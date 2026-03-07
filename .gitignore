@@ -1,0 +1,16 @@
+.idea/
+.venv/
+.venv*/
+__pycache__/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+build/
+dist/
+*.egg-info/
+*.pyc
+*.pyo
+*.pyd
+*.log
+pytest-cache-files-*/
+tests/.tmp/

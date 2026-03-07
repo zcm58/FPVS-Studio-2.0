@@ -1,0 +1,316 @@
+"""Runtime-owned helpers for writing neutral run and session artifacts."""
+
+from __future__ import annotations
+
+import csv
+from pathlib import Path
+from typing import Iterable
+
+from fpvs_studio.core.enums import DutyCycleMode
+from fpvs_studio.core.execution import RunExecutionSummary, SessionExecutionSummary
+from fpvs_studio.core.run_spec import RunSpec
+from fpvs_studio.core.serialization import write_json_file
+from fpvs_studio.core.session_plan import SessionPlan
+from fpvs_studio.core.validation import validate_display_refresh
+
+
+def _write_csv(path: Path, header: Iterable[str], rows: Iterable[Iterable[object]] = ()) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.writer(handle)
+        writer.writerow(list(header))
+        for row in rows:
+            writer.writerow(list(row))
+
+
+def _write_warnings(path: Path, warnings: list[str]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("\n".join(warnings) + ("\n" if warnings else ""), encoding="utf-8")
+
+
+def _display_report_for_run(run_spec: RunSpec):
+    duty_cycle_mode = (
+        DutyCycleMode.BLANK_50 if run_spec.display.off_frames > 0 else DutyCycleMode.CONTINUOUS
+    )
+    return validate_display_refresh(
+        run_spec.display.refresh_hz,
+        duty_cycle_mode=duty_cycle_mode,
+        base_hz=run_spec.condition.base_hz,
+    )
+
+
+def write_run_artifacts(output_dir: Path, run_spec: RunSpec, summary: RunExecutionSummary) -> None:
+    """Write the per-run artifact set for one executed `RunSpec`."""
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    write_json_file(output_dir / "runspec.json", run_spec)
+    write_json_file(output_dir / "run_summary.json", summary)
+    if summary.runtime_metadata is not None:
+        write_json_file(output_dir / "runtime_metadata.json", summary.runtime_metadata)
+    write_json_file(output_dir / "display_report.json", _display_report_for_run(run_spec))
+
+    _write_csv(
+        output_dir / "events.csv",
+        ["sequence_index", "role", "image_path", "on_start_frame", "on_frames", "off_frames"],
+        [
+            (
+                event.sequence_index,
+                event.role,
+                event.image_path,
+                event.on_start_frame,
+                event.on_frames,
+                event.off_frames,
+            )
+            for event in run_spec.stimulus_sequence
+        ],
+    )
+    _write_csv(
+        output_dir / "fixation_events.csv",
+        [
+            "event_index",
+            "start_frame",
+            "duration_frames",
+            "responded",
+            "first_response_key",
+            "response_frame",
+            "response_time_s",
+            "rt_frames",
+            "outcome",
+        ],
+        [
+            (
+                event.event_index,
+                event.start_frame,
+                event.duration_frames,
+                event.responded,
+                event.first_response_key,
+                event.response_frame,
+                event.response_time_s,
+                event.rt_frames,
+                event.outcome,
+            )
+            for event in summary.fixation_responses
+        ],
+    )
+    _write_csv(
+        output_dir / "responses.csv",
+        [
+            "response_index",
+            "key",
+            "frame_index",
+            "time_s",
+            "matched_event_index",
+            "rt_frames",
+            "correct",
+        ],
+        [
+            (
+                response.response_index,
+                response.key,
+                response.frame_index,
+                response.time_s,
+                response.matched_event_index,
+                response.rt_frames,
+                response.correct,
+            )
+            for response in summary.response_log
+        ],
+    )
+    _write_csv(
+        output_dir / "frame_intervals.csv",
+        ["frame_index", "interval_s"],
+        [
+            (interval.frame_index, interval.interval_s)
+            for interval in summary.frame_intervals
+        ],
+    )
+    _write_csv(
+        output_dir / "trigger_log.csv",
+        [
+            "trigger_index",
+            "frame_index",
+            "time_s",
+            "code",
+            "label",
+            "backend_name",
+            "status",
+            "message",
+        ],
+        [
+            (
+                trigger.trigger_index,
+                trigger.frame_index,
+                trigger.time_s,
+                trigger.code,
+                trigger.label,
+                trigger.backend_name,
+                trigger.status,
+                trigger.message,
+            )
+            for trigger in summary.trigger_log
+        ],
+    )
+    _write_warnings(output_dir / "warnings.log", summary.warnings)
+
+
+def write_session_artifacts(
+    output_dir: Path,
+    session_plan: SessionPlan,
+    summary: SessionExecutionSummary,
+) -> None:
+    """Write the session-level artifact bundle for a compiled/executed session."""
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    write_json_file(output_dir / "session_plan.json", session_plan)
+    write_json_file(output_dir / "session_summary.json", summary)
+    if summary.runtime_metadata is not None:
+        write_json_file(output_dir / "runtime_metadata.json", summary.runtime_metadata)
+
+    _write_csv(
+        output_dir / "conditions.csv",
+        [
+            "global_order_index",
+            "block_index",
+            "index_within_block",
+            "condition_id",
+            "condition_name",
+            "run_id",
+        ],
+        [
+            (
+                entry.global_order_index,
+                entry.block_index,
+                entry.index_within_block,
+                entry.condition_id,
+                entry.condition_name,
+                entry.run_id,
+            )
+            for entry in session_plan.ordered_entries()
+        ],
+    )
+    _write_csv(
+        output_dir / "events.csv",
+        [
+            "run_id",
+            "sequence_index",
+            "role",
+            "image_path",
+            "on_start_frame",
+            "on_frames",
+            "off_frames",
+        ],
+        [
+            (
+                entry.run_id,
+                event.sequence_index,
+                event.role,
+                event.image_path,
+                event.on_start_frame,
+                event.on_frames,
+                event.off_frames,
+            )
+            for entry in session_plan.ordered_entries()
+            for event in entry.run_spec.stimulus_sequence
+        ],
+    )
+    _write_csv(
+        output_dir / "fixation_events.csv",
+        [
+            "run_id",
+            "event_index",
+            "start_frame",
+            "duration_frames",
+            "responded",
+            "first_response_key",
+            "response_frame",
+            "response_time_s",
+            "rt_frames",
+            "outcome",
+        ],
+        [
+            (
+                run_result.run_id,
+                event.event_index,
+                event.start_frame,
+                event.duration_frames,
+                event.responded,
+                event.first_response_key,
+                event.response_frame,
+                event.response_time_s,
+                event.rt_frames,
+                event.outcome,
+            )
+            for run_result in summary.run_results
+            for event in run_result.fixation_responses
+        ],
+    )
+    _write_csv(
+        output_dir / "responses.csv",
+        [
+            "run_id",
+            "response_index",
+            "key",
+            "frame_index",
+            "time_s",
+            "matched_event_index",
+            "rt_frames",
+            "correct",
+        ],
+        [
+            (
+                run_result.run_id,
+                response.response_index,
+                response.key,
+                response.frame_index,
+                response.time_s,
+                response.matched_event_index,
+                response.rt_frames,
+                response.correct,
+            )
+            for run_result in summary.run_results
+            for response in run_result.response_log
+        ],
+    )
+    _write_csv(
+        output_dir / "frame_intervals.csv",
+        ["run_id", "frame_index", "interval_s"],
+        [
+            (
+                run_result.run_id,
+                interval.frame_index,
+                interval.interval_s,
+            )
+            for run_result in summary.run_results
+            for interval in run_result.frame_intervals
+        ],
+    )
+    _write_csv(
+        output_dir / "trigger_log.csv",
+        [
+            "run_id",
+            "trigger_index",
+            "frame_index",
+            "time_s",
+            "code",
+            "label",
+            "backend_name",
+            "status",
+            "message",
+        ],
+        [
+            (
+                run_result.run_id,
+                trigger.trigger_index,
+                trigger.frame_index,
+                trigger.time_s,
+                trigger.code,
+                trigger.label,
+                trigger.backend_name,
+                trigger.status,
+                trigger.message,
+            )
+            for run_result in summary.run_results
+            for trigger in run_result.trigger_log
+        ],
+    )
+    _write_warnings(output_dir / "warnings.log", summary.warnings)

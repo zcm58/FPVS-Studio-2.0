@@ -1,0 +1,81 @@
+"""Project creation and folder scaffolding helpers."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from pathlib import Path
+
+from fpvs_studio.core.models import ProjectFile, ProjectMeta, ProjectSettings
+from fpvs_studio.core.paths import (
+    cache_dir,
+    logs_dir,
+    project_dir,
+    project_json_path,
+    runs_dir,
+    slugify_project_name,
+    stimuli_dir,
+    stimulus_derived_root,
+    stimulus_manifest_path,
+    stimulus_source_root,
+)
+from fpvs_studio.core.serialization import save_project_file
+from fpvs_studio.core.template_library import DEFAULT_TEMPLATE_ID, get_template
+from fpvs_studio.preprocessing.manifest import create_empty_manifest
+
+
+@dataclass(frozen=True)
+class ProjectScaffold:
+    """Paths and models created when scaffolding a project."""
+
+    project_root: Path
+    project: ProjectFile
+
+
+def build_starter_project(
+    project_name: str,
+    *,
+    template_id: str = DEFAULT_TEMPLATE_ID,
+) -> ProjectFile:
+    """Build a minimal starter project with engine-neutral defaults."""
+
+    template = get_template(template_id)
+    project_id = slugify_project_name(project_name)
+    return ProjectFile(
+        meta=ProjectMeta(
+            project_id=project_id,
+            name=project_name,
+            template_id=template.template_id,
+        ),
+        settings=ProjectSettings(),
+        stimulus_sets=[],
+        conditions=[],
+    )
+
+
+def create_project(
+    parent_dir: Path,
+    project_name: str,
+    *,
+    template_id: str = DEFAULT_TEMPLATE_ID,
+) -> ProjectScaffold:
+    """Create the on-disk folder structure and starter files for a new project."""
+
+    project = build_starter_project(project_name, template_id=template_id)
+    target_dir = project_dir(parent_dir, project.meta.project_id)
+    for folder in (
+        target_dir,
+        stimuli_dir(target_dir),
+        stimulus_source_root(target_dir),
+        stimulus_derived_root(target_dir),
+        runs_dir(target_dir),
+        cache_dir(target_dir),
+        logs_dir(target_dir),
+    ):
+        folder.mkdir(parents=True, exist_ok=True)
+
+    save_project_file(project, project_json_path(target_dir))
+    save_project_file(
+        create_empty_manifest(project.meta.project_id),
+        stimulus_manifest_path(target_dir),
+    )
+    return ProjectScaffold(project_root=target_dir, project=project)
