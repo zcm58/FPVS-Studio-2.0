@@ -49,6 +49,7 @@ from fpvs_studio.preprocessing.manifest import (
 )
 from fpvs_studio.preprocessing.models import StimulusManifest
 from fpvs_studio.runtime.launcher import LaunchSettings, launch_session
+from fpvs_studio.runtime.participant_history import find_completed_sessions_for_participant
 from fpvs_studio.runtime.preflight import preflight_session_plan
 from fpvs_studio.engines.registry import create_engine
 
@@ -564,6 +565,7 @@ class ProjectDocument(QObject):
         self,
         *,
         refresh_hz: float,
+        participant_number: str,
         display_index: int | None,
         fullscreen: bool = True,
         engine_name: str = EngineName.PSYCHOPY.value,
@@ -576,6 +578,7 @@ class ProjectDocument(QObject):
             summary = launch_session(
                 self._project_root,
                 session_plan,
+                participant_number=participant_number,
                 launch_settings=LaunchSettings(
                     engine_name=engine_name,
                     test_mode=test_mode,
@@ -588,6 +591,16 @@ class ProjectDocument(QObject):
         except Exception as exc:
             raise DocumentError(str(exc)) from exc
         return session_plan, summary
+
+    def has_completed_session_for_participant(self, participant_number: str) -> bool:
+        """Return whether this project already contains completed runs for a participant."""
+
+        return bool(
+            find_completed_sessions_for_participant(
+                self._project_root,
+                participant_number,
+            )
+        )
 
     def _apply_project_update(self, **updates: object) -> None:
         project = _validated_copy(self._project, **updates)

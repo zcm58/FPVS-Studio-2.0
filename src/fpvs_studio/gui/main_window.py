@@ -12,6 +12,8 @@ from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
     QComboBox,
+    QDialog,
+    QDialogButtonBox,
     QDoubleSpinBox,
     QFormLayout,
     QGridLayout,
@@ -124,6 +126,69 @@ class LeftToRightPlainTextEdit(QPlainTextEdit):
         text_option = self.document().defaultTextOption()
         text_option.setTextDirection(Qt.LeftToRight)
         self.document().setDefaultTextOption(text_option)
+
+
+class ParticipantNumberDialog(QDialog):
+    """Collect the required launch-time participant number."""
+
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Participant Number")
+        self.setModal(True)
+        self.resize(420, 120)
+
+        self.prompt_label = QLabel("Please enter the participant number.", self)
+        self.prompt_label.setObjectName("participant_number_prompt_label")
+
+        self.participant_number_edit = QLineEdit(self)
+        self.participant_number_edit.setObjectName("participant_number_edit")
+        self.participant_number_edit.setPlaceholderText("Digits only (for example, 0012)")
+        self.participant_number_edit.setLayoutDirection(Qt.LeftToRight)
+        self.participant_number_edit.setFocus()
+
+        form_layout = QFormLayout()
+        form_layout.addRow("Participant Number", self.participant_number_edit)
+
+        self.button_box = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel,
+            parent=self,
+        )
+        self.button_box.setObjectName("participant_number_button_box")
+        self.button_box.accepted.connect(self.accept)
+        self.button_box.rejected.connect(self.reject)
+
+        layout = QVBoxLayout(self)
+        layout.addWidget(self.prompt_label)
+        layout.addLayout(form_layout)
+        layout.addWidget(self.button_box)
+
+    @property
+    def participant_number(self) -> str:
+        """Return the trimmed participant number value."""
+
+        return self.participant_number_edit.text().strip()
+
+    def accept(self) -> None:
+        participant_number = self.participant_number
+        if not participant_number:
+            QMessageBox.warning(
+                self,
+                "Participant Number Required",
+                "Enter a participant number to launch the session.",
+            )
+            self.participant_number_edit.setFocus()
+            return
+        if not participant_number.isdigit():
+            QMessageBox.warning(
+                self,
+                "Invalid Participant Number",
+                "Participant number must contain digits only.",
+            )
+            self.participant_number_edit.setFocus()
+            self.participant_number_edit.selectAll()
+            return
+        self.participant_number_edit.setText(participant_number)
+        super().accept()
 
 
 class ProjectPage(QWidget):
@@ -1231,9 +1296,13 @@ class RunPage(QWidget):
         )
 
     def launch_test_session(self) -> None:
+        participant_number = self._collect_launch_participant_number()
+        if participant_number is None:
+            return
         try:
             session_plan, summary = self._document.launch_test_session(
                 refresh_hz=self.current_refresh_hz(),
+                participant_number=participant_number,
                 display_index=self.current_display_index(),
                 fullscreen=self.fullscreen_checkbox.isChecked(),
             )
@@ -1242,6 +1311,7 @@ class RunPage(QWidget):
             return
         extra_lines = [
             "Status: runtime launch completed.",
+            f"Participant Number: {summary.participant_number or participant_number}",
             f"Output Dir: {summary.output_dir or 'runs/...'}",
         ]
         self._set_summary(session_plan, extra_lines=extra_lines)
@@ -1250,6 +1320,35 @@ class RunPage(QWidget):
             "Launch Complete",
             "The test session finished. Review the run exports in the project runs folder.",
         )
+
+    def _prompt_participant_number(self) -> str | None:
+        dialog = ParticipantNumberDialog(self)
+        if dialog.exec() != int(QDialog.DialogCode.Accepted):
+            return None
+        return dialog.participant_number
+
+    def _collect_launch_participant_number(self) -> str | None:
+        while True:
+            participant_number = self._prompt_participant_number()
+            if participant_number is None:
+                return None
+
+            if not self._document.has_completed_session_for_participant(participant_number):
+                return participant_number
+
+            warning_text = (
+                f"Warning: logs indicate that {participant_number} has already completed this study, "
+                f"but you entered {participant_number}. Do you wish to overwrite the existing data?"
+            )
+            answer = QMessageBox.question(
+                self,
+                "Participant Already Completed",
+                warning_text,
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if answer == QMessageBox.StandardButton.Yes:
+                return participant_number
 
     def _apply_refresh_hz(self) -> None:
         try:
@@ -1316,11 +1415,13 @@ class StudioMainWindow(QMainWindow):
         document: ProjectDocument,
         on_request_new_project: Callable[[], None],
         on_request_open_project: Callable[[], None],
+        on_request_settings: Callable[[], None],
     ) -> None:
         super().__init__()
         self.document = document
         self._on_request_new_project = on_request_new_project
         self._on_request_open_project = on_request_open_project
+        self._on_request_settings = on_request_settings
         self.setWindowTitle("FPVS Studio")
         self.resize(1200, 860)
 
@@ -1357,6 +1458,9 @@ class StudioMainWindow(QMainWindow):
         self.open_project_action.triggered.connect(self._request_open_project)
         self.save_project_action = QAction("Save", self)
         self.save_project_action.triggered.connect(self.save_project)
+        self.settings_action = QAction("Settings...", self)
+        self.settings_action.setObjectName("settings_action")
+        self.settings_action.triggered.connect(self._request_settings)
         self.preflight_action = QAction("Preflight", self)
         self.preflight_action.triggered.connect(self.run_page.preflight_session)
         self.launch_action = QAction("Launch Test Session", self)
@@ -1367,6 +1471,8 @@ class StudioMainWindow(QMainWindow):
         file_menu.addAction(self.new_project_action)
         file_menu.addAction(self.open_project_action)
         file_menu.addAction(self.save_project_action)
+        file_menu.addSeparator()
+        file_menu.addAction(self.settings_action)
 
         run_menu = self.menuBar().addMenu("Run")
         run_menu.addAction(self.preflight_action)
@@ -1419,6 +1525,9 @@ class StudioMainWindow(QMainWindow):
     def _request_open_project(self) -> None:
         if self.maybe_save_changes():
             self._on_request_open_project()
+
+    def _request_settings(self) -> None:
+        self._on_request_settings()
 
     def _update_window_title(self, *_args) -> None:
         dirty_prefix = "*" if self.document.dirty else ""

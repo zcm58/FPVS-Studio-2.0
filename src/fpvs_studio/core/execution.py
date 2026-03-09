@@ -15,6 +15,17 @@ ResponseOutcome = Literal["hit", "false_alarm"]
 TriggerStatus = Literal["sent", "failed", "skipped"]
 
 
+def _validate_participant_number(value: str | None) -> str | None:
+    if value is None:
+        return None
+    cleaned = value.strip()
+    if not cleaned:
+        raise ValueError("participant_number may not be blank.")
+    if not cleaned.isdigit():
+        raise ValueError("participant_number must contain digits only.")
+    return cleaned
+
+
 class RuntimeMetadata(FPVSBaseModel):
     """Measured runtime/display metadata captured while executing a session."""
 
@@ -138,6 +149,7 @@ class RunExecutionSummary(FPVSBaseModel):
     condition_name: str
     engine_name: str
     run_mode: RunMode
+    participant_number: str | None = None
     started_at: datetime | None = None
     finished_at: datetime | None = None
     completed_frames: int = Field(default=0, ge=0)
@@ -151,6 +163,11 @@ class RunExecutionSummary(FPVSBaseModel):
     response_log: list[ResponseRecord] = Field(default_factory=list)
     trigger_log: list[TriggerRecord] = Field(default_factory=list)
     output_dir: str | None = None
+
+    @field_validator("participant_number")
+    @classmethod
+    def validate_participant_number(cls, value: str | None) -> str | None:
+        return _validate_participant_number(value)
 
     @field_validator("output_dir")
     @classmethod
@@ -168,6 +185,7 @@ class SessionExecutionSummary(FPVSBaseModel):
     session_id: str
     engine_name: str
     run_mode: RunMode
+    participant_number: str | None = None
     random_seed: int | None = Field(default=None, ge=0)
     started_at: datetime | None = None
     finished_at: datetime | None = None
@@ -180,6 +198,11 @@ class SessionExecutionSummary(FPVSBaseModel):
     realized_block_orders: list[list[str]] = Field(default_factory=list)
     run_results: list[RunExecutionSummary] = Field(default_factory=list)
     output_dir: str | None = None
+
+    @field_validator("participant_number")
+    @classmethod
+    def validate_participant_number(cls, value: str | None) -> str | None:
+        return _validate_participant_number(value)
 
     @field_validator("output_dir")
     @classmethod

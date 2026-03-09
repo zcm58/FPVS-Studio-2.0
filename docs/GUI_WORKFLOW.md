@@ -1,0 +1,133 @@
+# GUI Workflow
+
+## Launch
+
+Run the authoring application with:
+
+```powershell
+.\.venv\Scripts\python -m fpvs_studio.app
+```
+
+The installed script entry point is also available as `fpvs-studio`.
+
+## Welcome Flow
+
+The welcome window provides:
+
+- `Create New Project`
+- `Open Existing Project`
+
+Creating a project asks for:
+
+- project name
+- parent folder where the project root will be scaffolded
+
+Opening a project currently selects an existing project directory and resolves
+its `project.json` through the backend document layer.
+
+## Main Window
+
+The authoring window is organized into five pages:
+
+- `Project`
+  - project name, description, root, template display, background color
+- `Conditions`
+  - condition list, add/remove/reorder, instructions, trigger code, stimulus
+    variant, duty cycle, base/oddball import actions, source summaries
+- `Fixation & Session`
+  - block count, stored session seed, randomization, transition settings,
+    fixation behavior, colors, fixed/randomized target-count mode, no-immediate
+    repeat setting, Space response-window settings, cross geometry
+- `Assets / Preprocessing`
+  - supported project variants, source import, inspection refresh,
+    materialization, manifest and validation summaries
+- `Run / Runtime`
+  - refresh rate, display index, engine display, serial port, baud rate,
+    compile, preflight, launch, and session-plan summary
+
+## Supported Authoring Tasks
+
+Phase 5 currently supports:
+
+- creating a new project scaffold
+- opening and editing an existing project
+- saving and reopening project state
+- configuring session transition settings and stored seed
+- configuring fixation settings, including an optional fixation accuracy task
+  (Space within 1.0 s of each fixation color change)
+- configuring fixed or randomized fixation target counts per condition run with
+  deterministic no-immediate-repeat behavior across consecutive compiled runs
+- authoring multiple conditions
+- importing base and oddball image folders
+- materializing original, grayscale, rot180, and phase-scrambled variants
+- validating and compiling the multi-condition session plan
+- running the current test-mode launch path with fullscreen PsychoPy playback
+  and manual inter-block continue screens
+
+## Runtime Scope
+
+The run page intentionally exposes `Launch Test Session`, not a generic
+production launch button.
+
+Current honest behavior:
+
+- runtime launch still requires `test_mode=True`
+- launched PsychoPy playback opens fullscreen on the selected display by default
+- non-final blocks show a separate `Press Space to continue` break screen
+- PsychoPy remains behind the runtime and engine layers
+- serial port and baud rate flow through launch settings and trigger seams
+- GUI startup itself still does not initialize PsychoPy
+- non-test validation remains deferred
+
+## Fixation Accuracy Task
+
+When enabled in `Fixation & Session`:
+
+- each fixation color change is treated as a response target
+- the participant responds with `Space` within `1.0` second of target onset
+- runtime shows a participant-facing end-of-condition feedback screen with:
+  - accuracy percentage and hits/total
+  - mean RT (ms, or N/A when no hits)
+  - false alarms
+
+This engagement task is orthogonal to FPVS stimulus timing and does not change
+base/oddball scheduling.
+
+## GUI Test Guidance
+
+When iterating on GUI tests:
+
+- keep Qt headless with `QT_QPA_PLATFORM=offscreen`
+- disable plugin autoload to avoid unrelated third-party pytest plugins
+- run one GUI test node at a time
+- use `pytest-timeout`
+- monkeypatch modal dialogs and runtime launch calls
+- do not let tests open real `QFileDialog`, `QMessageBox`, or launch the real
+  PsychoPy runtime
+
+Recommended invocation:
+
+```powershell
+$env:PYTHONPATH = "src"
+$env:TMP = "$PWD\build\tmp"
+$env:TEMP = "$PWD\build\tmp"
+$env:TMPDIR = "$PWD\build\tmp"
+$env:APPDATA = "$PWD\build\appdata"
+$env:LOCALAPPDATA = "$PWD\build\localappdata"
+$env:USERPROFILE = "$PWD\build\userprofile"
+$env:HOME = "$PWD\build\home"
+$env:QT_QPA_PLATFORM = "offscreen"
+$env:PYTEST_DISABLE_PLUGIN_AUTOLOAD = "1"
+
+New-Item -ItemType Directory -Force build\tmp, build\appdata, build\localappdata, build\userprofile, build\home | Out-Null
+
+.\.venv\Scripts\python -m pytest `
+  --disable-plugin-autoload `
+  -p pytestqt.plugin `
+  -p pytest_timeout `
+  --basetemp=build\pytest_tmp `
+  --maxfail=1 `
+  --timeout=45 `
+  -vv -s `
+  tests\gui\test_authoring_gui.py::test_welcome_window_smoke
+```

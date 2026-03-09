@@ -32,6 +32,8 @@ from fpvs_studio.runtime.launcher import (
 from fpvs_studio.runtime.preflight import PreflightError
 from fpvs_studio.triggers.base import TriggerBackend
 
+PARTICIPANT_NUMBER = "0007"
+
 
 def _read_csv_rows(path: Path) -> list[dict[str, str]]:
     with path.open("r", encoding="utf-8", newline="") as handle:
@@ -216,6 +218,7 @@ def test_runtime_launcher_dispatches_runspec_to_registered_engine(
         summary = launch_run(
             sample_project_root,
             run_spec,
+            participant_number=PARTICIPANT_NUMBER,
             launch_settings=LaunchSettings(
                 engine_name="stub",
                 test_mode=True,
@@ -238,6 +241,7 @@ def test_runtime_launcher_dispatches_runspec_to_registered_engine(
         "serial_baudrate": 57600,
     }
     assert summary.output_dir == "runs/faces-run"
+    assert summary.participant_number == PARTICIPANT_NUMBER
     assert summary.warnings == []
     assert summary.runtime_metadata is not None
     assert summary.runtime_metadata.test_mode is True
@@ -247,6 +251,11 @@ def test_runtime_launcher_dispatches_runspec_to_registered_engine(
     assert (sample_project_root / "runs" / "faces-run" / "runtime_metadata.json").is_file()
     assert (sample_project_root / "runs" / "faces-run" / "fixation_events.csv").is_file()
     assert (sample_project_root / "runs" / "faces-run" / "trigger_log.csv").is_file()
+    exported_run_summary = read_json_file(
+        sample_project_root / "runs" / "faces-run" / "run_summary.json",
+        RunExecutionSummary,
+    )
+    assert exported_run_summary.participant_number == PARTICIPANT_NUMBER
 
     exported_display_report = read_json_file(
         sample_project_root / "runs" / "faces-run" / "display_report.json",
@@ -295,6 +304,7 @@ def test_launch_session_runs_all_entries_with_stub_engine_and_reuses_session_win
         summary = launch_session(
             multi_condition_project_root,
             session_plan,
+            participant_number=PARTICIPANT_NUMBER,
             launch_settings=LaunchSettings(engine_name="stub-session", test_mode=True),
         )
     finally:
@@ -321,27 +331,65 @@ def test_launch_session_runs_all_entries_with_stub_engine_and_reuses_session_win
         }
     ]
     assert summary.completed_condition_count == session_plan.total_runs
-    assert summary.output_dir == f"runs/{session_plan.session_id}"
+    assert summary.output_dir == f"runs/{PARTICIPANT_NUMBER}"
+    assert summary.participant_number == PARTICIPANT_NUMBER
+    assert all(run_result.participant_number == PARTICIPANT_NUMBER for run_result in summary.run_results)
     assert summary.realized_block_orders == [
         block.condition_order for block in session_plan.blocks
     ]
-    assert (
-        multi_condition_project_root / "runs" / session_plan.session_id / "session_plan.json"
-    ).is_file()
-    assert (
-        multi_condition_project_root / "runs" / session_plan.session_id / "session_summary.json"
-    ).is_file()
-    assert (
-        multi_condition_project_root / "runs" / session_plan.session_id / "runtime_metadata.json"
-    ).is_file()
-    first_run_dir = (
-        multi_condition_project_root
-        / "runs"
-        / session_plan.session_id
-        / session_plan.ordered_entries()[0].run_id
-    )
+    assert summary.output_dir is not None
+    session_output_dir = multi_condition_project_root / Path(summary.output_dir)
+    assert (session_output_dir / "session_plan.json").is_file()
+    assert (session_output_dir / "session_summary.json").is_file()
+    assert (session_output_dir / "runtime_metadata.json").is_file()
+    first_run_dir = session_output_dir / session_plan.ordered_entries()[0].run_id
     assert (first_run_dir / "runspec.json").is_file()
     assert (first_run_dir / "run_summary.json").is_file()
+
+
+def test_launch_session_reuses_participant_number_with_incremented_output_labels(
+    multi_condition_project,
+    multi_condition_project_root,
+) -> None:
+    captures: dict[str, object] = {}
+    register_engine("stub-participant-folders", lambda: StubEngine(captures))
+    try:
+        session_plan = compile_session_plan(
+            multi_condition_project,
+            refresh_hz=60.0,
+            project_root=multi_condition_project_root,
+            random_seed=401,
+        )
+        summary_1 = launch_session(
+            multi_condition_project_root,
+            session_plan,
+            participant_number=PARTICIPANT_NUMBER,
+            launch_settings=LaunchSettings(engine_name="stub-participant-folders", test_mode=True),
+        )
+        summary_2 = launch_session(
+            multi_condition_project_root,
+            session_plan,
+            participant_number=PARTICIPANT_NUMBER,
+            launch_settings=LaunchSettings(engine_name="stub-participant-folders", test_mode=True),
+        )
+        summary_3 = launch_session(
+            multi_condition_project_root,
+            session_plan,
+            participant_number=PARTICIPANT_NUMBER,
+            launch_settings=LaunchSettings(engine_name="stub-participant-folders", test_mode=True),
+        )
+    finally:
+        unregister_engine("stub-participant-folders")
+
+    assert summary_1.output_dir == f"runs/{PARTICIPANT_NUMBER}"
+    assert summary_2.output_dir == f"runs/{PARTICIPANT_NUMBER}_run2"
+    assert summary_3.output_dir == f"runs/{PARTICIPANT_NUMBER}_run3"
+    assert summary_1.output_dir is not None
+    assert summary_2.output_dir is not None
+    assert summary_3.output_dir is not None
+    assert (multi_condition_project_root / Path(summary_1.output_dir) / "session_summary.json").is_file()
+    assert (multi_condition_project_root / Path(summary_2.output_dir) / "session_summary.json").is_file()
+    assert (multi_condition_project_root / Path(summary_3.output_dir) / "session_summary.json").is_file()
 
 
 def test_session_launch_shows_condition_feedback_with_accuracy_and_mean_rt_when_enabled(
@@ -361,6 +409,7 @@ def test_session_launch_shows_condition_feedback_with_accuracy_and_mean_rt_when_
         summary = launch_session(
             multi_condition_project_root,
             session_plan,
+            participant_number=PARTICIPANT_NUMBER,
             launch_settings=LaunchSettings(engine_name="stub-feedback", test_mode=True),
         )
     finally:
@@ -394,6 +443,7 @@ def test_session_launch_skips_condition_feedback_when_accuracy_task_disabled(
         summary = launch_session(
             multi_condition_project_root,
             session_plan,
+            participant_number=PARTICIPANT_NUMBER,
             launch_settings=LaunchSettings(engine_name="stub-no-feedback", test_mode=True),
         )
     finally:
@@ -421,6 +471,7 @@ def test_session_launch_fixed_break_transition_path_is_honored(
         launch_session(
             multi_condition_project_root,
             session_plan,
+            participant_number=PARTICIPANT_NUMBER,
             launch_settings=LaunchSettings(engine_name="stub-fixed-break", test_mode=True),
         )
     finally:
@@ -451,6 +502,7 @@ def test_session_launch_manual_continue_transition_path_is_honored(
         launch_session(
             multi_condition_project_root,
             session_plan,
+            participant_number=PARTICIPANT_NUMBER,
             launch_settings=LaunchSettings(engine_name="stub-manual", test_mode=True),
         )
     finally:
@@ -477,6 +529,7 @@ def test_session_launch_inserts_manual_inter_block_break_between_non_final_block
         launch_session(
             multi_condition_project_root,
             session_plan,
+            participant_number=PARTICIPANT_NUMBER,
             launch_settings=LaunchSettings(engine_name="stub-block-break", test_mode=True),
         )
     finally:
@@ -508,6 +561,7 @@ def test_session_launch_aborts_cleanly_when_inter_block_break_is_cancelled(
         summary = launch_session(
             multi_condition_project_root,
             session_plan,
+            participant_number=PARTICIPANT_NUMBER,
             launch_settings=LaunchSettings(
                 engine_name="stub-block-break-abort",
                 test_mode=True,
@@ -546,6 +600,7 @@ def test_session_launch_passes_condition_instructions_to_transition_screens(
         launch_session(
             multi_condition_project_root,
             session_plan,
+            participant_number=PARTICIPANT_NUMBER,
             launch_settings=LaunchSettings(engine_name="stub-instructions", test_mode=True),
         )
     finally:
@@ -574,6 +629,7 @@ def test_session_launch_preserves_instruction_text_verbatim(
         launch_session(
             multi_condition_project_root,
             session_plan,
+            participant_number=PARTICIPANT_NUMBER,
             launch_settings=LaunchSettings(engine_name="stub-verbatim", test_mode=True),
         )
     finally:
@@ -597,21 +653,24 @@ def test_session_export_captures_seed_and_runtime_logs(
             random_seed=77,
         )
 
-        launch_session(
+        summary = launch_session(
             multi_condition_project_root,
             session_plan,
+            participant_number=PARTICIPANT_NUMBER,
             launch_settings=LaunchSettings(engine_name="stub-export", test_mode=True),
         )
     finally:
         unregister_engine("stub-export")
 
-    session_output_dir = multi_condition_project_root / "runs" / session_plan.session_id
+    assert summary.output_dir is not None
+    session_output_dir = multi_condition_project_root / Path(summary.output_dir)
     exported_summary = read_json_file(
         session_output_dir / "session_summary.json",
         SessionExecutionSummary,
     )
 
     assert exported_summary.random_seed == 77
+    assert exported_summary.participant_number == PARTICIPANT_NUMBER
     assert exported_summary.realized_block_orders == [
         block.condition_order for block in session_plan.blocks
     ]
@@ -622,6 +681,10 @@ def test_session_export_captures_seed_and_runtime_logs(
     assert [run_result.run_id for run_result in exported_summary.run_results] == [
         entry.run_id for entry in session_plan.ordered_entries()
     ]
+    assert all(
+        run_result.participant_number == PARTICIPANT_NUMBER
+        for run_result in exported_summary.run_results
+    )
 
     conditions_rows = _read_csv_rows(session_output_dir / "conditions.csv")
     fixation_rows = _read_csv_rows(session_output_dir / "fixation_events.csv")
@@ -664,6 +727,7 @@ def test_session_launch_preflight_rejects_missing_assets_before_engine_run(
             launch_session(
                 sample_project_root,
                 session_plan,
+                participant_number=PARTICIPANT_NUMBER,
                 launch_settings=LaunchSettings(engine_name="stub-preflight", test_mode=True),
             )
     finally:
@@ -691,6 +755,7 @@ def test_session_launch_preflight_rejects_invalid_timing_before_engine_run(
             launch_session(
                 sample_project_root,
                 session_plan,
+                participant_number=PARTICIPANT_NUMBER,
                 launch_settings=LaunchSettings(engine_name="stub-invalid", test_mode=True),
             )
     finally:
@@ -717,6 +782,7 @@ def test_launch_run_rejects_non_test_mode_even_with_registered_engine(
             launch_run(
                 sample_project_root,
                 run_spec,
+                participant_number=PARTICIPANT_NUMBER,
                 launch_settings=LaunchSettings(engine_name="stub-non-test", test_mode=False),
             )
     finally:
@@ -746,6 +812,7 @@ def test_launch_session_rejects_invalid_display_index_before_engine_creation(
             launch_session(
                 sample_project_root,
                 session_plan,
+                participant_number=PARTICIPANT_NUMBER,
                 launch_settings=LaunchSettings(
                     engine_name="stub-invalid-display",
                     test_mode=True,
@@ -779,6 +846,7 @@ def test_launch_session_rejects_invalid_serial_baudrate_before_engine_creation(
             launch_session(
                 sample_project_root,
                 session_plan,
+                participant_number=PARTICIPANT_NUMBER,
                 launch_settings=LaunchSettings(
                     engine_name="stub-invalid-baud",
                     test_mode=True,
@@ -812,6 +880,7 @@ def test_launch_session_rejects_non_boolean_fullscreen_before_engine_creation(
             launch_session(
                 sample_project_root,
                 session_plan,
+                participant_number=PARTICIPANT_NUMBER,
                 launch_settings=LaunchSettings(
                     engine_name="stub-invalid-fullscreen",
                     test_mode=True,
@@ -820,5 +889,65 @@ def test_launch_session_rejects_non_boolean_fullscreen_before_engine_creation(
             )
     finally:
         unregister_engine("stub-invalid-fullscreen")
+
+    assert captures == {}
+
+
+def test_launch_session_rejects_blank_participant_number_before_engine_creation(
+    sample_project,
+    sample_project_root,
+) -> None:
+    captures: dict[str, object] = {}
+    register_engine("stub-empty-participant", lambda: StubEngine(captures))
+    try:
+        session_plan = compile_session_plan(
+            sample_project,
+            refresh_hz=60.0,
+            project_root=sample_project_root,
+            random_seed=33,
+        )
+
+        with pytest.raises(LaunchSettingsError, match="participant_number is required"):
+            launch_session(
+                sample_project_root,
+                session_plan,
+                participant_number="   ",
+                launch_settings=LaunchSettings(
+                    engine_name="stub-empty-participant",
+                    test_mode=True,
+                ),
+            )
+    finally:
+        unregister_engine("stub-empty-participant")
+
+    assert captures == {}
+
+
+def test_launch_session_rejects_non_digit_participant_number_before_engine_creation(
+    sample_project,
+    sample_project_root,
+) -> None:
+    captures: dict[str, object] = {}
+    register_engine("stub-bad-participant", lambda: StubEngine(captures))
+    try:
+        session_plan = compile_session_plan(
+            sample_project,
+            refresh_hz=60.0,
+            project_root=sample_project_root,
+            random_seed=34,
+        )
+
+        with pytest.raises(LaunchSettingsError, match="participant_number must contain digits only"):
+            launch_session(
+                sample_project_root,
+                session_plan,
+                participant_number="AB12",
+                launch_settings=LaunchSettings(
+                    engine_name="stub-bad-participant",
+                    test_mode=True,
+                ),
+            )
+    finally:
+        unregister_engine("stub-bad-participant")
 
     assert captures == {}

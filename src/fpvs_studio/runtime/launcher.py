@@ -11,6 +11,7 @@ from fpvs_studio.core.paths import runs_dir, to_project_relative_posix
 from fpvs_studio.core.run_spec import RunSpec
 from fpvs_studio.core.session_plan import SessionPlan
 from fpvs_studio.engines.registry import create_engine
+from fpvs_studio.runtime.participant_history import resolve_next_participant_output_label
 from fpvs_studio.runtime.preflight import preflight_run_spec, preflight_session_plan
 from fpvs_studio.runtime.run_worker import RuntimeWorker
 
@@ -57,15 +58,29 @@ def _validate_launch_settings(settings: LaunchSettings) -> None:
         raise LaunchSettingsError("serial_baudrate must be a positive integer.")
 
 
+def _validate_participant_number(participant_number: str) -> str:
+    if not isinstance(participant_number, str):
+        raise LaunchSettingsError("participant_number must be a string.")
+    cleaned = participant_number.strip()
+    if not cleaned:
+        raise LaunchSettingsError("participant_number is required.")
+    if not cleaned.isdigit():
+        raise LaunchSettingsError("participant_number must contain digits only.")
+    return cleaned
+
+
 def launch_run(
     project_root: Path,
     run_spec: RunSpec,
+    *,
+    participant_number: str,
     launch_settings: LaunchSettings | None = None,
 ) -> RunExecutionSummary:
     """Launch one compiled RunSpec into the selected presentation engine."""
 
     settings = launch_settings or LaunchSettings()
     _validate_launch_settings(settings)
+    cleaned_participant_number = _validate_participant_number(participant_number)
     output_dir = runs_dir(project_root) / run_spec.run_id
     relative_output_dir = to_project_relative_posix(project_root, output_dir)
     engine = create_engine(settings.engine_name)
@@ -77,19 +92,24 @@ def launch_run(
         output_dir,
         runtime_options=settings.as_runtime_options(),
         relative_output_dir=relative_output_dir,
+        participant_number=cleaned_participant_number,
     )
 
 
 def launch_session(
     project_root: Path,
     session_plan: SessionPlan,
+    *,
+    participant_number: str,
     launch_settings: LaunchSettings | None = None,
 ) -> SessionExecutionSummary:
     """Launch an ordered session plan into the selected presentation engine."""
 
     settings = launch_settings or LaunchSettings()
     _validate_launch_settings(settings)
-    output_dir = runs_dir(project_root) / session_plan.session_id
+    cleaned_participant_number = _validate_participant_number(participant_number)
+    output_label = resolve_next_participant_output_label(project_root, cleaned_participant_number)
+    output_dir = runs_dir(project_root) / output_label
     relative_output_dir = to_project_relative_posix(project_root, output_dir)
     engine = create_engine(settings.engine_name)
     preflight_session_plan(project_root, session_plan, engine=engine)
@@ -100,4 +120,5 @@ def launch_session(
         output_dir,
         runtime_options=settings.as_runtime_options(),
         relative_output_dir=relative_output_dir,
+        participant_number=cleaned_participant_number,
     )
