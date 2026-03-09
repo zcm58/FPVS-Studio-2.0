@@ -1,0 +1,80 @@
+"""Runtime helpers for participant history lookup and output-folder naming."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from pathlib import Path
+
+from fpvs_studio.core.execution import SessionExecutionSummary
+from fpvs_studio.core.paths import runs_dir
+from fpvs_studio.core.serialization import read_json_file
+
+
+@dataclass(frozen=True)
+class CompletedParticipantSessionRecord:
+    """One completed participant session discovered from run exports."""
+
+    output_label: str
+    summary: SessionExecutionSummary
+
+
+def find_completed_sessions_for_participant(
+    project_root: Path,
+    participant_number: str,
+) -> list[CompletedParticipantSessionRecord]:
+    """Return completed prior session summaries for one participant number."""
+
+    completed_records: list[CompletedParticipantSessionRecord] = []
+    for output_label, summary in _iter_session_summaries(project_root):
+        if summary.participant_number != participant_number:
+            continue
+        if summary.aborted:
+            continue
+        if summary.completed_condition_count <= 0:
+            continue
+        completed_records.append(
+            CompletedParticipantSessionRecord(
+                output_label=output_label,
+                summary=summary,
+            )
+        )
+    return completed_records
+
+
+def resolve_next_participant_output_label(
+    project_root: Path,
+    participant_number: str,
+) -> str:
+    """Return the next available participant-labeled output directory name."""
+
+    base_label = participant_number
+    runs_root = runs_dir(project_root)
+    if not (runs_root / base_label).exists():
+        return base_label
+
+    suffix = 2
+    while (runs_root / f"{base_label}_run{suffix}").exists():
+        suffix += 1
+    return f"{base_label}_run{suffix}"
+
+
+def _iter_session_summaries(
+    project_root: Path,
+) -> list[tuple[str, SessionExecutionSummary]]:
+    runs_root = runs_dir(project_root)
+    if not runs_root.is_dir():
+        return []
+
+    discovered: list[tuple[str, SessionExecutionSummary]] = []
+    for entry in runs_root.iterdir():
+        if not entry.is_dir():
+            continue
+        summary_path = entry / "session_summary.json"
+        if not summary_path.is_file():
+            continue
+        try:
+            summary = read_json_file(summary_path, SessionExecutionSummary)
+        except Exception:
+            continue
+        discovered.append((entry.name, summary))
+    return discovered
