@@ -136,6 +136,7 @@ class RuntimeWorker:
                     trigger_start_index=trigger_start_index,
                     warnings=(),
                 )
+                previous_feedback_summary = _latest_fixation_task_summary(run_results)
                 warnings.extend(run_summary.warnings)
                 run_results.append(run_summary)
                 write_run_artifacts(run_output_dir, entry.run_spec, run_summary)
@@ -144,7 +145,11 @@ class RuntimeWorker:
                     abort_reason = run_summary.abort_reason or f"Run '{entry.run_id}' was aborted."
                     break
 
-                if self._show_condition_feedback(entry.run_spec, run_summary):
+                if self._show_condition_feedback(
+                    entry.run_spec,
+                    run_summary,
+                    previous_summary=previous_feedback_summary,
+                ):
                     abort_reason = (
                         f"Session aborted during the condition feedback screen after run "
                         f"'{entry.run_id}'."
@@ -314,6 +319,8 @@ class RuntimeWorker:
         self,
         run_spec: RunSpec,
         run_summary: RunExecutionSummary,
+        *,
+        previous_summary: FixationTaskSummary | None = None,
     ) -> bool:
         if not run_spec.fixation.accuracy_task_enabled:
             return False
@@ -322,7 +329,7 @@ class RuntimeWorker:
             return False
         return self._engine.show_condition_feedback_screen(
             heading="Condition complete.",
-            body=_format_condition_feedback(summary),
+            body=_format_condition_feedback(summary, previous_summary=previous_summary),
             continue_key="space",
         )
 
@@ -356,13 +363,78 @@ def _run_mode(runtime_options: Mapping[str, object] | None) -> RunMode:
     return RunMode.TEST if bool((runtime_options or {}).get("test_mode")) else RunMode.SESSION
 
 
-def _format_condition_feedback(summary: FixationTaskSummary) -> str:
-    mean_rt_line = "Mean RT: N/A" if summary.mean_rt_ms is None else f"Mean RT: {summary.mean_rt_ms:.0f} ms"
-    return "\n".join(
-        [
-            f"Accuracy: {summary.accuracy_percent:.1f}% ({summary.hit_count}/{summary.total_targets})",
-            mean_rt_line,
-            f"False alarms: {summary.false_alarm_count}",
-            "Press Space to continue.",
-        ]
+def _latest_fixation_task_summary(
+    run_results: list[RunExecutionSummary],
+) -> FixationTaskSummary | None:
+    for run_result in reversed(run_results):
+        if run_result.fixation_task_summary is not None:
+            return run_result.fixation_task_summary
+    return None
+
+
+def _format_condition_feedback(
+    summary: FixationTaskSummary,
+    *,
+    previous_summary: FixationTaskSummary | None = None,
+) -> str:
+    target_label = "color change" if summary.total_targets == 1 else "color changes"
+    detected_line = (
+        f"You successfully detected {summary.hit_count}/{summary.total_targets} {target_label}."
+        if summary.total_targets > 0
+        else "No color changes were scheduled in this condition."
     )
+    mean_rt_line = (
+        "Your average reaction time was not available for this condition."
+        if summary.mean_rt_ms is None
+        else f"Your average reaction time was {summary.mean_rt_ms:.0f} milliseconds."
+    )
+    false_alarm_line = (
+        "Great timing: no extra responses were recorded."
+        if summary.false_alarm_count == 0
+        else (
+            "You made 1 extra response outside a color change."
+            if summary.false_alarm_count == 1
+            else f"You made {summary.false_alarm_count} extra responses outside a color change."
+        )
+    )
+    lines = [detected_line, mean_rt_line, false_alarm_line]
+    comparison_line = _format_condition_feedback_comparison(summary, previous_summary)
+    if comparison_line is not None:
+        lines.append(comparison_line)
+    return "\n".join(lines)
+
+
+def _format_condition_feedback_comparison(
+    summary: FixationTaskSummary,
+    previous_summary: FixationTaskSummary | None,
+) -> str | None:
+    if previous_summary is None:
+        return None
+
+    accuracy_delta = summary.accuracy_percent - previous_summary.accuracy_percent
+    if abs(accuracy_delta) < 0.05:
+        accuracy_text = "your detection rate stayed about the same"
+    elif accuracy_delta > 0:
+        accuracy_text = f"your detection rate improved by {accuracy_delta:.1f} percentage points"
+    else:
+        accuracy_text = f"your detection rate dropped by {abs(accuracy_delta):.1f} percentage points"
+
+    rt_text = _format_rt_comparison(summary.mean_rt_ms, previous_summary.mean_rt_ms)
+    if rt_text is None:
+        return f"Compared with the previous condition, {accuracy_text}."
+    return f"Compared with the previous condition, {accuracy_text}, and {rt_text}."
+
+
+def _format_rt_comparison(
+    current_mean_rt_ms: float | None,
+    previous_mean_rt_ms: float | None,
+) -> str | None:
+    if current_mean_rt_ms is None or previous_mean_rt_ms is None:
+        return None
+
+    rt_delta_ms = current_mean_rt_ms - previous_mean_rt_ms
+    if abs(rt_delta_ms) < 0.5:
+        return "your reaction time stayed about the same"
+    if rt_delta_ms < 0:
+        return f"you were {abs(rt_delta_ms):.0f} milliseconds faster"
+    return f"you were {rt_delta_ms:.0f} milliseconds slower"

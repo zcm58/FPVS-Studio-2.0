@@ -422,8 +422,10 @@ def test_session_launch_shows_condition_feedback_with_accuracy_and_mean_rt_when_
     assert first_summary.hit_count == 1
     assert first_summary.mean_rt_ms == 0.0
     assert len(captures["condition_feedback"]) == session_plan.total_runs
-    assert "Accuracy:" in captures["condition_feedback"][0]["body"]
-    assert "Mean RT:" in captures["condition_feedback"][0]["body"]
+    assert "You successfully detected" in captures["condition_feedback"][0]["body"]
+    assert "Your average reaction time was" in captures["condition_feedback"][0]["body"]
+    if session_plan.total_runs > 1:
+        assert "Compared with the previous condition" in captures["condition_feedback"][1]["body"]
 
 
 def test_session_launch_skips_condition_feedback_when_accuracy_task_disabled(

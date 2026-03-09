@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import QEvent, Signal
+from PySide6.QtCore import QEvent, Qt, Signal
 from PySide6.QtGui import QColor, QPalette
 from PySide6.QtWidgets import (
     QApplication,
@@ -38,59 +38,68 @@ class WelcomeWindow(QWidget):
         page_layout.setContentsMargins(32, 32, 32, 32)
         page_layout.setSpacing(16)
 
-        centered_content_layout = QHBoxLayout()
-        centered_content_layout.setContentsMargins(0, 0, 0, 0)
-        centered_content_layout.setSpacing(0)
-        centered_content_layout.addStretch(1)
-
         self.content_frame = QFrame(self)
         self.content_frame.setObjectName("welcome_content_frame")
-        self.content_frame.setMaximumWidth(980)
         self.content_frame.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        centered_content_layout.addWidget(self.content_frame, 1)
-        centered_content_layout.addStretch(1)
-        page_layout.addLayout(centered_content_layout, 1)
+        page_layout.addWidget(self.content_frame, 1)
 
         content_layout = QVBoxLayout(self.content_frame)
-        content_layout.setContentsMargins(32, 32, 32, 32)
-        content_layout.setSpacing(24)
+        content_layout.setContentsMargins(44, 40, 44, 40)
+        content_layout.setSpacing(0)
 
-        self.brand_label = QLabel("FPVS Studio", self.content_frame)
+        content_layout.addStretch(1)
+
+        self.hero_container = QWidget(self.content_frame)
+        self.hero_container.setObjectName("welcome_hero_container")
+        self.hero_container.setMaximumWidth(760)
+        self.hero_container.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum)
+        content_layout.addWidget(self.hero_container, 0, Qt.AlignmentFlag.AlignHCenter)
+
+        hero_layout = QVBoxLayout(self.hero_container)
+        hero_layout.setContentsMargins(0, 0, 0, 0)
+        hero_layout.setSpacing(18)
+
+        self.brand_label = QLabel("FPVS Studio", self.hero_container)
         self.brand_label.setObjectName("welcome_brand_label")
-        content_layout.addWidget(self.brand_label)
+        self.brand_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        hero_layout.addWidget(self.brand_label)
 
-        self.headline_label = QLabel("Start a project", self.content_frame)
+        self.headline_label = QLabel("Welcome to FPVS Studio", self.hero_container)
         self.headline_label.setObjectName("welcome_headline_label")
-        content_layout.addWidget(self.headline_label)
+        self.headline_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        hero_layout.addWidget(self.headline_label)
 
         self.body_label = QLabel(
-            "Create or open an FPVS project, import assets, validate your session, "
-            "and launch a supported test runtime.",
-            self.content_frame,
+            "Create a new FPVS project or open an existing one.",
+            self.hero_container,
         )
         self.body_label.setObjectName("welcome_body_label")
         self.body_label.setWordWrap(True)
-        content_layout.addWidget(self.body_label)
+        self.body_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        hero_layout.addWidget(self.body_label)
 
         action_layout = QHBoxLayout()
-        action_layout.setSpacing(8)
-        action_layout.setContentsMargins(0, 8, 0, 0)
+        action_layout.setSpacing(12)
+        action_layout.setContentsMargins(0, 10, 0, 0)
+        action_layout.setAlignment(Qt.AlignmentFlag.AlignHCenter)
 
-        self.create_button = QPushButton("New Project", self.content_frame)
+        self.create_button = QPushButton("New Project", self.hero_container)
         self.create_button.setObjectName("create_project_button")
         self.create_button.setProperty("welcomeRole", "primary")
-        self.create_button.setMinimumHeight(44)
+        self.create_button.setMinimumHeight(52)
+        self.create_button.setFixedWidth(220)
         self.create_button.clicked.connect(self.create_requested.emit)
         action_layout.addWidget(self.create_button)
 
-        self.open_button = QPushButton("Open Project", self.content_frame)
+        self.open_button = QPushButton("Open Project", self.hero_container)
         self.open_button.setObjectName("open_project_button")
         self.open_button.setProperty("welcomeRole", "secondary")
-        self.open_button.setMinimumHeight(44)
+        self.open_button.setMinimumHeight(52)
+        self.open_button.setFixedWidth(220)
         self.open_button.clicked.connect(self.open_requested.emit)
         action_layout.addWidget(self.open_button)
-        action_layout.addStretch(1)
-        content_layout.addLayout(action_layout)
+        hero_layout.addLayout(action_layout)
+
         content_layout.addStretch(1)
 
         self._apply_theme_styles()
@@ -113,9 +122,11 @@ class WelcomeWindow(QWidget):
         muted_text.setAlpha(190)
         subtle_text = QColor(text_color)
         subtle_text.setAlpha(150)
+        frame_border = QColor(mid_color)
+        frame_border.setAlpha(100 if window_color.lightness() >= 128 else 145)
 
         is_dark = window_color.lightness() < 128
-        content_bg = window_color.lighter(108) if is_dark else window_color.lighter(103)
+        content_bg = window_color.lighter(106) if is_dark else window_color.lighter(102)
         row_hover_bg = base_color.lighter(118) if is_dark else window_color.lighter(107)
         focus_color = highlight_color.lighter(125) if is_dark else highlight_color.darker(110)
         primary_hover = highlight_color.lighter(112) if is_dark else highlight_color.darker(108)
@@ -124,30 +135,35 @@ class WelcomeWindow(QWidget):
         self.setStyleSheet(
             f"""
             QFrame#welcome_content_frame {{
-                border: 1px solid {_rgba(mid_color)};
-                border-radius: 14px;
+                border: 1px solid {_rgba(frame_border)};
+                border-radius: 16px;
                 background-color: {_rgba(content_bg)};
+            }}
+            QWidget#welcome_hero_container {{
+                background: transparent;
             }}
             QLabel#welcome_brand_label {{
                 color: {_rgba(subtle_text)};
-                font-size: 13px;
+                font-size: 14px;
                 font-weight: 600;
             }}
             QLabel#welcome_headline_label {{
                 color: {_rgba(text_color)};
-                font-size: 34px;
+                font-size: 44px;
                 font-weight: 700;
             }}
             QLabel#welcome_body_label {{
                 color: {_rgba(muted_text)};
-                font-size: 14px;
+                font-size: 17px;
             }}
             QPushButton {{
                 border: 1px solid {_rgba(mid_color)};
-                border-radius: 8px;
-                padding: 8px 14px;
+                border-radius: 10px;
+                padding: 12px 26px;
                 background-color: {_rgba(base_color)};
                 color: {_rgba(text_color)};
+                font-size: 16px;
+                font-weight: 600;
             }}
             QPushButton:hover {{
                 background-color: {_rgba(row_hover_bg)};

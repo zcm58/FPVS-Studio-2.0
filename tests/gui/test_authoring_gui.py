@@ -101,12 +101,63 @@ def test_welcome_window_copy_and_primary_hierarchy(controller: StudioController)
     assert create_button is not None
     assert open_button is not None
 
-    assert headline.text() == "Start a project"
-    assert "Create or open an FPVS project" in body.text()
+    assert headline.text() == "Welcome to FPVS Studio"
+    assert body.text() == "Create a new FPVS project or open an existing one."
     assert create_button.text() == "New Project"
     assert open_button.text() == "Open Project"
     assert create_button.property("welcomeRole") == "primary"
     assert open_button.property("welcomeRole") != "primary"
+
+
+def test_welcome_window_action_buttons_are_horizontally_centered(
+    controller: StudioController,
+) -> None:
+    welcome = controller.welcome_window
+    assert welcome is not None
+
+    content_frame = welcome.findChild(QWidget, "welcome_content_frame")
+    create_button = welcome.findChild(QPushButton, "create_project_button")
+    open_button = welcome.findChild(QPushButton, "open_project_button")
+
+    assert content_frame is not None
+    assert create_button is not None
+    assert open_button is not None
+
+    welcome.resize(1200, 760)
+    QApplication.processEvents()
+
+    create_left = create_button.mapTo(content_frame, create_button.rect().topLeft()).x()
+    create_right = create_button.mapTo(content_frame, create_button.rect().bottomRight()).x()
+    open_left = open_button.mapTo(content_frame, open_button.rect().topLeft()).x()
+    open_right = open_button.mapTo(content_frame, open_button.rect().bottomRight()).x()
+
+    group_left = min(create_left, open_left)
+    group_right = max(create_right, open_right)
+    button_group_midpoint = (group_left + group_right) / 2.0
+    content_midpoint = content_frame.width() / 2.0
+
+    assert abs(button_group_midpoint - content_midpoint) <= 6.0
+
+
+def test_welcome_window_hero_stack_is_centered_in_panel(controller: StudioController) -> None:
+    welcome = controller.welcome_window
+    assert welcome is not None
+
+    content_frame = welcome.findChild(QWidget, "welcome_content_frame")
+    hero_container = welcome.findChild(QWidget, "welcome_hero_container")
+
+    assert content_frame is not None
+    assert hero_container is not None
+
+    welcome.resize(1280, 720)
+    QApplication.processEvents()
+
+    hero_center = hero_container.geometry().center()
+    frame_center_x = content_frame.width() / 2.0
+    frame_center_y = content_frame.height() / 2.0
+
+    assert abs(hero_center.x() - frame_center_x) <= 10.0
+    assert abs(hero_center.y() - frame_center_y) <= 18.0
 
 
 def test_welcome_window_does_not_expose_recent_projects_panel(
@@ -148,6 +199,45 @@ def test_open_existing_project_dialog_uses_saved_root_as_default(
     controller.show_open_project_dialog()
 
     assert captured_initial_dirs == [str(root_dir)]
+
+
+def test_open_project_randomizes_session_seed_per_open_without_dirtying_document(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Seed Randomization")
+    project_root = window.document.project_root
+    project_file_path = window.document.project_file_path
+    persisted_seed = load_project_file(project_file_path).settings.session.session_seed
+
+    seed_values = iter((111_111_111, 222_222_222))
+
+    class _DeterministicSystemRandom:
+        def randrange(self, _upper_bound: int) -> int:
+            return next(seed_values)
+
+    deterministic_rng = _DeterministicSystemRandom()
+    monkeypatch.setattr(
+        "fpvs_studio.gui.document.random.SystemRandom",
+        lambda: deterministic_rng,
+    )
+
+    first_opened = controller.open_project(project_root)
+    assert first_opened is not None
+    assert controller.main_window is not None
+    qtbot.addWidget(controller.main_window)
+    assert controller.main_window.document.project.settings.session.session_seed == 111_111_111
+    assert controller.main_window.document.dirty is False
+
+    second_opened = controller.open_project(project_root)
+    assert second_opened is not None
+    assert controller.main_window is not None
+    qtbot.addWidget(controller.main_window)
+    assert controller.main_window.document.project.settings.session.session_seed == 222_222_222
+    assert controller.main_window.document.dirty is False
+    assert load_project_file(project_file_path).settings.session.session_seed == persisted_seed
 
 
 def test_create_project_dialog_prefills_saved_root_parent_directory(

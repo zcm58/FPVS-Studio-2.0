@@ -298,6 +298,17 @@ class ProjectDocument(QObject):
         self.update_session_settings(session_seed=seed)
         return seed
 
+    def randomize_session_seed_for_app_launch(self) -> int:
+        """Generate a fresh session seed for the current app launch without marking dirty."""
+
+        seed = random.SystemRandom().randrange(_SESSION_SEED_UPPER_BOUND)
+        session = _validated_copy(self._project.settings.session, session_seed=seed)
+        settings = _validated_copy(self._project.settings, session=session)
+        self._project = _validated_copy(self._project, settings=settings)
+        self._last_session_plan = None
+        self.project_changed.emit()
+        return seed
+
     def update_fixation_settings(self, **updates: object) -> None:
         """Update fixation settings through Pydantic validation."""
 

@@ -193,6 +193,7 @@ class StudioController:
         dialog.exec()
 
     def _open_document(self, document: ProjectDocument) -> None:
+        document.randomize_session_seed_for_app_launch()
         previous_window = self.main_window
         self.main_window = StudioMainWindow(
             document=document,
