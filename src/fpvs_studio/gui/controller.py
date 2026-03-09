@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 import traceback
+from pathlib import Path
 
 from PySide6.QtCore import QSettings
 from PySide6.QtWidgets import QApplication, QFileDialog, QMessageBox, QWidget

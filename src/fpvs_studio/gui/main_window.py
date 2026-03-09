@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
+import traceback
 from collections.abc import Callable
 from pathlib import Path
-import traceback
 
 from PySide6.QtCore import QSignalBlocker, Qt
-from PySide6.QtGui import QAction, QCloseEvent, QTextCursor, QTextOption
+from PySide6.QtGui import QAction, QCloseEvent, QTextCursor
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -15,7 +15,9 @@ from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QDoubleSpinBox,
+    QFileDialog,
     QFormLayout,
+    QFrame,
     QGridLayout,
     QGroupBox,
     QHBoxLayout,
@@ -31,17 +33,17 @@ from PySide6.QtWidgets import (
     QSpinBox,
     QSplitter,
     QStatusBar,
-    QTabWidget,
     QTableWidget,
     QTableWidgetItem,
+    QTabWidget,
     QTextEdit,
     QVBoxLayout,
     QWidget,
-    QFileDialog,
 )
 
 from fpvs_studio.core.enums import DutyCycleMode, InterConditionMode, StimulusVariant
 from fpvs_studio.core.template_library import get_template
+from fpvs_studio.gui.animations import AnimatedTabBar, ButtonHoverAnimator
 from fpvs_studio.gui.document import ConditionStimulusRow, DocumentError, ProjectDocument
 
 _CYCLE_HELP_TEXT = "Cycle = one turn of base presentations plus one oddball presentation."
@@ -204,44 +206,102 @@ class ProjectPage(QWidget):
 
         self.project_description_edit = LeftToRightPlainTextEdit(self)
         self.project_description_edit.setObjectName("project_description_edit")
+        self.project_description_edit.setPlaceholderText(
+            "Describe the project goal and participant instructions."
+        )
+        self.project_description_edit.setFixedHeight(110)
         self.project_description_edit.setMaximumBlockCount(20)
         self.project_description_edit.textChanged.connect(self._apply_project_description)
 
         self.project_root_value = QLabel(self)
         self.project_root_value.setObjectName("project_root_value")
         self.project_root_value.setWordWrap(True)
+        self.project_root_value.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         self.template_value = QLabel(self)
         self.template_value.setObjectName("template_value")
         self.template_value.setWordWrap(True)
+        self.template_value.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         self.background_color_edit = QLineEdit(self)
         self.background_color_edit.setObjectName("background_color_edit")
         self.background_color_edit.editingFinished.connect(self._apply_background_color)
 
+        runtime_note_title = QLabel("Runtime Launch Status", self)
+        runtime_note_title.setObjectName("project_runtime_note_title")
         self.runtime_note = QLabel(
-            "Runtime launch currently uses the supported test-mode path. "
+            "Runtime launch currently uses the supported alpha test-mode path. "
             "Launched PsychoPy playback opens fullscreen on the selected display and "
             "shows a manual continue screen between non-final blocks. Broader "
             "production validation remains deferred.",
             self,
         )
         self.runtime_note.setWordWrap(True)
+        self.runtime_note.setObjectName("project_runtime_note_body")
 
-        metadata_group = QGroupBox("Project", self)
+        runtime_note_banner = QFrame(self)
+        runtime_note_banner.setObjectName("project_runtime_note_banner")
+        runtime_note_layout = QVBoxLayout(runtime_note_banner)
+        runtime_note_layout.setContentsMargins(12, 10, 12, 10)
+        runtime_note_layout.setSpacing(6)
+        runtime_note_layout.addWidget(runtime_note_title)
+        runtime_note_layout.addWidget(self.runtime_note)
+
+        metadata_group = QGroupBox("Project Overview", self)
+        metadata_group.setObjectName("project_metadata_card")
         metadata_layout = QFormLayout(metadata_group)
+        metadata_layout.setVerticalSpacing(10)
         metadata_layout.addRow("Name", self.project_name_edit)
         metadata_layout.addRow("Description", self.project_description_edit)
         metadata_layout.addRow("Project Root", self.project_root_value)
         metadata_layout.addRow("Template", self.template_value)
 
-        display_group = QGroupBox("Display", self)
+        display_group = QGroupBox("Display & Runtime", self)
+        display_group.setObjectName("project_display_card")
         display_layout = QFormLayout(display_group)
+        display_layout.setVerticalSpacing(10)
         display_layout.addRow("Background Color", self.background_color_edit)
-        display_layout.addRow("", self.runtime_note)
+        display_layout.addRow(runtime_note_banner)
 
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setSpacing(12)
         layout.addWidget(metadata_group)
         layout.addWidget(display_group)
         layout.addStretch(1)
+
+        self.setStyleSheet(
+            """
+            QGroupBox#project_metadata_card,
+            QGroupBox#project_display_card {
+                border: 1px solid #c7d0dd;
+                border-radius: 8px;
+                margin-top: 10px;
+                padding-top: 10px;
+                background-color: #f8fafc;
+            }
+            QGroupBox#project_metadata_card::title,
+            QGroupBox#project_display_card::title {
+                subcontrol-origin: margin;
+                left: 12px;
+                padding: 0 4px;
+                font-weight: 600;
+            }
+            QLabel#project_root_value,
+            QLabel#template_value {
+                border: 1px solid #d6dde8;
+                border-radius: 6px;
+                background-color: #ffffff;
+                padding: 6px 8px;
+            }
+            QFrame#project_runtime_note_banner {
+                border: 1px solid #d2dae5;
+                border-radius: 8px;
+                background-color: #ffffff;
+            }
+            QLabel#project_runtime_note_title {
+                font-weight: 600;
+            }
+            """
+        )
 
         self._document.project_changed.connect(self.refresh)
         self.refresh()
@@ -1000,7 +1060,6 @@ class AssetsPage(QWidget):
             checkbox.stateChanged.connect(self._apply_supported_variants)
             if variant == StimulusVariant.ORIGINAL:
                 checkbox.setEnabled(False)
-                checkbox.setChecked(True)
             self._variant_checkboxes[variant] = checkbox
             supported_variants_layout.addWidget(checkbox)
 
@@ -1167,7 +1226,7 @@ class AssetsPage(QWidget):
 
 
 class RunPage(QWidget):
-    """Session compile, preflight, and launch page."""
+    """Session compile and launch page with automatic preflight checks."""
 
     def __init__(self, document: ProjectDocument, parent=None) -> None:
         super().__init__(parent)
@@ -1196,7 +1255,7 @@ class RunPage(QWidget):
         self.serial_baudrate_spin.setRange(1, 2_000_000)
         self.serial_baudrate_spin.valueChanged.connect(self._apply_serial_settings)
 
-        self.test_mode_checkbox = QCheckBox("Launch the currently supported test-mode path", self)
+        self.test_mode_checkbox = QCheckBox("Launch the currently supported alpha test-mode path", self)
         self.test_mode_checkbox.setObjectName("test_mode_checkbox")
         self.test_mode_checkbox.setChecked(True)
         self.test_mode_checkbox.setEnabled(False)
@@ -1207,11 +1266,12 @@ class RunPage(QWidget):
         self.compile_button = QPushButton("Compile Session", self)
         self.compile_button.setObjectName("compile_session_button")
         self.compile_button.clicked.connect(self.compile_session)
-        self.preflight_button = QPushButton("Preflight", self)
-        self.preflight_button.setObjectName("preflight_button")
-        self.preflight_button.clicked.connect(self.preflight_session)
-        self.launch_button = QPushButton("Launch Test Session", self)
+        self.launch_button = QPushButton("Launch Experiment", self)
         self.launch_button.setObjectName("launch_test_session_button")
+        self.launch_button.setProperty("launchActionRole", "primary")
+        self.launch_button.setToolTip(
+            "Launch Experiment on the current alpha test-mode runtime path."
+        )
         self.launch_button.clicked.connect(self.launch_test_session)
 
         self.summary_text = QPlainTextEdit(self)
@@ -1231,7 +1291,6 @@ class RunPage(QWidget):
 
         button_layout = QHBoxLayout()
         button_layout.addWidget(self.compile_button)
-        button_layout.addWidget(self.preflight_button)
         button_layout.addWidget(self.launch_button)
 
         layout = QVBoxLayout(self)
@@ -1296,6 +1355,16 @@ class RunPage(QWidget):
         )
 
     def launch_test_session(self) -> None:
+        try:
+            session_plan = self._document.preflight_session(refresh_hz=self.current_refresh_hz())
+        except Exception as error:
+            _show_error_dialog(self, "Launch Blocked", error)
+            return
+        self._set_summary(
+            session_plan,
+            extra_lines=["Status: launch readiness checks passed."],
+        )
+
         participant_number = self._collect_launch_participant_number()
         if participant_number is None:
             return
@@ -1318,7 +1387,8 @@ class RunPage(QWidget):
         QMessageBox.information(
             self,
             "Launch Complete",
-            "The test session finished. Review the run exports in the project runs folder.",
+            "The experiment finished on the current alpha test-mode path. "
+            "Review run exports in the project runs folder.",
         )
 
     def _prompt_participant_number(self) -> str | None:
@@ -1406,6 +1476,369 @@ class RunPage(QWidget):
         self.summary_text.setPlainText("\n".join(lines))
 
 
+class HomePage(QWidget):
+    """Dashboard-style overview page for the current project."""
+
+    def __init__(self, document: ProjectDocument, run_page: RunPage, parent=None) -> None:
+        super().__init__(parent)
+        self._document = document
+        self._run_page = run_page
+        self._latest_status_bar_message = ""
+
+        self.current_project_header = QLabel(self)
+        self.current_project_header.setObjectName("home_current_project_header")
+
+        self.current_project_subtitle = QLabel(
+            "Authoring dashboard with key actions and live project/session status.",
+            self,
+        )
+        self.current_project_subtitle.setObjectName("home_current_project_subtitle")
+        self.current_project_subtitle.setWordWrap(True)
+
+        self.new_project_button = QPushButton("Create New Project", self)
+        self.new_project_button.setObjectName("home_create_project_button")
+        self.open_project_button = QPushButton("Open Project", self)
+        self.open_project_button.setObjectName("home_open_project_button")
+        self.save_project_button = QPushButton("Save", self)
+        self.save_project_button.setObjectName("home_save_project_button")
+        self.launch_button = QPushButton("Launch Experiment", self)
+        self.launch_button.setObjectName("home_launch_test_session_button")
+        self.launch_button.setProperty("launchActionRole", "primary")
+        self.launch_button.setProperty("homeActionRole", "primary")
+
+        for button in (
+            self.new_project_button,
+            self.open_project_button,
+            self.save_project_button,
+            self.launch_button,
+        ):
+            button.setMinimumHeight(36)
+
+        action_layout = QHBoxLayout()
+        action_layout.setSpacing(8)
+        action_layout.addWidget(self.new_project_button)
+        action_layout.addWidget(self.open_project_button)
+        action_layout.addWidget(self.save_project_button)
+        action_layout.addWidget(self.launch_button)
+        action_layout.addStretch(1)
+
+        project_card = QGroupBox("Project Overview", self)
+        project_card.setObjectName("home_project_card")
+        project_layout = QFormLayout(project_card)
+        project_layout.setVerticalSpacing(8)
+        self.project_name_value = QLabel(self)
+        self.project_name_value.setObjectName("home_project_name_value")
+        self.project_name_value.setWordWrap(True)
+        self.project_root_value = QLabel(self)
+        self.project_root_value.setObjectName("home_project_root_value")
+        self.project_root_value.setWordWrap(True)
+        self.project_root_value.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        self.project_template_value = QLabel(self)
+        self.project_template_value.setObjectName("home_project_template_value")
+        self.project_template_value.setWordWrap(True)
+        self.project_description_value = QLabel(self)
+        self.project_description_value.setObjectName("home_project_description_value")
+        self.project_description_value.setWordWrap(True)
+        project_layout.addRow("Name", self.project_name_value)
+        project_layout.addRow("Root", self.project_root_value)
+        project_layout.addRow("Template", self.project_template_value)
+        project_layout.addRow("Description", self.project_description_value)
+
+        session_card = QGroupBox("Session Overview", self)
+        session_card.setObjectName("home_session_card")
+        session_layout = QFormLayout(session_card)
+        session_layout.setVerticalSpacing(8)
+        self.condition_count_value = QLabel(self)
+        self.condition_count_value.setObjectName("home_condition_count_value")
+        self.block_count_value = QLabel(self)
+        self.block_count_value.setObjectName("home_block_count_value")
+        self.session_structure_value = QLabel(self)
+        self.session_structure_value.setObjectName("home_session_structure_value")
+        self.session_structure_value.setWordWrap(True)
+        self.fixation_status_value = QLabel(self)
+        self.fixation_status_value.setObjectName("home_fixation_status_value")
+        self.fixation_status_value.setWordWrap(True)
+        session_layout.addRow("Condition Count", self.condition_count_value)
+        session_layout.addRow("Block Count", self.block_count_value)
+        session_layout.addRow("Structure", self.session_structure_value)
+        session_layout.addRow("Fixation Task", self.fixation_status_value)
+
+        runtime_card = QGroupBox("Runtime Overview", self)
+        runtime_card.setObjectName("home_runtime_card")
+        runtime_layout = QFormLayout(runtime_card)
+        runtime_layout.setVerticalSpacing(8)
+        self.runtime_display_value = QLabel(self)
+        self.runtime_display_value.setObjectName("home_runtime_display_value")
+        self.runtime_display_value.setWordWrap(True)
+        self.runtime_serial_value = QLabel(self)
+        self.runtime_serial_value.setObjectName("home_runtime_serial_value")
+        self.runtime_serial_value.setWordWrap(True)
+        self.runtime_launch_note_value = QLabel(self)
+        self.runtime_launch_note_value.setObjectName("home_runtime_launch_note_value")
+        self.runtime_launch_note_value.setWordWrap(True)
+        runtime_layout.addRow("Display", self.runtime_display_value)
+        runtime_layout.addRow("Serial", self.runtime_serial_value)
+        runtime_layout.addRow("Launch Mode", self.runtime_launch_note_value)
+
+        preflight_card = QGroupBox("Launch Readiness Status", self)
+        preflight_card.setObjectName("home_preflight_card")
+        preflight_layout = QVBoxLayout(preflight_card)
+        self.preflight_status_text = QPlainTextEdit(self)
+        self.preflight_status_text.setObjectName("home_preflight_status_text")
+        self.preflight_status_text.setReadOnly(True)
+        self.preflight_status_text.setMaximumBlockCount(200)
+        preflight_layout.addWidget(self.preflight_status_text)
+
+        activity_card = QGroupBox("Recent Activity / Log", self)
+        activity_card.setObjectName("home_activity_card")
+        activity_layout = QVBoxLayout(activity_card)
+        self.recent_activity_text = QPlainTextEdit(self)
+        self.recent_activity_text.setObjectName("home_recent_activity_text")
+        self.recent_activity_text.setReadOnly(True)
+        self.recent_activity_text.setMaximumBlockCount(300)
+        activity_layout.addWidget(self.recent_activity_text)
+
+        cards_grid = QGridLayout()
+        cards_grid.setHorizontalSpacing(12)
+        cards_grid.setVerticalSpacing(12)
+        cards_grid.addWidget(project_card, 0, 0)
+        cards_grid.addWidget(session_card, 0, 1)
+        cards_grid.addWidget(runtime_card, 0, 2)
+        cards_grid.addWidget(preflight_card, 1, 0)
+        cards_grid.addWidget(activity_card, 1, 1, 1, 2)
+        cards_grid.setColumnStretch(0, 1)
+        cards_grid.setColumnStretch(1, 1)
+        cards_grid.setColumnStretch(2, 1)
+        cards_grid.setRowStretch(1, 1)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(20, 18, 20, 18)
+        layout.setSpacing(12)
+        layout.addWidget(self.current_project_header)
+        layout.addWidget(self.current_project_subtitle)
+        layout.addLayout(action_layout)
+        layout.addLayout(cards_grid, 1)
+
+        self.setStyleSheet(
+            """
+            QLabel#home_current_project_header {
+                font-size: 24px;
+                font-weight: 700;
+            }
+            QLabel#home_current_project_subtitle {
+                color: #495869;
+            }
+            QGroupBox#home_project_card,
+            QGroupBox#home_session_card,
+            QGroupBox#home_runtime_card,
+            QGroupBox#home_preflight_card,
+            QGroupBox#home_activity_card {
+                border: 1px solid #c5cfdb;
+                border-radius: 8px;
+                margin-top: 10px;
+                padding-top: 10px;
+                background-color: #f8fafc;
+            }
+            QGroupBox#home_project_card::title,
+            QGroupBox#home_session_card::title,
+            QGroupBox#home_runtime_card::title,
+            QGroupBox#home_preflight_card::title,
+            QGroupBox#home_activity_card::title {
+                subcontrol-origin: margin;
+                left: 12px;
+                padding: 0 4px;
+                font-weight: 600;
+            }
+            QPushButton[launchActionRole="primary"],
+            QPushButton[homeActionRole="primary"] {
+                font-weight: 600;
+                padding-left: 12px;
+                padding-right: 12px;
+            }
+            QPlainTextEdit#home_preflight_status_text,
+            QPlainTextEdit#home_recent_activity_text {
+                background-color: #ffffff;
+                border: 1px solid #d0d9e4;
+                border-radius: 6px;
+                padding: 6px;
+            }
+            """
+        )
+
+        self._document.project_changed.connect(self.refresh)
+        self._document.session_plan_changed.connect(self.refresh)
+        self._run_page.summary_text.textChanged.connect(self.refresh)
+        self.refresh()
+
+    def bind_quick_actions(
+        self,
+        *,
+        new_project_action: QAction,
+        open_project_action: QAction,
+        save_project_action: QAction,
+        launch_action: QAction,
+    ) -> None:
+        self._bind_button_to_action(
+            self.new_project_button,
+            new_project_action,
+            "Create New Project",
+        )
+        self._bind_button_to_action(
+            self.open_project_button,
+            open_project_action,
+            "Open Project",
+        )
+        self._bind_button_to_action(self.save_project_button, save_project_action, "Save")
+        self._bind_button_to_action(
+            self.launch_button,
+            launch_action,
+            "Launch Experiment",
+        )
+
+    def update_status_bar_message(self, message: str) -> None:
+        if message:
+            self._latest_status_bar_message = message
+        self.refresh()
+
+    def refresh(self) -> None:
+        project = self._document.project
+        template = get_template(project.meta.template_id)
+        session_settings = project.settings.session
+        display_settings = project.settings.display
+        trigger_settings = project.settings.triggers
+        fixation_settings = project.settings.fixation_task
+        ordered_conditions = self._document.ordered_conditions()
+
+        self.current_project_header.setText(f"Current Project: {project.meta.name}")
+        self.project_name_value.setText(project.meta.name)
+        self.project_root_value.setText(str(self._document.project_root))
+        self.project_template_value.setText(f"{template.display_name} ({template.template_id})")
+
+        description = project.meta.description.strip()
+        if not description:
+            self.project_description_value.setText("No description set yet.")
+        else:
+            compact_description = " ".join(description.split())
+            if len(compact_description) > 180:
+                compact_description = f"{compact_description[:177]}..."
+            self.project_description_value.setText(compact_description)
+
+        self.condition_count_value.setText(str(len(ordered_conditions)))
+        self.block_count_value.setText(str(session_settings.block_count))
+        self.session_structure_value.setText(self._session_structure_text())
+
+        fixation_state = "Enabled" if fixation_settings.enabled else "Disabled"
+        accuracy_state = (
+            "enabled" if fixation_settings.accuracy_task_enabled else "disabled"
+        )
+        self.fixation_status_value.setText(
+            f"{fixation_state}; accuracy task {accuracy_state}"
+        )
+
+        preferred_refresh = (
+            f"{display_settings.preferred_refresh_hz:.2f} Hz"
+            if display_settings.preferred_refresh_hz is not None
+            else "not set"
+        )
+        self.runtime_display_value.setText(
+            f"Background: {display_settings.background_color}; preferred refresh: {preferred_refresh}"
+        )
+        serial_port = trigger_settings.serial_port or "not set"
+        self.runtime_serial_value.setText(
+            f"{serial_port} @ {trigger_settings.baudrate}"
+        )
+        launch_mode = "alpha test-mode only"
+        fullscreen_mode = "fullscreen on" if self._run_page.fullscreen_checkbox.isChecked() else "fullscreen off"
+        self.runtime_launch_note_value.setText(
+            f"{launch_mode}; {fullscreen_mode}."
+        )
+
+        self.preflight_status_text.setPlainText(self._preflight_status_text())
+        self.recent_activity_text.setPlainText(self._activity_text())
+
+    @staticmethod
+    def _bind_button_to_action(button: QPushButton, action: QAction, label: str) -> None:
+        button.setText(label)
+        if action.toolTip():
+            button.setToolTip(action.toolTip())
+        if action.statusTip():
+            button.setStatusTip(action.statusTip())
+        button.clicked.connect(lambda _checked=False, target=action: target.trigger())
+
+    def _session_structure_text(self) -> str:
+        session_plan = self._document.last_session_plan
+        if session_plan is not None:
+            block_lines = []
+            for block in session_plan.blocks[:3]:
+                block_lines.append(
+                    f"Block {block.block_index + 1}: " + " -> ".join(block.condition_order)
+                )
+            remaining_block_count = len(session_plan.blocks) - len(block_lines)
+            if remaining_block_count > 0:
+                block_lines.append(f"... and {remaining_block_count} more block(s).")
+            return " | ".join(block_lines)
+
+        ordered_conditions = self._document.ordered_conditions()
+        if not ordered_conditions:
+            return "No conditions configured yet."
+
+        if (
+            self._document.project.settings.session.randomize_conditions_per_block
+            and len(ordered_conditions) > 1
+        ):
+            return "Conditions will be randomized within each block."
+
+        return "Planned order: " + " -> ".join(
+            condition.name for condition in ordered_conditions
+        )
+
+    def _preflight_status_text(self) -> str:
+        latest_status_line = self._latest_status_line()
+        if latest_status_line is not None:
+            return latest_status_line
+
+        refresh_hz = self._run_page.current_refresh_hz()
+        validation = self._document.validation_report(refresh_hz=refresh_hz)
+        intro = "Launch checks run automatically when you launch an experiment in alpha test mode."
+        if not validation.issues:
+            return (
+                f"{intro}\n"
+                f"Current validation at {refresh_hz:.2f} Hz reports no issues."
+            )
+
+        lines = [
+            intro,
+            f"Current validation at {refresh_hz:.2f} Hz reports {len(validation.issues)} issue(s).",
+            f"- {validation.issues[0].message}",
+        ]
+        if len(validation.issues) > 1:
+            lines.append(f"... and {len(validation.issues) - 1} more issue(s).")
+        return "\n".join(lines)
+
+    def _latest_status_line(self) -> str | None:
+        summary_text = self._run_page.summary_text.toPlainText()
+        for line in reversed(summary_text.splitlines()):
+            stripped = line.strip()
+            if stripped.lower().startswith("status:"):
+                return stripped
+        return None
+
+    def _activity_text(self) -> str:
+        summary_text = self._run_page.summary_text.toPlainText().strip()
+        lines: list[str] = []
+        if self._latest_status_bar_message:
+            lines.append(f"Status bar: {self._latest_status_bar_message}")
+        else:
+            lines.append("Status bar: no recent message.")
+        lines.append("")
+        if summary_text:
+            lines.append("Run summary:")
+            lines.append(summary_text)
+        else:
+            lines.append("Run summary: no compile/launch activity yet.")
+        return "\n".join(lines)
+
+
 class StudioMainWindow(QMainWindow):
     """Main window hosting the Phase 5 authoring tabs."""
 
@@ -1422,7 +1855,7 @@ class StudioMainWindow(QMainWindow):
         self._on_request_new_project = on_request_new_project
         self._on_request_open_project = on_request_open_project
         self._on_request_settings = on_request_settings
-        self.setWindowTitle("FPVS Studio")
+        self.setWindowTitle("FPVS Studio (Alpha)")
         self.resize(1200, 860)
 
         self.project_page = ProjectPage(document, self)
@@ -1430,19 +1863,37 @@ class StudioMainWindow(QMainWindow):
         self.session_fixation_page = SessionFixationPage(document, self)
         self.assets_page = AssetsPage(document, self)
         self.run_page = RunPage(document, self)
+        self.home_page = HomePage(document, self.run_page, self)
 
         self.main_tabs = QTabWidget(self)
         self.main_tabs.setObjectName("main_tabs")
+        self.main_tabs.setTabBar(AnimatedTabBar(self.main_tabs))
+        self.main_tabs.addTab(self.home_page, "Home")
         self.main_tabs.addTab(self.project_page, "Project")
         self.main_tabs.addTab(self.conditions_page, "Conditions")
         self.main_tabs.addTab(self.session_fixation_page, "Fixation & Session")
         self.main_tabs.addTab(self.assets_page, "Assets / Preprocessing")
         self.main_tabs.addTab(self.run_page, "Run / Runtime")
         self.setCentralWidget(self.main_tabs)
+        self._apply_chrome_styles()
 
         self.setStatusBar(QStatusBar(self))
+        self.alpha_status_label = QLabel("Alpha: test-mode runtime path only", self)
+        self.alpha_status_label.setObjectName("alpha_runtime_status_label")
+        self.alpha_status_label.setToolTip(
+            "Runtime launch currently supports the alpha test-mode path only (test_mode=True)."
+        )
+        self.statusBar().addPermanentWidget(self.alpha_status_label)
         self._create_actions()
+        self.home_page.bind_quick_actions(
+            new_project_action=self.new_project_action,
+            open_project_action=self.open_project_action,
+            save_project_action=self.save_project_action,
+            launch_action=self.launch_action,
+        )
         self._create_menu_and_toolbar()
+        self._button_hover_animators: list[ButtonHoverAnimator] = []
+        self._install_button_hover_animations()
         self._wire_document()
         self._update_window_title()
 
@@ -1450,6 +1901,65 @@ class StudioMainWindow(QMainWindow):
         self.document.project_changed.connect(self._update_window_title)
         self.document.dirty_changed.connect(self._update_window_title)
         self.document.saved.connect(lambda: self.statusBar().showMessage("Project saved.", 3000))
+        self.statusBar().messageChanged.connect(self.home_page.update_status_bar_message)
+        self.home_page.update_status_bar_message(self.statusBar().currentMessage())
+
+    def _apply_chrome_styles(self) -> None:
+        self.setStyleSheet(
+            """
+            QTabWidget#main_tabs::pane {
+                border: 1px solid #c5cfdb;
+                background-color: #ffffff;
+                top: -1px;
+            }
+            QPushButton {
+                border: 1px solid #c3d0de;
+                border-radius: 8px;
+                background-color: #f8fafc;
+                padding: 6px 12px;
+                color: #243447;
+            }
+            QPushButton:hover {
+                border-color: #a8bad2;
+                background-color: #ecf2fa;
+            }
+            QPushButton:pressed {
+                border-color: #94aac6;
+                background-color: #dfe8f5;
+            }
+            QPushButton:disabled {
+                border-color: #d4dbe6;
+                background-color: #f1f4f8;
+                color: #8a97a8;
+            }
+            QPushButton[launchActionRole="primary"] {
+                border-color: #1d4ed8;
+                background-color: #2563eb;
+                color: #ffffff;
+                font-weight: 600;
+                padding-left: 14px;
+                padding-right: 14px;
+            }
+            QPushButton[launchActionRole="primary"]:hover {
+                border-color: #1e40af;
+                background-color: #1d4ed8;
+            }
+            QPushButton[launchActionRole="primary"]:pressed {
+                border-color: #1e3a8a;
+                background-color: #1e40af;
+            }
+            QPushButton[launchActionRole="primary"]:disabled {
+                border-color: #93c5fd;
+                background-color: #93c5fd;
+                color: #eff6ff;
+            }
+            """
+        )
+
+    def _install_button_hover_animations(self) -> None:
+        self._button_hover_animators.clear()
+        for button in self.findChildren(QPushButton):
+            self._button_hover_animators.append(ButtonHoverAnimator(button, parent=self))
 
     def _create_actions(self) -> None:
         self.new_project_action = QAction("Create New Project", self)
@@ -1461,30 +1971,18 @@ class StudioMainWindow(QMainWindow):
         self.settings_action = QAction("Settings...", self)
         self.settings_action.setObjectName("settings_action")
         self.settings_action.triggered.connect(self._request_settings)
-        self.preflight_action = QAction("Preflight", self)
-        self.preflight_action.triggered.connect(self.run_page.preflight_session)
-        self.launch_action = QAction("Launch Test Session", self)
+        self.launch_action = QAction("Launch Experiment", self)
+        launch_help = (
+            "Launch Experiment on the current alpha test-mode runtime path. "
+            "Launch checks run automatically before participant entry."
+        )
+        self.launch_action.setToolTip(launch_help)
+        self.launch_action.setStatusTip(launch_help)
         self.launch_action.triggered.connect(self.run_page.launch_test_session)
 
     def _create_menu_and_toolbar(self) -> None:
         file_menu = self.menuBar().addMenu("File")
-        file_menu.addAction(self.new_project_action)
-        file_menu.addAction(self.open_project_action)
-        file_menu.addAction(self.save_project_action)
-        file_menu.addSeparator()
         file_menu.addAction(self.settings_action)
-
-        run_menu = self.menuBar().addMenu("Run")
-        run_menu.addAction(self.preflight_action)
-        run_menu.addAction(self.launch_action)
-
-        toolbar = self.addToolBar("Main")
-        toolbar.addAction(self.new_project_action)
-        toolbar.addAction(self.open_project_action)
-        toolbar.addAction(self.save_project_action)
-        toolbar.addSeparator()
-        toolbar.addAction(self.preflight_action)
-        toolbar.addAction(self.launch_action)
 
     def save_project(self) -> bool:
         try:
@@ -1532,5 +2030,5 @@ class StudioMainWindow(QMainWindow):
     def _update_window_title(self, *_args) -> None:
         dirty_prefix = "*" if self.document.dirty else ""
         self.setWindowTitle(
-            f"{dirty_prefix}{self.document.project.meta.name} - FPVS Studio"
+            f"{dirty_prefix}{self.document.project.meta.name} - FPVS Studio (Alpha)"
         )

@@ -5,20 +5,32 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from pathlib import Path
 
-from PIL import Image
-from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QLabel, QMessageBox, QPushButton
 import pytest
+from PIL import Image
+from PySide6.QtCore import QEvent, QPoint, Qt
+from PySide6.QtWidgets import (
+    QApplication,
+    QGroupBox,
+    QLabel,
+    QMessageBox,
+    QPlainTextEdit,
+    QPushButton,
+    QToolBar,
+    QWidget,
+)
 
 from fpvs_studio.core.enums import DutyCycleMode, InterConditionMode, RunMode, StimulusVariant
 from fpvs_studio.core.execution import SessionExecutionSummary
 from fpvs_studio.core.project_service import create_project
 from fpvs_studio.core.serialization import load_project_file
+from fpvs_studio.gui.animations import AnimatedTabBar
+from fpvs_studio.gui.application import create_application
 from fpvs_studio.gui.controller import StudioController
 from fpvs_studio.gui.create_project_dialog import CreateProjectDialog
 from fpvs_studio.gui.document import _CONDITION_LENGTH_ERROR_MESSAGE
 from fpvs_studio.gui.main_window import ParticipantNumberDialog
 from fpvs_studio.gui.settings_dialog import AppSettingsDialog
+from fpvs_studio.gui.welcome_window import WelcomeWindow
 
 
 def _write_image_directory(target_dir: Path, *, size: tuple[int, int] = (96, 96)) -> Path:
@@ -73,6 +85,46 @@ def test_welcome_window_smoke(qtbot, controller: StudioController) -> None:
         qtbot.mouseClick(create_button, Qt.MouseButton.LeftButton)
     with qtbot.waitSignal(welcome.open_requested, timeout=1000):
         qtbot.mouseClick(open_button, Qt.MouseButton.LeftButton)
+
+
+def test_welcome_window_copy_and_primary_hierarchy(controller: StudioController) -> None:
+    welcome = controller.welcome_window
+    assert welcome is not None
+
+    headline = welcome.findChild(QLabel, "welcome_headline_label")
+    body = welcome.findChild(QLabel, "welcome_body_label")
+    create_button = welcome.findChild(QPushButton, "create_project_button")
+    open_button = welcome.findChild(QPushButton, "open_project_button")
+
+    assert headline is not None
+    assert body is not None
+    assert create_button is not None
+    assert open_button is not None
+
+    assert headline.text() == "Start a project"
+    assert "Create or open an FPVS project" in body.text()
+    assert create_button.text() == "New Project"
+    assert open_button.text() == "Open Project"
+    assert create_button.property("welcomeRole") == "primary"
+    assert open_button.property("welcomeRole") != "primary"
+
+
+def test_welcome_window_does_not_expose_recent_projects_panel(
+    controller: StudioController,
+) -> None:
+    welcome = controller.welcome_window
+    assert welcome is not None
+    assert welcome.findChild(QWidget, "welcome_recent_projects_panel") is None
+
+
+def test_application_bootstrap_sets_non_null_welcome_icon(qapp) -> None:
+    app = create_application([])
+    assert not app.windowIcon().isNull()
+    welcome = WelcomeWindow()
+    try:
+        assert not welcome.windowIcon().isNull()
+    finally:
+        welcome.deleteLater()
 
 
 def test_open_existing_project_dialog_uses_saved_root_as_default(
@@ -367,6 +419,302 @@ def test_open_existing_project_populates_gui_correctly(
     assert controller.main_window.project_page.project_root_value.text().endswith("opened-project")
 
 
+def test_home_tab_is_first_and_existing_tabs_remain_usable(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Home Tabs Project")
+
+    expected_tabs = [
+        "Home",
+        "Project",
+        "Conditions",
+        "Fixation & Session",
+        "Assets / Preprocessing",
+        "Run / Runtime",
+    ]
+    tab_labels = [window.main_tabs.tabText(index) for index in range(window.main_tabs.count())]
+    assert tab_labels == expected_tabs
+
+    window.main_tabs.setCurrentWidget(window.project_page)
+    assert window.main_tabs.currentWidget() is window.project_page
+    window.main_tabs.setCurrentWidget(window.conditions_page)
+    assert window.main_tabs.currentWidget() is window.conditions_page
+    window.main_tabs.setCurrentWidget(window.run_page)
+    assert window.main_tabs.currentWidget() is window.run_page
+
+
+def test_home_header_updates_when_project_name_changes(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Home Header Project")
+    header_label = window.home_page.findChild(QLabel, "home_current_project_header")
+    assert header_label is not None
+    assert header_label.text() == "Current Project: Home Header Project"
+
+    window.project_page.project_name_edit.setText("Renamed Header Project")
+    window.project_page.project_name_edit.editingFinished.emit()
+
+    qtbot.waitUntil(lambda: header_label.text() == "Current Project: Renamed Header Project")
+    assert window.document.project.meta.name == "Renamed Header Project"
+
+
+def test_home_quick_action_buttons_present_and_wired(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Home Actions Project")
+    monkeypatch.setattr(
+        "fpvs_studio.gui.main_window.ParticipantNumberDialog.exec",
+        lambda self: int(self.DialogCode.Rejected),
+    )
+
+    new_button = window.home_page.findChild(QPushButton, "home_create_project_button")
+    open_button = window.home_page.findChild(QPushButton, "home_open_project_button")
+    save_button = window.home_page.findChild(QPushButton, "home_save_project_button")
+    launch_button = window.home_page.findChild(QPushButton, "home_launch_test_session_button")
+    assert new_button is not None
+    assert open_button is not None
+    assert save_button is not None
+    assert launch_button is not None
+    assert launch_button.text() == "Launch Experiment"
+    assert window.run_page.launch_button.text() == "Launch Experiment"
+    assert window.launch_action.text() == "Launch Experiment"
+    assert "alpha test-mode" in window.launch_action.toolTip().lower()
+
+    trigger_counts = {"new": 0, "open": 0, "save": 0, "launch": 0}
+    window.new_project_action.triggered.connect(
+        lambda _checked=False: trigger_counts.__setitem__("new", trigger_counts["new"] + 1)
+    )
+    window.open_project_action.triggered.connect(
+        lambda _checked=False: trigger_counts.__setitem__("open", trigger_counts["open"] + 1)
+    )
+    window.save_project_action.triggered.connect(
+        lambda _checked=False: trigger_counts.__setitem__("save", trigger_counts["save"] + 1)
+    )
+    window.launch_action.triggered.connect(
+        lambda _checked=False: trigger_counts.__setitem__("launch", trigger_counts["launch"] + 1)
+    )
+
+    qtbot.mouseClick(new_button, Qt.MouseButton.LeftButton)
+    qtbot.mouseClick(open_button, Qt.MouseButton.LeftButton)
+    qtbot.mouseClick(save_button, Qt.MouseButton.LeftButton)
+    qtbot.mouseClick(launch_button, Qt.MouseButton.LeftButton)
+
+    assert trigger_counts == {"new": 1, "open": 1, "save": 1, "launch": 1}
+
+
+def test_launch_buttons_share_primary_visual_role(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Launch Role Project")
+    home_launch_button = window.home_page.findChild(QPushButton, "home_launch_test_session_button")
+    run_launch_button = window.run_page.findChild(QPushButton, "launch_test_session_button")
+    assert home_launch_button is not None
+    assert run_launch_button is not None
+    assert home_launch_button.text() == "Launch Experiment"
+    assert run_launch_button.text() == "Launch Experiment"
+    assert home_launch_button.property("launchActionRole") == "primary"
+    assert run_launch_button.property("launchActionRole") == "primary"
+
+
+def test_main_tabs_use_animated_tab_bar(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Animated Tabs Project")
+    assert isinstance(window.main_tabs.tabBar(), AnimatedTabBar)
+
+
+def test_main_window_buttons_are_hover_animation_enabled(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Hover Buttons Project")
+    create_button = window.home_page.findChild(QPushButton, "home_create_project_button")
+    run_compile_button = window.run_page.findChild(QPushButton, "compile_session_button")
+    run_launch_button = window.run_page.findChild(QPushButton, "launch_test_session_button")
+    assert create_button is not None
+    assert run_compile_button is not None
+    assert run_launch_button is not None
+    assert create_button.property("hoverAnimationEnabled") is True
+    assert run_compile_button.property("hoverAnimationEnabled") is True
+    assert run_launch_button.property("hoverAnimationEnabled") is True
+
+
+def test_animated_tab_hover_progress_updates_on_mouse_move(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Animated Tab Hover Project")
+    tab_bar = window.main_tabs.tabBar()
+    assert isinstance(tab_bar, AnimatedTabBar)
+
+    target_index = 1
+    qtbot.waitUntil(lambda: tab_bar.tabRect(target_index).width() > 0)
+    target_center = tab_bar.tabRect(target_index).center()
+    qtbot.mouseMove(tab_bar, target_center)
+    if tab_bar.hovered_tab_index() != target_index:
+        tab_bar._set_hovered_tab(target_index)
+    qtbot.waitUntil(lambda: tab_bar.hovered_tab_index() == target_index)
+    qtbot.waitUntil(lambda: tab_bar.tab_hover_progress(target_index) > 0.0)
+
+    qtbot.mouseMove(window, QPoint(2, window.height() - 2))
+    if tab_bar.hovered_tab_index() != -1:
+        QApplication.sendEvent(tab_bar, QEvent(QEvent.Type.HoverLeave))
+    qtbot.waitUntil(lambda: tab_bar.hovered_tab_index() == -1)
+
+
+def test_no_standalone_preflight_controls_are_exposed(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "No Preflight Controls")
+
+    assert window.run_page.findChild(QPushButton, "preflight_button") is None
+    assert window.home_page.findChild(QPushButton, "home_preflight_button") is None
+    assert not hasattr(window, "preflight_action")
+
+    top_menu_labels = [action.text() for action in window.menuBar().actions() if action.text()]
+    assert "Run" not in top_menu_labels
+
+    menu_labels = [
+        action.text()
+        for menu_action in window.menuBar().actions()
+        for action in ((menu_action.menu().actions() if menu_action.menu() is not None else []))
+        if action.text()
+    ]
+    assert "Settings..." in menu_labels
+    assert "Create New Project" not in menu_labels
+    assert "Open Project..." not in menu_labels
+    assert "Save" not in menu_labels
+    assert "Launch Experiment" not in menu_labels
+    assert "Preflight" not in menu_labels
+
+    toolbar_labels = [
+        action.text()
+        for toolbar in window.findChildren(QToolBar)
+        for action in toolbar.actions()
+        if action.text()
+    ]
+    assert "Create New Project" not in toolbar_labels
+    assert "Open Project..." not in toolbar_labels
+    assert "Save" not in toolbar_labels
+    assert "Launch Experiment" not in toolbar_labels
+    assert "Preflight" not in toolbar_labels
+
+
+def test_window_title_and_status_bar_surface_alpha_runtime_designation(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Alpha Label Project")
+    alpha_label = window.findChild(QLabel, "alpha_runtime_status_label")
+
+    assert alpha_label is not None
+    assert alpha_label.text() == "Alpha: test-mode runtime path only"
+    assert "(Alpha)" in window.windowTitle()
+
+
+def test_home_overview_panels_show_project_session_and_runtime_metadata(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Home Metadata Project")
+    qtbot.mouseClick(window.conditions_page.add_condition_button, Qt.MouseButton.LeftButton)
+
+    window.session_fixation_page.block_count_spin.setValue(2)
+    window.run_page.serial_port_edit.setText("COM7")
+    window.run_page.serial_port_edit.editingFinished.emit()
+    window.run_page.serial_baudrate_spin.setValue(57600)
+    window.project_page.background_color_edit.setText("#101010")
+    window.project_page.background_color_edit.editingFinished.emit()
+
+    condition_count_label = window.home_page.findChild(QLabel, "home_condition_count_value")
+    block_count_label = window.home_page.findChild(QLabel, "home_block_count_value")
+    fixation_label = window.home_page.findChild(QLabel, "home_fixation_status_value")
+    serial_label = window.home_page.findChild(QLabel, "home_runtime_serial_value")
+    template_label = window.home_page.findChild(QLabel, "home_project_template_value")
+    description_label = window.home_page.findChild(QLabel, "home_project_description_value")
+    assert condition_count_label is not None
+    assert block_count_label is not None
+    assert fixation_label is not None
+    assert serial_label is not None
+    assert template_label is not None
+    assert description_label is not None
+
+    assert condition_count_label.text() == "1"
+    assert block_count_label.text() == "2"
+    assert "disabled" in fixation_label.text().lower()
+    assert serial_label.text() == "COM7 @ 57600"
+    assert "fpvs_6hz_every5_v1" in template_label.text()
+    assert description_label.text() == "No description set yet."
+
+
+def test_home_readiness_status_and_recent_activity_update_from_launch_checks(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Home Status Project")
+    preflight_status = window.home_page.findChild(QPlainTextEdit, "home_preflight_status_text")
+    recent_activity = window.home_page.findChild(QPlainTextEdit, "home_recent_activity_text")
+    launch_button = window.home_page.findChild(QPushButton, "home_launch_test_session_button")
+    readiness_card = window.home_page.findChild(QGroupBox, "home_preflight_card")
+    assert preflight_status is not None
+    assert recent_activity is not None
+    assert launch_button is not None
+    assert readiness_card is not None
+    assert readiness_card.title() == "Launch Readiness Status"
+    assert "launch an experiment in alpha test mode" in preflight_status.toPlainText().lower()
+
+    _prepare_compile_ready_project(window, tmp_path / "home-status-preflight")
+
+    captures: dict[str, object] = {}
+    monkeypatch.setattr(
+        "fpvs_studio.gui.document.create_engine",
+        lambda engine_name: {"engine_name": engine_name},
+    )
+    monkeypatch.setattr(
+        "fpvs_studio.gui.document.preflight_session_plan",
+        lambda project_root, session_plan, engine: captures.update(
+            {
+                "project_root": project_root,
+                "session_id": session_plan.session_id,
+                "engine": engine,
+            }
+        ),
+    )
+    monkeypatch.setattr(
+        "fpvs_studio.gui.main_window.QMessageBox.information",
+        lambda *args, **kwargs: QMessageBox.StandardButton.Ok,
+    )
+    monkeypatch.setattr(window.run_page, "_prompt_participant_number", lambda: None)
+
+    qtbot.mouseClick(launch_button, Qt.MouseButton.LeftButton)
+
+    assert captures["project_root"] == window.document.project_root
+    qtbot.waitUntil(
+        lambda: "status: launch readiness checks passed"
+        in preflight_status.toPlainText().lower(),
+    )
+    assert "status: launch readiness checks passed" in recent_activity.toPlainText().lower()
+
+
 def test_project_description_typing_round_trips_without_cursor_reset(
     qtbot,
     controller: StudioController,
@@ -375,6 +723,7 @@ def test_project_description_typing_round_trips_without_cursor_reset(
     typed_text = "testing this, why is this happening"
     _, window = _open_created_project(controller, qtbot, tmp_path, "Description Project")
 
+    window.main_tabs.setCurrentWidget(window.project_page)
     description_edit = window.project_page.project_description_edit
     description_edit.setFocus()
     qtbot.waitUntil(description_edit.hasFocus)
@@ -608,7 +957,7 @@ def test_save_blocked_when_condition_repeat_cycle_values_differ(
     assert any(_CONDITION_LENGTH_ERROR_MESSAGE in message for message in messages)
 
 
-def test_compile_and_preflight_blocked_when_condition_repeat_cycle_values_differ(
+def test_launch_blocked_when_condition_repeat_cycle_values_differ(
     qtbot,
     controller: StudioController,
     tmp_path: Path,
@@ -634,12 +983,27 @@ def test_compile_and_preflight_blocked_when_condition_repeat_cycle_values_differ
         return int(QMessageBox.StandardButton.Ok)
 
     monkeypatch.setattr("fpvs_studio.gui.main_window.QMessageBox.exec", _capture_exec)
+    prompt_calls = 0
+    launch_calls = 0
 
-    qtbot.mouseClick(window.run_page.compile_button, Qt.MouseButton.LeftButton)
-    qtbot.mouseClick(window.run_page.preflight_button, Qt.MouseButton.LeftButton)
+    def _capture_prompt() -> str:
+        nonlocal prompt_calls
+        prompt_calls += 1
+        return "00011"
 
-    matching_messages = [message for message in messages if _CONDITION_LENGTH_ERROR_MESSAGE in message]
-    assert len(matching_messages) >= 2
+    def _capture_launch(*_args, **_kwargs):
+        nonlocal launch_calls
+        launch_calls += 1
+        raise AssertionError("launch_session should not be called when launch preflight fails")
+
+    monkeypatch.setattr(window.run_page, "_prompt_participant_number", _capture_prompt)
+    monkeypatch.setattr("fpvs_studio.gui.document.launch_session", _capture_launch)
+
+    qtbot.mouseClick(window.run_page.launch_button, Qt.MouseButton.LeftButton)
+
+    assert prompt_calls == 0
+    assert launch_calls == 0
+    assert any(_CONDITION_LENGTH_ERROR_MESSAGE in message for message in messages)
 
 
 def test_new_condition_inherits_first_condition_repeat_cycle_values(
@@ -667,7 +1031,7 @@ def test_new_condition_inherits_first_condition_repeat_cycle_values(
     assert second_condition.oddball_cycle_repeats_per_sequence == 101
 
 
-def test_preflight_reports_actionable_condition_level_fixation_error(
+def test_launch_reports_actionable_condition_level_fixation_error_before_prompt(
     qtbot,
     controller: StudioController,
     tmp_path: Path,
@@ -698,8 +1062,23 @@ def test_preflight_reports_actionable_condition_level_fixation_error(
         return int(QMessageBox.StandardButton.Ok)
 
     monkeypatch.setattr("fpvs_studio.gui.main_window.QMessageBox.exec", _capture_exec)
+    prompt_calls = 0
+    launch_calls = 0
 
-    qtbot.mouseClick(window.run_page.preflight_button, Qt.MouseButton.LeftButton)
+    def _capture_prompt() -> str:
+        nonlocal prompt_calls
+        prompt_calls += 1
+        return "00123"
+
+    def _capture_launch(*_args, **_kwargs):
+        nonlocal launch_calls
+        launch_calls += 1
+        raise AssertionError("launch_session should not be called when launch preflight fails")
+
+    monkeypatch.setattr(window.run_page, "_prompt_participant_number", _capture_prompt)
+    monkeypatch.setattr("fpvs_studio.gui.document.launch_session", _capture_launch)
+
+    qtbot.mouseClick(window.run_page.launch_button, Qt.MouseButton.LeftButton)
 
     assert any("Required duration:" in message for message in messages)
     assert any(
@@ -707,6 +1086,8 @@ def test_preflight_reports_actionable_condition_level_fixation_error(
         for message in messages
     )
     assert any("Minimum cycle count needed" in message for message in messages)
+    assert prompt_calls == 0
+    assert launch_calls == 0
 
 
 def test_assets_preprocessing_import_and_materialize_updates_status(
@@ -770,7 +1151,7 @@ def test_assets_import_validation_failure_is_reported(
     assert any("identical resolution" in message for message in messages)
 
 
-def test_preflight_action_invokes_backend_preflight(
+def test_launch_invokes_backend_preflight_before_participant_prompt(
     qtbot,
     controller: StudioController,
     tmp_path: Path,
@@ -785,25 +1166,43 @@ def test_preflight_action_invokes_backend_preflight(
         lambda engine_name: {"engine_name": engine_name},
     )
     monkeypatch.setattr(
-        "fpvs_studio.gui.document.preflight_session_plan",
-        lambda project_root, session_plan, engine: captures.update(
+        "fpvs_studio.gui.main_window.QMessageBox.information",
+        lambda *args, **kwargs: QMessageBox.StandardButton.Ok,
+    )
+    phase_trace: list[str] = []
+
+    def _fake_prompt() -> None:
+        phase_trace.append("prompt")
+        return None
+
+    launch_calls = 0
+
+    def _fake_launch(*_args, **_kwargs):
+        nonlocal launch_calls
+        launch_calls += 1
+        raise AssertionError("launch_session should not run when prompt returns None")
+
+    def _capture_preflight(project_root, session_plan, engine):
+        phase_trace.append("preflight")
+        captures.update(
             {
                 "project_root": project_root,
                 "session_id": session_plan.session_id,
                 "engine": engine,
             }
-        ),
-    )
-    monkeypatch.setattr(
-        "fpvs_studio.gui.main_window.QMessageBox.information",
-        lambda *args, **kwargs: QMessageBox.StandardButton.Ok,
-    )
+        )
 
-    qtbot.mouseClick(window.run_page.preflight_button, Qt.MouseButton.LeftButton)
+    monkeypatch.setattr("fpvs_studio.gui.document.preflight_session_plan", _capture_preflight)
+    monkeypatch.setattr(window.run_page, "_prompt_participant_number", _fake_prompt)
+    monkeypatch.setattr("fpvs_studio.gui.document.launch_session", _fake_launch)
+
+    qtbot.mouseClick(window.run_page.launch_button, Qt.MouseButton.LeftButton)
 
     assert captures["project_root"] == window.document.project_root
     assert captures["engine"] == {"engine_name": "psychopy"}
-    assert "preflight passed" in window.run_page.summary_text.toPlainText().lower()
+    assert phase_trace == ["preflight", "prompt"]
+    assert launch_calls == 0
+    assert "launch readiness checks passed" in window.run_page.summary_text.toPlainText().lower()
 
 
 def test_launch_action_wires_runtime_launcher_with_serial_settings(
@@ -843,6 +1242,11 @@ def test_launch_action_wires_runtime_launcher_with_serial_settings(
         prompt_calls += 1
         return participant_number
 
+    monkeypatch.setattr(
+        window.document,
+        "preflight_session",
+        lambda refresh_hz: window.document.compile_session(refresh_hz=refresh_hz),
+    )
     monkeypatch.setattr(window.run_page, "_prompt_participant_number", _fake_prompt)
     monkeypatch.setattr("fpvs_studio.gui.document.launch_session", _fake_launch)
     monkeypatch.setattr(
@@ -909,6 +1313,11 @@ def test_launch_action_duplicate_participant_yes_still_launches(
         warning_messages.append(text)
         return QMessageBox.StandardButton.Yes
 
+    monkeypatch.setattr(
+        window.document,
+        "preflight_session",
+        lambda refresh_hz: window.document.compile_session(refresh_hz=refresh_hz),
+    )
     monkeypatch.setattr(window.run_page, "_prompt_participant_number", _fake_prompt)
     monkeypatch.setattr(window.document, "has_completed_session_for_participant", lambda value: value == "00011")
     monkeypatch.setattr("fpvs_studio.gui.main_window.QMessageBox.question", _fake_question)
@@ -965,6 +1374,11 @@ def test_launch_action_duplicate_participant_no_reprompts_until_new_value(
         warning_messages.append(text)
         return QMessageBox.StandardButton.No
 
+    monkeypatch.setattr(
+        window.document,
+        "preflight_session",
+        lambda refresh_hz: window.document.compile_session(refresh_hz=refresh_hz),
+    )
     monkeypatch.setattr(window.run_page, "_prompt_participant_number", _fake_prompt)
     monkeypatch.setattr(window.document, "has_completed_session_for_participant", lambda value: value == "00011")
     monkeypatch.setattr("fpvs_studio.gui.main_window.QMessageBox.question", _fake_question)
@@ -997,6 +1411,11 @@ def test_launch_action_cancelled_participant_prompt_aborts_launch(
         launch_calls += 1
         raise AssertionError("launch_session should not be called when participant entry is cancelled")
 
+    monkeypatch.setattr(
+        window.document,
+        "preflight_session",
+        lambda refresh_hz: window.document.compile_session(refresh_hz=refresh_hz),
+    )
     monkeypatch.setattr(window.run_page, "_prompt_participant_number", lambda: None)
     monkeypatch.setattr("fpvs_studio.gui.document.launch_session", _fake_launch)
 
