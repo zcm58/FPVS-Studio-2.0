@@ -1,12 +1,16 @@
-"""Minimal application entrypoint for the repository scaffold."""
+"""Application entry point that lazily hands off to the PySide6 GUI."""
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 
-def main() -> int:
-    """Return a successful exit code for the scaffolded app shell."""
 
-    return 0
+def main(argv: Sequence[str] | None = None) -> int:
+    """Run the packaged FPVS Studio GUI entry point."""
+
+    from fpvs_studio.gui.application import run_gui_app
+
+    return run_gui_app(list(argv) if argv is not None else None)
 
 
 if __name__ == "__main__":

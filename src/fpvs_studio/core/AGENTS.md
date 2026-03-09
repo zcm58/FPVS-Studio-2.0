@@ -103,6 +103,8 @@ A minimal compiler in this phase should be able to:
 - assign deterministic project-relative image paths
 - preserve `RunSpec` as a single-condition contract when building `SessionPlan`
 - convert fixation timing fields from ms to frames and emit concrete fixation events
+- compile fixation accuracy-task settings into `RunSpec` (response key/window and realized target count), while keeping `RunSpec` single-condition
+- when randomized fixation target-count mode is enabled, select realized counts during session compilation with session-seed determinism and no immediate repetition across consecutive ordered runs
 - emit trigger events without implementing hardware I/O
 
 If full image-order schedule compilation feels premature, scaffold the interface and keep the compiler deterministic and testable.

@@ -117,3 +117,80 @@ def test_compiler_resolves_manifest_backed_variant_paths(
 
     assert first_path.startswith("stimuli/derived/base-set/grayscale/")
     assert (sample_project_root / Path(first_path)).is_file()
+
+
+def test_compile_run_spec_fixed_color_changes_per_condition_mode_uses_configured_count(
+    sample_project,
+    sample_project_root,
+) -> None:
+    sample_project.settings.fixation_task.enabled = True
+    sample_project.settings.fixation_task.target_count_mode = "fixed"
+    sample_project.settings.fixation_task.changes_per_sequence = 5
+
+    run_spec = compile_run_spec(
+        sample_project,
+        refresh_hz=60.0,
+        project_root=sample_project_root,
+    )
+
+    assert run_spec.fixation.realized_target_count == 5
+    assert len(run_spec.fixation_events) == 5
+
+
+def test_compile_run_spec_randomized_target_count_is_seed_deterministic(
+    sample_project,
+    sample_project_root,
+) -> None:
+    sample_project.settings.fixation_task.enabled = True
+    sample_project.settings.fixation_task.target_count_mode = "randomized"
+    sample_project.settings.fixation_task.target_count_min = 2
+    sample_project.settings.fixation_task.target_count_max = 4
+
+    run_spec_a = compile_run_spec(
+        sample_project,
+        refresh_hz=60.0,
+        project_root=sample_project_root,
+        random_seed=2026,
+        run_id="run-a",
+    )
+    run_spec_b = compile_run_spec(
+        sample_project,
+        refresh_hz=60.0,
+        project_root=sample_project_root,
+        random_seed=2026,
+        run_id="run-b",
+    )
+
+    assert 2 <= run_spec_a.fixation.realized_target_count <= 4
+    assert run_spec_a.fixation.realized_target_count == run_spec_b.fixation.realized_target_count
+    assert [event.start_frame for event in run_spec_a.fixation_events] == [
+        event.start_frame for event in run_spec_b.fixation_events
+    ]
+
+
+def test_compile_run_spec_reports_minimum_cycles_when_fixation_settings_do_not_fit(
+    sample_project,
+    sample_project_root,
+) -> None:
+    sample_project.conditions[0].oddball_cycle_repeats_per_sequence = 2
+    fixation = sample_project.settings.fixation_task
+    fixation.enabled = True
+    fixation.target_count_mode = "fixed"
+    fixation.changes_per_sequence = 4
+    fixation.target_duration_ms = 230
+    fixation.min_gap_ms = 1000
+    fixation.max_gap_ms = 3000
+
+    with pytest.raises(CompileError) as exc_info:
+        compile_run_spec(
+            sample_project,
+            refresh_hz=60.0,
+            project_root=sample_project_root,
+        )
+
+    message = str(exc_info.value)
+    assert "Condition 'Faces' duration:" in message
+    assert "Required duration:" in message
+    assert "Color changes are distributed across the full condition duration." in message
+    assert "reduce color-change count per condition" in message
+    assert "Minimum cycle count needed at 60.00 Hz: 8 total (8 per condition repeat" in message

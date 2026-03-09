@@ -17,7 +17,7 @@ def _validate_stimulus_timing(run_spec: RunSpec) -> None:
     stimulus_sequence = run_spec.stimulus_sequence
     if len(stimulus_sequence) != run_spec.condition.total_stimuli:
         raise PreflightError(
-            "Run preflight failed because stimulus_sequence length does not "
+            "Run preflight failed because compiled stimulus event count does not "
             "match condition.total_stimuli."
         )
     if not stimulus_sequence:
@@ -29,7 +29,7 @@ def _validate_stimulus_timing(run_spec: RunSpec) -> None:
     for expected_index, event in enumerate(stimulus_sequence):
         if event.sequence_index != expected_index:
             raise PreflightError(
-                "Run preflight failed because stimulus sequence_index values are not contiguous."
+                "Run preflight failed because stimulus event indices are not contiguous."
             )
         if event.on_start_frame != expected_start_frame:
             raise PreflightError(

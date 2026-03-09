@@ -58,6 +58,26 @@ class PresentationEngine(ABC):
         """Show a text transition screen and return whether the session was aborted."""
 
     @abstractmethod
+    def show_block_break_screen(
+        self,
+        *,
+        completed_block_index: int,
+        total_block_count: int,
+        next_block_index: int,
+    ) -> bool:
+        """Show a manual inter-block break screen and return whether escape aborted."""
+
+    @abstractmethod
+    def show_condition_feedback_screen(
+        self,
+        *,
+        heading: str,
+        body: str,
+        continue_key: str,
+    ) -> bool:
+        """Show end-of-condition feedback and return whether escape aborted."""
+
+    @abstractmethod
     def run_condition(
         self,
         run_spec: RunSpec,

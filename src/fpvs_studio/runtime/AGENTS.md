@@ -27,8 +27,11 @@ This phase should establish:
 - preflight all referenced assets before launch
 - open/close one engine session per launched session
 - show instruction/transition screens via the engine
+- insert inter-block pause flow via the engine for non-final blocks
 - call `engine.run_condition(RunSpec, ...)`
 - score fixation responses from raw key logs
+- apply fixation accuracy scoring windows/false-alarm logic and build condition-level accuracy/RT summaries
+- trigger participant-facing end-of-condition feedback via the engine when the fixation accuracy task is enabled
 - aggregate run results into a session result
 - write run/session export artifacts
 - preserve clear separation from GUI code
@@ -39,6 +42,7 @@ This phase should establish:
 - Keep PsychoPy usage indirect through the engine layer.
 - Avoid mixing file format concerns with engine logic.
 - Do not push runtime-only settings like display index or serial port back into core `RunSpec` models.
+- Keep runtime-only launch settings such as fullscreen in runtime launch settings instead of GUI or core contracts.
 - Do not move session randomization or compilation logic out of core and into runtime.
 
 ## Export guidance

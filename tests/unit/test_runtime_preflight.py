@@ -36,6 +36,15 @@ class _PreflightEngine(PresentationEngine):
     ) -> bool:
         return False
 
+    def show_block_break_screen(
+        self,
+        *,
+        completed_block_index: int,
+        total_block_count: int,
+        next_block_index: int,
+    ) -> bool:
+        return False
+
     def run_condition(
         self,
         run_spec: RunSpec,

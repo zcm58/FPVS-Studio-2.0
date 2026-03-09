@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from pydantic import Field, field_validator
@@ -14,7 +14,7 @@ from fpvs_studio.core.models import FPVSBaseModel, ImageResolution, validate_pro
 def utc_now() -> datetime:
     """Return a timezone-aware UTC timestamp."""
 
-    return datetime.now(UTC)
+    return datetime.now(timezone.utc)
 
 
 class InspectionFileRecord(FPVSBaseModel):

@@ -19,6 +19,8 @@ play compiled runs end to end.
 - Keep engines consuming one `RunSpec` at a time; runtime owns `SessionPlan` iteration.
 - Add an engine registry/factory.
 - Add a real but minimal `PsychoPyEngine`.
+- Render runtime-owned instruction, inter-block break, and completion screens without moving session sequencing into the engine.
+- Render runtime-owned end-of-condition fixation feedback screens without moving scoring/session decisions into the engine.
 - Keep the public surface small and swappable.
 
 ## Hard restrictions

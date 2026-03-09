@@ -33,7 +33,11 @@ SessionPlan
   -> for each SessionEntry in order:
        -> engine.show_transition_screen(...)
        -> engine.run_condition(RunSpec, ...)
+       -> if this completed a non-final block:
+            -> engine.show_block_break_screen(...)
        -> runtime scores fixation responses
+       -> when fixation accuracy task is enabled:
+            -> engine.show_condition_feedback_screen(...)
        -> runtime writes per-run artifacts
   -> engine.show_completion_screen(...)
   -> engine.close_session()
@@ -51,7 +55,9 @@ The PsychoPy implementation:
 - keeps imports lazy inside `psychopy_engine.py`
 - opens one `visual.Window` per launched session
 - reuses that window across all runs in the `SessionPlan`
+- opens launched playback fullscreen on the selected display by default
 - shows transition/completion text screens
+- shows a dedicated manual inter-block break screen between non-final blocks
 - preloads image stimuli before each condition
 - executes the compiled frame schedule directly from `RunSpec`
 - draws the fixation cross continuously and switches color on compiled
@@ -80,10 +86,20 @@ The engine captures raw response key presses.
 Runtime then scores them against compiled `FixationEvent` windows and exports:
 
 - one fixation-event log with hit/miss outcomes
-- one raw/scored response log
+- one raw/scored response log with hit/false-alarm classification
+- one condition-level fixation summary (targets, hits, misses, false alarms,
+  accuracy %, mean RT)
 - compiled fixation event timing preserved in the exported fixation rows
 
 That keeps the scoring logic testable without requiring PsychoPy.
+
+Scoring semantics for the fixation accuracy task:
+
+- response key: `space`
+- response window: `1.0` second from fixation target onset
+- first valid response in-window counts as the target hit
+- responses outside open windows are false alarms
+- mean RT is computed from hits only
 
 ## Exports
 
@@ -121,7 +137,8 @@ launch mode in the current Phase 4 backend.
 
 In the current v1 runtime it means:
 
-- PsychoPy runs windowed instead of fullscreen
+- runtime launch still flows through the test-mode seam and test-mode metadata
+- PsychoPy launch settings may still request fullscreen presentation
 - trigger output stays on the logged null backend
 - completion screens auto-dismiss quickly
 - launch entry points reject `test_mode=False` until the non-test path is

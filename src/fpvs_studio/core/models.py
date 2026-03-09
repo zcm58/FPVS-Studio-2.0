@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import PurePosixPath
+import random
 import re
+from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from fpvs_studio.core.enums import (
     DutyCycleMode,
@@ -29,11 +31,32 @@ SUPPORTED_VARIANTS = [
     StimulusVariant.PHASE_SCRAMBLED,
 ]
 
+_BIDI_CONTROL_CODEPOINTS = {
+    ord("\u061c"): None,  # Arabic Letter Mark
+    ord("\u200e"): None,  # Left-to-Right Mark
+    ord("\u200f"): None,  # Right-to-Left Mark
+    ord("\u202a"): None,  # Left-to-Right Embedding
+    ord("\u202b"): None,  # Right-to-Left Embedding
+    ord("\u202c"): None,  # Pop Directional Formatting
+    ord("\u202d"): None,  # Left-to-Right Override
+    ord("\u202e"): None,  # Right-to-Left Override
+    ord("\u2066"): None,  # Left-to-Right Isolate
+    ord("\u2067"): None,  # Right-to-Left Isolate
+    ord("\u2068"): None,  # First Strong Isolate
+    ord("\u2069"): None,  # Pop Directional Isolate
+}
+
 
 def utc_now() -> datetime:
     """Return a timezone-aware UTC timestamp."""
 
-    return datetime.now(UTC)
+    return datetime.now(timezone.utc)
+
+
+def default_session_seed() -> int:
+    """Return a persisted default seed for reproducible session compilation."""
+
+    return random.SystemRandom().randrange(2**31)
 
 
 def validate_project_relative_path(value: str) -> str:
@@ -73,6 +96,12 @@ def validate_color(value: str | tuple[int, int, int]) -> str | tuple[int, int, i
     if any(channel < 0 or channel > 255 for channel in value):
         raise ValueError("RGB channel values must be between 0 and 255.")
     return value
+
+
+def strip_bidi_controls(value: str) -> str:
+    """Remove invisible bidirectional control characters from persisted text."""
+
+    return value.translate(_BIDI_CONTROL_CODEPOINTS)
 
 
 class FPVSBaseModel(BaseModel):
@@ -174,15 +203,32 @@ class FixationTaskSettings(FPVSBaseModel):
     """Project-level fixation-cross color-change task settings."""
 
     enabled: bool = False
-    changes_per_sequence: int = Field(default=0, ge=0)
+    accuracy_task_enabled: bool = False
+    changes_per_sequence: int = Field(
+        default=0,
+        ge=0,
+        validation_alias=AliasChoices("changes_per_sequence", "color_changes_per_condition"),
+    )
+    target_count_mode: Literal["fixed", "randomized"] = "fixed"
+    target_count_min: int = Field(default=1, ge=0)
+    target_count_max: int = Field(default=3, ge=0)
+    no_immediate_repeat_count: bool = True
     base_color: str | tuple[int, int, int] = "#FFFFFF"
     target_color: str | tuple[int, int, int] = "#FF0000"
     target_duration_ms: int = Field(default=250, ge=0)
     min_gap_ms: int = Field(default=1500, ge=0)
     max_gap_ms: int = Field(default=3000, ge=0)
+    response_key: str = "space"
+    response_window_seconds: float = Field(default=1.0, gt=0)
     response_keys: list[str] = Field(default_factory=lambda: ["space"])
     cross_size_px: int = Field(default=48, gt=0)
     line_width_px: int = Field(default=4, gt=0)
+
+    @property
+    def color_changes_per_condition(self) -> int:
+        """Return the fixed color-change count per condition (legacy key compatible)."""
+
+        return self.changes_per_sequence
 
     @field_validator("base_color", "target_color")
     @classmethod
@@ -194,9 +240,17 @@ class FixationTaskSettings(FPVSBaseModel):
     def validate_response_keys(cls, value: list[str]) -> list[str]:
         if not value:
             raise ValueError("At least one response key must be provided.")
-        cleaned = [item.strip() for item in value if item.strip()]
+        cleaned = [item.strip().lower() for item in value if item.strip()]
         if not cleaned:
             raise ValueError("Response key values may not be blank.")
+        return cleaned
+
+    @field_validator("response_key")
+    @classmethod
+    def validate_response_key(cls, value: str) -> str:
+        cleaned = value.strip().lower()
+        if not cleaned:
+            raise ValueError("response_key may not be blank.")
         return cleaned
 
     @model_validator(mode="after")
@@ -205,6 +259,17 @@ class FixationTaskSettings(FPVSBaseModel):
             raise ValueError("Fixation target duration must be greater than 0 ms when enabled.")
         if self.min_gap_ms > self.max_gap_ms:
             raise ValueError("Fixation min_gap_ms must be less than or equal to max_gap_ms.")
+        if self.accuracy_task_enabled and not self.enabled:
+            raise ValueError("Fixation task must be enabled when the fixation accuracy task is enabled.")
+        if self.target_count_mode == "randomized":
+            if self.target_count_min > self.target_count_max:
+                raise ValueError("Fixation target_count_min must be less than or equal to target_count_max.")
+            if self.no_immediate_repeat_count and self.target_count_min == self.target_count_max:
+                raise ValueError(
+                    "Randomized color changes per condition (target counts) require min/max to differ when no immediate repeat is enabled."
+                )
+        if self.response_key not in self.response_keys:
+            self.response_keys = [self.response_key, *self.response_keys]
         return self
 
 
@@ -224,6 +289,7 @@ class SessionSettings(FPVSBaseModel):
     """Project-level session flow settings."""
 
     block_count: int = Field(default=1, ge=1)
+    session_seed: int = Field(default_factory=default_session_seed, ge=0)
     randomize_conditions_per_block: bool = True
     inter_condition_mode: InterConditionMode = InterConditionMode.FIXED_BREAK
     inter_condition_break_seconds: float = Field(default=30.0, ge=0)
@@ -305,6 +371,11 @@ class Condition(FPVSBaseModel):
         if not value.strip():
             raise ValueError("Condition name may not be empty.")
         return value
+
+    @field_validator("instructions")
+    @classmethod
+    def sanitize_instructions(cls, value: str) -> str:
+        return strip_bidi_controls(value)
 
     @field_validator("base_stimulus_set_id", "oddball_stimulus_set_id")
     @classmethod

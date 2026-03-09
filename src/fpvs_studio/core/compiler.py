@@ -3,14 +3,26 @@
 from __future__ import annotations
 
 from collections import Counter
-from datetime import UTC, datetime
-import math
+from datetime import datetime, timezone
 from pathlib import Path
 import random
 
 from fpvs_studio.core.enums import DutyCycleMode, InterConditionMode, StimulusVariant
+from fpvs_studio.core.fixation_planning import (
+    max_supported_color_changes,
+    milliseconds_to_frames,
+    minimum_cycles_required,
+    required_fixation_frames,
+    seconds_to_frames,
+)
 from fpvs_studio.core.frame_validation import FrameValidationError, frames_per_stimulus, on_off_frames
-from fpvs_studio.core.models import Condition, ProjectFile, StimulusSet, validate_project_relative_path
+from fpvs_studio.core.models import (
+    Condition,
+    FixationTaskSettings,
+    ProjectFile,
+    StimulusSet,
+    validate_project_relative_path,
+)
 from fpvs_studio.core.paths import (
     stimulus_derived_dir,
     stimulus_manifest_path,
@@ -47,37 +59,27 @@ RANDOM_SEED_UPPER_BOUND = 2**31
 class CompileError(ValueError):
     """Raised when editable project state cannot be compiled into a run spec."""
 
-
-def _ms_to_frames(milliseconds: int, refresh_hz: float) -> int:
-    """Convert a millisecond duration to a positive frame count when needed."""
-
-    if milliseconds <= 0:
-        return 0
-    return max(1, math.ceil((milliseconds / 1000.0) * refresh_hz))
-
-
 def _make_run_id(condition_id: str, now: datetime | None = None) -> str:
     """Create a compact condition-run id."""
 
-    timestamp = now or datetime.now(UTC)
+    timestamp = now or datetime.now(timezone.utc)
     return f"{condition_id}-{timestamp.strftime('%Y%m%dT%H%M%SZ')}"
 
 
-def _make_session_id(project_id: str, random_seed: int) -> str:
-    """Create a deterministic session identifier."""
+def _make_session_id(_project_id: str, random_seed: int) -> str:
+    """Create a deterministic, path-friendly session identifier."""
 
-    return f"{project_id}-session-{random_seed:010d}"
+    return f"session-{random_seed:010d}"
 
 
 def _make_session_run_id(
-    session_id: str,
     *,
     global_order_index: int,
     condition_id: str,
 ) -> str:
-    """Create a deterministic run id for one session entry."""
+    """Create a deterministic, path-friendly run id for one session entry."""
 
-    return f"{session_id}-{global_order_index + 1:03d}-{condition_id}"
+    return f"run-{global_order_index + 1:03d}-{condition_id}"
 
 
 def _color_to_string(value: str | tuple[int, int, int]) -> str:
@@ -376,49 +378,79 @@ def _build_stimulus_sequence(
 
 def _build_fixation_events(
     *,
-    total_sequences: int,
-    sequence_frames: int,
-    events_per_sequence: int,
+    total_frames: int,
+    total_event_count: int,
     target_duration_frames: int,
     min_gap_frames: int,
     max_gap_frames: int,
 ) -> list[FixationEvent]:
-    """Generate deterministic, non-overlapping fixation events for the run."""
+    """Generate deterministic, non-overlapping fixation events for one run."""
 
-    if events_per_sequence <= 0 or target_duration_frames <= 0 or total_sequences <= 0:
+    if total_event_count <= 0 or target_duration_frames <= 0 or total_frames <= 0:
         return []
 
-    available_gap_space = sequence_frames - (events_per_sequence * target_duration_frames)
-    required_minimum = (events_per_sequence + 1) * min_gap_frames
+    available_gap_space = total_frames - (total_event_count * target_duration_frames)
+    required_minimum = (total_event_count + 1) * min_gap_frames
     if available_gap_space < required_minimum:
         raise CompileError(
-            "Fixation settings do not fit within one condition sequence at the selected refresh rate."
+            "Fixation settings do not fit within one condition run at the selected refresh rate. "
+            f"Need at least {required_minimum} gap frames but only {available_gap_space} are available "
+            "after allocating fixation target durations."
         )
 
-    preferred_gap = available_gap_space // (events_per_sequence + 1)
+    preferred_gap = available_gap_space // (total_event_count + 1)
     gap_frames = min(max_gap_frames, max(min_gap_frames, preferred_gap))
     fixation_events: list[FixationEvent] = []
-    event_index = 0
-
-    for sequence_offset in range(total_sequences):
-        current_start = (sequence_offset * sequence_frames) + gap_frames
-        sequence_end = (sequence_offset + 1) * sequence_frames
-        for _ in range(events_per_sequence):
-            if current_start + target_duration_frames > sequence_end:
-                raise CompileError(
-                    "Fixation event scheduling exceeded the sequence duration after applying spacing constraints."
-                )
-            fixation_events.append(
-                FixationEvent(
-                    event_index=event_index,
-                    start_frame=current_start,
-                    duration_frames=target_duration_frames,
-                )
+    current_start = gap_frames
+    for event_index in range(total_event_count):
+        if current_start + target_duration_frames > total_frames:
+            raise CompileError(
+                "Fixation event scheduling exceeded the condition duration after applying spacing constraints."
             )
-            event_index += 1
-            current_start += target_duration_frames + gap_frames
+        fixation_events.append(
+            FixationEvent(
+                event_index=event_index,
+                start_frame=current_start,
+                duration_frames=target_duration_frames,
+            )
+        )
+        current_start += target_duration_frames + gap_frames
 
     return fixation_events
+
+
+def _resolve_realized_target_count(
+    fixation_settings: FixationTaskSettings,
+    *,
+    rng: random.Random,
+    previous_count: int | None,
+    max_supported_count: int | None = None,
+) -> int:
+    """Resolve a deterministic realized fixation target count for one run."""
+
+    if not fixation_settings.enabled:
+        return 0
+    if fixation_settings.target_count_mode == "fixed":
+        # Backward-compatible key name; interpreted as color changes per condition.
+        return fixation_settings.changes_per_sequence
+
+    candidate_counts = list(
+        range(fixation_settings.target_count_min, fixation_settings.target_count_max + 1)
+    )
+    if max_supported_count is not None:
+        candidate_counts = [count for count in candidate_counts if count <= max_supported_count]
+    if (
+        fixation_settings.no_immediate_repeat_count
+        and previous_count is not None
+        and previous_count in candidate_counts
+    ):
+        candidate_counts = [count for count in candidate_counts if count != previous_count]
+    if not candidate_counts:
+        raise CompileError(
+            "Randomized fixation target count range cannot satisfy feasibility/no-immediate-repeat "
+            "constraints for this condition duration."
+        )
+    return rng.choice(candidate_counts)
 
 
 def _build_trigger_events(trigger_code: int | None) -> list[TriggerEvent]:
@@ -454,6 +486,7 @@ def compile_run_spec(
     project_root: Path | None = None,
     random_seed: int = 0,
     run_id: str | None = None,
+    realized_target_count: int | None = None,
     manifest: StimulusManifest | None = None,
 ) -> RunSpec:
     """Compile one project condition into a dedicated frame-based RunSpec."""
@@ -477,11 +510,6 @@ def compile_run_spec(
     )
     total_stimuli = total_oddball_cycles * template.oddball_every_n
     total_frames = total_stimuli * frames_per_stimulus_value
-    sequence_frames = (
-        condition.oddball_cycle_repeats_per_sequence
-        * template.oddball_every_n
-        * frames_per_stimulus_value
-    )
 
     base_paths = _resolve_image_paths(
         base_set,
@@ -506,17 +534,63 @@ def compile_run_spec(
     )
 
     fixation_settings = project.settings.fixation_task
-    target_duration_frames = _ms_to_frames(
+    target_duration_frames = milliseconds_to_frames(
         fixation_settings.target_duration_ms,
         refresh_hz,
     )
-    min_gap_frames = _ms_to_frames(fixation_settings.min_gap_ms, refresh_hz)
-    max_gap_frames = _ms_to_frames(fixation_settings.max_gap_ms, refresh_hz)
+    response_window_frames = seconds_to_frames(
+        fixation_settings.response_window_seconds,
+        refresh_hz,
+    )
+    min_gap_frames = milliseconds_to_frames(fixation_settings.min_gap_ms, refresh_hz)
+    max_gap_frames = milliseconds_to_frames(fixation_settings.max_gap_ms, refresh_hz)
+    max_supported_count = max_supported_color_changes(
+        total_frames=total_frames,
+        target_duration_frames=target_duration_frames,
+        min_gap_frames=min_gap_frames,
+    )
+    run_rng = random.Random(random_seed)
+    resolved_target_count = (
+        realized_target_count
+        if realized_target_count is not None
+        else _resolve_realized_target_count(
+            fixation_settings,
+            rng=run_rng,
+            previous_count=None,
+            max_supported_count=max_supported_count,
+        )
+    )
+    required_frames = required_fixation_frames(
+        color_change_count=resolved_target_count,
+        target_duration_frames=target_duration_frames,
+        min_gap_frames=min_gap_frames,
+    )
+    if fixation_settings.enabled and total_frames < required_frames:
+        minimum_total_cycles, minimum_cycles_per_repeat = minimum_cycles_required(
+            required_frames=required_frames,
+            frames_per_stimulus=frames_per_stimulus_value,
+            oddball_every_n=template.oddball_every_n,
+            condition_repeat_count=condition.sequence_count,
+        )
+        raise CompileError(
+            "Fixation color-change settings do not fit this condition at the selected refresh rate. "
+            f"Condition '{condition.name}' duration: {total_frames} frames / "
+            f"{total_frames / refresh_hz:.2f} s at {refresh_hz:.2f} Hz across "
+            f"{total_oddball_cycles} cycle(s). "
+            f"Required duration: {required_frames} frames / {required_frames / refresh_hz:.2f} s for "
+            f"{resolved_target_count} color changes (targets), "
+            f"{fixation_settings.target_duration_ms} ms target duration, and "
+            f"{fixation_settings.min_gap_ms} ms minimum gap. "
+            "Color changes are distributed across the full condition duration. "
+            "Adjust one of these settings: reduce color-change count per condition, reduce minimum gap, "
+            "reduce target duration, or increase cycle count. "
+            f"Minimum cycle count needed at {refresh_hz:.2f} Hz: {minimum_total_cycles} total "
+            f"({minimum_cycles_per_repeat} per condition repeat with {condition.sequence_count} repeat(s))."
+        )
     fixation_events = (
         _build_fixation_events(
-            total_sequences=condition.sequence_count,
-            sequence_frames=sequence_frames,
-            events_per_sequence=fixation_settings.changes_per_sequence,
+            total_frames=total_frames,
+            total_event_count=resolved_target_count,
             target_duration_frames=target_duration_frames,
             min_gap_frames=min_gap_frames,
             max_gap_frames=max_gap_frames,
@@ -553,12 +627,16 @@ def compile_run_spec(
             total_frames=total_frames,
         ),
         fixation=FixationStyleSpec(
+            accuracy_task_enabled=fixation_settings.accuracy_task_enabled,
             default_color=_color_to_string(fixation_settings.base_color),
             target_color=_color_to_string(fixation_settings.target_color),
-            response_keys=list(fixation_settings.response_keys),
+            response_key=fixation_settings.response_key,
+            response_window_frames=response_window_frames,
+            response_keys=[fixation_settings.response_key] if fixation_settings.accuracy_task_enabled else [],
             cross_size_px=fixation_settings.cross_size_px,
             line_width_px=fixation_settings.line_width_px,
             target_duration_frames=target_duration_frames,
+            realized_target_count=resolved_target_count if fixation_settings.enabled else 0,
         ),
         stimulus_sequence=stimulus_sequence,
         fixation_events=fixation_events,
@@ -580,10 +658,22 @@ def compile_session_plan(
 
     selected_conditions = _select_conditions(project, condition_ids)
     if random_seed is None:
-        random_seed = random.SystemRandom().randrange(RANDOM_SEED_UPPER_BOUND)
+        random_seed = project.settings.session.session_seed
     session_identifier = session_id or _make_session_id(project.meta.project_id, random_seed)
     resolved_manifest = _load_manifest(project_root, manifest)
     session_rng = random.Random(random_seed)
+    fixation_settings = project.settings.fixation_task
+    template = get_template(project.meta.template_id)
+    try:
+        frames_per_stimulus_value = frames_per_stimulus(refresh_hz, template.base_hz)
+    except FrameValidationError as exc:
+        raise CompileError(str(exc)) from exc
+    target_duration_frames = milliseconds_to_frames(
+        fixation_settings.target_duration_ms,
+        refresh_hz,
+    )
+    min_gap_frames = milliseconds_to_frames(fixation_settings.min_gap_ms, refresh_hz)
+    previous_realized_target_count: int | None = None
 
     blocks: list[SessionBlock] = []
     global_order_index = 0
@@ -595,19 +685,41 @@ def compile_session_plan(
         entries: list[SessionEntry] = []
         for index_within_block, condition in enumerate(block_conditions):
             run_id = _make_session_run_id(
-                session_identifier,
                 global_order_index=global_order_index,
                 condition_id=condition.condition_id,
             )
-            run_spec = compile_run_spec(
-                project,
-                refresh_hz=refresh_hz,
-                condition_id=condition.condition_id,
-                project_root=project_root,
-                random_seed=session_rng.randrange(RANDOM_SEED_UPPER_BOUND),
-                run_id=run_id,
-                manifest=resolved_manifest,
+            run_random_seed = session_rng.randrange(RANDOM_SEED_UPPER_BOUND)
+            condition_total_oddball_cycles = (
+                condition.oddball_cycle_repeats_per_sequence * condition.sequence_count
             )
+            condition_total_stimuli = condition_total_oddball_cycles * template.oddball_every_n
+            condition_total_frames = condition_total_stimuli * frames_per_stimulus_value
+            max_supported_count = max_supported_color_changes(
+                total_frames=condition_total_frames,
+                target_duration_frames=target_duration_frames,
+                min_gap_frames=min_gap_frames,
+            )
+            try:
+                realized_target_count = _resolve_realized_target_count(
+                    fixation_settings,
+                    rng=session_rng,
+                    previous_count=previous_realized_target_count,
+                    max_supported_count=max_supported_count,
+                )
+                run_spec = compile_run_spec(
+                    project,
+                    refresh_hz=refresh_hz,
+                    condition_id=condition.condition_id,
+                    project_root=project_root,
+                    random_seed=run_random_seed,
+                    run_id=run_id,
+                    realized_target_count=realized_target_count,
+                    manifest=resolved_manifest,
+                )
+            except CompileError as exc:
+                raise CompileError(
+                    f"Condition '{condition.name}' (id '{condition.condition_id}') failed compilation: {exc}"
+                ) from exc
             entries.append(
                 SessionEntry(
                     global_order_index=global_order_index,
@@ -619,6 +731,8 @@ def compile_session_plan(
                     run_spec=run_spec,
                 )
             )
+            if fixation_settings.enabled and fixation_settings.target_count_mode == "randomized":
+                previous_realized_target_count = realized_target_count
             global_order_index += 1
 
         blocks.append(

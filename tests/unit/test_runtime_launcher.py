@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import csv
 from collections.abc import Mapping
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -77,6 +77,38 @@ class StubEngine(PresentationEngine):
         )
         return False
 
+    def show_block_break_screen(
+        self,
+        *,
+        completed_block_index: int,
+        total_block_count: int,
+        next_block_index: int,
+    ) -> bool:
+        self._captures.setdefault("block_breaks", []).append(
+            {
+                "completed_block_index": completed_block_index,
+                "total_block_count": total_block_count,
+                "next_block_index": next_block_index,
+            }
+        )
+        return bool(self._captures.get("abort_on_block_break", False))
+
+    def show_condition_feedback_screen(
+        self,
+        *,
+        heading: str,
+        body: str,
+        continue_key: str,
+    ) -> bool:
+        self._captures.setdefault("condition_feedback", []).append(
+            {
+                "heading": heading,
+                "body": body,
+                "continue_key": continue_key,
+            }
+        )
+        return False
+
     def run_condition(
         self,
         run_spec: RunSpec,
@@ -106,7 +138,7 @@ class StubEngine(PresentationEngine):
             response_log.append(
                 ResponseRecord(
                     response_index=0,
-                    key=run_spec.fixation.response_keys[0],
+                    key=run_spec.fixation.response_key,
                     frame_index=first_event.start_frame,
                     time_s=0.25,
                 )
@@ -124,8 +156,8 @@ class StubEngine(PresentationEngine):
                 if bool((runtime_options or {}).get("test_mode"))
                 else RunMode.SESSION
             ),
-            started_at=datetime(2026, 3, 7, 12, 0, 0, tzinfo=UTC),
-            finished_at=datetime(2026, 3, 7, 12, 0, 5, tzinfo=UTC),
+            started_at=datetime(2026, 3, 7, 12, 0, 0, tzinfo=timezone.utc),
+            finished_at=datetime(2026, 3, 7, 12, 0, 5, tzinfo=timezone.utc),
             completed_frames=run_spec.display.total_frames,
             aborted=False,
             runtime_metadata=RuntimeMetadata(
@@ -184,7 +216,12 @@ def test_runtime_launcher_dispatches_runspec_to_registered_engine(
         summary = launch_run(
             sample_project_root,
             run_spec,
-            launch_settings=LaunchSettings(engine_name="stub", test_mode=True, serial_port="COM9"),
+            launch_settings=LaunchSettings(
+                engine_name="stub",
+                test_mode=True,
+                serial_port="COM9",
+                serial_baudrate=57600,
+            ),
         )
     finally:
         unregister_engine("stub")
@@ -195,8 +232,10 @@ def test_runtime_launcher_dispatches_runspec_to_registered_engine(
     assert captures["runtime_options"] == {
         "engine_name": "stub",
         "test_mode": True,
+        "fullscreen": True,
         "display_index": None,
         "serial_port": "COM9",
+        "serial_baudrate": 57600,
     }
     assert summary.output_dir == "runs/faces-run"
     assert summary.warnings == []
@@ -267,6 +306,13 @@ def test_launch_session_runs_all_entries_with_stub_engine_and_reuses_session_win
         entry.run_id for entry in session_plan.ordered_entries()
     ]
     assert len(captures["transitions"]) == session_plan.total_runs
+    assert captures["block_breaks"] == [
+        {
+            "completed_block_index": 0,
+            "total_block_count": session_plan.block_count,
+            "next_block_index": 1,
+        }
+    ]
     assert captures["completion_screens"] == [
         {
             "completed_condition_count": session_plan.total_runs,
@@ -296,6 +342,65 @@ def test_launch_session_runs_all_entries_with_stub_engine_and_reuses_session_win
     )
     assert (first_run_dir / "runspec.json").is_file()
     assert (first_run_dir / "run_summary.json").is_file()
+
+
+def test_session_launch_shows_condition_feedback_with_accuracy_and_mean_rt_when_enabled(
+    multi_condition_project,
+    multi_condition_project_root,
+) -> None:
+    captures: dict[str, object] = {}
+    multi_condition_project.settings.fixation_task.accuracy_task_enabled = True
+    register_engine("stub-feedback", lambda: StubEngine(captures))
+    try:
+        session_plan = compile_session_plan(
+            multi_condition_project,
+            refresh_hz=60.0,
+            project_root=multi_condition_project_root,
+            random_seed=123,
+        )
+        summary = launch_session(
+            multi_condition_project_root,
+            session_plan,
+            launch_settings=LaunchSettings(engine_name="stub-feedback", test_mode=True),
+        )
+    finally:
+        unregister_engine("stub-feedback")
+
+    assert all(run_result.fixation_task_summary is not None for run_result in summary.run_results)
+    first_summary = summary.run_results[0].fixation_task_summary
+    assert first_summary is not None
+    assert first_summary.total_targets == len(session_plan.ordered_entries()[0].run_spec.fixation_events)
+    assert first_summary.hit_count == 1
+    assert first_summary.mean_rt_ms == 0.0
+    assert len(captures["condition_feedback"]) == session_plan.total_runs
+    assert "Accuracy:" in captures["condition_feedback"][0]["body"]
+    assert "Mean RT:" in captures["condition_feedback"][0]["body"]
+
+
+def test_session_launch_skips_condition_feedback_when_accuracy_task_disabled(
+    multi_condition_project,
+    multi_condition_project_root,
+) -> None:
+    captures: dict[str, object] = {}
+    multi_condition_project.settings.fixation_task.accuracy_task_enabled = False
+    register_engine("stub-no-feedback", lambda: StubEngine(captures))
+    try:
+        session_plan = compile_session_plan(
+            multi_condition_project,
+            refresh_hz=60.0,
+            project_root=multi_condition_project_root,
+            random_seed=124,
+        )
+        summary = launch_session(
+            multi_condition_project_root,
+            session_plan,
+            launch_settings=LaunchSettings(engine_name="stub-no-feedback", test_mode=True),
+        )
+    finally:
+        unregister_engine("stub-no-feedback")
+
+    assert all(run_result.fixation_task_summary is None for run_result in summary.run_results)
+    assert captures.get("condition_feedback") is None
 
 
 def test_session_launch_fixed_break_transition_path_is_honored(
@@ -355,6 +460,75 @@ def test_session_launch_manual_continue_transition_path_is_honored(
     assert all(item["continue_key"] == "return" for item in captures["transitions"])
 
 
+def test_session_launch_inserts_manual_inter_block_break_between_non_final_blocks(
+    multi_condition_project,
+    multi_condition_project_root,
+) -> None:
+    captures: dict[str, object] = {}
+    register_engine("stub-block-break", lambda: StubEngine(captures))
+    try:
+        session_plan = compile_session_plan(
+            multi_condition_project,
+            refresh_hz=60.0,
+            project_root=multi_condition_project_root,
+            random_seed=17,
+        )
+
+        launch_session(
+            multi_condition_project_root,
+            session_plan,
+            launch_settings=LaunchSettings(engine_name="stub-block-break", test_mode=True),
+        )
+    finally:
+        unregister_engine("stub-block-break")
+
+    assert captures["block_breaks"] == [
+        {
+            "completed_block_index": 0,
+            "total_block_count": 2,
+            "next_block_index": 1,
+        }
+    ]
+
+
+def test_session_launch_aborts_cleanly_when_inter_block_break_is_cancelled(
+    multi_condition_project,
+    multi_condition_project_root,
+) -> None:
+    captures: dict[str, object] = {"abort_on_block_break": True}
+    register_engine("stub-block-break-abort", lambda: StubEngine(captures))
+    try:
+        session_plan = compile_session_plan(
+            multi_condition_project,
+            refresh_hz=60.0,
+            project_root=multi_condition_project_root,
+            random_seed=18,
+        )
+
+        summary = launch_session(
+            multi_condition_project_root,
+            session_plan,
+            launch_settings=LaunchSettings(
+                engine_name="stub-block-break-abort",
+                test_mode=True,
+            ),
+        )
+    finally:
+        unregister_engine("stub-block-break-abort")
+
+    assert summary.aborted is True
+    assert summary.completed_condition_count == len(session_plan.blocks[0].entries)
+    assert summary.abort_reason == "Session aborted during the inter-block break after block 1."
+    assert captures["block_breaks"] == [
+        {
+            "completed_block_index": 0,
+            "total_block_count": 2,
+            "next_block_index": 1,
+        }
+    ]
+    assert captures.get("completion_screens") is None
+
+
 def test_session_launch_passes_condition_instructions_to_transition_screens(
     multi_condition_project,
     multi_condition_project_root,
@@ -379,6 +553,34 @@ def test_session_launch_passes_condition_instructions_to_transition_screens(
 
     bodies = [item["body"] for item in captures["transitions"]]
     assert all("Instructions for condition" in body for body in bodies)
+
+
+def test_session_launch_preserves_instruction_text_verbatim(
+    multi_condition_project,
+    multi_condition_project_root,
+) -> None:
+    captures: dict[str, object] = {}
+    exact_text = "testing this, why is this happening"
+    multi_condition_project.conditions[0].instructions = exact_text
+    register_engine("stub-verbatim", lambda: StubEngine(captures))
+    try:
+        session_plan = compile_session_plan(
+            multi_condition_project,
+            refresh_hz=60.0,
+            project_root=multi_condition_project_root,
+            random_seed=16,
+        )
+
+        launch_session(
+            multi_condition_project_root,
+            session_plan,
+            launch_settings=LaunchSettings(engine_name="stub-verbatim", test_mode=True),
+        )
+    finally:
+        unregister_engine("stub-verbatim")
+
+    assert captures["condition_instructions"][0] == exact_text
+    assert captures["transitions"][0]["body"].startswith(f"{exact_text}\n\n")
 
 
 def test_session_export_captures_seed_and_runtime_logs(
@@ -552,5 +754,71 @@ def test_launch_session_rejects_invalid_display_index_before_engine_creation(
             )
     finally:
         unregister_engine("stub-invalid-display")
+
+    assert captures == {}
+
+
+def test_launch_session_rejects_invalid_serial_baudrate_before_engine_creation(
+    sample_project,
+    sample_project_root,
+) -> None:
+    captures: dict[str, object] = {}
+    register_engine("stub-invalid-baud", lambda: StubEngine(captures))
+    try:
+        session_plan = compile_session_plan(
+            sample_project,
+            refresh_hz=60.0,
+            project_root=sample_project_root,
+            random_seed=31,
+        )
+
+        with pytest.raises(
+            LaunchSettingsError,
+            match="serial_baudrate must be a positive integer",
+        ):
+            launch_session(
+                sample_project_root,
+                session_plan,
+                launch_settings=LaunchSettings(
+                    engine_name="stub-invalid-baud",
+                    test_mode=True,
+                    serial_baudrate=0,
+                ),
+            )
+    finally:
+        unregister_engine("stub-invalid-baud")
+
+    assert captures == {}
+
+
+def test_launch_session_rejects_non_boolean_fullscreen_before_engine_creation(
+    sample_project,
+    sample_project_root,
+) -> None:
+    captures: dict[str, object] = {}
+    register_engine("stub-invalid-fullscreen", lambda: StubEngine(captures))
+    try:
+        session_plan = compile_session_plan(
+            sample_project,
+            refresh_hz=60.0,
+            project_root=sample_project_root,
+            random_seed=32,
+        )
+
+        with pytest.raises(
+            LaunchSettingsError,
+            match="fullscreen must be a boolean",
+        ):
+            launch_session(
+                sample_project_root,
+                session_plan,
+                launch_settings=LaunchSettings(
+                    engine_name="stub-invalid-fullscreen",
+                    test_mode=True,
+                    fullscreen="yes",  # type: ignore[arg-type]
+                ),
+            )
+    finally:
+        unregister_engine("stub-invalid-fullscreen")
 
     assert captures == {}

@@ -70,12 +70,16 @@ class StimulusEvent(FPVSBaseModel):
 class FixationStyleSpec(FPVSBaseModel):
     """Fixation rendering and response settings used during a run."""
 
+    accuracy_task_enabled: bool = False
     default_color: str
     target_color: str
+    response_key: str = "space"
+    response_window_frames: int = Field(default=1, gt=0)
     response_keys: list[str]
     cross_size_px: int = Field(gt=0)
     line_width_px: int = Field(gt=0)
     target_duration_frames: int = Field(ge=0)
+    realized_target_count: int = Field(default=0, ge=0)
 
     @field_validator("default_color", "target_color")
     @classmethod
@@ -84,6 +88,14 @@ class FixationStyleSpec(FPVSBaseModel):
         if not isinstance(validated, str):
             raise ValueError("Fixation colors must be stored as strings.")
         return validated
+
+    @field_validator("response_key")
+    @classmethod
+    def validate_response_key(cls, value: str) -> str:
+        cleaned = value.strip().lower()
+        if not cleaned:
+            raise ValueError("response_key may not be blank.")
+        return cleaned
 
 
 class FixationEvent(FPVSBaseModel):

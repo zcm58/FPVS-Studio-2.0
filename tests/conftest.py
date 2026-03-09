@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
+import tempfile
 
 from PIL import Image
 import pytest
@@ -17,6 +19,49 @@ from fpvs_studio.core.models import (
     ProjectSettings,
     StimulusSet,
 )
+
+TEST_ENV_ROOT = Path(__file__).resolve().parents[1] / "build" / "test_env"
+
+
+def _apply_workspace_test_env() -> Path:
+    root = TEST_ENV_ROOT.resolve()
+    directories = {
+        "tmp": root / "tmp",
+        "appdata": root / "appdata",
+        "localappdata": root / "localappdata",
+        "home": root / "home",
+        "userprofile": root / "userprofile",
+    }
+    for directory in directories.values():
+        directory.mkdir(parents=True, exist_ok=True)
+
+    os.environ["TMPDIR"] = str(directories["tmp"])
+    os.environ["TMP"] = str(directories["tmp"])
+    os.environ["TEMP"] = str(directories["tmp"])
+    os.environ["APPDATA"] = str(directories["appdata"])
+    os.environ["LOCALAPPDATA"] = str(directories["localappdata"])
+    os.environ["HOME"] = str(directories["home"])
+    os.environ["USERPROFILE"] = str(directories["userprofile"])
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    tempfile.tempdir = str(directories["tmp"])
+    return root
+
+
+_apply_workspace_test_env()
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _workspace_env() -> Path:
+    """Keep temp/profile writes inside the workspace for deterministic test runs."""
+
+    return _apply_workspace_test_env()
+
+
+@pytest.fixture(scope="session")
+def qapp_args() -> list[str]:
+    """Force pytest-qt to construct the application in offscreen mode."""
+
+    return ["pytest", "-platform", os.environ.get("QT_QPA_PLATFORM", "offscreen")]
 
 
 def _build_project(project_id: str, project_name: str, *, condition_count: int) -> ProjectFile:

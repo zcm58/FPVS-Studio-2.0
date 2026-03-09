@@ -1,164 +1,181 @@
 # FPVS Studio
 
-FPVS Studio is an open-source desktop application for building and running fast
-periodic visual stimulation (FPVS) experiments without requiring end users to
-work directly in PsychoPy.
+FPVS Studio is a Python 3.10 desktop application for authoring fast periodic
+visual stimulation experiments with a PySide6 GUI and a PsychoPy-backed runtime
+hidden behind the engine boundary.
 
-Phase 4 is a backend/runtime stabilization milestone. The PySide6 GUI is not
-built yet; the currently usable surface is the engine-neutral compiler,
-preprocessing pipeline, runtime/export path, and the optional PsychoPy-backed
-presentation engine.
+Phase 5 introduces the first usable authoring GUI. Users can now create or open
+projects, edit conditions and session settings, import and materialize assets,
+save and reopen `project.json`, preflight the compiled session, and launch the
+currently supported test-mode runtime path.
 
 ## Architecture
 
-The repository is intentionally split into four neutral layers plus the trigger
-boundary:
+The repository keeps editable authoring state, compiled plans, preprocessing,
+runtime, and engine concerns separate:
 
 - `src/fpvs_studio/core/models.py`
-  - editable project state persisted in `project.json`
+  - editable project state stored in `project.json`
 - `src/fpvs_studio/core/run_spec.py`
-  - one compiled, frame-explicit execution contract for one condition run
+  - one compiled execution contract for one condition run
 - `src/fpvs_studio/core/session_plan.py`
-  - one ordered multi-condition session plan containing many `RunSpec` entries
+  - one compiled ordered multi-condition session plan
 - `src/fpvs_studio/core/execution.py`
-  - engine-neutral run/session execution results, runtime metadata, response
-    logs, frame-interval logs, and trigger logs
+  - engine-neutral execution/export contracts
 - `src/fpvs_studio/preprocessing/`
-  - manifest-backed source and derived stimuli materialization
+  - source inspection, manifests, and derived-asset materialization
 - `src/fpvs_studio/runtime/`
-  - session preflight, session flow, trigger plumbing, and export writers
+  - compile preflight, launch settings, session flow, and export writers
 - `src/fpvs_studio/engines/`
-  - swappable presentation engines; only this layer may import PsychoPy
+  - swappable presentation engines; only this package may import PsychoPy
+- `src/fpvs_studio/gui/`
+  - the PySide6 authoring application
 
 The compile and launch flow is:
 
 ```text
 project.json -> ProjectFile -> compile_run_spec(...) -> RunSpec
 project.json + session settings -> compile_session_plan(...) -> SessionPlan
-runtime launcher -> session preflight -> runtime session flow -> engine
-engine run results -> runtime exporters -> session artifacts
+GUI -> runtime launcher/preflight -> runtime session flow -> engine
+engine run/session results -> runtime exporters -> runs/...
 ```
 
-## Current usable scope
+`RunSpec` remains single-condition. `SessionPlan` remains the ordered
+multi-condition contract above it. The GUI reuses backend services and does not
+duplicate compiler, preprocessing, or runtime logic.
 
-Today, the repository supports:
+## Supported Environment
 
-- project and session modeling in the neutral core layer
-- deterministic preprocessing/materialization of source and derived stimuli
-- compilation from `ProjectFile` into one-condition `RunSpec` values
-- compilation from `ProjectFile` plus session settings into multi-condition
-  `SessionPlan` values
-- runtime preflight, session execution orchestration, and rich exports
-- an optional PsychoPy engine behind the engine adapter boundary
+FPVS Studio currently supports Python `3.10` only.
 
-Not built yet:
-
-- the PySide6 GUI editor/shell
-- a supported end-user CLI workflow
-- fullscreen/non-test launch mode
-- real serial-trigger hardware I/O
-
-## Phase 4 runtime
-
-Phase 4 provides the first real execution vertical slice:
-
-- runtime launches a full `SessionPlan`
-- one PsychoPy window is reused across the whole session
-- runtime shows per-condition instruction/transition screens
-- fixed-break and manual-continue transitions are handled above the engine
-- the PsychoPy engine plays each `RunSpec` directly from its compiled frame
-  schedule
-- fixation-task responses, frame intervals, and trigger attempts are logged
-- runtime writes richer per-run and per-session exports
-
-`RunSpec` remains strictly single-condition. `SessionPlan` remains the compiled
-multi-condition session contract above it. Runtime still owns session order and
-transitions; the engine still owns rendering and frame presentation.
-
-## PsychoPy dependency
-
-Core, preprocessing, compiler, `RunSpec`, `SessionPlan`, and runtime imports do
-not require PsychoPy.
-
-Use Python `3.10` to `3.12` for supported installs. The project metadata
-currently enforces `>=3.10,<3.13`.
-
-Install the backend/dev environment without PsychoPy:
+PowerShell setup:
 
 ```powershell
-python -m pip install -e .[dev]
+py -3.10 -m venv .venv
+.\.venv\Scripts\python -m pip install -U pip
+.\.venv\Scripts\python -m pip install -e '.[dev]'
 ```
 
-Install the PsychoPy engine extras when you want to exercise the optional
-runtime path:
+Install the optional PsychoPy runtime extra when you want to launch sessions:
 
 ```powershell
-python -m pip install -e .[dev,engine]
+.\.venv\Scripts\python -m pip install -e '.[dev,engine]'
 ```
 
-PsychoPy imports remain lazy inside `src/fpvs_studio/engines/psychopy_engine.py`.
+Notes:
+
+- PySide6 is a required application dependency in the default install.
+- PsychoPy stays optional at install time and remains isolated to
+  `src/fpvs_studio/engines/`.
+- The current honest launch path is still `test_mode=True`, but launched
+  PsychoPy playback now opens fullscreen on the selected display.
+- Non-test validation and lab-grade trigger validation remain deferred.
+
+See [docs/ENVIRONMENT.md](docs/ENVIRONMENT.md) for environment details and
+[docs/GUI_WORKFLOW.md](docs/GUI_WORKFLOW.md) for the GUI authoring workflow.
+
+## Launching The GUI
+
+Developer entry points:
+
+```powershell
+.\.venv\Scripts\python -m fpvs_studio.app
+```
+
+or, after install:
+
+```powershell
+fpvs-studio
+```
+
+The welcome window supports:
+
+- Create New Project
+- Open Existing Project
+
+The main authoring window provides pages for:
+
+- Project
+- Conditions
+- Fixation & Session
+- Assets / Preprocessing
+- Run / Runtime
+
+## Current GUI Workflow
+
+Phase 5 currently supports:
+
+- creating a new project scaffold in a chosen parent folder
+- opening an existing project directory through the GUI; the backend document
+  layer also accepts a direct `project.json` path
+- editing project name, description, and display background color
+- adding, removing, reordering, and editing conditions
+- assigning base and oddball source folders per condition
+- configuring duty cycle, instructions, trigger code, and stimulus variant
+- editing session settings, stored session seed, transition mode, and fixation
+  settings
+- configuring an optional fixation accuracy task (Space response within 1.0 s
+  after each fixation color change) with end-of-condition feedback
+- configuring fixed or randomized fixation target counts per compiled condition
+  run, including deterministic no-immediate-repeat behavior across consecutive
+  runs
+- configuring serial port and baud rate in the runtime settings page
+- importing source folders, refreshing inspection, and materializing supported
+  variants
+- validating, compiling, preflighting, and launching the supported test-mode
+  runtime path
+- saving and reopening projects with state preserved
+
+Runtime honesty matters here: the GUI labels the launch action as
+`Launch Test Session` because the supported path still uses the test-mode
+runtime seam, even though launched PsychoPy playback now presents fullscreen
+and inserts a manual continue screen between non-final blocks. The fixation
+accuracy task remains an engagement layer and does not alter the FPVS
+base/oddball schedule.
 
 ## Tests
 
-Run the default test suite:
+Run the non-GUI/backend-focused checks:
 
 ```powershell
-python -m pytest -q
+.\.venv\Scripts\python -m pytest -q
 ```
 
-The default suite does not require PsychoPy. The optional integration smoke
-tests under `tests/integration/` skip automatically when PsychoPy is not
-installed.
+When iterating on GUI tests, run one node at a time and keep the run hermetic:
 
-## Test mode
+```powershell
+$env:PYTHONPATH = "src"
+$env:TMP = "$PWD\build\tmp"
+$env:TEMP = "$PWD\build\tmp"
+$env:TMPDIR = "$PWD\build\tmp"
+$env:APPDATA = "$PWD\build\appdata"
+$env:LOCALAPPDATA = "$PWD\build\localappdata"
+$env:USERPROFILE = "$PWD\build\userprofile"
+$env:HOME = "$PWD\build\home"
+$env:QT_QPA_PLATFORM = "offscreen"
+$env:PYTEST_DISABLE_PLUGIN_AUTOLOAD = "1"
 
-`test_mode` is a runtime-only launch setting and is currently required for the
-supported Phase 4 launch path.
+New-Item -ItemType Directory -Force build\tmp, build\appdata, build\localappdata, build\userprofile, build\home | Out-Null
 
-In this milestone, `test_mode=True` means:
+.\.venv\Scripts\python -m pytest `
+  --disable-plugin-autoload `
+  -p pytestqt.plugin `
+  -p pytest_timeout `
+  --basetemp=build\pytest_tmp `
+  --maxfail=1 `
+  --timeout=45 `
+  -vv -s `
+  tests\gui\test_authoring_gui.py::test_welcome_window_smoke
+```
 
-- PsychoPy opens a windowed session instead of fullscreen
-- trigger output stays on the logged null backend
-- the rest of the runtime path still executes the compiled `RunSpec` /
-  `SessionPlan` contracts
-- fullscreen/non-test launches are intentionally rejected until later phases
+The GUI tests are written to stay headless and should not open real modal
+dialogs or launch the real PsychoPy runtime.
 
-## Exports
+## Deferred Items
 
-Runtime writes neutral artifacts under `runs/...`, including:
+The following remain intentionally deferred after Phase 5:
 
-- `session_plan.json`
-- `session_summary.json`
-- `run_summary.json`
-- `runtime_metadata.json`
-- `runspec.json`
-- `events.csv`
-- `fixation_events.csv`
-- `responses.csv`
-- `frame_intervals.csv`
-- `trigger_log.csv`
-
-See [docs/RUNSPEC.md](docs/RUNSPEC.md),
-[docs/SESSION_PLAN.md](docs/SESSION_PLAN.md), and
-[docs/RUNTIME_EXECUTION.md](docs/RUNTIME_EXECUTION.md) for the current contract
-split.
-
-## Core Concepts
-
-- `ProjectFile`
-  - editable project state stored in `project.json`
-- `RunSpec`
-  - one compiled, frame-explicit plan for one condition run
-- `SessionPlan`
-  - one ordered multi-condition session made of many `RunSpec` entries
-- `RunExecutionSummary` / `SessionExecutionSummary`
-  - neutral execution/export records written by the runtime after playback
-
-## Deferred v1 items
-
-The following remain intentionally deferred after the Phase 4 audit pass:
-
-- the Phase 5 GUI work
-- real serial-port trigger output
-- non-PsychoPy presentation backends
-- additional task variants beyond fixation-cross response logging
+- non-test launch validation
+- lab-validated serial trigger hardware behavior
+- alternate non-PsychoPy presentation engines
+- broader theming/polish beyond the first usable authoring GUI

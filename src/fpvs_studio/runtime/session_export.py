@@ -102,6 +102,7 @@ def write_run_artifacts(output_dir: Path, run_spec: RunSpec, summary: RunExecuti
             "matched_event_index",
             "rt_frames",
             "correct",
+            "outcome",
         ],
         [
             (
@@ -112,6 +113,7 @@ def write_run_artifacts(output_dir: Path, run_spec: RunSpec, summary: RunExecuti
                 response.matched_event_index,
                 response.rt_frames,
                 response.correct,
+                response.outcome,
             )
             for response in summary.response_log
         ],
@@ -255,6 +257,7 @@ def write_session_artifacts(
             "matched_event_index",
             "rt_frames",
             "correct",
+            "outcome",
         ],
         [
             (
@@ -266,6 +269,7 @@ def write_session_artifacts(
                 response.matched_event_index,
                 response.rt_frames,
                 response.correct,
+                response.outcome,
             )
             for run_result in summary.run_results
             for response in run_result.response_log

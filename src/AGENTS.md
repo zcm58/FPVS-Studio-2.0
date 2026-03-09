@@ -19,20 +19,22 @@ mirrors the current lab workflow:
 
 ## Current phase
 
-The current implementation phase is **runtime execution vertical slice**.
+The current implementation phase is **Phase 5 authoring GUI**.
 
-This pass should keep the compile layers stable while making execution real:
+This pass should keep the existing compile/runtime layers stable while exposing
+them through the first real PySide6 authoring application:
 
 - `project.json` -> core project models
 - core compiler -> single-condition `RunSpec`
 - core compiler -> multi-condition `SessionPlan`
 - preprocessing -> manifest-backed original/derived assets
-- runtime -> session preflight -> session flow -> export writers
+- GUI -> backend document/controller services
+- runtime -> session preflight -> test-mode launch boundary -> export writers
 - engine -> transition screens + frame-accurate `RunSpec` playback
 - core execution results -> neutral run/session artifacts
 
-Do not collapse the planning layers into runtime or move PsychoPy into core or
-preprocessing.
+Do not collapse the planning layers into runtime, move PsychoPy into core or
+preprocessing, or move domain logic into widgets.
 
 ## Non-negotiable product decisions for v1
 
@@ -119,17 +121,20 @@ preprocessing.
    still narrow PsychoPy execution path.
 10. A `SessionPlan` contract plus runtime session flow that iterates ordered
     `RunSpec` entries above the engine layer.
-11. Core-owned execution-result/export contracts and unit tests that keep the
+11. A usable PySide6 authoring GUI that reuses backend services for
+    create/open/save, condition editing, preprocessing, preflight, and
+    test-mode launch.
+12. Core-owned execution-result/export contracts and unit tests that keep the
     runtime path trustworthy without requiring PsychoPy in the default suite.
 
 ## What this phase should not overbuild
 
-- No GUI editor completion yet.
-- No complete GUI yet.
+- No user-facing dependency fallbacks around missing PySide6.
 - No real lab-specific serial-port trigger code yet.
 - No advanced image normalization beyond the data contracts needed to support
   it later.
 - No attempt to make unsupported monitor refresh rates work anyway.
+- No claim that fullscreen/non-test launch is production validated.
 
 ## Change discipline
 

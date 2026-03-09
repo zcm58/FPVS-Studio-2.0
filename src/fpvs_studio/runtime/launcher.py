@@ -25,8 +25,10 @@ class LaunchSettings:
 
     engine_name: str | EngineName = EngineName.PSYCHOPY
     test_mode: bool = True
+    fullscreen: bool = True
     display_index: int | None = None
     serial_port: str | None = None
+    serial_baudrate: int = 115200
 
     def as_runtime_options(self) -> dict[str, object]:
         """Return a generic engine-facing runtime options mapping."""
@@ -42,13 +44,17 @@ def _validate_launch_settings(settings: LaunchSettings) -> None:
     if not settings.test_mode:
         raise LaunchSettingsError(
             "FPVS Studio Phase 4 currently requires test_mode=True. "
-            "Fullscreen/runtime-only launches remain deferred."
+            "Non-test launch validation remains deferred."
         )
     if settings.display_index is not None:
         if not isinstance(settings.display_index, int) or settings.display_index < 0:
             raise LaunchSettingsError("display_index must be None or a non-negative integer.")
+    if not isinstance(settings.fullscreen, bool):
+        raise LaunchSettingsError("fullscreen must be a boolean.")
     if settings.serial_port is not None and not settings.serial_port.strip():
         raise LaunchSettingsError("serial_port may not be blank when provided.")
+    if not isinstance(settings.serial_baudrate, int) or settings.serial_baudrate <= 0:
+        raise LaunchSettingsError("serial_baudrate must be a positive integer.")
 
 
 def launch_run(

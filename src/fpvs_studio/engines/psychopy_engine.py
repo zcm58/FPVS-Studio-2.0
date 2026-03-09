@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 import sys
 
@@ -59,16 +59,17 @@ class PsychoPyEngine(PresentationEngine):
 
         self._runtime_options = dict(runtime_options or {})
         test_mode = bool(self._runtime_options.get("test_mode"))
+        fullscreen = bool(self._runtime_options.get("fullscreen", True))
         display_index = self._runtime_options.get("display_index")
         window_kwargs: dict[str, object] = {
-            "fullscr": not test_mode,
+            "fullscr": fullscreen,
             "screen": display_index if isinstance(display_index, int) else 0,
-            "allowGUI": test_mode,
+            "allowGUI": not fullscreen,
             "waitBlanking": True,
             "color": "black",
             "units": "pix",
         }
-        if test_mode:
+        if test_mode and not fullscreen:
             window_kwargs["size"] = [1280, 720]
 
         self._window = visual.Window(**window_kwargs)
@@ -92,6 +93,36 @@ class PsychoPyEngine(PresentationEngine):
             continue_key=continue_key,
         )
 
+    def show_block_break_screen(
+        self,
+        *,
+        completed_block_index: int,
+        total_block_count: int,
+        next_block_index: int,
+    ) -> bool:
+        heading = f"Block {completed_block_index + 1} of {total_block_count} complete."
+        body = f"Press Space to continue to Block {next_block_index + 1}."
+        return self._show_text_screen(
+            heading=heading,
+            body=body,
+            countdown_seconds=None,
+            continue_key="space",
+        )
+
+    def show_condition_feedback_screen(
+        self,
+        *,
+        heading: str,
+        body: str,
+        continue_key: str,
+    ) -> bool:
+        return self._show_text_screen(
+            heading=heading,
+            body=body,
+            countdown_seconds=None,
+            continue_key=continue_key,
+        )
+
     def run_condition(
         self,
         run_spec: RunSpec,
@@ -102,7 +133,7 @@ class PsychoPyEngine(PresentationEngine):
     ) -> RunExecutionSummary:
         self.open_session(runtime_options=runtime_options)
         self._aborted = False
-        started_at = datetime.now(UTC)
+        started_at = datetime.now(timezone.utc)
 
         visual = self._require_visual()
         core = self._require_core()
@@ -222,7 +253,7 @@ class PsychoPyEngine(PresentationEngine):
                     )
                 )
 
-        finished_at = datetime.now(UTC)
+        finished_at = datetime.now(timezone.utc)
         runtime_metadata = self._runtime_metadata_for_run(run_spec, frame_intervals)
         self._active_run_clock = None
         return RunExecutionSummary(
@@ -359,7 +390,7 @@ class PsychoPyEngine(PresentationEngine):
             monitor_name=monitor_name,
             screen_width_px=width,
             screen_height_px=height,
-            fullscreen=not bool(self._runtime_options.get("test_mode")),
+            fullscreen=bool(self._runtime_options.get("fullscreen", True)),
             requested_refresh_hz=run_spec.display.refresh_hz,
             actual_refresh_hz=actual_refresh_hz,
             frame_interval_recording=True,

@@ -11,6 +11,7 @@ from fpvs_studio.core.enums import RunMode, SchemaVersion
 from fpvs_studio.core.models import FPVSBaseModel, validate_project_relative_path
 
 FixationOutcome = Literal["hit", "miss"]
+ResponseOutcome = Literal["hit", "false_alarm"]
 TriggerStatus = Literal["sent", "failed", "skipped"]
 
 
@@ -48,6 +49,7 @@ class ResponseRecord(FPVSBaseModel):
     matched_event_index: int | None = Field(default=None, ge=0)
     rt_frames: int | None = Field(default=None, ge=0)
     correct: bool | None = None
+    outcome: ResponseOutcome | None = None
 
     @field_validator("key")
     @classmethod
@@ -93,6 +95,17 @@ class FixationResponseRecord(FPVSBaseModel):
         return self
 
 
+class FixationTaskSummary(FPVSBaseModel):
+    """Condition-level fixation accuracy metrics for participant feedback and export."""
+
+    total_targets: int = Field(ge=0)
+    hit_count: int = Field(ge=0)
+    miss_count: int = Field(ge=0)
+    false_alarm_count: int = Field(ge=0)
+    accuracy_percent: float = Field(ge=0)
+    mean_rt_ms: float | None = Field(default=None, ge=0)
+
+
 class TriggerRecord(FPVSBaseModel):
     """One attempted trigger emission observed during execution."""
 
@@ -134,6 +147,7 @@ class RunExecutionSummary(FPVSBaseModel):
     runtime_metadata: RuntimeMetadata | None = None
     frame_intervals: list[FrameIntervalRecord] = Field(default_factory=list)
     fixation_responses: list[FixationResponseRecord] = Field(default_factory=list)
+    fixation_task_summary: FixationTaskSummary | None = None
     response_log: list[ResponseRecord] = Field(default_factory=list)
     trigger_log: list[TriggerRecord] = Field(default_factory=list)
     output_dir: str | None = None
