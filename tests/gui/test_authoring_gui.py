@@ -771,10 +771,7 @@ def test_home_tab_is_first_and_existing_tabs_remain_usable(
     expected_tabs = [
         "Home",
         "Project",
-        "Conditions",
         "Setup Dashboard",
-        "Session Structure",
-        "Fixation Cross Settings",
         "Assets / Preprocessing",
         "Run / Runtime",
     ]
@@ -783,16 +780,18 @@ def test_home_tab_is_first_and_existing_tabs_remain_usable(
 
     window.main_tabs.setCurrentWidget(window.project_page)
     assert window.main_tabs.currentWidget() is window.project_page
-    window.main_tabs.setCurrentWidget(window.conditions_page)
-    assert window.main_tabs.currentWidget() is window.conditions_page
     window.main_tabs.setCurrentWidget(window.setup_dashboard_page)
     assert window.main_tabs.currentWidget() is window.setup_dashboard_page
-    window.main_tabs.setCurrentWidget(window.session_structure_page)
-    assert window.main_tabs.currentWidget() is window.session_structure_page
-    window.main_tabs.setCurrentWidget(window.fixation_cross_settings_page)
-    assert window.main_tabs.currentWidget() is window.fixation_cross_settings_page
+    window.main_tabs.setCurrentWidget(window.assets_page)
+    assert window.main_tabs.currentWidget() is window.assets_page
     window.main_tabs.setCurrentWidget(window.run_page)
     assert window.main_tabs.currentWidget() is window.run_page
+    assert window.main_tabs.indexOf(window.conditions_page) == -1
+    assert window.main_tabs.indexOf(window.session_structure_page) == -1
+    assert window.main_tabs.indexOf(window.fixation_cross_settings_page) == -1
+    assert window.conditions_page.add_condition_button is not None
+    assert window.session_structure_page.block_count_spin is not None
+    assert window.fixation_cross_settings_page.fixation_enabled_checkbox is not None
 
 
 def test_setup_dashboard_tab_exists_and_uses_three_column_shell(
@@ -804,13 +803,13 @@ def test_setup_dashboard_tab_exists_and_uses_three_column_shell(
 
     dashboard = window.setup_dashboard_page
     dashboard_index = window.main_tabs.indexOf(dashboard)
-    assert dashboard_index == 3
+    assert dashboard_index == 2
     assert window.main_tabs.tabText(dashboard_index) == "Setup Dashboard"
     assert dashboard.shell.layout_mode == "three_column"
     assert dashboard.shell.column_count() == 3
 
 
-def test_setup_dashboard_surfaces_session_fixation_runtime_and_assets_controls(
+def test_setup_dashboard_surfaces_session_conditions_fixation_runtime_and_assets_controls(
     qtbot,
     controller: StudioController,
     tmp_path: Path,
@@ -821,12 +820,20 @@ def test_setup_dashboard_surfaces_session_fixation_runtime_and_assets_controls(
     QApplication.processEvents()
 
     session_editor = dashboard.session_structure_editor
+    conditions_editor = dashboard.conditions_editor
     fixation_editor = dashboard.fixation_settings_editor
     runtime_editor = dashboard.runtime_settings_editor
     assets_editor = dashboard.assets_readiness_editor
 
     assert session_editor.block_count_spin is not None
     assert session_editor.inter_condition_mode_combo is not None
+    assert conditions_editor.add_condition_button is not None
+    assert conditions_editor.remove_condition_button is not None
+    assert conditions_editor.condition_name_edit is not None
+    assert conditions_editor.variant_combo is not None
+    assert conditions_editor.duty_cycle_combo is not None
+    assert conditions_editor.base_import_button is not None
+    assert conditions_editor.oddball_import_button is not None
 
     assert fixation_editor.fixation_enabled_checkbox is not None
     assert fixation_editor.target_count_mode_combo is not None
@@ -836,11 +843,15 @@ def test_setup_dashboard_surfaces_session_fixation_runtime_and_assets_controls(
 
     assert runtime_editor.refresh_hz_spin is not None
     assert runtime_editor.runtime_background_color_combo is not None
+    assert runtime_editor.serial_baudrate_spin.isEnabled() is False
     assert not hasattr(runtime_editor, "display_index_edit")
 
     assert assets_editor.refresh_button.text() == "Refresh Inspection"
     assert assets_editor.materialize_button.text() == "Materialize Supported Variants"
     assert "Condition stimulus rows:" in assets_editor.condition_rows_value.text()
+    left_column_layout = dashboard.shell._column_layouts[0]
+    assert left_column_layout.itemAt(0).widget() is session_editor
+    assert left_column_layout.itemAt(1).widget() is conditions_editor
 
 
 def test_setup_dashboard_edits_sync_document_and_dedicated_tabs(
@@ -850,6 +861,20 @@ def test_setup_dashboard_edits_sync_document_and_dedicated_tabs(
 ) -> None:
     _, window = _open_created_project(controller, qtbot, tmp_path, "Setup Dashboard Forward Sync")
     dashboard = window.setup_dashboard_page
+
+    conditions_editor = dashboard.conditions_editor
+    qtbot.mouseClick(conditions_editor.add_condition_button, Qt.MouseButton.LeftButton)
+    conditions_editor.condition_name_edit.setText("Dashboard Faces")
+    conditions_editor.condition_name_edit.editingFinished.emit()
+    conditions_editor.instructions_edit.setPlainText("Look at the faces.")
+    conditions_editor.trigger_code_spin.setValue(21)
+    conditions_editor.sequence_count_spin.setValue(2)
+    conditions_editor.variant_combo.setCurrentIndex(
+        conditions_editor.variant_combo.findData(StimulusVariant.GRAYSCALE)
+    )
+    conditions_editor.duty_cycle_combo.setCurrentIndex(
+        conditions_editor.duty_cycle_combo.findData(DutyCycleMode.BLANK_50)
+    )
 
     session_editor = dashboard.session_structure_editor
     session_editor.block_count_spin.setValue(4)
@@ -876,9 +901,17 @@ def test_setup_dashboard_edits_sync_document_and_dedicated_tabs(
     runtime_editor.runtime_background_color_combo.setCurrentIndex(dark_gray_index)
     runtime_editor.serial_port_edit.setText("COM9")
     runtime_editor.serial_port_edit.editingFinished.emit()
-    runtime_editor.serial_baudrate_spin.setValue(57600)
     runtime_editor.fullscreen_checkbox.setChecked(False)
     QApplication.processEvents()
+
+    conditions = window.document.ordered_conditions()
+    assert len(conditions) == 1
+    assert conditions[0].name == "Dashboard Faces"
+    assert conditions[0].instructions == "Look at the faces."
+    assert conditions[0].trigger_code == 21
+    assert conditions[0].sequence_count == 2
+    assert conditions[0].stimulus_variant == StimulusVariant.GRAYSCALE
+    assert conditions[0].duty_cycle_mode == DutyCycleMode.BLANK_50
 
     settings = window.document.project.settings
     assert settings.session.block_count == 4
@@ -891,7 +924,7 @@ def test_setup_dashboard_edits_sync_document_and_dedicated_tabs(
     assert settings.display.preferred_refresh_hz == pytest.approx(59.94, abs=0.01)
     assert settings.display.background_color == "#101010"
     assert settings.triggers.serial_port == "COM9"
-    assert settings.triggers.baudrate == 57600
+    assert settings.triggers.baudrate == 115200
 
     assert window.session_structure_page.block_count_spin.value() == 4
     assert (
@@ -904,7 +937,9 @@ def test_setup_dashboard_edits_sync_document_and_dedicated_tabs(
     assert window.run_page.refresh_hz_spin.value() == pytest.approx(59.94, abs=0.01)
     assert window.run_page.runtime_background_color_combo.currentData() == "#101010"
     assert window.run_page.serial_port_edit.text() == "COM9"
-    assert window.run_page.serial_baudrate_spin.value() == 57600
+    assert window.run_page.serial_baudrate_spin.value() == 115200
+    assert dashboard.runtime_settings_editor.serial_baudrate_spin.isEnabled() is False
+    assert window.run_page.serial_baudrate_spin.isEnabled() is False
     assert window.run_page.fullscreen_checkbox.isChecked() is False
 
 
@@ -935,7 +970,7 @@ def test_dedicated_tab_edits_refresh_setup_dashboard_controls(
     run_page.refresh_hz_spin.setValue(75.0)
     run_page.serial_port_edit.setText("COM4")
     run_page.serial_port_edit.editingFinished.emit()
-    run_page.serial_baudrate_spin.setValue(115200)
+    window.document.update_trigger_settings(baudrate=230400)
     run_page.fullscreen_checkbox.setChecked(False)
     QApplication.processEvents()
 
@@ -953,7 +988,10 @@ def test_dedicated_tab_edits_refresh_setup_dashboard_controls(
     assert dashboard.fixation_settings_editor.changes_per_sequence_spin.value() == 7
     assert dashboard.runtime_settings_editor.refresh_hz_spin.value() == pytest.approx(75.0, abs=0.01)
     assert dashboard.runtime_settings_editor.serial_port_edit.text() == "COM4"
-    assert dashboard.runtime_settings_editor.serial_baudrate_spin.value() == 115200
+    assert dashboard.runtime_settings_editor.serial_baudrate_spin.value() == 230400
+    assert dashboard.runtime_settings_editor.serial_baudrate_spin.isEnabled() is False
+    assert run_page.serial_baudrate_spin.value() == 230400
+    assert run_page.serial_baudrate_spin.isEnabled() is False
     assert dashboard.runtime_settings_editor.fullscreen_checkbox.isChecked() is False
 
 
@@ -995,7 +1033,7 @@ def test_setup_dashboard_save_load_smoke_persists_dashboard_edited_settings(
     runtime_editor.runtime_background_color_combo.setCurrentIndex(dark_gray_index)
     runtime_editor.serial_port_edit.setText("COM5")
     runtime_editor.serial_port_edit.editingFinished.emit()
-    runtime_editor.serial_baudrate_spin.setValue(38400)
+    window.document.update_trigger_settings(baudrate=38400)
     runtime_editor.fullscreen_checkbox.setChecked(False)
 
     assert window.save_project() is True
@@ -1029,6 +1067,10 @@ def test_setup_dashboard_save_load_smoke_persists_dashboard_edited_settings(
     assert reopened_dashboard.session_structure_editor.block_count_spin.value() == 3
     assert reopened_dashboard.fixation_settings_editor.changes_per_sequence_spin.value() == 6
     assert reopened_dashboard.runtime_settings_editor.serial_port_edit.text() == "COM5"
+    assert reopened_dashboard.runtime_settings_editor.serial_baudrate_spin.value() == 38400
+    assert reopened_dashboard.runtime_settings_editor.serial_baudrate_spin.isEnabled() is False
+    assert reopened_window.run_page.serial_baudrate_spin.value() == 38400
+    assert reopened_window.run_page.serial_baudrate_spin.isEnabled() is False
     assert reopened_window.run_page.fullscreen_checkbox.isChecked() is True
 
 
@@ -1226,7 +1268,7 @@ def test_home_overview_panels_show_project_session_and_runtime_metadata(
     window.session_structure_page.block_count_spin.setValue(2)
     window.run_page.serial_port_edit.setText("COM7")
     window.run_page.serial_port_edit.editingFinished.emit()
-    window.run_page.serial_baudrate_spin.setValue(57600)
+    window.document.update_trigger_settings(baudrate=57600)
     dark_gray_index = window.run_page.runtime_background_color_combo.findData("#101010")
     assert dark_gray_index >= 0
     window.run_page.runtime_background_color_combo.setCurrentIndex(dark_gray_index)
@@ -1550,7 +1592,8 @@ def test_fixation_cross_settings_page_maps_fixed_target_count_mode_to_backend(
 ) -> None:
     _, window = _open_created_project(controller, qtbot, tmp_path, "Fixed Target Count")
 
-    page = window.fixation_cross_settings_page
+    window.main_tabs.setCurrentWidget(window.setup_dashboard_page)
+    page = window.setup_dashboard_page.fixation_settings_editor
     page.target_count_mode_combo.setCurrentIndex(page.target_count_mode_combo.findData("fixed"))
     page.changes_per_sequence_spin.setValue(7)
 
@@ -1566,7 +1609,8 @@ def test_fixation_cross_settings_page_exposes_accuracy_task_controls(
 ) -> None:
     _, window = _open_created_project(controller, qtbot, tmp_path, "Fixation Controls")
 
-    page = window.fixation_cross_settings_page
+    window.main_tabs.setCurrentWidget(window.setup_dashboard_page)
+    page = window.setup_dashboard_page.fixation_settings_editor
     assert page.findChild(type(page.fixation_accuracy_checkbox), "fixation_accuracy_checkbox") is not None
     assert page.findChild(type(page.target_count_mode_combo), "target_count_mode_combo") is not None
     assert page.findChild(type(page.target_count_min_spin), "target_count_min_spin") is not None
@@ -1583,8 +1627,8 @@ def test_session_structure_rows_toggle_with_inter_condition_mode(
 ) -> None:
     _, window = _open_created_project(controller, qtbot, tmp_path, "Session Structure Visibility")
 
-    page = window.session_structure_page
-    window.main_tabs.setCurrentWidget(page)
+    page = window.setup_dashboard_page.session_structure_editor
+    window.main_tabs.setCurrentWidget(window.setup_dashboard_page)
     QApplication.processEvents()
 
     page.inter_condition_mode_combo.setCurrentIndex(
@@ -1609,24 +1653,24 @@ def test_fixation_color_change_mode_toggles_relevant_controls(
 ) -> None:
     _, window = _open_created_project(controller, qtbot, tmp_path, "Fixation Mode Visibility")
 
-    page = window.fixation_cross_settings_page
-    window.main_tabs.setCurrentWidget(page)
+    page = window.setup_dashboard_page.fixation_settings_editor
+    window.main_tabs.setCurrentWidget(window.setup_dashboard_page)
     page.fixation_enabled_checkbox.setChecked(True)
     QApplication.processEvents()
 
     page.target_count_mode_combo.setCurrentIndex(page.target_count_mode_combo.findData("fixed"))
     QApplication.processEvents()
-    assert page.changes_per_sequence_spin.isVisible()
-    assert not page.target_count_min_spin.isVisible()
-    assert not page.target_count_max_spin.isVisible()
-    assert not page.no_repeat_count_checkbox.isVisible()
+    assert page.changes_per_sequence_spin.isEnabled()
+    assert not page.target_count_min_spin.isEnabled()
+    assert not page.target_count_max_spin.isEnabled()
+    assert not page.no_repeat_count_checkbox.isEnabled()
 
     page.target_count_mode_combo.setCurrentIndex(page.target_count_mode_combo.findData("randomized"))
     QApplication.processEvents()
-    assert not page.changes_per_sequence_spin.isVisible()
-    assert page.target_count_min_spin.isVisible()
-    assert page.target_count_max_spin.isVisible()
-    assert page.no_repeat_count_checkbox.isVisible()
+    assert not page.changes_per_sequence_spin.isEnabled()
+    assert page.target_count_min_spin.isEnabled()
+    assert page.target_count_max_spin.isEnabled()
+    assert page.no_repeat_count_checkbox.isEnabled()
 
 
 def test_fixation_accuracy_toggle_controls_response_visibility(
@@ -1636,8 +1680,8 @@ def test_fixation_accuracy_toggle_controls_response_visibility(
 ) -> None:
     _, window = _open_created_project(controller, qtbot, tmp_path, "Fixation Accuracy Visibility")
 
-    page = window.fixation_cross_settings_page
-    window.main_tabs.setCurrentWidget(page)
+    page = window.setup_dashboard_page.fixation_settings_editor
+    window.main_tabs.setCurrentWidget(window.setup_dashboard_page)
     page.fixation_enabled_checkbox.setChecked(True)
     QApplication.processEvents()
 
@@ -1659,8 +1703,8 @@ def test_fixation_disable_hides_dependent_sections(
 ) -> None:
     _, window = _open_created_project(controller, qtbot, tmp_path, "Fixation Enablement Visibility")
 
-    page = window.fixation_cross_settings_page
-    window.main_tabs.setCurrentWidget(page)
+    page = window.setup_dashboard_page.fixation_settings_editor
+    window.main_tabs.setCurrentWidget(window.setup_dashboard_page)
     page.fixation_enabled_checkbox.setChecked(True)
     page.fixation_accuracy_checkbox.setChecked(True)
     QApplication.processEvents()
@@ -1697,8 +1741,8 @@ def test_cycle_tooltips_and_fixation_feasibility_render_and_update(
         == "Cycle = one turn of base presentations plus one oddball presentation."
     )
 
-    page = window.fixation_cross_settings_page
-    window.main_tabs.setCurrentWidget(page)
+    page = window.setup_dashboard_page.fixation_settings_editor
+    window.main_tabs.setCurrentWidget(window.setup_dashboard_page)
     page.fixation_enabled_checkbox.setChecked(True)
     page.target_count_mode_combo.setCurrentIndex(page.target_count_mode_combo.findData("fixed"))
     page.changes_per_sequence_spin.setValue(4)
@@ -1735,8 +1779,8 @@ def test_fixation_feasibility_shows_single_value_for_uniform_condition_lengths(
     qtbot.mouseClick(window.conditions_page.add_condition_button, Qt.MouseButton.LeftButton)
     qtbot.mouseClick(window.conditions_page.add_condition_button, Qt.MouseButton.LeftButton)
 
-    page = window.fixation_cross_settings_page
-    window.main_tabs.setCurrentWidget(page)
+    page = window.setup_dashboard_page.fixation_settings_editor
+    window.main_tabs.setCurrentWidget(window.setup_dashboard_page)
     QApplication.processEvents()
 
     guidance = page.fixation_feasibility_label.text()
@@ -2132,8 +2176,10 @@ def test_launch_action_wires_runtime_launcher_with_serial_settings(
 
     window.run_page.serial_port_edit.setText("COM3")
     window.run_page.serial_port_edit.editingFinished.emit()
-    window.run_page.serial_baudrate_spin.setValue(57600)
+    window.document.update_trigger_settings(baudrate=57600)
     window.run_page.display_index_edit.setText("1")
+    assert window.run_page.serial_baudrate_spin.isEnabled() is False
+    assert window.setup_dashboard_page.runtime_settings_editor.serial_baudrate_spin.isEnabled() is False
     assert window.run_page.fullscreen_checkbox.isChecked() is True
 
     qtbot.mouseClick(window.run_page.launch_button, Qt.MouseButton.LeftButton)

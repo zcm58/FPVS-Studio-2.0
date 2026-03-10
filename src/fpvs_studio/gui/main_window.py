@@ -1849,6 +1849,10 @@ class RuntimeSettingsEditor(QWidget):
             _prefixed_object_name(object_name_prefix, "serial_baudrate_spin")
         )
         self.serial_baudrate_spin.setRange(1, 2_000_000)
+        self.serial_baudrate_spin.setEnabled(False)
+        self.serial_baudrate_spin.setToolTip(
+            "Baud rate is stored in project settings and shown here for reference."
+        )
         self.serial_baudrate_spin.valueChanged.connect(self._apply_serial_settings)
 
         self.test_mode_checkbox = QCheckBox(
@@ -2129,6 +2133,7 @@ class SetupDashboardPage(QWidget):
         self,
         document: ProjectDocument,
         *,
+        conditions_editor: ConditionsPage,
         fullscreen_state_getter: Callable[[], bool] | None = None,
         fullscreen_state_setter: Callable[[bool], None] | None = None,
         parent=None,
@@ -2136,15 +2141,19 @@ class SetupDashboardPage(QWidget):
         super().__init__(parent)
         self.shell = NonHomePageShell(
             title="Setup Dashboard",
-            subtitle="Configure session structure, fixation behavior, runtime, and assets from one view.",
+            subtitle=(
+                "Configure session structure, conditions, fixation behavior, runtime, "
+                "and assets from one view."
+            ),
             layout_mode="three_column",
             parent=self,
         )
         self.shell.set_column_stretches(3, 4, 3)
         self.shell.set_footer_text(
-            "Dashboard changes update the same project state used by each dedicated tab."
+            "Setup changes here update the shared project state used by Home and Run / Runtime."
         )
 
+        self.conditions_editor = conditions_editor
         self.session_structure_editor = SessionStructureEditor(
             document,
             object_name_prefix="dashboard_",
@@ -2169,6 +2178,7 @@ class SetupDashboardPage(QWidget):
         )
 
         self.shell.add_column_widget(0, self.session_structure_editor)
+        self.shell.add_column_widget(0, self.conditions_editor)
         self.shell.add_column_widget(1, self.fixation_settings_editor)
         self.shell.add_column_widget(2, self.runtime_settings_editor)
         self.shell.add_column_widget(2, self.assets_readiness_editor)
@@ -3170,6 +3180,7 @@ class StudioMainWindow(QMainWindow):
         )
         self.setup_dashboard_page = SetupDashboardPage(
             document,
+            conditions_editor=self.conditions_page,
             fullscreen_state_getter=self._runtime_fullscreen_state,
             fullscreen_state_setter=self._set_runtime_fullscreen_state,
             parent=self,
@@ -3186,10 +3197,7 @@ class StudioMainWindow(QMainWindow):
         self.main_tabs.setTabBar(AnimatedTabBar(self.main_tabs))
         self.main_tabs.addTab(self.home_page, "Home")
         self.main_tabs.addTab(self.project_page, "Project")
-        self.main_tabs.addTab(self.conditions_page, "Conditions")
         self.main_tabs.addTab(self.setup_dashboard_page, "Setup Dashboard")
-        self.main_tabs.addTab(self.session_structure_page, "Session Structure")
-        self.main_tabs.addTab(self.fixation_cross_settings_page, "Fixation Cross Settings")
         self.main_tabs.addTab(self.assets_page, "Assets / Preprocessing")
         self.main_tabs.addTab(self.run_page, "Run / Runtime")
         self.setCentralWidget(self.main_tabs)
