@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import html
 from pathlib import Path
 
 from PySide6.QtCore import Qt
@@ -47,6 +48,96 @@ def _duty_cycle_label(mode: DutyCycleMode) -> str:
     }[mode]
 
 
+_DISPLAY_RESOLUTION_TEXT = "Full Screen (1920 × 1080)"
+
+
+def _enabled_label(value: bool) -> str:
+    return "Enabled" if value else "Disabled"
+
+
+def _format_refresh_rate(preferred_refresh_hz: float | None) -> str:
+    if preferred_refresh_hz is None:
+        return "Not Set"
+    value_text = f"{preferred_refresh_hz:.3f}".rstrip("0").rstrip(".")
+    return f"{value_text} Hz"
+
+
+def _format_color_changes_per_condition(fixation: FixationTaskSettings) -> str:
+    if fixation.target_count_mode != "randomized":
+        return str(fixation.changes_per_sequence)
+    min_count = fixation.target_count_min
+    max_count = fixation.target_count_max
+    midpoint_sum = min_count + max_count
+    if midpoint_sum % 2 == 0:
+        center = midpoint_sum // 2
+        delta = max_count - center
+        if center - delta == min_count and center + delta == max_count:
+            return f"{center} ± {delta}"
+    return f"{min_count} to {max_count}"
+
+
+def _format_profile_details(profile: ConditionTemplateProfile) -> str:
+    defaults = profile.defaults
+    fixation = defaults.fixation_task
+    sections = [
+        (
+            "Template",
+            [
+                f"Template Name: {profile.display_name}",
+                f"Built-in: {'Yes' if profile.built_in else 'No'}",
+            ],
+        ),
+        (
+            "Display",
+            [
+                f"Display Refresh Rate: {_format_refresh_rate(defaults.display.preferred_refresh_hz)}",
+                f"Display Resolution: {_DISPLAY_RESOLUTION_TEXT}",
+            ],
+        ),
+        (
+            "Fixation Cross",
+            [
+                f"Fixation Cross: {_enabled_label(fixation.enabled)}",
+                f"Fixation Cross Accuracy Task: {_enabled_label(fixation.accuracy_task_enabled)}",
+                (
+                    "Total cross color changes in each condition: "
+                    f"{_format_color_changes_per_condition(fixation)}"
+                ),
+                f"Fixation cross timing: {fixation.target_duration_ms} ms",
+                f"Minimum time between color changes: {fixation.min_gap_ms} ms",
+                f"Maximum time between color changes: {fixation.max_gap_ms} ms",
+            ],
+        ),
+        (
+            "Condition Settings",
+            [
+                f"Duty Cycle: {_duty_cycle_label(defaults.condition.duty_cycle_mode)}",
+                f"Repeats: {defaults.condition.sequence_count}",
+                f"Cycles per Repeat: {defaults.condition.oddball_cycle_repeats_per_sequence}",
+            ],
+        ),
+        (
+            "Description",
+            [profile.description.strip() or "No description provided."],
+        ),
+    ]
+    parts = ['<div style="line-height: 1.45;">']
+    for index, (title, lines) in enumerate(sections):
+        if index:
+            parts.append('<div style="height: 12px;"></div>')
+        parts.append(
+            '<div>'
+            '<span style="font-size: 14px; font-weight: 700; text-decoration: underline;">'
+            f"{html.escape(title)}"
+            "</span>"
+            "</div>"
+        )
+        for line in lines:
+            parts.append(f'<div style="margin-top: 4px;">{html.escape(line)}</div>')
+    parts.append("</div>")
+    return "".join(parts)
+
+
 class ConditionTemplateProfileEditorDialog(QDialog):
     """Create or edit one user-defined condition-template profile."""
 
@@ -59,7 +150,9 @@ class ConditionTemplateProfileEditorDialog(QDialog):
     ) -> None:
         super().__init__(parent)
         self._existing_profile_ids = existing_profile_ids
-        self._original_profile_id = initial_profile.profile_id if initial_profile is not None else None
+        self._original_profile_id = (
+            initial_profile.profile_id if initial_profile is not None else None
+        )
         self._saved_profile: ConditionTemplateProfile | None = None
 
         self.setWindowTitle("Condition Template Profile")
@@ -157,7 +250,9 @@ class ConditionTemplateProfileEditorDialog(QDialog):
         self.response_key_edit.setObjectName("condition_profile_response_key_edit")
         self.response_keys_edit = QLineEdit(self)
         self.response_keys_edit.setObjectName("condition_profile_response_keys_edit")
-        self.response_keys_edit.setPlaceholderText("Comma-separated keys (for example: space,return)")
+        self.response_keys_edit.setPlaceholderText(
+            "Comma-separated keys (for example: space,return)"
+        )
         self.response_window_spin = QDoubleSpinBox(self)
         self.response_window_spin.setObjectName("condition_profile_response_window_spin")
         self.response_window_spin.setRange(0.1, 30.0)
@@ -241,7 +336,9 @@ class ConditionTemplateProfileEditorDialog(QDialog):
         preferred_refresh = profile.defaults.display.preferred_refresh_hz
         self.preferred_refresh_enabled_checkbox.setChecked(preferred_refresh is not None)
         self.preferred_refresh_spin.setEnabled(preferred_refresh is not None)
-        self.preferred_refresh_spin.setValue(preferred_refresh if preferred_refresh is not None else 60.0)
+        self.preferred_refresh_spin.setValue(
+            preferred_refresh if preferred_refresh is not None else 60.0
+        )
 
         fixation = profile.defaults.fixation_task
         self.fixation_enabled_checkbox.setChecked(fixation.enabled)
@@ -357,7 +454,15 @@ class ConditionTemplateManagerDialog(QDialog):
         self.profile_details = QLabel(self)
         self.profile_details.setObjectName("condition_template_profile_details")
         self.profile_details.setWordWrap(True)
+        self.profile_details.setTextFormat(Qt.TextFormat.RichText)
         self.profile_details.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+
+        self.details_header = QLabel("Details", self)
+        self.details_header.setObjectName("condition_template_details_header")
+        self.details_header.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.details_header.setStyleSheet(
+            "font-size: 18px; font-weight: 700; text-decoration: underline;"
+        )
 
         self.add_button = QPushButton("Add", self)
         self.add_button.setObjectName("condition_template_add_button")
@@ -381,7 +486,7 @@ class ConditionTemplateManagerDialog(QDialog):
 
         content_layout = QGridLayout()
         content_layout.addWidget(QLabel("Profiles", self), 0, 0)
-        content_layout.addWidget(QLabel("Details", self), 0, 1)
+        content_layout.addWidget(self.details_header, 0, 1)
         content_layout.addWidget(self.profile_list, 1, 0)
         content_layout.addWidget(self.profile_details, 1, 1)
         content_layout.setColumnStretch(0, 1)
@@ -412,8 +517,7 @@ class ConditionTemplateManagerDialog(QDialog):
         self.profile_list.clear()
         selected_row = -1
         for index, profile in enumerate(self._profiles):
-            suffix = " [Built-in]" if profile.built_in else ""
-            item = QListWidgetItem(f"{profile.display_name} ({profile.profile_id}){suffix}")
+            item = QListWidgetItem(profile.display_name)
             item.setData(Qt.ItemDataRole.UserRole, profile.profile_id)
             self.profile_list.addItem(item)
             if select_profile_id is not None and profile.profile_id == select_profile_id:
@@ -433,32 +537,7 @@ class ConditionTemplateManagerDialog(QDialog):
         if profile is None:
             self.profile_details.setText("Select a condition template profile.")
             return
-        defaults = profile.defaults
-        preferred_refresh = defaults.display.preferred_refresh_hz
-        preferred_refresh_text = (
-            f"{preferred_refresh:.3f} Hz"
-            if preferred_refresh is not None
-            else "not set"
-        )
-        fixation = defaults.fixation_task
-        lines = [
-            f"Id: {profile.profile_id}",
-            f"Name: {profile.display_name}",
-            f"Built-in: {'Yes' if profile.built_in else 'No'}",
-            "",
-            f"Condition defaults: duty={defaults.condition.duty_cycle_mode.value}, "
-            f"repeats={defaults.condition.sequence_count}, "
-            f"cycles/repeat={defaults.condition.oddball_cycle_repeats_per_sequence}",
-            f"Display preferred refresh: {preferred_refresh_text}",
-            f"Fixation: enabled={fixation.enabled}, accuracy={fixation.accuracy_task_enabled}, "
-            f"changes={fixation.changes_per_sequence}, "
-            f"mode={fixation.target_count_mode}",
-            f"Fixation timing: target={fixation.target_duration_ms} ms, "
-            f"min_gap={fixation.min_gap_ms} ms, max_gap={fixation.max_gap_ms} ms",
-        ]
-        if profile.description.strip():
-            lines.extend(["", f"Description: {profile.description.strip()}"])
-        self.profile_details.setText("\n".join(lines))
+        self.profile_details.setText(_format_profile_details(profile))
 
     def _existing_profile_ids(self) -> set[str]:
         return {item.profile_id for item in self._profiles}

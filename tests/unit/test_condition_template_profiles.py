@@ -27,11 +27,51 @@ from fpvs_studio.core.paths import condition_template_library_path
 def test_condition_template_library_is_seeded_with_built_ins(tmp_path) -> None:
     profiles = list_condition_template_profiles(tmp_path)
     profile_ids = {profile.profile_id for profile in profiles}
+    profiles_by_id = {profile.profile_id: profile for profile in profiles}
 
     assert STUDIO_DEFAULT_PROFILE_ID in profile_ids
     assert SIXTY_HZ_BLANK_FIXATION_PROFILE_ID in profile_ids
+    assert (
+        profiles_by_id[STUDIO_DEFAULT_PROFILE_ID].display_name
+        == "Default Template 1: Continuous Images"
+    )
+    assert (
+        profiles_by_id[SIXTY_HZ_BLANK_FIXATION_PROFILE_ID].display_name
+        == "Default Template 2: 83ms blank"
+    )
     assert condition_template_library_path(tmp_path).is_file()
     assert all(profile.built_in for profile in profiles)
+
+
+def test_built_in_templates_share_defaults_except_duty_cycle() -> None:
+    profiles_by_id = {
+        profile.profile_id: profile for profile in built_in_condition_template_profiles()
+    }
+    template_one = profiles_by_id[STUDIO_DEFAULT_PROFILE_ID]
+    template_two = profiles_by_id[SIXTY_HZ_BLANK_FIXATION_PROFILE_ID]
+
+    assert template_one.defaults.condition.duty_cycle_mode == DutyCycleMode.CONTINUOUS
+    assert template_two.defaults.condition.duty_cycle_mode == DutyCycleMode.BLANK_50
+    assert template_one.defaults.condition.sequence_count == 1
+    assert template_two.defaults.condition.sequence_count == 1
+    assert template_one.defaults.condition.oddball_cycle_repeats_per_sequence == 146
+    assert template_two.defaults.condition.oddball_cycle_repeats_per_sequence == 146
+    assert template_one.defaults.display.preferred_refresh_hz is None
+    assert template_two.defaults.display.preferred_refresh_hz is None
+
+    fixation_one = template_one.defaults.fixation_task
+    fixation_two = template_two.defaults.fixation_task
+    assert fixation_one == fixation_two
+    assert fixation_one.enabled is True
+    assert fixation_one.accuracy_task_enabled is True
+    assert fixation_one.target_count_mode == "randomized"
+    assert fixation_one.target_count_min == 6
+    assert fixation_one.target_count_max == 8
+    assert fixation_one.no_immediate_repeat_count is True
+    assert fixation_one.changes_per_sequence == 7
+    assert fixation_one.target_duration_ms == 250
+    assert fixation_one.min_gap_ms == 1000
+    assert fixation_one.max_gap_ms == 3000
 
 
 def test_condition_template_profile_upsert_and_delete_round_trip(tmp_path) -> None:

@@ -48,6 +48,20 @@ from fpvs_studio.gui.animations import AnimatedTabBar, ButtonHoverAnimator
 from fpvs_studio.gui.document import ConditionStimulusRow, DocumentError, ProjectDocument
 
 _CYCLE_HELP_TEXT = "Cycle = one turn of base presentations plus one oddball presentation."
+_RUNTIME_BACKGROUND_COLOR_PRESETS: tuple[tuple[str, str], ...] = (
+    ("Black", "#000000"),
+    ("Dark Gray", "#101010"),
+)
+
+
+def _canonical_runtime_background_hex(background_color: str) -> str | None:
+    """Return the canonical preset hex when one runtime background preset matches."""
+
+    normalized = background_color.strip().lower()
+    for _label, preset_hex in _RUNTIME_BACKGROUND_COLOR_PRESETS:
+        if preset_hex.lower() == normalized:
+            return preset_hex
+    return None
 
 
 def _show_error_dialog(parent: QWidget, title: str, error: Exception) -> None:
@@ -118,6 +132,13 @@ def _sync_text_editor_contents(editor: QTextEdit | QPlainTextEdit, text: str) ->
     )
     restored_cursor.setPosition(min(position, len(text)), move_mode)
     editor.setTextCursor(restored_cursor)
+
+
+def _set_form_row_visible(layout: QFormLayout, field: QWidget, visible: bool) -> None:
+    label = layout.labelForField(field)
+    if label is not None:
+        label.setVisible(visible)
+    field.setVisible(visible)
 
 
 class LeftToRightPlainTextEdit(QPlainTextEdit):
@@ -195,7 +216,7 @@ class ParticipantNumberDialog(QDialog):
 
 
 class ProjectPage(QWidget):
-    """Project metadata and display settings page."""
+    """Project metadata and condition template controls page."""
 
     def __init__(
         self,
@@ -228,10 +249,6 @@ class ProjectPage(QWidget):
         self.project_root_value.setObjectName("project_root_value")
         self.project_root_value.setWordWrap(True)
         self.project_root_value.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        self.template_value = QLabel(self)
-        self.template_value.setObjectName("template_value")
-        self.template_value.setWordWrap(True)
-        self.template_value.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         self.condition_profile_combo = QComboBox(self)
         self.condition_profile_combo.setObjectName("project_condition_profile_combo")
         self.condition_profile_combo.setPlaceholderText("Select a condition template profile...")
@@ -242,12 +259,6 @@ class ProjectPage(QWidget):
         self.apply_profile_to_conditions_button = QPushButton("Apply Template To All Conditions", self)
         self.apply_profile_to_conditions_button.setObjectName("apply_profile_to_conditions_button")
         self.apply_profile_to_conditions_button.clicked.connect(self._apply_profile_to_conditions)
-        self.condition_profile_status_value = QLabel(self)
-        self.condition_profile_status_value.setObjectName("condition_profile_status_value")
-        self.condition_profile_status_value.setWordWrap(True)
-        self.background_color_edit = QLineEdit(self)
-        self.background_color_edit.setObjectName("background_color_edit")
-        self.background_color_edit.editingFinished.connect(self._apply_background_color)
 
         condition_profile_row = QWidget(self)
         condition_profile_layout = QHBoxLayout(condition_profile_row)
@@ -284,15 +295,12 @@ class ProjectPage(QWidget):
         metadata_layout.addRow("Name", self.project_name_edit)
         metadata_layout.addRow("Description", self.project_description_edit)
         metadata_layout.addRow("Project Root", self.project_root_value)
-        metadata_layout.addRow("Protocol Template", self.template_value)
         metadata_layout.addRow("Condition Template", condition_profile_row)
-        metadata_layout.addRow("Template Status", self.condition_profile_status_value)
 
         display_group = QGroupBox("Display & Runtime", self)
         display_group.setObjectName("project_display_card")
         display_layout = QFormLayout(display_group)
         display_layout.setVerticalSpacing(10)
-        display_layout.addRow("Background Color", self.background_color_edit)
         display_layout.addRow(runtime_note_banner)
 
         layout = QVBoxLayout(self)
@@ -319,9 +327,7 @@ class ProjectPage(QWidget):
                 padding: 0 4px;
                 font-weight: 600;
             }
-            QLabel#project_root_value,
-            QLabel#template_value,
-            QLabel#condition_profile_status_value {
+            QLabel#project_root_value {
                 border: 1px solid #d6dde8;
                 border-radius: 6px;
                 background-color: #ffffff;
@@ -343,14 +349,10 @@ class ProjectPage(QWidget):
 
     def refresh(self) -> None:
         project = self._document.project
-        template = get_template(project.meta.template_id)
         with QSignalBlocker(self.project_name_edit):
             self.project_name_edit.setText(project.meta.name)
         _sync_text_editor_contents(self.project_description_edit, project.meta.description)
-        with QSignalBlocker(self.background_color_edit):
-            self.background_color_edit.setText(str(project.settings.display.background_color))
         self.project_root_value.setText(str(self._document.project_root))
-        self.template_value.setText(f"{template.display_name} ({template.template_id})")
         self._refresh_condition_profile_widgets()
 
     def _refresh_condition_profile_widgets(self) -> None:
@@ -377,20 +379,6 @@ class ProjectPage(QWidget):
             if selected_profile_id is not None
             else None
         )
-        if selected_profile_id is None:
-            self.condition_profile_status_value.setText(
-                "No condition template selected. New conditions use saved project defaults."
-            )
-        elif profile is None:
-            self.condition_profile_status_value.setText(
-                f"Profile '{selected_profile_id}' is missing from the global library. "
-                "Project snapshot defaults remain active."
-            )
-        else:
-            self.condition_profile_status_value.setText(
-                f"{profile.display_name} ({profile.profile_id}) is selected for this project."
-            )
-
         self.apply_profile_to_conditions_button.setEnabled(
             profile is not None and bool(self._document.project.conditions)
         )
@@ -410,15 +398,6 @@ class ProjectPage(QWidget):
             self._document.update_project_description(description)
         except Exception as error:  # pragma: no cover - exercised via GUI tests
             _show_error_dialog(self, "Project Description Error", error)
-            self.refresh()
-
-    def _apply_background_color(self) -> None:
-        try:
-            self._document.update_display_settings(
-                background_color=self.background_color_edit.text().strip()
-            )
-        except Exception as error:
-            _show_error_dialog(self, "Display Settings Error", error)
             self.refresh()
 
     def _apply_condition_profile_selection(self) -> None:
@@ -826,8 +805,8 @@ class ConditionsPage(QWidget):
             _show_error_dialog(self, "Stimulus Import Error", error)
 
 
-class SessionFixationPage(QWidget):
-    """Combined session and fixation settings page."""
+class SessionStructurePage(QWidget):
+    """Session-level settings page."""
 
     def __init__(self, document: ProjectDocument, parent=None) -> None:
         super().__init__(parent)
@@ -842,6 +821,7 @@ class SessionFixationPage(QWidget):
         self.session_seed_spin.setObjectName("session_seed_spin")
         self.session_seed_spin.setRange(0, 2_147_483_647)
         self.session_seed_spin.valueChanged.connect(self._apply_session_settings)
+
         self.generate_seed_button = QPushButton("Generate New Seed", self)
         self.generate_seed_button.setObjectName("generate_seed_button")
         self.generate_seed_button.clicked.connect(self._generate_seed)
@@ -854,7 +834,9 @@ class SessionFixationPage(QWidget):
         self.inter_condition_mode_combo.setObjectName("inter_condition_mode_combo")
         for mode in InterConditionMode:
             self.inter_condition_mode_combo.addItem(_transition_label(mode), userData=mode)
-        self.inter_condition_mode_combo.currentIndexChanged.connect(self._apply_session_settings)
+        self.inter_condition_mode_combo.currentIndexChanged.connect(
+            self._on_inter_condition_mode_changed
+        )
 
         self.break_seconds_spin = QDoubleSpinBox(self)
         self.break_seconds_spin.setObjectName("inter_condition_break_seconds_spin")
@@ -866,12 +848,128 @@ class SessionFixationPage(QWidget):
         self.continue_key_edit.setObjectName("continue_key_edit")
         self.continue_key_edit.editingFinished.connect(self._apply_session_settings)
 
+        session_group = QGroupBox("Session Structure", self)
+        session_group.setObjectName("session_structure_card")
+        session_group.setMaximumWidth(760)
+        self.session_layout = QFormLayout(session_group)
+        self.session_layout.setVerticalSpacing(9)
+        seed_layout = QHBoxLayout()
+        seed_layout.addWidget(self.session_seed_spin, 1)
+        seed_layout.addWidget(self.generate_seed_button)
+        self.session_layout.addRow("Block count", self.block_count_spin)
+        self.session_layout.addRow("Session seed", seed_layout)
+        self.session_layout.addRow("", self.randomize_checkbox)
+        self.session_layout.addRow("Inter-condition mode", self.inter_condition_mode_combo)
+        self.session_layout.addRow("Break seconds", self.break_seconds_spin)
+        self.session_layout.addRow("Continue key", self.continue_key_edit)
+
+        centered_row = QHBoxLayout()
+        centered_row.addStretch(1)
+        centered_row.addWidget(session_group, 0, Qt.AlignmentFlag.AlignTop)
+        centered_row.addStretch(1)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(24, 20, 24, 20)
+        layout.setSpacing(10)
+        layout.addLayout(centered_row)
+        layout.addStretch(1)
+
+        self.setStyleSheet(
+            """
+            QGroupBox#session_structure_card {
+                border: 1px solid #c7d0dd;
+                border-radius: 9px;
+                margin-top: 10px;
+                padding-top: 10px;
+                background-color: #f8fafc;
+            }
+            QGroupBox#session_structure_card::title {
+                subcontrol-origin: margin;
+                left: 12px;
+                padding: 0 4px;
+                font-weight: 600;
+            }
+            """
+        )
+
+        self._document.project_changed.connect(self.refresh)
+        self.refresh()
+
+    def refresh(self) -> None:
+        session = self._document.project.settings.session
+        with QSignalBlocker(self.block_count_spin):
+            self.block_count_spin.setValue(session.block_count)
+        with QSignalBlocker(self.session_seed_spin):
+            self.session_seed_spin.setValue(session.session_seed)
+        with QSignalBlocker(self.randomize_checkbox):
+            self.randomize_checkbox.setChecked(session.randomize_conditions_per_block)
+        with QSignalBlocker(self.inter_condition_mode_combo):
+            self.inter_condition_mode_combo.setCurrentIndex(
+                self.inter_condition_mode_combo.findData(session.inter_condition_mode)
+            )
+        with QSignalBlocker(self.break_seconds_spin):
+            self.break_seconds_spin.setValue(session.inter_condition_break_seconds)
+        with QSignalBlocker(self.continue_key_edit):
+            self.continue_key_edit.setText(session.continue_key)
+        self._update_session_visibility_state()
+
+    def _update_session_visibility_state(self) -> None:
+        mode = self.inter_condition_mode_combo.currentData()
+        show_break_seconds = mode == InterConditionMode.FIXED_BREAK
+        show_continue_key = mode == InterConditionMode.MANUAL_CONTINUE
+        _set_form_row_visible(
+            self.session_layout,
+            self.break_seconds_spin,
+            show_break_seconds,
+        )
+        _set_form_row_visible(
+            self.session_layout,
+            self.continue_key_edit,
+            show_continue_key,
+        )
+        self.break_seconds_spin.setEnabled(show_break_seconds)
+        self.continue_key_edit.setEnabled(show_continue_key)
+
+    def _on_inter_condition_mode_changed(self) -> None:
+        self._update_session_visibility_state()
+        self._apply_session_settings()
+
+    def _apply_session_settings(self) -> None:
+        try:
+            self._document.update_session_settings(
+                block_count=self.block_count_spin.value(),
+                session_seed=self.session_seed_spin.value(),
+                randomize_conditions_per_block=self.randomize_checkbox.isChecked(),
+                inter_condition_mode=self.inter_condition_mode_combo.currentData(),
+                inter_condition_break_seconds=self.break_seconds_spin.value(),
+                continue_key=self.continue_key_edit.text().strip(),
+            )
+        except Exception as error:
+            _show_error_dialog(self, "Session Settings Error", error)
+            self.refresh()
+            return
+        self._update_session_visibility_state()
+
+    def _generate_seed(self) -> None:
+        try:
+            self._document.generate_new_session_seed()
+        except Exception as error:
+            _show_error_dialog(self, "Session Seed Error", error)
+
+
+class FixationCrossSettingsPage(QWidget):
+    """Fixation-task settings page."""
+
+    def __init__(self, document: ProjectDocument, parent=None) -> None:
+        super().__init__(parent)
+        self._document = document
+
         self.fixation_enabled_checkbox = QCheckBox("Enable fixation color changes per condition", self)
         self.fixation_enabled_checkbox.setObjectName("fixation_enabled_checkbox")
-        self.fixation_enabled_checkbox.stateChanged.connect(self._apply_fixation_settings)
+        self.fixation_enabled_checkbox.stateChanged.connect(self._on_fixation_enabled_toggled)
 
         self.fixation_accuracy_checkbox = QCheckBox(
-            "Enable fixation accuracy task (Space within 1.0 s)",
+            "Enable fixation accuracy task",
             self,
         )
         self.fixation_accuracy_checkbox.setObjectName("fixation_accuracy_checkbox")
@@ -949,87 +1047,130 @@ class SessionFixationPage(QWidget):
         self.line_width_spin.setRange(1, 1000)
         self.line_width_spin.valueChanged.connect(self._apply_fixation_settings)
 
-        self.cycle_help_label = QLabel(_CYCLE_HELP_TEXT, self)
-        self.cycle_help_label.setObjectName("cycle_help_label")
-        self.cycle_help_label.setWordWrap(True)
+        self.fixation_panel = QFrame(self)
+        self.fixation_panel.setObjectName("fixation_settings_panel")
+        self.fixation_panel.setMaximumWidth(980)
+        fixation_panel_layout = QVBoxLayout(self.fixation_panel)
+        fixation_panel_layout.setContentsMargins(18, 16, 18, 16)
+        fixation_panel_layout.setSpacing(10)
 
-        self.fixation_guidance_text = QPlainTextEdit(self)
-        self.fixation_guidance_text.setObjectName("fixation_condition_guidance_text")
-        self.fixation_guidance_text.setReadOnly(True)
-        self.fixation_guidance_text.setMaximumBlockCount(200)
-
-        session_group = QGroupBox("Session Settings", self)
-        session_layout = QFormLayout(session_group)
-        seed_layout = QHBoxLayout()
-        seed_layout.addWidget(self.session_seed_spin, 1)
-        seed_layout.addWidget(self.generate_seed_button)
-        session_layout.addRow("Block Count", self.block_count_spin)
-        session_layout.addRow("Session Seed", seed_layout)
-        session_layout.addRow("", self.randomize_checkbox)
-        session_layout.addRow("Inter-Condition Mode", self.inter_condition_mode_combo)
-        session_layout.addRow("Break Seconds", self.break_seconds_spin)
-        session_layout.addRow("Continue Key", self.continue_key_edit)
-
-        fixation_group = QGroupBox("Fixation Task", self)
-        fixation_layout = QFormLayout(fixation_group)
-        fixation_layout.addRow("", self.fixation_enabled_checkbox)
-        fixation_layout.addRow("", self.fixation_accuracy_checkbox)
-        fixation_layout.addRow("Color Changes / Condition Mode", self.target_count_mode_combo)
-        fixation_layout.addRow(
-            "Color Changes / Condition (fixed target count)",
-            self.changes_per_sequence_spin,
+        panel_title = QLabel("Fixation Cross Task", self.fixation_panel)
+        panel_title.setObjectName("fixation_page_title")
+        panel_subtitle = QLabel(
+            "Configure color-change behavior, timing, response, and appearance.",
+            self.fixation_panel,
         )
-        fixation_layout.addRow(
-            "Color Changes Min / Condition (target count)",
-            self.target_count_min_spin,
-        )
-        fixation_layout.addRow(
-            "Color Changes Max / Condition (target count)",
-            self.target_count_max_spin,
-        )
-        fixation_layout.addRow("", self.no_repeat_count_checkbox)
-        fixation_layout.addRow("Color Change Duration (target) (ms)", self.target_duration_spin)
-        fixation_layout.addRow("Min Gap (ms)", self.min_gap_spin)
-        fixation_layout.addRow("Max Gap (ms)", self.max_gap_spin)
-        fixation_layout.addRow("Default Color", self.base_color_edit)
-        fixation_layout.addRow("Change Color (target)", self.target_color_edit)
-        fixation_layout.addRow("Response Key", self.response_key_edit)
-        fixation_layout.addRow("Response Window (s)", self.response_window_spin)
-        fixation_layout.addRow("Cross Size (px)", self.cross_size_spin)
-        fixation_layout.addRow("Line Width (px)", self.line_width_spin)
+        panel_subtitle.setObjectName("fixation_page_subtitle")
+        panel_subtitle.setWordWrap(True)
+        fixation_panel_layout.addWidget(panel_title)
+        fixation_panel_layout.addWidget(panel_subtitle)
 
-        guidance_group = QGroupBox("Condition Guidance", self)
-        guidance_layout = QVBoxLayout(guidance_group)
-        guidance_layout.addWidget(self.cycle_help_label)
-        guidance_layout.addWidget(self.fixation_guidance_text)
+        fixation_enablement_group = QGroupBox("Task Enablement", self.fixation_panel)
+        fixation_enablement_layout = QVBoxLayout(fixation_enablement_group)
+        fixation_enablement_layout.setContentsMargins(10, 10, 10, 10)
+        fixation_enablement_layout.setSpacing(6)
+        fixation_enablement_layout.addWidget(self.fixation_enabled_checkbox)
+        fixation_enablement_layout.addWidget(self.fixation_accuracy_checkbox)
+
+        self.fixation_behavior_group = QGroupBox("Behavior", self.fixation_panel)
+        self.fixation_behavior_layout = QFormLayout(self.fixation_behavior_group)
+        self.fixation_behavior_layout.addRow("Color change schedule", self.target_count_mode_combo)
+        self.fixation_behavior_layout.addRow("Changes per condition", self.changes_per_sequence_spin)
+        self.fixation_behavior_layout.addRow("Minimum changes", self.target_count_min_spin)
+        self.fixation_behavior_layout.addRow("Maximum changes", self.target_count_max_spin)
+        self.fixation_behavior_layout.addRow("No immediate repeat", self.no_repeat_count_checkbox)
+
+        self.fixation_timing_group = QGroupBox("Timing", self.fixation_panel)
+        fixation_timing_layout = QFormLayout(self.fixation_timing_group)
+        fixation_timing_layout.addRow("Color change duration (ms)", self.target_duration_spin)
+        fixation_timing_layout.addRow("Minimum gap (ms)", self.min_gap_spin)
+        fixation_timing_layout.addRow("Maximum gap (ms)", self.max_gap_spin)
+
+        self.fixation_response_group = QGroupBox("Response", self.fixation_panel)
+        fixation_response_layout = QFormLayout(self.fixation_response_group)
+        fixation_response_layout.addRow("Response key", self.response_key_edit)
+        fixation_response_layout.addRow("Response window (s)", self.response_window_spin)
+
+        self.fixation_appearance_group = QGroupBox("Appearance", self.fixation_panel)
+        fixation_appearance_layout = QFormLayout(self.fixation_appearance_group)
+        fixation_appearance_layout.addRow("Default color", self.base_color_edit)
+        fixation_appearance_layout.addRow("Change color", self.target_color_edit)
+        fixation_appearance_layout.addRow("Cross size (px)", self.cross_size_spin)
+        fixation_appearance_layout.addRow("Line width (px)", self.line_width_spin)
+
+        feasibility_card = QFrame(self.fixation_panel)
+        feasibility_card.setObjectName("fixation_feasibility_card")
+        feasibility_layout = QVBoxLayout(feasibility_card)
+        feasibility_layout.setContentsMargins(10, 8, 10, 8)
+        feasibility_layout.setSpacing(4)
+        self.fixation_feasibility_label = QLabel(feasibility_card)
+        self.fixation_feasibility_label.setObjectName("fixation_feasibility_label")
+        self.fixation_feasibility_label.setWordWrap(True)
+        feasibility_layout.addWidget(self.fixation_feasibility_label)
+
+        fixation_panel_layout.addWidget(fixation_enablement_group)
+        fixation_panel_layout.addWidget(self.fixation_behavior_group)
+        fixation_panel_layout.addWidget(self.fixation_timing_group)
+        fixation_panel_layout.addWidget(self.fixation_response_group)
+        fixation_panel_layout.addWidget(self.fixation_appearance_group)
+        fixation_panel_layout.addWidget(feasibility_card)
+
+        centered_row = QHBoxLayout()
+        centered_row.addStretch(1)
+        centered_row.addWidget(self.fixation_panel)
+        centered_row.addStretch(1)
 
         layout = QVBoxLayout(self)
-        layout.addWidget(session_group)
-        layout.addWidget(fixation_group)
-        layout.addWidget(guidance_group)
+        layout.setContentsMargins(20, 18, 20, 18)
+        layout.setSpacing(10)
+        layout.addLayout(centered_row)
         layout.addStretch(1)
+
+        self.setStyleSheet(
+            """
+            QFrame#fixation_settings_panel {
+                border: 1px solid #a8b7c8;
+                border-radius: 12px;
+                background-color: #e4ebf3;
+            }
+            QLabel#fixation_page_title {
+                font-size: 18px;
+                font-weight: 700;
+                color: #1f2f44;
+            }
+            QLabel#fixation_page_subtitle {
+                color: #33485f;
+            }
+            QGroupBox {
+                border: 1px solid #c1ccda;
+                border-radius: 8px;
+                margin-top: 10px;
+                padding-top: 10px;
+                background-color: #f7f9fc;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 4px;
+                font-weight: 600;
+            }
+            QFrame#fixation_feasibility_card {
+                border: 1px solid #c0cddd;
+                border-radius: 8px;
+                background-color: #fbfdff;
+            }
+            QLabel#fixation_feasibility_label {
+                color: #233a52;
+                font-weight: 600;
+            }
+            """
+        )
 
         self._document.project_changed.connect(self.refresh)
         self.refresh()
 
     def refresh(self) -> None:
-        session = self._document.project.settings.session
         fixation = self._document.project.settings.fixation_task
-        with QSignalBlocker(self.block_count_spin):
-            self.block_count_spin.setValue(session.block_count)
-        with QSignalBlocker(self.session_seed_spin):
-            self.session_seed_spin.setValue(session.session_seed)
-        with QSignalBlocker(self.randomize_checkbox):
-            self.randomize_checkbox.setChecked(session.randomize_conditions_per_block)
-        with QSignalBlocker(self.inter_condition_mode_combo):
-            self.inter_condition_mode_combo.setCurrentIndex(
-                self.inter_condition_mode_combo.findData(session.inter_condition_mode)
-            )
-        with QSignalBlocker(self.break_seconds_spin):
-            self.break_seconds_spin.setValue(session.inter_condition_break_seconds)
-        with QSignalBlocker(self.continue_key_edit):
-            self.continue_key_edit.setText(session.continue_key)
-
         with QSignalBlocker(self.fixation_enabled_checkbox):
             self.fixation_enabled_checkbox.setChecked(fixation.enabled)
         with QSignalBlocker(self.fixation_accuracy_checkbox):
@@ -1064,85 +1205,93 @@ class SessionFixationPage(QWidget):
             self.cross_size_spin.setValue(fixation.cross_size_px)
         with QSignalBlocker(self.line_width_spin):
             self.line_width_spin.setValue(fixation.line_width_px)
-        self._update_transition_state()
-        self._update_fixation_target_count_state()
-        self._update_fixation_accuracy_state()
+        self._update_fixation_visibility_state()
         self._refresh_condition_guidance()
 
-    def _update_transition_state(self) -> None:
-        mode = self.inter_condition_mode_combo.currentData()
-        self.break_seconds_spin.setEnabled(mode == InterConditionMode.FIXED_BREAK)
-        self.continue_key_edit.setEnabled(mode == InterConditionMode.MANUAL_CONTINUE)
+    def _update_fixation_visibility_state(self) -> None:
+        fixation_enabled = self.fixation_enabled_checkbox.isChecked()
+        if not fixation_enabled and self.fixation_accuracy_checkbox.isChecked():
+            with QSignalBlocker(self.fixation_accuracy_checkbox):
+                self.fixation_accuracy_checkbox.setChecked(False)
+        self.fixation_accuracy_checkbox.setEnabled(fixation_enabled)
 
-    def _update_fixation_target_count_state(self) -> None:
+        for group in (
+            self.fixation_behavior_group,
+            self.fixation_timing_group,
+            self.fixation_appearance_group,
+        ):
+            group.setVisible(fixation_enabled)
+            group.setEnabled(fixation_enabled)
+
         randomized_mode = self.target_count_mode_combo.currentData() == "randomized"
-        self.changes_per_sequence_spin.setEnabled(not randomized_mode)
-        self.target_count_min_spin.setEnabled(randomized_mode)
-        self.target_count_max_spin.setEnabled(randomized_mode)
-        self.no_repeat_count_checkbox.setEnabled(randomized_mode)
+        _set_form_row_visible(
+            self.fixation_behavior_layout,
+            self.changes_per_sequence_spin,
+            not randomized_mode,
+        )
+        _set_form_row_visible(
+            self.fixation_behavior_layout,
+            self.target_count_min_spin,
+            randomized_mode,
+        )
+        _set_form_row_visible(
+            self.fixation_behavior_layout,
+            self.target_count_max_spin,
+            randomized_mode,
+        )
+        _set_form_row_visible(
+            self.fixation_behavior_layout,
+            self.no_repeat_count_checkbox,
+            randomized_mode,
+        )
 
-    def _update_fixation_accuracy_state(self) -> None:
-        accuracy_enabled = self.fixation_accuracy_checkbox.isChecked()
-        self.response_key_edit.setEnabled(accuracy_enabled)
-        self.response_window_spin.setEnabled(accuracy_enabled)
+        accuracy_enabled = fixation_enabled and self.fixation_accuracy_checkbox.isChecked()
+        self.fixation_response_group.setVisible(accuracy_enabled)
+        self.fixation_response_group.setEnabled(accuracy_enabled)
+
+    def _build_compact_feasibility_text(
+        self,
+        *,
+        guidance_rows: list[object] | None,
+        guidance_error: Exception | None,
+    ) -> str:
+        label = "Estimated maximum feasible cross changes per condition"
+        if guidance_error is not None:
+            return f"{label}: unavailable ({guidance_error})"
+        if not guidance_rows:
+            return f"{label}: unavailable (add a condition)."
+        estimated_values = sorted(
+            {row.estimated_max_color_changes_per_condition for row in guidance_rows}
+        )
+        if len(estimated_values) == 1:
+            return f"{label}: {estimated_values[0]}"
+        return f"{label}: {estimated_values[0]}-{estimated_values[-1]} (varies by condition)"
 
     def _refresh_condition_guidance(self) -> None:
         refresh_hz = self._document.project.settings.display.preferred_refresh_hz or 60.0
+        guidance_rows: list[object] | None = None
+        guidance_error: Exception | None = None
         try:
             guidance_rows = self._document.fixation_guidance(refresh_hz=refresh_hz)
         except Exception as error:
-            self.fixation_guidance_text.setPlainText(
-                f"Condition guidance unavailable at {refresh_hz:.2f} Hz: {error}"
+            guidance_error = error
+        self.fixation_feasibility_label.setText(
+            self._build_compact_feasibility_text(
+                guidance_rows=guidance_rows,
+                guidance_error=guidance_error,
             )
-            return
-        if not guidance_rows:
-            self.fixation_guidance_text.setPlainText(
-                "Add a condition to preview condition duration and estimated max feasible "
-                "color changes per condition."
-            )
-            return
-        lines = [
-            f"Refresh: {refresh_hz:.2f} Hz",
-            "Color changes are distributed across each full condition duration.",
-            "",
-        ]
-        for row in guidance_rows:
-            lines.append(
-                f"{row.condition_name}: {row.condition_duration_seconds:.2f} s "
-                f"({row.total_frames} frames, {row.total_cycles} cycle(s)); "
-                "estimated max feasible color changes per condition: "
-                f"{row.estimated_max_color_changes_per_condition}"
-            )
-        self.fixation_guidance_text.setPlainText("\n".join(lines))
+        )
 
-    def _apply_session_settings(self) -> None:
-        try:
-            self._document.update_session_settings(
-                block_count=self.block_count_spin.value(),
-                session_seed=self.session_seed_spin.value(),
-                randomize_conditions_per_block=self.randomize_checkbox.isChecked(),
-                inter_condition_mode=self.inter_condition_mode_combo.currentData(),
-                inter_condition_break_seconds=self.break_seconds_spin.value(),
-                continue_key=self.continue_key_edit.text().strip(),
-            )
-        except Exception as error:
-            _show_error_dialog(self, "Session Settings Error", error)
-            self.refresh()
-            return
-        self._update_transition_state()
-
-    def _generate_seed(self) -> None:
-        try:
-            self._document.generate_new_session_seed()
-        except Exception as error:
-            _show_error_dialog(self, "Session Seed Error", error)
+    def _on_fixation_enabled_toggled(self) -> None:
+        self._update_fixation_visibility_state()
+        self._apply_fixation_settings()
 
     def _on_target_count_mode_changed(self) -> None:
-        self._update_fixation_target_count_state()
+        self._update_fixation_visibility_state()
         self._apply_fixation_settings()
 
     def _on_fixation_accuracy_toggled(self) -> None:
-        self._update_fixation_accuracy_state()
+        self._update_fixation_visibility_state()
         self._apply_fixation_settings()
 
     def _apply_fixation_settings(self) -> None:
@@ -1359,12 +1508,27 @@ class RunPage(QWidget):
     def __init__(self, document: ProjectDocument, parent=None) -> None:
         super().__init__(parent)
         self._document = document
+        self._runtime_background_refresh_guard = False
 
         self.refresh_hz_spin = QDoubleSpinBox(self)
         self.refresh_hz_spin.setObjectName("refresh_hz_spin")
         self.refresh_hz_spin.setRange(1.0, 500.0)
         self.refresh_hz_spin.setDecimals(2)
         self.refresh_hz_spin.valueChanged.connect(self._apply_refresh_hz)
+
+        self.runtime_background_color_combo = QComboBox(self)
+        self.runtime_background_color_combo.setObjectName("runtime_background_color_combo")
+        for label, background_hex in _RUNTIME_BACKGROUND_COLOR_PRESETS:
+            self.runtime_background_color_combo.addItem(label, userData=background_hex)
+        self.runtime_background_color_combo.currentIndexChanged.connect(
+            self._apply_runtime_background_color
+        )
+        self.runtime_background_scope_label = QLabel(
+            "Used during FPVS image presentation.",
+            self,
+        )
+        self.runtime_background_scope_label.setObjectName("runtime_background_scope_label")
+        self.runtime_background_scope_label.setWordWrap(True)
 
         self.display_index_edit = QLineEdit(self)
         self.display_index_edit.setObjectName("display_index_edit")
@@ -1410,6 +1574,8 @@ class RunPage(QWidget):
         runtime_group = QGroupBox("Runtime Settings", self)
         runtime_layout = QFormLayout(runtime_group)
         runtime_layout.addRow("Refresh (Hz)", self.refresh_hz_spin)
+        runtime_layout.addRow("Stimulus Background", self.runtime_background_color_combo)
+        runtime_layout.addRow("", self.runtime_background_scope_label)
         runtime_layout.addRow("Display Index", self.display_index_edit)
         runtime_layout.addRow("Engine", self.engine_name_value)
         runtime_layout.addRow("Serial Port", self.serial_port_edit)
@@ -1446,14 +1612,37 @@ class RunPage(QWidget):
         return display_index
 
     def refresh(self) -> None:
+        background_color = self._normalized_runtime_background_color()
         preferred_refresh = self._document.project.settings.display.preferred_refresh_hz or 60.0
         with QSignalBlocker(self.refresh_hz_spin):
             self.refresh_hz_spin.setValue(preferred_refresh)
+        with QSignalBlocker(self.runtime_background_color_combo):
+            selected_index = self.runtime_background_color_combo.findData(background_color)
+            if selected_index < 0:
+                selected_index = self.runtime_background_color_combo.findData("#000000")
+            self.runtime_background_color_combo.setCurrentIndex(selected_index)
         with QSignalBlocker(self.serial_port_edit):
             self.serial_port_edit.setText(self._document.project.settings.triggers.serial_port or "")
         with QSignalBlocker(self.serial_baudrate_spin):
             self.serial_baudrate_spin.setValue(self._document.project.settings.triggers.baudrate)
         self._refresh_summary()
+
+    def _normalized_runtime_background_color(self) -> str:
+        background_color = self._document.project.settings.display.background_color
+        if isinstance(background_color, str):
+            canonical_preset = _canonical_runtime_background_hex(background_color)
+            if canonical_preset is not None:
+                return canonical_preset
+
+        if self._runtime_background_refresh_guard:
+            return "#000000"
+
+        self._runtime_background_refresh_guard = True
+        try:
+            self._document.update_display_settings(background_color="#000000")
+        finally:
+            self._runtime_background_refresh_guard = False
+        return "#000000"
 
     def compile_session(self) -> None:
         try:
@@ -1555,6 +1744,16 @@ class RunPage(QWidget):
             _show_error_dialog(self, "Refresh Setting Error", error)
             self.refresh()
 
+    def _apply_runtime_background_color(self) -> None:
+        selected_background_color = self.runtime_background_color_combo.currentData()
+        if not isinstance(selected_background_color, str):
+            return
+        try:
+            self._document.update_display_settings(background_color=selected_background_color)
+        except Exception as error:
+            _show_error_dialog(self, "Display Settings Error", error)
+            self.refresh()
+
     def _apply_serial_settings(self) -> None:
         serial_port = self.serial_port_edit.text().strip() or None
         try:
@@ -1607,10 +1806,18 @@ class RunPage(QWidget):
 class HomePage(QWidget):
     """Dashboard-style overview page for the current project."""
 
-    def __init__(self, document: ProjectDocument, run_page: RunPage, parent=None) -> None:
+    def __init__(
+        self,
+        document: ProjectDocument,
+        run_page: RunPage,
+        *,
+        load_condition_template_profiles: Callable[[], list[ConditionTemplateProfile]],
+        parent=None,
+    ) -> None:
         super().__init__(parent)
         self._document = document
         self._run_page = run_page
+        self._load_condition_template_profiles = load_condition_template_profiles
         self._latest_status_bar_message = ""
         self.setObjectName("home_page")
 
@@ -1908,7 +2115,6 @@ class HomePage(QWidget):
 
     def refresh(self) -> None:
         project = self._document.project
-        template = get_template(project.meta.template_id)
         session_settings = project.settings.session
         display_settings = project.settings.display
         trigger_settings = project.settings.triggers
@@ -1921,7 +2127,7 @@ class HomePage(QWidget):
         self.current_project_header.setText(f"Current Project: {project.meta.name}")
         self.project_name_value.setText(project.meta.name)
         self.project_root_value.setText(str(self._document.project_root))
-        self.project_template_value.setText(f"{template.display_name} ({template.template_id})")
+        self.project_template_value.setText(self._condition_template_summary_text())
 
         description = project.meta.description.strip()
         if not description:
@@ -1960,6 +2166,19 @@ class HomePage(QWidget):
             validation_issue_count=len(validation.issues),
         )
         self._refresh_activity_panel(latest_status_line=latest_status_line)
+
+    def _condition_template_summary_text(self) -> str:
+        profile_id = self._document.project.settings.condition_profile_id
+        if profile_id is None:
+            return "No template selected"
+        profiles_by_id = {
+            profile.profile_id: profile
+            for profile in self._load_condition_template_profiles()
+        }
+        profile = profiles_by_id.get(profile_id)
+        if profile is None:
+            return f"Missing template: {profile_id}"
+        return profile.display_name
 
     @staticmethod
     def _configure_read_only_list(widget: QListWidget) -> None:
@@ -2305,10 +2524,16 @@ class StudioMainWindow(QMainWindow):
             parent=self,
         )
         self.conditions_page = ConditionsPage(document, self)
-        self.session_fixation_page = SessionFixationPage(document, self)
+        self.session_structure_page = SessionStructurePage(document, self)
+        self.fixation_cross_settings_page = FixationCrossSettingsPage(document, self)
         self.assets_page = AssetsPage(document, self)
         self.run_page = RunPage(document, self)
-        self.home_page = HomePage(document, self.run_page, self)
+        self.home_page = HomePage(
+            document,
+            self.run_page,
+            load_condition_template_profiles=on_load_condition_template_profiles,
+            parent=self,
+        )
 
         self.main_tabs = QTabWidget(self)
         self.main_tabs.setObjectName("main_tabs")
@@ -2316,7 +2541,8 @@ class StudioMainWindow(QMainWindow):
         self.main_tabs.addTab(self.home_page, "Home")
         self.main_tabs.addTab(self.project_page, "Project")
         self.main_tabs.addTab(self.conditions_page, "Conditions")
-        self.main_tabs.addTab(self.session_fixation_page, "Fixation & Session")
+        self.main_tabs.addTab(self.session_structure_page, "Session Structure")
+        self.main_tabs.addTab(self.fixation_cross_settings_page, "Fixation Cross Settings")
         self.main_tabs.addTab(self.assets_page, "Assets / Preprocessing")
         self.main_tabs.addTab(self.run_page, "Run / Runtime")
         self.setCentralWidget(self.main_tabs)

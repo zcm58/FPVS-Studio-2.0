@@ -22,59 +22,66 @@ STUDIO_DEFAULT_PROFILE_ID = "studio-default-v1"
 SIXTY_HZ_BLANK_FIXATION_PROFILE_ID = "sixty-hz-blank50-fixation-v1"
 
 
+def _shared_fixation_defaults() -> FixationTaskSettings:
+    return FixationTaskSettings(
+        enabled=True,
+        accuracy_task_enabled=True,
+        target_count_mode="randomized",
+        target_count_min=6,
+        target_count_max=8,
+        no_immediate_repeat_count=True,
+        changes_per_sequence=7,
+        target_duration_ms=250,
+        min_gap_ms=1000,
+        max_gap_ms=3000,
+    )
+
+
+def _built_in_profile(
+    *,
+    profile_id: str,
+    display_name: str,
+    description: str,
+    duty_cycle_mode: DutyCycleMode,
+) -> ConditionTemplateProfile:
+    return ConditionTemplateProfile(
+        profile_id=profile_id,
+        display_name=display_name,
+        description=description,
+        built_in=True,
+        defaults=ConditionTemplateDefaults(
+            condition=ConditionDefaults(
+                duty_cycle_mode=duty_cycle_mode,
+                sequence_count=1,
+                oddball_cycle_repeats_per_sequence=146,
+            ),
+            display=ConditionTemplateDisplayDefaults(preferred_refresh_hz=None),
+            fixation_task=_shared_fixation_defaults(),
+        ),
+    )
+
+
 def built_in_condition_template_profiles() -> list[ConditionTemplateProfile]:
     """Return built-in condition-template profiles shipped with the app."""
 
     return [
-        ConditionTemplateProfile(
+        _built_in_profile(
             profile_id=STUDIO_DEFAULT_PROFILE_ID,
-            display_name="Studio Default (v1)",
+            display_name="Default Template 1: Continuous Images",
             description=(
-                "Matches the existing project defaults: continuous duty cycle, one repeat, "
-                "146 oddball cycles, and default fixation settings."
+                "Continuous-image duty cycle template with fullscreen display defaults and "
+                "fixation cross accuracy task defaults."
             ),
-            built_in=True,
-            defaults=ConditionTemplateDefaults(
-                condition=ConditionDefaults(
-                    duty_cycle_mode=DutyCycleMode.CONTINUOUS,
-                    sequence_count=1,
-                    oddball_cycle_repeats_per_sequence=146,
-                ),
-                display=ConditionTemplateDisplayDefaults(
-                    preferred_refresh_hz=None,
-                ),
-                fixation_task=FixationTaskSettings(),
-            ),
+            duty_cycle_mode=DutyCycleMode.CONTINUOUS,
         ),
-        ConditionTemplateProfile(
+        _built_in_profile(
             profile_id=SIXTY_HZ_BLANK_FIXATION_PROFILE_ID,
-            display_name="60 Hz Blank 50 + Fixation",
+            display_name="Default Template 2: 83ms blank",
             description=(
-                "60 Hz preferred refresh, 50% blank duty cycle, and fixation accuracy "
-                "task defaults tuned for quick setup."
+                "83 ms blank (50% blank duty cycle) template with fullscreen display defaults "
+                "and fixation cross accuracy task defaults."
             ),
-            built_in=True,
-            defaults=ConditionTemplateDefaults(
-                condition=ConditionDefaults(
-                    duty_cycle_mode=DutyCycleMode.BLANK_50,
-                    sequence_count=1,
-                    oddball_cycle_repeats_per_sequence=146,
-                ),
-                display=ConditionTemplateDisplayDefaults(
-                    preferred_refresh_hz=60.0,
-                ),
-                fixation_task=FixationTaskSettings(
-                    enabled=True,
-                    accuracy_task_enabled=True,
-                    target_count_mode="fixed",
-                    changes_per_sequence=7,
-                    target_duration_ms=450,
-                    min_gap_ms=1000,
-                    max_gap_ms=3000,
-                    response_key="space",
-                    response_keys=["space"],
-                ),
-            ),
+            duty_cycle_mode=DutyCycleMode.BLANK_50,
         ),
     ]
 
@@ -145,7 +152,10 @@ def upsert_condition_template_profile(
 
     normalized_profile = profile.model_copy(update={"built_in": False})
     library = load_condition_template_profile_library(root_dir)
-    if any(item.profile_id == normalized_profile.profile_id and item.built_in for item in library.profiles):
+    if any(
+        item.profile_id == normalized_profile.profile_id and item.built_in
+        for item in library.profiles
+    ):
         raise ValueError("Built-in condition templates are read-only.")
 
     updated_profiles: list[ConditionTemplateProfile] = []
@@ -164,7 +174,10 @@ def upsert_condition_template_profile(
     )
 
 
-def delete_condition_template_profile(root_dir: Path, profile_id: str) -> ConditionTemplateProfileLibrary:
+def delete_condition_template_profile(
+    root_dir: Path,
+    profile_id: str,
+) -> ConditionTemplateProfileLibrary:
     """Delete one user-defined condition-template profile."""
 
     library = load_condition_template_profile_library(root_dir)
@@ -213,4 +226,3 @@ def apply_condition_defaults_to_condition(
             "oddball_cycle_repeats_per_sequence": defaults.oddball_cycle_repeats_per_sequence,
         }
     )
-

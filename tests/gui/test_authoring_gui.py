@@ -10,6 +10,7 @@ from PIL import Image
 from PySide6.QtCore import QEvent, QPoint, Qt
 from PySide6.QtWidgets import (
     QApplication,
+    QComboBox,
     QGroupBox,
     QLabel,
     QListWidget,
@@ -21,14 +22,20 @@ from PySide6.QtWidgets import (
 
 from fpvs_studio.core.condition_template_profiles import (
     SIXTY_HZ_BLANK_FIXATION_PROFILE_ID,
+    STUDIO_DEFAULT_PROFILE_ID,
     built_in_condition_template_profiles,
+    list_condition_template_profiles,
 )
 from fpvs_studio.core.enums import DutyCycleMode, InterConditionMode, RunMode, StimulusVariant
 from fpvs_studio.core.execution import SessionExecutionSummary
 from fpvs_studio.core.project_service import create_project
-from fpvs_studio.core.serialization import load_project_file
+from fpvs_studio.core.serialization import load_project_file, save_project_file
 from fpvs_studio.gui.animations import AnimatedTabBar
 from fpvs_studio.gui.application import create_application
+from fpvs_studio.gui.condition_template_manager_dialog import (
+    ConditionTemplateManagerDialog,
+    ConditionTemplateProfileEditorDialog,
+)
 from fpvs_studio.gui.controller import StudioController
 from fpvs_studio.gui.create_project_dialog import CreateProjectDialog
 from fpvs_studio.gui.document import _CONDITION_LENGTH_ERROR_MESSAGE
@@ -57,6 +64,14 @@ def _list_widget_text(list_widget: QListWidget) -> str:
     return "\n".join(
         list_widget.item(index).text() for index in range(list_widget.count())
     )
+
+
+def _find_profile_row(dialog: ConditionTemplateManagerDialog, profile_id: str) -> int:
+    for index in range(dialog.profile_list.count()):
+        item = dialog.profile_list.item(index)
+        if item.data(Qt.ItemDataRole.UserRole) == profile_id:
+            return index
+    raise AssertionError(f"Profile id '{profile_id}' not found in manager list.")
 
 
 def _prepare_compile_ready_project(window, tmp_path: Path) -> None:
@@ -547,6 +562,164 @@ def test_create_project_dialog_manage_templates_refreshes_profile_options(qtbot)
     assert dialog.condition_profile_combo.count() == 2
 
 
+def test_manage_condition_templates_dialog_renders_hierarchical_details(
+    qtbot,
+    tmp_path: Path,
+) -> None:
+    root_dir = tmp_path / "template-manager-root"
+    root_dir.mkdir(parents=True, exist_ok=True)
+
+    dialog = ConditionTemplateManagerDialog(root_dir=root_dir)
+    qtbot.addWidget(dialog)
+
+    list_text = _list_widget_text(dialog.profile_list)
+    assert "Default Template 1: Continuous Images" in list_text
+    assert "Default Template 2: 83ms blank" in list_text
+    assert STUDIO_DEFAULT_PROFILE_ID not in list_text
+    assert SIXTY_HZ_BLANK_FIXATION_PROFILE_ID not in list_text
+    assert "[Built-in]" not in list_text
+
+    details_header = dialog.findChild(QLabel, "condition_template_details_header")
+    assert details_header is not None
+    assert details_header.text() == "Details"
+    assert details_header.alignment() == Qt.AlignmentFlag.AlignCenter
+    assert "font-size: 18px" in details_header.styleSheet()
+    assert "font-weight: 700" in details_header.styleSheet()
+    assert "text-decoration: underline" in details_header.styleSheet()
+
+    studio_row = _find_profile_row(dialog, STUDIO_DEFAULT_PROFILE_ID)
+    dialog.profile_list.setCurrentRow(studio_row)
+    QApplication.processEvents()
+
+    details_text = dialog.profile_details.text()
+    assert (
+        '<span style="font-size: 14px; font-weight: 700; text-decoration: underline;">'
+        "Template</span>"
+    ) in details_text
+    assert (
+        '<span style="font-size: 14px; font-weight: 700; text-decoration: underline;">'
+        "Display</span>"
+    ) in details_text
+    assert (
+        '<span style="font-size: 14px; font-weight: 700; text-decoration: underline;">'
+        "Fixation Cross</span>"
+    ) in details_text
+    assert (
+        '<span style="font-size: 14px; font-weight: 700; text-decoration: underline;">'
+        "Condition Settings</span>"
+    ) in details_text
+    assert (
+        '<span style="font-size: 14px; font-weight: 700; text-decoration: underline;">'
+        "Description</span>"
+    ) in details_text
+    assert details_text.count('<div style="height: 12px;"></div>') >= 4
+    assert "Template Name: Default Template 1: Continuous Images" in details_text
+    assert "Built-in: Yes" in details_text
+    assert "Display Refresh Rate: Not Set" in details_text
+    assert "Display Resolution: Full Screen (1920 × 1080)" in details_text
+    assert "Fixation Cross: Enabled" in details_text
+    assert "Fixation Cross Accuracy Task: Enabled" in details_text
+    assert "Total cross color changes in each condition: 7 ± 1" in details_text
+    assert "Fixation cross timing: 250 ms" in details_text
+    assert "Minimum time between color changes: 1000 ms" in details_text
+    assert "Maximum time between color changes: 3000 ms" in details_text
+    assert "Duty Cycle: Continuous" in details_text
+    assert "Repeats: 1" in details_text
+    assert "Cycles per Repeat: 146" in details_text
+    assert "Display preferred refresh:" not in details_text
+    assert "Fixation: enabled=" not in details_text
+    assert dialog.edit_button.isEnabled() is False
+    assert dialog.delete_button.isEnabled() is False
+    assert dialog.duplicate_button.isEnabled() is True
+
+    blank_row = _find_profile_row(dialog, SIXTY_HZ_BLANK_FIXATION_PROFILE_ID)
+    dialog.profile_list.setCurrentRow(blank_row)
+    QApplication.processEvents()
+
+    blank_details_text = dialog.profile_details.text()
+    assert "Template Name: Default Template 2: 83ms blank" in blank_details_text
+    assert "Duty Cycle: 50% Blank" in blank_details_text
+    assert "Total cross color changes in each condition: 7 ± 1" in blank_details_text
+    assert "Display Refresh Rate: Not Set" in blank_details_text
+
+
+def test_manage_condition_templates_add_edit_duplicate_delete_round_trip(
+    qtbot,
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    root_dir = tmp_path / "template-manager-mutate-root"
+    root_dir.mkdir(parents=True, exist_ok=True)
+    dialog = ConditionTemplateManagerDialog(root_dir=root_dir)
+    qtbot.addWidget(dialog)
+
+    def _accept_add(editor: ConditionTemplateProfileEditorDialog) -> int:
+        editor.profile_id_edit.setText("custom-profile")
+        editor.display_name_edit.setText("Custom Profile")
+        editor.description_edit.setText("Custom profile for GUI lifecycle test.")
+        editor.duty_cycle_combo.setCurrentIndex(editor.duty_cycle_combo.findData(DutyCycleMode.BLANK_50))
+        editor.sequence_count_spin.setValue(2)
+        editor.oddball_cycles_spin.setValue(120)
+        editor.preferred_refresh_enabled_checkbox.setChecked(True)
+        editor.preferred_refresh_spin.setValue(120.0)
+        editor.fixation_enabled_checkbox.setChecked(True)
+        editor.accuracy_enabled_checkbox.setChecked(True)
+        editor.target_count_mode_combo.setCurrentIndex(editor.target_count_mode_combo.findData("fixed"))
+        editor.changes_per_sequence_spin.setValue(5)
+        editor.target_duration_spin.setValue(300)
+        editor.min_gap_spin.setValue(900)
+        editor.max_gap_spin.setValue(1800)
+        editor._saved_profile = editor._build_profile()
+        return int(editor.DialogCode.Accepted)
+
+    monkeypatch.setattr(ConditionTemplateProfileEditorDialog, "exec", _accept_add)
+    qtbot.mouseClick(dialog.add_button, Qt.MouseButton.LeftButton)
+    custom_row = _find_profile_row(dialog, "custom-profile")
+    dialog.profile_list.setCurrentRow(custom_row)
+    assert dialog.edit_button.isEnabled() is True
+    assert dialog.delete_button.isEnabled() is True
+
+    def _accept_edit(editor: ConditionTemplateProfileEditorDialog) -> int:
+        editor.display_name_edit.setText("Custom Profile Edited")
+        editor.description_edit.setText("Edited custom profile for GUI lifecycle test.")
+        editor.sequence_count_spin.setValue(3)
+        editor._saved_profile = editor._build_profile()
+        return int(editor.DialogCode.Accepted)
+
+    monkeypatch.setattr(ConditionTemplateProfileEditorDialog, "exec", _accept_edit)
+    qtbot.mouseClick(dialog.edit_button, Qt.MouseButton.LeftButton)
+
+    custom_row = _find_profile_row(dialog, "custom-profile")
+    assert "Custom Profile Edited" in dialog.profile_list.item(custom_row).text()
+
+    def _accept_duplicate(editor: ConditionTemplateProfileEditorDialog) -> int:
+        editor._saved_profile = editor._build_profile()
+        return int(editor.DialogCode.Accepted)
+
+    monkeypatch.setattr(ConditionTemplateProfileEditorDialog, "exec", _accept_duplicate)
+    qtbot.mouseClick(dialog.duplicate_button, Qt.MouseButton.LeftButton)
+    duplicate_row = _find_profile_row(dialog, "custom-profile-copy")
+    dialog.profile_list.setCurrentRow(duplicate_row)
+
+    monkeypatch.setattr(
+        "fpvs_studio.gui.condition_template_manager_dialog.QMessageBox.question",
+        lambda *_args, **_kwargs: QMessageBox.StandardButton.Yes,
+    )
+    qtbot.mouseClick(dialog.delete_button, Qt.MouseButton.LeftButton)
+
+    ids_after_delete = {
+        dialog.profile_list.item(index).data(Qt.ItemDataRole.UserRole)
+        for index in range(dialog.profile_list.count())
+    }
+    assert "custom-profile-copy" not in ids_after_delete
+
+    profiles_by_id = {
+        profile.profile_id: profile for profile in list_condition_template_profiles(root_dir)
+    }
+    assert profiles_by_id["custom-profile"].display_name == "Custom Profile Edited"
+    assert "custom-profile-copy" not in profiles_by_id
+
+
 def test_create_project_flow_scaffolds_project_and_opens_main_window(
     qtbot,
     controller: StudioController,
@@ -599,7 +772,8 @@ def test_home_tab_is_first_and_existing_tabs_remain_usable(
         "Home",
         "Project",
         "Conditions",
-        "Fixation & Session",
+        "Session Structure",
+        "Fixation Cross Settings",
         "Assets / Preprocessing",
         "Run / Runtime",
     ]
@@ -610,6 +784,10 @@ def test_home_tab_is_first_and_existing_tabs_remain_usable(
     assert window.main_tabs.currentWidget() is window.project_page
     window.main_tabs.setCurrentWidget(window.conditions_page)
     assert window.main_tabs.currentWidget() is window.conditions_page
+    window.main_tabs.setCurrentWidget(window.session_structure_page)
+    assert window.main_tabs.currentWidget() is window.session_structure_page
+    window.main_tabs.setCurrentWidget(window.fixation_cross_settings_page)
+    assert window.main_tabs.currentWidget() is window.fixation_cross_settings_page
     window.main_tabs.setCurrentWidget(window.run_page)
     assert window.main_tabs.currentWidget() is window.run_page
 
@@ -805,12 +983,13 @@ def test_home_overview_panels_show_project_session_and_runtime_metadata(
     _, window = _open_created_project(controller, qtbot, tmp_path, "Home Metadata Project")
     qtbot.mouseClick(window.conditions_page.add_condition_button, Qt.MouseButton.LeftButton)
 
-    window.session_fixation_page.block_count_spin.setValue(2)
+    window.session_structure_page.block_count_spin.setValue(2)
     window.run_page.serial_port_edit.setText("COM7")
     window.run_page.serial_port_edit.editingFinished.emit()
     window.run_page.serial_baudrate_spin.setValue(57600)
-    window.project_page.background_color_edit.setText("#101010")
-    window.project_page.background_color_edit.editingFinished.emit()
+    dark_gray_index = window.run_page.runtime_background_color_combo.findData("#101010")
+    assert dark_gray_index >= 0
+    window.run_page.runtime_background_color_combo.setCurrentIndex(dark_gray_index)
 
     condition_count_label = window.home_page.findChild(QLabel, "home_condition_count_value")
     block_count_label = window.home_page.findChild(QLabel, "home_block_count_value")
@@ -827,13 +1006,96 @@ def test_home_overview_panels_show_project_session_and_runtime_metadata(
     assert template_label is not None
     assert description_label is not None
 
+    project_labels = {
+        label.text().strip()
+        for label in window.project_page.findChildren(QLabel)
+        if label.text().strip()
+    }
+    assert "Protocol Template" not in project_labels
+    assert "Template Status" not in project_labels
+    assert "Condition Template" in project_labels
+    assert window.project_page.condition_profile_combo is not None
+    assert window.project_page.manage_templates_button is not None
+    assert window.project_page.apply_profile_to_conditions_button is not None
+
     assert condition_count_label.text() == "1"
     assert block_count_label.text() == "2"
     assert fixation_label.text() == "Disabled"
     assert accuracy_label.text() == "Disabled"
+    assert "Display #101010" in runtime_summary_label.text()
     assert "com7 @ 57600" in runtime_summary_label.text().lower()
-    assert "fpvs_6hz_every5_v1" in template_label.text()
+    assert template_label.text() == "No template selected"
     assert description_label.text() == "No description set yet."
+
+    profile_index = window.project_page.condition_profile_combo.findData(
+        SIXTY_HZ_BLANK_FIXATION_PROFILE_ID
+    )
+    assert profile_index >= 0
+    window.project_page.condition_profile_combo.setCurrentIndex(profile_index)
+    QApplication.processEvents()
+    assert template_label.text() == "Default Template 2: 83ms blank"
+    assert SIXTY_HZ_BLANK_FIXATION_PROFILE_ID not in template_label.text()
+    assert "fpvs_6hz_every5_v1" not in template_label.text()
+
+    missing_profile = built_in_condition_template_profiles()[0].model_copy(
+        update={"profile_id": "missing-home-template-profile"},
+    )
+    window.document.apply_condition_template_profile(missing_profile)
+    QApplication.processEvents()
+    assert template_label.text() == "Missing template: missing-home-template-profile"
+
+
+def test_background_color_control_is_run_tab_presets_only(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Runtime Background Presets")
+
+    assert window.project_page.findChild(QWidget, "background_color_edit") is None
+
+    runtime_background_combo = window.run_page.findChild(QComboBox, "runtime_background_color_combo")
+    assert runtime_background_combo is not None
+    assert runtime_background_combo.count() == 2
+    assert runtime_background_combo.itemText(0) == "Black"
+    assert runtime_background_combo.itemData(0) == "#000000"
+    assert runtime_background_combo.itemText(1) == "Dark Gray"
+    assert runtime_background_combo.itemData(1) == "#101010"
+    assert runtime_background_combo.currentText() == "Black"
+
+    scope_label = window.run_page.findChild(QLabel, "runtime_background_scope_label")
+    assert scope_label is not None
+    assert scope_label.text() == "Used during FPVS image presentation."
+
+
+def test_run_page_refresh_normalizes_legacy_background_to_black_and_marks_dirty(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+) -> None:
+    scaffold = create_project(tmp_path, "Legacy Background Migration")
+    project_file_path = scaffold.project_root / "project.json"
+    legacy_project = load_project_file(project_file_path)
+    assert legacy_project.settings.display.background_color == "#000000"
+    legacy_display_settings = legacy_project.settings.display.model_copy(
+        update={"background_color": "#123456"}
+    )
+    legacy_settings = legacy_project.settings.model_copy(update={"display": legacy_display_settings})
+    save_project_file(
+        legacy_project.model_copy(update={"settings": legacy_settings}),
+        project_file_path,
+    )
+    assert load_project_file(project_file_path).settings.display.background_color == "#123456"
+
+    document = controller.open_project(scaffold.project_root)
+    assert document is not None
+    assert controller.main_window is not None
+    qtbot.addWidget(controller.main_window)
+    window = controller.main_window
+
+    assert window.document.project.settings.display.background_color == "#000000"
+    assert window.document.dirty is True
+    assert window.run_page.runtime_background_color_combo.currentText() == "Black"
 
 
 def test_home_readiness_status_and_recent_activity_update_from_launch_checks(
@@ -980,32 +1242,36 @@ def test_session_and_fixation_settings_round_trip(
 ) -> None:
     _, window = _open_created_project(controller, qtbot, tmp_path, "Roundtrip Settings")
 
-    page = window.session_fixation_page
-    page.block_count_spin.setValue(3)
-    page.session_seed_spin.setValue(123456)
-    page.randomize_checkbox.setChecked(False)
-    page.inter_condition_mode_combo.setCurrentIndex(
-        page.inter_condition_mode_combo.findData(InterConditionMode.MANUAL_CONTINUE)
+    session_page = window.session_structure_page
+    session_page.block_count_spin.setValue(3)
+    session_page.session_seed_spin.setValue(123456)
+    session_page.randomize_checkbox.setChecked(False)
+    session_page.inter_condition_mode_combo.setCurrentIndex(
+        session_page.inter_condition_mode_combo.findData(InterConditionMode.MANUAL_CONTINUE)
     )
-    page.continue_key_edit.setText("return")
-    page.continue_key_edit.editingFinished.emit()
-    page.fixation_enabled_checkbox.setChecked(True)
-    page.changes_per_sequence_spin.setValue(4)
-    page.fixation_accuracy_checkbox.setChecked(True)
-    page.target_count_mode_combo.setCurrentIndex(page.target_count_mode_combo.findData("randomized"))
-    page.target_count_min_spin.setValue(2)
-    page.target_count_max_spin.setValue(5)
-    page.no_repeat_count_checkbox.setChecked(True)
-    page.target_duration_spin.setValue(300)
-    page.base_color_edit.setText("#112233")
-    page.base_color_edit.editingFinished.emit()
-    page.target_color_edit.setText("#445566")
-    page.target_color_edit.editingFinished.emit()
-    page.response_key_edit.setText("space")
-    page.response_key_edit.editingFinished.emit()
-    page.response_window_spin.setValue(1.25)
-    page.cross_size_spin.setValue(52)
-    page.line_width_spin.setValue(6)
+    session_page.continue_key_edit.setText("return")
+    session_page.continue_key_edit.editingFinished.emit()
+
+    fixation_page = window.fixation_cross_settings_page
+    fixation_page.fixation_enabled_checkbox.setChecked(True)
+    fixation_page.changes_per_sequence_spin.setValue(4)
+    fixation_page.fixation_accuracy_checkbox.setChecked(True)
+    fixation_page.target_count_mode_combo.setCurrentIndex(
+        fixation_page.target_count_mode_combo.findData("randomized")
+    )
+    fixation_page.target_count_min_spin.setValue(2)
+    fixation_page.target_count_max_spin.setValue(5)
+    fixation_page.no_repeat_count_checkbox.setChecked(True)
+    fixation_page.target_duration_spin.setValue(300)
+    fixation_page.base_color_edit.setText("#112233")
+    fixation_page.base_color_edit.editingFinished.emit()
+    fixation_page.target_color_edit.setText("#445566")
+    fixation_page.target_color_edit.editingFinished.emit()
+    fixation_page.response_key_edit.setText("space")
+    fixation_page.response_key_edit.editingFinished.emit()
+    fixation_page.response_window_spin.setValue(1.25)
+    fixation_page.cross_size_spin.setValue(52)
+    fixation_page.line_width_spin.setValue(6)
 
     assert window.save_project() is True
     controller.open_project(window.document.project_root)
@@ -1044,7 +1310,7 @@ def test_fixation_session_page_maps_fixed_target_count_mode_to_backend(
 ) -> None:
     _, window = _open_created_project(controller, qtbot, tmp_path, "Fixed Target Count")
 
-    page = window.session_fixation_page
+    page = window.fixation_cross_settings_page
     page.target_count_mode_combo.setCurrentIndex(page.target_count_mode_combo.findData("fixed"))
     page.changes_per_sequence_spin.setValue(7)
 
@@ -1060,7 +1326,7 @@ def test_fixation_session_page_exposes_accuracy_task_controls(
 ) -> None:
     _, window = _open_created_project(controller, qtbot, tmp_path, "Fixation Controls")
 
-    page = window.session_fixation_page
+    page = window.fixation_cross_settings_page
     assert page.findChild(type(page.fixation_accuracy_checkbox), "fixation_accuracy_checkbox") is not None
     assert page.findChild(type(page.target_count_mode_combo), "target_count_mode_combo") is not None
     assert page.findChild(type(page.target_count_min_spin), "target_count_min_spin") is not None
@@ -1070,7 +1336,111 @@ def test_fixation_session_page_exposes_accuracy_task_controls(
     assert page.findChild(type(page.response_window_spin), "response_window_seconds_spin") is not None
 
 
-def test_cycle_tooltips_and_condition_guidance_render_and_update(
+def test_session_structure_rows_toggle_with_inter_condition_mode(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Session Structure Visibility")
+
+    page = window.session_structure_page
+    window.main_tabs.setCurrentWidget(page)
+    QApplication.processEvents()
+
+    page.inter_condition_mode_combo.setCurrentIndex(
+        page.inter_condition_mode_combo.findData(InterConditionMode.FIXED_BREAK)
+    )
+    QApplication.processEvents()
+    assert page.break_seconds_spin.isVisible()
+    assert not page.continue_key_edit.isVisible()
+
+    page.inter_condition_mode_combo.setCurrentIndex(
+        page.inter_condition_mode_combo.findData(InterConditionMode.MANUAL_CONTINUE)
+    )
+    QApplication.processEvents()
+    assert not page.break_seconds_spin.isVisible()
+    assert page.continue_key_edit.isVisible()
+
+
+def test_fixation_color_change_mode_toggles_relevant_controls(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Fixation Mode Visibility")
+
+    page = window.fixation_cross_settings_page
+    window.main_tabs.setCurrentWidget(page)
+    page.fixation_enabled_checkbox.setChecked(True)
+    QApplication.processEvents()
+
+    page.target_count_mode_combo.setCurrentIndex(page.target_count_mode_combo.findData("fixed"))
+    QApplication.processEvents()
+    assert page.changes_per_sequence_spin.isVisible()
+    assert not page.target_count_min_spin.isVisible()
+    assert not page.target_count_max_spin.isVisible()
+    assert not page.no_repeat_count_checkbox.isVisible()
+
+    page.target_count_mode_combo.setCurrentIndex(page.target_count_mode_combo.findData("randomized"))
+    QApplication.processEvents()
+    assert not page.changes_per_sequence_spin.isVisible()
+    assert page.target_count_min_spin.isVisible()
+    assert page.target_count_max_spin.isVisible()
+    assert page.no_repeat_count_checkbox.isVisible()
+
+
+def test_fixation_accuracy_toggle_controls_response_visibility(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Fixation Accuracy Visibility")
+
+    page = window.fixation_cross_settings_page
+    window.main_tabs.setCurrentWidget(page)
+    page.fixation_enabled_checkbox.setChecked(True)
+    QApplication.processEvents()
+
+    page.fixation_accuracy_checkbox.setChecked(False)
+    QApplication.processEvents()
+    assert not page.response_key_edit.isVisible()
+    assert not page.response_window_spin.isVisible()
+
+    page.fixation_accuracy_checkbox.setChecked(True)
+    QApplication.processEvents()
+    assert page.response_key_edit.isVisible()
+    assert page.response_window_spin.isVisible()
+
+
+def test_fixation_disable_hides_dependent_sections(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Fixation Enablement Visibility")
+
+    page = window.fixation_cross_settings_page
+    window.main_tabs.setCurrentWidget(page)
+    page.fixation_enabled_checkbox.setChecked(True)
+    page.fixation_accuracy_checkbox.setChecked(True)
+    QApplication.processEvents()
+    assert page.target_count_mode_combo.isVisible()
+    assert page.target_duration_spin.isVisible()
+    assert page.base_color_edit.isVisible()
+    assert page.response_key_edit.isVisible()
+    assert page.fixation_accuracy_checkbox.isEnabled()
+
+    page.fixation_enabled_checkbox.setChecked(False)
+    QApplication.processEvents()
+    assert not page.target_count_mode_combo.isVisible()
+    assert not page.target_duration_spin.isVisible()
+    assert not page.base_color_edit.isVisible()
+    assert not page.response_key_edit.isVisible()
+    assert not page.fixation_accuracy_checkbox.isEnabled()
+    assert page.fixation_accuracy_checkbox.isChecked() is False
+
+
+def test_cycle_tooltips_and_fixation_feasibility_render_and_update(
     qtbot,
     controller: StudioController,
     tmp_path: Path,
@@ -1087,15 +1457,42 @@ def test_cycle_tooltips_and_condition_guidance_render_and_update(
         == "Cycle = one turn of base presentations plus one oddball presentation."
     )
 
-    page = window.session_fixation_page
-    guidance_before = page.fixation_guidance_text.toPlainText()
-    assert "Color changes are distributed across each full condition duration." in guidance_before
-    assert "Condition 1:" in guidance_before
-    assert "estimated max feasible color changes per condition" in guidance_before
+    page = window.fixation_cross_settings_page
+    window.main_tabs.setCurrentWidget(page)
+    page.fixation_enabled_checkbox.setChecked(True)
+    page.target_count_mode_combo.setCurrentIndex(page.target_count_mode_combo.findData("fixed"))
+    page.changes_per_sequence_spin.setValue(4)
+    QApplication.processEvents()
+
+    guidance_before = page.fixation_feasibility_label.text()
+    assert "Estimated maximum feasible cross changes per condition:" in guidance_before
+    assert "Refresh rate:" not in guidance_before
+    assert "Per-condition estimated feasible max color changes:" not in guidance_before
 
     page.target_duration_spin.setValue(900)
-    guidance_after = page.fixation_guidance_text.toPlainText()
+    QApplication.processEvents()
+    guidance_after = page.fixation_feasibility_label.text()
     assert guidance_after != guidance_before
+    assert "Estimated maximum feasible cross changes per condition:" in guidance_after
+
+
+def test_fixation_feasibility_shows_single_value_for_uniform_condition_lengths(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Uniform Feasibility")
+    qtbot.mouseClick(window.conditions_page.add_condition_button, Qt.MouseButton.LeftButton)
+    qtbot.mouseClick(window.conditions_page.add_condition_button, Qt.MouseButton.LeftButton)
+
+    page = window.fixation_cross_settings_page
+    window.main_tabs.setCurrentWidget(page)
+    QApplication.processEvents()
+
+    guidance = page.fixation_feasibility_label.text()
+    assert "Estimated maximum feasible cross changes per condition:" in guidance
+    assert "varies by condition" not in guidance
+    assert "\n" not in guidance
 
 
 def test_save_blocked_when_condition_repeat_cycle_values_differ(
@@ -1276,7 +1673,7 @@ def test_launch_reports_actionable_condition_level_fixation_error_before_prompt(
         sequence_count=1,
     )
 
-    page = window.session_fixation_page
+    page = window.fixation_cross_settings_page
     page.fixation_enabled_checkbox.setChecked(True)
     page.target_count_mode_combo.setCurrentIndex(page.target_count_mode_combo.findData("fixed"))
     page.changes_per_sequence_spin.setValue(4)

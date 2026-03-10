@@ -44,10 +44,14 @@ def test_project_scaffolding_applies_condition_template_profile_snapshot(tmp_pat
     assert project.settings.condition_defaults.duty_cycle_mode.value == "blank_50"
     assert project.settings.condition_defaults.sequence_count == 1
     assert project.settings.condition_defaults.oddball_cycle_repeats_per_sequence == 146
-    assert project.settings.display.preferred_refresh_hz == 60.0
+    assert project.settings.display.preferred_refresh_hz is None
     assert project.settings.fixation_task.enabled is True
     assert project.settings.fixation_task.accuracy_task_enabled is True
     assert project.settings.fixation_task.changes_per_sequence == 7
-    assert project.settings.fixation_task.target_duration_ms == 450
+    assert project.settings.fixation_task.target_count_mode == "randomized"
+    assert project.settings.fixation_task.target_count_min == 6
+    assert project.settings.fixation_task.target_count_max == 8
+    assert project.settings.fixation_task.no_immediate_repeat_count is True
+    assert project.settings.fixation_task.target_duration_ms == 250
     assert project.settings.fixation_task.min_gap_ms == 1000
     assert project.settings.fixation_task.max_gap_ms == 3000
