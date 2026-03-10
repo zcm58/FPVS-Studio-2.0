@@ -5,7 +5,15 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from fpvs_studio.core.models import ProjectFile, ProjectMeta, ProjectSettings
+from fpvs_studio.core.condition_template_profiles import (
+    apply_condition_template_profile_to_settings,
+)
+from fpvs_studio.core.models import (
+    ConditionTemplateProfile,
+    ProjectFile,
+    ProjectMeta,
+    ProjectSettings,
+)
 from fpvs_studio.core.paths import (
     cache_dir,
     logs_dir,
@@ -35,18 +43,25 @@ def build_starter_project(
     project_name: str,
     *,
     template_id: str = DEFAULT_TEMPLATE_ID,
+    condition_template_profile: ConditionTemplateProfile | None = None,
 ) -> ProjectFile:
     """Build a minimal starter project with engine-neutral defaults."""
 
     template = get_template(template_id)
     project_id = slugify_project_name(project_name)
+    settings = ProjectSettings()
+    if condition_template_profile is not None:
+        settings = apply_condition_template_profile_to_settings(
+            settings,
+            condition_template_profile,
+        )
     return ProjectFile(
         meta=ProjectMeta(
             project_id=project_id,
             name=project_name,
             template_id=template.template_id,
         ),
-        settings=ProjectSettings(),
+        settings=settings,
         stimulus_sets=[],
         conditions=[],
     )
@@ -57,10 +72,15 @@ def create_project(
     project_name: str,
     *,
     template_id: str = DEFAULT_TEMPLATE_ID,
+    condition_template_profile: ConditionTemplateProfile | None = None,
 ) -> ProjectScaffold:
     """Create the on-disk folder structure and starter files for a new project."""
 
-    project = build_starter_project(project_name, template_id=template_id)
+    project = build_starter_project(
+        project_name,
+        template_id=template_id,
+        condition_template_profile=condition_template_profile,
+    )
     target_dir = project_dir(parent_dir, project.meta.project_id)
     for folder in (
         target_dir,

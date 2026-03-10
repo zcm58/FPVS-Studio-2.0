@@ -19,6 +19,10 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from fpvs_studio.core.condition_template_profiles import (
+    SIXTY_HZ_BLANK_FIXATION_PROFILE_ID,
+    built_in_condition_template_profiles,
+)
 from fpvs_studio.core.enums import DutyCycleMode, InterConditionMode, RunMode, StimulusVariant
 from fpvs_studio.core.execution import SessionExecutionSummary
 from fpvs_studio.core.project_service import create_project
@@ -393,6 +397,31 @@ def test_settings_dialog_shows_root_and_change_button_updates_value(
     assert root_value_label.text() == str(updated_root)
 
 
+def test_settings_dialog_manage_templates_button_triggers_callback(
+    qtbot,
+    tmp_path: Path,
+) -> None:
+    root_dir = tmp_path / "settings-root"
+    root_dir.mkdir(parents=True, exist_ok=True)
+    callback_calls = 0
+
+    def _capture_manage_templates() -> None:
+        nonlocal callback_calls
+        callback_calls += 1
+
+    dialog = AppSettingsDialog(
+        fpvs_root_dir=root_dir,
+        on_change_fpvs_root_dir=lambda _path: None,
+        on_manage_condition_templates=_capture_manage_templates,
+    )
+    qtbot.addWidget(dialog)
+
+    manage_button = dialog.findChild(QPushButton, "manage_condition_templates_button")
+    assert manage_button is not None
+    qtbot.mouseClick(manage_button, Qt.MouseButton.LeftButton)
+    assert callback_calls == 1
+
+
 def test_file_settings_action_changes_root_and_updates_open_create_defaults(
     qtbot,
     controller: StudioController,
@@ -469,15 +498,59 @@ def test_opening_project_outside_saved_root_is_allowed_and_keeps_saved_root(
     assert controller.load_fpvs_root_dir() == root_dir
 
 
+def test_create_project_dialog_requires_condition_template_selection(
+    qtbot,
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    dialog = CreateProjectDialog(condition_template_profiles=built_in_condition_template_profiles())
+    qtbot.addWidget(dialog)
+    messages: list[str] = []
+    monkeypatch.setattr(
+        "fpvs_studio.gui.create_project_dialog.QMessageBox.warning",
+        lambda _parent, _title, message: messages.append(message),
+    )
+
+    dialog.project_name_edit.setText("Condition Template Required")
+    dialog.project_root_edit.setText(str(tmp_path))
+    dialog.accept()
+
+    assert dialog.result() != int(dialog.DialogCode.Accepted)
+    assert any("condition template profile" in message.lower() for message in messages)
+
+    dialog.condition_profile_combo.setCurrentIndex(0)
+    dialog.accept()
+    assert dialog.result() == int(dialog.DialogCode.Accepted)
+
+
+def test_create_project_dialog_manage_templates_refreshes_profile_options(qtbot) -> None:
+    initial_profiles = built_in_condition_template_profiles()[:1]
+    refreshed_profiles = built_in_condition_template_profiles()
+
+    dialog = CreateProjectDialog(
+        condition_template_profiles=initial_profiles,
+        on_manage_templates=lambda: refreshed_profiles,
+    )
+    qtbot.addWidget(dialog)
+    assert dialog.condition_profile_combo.count() == 1
+
+    manage_button = dialog.findChild(QPushButton, "manage_condition_templates_button")
+    assert manage_button is not None
+    qtbot.mouseClick(manage_button, Qt.MouseButton.LeftButton)
+
+    assert dialog.condition_profile_combo.count() == 2
+
+
 def test_create_project_flow_scaffolds_project_and_opens_main_window(
     qtbot,
     controller: StudioController,
     tmp_path: Path,
 ) -> None:
-    dialog = CreateProjectDialog()
+    dialog = CreateProjectDialog(condition_template_profiles=built_in_condition_template_profiles())
     qtbot.addWidget(dialog)
     dialog.project_name_edit.setText("Visual Oddball")
     dialog.project_root_edit.setText(str(tmp_path))
+    dialog.condition_profile_combo.setCurrentIndex(0)
     dialog.accept()
     assert dialog.result() == dialog.DialogCode.Accepted
 
@@ -1096,29 +1169,86 @@ def test_launch_blocked_when_condition_repeat_cycle_values_differ(
     assert any(_CONDITION_LENGTH_ERROR_MESSAGE in message for message in messages)
 
 
-def test_new_condition_inherits_first_condition_repeat_cycle_values(
+def test_new_condition_uses_project_condition_defaults(
     qtbot,
     controller: StudioController,
     tmp_path: Path,
 ) -> None:
-    _, window = _open_created_project(controller, qtbot, tmp_path, "Condition Inheritance")
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Condition Defaults")
+
+    profile_index = window.project_page.condition_profile_combo.findData(
+        SIXTY_HZ_BLANK_FIXATION_PROFILE_ID
+    )
+    assert profile_index >= 0
+    window.project_page.condition_profile_combo.setCurrentIndex(profile_index)
+
+    qtbot.mouseClick(window.conditions_page.add_condition_button, Qt.MouseButton.LeftButton)
+    condition_id = window.conditions_page.selected_condition_id()
+    assert condition_id is not None
+    condition = window.document.get_condition(condition_id)
+    assert condition is not None
+
+    assert condition.duty_cycle_mode == DutyCycleMode.BLANK_50
+    assert condition.sequence_count == 1
+    assert condition.oddball_cycle_repeats_per_sequence == 146
+
+
+def test_apply_condition_template_profile_to_all_conditions_standardizes_existing_rows(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Condition Standardization")
 
     qtbot.mouseClick(window.conditions_page.add_condition_button, Qt.MouseButton.LeftButton)
     first_condition_id = window.conditions_page.selected_condition_id()
     assert first_condition_id is not None
-
-    window.conditions_page.sequence_count_spin.setValue(3)
-    window.conditions_page.oddball_cycles_spin.setValue(101)
-
     qtbot.mouseClick(window.conditions_page.add_condition_button, Qt.MouseButton.LeftButton)
     second_condition_id = window.conditions_page.selected_condition_id()
     assert second_condition_id is not None
     assert second_condition_id != first_condition_id
 
-    second_condition = window.document.get_condition(second_condition_id)
-    assert second_condition is not None
-    assert second_condition.sequence_count == 3
-    assert second_condition.oddball_cycle_repeats_per_sequence == 101
+    window.document.update_condition(
+        first_condition_id,
+        sequence_count=2,
+        oddball_cycle_repeats_per_sequence=88,
+        duty_cycle_mode=DutyCycleMode.CONTINUOUS,
+    )
+    window.document.update_condition(
+        second_condition_id,
+        sequence_count=3,
+        oddball_cycle_repeats_per_sequence=90,
+        duty_cycle_mode=DutyCycleMode.CONTINUOUS,
+    )
+
+    profile_index = window.project_page.condition_profile_combo.findData(
+        SIXTY_HZ_BLANK_FIXATION_PROFILE_ID
+    )
+    assert profile_index >= 0
+    window.project_page.condition_profile_combo.setCurrentIndex(profile_index)
+
+    first_before = window.document.get_condition(first_condition_id)
+    second_before = window.document.get_condition(second_condition_id)
+    assert first_before is not None
+    assert second_before is not None
+    assert first_before.sequence_count == 2
+    assert second_before.sequence_count == 3
+
+    qtbot.mouseClick(
+        window.project_page.apply_profile_to_conditions_button,
+        Qt.MouseButton.LeftButton,
+    )
+
+    first_after = window.document.get_condition(first_condition_id)
+    second_after = window.document.get_condition(second_condition_id)
+    assert first_after is not None
+    assert second_after is not None
+    assert first_after.duty_cycle_mode == DutyCycleMode.BLANK_50
+    assert second_after.duty_cycle_mode == DutyCycleMode.BLANK_50
+    assert first_after.sequence_count == 1
+    assert second_after.sequence_count == 1
+    assert first_after.oddball_cycle_repeats_per_sequence == 146
+    assert second_after.oddball_cycle_repeats_per_sequence == 146
 
 
 def test_launch_reports_actionable_condition_level_fixation_error_before_prompt(

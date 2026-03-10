@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from fpvs_studio.core.models import Condition
+from fpvs_studio.core.enums import DutyCycleMode
+from fpvs_studio.core.models import Condition, ProjectFile
 from fpvs_studio.core.serialization import load_project_file, save_project_file
 
 
@@ -27,3 +28,16 @@ def test_condition_instructions_strip_bidi_control_characters() -> None:
     )
 
     assert condition.instructions == "Read the instructions."
+
+
+def test_project_model_backfills_condition_profile_defaults_for_legacy_payload(sample_project) -> None:
+    payload = sample_project.model_dump(mode="python")
+    payload["settings"].pop("condition_profile_id", None)
+    payload["settings"].pop("condition_defaults", None)
+
+    loaded = ProjectFile.model_validate(payload)
+
+    assert loaded.settings.condition_profile_id is None
+    assert loaded.settings.condition_defaults.duty_cycle_mode == DutyCycleMode.CONTINUOUS
+    assert loaded.settings.condition_defaults.sequence_count == 1
+    assert loaded.settings.condition_defaults.oddball_cycle_repeats_per_sequence == 146

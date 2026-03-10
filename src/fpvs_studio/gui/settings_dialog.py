@@ -26,16 +26,18 @@ class AppSettingsDialog(QDialog):
         *,
         fpvs_root_dir: Path,
         on_change_fpvs_root_dir: Callable[[Path], None],
+        on_manage_condition_templates: Callable[[], object] | None = None,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self.setObjectName("fpvs_root_settings_dialog")
         self.setWindowTitle("Settings")
         self.setModal(True)
-        self.resize(620, 180)
+        self.resize(700, 240)
 
         self._fpvs_root_dir = fpvs_root_dir
         self._on_change_fpvs_root_dir = on_change_fpvs_root_dir
+        self._on_manage_condition_templates = on_manage_condition_templates
 
         self.fpvs_root_dir_value = QLabel(str(fpvs_root_dir), self)
         self.fpvs_root_dir_value.setObjectName("fpvs_root_dir_value")
@@ -53,6 +55,11 @@ class AppSettingsDialog(QDialog):
 
         form_layout = QFormLayout()
         form_layout.addRow("FPVS Studio Root Folder", fpvs_root_row)
+        self.manage_templates_button = QPushButton("Manage Condition Templates...", self)
+        self.manage_templates_button.setObjectName("manage_condition_templates_button")
+        self.manage_templates_button.setEnabled(self._on_manage_condition_templates is not None)
+        self.manage_templates_button.clicked.connect(self._manage_condition_templates)
+        form_layout.addRow("Condition Templates", self.manage_templates_button)
 
         self.button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Close, parent=self)
         self.button_box.setObjectName("settings_button_box")
@@ -77,3 +84,8 @@ class AppSettingsDialog(QDialog):
         self._on_change_fpvs_root_dir(selected_path)
         self._fpvs_root_dir = selected_path
         self.fpvs_root_dir_value.setText(str(selected_path))
+
+    def _manage_condition_templates(self) -> None:
+        if self._on_manage_condition_templates is None:
+            return
+        self._on_manage_condition_templates()

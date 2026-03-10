@@ -45,6 +45,15 @@ class _PreflightEngine(PresentationEngine):
     ) -> bool:
         return False
 
+    def show_condition_feedback_screen(
+        self,
+        *,
+        heading: str,
+        body: str,
+        continue_key: str,
+    ) -> bool:
+        return False
+
     def run_condition(
         self,
         run_spec: RunSpec,

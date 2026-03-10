@@ -42,6 +42,7 @@ from PySide6.QtWidgets import (
 )
 
 from fpvs_studio.core.enums import DutyCycleMode, InterConditionMode, StimulusVariant
+from fpvs_studio.core.models import ConditionTemplateProfile
 from fpvs_studio.core.template_library import get_template
 from fpvs_studio.gui.animations import AnimatedTabBar, ButtonHoverAnimator
 from fpvs_studio.gui.document import ConditionStimulusRow, DocumentError, ProjectDocument
@@ -196,9 +197,19 @@ class ParticipantNumberDialog(QDialog):
 class ProjectPage(QWidget):
     """Project metadata and display settings page."""
 
-    def __init__(self, document: ProjectDocument, parent=None) -> None:
+    def __init__(
+        self,
+        document: ProjectDocument,
+        *,
+        load_condition_template_profiles: Callable[[], list[ConditionTemplateProfile]],
+        manage_condition_templates: Callable[[], list[ConditionTemplateProfile]],
+        parent=None,
+    ) -> None:
         super().__init__(parent)
         self._document = document
+        self._load_condition_template_profiles = load_condition_template_profiles
+        self._manage_condition_templates = manage_condition_templates
+        self._condition_profiles_by_id: dict[str, ConditionTemplateProfile] = {}
 
         self.project_name_edit = QLineEdit(self)
         self.project_name_edit.setObjectName("project_name_edit")
@@ -221,9 +232,30 @@ class ProjectPage(QWidget):
         self.template_value.setObjectName("template_value")
         self.template_value.setWordWrap(True)
         self.template_value.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        self.condition_profile_combo = QComboBox(self)
+        self.condition_profile_combo.setObjectName("project_condition_profile_combo")
+        self.condition_profile_combo.setPlaceholderText("Select a condition template profile...")
+        self.condition_profile_combo.currentIndexChanged.connect(self._apply_condition_profile_selection)
+        self.manage_templates_button = QPushButton("Manage Templates...", self)
+        self.manage_templates_button.setObjectName("project_manage_templates_button")
+        self.manage_templates_button.clicked.connect(self._open_template_manager)
+        self.apply_profile_to_conditions_button = QPushButton("Apply Template To All Conditions", self)
+        self.apply_profile_to_conditions_button.setObjectName("apply_profile_to_conditions_button")
+        self.apply_profile_to_conditions_button.clicked.connect(self._apply_profile_to_conditions)
+        self.condition_profile_status_value = QLabel(self)
+        self.condition_profile_status_value.setObjectName("condition_profile_status_value")
+        self.condition_profile_status_value.setWordWrap(True)
         self.background_color_edit = QLineEdit(self)
         self.background_color_edit.setObjectName("background_color_edit")
         self.background_color_edit.editingFinished.connect(self._apply_background_color)
+
+        condition_profile_row = QWidget(self)
+        condition_profile_layout = QHBoxLayout(condition_profile_row)
+        condition_profile_layout.setContentsMargins(0, 0, 0, 0)
+        condition_profile_layout.setSpacing(8)
+        condition_profile_layout.addWidget(self.condition_profile_combo, 1)
+        condition_profile_layout.addWidget(self.manage_templates_button)
+        condition_profile_layout.addWidget(self.apply_profile_to_conditions_button)
 
         runtime_note_title = QLabel("Runtime Launch Status", self)
         runtime_note_title.setObjectName("project_runtime_note_title")
@@ -252,7 +284,9 @@ class ProjectPage(QWidget):
         metadata_layout.addRow("Name", self.project_name_edit)
         metadata_layout.addRow("Description", self.project_description_edit)
         metadata_layout.addRow("Project Root", self.project_root_value)
-        metadata_layout.addRow("Template", self.template_value)
+        metadata_layout.addRow("Protocol Template", self.template_value)
+        metadata_layout.addRow("Condition Template", condition_profile_row)
+        metadata_layout.addRow("Template Status", self.condition_profile_status_value)
 
         display_group = QGroupBox("Display & Runtime", self)
         display_group.setObjectName("project_display_card")
@@ -286,7 +320,8 @@ class ProjectPage(QWidget):
                 font-weight: 600;
             }
             QLabel#project_root_value,
-            QLabel#template_value {
+            QLabel#template_value,
+            QLabel#condition_profile_status_value {
                 border: 1px solid #d6dde8;
                 border-radius: 6px;
                 background-color: #ffffff;
@@ -316,6 +351,49 @@ class ProjectPage(QWidget):
             self.background_color_edit.setText(str(project.settings.display.background_color))
         self.project_root_value.setText(str(self._document.project_root))
         self.template_value.setText(f"{template.display_name} ({template.template_id})")
+        self._refresh_condition_profile_widgets()
+
+    def _refresh_condition_profile_widgets(self) -> None:
+        profiles = self._load_condition_template_profiles()
+        self._condition_profiles_by_id = {profile.profile_id: profile for profile in profiles}
+        selected_profile_id = self._document.project.settings.condition_profile_id
+        with QSignalBlocker(self.condition_profile_combo):
+            self.condition_profile_combo.clear()
+            for profile in profiles:
+                self.condition_profile_combo.addItem(
+                    f"{profile.display_name} ({profile.profile_id})",
+                    userData=profile.profile_id,
+                )
+            if selected_profile_id is None:
+                self.condition_profile_combo.setCurrentIndex(-1)
+            else:
+                selected_index = self.condition_profile_combo.findData(selected_profile_id)
+                self.condition_profile_combo.setCurrentIndex(
+                    selected_index if selected_index >= 0 else -1
+                )
+
+        profile = (
+            self._condition_profiles_by_id.get(selected_profile_id)
+            if selected_profile_id is not None
+            else None
+        )
+        if selected_profile_id is None:
+            self.condition_profile_status_value.setText(
+                "No condition template selected. New conditions use saved project defaults."
+            )
+        elif profile is None:
+            self.condition_profile_status_value.setText(
+                f"Profile '{selected_profile_id}' is missing from the global library. "
+                "Project snapshot defaults remain active."
+            )
+        else:
+            self.condition_profile_status_value.setText(
+                f"{profile.display_name} ({profile.profile_id}) is selected for this project."
+            )
+
+        self.apply_profile_to_conditions_button.setEnabled(
+            profile is not None and bool(self._document.project.conditions)
+        )
 
     def _apply_project_name(self) -> None:
         try:
@@ -341,6 +419,56 @@ class ProjectPage(QWidget):
             )
         except Exception as error:
             _show_error_dialog(self, "Display Settings Error", error)
+            self.refresh()
+
+    def _apply_condition_profile_selection(self) -> None:
+        profile_id = self.condition_profile_combo.currentData()
+        if not profile_id:
+            return
+        profile = self._condition_profiles_by_id.get(str(profile_id))
+        if profile is None:
+            return
+        try:
+            self._document.apply_condition_template_profile(
+                profile,
+                apply_to_existing_conditions=False,
+            )
+        except Exception as error:
+            _show_error_dialog(self, "Condition Template Error", error)
+            self.refresh()
+
+    def _open_template_manager(self) -> None:
+        try:
+            self._manage_condition_templates()
+        except Exception as error:
+            _show_error_dialog(self, "Condition Template Error", error)
+            return
+        self.refresh()
+
+    def _apply_profile_to_conditions(self) -> None:
+        profile_id = self._document.project.settings.condition_profile_id
+        if profile_id is None:
+            QMessageBox.warning(
+                self,
+                "No Condition Template Selected",
+                "Select a condition template profile before applying defaults to all conditions.",
+            )
+            return
+        profile = self._condition_profiles_by_id.get(profile_id)
+        if profile is None:
+            QMessageBox.warning(
+                self,
+                "Condition Template Missing",
+                "The selected condition template profile is missing from the global library.",
+            )
+            return
+        try:
+            self._document.apply_condition_template_profile(
+                profile,
+                apply_to_existing_conditions=True,
+            )
+        except Exception as error:
+            _show_error_dialog(self, "Condition Template Error", error)
             self.refresh()
 
 
@@ -1849,6 +1977,8 @@ class StudioMainWindow(QMainWindow):
         on_request_new_project: Callable[[], None],
         on_request_open_project: Callable[[], None],
         on_request_settings: Callable[[], None],
+        on_load_condition_template_profiles: Callable[[], list[ConditionTemplateProfile]],
+        on_manage_condition_templates: Callable[[], list[ConditionTemplateProfile]],
     ) -> None:
         super().__init__()
         self.document = document
@@ -1858,7 +1988,12 @@ class StudioMainWindow(QMainWindow):
         self.setWindowTitle("FPVS Studio (Alpha)")
         self.resize(1200, 860)
 
-        self.project_page = ProjectPage(document, self)
+        self.project_page = ProjectPage(
+            document,
+            load_condition_template_profiles=on_load_condition_template_profiles,
+            manage_condition_templates=on_manage_condition_templates,
+            parent=self,
+        )
         self.conditions_page = ConditionsPage(document, self)
         self.session_fixation_page = SessionFixationPage(document, self)
         self.assets_page = AssetsPage(document, self)

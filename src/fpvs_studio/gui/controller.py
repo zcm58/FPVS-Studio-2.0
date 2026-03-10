@@ -8,6 +8,12 @@ from pathlib import Path
 from PySide6.QtCore import QSettings
 from PySide6.QtWidgets import QApplication, QFileDialog, QMessageBox, QWidget
 
+from fpvs_studio.core.condition_template_profiles import (
+    get_condition_template_profile,
+    list_condition_template_profiles,
+)
+from fpvs_studio.core.models import ConditionTemplateProfile
+from fpvs_studio.gui.condition_template_manager_dialog import ConditionTemplateManagerDialog
 from fpvs_studio.gui.create_project_dialog import CreateProjectDialog
 from fpvs_studio.gui.document import ProjectDocument
 from fpvs_studio.gui.main_window import StudioMainWindow
@@ -131,12 +137,24 @@ class StudioController:
     def show_create_project_dialog(self) -> None:
         """Collect new-project inputs and scaffold a project when confirmed."""
 
+        if not self.ensure_fpvs_root_configured():
+            return
         parent = self.main_window if self.main_window is not None else self.welcome_window
-        dialog = CreateProjectDialog(parent)
+        if self._fpvs_root_dir is None:
+            return
+        dialog = CreateProjectDialog(
+            condition_template_profiles=self._load_condition_template_profiles(),
+            on_manage_templates=self._show_condition_template_manager,
+            parent=parent,
+        )
         dialog.set_parent_directory(self._projects_parent_dir)
         if dialog.exec() != dialog.DialogCode.Accepted:
             return
-        self.create_project(dialog.project_name, dialog.parent_directory)
+        self.create_project(
+            dialog.project_name,
+            dialog.parent_directory,
+            condition_profile_id=dialog.condition_profile_id,
+        )
 
     def show_open_project_dialog(self) -> None:
         """Open an existing project directory."""
@@ -151,13 +169,32 @@ class StudioController:
             return
         self.open_project(Path(directory))
 
-    def create_project(self, project_name: str, parent_dir: Path) -> ProjectDocument | None:
+    def create_project(
+        self,
+        project_name: str,
+        parent_dir: Path,
+        *,
+        condition_profile_id: str | None = None,
+    ) -> ProjectDocument | None:
         """Scaffold and open a new project."""
 
+        condition_profile: ConditionTemplateProfile | None = None
+        root_dir = self._fpvs_root_dir
+        if condition_profile_id is not None and root_dir is not None:
+            try:
+                condition_profile = get_condition_template_profile(root_dir, condition_profile_id)
+            except KeyError as error:
+                _show_error(
+                    self.main_window or self.welcome_window,
+                    "Create Project Error",
+                    ValueError(str(error)),
+                )
+                return None
         try:
             document = ProjectDocument.create_new(
                 parent_dir=Path(parent_dir),
                 project_name=project_name,
+                condition_template_profile=condition_profile,
             )
         except Exception as error:
             _show_error(self.main_window or self.welcome_window, "Create Project Error", error)
@@ -188,6 +225,7 @@ class StudioController:
         dialog = AppSettingsDialog(
             fpvs_root_dir=root_dir,
             on_change_fpvs_root_dir=self.save_fpvs_root_dir,
+            on_manage_condition_templates=self._show_condition_template_manager,
             parent=parent,
         )
         dialog.exec()
@@ -200,6 +238,8 @@ class StudioController:
             on_request_new_project=self.show_create_project_dialog,
             on_request_open_project=self.show_open_project_dialog,
             on_request_settings=self.show_settings_dialog,
+            on_load_condition_template_profiles=self._load_condition_template_profiles,
+            on_manage_condition_templates=self._show_condition_template_manager,
         )
         self.main_window.show()
         self.main_window.raise_()
@@ -208,3 +248,20 @@ class StudioController:
             self.welcome_window.hide()
         if previous_window is not None and previous_window is not self.main_window:
             previous_window.close()
+
+    def _load_condition_template_profiles(self) -> list[ConditionTemplateProfile]:
+        root_dir = self._fpvs_root_dir
+        if root_dir is None:
+            return []
+        return list_condition_template_profiles(root_dir)
+
+    def _show_condition_template_manager(self) -> list[ConditionTemplateProfile]:
+        if not self.ensure_fpvs_root_configured():
+            return []
+        root_dir = self._fpvs_root_dir
+        if root_dir is None:
+            return []
+        parent = self.main_window if self.main_window is not None else self.welcome_window
+        dialog = ConditionTemplateManagerDialog(root_dir=root_dir, parent=parent)
+        dialog.exec()
+        return self._load_condition_template_profiles()

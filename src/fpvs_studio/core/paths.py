@@ -14,6 +14,8 @@ SOURCE_DIRNAME = "source"
 DERIVED_DIRNAME = "derived"
 ORIGINALS_DIRNAME = "originals"
 MANIFEST_FILENAME = "manifest.json"
+TEMPLATES_DIRNAME = "templates"
+CONDITION_TEMPLATE_LIBRARY_FILENAME = "condition_templates.json"
 
 _NON_ALNUM_RE = re.compile(r"[^a-z0-9]+")
 
@@ -89,6 +91,18 @@ def logs_dir(project_root: Path) -> Path:
     """Return the logs directory path."""
 
     return project_root / LOGS_DIRNAME
+
+
+def templates_dir(root_dir: Path) -> Path:
+    """Return the app-level templates directory path under the FPVS root."""
+
+    return root_dir / TEMPLATES_DIRNAME
+
+
+def condition_template_library_path(root_dir: Path) -> Path:
+    """Return the app-level condition-template library JSON path."""
+
+    return templates_dir(root_dir) / CONDITION_TEMPLATE_LIBRARY_FILENAME
 
 
 def to_project_relative_posix(project_root: Path, target_path: Path) -> str:

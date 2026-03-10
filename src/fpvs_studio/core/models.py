@@ -273,6 +273,14 @@ class FixationTaskSettings(FPVSBaseModel):
         return self
 
 
+class ConditionDefaults(FPVSBaseModel):
+    """Project-level default values applied to new or standardized conditions."""
+
+    duty_cycle_mode: DutyCycleMode = DutyCycleMode.CONTINUOUS
+    sequence_count: int = Field(default=1, ge=1)
+    oddball_cycle_repeats_per_sequence: int = Field(default=146, ge=1)
+
+
 class TriggerSettings(FPVSBaseModel):
     """Project-level trigger backend configuration."""
 
@@ -307,11 +315,23 @@ class SessionSettings(FPVSBaseModel):
 class ProjectSettings(FPVSBaseModel):
     """Editable project-level settings."""
 
+    condition_profile_id: str | None = None
+    condition_defaults: ConditionDefaults = Field(default_factory=ConditionDefaults)
     display: DisplaySettings = Field(default_factory=DisplaySettings)
     fixation_task: FixationTaskSettings = Field(default_factory=FixationTaskSettings)
     triggers: TriggerSettings = Field(default_factory=TriggerSettings)
     session: SessionSettings = Field(default_factory=SessionSettings)
     supported_variants: list[StimulusVariant] = Field(default_factory=lambda: list(SUPPORTED_VARIANTS))
+
+    @field_validator("condition_profile_id")
+    @classmethod
+    def validate_condition_profile_id(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        cleaned = value.strip()
+        if not cleaned:
+            return None
+        return validate_slug(cleaned, field_name="condition_profile_id")
 
 
 class StimulusSet(FPVSBaseModel):
@@ -414,6 +434,61 @@ class TemplateSpec(FPVSBaseModel):
     oddball_hz: float = Field(gt=0)
     supported_duty_cycle_modes: tuple[DutyCycleMode, ...]
     default_oddball_cycle_repeats_per_sequence: int = Field(ge=1)
+
+
+class ConditionTemplateDisplayDefaults(FPVSBaseModel):
+    """Display defaults that can be snapshotted into a project from a profile."""
+
+    preferred_refresh_hz: float | None = Field(default=None, gt=0)
+
+
+class ConditionTemplateDefaults(FPVSBaseModel):
+    """Condition-template profile defaults."""
+
+    condition: ConditionDefaults = Field(default_factory=ConditionDefaults)
+    display: ConditionTemplateDisplayDefaults = Field(default_factory=ConditionTemplateDisplayDefaults)
+    fixation_task: FixationTaskSettings = Field(default_factory=FixationTaskSettings)
+
+
+class ConditionTemplateProfile(FPVSBaseModel):
+    """One reusable condition-template profile stored at the FPVS root."""
+
+    profile_id: str
+    display_name: str
+    description: str = ""
+    built_in: bool = False
+    defaults: ConditionTemplateDefaults = Field(default_factory=ConditionTemplateDefaults)
+
+    @field_validator("profile_id")
+    @classmethod
+    def validate_profile_id(cls, value: str) -> str:
+        return validate_slug(value, field_name="profile_id")
+
+    @field_validator("display_name")
+    @classmethod
+    def validate_display_name(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("display_name may not be empty.")
+        return value
+
+    @field_validator("description")
+    @classmethod
+    def sanitize_description(cls, value: str) -> str:
+        return strip_bidi_controls(value)
+
+
+class ConditionTemplateProfileLibrary(FPVSBaseModel):
+    """Persisted app-level condition-template library."""
+
+    schema_version: SchemaVersion = SchemaVersion.V1
+    profiles: list[ConditionTemplateProfile] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_unique_profile_ids(self) -> "ConditionTemplateProfileLibrary":
+        profile_ids = [item.profile_id for item in self.profiles]
+        if len(profile_ids) != len(set(profile_ids)):
+            raise ValueError("Condition template profile ids must be unique.")
+        return self
 
 
 class RunParticipant(FPVSBaseModel):

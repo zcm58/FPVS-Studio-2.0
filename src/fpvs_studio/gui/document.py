@@ -9,10 +9,16 @@ import random
 from PySide6.QtCore import QObject, Signal
 from pydantic import ValidationError
 
+from fpvs_studio.core.condition_template_profiles import (
+    apply_condition_defaults_to_condition,
+    apply_condition_template_profile_to_settings,
+)
 from fpvs_studio.core.compiler import CompileError, compile_session_plan
 from fpvs_studio.core.enums import EngineName, StimulusVariant
 from fpvs_studio.core.models import (
     Condition,
+    ConditionDefaults,
+    ConditionTemplateProfile,
     FixationTaskSettings,
     ProjectFile,
     ProjectValidationReport,
@@ -145,10 +151,20 @@ class ProjectDocument(QObject):
         self._last_session_plan = None
 
     @classmethod
-    def create_new(cls, *, parent_dir: Path, project_name: str) -> "ProjectDocument":
+    def create_new(
+        cls,
+        *,
+        parent_dir: Path,
+        project_name: str,
+        condition_template_profile: ConditionTemplateProfile | None = None,
+    ) -> "ProjectDocument":
         """Scaffold a new project and open it as a live document."""
 
-        scaffold = create_project(parent_dir, project_name)
+        scaffold = create_project(
+            parent_dir,
+            project_name,
+            condition_template_profile=condition_template_profile,
+        )
         manifest = create_empty_manifest(scaffold.project.meta.project_id)
         return cls(
             project_root=scaffold.project_root,
@@ -330,32 +346,66 @@ class ProjectDocument(QObject):
         settings = _validated_copy(self._project.settings, supported_variants=ordered_variants)
         self._apply_project_update(settings=settings)
 
+    def apply_condition_template_profile(
+        self,
+        profile: ConditionTemplateProfile,
+        *,
+        apply_to_existing_conditions: bool = False,
+    ) -> None:
+        """Snapshot one condition-template profile into project settings."""
+
+        settings = apply_condition_template_profile_to_settings(self._project.settings, profile)
+        project = _validated_copy(self._project, settings=settings)
+        if apply_to_existing_conditions:
+            defaults = project.settings.condition_defaults
+            conditions = [
+                apply_condition_defaults_to_condition(condition, defaults)
+                for condition in self.ordered_conditions()
+            ]
+            project = _validated_copy(
+                project,
+                conditions=self._reindex_conditions(conditions),
+            )
+        self._replace_project(project)
+
+    def apply_condition_defaults_to_all_conditions(
+        self,
+        *,
+        defaults: ConditionDefaults | None = None,
+    ) -> None:
+        """Apply one condition-default snapshot to all conditions in project order."""
+
+        resolved_defaults = defaults or self._project.settings.condition_defaults
+        conditions = [
+            apply_condition_defaults_to_condition(condition, resolved_defaults)
+            for condition in self.ordered_conditions()
+        ]
+        project = _validated_copy(
+            self._project,
+            conditions=self._reindex_conditions(conditions),
+        )
+        self._replace_project(project)
+
     def create_condition(self, *, name: str | None = None) -> str:
         """Create one new condition plus dedicated base/oddball stimulus sets."""
 
         ordered_conditions = self.ordered_conditions()
+        defaults = self._project.settings.condition_defaults
         display_name = name or f"Condition {len(ordered_conditions) + 1}"
         existing_condition_ids = {condition.condition_id for condition in self._project.conditions}
         existing_set_ids = {stimulus_set.set_id for stimulus_set in self._project.stimulus_sets}
         condition_id = self._unique_slug(display_name, existing_condition_ids)
         base_set_id = self._unique_slug(f"{condition_id}-base", existing_set_ids)
         oddball_set_id = self._unique_slug(f"{condition_id}-oddball", existing_set_ids | {base_set_id})
-        sequence_count = 1
-        oddball_cycle_repeats_per_sequence = 146
-        if ordered_conditions:
-            first_ordered_condition = ordered_conditions[0]
-            sequence_count = first_ordered_condition.sequence_count
-            oddball_cycle_repeats_per_sequence = (
-                first_ordered_condition.oddball_cycle_repeats_per_sequence
-            )
 
         new_condition = Condition(
             condition_id=condition_id,
             name=display_name,
             base_stimulus_set_id=base_set_id,
             oddball_stimulus_set_id=oddball_set_id,
-            sequence_count=sequence_count,
-            oddball_cycle_repeats_per_sequence=oddball_cycle_repeats_per_sequence,
+            sequence_count=defaults.sequence_count,
+            oddball_cycle_repeats_per_sequence=defaults.oddball_cycle_repeats_per_sequence,
+            duty_cycle_mode=defaults.duty_cycle_mode,
             trigger_code=len(ordered_conditions) + 1,
             order_index=len(ordered_conditions),
         )
