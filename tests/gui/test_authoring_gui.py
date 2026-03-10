@@ -12,8 +12,8 @@ from PySide6.QtWidgets import (
     QApplication,
     QGroupBox,
     QLabel,
+    QListWidget,
     QMessageBox,
-    QPlainTextEdit,
     QPushButton,
     QToolBar,
     QWidget,
@@ -51,6 +51,12 @@ def _open_created_project(controller: StudioController, qtbot, tmp_path: Path, n
     assert controller.main_window is not None
     qtbot.addWidget(controller.main_window)
     return document, controller.main_window
+
+
+def _list_widget_text(list_widget: QListWidget) -> str:
+    return "\n".join(
+        list_widget.item(index).text() for index in range(list_widget.count())
+    )
 
 
 def _prepare_compile_ready_project(window, tmp_path: Path) -> None:
@@ -808,21 +814,24 @@ def test_home_overview_panels_show_project_session_and_runtime_metadata(
 
     condition_count_label = window.home_page.findChild(QLabel, "home_condition_count_value")
     block_count_label = window.home_page.findChild(QLabel, "home_block_count_value")
-    fixation_label = window.home_page.findChild(QLabel, "home_fixation_status_value")
-    serial_label = window.home_page.findChild(QLabel, "home_runtime_serial_value")
+    fixation_label = window.home_page.findChild(QLabel, "home_fixation_task_value")
+    accuracy_label = window.home_page.findChild(QLabel, "home_accuracy_task_value")
+    runtime_summary_label = window.home_page.findChild(QLabel, "home_runtime_summary_value")
     template_label = window.home_page.findChild(QLabel, "home_project_template_value")
     description_label = window.home_page.findChild(QLabel, "home_project_description_value")
     assert condition_count_label is not None
     assert block_count_label is not None
     assert fixation_label is not None
-    assert serial_label is not None
+    assert accuracy_label is not None
+    assert runtime_summary_label is not None
     assert template_label is not None
     assert description_label is not None
 
     assert condition_count_label.text() == "1"
     assert block_count_label.text() == "2"
-    assert "disabled" in fixation_label.text().lower()
-    assert serial_label.text() == "COM7 @ 57600"
+    assert fixation_label.text() == "Disabled"
+    assert accuracy_label.text() == "Disabled"
+    assert "com7 @ 57600" in runtime_summary_label.text().lower()
     assert "fpvs_6hz_every5_v1" in template_label.text()
     assert description_label.text() == "No description set yet."
 
@@ -834,16 +843,16 @@ def test_home_readiness_status_and_recent_activity_update_from_launch_checks(
     monkeypatch,
 ) -> None:
     _, window = _open_created_project(controller, qtbot, tmp_path, "Home Status Project")
-    preflight_status = window.home_page.findChild(QPlainTextEdit, "home_preflight_status_text")
-    recent_activity = window.home_page.findChild(QPlainTextEdit, "home_recent_activity_text")
+    readiness_checklist = window.home_page.findChild(QListWidget, "home_readiness_checklist")
+    recent_activity = window.home_page.findChild(QListWidget, "home_recent_activity_list")
     launch_button = window.home_page.findChild(QPushButton, "home_launch_test_session_button")
     readiness_card = window.home_page.findChild(QGroupBox, "home_preflight_card")
-    assert preflight_status is not None
+    assert readiness_checklist is not None
     assert recent_activity is not None
     assert launch_button is not None
     assert readiness_card is not None
-    assert readiness_card.title() == "Launch Readiness Status"
-    assert "launch an experiment in alpha test mode" in preflight_status.toPlainText().lower()
+    assert readiness_card.title() == "Launch Readiness"
+    assert "runtime path: alpha test-mode only" in _list_widget_text(readiness_checklist).lower()
 
     _prepare_compile_ready_project(window, tmp_path / "home-status-preflight")
 
@@ -873,9 +882,9 @@ def test_home_readiness_status_and_recent_activity_update_from_launch_checks(
     assert captures["project_root"] == window.document.project_root
     qtbot.waitUntil(
         lambda: "status: launch readiness checks passed"
-        in preflight_status.toPlainText().lower(),
+        in _list_widget_text(readiness_checklist).lower(),
     )
-    assert "status: launch readiness checks passed" in recent_activity.toPlainText().lower()
+    assert "status: launch readiness checks passed" in _list_widget_text(recent_activity).lower()
 
 
 def test_project_description_typing_round_trips_without_cursor_reset(
