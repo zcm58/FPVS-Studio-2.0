@@ -48,6 +48,9 @@ from fpvs_studio.gui.animations import AnimatedTabBar, ButtonHoverAnimator
 from fpvs_studio.gui.document import ConditionStimulusRow, DocumentError, ProjectDocument
 
 _CYCLE_HELP_TEXT = "Cycle = one turn of base presentations plus one oddball presentation."
+_FIXATION_FEASIBILITY_TOOLTIP_TEXT = (
+    "Derived from each condition's duration and the current fixation timing settings."
+)
 _RUNTIME_BACKGROUND_COLOR_PRESETS: tuple[tuple[str, str], ...] = (
     ("Black", "#000000"),
     ("Dark Gray", "#101010"),
@@ -139,6 +142,12 @@ def _set_form_row_visible(layout: QFormLayout, field: QWidget, visible: bool) ->
     if label is not None:
         label.setVisible(visible)
     field.setVisible(visible)
+
+
+def _prefixed_object_name(prefix: str, name: str) -> str:
+    if not prefix:
+        return name
+    return f"{prefix}{name}"
 
 
 class LeftToRightPlainTextEdit(QPlainTextEdit):
@@ -805,33 +814,275 @@ class ConditionsPage(QWidget):
             _show_error_dialog(self, "Stimulus Import Error", error)
 
 
-class SessionStructurePage(QWidget):
-    """Session-level settings page."""
+class NonHomePageShell(QWidget):
+    """Reusable shell for non-home pages with centered content."""
 
-    def __init__(self, document: ProjectDocument, parent=None) -> None:
+    def __init__(
+        self,
+        *,
+        title: str,
+        subtitle: str,
+        layout_mode: str = "single_column",
+        parent=None,
+    ) -> None:
+        super().__init__(parent)
+        if layout_mode not in {"single_column", "three_column"}:
+            raise ValueError(f"Unsupported layout_mode: {layout_mode}")
+
+        self.layout_mode = layout_mode
+        self._single_column_layout: QVBoxLayout | None = None
+        self._column_layouts: list[QVBoxLayout] = []
+        self._footer_widget: QWidget | None = None
+
+        self.title_label = QLabel(title, self)
+        self.title_label.setObjectName("non_home_shell_title")
+        self.subtitle_label = QLabel(subtitle, self)
+        self.subtitle_label.setObjectName("non_home_shell_subtitle")
+        self.subtitle_label.setWordWrap(True)
+
+        self.content_frame = QFrame(self)
+        self.content_frame.setObjectName("non_home_shell_content_frame")
+        self.content_frame.setMaximumWidth(1260)
+
+        if layout_mode == "single_column":
+            single_layout = QVBoxLayout(self.content_frame)
+            single_layout.setContentsMargins(0, 0, 0, 0)
+            single_layout.setSpacing(12)
+            self._single_column_layout = single_layout
+        else:
+            columns_layout = QHBoxLayout(self.content_frame)
+            columns_layout.setContentsMargins(0, 0, 0, 0)
+            columns_layout.setSpacing(12)
+            for column_name in ("left", "center", "right"):
+                column_container = QWidget(self.content_frame)
+                column_container.setObjectName(f"non_home_shell_column_{column_name}")
+                column_layout = QVBoxLayout(column_container)
+                column_layout.setContentsMargins(0, 0, 0, 0)
+                column_layout.setSpacing(12)
+                columns_layout.addWidget(column_container, 1)
+                self._column_layouts.append(column_layout)
+            columns_layout.setStretch(0, 3)
+            columns_layout.setStretch(1, 4)
+            columns_layout.setStretch(2, 3)
+
+        centered_content_row = QHBoxLayout()
+        centered_content_row.addStretch(1)
+        centered_content_row.addWidget(self.content_frame)
+        centered_content_row.addStretch(1)
+
+        self.footer_strip = QFrame(self)
+        self.footer_strip.setObjectName("non_home_shell_footer_strip")
+        self.footer_strip.setVisible(False)
+        footer_layout = QHBoxLayout(self.footer_strip)
+        footer_layout.setContentsMargins(12, 8, 12, 8)
+        footer_layout.setSpacing(8)
+        self.footer_label = QLabel(self.footer_strip)
+        self.footer_label.setObjectName("non_home_shell_footer_label")
+        self.footer_label.setWordWrap(True)
+        footer_layout.addWidget(self.footer_label, 1)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(24, 18, 24, 18)
+        layout.setSpacing(10)
+        layout.addWidget(self.title_label)
+        layout.addWidget(self.subtitle_label)
+        layout.addLayout(centered_content_row, 1)
+        layout.addWidget(self.footer_strip)
+
+        self.setStyleSheet(
+            """
+            QLabel#non_home_shell_title {
+                font-size: 24px;
+                font-weight: 700;
+                color: #1f2f44;
+            }
+            QLabel#non_home_shell_subtitle {
+                color: #42566f;
+                font-size: 13px;
+            }
+            QFrame#non_home_shell_footer_strip {
+                border: 1px solid #d2dbe7;
+                border-radius: 8px;
+                background-color: #f8fafd;
+            }
+            QLabel#non_home_shell_footer_label {
+                color: #33485f;
+            }
+            """
+        )
+
+    def add_content_widget(self, widget: QWidget, *, stretch: int = 0) -> None:
+        if self._single_column_layout is None:
+            raise RuntimeError("add_content_widget is only available in single_column mode.")
+        self._single_column_layout.addWidget(widget, stretch)
+
+    def add_column_widget(self, column_index: int, widget: QWidget, *, stretch: int = 0) -> None:
+        if self.layout_mode != "three_column":
+            raise RuntimeError("add_column_widget is only available in three_column mode.")
+        self._column_layouts[column_index].addWidget(widget, stretch)
+
+    def add_column_stretch(self, column_index: int, stretch: int = 1) -> None:
+        if self.layout_mode != "three_column":
+            raise RuntimeError("add_column_stretch is only available in three_column mode.")
+        self._column_layouts[column_index].addStretch(stretch)
+
+    def set_column_stretches(self, left: int, center: int, right: int) -> None:
+        if self.layout_mode != "three_column":
+            raise RuntimeError("set_column_stretches is only available in three_column mode.")
+        columns_layout = self.content_frame.layout()
+        assert isinstance(columns_layout, QHBoxLayout)
+        columns_layout.setStretch(0, left)
+        columns_layout.setStretch(1, center)
+        columns_layout.setStretch(2, right)
+
+    def column_count(self) -> int:
+        return len(self._column_layouts)
+
+    def set_footer_text(self, text: str | None) -> None:
+        if not text:
+            self.footer_label.clear()
+            self.footer_strip.setVisible(False)
+            return
+        self.footer_label.setText(text)
+        self.footer_strip.setVisible(True)
+
+    def set_footer_widget(self, widget: QWidget | None) -> None:
+        footer_layout = self.footer_strip.layout()
+        assert isinstance(footer_layout, QHBoxLayout)
+        if self._footer_widget is not None:
+            footer_layout.removeWidget(self._footer_widget)
+            self._footer_widget.setParent(None)
+            self._footer_widget = None
+        if widget is None:
+            return
+        widget.setParent(self.footer_strip)
+        footer_layout.insertWidget(0, widget, 1)
+        self._footer_widget = widget
+        self.footer_strip.setVisible(True)
+
+
+class SectionCard(QFrame):
+    """Reusable section card with optional tooltip affordance."""
+
+    def __init__(
+        self,
+        *,
+        title: str,
+        subtitle: str | None = None,
+        tooltip_text: str | None = None,
+        object_name: str = "section_card",
+        parent=None,
+    ) -> None:
+        super().__init__(parent)
+        self.setObjectName(object_name)
+        self.setProperty("sectionCard", "true")
+        if tooltip_text:
+            self.setToolTip(tooltip_text)
+
+        header_layout = QHBoxLayout()
+        header_layout.setContentsMargins(0, 0, 0, 0)
+        header_layout.setSpacing(6)
+
+        self.title_label = QLabel(title, self)
+        self.title_label.setProperty("sectionCardRole", "title")
+        header_layout.addWidget(self.title_label)
+
+        if tooltip_text:
+            self.tooltip_badge = QLabel("i", self)
+            self.tooltip_badge.setObjectName("section_card_tooltip_badge")
+            self.tooltip_badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.tooltip_badge.setToolTip(tooltip_text)
+            self.tooltip_badge.setFixedSize(16, 16)
+            header_layout.addWidget(self.tooltip_badge)
+        else:
+            self.tooltip_badge = None
+
+        header_layout.addStretch(1)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(14, 12, 14, 12)
+        layout.setSpacing(8)
+        layout.addLayout(header_layout)
+
+        if subtitle:
+            self.subtitle_label = QLabel(subtitle, self)
+            self.subtitle_label.setProperty("sectionCardRole", "subtitle")
+            self.subtitle_label.setWordWrap(True)
+            layout.addWidget(self.subtitle_label)
+        else:
+            self.subtitle_label = None
+
+        self.body_layout = QVBoxLayout()
+        self.body_layout.setContentsMargins(0, 0, 0, 0)
+        self.body_layout.setSpacing(8)
+        layout.addLayout(self.body_layout)
+
+        self.setStyleSheet(
+            """
+            QFrame[sectionCard="true"] {
+                border: 1px solid #c7d0dd;
+                border-radius: 9px;
+                background-color: #f8fafc;
+            }
+            QLabel[sectionCardRole="title"] {
+                font-size: 15px;
+                font-weight: 700;
+                color: #1f2f44;
+            }
+            QLabel[sectionCardRole="subtitle"] {
+                color: #455a72;
+            }
+            QLabel#section_card_tooltip_badge {
+                border: 1px solid #9fb1c8;
+                border-radius: 8px;
+                background-color: #eef3f9;
+                color: #2c4a69;
+                font-size: 11px;
+                font-weight: 700;
+            }
+            """
+        )
+
+
+class SessionStructureEditor(QWidget):
+    """Reusable session-structure editor widget."""
+
+    def __init__(
+        self,
+        document: ProjectDocument,
+        *,
+        object_name_prefix: str = "",
+        parent=None,
+    ) -> None:
         super().__init__(parent)
         self._document = document
 
         self.block_count_spin = QSpinBox(self)
-        self.block_count_spin.setObjectName("block_count_spin")
+        self.block_count_spin.setObjectName(_prefixed_object_name(object_name_prefix, "block_count_spin"))
         self.block_count_spin.setRange(1, 1000)
         self.block_count_spin.valueChanged.connect(self._apply_session_settings)
 
         self.session_seed_spin = QSpinBox(self)
-        self.session_seed_spin.setObjectName("session_seed_spin")
+        self.session_seed_spin.setObjectName(_prefixed_object_name(object_name_prefix, "session_seed_spin"))
         self.session_seed_spin.setRange(0, 2_147_483_647)
         self.session_seed_spin.valueChanged.connect(self._apply_session_settings)
 
         self.generate_seed_button = QPushButton("Generate New Seed", self)
-        self.generate_seed_button.setObjectName("generate_seed_button")
+        self.generate_seed_button.setObjectName(
+            _prefixed_object_name(object_name_prefix, "generate_seed_button")
+        )
         self.generate_seed_button.clicked.connect(self._generate_seed)
 
         self.randomize_checkbox = QCheckBox("Randomize conditions within each block", self)
-        self.randomize_checkbox.setObjectName("randomize_conditions_checkbox")
+        self.randomize_checkbox.setObjectName(
+            _prefixed_object_name(object_name_prefix, "randomize_conditions_checkbox")
+        )
         self.randomize_checkbox.stateChanged.connect(self._apply_session_settings)
 
         self.inter_condition_mode_combo = QComboBox(self)
-        self.inter_condition_mode_combo.setObjectName("inter_condition_mode_combo")
+        self.inter_condition_mode_combo.setObjectName(
+            _prefixed_object_name(object_name_prefix, "inter_condition_mode_combo")
+        )
         for mode in InterConditionMode:
             self.inter_condition_mode_combo.addItem(_transition_label(mode), userData=mode)
         self.inter_condition_mode_combo.currentIndexChanged.connect(
@@ -839,19 +1090,26 @@ class SessionStructurePage(QWidget):
         )
 
         self.break_seconds_spin = QDoubleSpinBox(self)
-        self.break_seconds_spin.setObjectName("inter_condition_break_seconds_spin")
+        self.break_seconds_spin.setObjectName(
+            _prefixed_object_name(object_name_prefix, "inter_condition_break_seconds_spin")
+        )
         self.break_seconds_spin.setRange(0.0, 3600.0)
         self.break_seconds_spin.setDecimals(1)
         self.break_seconds_spin.valueChanged.connect(self._apply_session_settings)
 
         self.continue_key_edit = QLineEdit(self)
-        self.continue_key_edit.setObjectName("continue_key_edit")
+        self.continue_key_edit.setObjectName(
+            _prefixed_object_name(object_name_prefix, "continue_key_edit")
+        )
         self.continue_key_edit.editingFinished.connect(self._apply_session_settings)
 
-        session_group = QGroupBox("Session Structure", self)
-        session_group.setObjectName("session_structure_card")
-        session_group.setMaximumWidth(760)
-        self.session_layout = QFormLayout(session_group)
+        self.session_card = SectionCard(
+            title="Session Structure",
+            subtitle="Configure block count, ordering strategy, and inter-condition transitions.",
+            object_name=_prefixed_object_name(object_name_prefix, "session_structure_card"),
+            parent=self,
+        )
+        self.session_layout = QFormLayout()
         self.session_layout.setVerticalSpacing(9)
         seed_layout = QHBoxLayout()
         seed_layout.addWidget(self.session_seed_spin, 1)
@@ -862,35 +1120,12 @@ class SessionStructurePage(QWidget):
         self.session_layout.addRow("Inter-condition mode", self.inter_condition_mode_combo)
         self.session_layout.addRow("Break seconds", self.break_seconds_spin)
         self.session_layout.addRow("Continue key", self.continue_key_edit)
-
-        centered_row = QHBoxLayout()
-        centered_row.addStretch(1)
-        centered_row.addWidget(session_group, 0, Qt.AlignmentFlag.AlignTop)
-        centered_row.addStretch(1)
+        self.session_card.body_layout.addLayout(self.session_layout)
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(24, 20, 24, 20)
-        layout.setSpacing(10)
-        layout.addLayout(centered_row)
-        layout.addStretch(1)
-
-        self.setStyleSheet(
-            """
-            QGroupBox#session_structure_card {
-                border: 1px solid #c7d0dd;
-                border-radius: 9px;
-                margin-top: 10px;
-                padding-top: 10px;
-                background-color: #f8fafc;
-            }
-            QGroupBox#session_structure_card::title {
-                subcontrol-origin: margin;
-                left: 12px;
-                padding: 0 4px;
-                font-weight: 600;
-            }
-            """
-        )
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        layout.addWidget(self.session_card)
 
         self._document.project_changed.connect(self.refresh)
         self.refresh()
@@ -917,16 +1152,8 @@ class SessionStructurePage(QWidget):
         mode = self.inter_condition_mode_combo.currentData()
         show_break_seconds = mode == InterConditionMode.FIXED_BREAK
         show_continue_key = mode == InterConditionMode.MANUAL_CONTINUE
-        _set_form_row_visible(
-            self.session_layout,
-            self.break_seconds_spin,
-            show_break_seconds,
-        )
-        _set_form_row_visible(
-            self.session_layout,
-            self.continue_key_edit,
-            show_continue_key,
-        )
+        _set_form_row_visible(self.session_layout, self.break_seconds_spin, show_break_seconds)
+        _set_form_row_visible(self.session_layout, self.continue_key_edit, show_continue_key)
         self.break_seconds_spin.setEnabled(show_break_seconds)
         self.continue_key_edit.setEnabled(show_continue_key)
 
@@ -957,12 +1184,53 @@ class SessionStructurePage(QWidget):
             _show_error_dialog(self, "Session Seed Error", error)
 
 
-class FixationCrossSettingsPage(QWidget):
-    """Fixation-task settings page."""
+class SessionStructurePage(QWidget):
+    """Session-level settings page."""
 
     def __init__(self, document: ProjectDocument, parent=None) -> None:
         super().__init__(parent)
+        self.editor = SessionStructureEditor(document, parent=self)
+        self.shell = NonHomePageShell(
+            title="Session Structure",
+            subtitle="Configure block sequencing and inter-condition transition flow.",
+            layout_mode="single_column",
+            parent=self,
+        )
+        self.shell.add_content_widget(self.editor)
+        self.shell.add_content_widget(QWidget(self.shell), stretch=1)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(self.shell)
+
+        self.block_count_spin = self.editor.block_count_spin
+        self.session_seed_spin = self.editor.session_seed_spin
+        self.generate_seed_button = self.editor.generate_seed_button
+        self.randomize_checkbox = self.editor.randomize_checkbox
+        self.inter_condition_mode_combo = self.editor.inter_condition_mode_combo
+        self.break_seconds_spin = self.editor.break_seconds_spin
+        self.continue_key_edit = self.editor.continue_key_edit
+        self.session_layout = self.editor.session_layout
+
+    def refresh(self) -> None:
+        self.editor.refresh()
+
+
+class FixationSettingsEditor(QWidget):
+    """Reusable fixation-task settings editor."""
+
+    def __init__(
+        self,
+        document: ProjectDocument,
+        *,
+        schedule_row_behavior: str = "hide",
+        parent=None,
+    ) -> None:
+        super().__init__(parent)
+        if schedule_row_behavior not in {"hide", "disable"}:
+            raise ValueError(f"Unsupported schedule_row_behavior: {schedule_row_behavior}")
         self._document = document
+        self._schedule_row_behavior = schedule_row_behavior
 
         self.fixation_enabled_checkbox = QCheckBox("Enable fixation color changes per condition", self)
         self.fixation_enabled_checkbox.setObjectName("fixation_enabled_checkbox")
@@ -1100,11 +1368,13 @@ class FixationCrossSettingsPage(QWidget):
 
         feasibility_card = QFrame(self.fixation_panel)
         feasibility_card.setObjectName("fixation_feasibility_card")
+        feasibility_card.setToolTip(_FIXATION_FEASIBILITY_TOOLTIP_TEXT)
         feasibility_layout = QVBoxLayout(feasibility_card)
         feasibility_layout.setContentsMargins(10, 8, 10, 8)
         feasibility_layout.setSpacing(4)
         self.fixation_feasibility_label = QLabel(feasibility_card)
         self.fixation_feasibility_label.setObjectName("fixation_feasibility_label")
+        self.fixation_feasibility_label.setToolTip(_FIXATION_FEASIBILITY_TOOLTIP_TEXT)
         self.fixation_feasibility_label.setWordWrap(True)
         feasibility_layout.addWidget(self.fixation_feasibility_label)
 
@@ -1224,26 +1494,40 @@ class FixationCrossSettingsPage(QWidget):
             group.setEnabled(fixation_enabled)
 
         randomized_mode = self.target_count_mode_combo.currentData() == "randomized"
-        _set_form_row_visible(
-            self.fixation_behavior_layout,
-            self.changes_per_sequence_spin,
-            not randomized_mode,
-        )
-        _set_form_row_visible(
-            self.fixation_behavior_layout,
-            self.target_count_min_spin,
-            randomized_mode,
-        )
-        _set_form_row_visible(
-            self.fixation_behavior_layout,
-            self.target_count_max_spin,
-            randomized_mode,
-        )
-        _set_form_row_visible(
-            self.fixation_behavior_layout,
-            self.no_repeat_count_checkbox,
-            randomized_mode,
-        )
+        if self._schedule_row_behavior == "hide":
+            _set_form_row_visible(
+                self.fixation_behavior_layout,
+                self.changes_per_sequence_spin,
+                not randomized_mode,
+            )
+            _set_form_row_visible(
+                self.fixation_behavior_layout,
+                self.target_count_min_spin,
+                randomized_mode,
+            )
+            _set_form_row_visible(
+                self.fixation_behavior_layout,
+                self.target_count_max_spin,
+                randomized_mode,
+            )
+            _set_form_row_visible(
+                self.fixation_behavior_layout,
+                self.no_repeat_count_checkbox,
+                randomized_mode,
+            )
+        else:
+            _set_form_row_visible(self.fixation_behavior_layout, self.changes_per_sequence_spin, True)
+            _set_form_row_visible(self.fixation_behavior_layout, self.target_count_min_spin, True)
+            _set_form_row_visible(self.fixation_behavior_layout, self.target_count_max_spin, True)
+            _set_form_row_visible(
+                self.fixation_behavior_layout,
+                self.no_repeat_count_checkbox,
+                True,
+            )
+            self.changes_per_sequence_spin.setEnabled(fixation_enabled and not randomized_mode)
+            self.target_count_min_spin.setEnabled(fixation_enabled and randomized_mode)
+            self.target_count_max_spin.setEnabled(fixation_enabled and randomized_mode)
+            self.no_repeat_count_checkbox.setEnabled(fixation_enabled and randomized_mode)
 
         accuracy_enabled = fixation_enabled and self.fixation_accuracy_checkbox.isChecked()
         self.fixation_response_group.setVisible(accuracy_enabled)
@@ -1319,6 +1603,13 @@ class FixationCrossSettingsPage(QWidget):
         except Exception as error:
             _show_error_dialog(self, "Fixation Settings Error", error)
             self.refresh()
+
+
+class FixationCrossSettingsPage(FixationSettingsEditor):
+    """Fixation-task settings page."""
+
+    def __init__(self, document: ProjectDocument, parent=None) -> None:
+        super().__init__(document, schedule_row_behavior="hide", parent=parent)
 
 
 class AssetsPage(QWidget):
@@ -1502,22 +1793,36 @@ class AssetsPage(QWidget):
             dialog.close()
 
 
-class RunPage(QWidget):
-    """Session compile and launch page with automatic preflight checks."""
+class RuntimeSettingsEditor(QWidget):
+    """Reusable runtime settings editor for refresh/display/serial controls."""
 
-    def __init__(self, document: ProjectDocument, parent=None) -> None:
+    def __init__(
+        self,
+        document: ProjectDocument,
+        *,
+        object_name_prefix: str = "",
+        fullscreen_state_getter: Callable[[], bool] | None = None,
+        fullscreen_state_setter: Callable[[bool], None] | None = None,
+        parent=None,
+    ) -> None:
         super().__init__(parent)
         self._document = document
+        self._fullscreen_state_getter = fullscreen_state_getter
+        self._fullscreen_state_setter = fullscreen_state_setter
         self._runtime_background_refresh_guard = False
 
         self.refresh_hz_spin = QDoubleSpinBox(self)
-        self.refresh_hz_spin.setObjectName("refresh_hz_spin")
+        self.refresh_hz_spin.setObjectName(
+            _prefixed_object_name(object_name_prefix, "refresh_hz_spin")
+        )
         self.refresh_hz_spin.setRange(1.0, 500.0)
         self.refresh_hz_spin.setDecimals(2)
         self.refresh_hz_spin.valueChanged.connect(self._apply_refresh_hz)
 
         self.runtime_background_color_combo = QComboBox(self)
-        self.runtime_background_color_combo.setObjectName("runtime_background_color_combo")
+        self.runtime_background_color_combo.setObjectName(
+            _prefixed_object_name(object_name_prefix, "runtime_background_color_combo")
+        )
         for label, background_hex in _RUNTIME_BACKGROUND_COLOR_PRESETS:
             self.runtime_background_color_combo.addItem(label, userData=background_hex)
         self.runtime_background_color_combo.currentIndexChanged.connect(
@@ -1527,89 +1832,70 @@ class RunPage(QWidget):
             "Used during FPVS image presentation.",
             self,
         )
-        self.runtime_background_scope_label.setObjectName("runtime_background_scope_label")
+        self.runtime_background_scope_label.setObjectName(
+            _prefixed_object_name(object_name_prefix, "runtime_background_scope_label")
+        )
         self.runtime_background_scope_label.setWordWrap(True)
 
-        self.display_index_edit = QLineEdit(self)
-        self.display_index_edit.setObjectName("display_index_edit")
-        self.display_index_edit.setPlaceholderText("Leave blank for default display")
-
-        self.engine_name_value = QLabel("psychopy", self)
-        self.engine_name_value.setObjectName("engine_name_value")
-
         self.serial_port_edit = QLineEdit(self)
-        self.serial_port_edit.setObjectName("serial_port_edit")
+        self.serial_port_edit.setObjectName(
+            _prefixed_object_name(object_name_prefix, "serial_port_edit")
+        )
         self.serial_port_edit.setPlaceholderText("COM3")
         self.serial_port_edit.editingFinished.connect(self._apply_serial_settings)
 
         self.serial_baudrate_spin = QSpinBox(self)
-        self.serial_baudrate_spin.setObjectName("serial_baudrate_spin")
+        self.serial_baudrate_spin.setObjectName(
+            _prefixed_object_name(object_name_prefix, "serial_baudrate_spin")
+        )
         self.serial_baudrate_spin.setRange(1, 2_000_000)
         self.serial_baudrate_spin.valueChanged.connect(self._apply_serial_settings)
 
-        self.test_mode_checkbox = QCheckBox("Launch the currently supported alpha test-mode path", self)
-        self.test_mode_checkbox.setObjectName("test_mode_checkbox")
+        self.test_mode_checkbox = QCheckBox(
+            "Launch the currently supported alpha test-mode path",
+            self,
+        )
+        self.test_mode_checkbox.setObjectName(
+            _prefixed_object_name(object_name_prefix, "test_mode_checkbox")
+        )
         self.test_mode_checkbox.setChecked(True)
         self.test_mode_checkbox.setEnabled(False)
+
         self.fullscreen_checkbox = QCheckBox("Present launched playback fullscreen", self)
-        self.fullscreen_checkbox.setObjectName("fullscreen_checkbox")
-        self.fullscreen_checkbox.setChecked(True)
-
-        self.compile_button = QPushButton("Compile Session", self)
-        self.compile_button.setObjectName("compile_session_button")
-        self.compile_button.clicked.connect(self.compile_session)
-        self.launch_button = QPushButton("Launch Experiment", self)
-        self.launch_button.setObjectName("launch_test_session_button")
-        self.launch_button.setProperty("launchActionRole", "primary")
-        self.launch_button.setToolTip(
-            "Launch Experiment on the current alpha test-mode runtime path."
+        self.fullscreen_checkbox.setObjectName(
+            _prefixed_object_name(object_name_prefix, "fullscreen_checkbox")
         )
-        self.launch_button.clicked.connect(self.launch_test_session)
+        self.fullscreen_checkbox.stateChanged.connect(self._on_fullscreen_toggled)
 
-        self.summary_text = QPlainTextEdit(self)
-        self.summary_text.setObjectName("session_summary_text")
-        self.summary_text.setReadOnly(True)
-        self.summary_text.setMaximumBlockCount(500)
-
-        runtime_group = QGroupBox("Runtime Settings", self)
-        runtime_layout = QFormLayout(runtime_group)
-        runtime_layout.addRow("Refresh (Hz)", self.refresh_hz_spin)
-        runtime_layout.addRow("Stimulus Background", self.runtime_background_color_combo)
-        runtime_layout.addRow("", self.runtime_background_scope_label)
-        runtime_layout.addRow("Display Index", self.display_index_edit)
-        runtime_layout.addRow("Engine", self.engine_name_value)
-        runtime_layout.addRow("Serial Port", self.serial_port_edit)
-        runtime_layout.addRow("Serial Baud Rate", self.serial_baudrate_spin)
-        runtime_layout.addRow("", self.test_mode_checkbox)
-        runtime_layout.addRow("", self.fullscreen_checkbox)
-
-        button_layout = QHBoxLayout()
-        button_layout.addWidget(self.compile_button)
-        button_layout.addWidget(self.launch_button)
+        self.card = SectionCard(
+            title="Runtime Settings",
+            subtitle="Refresh, background, fullscreen, and serial trigger controls.",
+            object_name=_prefixed_object_name(object_name_prefix, "runtime_settings_card"),
+            parent=self,
+        )
+        self.form_layout = QFormLayout()
+        self.form_layout.addRow("Refresh (Hz)", self.refresh_hz_spin)
+        self.form_layout.addRow("Stimulus Background", self.runtime_background_color_combo)
+        self.form_layout.addRow("", self.runtime_background_scope_label)
+        self.form_layout.addRow("Serial Port", self.serial_port_edit)
+        self.form_layout.addRow("Serial Baud Rate", self.serial_baudrate_spin)
+        self.form_layout.addRow("", self.test_mode_checkbox)
+        self.form_layout.addRow("", self.fullscreen_checkbox)
+        self.card.body_layout.addLayout(self.form_layout)
 
         layout = QVBoxLayout(self)
-        layout.addWidget(runtime_group)
-        layout.addLayout(button_layout)
-        layout.addWidget(self.summary_text, 1)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(self.card)
 
         self._document.project_changed.connect(self.refresh)
-        self._document.session_plan_changed.connect(self._refresh_summary)
         self.refresh()
 
     def current_refresh_hz(self) -> float:
         return self.refresh_hz_spin.value()
 
-    def current_display_index(self) -> int | None:
-        raw_value = self.display_index_edit.text().strip()
-        if not raw_value:
-            return None
-        try:
-            display_index = int(raw_value)
-        except ValueError as exc:
-            raise DocumentError("Display index must be blank or a non-negative integer.") from exc
-        if display_index < 0:
-            raise DocumentError("Display index must be blank or a non-negative integer.")
-        return display_index
+    def set_fullscreen_checked(self, checked: bool) -> None:
+        with QSignalBlocker(self.fullscreen_checkbox):
+            self.fullscreen_checkbox.setChecked(checked)
 
     def refresh(self) -> None:
         background_color = self._normalized_runtime_background_color()
@@ -1625,7 +1911,12 @@ class RunPage(QWidget):
             self.serial_port_edit.setText(self._document.project.settings.triggers.serial_port or "")
         with QSignalBlocker(self.serial_baudrate_spin):
             self.serial_baudrate_spin.setValue(self._document.project.settings.triggers.baudrate)
-        self._refresh_summary()
+        target_fullscreen_value = (
+            self._fullscreen_state_getter()
+            if self._fullscreen_state_getter is not None
+            else self.fullscreen_checkbox.isChecked()
+        )
+        self.set_fullscreen_checked(target_fullscreen_value)
 
     def _normalized_runtime_background_color(self) -> str:
         background_color = self._document.project.settings.display.background_color
@@ -1643,6 +1934,377 @@ class RunPage(QWidget):
         finally:
             self._runtime_background_refresh_guard = False
         return "#000000"
+
+    def _apply_refresh_hz(self) -> None:
+        try:
+            self._document.update_display_settings(preferred_refresh_hz=self.refresh_hz_spin.value())
+        except Exception as error:
+            _show_error_dialog(self, "Refresh Setting Error", error)
+            self.refresh()
+
+    def _apply_runtime_background_color(self) -> None:
+        selected_background_color = self.runtime_background_color_combo.currentData()
+        if not isinstance(selected_background_color, str):
+            return
+        try:
+            self._document.update_display_settings(background_color=selected_background_color)
+        except Exception as error:
+            _show_error_dialog(self, "Display Settings Error", error)
+            self.refresh()
+
+    def _apply_serial_settings(self) -> None:
+        serial_port = self.serial_port_edit.text().strip() or None
+        try:
+            self._document.update_trigger_settings(
+                serial_port=serial_port,
+                baudrate=self.serial_baudrate_spin.value(),
+            )
+        except Exception as error:
+            _show_error_dialog(self, "Serial Settings Error", error)
+            self.refresh()
+
+    def _on_fullscreen_toggled(self) -> None:
+        if self._fullscreen_state_setter is not None:
+            self._fullscreen_state_setter(self.fullscreen_checkbox.isChecked())
+
+
+class AssetsReadinessEditor(QWidget):
+    """Compact assets readiness snapshot and actions."""
+
+    def __init__(
+        self,
+        document: ProjectDocument,
+        *,
+        object_name_prefix: str = "",
+        parent=None,
+    ) -> None:
+        super().__init__(parent)
+        self._document = document
+        self._variant_checkboxes: dict[StimulusVariant, QCheckBox] = {}
+
+        self.card = SectionCard(
+            title="Assets Readiness",
+            subtitle="Supported variants, inspection status, and materialization actions.",
+            object_name=_prefixed_object_name(object_name_prefix, "assets_readiness_card"),
+            parent=self,
+        )
+
+        variants_row = QWidget(self.card)
+        variants_layout = QHBoxLayout(variants_row)
+        variants_layout.setContentsMargins(0, 0, 0, 0)
+        variants_layout.setSpacing(8)
+        for variant in StimulusVariant:
+            checkbox = QCheckBox(_variant_label(variant), variants_row)
+            checkbox.setObjectName(
+                _prefixed_object_name(object_name_prefix, f"variant_checkbox_{variant.value}")
+            )
+            checkbox.stateChanged.connect(self._apply_supported_variants)
+            if variant == StimulusVariant.ORIGINAL:
+                checkbox.setEnabled(False)
+            self._variant_checkboxes[variant] = checkbox
+            variants_layout.addWidget(checkbox)
+
+        self.condition_rows_value = QLabel(self.card)
+        self.condition_rows_value.setObjectName(
+            _prefixed_object_name(object_name_prefix, "assets_condition_rows_value")
+        )
+        self.manifest_status_value = QLabel(self.card)
+        self.manifest_status_value.setObjectName(
+            _prefixed_object_name(object_name_prefix, "assets_manifest_status_value")
+        )
+        self.manifest_status_value.setWordWrap(True)
+        self.materialization_status_value = QLabel(self.card)
+        self.materialization_status_value.setObjectName(
+            _prefixed_object_name(object_name_prefix, "assets_materialization_status_value")
+        )
+        self.materialization_status_value.setWordWrap(True)
+
+        self.refresh_button = QPushButton("Refresh Inspection", self.card)
+        self.refresh_button.setObjectName(
+            _prefixed_object_name(object_name_prefix, "assets_refresh_button")
+        )
+        self.refresh_button.clicked.connect(self._refresh_inspection)
+        self.materialize_button = QPushButton("Materialize Supported Variants", self.card)
+        self.materialize_button.setObjectName(
+            _prefixed_object_name(object_name_prefix, "materialize_assets_button")
+        )
+        self.materialize_button.clicked.connect(self._materialize_assets)
+
+        actions_row = QWidget(self.card)
+        actions_layout = QHBoxLayout(actions_row)
+        actions_layout.setContentsMargins(0, 0, 0, 0)
+        actions_layout.setSpacing(8)
+        actions_layout.addWidget(self.refresh_button)
+        actions_layout.addWidget(self.materialize_button)
+
+        self.card.body_layout.addWidget(variants_row)
+        self.card.body_layout.addWidget(self.condition_rows_value)
+        self.card.body_layout.addWidget(self.manifest_status_value)
+        self.card.body_layout.addWidget(self.materialization_status_value)
+        self.card.body_layout.addWidget(actions_row)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(self.card)
+
+        self._document.project_changed.connect(self.refresh)
+        self._document.manifest_changed.connect(self.refresh)
+        self.refresh()
+
+    def refresh(self) -> None:
+        supported_variants = set(self._document.project.settings.supported_variants)
+        for variant, checkbox in self._variant_checkboxes.items():
+            with QSignalBlocker(checkbox):
+                checkbox.setChecked(variant in supported_variants)
+
+        rows = self._document.condition_rows()
+        self.condition_rows_value.setText(f"Condition stimulus rows: {len(rows)}")
+        manifest = self._document.manifest
+        if manifest is None:
+            self.manifest_status_value.setText("Manifest status: no manifest loaded yet.")
+        else:
+            self.manifest_status_value.setText(
+                "Manifest status: "
+                f"{len(manifest.sets)} set(s), generated {manifest.generated_at.isoformat()}."
+            )
+        refresh_hz = self._document.project.settings.display.preferred_refresh_hz or 60.0
+        validation = self._document.validation_report(refresh_hz=refresh_hz)
+        issue_count = len(validation.issues)
+        if issue_count == 0:
+            self.materialization_status_value.setText(
+                "Materialization readiness: clear validation checks."
+            )
+        else:
+            self.materialization_status_value.setText(
+                f"Materialization readiness: {issue_count} validation issue(s) need attention."
+            )
+
+    def _apply_supported_variants(self) -> None:
+        variants = [
+            variant
+            for variant, checkbox in self._variant_checkboxes.items()
+            if checkbox.isChecked()
+        ]
+        try:
+            self._document.set_supported_variants(variants)
+        except Exception as error:
+            _show_error_dialog(self, "Supported Variants Error", error)
+            self.refresh()
+
+    def _refresh_inspection(self) -> None:
+        try:
+            self._run_with_progress(
+                "Refreshing source inspection...",
+                self._document.refresh_stimulus_inspection,
+            )
+        except Exception as error:
+            _show_error_dialog(self, "Inspection Error", error)
+
+    def _materialize_assets(self) -> None:
+        try:
+            self._run_with_progress(
+                "Materializing project assets...",
+                self._document.materialize_assets,
+            )
+        except Exception as error:
+            _show_error_dialog(self, "Materialization Error", error)
+
+    def _run_with_progress(self, label: str, callback: Callable[[], object]) -> None:
+        dialog = QProgressDialog(label, "", 0, 0, self)
+        dialog.setCancelButton(None)
+        dialog.setWindowModality(Qt.WindowModality.WindowModal)
+        dialog.setMinimumDuration(0)
+        dialog.show()
+        QApplication.processEvents()
+        try:
+            callback()
+        finally:
+            dialog.close()
+
+
+class SetupDashboardPage(QWidget):
+    """Curated setup dashboard that surfaces key controls across tabs."""
+
+    def __init__(
+        self,
+        document: ProjectDocument,
+        *,
+        fullscreen_state_getter: Callable[[], bool] | None = None,
+        fullscreen_state_setter: Callable[[bool], None] | None = None,
+        parent=None,
+    ) -> None:
+        super().__init__(parent)
+        self.shell = NonHomePageShell(
+            title="Setup Dashboard",
+            subtitle="Configure session structure, fixation behavior, runtime, and assets from one view.",
+            layout_mode="three_column",
+            parent=self,
+        )
+        self.shell.set_column_stretches(3, 4, 3)
+        self.shell.set_footer_text(
+            "Dashboard changes update the same project state used by each dedicated tab."
+        )
+
+        self.session_structure_editor = SessionStructureEditor(
+            document,
+            object_name_prefix="dashboard_",
+            parent=self.shell,
+        )
+        self.fixation_settings_editor = FixationSettingsEditor(
+            document,
+            schedule_row_behavior="disable",
+            parent=self.shell,
+        )
+        self.runtime_settings_editor = RuntimeSettingsEditor(
+            document,
+            object_name_prefix="dashboard_",
+            fullscreen_state_getter=fullscreen_state_getter,
+            fullscreen_state_setter=fullscreen_state_setter,
+            parent=self.shell,
+        )
+        self.assets_readiness_editor = AssetsReadinessEditor(
+            document,
+            object_name_prefix="dashboard_",
+            parent=self.shell,
+        )
+
+        self.shell.add_column_widget(0, self.session_structure_editor)
+        self.shell.add_column_widget(1, self.fixation_settings_editor)
+        self.shell.add_column_widget(2, self.runtime_settings_editor)
+        self.shell.add_column_widget(2, self.assets_readiness_editor)
+        self.shell.add_column_stretch(0)
+        self.shell.add_column_stretch(1)
+        self.shell.add_column_stretch(2)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(self.shell)
+
+    def sync_fullscreen_checkbox(self, checked: bool) -> None:
+        self.runtime_settings_editor.set_fullscreen_checked(checked)
+
+
+class RunPage(QWidget):
+    """Session compile and launch page with automatic preflight checks."""
+
+    def __init__(
+        self,
+        document: ProjectDocument,
+        *,
+        fullscreen_state_getter: Callable[[], bool] | None = None,
+        fullscreen_state_setter: Callable[[bool], None] | None = None,
+        parent=None,
+    ) -> None:
+        super().__init__(parent)
+        self._document = document
+
+        self.runtime_settings_editor = RuntimeSettingsEditor(
+            document,
+            fullscreen_state_getter=fullscreen_state_getter,
+            fullscreen_state_setter=fullscreen_state_setter,
+            parent=self,
+        )
+        self.refresh_hz_spin = self.runtime_settings_editor.refresh_hz_spin
+        self.runtime_background_color_combo = self.runtime_settings_editor.runtime_background_color_combo
+        self.runtime_background_scope_label = self.runtime_settings_editor.runtime_background_scope_label
+        self.serial_port_edit = self.runtime_settings_editor.serial_port_edit
+        self.serial_baudrate_spin = self.runtime_settings_editor.serial_baudrate_spin
+        self.test_mode_checkbox = self.runtime_settings_editor.test_mode_checkbox
+        self.fullscreen_checkbox = self.runtime_settings_editor.fullscreen_checkbox
+
+        self.display_index_edit = QLineEdit(self)
+        self.display_index_edit.setObjectName("display_index_edit")
+        self.display_index_edit.setPlaceholderText("Leave blank for default display")
+
+        self.engine_name_value = QLabel("psychopy", self)
+        self.engine_name_value.setObjectName("engine_name_value")
+
+        display_card = SectionCard(
+            title="Display & Engine",
+            subtitle="Display index remains editable only on this dedicated Run / Runtime page.",
+            object_name="run_display_card",
+            parent=self,
+        )
+        display_layout = QFormLayout()
+        display_layout.addRow("Display Index", self.display_index_edit)
+        display_layout.addRow("Engine", self.engine_name_value)
+        display_card.body_layout.addLayout(display_layout)
+
+        self.compile_button = QPushButton("Compile Session", self)
+        self.compile_button.setObjectName("compile_session_button")
+        self.compile_button.clicked.connect(self.compile_session)
+        self.launch_button = QPushButton("Launch Experiment", self)
+        self.launch_button.setObjectName("launch_test_session_button")
+        self.launch_button.setProperty("launchActionRole", "primary")
+        self.launch_button.setToolTip(
+            "Launch Experiment on the current alpha test-mode runtime path."
+        )
+        self.launch_button.clicked.connect(self.launch_test_session)
+
+        button_row = QWidget(self)
+        button_layout = QHBoxLayout(button_row)
+        button_layout.setContentsMargins(0, 0, 0, 0)
+        button_layout.setSpacing(8)
+        button_layout.addWidget(self.compile_button)
+        button_layout.addWidget(self.launch_button)
+        button_layout.addStretch(1)
+
+        self.summary_text = QPlainTextEdit(self)
+        self.summary_text.setObjectName("session_summary_text")
+        self.summary_text.setReadOnly(True)
+        self.summary_text.setMaximumBlockCount(500)
+
+        summary_card = SectionCard(
+            title="Session Summary",
+            subtitle="Compile and launch feedback appears here.",
+            object_name="run_summary_card",
+            parent=self,
+        )
+        summary_card.body_layout.addWidget(self.summary_text)
+
+        self.shell = NonHomePageShell(
+            title="Run / Runtime",
+            subtitle="Compile, validate, and launch using the supported alpha test-mode path.",
+            layout_mode="single_column",
+            parent=self,
+        )
+        self.shell.add_content_widget(self.runtime_settings_editor)
+        self.shell.add_content_widget(display_card)
+        self.shell.add_content_widget(button_row)
+        self.shell.add_content_widget(summary_card, stretch=1)
+        self.shell.set_footer_text(
+            "Display index is edited here only; dashboard runtime controls intentionally omit it."
+        )
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(self.shell)
+
+        self._document.project_changed.connect(self.refresh)
+        self._document.session_plan_changed.connect(self._refresh_summary)
+        self.refresh()
+
+    def current_refresh_hz(self) -> float:
+        return self.runtime_settings_editor.current_refresh_hz()
+
+    def sync_fullscreen_checkbox(self, checked: bool) -> None:
+        self.runtime_settings_editor.set_fullscreen_checked(checked)
+
+    def current_display_index(self) -> int | None:
+        raw_value = self.display_index_edit.text().strip()
+        if not raw_value:
+            return None
+        try:
+            display_index = int(raw_value)
+        except ValueError as exc:
+            raise DocumentError("Display index must be blank or a non-negative integer.") from exc
+        if display_index < 0:
+            raise DocumentError("Display index must be blank or a non-negative integer.")
+        return display_index
+
+    def refresh(self) -> None:
+        self.runtime_settings_editor.refresh()
+        self._refresh_summary()
 
     def compile_session(self) -> None:
         try:
@@ -1736,34 +2398,6 @@ class RunPage(QWidget):
             )
             if answer == QMessageBox.StandardButton.Yes:
                 return participant_number
-
-    def _apply_refresh_hz(self) -> None:
-        try:
-            self._document.update_display_settings(preferred_refresh_hz=self.refresh_hz_spin.value())
-        except Exception as error:
-            _show_error_dialog(self, "Refresh Setting Error", error)
-            self.refresh()
-
-    def _apply_runtime_background_color(self) -> None:
-        selected_background_color = self.runtime_background_color_combo.currentData()
-        if not isinstance(selected_background_color, str):
-            return
-        try:
-            self._document.update_display_settings(background_color=selected_background_color)
-        except Exception as error:
-            _show_error_dialog(self, "Display Settings Error", error)
-            self.refresh()
-
-    def _apply_serial_settings(self) -> None:
-        serial_port = self.serial_port_edit.text().strip() or None
-        try:
-            self._document.update_trigger_settings(
-                serial_port=serial_port,
-                baudrate=self.serial_baudrate_spin.value(),
-            )
-        except Exception as error:
-            _show_error_dialog(self, "Serial Settings Error", error)
-            self.refresh()
 
     def _refresh_summary(self) -> None:
         session_plan = self._document.last_session_plan
@@ -2527,7 +3161,19 @@ class StudioMainWindow(QMainWindow):
         self.session_structure_page = SessionStructurePage(document, self)
         self.fixation_cross_settings_page = FixationCrossSettingsPage(document, self)
         self.assets_page = AssetsPage(document, self)
-        self.run_page = RunPage(document, self)
+        self._runtime_fullscreen_ui_state = True
+        self.run_page = RunPage(
+            document,
+            fullscreen_state_getter=self._runtime_fullscreen_state,
+            fullscreen_state_setter=self._set_runtime_fullscreen_state,
+            parent=self,
+        )
+        self.setup_dashboard_page = SetupDashboardPage(
+            document,
+            fullscreen_state_getter=self._runtime_fullscreen_state,
+            fullscreen_state_setter=self._set_runtime_fullscreen_state,
+            parent=self,
+        )
         self.home_page = HomePage(
             document,
             self.run_page,
@@ -2541,6 +3187,7 @@ class StudioMainWindow(QMainWindow):
         self.main_tabs.addTab(self.home_page, "Home")
         self.main_tabs.addTab(self.project_page, "Project")
         self.main_tabs.addTab(self.conditions_page, "Conditions")
+        self.main_tabs.addTab(self.setup_dashboard_page, "Setup Dashboard")
         self.main_tabs.addTab(self.session_structure_page, "Session Structure")
         self.main_tabs.addTab(self.fixation_cross_settings_page, "Fixation Cross Settings")
         self.main_tabs.addTab(self.assets_page, "Assets / Preprocessing")
@@ -2574,6 +3221,18 @@ class StudioMainWindow(QMainWindow):
         self.document.saved.connect(lambda: self.statusBar().showMessage("Project saved.", 3000))
         self.statusBar().messageChanged.connect(self.home_page.update_status_bar_message)
         self.home_page.update_status_bar_message(self.statusBar().currentMessage())
+
+    def _runtime_fullscreen_state(self) -> bool:
+        return self._runtime_fullscreen_ui_state
+
+    def _set_runtime_fullscreen_state(self, checked: bool) -> None:
+        checked_bool = bool(checked)
+        if self._runtime_fullscreen_ui_state == checked_bool:
+            return
+        self._runtime_fullscreen_ui_state = checked_bool
+        self.run_page.sync_fullscreen_checkbox(checked_bool)
+        self.setup_dashboard_page.sync_fullscreen_checkbox(checked_bool)
+        self.home_page.refresh()
 
     def _apply_chrome_styles(self) -> None:
         self.setStyleSheet(
