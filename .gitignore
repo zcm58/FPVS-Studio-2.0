@@ -14,3 +14,5 @@ dist/
 *.log
 pytest-cache-files-*/
 tests/.tmp/
+
+.tmp/
