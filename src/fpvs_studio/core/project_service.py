@@ -25,6 +25,7 @@ from fpvs_studio.core.paths import (
     stimulus_derived_root,
     stimulus_manifest_path,
     stimulus_source_root,
+    validate_project_id,
 )
 from fpvs_studio.core.serialization import save_project_file
 from fpvs_studio.core.template_library import DEFAULT_TEMPLATE_ID, get_template
@@ -49,6 +50,7 @@ def build_starter_project(
 
     template = get_template(template_id)
     project_id = slugify_project_name(project_name)
+    validate_project_id(project_id)
     settings = ProjectSettings()
     if condition_template_profile is not None:
         settings = apply_condition_template_profile_to_settings(
@@ -76,6 +78,7 @@ def create_project(
 ) -> ProjectScaffold:
     """Create the on-disk folder structure and starter files for a new project."""
 
+    validate_project_id(slugify_project_name(project_name))
     project = build_starter_project(
         project_name,
         template_id=template_id,

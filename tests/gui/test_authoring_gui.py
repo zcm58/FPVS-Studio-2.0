@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -11,6 +12,7 @@ from PySide6.QtCore import QEvent, QPoint, Qt
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
+    QDialogButtonBox,
     QGroupBox,
     QLabel,
     QListWidget,
@@ -285,6 +287,28 @@ def test_create_project_dialog_prefills_saved_root_parent_directory(
     assert captured_parent_dirs == [str(root_dir)]
 
 
+def test_show_create_project_dialog_normalizes_legacy_template_library(
+    controller: StudioController,
+    monkeypatch,
+) -> None:
+    root_dir = controller.load_fpvs_root_dir()
+    assert root_dir is not None
+
+    legacy_path = root_dir / "condition_templates.json"
+    legacy_path.write_text('{"profiles":[]}', encoding="utf-8")
+    assert legacy_path.is_file()
+    assert not (root_dir / "templates" / "condition_templates.json").exists()
+
+    def _capture_exec(_dialog: CreateProjectDialog) -> int:
+        return int(CreateProjectDialog.DialogCode.Rejected)
+
+    monkeypatch.setattr(CreateProjectDialog, "exec", _capture_exec)
+    controller.show_create_project_dialog()
+
+    assert not legacy_path.exists()
+    assert (root_dir / "templates" / "condition_templates.json").is_file()
+
+
 def test_show_welcome_requires_fpvs_root_and_cancel_path_exits_app(
     qapp,
     monkeypatch,
@@ -360,7 +384,7 @@ def test_invalid_saved_root_is_reprompted_on_startup(
     deleted_root = tmp_path / "missing-root"
     deleted_root.mkdir(parents=True, exist_ok=True)
     controller.save_fpvs_root_dir(deleted_root)
-    deleted_root.rmdir()
+    shutil.rmtree(deleted_root)
 
     replacement_root = tmp_path / "replacement-root"
     replacement_root.mkdir(parents=True, exist_ok=True)
@@ -540,6 +564,39 @@ def test_create_project_dialog_requires_condition_template_selection(
     assert any("condition template profile" in message.lower() for message in messages)
 
     dialog.condition_profile_combo.setCurrentIndex(0)
+    dialog.accept()
+    assert dialog.result() == int(dialog.DialogCode.Accepted)
+
+
+def test_create_project_dialog_rejects_reserved_project_name(
+    qtbot,
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    dialog = CreateProjectDialog(condition_template_profiles=built_in_condition_template_profiles())
+    qtbot.addWidget(dialog)
+    messages: list[str] = []
+    monkeypatch.setattr(
+        "fpvs_studio.gui.create_project_dialog.QMessageBox.warning",
+        lambda _parent, _title, message: messages.append(message),
+    )
+
+    ok_button = dialog.button_box.button(QDialogButtonBox.StandardButton.Ok)
+    assert ok_button is not None
+
+    dialog.project_name_edit.setText("Templates")
+    dialog.project_root_edit.setText(str(tmp_path))
+    dialog.condition_profile_combo.setCurrentIndex(0)
+    assert dialog.project_name_validation_label.text() != ""
+    assert "reserved root folder 'templates'" in dialog.project_name_validation_label.text().lower()
+    assert ok_button.isEnabled() is False
+
+    dialog.accept()
+    assert dialog.result() != int(dialog.DialogCode.Accepted)
+    assert any("reserved root folder 'templates'" in message.lower() for message in messages)
+
+    dialog.project_name_edit.setText("Valid Project")
+    assert ok_button.isEnabled() is True
     dialog.accept()
     assert dialog.result() == int(dialog.DialogCode.Accepted)
 

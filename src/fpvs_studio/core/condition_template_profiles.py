@@ -15,7 +15,11 @@ from fpvs_studio.core.models import (
     FixationTaskSettings,
     ProjectSettings,
 )
-from fpvs_studio.core.paths import condition_template_library_path
+from fpvs_studio.core.paths import (
+    CONDITION_TEMPLATE_LIBRARY_FILENAME,
+    condition_template_library_path,
+    templates_dir,
+)
 from fpvs_studio.core.serialization import read_json_file, write_json_file
 
 STUDIO_DEFAULT_PROFILE_ID = "studio-default-v1"
@@ -104,10 +108,25 @@ def _normalize_library(
     return ConditionTemplateProfileLibrary(profiles=ordered_profiles)
 
 
+def normalize_condition_template_profile_root(root_dir: Path) -> Path:
+    """Ensure dedicated template storage exists and migrate legacy root-level library files."""
+
+    root_dir = Path(root_dir)
+    templates_root = templates_dir(root_dir)
+    templates_root.mkdir(parents=True, exist_ok=True)
+
+    canonical_library_path = condition_template_library_path(root_dir)
+    legacy_library_path = root_dir / CONDITION_TEMPLATE_LIBRARY_FILENAME
+    if legacy_library_path.is_file() and not canonical_library_path.is_file():
+        legacy_library_path.replace(canonical_library_path)
+
+    return canonical_library_path
+
+
 def load_condition_template_profile_library(root_dir: Path) -> ConditionTemplateProfileLibrary:
     """Load the app-level condition-template library and seed built-ins when needed."""
 
-    library_path = condition_template_library_path(Path(root_dir))
+    library_path = normalize_condition_template_profile_root(Path(root_dir))
     if library_path.is_file():
         library = read_json_file(library_path, ConditionTemplateProfileLibrary)
     else:
@@ -125,7 +144,8 @@ def save_condition_template_profile_library(
     """Persist a normalized app-level condition-template library."""
 
     normalized = _normalize_library(library)
-    write_json_file(condition_template_library_path(Path(root_dir)), normalized)
+    library_path = normalize_condition_template_profile_root(Path(root_dir))
+    write_json_file(library_path, normalized)
     return normalized
 
 

@@ -11,6 +11,7 @@ from PySide6.QtWidgets import QApplication, QFileDialog, QMessageBox, QWidget
 from fpvs_studio.core.condition_template_profiles import (
     get_condition_template_profile,
     list_condition_template_profiles,
+    normalize_condition_template_profile_root,
 )
 from fpvs_studio.core.models import ConditionTemplateProfile
 from fpvs_studio.gui.condition_template_manager_dialog import ConditionTemplateManagerDialog
@@ -95,11 +96,13 @@ class StudioController:
         self._settings.sync()
         self._fpvs_root_dir = root_dir
         self._projects_parent_dir = root_dir
+        self._normalize_fpvs_root_layout()
 
     def ensure_fpvs_root_configured(self) -> bool:
         """Require a valid FPVS Studio root folder before normal workflows are shown."""
 
-        if self.load_fpvs_root_dir() is not None:
+        loaded_root_dir = self.load_fpvs_root_dir()
+        if loaded_root_dir is not None and self._normalize_fpvs_root_layout():
             return True
 
         parent = self.main_window if self.main_window is not None else self.welcome_window
@@ -113,7 +116,9 @@ class StudioController:
                 selected_path = Path(directory)
                 if selected_path.is_dir():
                     self.save_fpvs_root_dir(selected_path)
-                    return True
+                    if self._normalize_fpvs_root_layout():
+                        return True
+                    continue
                 QMessageBox.warning(
                     parent,
                     "Invalid FPVS Studio Root Folder",
@@ -139,6 +144,8 @@ class StudioController:
 
         if not self.ensure_fpvs_root_configured():
             return
+        if not self._normalize_fpvs_root_layout():
+            return
         parent = self.main_window if self.main_window is not None else self.welcome_window
         if self._fpvs_root_dir is None:
             return
@@ -159,6 +166,10 @@ class StudioController:
     def show_open_project_dialog(self) -> None:
         """Open an existing project directory."""
 
+        if not self.ensure_fpvs_root_configured():
+            return
+        if not self._normalize_fpvs_root_layout():
+            return
         parent = self.main_window if self.main_window is not None else self.welcome_window
         directory = QFileDialog.getExistingDirectory(
             parent,
@@ -178,6 +189,8 @@ class StudioController:
     ) -> ProjectDocument | None:
         """Scaffold and open a new project."""
 
+        if not self._normalize_fpvs_root_layout():
+            return None
         condition_profile: ConditionTemplateProfile | None = None
         root_dir = self._fpvs_root_dir
         if condition_profile_id is not None and root_dir is not None:
@@ -205,6 +218,8 @@ class StudioController:
     def open_project(self, project_location: Path) -> ProjectDocument | None:
         """Open an existing project directory or `project.json` path."""
 
+        if not self._normalize_fpvs_root_layout():
+            return None
         try:
             document = ProjectDocument.open_existing(Path(project_location))
         except Exception as error:
@@ -217,6 +232,8 @@ class StudioController:
         """Show application-level settings, including the FPVS Studio root folder."""
 
         if not self.ensure_fpvs_root_configured():
+            return
+        if not self._normalize_fpvs_root_layout():
             return
         parent = self.main_window if self.main_window is not None else self.welcome_window
         root_dir = self._fpvs_root_dir
@@ -265,3 +282,18 @@ class StudioController:
         dialog = ConditionTemplateManagerDialog(root_dir=root_dir, parent=parent)
         dialog.exec()
         return self._load_condition_template_profiles()
+
+    def _normalize_fpvs_root_layout(self) -> bool:
+        root_dir = self._fpvs_root_dir
+        if root_dir is None:
+            return True
+        try:
+            normalize_condition_template_profile_root(root_dir)
+        except Exception as error:
+            _show_error(
+                self.main_window or self.welcome_window,
+                "FPVS Root Layout Error",
+                error,
+            )
+            return False
+        return True

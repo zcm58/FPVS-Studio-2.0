@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QFormLayout,
     QHBoxLayout,
+    QLabel,
     QLineEdit,
     QMessageBox,
     QPushButton,
@@ -20,6 +21,7 @@ from PySide6.QtWidgets import (
 )
 
 from fpvs_studio.core.models import ConditionTemplateProfile
+from fpvs_studio.core.paths import slugify_project_name, validate_project_id
 
 
 class CreateProjectDialog(QDialog):
@@ -40,6 +42,12 @@ class CreateProjectDialog(QDialog):
 
         self.project_name_edit = QLineEdit(self)
         self.project_name_edit.setObjectName("project_name_edit")
+        self.project_name_edit.textChanged.connect(self._update_project_name_validation)
+        self.project_name_validation_label = QLabel(self)
+        self.project_name_validation_label.setObjectName("project_name_validation_label")
+        self.project_name_validation_label.setWordWrap(True)
+        self.project_name_validation_label.setStyleSheet("color: #a1332b;")
+        self.project_name_validation_label.setVisible(False)
         self.project_root_edit = QLineEdit(self)
         self.project_root_edit.setObjectName("project_root_edit")
         self.project_root_browse_button = QPushButton("Browse...", self)
@@ -64,6 +72,7 @@ class CreateProjectDialog(QDialog):
 
         form_layout = QFormLayout()
         form_layout.addRow("Project Name", self.project_name_edit)
+        form_layout.addRow("", self.project_name_validation_label)
         form_layout.addRow("Project Folder", root_layout)
         form_layout.addRow("Condition Template", profile_layout)
 
@@ -80,6 +89,7 @@ class CreateProjectDialog(QDialog):
         layout.addWidget(self.button_box)
 
         self.set_condition_template_profiles(condition_template_profiles or [], preserve_selection=False)
+        self._update_project_name_validation()
 
     @property
     def project_name(self) -> str:
@@ -136,6 +146,11 @@ class CreateProjectDialog(QDialog):
             QMessageBox.warning(self, "Project Name Required", "Enter a project name.")
             self.project_name_edit.setFocus()
             return
+        project_name_error = self._project_name_validation_error(project_name)
+        if project_name_error is not None:
+            QMessageBox.warning(self, "Invalid Project Name", project_name_error)
+            self.project_name_edit.setFocus()
+            return
         if not parent_directory:
             QMessageBox.warning(
                 self,
@@ -176,3 +191,20 @@ class CreateProjectDialog(QDialog):
             return
         profiles = self._on_manage_templates()
         self.set_condition_template_profiles(profiles, preserve_selection=True)
+
+    def _project_name_validation_error(self, project_name: str) -> str | None:
+        if not project_name.strip():
+            return None
+        try:
+            validate_project_id(slugify_project_name(project_name))
+        except ValueError as error:
+            return str(error)
+        return None
+
+    def _update_project_name_validation(self, _text: str = "") -> None:
+        error = self._project_name_validation_error(self.project_name_edit.text())
+        self.project_name_validation_label.setVisible(error is not None)
+        self.project_name_validation_label.setText(error or "")
+        ok_button = self.button_box.button(QDialogButtonBox.StandardButton.Ok)
+        if ok_button is not None:
+            ok_button.setEnabled(error is None)

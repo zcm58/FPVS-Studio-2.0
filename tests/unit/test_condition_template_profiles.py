@@ -10,7 +10,9 @@ from fpvs_studio.core.condition_template_profiles import (
     built_in_condition_template_profiles,
     delete_condition_template_profile,
     get_condition_template_profile,
+    load_condition_template_profile_library,
     list_condition_template_profiles,
+    save_condition_template_profile_library,
     upsert_condition_template_profile,
 )
 from fpvs_studio.core.enums import DutyCycleMode
@@ -19,9 +21,14 @@ from fpvs_studio.core.models import (
     ConditionTemplateDefaults,
     ConditionTemplateDisplayDefaults,
     ConditionTemplateProfile,
+    ConditionTemplateProfileLibrary,
     FixationTaskSettings,
 )
-from fpvs_studio.core.paths import condition_template_library_path
+from fpvs_studio.core.paths import (
+    CONDITION_TEMPLATE_LIBRARY_FILENAME,
+    condition_template_library_path,
+)
+from fpvs_studio.core.serialization import write_json_file
 
 
 def test_condition_template_library_is_seeded_with_built_ins(tmp_path) -> None:
@@ -41,6 +48,57 @@ def test_condition_template_library_is_seeded_with_built_ins(tmp_path) -> None:
     )
     assert condition_template_library_path(tmp_path).is_file()
     assert all(profile.built_in for profile in profiles)
+
+
+def test_condition_template_library_migrates_legacy_root_file_idempotently(tmp_path) -> None:
+    legacy_path = tmp_path / CONDITION_TEMPLATE_LIBRARY_FILENAME
+    write_json_file(legacy_path, ConditionTemplateProfileLibrary())
+
+    migrated_once = load_condition_template_profile_library(tmp_path)
+    migrated_twice = load_condition_template_profile_library(tmp_path)
+
+    assert condition_template_library_path(tmp_path).is_file()
+    assert not legacy_path.exists()
+    assert migrated_once == migrated_twice
+    migrated_ids = {profile.profile_id for profile in migrated_once.profiles}
+    assert STUDIO_DEFAULT_PROFILE_ID in migrated_ids
+    assert SIXTY_HZ_BLANK_FIXATION_PROFILE_ID in migrated_ids
+
+
+def test_condition_template_library_save_load_stays_under_templates_dir(tmp_path) -> None:
+    user_profile = ConditionTemplateProfile(
+        profile_id="custom-profile",
+        display_name="Custom Profile",
+        description="User profile",
+        built_in=False,
+        defaults=ConditionTemplateDefaults(
+            condition=ConditionDefaults(
+                duty_cycle_mode=DutyCycleMode.BLANK_50,
+                sequence_count=3,
+                oddball_cycle_repeats_per_sequence=101,
+            ),
+            display=ConditionTemplateDisplayDefaults(preferred_refresh_hz=120.0),
+            fixation_task=FixationTaskSettings(
+                enabled=True,
+                accuracy_task_enabled=True,
+                changes_per_sequence=4,
+                target_duration_ms=350,
+                min_gap_ms=900,
+                max_gap_ms=2500,
+            ),
+        ),
+    )
+
+    save_condition_template_profile_library(
+        tmp_path,
+        ConditionTemplateProfileLibrary(profiles=[user_profile]),
+    )
+    loaded = load_condition_template_profile_library(tmp_path)
+
+    assert condition_template_library_path(tmp_path).is_file()
+    assert not (tmp_path / CONDITION_TEMPLATE_LIBRARY_FILENAME).exists()
+    loaded_ids = {profile.profile_id for profile in loaded.profiles}
+    assert "custom-profile" in loaded_ids
 
 
 def test_built_in_templates_share_defaults_except_duty_cycle() -> None:

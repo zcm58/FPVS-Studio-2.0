@@ -2,11 +2,20 @@
 
 from __future__ import annotations
 
+import pytest
+
 from fpvs_studio.core.condition_template_profiles import get_condition_template_profile
 from fpvs_studio.core.paths import project_json_path, stimulus_manifest_path
 from fpvs_studio.core.project_service import create_project
 from fpvs_studio.core.serialization import load_project_file, read_json_file
 from fpvs_studio.preprocessing.models import StimulusManifest
+
+
+def test_project_scaffolding_rejects_reserved_templates_root_name(tmp_path) -> None:
+    with pytest.raises(ValueError, match="reserved root folder 'templates'"):
+        create_project(tmp_path, "Templates")
+
+    assert not (tmp_path / "templates").exists()
 
 
 def test_project_scaffolding_creates_expected_directories_and_files(tmp_path) -> None:

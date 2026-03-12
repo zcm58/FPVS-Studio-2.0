@@ -16,6 +16,7 @@ ORIGINALS_DIRNAME = "originals"
 MANIFEST_FILENAME = "manifest.json"
 TEMPLATES_DIRNAME = "templates"
 CONDITION_TEMPLATE_LIBRARY_FILENAME = "condition_templates.json"
+RESERVED_ROOT_ENTRY_NAMES = frozenset({TEMPLATES_DIRNAME})
 
 _NON_ALNUM_RE = re.compile(r"[^a-z0-9]+")
 
@@ -25,6 +26,25 @@ def slugify_project_name(name: str) -> str:
 
     normalized = _NON_ALNUM_RE.sub("-", name.strip().lower()).strip("-")
     return normalized or "fpvs-project"
+
+
+def is_reserved_root_entry_name(name: str) -> bool:
+    """Return whether one top-level root entry name is reserved by the app layout."""
+
+    return name.strip().lower() in RESERVED_ROOT_ENTRY_NAMES
+
+
+def validate_project_id(project_id: str) -> None:
+    """Validate one project id against reserved top-level root entry names."""
+
+    normalized = project_id.strip().lower()
+    if not normalized:
+        raise ValueError("Project name resolves to an empty project id.")
+    if is_reserved_root_entry_name(normalized):
+        raise ValueError(
+            f"Project name resolves to reserved root folder '{normalized}'. "
+            "Choose a different project name."
+        )
 
 
 def project_dir(root_dir: Path, project_id: str) -> Path:
