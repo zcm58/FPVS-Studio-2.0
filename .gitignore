@@ -16,3 +16,11 @@ pytest-cache-files-*/
 tests/.tmp/
 
 .tmp/
+
+# Test/runtime temp artifacts
+codex_pytest_cache/
+codex_pytest_tmp/
+pytest_tmp/
+.pytest_cache/
+.ruff_cache/
+.tmp/
