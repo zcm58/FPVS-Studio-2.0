@@ -1,26 +1,31 @@
 .idea/
+
+# Environment / IDE
 .venv/
 .venv*/
+.venv3.10/
 __pycache__/
 .mypy_cache/
-.pytest_cache/
-.ruff_cache/
+
+# Build / packaging
 build/
 dist/
 *.egg-info/
+
+# Python compiled
 *.pyc
 *.pyo
 *.pyd
 *.log
-pytest-cache-files-*/
-tests/.tmp/
 
-.tmp/
-
-# Test/runtime temp artifacts
-codex_pytest_cache/
-codex_pytest_tmp/
-pytest_tmp/
+# Pytest / temp artifacts
 .pytest_cache/
 .ruff_cache/
 .tmp/
+codex_pytest_cache/
+codex_pytest_tmp/
+pytest_tmp/
+tests/.tmp/
+pytest-cache-files-*/
+
+# Keep local project metadata out
