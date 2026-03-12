@@ -31,7 +31,6 @@ from PySide6.QtWidgets import (
     QProgressDialog,
     QPushButton,
     QSpinBox,
-    QSplitter,
     QStatusBar,
     QTableWidget,
     QTableWidgetItem,
@@ -224,8 +223,8 @@ class ParticipantNumberDialog(QDialog):
         super().accept()
 
 
-class ProjectPage(QWidget):
-    """Project metadata and condition template controls page."""
+class ProjectOverviewEditor(QWidget):
+    """Compact project metadata and condition template controls editor."""
 
     def __init__(
         self,
@@ -250,7 +249,7 @@ class ProjectPage(QWidget):
         self.project_description_edit.setPlaceholderText(
             "Describe the project goal and participant instructions."
         )
-        self.project_description_edit.setFixedHeight(110)
+        self.project_description_edit.setFixedHeight(90)
         self.project_description_edit.setMaximumBlockCount(20)
         self.project_description_edit.textChanged.connect(self._apply_project_description)
 
@@ -277,78 +276,35 @@ class ProjectPage(QWidget):
         condition_profile_layout.addWidget(self.manage_templates_button)
         condition_profile_layout.addWidget(self.apply_profile_to_conditions_button)
 
-        runtime_note_title = QLabel("Runtime Launch Status", self)
-        runtime_note_title.setObjectName("project_runtime_note_title")
-        self.runtime_note = QLabel(
-            "Runtime launch currently uses the supported alpha test-mode path. "
-            "Launched PsychoPy playback opens fullscreen on the selected display and "
-            "shows a manual continue screen between non-final blocks. Broader "
-            "production validation remains deferred.",
-            self,
+        self.project_overview_card = SectionCard(
+            title="Project Overview",
+            subtitle=(
+                "Set project metadata and choose the default condition template "
+                "profile used when new conditions are added."
+            ),
+            object_name="dashboard_project_overview_card",
+            parent=self,
         )
-        self.runtime_note.setWordWrap(True)
-        self.runtime_note.setObjectName("project_runtime_note_body")
-
-        runtime_note_banner = QFrame(self)
-        runtime_note_banner.setObjectName("project_runtime_note_banner")
-        runtime_note_layout = QVBoxLayout(runtime_note_banner)
-        runtime_note_layout.setContentsMargins(12, 10, 12, 10)
-        runtime_note_layout.setSpacing(6)
-        runtime_note_layout.addWidget(runtime_note_title)
-        runtime_note_layout.addWidget(self.runtime_note)
-
-        metadata_group = QGroupBox("Project Overview", self)
-        metadata_group.setObjectName("project_metadata_card")
-        metadata_layout = QFormLayout(metadata_group)
+        metadata_layout = QFormLayout()
         metadata_layout.setVerticalSpacing(10)
         metadata_layout.addRow("Name", self.project_name_edit)
         metadata_layout.addRow("Description", self.project_description_edit)
         metadata_layout.addRow("Project Root", self.project_root_value)
         metadata_layout.addRow("Condition Template", condition_profile_row)
-
-        display_group = QGroupBox("Display & Runtime", self)
-        display_group.setObjectName("project_display_card")
-        display_layout = QFormLayout(display_group)
-        display_layout.setVerticalSpacing(10)
-        display_layout.addRow(runtime_note_banner)
+        self.project_overview_card.body_layout.addLayout(metadata_layout)
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(18, 18, 18, 18)
-        layout.setSpacing(12)
-        layout.addWidget(metadata_group)
-        layout.addWidget(display_group)
-        layout.addStretch(1)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        layout.addWidget(self.project_overview_card)
 
         self.setStyleSheet(
             """
-            QGroupBox#project_metadata_card,
-            QGroupBox#project_display_card {
-                border: 1px solid #c7d0dd;
-                border-radius: 8px;
-                margin-top: 10px;
-                padding-top: 10px;
-                background-color: #f8fafc;
-            }
-            QGroupBox#project_metadata_card::title,
-            QGroupBox#project_display_card::title {
-                subcontrol-origin: margin;
-                left: 12px;
-                padding: 0 4px;
-                font-weight: 600;
-            }
             QLabel#project_root_value {
                 border: 1px solid #d6dde8;
                 border-radius: 6px;
                 background-color: #ffffff;
                 padding: 6px 8px;
-            }
-            QFrame#project_runtime_note_banner {
-                border: 1px solid #d2dae5;
-                border-radius: 8px;
-                background-color: #ffffff;
-            }
-            QLabel#project_runtime_note_title {
-                font-weight: 600;
             }
             """
         )
@@ -489,11 +445,18 @@ class ConditionsPage(QWidget):
         list_button_layout.addWidget(self.remove_condition_button)
         list_button_layout.addWidget(self.move_up_button)
         list_button_layout.addWidget(self.move_down_button)
-
-        list_panel = QWidget(self)
-        list_panel_layout = QVBoxLayout(list_panel)
+        self.condition_list_card = SectionCard(
+            title="Condition List",
+            subtitle="Create, remove, and reorder conditions in session order.",
+            object_name="conditions_list_card",
+            parent=self,
+        )
+        list_panel_layout = QVBoxLayout()
+        list_panel_layout.setContentsMargins(0, 0, 0, 0)
+        list_panel_layout.setSpacing(8)
         list_panel_layout.addWidget(self.condition_list, 1)
         list_panel_layout.addLayout(list_button_layout)
+        self.condition_list_card.body_layout.addLayout(list_panel_layout)
 
         self.condition_name_edit = QLineEdit(self)
         self.condition_name_edit.setObjectName("condition_name_edit")
@@ -563,8 +526,13 @@ class ConditionsPage(QWidget):
         self.oddball_import_button.setObjectName("import_oddball_folder_button")
         self.oddball_import_button.clicked.connect(lambda: self._import_stimulus_folder("oddball"))
 
-        editor_group = QGroupBox("Condition Editor", self)
-        editor_layout = QFormLayout(editor_group)
+        self.condition_editor_card = SectionCard(
+            title="Identity & Logic",
+            subtitle="Edit condition naming, instructions, trigger code, and timing defaults.",
+            object_name="conditions_editor_card",
+            parent=self,
+        )
+        editor_layout = QFormLayout()
         editor_layout.addRow("Condition Name", self.condition_name_edit)
         editor_layout.addRow("Instructions", self.instructions_edit)
         editor_layout.addRow("Trigger Code", self.trigger_code_spin)
@@ -573,9 +541,15 @@ class ConditionsPage(QWidget):
         editor_layout.addRow("Stimulus Variant", self.variant_combo)
         editor_layout.addRow("Duty Cycle", self.duty_cycle_combo)
         editor_layout.addRow("Template Info", self.template_info_label)
+        self.condition_editor_card.body_layout.addLayout(editor_layout)
 
-        stimulus_group = QGroupBox("Stimulus Sources", self)
-        stimulus_layout = QGridLayout(stimulus_group)
+        self.stimulus_sources_card = SectionCard(
+            title="Stimulus Sources & Status",
+            subtitle="Review current source folders and import base/oddball sets.",
+            object_name="conditions_stimulus_sources_card",
+            parent=self,
+        )
+        stimulus_layout = QGridLayout()
         stimulus_layout.addWidget(QLabel(""), 0, 0)
         stimulus_layout.addWidget(QLabel("Base"), 0, 1)
         stimulus_layout.addWidget(QLabel("Oddball"), 0, 2)
@@ -593,21 +567,42 @@ class ConditionsPage(QWidget):
         stimulus_layout.addWidget(self.oddball_variants_value, 4, 2)
         stimulus_layout.addWidget(self.base_import_button, 5, 1)
         stimulus_layout.addWidget(self.oddball_import_button, 5, 2)
+        self.stimulus_sources_card.body_layout.addLayout(stimulus_layout)
 
-        editor_panel = QWidget(self)
-        editor_panel_layout = QVBoxLayout(editor_panel)
-        editor_panel_layout.addWidget(editor_group)
-        editor_panel_layout.addWidget(stimulus_group)
-        editor_panel_layout.addStretch(1)
+        self.condition_detail_stack = QWidget(self)
+        self.condition_detail_stack.setObjectName("conditions_detail_stack")
+        detail_stack_layout = QVBoxLayout(self.condition_detail_stack)
+        detail_stack_layout.setContentsMargins(0, 0, 0, 0)
+        detail_stack_layout.setSpacing(12)
+        detail_stack_layout.addWidget(self.condition_editor_card)
+        detail_stack_layout.addWidget(self.stimulus_sources_card)
+        detail_stack_layout.addStretch(1)
 
-        splitter = QSplitter(self)
-        splitter.addWidget(list_panel)
-        splitter.addWidget(editor_panel)
-        splitter.setStretchFactor(0, 0)
-        splitter.setStretchFactor(1, 1)
+        self.master_detail_container = QWidget(self)
+        self.master_detail_container.setObjectName("conditions_master_detail_container")
+        self.master_detail_layout = QHBoxLayout(self.master_detail_container)
+        self.master_detail_layout.setContentsMargins(0, 0, 0, 0)
+        self.master_detail_layout.setSpacing(12)
+        self.master_detail_layout.addWidget(self.condition_list_card, 3)
+        self.master_detail_layout.addWidget(self.condition_detail_stack, 7)
+
+        self.shell = NonHomePageShell(
+            title="Conditions",
+            subtitle=(
+                "Edit condition ordering, identity, logic, and stimulus sources in a "
+                "dedicated master-detail workspace."
+            ),
+            layout_mode="single_column",
+            parent=self,
+        )
+        self.shell.add_content_widget(self.master_detail_container, stretch=1)
+        self.shell.set_footer_text(
+            "Condition edits update the shared project document used by Setup Dashboard and Run / Runtime."
+        )
 
         layout = QVBoxLayout(self)
-        layout.addWidget(splitter)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(self.shell)
 
         self._document.project_changed.connect(self.refresh)
         self.refresh()
@@ -2133,7 +2128,8 @@ class SetupDashboardPage(QWidget):
         self,
         document: ProjectDocument,
         *,
-        conditions_editor: ConditionsPage,
+        load_condition_template_profiles: Callable[[], list[ConditionTemplateProfile]],
+        manage_condition_templates: Callable[[], list[ConditionTemplateProfile]],
         fullscreen_state_getter: Callable[[], bool] | None = None,
         fullscreen_state_setter: Callable[[bool], None] | None = None,
         parent=None,
@@ -2142,8 +2138,8 @@ class SetupDashboardPage(QWidget):
         self.shell = NonHomePageShell(
             title="Setup Dashboard",
             subtitle=(
-                "Configure session structure, conditions, fixation behavior, runtime, "
-                "and assets from one view."
+                "Configure project metadata, session structure, fixation behavior, runtime, "
+                "and asset readiness from one view."
             ),
             layout_mode="three_column",
             parent=self,
@@ -2153,7 +2149,12 @@ class SetupDashboardPage(QWidget):
             "Setup changes here update the shared project state used by Home and Run / Runtime."
         )
 
-        self.conditions_editor = conditions_editor
+        self.project_overview_editor = ProjectOverviewEditor(
+            document,
+            load_condition_template_profiles=load_condition_template_profiles,
+            manage_condition_templates=manage_condition_templates,
+            parent=self.shell,
+        )
         self.session_structure_editor = SessionStructureEditor(
             document,
             object_name_prefix="dashboard_",
@@ -2177,8 +2178,8 @@ class SetupDashboardPage(QWidget):
             parent=self.shell,
         )
 
+        self.shell.add_column_widget(0, self.project_overview_editor)
         self.shell.add_column_widget(0, self.session_structure_editor)
-        self.shell.add_column_widget(0, self.conditions_editor)
         self.shell.add_column_widget(1, self.fixation_settings_editor)
         self.shell.add_column_widget(2, self.runtime_settings_editor)
         self.shell.add_column_widget(2, self.assets_readiness_editor)
@@ -3161,12 +3162,6 @@ class StudioMainWindow(QMainWindow):
         self.setWindowTitle("FPVS Studio (Alpha)")
         self.resize(1200, 860)
 
-        self.project_page = ProjectPage(
-            document,
-            load_condition_template_profiles=on_load_condition_template_profiles,
-            manage_condition_templates=on_manage_condition_templates,
-            parent=self,
-        )
         self.conditions_page = ConditionsPage(document, self)
         self.session_structure_page = SessionStructurePage(document, self)
         self.fixation_cross_settings_page = FixationCrossSettingsPage(document, self)
@@ -3180,7 +3175,8 @@ class StudioMainWindow(QMainWindow):
         )
         self.setup_dashboard_page = SetupDashboardPage(
             document,
-            conditions_editor=self.conditions_page,
+            load_condition_template_profiles=on_load_condition_template_profiles,
+            manage_condition_templates=on_manage_condition_templates,
             fullscreen_state_getter=self._runtime_fullscreen_state,
             fullscreen_state_setter=self._set_runtime_fullscreen_state,
             parent=self,
@@ -3196,8 +3192,8 @@ class StudioMainWindow(QMainWindow):
         self.main_tabs.setObjectName("main_tabs")
         self.main_tabs.setTabBar(AnimatedTabBar(self.main_tabs))
         self.main_tabs.addTab(self.home_page, "Home")
-        self.main_tabs.addTab(self.project_page, "Project")
         self.main_tabs.addTab(self.setup_dashboard_page, "Setup Dashboard")
+        self.main_tabs.addTab(self.conditions_page, "Conditions")
         self.main_tabs.addTab(self.assets_page, "Assets / Preprocessing")
         self.main_tabs.addTab(self.run_page, "Run / Runtime")
         self.setCentralWidget(self.main_tabs)

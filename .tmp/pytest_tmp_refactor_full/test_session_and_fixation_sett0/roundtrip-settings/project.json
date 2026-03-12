@@ -1,0 +1,67 @@
+{
+  "schema_version": "1.0.0",
+  "meta": {
+    "project_id": "roundtrip-settings",
+    "name": "Roundtrip Settings",
+    "template_id": "fpvs_6hz_every5_v1",
+    "description": "",
+    "created_at": "2026-03-10T20:46:06.141505Z",
+    "updated_at": "2026-03-10T20:46:06.314517Z"
+  },
+  "settings": {
+    "condition_defaults": {
+      "duty_cycle_mode": "continuous",
+      "sequence_count": 1,
+      "oddball_cycle_repeats_per_sequence": 146
+    },
+    "display": {
+      "fullscreen": true,
+      "background_color": "#000000"
+    },
+    "fixation_task": {
+      "enabled": true,
+      "accuracy_task_enabled": true,
+      "changes_per_sequence": 4,
+      "target_count_mode": "randomized",
+      "target_count_min": 2,
+      "target_count_max": 5,
+      "no_immediate_repeat_count": true,
+      "base_color": "#112233",
+      "target_color": "#445566",
+      "target_duration_ms": 300,
+      "min_gap_ms": 1500,
+      "max_gap_ms": 3000,
+      "response_key": "space",
+      "response_window_seconds": 1.25,
+      "response_keys": [
+        "space"
+      ],
+      "cross_size_px": 52,
+      "line_width_px": 6
+    },
+    "triggers": {
+      "backend": "null",
+      "enabled": false,
+      "baudrate": 115200,
+      "pulse_width_ms": 10,
+      "reset_code": 0,
+      "reset_delay_ms": 5
+    },
+    "session": {
+      "block_count": 3,
+      "session_seed": 123456,
+      "randomize_conditions_per_block": false,
+      "inter_condition_mode": "manual_continue",
+      "inter_condition_break_seconds": 30.0,
+      "continue_key": "return"
+    },
+    "supported_variants": [
+      "original",
+      "grayscale",
+      "rot180",
+      "phase_scrambled"
+    ]
+  },
+  "stimulus_sets": [],
+  "conditions": []
+}

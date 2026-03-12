@@ -1,0 +1,104 @@
+{
+  "schema_version": "1.0.0",
+  "preprocessing_version": "1.0.0",
+  "project_id": "home-status-project",
+  "generated_at": "2026-03-10T20:45:51.234557Z",
+  "sets": [
+    {
+      "set_id": "condition-1-base",
+      "source_dir": "stimuli/source/condition-1-base/originals",
+      "available_variants": [
+        "original"
+      ],
+      "assets": [
+        {
+          "source": {
+            "relative_path": "stimuli/source/condition-1-base/originals/stimulus-01.png",
+            "sha256": "c8834f09c2dbfed6ac47b805530decbe99393c0d4da0545f75f6d3c7277e07c0",
+            "source_format": "png",
+            "resolution": {
+              "width_px": 96,
+              "height_px": 96
+            },
+            "imported_at": "2026-03-10T20:45:51.519491Z"
+          },
+          "derivatives": []
+        },
+        {
+          "source": {
+            "relative_path": "stimuli/source/condition-1-base/originals/stimulus-02.png",
+            "sha256": "8bfecd6cdaa5adeac06516667f1b35260ce3fd098424d679d1c7a8b9bbc7ea41",
+            "source_format": "png",
+            "resolution": {
+              "width_px": 96,
+              "height_px": 96
+            },
+            "imported_at": "2026-03-10T20:45:51.519491Z"
+          },
+          "derivatives": []
+        },
+        {
+          "source": {
+            "relative_path": "stimuli/source/condition-1-base/originals/stimulus-03.png",
+            "sha256": "630e6f58413813cef1608e17637d21522b34965f0366888f70983176ffb2fc0c",
+            "source_format": "png",
+            "resolution": {
+              "width_px": 96,
+              "height_px": 96
+            },
+            "imported_at": "2026-03-10T20:45:51.519491Z"
+          },
+          "derivatives": []
+        }
+      ]
+    },
+    {
+      "set_id": "condition-1-oddball",
+      "source_dir": "stimuli/source/condition-1-oddball/originals",
+      "available_variants": [
+        "original"
+      ],
+      "assets": [
+        {
+          "source": {
+            "relative_path": "stimuli/source/condition-1-oddball/originals/stimulus-01.png",
+            "sha256": "c8834f09c2dbfed6ac47b805530decbe99393c0d4da0545f75f6d3c7277e07c0",
+            "source_format": "png",
+            "resolution": {
+              "width_px": 96,
+              "height_px": 96
+            },
+            "imported_at": "2026-03-10T20:45:51.539602Z"
+          },
+          "derivatives": []
+        },
+        {
+          "source": {
+            "relative_path": "stimuli/source/condition-1-oddball/originals/stimulus-02.png",
+            "sha256": "8bfecd6cdaa5adeac06516667f1b35260ce3fd098424d679d1c7a8b9bbc7ea41",
+            "source_format": "png",
+            "resolution": {
+              "width_px": 96,
+              "height_px": 96
+            },
+            "imported_at": "2026-03-10T20:45:51.539602Z"
+          },
+          "derivatives": []
+        },
+        {
+          "source": {
+            "relative_path": "stimuli/source/condition-1-oddball/originals/stimulus-03.png",
+            "sha256": "630e6f58413813cef1608e17637d21522b34965f0366888f70983176ffb2fc0c",
+            "source_format": "png",
+            "resolution": {
+              "width_px": 96,
+              "height_px": 96
+            },
+            "imported_at": "2026-03-10T20:45:51.539602Z"
+          },
+          "derivatives": []
+        }
+      ]
+    }
+  ]
+}

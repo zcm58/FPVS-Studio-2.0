@@ -1,0 +1,100 @@
+{
+  "schema_version": "1.0.0",
+  "meta": {
+    "project_id": "roundtrip-conditions",
+    "name": "Roundtrip Conditions",
+    "template_id": "fpvs_6hz_every5_v1",
+    "description": "",
+    "created_at": "2026-03-10T20:46:05.556333Z",
+    "updated_at": "2026-03-10T20:46:05.724629Z"
+  },
+  "settings": {
+    "condition_defaults": {
+      "duty_cycle_mode": "continuous",
+      "sequence_count": 1,
+      "oddball_cycle_repeats_per_sequence": 146
+    },
+    "display": {
+      "fullscreen": true,
+      "background_color": "#000000"
+    },
+    "fixation_task": {
+      "enabled": false,
+      "accuracy_task_enabled": false,
+      "changes_per_sequence": 0,
+      "target_count_mode": "fixed",
+      "target_count_min": 1,
+      "target_count_max": 3,
+      "no_immediate_repeat_count": true,
+      "base_color": "#FFFFFF",
+      "target_color": "#FF0000",
+      "target_duration_ms": 250,
+      "min_gap_ms": 1500,
+      "max_gap_ms": 3000,
+      "response_key": "space",
+      "response_window_seconds": 1.0,
+      "response_keys": [
+        "space"
+      ],
+      "cross_size_px": 48,
+      "line_width_px": 4
+    },
+    "triggers": {
+      "backend": "null",
+      "enabled": false,
+      "baudrate": 115200,
+      "pulse_width_ms": 10,
+      "reset_code": 0,
+      "reset_delay_ms": 5
+    },
+    "session": {
+      "block_count": 1,
+      "session_seed": 66753821,
+      "randomize_conditions_per_block": true,
+      "inter_condition_mode": "fixed_break",
+      "inter_condition_break_seconds": 30.0,
+      "continue_key": "space"
+    },
+    "supported_variants": [
+      "original",
+      "grayscale",
+      "rot180",
+      "phase_scrambled"
+    ]
+  },
+  "stimulus_sets": [
+    {
+      "set_id": "condition-1-base",
+      "name": "Condition 1 Base",
+      "source_dir": "stimuli/source/condition-1-base/originals",
+      "image_count": 0,
+      "available_variants": [
+        "original"
+      ]
+    },
+    {
+      "set_id": "condition-1-oddball",
+      "name": "Condition 1 Oddball",
+      "source_dir": "stimuli/source/condition-1-oddball/originals",
+      "image_count": 0,
+      "available_variants": [
+        "original"
+      ]
+    }
+  ],
+  "conditions": [
+    {
+      "condition_id": "condition-1",
+      "name": "Faces Condition",
+      "instructions": "Look at the faces.",
+      "base_stimulus_set_id": "condition-1-base",
+      "oddball_stimulus_set_id": "condition-1-oddball",
+      "stimulus_variant": "grayscale",
+      "sequence_count": 2,
+      "oddball_cycle_repeats_per_sequence": 146,
+      "trigger_code": 21,
+      "duty_cycle_mode": "blank_50",
+      "order_index": 0
+    }
+  ]
+}
