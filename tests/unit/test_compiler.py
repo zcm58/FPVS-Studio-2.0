@@ -62,6 +62,41 @@ def test_compiler_generates_deterministic_role_schedule(sample_project, sample_p
     assert all(role == "base" for index, role in enumerate(roles) if (index + 1) % 5 != 0)
 
 
+@pytest.mark.parametrize(
+    ("refresh_hz", "expected_base_frame_step", "expected_oddball_frame_step"),
+    [
+        (60.0, 10, 50),
+        (120.0, 20, 100),
+    ],
+)
+def test_compiler_keeps_base_and_oddball_frame_cadence_locked(
+    sample_project,
+    sample_project_root,
+    refresh_hz: float,
+    expected_base_frame_step: int,
+    expected_oddball_frame_step: int,
+) -> None:
+    run_spec = compile_run_spec(
+        sample_project,
+        refresh_hz=refresh_hz,
+        project_root=sample_project_root,
+    )
+    stimulus_start_frames = [event.on_start_frame for event in run_spec.stimulus_sequence]
+    oddball_start_frames = [
+        event.on_start_frame for event in run_spec.stimulus_sequence if event.role == "oddball"
+    ]
+
+    assert run_spec.display.frames_per_stimulus == expected_base_frame_step
+    assert all(
+        b - a == expected_base_frame_step
+        for a, b in zip(stimulus_start_frames, stimulus_start_frames[1:])
+    )
+    assert all(
+        b - a == expected_oddball_frame_step
+        for a, b in zip(oddball_start_frames, oddball_start_frames[1:])
+    )
+
+
 def test_compiler_assigns_image_paths_deterministically(sample_project, sample_project_root) -> None:
     run_spec_a = compile_run_spec(
         sample_project,

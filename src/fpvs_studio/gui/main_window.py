@@ -6,7 +6,7 @@ import traceback
 from collections.abc import Callable
 from pathlib import Path
 
-from PySide6.QtCore import QSignalBlocker, Qt
+from PySide6.QtCore import QEventLoop, QSignalBlocker, Qt, QTimer
 from PySide6.QtGui import QAction, QCloseEvent, QTextCursor
 from PySide6.QtWidgets import (
     QApplication,
@@ -54,6 +54,7 @@ _RUNTIME_BACKGROUND_COLOR_PRESETS: tuple[tuple[str, str], ...] = (
     ("Black", "#000000"),
     ("Dark Gray", "#101010"),
 )
+_LAUNCH_INTERSTITIAL_DURATION_MS = 700
 
 
 def _canonical_runtime_background_hex(background_color: str) -> str | None:
@@ -2359,6 +2360,7 @@ class RunPage(QWidget):
         if participant_number is None:
             return
         try:
+            self._show_launch_interstitial()
             session_plan, summary = self._document.launch_test_session(
                 refresh_hz=self.current_refresh_hz(),
                 participant_number=participant_number,
@@ -2368,10 +2370,36 @@ class RunPage(QWidget):
         except Exception as error:
             _show_error_dialog(self, "Launch Error", error)
             return
+        output_dir = summary.output_dir or "runs/..."
+        participant_value = summary.participant_number or participant_number
+        if summary.aborted:
+            abort_reason = summary.abort_reason or "No abort reason was provided."
+            extra_lines = [
+                "Status: runtime launch aborted.",
+                f"Participant Number: {participant_value}",
+                f"Output Dir: {output_dir}",
+                f"Abort Reason: {abort_reason}",
+                (
+                    "Completed Conditions: "
+                    f"{summary.completed_condition_count}/{summary.total_condition_count}"
+                ),
+            ]
+            self._set_summary(session_plan, extra_lines=extra_lines)
+            QMessageBox.warning(
+                self,
+                "Launch Aborted",
+                "The experiment aborted on the current alpha test-mode path.\n\n"
+                f"Reason: {abort_reason}\n"
+                "Completed Conditions: "
+                f"{summary.completed_condition_count}/{summary.total_condition_count}\n"
+                f"Output Dir: {output_dir}\n\n"
+                "Review run exports in the project runs folder.",
+            )
+            return
         extra_lines = [
             "Status: runtime launch completed.",
-            f"Participant Number: {summary.participant_number or participant_number}",
-            f"Output Dir: {summary.output_dir or 'runs/...'}",
+            f"Participant Number: {participant_value}",
+            f"Output Dir: {output_dir}",
         ]
         self._set_summary(session_plan, extra_lines=extra_lines)
         QMessageBox.information(
@@ -2380,6 +2408,22 @@ class RunPage(QWidget):
             "The experiment finished on the current alpha test-mode path. "
             "Review run exports in the project runs folder.",
         )
+
+    def _show_launch_interstitial(self) -> None:
+        dialog = QProgressDialog("Launching experiment: Please wait", "", 0, 0, self)
+        dialog.setWindowTitle("FPVS Studio")
+        dialog.setCancelButton(None)
+        dialog.setWindowModality(Qt.WindowModality.WindowModal)
+        dialog.setMinimumDuration(0)
+        dialog.show()
+        QApplication.processEvents()
+        try:
+            if _LAUNCH_INTERSTITIAL_DURATION_MS > 0:
+                loop = QEventLoop(self)
+                QTimer.singleShot(_LAUNCH_INTERSTITIAL_DURATION_MS, loop.quit)
+                loop.exec()
+        finally:
+            dialog.close()
 
     def _prompt_participant_number(self) -> str | None:
         dialog = ParticipantNumberDialog(self)

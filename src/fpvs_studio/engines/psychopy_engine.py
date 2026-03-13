@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 import sys
@@ -12,6 +13,21 @@ from fpvs_studio.core.execution import FrameIntervalRecord, ResponseRecord, RunE
 from fpvs_studio.core.run_spec import FixationEvent, RunSpec, StimulusEvent
 from fpvs_studio.engines.base import PresentationEngine
 from fpvs_studio.triggers.base import TriggerBackend
+
+WARMUP_SETTLE_FRAMES = 30
+WARMUP_SEVERE_MISS_MULTIPLIER = 2.0
+
+
+@dataclass(frozen=True)
+class _TimingConfig:
+    strict_timing: bool
+    strict_timing_warmup: bool
+    expected_interval_s: float
+    miss_threshold_multiplier: float
+    miss_threshold_s: float
+    warmup_frames: int
+    warmup_settle_frames: int
+    severe_miss_threshold_s: float
 
 
 class PsychoPyEngine(PresentationEngine):
@@ -140,6 +156,12 @@ class PsychoPyEngine(PresentationEngine):
         window = self._require_window()
         keyboard = self._require_keyboard()
         self._runtime_options = dict(runtime_options or {})
+        timing_config = self._timing_config_for_run(run_spec)
+        abort_reason: str | None = None
+        timing_first_bad_frame_index: int | None = None
+        timing_max_interval_s: float | None = None
+        timing_strict_abort = False
+        warmup_intervals: list[float] = []
 
         absolute_paths = {
             event.image_path: project_root / Path(event.image_path) for event in run_spec.stimulus_sequence
@@ -168,6 +190,53 @@ class PsychoPyEngine(PresentationEngine):
             setattr(window, "frameIntervals", [])
 
         self._active_run_clock = core.Clock()
+        warmup_last_flip_time: float | None = None
+        warmup_miss_count = 0
+        warmup_strict_timing_enabled = (
+            timing_config.strict_timing and timing_config.strict_timing_warmup
+        )
+        for warmup_frame_index in range(timing_config.warmup_frames):
+            flip_time = window.flip()
+            current_time_s = (
+                float(flip_time) if flip_time is not None else self._active_run_clock.getTime()
+            )
+            if warmup_last_flip_time is not None:
+                warmup_interval_index = warmup_frame_index - 1
+                interval_s = current_time_s - warmup_last_flip_time
+                warmup_intervals.append(interval_s)
+                timing_max_interval_s = (
+                    interval_s
+                    if timing_max_interval_s is None
+                    else max(timing_max_interval_s, interval_s)
+                )
+                if (
+                    timing_first_bad_frame_index is None
+                    and interval_s > timing_config.miss_threshold_s
+                ):
+                    timing_first_bad_frame_index = warmup_interval_index
+                post_settle_window = (
+                    warmup_frame_index >= timing_config.warmup_settle_frames
+                )
+                interval_is_miss = interval_s > timing_config.miss_threshold_s
+                interval_is_severe = interval_s > timing_config.severe_miss_threshold_s
+                if warmup_strict_timing_enabled and post_settle_window and interval_is_miss:
+                    warmup_miss_count += 1
+                if warmup_strict_timing_enabled and post_settle_window and (
+                    interval_is_severe or warmup_miss_count >= 2
+                ):
+                    timing_strict_abort = True
+                    self._aborted = True
+                    abort_reason = self._timing_abort_reason(
+                        phase="warmup",
+                        frame_index=warmup_interval_index,
+                        interval_s=interval_s,
+                        timing_config=timing_config,
+                    )
+                    break
+            warmup_last_flip_time = current_time_s
+
+        keyboard.clock.reset()
+        keyboard.clearEvents()
         stimulus_index = 0
         fixation_index = 0
         completed_frames = 0
@@ -220,14 +289,37 @@ class PsychoPyEngine(PresentationEngine):
             flip_time = window.flip()
             current_time_s = float(flip_time) if flip_time is not None else self._active_run_clock.getTime()
             if last_flip_time is not None:
+                interval_s = current_time_s - last_flip_time
                 frame_intervals.append(
                     FrameIntervalRecord(
                         frame_index=frame_index - 1,
-                        interval_s=current_time_s - last_flip_time,
+                        interval_s=interval_s,
                     )
                 )
+                timing_max_interval_s = (
+                    interval_s
+                    if timing_max_interval_s is None
+                    else max(timing_max_interval_s, interval_s)
+                )
+                if (
+                    timing_first_bad_frame_index is None
+                    and interval_s > timing_config.miss_threshold_s
+                ):
+                    timing_first_bad_frame_index = frame_index - 1
+                if timing_config.strict_timing and interval_s > timing_config.miss_threshold_s:
+                    timing_strict_abort = True
+                    self._aborted = True
+                    abort_reason = self._timing_abort_reason(
+                        phase="run",
+                        frame_index=frame_index - 1,
+                        interval_s=interval_s,
+                        timing_config=timing_config,
+                    )
             last_flip_time = current_time_s
             completed_frames = frame_index + 1
+
+            if self._aborted:
+                break
 
             keys = keyboard.getKeys(
                 keyList=list(run_spec.fixation.response_keys) + ["escape"],
@@ -238,6 +330,8 @@ class PsychoPyEngine(PresentationEngine):
                 key_name = getattr(key, "name", str(key))
                 if key_name == "escape":
                     self._aborted = True
+                    if abort_reason is None:
+                        abort_reason = "Escape pressed during condition playback."
                     break
                 key_time = getattr(key, "rt", None)
                 response_log.append(
@@ -252,9 +346,19 @@ class PsychoPyEngine(PresentationEngine):
                         ),
                     )
                 )
+            if self._aborted:
+                break
 
         finished_at = datetime.now(timezone.utc)
-        runtime_metadata = self._runtime_metadata_for_run(run_spec, frame_intervals)
+        runtime_metadata = self._runtime_metadata_for_run(
+            run_spec,
+            frame_intervals,
+            timing_config=timing_config,
+            warmup_intervals=warmup_intervals,
+            timing_max_interval_s=timing_max_interval_s,
+            timing_first_bad_frame_index=timing_first_bad_frame_index,
+            timing_strict_abort=timing_strict_abort,
+        )
         self._active_run_clock = None
         return RunExecutionSummary(
             project_id=run_spec.project_id,
@@ -270,7 +374,7 @@ class PsychoPyEngine(PresentationEngine):
             finished_at=finished_at,
             completed_frames=completed_frames,
             aborted=self._aborted,
-            abort_reason="Escape pressed during condition playback." if self._aborted else None,
+            abort_reason=abort_reason if self._aborted else None,
             runtime_metadata=runtime_metadata,
             frame_intervals=frame_intervals,
             fixation_responses=[],
@@ -365,13 +469,18 @@ class PsychoPyEngine(PresentationEngine):
         self,
         run_spec: RunSpec,
         frame_intervals: list[FrameIntervalRecord],
+        *,
+        timing_config: _TimingConfig,
+        warmup_intervals: list[float],
+        timing_max_interval_s: float | None,
+        timing_first_bad_frame_index: int | None,
+        timing_strict_abort: bool,
     ) -> RuntimeMetadata:
         window = self._require_window()
-        actual_refresh_hz = None
-        if frame_intervals:
-            actual_refresh_hz = 1.0 / (
-                sum(interval.interval_s for interval in frame_intervals) / len(frame_intervals)
-            )
+        measured_refresh_hz = self._estimate_refresh_hz(
+            [interval.interval_s for interval in frame_intervals],
+            fallback_intervals=warmup_intervals,
+        )
 
         size = getattr(window, "size", None)
         width = int(size[0]) if size is not None else None
@@ -392,10 +501,70 @@ class PsychoPyEngine(PresentationEngine):
             screen_height_px=height,
             fullscreen=bool(self._runtime_options.get("fullscreen", True)),
             requested_refresh_hz=run_spec.display.refresh_hz,
-            actual_refresh_hz=actual_refresh_hz,
+            actual_refresh_hz=measured_refresh_hz,
             frame_interval_recording=True,
             test_mode=bool(self._runtime_options.get("test_mode")),
+            timing_qc_expected_interval_s=timing_config.expected_interval_s,
+            timing_qc_threshold_interval_s=timing_config.miss_threshold_s,
+            timing_qc_warmup_frames=timing_config.warmup_frames,
+            timing_qc_measured_refresh_hz=measured_refresh_hz,
+            timing_qc_max_interval_s=timing_max_interval_s,
+            timing_qc_first_bad_frame_index=timing_first_bad_frame_index,
+            timing_qc_strict_abort=timing_strict_abort,
         )
+
+    def _timing_config_for_run(self, run_spec: RunSpec) -> _TimingConfig:
+        strict_timing = bool(self._runtime_options.get("strict_timing", True))
+        strict_timing_warmup = bool(self._runtime_options.get("strict_timing_warmup", True))
+        expected_interval_s = 1.0 / run_spec.display.refresh_hz
+        raw_multiplier = self._runtime_options.get("timing_miss_threshold_multiplier", 1.5)
+        multiplier = (
+            float(raw_multiplier)
+            if isinstance(raw_multiplier, (int, float)) and raw_multiplier > 1.0
+            else 1.5
+        )
+        raw_warmup_frames = self._runtime_options.get("timing_warmup_frames", 240)
+        warmup_frames = (
+            raw_warmup_frames if isinstance(raw_warmup_frames, int) and raw_warmup_frames >= 0 else 240
+        )
+        return _TimingConfig(
+            strict_timing=strict_timing,
+            strict_timing_warmup=strict_timing_warmup,
+            expected_interval_s=expected_interval_s,
+            miss_threshold_multiplier=multiplier,
+            miss_threshold_s=expected_interval_s * multiplier,
+            warmup_frames=warmup_frames,
+            warmup_settle_frames=min(WARMUP_SETTLE_FRAMES, warmup_frames),
+            severe_miss_threshold_s=expected_interval_s * WARMUP_SEVERE_MISS_MULTIPLIER,
+        )
+
+    def _timing_abort_reason(
+        self,
+        *,
+        phase: str,
+        frame_index: int,
+        interval_s: float,
+        timing_config: _TimingConfig,
+    ) -> str:
+        return (
+            "Strict timing aborted run during "
+            f"{phase}: frame interval at index {frame_index} was {interval_s:.6f} s, "
+            f"exceeding {timing_config.miss_threshold_multiplier:.2f}x expected "
+            f"{timing_config.expected_interval_s:.6f} s."
+        )
+
+    def _estimate_refresh_hz(
+        self,
+        intervals: list[float],
+        *,
+        fallback_intervals: list[float] | None = None,
+    ) -> float | None:
+        source_intervals = [interval for interval in intervals if interval > 0]
+        if not source_intervals and fallback_intervals is not None:
+            source_intervals = [interval for interval in fallback_intervals if interval > 0]
+        if not source_intervals:
+            return None
+        return 1.0 / (sum(source_intervals) / len(source_intervals))
 
     def _should_draw_stimulus(
         self,

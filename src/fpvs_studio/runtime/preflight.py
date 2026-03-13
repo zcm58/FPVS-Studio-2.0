@@ -2,15 +2,46 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from pathlib import Path
 
+from fpvs_studio.core.enums import DutyCycleMode
 from fpvs_studio.core.run_spec import RunSpec
 from fpvs_studio.core.session_plan import SessionPlan
+from fpvs_studio.core.validation import validate_display_refresh
 from fpvs_studio.engines.base import PresentationEngine
 
 
 class PreflightError(ValueError):
     """Raised when runtime prerequisites are not satisfied."""
+
+
+def _strict_timing_enabled(runtime_options: Mapping[str, object] | None) -> bool:
+    return bool((runtime_options or {}).get("strict_timing", True))
+
+
+def _validate_display_refresh_timing(run_spec: RunSpec) -> None:
+    duty_cycle_mode = (
+        DutyCycleMode.BLANK_50 if run_spec.display.off_frames > 0 else DutyCycleMode.CONTINUOUS
+    )
+    display_report = validate_display_refresh(
+        run_spec.display.refresh_hz,
+        duty_cycle_mode=duty_cycle_mode,
+        base_hz=run_spec.condition.base_hz,
+    )
+    if not display_report.compatible:
+        raise PreflightError(
+            "Run preflight failed because display timing is incompatible: "
+            f"{'; '.join(display_report.errors)}"
+        )
+    if (
+        display_report.frames_per_cycle is not None
+        and display_report.frames_per_cycle != run_spec.display.frames_per_stimulus
+    ):
+        raise PreflightError(
+            "Run preflight failed because compiled frames_per_stimulus does not match "
+            "the requested refresh rate and base frequency."
+        )
 
 
 def _validate_stimulus_timing(run_spec: RunSpec) -> None:
@@ -98,8 +129,19 @@ def preflight_run_spec(
     run_spec: RunSpec,
     *,
     engine: PresentationEngine,
+    runtime_options: Mapping[str, object] | None = None,
 ) -> None:
     """Validate one run spec before execution starts."""
+
+    strict_timing = _strict_timing_enabled(runtime_options)
+    if strict_timing and not bool((runtime_options or {}).get("fullscreen", True)):
+        raise PreflightError(
+            "Run preflight failed because strict timing requires fullscreen presentation."
+        )
+    if strict_timing and bool((runtime_options or {}).get("variable_refresh_enabled", False)):
+        raise PreflightError(
+            "Run preflight failed because strict timing does not support variable-refresh displays."
+        )
 
     missing_assets = sorted(
         {
@@ -121,6 +163,7 @@ def preflight_run_spec(
             "Run preflight failed because on/off frame timing does not match "
             "frames_per_stimulus."
         )
+    _validate_display_refresh_timing(run_spec)
     _validate_stimulus_timing(run_spec)
     _validate_fixation_timing(run_spec)
     _validate_trigger_timing(run_spec)
@@ -130,6 +173,11 @@ def preflight_run_spec(
             "Run preflight failed because display timing is incompatible: "
             f"{'; '.join(display_report.errors)}"
         )
+    if strict_timing and display_report.warnings:
+        raise PreflightError(
+            "Run preflight failed because strict timing does not allow display warnings: "
+            f"{'; '.join(display_report.warnings)}"
+        )
 
 
 def preflight_session_plan(
@@ -137,6 +185,7 @@ def preflight_session_plan(
     session_plan: SessionPlan,
     *,
     engine: PresentationEngine,
+    runtime_options: Mapping[str, object] | None = None,
 ) -> None:
     """Validate every run in a session plan before execution starts."""
 
@@ -148,4 +197,9 @@ def preflight_session_plan(
             "Session preflight failed because session entry ordering is invalid."
         )
     for entry in ordered_entries:
-        preflight_run_spec(project_root, entry.run_spec, engine=engine)
+        preflight_run_spec(
+            project_root,
+            entry.run_spec,
+            engine=engine,
+            runtime_options=runtime_options,
+        )

@@ -102,6 +102,11 @@ def controller(qtbot, qapp, tmp_path: Path) -> StudioController:
     return controller
 
 
+@pytest.fixture(autouse=True)
+def _disable_launch_interstitial_delay(monkeypatch) -> None:
+    monkeypatch.setattr("fpvs_studio.gui.main_window._LAUNCH_INTERSTITIAL_DURATION_MS", 0)
+
+
 def test_welcome_window_smoke(qtbot, controller: StudioController) -> None:
     welcome = controller.welcome_window
     assert welcome is not None
@@ -2224,8 +2229,47 @@ def test_launch_action_wires_runtime_launcher_with_serial_settings(
     captures: dict[str, object] = {}
     participant_number = "00042"
     prompt_calls = 0
+    progress_events: list[str] = []
+    progress_dialogs: list[object] = []
+
+    class _FakeProgressDialog:
+        def __init__(self, label, cancel_text, minimum, maximum, parent) -> None:
+            self.label = label
+            self.cancel_text = cancel_text
+            self.minimum = minimum
+            self.maximum = maximum
+            self.parent = parent
+            self.window_title = ""
+            self.cancel_button = object()
+            self.window_modality = None
+            self.minimum_duration = None
+            self.shown = False
+            self.closed = False
+            progress_events.append("created")
+            progress_dialogs.append(self)
+
+        def setWindowTitle(self, title) -> None:  # noqa: N802
+            self.window_title = title
+
+        def setCancelButton(self, button) -> None:  # noqa: N802
+            self.cancel_button = button
+
+        def setWindowModality(self, modality) -> None:  # noqa: N802
+            self.window_modality = modality
+
+        def setMinimumDuration(self, duration_ms) -> None:  # noqa: N802
+            self.minimum_duration = duration_ms
+
+        def show(self) -> None:
+            self.shown = True
+            progress_events.append("shown")
+
+        def close(self) -> None:
+            self.closed = True
+            progress_events.append("closed")
 
     def _fake_launch(project_root, session_plan, participant_number, launch_settings):
+        assert progress_events == ["created", "shown", "closed"]
         captures["project_root"] = project_root
         captures["session_plan"] = session_plan
         captures["participant_number"] = participant_number
@@ -2256,6 +2300,7 @@ def test_launch_action_wires_runtime_launcher_with_serial_settings(
     )
     monkeypatch.setattr(window.run_page, "_prompt_participant_number", _fake_prompt)
     monkeypatch.setattr("fpvs_studio.gui.document.launch_session", _fake_launch)
+    monkeypatch.setattr("fpvs_studio.gui.main_window.QProgressDialog", _FakeProgressDialog)
     monkeypatch.setattr(
         "fpvs_studio.gui.main_window.QMessageBox.information",
         lambda *args, **kwargs: QMessageBox.StandardButton.Ok,
@@ -2272,16 +2317,174 @@ def test_launch_action_wires_runtime_launcher_with_serial_settings(
     qtbot.mouseClick(window.run_page.launch_button, Qt.MouseButton.LeftButton)
 
     launch_settings = captures["launch_settings"]
+    assert len(progress_dialogs) == 1
+    progress_dialog = progress_dialogs[0]
     assert prompt_calls == 1
     assert captures["participant_number"] == participant_number
     assert captures["project_root"] == window.document.project_root
+    assert progress_dialog.label == "Launching experiment: Please wait"
+    assert progress_dialog.window_title == "FPVS Studio"
+    assert progress_dialog.minimum == 0
+    assert progress_dialog.maximum == 0
+    assert progress_dialog.cancel_button is None
+    assert progress_dialog.window_modality == Qt.WindowModality.WindowModal
+    assert progress_dialog.minimum_duration == 0
+    assert progress_dialog.shown is True
+    assert progress_dialog.closed is True
+    assert progress_events == ["created", "shown", "closed"]
     assert launch_settings.serial_port == "COM3"
     assert launch_settings.serial_baudrate == 57600
     assert launch_settings.display_index == 1
     assert launch_settings.test_mode is True
     assert launch_settings.fullscreen is True
+    assert launch_settings.strict_timing is True
+    assert launch_settings.strict_timing_warmup is False
+    assert launch_settings.timing_miss_threshold_multiplier == 4.0
     assert f"participant number: {participant_number}" in window.run_page.summary_text.toPlainText().lower()
     assert "runtime launch completed" in window.run_page.summary_text.toPlainText().lower()
+
+
+def test_launch_action_surfaces_abort_reason_when_runtime_aborts(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Launch Abort Project")
+    _prepare_compile_ready_project(window, tmp_path / "launch-abort")
+
+    participant_number = "00043"
+    info_calls = 0
+    warning_payloads: list[tuple[str, str]] = []
+
+    def _fake_launch(project_root, session_plan, participant_number, launch_settings):
+        return SessionExecutionSummary(
+            project_id=session_plan.project_id,
+            session_id=session_plan.session_id,
+            engine_name="stub",
+            run_mode=RunMode.TEST,
+            participant_number=participant_number,
+            random_seed=session_plan.random_seed,
+            started_at=datetime(2026, 3, 8, 10, 0, tzinfo=timezone.utc),
+            finished_at=datetime(2026, 3, 8, 10, 0, 1, tzinfo=timezone.utc),
+            total_condition_count=session_plan.total_runs,
+            completed_condition_count=0,
+            aborted=True,
+            abort_reason=(
+                "Strict timing aborted run during warmup: frame interval at index 18 was "
+                "0.025840 s, exceeding 1.50x expected 0.016667 s."
+            ),
+            output_dir="runs/00043",
+        )
+
+    def _capture_information(*_args, **_kwargs):
+        nonlocal info_calls
+        info_calls += 1
+        return QMessageBox.StandardButton.Ok
+
+    def _capture_warning(_parent, title, text):
+        warning_payloads.append((title, text))
+        return QMessageBox.StandardButton.Ok
+
+    monkeypatch.setattr(
+        window.document,
+        "preflight_session",
+        lambda refresh_hz: window.document.compile_session(refresh_hz=refresh_hz),
+    )
+    monkeypatch.setattr(
+        window.run_page,
+        "_prompt_participant_number",
+        lambda: participant_number,
+    )
+    monkeypatch.setattr("fpvs_studio.gui.document.launch_session", _fake_launch)
+    monkeypatch.setattr(
+        "fpvs_studio.gui.main_window.QMessageBox.information",
+        _capture_information,
+    )
+    monkeypatch.setattr(
+        "fpvs_studio.gui.main_window.QMessageBox.warning",
+        _capture_warning,
+    )
+
+    qtbot.mouseClick(window.run_page.launch_button, Qt.MouseButton.LeftButton)
+
+    summary_text = window.run_page.summary_text.toPlainText().lower()
+    assert info_calls == 0
+    assert len(warning_payloads) == 1
+    assert warning_payloads[0][0] == "Launch Aborted"
+    assert "strict timing aborted run during warmup" in warning_payloads[0][1].lower()
+    assert "runtime launch completed" not in summary_text
+    assert "runtime launch aborted" in summary_text
+    assert "abort reason:" in summary_text
+
+
+def test_launch_action_closes_progress_dialog_when_runtime_launch_raises(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Launch Error Progress Project")
+    _prepare_compile_ready_project(window, tmp_path / "launch-error-progress")
+
+    events: list[str] = []
+    captured_errors: list[tuple[str, str]] = []
+
+    class _FakeProgressDialog:
+        def __init__(self, label, cancel_text, minimum, maximum, parent) -> None:
+            self.label = label
+            self.cancel_text = cancel_text
+            self.minimum = minimum
+            self.maximum = maximum
+            self.parent = parent
+            self.window_title = ""
+            self.cancel_button = object()
+            self.window_modality = None
+            self.minimum_duration = None
+            self.closed = False
+            events.append("created")
+
+        def setWindowTitle(self, title) -> None:  # noqa: N802
+            self.window_title = title
+
+        def setCancelButton(self, button) -> None:  # noqa: N802
+            self.cancel_button = button
+
+        def setWindowModality(self, modality) -> None:  # noqa: N802
+            self.window_modality = modality
+
+        def setMinimumDuration(self, duration_ms) -> None:  # noqa: N802
+            self.minimum_duration = duration_ms
+
+        def show(self) -> None:
+            events.append("shown")
+
+        def close(self) -> None:
+            self.closed = True
+            events.append("closed")
+
+    def _fake_launch(*_args, **_kwargs):
+        events.append("launch_called")
+        raise RuntimeError("Intentional launch failure.")
+
+    def _capture_error_dialog(_parent, title, error) -> None:
+        events.append("error_dialog")
+        captured_errors.append((title, str(error)))
+
+    monkeypatch.setattr(
+        window.document,
+        "preflight_session",
+        lambda refresh_hz: window.document.compile_session(refresh_hz=refresh_hz),
+    )
+    monkeypatch.setattr(window.run_page, "_prompt_participant_number", lambda: "00077")
+    monkeypatch.setattr("fpvs_studio.gui.document.launch_session", _fake_launch)
+    monkeypatch.setattr("fpvs_studio.gui.main_window.QProgressDialog", _FakeProgressDialog)
+    monkeypatch.setattr("fpvs_studio.gui.main_window._show_error_dialog", _capture_error_dialog)
+
+    qtbot.mouseClick(window.run_page.launch_button, Qt.MouseButton.LeftButton)
+
+    assert captured_errors == [("Launch Error", "Intentional launch failure.")]
+    assert events == ["created", "shown", "closed", "launch_called", "error_dialog"]
 
 
 def test_launch_action_duplicate_participant_yes_still_launches(

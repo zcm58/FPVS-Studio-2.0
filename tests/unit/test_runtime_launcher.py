@@ -146,6 +146,51 @@ class StubEngine(PresentationEngine):
                 )
             )
 
+        if bool(self._captures.get("timing_abort_on_first_run", False)) and not bool(
+            self._captures.get("timing_abort_emitted", False)
+        ):
+            self._captures["timing_abort_emitted"] = True
+            return RunExecutionSummary(
+                project_id=run_spec.project_id,
+                session_id=None,
+                run_id=run_spec.run_id,
+                condition_id=run_spec.condition.condition_id,
+                condition_name=run_spec.condition.name,
+                engine_name="stub",
+                run_mode=(
+                    RunMode.TEST
+                    if bool((runtime_options or {}).get("test_mode"))
+                    else RunMode.SESSION
+                ),
+                started_at=datetime(2026, 3, 7, 12, 0, 0, tzinfo=timezone.utc),
+                finished_at=datetime(2026, 3, 7, 12, 0, 1, tzinfo=timezone.utc),
+                completed_frames=3,
+                aborted=True,
+                abort_reason=(
+                    "Strict timing aborted run during run: frame interval at index 1 was "
+                    "0.040000 s, exceeding 1.50x expected 0.016667 s."
+                ),
+                runtime_metadata=RuntimeMetadata(
+                    engine_name="stub",
+                    requested_refresh_hz=run_spec.display.refresh_hz,
+                    actual_refresh_hz=59.0,
+                    frame_interval_recording=True,
+                    test_mode=bool((runtime_options or {}).get("test_mode")),
+                    timing_qc_expected_interval_s=1.0 / run_spec.display.refresh_hz,
+                    timing_qc_threshold_interval_s=1.5 / run_spec.display.refresh_hz,
+                    timing_qc_warmup_frames=240,
+                    timing_qc_measured_refresh_hz=59.0,
+                    timing_qc_max_interval_s=0.04,
+                    timing_qc_first_bad_frame_index=1,
+                    timing_qc_strict_abort=True,
+                ),
+                frame_intervals=[
+                    FrameIntervalRecord(frame_index=0, interval_s=1.0 / run_spec.display.refresh_hz),
+                    FrameIntervalRecord(frame_index=1, interval_s=0.04),
+                ],
+                response_log=response_log,
+            )
+
         return RunExecutionSummary(
             project_id=run_spec.project_id,
             session_id=None,
@@ -239,6 +284,10 @@ def test_runtime_launcher_dispatches_runspec_to_registered_engine(
         "display_index": None,
         "serial_port": "COM9",
         "serial_baudrate": 57600,
+        "strict_timing": True,
+        "strict_timing_warmup": True,
+        "timing_miss_threshold_multiplier": 1.5,
+        "timing_warmup_frames": 240,
     }
     assert summary.output_dir == "runs/faces-run"
     assert summary.participant_number == PARTICIPANT_NUMBER
@@ -793,6 +842,131 @@ def test_launch_run_rejects_non_test_mode_even_with_registered_engine(
     assert captures == {}
 
 
+def test_launch_settings_default_to_strict_timing_fail_fast() -> None:
+    settings = LaunchSettings()
+
+    assert settings.strict_timing is True
+    assert settings.strict_timing_warmup is True
+    assert settings.timing_miss_threshold_multiplier == 1.5
+    assert settings.timing_warmup_frames == 240
+
+
+def test_launch_session_preflight_rejects_windowed_mode_when_strict_timing_enabled(
+    sample_project,
+    sample_project_root,
+) -> None:
+    captures: dict[str, object] = {}
+    register_engine("stub-strict-fullscreen", lambda: StubEngine(captures))
+    try:
+        session_plan = compile_session_plan(
+            sample_project,
+            refresh_hz=60.0,
+            project_root=sample_project_root,
+            random_seed=35,
+        )
+
+        with pytest.raises(PreflightError, match="strict timing requires fullscreen"):
+            launch_session(
+                sample_project_root,
+                session_plan,
+                participant_number=PARTICIPANT_NUMBER,
+                launch_settings=LaunchSettings(
+                    engine_name="stub-strict-fullscreen",
+                    test_mode=True,
+                    fullscreen=False,
+                    strict_timing=True,
+                ),
+            )
+    finally:
+        unregister_engine("stub-strict-fullscreen")
+
+    assert captures == {}
+
+
+def test_launch_session_allows_windowed_mode_when_strict_timing_disabled(
+    sample_project,
+    sample_project_root,
+) -> None:
+    captures: dict[str, object] = {}
+    register_engine("stub-windowed-allowed", lambda: StubEngine(captures))
+    try:
+        session_plan = compile_session_plan(
+            sample_project,
+            refresh_hz=60.0,
+            project_root=sample_project_root,
+            random_seed=36,
+        )
+
+        summary = launch_session(
+            sample_project_root,
+            session_plan,
+            participant_number=PARTICIPANT_NUMBER,
+            launch_settings=LaunchSettings(
+                engine_name="stub-windowed-allowed",
+                test_mode=True,
+                fullscreen=False,
+                strict_timing=False,
+            ),
+        )
+    finally:
+        unregister_engine("stub-windowed-allowed")
+
+    assert summary.aborted is False
+    assert captures["runtime_options"]["fullscreen"] is False
+    assert captures["runtime_options"]["strict_timing"] is False
+
+
+def test_session_launch_exports_timing_aborted_status_from_run_result(
+    sample_project,
+    sample_project_root,
+) -> None:
+    captures: dict[str, object] = {"timing_abort_on_first_run": True}
+    register_engine("stub-timing-abort", lambda: StubEngine(captures))
+    try:
+        session_plan = compile_session_plan(
+            sample_project,
+            refresh_hz=60.0,
+            project_root=sample_project_root,
+            random_seed=37,
+        )
+
+        summary = launch_session(
+            sample_project_root,
+            session_plan,
+            participant_number=PARTICIPANT_NUMBER,
+            launch_settings=LaunchSettings(engine_name="stub-timing-abort", test_mode=True),
+        )
+    finally:
+        unregister_engine("stub-timing-abort")
+
+    assert summary.aborted is True
+    assert summary.completed_condition_count == 0
+    assert len(summary.run_results) == 1
+    assert summary.run_results[0].aborted is True
+    assert "Strict timing aborted run" in (summary.abort_reason or "")
+    assert summary.run_results[0].runtime_metadata is not None
+    assert summary.run_results[0].runtime_metadata.timing_qc_strict_abort is True
+    assert captures["run_ids"] == [session_plan.ordered_entries()[0].run_id]
+    assert summary.output_dir is not None
+    session_output_dir = sample_project_root / Path(summary.output_dir)
+    exported_summary = read_json_file(
+        session_output_dir / "session_summary.json",
+        SessionExecutionSummary,
+    )
+    exported_run_summary = read_json_file(
+        session_output_dir / session_plan.ordered_entries()[0].run_id / "run_summary.json",
+        RunExecutionSummary,
+    )
+
+    assert exported_summary.aborted is True
+    assert exported_summary.completed_condition_count == 0
+    assert exported_summary.run_results[0].runtime_metadata is not None
+    assert exported_summary.run_results[0].runtime_metadata.timing_qc_strict_abort is True
+    assert exported_run_summary.aborted is True
+    assert exported_run_summary.runtime_metadata is not None
+    assert exported_run_summary.runtime_metadata.timing_qc_first_bad_frame_index == 1
+
+
 def test_launch_session_rejects_invalid_display_index_before_engine_creation(
     sample_project,
     sample_project_root,
@@ -891,6 +1065,40 @@ def test_launch_session_rejects_non_boolean_fullscreen_before_engine_creation(
             )
     finally:
         unregister_engine("stub-invalid-fullscreen")
+
+    assert captures == {}
+
+
+def test_launch_session_rejects_non_boolean_strict_timing_warmup_before_engine_creation(
+    sample_project,
+    sample_project_root,
+) -> None:
+    captures: dict[str, object] = {}
+    register_engine("stub-invalid-strict-warmup", lambda: StubEngine(captures))
+    try:
+        session_plan = compile_session_plan(
+            sample_project,
+            refresh_hz=60.0,
+            project_root=sample_project_root,
+            random_seed=38,
+        )
+
+        with pytest.raises(
+            LaunchSettingsError,
+            match="strict_timing_warmup must be a boolean",
+        ):
+            launch_session(
+                sample_project_root,
+                session_plan,
+                participant_number=PARTICIPANT_NUMBER,
+                launch_settings=LaunchSettings(
+                    engine_name="stub-invalid-strict-warmup",
+                    test_mode=True,
+                    strict_timing_warmup="yes",  # type: ignore[arg-type]
+                ),
+            )
+    finally:
+        unregister_engine("stub-invalid-strict-warmup")
 
     assert captures == {}
 

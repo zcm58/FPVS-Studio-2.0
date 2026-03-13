@@ -126,3 +126,55 @@ def test_preflight_rejects_trigger_events_outside_run_duration(
 
     with pytest.raises(PreflightError, match="trigger event falls outside"):
         preflight_run_spec(sample_project_root, run_spec, engine=_PreflightEngine())
+
+
+@pytest.mark.parametrize("refresh_hz", [60.0, 120.0, 144.0])
+def test_preflight_accepts_refresh_rates_compatible_with_6hz(
+    sample_project,
+    sample_project_root,
+    refresh_hz: float,
+) -> None:
+    run_spec = compile_run_spec(
+        sample_project,
+        refresh_hz=refresh_hz,
+        project_root=sample_project_root,
+        run_id=f"faces-{int(refresh_hz)}hz",
+    )
+
+    preflight_run_spec(sample_project_root, run_spec, engine=_PreflightEngine())
+
+
+def test_preflight_rejects_refresh_rate_incompatible_with_6hz(
+    sample_project,
+    sample_project_root,
+) -> None:
+    run_spec = compile_run_spec(
+        sample_project,
+        refresh_hz=60.0,
+        project_root=sample_project_root,
+        run_id="faces-run",
+    )
+    run_spec.display.refresh_hz = 75.0
+
+    with pytest.raises(PreflightError, match="display timing is incompatible"):
+        preflight_run_spec(sample_project_root, run_spec, engine=_PreflightEngine())
+
+
+def test_preflight_rejects_blank_50_when_frames_per_stimulus_is_odd(
+    sample_project,
+    sample_project_root,
+) -> None:
+    run_spec = compile_run_spec(
+        sample_project,
+        refresh_hz=90.0,
+        project_root=sample_project_root,
+        run_id="faces-run",
+    )
+    run_spec.display.on_frames = 8
+    run_spec.display.off_frames = 7
+    for event in run_spec.stimulus_sequence:
+        event.on_frames = 8
+        event.off_frames = 7
+
+    with pytest.raises(PreflightError, match="blank_50"):
+        preflight_run_spec(sample_project_root, run_spec, engine=_PreflightEngine())

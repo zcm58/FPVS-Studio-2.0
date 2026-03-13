@@ -41,6 +41,13 @@ class RuntimeMetadata(FPVSBaseModel):
     actual_refresh_hz: float | None = Field(default=None, gt=0)
     frame_interval_recording: bool = False
     test_mode: bool = False
+    timing_qc_expected_interval_s: float | None = Field(default=None, gt=0)
+    timing_qc_threshold_interval_s: float | None = Field(default=None, gt=0)
+    timing_qc_warmup_frames: int | None = Field(default=None, ge=0)
+    timing_qc_measured_refresh_hz: float | None = Field(default=None, gt=0)
+    timing_qc_max_interval_s: float | None = Field(default=None, gt=0)
+    timing_qc_first_bad_frame_index: int | None = Field(default=None, ge=0)
+    timing_qc_strict_abort: bool = False
 
 
 class FrameIntervalRecord(FPVSBaseModel):

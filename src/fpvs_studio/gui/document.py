@@ -647,6 +647,8 @@ class ProjectDocument(QObject):
                     display_index=display_index,
                     serial_port=self._project.settings.triggers.serial_port,
                     serial_baudrate=self._project.settings.triggers.baudrate,
+                    strict_timing_warmup=False if test_mode else True,
+                    timing_miss_threshold_multiplier=4.0 if test_mode else 1.5,
                 ),
             )
         except Exception as exc:

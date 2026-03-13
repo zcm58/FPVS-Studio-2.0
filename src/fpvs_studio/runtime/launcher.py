@@ -30,6 +30,10 @@ class LaunchSettings:
     display_index: int | None = None
     serial_port: str | None = None
     serial_baudrate: int = 115200
+    strict_timing: bool = True
+    strict_timing_warmup: bool = True
+    timing_miss_threshold_multiplier: float = 1.5
+    timing_warmup_frames: int = 240
 
     def as_runtime_options(self) -> dict[str, object]:
         """Return a generic engine-facing runtime options mapping."""
@@ -52,6 +56,19 @@ def _validate_launch_settings(settings: LaunchSettings) -> None:
             raise LaunchSettingsError("display_index must be None or a non-negative integer.")
     if not isinstance(settings.fullscreen, bool):
         raise LaunchSettingsError("fullscreen must be a boolean.")
+    if not isinstance(settings.strict_timing, bool):
+        raise LaunchSettingsError("strict_timing must be a boolean.")
+    if not isinstance(settings.strict_timing_warmup, bool):
+        raise LaunchSettingsError("strict_timing_warmup must be a boolean.")
+    if (
+        not isinstance(settings.timing_miss_threshold_multiplier, (int, float))
+        or settings.timing_miss_threshold_multiplier <= 1.0
+    ):
+        raise LaunchSettingsError(
+            "timing_miss_threshold_multiplier must be a number greater than 1.0."
+        )
+    if not isinstance(settings.timing_warmup_frames, int) or settings.timing_warmup_frames < 0:
+        raise LaunchSettingsError("timing_warmup_frames must be a non-negative integer.")
     if settings.serial_port is not None and not settings.serial_port.strip():
         raise LaunchSettingsError("serial_port may not be blank when provided.")
     if not isinstance(settings.serial_baudrate, int) or settings.serial_baudrate <= 0:
@@ -80,17 +97,18 @@ def launch_run(
 
     settings = launch_settings or LaunchSettings()
     _validate_launch_settings(settings)
+    runtime_options = settings.as_runtime_options()
     cleaned_participant_number = _validate_participant_number(participant_number)
     output_dir = runs_dir(project_root) / run_spec.run_id
     relative_output_dir = to_project_relative_posix(project_root, output_dir)
     engine = create_engine(settings.engine_name)
-    preflight_run_spec(project_root, run_spec, engine=engine)
+    preflight_run_spec(project_root, run_spec, engine=engine, runtime_options=runtime_options)
     worker = RuntimeWorker(engine)
     return worker.execute(
         project_root,
         run_spec,
         output_dir,
-        runtime_options=settings.as_runtime_options(),
+        runtime_options=runtime_options,
         relative_output_dir=relative_output_dir,
         participant_number=cleaned_participant_number,
     )
@@ -107,18 +125,24 @@ def launch_session(
 
     settings = launch_settings or LaunchSettings()
     _validate_launch_settings(settings)
+    runtime_options = settings.as_runtime_options()
     cleaned_participant_number = _validate_participant_number(participant_number)
     output_label = resolve_next_participant_output_label(project_root, cleaned_participant_number)
     output_dir = runs_dir(project_root) / output_label
     relative_output_dir = to_project_relative_posix(project_root, output_dir)
     engine = create_engine(settings.engine_name)
-    preflight_session_plan(project_root, session_plan, engine=engine)
+    preflight_session_plan(
+        project_root,
+        session_plan,
+        engine=engine,
+        runtime_options=runtime_options,
+    )
     worker = RuntimeWorker(engine)
     return worker.execute_session(
         project_root,
         session_plan,
         output_dir,
-        runtime_options=settings.as_runtime_options(),
+        runtime_options=runtime_options,
         relative_output_dir=relative_output_dir,
         participant_number=cleaned_participant_number,
     )
