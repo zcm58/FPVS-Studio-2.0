@@ -1,4 +1,6 @@
-"""Dialog for collecting the minimal new-project scaffold inputs."""
+"""Dialog for collecting the inputs needed to scaffold a new project.
+It gathers user-facing values that feed core project_service and path helpers before the resulting ProjectFile and folder layout are created.
+The module owns form interaction only; validation, scaffolding, and template defaults stay in backend services."""
 
 from __future__ import annotations
 

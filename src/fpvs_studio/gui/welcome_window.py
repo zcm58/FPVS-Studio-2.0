@@ -1,4 +1,6 @@
-"""Welcome screen shown before a project is opened."""
+"""Welcome screen shown before a project document is opened.
+It presents entry actions for creating or loading work without taking ownership of project scaffolding, compilation, or runtime launch logic.
+The module owns introductory UI only; controller and document layers handle application state transitions."""
 
 from __future__ import annotations
 

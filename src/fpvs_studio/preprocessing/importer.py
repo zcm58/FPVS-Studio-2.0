@@ -1,4 +1,6 @@
-"""Helpers for importing source images and materializing derived assets."""
+"""Source-image import and derived-asset materialization pipeline.
+It copies supported inputs into the project, updates manifest-backed asset records, and generates deterministic preprocessing variants for compilation to consume.
+This module owns preprocessing I/O and provenance, not ProjectFile editing semantics, RunSpec construction, or runtime launch behavior."""
 
 from __future__ import annotations
 

@@ -1,4 +1,6 @@
-"""GUI animation helpers for button hover effects and animated tabs."""
+"""Reusable UI animation helpers for the PySide6 authoring shell.
+These classes style widget motion and hover behavior so the GUI can feel responsive without embedding domain or runtime logic.
+The module owns presentation polish only; project semantics and launch behavior stay in backend services and main widgets."""
 
 from __future__ import annotations
 

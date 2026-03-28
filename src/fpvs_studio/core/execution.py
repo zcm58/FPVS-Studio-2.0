@@ -1,4 +1,6 @@
-"""Engine-neutral execution-result contracts for runtime and exporters."""
+"""Engine-neutral execution-result contracts for completed runs and sessions.
+Runtime populates these models from RunSpec and SessionPlan playback so exporters can write stable summaries without depending on engine internals.
+This module owns result schemas and serialization shape, not scoring flow control or presentation behavior."""
 
 from __future__ import annotations
 

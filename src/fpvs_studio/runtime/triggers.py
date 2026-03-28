@@ -1,4 +1,6 @@
-"""Runtime helpers for trigger backend selection and logging."""
+"""Runtime helpers for trigger backend wiring and logging.
+It wraps trigger backends so runtime execution can record neutral TriggerRecord data while keeping hardware-specific behavior behind backend interfaces.
+The module owns runtime trigger selection and logging, not core trigger schemas, session planning, or engine presentation."""
 
 from __future__ import annotations
 

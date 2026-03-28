@@ -1,4 +1,6 @@
-"""Validation helpers for editable FPVS Studio project state."""
+"""Validation helpers for editable authoring state before compilation or launch.
+These routines check ProjectFile settings against protocol rules and frame-compatibility constraints so compiler inputs stay explicit and friendly.
+The module owns authoring-time diagnostics, not manifest generation, session execution, or engine timing loops."""
 
 from __future__ import annotations
 

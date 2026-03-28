@@ -1,4 +1,6 @@
-"""Image inspection helpers for FPVS Studio stimulus intake."""
+"""Image inspection helpers for preprocessing source directories.
+It measures hashes, formats, and resolutions so stimulus-set summaries and manifest records stay reproducible before compilation.
+The module owns source-asset facts only; it does not choose session order, derive RunSpec timing, or render anything."""
 
 from __future__ import annotations
 

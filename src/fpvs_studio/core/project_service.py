@@ -1,4 +1,6 @@
-"""Project creation and folder scaffolding helpers."""
+"""Project scaffold and creation helpers for new FPVS Studio workspaces.
+It assembles starter ProjectFile state, folder structure, template defaults, and empty preprocessing manifest records for the authoring flow.
+The module owns project initialization on disk, not ongoing compilation, runtime execution, or engine control."""
 
 from __future__ import annotations
 

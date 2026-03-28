@@ -1,4 +1,6 @@
-"""GUI-facing project document and backend service adapter."""
+"""GUI-facing document adapter over editable project and backend services.
+It mediates ProjectFile editing, preprocessing, compilation, preflight preparation, and launch requests so widgets do not duplicate domain logic.
+This module owns authoring-session coordination, not widget layout and not runtime playback or engine implementation."""
 
 from __future__ import annotations
 
@@ -15,6 +17,7 @@ from fpvs_studio.core.condition_template_profiles import (
 )
 from fpvs_studio.core.compiler import CompileError, compile_session_plan
 from fpvs_studio.core.enums import EngineName, StimulusVariant
+from fpvs_studio.core.execution import SessionExecutionSummary
 from fpvs_studio.core.models import (
     Condition,
     ConditionDefaults,
@@ -36,6 +39,7 @@ from fpvs_studio.core.paths import (
 )
 from fpvs_studio.core.project_service import create_project
 from fpvs_studio.core.serialization import load_project_file, save_project_file
+from fpvs_studio.core.session_plan import SessionPlan
 from fpvs_studio.core.validation import (
     condition_fixation_guidance,
     validate_condition_repeat_cycle_consistency,
@@ -71,6 +75,9 @@ _CONDITION_LENGTH_ERROR_MESSAGE = (
 
 class DocumentError(ValueError):
     """Raised when a GUI-facing document action cannot complete."""
+
+
+LaunchSummary = SessionExecutionSummary
 
 
 @dataclass(frozen=True)
@@ -148,7 +155,7 @@ class ProjectDocument(QObject):
         self._project = project
         self._manifest = manifest
         self._dirty = False
-        self._last_session_plan = None
+        self._last_session_plan: SessionPlan | None = None
 
     @classmethod
     def create_new(
@@ -214,7 +221,7 @@ class ProjectDocument(QObject):
         return self._dirty
 
     @property
-    def last_session_plan(self):  # noqa: ANN201 - concrete type adds import churn
+    def last_session_plan(self) -> SessionPlan | None:
         """Return the most recently compiled session plan."""
 
         return self._last_session_plan
@@ -614,6 +621,20 @@ class ProjectDocument(QObject):
     ):
         """Compile and preflight the current session plan."""
 
+        session_plan = self.prepare_test_session_launch(
+            refresh_hz=refresh_hz,
+            engine_name=engine_name,
+        )
+        return session_plan
+
+    def prepare_test_session_launch(
+        self,
+        *,
+        refresh_hz: float,
+        engine_name: str = EngineName.PSYCHOPY.value,
+    ) -> SessionPlan:
+        """Compile and preflight the current test-mode session launch."""
+
         session_plan = self.compile_session(refresh_hz=refresh_hz)
         try:
             engine = create_engine(engine_name)
@@ -622,19 +643,18 @@ class ProjectDocument(QObject):
             raise DocumentError(str(exc)) from exc
         return session_plan
 
-    def launch_test_session(
+    def launch_compiled_session(
         self,
+        session_plan: SessionPlan,
         *,
-        refresh_hz: float,
         participant_number: str,
         display_index: int | None,
         fullscreen: bool = True,
         engine_name: str = EngineName.PSYCHOPY.value,
         test_mode: bool = True,
-    ):
-        """Compile and launch the current session through the runtime boundary."""
+    ) -> LaunchSummary:
+        """Launch an already-prepared session plan through the runtime boundary."""
 
-        session_plan = self.compile_session(refresh_hz=refresh_hz)
         try:
             summary = launch_session(
                 self._project_root,
@@ -653,6 +673,32 @@ class ProjectDocument(QObject):
             )
         except Exception as exc:
             raise DocumentError(str(exc)) from exc
+        return summary
+
+    def launch_test_session(
+        self,
+        *,
+        refresh_hz: float,
+        participant_number: str,
+        display_index: int | None,
+        fullscreen: bool = True,
+        engine_name: str = EngineName.PSYCHOPY.value,
+        test_mode: bool = True,
+    ):
+        """Compile and launch the current session through the runtime boundary."""
+
+        session_plan = self.prepare_test_session_launch(
+            refresh_hz=refresh_hz,
+            engine_name=engine_name,
+        )
+        summary = self.launch_compiled_session(
+            session_plan,
+            participant_number=participant_number,
+            display_index=display_index,
+            fullscreen=fullscreen,
+            engine_name=engine_name,
+            test_mode=test_mode,
+        )
         return session_plan, summary
 
     def has_completed_session_for_participant(self, participant_number: str) -> bool:

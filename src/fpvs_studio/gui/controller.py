@@ -1,4 +1,6 @@
-"""High-level GUI controller for welcome/create/open flows."""
+"""Top-level GUI controller for welcome, project-open, and settings flows.
+It coordinates windows and document lifecycle by delegating project creation, loading, and authoring actions into backend-backed GUI objects.
+This module owns application navigation and error surfacing, not core protocol semantics or runtime execution internals."""
 
 from __future__ import annotations
 

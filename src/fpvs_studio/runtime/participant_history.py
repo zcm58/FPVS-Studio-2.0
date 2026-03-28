@@ -1,4 +1,6 @@
-"""Runtime helpers for participant history lookup and output-folder naming."""
+"""Runtime helpers for participant-session history lookup.
+It reads prior execution summaries and naming conventions so launch flows can resolve stable output labels without changing core contracts.
+The module owns runtime filesystem history queries only; scoring, compilation, and export writing stay in adjacent runtime or core layers."""
 
 from __future__ import annotations
 

@@ -1,4 +1,6 @@
-"""Dedicated execution-plan schemas for compiled FPVS runs."""
+"""Compiled single-condition execution contracts for FPVS playback.
+Compiler emits these frame-based models from editable ProjectFile state and manifest-backed assets so runtime and engines can consume a neutral plan.
+This module owns one-condition playback schema only; session ordering lives in SessionPlan and machine-specific launch options stay outside RunSpec."""
 
 from __future__ import annotations
 

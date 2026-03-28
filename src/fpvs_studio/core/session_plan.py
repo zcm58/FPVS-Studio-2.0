@@ -1,4 +1,6 @@
-"""Compiled multi-condition session planning contracts."""
+"""Compiled multi-condition session contracts built above single-run plans.
+Core compilation turns editable session settings into ordered SessionPlan entries that reference individual RunSpec artifacts and transition metadata.
+This module owns session sequencing schema only; runtime executes that plan and engines render the screens it requests."""
 
 from __future__ import annotations
 

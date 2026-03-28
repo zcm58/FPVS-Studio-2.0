@@ -1,4 +1,6 @@
-"""JSON serialization helpers for FPVS Studio models."""
+"""JSON serialization helpers for persisted core contracts.
+It reads and writes ProjectFile data and related models using stable engine-neutral schemas that other layers can trust.
+The module owns file-format translation only, not business rules, compilation, or runtime export policy."""
 
 from __future__ import annotations
 

@@ -1,4 +1,6 @@
-"""Compilation from editable project state into run and session plans."""
+"""Compile editable project state into neutral execution contracts.
+This module transforms ProjectFile and manifest-backed assets into single-condition RunSpec and ordered SessionPlan artifacts with frame-based timing.
+It owns schedule derivation and fixation target realization, while runtime-only launch options and engine behavior stay out of compiled output."""
 
 from __future__ import annotations
 

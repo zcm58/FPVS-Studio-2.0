@@ -1,4 +1,6 @@
-"""Runtime-side fixation response scoring helpers."""
+"""Runtime fixation-response scoring helpers.
+It turns raw response logs and compiled FixationEvent data from RunSpec playback into neutral fixation summaries stored in execution contracts.
+The module owns scoring math and summary derivation, not fixation scheduling, participant feedback rendering, or engine input handling."""
 
 from __future__ import annotations
 

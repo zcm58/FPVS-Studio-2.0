@@ -1,4 +1,6 @@
-"""Control-variant preprocessing helpers."""
+"""Derived-control image generation for preprocessing manifests.
+It materializes deterministic rot180 and phase-scrambled PNG variants that preprocessing records before core compilation consumes manifest paths.
+This module owns offline asset transforms only; it must not take on runtime presentation or scheduling concerns."""
 
 from __future__ import annotations
 

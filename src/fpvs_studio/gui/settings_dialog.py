@@ -1,4 +1,6 @@
-"""Application settings dialog for FPVS Studio preferences."""
+"""Application settings dialog for local FPVS Studio preferences.
+It edits GUI-level configuration that shapes the desktop authoring experience without becoming part of ProjectFile, RunSpec, or SessionPlan data.
+The module owns app-preference widgets only; experiment semantics and runtime settings stay in their respective backend layers."""
 
 from __future__ import annotations
 

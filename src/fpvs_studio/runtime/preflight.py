@@ -1,4 +1,6 @@
-"""Runtime-side preflight validation for run and session execution."""
+"""Runtime preflight validation before execution begins.
+It checks compiled RunSpec and SessionPlan artifacts against asset availability and conservative display-timing expectations before engine launch.
+This module is a launch gatekeeper only; session ordering stays in SessionPlan and playback stays with runtime orchestration plus the engine."""
 
 from __future__ import annotations
 

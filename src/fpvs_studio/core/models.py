@@ -1,4 +1,6 @@
-"""Engine-neutral Pydantic models for FPVS Studio."""
+"""Editable engine-neutral project schemas for FPVS Studio.
+These Pydantic models define ProjectFile state, settings, conditions, validation reports, and related metadata that feed compilation and preprocessing.
+They own persisted authoring truth, not compiled RunSpec or SessionPlan artifacts and not runtime-only machine options."""
 
 from __future__ import annotations
 

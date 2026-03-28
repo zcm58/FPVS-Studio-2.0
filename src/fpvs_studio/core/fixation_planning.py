@@ -1,4 +1,6 @@
-"""Shared fixation-task planning helpers used by compiler and validation."""
+"""Frame-conversion helpers for the fixation engagement task.
+Compiler and validation use these calculations to translate editable fixation settings into frame-based constraints compatible with RunSpec timing.
+The module owns timing math only; realized scheduling, scoring, and participant feedback stay in compiler or runtime layers."""
 
 from __future__ import annotations
 

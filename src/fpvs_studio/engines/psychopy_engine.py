@@ -1,4 +1,6 @@
-"""PsychoPy-backed presentation engine implementation."""
+"""PsychoPy-backed renderer for compiled FPVS runs.
+It lazily imports PsychoPy and executes one RunSpec at a time while honoring runtime-owned transition, feedback, and trigger seams.
+This module owns presentation details only; session flow, fixation scoring, and neutral export contracts stay outside the engine."""
 
 from __future__ import annotations
 

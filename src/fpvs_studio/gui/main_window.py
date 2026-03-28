@@ -1,8 +1,11 @@
-"""Main authoring window for the Phase 5 FPVS Studio GUI."""
+"""Primary Phase 5 authoring window for FPVS Studio.
+It binds user actions to backend document services for project editing, preprocessing, validation, preflight, and test-mode launch workflows.
+The window owns UI composition and honest runtime messaging, not protocol semantics, RunSpec compilation rules, or execution flow."""
 
 from __future__ import annotations
 
 import traceback
+from dataclasses import dataclass
 from collections.abc import Callable
 from pathlib import Path
 
@@ -30,6 +33,7 @@ from PySide6.QtWidgets import (
     QPlainTextEdit,
     QProgressDialog,
     QPushButton,
+    QSizePolicy,
     QSpinBox,
     QStatusBar,
     QTableWidget,
@@ -40,7 +44,12 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from fpvs_studio.core.enums import DutyCycleMode, InterConditionMode, StimulusVariant
+from fpvs_studio.core.enums import (
+    DutyCycleMode,
+    InterConditionMode,
+    StimulusVariant,
+    ValidationSeverity,
+)
 from fpvs_studio.core.models import ConditionTemplateProfile
 from fpvs_studio.core.template_library import get_template
 from fpvs_studio.gui.animations import AnimatedTabBar, ButtonHoverAnimator
@@ -55,6 +64,11 @@ _RUNTIME_BACKGROUND_COLOR_PRESETS: tuple[tuple[str, str], ...] = (
     ("Dark Gray", "#101010"),
 )
 _LAUNCH_INTERSTITIAL_DURATION_MS = 700
+_PAGE_WIDTH_PRESETS: dict[str, int] = {
+    "narrow": 920,
+    "medium": 1100,
+    "wide": 1280,
+}
 
 
 def _canonical_runtime_background_hex(background_color: str) -> str | None:
@@ -148,6 +162,131 @@ def _prefixed_object_name(prefix: str, name: str) -> str:
     if not prefix:
         return name
     return f"{prefix}{name}"
+
+
+@dataclass(frozen=True)
+class LauncherReadinessReport:
+    status_label: str
+    badge_state: str
+    status_summary: str
+    readiness_items: tuple[str, ...]
+    preview_note: str | None = None
+
+
+def _truncate_line(value: str, max_length: int) -> str:
+    if len(value) <= max_length:
+        return value
+    return f"{value[: max_length - 3]}..."
+
+
+def _configure_read_only_list(widget: QListWidget) -> None:
+    widget.setSelectionMode(QListWidget.SelectionMode.NoSelection)
+    widget.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+    widget.setWordWrap(True)
+    widget.setSpacing(2)
+    widget.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+    widget.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+
+
+def _set_widget_property(widget: QWidget, name: str, value: str) -> None:
+    if widget.property(name) == value:
+        return
+    widget.setProperty(name, value)
+    widget.style().unpolish(widget)
+    widget.style().polish(widget)
+    widget.update()
+
+
+def _set_list_items(widget: QListWidget, lines: list[str] | tuple[str, ...]) -> None:
+    widget.clear()
+    for line in lines:
+        widget.addItem(line)
+
+
+def _conditions_have_assigned_assets(document: ProjectDocument, ordered_conditions: list) -> bool:
+    if not ordered_conditions:
+        return False
+    available_set_ids = {stimulus_set.set_id for stimulus_set in document.project.stimulus_sets}
+    if not available_set_ids:
+        return False
+    return all(
+        condition.base_stimulus_set_id in available_set_ids
+        and condition.oddball_stimulus_set_id in available_set_ids
+        for condition in ordered_conditions
+    )
+
+
+def _launcher_readiness_report(document: ProjectDocument, *, refresh_hz: float) -> LauncherReadinessReport:
+    ordered_conditions = document.ordered_conditions()
+    validation = document.validation_report(refresh_hz=refresh_hz)
+    blocking_issues = [
+        issue for issue in validation.issues if issue.severity == ValidationSeverity.ERROR
+    ]
+    blocking_issue_count = len(blocking_issues)
+
+    conditions_ready = bool(ordered_conditions)
+    assets_ready = _conditions_have_assigned_assets(document, ordered_conditions)
+    preview_available = document.last_session_plan is not None
+
+    if not conditions_ready:
+        status_label = "Setup Required"
+        badge_state = "pending"
+    elif not assets_ready:
+        status_label = "Missing Required Assets"
+        badge_state = "warning"
+    elif blocking_issue_count > 0:
+        status_label = "Validation Issues"
+        badge_state = "warning"
+    else:
+        status_label = "Ready to Launch"
+        badge_state = "ready"
+
+    if not conditions_ready:
+        status_summary = "Add at least one condition before launching."
+    elif not assets_ready:
+        status_summary = "Assign all base and oddball stimulus sets before launching."
+    elif blocking_issue_count > 0:
+        status_summary = (
+            f"Validation at {refresh_hz:.2f} Hz reports {blocking_issue_count} blocking issue(s)."
+        )
+    else:
+        status_summary = f"Launch requirements are satisfied at {refresh_hz:.2f} Hz."
+
+    readiness_items: list[str] = []
+    if conditions_ready:
+        readiness_items.append(f"[OK] Conditions configured: {len(ordered_conditions)}.")
+    else:
+        readiness_items.append("[TODO] Add at least one condition.")
+
+    if conditions_ready and assets_ready:
+        readiness_items.append("[OK] Stimulus assignments present for all conditions.")
+    elif conditions_ready:
+        readiness_items.append("[TODO] Assign base and oddball sets for each condition.")
+    else:
+        readiness_items.append("[TODO] Assign base and oddball sets for each condition.")
+
+    if blocking_issue_count > 0:
+        readiness_items.append(
+            f"[WARN] Validation ({refresh_hz:.2f} Hz): {blocking_issue_count} blocking issue(s)."
+        )
+        readiness_items.append(
+            f"[WARN] First blocker: {_truncate_line(blocking_issues[0].message, 120)}"
+        )
+    else:
+        readiness_items.append(f"[OK] Validation ({refresh_hz:.2f} Hz) clear.")
+
+    readiness_items.append("[INFO] Runtime path: alpha test-mode only.")
+    return LauncherReadinessReport(
+        status_label=status_label,
+        badge_state=badge_state,
+        status_summary=status_summary,
+        readiness_items=tuple(readiness_items),
+        preview_note=(
+            "Session preview available for inspection. Launch will still compile and run launch checks automatically."
+            if preview_available
+            else "Launch will compile and run launch checks automatically."
+        ),
+    )
 
 
 class LeftToRightPlainTextEdit(QPlainTextEdit):
@@ -594,6 +733,7 @@ class ConditionsPage(QWidget):
                 "dedicated master-detail workspace."
             ),
             layout_mode="single_column",
+            width_preset="wide",
             parent=self,
         )
         self.shell.add_content_widget(self.master_detail_container, stretch=1)
@@ -810,8 +950,59 @@ class ConditionsPage(QWidget):
             _show_error_dialog(self, "Stimulus Import Error", error)
 
 
+class PageContainer(QWidget):
+    """Centered page container with bounded width and top-aligned content."""
+
+    def __init__(
+        self,
+        *,
+        width_preset: str = "wide",
+        parent=None,
+    ) -> None:
+        super().__init__(parent)
+        if width_preset not in _PAGE_WIDTH_PRESETS:
+            raise ValueError(f"Unsupported width_preset: {width_preset}")
+
+        self.width_preset = width_preset
+        self.content_frame = QFrame(self)
+        self.content_frame.setObjectName("page_container_content_frame")
+        self.content_frame.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Maximum,
+        )
+
+        self.content_layout = QVBoxLayout(self.content_frame)
+        self.content_layout.setContentsMargins(0, 0, 0, 0)
+        self.content_layout.setSpacing(10)
+
+        centered_row = QHBoxLayout()
+        centered_row.setContentsMargins(0, 0, 0, 0)
+        centered_row.setSpacing(0)
+        centered_row.addStretch(1)
+        centered_row.addWidget(self.content_frame)
+        centered_row.addStretch(1)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(24, 18, 24, 18)
+        layout.setSpacing(0)
+        layout.addLayout(centered_row)
+        layout.addStretch(1)
+
+        self.set_width_preset(width_preset)
+
+    def set_width_preset(self, width_preset: str) -> None:
+        if width_preset not in _PAGE_WIDTH_PRESETS:
+            raise ValueError(f"Unsupported width_preset: {width_preset}")
+        self.width_preset = width_preset
+        self.content_frame.setMaximumWidth(_PAGE_WIDTH_PRESETS[width_preset])
+        self.content_frame.setProperty("pageWidthPreset", width_preset)
+
+    def max_content_width(self) -> int:
+        return _PAGE_WIDTH_PRESETS[self.width_preset]
+
+
 class NonHomePageShell(QWidget):
-    """Reusable shell for non-home pages with centered content."""
+    """Reusable shell for non-home pages with bounded, top-aligned content."""
 
     def __init__(
         self,
@@ -819,6 +1010,7 @@ class NonHomePageShell(QWidget):
         title: str,
         subtitle: str,
         layout_mode: str = "single_column",
+        width_preset: str = "wide",
         parent=None,
     ) -> None:
         super().__init__(parent)
@@ -829,6 +1021,7 @@ class NonHomePageShell(QWidget):
         self._single_column_layout: QVBoxLayout | None = None
         self._column_layouts: list[QVBoxLayout] = []
         self._footer_widget: QWidget | None = None
+        self.page_container = PageContainer(width_preset=width_preset, parent=self)
 
         self.title_label = QLabel(title, self)
         self.title_label.setObjectName("non_home_shell_title")
@@ -836,9 +1029,11 @@ class NonHomePageShell(QWidget):
         self.subtitle_label.setObjectName("non_home_shell_subtitle")
         self.subtitle_label.setWordWrap(True)
 
-        self.content_frame = QFrame(self)
+        self.content_frame = QFrame(self.page_container.content_frame)
         self.content_frame.setObjectName("non_home_shell_content_frame")
-        self.content_frame.setMaximumWidth(1260)
+        self.page_container.content_layout.addWidget(self.title_label)
+        self.page_container.content_layout.addWidget(self.subtitle_label)
+        self.page_container.content_layout.addWidget(self.content_frame)
 
         if layout_mode == "single_column":
             single_layout = QVBoxLayout(self.content_frame)
@@ -861,11 +1056,6 @@ class NonHomePageShell(QWidget):
             columns_layout.setStretch(1, 4)
             columns_layout.setStretch(2, 3)
 
-        centered_content_row = QHBoxLayout()
-        centered_content_row.addStretch(1)
-        centered_content_row.addWidget(self.content_frame)
-        centered_content_row.addStretch(1)
-
         self.footer_strip = QFrame(self)
         self.footer_strip.setObjectName("non_home_shell_footer_strip")
         self.footer_strip.setVisible(False)
@@ -876,14 +1066,11 @@ class NonHomePageShell(QWidget):
         self.footer_label.setObjectName("non_home_shell_footer_label")
         self.footer_label.setWordWrap(True)
         footer_layout.addWidget(self.footer_label, 1)
+        self.page_container.content_layout.addWidget(self.footer_strip)
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(24, 18, 24, 18)
-        layout.setSpacing(10)
-        layout.addWidget(self.title_label)
-        layout.addWidget(self.subtitle_label)
-        layout.addLayout(centered_content_row, 1)
-        layout.addWidget(self.footer_strip)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(self.page_container)
 
         self.setStyleSheet(
             """
@@ -933,6 +1120,9 @@ class NonHomePageShell(QWidget):
 
     def column_count(self) -> int:
         return len(self._column_layouts)
+
+    def set_width_preset(self, width_preset: str) -> None:
+        self.page_container.set_width_preset(width_preset)
 
     def set_footer_text(self, text: str | None) -> None:
         if not text:
@@ -1637,7 +1827,10 @@ class AssetsPage(QWidget):
         self.materialize_button.setObjectName("materialize_assets_button")
         self.materialize_button.clicked.connect(self._materialize_assets)
 
-        button_layout = QHBoxLayout()
+        actions_row = QWidget(self)
+        button_layout = QHBoxLayout(actions_row)
+        button_layout.setContentsMargins(0, 0, 0, 0)
+        button_layout.setSpacing(8)
         button_layout.addWidget(self.import_source_button)
         button_layout.addWidget(self.refresh_button)
         button_layout.addWidget(self.materialize_button)
@@ -1657,11 +1850,27 @@ class AssetsPage(QWidget):
         self.assets_status_text.setReadOnly(True)
         self.assets_status_text.setMaximumBlockCount(200)
 
+        self.shell = NonHomePageShell(
+            title="Assets / Preprocessing",
+            subtitle=(
+                "Inspect source folders, refresh derived-asset status, and materialize "
+                "project-supported variants."
+            ),
+            layout_mode="single_column",
+            width_preset="wide",
+            parent=self,
+        )
+        self.shell.add_content_widget(supported_variants_group)
+        self.shell.add_content_widget(actions_row)
+        self.shell.add_content_widget(self.assets_table)
+        self.shell.add_content_widget(self.assets_status_text)
+        self.shell.set_footer_text(
+            "Select a condition-role row to import or refresh assets without changing the outer window size."
+        )
+
         layout = QVBoxLayout(self)
-        layout.addWidget(supported_variants_group)
-        layout.addLayout(button_layout)
-        layout.addWidget(self.assets_table, 1)
-        layout.addWidget(self.assets_status_text)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(self.shell)
 
         self._document.project_changed.connect(self.refresh)
         self._document.manifest_changed.connect(self.refresh)
@@ -2143,6 +2352,7 @@ class SetupDashboardPage(QWidget):
                 "and asset readiness from one view."
             ),
             layout_mode="three_column",
+            width_preset="wide",
             parent=self,
         )
         self.shell.set_column_stretches(3, 4, 3)
@@ -2197,7 +2407,7 @@ class SetupDashboardPage(QWidget):
 
 
 class RunPage(QWidget):
-    """Session compile and launch page with automatic preflight checks."""
+    """Session compile and launch page with detailed runtime diagnostics."""
 
     def __init__(
         self,
@@ -2238,11 +2448,12 @@ class RunPage(QWidget):
             parent=self,
         )
         display_layout = QFormLayout()
+        display_layout.setVerticalSpacing(10)
         display_layout.addRow("Display Index", self.display_index_edit)
         display_layout.addRow("Engine", self.engine_name_value)
         display_card.body_layout.addLayout(display_layout)
 
-        self.compile_button = QPushButton("Compile Session", self)
+        self.compile_button = QPushButton("Preview Session Plan", self)
         self.compile_button.setObjectName("compile_session_button")
         self.compile_button.clicked.connect(self.compile_session)
         self.launch_button = QPushButton("Launch Experiment", self)
@@ -2261,31 +2472,70 @@ class RunPage(QWidget):
         button_layout.addWidget(self.launch_button)
         button_layout.addStretch(1)
 
+        controls_card = SectionCard(
+            title="Run Controls",
+            subtitle="Preview the session plan or launch from this page.",
+            object_name="run_controls_card",
+            parent=self,
+        )
+        controls_card.body_layout.addWidget(button_row)
+
         self.summary_text = QPlainTextEdit(self)
         self.summary_text.setObjectName("session_summary_text")
         self.summary_text.setReadOnly(True)
         self.summary_text.setMaximumBlockCount(500)
+        self.summary_text.setPlaceholderText(
+            "Preview the session plan or launch to populate runtime diagnostics."
+        )
 
         summary_card = SectionCard(
-            title="Session Summary",
-            subtitle="Compile and launch feedback appears here.",
+            title="Session Summary & Runtime Feedback",
+            subtitle="Detailed session-preview and launch diagnostics for the current project.",
             object_name="run_summary_card",
             parent=self,
         )
         summary_card.body_layout.addWidget(self.summary_text)
 
-        self.shell = NonHomePageShell(
-            title="Run / Runtime",
-            subtitle="Compile, validate, and launch using the supported alpha test-mode path.",
-            layout_mode="single_column",
+        self.readiness_badge = QLabel("Status: Setup Required", self)
+        self.readiness_badge.setObjectName("run_readiness_badge")
+        self.readiness_badge.setAlignment(Qt.AlignmentFlag.AlignLeft)
+        self.readiness_badge.setWordWrap(True)
+        self.readiness_badge.setMinimumHeight(34)
+        self.readiness_badge.setProperty("readinessRole", "compact")
+
+        self.readiness_summary_value = QLabel("Not computed yet.", self)
+        self.readiness_summary_value.setObjectName("run_readiness_summary_value")
+        self.readiness_summary_value.setWordWrap(True)
+        self.readiness_summary_value.setMinimumHeight(24)
+
+        self.readiness_checklist = QListWidget(self)
+        self.readiness_checklist.setObjectName("run_readiness_checklist")
+        _configure_read_only_list(self.readiness_checklist)
+
+        readiness_card = SectionCard(
+            title="Launch Readiness",
+            subtitle="Validation, asset checks, and launch prerequisites.",
+            object_name="run_readiness_card",
             parent=self,
         )
-        self.shell.add_content_widget(self.runtime_settings_editor)
-        self.shell.add_content_widget(display_card)
-        self.shell.add_content_widget(button_row)
-        self.shell.add_content_widget(summary_card, stretch=1)
+        readiness_card.body_layout.addWidget(self.readiness_badge)
+        readiness_card.body_layout.addWidget(self.readiness_summary_value)
+        readiness_card.body_layout.addWidget(self.readiness_checklist, 1)
+
+        self.shell = NonHomePageShell(
+            title="Run / Runtime",
+            subtitle="Preview the session plan and launch with detailed runtime feedback.",
+            layout_mode="three_column",
+            width_preset="medium",
+            parent=self,
+        )
+        self.shell.add_column_widget(0, self.runtime_settings_editor)
+        self.shell.add_column_widget(1, controls_card)
+        self.shell.add_column_widget(1, summary_card, stretch=1)
+        self.shell.add_column_widget(2, readiness_card)
+        self.shell.add_column_widget(2, display_card, stretch=1)
         self.shell.set_footer_text(
-            "Display index is edited here only; dashboard runtime controls intentionally omit it."
+            "Display index and runtime settings are available only on this page."
         )
 
         layout = QVBoxLayout(self)
@@ -2314,6 +2564,12 @@ class RunPage(QWidget):
             raise DocumentError("Display index must be blank or a non-negative integer.")
         return display_index
 
+    def _status_report(self) -> LauncherReadinessReport:
+        return _launcher_readiness_report(
+            self._document,
+            refresh_hz=self.current_refresh_hz(),
+        )
+
     def refresh(self) -> None:
         self.runtime_settings_editor.refresh()
         self._refresh_summary()
@@ -2326,18 +2582,20 @@ class RunPage(QWidget):
             return
         self._set_summary(
             session_plan,
-            extra_lines=["Status: session compiled successfully."],
+            extra_lines=["Status: session preview refreshed."],
         )
 
     def preflight_session(self) -> None:
         try:
-            session_plan = self._document.preflight_session(refresh_hz=self.current_refresh_hz())
+            session_plan = self._document.prepare_test_session_launch(
+                refresh_hz=self.current_refresh_hz()
+            )
         except Exception as error:
             _show_error_dialog(self, "Preflight Error", error)
             return
         self._set_summary(
             session_plan,
-            extra_lines=["Status: preflight passed for the current test-mode launch path."],
+            extra_lines=["Status: launch checks passed."],
         )
         QMessageBox.information(
             self,
@@ -2347,13 +2605,15 @@ class RunPage(QWidget):
 
     def launch_test_session(self) -> None:
         try:
-            session_plan = self._document.preflight_session(refresh_hz=self.current_refresh_hz())
+            refresh_hz = self.current_refresh_hz()
+            session_plan = self._document.prepare_test_session_launch(refresh_hz=refresh_hz)
+            display_index = self.current_display_index()
         except Exception as error:
             _show_error_dialog(self, "Launch Blocked", error)
             return
         self._set_summary(
             session_plan,
-            extra_lines=["Status: launch readiness checks passed."],
+            extra_lines=["Status: launch checks passed."],
         )
 
         participant_number = self._collect_launch_participant_number()
@@ -2361,10 +2621,10 @@ class RunPage(QWidget):
             return
         try:
             self._show_launch_interstitial()
-            session_plan, summary = self._document.launch_test_session(
-                refresh_hz=self.current_refresh_hz(),
+            summary = self._document.launch_compiled_session(
+                session_plan,
                 participant_number=participant_number,
-                display_index=self.current_display_index(),
+                display_index=display_index,
                 fullscreen=self.fullscreen_checkbox.isChecked(),
             )
         except Exception as error:
@@ -2455,19 +2715,27 @@ class RunPage(QWidget):
                 return participant_number
 
     def _refresh_summary(self) -> None:
+        self._refresh_readiness_panel()
         session_plan = self._document.last_session_plan
         if session_plan is None:
             validation = self._document.validation_report(refresh_hz=self.current_refresh_hz())
             if validation.issues:
-                self.summary_text.setPlainText(
-                    "\n".join(f"- {issue.message}" for issue in validation.issues)
-                )
-            else:
-                self.summary_text.setPlainText(
-                    "Compile the session to preview block order, seed, and run count."
-                )
+                lines = [f"- {issue.message}" for issue in validation.issues]
+                self.summary_text.setPlainText("\n".join(lines))
+                return
+            self.summary_text.clear()
             return
         self._set_summary(session_plan)
+
+    def _refresh_readiness_panel(self) -> None:
+        report = self._status_report()
+        self.readiness_badge.setText(f"Status: {report.status_label}")
+        _set_widget_property(self.readiness_badge, "readinessState", report.badge_state)
+        summary_text = report.status_summary
+        if report.preview_note:
+            summary_text = f"{summary_text} {report.preview_note}"
+        self.readiness_summary_value.setText(summary_text)
+        _set_list_items(self.readiness_checklist, report.readiness_items)
 
     def _set_summary(self, session_plan, *, extra_lines: list[str] | None = None) -> None:
         lines = [
@@ -2490,68 +2758,72 @@ class RunPage(QWidget):
         if extra_lines:
             lines.extend(["", *extra_lines])
         self.summary_text.setPlainText("\n".join(lines))
+        self._refresh_readiness_panel()
 
 
 class HomePage(QWidget):
-    """Dashboard-style overview page for the current project."""
+    """Launcher-oriented overview page for the current project."""
 
     def __init__(
         self,
         document: ProjectDocument,
-        run_page: RunPage,
         *,
         load_condition_template_profiles: Callable[[], list[ConditionTemplateProfile]],
         parent=None,
     ) -> None:
         super().__init__(parent)
         self._document = document
-        self._run_page = run_page
         self._load_condition_template_profiles = load_condition_template_profiles
-        self._latest_status_bar_message = ""
         self.setObjectName("home_page")
+        self.page_container = PageContainer(width_preset="narrow", parent=self)
 
         self.current_project_header = QLabel(self)
         self.current_project_header.setObjectName("home_current_project_header")
 
         self.current_project_subtitle = QLabel(
-            "Authoring dashboard with key actions and live project/session status.",
+            "Open a project, confirm its identity, and launch quickly.",
             self,
         )
         self.current_project_subtitle.setObjectName("home_current_project_subtitle")
         self.current_project_subtitle.setWordWrap(True)
 
-        self.new_project_button = QPushButton("Create New Project", self)
-        self.new_project_button.setObjectName("home_create_project_button")
         self.open_project_button = QPushButton("Open Project", self)
         self.open_project_button.setObjectName("home_open_project_button")
-        self.save_project_button = QPushButton("Save", self)
-        self.save_project_button.setObjectName("home_save_project_button")
         self.launch_button = QPushButton("Launch Experiment", self)
         self.launch_button.setObjectName("home_launch_test_session_button")
         self.launch_button.setProperty("launchActionRole", "primary")
         self.launch_button.setProperty("homeActionRole", "primary")
+        self.save_project_button = QPushButton("Save", self)
+        self.save_project_button.setObjectName("home_save_project_button")
+        self.new_project_button = QPushButton("Create New Project", self)
+        self.new_project_button.setObjectName("home_create_project_button")
 
         for button in (
-            self.new_project_button,
             self.open_project_button,
+            self.new_project_button,
             self.save_project_button,
             self.launch_button,
         ):
-            button.setMinimumHeight(42)
+            button.setMinimumHeight(38)
 
         action_layout = QHBoxLayout()
-        action_layout.setSpacing(10)
-        action_layout.addWidget(self.new_project_button)
+        action_layout.setContentsMargins(0, 0, 0, 0)
+        action_layout.setSpacing(8)
         action_layout.addWidget(self.open_project_button)
+        action_layout.addWidget(self.new_project_button)
         action_layout.addWidget(self.save_project_button)
         action_layout.addWidget(self.launch_button)
-        action_layout.addStretch(1)
 
-        project_card = QGroupBox("Project Summary", self)
-        project_card.setObjectName("home_project_card")
-        project_layout = QFormLayout(project_card)
-        project_layout.setVerticalSpacing(10)
-        project_layout.setHorizontalSpacing(14)
+        project_card = SectionCard(
+            title="Project Info",
+            subtitle="Project identity and template settings.",
+            object_name="home_project_card",
+            parent=self,
+        )
+        project_layout = QFormLayout()
+        project_layout.setContentsMargins(0, 0, 0, 0)
+        project_layout.setVerticalSpacing(6)
+        project_layout.setHorizontalSpacing(12)
         self.project_name_value = self._new_value_label(
             "home_project_name_value",
             role="primary",
@@ -2563,15 +2835,24 @@ class HomePage(QWidget):
         self.project_template_value = self._new_value_label("home_project_template_value")
         self.project_description_value = self._new_value_label("home_project_description_value")
         self._add_summary_row(project_layout, "Project Name", self.project_name_value)
-        self._add_summary_row(project_layout, "Root Path", self.project_root_value)
-        self._add_summary_row(project_layout, "Template", self.project_template_value)
         self._add_summary_row(project_layout, "Description", self.project_description_value)
+        self._add_summary_row(project_layout, "Template", self.project_template_value)
+        self._add_summary_row(project_layout, "Root Path", self.project_root_value)
+        project_card.layout().setContentsMargins(12, 10, 12, 10)
+        project_card.layout().setSpacing(6)
+        project_card.body_layout.setSpacing(6)
+        project_card.body_layout.addLayout(project_layout)
 
-        session_card = QGroupBox("Session Summary", self)
-        session_card.setObjectName("home_session_card")
-        session_layout = QFormLayout(session_card)
-        session_layout.setVerticalSpacing(10)
-        session_layout.setHorizontalSpacing(14)
+        session_card = SectionCard(
+            title="Session Summary",
+            subtitle="Compact launch essentials.",
+            object_name="home_session_card",
+            parent=self,
+        )
+        session_layout = QFormLayout()
+        session_layout.setContentsMargins(0, 0, 0, 0)
+        session_layout.setVerticalSpacing(6)
+        session_layout.setHorizontalSpacing(12)
         self.condition_count_value = self._new_value_label(
             "home_condition_count_value",
             role="primary",
@@ -2581,88 +2862,54 @@ class HomePage(QWidget):
             role="primary",
         )
         self.session_randomization_value = self._new_value_label("home_session_randomization_value")
-        self.session_structure_value = self._new_value_label("home_session_structure_value")
         self.fixation_task_value = self._new_value_label("home_fixation_task_value")
         self.accuracy_task_value = self._new_value_label("home_accuracy_task_value")
-        self.session_compile_value = self._new_value_label("home_session_compile_value")
         self._add_summary_row(session_layout, "Condition Count", self.condition_count_value)
         self._add_summary_row(session_layout, "Block Count", self.block_count_value)
         self._add_summary_row(session_layout, "Order Strategy", self.session_randomization_value)
-        self._add_summary_row(session_layout, "Structure Snapshot", self.session_structure_value)
         self._add_summary_row(session_layout, "Fixation Task", self.fixation_task_value)
         self._add_summary_row(session_layout, "Accuracy Task", self.accuracy_task_value)
-        self._add_summary_row(session_layout, "Compile Status", self.session_compile_value)
+        session_card.layout().setContentsMargins(12, 10, 12, 10)
+        session_card.layout().setSpacing(6)
+        session_card.body_layout.setSpacing(6)
+        session_card.body_layout.addLayout(session_layout)
 
-        preflight_card = QGroupBox("Launch Readiness", self)
-        preflight_card.setObjectName("home_preflight_card")
-        preflight_layout = QVBoxLayout(preflight_card)
-        preflight_layout.setSpacing(8)
-        self.readiness_badge = QLabel(self)
-        self.readiness_badge.setObjectName("home_readiness_badge")
-        self.readiness_badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.readiness_badge.setMinimumHeight(32)
-        self.readiness_summary_value = self._new_value_label(
-            "home_readiness_summary_value",
-            role="primary",
+        self.launch_status_label = QLabel("Status: Setup Required", self)
+        self.launch_status_label.setObjectName("home_launch_status_indicator")
+        self.launch_status_label.setAlignment(Qt.AlignmentFlag.AlignLeft)
+        self.launch_status_label.setWordWrap(False)
+        self.launch_status_label.setMinimumHeight(28)
+
+        status_card = SectionCard(
+            title="Launch Readiness",
+            subtitle="Single-line launch state.",
+            object_name="home_status_card",
+            parent=self,
         )
-        self.runtime_summary_value = self._new_value_label("home_runtime_summary_value")
-        self.readiness_checklist = QListWidget(self)
-        self.readiness_checklist.setObjectName("home_readiness_checklist")
-        self._configure_read_only_list(self.readiness_checklist)
-        preflight_layout.addWidget(self.readiness_badge, 0, Qt.AlignmentFlag.AlignLeft)
-        preflight_layout.addWidget(self.readiness_summary_value)
-        preflight_layout.addWidget(self.runtime_summary_value)
-        preflight_layout.addWidget(self.readiness_checklist, 1)
-
-        next_steps_card = QGroupBox("Next Steps", self)
-        next_steps_card.setObjectName("home_next_steps_card")
-        next_steps_layout = QVBoxLayout(next_steps_card)
-        next_steps_layout.setSpacing(8)
-        self.next_steps_intro = QLabel(
-            "Use this checklist to move from setup to launch.",
-            self,
-        )
-        self.next_steps_intro.setObjectName("home_next_steps_intro")
-        self.next_steps_intro.setWordWrap(True)
-        self.next_steps_list = QListWidget(self)
-        self.next_steps_list.setObjectName("home_next_steps_list")
-        self._configure_read_only_list(self.next_steps_list)
-        next_steps_layout.addWidget(self.next_steps_intro)
-        next_steps_layout.addWidget(self.next_steps_list, 1)
-
-        activity_card = QGroupBox("Recent Activity", self)
-        activity_card.setObjectName("home_activity_card")
-        activity_layout = QVBoxLayout(activity_card)
-        activity_layout.setSpacing(8)
-        self.activity_summary_value = QLabel(self)
-        self.activity_summary_value.setObjectName("home_activity_summary_value")
-        self.activity_summary_value.setWordWrap(True)
-        self.recent_activity_list = QListWidget(self)
-        self.recent_activity_list.setObjectName("home_recent_activity_list")
-        self._configure_read_only_list(self.recent_activity_list)
-        activity_layout.addWidget(self.activity_summary_value)
-        activity_layout.addWidget(self.recent_activity_list, 1)
+        status_card.layout().setContentsMargins(12, 10, 12, 10)
+        status_card.layout().setSpacing(6)
+        status_card.body_layout.setSpacing(4)
+        status_card.body_layout.addWidget(self.launch_status_label)
 
         cards_grid = QGridLayout()
-        cards_grid.setHorizontalSpacing(14)
-        cards_grid.setVerticalSpacing(14)
+        cards_grid.setContentsMargins(0, 0, 0, 0)
+        cards_grid.setHorizontalSpacing(10)
+        cards_grid.setVerticalSpacing(10)
         cards_grid.addWidget(project_card, 0, 0)
         cards_grid.addWidget(session_card, 0, 1)
-        cards_grid.addWidget(preflight_card, 0, 2)
-        cards_grid.addWidget(next_steps_card, 1, 0)
-        cards_grid.addWidget(activity_card, 1, 1, 1, 2)
+        cards_grid.addWidget(status_card, 1, 0, 1, 2)
         cards_grid.setColumnStretch(0, 3)
         cards_grid.setColumnStretch(1, 3)
-        cards_grid.setColumnStretch(2, 3)
-        cards_grid.setRowStretch(1, 1)
+
+        page_layout = self.page_container.content_layout
+        page_layout.addWidget(self.current_project_header)
+        page_layout.addWidget(self.current_project_subtitle)
+        page_layout.addLayout(action_layout)
+        page_layout.addLayout(cards_grid)
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(24, 20, 24, 20)
-        layout.setSpacing(14)
-        layout.addWidget(self.current_project_header)
-        layout.addWidget(self.current_project_subtitle)
-        layout.addLayout(action_layout)
-        layout.addLayout(cards_grid, 1)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(self.page_container)
 
         self.setStyleSheet(
             """
@@ -2671,11 +2918,11 @@ class HomePage(QWidget):
                 font-size: 13px;
             }
             QLabel#home_current_project_header {
-                font-size: 28px;
+                font-size: 26px;
                 font-weight: 700;
             }
             QLabel#home_current_project_subtitle {
-                font-size: 14px;
+                font-size: 13px;
                 color: #495869;
             }
             QLabel[homeFieldLabel="true"] {
@@ -2692,84 +2939,48 @@ class HomePage(QWidget):
                 color: #2f435b;
                 font-size: 13px;
             }
-            QGroupBox#home_project_card,
-            QGroupBox#home_session_card,
-            QGroupBox#home_preflight_card,
-            QGroupBox#home_next_steps_card,
-            QGroupBox#home_activity_card {
-                border: 1px solid #c5cfdb;
-                border-radius: 10px;
-                margin-top: 12px;
-                padding-top: 12px;
-                background-color: #f8fafc;
-            }
-            QGroupBox#home_project_card::title,
-            QGroupBox#home_session_card::title,
-            QGroupBox#home_preflight_card::title,
-            QGroupBox#home_next_steps_card::title,
-            QGroupBox#home_activity_card::title {
-                subcontrol-origin: margin;
-                left: 14px;
-                padding: 0 5px;
-                font-size: 14px;
-                font-weight: 700;
-            }
             QPushButton#home_create_project_button,
             QPushButton#home_open_project_button,
             QPushButton#home_save_project_button,
             QPushButton#home_launch_test_session_button {
                 font-size: 14px;
-                padding: 8px 14px;
+                padding: 7px 12px;
             }
             QPushButton[launchActionRole="primary"],
             QPushButton[homeActionRole="primary"] {
                 font-weight: 700;
             }
-            QLabel#home_readiness_badge {
+            QLabel#home_launch_status_indicator {
                 border-radius: 6px;
-                padding: 5px 10px;
+                padding: 4px 8px;
                 font-size: 13px;
                 font-weight: 700;
             }
-            QLabel#home_readiness_badge[readinessState="ready"] {
+            QLabel#home_launch_status_indicator[readinessState="ready"] {
                 background-color: #dcfce7;
                 border: 1px solid #86efac;
                 color: #166534;
             }
-            QLabel#home_readiness_badge[readinessState="warning"] {
+            QLabel#home_launch_status_indicator[readinessState="warning"] {
                 background-color: #ffedd5;
                 border: 1px solid #fdba74;
                 color: #9a3412;
             }
-            QLabel#home_readiness_badge[readinessState="info"] {
+            QLabel#home_launch_status_indicator[readinessState="info"] {
                 background-color: #e0f2fe;
                 border: 1px solid #7dd3fc;
                 color: #0c4a6e;
             }
-            QLabel#home_runtime_summary_value,
-            QLabel#home_activity_summary_value,
-            QLabel#home_next_steps_intro {
-                color: #4c5d73;
-            }
-            QListWidget#home_readiness_checklist,
-            QListWidget#home_next_steps_list,
-            QListWidget#home_recent_activity_list {
-                background-color: #ffffff;
-                border: 1px solid #d0d9e4;
-                border-radius: 6px;
-                padding: 4px;
-            }
-            QListWidget#home_readiness_checklist::item,
-            QListWidget#home_next_steps_list::item,
-            QListWidget#home_recent_activity_list::item {
-                padding: 5px 4px;
+            QLabel#home_launch_status_indicator[readinessState="pending"] {
+                background-color: #f1f5f9;
+                border: 1px solid #cbd5e1;
+                color: #475569;
             }
             """
         )
 
         self._document.project_changed.connect(self.refresh)
         self._document.session_plan_changed.connect(self.refresh)
-        self._run_page.summary_text.textChanged.connect(self.refresh)
         self.refresh()
 
     def bind_quick_actions(
@@ -2797,64 +3008,51 @@ class HomePage(QWidget):
             "Launch Experiment",
         )
 
-    def update_status_bar_message(self, message: str) -> None:
-        if message:
-            self._latest_status_bar_message = message
-        self.refresh()
-
     def refresh(self) -> None:
         project = self._document.project
         session_settings = project.settings.session
-        display_settings = project.settings.display
-        trigger_settings = project.settings.triggers
         fixation_settings = project.settings.fixation_task
         ordered_conditions = self._document.ordered_conditions()
-        refresh_hz = self._run_page.current_refresh_hz()
-        validation = self._document.validation_report(refresh_hz=refresh_hz)
-        latest_status_line = self._latest_status_line()
+        report = self._status_report()
 
-        self.current_project_header.setText(f"Current Project: {project.meta.name}")
+        self.current_project_header.setText(project.meta.name)
+        self.current_project_subtitle.setText(
+            "Open a project, confirm its identity, and launch quickly."
+        )
         self.project_name_value.setText(project.meta.name)
         self.project_root_value.setText(str(self._document.project_root))
         self.project_template_value.setText(self._condition_template_summary_text())
-
-        description = project.meta.description.strip()
-        if not description:
-            self.project_description_value.setText("No description set yet.")
-        else:
-            compact_description = " ".join(description.split())
-            if len(compact_description) > 180:
-                compact_description = f"{compact_description[:177]}..."
-            self.project_description_value.setText(compact_description)
+        self.project_description_value.setText(
+            self._project_description_text(project.meta.description)
+        )
 
         self.condition_count_value.setText(str(len(ordered_conditions)))
         self.block_count_value.setText(str(session_settings.block_count))
         self.session_randomization_value.setText(self._session_order_text())
-        self.session_structure_value.setText(self._session_structure_text())
-        self.session_compile_value.setText(self._compile_status_text())
-
         self.fixation_task_value.setText("Enabled" if fixation_settings.enabled else "Disabled")
         self.accuracy_task_value.setText(
             "Enabled" if fixation_settings.accuracy_task_enabled else "Disabled"
         )
-        self.runtime_summary_value.setText(
-            self._runtime_summary_text(
-                display_settings=display_settings,
-                trigger_settings=trigger_settings,
-            )
+        self._set_status_indicator(report)
+
+    def _status_report(self) -> LauncherReadinessReport:
+        return _launcher_readiness_report(
+            self._document,
+            refresh_hz=self._status_refresh_hz(),
         )
 
-        self._refresh_readiness_panel(
-            validation=validation,
-            refresh_hz=refresh_hz,
-            ordered_conditions=ordered_conditions,
-            latest_status_line=latest_status_line,
-        )
-        self._refresh_next_steps(
-            ordered_conditions=ordered_conditions,
-            validation_issue_count=len(validation.issues),
-        )
-        self._refresh_activity_panel(latest_status_line=latest_status_line)
+    def _status_refresh_hz(self) -> float:
+        preferred_refresh = self._document.project.settings.display.preferred_refresh_hz
+        return float(preferred_refresh if preferred_refresh is not None else 60.0)
+
+    @staticmethod
+    def _project_description_text(description: str) -> str:
+        compact = " ".join(description.split())
+        if not compact:
+            return "No description set yet."
+        if len(compact) > 160:
+            compact = f"{compact[:157]}..."
+        return compact
 
     def _condition_template_summary_text(self) -> str:
         profile_id = self._document.project.settings.condition_profile_id
@@ -2869,14 +3067,14 @@ class HomePage(QWidget):
             return f"Missing template: {profile_id}"
         return profile.display_name
 
-    @staticmethod
-    def _configure_read_only_list(widget: QListWidget) -> None:
-        widget.setSelectionMode(QListWidget.SelectionMode.NoSelection)
-        widget.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        widget.setWordWrap(True)
-        widget.setSpacing(2)
-        widget.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        widget.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+    def _set_status_indicator(self, report: LauncherReadinessReport) -> None:
+        self.launch_status_label.setText(f"Status: {report.status_label}")
+        _set_widget_property(
+            self.launch_status_label,
+            "readinessState",
+            report.badge_state,
+        )
+        self.launch_status_label.setToolTip(report.status_summary)
 
     def _add_summary_row(
         self,
@@ -2905,21 +3103,6 @@ class HomePage(QWidget):
         return label
 
     @staticmethod
-    def _set_widget_property(widget: QWidget, name: str, value: str) -> None:
-        if widget.property(name) == value:
-            return
-        widget.setProperty(name, value)
-        widget.style().unpolish(widget)
-        widget.style().polish(widget)
-        widget.update()
-
-    @staticmethod
-    def _set_list_items(widget: QListWidget, lines: list[str]) -> None:
-        widget.clear()
-        for line in lines:
-            widget.addItem(line)
-
-    @staticmethod
     def _bind_button_to_action(button: QPushButton, action: QAction, label: str) -> None:
         button.setText(label)
         if action.toolTip():
@@ -2927,33 +3110,6 @@ class HomePage(QWidget):
         if action.statusTip():
             button.setStatusTip(action.statusTip())
         button.clicked.connect(lambda _checked=False, target=action: target.trigger())
-
-    def _session_structure_text(self) -> str:
-        session_plan = self._document.last_session_plan
-        if session_plan is not None:
-            block_lines = []
-            for block in session_plan.blocks[:3]:
-                block_lines.append(
-                    f"Block {block.block_index + 1}: " + " -> ".join(block.condition_order)
-                )
-            remaining_block_count = len(session_plan.blocks) - len(block_lines)
-            if remaining_block_count > 0:
-                block_lines.append(f"... and {remaining_block_count} more block(s).")
-            return " | ".join(block_lines)
-
-        ordered_conditions = self._document.ordered_conditions()
-        if not ordered_conditions:
-            return "No conditions configured yet."
-
-        if (
-            self._document.project.settings.session.randomize_conditions_per_block
-            and len(ordered_conditions) > 1
-        ):
-            return "Conditions will be randomized within each block."
-
-        return "Planned order: " + " -> ".join(
-            condition.name for condition in ordered_conditions
-        )
 
     def _session_order_text(self) -> str:
         ordered_conditions = self._document.ordered_conditions()
@@ -2966,225 +3122,6 @@ class HomePage(QWidget):
         ):
             return "Randomized within each block."
         return "Fixed project order."
-
-    def _compile_status_text(self) -> str:
-        session_plan = self._document.last_session_plan
-        if session_plan is None:
-            return "Not compiled yet."
-        return (
-            f"Compiled with {session_plan.total_runs} run(s), "
-            f"{session_plan.block_count} block(s), seed {session_plan.random_seed}."
-        )
-
-    def _runtime_summary_text(self, *, display_settings, trigger_settings) -> str:
-        preferred_refresh = (
-            f"{display_settings.preferred_refresh_hz:.2f} Hz"
-            if display_settings.preferred_refresh_hz is not None
-            else "not set"
-        )
-        serial_port = trigger_settings.serial_port or "not set"
-        fullscreen_mode = (
-            "on" if self._run_page.fullscreen_checkbox.isChecked() else "off"
-        )
-        return (
-            "Runtime: alpha test-mode only | "
-            f"Display {display_settings.background_color}, refresh {preferred_refresh}, "
-            f"fullscreen {fullscreen_mode} | "
-            f"Serial {serial_port} @ {trigger_settings.baudrate}"
-        )
-
-    def _refresh_readiness_panel(
-        self,
-        *,
-        validation,
-        refresh_hz: float,
-        ordered_conditions: list,
-        latest_status_line: str | None,
-    ) -> None:
-        issue_count = len(validation.issues)
-        has_conditions = bool(ordered_conditions)
-        session_compiled = self._document.last_session_plan is not None
-
-        if latest_status_line is not None and "passed" in latest_status_line.lower():
-            badge_text = "Launch Checks Passed"
-            badge_state = "ready"
-        elif not has_conditions:
-            badge_text = "Setup Required"
-            badge_state = "warning"
-        elif issue_count > 0:
-            badge_text = "Needs Attention"
-            badge_state = "warning"
-        else:
-            badge_text = "Ready to Launch"
-            badge_state = "ready"
-
-        self.readiness_badge.setText(badge_text)
-        self._set_widget_property(self.readiness_badge, "readinessState", badge_state)
-
-        if issue_count > 0:
-            summary_text = (
-                f"Validation at {refresh_hz:.2f} Hz reports "
-                f"{issue_count} issue(s)."
-            )
-        else:
-            summary_text = f"Validation at {refresh_hz:.2f} Hz reports no issues."
-        if not session_compiled:
-            summary_text += " Compile once on Run / Runtime for a concrete session plan."
-        self.readiness_summary_value.setText(summary_text)
-        self._set_list_items(
-            self.readiness_checklist,
-            self._readiness_items(
-                validation=validation,
-                refresh_hz=refresh_hz,
-                ordered_conditions=ordered_conditions,
-                latest_status_line=latest_status_line,
-            ),
-        )
-
-    def _readiness_items(
-        self,
-        *,
-        validation,
-        refresh_hz: float,
-        ordered_conditions: list,
-        latest_status_line: str | None,
-    ) -> list[str]:
-        items: list[str] = []
-        if ordered_conditions:
-            items.append(f"[OK] Conditions configured: {len(ordered_conditions)}.")
-        else:
-            items.append("[TODO] Add at least one condition.")
-
-        if self._document.last_session_plan is not None:
-            items.append("[OK] Session plan compiled.")
-        else:
-            items.append("[TODO] Compile once on Run / Runtime.")
-
-        issue_count = len(validation.issues)
-        if issue_count == 0:
-            items.append(f"[OK] Validation ({refresh_hz:.2f} Hz) clear.")
-        else:
-            items.append(
-                f"[CHECK] Validation ({refresh_hz:.2f} Hz): {issue_count} issue(s)."
-            )
-            first_issue = self._truncate_line(validation.issues[0].message, 120)
-            items.append(f"[WARN] First issue: {first_issue}")
-
-        items.append("[INFO] Runtime path: alpha test-mode only.")
-        if latest_status_line is not None:
-            items.append(f"[LATEST] {self._truncate_line(latest_status_line, 120)}")
-        return items
-
-    def _refresh_next_steps(
-        self,
-        *,
-        ordered_conditions: list,
-        validation_issue_count: int,
-    ) -> None:
-        conditions_ready = bool(ordered_conditions)
-        assets_ready = self._conditions_have_assigned_assets(ordered_conditions)
-        compiled_ready = self._document.last_session_plan is not None
-        validation_ready = validation_issue_count == 0
-        launch_ready = conditions_ready and assets_ready and validation_ready
-
-        steps = [
-            self._format_step(
-                conditions_ready,
-                "Define conditions on the Conditions tab.",
-            ),
-            self._format_step(
-                assets_ready,
-                "Assign base/oddball sets on Assets / Preprocessing.",
-            ),
-            self._format_step(
-                compiled_ready,
-                "Compile session on Run / Runtime.",
-            ),
-            self._format_step(
-                validation_ready,
-                "Resolve launch-readiness issues.",
-            ),
-        ]
-
-        if launch_ready:
-            steps.append("[NEXT] Launch experiment from Home or Run / Runtime.")
-        elif not conditions_ready:
-            steps.append("[NEXT] Add your first condition.")
-        elif not assets_ready:
-            steps.append("[NEXT] Import and assign stimulus sets.")
-        elif not compiled_ready:
-            steps.append("[NEXT] Compile once to preview block order.")
-        else:
-            steps.append("[NEXT] Resolve remaining validation issues, then launch.")
-
-        self._set_list_items(self.next_steps_list, steps)
-
-    def _conditions_have_assigned_assets(self, ordered_conditions: list) -> bool:
-        if not ordered_conditions:
-            return False
-        available_set_ids = {
-            stimulus_set.set_id for stimulus_set in self._document.project.stimulus_sets
-        }
-        if not available_set_ids:
-            return False
-        return all(
-            condition.base_stimulus_set_id in available_set_ids
-            and condition.oddball_stimulus_set_id in available_set_ids
-            for condition in ordered_conditions
-        )
-
-    @staticmethod
-    def _format_step(is_done: bool, text: str) -> str:
-        status = "DONE" if is_done else "TODO"
-        return f"[{status}] {text}"
-
-    def _refresh_activity_panel(self, *, latest_status_line: str | None) -> None:
-        self.activity_summary_value.setText(self._compile_status_text())
-        self._set_list_items(
-            self.recent_activity_list,
-            self._activity_entries(latest_status_line=latest_status_line),
-        )
-
-    def _activity_entries(self, *, latest_status_line: str | None) -> list[str]:
-        entries: list[str] = []
-        if self._latest_status_bar_message:
-            entries.append(f"Status bar: {self._latest_status_bar_message}")
-        else:
-            entries.append("Status bar: no recent message.")
-
-        if latest_status_line is not None:
-            entries.append(
-                f"Latest run status: {self._truncate_line(latest_status_line, 120)}"
-            )
-
-        summary_text = self._run_page.summary_text.toPlainText().strip()
-        if not summary_text:
-            entries.append("Run summary: no compile/launch activity yet.")
-            return entries
-
-        summary_lines = [line.strip() for line in summary_text.splitlines() if line.strip()]
-        tail_lines = summary_lines[-4:]
-        for line in tail_lines:
-            if latest_status_line is not None and line == latest_status_line:
-                continue
-            entries.append(f"Run detail: {self._truncate_line(line, 120)}")
-        return entries
-
-    @staticmethod
-    def _truncate_line(value: str, max_length: int) -> str:
-        if len(value) <= max_length:
-            return value
-        return f"{value[: max_length - 3]}..."
-
-    def _latest_status_line(self) -> str | None:
-        summary_text = self._run_page.summary_text.toPlainText()
-        for line in reversed(summary_text.splitlines()):
-            stripped = line.strip()
-            if stripped.lower().startswith("status:"):
-                return stripped
-        return None
-
-
 class StudioMainWindow(QMainWindow):
     """Main window hosting the Phase 5 authoring tabs."""
 
@@ -3227,7 +3164,6 @@ class StudioMainWindow(QMainWindow):
         )
         self.home_page = HomePage(
             document,
-            self.run_page,
             load_condition_template_profiles=on_load_condition_template_profiles,
             parent=self,
         )
@@ -3267,8 +3203,6 @@ class StudioMainWindow(QMainWindow):
         self.document.project_changed.connect(self._update_window_title)
         self.document.dirty_changed.connect(self._update_window_title)
         self.document.saved.connect(lambda: self.statusBar().showMessage("Project saved.", 3000))
-        self.statusBar().messageChanged.connect(self.home_page.update_status_bar_message)
-        self.home_page.update_status_bar_message(self.statusBar().currentMessage())
 
     def _runtime_fullscreen_state(self) -> bool:
         return self._runtime_fullscreen_ui_state

@@ -1,4 +1,6 @@
-"""Runtime-owned helpers for writing neutral run and session artifacts."""
+"""Writers for runtime-owned neutral session artifacts.
+It serializes RunSpec, SessionPlan context, validation reports, and execution summaries into stable JSON and CSV outputs after playback completes.
+This module owns export file emission only; scoring, session flow, and engine behavior are provided by other runtime components."""
 
 from __future__ import annotations
 

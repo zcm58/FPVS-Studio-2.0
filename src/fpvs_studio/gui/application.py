@@ -1,4 +1,6 @@
-"""PySide6 application bootstrap for FPVS Studio."""
+"""PySide6 application bootstrap and process-level window startup.
+It creates the QApplication instance and hands control to the GUI controller that loads project, preprocessing, and launch workflows.
+This module owns desktop app initialization only, not persistent model truth or runtime execution logic."""
 
 from __future__ import annotations
 

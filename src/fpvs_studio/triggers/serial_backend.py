@@ -1,4 +1,6 @@
-"""Serial trigger backend scaffold."""
+"""Serial trigger backend scaffold for future lab hardware integration.
+It reserves the runtime-facing adapter shape for configured serial ports while keeping serial specifics out of core contracts and GUI code.
+This module owns hardware hookup scaffolding only; trigger scheduling and export records remain in compiler and runtime."""
 
 from __future__ import annotations
 

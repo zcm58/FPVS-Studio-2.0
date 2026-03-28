@@ -1,4 +1,6 @@
-"""Utilities for building and querying preprocessing manifests."""
+"""Manifest persistence and query helpers for preprocessing outputs.
+It converts inspected and materialized assets into deterministic records that core compilation can resolve into project-relative source and derivative paths.
+This module owns preprocessing provenance, not presentation scheduling, runtime execution, or engine-specific data."""
 
 from __future__ import annotations
 

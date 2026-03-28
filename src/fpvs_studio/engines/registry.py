@@ -1,4 +1,6 @@
-"""Presentation engine registry."""
+"""Factory and registry for presentation-engine implementations.
+Runtime uses this module to resolve an EngineName into a concrete engine that consumes RunSpec and returns neutral execution summaries.
+It owns engine lookup and registration only; PsychoPy behavior and session orchestration remain in other layers."""
 
 from __future__ import annotations
 

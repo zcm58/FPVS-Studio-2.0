@@ -1,4 +1,6 @@
-"""Runtime worker that executes run specs through a presentation engine."""
+"""Runtime worker that executes compiled runs through an engine.
+It iterates RunSpec or SessionPlan playback, manages runtime-owned transitions and fixation feedback flow, and builds neutral execution summaries plus exports.
+The module owns execution orchestration above the engine seam, not ProjectFile compilation or PsychoPy-specific rendering logic."""
 
 from __future__ import annotations
 

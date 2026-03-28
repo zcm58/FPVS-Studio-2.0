@@ -1,4 +1,6 @@
-"""Dialogs for managing app-level condition-template profiles."""
+"""Dialogs for managing reusable condition-template profiles in the GUI.
+They present app-level profile data backed by core condition_template_profiles helpers and apply defaults into editable project state.
+The module owns user interaction around profile libraries, not RunSpec compilation, session planning, or runtime behavior."""
 
 from __future__ import annotations
 

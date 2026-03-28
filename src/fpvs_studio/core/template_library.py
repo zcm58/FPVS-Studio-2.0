@@ -1,4 +1,6 @@
-"""Built-in FPVS protocol templates."""
+"""Built-in protocol template catalog for editable project creation.
+It exposes the supported v1 template metadata and default settings that seed ProjectFile authoring before compilation.
+The module owns template lookup only; condition materialization, RunSpec generation, and runtime execution happen elsewhere."""
 
 from __future__ import annotations
 

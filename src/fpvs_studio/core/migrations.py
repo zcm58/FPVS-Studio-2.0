@@ -1,4 +1,6 @@
-"""Schema migration placeholders for persisted project files."""
+"""Migration seam for persisted editable project payloads.
+It sits between on-disk project JSON and current ProjectFile models so schema-version transitions can stay explicit and engine-neutral.
+The module owns payload normalization only; compilation, preprocessing, and runtime behavior remain elsewhere."""
 
 from __future__ import annotations
 
