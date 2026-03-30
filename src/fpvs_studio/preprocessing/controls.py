@@ -33,7 +33,7 @@ def generate_phase_scrambled_png(source_path: Path, destination_path: Path, *, s
         for channel_index in range(image_array.shape[2])
     ]
     scrambled_array = np.stack(scrambled_channels, axis=2)
-    Image.fromarray(scrambled_array, mode="RGB").save(destination_path, format="PNG")
+    Image.fromarray(scrambled_array).save(destination_path, format="PNG")
 
 
 def _phase_scramble_channel(channel: np.ndarray, rng: np.random.Generator) -> np.ndarray:

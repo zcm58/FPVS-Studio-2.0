@@ -100,6 +100,7 @@ class AnimatedTabBar(QTabBar):
         self._animations: dict[int, QVariantAnimation] = {}
         self.setMouseTracking(True)
         self.setDrawBase(False)
+        self.setExpanding(True)
         self.setAttribute(Qt.WidgetAttribute.WA_Hover, True)
 
     def hovered_tab_index(self) -> int:
@@ -108,9 +109,25 @@ class AnimatedTabBar(QTabBar):
     def tab_hover_progress(self, index: int) -> float:
         return self._hover_progress.get(index, 0.0)
 
+    def _uniform_tab_size_hint(self) -> QSize:
+        tab_count = self.count()
+        if tab_count == 0:
+            return QSize(130, 40)
+
+        max_width = 0
+        max_height = 0
+        for tab_index in range(tab_count):
+            hint = super().tabSizeHint(tab_index)
+            max_width = max(max_width, hint.width())
+            max_height = max(max_height, hint.height())
+
+        return QSize(max(130, max_width + 14), max(40, max_height + 10))
+
+    def minimumTabSizeHint(self, index: int) -> QSize:  # noqa: N802
+        return self._uniform_tab_size_hint()
+
     def tabSizeHint(self, index: int) -> QSize:  # noqa: N802
-        hint = super().tabSizeHint(index)
-        return QSize(max(130, hint.width() + 14), max(40, hint.height() + 10))
+        return self._uniform_tab_size_hint()
 
     def mouseMoveEvent(self, event: QMouseEvent) -> None:  # noqa: N802
         self._set_hovered_tab(self.tabAt(event.position().toPoint()))

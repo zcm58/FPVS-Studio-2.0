@@ -22,7 +22,7 @@ from PySide6.QtWidgets import (
     QFormLayout,
     QFrame,
     QGridLayout,
-    QGroupBox,
+    QHeaderView,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -32,6 +32,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPlainTextEdit,
     QProgressDialog,
+    QScrollArea,
     QPushButton,
     QSizePolicy,
     QSpinBox,
@@ -40,6 +41,7 @@ from PySide6.QtWidgets import (
     QTableWidgetItem,
     QTabWidget,
     QTextEdit,
+    QStackedWidget,
     QVBoxLayout,
     QWidget,
 )
@@ -52,6 +54,46 @@ from fpvs_studio.core.enums import (
 )
 from fpvs_studio.core.models import ConditionTemplateProfile
 from fpvs_studio.core.template_library import get_template
+from fpvs_studio.gui.design_system import (
+    CARD_BORDER_WIDTH,
+    CARD_CORNER_RADIUS,
+    CARD_PADDING_X,
+    CARD_PADDING_Y,
+    COLOR_BORDER,
+    COLOR_BORDER_SOFT,
+    COLOR_INFO_BG,
+    COLOR_INFO_BORDER,
+    COLOR_INFO_TEXT,
+    COLOR_PAGE_BACKGROUND,
+    COLOR_PENDING_BG,
+    COLOR_PENDING_BORDER,
+    COLOR_PENDING_TEXT,
+    COLOR_PRIMARY,
+    COLOR_PRIMARY_BORDER,
+    COLOR_PRIMARY_HOVER,
+    COLOR_PRIMARY_PRESSED,
+    COLOR_SUCCESS_BG,
+    COLOR_SUCCESS_BORDER,
+    COLOR_SUCCESS_TEXT,
+    COLOR_SURFACE,
+    COLOR_SURFACE_ALT,
+    COLOR_SURFACE_ELEVATED,
+    COLOR_TEXT_HINT,
+    COLOR_TEXT_MUTED,
+    COLOR_TEXT_PRIMARY,
+    COLOR_TEXT_SECONDARY,
+    COLOR_WARNING_BG,
+    COLOR_WARNING_BORDER,
+    COLOR_WARNING_TEXT,
+    CONTENT_MAX_WIDTHS,
+    PAGE_MARGIN_X,
+    PAGE_MARGIN_Y,
+    PAGE_SECTION_GAP,
+    PathValueLabel,
+    StatusBadgeLabel,
+    elide_middle,
+    set_truncated_label_text,
+)
 from fpvs_studio.gui.animations import AnimatedTabBar, ButtonHoverAnimator
 from fpvs_studio.gui.document import ConditionStimulusRow, DocumentError, ProjectDocument
 
@@ -64,11 +106,7 @@ _RUNTIME_BACKGROUND_COLOR_PRESETS: tuple[tuple[str, str], ...] = (
     ("Dark Gray", "#101010"),
 )
 _LAUNCH_INTERSTITIAL_DURATION_MS = 700
-_PAGE_WIDTH_PRESETS: dict[str, int] = {
-    "narrow": 920,
-    "medium": 1100,
-    "wide": 1280,
-}
+_PAGE_WIDTH_PRESETS: dict[str, int] = CONTENT_MAX_WIDTHS
 
 
 def _canonical_runtime_background_hex(background_color: str) -> str | None:
@@ -92,6 +130,13 @@ def _show_error_dialog(parent: QWidget, title: str, error: Exception) -> None:
         "".join(traceback.format_exception(type(error), error, error.__traceback__))
     )
     dialog.exec()
+
+
+def _configure_centered_page_header_label(label: QLabel) -> None:
+    """Configure a page-header label to span the page band and center its text."""
+
+    label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+    label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
 
 def _variant_label(variant: StimulusVariant) -> str:
@@ -174,9 +219,7 @@ class LauncherReadinessReport:
 
 
 def _truncate_line(value: str, max_length: int) -> str:
-    if len(value) <= max_length:
-        return value
-    return f"{value[: max_length - 3]}..."
+    return elide_middle(value, max_length)
 
 
 def _configure_read_only_list(widget: QListWidget) -> None:
@@ -389,14 +432,12 @@ class ProjectOverviewEditor(QWidget):
         self.project_description_edit.setPlaceholderText(
             "Describe the project goal and participant instructions."
         )
-        self.project_description_edit.setFixedHeight(90)
+        self.project_description_edit.setFixedHeight(64)
         self.project_description_edit.setMaximumBlockCount(20)
         self.project_description_edit.textChanged.connect(self._apply_project_description)
 
-        self.project_root_value = QLabel(self)
+        self.project_root_value = PathValueLabel(self)
         self.project_root_value.setObjectName("project_root_value")
-        self.project_root_value.setWordWrap(True)
-        self.project_root_value.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         self.condition_profile_combo = QComboBox(self)
         self.condition_profile_combo.setObjectName("project_condition_profile_combo")
         self.condition_profile_combo.setPlaceholderText("Select a condition template profile...")
@@ -419,35 +460,26 @@ class ProjectOverviewEditor(QWidget):
         self.project_overview_card = SectionCard(
             title="Project Overview",
             subtitle=(
-                "Set project metadata and choose the default condition template "
-                "profile used when new conditions are added."
+                "Project metadata and the default condition template for new rows."
             ),
             object_name="dashboard_project_overview_card",
             parent=self,
         )
         metadata_layout = QFormLayout()
-        metadata_layout.setVerticalSpacing(10)
+        metadata_layout.setVerticalSpacing(8)
         metadata_layout.addRow("Name", self.project_name_edit)
         metadata_layout.addRow("Description", self.project_description_edit)
         metadata_layout.addRow("Project Root", self.project_root_value)
         metadata_layout.addRow("Condition Template", condition_profile_row)
+        self.project_overview_card.layout().setContentsMargins(12, 10, 12, 10)
+        self.project_overview_card.layout().setSpacing(8)
+        self.project_overview_card.body_layout.setSpacing(8)
         self.project_overview_card.body_layout.addLayout(metadata_layout)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
         layout.addWidget(self.project_overview_card)
-
-        self.setStyleSheet(
-            """
-            QLabel#project_root_value {
-                border: 1px solid #d6dde8;
-                border-radius: 6px;
-                background-color: #ffffff;
-                padding: 6px 8px;
-            }
-            """
-        )
 
         self._document.project_changed.connect(self.refresh)
         self.refresh()
@@ -457,7 +489,7 @@ class ProjectOverviewEditor(QWidget):
         with QSignalBlocker(self.project_name_edit):
             self.project_name_edit.setText(project.meta.name)
         _sync_text_editor_contents(self.project_description_edit, project.meta.description)
-        self.project_root_value.setText(str(self._document.project_root))
+        self.project_root_value.set_path_text(str(self._document.project_root), max_length=74)
         self._refresh_condition_profile_widgets()
 
     def _refresh_condition_profile_widgets(self) -> None:
@@ -565,11 +597,16 @@ class ConditionsPage(QWidget):
 
         self.condition_list = QListWidget(self)
         self.condition_list.setObjectName("condition_list")
+        self.condition_list.setSelectionMode(QListWidget.SelectionMode.SingleSelection)
+        self.condition_list.setAlternatingRowColors(True)
+        self.condition_list.setMinimumWidth(260)
+        self.condition_list.setMinimumHeight(0)
         self.condition_list.currentItemChanged.connect(self._refresh_editor)
 
         self.add_condition_button = QPushButton("Add", self)
         self.add_condition_button.setObjectName("add_condition_button")
         self.add_condition_button.clicked.connect(self._add_condition)
+        self.add_condition_button.setProperty("primaryActionRole", "true")
         self.remove_condition_button = QPushButton("Remove", self)
         self.remove_condition_button.setObjectName("remove_condition_button")
         self.remove_condition_button.clicked.connect(self._remove_condition)
@@ -587,10 +624,13 @@ class ConditionsPage(QWidget):
         list_button_layout.addWidget(self.move_down_button)
         self.condition_list_card = SectionCard(
             title="Condition List",
-            subtitle="Create, remove, and reorder conditions in session order.",
+            subtitle="Create, remove, and reorder session conditions.",
             object_name="conditions_list_card",
             parent=self,
         )
+        self.condition_list_card.layout().setContentsMargins(12, 10, 12, 10)
+        self.condition_list_card.layout().setSpacing(8)
+        self.condition_list_card.body_layout.setSpacing(8)
         list_panel_layout = QVBoxLayout()
         list_panel_layout.setContentsMargins(0, 0, 0, 0)
         list_panel_layout.setSpacing(8)
@@ -640,9 +680,16 @@ class ConditionsPage(QWidget):
         self.template_info_label.setObjectName("template_info_label")
         self.template_info_label.setToolTip(_CYCLE_HELP_TEXT)
 
-        self.base_source_value = QLabel(self)
+        self.selected_condition_badge = StatusBadgeLabel("Select a condition to edit", self)
+        self.selected_condition_badge.setObjectName("selected_condition_badge")
+        self.selected_condition_note = QLabel(self)
+        self.selected_condition_note.setObjectName("selected_condition_note")
+        self.selected_condition_note.setWordWrap(True)
+
+        self.base_source_value = PathValueLabel(self)
         self.base_source_value.setObjectName("base_source_value")
-        self.base_source_value.setWordWrap(True)
+        self.base_source_state = StatusBadgeLabel("Base source not configured", self)
+        self.base_source_state.setObjectName("base_source_state")
         self.base_count_value = QLabel(self)
         self.base_count_value.setObjectName("base_count_value")
         self.base_resolution_value = QLabel(self)
@@ -652,10 +699,12 @@ class ConditionsPage(QWidget):
         self.base_import_button = QPushButton("Import Base Folder...", self)
         self.base_import_button.setObjectName("import_base_folder_button")
         self.base_import_button.clicked.connect(lambda: self._import_stimulus_folder("base"))
+        self.base_import_button.setProperty("secondaryActionRole", "true")
 
-        self.oddball_source_value = QLabel(self)
+        self.oddball_source_value = PathValueLabel(self)
         self.oddball_source_value.setObjectName("oddball_source_value")
-        self.oddball_source_value.setWordWrap(True)
+        self.oddball_source_state = StatusBadgeLabel("Oddball source not configured", self)
+        self.oddball_source_state.setObjectName("oddball_source_state")
         self.oddball_count_value = QLabel(self)
         self.oddball_count_value.setObjectName("oddball_count_value")
         self.oddball_resolution_value = QLabel(self)
@@ -665,58 +714,128 @@ class ConditionsPage(QWidget):
         self.oddball_import_button = QPushButton("Import Oddball Folder...", self)
         self.oddball_import_button.setObjectName("import_oddball_folder_button")
         self.oddball_import_button.clicked.connect(lambda: self._import_stimulus_folder("oddball"))
+        self.oddball_import_button.setProperty("secondaryActionRole", "true")
 
         self.condition_editor_card = SectionCard(
-            title="Identity & Logic",
-            subtitle="Edit condition naming, instructions, trigger code, and timing defaults.",
+            title="Condition Editor",
+            subtitle="Edit identity, instructions, timing, and stimulus configuration.",
             object_name="conditions_editor_card",
             parent=self,
         )
-        editor_layout = QFormLayout()
-        editor_layout.addRow("Condition Name", self.condition_name_edit)
-        editor_layout.addRow("Instructions", self.instructions_edit)
-        editor_layout.addRow("Trigger Code", self.trigger_code_spin)
-        editor_layout.addRow("Condition Repeats", self.sequence_count_spin)
-        editor_layout.addRow("Cycles / Condition Repeat", self.oddball_cycles_spin)
-        editor_layout.addRow("Stimulus Variant", self.variant_combo)
-        editor_layout.addRow("Duty Cycle", self.duty_cycle_combo)
-        editor_layout.addRow("Template Info", self.template_info_label)
-        self.condition_editor_card.body_layout.addLayout(editor_layout)
+        self.condition_editor_card.layout().setContentsMargins(12, 10, 12, 10)
+        self.condition_editor_card.layout().setSpacing(8)
+        self.condition_editor_card.body_layout.setSpacing(8)
+        selected_row = QWidget(self.condition_editor_card)
+        selected_row_layout = QHBoxLayout(selected_row)
+        selected_row_layout.setContentsMargins(0, 0, 0, 0)
+        selected_row_layout.setSpacing(PAGE_SECTION_GAP)
+        selected_row_layout.addWidget(self.selected_condition_badge, 0)
+        selected_row_layout.addWidget(self.selected_condition_note, 1)
+        self.condition_editor_card.body_layout.addWidget(selected_row)
+
+        basic_form = QFormLayout()
+        basic_form.setVerticalSpacing(7)
+        basic_form.addRow("Condition Name", self.condition_name_edit)
+        basic_form.addRow("Trigger Code", self.trigger_code_spin)
+        self.instructions_edit.setMinimumHeight(88)
+        self.instructions_edit.setMaximumHeight(120)
+        self.instructions_edit.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Preferred,
+        )
+        timing_grid = QGridLayout()
+        timing_grid.setHorizontalSpacing(PAGE_SECTION_GAP)
+        timing_grid.setVerticalSpacing(8)
+        timing_grid.addWidget(QLabel("Condition Repeats", self.condition_editor_card), 0, 0)
+        timing_grid.addWidget(self.sequence_count_spin, 0, 1)
+        timing_grid.addWidget(QLabel("Cycles / Repeat", self.condition_editor_card), 1, 0)
+        timing_grid.addWidget(self.oddball_cycles_spin, 1, 1)
+        timing_grid.addWidget(QLabel("Stimulus Variant", self.condition_editor_card), 0, 2)
+        timing_grid.addWidget(self.variant_combo, 0, 3)
+        timing_grid.addWidget(QLabel("Duty Cycle", self.condition_editor_card), 1, 2)
+        timing_grid.addWidget(self.duty_cycle_combo, 1, 3)
+        timing_grid.setColumnStretch(1, 1)
+        timing_grid.setColumnStretch(3, 1)
+        basics_header = QLabel("Basics / Identity", self.condition_editor_card)
+        basics_header.setProperty("sectionCardRole", "subtitle")
+        instructions_header = QLabel("Instructions", self.condition_editor_card)
+        instructions_header.setProperty("sectionCardRole", "subtitle")
+        timing_header = QLabel("Timing / Stimulus", self.condition_editor_card)
+        timing_header.setProperty("sectionCardRole", "subtitle")
+        template_header = QLabel("Template / Info", self.condition_editor_card)
+        template_header.setProperty("sectionCardRole", "subtitle")
+        editor_columns = QGridLayout()
+        editor_columns.setContentsMargins(0, 0, 0, 0)
+        editor_columns.setHorizontalSpacing(PAGE_SECTION_GAP)
+        editor_columns.setVerticalSpacing(8)
+        editor_columns.addWidget(basics_header, 0, 0)
+        editor_columns.addWidget(timing_header, 0, 1)
+        editor_columns.addLayout(basic_form, 1, 0)
+        editor_columns.addLayout(timing_grid, 1, 1)
+        editor_columns.addWidget(instructions_header, 2, 0)
+        editor_columns.addWidget(template_header, 2, 1)
+        editor_columns.addWidget(self.instructions_edit, 3, 0)
+        editor_columns.addWidget(self.template_info_label, 3, 1)
+        editor_columns.setColumnStretch(0, 1)
+        editor_columns.setColumnStretch(1, 1)
+        self.condition_editor_card.body_layout.addLayout(editor_columns)
 
         self.stimulus_sources_card = SectionCard(
             title="Stimulus Sources & Status",
-            subtitle="Review current source folders and import base/oddball sets.",
+            subtitle="Base and oddball sources shown side by side for quick comparison.",
             object_name="conditions_stimulus_sources_card",
             parent=self,
         )
-        stimulus_layout = QGridLayout()
-        stimulus_layout.addWidget(QLabel(""), 0, 0)
-        stimulus_layout.addWidget(QLabel("Base"), 0, 1)
-        stimulus_layout.addWidget(QLabel("Oddball"), 0, 2)
-        stimulus_layout.addWidget(QLabel("Source Folder"), 1, 0)
-        stimulus_layout.addWidget(self.base_source_value, 1, 1)
-        stimulus_layout.addWidget(self.oddball_source_value, 1, 2)
-        stimulus_layout.addWidget(QLabel("Image Count"), 2, 0)
-        stimulus_layout.addWidget(self.base_count_value, 2, 1)
-        stimulus_layout.addWidget(self.oddball_count_value, 2, 2)
-        stimulus_layout.addWidget(QLabel("Resolution"), 3, 0)
-        stimulus_layout.addWidget(self.base_resolution_value, 3, 1)
-        stimulus_layout.addWidget(self.oddball_resolution_value, 3, 2)
-        stimulus_layout.addWidget(QLabel("Available Variants"), 4, 0)
-        stimulus_layout.addWidget(self.base_variants_value, 4, 1)
-        stimulus_layout.addWidget(self.oddball_variants_value, 4, 2)
-        stimulus_layout.addWidget(self.base_import_button, 5, 1)
-        stimulus_layout.addWidget(self.oddball_import_button, 5, 2)
-        self.stimulus_sources_card.body_layout.addLayout(stimulus_layout)
+        self.stimulus_sources_card.layout().setContentsMargins(12, 10, 12, 10)
+        self.stimulus_sources_card.layout().setSpacing(8)
+        self.stimulus_sources_card.body_layout.setSpacing(8)
+        base_panel = QWidget(self.stimulus_sources_card)
+        base_layout = QFormLayout(base_panel)
+        base_layout.setContentsMargins(0, 0, 0, 0)
+        base_layout.setHorizontalSpacing(10)
+        base_layout.setVerticalSpacing(6)
+        base_layout.addRow("Readiness", self.base_source_state)
+        base_layout.addRow("Source Folder", self.base_source_value)
+        base_layout.addRow("Image Count", self.base_count_value)
+        base_layout.addRow("Resolution", self.base_resolution_value)
+        base_layout.addRow("Variants", self.base_variants_value)
+        base_layout.addRow("", self.base_import_button)
+
+        oddball_panel = QWidget(self.stimulus_sources_card)
+        oddball_layout = QFormLayout(oddball_panel)
+        oddball_layout.setContentsMargins(0, 0, 0, 0)
+        oddball_layout.setHorizontalSpacing(10)
+        oddball_layout.setVerticalSpacing(6)
+        oddball_layout.addRow("Readiness", self.oddball_source_state)
+        oddball_layout.addRow("Source Folder", self.oddball_source_value)
+        oddball_layout.addRow("Image Count", self.oddball_count_value)
+        oddball_layout.addRow("Resolution", self.oddball_resolution_value)
+        oddball_layout.addRow("Variants", self.oddball_variants_value)
+        oddball_layout.addRow("", self.oddball_import_button)
+
+        source_columns = QGridLayout()
+        source_columns.setContentsMargins(0, 0, 0, 0)
+        source_columns.setHorizontalSpacing(PAGE_SECTION_GAP)
+        source_columns.setVerticalSpacing(8)
+        base_header = QLabel("Base", self.stimulus_sources_card)
+        base_header.setProperty("sectionCardRole", "title")
+        oddball_header = QLabel("Oddball", self.stimulus_sources_card)
+        oddball_header.setProperty("sectionCardRole", "title")
+        source_columns.addWidget(base_header, 0, 0)
+        source_columns.addWidget(oddball_header, 0, 1)
+        source_columns.addWidget(base_panel, 1, 0)
+        source_columns.addWidget(oddball_panel, 1, 1)
+        source_columns.setColumnStretch(0, 1)
+        source_columns.setColumnStretch(1, 1)
+        self.stimulus_sources_card.body_layout.addLayout(source_columns)
 
         self.condition_detail_stack = QWidget(self)
         self.condition_detail_stack.setObjectName("conditions_detail_stack")
         detail_stack_layout = QVBoxLayout(self.condition_detail_stack)
         detail_stack_layout.setContentsMargins(0, 0, 0, 0)
-        detail_stack_layout.setSpacing(12)
-        detail_stack_layout.addWidget(self.condition_editor_card)
+        detail_stack_layout.setSpacing(10)
+        detail_stack_layout.addWidget(self.condition_editor_card, 1)
         detail_stack_layout.addWidget(self.stimulus_sources_card)
-        detail_stack_layout.addStretch(1)
 
         self.master_detail_container = QWidget(self)
         self.master_detail_container.setObjectName("conditions_master_detail_container")
@@ -790,16 +909,20 @@ class ConditionsPage(QWidget):
         for widget in widgets:
             widget.setEnabled(enabled)
         if condition is None:
+            self.selected_condition_badge.set_state("pending", "No condition selected")
+            self.selected_condition_note.setText("Choose a condition in the list to edit it.")
             with QSignalBlocker(self.condition_name_edit):
                 self.condition_name_edit.clear()
             with QSignalBlocker(self.instructions_edit):
                 self.instructions_edit.clear()
             self.template_info_label.setText("Add a condition to begin.")
-            self.base_source_value.setText("Not configured")
+            self.base_source_state.set_state("pending", "Base source not configured")
+            self.base_source_value.set_path_text("Not configured", max_length=74)
             self.base_count_value.setText("0")
             self.base_resolution_value.setText("Not imported")
             self.base_variants_value.setText("original")
-            self.oddball_source_value.setText("Not configured")
+            self.oddball_source_state.set_state("pending", "Oddball source not configured")
+            self.oddball_source_value.set_path_text("Not configured", max_length=74)
             self.oddball_count_value.setText("0")
             self.oddball_resolution_value.setText("Not imported")
             self.oddball_variants_value.setText("original")
@@ -808,6 +931,10 @@ class ConditionsPage(QWidget):
         template = get_template(self._document.project.meta.template_id)
         base_set = self._document.get_condition_stimulus_set(condition.condition_id, "base")
         oddball_set = self._document.get_condition_stimulus_set(condition.condition_id, "oddball")
+        self.selected_condition_badge.set_state("ready", condition.name)
+        self.selected_condition_note.setText(
+            f"Condition ID: {condition.condition_id}   |   Trigger code: {condition.trigger_code}"
+        )
 
         with QSignalBlocker(self.condition_name_edit):
             self.condition_name_edit.setText(condition.name)
@@ -828,11 +955,19 @@ class ConditionsPage(QWidget):
             f"{template.display_name}: base {template.base_hz:.1f} Hz, oddball every "
             f"{template.oddball_every_n}th image, oddball {template.oddball_hz:.1f} Hz."
         )
-        self.base_source_value.setText(base_set.source_dir)
+        self.base_source_state.set_state(
+            "ready" if base_set.image_count > 0 else "warning",
+            "Base source ready" if base_set.image_count > 0 else "Base source needs attention",
+        )
+        self.base_source_value.set_path_text(base_set.source_dir, max_length=74)
         self.base_count_value.setText(str(base_set.image_count))
         self.base_resolution_value.setText(_resolution_text(base_set.resolution))
         self.base_variants_value.setText(", ".join(item.value for item in base_set.available_variants))
-        self.oddball_source_value.setText(oddball_set.source_dir)
+        self.oddball_source_state.set_state(
+            "ready" if oddball_set.image_count > 0 else "warning",
+            "Oddball source ready" if oddball_set.image_count > 0 else "Oddball source needs attention",
+        )
+        self.oddball_source_value.set_path_text(oddball_set.source_dir, max_length=74)
         self.oddball_count_value.setText(str(oddball_set.image_count))
         self.oddball_resolution_value.setText(_resolution_text(oddball_set.resolution))
         self.oddball_variants_value.setText(
@@ -951,7 +1086,7 @@ class ConditionsPage(QWidget):
 
 
 class PageContainer(QWidget):
-    """Centered page container with bounded width and top-aligned content."""
+    """Top-aligned page container with optional bounded or full-width content."""
 
     def __init__(
         self,
@@ -964,29 +1099,73 @@ class PageContainer(QWidget):
             raise ValueError(f"Unsupported width_preset: {width_preset}")
 
         self.width_preset = width_preset
+        self.header_widget = QWidget(self)
+        self.header_widget.setObjectName("page_container_header_widget")
+        self.header_widget.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Maximum,
+        )
+        self.header_widget.setVisible(False)
+
+        self.header_layout = QVBoxLayout(self.header_widget)
+        self.header_layout.setContentsMargins(0, 0, 0, 0)
+        self.header_layout.setSpacing(4)
+
+        self.scroll_area = QScrollArea(self)
+        self.scroll_area.setObjectName("page_container_scroll_area")
+        self.scroll_area.setWidgetResizable(True)
+        self.scroll_area.setFrameShape(QFrame.Shape.NoFrame)
+        self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+
+        self.scroll_content = QWidget(self.scroll_area)
+        self.scroll_content.setObjectName("page_container_scroll_content")
+        self.scroll_content.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Preferred,
+        )
+        self.scroll_area.setWidget(self.scroll_content)
+
+        self.scroll_content_layout = QVBoxLayout(self.scroll_content)
+        self.scroll_content_layout.setContentsMargins(0, 0, 0, 0)
+        self.scroll_content_layout.setSpacing(PAGE_SECTION_GAP)
+
         self.content_frame = QFrame(self)
         self.content_frame.setObjectName("page_container_content_frame")
         self.content_frame.setSizePolicy(
             QSizePolicy.Policy.Expanding,
-            QSizePolicy.Policy.Maximum,
+            QSizePolicy.Policy.Preferred,
         )
 
         self.content_layout = QVBoxLayout(self.content_frame)
         self.content_layout.setContentsMargins(0, 0, 0, 0)
-        self.content_layout.setSpacing(10)
+        self.content_layout.setSpacing(PAGE_SECTION_GAP)
 
-        centered_row = QHBoxLayout()
-        centered_row.setContentsMargins(0, 0, 0, 0)
-        centered_row.setSpacing(0)
-        centered_row.addStretch(1)
-        centered_row.addWidget(self.content_frame)
-        centered_row.addStretch(1)
+        self._content_row = QHBoxLayout()
+        self._content_row.setContentsMargins(0, 0, 0, 0)
+        self._content_row.setSpacing(0)
+        self._content_row.addStretch(1)
+        self._content_row.addWidget(self.content_frame)
+        self._content_row.addStretch(1)
 
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(24, 18, 24, 18)
-        layout.setSpacing(0)
-        layout.addLayout(centered_row)
-        layout.addStretch(1)
+        self.footer_strip = QFrame(self)
+        self.footer_strip.setObjectName("non_home_shell_footer_strip")
+        self.footer_strip.setVisible(False)
+        footer_layout = QHBoxLayout(self.footer_strip)
+        footer_layout.setContentsMargins(12, 8, 12, 8)
+        footer_layout.setSpacing(8)
+        self.footer_label = QLabel(self.footer_strip)
+        self.footer_label.setObjectName("non_home_shell_footer_label")
+        self.footer_label.setWordWrap(True)
+        footer_layout.addWidget(self.footer_label, 1)
+
+        self._outer_layout = QVBoxLayout(self)
+        self._outer_layout.setContentsMargins(PAGE_MARGIN_X, PAGE_MARGIN_Y, PAGE_MARGIN_X, PAGE_MARGIN_Y)
+        self._outer_layout.setSpacing(PAGE_SECTION_GAP)
+        self._outer_layout.addWidget(self.header_widget)
+        self._outer_layout.addWidget(self.scroll_area, 1)
+
+        self.scroll_content_layout.addLayout(self._content_row)
+        self.scroll_content_layout.addWidget(self.footer_strip)
 
         self.set_width_preset(width_preset)
 
@@ -995,6 +1174,14 @@ class PageContainer(QWidget):
             raise ValueError(f"Unsupported width_preset: {width_preset}")
         self.width_preset = width_preset
         self.content_frame.setMaximumWidth(_PAGE_WIDTH_PRESETS[width_preset])
+        if width_preset == "full":
+            self._content_row.setStretch(0, 0)
+            self._content_row.setStretch(1, 1)
+            self._content_row.setStretch(2, 0)
+        else:
+            self._content_row.setStretch(0, 1)
+            self._content_row.setStretch(1, 0)
+            self._content_row.setStretch(2, 1)
         self.content_frame.setProperty("pageWidthPreset", width_preset)
 
     def max_content_width(self) -> int:
@@ -1023,16 +1210,20 @@ class NonHomePageShell(QWidget):
         self._footer_widget: QWidget | None = None
         self.page_container = PageContainer(width_preset=width_preset, parent=self)
 
-        self.title_label = QLabel(title, self)
+        self.title_label = QLabel(title, self.page_container.header_widget)
         self.title_label.setObjectName("non_home_shell_title")
-        self.subtitle_label = QLabel(subtitle, self)
+        _configure_centered_page_header_label(self.title_label)
+        self.subtitle_label = QLabel(subtitle, self.page_container.header_widget)
         self.subtitle_label.setObjectName("non_home_shell_subtitle")
         self.subtitle_label.setWordWrap(True)
+        _configure_centered_page_header_label(self.subtitle_label)
+
+        self.page_container.header_layout.addWidget(self.title_label)
+        self.page_container.header_layout.addWidget(self.subtitle_label)
+        self.page_container.header_widget.setVisible(True)
 
         self.content_frame = QFrame(self.page_container.content_frame)
         self.content_frame.setObjectName("non_home_shell_content_frame")
-        self.page_container.content_layout.addWidget(self.title_label)
-        self.page_container.content_layout.addWidget(self.subtitle_label)
         self.page_container.content_layout.addWidget(self.content_frame)
 
         if layout_mode == "single_column":
@@ -1056,17 +1247,8 @@ class NonHomePageShell(QWidget):
             columns_layout.setStretch(1, 4)
             columns_layout.setStretch(2, 3)
 
-        self.footer_strip = QFrame(self)
-        self.footer_strip.setObjectName("non_home_shell_footer_strip")
-        self.footer_strip.setVisible(False)
-        footer_layout = QHBoxLayout(self.footer_strip)
-        footer_layout.setContentsMargins(12, 8, 12, 8)
-        footer_layout.setSpacing(8)
-        self.footer_label = QLabel(self.footer_strip)
-        self.footer_label.setObjectName("non_home_shell_footer_label")
-        self.footer_label.setWordWrap(True)
-        footer_layout.addWidget(self.footer_label, 1)
-        self.page_container.content_layout.addWidget(self.footer_strip)
+        self.footer_strip = self.page_container.footer_strip
+        self.footer_label = self.page_container.footer_label
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -1077,21 +1259,29 @@ class NonHomePageShell(QWidget):
             QLabel#non_home_shell_title {
                 font-size: 24px;
                 font-weight: 700;
-                color: #1f2f44;
+                color: %s;
             }
             QLabel#non_home_shell_subtitle {
-                color: #42566f;
+                color: %s;
                 font-size: 13px;
             }
             QFrame#non_home_shell_footer_strip {
-                border: 1px solid #d2dbe7;
-                border-radius: 8px;
-                background-color: #f8fafd;
+                border: 1px solid %s;
+                border-radius: %spx;
+                background-color: %s;
             }
             QLabel#non_home_shell_footer_label {
-                color: #33485f;
+                color: %s;
             }
             """
+            % (
+                COLOR_TEXT_PRIMARY,
+                COLOR_TEXT_SECONDARY,
+                COLOR_BORDER_SOFT,
+                CARD_CORNER_RADIUS,
+                COLOR_SURFACE,
+                COLOR_TEXT_SECONDARY,
+            )
         )
 
     def add_content_widget(self, widget: QWidget, *, stretch: int = 0) -> None:
@@ -1186,8 +1376,8 @@ class SectionCard(QFrame):
         header_layout.addStretch(1)
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(14, 12, 14, 12)
-        layout.setSpacing(8)
+        layout.setContentsMargins(CARD_PADDING_X, CARD_PADDING_Y, CARD_PADDING_X, CARD_PADDING_Y)
+        layout.setSpacing(PAGE_SECTION_GAP)
         layout.addLayout(header_layout)
 
         if subtitle:
@@ -1200,33 +1390,43 @@ class SectionCard(QFrame):
 
         self.body_layout = QVBoxLayout()
         self.body_layout.setContentsMargins(0, 0, 0, 0)
-        self.body_layout.setSpacing(8)
+        self.body_layout.setSpacing(PAGE_SECTION_GAP)
         layout.addLayout(self.body_layout)
 
         self.setStyleSheet(
             """
             QFrame[sectionCard="true"] {
-                border: 1px solid #c7d0dd;
-                border-radius: 9px;
-                background-color: #f8fafc;
+                border: 1px solid %s;
+                border-radius: %spx;
+                background-color: %s;
             }
             QLabel[sectionCardRole="title"] {
                 font-size: 15px;
                 font-weight: 700;
-                color: #1f2f44;
+                color: %s;
             }
             QLabel[sectionCardRole="subtitle"] {
-                color: #455a72;
+                color: %s;
             }
             QLabel#section_card_tooltip_badge {
-                border: 1px solid #9fb1c8;
+                border: 1px solid %s;
                 border-radius: 8px;
-                background-color: #eef3f9;
-                color: #2c4a69;
+                background-color: %s;
+                color: %s;
                 font-size: 11px;
                 font-weight: 700;
             }
             """
+            % (
+                COLOR_BORDER,
+                CARD_CORNER_RADIUS,
+                COLOR_SURFACE,
+                COLOR_TEXT_PRIMARY,
+                COLOR_TEXT_SECONDARY,
+                COLOR_BORDER_SOFT,
+                COLOR_SURFACE_ALT,
+                COLOR_TEXT_PRIMARY,
+            )
         )
 
 
@@ -1291,12 +1491,12 @@ class SessionStructureEditor(QWidget):
 
         self.session_card = SectionCard(
             title="Session Structure",
-            subtitle="Configure block count, ordering strategy, and inter-condition transitions.",
+            subtitle="Block order and inter-condition flow.",
             object_name=_prefixed_object_name(object_name_prefix, "session_structure_card"),
             parent=self,
         )
         self.session_layout = QFormLayout()
-        self.session_layout.setVerticalSpacing(9)
+        self.session_layout.setVerticalSpacing(7)
         seed_layout = QHBoxLayout()
         seed_layout.addWidget(self.session_seed_spin, 1)
         seed_layout.addWidget(self.generate_seed_button)
@@ -1306,6 +1506,9 @@ class SessionStructureEditor(QWidget):
         self.session_layout.addRow("Inter-condition mode", self.inter_condition_mode_combo)
         self.session_layout.addRow("Break seconds", self.break_seconds_spin)
         self.session_layout.addRow("Continue key", self.continue_key_edit)
+        self.session_card.layout().setContentsMargins(12, 10, 12, 10)
+        self.session_card.layout().setSpacing(8)
+        self.session_card.body_layout.setSpacing(8)
         self.session_card.body_layout.addLayout(self.session_layout)
 
         layout = QVBoxLayout(self)
@@ -1501,56 +1704,53 @@ class FixationSettingsEditor(QWidget):
         self.line_width_spin.setRange(1, 1000)
         self.line_width_spin.valueChanged.connect(self._apply_fixation_settings)
 
-        self.fixation_panel = QFrame(self)
-        self.fixation_panel.setObjectName("fixation_settings_panel")
-        self.fixation_panel.setMaximumWidth(980)
-        fixation_panel_layout = QVBoxLayout(self.fixation_panel)
-        fixation_panel_layout.setContentsMargins(18, 16, 18, 16)
-        fixation_panel_layout.setSpacing(10)
-
-        panel_title = QLabel("Fixation Cross Task", self.fixation_panel)
-        panel_title.setObjectName("fixation_page_title")
-        panel_subtitle = QLabel(
-            "Configure color-change behavior, timing, response, and appearance.",
-            self.fixation_panel,
+        self.fixation_panel = SectionCard(
+            title="Fixation Cross Task",
+            subtitle="Task enablement, behavior, timing, response, and appearance.",
+            object_name="fixation_settings_panel",
+            parent=self,
         )
-        panel_subtitle.setObjectName("fixation_page_subtitle")
-        panel_subtitle.setWordWrap(True)
-        fixation_panel_layout.addWidget(panel_title)
-        fixation_panel_layout.addWidget(panel_subtitle)
+        self.fixation_panel.layout().setContentsMargins(12, 10, 12, 10)
+        self.fixation_panel.layout().setSpacing(8)
+        fixation_panel_layout = self.fixation_panel.body_layout
+        fixation_panel_layout.setSpacing(8)
 
-        fixation_enablement_group = QGroupBox("Task Enablement", self.fixation_panel)
-        fixation_enablement_layout = QVBoxLayout(fixation_enablement_group)
-        fixation_enablement_layout.setContentsMargins(10, 10, 10, 10)
-        fixation_enablement_layout.setSpacing(6)
-        fixation_enablement_layout.addWidget(self.fixation_enabled_checkbox)
-        fixation_enablement_layout.addWidget(self.fixation_accuracy_checkbox)
+        enablement_layout = QHBoxLayout()
+        enablement_layout.setContentsMargins(0, 0, 0, 0)
+        enablement_layout.setSpacing(6)
+        enablement_layout.addWidget(self.fixation_enabled_checkbox)
+        enablement_layout.addWidget(self.fixation_accuracy_checkbox)
+        enablement_layout.addStretch(1)
 
-        self.fixation_behavior_group = QGroupBox("Behavior", self.fixation_panel)
+        self.fixation_behavior_group = QWidget(self.fixation_panel)
         self.fixation_behavior_layout = QFormLayout(self.fixation_behavior_group)
+        self.fixation_behavior_layout.setVerticalSpacing(7)
         self.fixation_behavior_layout.addRow("Color change schedule", self.target_count_mode_combo)
         self.fixation_behavior_layout.addRow("Changes per condition", self.changes_per_sequence_spin)
         self.fixation_behavior_layout.addRow("Minimum changes", self.target_count_min_spin)
         self.fixation_behavior_layout.addRow("Maximum changes", self.target_count_max_spin)
         self.fixation_behavior_layout.addRow("No immediate repeat", self.no_repeat_count_checkbox)
 
-        self.fixation_timing_group = QGroupBox("Timing", self.fixation_panel)
-        fixation_timing_layout = QFormLayout(self.fixation_timing_group)
-        fixation_timing_layout.addRow("Color change duration (ms)", self.target_duration_spin)
-        fixation_timing_layout.addRow("Minimum gap (ms)", self.min_gap_spin)
-        fixation_timing_layout.addRow("Maximum gap (ms)", self.max_gap_spin)
+        self.fixation_timing_group = QWidget(self.fixation_panel)
+        timing_layout = QFormLayout(self.fixation_timing_group)
+        timing_layout.setVerticalSpacing(7)
+        timing_layout.addRow("Color change duration (ms)", self.target_duration_spin)
+        timing_layout.addRow("Minimum gap (ms)", self.min_gap_spin)
+        timing_layout.addRow("Maximum gap (ms)", self.max_gap_spin)
 
-        self.fixation_response_group = QGroupBox("Response", self.fixation_panel)
-        fixation_response_layout = QFormLayout(self.fixation_response_group)
-        fixation_response_layout.addRow("Response key", self.response_key_edit)
-        fixation_response_layout.addRow("Response window (s)", self.response_window_spin)
+        self.fixation_response_group = QWidget(self.fixation_panel)
+        response_layout = QFormLayout(self.fixation_response_group)
+        response_layout.setVerticalSpacing(7)
+        response_layout.addRow("Response key", self.response_key_edit)
+        response_layout.addRow("Response window (s)", self.response_window_spin)
 
-        self.fixation_appearance_group = QGroupBox("Appearance", self.fixation_panel)
-        fixation_appearance_layout = QFormLayout(self.fixation_appearance_group)
-        fixation_appearance_layout.addRow("Default color", self.base_color_edit)
-        fixation_appearance_layout.addRow("Change color", self.target_color_edit)
-        fixation_appearance_layout.addRow("Cross size (px)", self.cross_size_spin)
-        fixation_appearance_layout.addRow("Line width (px)", self.line_width_spin)
+        self.fixation_appearance_group = QWidget(self.fixation_panel)
+        appearance_layout = QFormLayout(self.fixation_appearance_group)
+        appearance_layout.setVerticalSpacing(7)
+        appearance_layout.addRow("Default color", self.base_color_edit)
+        appearance_layout.addRow("Change color", self.target_color_edit)
+        appearance_layout.addRow("Cross size (px)", self.cross_size_spin)
+        appearance_layout.addRow("Line width (px)", self.line_width_spin)
 
         feasibility_card = QFrame(self.fixation_panel)
         feasibility_card.setObjectName("fixation_feasibility_card")
@@ -1564,62 +1764,55 @@ class FixationSettingsEditor(QWidget):
         self.fixation_feasibility_label.setWordWrap(True)
         feasibility_layout.addWidget(self.fixation_feasibility_label)
 
-        fixation_panel_layout.addWidget(fixation_enablement_group)
-        fixation_panel_layout.addWidget(self.fixation_behavior_group)
-        fixation_panel_layout.addWidget(self.fixation_timing_group)
-        fixation_panel_layout.addWidget(self.fixation_response_group)
-        fixation_panel_layout.addWidget(self.fixation_appearance_group)
+        fixation_panel_layout.addLayout(enablement_layout)
         fixation_panel_layout.addWidget(feasibility_card)
-
-        centered_row = QHBoxLayout()
-        centered_row.addStretch(1)
-        centered_row.addWidget(self.fixation_panel)
-        centered_row.addStretch(1)
+        settings_grid = QGridLayout()
+        settings_grid.setContentsMargins(0, 0, 0, 0)
+        settings_grid.setHorizontalSpacing(PAGE_SECTION_GAP)
+        settings_grid.setVerticalSpacing(8)
+        behavior_header = QLabel("Behavior", self.fixation_panel)
+        behavior_header.setProperty("sectionCardRole", "subtitle")
+        timing_header = QLabel("Timing", self.fixation_panel)
+        timing_header.setProperty("sectionCardRole", "subtitle")
+        response_header = QLabel("Response", self.fixation_panel)
+        response_header.setProperty("sectionCardRole", "subtitle")
+        appearance_header = QLabel("Appearance", self.fixation_panel)
+        appearance_header.setProperty("sectionCardRole", "subtitle")
+        settings_grid.addWidget(behavior_header, 0, 0)
+        settings_grid.addWidget(timing_header, 0, 1)
+        settings_grid.addWidget(self.fixation_behavior_group, 1, 0)
+        settings_grid.addWidget(self.fixation_timing_group, 1, 1)
+        settings_grid.addWidget(response_header, 2, 0)
+        settings_grid.addWidget(appearance_header, 2, 1)
+        settings_grid.addWidget(self.fixation_response_group, 3, 0)
+        settings_grid.addWidget(self.fixation_appearance_group, 3, 1)
+        settings_grid.setColumnStretch(0, 1)
+        settings_grid.setColumnStretch(1, 1)
+        fixation_panel_layout.addLayout(settings_grid)
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(20, 18, 20, 18)
-        layout.setSpacing(10)
-        layout.addLayout(centered_row)
-        layout.addStretch(1)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        layout.addWidget(self.fixation_panel)
 
         self.setStyleSheet(
             """
-            QFrame#fixation_settings_panel {
-                border: 1px solid #a8b7c8;
-                border-radius: 12px;
-                background-color: #e4ebf3;
-            }
-            QLabel#fixation_page_title {
-                font-size: 18px;
-                font-weight: 700;
-                color: #1f2f44;
-            }
-            QLabel#fixation_page_subtitle {
-                color: #33485f;
-            }
-            QGroupBox {
-                border: 1px solid #c1ccda;
-                border-radius: 8px;
-                margin-top: 10px;
-                padding-top: 10px;
-                background-color: #f7f9fc;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                left: 10px;
-                padding: 0 4px;
-                font-weight: 600;
-            }
             QFrame#fixation_feasibility_card {
-                border: 1px solid #c0cddd;
-                border-radius: 8px;
-                background-color: #fbfdff;
+                border: 1px solid %s;
+                border-radius: %spx;
+                background-color: %s;
             }
             QLabel#fixation_feasibility_label {
-                color: #233a52;
+                color: %s;
                 font-weight: 600;
             }
             """
+            % (
+                COLOR_BORDER_SOFT,
+                CARD_CORNER_RADIUS,
+                COLOR_SURFACE_ELEVATED,
+                COLOR_TEXT_PRIMARY,
+            )
         )
 
         self._document.project_changed.connect(self.refresh)
@@ -1799,73 +1992,97 @@ class FixationCrossSettingsPage(FixationSettingsEditor):
 
 
 class AssetsPage(QWidget):
-    """Preprocessing/materialization page."""
+    """Stimuli manager page."""
 
     def __init__(self, document: ProjectDocument, parent=None) -> None:
         super().__init__(parent)
         self._document = document
         self._variant_checkboxes: dict[StimulusVariant, QCheckBox] = {}
 
-        supported_variants_group = QGroupBox("Project Materialization Variants", self)
-        supported_variants_layout = QHBoxLayout(supported_variants_group)
+        controls_row = QWidget(self)
+        controls_layout = QHBoxLayout(controls_row)
+        controls_layout.setContentsMargins(0, 0, 0, 0)
+        controls_layout.setSpacing(PAGE_SECTION_GAP)
+
+        variants_label = QLabel("Enabled Variants", controls_row)
+        variants_label.setProperty("sectionCardRole", "subtitle")
+        controls_layout.addWidget(variants_label)
         for variant in StimulusVariant:
-            checkbox = QCheckBox(_variant_label(variant), supported_variants_group)
+            checkbox = QCheckBox(_variant_label(variant), controls_row)
             checkbox.setObjectName(f"variant_checkbox_{variant.value}")
             checkbox.stateChanged.connect(self._apply_supported_variants)
             if variant == StimulusVariant.ORIGINAL:
                 checkbox.setEnabled(False)
             self._variant_checkboxes[variant] = checkbox
-            supported_variants_layout.addWidget(checkbox)
+            controls_layout.addWidget(checkbox)
+        controls_layout.addStretch(1)
 
-        self.import_source_button = QPushButton("Import Source Folder...", self)
+        self.import_source_button = QPushButton("Import Selected Source Folder...", self)
         self.import_source_button.setObjectName("assets_import_source_button")
         self.import_source_button.clicked.connect(self._import_selected_source)
-        self.refresh_button = QPushButton("Refresh Inspection", self)
+        self.refresh_button = QPushButton("Refresh Source Details", self)
         self.refresh_button.setObjectName("assets_refresh_button")
         self.refresh_button.clicked.connect(self._refresh_inspection)
-        self.materialize_button = QPushButton("Materialize Supported Variants", self)
+        self.materialize_button = QPushButton("Build Supported Variants", self)
         self.materialize_button.setObjectName("materialize_assets_button")
+        self.materialize_button.setProperty("primaryActionRole", "true")
         self.materialize_button.clicked.connect(self._materialize_assets)
 
-        actions_row = QWidget(self)
-        button_layout = QHBoxLayout(actions_row)
-        button_layout.setContentsMargins(0, 0, 0, 0)
-        button_layout.setSpacing(8)
-        button_layout.addWidget(self.import_source_button)
-        button_layout.addWidget(self.refresh_button)
-        button_layout.addWidget(self.materialize_button)
+        controls_layout.addWidget(self.import_source_button)
+        controls_layout.addWidget(self.refresh_button)
+        controls_layout.addWidget(self.materialize_button)
 
         self.assets_table = QTableWidget(0, 6, self)
         self.assets_table.setObjectName("assets_table")
         self.assets_table.setHorizontalHeaderLabels(
-            ["Condition", "Role", "Source Dir", "Images", "Resolution", "Variants"]
+            ["Condition", "Role", "Source Path", "Items", "Resolution", "Available Variants"]
         )
         self.assets_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.assets_table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
         self.assets_table.itemSelectionChanged.connect(self._update_buttons)
-        self.assets_table.horizontalHeader().setStretchLastSection(True)
+        self.assets_table.setAlternatingRowColors(True)
+        self.assets_table.setWordWrap(False)
+        self.assets_table.setTextElideMode(Qt.TextElideMode.ElideMiddle)
+        self.assets_table.setMinimumHeight(420)
+        self.assets_table.verticalHeader().setVisible(False)
+        header = self.assets_table.horizontalHeader()
+        header.setStretchLastSection(False)
+        header.setMinimumSectionSize(72)
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Interactive)
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
+        header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(5, QHeaderView.ResizeMode.Interactive)
+        self.assets_table.setColumnWidth(0, 180)
+        self.assets_table.setColumnWidth(5, 260)
 
         self.assets_status_text = QPlainTextEdit(self)
         self.assets_status_text.setObjectName("assets_status_text")
         self.assets_status_text.setReadOnly(True)
         self.assets_status_text.setMaximumBlockCount(200)
+        self.assets_status_text.setMinimumHeight(72)
+        self.assets_status_text.setMaximumHeight(96)
+        self.assets_status_text.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Fixed,
+        )
 
         self.shell = NonHomePageShell(
-            title="Assets / Preprocessing",
+            title="Stimuli Manager",
             subtitle=(
-                "Inspect source folders, refresh derived-asset status, and materialize "
-                "project-supported variants."
+                "Manage condition-level stimulus sources, inspect imported sets, and "
+                "prepare supported variants for the current project."
             ),
             layout_mode="single_column",
-            width_preset="wide",
+            width_preset="full",
             parent=self,
         )
-        self.shell.add_content_widget(supported_variants_group)
-        self.shell.add_content_widget(actions_row)
-        self.shell.add_content_widget(self.assets_table)
+        self.shell.add_content_widget(controls_row)
+        self.shell.add_content_widget(self.assets_table, stretch=1)
         self.shell.add_content_widget(self.assets_status_text)
         self.shell.set_footer_text(
-            "Select a condition-role row to import or refresh assets without changing the outer window size."
+            "Select a condition-role row to import or refresh its stimulus source."
         )
 
         layout = QVBoxLayout(self)
@@ -1887,47 +2104,86 @@ class AssetsPage(QWidget):
             self.assets_table.setRowCount(len(rows))
             for row_index, row in enumerate(rows):
                 self._set_table_item(row_index, 0, row.condition_name)
-                self._set_table_item(row_index, 1, row.role)
-                source_item = self._set_table_item(row_index, 2, row.stimulus_set.source_dir)
+                self._set_table_item(row_index, 1, row.role.title(), alignment=Qt.AlignmentFlag.AlignCenter)
+                source_item = self._set_table_item(
+                    row_index,
+                    2,
+                    elide_middle(row.stimulus_set.source_dir, 72),
+                )
                 source_item.setData(
                     Qt.ItemDataRole.UserRole,
                     (row.condition_id, row.role),
                 )
-                self._set_table_item(row_index, 3, str(row.stimulus_set.image_count))
-                self._set_table_item(row_index, 4, _resolution_text(row.stimulus_set.resolution))
+                source_item.setToolTip(row.stimulus_set.source_dir)
+                self._set_table_item(
+                    row_index,
+                    3,
+                    str(row.stimulus_set.image_count),
+                    alignment=Qt.AlignmentFlag.AlignCenter,
+                )
+                self._set_table_item(
+                    row_index,
+                    4,
+                    _resolution_text(row.stimulus_set.resolution),
+                    alignment=Qt.AlignmentFlag.AlignCenter,
+                )
                 self._set_table_item(
                     row_index,
                     5,
-                    ", ".join(item.value for item in row.stimulus_set.available_variants),
+                    ", ".join(_variant_label(item) for item in row.stimulus_set.available_variants),
                 )
-        self.assets_table.resizeColumnsToContents()
+        self._resize_table_columns()
         self.assets_status_text.setPlainText(self._build_status_text(rows))
         self._update_buttons()
 
-    def _set_table_item(self, row: int, column: int, text: str) -> QTableWidgetItem:
+    def _resize_table_columns(self) -> None:
+        self.assets_table.resizeColumnToContents(0)
+        condition_width = max(180, min(self.assets_table.columnWidth(0) + 24, 260))
+        self.assets_table.setColumnWidth(0, condition_width)
+
+        self.assets_table.resizeColumnToContents(5)
+        variants_width = max(220, min(self.assets_table.columnWidth(5) + 24, 340))
+        self.assets_table.setColumnWidth(5, variants_width)
+
+    def _set_table_item(
+        self,
+        row: int,
+        column: int,
+        text: str,
+        *,
+        alignment: Qt.AlignmentFlag | None = None,
+    ) -> QTableWidgetItem:
         item = QTableWidgetItem(text)
         item.setFlags(item.flags() ^ Qt.ItemFlag.ItemIsEditable)
+        item.setToolTip(text)
+        if alignment is not None:
+            item.setTextAlignment(alignment)
         self.assets_table.setItem(row, column, item)
         return item
 
     def _build_status_text(self, rows: list[ConditionStimulusRow]) -> str:
         manifest = self._document.manifest
         lines = [
-            f"Condition stimulus rows: {len(rows)}",
-            f"Project-supported variants: {', '.join(item.value for item in self._document.project.settings.supported_variants)}",
+            f"Stimulus source rows: {len(rows)}",
+            "Enabled variants: "
+            + ", ".join(
+                _variant_label(item) for item in self._document.project.settings.supported_variants
+            ),
         ]
         if manifest is None:
-            lines.append("Manifest status: no manifest loaded yet.")
+            lines.append("Catalog status: no tracked stimulus sets yet.")
         else:
             lines.append(
-                f"Manifest status: {len(manifest.sets)} stimulus set(s), generated {manifest.generated_at.isoformat()}."
+                "Catalog status: "
+                f"{len(manifest.sets)} stimulus set(s), updated "
+                f"{manifest.generated_at.isoformat(timespec='seconds')}."
             )
         validation = self._document.validation_report(
             refresh_hz=self._document.project.settings.display.preferred_refresh_hz or 60.0
         )
         if validation.issues:
             lines.append("")
-            lines.append("Validation issues:")
+            lines.append("Readiness issues:")
             lines.extend(f"- {issue.message}" for issue in validation.issues)
         return "\n".join(lines)
 
@@ -1949,7 +2205,7 @@ class AssetsPage(QWidget):
         try:
             self._document.set_supported_variants(variants)
         except Exception as error:
-            _show_error_dialog(self, "Supported Variants Error", error)
+            _show_error_dialog(self, "Stimulus Variants Error", error)
             self.refresh()
 
     def _import_selected_source(self) -> None:
@@ -1958,7 +2214,7 @@ class AssetsPage(QWidget):
             return
         directory = QFileDialog.getExistingDirectory(
             self,
-            "Choose Source Folder",
+            "Choose Stimulus Source Folder",
             str(Path.home()),
         )
         if not directory:
@@ -1975,15 +2231,21 @@ class AssetsPage(QWidget):
 
     def _refresh_inspection(self) -> None:
         try:
-            self._run_with_progress("Refreshing source inspection...", self._document.refresh_stimulus_inspection)
+            self._run_with_progress(
+                "Refreshing stimulus source details...",
+                self._document.refresh_stimulus_inspection,
+            )
         except Exception as error:
-            _show_error_dialog(self, "Inspection Error", error)
+            _show_error_dialog(self, "Source Inspection Error", error)
 
     def _materialize_assets(self) -> None:
         try:
-            self._run_with_progress("Materializing project assets...", self._document.materialize_assets)
+            self._run_with_progress(
+                "Building supported stimulus variants...",
+                self._document.materialize_assets,
+            )
         except Exception as error:
-            _show_error_dialog(self, "Materialization Error", error)
+            _show_error_dialog(self, "Variant Build Error", error)
 
     def _run_with_progress(self, label: str, callback: Callable[[], object]) -> None:
         dialog = QProgressDialog(label, "", 0, 0, self)
@@ -2006,12 +2268,14 @@ class RuntimeSettingsEditor(QWidget):
         document: ProjectDocument,
         *,
         object_name_prefix: str = "",
+        editable: bool = True,
         fullscreen_state_getter: Callable[[], bool] | None = None,
         fullscreen_state_setter: Callable[[bool], None] | None = None,
         parent=None,
     ) -> None:
         super().__init__(parent)
         self._document = document
+        self._editable = editable
         self._fullscreen_state_getter = fullscreen_state_getter
         self._fullscreen_state_setter = fullscreen_state_setter
         self._runtime_background_refresh_guard = False
@@ -2078,19 +2342,68 @@ class RuntimeSettingsEditor(QWidget):
 
         self.card = SectionCard(
             title="Runtime Settings",
-            subtitle="Refresh, background, fullscreen, and serial trigger controls.",
+            subtitle="Refresh, background, fullscreen, and trigger configuration.",
             object_name=_prefixed_object_name(object_name_prefix, "runtime_settings_card"),
             parent=self,
         )
-        self.form_layout = QFormLayout()
-        self.form_layout.addRow("Refresh (Hz)", self.refresh_hz_spin)
-        self.form_layout.addRow("Stimulus Background", self.runtime_background_color_combo)
-        self.form_layout.addRow("", self.runtime_background_scope_label)
-        self.form_layout.addRow("Serial Port", self.serial_port_edit)
-        self.form_layout.addRow("Serial Baud Rate", self.serial_baudrate_spin)
-        self.form_layout.addRow("", self.test_mode_checkbox)
-        self.form_layout.addRow("", self.fullscreen_checkbox)
-        self.card.body_layout.addLayout(self.form_layout)
+        self.card.layout().setContentsMargins(12, 10, 12, 10)
+        self.card.layout().setSpacing(8)
+        self.card.body_layout.setSpacing(8)
+        self.summary_note_label = QLabel(self.card)
+        self.summary_note_label.setObjectName(
+            _prefixed_object_name(object_name_prefix, "runtime_settings_summary_note")
+        )
+        self.summary_note_label.setWordWrap(True)
+        self.summary_value_labels: dict[str, QLabel] = {}
+        self.form_container = QWidget(self.card)
+        self.form_layout = QGridLayout(self.form_container)
+        self.form_layout.setContentsMargins(0, 0, 0, 0)
+        self.form_layout.setHorizontalSpacing(PAGE_SECTION_GAP)
+        self.form_layout.setVerticalSpacing(8)
+        self.form_layout.addWidget(QLabel("Refresh (Hz)", self.form_container), 0, 0)
+        self.form_layout.addWidget(self.refresh_hz_spin, 0, 1)
+        self.form_layout.addWidget(QLabel("Background", self.form_container), 0, 2)
+        self.form_layout.addWidget(self.runtime_background_color_combo, 0, 3)
+        self.form_layout.addWidget(self.runtime_background_scope_label, 1, 0, 1, 4)
+        self.form_layout.addWidget(QLabel("Serial Port", self.form_container), 2, 0)
+        self.form_layout.addWidget(self.serial_port_edit, 2, 1)
+        self.form_layout.addWidget(QLabel("Baud Rate", self.form_container), 2, 2)
+        self.form_layout.addWidget(self.serial_baudrate_spin, 2, 3)
+        self.form_layout.addWidget(self.test_mode_checkbox, 3, 0, 1, 2)
+        self.form_layout.addWidget(self.fullscreen_checkbox, 3, 2, 1, 2)
+        self.form_layout.setColumnStretch(1, 1)
+        self.form_layout.setColumnStretch(3, 1)
+        self.summary_container = QWidget(self.card)
+        self.summary_layout = QFormLayout(self.summary_container)
+        self.summary_layout.setContentsMargins(0, 0, 0, 0)
+        self.summary_layout.setHorizontalSpacing(12)
+        self.summary_layout.setVerticalSpacing(6)
+        for key, label_text in (
+            ("refresh", "Refresh"),
+            ("background", "Background"),
+            ("serial_port", "Serial Port"),
+            ("serial_baudrate", "Baud Rate"),
+            ("test_mode", "Runtime Path"),
+            ("fullscreen", "Fullscreen"),
+        ):
+            value_label = QLabel(self.summary_container)
+            value_label.setWordWrap(True)
+            value_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+            self.summary_value_labels[key] = value_label
+            self.summary_layout.addRow(label_text, value_label)
+        if not self._editable:
+            self.card.title_label.setText("Runtime Settings Summary")
+            if self.card.subtitle_label is not None:
+                self.card.subtitle_label.setText(
+                    "Mirrored from Run / Runtime."
+                )
+            self.summary_note_label.setText(
+                "Open Run / Runtime to edit launch settings. This view is a compact mirror."
+            )
+            self.card.body_layout.addWidget(self.summary_note_label)
+            self.card.body_layout.addWidget(self.summary_container)
+        else:
+            self.card.body_layout.addWidget(self.form_container)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -2126,6 +2439,32 @@ class RuntimeSettingsEditor(QWidget):
             else self.fullscreen_checkbox.isChecked()
         )
         self.set_fullscreen_checked(target_fullscreen_value)
+        self.refresh_hz_spin.setEnabled(self._editable)
+        self.runtime_background_color_combo.setEnabled(self._editable)
+        self.serial_port_edit.setEnabled(self._editable)
+        self.fullscreen_checkbox.setEnabled(self._editable)
+        if not self._editable:
+            self.summary_note_label.setVisible(True)
+            self.summary_container.setVisible(True)
+            self.form_container.setVisible(False)
+            self.summary_value_labels["refresh"].setText(f"{preferred_refresh:.2f} Hz")
+            self.summary_value_labels["background"].setText(
+                self.runtime_background_color_combo.currentText()
+            )
+            self.summary_value_labels["serial_port"].setText(
+                self._document.project.settings.triggers.serial_port or "Not set"
+            )
+            self.summary_value_labels["serial_baudrate"].setText(
+                str(self._document.project.settings.triggers.baudrate)
+            )
+            self.summary_value_labels["test_mode"].setText("Alpha test-mode path only")
+            self.summary_value_labels["fullscreen"].setText(
+                "Enabled" if target_fullscreen_value else "Disabled"
+            )
+        else:
+            self.summary_note_label.setVisible(False)
+            self.summary_container.setVisible(False)
+            self.form_container.setVisible(True)
 
     def _normalized_runtime_background_color(self) -> str:
         background_color = self._document.project.settings.display.background_color
@@ -2193,15 +2532,18 @@ class AssetsReadinessEditor(QWidget):
 
         self.card = SectionCard(
             title="Assets Readiness",
-            subtitle="Supported variants, inspection status, and materialization actions.",
+            subtitle="Variant support, inspection status, and build actions.",
             object_name=_prefixed_object_name(object_name_prefix, "assets_readiness_card"),
             parent=self,
         )
+        self.card.layout().setContentsMargins(12, 10, 12, 10)
+        self.card.layout().setSpacing(8)
+        self.card.body_layout.setSpacing(8)
 
         variants_row = QWidget(self.card)
         variants_layout = QHBoxLayout(variants_row)
         variants_layout.setContentsMargins(0, 0, 0, 0)
-        variants_layout.setSpacing(8)
+        variants_layout.setSpacing(6)
         for variant in StimulusVariant:
             checkbox = QCheckBox(_variant_label(variant), variants_row)
             checkbox.setObjectName(
@@ -2212,6 +2554,7 @@ class AssetsReadinessEditor(QWidget):
                 checkbox.setEnabled(False)
             self._variant_checkboxes[variant] = checkbox
             variants_layout.addWidget(checkbox)
+        variants_layout.addStretch(1)
 
         self.condition_rows_value = QLabel(self.card)
         self.condition_rows_value.setObjectName(
@@ -2227,6 +2570,17 @@ class AssetsReadinessEditor(QWidget):
             _prefixed_object_name(object_name_prefix, "assets_materialization_status_value")
         )
         self.materialization_status_value.setWordWrap(True)
+        summary_grid = QGridLayout()
+        summary_grid.setContentsMargins(0, 0, 0, 0)
+        summary_grid.setHorizontalSpacing(10)
+        summary_grid.setVerticalSpacing(6)
+        summary_grid.addWidget(QLabel("Rows", self.card), 0, 0)
+        summary_grid.addWidget(self.condition_rows_value, 0, 1)
+        summary_grid.addWidget(QLabel("Manifest", self.card), 1, 0)
+        summary_grid.addWidget(self.manifest_status_value, 1, 1)
+        summary_grid.addWidget(QLabel("Build", self.card), 2, 0)
+        summary_grid.addWidget(self.materialization_status_value, 2, 1)
+        summary_grid.setColumnStretch(1, 1)
 
         self.refresh_button = QPushButton("Refresh Inspection", self.card)
         self.refresh_button.setObjectName(
@@ -2245,11 +2599,10 @@ class AssetsReadinessEditor(QWidget):
         actions_layout.setSpacing(8)
         actions_layout.addWidget(self.refresh_button)
         actions_layout.addWidget(self.materialize_button)
+        actions_layout.addStretch(1)
 
         self.card.body_layout.addWidget(variants_row)
-        self.card.body_layout.addWidget(self.condition_rows_value)
-        self.card.body_layout.addWidget(self.manifest_status_value)
-        self.card.body_layout.addWidget(self.materialization_status_value)
+        self.card.body_layout.addLayout(summary_grid)
         self.card.body_layout.addWidget(actions_row)
 
         layout = QVBoxLayout(self)
@@ -2345,20 +2698,46 @@ class SetupDashboardPage(QWidget):
         parent=None,
     ) -> None:
         super().__init__(parent)
+        self._document = document
         self.shell = NonHomePageShell(
             title="Setup Dashboard",
             subtitle=(
                 "Configure project metadata, session structure, fixation behavior, runtime, "
                 "and asset readiness from one view."
             ),
-            layout_mode="three_column",
+            layout_mode="single_column",
             width_preset="wide",
             parent=self,
         )
-        self.shell.set_column_stretches(3, 4, 3)
         self.shell.set_footer_text(
             "Setup changes here update the shared project state used by Home and Run / Runtime."
         )
+
+        self.setup_summary_card = SectionCard(
+            title="Readiness Overview",
+            subtitle="Current launch state, blocker count, and the next issue to resolve.",
+            object_name="dashboard_attention_card",
+            parent=self,
+        )
+        self.setup_summary_card.layout().setContentsMargins(12, 10, 12, 10)
+        self.setup_summary_card.layout().setSpacing(8)
+        self.setup_summary_card.body_layout.setSpacing(6)
+        self.setup_summary_badge = StatusBadgeLabel("Checking readiness...", self.setup_summary_card)
+        self.setup_summary_badge.setObjectName("dashboard_attention_badge")
+        self.setup_summary_note = QLabel(self.setup_summary_card)
+        self.setup_summary_note.setObjectName("dashboard_attention_note")
+        self.setup_summary_note.setWordWrap(True)
+        self.setup_summary_count = QLabel(self.setup_summary_card)
+        self.setup_summary_count.setObjectName("dashboard_attention_count")
+        self.setup_summary_count.setWordWrap(True)
+        summary_strip = QWidget(self.setup_summary_card)
+        summary_strip_layout = QHBoxLayout(summary_strip)
+        summary_strip_layout.setContentsMargins(0, 0, 0, 0)
+        summary_strip_layout.setSpacing(PAGE_SECTION_GAP)
+        summary_strip_layout.addWidget(self.setup_summary_badge, 0)
+        summary_strip_layout.addWidget(self.setup_summary_count, 0)
+        summary_strip_layout.addWidget(self.setup_summary_note, 1)
+        self.setup_summary_card.body_layout.addWidget(summary_strip)
 
         self.project_overview_editor = ProjectOverviewEditor(
             document,
@@ -2379,6 +2758,7 @@ class SetupDashboardPage(QWidget):
         self.runtime_settings_editor = RuntimeSettingsEditor(
             document,
             object_name_prefix="dashboard_",
+            editable=False,
             fullscreen_state_getter=fullscreen_state_getter,
             fullscreen_state_setter=fullscreen_state_setter,
             parent=self.shell,
@@ -2388,22 +2768,71 @@ class SetupDashboardPage(QWidget):
             object_name_prefix="dashboard_",
             parent=self.shell,
         )
+        self.workspace = QWidget(self.shell)
+        workspace_layout = QHBoxLayout(self.workspace)
+        workspace_layout.setContentsMargins(0, 0, 0, 0)
+        workspace_layout.setSpacing(PAGE_SECTION_GAP)
 
-        self.shell.add_column_widget(0, self.project_overview_editor)
-        self.shell.add_column_widget(0, self.session_structure_editor)
-        self.shell.add_column_widget(1, self.fixation_settings_editor)
-        self.shell.add_column_widget(2, self.runtime_settings_editor)
-        self.shell.add_column_widget(2, self.assets_readiness_editor)
-        self.shell.add_column_stretch(0)
-        self.shell.add_column_stretch(1)
-        self.shell.add_column_stretch(2)
+        self.workspace_left_column = QWidget(self.workspace)
+        left_layout = QVBoxLayout(self.workspace_left_column)
+        left_layout.setContentsMargins(0, 0, 0, 0)
+        left_layout.setSpacing(PAGE_SECTION_GAP)
+        left_layout.addWidget(self.project_overview_editor)
+        left_layout.addWidget(self.session_structure_editor)
+
+        self.workspace_center_column = QWidget(self.workspace)
+        center_layout = QVBoxLayout(self.workspace_center_column)
+        center_layout.setContentsMargins(0, 0, 0, 0)
+        center_layout.setSpacing(0)
+        center_layout.addWidget(self.fixation_settings_editor)
+
+        self.workspace_right_column = QWidget(self.workspace)
+        right_layout = QVBoxLayout(self.workspace_right_column)
+        right_layout.setContentsMargins(0, 0, 0, 0)
+        right_layout.setSpacing(PAGE_SECTION_GAP)
+        right_layout.addWidget(self.assets_readiness_editor)
+        right_layout.addWidget(self.runtime_settings_editor)
+
+        workspace_layout.addWidget(self.workspace_left_column, 3)
+        workspace_layout.addWidget(self.workspace_center_column, 4)
+        workspace_layout.addWidget(self.workspace_right_column, 3)
+
+        self.shell.add_content_widget(self.setup_summary_card)
+        self.shell.add_content_widget(self.workspace, stretch=1)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self.shell)
 
+        self._document.project_changed.connect(self._refresh_attention_summary)
+        self._document.session_plan_changed.connect(self._refresh_attention_summary)
+        self._refresh_attention_summary()
+
     def sync_fullscreen_checkbox(self, checked: bool) -> None:
         self.runtime_settings_editor.set_fullscreen_checked(checked)
+
+    def _refresh_attention_summary(self) -> None:
+        report = _launcher_readiness_report(
+            self._document,
+            refresh_hz=self.runtime_settings_editor.current_refresh_hz(),
+        )
+        issue_count = sum(
+            1 for item in report.readiness_items if item.startswith("[ACTION]")
+        )
+        self.setup_summary_badge.set_state(report.badge_state, report.status_label)
+        self.setup_summary_count.setText(f"Blockers: {issue_count}")
+        first_blocker = next(
+            (
+                item.replace("[ACTION] ", "", 1)
+                for item in report.readiness_items
+                if item.startswith("[ACTION]")
+            ),
+            "No blockers. Setup is ready for preview or launch.",
+        )
+        summary_text = first_blocker
+        if report.preview_note:
+            summary_text = f"{summary_text} {report.preview_note}"
+        self.setup_summary_note.setText(summary_text)
 
 
 class RunPage(QWidget):
@@ -2443,12 +2872,15 @@ class RunPage(QWidget):
 
         display_card = SectionCard(
             title="Display & Engine",
-            subtitle="Display index remains editable only on this dedicated Run / Runtime page.",
+            subtitle="Display routing that stays specific to this page.",
             object_name="run_display_card",
             parent=self,
         )
+        display_card.layout().setContentsMargins(12, 10, 12, 10)
+        display_card.layout().setSpacing(8)
+        display_card.body_layout.setSpacing(8)
         display_layout = QFormLayout()
-        display_layout.setVerticalSpacing(10)
+        display_layout.setVerticalSpacing(8)
         display_layout.addRow("Display Index", self.display_index_edit)
         display_layout.addRow("Engine", self.engine_name_value)
         display_card.body_layout.addLayout(display_layout)
@@ -2456,31 +2888,56 @@ class RunPage(QWidget):
         self.compile_button = QPushButton("Preview Session Plan", self)
         self.compile_button.setObjectName("compile_session_button")
         self.compile_button.clicked.connect(self.compile_session)
+        self.compile_button.setProperty("secondaryActionRole", "true")
         self.launch_button = QPushButton("Launch Experiment", self)
         self.launch_button.setObjectName("launch_test_session_button")
         self.launch_button.setProperty("launchActionRole", "primary")
+        self.launch_button.setProperty("primaryActionRole", "true")
         self.launch_button.setToolTip(
             "Launch Experiment on the current alpha test-mode runtime path."
         )
+        self.launch_button.setMinimumHeight(42)
         self.launch_button.clicked.connect(self.launch_test_session)
 
         button_row = QWidget(self)
         button_layout = QHBoxLayout(button_row)
         button_layout.setContentsMargins(0, 0, 0, 0)
-        button_layout.setSpacing(8)
+        button_layout.setSpacing(PAGE_SECTION_GAP)
         button_layout.addWidget(self.compile_button)
-        button_layout.addWidget(self.launch_button)
         button_layout.addStretch(1)
+        button_layout.addWidget(self.launch_button)
 
         controls_card = SectionCard(
             title="Run Controls",
-            subtitle="Preview the session plan or launch from this page.",
+            subtitle="Preview first, then launch with one primary action.",
             object_name="run_controls_card",
             parent=self,
         )
+        controls_card.layout().setContentsMargins(12, 10, 12, 10)
+        controls_card.layout().setSpacing(8)
+        controls_card.body_layout.setSpacing(8)
         controls_card.body_layout.addWidget(button_row)
 
-        self.summary_text = QPlainTextEdit(self)
+        self.summary_stack = QStackedWidget(self)
+        self.summary_stack.setObjectName("run_summary_stack")
+        self.summary_empty_panel = QFrame(self.summary_stack)
+        self.summary_empty_panel.setObjectName("run_summary_empty_state")
+        empty_layout = QVBoxLayout(self.summary_empty_panel)
+        empty_layout.setContentsMargins(16, 14, 16, 14)
+        empty_layout.setSpacing(8)
+        empty_title = QLabel("No session preview yet", self.summary_empty_panel)
+        empty_title.setObjectName("run_summary_empty_title")
+        empty_body = QLabel(
+            "Preview the session plan to reveal block order, launch diagnostics, and feedback details.",
+            self.summary_empty_panel,
+        )
+        empty_body.setObjectName("run_summary_empty_body")
+        empty_body.setWordWrap(True)
+        empty_layout.addWidget(empty_title)
+        empty_layout.addWidget(empty_body)
+        empty_layout.addStretch(1)
+
+        self.summary_text = QPlainTextEdit(self.summary_stack)
         self.summary_text.setObjectName("session_summary_text")
         self.summary_text.setReadOnly(True)
         self.summary_text.setMaximumBlockCount(500)
@@ -2488,20 +2945,23 @@ class RunPage(QWidget):
             "Preview the session plan or launch to populate runtime diagnostics."
         )
 
+        self.summary_stack.addWidget(self.summary_empty_panel)
+        self.summary_stack.addWidget(self.summary_text)
+
         summary_card = SectionCard(
             title="Session Summary & Runtime Feedback",
-            subtitle="Detailed session-preview and launch diagnostics for the current project.",
+            subtitle="Structured preview and launch diagnostics.",
             object_name="run_summary_card",
             parent=self,
         )
-        summary_card.body_layout.addWidget(self.summary_text)
+        summary_card.layout().setContentsMargins(12, 10, 12, 10)
+        summary_card.layout().setSpacing(8)
+        summary_card.body_layout.setSpacing(8)
+        summary_card.body_layout.addWidget(self.summary_stack)
 
-        self.readiness_badge = QLabel("Status: Setup Required", self)
+        self.readiness_badge = StatusBadgeLabel("Status: Setup Required", self)
         self.readiness_badge.setObjectName("run_readiness_badge")
-        self.readiness_badge.setAlignment(Qt.AlignmentFlag.AlignLeft)
-        self.readiness_badge.setWordWrap(True)
         self.readiness_badge.setMinimumHeight(34)
-        self.readiness_badge.setProperty("readinessRole", "compact")
 
         self.readiness_summary_value = QLabel("Not computed yet.", self)
         self.readiness_summary_value.setObjectName("run_readiness_summary_value")
@@ -2518,22 +2978,26 @@ class RunPage(QWidget):
             object_name="run_readiness_card",
             parent=self,
         )
+        readiness_card.layout().setContentsMargins(12, 10, 12, 10)
+        readiness_card.layout().setSpacing(8)
+        readiness_card.body_layout.setSpacing(8)
         readiness_card.body_layout.addWidget(self.readiness_badge)
         readiness_card.body_layout.addWidget(self.readiness_summary_value)
         readiness_card.body_layout.addWidget(self.readiness_checklist, 1)
 
         self.shell = NonHomePageShell(
             title="Run / Runtime",
-            subtitle="Preview the session plan and launch with detailed runtime feedback.",
+            subtitle="Preview the session plan, review readiness, and launch from the supported alpha path.",
             layout_mode="three_column",
             width_preset="medium",
             parent=self,
         )
+        self.shell.set_column_stretches(4, 3, 3)
         self.shell.add_column_widget(0, self.runtime_settings_editor)
-        self.shell.add_column_widget(1, controls_card)
-        self.shell.add_column_widget(1, summary_card, stretch=1)
-        self.shell.add_column_widget(2, readiness_card)
-        self.shell.add_column_widget(2, display_card, stretch=1)
+        self.shell.add_column_widget(0, display_card)
+        self.shell.add_column_widget(1, readiness_card, stretch=1)
+        self.shell.add_column_widget(2, controls_card)
+        self.shell.add_column_widget(2, summary_card, stretch=1)
         self.shell.set_footer_text(
             "Display index and runtime settings are available only on this page."
         )
@@ -2720,17 +3184,18 @@ class RunPage(QWidget):
         if session_plan is None:
             validation = self._document.validation_report(refresh_hz=self.current_refresh_hz())
             if validation.issues:
+                self.summary_stack.setCurrentWidget(self.summary_text)
                 lines = [f"- {issue.message}" for issue in validation.issues]
                 self.summary_text.setPlainText("\n".join(lines))
                 return
             self.summary_text.clear()
+            self.summary_stack.setCurrentWidget(self.summary_empty_panel)
             return
         self._set_summary(session_plan)
 
     def _refresh_readiness_panel(self) -> None:
         report = self._status_report()
-        self.readiness_badge.setText(f"Status: {report.status_label}")
-        _set_widget_property(self.readiness_badge, "readinessState", report.badge_state)
+        self.readiness_badge.set_state(report.badge_state, f"Status: {report.status_label}")
         summary_text = report.status_summary
         if report.preview_note:
             summary_text = f"{summary_text} {report.preview_note}"
@@ -2738,6 +3203,7 @@ class RunPage(QWidget):
         _set_list_items(self.readiness_checklist, report.readiness_items)
 
     def _set_summary(self, session_plan, *, extra_lines: list[str] | None = None) -> None:
+        self.summary_stack.setCurrentWidget(self.summary_text)
         lines = [
             f"Session ID: {session_plan.session_id}",
             f"Session Seed: {session_plan.random_seed}",
@@ -2775,17 +3241,35 @@ class HomePage(QWidget):
         self._document = document
         self._load_condition_template_profiles = load_condition_template_profiles
         self.setObjectName("home_page")
-        self.page_container = PageContainer(width_preset="narrow", parent=self)
+        self.page_container = PageContainer(width_preset="wide", parent=self)
 
-        self.current_project_header = QLabel(self)
+        self.current_project_header = QLabel(self.page_container.header_widget)
         self.current_project_header.setObjectName("home_current_project_header")
+        self.current_project_header.setAlignment(
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
+        )
+        self.current_project_header.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Preferred,
+        )
 
         self.current_project_subtitle = QLabel(
             "Open a project, confirm its identity, and launch quickly.",
-            self,
+            self.page_container.header_widget,
         )
         self.current_project_subtitle.setObjectName("home_current_project_subtitle")
         self.current_project_subtitle.setWordWrap(True)
+        self.current_project_subtitle.setAlignment(
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
+        )
+        self.current_project_subtitle.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Preferred,
+        )
+
+        self.page_container.header_layout.addWidget(self.current_project_header)
+        self.page_container.header_layout.addWidget(self.current_project_subtitle)
+        self.page_container.header_widget.setVisible(True)
 
         self.open_project_button = QPushButton("Open Project", self)
         self.open_project_button.setObjectName("home_open_project_button")
@@ -2793,6 +3277,7 @@ class HomePage(QWidget):
         self.launch_button.setObjectName("home_launch_test_session_button")
         self.launch_button.setProperty("launchActionRole", "primary")
         self.launch_button.setProperty("homeActionRole", "primary")
+        self.launch_button.setProperty("primaryActionRole", "true")
         self.save_project_button = QPushButton("Save", self)
         self.save_project_button.setObjectName("home_save_project_button")
         self.new_project_button = QPushButton("Create New Project", self)
@@ -2805,13 +3290,15 @@ class HomePage(QWidget):
             self.launch_button,
         ):
             button.setMinimumHeight(38)
+            button.setFixedWidth(176)
 
         action_layout = QHBoxLayout()
         action_layout.setContentsMargins(0, 0, 0, 0)
-        action_layout.setSpacing(8)
+        action_layout.setSpacing(PAGE_SECTION_GAP)
         action_layout.addWidget(self.open_project_button)
         action_layout.addWidget(self.new_project_button)
         action_layout.addWidget(self.save_project_button)
+        action_layout.addStretch(1)
         action_layout.addWidget(self.launch_button)
 
         project_card = SectionCard(
@@ -2828,10 +3315,8 @@ class HomePage(QWidget):
             "home_project_name_value",
             role="primary",
         )
-        self.project_root_value = self._new_value_label(
-            "home_project_root_value",
-            selectable=True,
-        )
+        self.project_root_value = PathValueLabel(self)
+        self.project_root_value.setObjectName("home_project_root_value")
         self.project_template_value = self._new_value_label("home_project_template_value")
         self.project_description_value = self._new_value_label("home_project_description_value")
         self._add_summary_row(project_layout, "Project Name", self.project_name_value)
@@ -2874,38 +3359,46 @@ class HomePage(QWidget):
         session_card.body_layout.setSpacing(6)
         session_card.body_layout.addLayout(session_layout)
 
-        self.launch_status_label = QLabel("Status: Setup Required", self)
+        self.launch_status_label = StatusBadgeLabel("Status: Setup Required", self)
         self.launch_status_label.setObjectName("home_launch_status_indicator")
-        self.launch_status_label.setAlignment(Qt.AlignmentFlag.AlignLeft)
-        self.launch_status_label.setWordWrap(False)
         self.launch_status_label.setMinimumHeight(28)
+        self.launch_status_summary = QLabel(self)
+        self.launch_status_summary.setObjectName("home_launch_status_summary")
+        self.launch_status_summary.setWordWrap(True)
+        self.launch_status_summary.setMinimumHeight(28)
+        self.launch_readiness_list = QListWidget(self)
+        self.launch_readiness_list.setObjectName("home_readiness_list")
+        _configure_read_only_list(self.launch_readiness_list)
 
         status_card = SectionCard(
             title="Launch Readiness",
-            subtitle="Single-line launch state.",
+            subtitle="Project launch state, task checklist, and alpha runtime note.",
             object_name="home_status_card",
             parent=self,
         )
         status_card.layout().setContentsMargins(12, 10, 12, 10)
-        status_card.layout().setSpacing(6)
-        status_card.body_layout.setSpacing(4)
+        status_card.layout().setSpacing(8)
+        status_card.body_layout.setSpacing(PAGE_SECTION_GAP)
         status_card.body_layout.addWidget(self.launch_status_label)
+        status_card.body_layout.addWidget(self.launch_status_summary)
+        status_card.body_layout.addWidget(self.launch_readiness_list)
 
-        cards_grid = QGridLayout()
-        cards_grid.setContentsMargins(0, 0, 0, 0)
-        cards_grid.setHorizontalSpacing(10)
-        cards_grid.setVerticalSpacing(10)
-        cards_grid.addWidget(project_card, 0, 0)
-        cards_grid.addWidget(session_card, 0, 1)
-        cards_grid.addWidget(status_card, 1, 0, 1, 2)
-        cards_grid.setColumnStretch(0, 3)
-        cards_grid.setColumnStretch(1, 3)
+        left_column = QWidget(self)
+        left_column_layout = QVBoxLayout(left_column)
+        left_column_layout.setContentsMargins(0, 0, 0, 0)
+        left_column_layout.setSpacing(PAGE_SECTION_GAP)
+        left_column_layout.addWidget(project_card)
+        left_column_layout.addWidget(session_card)
+
+        main_row = QHBoxLayout()
+        main_row.setContentsMargins(0, 0, 0, 0)
+        main_row.setSpacing(PAGE_SECTION_GAP)
+        main_row.addWidget(left_column, 5)
+        main_row.addWidget(status_card, 4)
 
         page_layout = self.page_container.content_layout
-        page_layout.addWidget(self.current_project_header)
-        page_layout.addWidget(self.current_project_subtitle)
         page_layout.addLayout(action_layout)
-        page_layout.addLayout(cards_grid)
+        page_layout.addLayout(main_row)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -2951,30 +3444,10 @@ class HomePage(QWidget):
                 font-weight: 700;
             }
             QLabel#home_launch_status_indicator {
-                border-radius: 6px;
-                padding: 4px 8px;
-                font-size: 13px;
-                font-weight: 700;
+                min-height: 28px;
             }
-            QLabel#home_launch_status_indicator[readinessState="ready"] {
-                background-color: #dcfce7;
-                border: 1px solid #86efac;
-                color: #166534;
-            }
-            QLabel#home_launch_status_indicator[readinessState="warning"] {
-                background-color: #ffedd5;
-                border: 1px solid #fdba74;
-                color: #9a3412;
-            }
-            QLabel#home_launch_status_indicator[readinessState="info"] {
-                background-color: #e0f2fe;
-                border: 1px solid #7dd3fc;
-                color: #0c4a6e;
-            }
-            QLabel#home_launch_status_indicator[readinessState="pending"] {
-                background-color: #f1f5f9;
-                border: 1px solid #cbd5e1;
-                color: #475569;
+            QLabel#home_launch_status_summary {
+                color: #33485f;
             }
             """
         )
@@ -3017,10 +3490,11 @@ class HomePage(QWidget):
 
         self.current_project_header.setText(project.meta.name)
         self.current_project_subtitle.setText(
-            "Open a project, confirm its identity, and launch quickly."
+            "Open a project, confirm readiness, and launch quickly."
         )
         self.project_name_value.setText(project.meta.name)
-        self.project_root_value.setText(str(self._document.project_root))
+        project_root_text = str(self._document.project_root)
+        self.project_root_value.set_path_text(project_root_text, max_length=96)
         self.project_template_value.setText(self._condition_template_summary_text())
         self.project_description_value.setText(
             self._project_description_text(project.meta.description)
@@ -3068,13 +3542,12 @@ class HomePage(QWidget):
         return profile.display_name
 
     def _set_status_indicator(self, report: LauncherReadinessReport) -> None:
-        self.launch_status_label.setText(f"Status: {report.status_label}")
-        _set_widget_property(
-            self.launch_status_label,
-            "readinessState",
-            report.badge_state,
-        )
-        self.launch_status_label.setToolTip(report.status_summary)
+        self.launch_status_label.set_state(report.badge_state, f"Status: {report.status_label}")
+        summary_text = report.status_summary
+        if report.preview_note:
+            summary_text = f"{summary_text} {report.preview_note}"
+        self.launch_status_summary.setText(summary_text)
+        _set_list_items(self.launch_readiness_list, report.readiness_items)
 
     def _add_summary_row(
         self,
@@ -3141,7 +3614,7 @@ class StudioMainWindow(QMainWindow):
         self._on_request_open_project = on_request_open_project
         self._on_request_settings = on_request_settings
         self.setWindowTitle("FPVS Studio (Alpha)")
-        self.resize(1200, 860)
+        self.resize(1440, 920)
 
         self.conditions_page = ConditionsPage(document, self)
         self.session_structure_page = SessionStructurePage(document, self)
@@ -3174,8 +3647,8 @@ class StudioMainWindow(QMainWindow):
         self.main_tabs.addTab(self.home_page, "Home")
         self.main_tabs.addTab(self.setup_dashboard_page, "Setup Dashboard")
         self.main_tabs.addTab(self.conditions_page, "Conditions")
-        self.main_tabs.addTab(self.assets_page, "Assets / Preprocessing")
-        self.main_tabs.addTab(self.run_page, "Run / Runtime")
+        self.main_tabs.addTab(self.assets_page, "Stimuli Manager")
+        self.main_tabs.addTab(self.run_page, "Runtime")
         self.setCentralWidget(self.main_tabs)
         self._apply_chrome_styles()
 
@@ -3220,52 +3693,295 @@ class StudioMainWindow(QMainWindow):
         self.setStyleSheet(
             """
             QTabWidget#main_tabs::pane {
-                border: 1px solid #c5cfdb;
-                background-color: #ffffff;
+                border: 1px solid %s;
+                background-color: %s;
                 top: -1px;
             }
             QPushButton {
-                border: 1px solid #c3d0de;
-                border-radius: 8px;
-                background-color: #f8fafc;
+                border: 1px solid %s;
+                border-radius: %spx;
+                background-color: %s;
                 padding: 6px 12px;
-                color: #243447;
+                color: %s;
+                min-height: 30px;
             }
             QPushButton:hover {
-                border-color: #a8bad2;
-                background-color: #ecf2fa;
+                border-color: %s;
+                background-color: %s;
             }
             QPushButton:pressed {
-                border-color: #94aac6;
-                background-color: #dfe8f5;
+                border-color: %s;
+                background-color: %s;
             }
             QPushButton:disabled {
-                border-color: #d4dbe6;
-                background-color: #f1f4f8;
+                border-color: %s;
+                background-color: %s;
                 color: #8a97a8;
             }
-            QPushButton[launchActionRole="primary"] {
-                border-color: #1d4ed8;
-                background-color: #2563eb;
+            QPushButton[launchActionRole="primary"],
+            QPushButton[primaryActionRole="true"] {
+                border-color: %s;
+                background-color: %s;
                 color: #ffffff;
-                font-weight: 600;
+                font-weight: 700;
                 padding-left: 14px;
                 padding-right: 14px;
             }
-            QPushButton[launchActionRole="primary"]:hover {
-                border-color: #1e40af;
-                background-color: #1d4ed8;
+            QPushButton[launchActionRole="primary"]:hover,
+            QPushButton[primaryActionRole="true"]:hover {
+                border-color: %s;
+                background-color: %s;
             }
-            QPushButton[launchActionRole="primary"]:pressed {
-                border-color: #1e3a8a;
-                background-color: #1e40af;
+            QPushButton[launchActionRole="primary"]:pressed,
+            QPushButton[primaryActionRole="true"]:pressed {
+                border-color: %s;
+                background-color: %s;
             }
-            QPushButton[launchActionRole="primary"]:disabled {
+            QPushButton[launchActionRole="primary"]:disabled,
+            QPushButton[primaryActionRole="true"]:disabled {
                 border-color: #93c5fd;
                 background-color: #93c5fd;
                 color: #eff6ff;
             }
+            QPushButton[secondaryActionRole="true"] {
+                font-weight: 600;
+            }
+            QPushButton:focus {
+                border: 2px solid %s;
+            }
+            QLabel[statusBadge="true"] {
+                border: 1px solid %s;
+                border-radius: %spx;
+                background-color: %s;
+                color: %s;
+                padding: 5px 10px;
+                font-size: 12px;
+                font-weight: 700;
+            }
+            QLabel[statusBadge="true"][statusState="ready"] {
+                border-color: %s;
+                background-color: %s;
+                color: %s;
+            }
+            QLabel[statusBadge="true"][statusState="warning"] {
+                border-color: %s;
+                background-color: %s;
+                color: %s;
+            }
+            QLabel[statusBadge="true"][statusState="info"] {
+                border-color: %s;
+                background-color: %s;
+                color: %s;
+            }
+            QLabel[statusBadge="true"][statusState="pending"] {
+                border-color: %s;
+                background-color: %s;
+                color: %s;
+            }
+            QLabel[statusBadge="true"][statusState="error"] {
+                border-color: #fca5a5;
+                background-color: #fef2f2;
+                color: #991b1b;
+            }
+            QLabel[pathValue="true"] {
+                border: 1px solid %s;
+                border-radius: %spx;
+                background-color: %s;
+                color: %s;
+                padding: 6px 8px;
+            }
+            QListWidget#condition_list,
+            QListWidget#run_readiness_checklist,
+            QListWidget#home_readiness_list,
+            QListWidget#dashboard_attention_list {
+                border: 1px solid %s;
+                border-radius: %spx;
+                background-color: %s;
+                outline: none;
+            }
+            QListWidget#condition_list {
+                padding: 4px;
+            }
+            QListWidget#condition_list::item {
+                padding: 7px 10px;
+                border-radius: 8px;
+            }
+            QListWidget#condition_list::item:hover {
+                background-color: %s;
+            }
+            QListWidget#condition_list::item:selected {
+                background-color: %s;
+                color: #ffffff;
+                font-weight: 700;
+            }
+            QListWidget#run_readiness_checklist::item,
+            QListWidget#home_readiness_list::item,
+            QListWidget#dashboard_attention_list::item {
+                padding: 4px 6px;
+            }
+            QTableWidget#assets_table {
+                border: 1px solid %s;
+                border-radius: %spx;
+                background-color: %s;
+                gridline-color: %s;
+                selection-background-color: %s;
+                selection-color: #ffffff;
+                outline: none;
+            }
+            QTableWidget#assets_table QHeaderView::section {
+                background-color: %s;
+                border: none;
+                border-right: 1px solid %s;
+                border-bottom: 1px solid %s;
+                padding: 6px 8px;
+                color: %s;
+                font-weight: 700;
+            }
+            QTableWidget#assets_table::item {
+                padding: 4px 8px;
+            }
+            QTableWidget#assets_table::item:selected {
+                background-color: %s;
+                color: #ffffff;
+            }
+            QTableWidget#assets_table::item:hover {
+                background-color: %s;
+            }
+            QPlainTextEdit#assets_status_text,
+            QPlainTextEdit#session_summary_text {
+                border: 1px solid %s;
+                border-radius: %spx;
+                background-color: %s;
+                color: %s;
+            }
+            QFrame#run_summary_empty_state {
+                border: 1px dashed %s;
+                border-radius: %spx;
+                background-color: %s;
+            }
+            QLabel#run_summary_empty_title {
+                color: %s;
+                font-size: 14px;
+                font-weight: 700;
+            }
+            QLabel#run_summary_empty_body {
+                color: %s;
+            }
+            QLabel#home_launch_status_summary,
+            QLabel#run_readiness_summary_value,
+            QLabel#dashboard_attention_note {
+                color: %s;
+            }
             """
+            % (
+                COLOR_BORDER,
+                COLOR_SURFACE_ELEVATED,
+                COLOR_BORDER,
+                CARD_CORNER_RADIUS,
+                COLOR_SURFACE_ELEVATED,
+                COLOR_TEXT_PRIMARY,
+                COLOR_BORDER_SOFT,
+                COLOR_SURFACE_ALT,
+                COLOR_BORDER_SOFT,
+                COLOR_SURFACE_ALT,
+                COLOR_BORDER_SOFT,
+                COLOR_SURFACE_ALT,
+                COLOR_PRIMARY_BORDER,
+                COLOR_PRIMARY,
+                COLOR_PRIMARY_HOVER,
+                COLOR_PRIMARY_PRESSED,
+                COLOR_PRIMARY_BORDER,
+                COLOR_PRIMARY_PRESSED,
+                COLOR_PRIMARY,
+                COLOR_BORDER_SOFT,
+                CARD_CORNER_RADIUS,
+                COLOR_SURFACE_ELEVATED,
+                COLOR_TEXT_PRIMARY,
+                COLOR_SUCCESS_BORDER,
+                COLOR_SUCCESS_BG,
+                COLOR_SUCCESS_TEXT,
+                COLOR_WARNING_BORDER,
+                COLOR_WARNING_BG,
+                COLOR_WARNING_TEXT,
+                COLOR_INFO_BORDER,
+                COLOR_INFO_BG,
+                COLOR_INFO_TEXT,
+                COLOR_PENDING_BORDER,
+                COLOR_PENDING_BG,
+                COLOR_PENDING_TEXT,
+                COLOR_BORDER_SOFT,
+                CARD_CORNER_RADIUS,
+                COLOR_SURFACE_ELEVATED,
+                COLOR_TEXT_PRIMARY,
+                COLOR_BORDER_SOFT,
+                CARD_CORNER_RADIUS,
+                COLOR_SURFACE_ELEVATED,
+                COLOR_SURFACE_ALT,
+                COLOR_PRIMARY,
+                COLOR_BORDER_SOFT,
+                CARD_CORNER_RADIUS,
+                COLOR_SURFACE_ELEVATED,
+                COLOR_BORDER_SOFT,
+                COLOR_PRIMARY,
+                COLOR_SURFACE_ALT,
+                COLOR_BORDER_SOFT,
+                COLOR_BORDER_SOFT,
+                COLOR_TEXT_SECONDARY,
+                COLOR_PRIMARY,
+                COLOR_SURFACE_ALT,
+                COLOR_BORDER_SOFT,
+                CARD_CORNER_RADIUS,
+                COLOR_SURFACE_ELEVATED,
+                COLOR_TEXT_PRIMARY,
+                COLOR_BORDER_SOFT,
+                CARD_CORNER_RADIUS,
+                COLOR_SURFACE_ELEVATED,
+                COLOR_TEXT_PRIMARY,
+                COLOR_TEXT_SECONDARY,
+                COLOR_TEXT_SECONDARY,
+            )
+        )
+        self.menuBar().setStyleSheet(
+            """
+            QMenuBar {
+                background: transparent;
+                color: %s;
+            }
+            QMenuBar::item {
+                background: transparent;
+                border: none;
+                border-radius: 0px;
+                margin: 0px;
+                padding: 4px 8px;
+            }
+            QMenuBar::item:selected,
+            QMenuBar::item:pressed {
+                background: transparent;
+                border: none;
+                color: %s;
+            }
+            QMenu {
+                border: 1px solid %s;
+                background-color: %s;
+                color: %s;
+            }
+            QMenu::item {
+                padding: 6px 24px 6px 12px;
+                background: transparent;
+            }
+            QMenu::item:selected {
+                background-color: %s;
+                color: #ffffff;
+            }
+            """
+            % (
+                COLOR_TEXT_PRIMARY,
+                COLOR_TEXT_PRIMARY,
+                COLOR_BORDER_SOFT,
+                COLOR_SURFACE_ELEVATED,
+                COLOR_TEXT_PRIMARY,
+                COLOR_PRIMARY,
+            )
         )
 
     def _install_button_hover_animations(self) -> None:

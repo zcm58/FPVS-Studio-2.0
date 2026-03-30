@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
     QComboBox,
     QDialogButtonBox,
     QGroupBox,
+    QHeaderView,
     QLabel,
     QListWidget,
     QMessageBox,
@@ -834,8 +835,8 @@ def test_home_tab_is_first_and_existing_tabs_remain_usable(
         "Home",
         "Setup Dashboard",
         "Conditions",
-        "Assets / Preprocessing",
-        "Run / Runtime",
+        "Stimuli Manager",
+        "Runtime",
     ]
     tab_labels = [window.main_tabs.tabText(index) for index in range(window.main_tabs.count())]
     assert tab_labels == expected_tabs
@@ -856,7 +857,7 @@ def test_home_tab_is_first_and_existing_tabs_remain_usable(
     assert window.fixation_cross_settings_page.fixation_enabled_checkbox is not None
 
 
-def test_setup_dashboard_tab_exists_and_uses_three_column_shell(
+def test_setup_dashboard_tab_exists_and_uses_single_column_shell_with_workspace(
     qtbot,
     controller: StudioController,
     tmp_path: Path,
@@ -867,8 +868,8 @@ def test_setup_dashboard_tab_exists_and_uses_three_column_shell(
     dashboard_index = window.main_tabs.indexOf(dashboard)
     assert dashboard_index == 1
     assert window.main_tabs.tabText(dashboard_index) == "Setup Dashboard"
-    assert dashboard.shell.layout_mode == "three_column"
-    assert dashboard.shell.column_count() == 3
+    assert dashboard.shell.layout_mode == "single_column"
+    assert dashboard.workspace.layout() is not None
 
 
 def test_major_tabs_share_page_container_width_presets(
@@ -878,12 +879,58 @@ def test_major_tabs_share_page_container_width_presets(
 ) -> None:
     _, window = _open_created_project(controller, qtbot, tmp_path, "Shared Page Container")
 
-    assert window.home_page.page_container.width_preset == "narrow"
-    assert window.home_page.page_container.max_content_width() == 920
+    assert window.home_page.page_container.width_preset == "wide"
+    assert window.home_page.page_container.max_content_width() == 1280
     assert window.setup_dashboard_page.shell.page_container.width_preset == "wide"
     assert window.conditions_page.shell.page_container.width_preset == "wide"
-    assert window.assets_page.shell.page_container.width_preset == "wide"
+    assert window.assets_page.shell.page_container.width_preset == "full"
+    assert window.assets_page.shell.page_container.max_content_width() == 16_777_215
     assert window.run_page.shell.page_container.width_preset == "medium"
+
+
+def test_page_headers_use_home_left_alignment_and_non_home_center_alignment(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Header Geometry")
+    assert (
+        window.home_page.current_project_header.parent()
+        is window.home_page.page_container.header_widget
+    )
+    assert (
+        window.home_page.current_project_subtitle.parent()
+        is window.home_page.page_container.header_widget
+    )
+    assert window.home_page.current_project_header.alignment() & Qt.AlignmentFlag.AlignLeft
+    assert window.home_page.current_project_subtitle.alignment() & Qt.AlignmentFlag.AlignLeft
+    assert window.setup_dashboard_page.shell.title_label.alignment() & Qt.AlignmentFlag.AlignCenter
+    assert window.conditions_page.shell.title_label.alignment() & Qt.AlignmentFlag.AlignCenter
+    assert window.assets_page.shell.title_label.alignment() & Qt.AlignmentFlag.AlignCenter
+
+
+def test_stimuli_manager_page_uses_table_focused_layout(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Stimuli Manager Layout")
+    page = window.assets_page
+    header = page.assets_table.horizontalHeader()
+
+    assert window.main_tabs.tabText(window.main_tabs.indexOf(page)) == "Stimuli Manager"
+    assert page.shell.title_label.text() == "Stimuli Manager"
+    assert "stimulus sources" in page.shell.subtitle_label.text().lower()
+    assert page.assets_table.horizontalHeaderItem(2).text() == "Source Path"
+    assert header.sectionResizeMode(0) == QHeaderView.ResizeMode.Interactive
+    assert header.sectionResizeMode(1) == QHeaderView.ResizeMode.ResizeToContents
+    assert header.sectionResizeMode(2) == QHeaderView.ResizeMode.Stretch
+    assert header.sectionResizeMode(5) == QHeaderView.ResizeMode.Interactive
+    assert header.stretchLastSection() is False
+    assert not page.assets_table.verticalHeader().isVisible()
+    assert page.assets_status_text.maximumHeight() == 96
+    assert page.shell.page_container.layout().contentsMargins().left() == 24
+    assert page.shell.page_container.layout().contentsMargins().right() == 24
 
 
 def test_switching_main_tabs_keeps_outer_window_size_stable(
@@ -904,6 +951,35 @@ def test_switching_main_tabs_keeps_outer_window_size_stable(
         window.main_tabs.setCurrentWidget(page)
         QApplication.processEvents()
         assert window.size() == initial_size
+
+
+def test_primary_tabs_fit_default_window_without_page_level_scrollbars(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "No Scroll Layout")
+    _prepare_compile_ready_project(window, tmp_path / "no-scroll-ready")
+    window.resize(1200, 860)
+    window.show()
+    QApplication.processEvents()
+
+    page_specs = [
+        (window.home_page, window.home_page.page_container.scroll_area),
+        (
+            window.setup_dashboard_page,
+            window.setup_dashboard_page.shell.page_container.scroll_area,
+        ),
+        (window.conditions_page, window.conditions_page.shell.page_container.scroll_area),
+        (window.assets_page, window.assets_page.shell.page_container.scroll_area),
+        (window.run_page, window.run_page.shell.page_container.scroll_area),
+    ]
+
+    for page, scroll_area in page_specs:
+        window.main_tabs.setCurrentWidget(page)
+        QApplication.processEvents()
+        qtbot.waitUntil(lambda scroll_area=scroll_area: scroll_area.verticalScrollBar().maximum() <= 1)
+        assert scroll_area.verticalScrollBar().maximum() <= 1
 
 
 def test_conditions_tab_uses_horizontal_master_detail_shell(
@@ -967,9 +1043,11 @@ def test_setup_dashboard_surfaces_project_session_fixation_runtime_and_assets_co
     assert "Condition stimulus rows:" in assets_editor.condition_rows_value.text()
     assert dashboard.findChild(QWidget, "condition_name_edit") is None
     assert dashboard.findChild(QWidget, "condition_list") is None
-    left_column_layout = dashboard.shell._column_layouts[0]
-    assert left_column_layout.itemAt(0).widget() is project_editor
-    assert left_column_layout.itemAt(1).widget() is session_editor
+    assert dashboard.workspace_left_column.layout().itemAt(0).widget() is project_editor
+    assert dashboard.workspace_left_column.layout().itemAt(1).widget() is session_editor
+    assert dashboard.workspace_center_column.layout().itemAt(0).widget() is fixation_editor
+    assert dashboard.workspace_right_column.layout().itemAt(0).widget() is assets_editor
+    assert dashboard.workspace_right_column.layout().itemAt(1).widget() is runtime_editor
 
 
 def test_setup_dashboard_edits_sync_document_and_dedicated_tabs(
@@ -1209,6 +1287,7 @@ def test_home_header_updates_when_project_name_changes(
     _, window = _open_created_project(controller, qtbot, tmp_path, "Home Header Project")
     header_label = window.home_page.findChild(QLabel, "home_current_project_header")
     assert header_label is not None
+    assert header_label.parent() is window.home_page.page_container.header_widget
     assert header_label.text() == "Home Header Project"
 
     window.setup_dashboard_page.project_overview_editor.project_name_edit.setText("Renamed Header Project")
@@ -1256,6 +1335,9 @@ def test_home_quick_action_buttons_present_and_wired(
     assert launch_button.geometry().right() == max(
         button.geometry().right() for button in ordered_buttons
     )
+    assert len({button.width() for button in ordered_buttons}) == 1
+    assert {button.minimumWidth() for button in ordered_buttons} == {176}
+    assert {button.maximumWidth() for button in ordered_buttons} == {176}
 
     trigger_counts = {"new": 0, "open": 0, "save": 0, "launch": 0}
     window.new_project_action.triggered.connect(
@@ -1302,6 +1384,25 @@ def test_main_tabs_use_animated_tab_bar(
 ) -> None:
     _, window = _open_created_project(controller, qtbot, tmp_path, "Animated Tabs Project")
     assert isinstance(window.main_tabs.tabBar(), AnimatedTabBar)
+
+
+def test_main_tabs_use_equal_width_tab_geometry(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Equal Width Tabs Project")
+    tab_bar = window.main_tabs.tabBar()
+    assert isinstance(tab_bar, AnimatedTabBar)
+
+    qtbot.waitUntil(lambda: tab_bar.count() == window.main_tabs.count())
+    qtbot.waitUntil(lambda: all(tab_bar.tabRect(index).width() > 0 for index in range(tab_bar.count())))
+
+    tab_widths = [tab_bar.tabRect(index).width() for index in range(tab_bar.count())]
+    hint_widths = [tab_bar.tabSizeHint(index).width() for index in range(tab_bar.count())]
+
+    assert len(set(tab_widths)) == 1
+    assert len(set(hint_widths)) == 1
 
 
 def test_main_window_buttons_are_hover_animation_enabled(
@@ -1471,7 +1572,10 @@ def test_home_overview_panels_show_project_session_and_runtime_metadata(
     assert block_count_label.text() == "2"
     assert fixation_label.text() == "Disabled"
     assert accuracy_label.text() == "Disabled"
-    assert root_path_label.text() == str(window.document.project_root)
+    assert str(window.document.project_root) in {
+        root_path_label.text(),
+        root_path_label.toolTip(),
+    }
     assert status_label.text().startswith("Status: ")
     assert template_label.text() == "No template selected"
     assert description_label.text() == "No description set yet."
@@ -2203,7 +2307,7 @@ def test_assets_preprocessing_import_and_materialize_updates_status(
     qtbot.mouseClick(window.assets_page.materialize_button, Qt.MouseButton.LeftButton)
 
     assert window.document.manifest is not None
-    assert "Manifest status:" in window.assets_page.assets_status_text.toPlainText()
+    assert "Catalog status:" in window.assets_page.assets_status_text.toPlainText()
     assert StimulusVariant.GRAYSCALE in window.document.project.stimulus_sets[0].available_variants
 
 
