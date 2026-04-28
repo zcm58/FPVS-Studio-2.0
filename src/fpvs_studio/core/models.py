@@ -1,13 +1,14 @@
-"""Editable engine-neutral project schemas for FPVS Studio.
-These Pydantic models define ProjectFile state, settings, conditions, validation reports, and related metadata that feed compilation and preprocessing.
-They own persisted authoring truth, not compiled RunSpec or SessionPlan artifacts and not runtime-only machine options."""
+"""Editable engine-neutral project schemas for FPVS Studio. These Pydantic models define
+ProjectFile state, settings, conditions, validation reports, and related metadata that
+feed compilation and preprocessing. They own persisted authoring truth, not compiled
+RunSpec or SessionPlan artifacts and not runtime-only machine options."""
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from pathlib import PurePosixPath
 import random
 import re
+from datetime import datetime, timezone
+from pathlib import PurePosixPath
 from typing import Literal
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -80,9 +81,7 @@ def validate_slug(value: str, *, field_name: str) -> str:
     """Validate a stable slug-like identifier."""
 
     if not SLUG_RE.fullmatch(value):
-        raise ValueError(
-            f"{field_name} must contain only lowercase letters, digits, and hyphens."
-        )
+        raise ValueError(f"{field_name} must contain only lowercase letters, digits, and hyphens.")
     return value
 
 
@@ -197,7 +196,9 @@ class DisplaySettings(FPVSBaseModel):
 
     @field_validator("background_color")
     @classmethod
-    def validate_background_color(cls, value: str | tuple[int, int, int]) -> str | tuple[int, int, int]:
+    def validate_background_color(
+        cls, value: str | tuple[int, int, int]
+    ) -> str | tuple[int, int, int]:
         return validate_color(value)
 
 
@@ -234,7 +235,9 @@ class FixationTaskSettings(FPVSBaseModel):
 
     @field_validator("base_color", "target_color")
     @classmethod
-    def validate_fixation_colors(cls, value: str | tuple[int, int, int]) -> str | tuple[int, int, int]:
+    def validate_fixation_colors(
+        cls, value: str | tuple[int, int, int]
+    ) -> str | tuple[int, int, int]:
         return validate_color(value)
 
     @field_validator("response_keys")
@@ -256,19 +259,24 @@ class FixationTaskSettings(FPVSBaseModel):
         return cleaned
 
     @model_validator(mode="after")
-    def validate_ranges(self) -> "FixationTaskSettings":
+    def validate_ranges(self) -> FixationTaskSettings:
         if self.enabled and self.target_duration_ms <= 0:
             raise ValueError("Fixation target duration must be greater than 0 ms when enabled.")
         if self.min_gap_ms > self.max_gap_ms:
             raise ValueError("Fixation min_gap_ms must be less than or equal to max_gap_ms.")
         if self.accuracy_task_enabled and not self.enabled:
-            raise ValueError("Fixation task must be enabled when the fixation accuracy task is enabled.")
+            raise ValueError(
+                "Fixation task must be enabled when the fixation accuracy task is enabled."
+            )
         if self.target_count_mode == "randomized":
             if self.target_count_min > self.target_count_max:
-                raise ValueError("Fixation target_count_min must be less than or equal to target_count_max.")
+                raise ValueError(
+                    "Fixation target_count_min must be less than or equal to target_count_max."
+                )
             if self.no_immediate_repeat_count and self.target_count_min == self.target_count_max:
                 raise ValueError(
-                    "Randomized color changes per condition (target counts) require min/max to differ when no immediate repeat is enabled."
+                    "Randomized color changes per condition (target counts) require "
+                    "min/max to differ when no immediate repeat is enabled."
                 )
         if self.response_key not in self.response_keys:
             self.response_keys = [self.response_key, *self.response_keys]
@@ -323,7 +331,9 @@ class ProjectSettings(FPVSBaseModel):
     fixation_task: FixationTaskSettings = Field(default_factory=FixationTaskSettings)
     triggers: TriggerSettings = Field(default_factory=TriggerSettings)
     session: SessionSettings = Field(default_factory=SessionSettings)
-    supported_variants: list[StimulusVariant] = Field(default_factory=lambda: list(SUPPORTED_VARIANTS))
+    supported_variants: list[StimulusVariant] = Field(
+        default_factory=lambda: list(SUPPORTED_VARIANTS)
+    )
 
     @field_validator("condition_profile_id")
     @classmethod
@@ -415,7 +425,7 @@ class ProjectFile(FPVSBaseModel):
     conditions: list[Condition] = Field(default_factory=list)
 
     @model_validator(mode="after")
-    def validate_unique_ids(self) -> "ProjectFile":
+    def validate_unique_ids(self) -> ProjectFile:
         set_ids = [item.set_id for item in self.stimulus_sets]
         if len(set_ids) != len(set(set_ids)):
             raise ValueError("Stimulus set ids must be unique.")
@@ -448,7 +458,9 @@ class ConditionTemplateDefaults(FPVSBaseModel):
     """Condition-template profile defaults."""
 
     condition: ConditionDefaults = Field(default_factory=ConditionDefaults)
-    display: ConditionTemplateDisplayDefaults = Field(default_factory=ConditionTemplateDisplayDefaults)
+    display: ConditionTemplateDisplayDefaults = Field(
+        default_factory=ConditionTemplateDisplayDefaults
+    )
     fixation_task: FixationTaskSettings = Field(default_factory=FixationTaskSettings)
 
 
@@ -486,7 +498,7 @@ class ConditionTemplateProfileLibrary(FPVSBaseModel):
     profiles: list[ConditionTemplateProfile] = Field(default_factory=list)
 
     @model_validator(mode="after")
-    def validate_unique_profile_ids(self) -> "ConditionTemplateProfileLibrary":
+    def validate_unique_profile_ids(self) -> ConditionTemplateProfileLibrary:
         profile_ids = [item.profile_id for item in self.profiles]
         if len(profile_ids) != len(set(profile_ids)):
             raise ValueError("Condition template profile ids must be unique.")

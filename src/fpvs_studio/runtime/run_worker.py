@@ -1,6 +1,7 @@
-"""Runtime worker that executes compiled runs through an engine.
-It iterates RunSpec or SessionPlan playback, manages runtime-owned transitions and fixation feedback flow, and builds neutral execution summaries plus exports.
-The module owns execution orchestration above the engine seam, not ProjectFile compilation or PsychoPy-specific rendering logic."""
+"""Runtime worker that executes compiled runs through an engine. It iterates RunSpec or
+SessionPlan playback, manages runtime-owned transitions and fixation feedback flow, and
+builds neutral execution summaries plus exports. The module owns execution orchestration
+above the engine seam, not ProjectFile compilation or PsychoPy-specific rendering logic."""
 
 from __future__ import annotations
 
@@ -10,10 +11,10 @@ from pathlib import Path
 from fpvs_studio.core.enums import InterConditionMode, RunMode
 from fpvs_studio.core.execution import (
     FixationTaskSummary,
+    FrameIntervalRecord,
     RunExecutionSummary,
     RuntimeMetadata,
     SessionExecutionSummary,
-    FrameIntervalRecord,
 )
 from fpvs_studio.core.run_spec import RunSpec
 from fpvs_studio.core.session_plan import SessionEntry, SessionPlan
@@ -118,7 +119,9 @@ class RuntimeWorker:
 
                 run_output_dir = output_dir / entry.run_id
                 run_relative_output_dir = (
-                    f"{relative_output_dir}/{entry.run_id}" if relative_output_dir is not None else None
+                    f"{relative_output_dir}/{entry.run_id}"
+                    if relative_output_dir is not None
+                    else None
                 )
                 trigger_start_index = len(trigger_backend.records)
                 run_summary = self._engine.run_condition(
@@ -345,7 +348,7 @@ def _estimate_refresh_hz(frame_intervals: list[FrameIntervalRecord]) -> float | 
     intervals = [
         interval.interval_s
         for interval in frame_intervals
-        if hasattr(interval, "interval_s") and getattr(interval, "interval_s") > 0
+        if hasattr(interval, "interval_s") and interval.interval_s > 0
     ]
     if not intervals:
         return None
@@ -419,7 +422,9 @@ def _format_condition_feedback_comparison(
     elif accuracy_delta > 0:
         accuracy_text = f"your detection rate improved by {accuracy_delta:.1f} percentage points"
     else:
-        accuracy_text = f"your detection rate dropped by {abs(accuracy_delta):.1f} percentage points"
+        accuracy_text = (
+            f"your detection rate dropped by {abs(accuracy_delta):.1f} percentage points"
+        )
 
     rt_text = _format_rt_comparison(summary.mean_rt_ms, previous_summary.mean_rt_ms)
     if rt_text is None:

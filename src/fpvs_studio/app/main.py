@@ -1,6 +1,7 @@
-"""Top-level application bootstrap for the Phase 5 PySide6 shell.
-It lazily hands process startup into the GUI application layer so imports stay lightweight until a desktop session is requested.
-Project editing, compilation, preprocessing, and runtime orchestration remain in backend services beneath this handoff."""
+"""Top-level application bootstrap for the Phase 5 PySide6 shell. It lazily hands process
+startup into the GUI application layer so imports stay lightweight until a desktop
+session is requested. Project editing, compilation, preprocessing, and runtime
+orchestration remain in backend services beneath this handoff."""
 
 from __future__ import annotations
 

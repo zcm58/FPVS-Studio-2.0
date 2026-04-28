@@ -1,6 +1,7 @@
 """Shared enumerations for editable models, compiled contracts, and runtime coordination.
-These values keep ProjectFile, RunSpec, SessionPlan, manifests, and execution summaries speaking the same engine-neutral vocabulary.
-The module owns stable symbolic choices only; validation rules and behavioral decisions live in the layers that consume them."""
+These values keep ProjectFile, RunSpec, SessionPlan, manifests, and execution summaries
+speaking the same engine-neutral vocabulary. The module owns stable symbolic choices
+only; validation rules and behavioral decisions live in the layers that consume them."""
 
 from __future__ import annotations
 

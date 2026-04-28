@@ -1,12 +1,13 @@
-"""Runtime helpers for trigger backend wiring and logging.
-It wraps trigger backends so runtime execution can record neutral TriggerRecord data while keeping hardware-specific behavior behind backend interfaces.
-The module owns runtime trigger selection and logging, not core trigger schemas, session planning, or engine presentation."""
+"""Runtime helpers for trigger backend wiring and logging. It wraps trigger backends so
+runtime execution can record neutral TriggerRecord data while keeping hardware-specific
+behavior behind backend interfaces. The module owns runtime trigger selection and
+logging, not core trigger schemas, session planning, or engine presentation."""
 
 from __future__ import annotations
 
 from collections.abc import Mapping
 
-from fpvs_studio.core.execution import TriggerRecord
+from fpvs_studio.core.execution import TriggerRecord, TriggerStatus
 from fpvs_studio.triggers.base import TriggerBackend
 from fpvs_studio.triggers.null_backend import NullBackend
 
@@ -14,7 +15,9 @@ from fpvs_studio.triggers.null_backend import NullBackend
 class LoggedTriggerBackend(TriggerBackend):
     """Wrap a trigger backend and retain execution-time trigger records."""
 
-    def __init__(self, backend: TriggerBackend | None = None, *, backend_name: str = "null") -> None:
+    def __init__(
+        self, backend: TriggerBackend | None = None, *, backend_name: str = "null"
+    ) -> None:
         self._backend = backend or NullBackend()
         self._backend_name = backend_name
         self._records: list[TriggerRecord] = []
@@ -42,7 +45,7 @@ class LoggedTriggerBackend(TriggerBackend):
         label: str | None = None,
         time_s: float | None = None,
     ) -> None:
-        status = "sent"
+        status: TriggerStatus = "sent"
         message: str | None = None
         try:
             self._backend.send_trigger(
@@ -90,7 +93,7 @@ def build_trigger_backend(
     warnings: list[str] = []
     if options.get("serial_port") and not bool(options.get("test_mode")):
         warnings.append(
-            "Serial trigger I/O is not implemented yet; trigger attempts will be logged without hardware output."
+            "Serial trigger I/O is not implemented yet; trigger attempts will be "
+            "logged without hardware output."
         )
     return LoggedTriggerBackend(), warnings
-

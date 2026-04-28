@@ -1,21 +1,23 @@
-"""GUI-facing document adapter over editable project and backend services.
-It mediates ProjectFile editing, preprocessing, compilation, preflight preparation, and launch requests so widgets do not duplicate domain logic.
-This module owns authoring-session coordination, not widget layout and not runtime playback or engine implementation."""
+"""GUI-facing document adapter over editable project and backend services. It mediates
+ProjectFile editing, preprocessing, compilation, preflight preparation, and launch
+requests so widgets do not duplicate domain logic. This module owns authoring-session
+coordination, not widget layout and not runtime playback or engine implementation."""
 
 from __future__ import annotations
 
+import random
 from dataclasses import dataclass
 from pathlib import Path
-import random
+from typing import TypeVar
 
+from pydantic import BaseModel, ValidationError
 from PySide6.QtCore import QObject, Signal
-from pydantic import ValidationError
 
+from fpvs_studio.core.compiler import CompileError, compile_session_plan
 from fpvs_studio.core.condition_template_profiles import (
     apply_condition_defaults_to_condition,
     apply_condition_template_profile_to_settings,
 )
-from fpvs_studio.core.compiler import CompileError, compile_session_plan
 from fpvs_studio.core.enums import EngineName, StimulusVariant
 from fpvs_studio.core.execution import SessionExecutionSummary
 from fpvs_studio.core.models import (
@@ -33,18 +35,20 @@ from fpvs_studio.core.models import (
 from fpvs_studio.core.paths import (
     project_json_path,
     slugify_project_name,
-    stimulus_originals_dir,
     stimulus_manifest_path,
+    stimulus_originals_dir,
     to_project_relative_posix,
 )
 from fpvs_studio.core.project_service import create_project
 from fpvs_studio.core.serialization import load_project_file, save_project_file
 from fpvs_studio.core.session_plan import SessionPlan
 from fpvs_studio.core.validation import (
+    ConditionFixationGuidance,
     condition_fixation_guidance,
     validate_condition_repeat_cycle_consistency,
     validate_project,
 )
+from fpvs_studio.engines.registry import create_engine
 from fpvs_studio.preprocessing.importer import (
     import_stimulus_source_directory,
     materialize_project_assets,
@@ -61,7 +65,6 @@ from fpvs_studio.preprocessing.models import StimulusManifest
 from fpvs_studio.runtime.launcher import LaunchSettings, launch_session
 from fpvs_studio.runtime.participant_history import find_completed_sessions_for_participant
 from fpvs_studio.runtime.preflight import preflight_session_plan
-from fpvs_studio.engines.registry import create_engine
 
 _SESSION_SEED_UPPER_BOUND = 2**31
 _CONDITION_REPEAT_CYCLE_MISMATCH_PREFIX = (
@@ -78,6 +81,7 @@ class DocumentError(ValueError):
 
 
 LaunchSummary = SessionExecutionSummary
+ModelT = TypeVar("ModelT", bound=BaseModel)
 
 
 @dataclass(frozen=True)
@@ -90,7 +94,7 @@ class ConditionStimulusRow:
     stimulus_set: StimulusSet
 
 
-def _validated_copy(model: object, **updates: object) -> object:
+def _validated_copy(model: ModelT, **updates: object) -> ModelT:
     data = model.model_dump(mode="python")
     data.update(updates)
     return type(model).model_validate(data)
@@ -102,8 +106,7 @@ def _format_validation_report(report: ProjectValidationReport) -> str:
         return ""
 
     has_condition_repeat_cycle_mismatch = any(
-        issue.message.startswith(_CONDITION_REPEAT_CYCLE_MISMATCH_PREFIX)
-        for issue in error_issues
+        issue.message.startswith(_CONDITION_REPEAT_CYCLE_MISMATCH_PREFIX) for issue in error_issues
     )
     if not has_condition_repeat_cycle_mismatch:
         return "\n".join(
@@ -164,7 +167,7 @@ class ProjectDocument(QObject):
         parent_dir: Path,
         project_name: str,
         condition_template_profile: ConditionTemplateProfile | None = None,
-    ) -> "ProjectDocument":
+    ) -> ProjectDocument:
         """Scaffold a new project and open it as a live document."""
 
         scaffold = create_project(
@@ -180,7 +183,7 @@ class ProjectDocument(QObject):
         )
 
     @classmethod
-    def open_existing(cls, project_location: Path) -> "ProjectDocument":
+    def open_existing(cls, project_location: Path) -> ProjectDocument:
         """Load an existing project directory or `project.json` file."""
 
         project_file_path = resolve_project_location(project_location)
@@ -403,7 +406,9 @@ class ProjectDocument(QObject):
         existing_set_ids = {stimulus_set.set_id for stimulus_set in self._project.stimulus_sets}
         condition_id = self._unique_slug(display_name, existing_condition_ids)
         base_set_id = self._unique_slug(f"{condition_id}-base", existing_set_ids)
-        oddball_set_id = self._unique_slug(f"{condition_id}-oddball", existing_set_ids | {base_set_id})
+        oddball_set_id = self._unique_slug(
+            f"{condition_id}-oddball", existing_set_ids | {base_set_id}
+        )
 
         new_condition = Condition(
             condition_id=condition_id,
@@ -460,7 +465,11 @@ class ProjectDocument(QObject):
 
         ordered_conditions = self.ordered_conditions()
         current_index = next(
-            (index for index, item in enumerate(ordered_conditions) if item.condition_id == condition_id),
+            (
+                index
+                for index, item in enumerate(ordered_conditions)
+                if item.condition_id == condition_id
+            ),
             None,
         )
         if current_index is None:
@@ -590,12 +599,12 @@ class ProjectDocument(QObject):
 
         return validate_project(self._project, refresh_hz=refresh_hz)
 
-    def fixation_guidance(self, *, refresh_hz: float):
+    def fixation_guidance(self, *, refresh_hz: float) -> list[ConditionFixationGuidance]:
         """Return condition-level fixation guidance at a specific refresh rate."""
 
         return condition_fixation_guidance(self._project, refresh_hz=refresh_hz)
 
-    def compile_session(self, *, refresh_hz: float):
+    def compile_session(self, *, refresh_hz: float) -> SessionPlan:
         """Compile the current project into a session plan."""
 
         report = self.validation_report(refresh_hz=refresh_hz)
@@ -618,7 +627,7 @@ class ProjectDocument(QObject):
         *,
         refresh_hz: float,
         engine_name: str = EngineName.PSYCHOPY.value,
-    ):
+    ) -> SessionPlan:
         """Compile and preflight the current session plan."""
 
         session_plan = self.prepare_test_session_launch(
@@ -684,7 +693,7 @@ class ProjectDocument(QObject):
         fullscreen: bool = True,
         engine_name: str = EngineName.PSYCHOPY.value,
         test_mode: bool = True,
-    ):
+    ) -> tuple[SessionPlan, LaunchSummary]:
         """Compile and launch the current session through the runtime boundary."""
 
         session_plan = self.prepare_test_session_launch(
@@ -788,7 +797,9 @@ class ProjectDocument(QObject):
                 synced_sets.append(stimulus_set)
                 continue
             resolution = (
-                manifest_set.assets[0].source.resolution if manifest_set.assets else stimulus_set.resolution
+                manifest_set.assets[0].source.resolution
+                if manifest_set.assets
+                else stimulus_set.resolution
             )
             synced_sets.append(
                 stimulus_set.model_copy(

@@ -1,6 +1,7 @@
-"""Abstract presentation-engine contract for runtime playback.
-Runtime calls this interface with RunSpec, validation data, and neutral execution models so engine implementations stay swappable.
-The module owns renderer-facing protocol definitions, not session sequencing, fixation scoring, or export writing."""
+"""Abstract presentation-engine contract for runtime playback. Runtime calls this interface
+with RunSpec, validation data, and neutral execution models so engine implementations
+stay swappable. The module owns renderer-facing protocol definitions, not session
+sequencing, fixation scoring, or export writing."""
 
 from __future__ import annotations
 

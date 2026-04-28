@@ -35,7 +35,9 @@ def _write_session_summary(
     write_json_file(project_root / "runs" / output_label / "session_summary.json", summary)
 
 
-def test_find_completed_sessions_for_participant_ignores_aborted_and_incomplete(tmp_path: Path) -> None:
+def test_find_completed_sessions_for_participant_ignores_aborted_and_incomplete(
+    tmp_path: Path,
+) -> None:
     project_root = tmp_path / "project"
     _write_session_summary(
         project_root,

@@ -1,6 +1,7 @@
-"""Manifest persistence and query helpers for preprocessing outputs.
-It converts inspected and materialized assets into deterministic records that core compilation can resolve into project-relative source and derivative paths.
-This module owns preprocessing provenance, not presentation scheduling, runtime execution, or engine-specific data."""
+"""Manifest persistence and query helpers for preprocessing outputs. It converts inspected
+and materialized assets into deterministic records that core compilation can resolve
+into project-relative source and derivative paths. This module owns preprocessing
+provenance, not presentation scheduling, runtime execution, or engine-specific data."""
 
 from __future__ import annotations
 
@@ -63,7 +64,9 @@ def inspection_summary_to_manifest_set(
     )
 
 
-def upsert_manifest_set(manifest: StimulusManifest, manifest_set: StimulusSetManifest) -> StimulusManifest:
+def upsert_manifest_set(
+    manifest: StimulusManifest, manifest_set: StimulusSetManifest
+) -> StimulusManifest:
     """Insert or replace a manifest set entry."""
 
     sets = [item for item in manifest.sets if item.set_id != manifest_set.set_id]

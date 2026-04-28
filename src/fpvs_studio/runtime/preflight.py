@@ -1,6 +1,8 @@
-"""Runtime preflight validation before execution begins.
-It checks compiled RunSpec and SessionPlan artifacts against asset availability and conservative display-timing expectations before engine launch.
-This module is a launch gatekeeper only; session ordering stays in SessionPlan and playback stays with runtime orchestration plus the engine."""
+"""Runtime preflight validation before execution begins. It checks compiled RunSpec and
+SessionPlan artifacts against asset availability and conservative display-timing
+expectations before engine launch. This module is a launch gatekeeper only; session
+ordering stays in SessionPlan and playback stays with runtime orchestration plus the
+engine."""
 
 from __future__ import annotations
 
@@ -92,8 +94,7 @@ def _validate_fixation_timing(run_spec: RunSpec) -> None:
     for expected_index, event in enumerate(ordered_events):
         if event.event_index != expected_index:
             raise PreflightError(
-                "Run preflight failed because fixation event indices are not "
-                "contiguous."
+                "Run preflight failed because fixation event indices are not contiguous."
             )
         if (
             run_spec.fixation.target_duration_frames > 0
@@ -111,8 +112,7 @@ def _validate_fixation_timing(run_spec: RunSpec) -> None:
             )
         if event.start_frame < previous_end_frame:
             raise PreflightError(
-                "Run preflight failed because fixation events overlap or are "
-                "out of order."
+                "Run preflight failed because fixation events overlap or are out of order."
             )
         previous_end_frame = event_end_frame
 
@@ -162,8 +162,7 @@ def preflight_run_spec(
         != run_spec.display.frames_per_stimulus
     ):
         raise PreflightError(
-            "Run preflight failed because on/off frame timing does not match "
-            "frames_per_stimulus."
+            "Run preflight failed because on/off frame timing does not match frames_per_stimulus."
         )
     _validate_display_refresh_timing(run_spec)
     _validate_stimulus_timing(run_spec)
@@ -195,9 +194,7 @@ def preflight_session_plan(
     expected_indices = list(range(len(ordered_entries)))
     actual_indices = [entry.global_order_index for entry in ordered_entries]
     if actual_indices != expected_indices:
-        raise PreflightError(
-            "Session preflight failed because session entry ordering is invalid."
-        )
+        raise PreflightError("Session preflight failed because session entry ordering is invalid.")
     for entry in ordered_entries:
         preflight_run_spec(
             project_root,

@@ -1,6 +1,7 @@
-"""Dialogs for managing reusable condition-template profiles in the GUI.
-They present app-level profile data backed by core condition_template_profiles helpers and apply defaults into editable project state.
-The module owns user interaction around profile libraries, not RunSpec compilation, session planning, or runtime behavior."""
+"""Dialogs for managing reusable condition-template profiles in the GUI. They present app-
+level profile data backed by core condition_template_profiles helpers and apply defaults
+into editable project state. The module owns user interaction around profile libraries,
+not RunSpec compilation, session planning, or runtime behavior."""
 
 from __future__ import annotations
 
@@ -26,6 +27,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QSpinBox,
     QVBoxLayout,
+    QWidget,
 )
 
 from fpvs_studio.core.condition_template_profiles import (
@@ -92,7 +94,8 @@ def _format_profile_details(profile: ConditionTemplateProfile) -> str:
         (
             "Display",
             [
-                f"Display Refresh Rate: {_format_refresh_rate(defaults.display.preferred_refresh_hz)}",
+                "Display Refresh Rate: "
+                f"{_format_refresh_rate(defaults.display.preferred_refresh_hz)}",
                 f"Display Resolution: {_DISPLAY_RESOLUTION_TEXT}",
             ],
         ),
@@ -128,7 +131,7 @@ def _format_profile_details(profile: ConditionTemplateProfile) -> str:
         if index:
             parts.append('<div style="height: 12px;"></div>')
         parts.append(
-            '<div>'
+            "<div>"
             '<span style="font-size: 14px; font-weight: 700; text-decoration: underline;">'
             f"{html.escape(title)}"
             "</span>"
@@ -148,7 +151,7 @@ class ConditionTemplateProfileEditorDialog(QDialog):
         *,
         existing_profile_ids: set[str],
         initial_profile: ConditionTemplateProfile | None = None,
-        parent=None,
+        parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self._existing_profile_ids = existing_profile_ids
@@ -195,7 +198,9 @@ class ConditionTemplateProfileEditorDialog(QDialog):
             "Set preferred refresh rate",
             self,
         )
-        self.preferred_refresh_enabled_checkbox.setObjectName("condition_profile_refresh_enabled_checkbox")
+        self.preferred_refresh_enabled_checkbox.setObjectName(
+            "condition_profile_refresh_enabled_checkbox"
+        )
         self.preferred_refresh_spin = QDoubleSpinBox(self)
         self.preferred_refresh_spin.setObjectName("condition_profile_refresh_spin")
         self.preferred_refresh_spin.setRange(1.0, 1000.0)
@@ -223,7 +228,9 @@ class ConditionTemplateProfileEditorDialog(QDialog):
         self.target_count_mode_combo.setObjectName("condition_profile_target_count_mode_combo")
         self.target_count_mode_combo.addItem("Fixed", userData="fixed")
         self.target_count_mode_combo.addItem("Randomized", userData="randomized")
-        self.target_count_mode_combo.currentIndexChanged.connect(self._update_target_count_mode_state)
+        self.target_count_mode_combo.currentIndexChanged.connect(
+            self._update_target_count_mode_state
+        )
         self.target_count_min_spin = QSpinBox(self)
         self.target_count_min_spin.setObjectName("condition_profile_target_count_min_spin")
         self.target_count_min_spin.setRange(0, 1000)
@@ -441,7 +448,7 @@ class ConditionTemplateProfileEditorDialog(QDialog):
 class ConditionTemplateManagerDialog(QDialog):
     """Manage app-level condition-template profiles under the FPVS root folder."""
 
-    def __init__(self, *, root_dir: Path, parent=None) -> None:
+    def __init__(self, *, root_dir: Path, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._root_dir = Path(root_dir)
         self._profiles: list[ConditionTemplateProfile] = []
@@ -530,7 +537,7 @@ class ConditionTemplateManagerDialog(QDialog):
             self.profile_list.setCurrentRow(0)
         self._update_buttons()
 
-    def _update_buttons(self, *_args) -> None:
+    def _update_buttons(self, *_args: object) -> None:
         profile = self._selected_profile()
         has_profile = profile is not None
         self.edit_button.setEnabled(has_profile and not profile.built_in if profile else False)

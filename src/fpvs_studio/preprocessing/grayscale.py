@@ -1,6 +1,7 @@
-"""Grayscale derivative generation for imported stimulus assets.
-Preprocessing uses this helper to materialize reproducible PNG variants that become manifest-backed inputs to later compilation.
-The module owns offline image conversion only; validation policy, session planning, and runtime rendering stay elsewhere."""
+"""Grayscale derivative generation for imported stimulus assets. Preprocessing uses this
+helper to materialize reproducible PNG variants that become manifest-backed inputs to
+later compilation. The module owns offline image conversion only; validation policy,
+session planning, and runtime rendering stay elsewhere."""
 
 from __future__ import annotations
 

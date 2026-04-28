@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import ast
 import importlib
-from pathlib import Path
 import sys
+from pathlib import Path
 
 
 def _clear_imports(package_name: str) -> None:

@@ -1,6 +1,7 @@
-"""Validation helpers for editable authoring state before compilation or launch.
-These routines check ProjectFile settings against protocol rules and frame-compatibility constraints so compiler inputs stay explicit and friendly.
-The module owns authoring-time diagnostics, not manifest generation, session execution, or engine timing loops."""
+"""Validation helpers for editable authoring state before compilation or launch. These
+routines check ProjectFile settings against protocol rules and frame-compatibility
+constraints so compiler inputs stay explicit and friendly. The module owns authoring-
+time diagnostics, not manifest generation, session execution, or engine timing loops."""
 
 from __future__ import annotations
 
@@ -85,7 +86,9 @@ def validate_fixation_settings(settings: FixationTaskSettings) -> list[Validatio
         issues.append(
             ValidationIssue(
                 location="settings.fixation_task.target_duration_ms",
-                message="Target duration must be greater than 0 ms when the fixation task is enabled.",
+                message=(
+                    "Target duration must be greater than 0 ms when the fixation task is enabled."
+                ),
             )
         )
     if settings.min_gap_ms > settings.max_gap_ms:
@@ -121,10 +124,15 @@ def validate_fixation_settings(settings: FixationTaskSettings) -> list[Validatio
             issues.append(
                 ValidationIssue(
                     location="settings.fixation_task",
-                    message="Fixation target_count_min must be less than or equal to target_count_max.",
+                    message=(
+                        "Fixation target_count_min must be less than or equal to target_count_max."
+                    ),
                 )
             )
-        if settings.no_immediate_repeat_count and settings.target_count_min == settings.target_count_max:
+        if (
+            settings.no_immediate_repeat_count
+            and settings.target_count_min == settings.target_count_max
+        ):
             issues.append(
                 ValidationIssue(
                     location="settings.fixation_task",
@@ -219,7 +227,9 @@ def validate_condition_repeat_cycle_consistency(project: ProjectFile) -> list[Va
     return issues
 
 
-def validate_project(project: ProjectFile, *, refresh_hz: float | None = None) -> ProjectValidationReport:
+def validate_project(
+    project: ProjectFile, *, refresh_hz: float | None = None
+) -> ProjectValidationReport:
     """Validate cross-field project rules with user-friendly issues."""
 
     issues: list[ValidationIssue] = []
@@ -271,7 +281,9 @@ def validate_project(project: ProjectFile, *, refresh_hz: float | None = None) -
             issues.append(
                 ValidationIssue(
                     location=f"stimulus_sets.{oddball_set.set_id}.image_count",
-                    message=f"Stimulus set '{oddball_set.name}' does not contain any imported images.",
+                    message=(
+                        f"Stimulus set '{oddball_set.name}' does not contain any imported images."
+                    ),
                 )
             )
         if (

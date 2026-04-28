@@ -1,6 +1,8 @@
-"""Compiled multi-condition session contracts built above single-run plans.
-Core compilation turns editable session settings into ordered SessionPlan entries that reference individual RunSpec artifacts and transition metadata.
-This module owns session sequencing schema only; runtime executes that plan and engines render the screens it requests."""
+"""Compiled multi-condition session contracts built above single-run plans. Core
+compilation turns editable session settings into ordered SessionPlan entries that
+reference individual RunSpec artifacts and transition metadata. This module owns session
+sequencing schema only; runtime executes that plan and engines render the screens it
+requests."""
 
 from __future__ import annotations
 
@@ -19,7 +21,7 @@ class InterConditionTransitionSpec(FPVSBaseModel):
     continue_key: str | None = None
 
     @model_validator(mode="after")
-    def validate_transition_fields(self) -> "InterConditionTransitionSpec":
+    def validate_transition_fields(self) -> InterConditionTransitionSpec:
         if self.mode == InterConditionMode.FIXED_BREAK and self.break_seconds is None:
             raise ValueError("break_seconds is required when mode is 'fixed_break'.")
         if self.mode == InterConditionMode.MANUAL_CONTINUE:
@@ -40,11 +42,13 @@ class SessionEntry(FPVSBaseModel):
     run_spec: RunSpec
 
     @model_validator(mode="after")
-    def validate_consistency(self) -> "SessionEntry":
+    def validate_consistency(self) -> SessionEntry:
         if self.run_id != self.run_spec.run_id:
             raise ValueError("SessionEntry.run_id must match run_spec.run_id.")
         if self.condition_id != self.run_spec.condition.condition_id:
-            raise ValueError("SessionEntry.condition_id must match run_spec.condition.condition_id.")
+            raise ValueError(
+                "SessionEntry.condition_id must match run_spec.condition.condition_id."
+            )
         if self.condition_name != self.run_spec.condition.name:
             raise ValueError("SessionEntry.condition_name must match run_spec.condition.name.")
         return self
@@ -58,10 +62,12 @@ class SessionBlock(FPVSBaseModel):
     entries: list[SessionEntry] = Field(default_factory=list)
 
     @model_validator(mode="after")
-    def validate_entries(self) -> "SessionBlock":
+    def validate_entries(self) -> SessionBlock:
         entry_order = [entry.condition_id for entry in self.entries]
         if self.condition_order != entry_order:
-            raise ValueError("SessionBlock.condition_order must match the ordered entry condition ids.")
+            raise ValueError(
+                "SessionBlock.condition_order must match the ordered entry condition ids."
+            )
         return self
 
 
@@ -80,7 +86,7 @@ class SessionPlan(FPVSBaseModel):
     total_runs: int = Field(ge=0)
 
     @model_validator(mode="after")
-    def validate_totals(self) -> "SessionPlan":
+    def validate_totals(self) -> SessionPlan:
         if self.block_count != len(self.blocks):
             raise ValueError("block_count must match the number of blocks.")
         total_entries = sum(len(block.entries) for block in self.blocks)

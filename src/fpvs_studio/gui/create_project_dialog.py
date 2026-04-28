@@ -1,6 +1,7 @@
-"""Dialog for collecting the inputs needed to scaffold a new project.
-It gathers user-facing values that feed core project_service and path helpers before the resulting ProjectFile and folder layout are created.
-The module owns form interaction only; validation, scaffolding, and template defaults stay in backend services."""
+"""Dialog for collecting the inputs needed to scaffold a new project. It gathers user-
+facing values that feed core project_service and path helpers before the resulting
+ProjectFile and folder layout are created. The module owns form interaction only;
+validation, scaffolding, and template defaults stay in backend services."""
 
 from __future__ import annotations
 
@@ -20,6 +21,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QVBoxLayout,
+    QWidget,
 )
 
 from fpvs_studio.core.models import ConditionTemplateProfile
@@ -34,7 +36,7 @@ class CreateProjectDialog(QDialog):
         *,
         condition_template_profiles: list[ConditionTemplateProfile] | None = None,
         on_manage_templates: Callable[[], list[ConditionTemplateProfile]] | None = None,
-        parent=None,
+        parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle("Create New Project")
@@ -90,7 +92,9 @@ class CreateProjectDialog(QDialog):
         layout.addLayout(form_layout)
         layout.addWidget(self.button_box)
 
-        self.set_condition_template_profiles(condition_template_profiles or [], preserve_selection=False)
+        self.set_condition_template_profiles(
+            condition_template_profiles or [], preserve_selection=False
+        )
         self._update_project_name_validation()
 
     @property
@@ -137,7 +141,9 @@ class CreateProjectDialog(QDialog):
                 self.condition_profile_combo.setCurrentIndex(-1)
             else:
                 selected_index = self.condition_profile_combo.findData(current_profile_id)
-                self.condition_profile_combo.setCurrentIndex(selected_index if selected_index >= 0 else -1)
+                self.condition_profile_combo.setCurrentIndex(
+                    selected_index if selected_index >= 0 else -1
+                )
 
     def accept(self) -> None:
         """Validate the dialog fields before closing."""

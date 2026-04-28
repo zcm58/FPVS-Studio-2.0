@@ -51,7 +51,9 @@ def test_compiler_rejects_blank_mode_odd_frame_cycles(sample_project) -> None:
         compile_run_spec(sample_project, refresh_hz=90.0)
 
 
-def test_compiler_generates_deterministic_role_schedule(sample_project, sample_project_root) -> None:
+def test_compiler_generates_deterministic_role_schedule(
+    sample_project, sample_project_root
+) -> None:
     run_spec = compile_run_spec(sample_project, refresh_hz=60.0, project_root=sample_project_root)
     roles = [event.role for event in run_spec.stimulus_sequence]
     role_counts = Counter(roles)
@@ -89,15 +91,17 @@ def test_compiler_keeps_base_and_oddball_frame_cadence_locked(
     assert run_spec.display.frames_per_stimulus == expected_base_frame_step
     assert all(
         b - a == expected_base_frame_step
-        for a, b in zip(stimulus_start_frames, stimulus_start_frames[1:])
+        for a, b in zip(stimulus_start_frames, stimulus_start_frames[1:], strict=False)
     )
     assert all(
         b - a == expected_oddball_frame_step
-        for a, b in zip(oddball_start_frames, oddball_start_frames[1:])
+        for a, b in zip(oddball_start_frames, oddball_start_frames[1:], strict=False)
     )
 
 
-def test_compiler_assigns_image_paths_deterministically(sample_project, sample_project_root) -> None:
+def test_compiler_assigns_image_paths_deterministically(
+    sample_project, sample_project_root
+) -> None:
     run_spec_a = compile_run_spec(
         sample_project,
         refresh_hz=60.0,

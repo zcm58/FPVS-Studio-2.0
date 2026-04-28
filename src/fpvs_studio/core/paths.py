@@ -1,11 +1,12 @@
-"""Project-folder path helpers shared across backend layers.
-They convert between filesystem locations and project-relative POSIX paths used by ProjectFile records, manifests, and export layouts.
-This module owns path conventions only; it does not validate domain rules or perform runtime scheduling."""
+"""Project-folder path helpers shared across backend layers. They convert between
+filesystem locations and project-relative POSIX paths used by ProjectFile records,
+manifests, and export layouts. This module owns path conventions only; it does not
+validate domain rules or perform runtime scheduling."""
 
 from __future__ import annotations
 
-from pathlib import Path
 import re
+from pathlib import Path
 
 PROJECT_FILENAME = "project.json"
 STIMULI_DIRNAME = "stimuli"

@@ -29,7 +29,7 @@ from fpvs_studio.core.enums import (
     DutyCycleMode,
     StimulusVariant,
 )
-from fpvs_studio.core.models import ConditionTemplateProfile
+from fpvs_studio.core.models import Condition, ConditionTemplateProfile
 from fpvs_studio.core.template_library import get_template
 from fpvs_studio.gui.design_system import (
     PAGE_SECTION_GAP,
@@ -58,7 +58,7 @@ class ProjectOverviewEditor(QWidget):
         *,
         load_condition_template_profiles: Callable[[], list[ConditionTemplateProfile]],
         manage_condition_templates: Callable[[], list[ConditionTemplateProfile]],
-        parent=None,
+        parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self._document = document
@@ -84,11 +84,15 @@ class ProjectOverviewEditor(QWidget):
         self.condition_profile_combo = QComboBox(self)
         self.condition_profile_combo.setObjectName("project_condition_profile_combo")
         self.condition_profile_combo.setPlaceholderText("Select a condition template profile...")
-        self.condition_profile_combo.currentIndexChanged.connect(self._apply_condition_profile_selection)
+        self.condition_profile_combo.currentIndexChanged.connect(
+            self._apply_condition_profile_selection
+        )
         self.manage_templates_button = QPushButton("Manage Templates...", self)
         self.manage_templates_button.setObjectName("project_manage_templates_button")
         self.manage_templates_button.clicked.connect(self._open_template_manager)
-        self.apply_profile_to_conditions_button = QPushButton("Apply Template To All Conditions", self)
+        self.apply_profile_to_conditions_button = QPushButton(
+            "Apply Template To All Conditions", self
+        )
         self.apply_profile_to_conditions_button.setObjectName("apply_profile_to_conditions_button")
         self.apply_profile_to_conditions_button.clicked.connect(self._apply_profile_to_conditions)
 
@@ -102,9 +106,7 @@ class ProjectOverviewEditor(QWidget):
 
         self.project_overview_card = SectionCard(
             title="Project Overview",
-            subtitle=(
-                "Project metadata and the default condition template for new rows."
-            ),
+            subtitle=("Project metadata and the default condition template for new rows."),
             object_name="dashboard_project_overview_card",
             parent=self,
         )
@@ -114,8 +116,8 @@ class ProjectOverviewEditor(QWidget):
         metadata_layout.addRow("Description", self.project_description_edit)
         metadata_layout.addRow("Project Root", self.project_root_value)
         metadata_layout.addRow("Condition Template", condition_profile_row)
-        self.project_overview_card.layout().setContentsMargins(12, 10, 12, 10)
-        self.project_overview_card.layout().setSpacing(8)
+        self.project_overview_card.card_layout.setContentsMargins(12, 10, 12, 10)
+        self.project_overview_card.card_layout.setSpacing(8)
         self.project_overview_card.body_layout.setSpacing(8)
         self.project_overview_card.body_layout.addLayout(metadata_layout)
 
@@ -154,13 +156,13 @@ class ProjectOverviewEditor(QWidget):
                     selected_index if selected_index >= 0 else -1
                 )
 
-        profile = (
+        selected_profile: ConditionTemplateProfile | None = (
             self._condition_profiles_by_id.get(selected_profile_id)
             if selected_profile_id is not None
             else None
         )
         self.apply_profile_to_conditions_button.setEnabled(
-            profile is not None and bool(self._document.project.conditions)
+            selected_profile is not None and bool(self._document.project.conditions)
         )
 
     def _apply_project_name(self) -> None:
@@ -234,7 +236,7 @@ class ProjectOverviewEditor(QWidget):
 class ConditionsPage(QWidget):
     """Condition list/editor page."""
 
-    def __init__(self, document: ProjectDocument, parent=None) -> None:
+    def __init__(self, document: ProjectDocument, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._document = document
 
@@ -271,8 +273,8 @@ class ConditionsPage(QWidget):
             object_name="conditions_list_card",
             parent=self,
         )
-        self.condition_list_card.layout().setContentsMargins(12, 10, 12, 10)
-        self.condition_list_card.layout().setSpacing(8)
+        self.condition_list_card.card_layout.setContentsMargins(12, 10, 12, 10)
+        self.condition_list_card.card_layout.setSpacing(8)
         self.condition_list_card.body_layout.setSpacing(8)
         list_panel_layout = QVBoxLayout()
         list_panel_layout.setContentsMargins(0, 0, 0, 0)
@@ -365,8 +367,8 @@ class ConditionsPage(QWidget):
             object_name="conditions_editor_card",
             parent=self,
         )
-        self.condition_editor_card.layout().setContentsMargins(12, 10, 12, 10)
-        self.condition_editor_card.layout().setSpacing(8)
+        self.condition_editor_card.card_layout.setContentsMargins(12, 10, 12, 10)
+        self.condition_editor_card.card_layout.setSpacing(8)
         self.condition_editor_card.body_layout.setSpacing(8)
         selected_row = QWidget(self.condition_editor_card)
         selected_row_layout = QHBoxLayout(selected_row)
@@ -429,8 +431,8 @@ class ConditionsPage(QWidget):
             object_name="conditions_stimulus_sources_card",
             parent=self,
         )
-        self.stimulus_sources_card.layout().setContentsMargins(12, 10, 12, 10)
-        self.stimulus_sources_card.layout().setSpacing(8)
+        self.stimulus_sources_card.card_layout.setContentsMargins(12, 10, 12, 10)
+        self.stimulus_sources_card.card_layout.setSpacing(8)
         self.stimulus_sources_card.body_layout.setSpacing(8)
         base_panel = QWidget(self.stimulus_sources_card)
         base_layout = QFormLayout(base_panel)
@@ -500,7 +502,8 @@ class ConditionsPage(QWidget):
         )
         self.shell.add_content_widget(self.master_detail_container, stretch=1)
         self.shell.set_footer_text(
-            "Condition edits update the shared project document used by Setup Dashboard and Run / Runtime."
+            "Condition edits update the shared project document used by Setup "
+            "Dashboard and Run / Runtime."
         )
 
         layout = QVBoxLayout(self)
@@ -512,7 +515,10 @@ class ConditionsPage(QWidget):
 
     def selected_condition_id(self) -> str | None:
         item = self.condition_list.currentItem()
-        return item.data(Qt.ItemDataRole.UserRole) if item is not None else None
+        if item is None:
+            return None
+        value = item.data(Qt.ItemDataRole.UserRole)
+        return value if isinstance(value, str) else None
 
     def refresh(self) -> None:
         selected_condition_id = self.selected_condition_id()
@@ -528,11 +534,11 @@ class ConditionsPage(QWidget):
                 self.condition_list.setCurrentRow(0)
         self._refresh_editor()
 
-    def _current_condition(self):
+    def _current_condition(self) -> Condition | None:
         condition_id = self.selected_condition_id()
         return self._document.get_condition(condition_id) if condition_id else None
 
-    def _refresh_editor(self, *_args) -> None:
+    def _refresh_editor(self, *_args: object) -> None:
         condition = self._current_condition()
         enabled = condition is not None
         widgets = [
@@ -589,7 +595,9 @@ class ConditionsPage(QWidget):
         with QSignalBlocker(self.oddball_cycles_spin):
             self.oddball_cycles_spin.setValue(condition.oddball_cycle_repeats_per_sequence)
         with QSignalBlocker(self.variant_combo):
-            self.variant_combo.setCurrentIndex(self.variant_combo.findData(condition.stimulus_variant))
+            self.variant_combo.setCurrentIndex(
+                self.variant_combo.findData(condition.stimulus_variant)
+            )
         with QSignalBlocker(self.duty_cycle_combo):
             self.duty_cycle_combo.setCurrentIndex(
                 self.duty_cycle_combo.findData(condition.duty_cycle_mode)
@@ -605,10 +613,14 @@ class ConditionsPage(QWidget):
         self.base_source_value.set_path_text(base_set.source_dir, max_length=74)
         self.base_count_value.setText(str(base_set.image_count))
         self.base_resolution_value.setText(_resolution_text(base_set.resolution))
-        self.base_variants_value.setText(", ".join(item.value for item in base_set.available_variants))
+        self.base_variants_value.setText(
+            ", ".join(item.value for item in base_set.available_variants)
+        )
         self.oddball_source_state.set_state(
             "ready" if oddball_set.image_count > 0 else "warning",
-            "Oddball source ready" if oddball_set.image_count > 0 else "Oddball source needs attention",
+            "Oddball source ready"
+            if oddball_set.image_count > 0
+            else "Oddball source needs attention",
         )
         self.oddball_source_value.set_path_text(oddball_set.source_dir, max_length=74)
         self.oddball_count_value.setText(str(oddball_set.image_count))
@@ -726,4 +738,3 @@ class ConditionsPage(QWidget):
             )
         except Exception as error:
             _show_error_dialog(self, "Stimulus Import Error", error)
-

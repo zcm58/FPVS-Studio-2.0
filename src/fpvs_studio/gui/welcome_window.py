@@ -1,6 +1,7 @@
-"""Welcome screen shown before a project document is opened.
-It presents entry actions for creating or loading work without taking ownership of project scaffolding, compilation, or runtime launch logic.
-The module owns introductory UI only; controller and document layers handle application state transitions."""
+"""Welcome screen shown before a project document is opened. It presents entry actions for
+creating or loading work without taking ownership of project scaffolding, compilation,
+or runtime launch logic. The module owns introductory UI only; controller and document
+layers handle application state transitions."""
 
 from __future__ import annotations
 
@@ -193,7 +194,7 @@ class WelcomeWindow(QWidget):
 
     def _adopt_app_icon(self) -> None:
         app = QApplication.instance()
-        if app is not None and not app.windowIcon().isNull():
+        if isinstance(app, QApplication) and not app.windowIcon().isNull():
             self.setWindowIcon(app.windowIcon())
             return
         if self.windowIcon().isNull():

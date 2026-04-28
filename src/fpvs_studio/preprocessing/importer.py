@@ -1,12 +1,14 @@
-"""Source-image import and derived-asset materialization pipeline.
-It copies supported inputs into the project, updates manifest-backed asset records, and generates deterministic preprocessing variants for compilation to consume.
-This module owns preprocessing I/O and provenance, not ProjectFile editing semantics, RunSpec construction, or runtime launch behavior."""
+"""Source-image import and derived-asset materialization pipeline. It copies supported
+inputs into the project, updates manifest-backed asset records, and generates
+deterministic preprocessing variants for compilation to consume. This module owns
+preprocessing I/O and provenance, not ProjectFile editing semantics, RunSpec
+construction, or runtime launch behavior."""
 
 from __future__ import annotations
 
+import shutil
 from collections.abc import Callable
 from hashlib import sha256
-import shutil
 from pathlib import Path
 
 from fpvs_studio.core.enums import StimulusVariant
@@ -134,7 +136,9 @@ def _merge_existing_derivatives(
     for asset in manifest_set.assets:
         previous_asset = previous_assets.get(asset.source.relative_path)
         if previous_asset is not None and previous_asset.source.sha256 == asset.source.sha256:
-            merged_assets.append(asset.model_copy(update={"derivatives": previous_asset.derivatives}))
+            merged_assets.append(
+                asset.model_copy(update={"derivatives": previous_asset.derivatives})
+            )
         else:
             merged_assets.append(asset)
 
@@ -216,7 +220,7 @@ def _ensure_derivative(
         )
 
     source_path = project_root / Path(asset.source.relative_path)
-    seed = _variant_seed(asset.source.sha256, variant=variant)
+    seed: int | None = _variant_seed(asset.source.sha256, variant=variant)
     generator = _variant_generator(variant)
     if variant == StimulusVariant.PHASE_SCRAMBLED:
         generator(source_path, destination_path, seed=seed)
@@ -268,7 +272,7 @@ def _derived_relative_path(
 def _variant_seed(source_sha256: str, *, variant: StimulusVariant) -> int:
     """Build a deterministic per-asset seed for randomized preprocessing variants."""
 
-    digest = sha256(f"{variant.value}:{source_sha256}".encode("utf-8")).hexdigest()
+    digest = sha256(f"{variant.value}:{source_sha256}".encode()).hexdigest()
     return int(digest[:16], 16)
 
 

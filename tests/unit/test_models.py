@@ -30,7 +30,9 @@ def test_condition_instructions_strip_bidi_control_characters() -> None:
     assert condition.instructions == "Read the instructions."
 
 
-def test_project_model_backfills_condition_profile_defaults_for_legacy_payload(sample_project) -> None:
+def test_project_model_backfills_condition_profile_defaults_for_legacy_payload(
+    sample_project,
+) -> None:
     payload = sample_project.model_dump(mode="python")
     payload["settings"].pop("condition_profile_id", None)
     payload["settings"].pop("condition_defaults", None)

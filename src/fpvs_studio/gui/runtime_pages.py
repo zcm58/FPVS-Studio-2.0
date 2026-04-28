@@ -4,9 +4,8 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from PySide6.QtCore import QEventLoop, QSignalBlocker, Qt, QTimer
+from PySide6.QtCore import QSignalBlocker, Qt
 from PySide6.QtWidgets import (
-    QApplication,
     QCheckBox,
     QComboBox,
     QDialog,
@@ -29,11 +28,12 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from fpvs_studio.core.session_plan import SessionPlan
 from fpvs_studio.gui.design_system import (
     PAGE_SECTION_GAP,
     StatusBadgeLabel,
 )
-from fpvs_studio.gui.document import DocumentError, ProjectDocument
+from fpvs_studio.gui.document import DocumentError, LaunchSummary, ProjectDocument
 from fpvs_studio.gui.window_helpers import (
     _RUNTIME_BACKGROUND_COLOR_PRESETS,
     LauncherReadinessReport,
@@ -45,12 +45,19 @@ from fpvs_studio.gui.window_helpers import (
     _show_error_dialog,
 )
 from fpvs_studio.gui.window_layout import NonHomePageShell, SectionCard
+from fpvs_studio.gui.workers import ProgressTask
 
 
-def _compat_progress_dialog(*args, **kwargs) -> QProgressDialog:
+def _compat_progress_dialog(
+    label: str,
+    cancel_text: str,
+    minimum: int,
+    maximum: int,
+    parent: QWidget,
+) -> QProgressDialog:
     from fpvs_studio.gui import main_window
 
-    return main_window.QProgressDialog(*args, **kwargs)
+    return main_window.QProgressDialog(label, cancel_text, minimum, maximum, parent)
 
 
 def _show_runtime_error_dialog(parent: QWidget, title: str, error: Exception) -> None:
@@ -62,7 +69,7 @@ def _show_runtime_error_dialog(parent: QWidget, title: str, error: Exception) ->
 class ParticipantNumberDialog(QDialog):
     """Collect the required launch-time participant number."""
 
-    def __init__(self, parent=None) -> None:
+    def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setWindowTitle("Participant Number")
         self.setModal(True)
@@ -74,7 +81,7 @@ class ParticipantNumberDialog(QDialog):
         self.participant_number_edit = QLineEdit(self)
         self.participant_number_edit.setObjectName("participant_number_edit")
         self.participant_number_edit.setPlaceholderText("Digits only (for example, 0012)")
-        self.participant_number_edit.setLayoutDirection(Qt.LeftToRight)
+        self.participant_number_edit.setLayoutDirection(Qt.LayoutDirection.LeftToRight)
         self.participant_number_edit.setFocus()
 
         form_layout = QFormLayout()
@@ -133,10 +140,13 @@ class RuntimeSettingsEditor(QWidget):
         editable: bool = True,
         fullscreen_state_getter: Callable[[], bool] | None = None,
         fullscreen_state_setter: Callable[[bool], None] | None = None,
-        parent=None,
+        parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self._document = document
+        self._active_launch_task: ProgressTask | None = None
+        self._active_launch_session_plan: SessionPlan | None = None
+        self._active_launch_participant_number: str | None = None
         self._editable = editable
         self._fullscreen_state_getter = fullscreen_state_getter
         self._fullscreen_state_setter = fullscreen_state_setter
@@ -208,8 +218,8 @@ class RuntimeSettingsEditor(QWidget):
             object_name=_prefixed_object_name(object_name_prefix, "runtime_settings_card"),
             parent=self,
         )
-        self.card.layout().setContentsMargins(12, 10, 12, 10)
-        self.card.layout().setSpacing(8)
+        self.card.card_layout.setContentsMargins(12, 10, 12, 10)
+        self.card.card_layout.setSpacing(8)
         self.card.body_layout.setSpacing(8)
         self.summary_note_label = QLabel(self.card)
         self.summary_note_label.setObjectName(
@@ -256,9 +266,7 @@ class RuntimeSettingsEditor(QWidget):
         if not self._editable:
             self.card.title_label.setText("Runtime Settings Summary")
             if self.card.subtitle_label is not None:
-                self.card.subtitle_label.setText(
-                    "Mirrored from Run / Runtime."
-                )
+                self.card.subtitle_label.setText("Mirrored from Run / Runtime.")
             self.summary_note_label.setText(
                 "Open Run / Runtime to edit launch settings. This view is a compact mirror."
             )
@@ -292,7 +300,9 @@ class RuntimeSettingsEditor(QWidget):
                 selected_index = self.runtime_background_color_combo.findData("#000000")
             self.runtime_background_color_combo.setCurrentIndex(selected_index)
         with QSignalBlocker(self.serial_port_edit):
-            self.serial_port_edit.setText(self._document.project.settings.triggers.serial_port or "")
+            self.serial_port_edit.setText(
+                self._document.project.settings.triggers.serial_port or ""
+            )
         with QSignalBlocker(self.serial_baudrate_spin):
             self.serial_baudrate_spin.setValue(self._document.project.settings.triggers.baudrate)
         target_fullscreen_value = (
@@ -347,7 +357,9 @@ class RuntimeSettingsEditor(QWidget):
 
     def _apply_refresh_hz(self) -> None:
         try:
-            self._document.update_display_settings(preferred_refresh_hz=self.refresh_hz_spin.value())
+            self._document.update_display_settings(
+                preferred_refresh_hz=self.refresh_hz_spin.value()
+            )
         except Exception as error:
             _show_error_dialog(self, "Refresh Setting Error", error)
             self.refresh()
@@ -387,10 +399,13 @@ class RunPage(QWidget):
         *,
         fullscreen_state_getter: Callable[[], bool] | None = None,
         fullscreen_state_setter: Callable[[bool], None] | None = None,
-        parent=None,
+        parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self._document = document
+        self._active_launch_task: ProgressTask | None = None
+        self._active_launch_session_plan: SessionPlan | None = None
+        self._active_launch_participant_number: str | None = None
 
         self.runtime_settings_editor = RuntimeSettingsEditor(
             document,
@@ -399,8 +414,12 @@ class RunPage(QWidget):
             parent=self,
         )
         self.refresh_hz_spin = self.runtime_settings_editor.refresh_hz_spin
-        self.runtime_background_color_combo = self.runtime_settings_editor.runtime_background_color_combo
-        self.runtime_background_scope_label = self.runtime_settings_editor.runtime_background_scope_label
+        self.runtime_background_color_combo = (
+            self.runtime_settings_editor.runtime_background_color_combo
+        )
+        self.runtime_background_scope_label = (
+            self.runtime_settings_editor.runtime_background_scope_label
+        )
         self.serial_port_edit = self.runtime_settings_editor.serial_port_edit
         self.serial_baudrate_spin = self.runtime_settings_editor.serial_baudrate_spin
         self.test_mode_checkbox = self.runtime_settings_editor.test_mode_checkbox
@@ -419,8 +438,8 @@ class RunPage(QWidget):
             object_name="run_display_card",
             parent=self,
         )
-        display_card.layout().setContentsMargins(12, 10, 12, 10)
-        display_card.layout().setSpacing(8)
+        display_card.card_layout.setContentsMargins(12, 10, 12, 10)
+        display_card.card_layout.setSpacing(8)
         display_card.body_layout.setSpacing(8)
         display_layout = QFormLayout()
         display_layout.setVerticalSpacing(8)
@@ -456,8 +475,8 @@ class RunPage(QWidget):
             object_name="run_controls_card",
             parent=self,
         )
-        controls_card.layout().setContentsMargins(12, 10, 12, 10)
-        controls_card.layout().setSpacing(8)
+        controls_card.card_layout.setContentsMargins(12, 10, 12, 10)
+        controls_card.card_layout.setSpacing(8)
         controls_card.body_layout.setSpacing(8)
         controls_card.body_layout.addWidget(button_row)
 
@@ -471,7 +490,8 @@ class RunPage(QWidget):
         empty_title = QLabel("No session preview yet", self.summary_empty_panel)
         empty_title.setObjectName("run_summary_empty_title")
         empty_body = QLabel(
-            "Preview the session plan to reveal block order, launch diagnostics, and feedback details.",
+            "Preview the session plan to reveal block order, launch diagnostics, "
+            "and feedback details.",
             self.summary_empty_panel,
         )
         empty_body.setObjectName("run_summary_empty_body")
@@ -497,8 +517,8 @@ class RunPage(QWidget):
             object_name="run_summary_card",
             parent=self,
         )
-        summary_card.layout().setContentsMargins(12, 10, 12, 10)
-        summary_card.layout().setSpacing(8)
+        summary_card.card_layout.setContentsMargins(12, 10, 12, 10)
+        summary_card.card_layout.setSpacing(8)
         summary_card.body_layout.setSpacing(8)
         summary_card.body_layout.addWidget(self.summary_stack)
 
@@ -521,8 +541,8 @@ class RunPage(QWidget):
             object_name="run_readiness_card",
             parent=self,
         )
-        readiness_card.layout().setContentsMargins(12, 10, 12, 10)
-        readiness_card.layout().setSpacing(8)
+        readiness_card.card_layout.setContentsMargins(12, 10, 12, 10)
+        readiness_card.card_layout.setSpacing(8)
         readiness_card.body_layout.setSpacing(8)
         readiness_card.body_layout.addWidget(self.readiness_badge)
         readiness_card.body_layout.addWidget(self.readiness_summary_value)
@@ -530,7 +550,10 @@ class RunPage(QWidget):
 
         self.shell = NonHomePageShell(
             title="Run / Runtime",
-            subtitle="Preview the session plan, review readiness, and launch from the supported alpha path.",
+            subtitle=(
+                "Preview the session plan, review readiness, and launch from the "
+                "supported alpha path."
+            ),
             layout_mode="three_column",
             width_preset="medium",
             parent=self,
@@ -611,6 +634,8 @@ class RunPage(QWidget):
         )
 
     def launch_test_session(self) -> None:
+        if self._active_launch_task is not None:
+            return
         try:
             refresh_hz = self.current_refresh_hz()
             session_plan = self._document.prepare_test_session_launch(refresh_hz=refresh_hz)
@@ -626,17 +651,69 @@ class RunPage(QWidget):
         participant_number = self._collect_launch_participant_number()
         if participant_number is None:
             return
-        try:
-            self._show_launch_interstitial()
-            summary = self._document.launch_compiled_session(
+        display_fullscreen = self.fullscreen_checkbox.isChecked()
+
+        def _launch() -> LaunchSummary:
+            return self._document.launch_compiled_session(
                 session_plan,
                 participant_number=participant_number,
                 display_index=display_index,
-                fullscreen=self.fullscreen_checkbox.isChecked(),
+                fullscreen=display_fullscreen,
             )
-        except Exception as error:
-            _show_runtime_error_dialog(self, "Launch Error", error)
+
+        self._active_launch_session_plan = session_plan
+        self._active_launch_participant_number = participant_number
+        task = ProgressTask(
+            parent_widget=self,
+            label="Launching experiment: Please wait",
+            callback=_launch,
+            dialog_factory=_compat_progress_dialog,
+            window_title="FPVS Studio",
+        )
+        self._active_launch_task = task
+        self._update_launch_buttons()
+        task.succeeded.connect(self._on_launch_succeeded)
+        task.failed.connect(self._on_launch_failed)
+        task.finished.connect(self._on_launch_finished)
+        task.start()
+
+    def _on_launch_succeeded(self, result: object) -> None:
+        if not isinstance(result, LaunchSummary):
+            _show_runtime_error_dialog(
+                self,
+                "Launch Error",
+                RuntimeError("Runtime launch returned an unexpected result."),
+            )
             return
+        session_plan = self._active_launch_session_plan
+        participant_number = self._active_launch_participant_number
+        if session_plan is None or participant_number is None:
+            return
+        self._apply_launch_summary(session_plan, participant_number, result)
+
+    def _on_launch_failed(self, error: object) -> None:
+        if isinstance(error, Exception):
+            _show_runtime_error_dialog(self, "Launch Error", error)
+        else:
+            _show_runtime_error_dialog(self, "Launch Error", RuntimeError(str(error)))
+
+    def _on_launch_finished(self) -> None:
+        self._active_launch_task = None
+        self._active_launch_session_plan = None
+        self._active_launch_participant_number = None
+        self._update_launch_buttons()
+
+    def _update_launch_buttons(self) -> None:
+        is_busy = self._active_launch_task is not None
+        self.compile_button.setEnabled(not is_busy)
+        self.launch_button.setEnabled(not is_busy)
+
+    def _apply_launch_summary(
+        self,
+        session_plan: SessionPlan,
+        participant_number: str,
+        summary: LaunchSummary,
+    ) -> None:
         output_dir = summary.output_dir or "runs/..."
         participant_value = summary.participant_number or participant_number
         if summary.aborted:
@@ -676,25 +753,6 @@ class RunPage(QWidget):
             "Review run exports in the project runs folder.",
         )
 
-    def _show_launch_interstitial(self) -> None:
-        dialog = _compat_progress_dialog("Launching experiment: Please wait", "", 0, 0, self)
-        dialog.setWindowTitle("FPVS Studio")
-        dialog.setCancelButton(None)
-        dialog.setWindowModality(Qt.WindowModality.WindowModal)
-        dialog.setMinimumDuration(0)
-        dialog.show()
-        QApplication.processEvents()
-        try:
-            from fpvs_studio.gui import main_window
-
-            launch_interstitial_duration_ms = main_window._LAUNCH_INTERSTITIAL_DURATION_MS
-            if launch_interstitial_duration_ms > 0:
-                loop = QEventLoop(self)
-                QTimer.singleShot(launch_interstitial_duration_ms, loop.quit)
-                loop.exec()
-        finally:
-            dialog.close()
-
     def _prompt_participant_number(self) -> str | None:
         dialog = ParticipantNumberDialog(self)
         if dialog.exec() != int(QDialog.DialogCode.Accepted):
@@ -711,7 +769,8 @@ class RunPage(QWidget):
                 return participant_number
 
             warning_text = (
-                f"Warning: logs indicate that {participant_number} has already completed this study, "
+                f"Warning: logs indicate that {participant_number} has already "
+                "completed this study, "
                 f"but you entered {participant_number}. Do you wish to overwrite the existing data?"
             )
             answer = QMessageBox.question(
@@ -748,7 +807,9 @@ class RunPage(QWidget):
         self.readiness_summary_value.setText(summary_text)
         _set_list_items(self.readiness_checklist, report.readiness_items)
 
-    def _set_summary(self, session_plan, *, extra_lines: list[str] | None = None) -> None:
+    def _set_summary(
+        self, session_plan: SessionPlan, *, extra_lines: list[str] | None = None
+    ) -> None:
         self.summary_stack.setCurrentWidget(self.summary_text)
         lines = [
             f"Session ID: {session_plan.session_id}",
@@ -764,9 +825,7 @@ class RunPage(QWidget):
             lines.append(f"Continue Key: {session_plan.transition.continue_key}")
         lines.append("")
         for block in session_plan.blocks:
-            lines.append(
-                f"Block {block.block_index + 1}: " + " -> ".join(block.condition_order)
-            )
+            lines.append(f"Block {block.block_index + 1}: " + " -> ".join(block.condition_order))
         if extra_lines:
             lines.extend(["", *extra_lines])
         self.summary_text.setPlainText("\n".join(lines))

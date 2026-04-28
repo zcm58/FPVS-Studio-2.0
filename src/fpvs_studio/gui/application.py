@@ -1,6 +1,7 @@
-"""PySide6 application bootstrap and process-level window startup.
-It creates the QApplication instance and hands control to the GUI controller that loads project, preprocessing, and launch workflows.
-This module owns desktop app initialization only, not persistent model truth or runtime execution logic."""
+"""PySide6 application bootstrap and process-level window startup. It creates the
+QApplication instance and hands control to the GUI controller that loads project,
+preprocessing, and launch workflows. This module owns desktop app initialization only,
+not persistent model truth or runtime execution logic."""
 
 from __future__ import annotations
 
@@ -22,8 +23,10 @@ def _ensure_application_icon(app: QApplication) -> None:
 def create_application(argv: list[str] | None = None) -> QApplication:
     """Create or reuse the shared QApplication instance."""
 
-    app = QApplication.instance()
-    if app is None:
+    instance = QApplication.instance()
+    if isinstance(instance, QApplication):
+        app = instance
+    else:
         app = QApplication(argv or sys.argv)
     app.setApplicationName("FPVS Studio")
     app.setOrganizationName("FPVS Studio")

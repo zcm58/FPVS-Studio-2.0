@@ -1,6 +1,7 @@
-"""Project scaffold and creation helpers for new FPVS Studio workspaces.
-It assembles starter ProjectFile state, folder structure, template defaults, and empty preprocessing manifest records for the authoring flow.
-The module owns project initialization on disk, not ongoing compilation, runtime execution, or engine control."""
+"""Project scaffold and creation helpers for new FPVS Studio workspaces. It assembles
+starter ProjectFile state, folder structure, template defaults, and empty preprocessing
+manifest records for the authoring flow. The module owns project initialization on disk,
+not ongoing compilation, runtime execution, or engine control."""
 
 from __future__ import annotations
 
@@ -25,13 +26,12 @@ from fpvs_studio.core.paths import (
     slugify_project_name,
     stimuli_dir,
     stimulus_derived_root,
-    stimulus_manifest_path,
     stimulus_source_root,
     validate_project_id,
 )
 from fpvs_studio.core.serialization import save_project_file
 from fpvs_studio.core.template_library import DEFAULT_TEMPLATE_ID, get_template
-from fpvs_studio.preprocessing.manifest import create_empty_manifest
+from fpvs_studio.preprocessing.manifest import create_empty_manifest, write_stimulus_manifest
 
 
 @dataclass(frozen=True)
@@ -99,8 +99,5 @@ def create_project(
         folder.mkdir(parents=True, exist_ok=True)
 
     save_project_file(project, project_json_path(target_dir))
-    save_project_file(
-        create_empty_manifest(project.meta.project_id),
-        stimulus_manifest_path(target_dir),
-    )
+    write_stimulus_manifest(target_dir, create_empty_manifest(project.meta.project_id))
     return ProjectScaffold(project_root=target_dir, project=project)

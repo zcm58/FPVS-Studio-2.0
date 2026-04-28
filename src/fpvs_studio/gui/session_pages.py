@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
 from fpvs_studio.core.enums import (
     InterConditionMode,
 )
+from fpvs_studio.core.validation import ConditionFixationGuidance
 from fpvs_studio.gui.design_system import (
     CARD_CORNER_RADIUS,
     COLOR_BORDER_SOFT,
@@ -48,18 +49,22 @@ class SessionStructureEditor(QWidget):
         document: ProjectDocument,
         *,
         object_name_prefix: str = "",
-        parent=None,
+        parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self._document = document
 
         self.block_count_spin = QSpinBox(self)
-        self.block_count_spin.setObjectName(_prefixed_object_name(object_name_prefix, "block_count_spin"))
+        self.block_count_spin.setObjectName(
+            _prefixed_object_name(object_name_prefix, "block_count_spin")
+        )
         self.block_count_spin.setRange(1, 1000)
         self.block_count_spin.valueChanged.connect(self._apply_session_settings)
 
         self.session_seed_spin = QSpinBox(self)
-        self.session_seed_spin.setObjectName(_prefixed_object_name(object_name_prefix, "session_seed_spin"))
+        self.session_seed_spin.setObjectName(
+            _prefixed_object_name(object_name_prefix, "session_seed_spin")
+        )
         self.session_seed_spin.setRange(0, 2_147_483_647)
         self.session_seed_spin.valueChanged.connect(self._apply_session_settings)
 
@@ -116,8 +121,8 @@ class SessionStructureEditor(QWidget):
         self.session_layout.addRow("Inter-condition mode", self.inter_condition_mode_combo)
         self.session_layout.addRow("Break seconds", self.break_seconds_spin)
         self.session_layout.addRow("Continue key", self.continue_key_edit)
-        self.session_card.layout().setContentsMargins(12, 10, 12, 10)
-        self.session_card.layout().setSpacing(8)
+        self.session_card.card_layout.setContentsMargins(12, 10, 12, 10)
+        self.session_card.card_layout.setSpacing(8)
         self.session_card.body_layout.setSpacing(8)
         self.session_card.body_layout.addLayout(self.session_layout)
 
@@ -186,7 +191,7 @@ class SessionStructureEditor(QWidget):
 class SessionStructurePage(QWidget):
     """Session-level settings page."""
 
-    def __init__(self, document: ProjectDocument, parent=None) -> None:
+    def __init__(self, document: ProjectDocument, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.editor = SessionStructureEditor(document, parent=self)
         self.shell = NonHomePageShell(
@@ -223,7 +228,7 @@ class FixationSettingsEditor(QWidget):
         document: ProjectDocument,
         *,
         schedule_row_behavior: str = "hide",
-        parent=None,
+        parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         if schedule_row_behavior not in {"hide", "disable"}:
@@ -231,7 +236,9 @@ class FixationSettingsEditor(QWidget):
         self._document = document
         self._schedule_row_behavior = schedule_row_behavior
 
-        self.fixation_enabled_checkbox = QCheckBox("Enable fixation color changes per condition", self)
+        self.fixation_enabled_checkbox = QCheckBox(
+            "Enable fixation color changes per condition", self
+        )
         self.fixation_enabled_checkbox.setObjectName("fixation_enabled_checkbox")
         self.fixation_enabled_checkbox.stateChanged.connect(self._on_fixation_enabled_toggled)
 
@@ -320,8 +327,8 @@ class FixationSettingsEditor(QWidget):
             object_name="fixation_settings_panel",
             parent=self,
         )
-        self.fixation_panel.layout().setContentsMargins(12, 10, 12, 10)
-        self.fixation_panel.layout().setSpacing(8)
+        self.fixation_panel.card_layout.setContentsMargins(12, 10, 12, 10)
+        self.fixation_panel.card_layout.setSpacing(8)
         fixation_panel_layout = self.fixation_panel.body_layout
         fixation_panel_layout.setSpacing(8)
 
@@ -336,7 +343,9 @@ class FixationSettingsEditor(QWidget):
         self.fixation_behavior_layout = QFormLayout(self.fixation_behavior_group)
         self.fixation_behavior_layout.setVerticalSpacing(7)
         self.fixation_behavior_layout.addRow("Color change schedule", self.target_count_mode_combo)
-        self.fixation_behavior_layout.addRow("Changes per condition", self.changes_per_sequence_spin)
+        self.fixation_behavior_layout.addRow(
+            "Changes per condition", self.changes_per_sequence_spin
+        )
         self.fixation_behavior_layout.addRow("Minimum changes", self.target_count_min_spin)
         self.fixation_behavior_layout.addRow("Maximum changes", self.target_count_max_spin)
         self.fixation_behavior_layout.addRow("No immediate repeat", self.no_repeat_count_checkbox)
@@ -406,23 +415,17 @@ class FixationSettingsEditor(QWidget):
         layout.addWidget(self.fixation_panel)
 
         self.setStyleSheet(
-            """
-            QFrame#fixation_feasibility_card {
-                border: 1px solid %s;
-                border-radius: %spx;
-                background-color: %s;
-            }
-            QLabel#fixation_feasibility_label {
-                color: %s;
+            f"""
+            QFrame#fixation_feasibility_card {{
+                border: 1px solid {COLOR_BORDER_SOFT};
+                border-radius: {CARD_CORNER_RADIUS}px;
+                background-color: {COLOR_SURFACE_ELEVATED};
+            }}
+            QLabel#fixation_feasibility_label {{
+                color: {COLOR_TEXT_PRIMARY};
                 font-weight: 600;
-            }
+            }}
             """
-            % (
-                COLOR_BORDER_SOFT,
-                CARD_CORNER_RADIUS,
-                COLOR_SURFACE_ELEVATED,
-                COLOR_TEXT_PRIMARY,
-            )
         )
 
         self._document.project_changed.connect(self.refresh)
@@ -505,7 +508,9 @@ class FixationSettingsEditor(QWidget):
                 randomized_mode,
             )
         else:
-            _set_form_row_visible(self.fixation_behavior_layout, self.changes_per_sequence_spin, True)
+            _set_form_row_visible(
+                self.fixation_behavior_layout, self.changes_per_sequence_spin, True
+            )
             _set_form_row_visible(self.fixation_behavior_layout, self.target_count_min_spin, True)
             _set_form_row_visible(self.fixation_behavior_layout, self.target_count_max_spin, True)
             _set_form_row_visible(
@@ -525,7 +530,7 @@ class FixationSettingsEditor(QWidget):
     def _build_compact_feasibility_text(
         self,
         *,
-        guidance_rows: list[object] | None,
+        guidance_rows: list[ConditionFixationGuidance] | None,
         guidance_error: Exception | None,
     ) -> str:
         label = "Estimated maximum feasible cross changes per condition"
@@ -542,7 +547,7 @@ class FixationSettingsEditor(QWidget):
 
     def _refresh_condition_guidance(self) -> None:
         refresh_hz = self._document.project.settings.display.preferred_refresh_hz or 60.0
-        guidance_rows: list[object] | None = None
+        guidance_rows: list[ConditionFixationGuidance] | None = None
         guidance_error: Exception | None = None
         try:
             guidance_rows = self._document.fixation_guidance(refresh_hz=refresh_hz)
@@ -597,6 +602,5 @@ class FixationSettingsEditor(QWidget):
 class FixationCrossSettingsPage(FixationSettingsEditor):
     """Fixation-task settings page."""
 
-    def __init__(self, document: ProjectDocument, parent=None) -> None:
+    def __init__(self, document: ProjectDocument, parent: QWidget | None = None) -> None:
         super().__init__(document, schedule_row_behavior="hide", parent=parent)
-

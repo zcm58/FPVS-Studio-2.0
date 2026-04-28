@@ -1,6 +1,8 @@
-"""Persist reusable condition-template profile libraries and apply them to editable project state.
-It converts stored profile records into ProjectSettings and Condition defaults that the GUI can reuse before ProjectFile state is compiled.
-This module owns profile-library I/O and normalization, not RunSpec generation, SessionPlan ordering, or runtime behavior."""
+"""Persist reusable condition-template profile libraries and apply them to editable project
+state. It converts stored profile records into ProjectSettings and Condition defaults
+that the GUI can reuse before ProjectFile state is compiled. This module owns profile-
+library I/O and normalization, not RunSpec generation, SessionPlan ordering, or runtime
+behavior."""
 
 from __future__ import annotations
 

@@ -19,8 +19,8 @@ from fpvs_studio.core.execution import (
     SessionExecutionSummary,
 )
 from fpvs_studio.core.models import DisplayValidationReport
-from fpvs_studio.core.serialization import read_json_file
 from fpvs_studio.core.run_spec import RunSpec
+from fpvs_studio.core.serialization import read_json_file
 from fpvs_studio.engines.base import PresentationEngine
 from fpvs_studio.engines.registry import register_engine, unregister_engine
 from fpvs_studio.runtime.launcher import (
@@ -185,7 +185,9 @@ class StubEngine(PresentationEngine):
                     timing_qc_strict_abort=True,
                 ),
                 frame_intervals=[
-                    FrameIntervalRecord(frame_index=0, interval_s=1.0 / run_spec.display.refresh_hz),
+                    FrameIntervalRecord(
+                        frame_index=0, interval_s=1.0 / run_spec.display.refresh_hz
+                    ),
                     FrameIntervalRecord(frame_index=1, interval_s=0.04),
                 ],
                 response_log=response_log,
@@ -199,9 +201,7 @@ class StubEngine(PresentationEngine):
             condition_name=run_spec.condition.name,
             engine_name="stub",
             run_mode=(
-                RunMode.TEST
-                if bool((runtime_options or {}).get("test_mode"))
-                else RunMode.SESSION
+                RunMode.TEST if bool((runtime_options or {}).get("test_mode")) else RunMode.SESSION
             ),
             started_at=datetime(2026, 3, 7, 12, 0, 0, tzinfo=timezone.utc),
             finished_at=datetime(2026, 3, 7, 12, 0, 5, tzinfo=timezone.utc),
@@ -361,9 +361,7 @@ def test_launch_session_runs_all_entries_with_stub_engine_and_reuses_session_win
 
     assert captures["open_count"] == 1
     assert captures["close_count"] == 1
-    assert captures["run_ids"] == [
-        entry.run_id for entry in session_plan.ordered_entries()
-    ]
+    assert captures["run_ids"] == [entry.run_id for entry in session_plan.ordered_entries()]
     assert len(captures["transitions"]) == session_plan.total_runs
     assert captures["block_breaks"] == [
         {
@@ -382,10 +380,10 @@ def test_launch_session_runs_all_entries_with_stub_engine_and_reuses_session_win
     assert summary.completed_condition_count == session_plan.total_runs
     assert summary.output_dir == f"runs/{PARTICIPANT_NUMBER}"
     assert summary.participant_number == PARTICIPANT_NUMBER
-    assert all(run_result.participant_number == PARTICIPANT_NUMBER for run_result in summary.run_results)
-    assert summary.realized_block_orders == [
-        block.condition_order for block in session_plan.blocks
-    ]
+    assert all(
+        run_result.participant_number == PARTICIPANT_NUMBER for run_result in summary.run_results
+    )
+    assert summary.realized_block_orders == [block.condition_order for block in session_plan.blocks]
     assert summary.output_dir is not None
     session_output_dir = multi_condition_project_root / Path(summary.output_dir)
     assert (session_output_dir / "session_plan.json").is_file()
@@ -436,9 +434,15 @@ def test_launch_session_reuses_participant_number_with_incremented_output_labels
     assert summary_1.output_dir is not None
     assert summary_2.output_dir is not None
     assert summary_3.output_dir is not None
-    assert (multi_condition_project_root / Path(summary_1.output_dir) / "session_summary.json").is_file()
-    assert (multi_condition_project_root / Path(summary_2.output_dir) / "session_summary.json").is_file()
-    assert (multi_condition_project_root / Path(summary_3.output_dir) / "session_summary.json").is_file()
+    assert (
+        multi_condition_project_root / Path(summary_1.output_dir) / "session_summary.json"
+    ).is_file()
+    assert (
+        multi_condition_project_root / Path(summary_2.output_dir) / "session_summary.json"
+    ).is_file()
+    assert (
+        multi_condition_project_root / Path(summary_3.output_dir) / "session_summary.json"
+    ).is_file()
 
 
 def test_session_launch_shows_condition_feedback_with_accuracy_and_mean_rt_when_enabled(
@@ -467,7 +471,9 @@ def test_session_launch_shows_condition_feedback_with_accuracy_and_mean_rt_when_
     assert all(run_result.fixation_task_summary is not None for run_result in summary.run_results)
     first_summary = summary.run_results[0].fixation_task_summary
     assert first_summary is not None
-    assert first_summary.total_targets == len(session_plan.ordered_entries()[0].run_spec.fixation_events)
+    assert first_summary.total_targets == len(
+        session_plan.ordered_entries()[0].run_spec.fixation_events
+    )
     assert first_summary.hit_count == 1
     assert first_summary.mean_rt_ms == 0.0
     assert len(captures["condition_feedback"]) == session_plan.total_runs
@@ -1147,7 +1153,9 @@ def test_launch_session_rejects_non_digit_participant_number_before_engine_creat
             random_seed=34,
         )
 
-        with pytest.raises(LaunchSettingsError, match="participant_number must contain digits only"):
+        with pytest.raises(
+            LaunchSettingsError, match="participant_number must contain digits only"
+        ):
             launch_session(
                 sample_project_root,
                 session_plan,

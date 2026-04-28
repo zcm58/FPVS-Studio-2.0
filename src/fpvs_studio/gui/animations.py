@@ -1,12 +1,13 @@
-"""Reusable UI animation helpers for the PySide6 authoring shell.
-These classes style widget motion and hover behavior so the GUI can feel responsive without embedding domain or runtime logic.
-The module owns presentation polish only; project semantics and launch behavior stay in backend services and main widgets."""
+"""Reusable UI animation helpers for the PySide6 authoring shell. These classes style
+widget motion and hover behavior so the GUI can feel responsive without embedding domain
+or runtime logic. The module owns presentation polish only; project semantics and launch
+behavior stay in backend services and main widgets."""
 
 from __future__ import annotations
 
 from PySide6.QtCore import QEasingCurve, QEvent, QObject, QRectF, QSize, Qt, QVariantAnimation
 from PySide6.QtGui import QColor, QMouseEvent, QPainter, QPaintEvent, QPen
-from PySide6.QtWidgets import QGraphicsDropShadowEffect, QPushButton, QTabBar
+from PySide6.QtWidgets import QGraphicsDropShadowEffect, QPushButton, QTabBar, QWidget
 
 
 def _interpolate_color(start: QColor, end: QColor, progress: float) -> QColor:
@@ -77,6 +78,8 @@ class ButtonHoverAnimator(QObject):
         self._animation.start()
 
     def _on_animation_value_changed(self, value: object) -> None:
+        if not isinstance(value, (float, int)):
+            return
         self._hover_progress = float(value)
         progress = self._hover_progress if self._button.isEnabled() else 0.0
         shadow_color = _interpolate_color(
@@ -92,7 +95,7 @@ class ButtonHoverAnimator(QObject):
 class AnimatedTabBar(QTabBar):
     """QTabBar that animates hover transitions for each tab."""
 
-    def __init__(self, parent=None, *, duration_ms: int = 180) -> None:
+    def __init__(self, parent: QWidget | None = None, *, duration_ms: int = 180) -> None:
         super().__init__(parent)
         self._duration_ms = duration_ms
         self._hovered_tab_index = -1
@@ -242,5 +245,7 @@ class AnimatedTabBar(QTabBar):
         animation.start()
 
     def _on_tab_progress_changed(self, index: int, value: object) -> None:
+        if not isinstance(value, (float, int)):
+            return
         self._hover_progress[index] = float(value)
         self.update()

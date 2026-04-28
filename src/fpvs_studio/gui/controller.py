@@ -1,6 +1,7 @@
-"""Top-level GUI controller for welcome, project-open, and settings flows.
-It coordinates windows and document lifecycle by delegating project creation, loading, and authoring actions into backend-backed GUI objects.
-This module owns application navigation and error surfacing, not core protocol semantics or runtime execution internals."""
+"""Top-level GUI controller for welcome, project-open, and settings flows. It coordinates
+windows and document lifecycle by delegating project creation, loading, and authoring
+actions into backend-backed GUI objects. This module owns application navigation and
+error surfacing, not core protocol semantics or runtime execution internals."""
 
 from __future__ import annotations
 
@@ -73,7 +74,7 @@ class StudioController:
         """Load the persisted FPVS Studio root folder when it still exists."""
 
         raw_root_dir = self._settings.value(_FPVS_ROOT_DIR_KEY, "", type=str)
-        if not raw_root_dir:
+        if not isinstance(raw_root_dir, str) or not raw_root_dir:
             self._fpvs_root_dir = None
             return None
 

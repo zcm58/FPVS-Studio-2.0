@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
 import tempfile
+from pathlib import Path
 
-from PIL import Image
 import pytest
+from PIL import Image
 
 from fpvs_studio.core.enums import DutyCycleMode
 from fpvs_studio.core.models import (

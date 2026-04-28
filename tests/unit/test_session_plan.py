@@ -14,8 +14,7 @@ def _block_orders(session_plan) -> list[list[str]]:
 
 def _realized_fixation_counts(session_plan) -> list[int]:
     return [
-        entry.run_spec.fixation.realized_target_count
-        for entry in session_plan.ordered_entries()
+        entry.run_spec.fixation.realized_target_count for entry in session_plan.ordered_entries()
     ]
 
 
@@ -116,7 +115,9 @@ def test_session_plan_transition_settings_preserve_break_and_continue_metadata(
         random_seed=7,
     )
 
-    multi_condition_project.settings.session.inter_condition_mode = InterConditionMode.MANUAL_CONTINUE
+    multi_condition_project.settings.session.inter_condition_mode = (
+        InterConditionMode.MANUAL_CONTINUE
+    )
     multi_condition_project.settings.session.inter_condition_break_seconds = 5.0
     multi_condition_project.settings.session.continue_key = "return"
     manual_continue_plan = compile_session_plan(
@@ -194,7 +195,7 @@ def test_session_plan_randomized_fixation_counts_are_seeded_and_non_repeating(
 
     assert counts == _realized_fixation_counts(plan_b)
     assert all(1 <= count <= 3 for count in counts)
-    assert all(left != right for left, right in zip(counts, counts[1:]))
+    assert all(left != right for left, right in zip(counts, counts[1:], strict=False))
 
 
 def test_session_plan_fixed_color_changes_per_condition_produce_expected_realized_count(

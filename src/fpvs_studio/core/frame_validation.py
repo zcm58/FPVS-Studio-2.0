@@ -1,6 +1,7 @@
-"""Low-level frame-timing helpers for FPVS display compatibility.
-Core validation and compilation use these utilities to derive per-cycle frame counts and duty-cycle on/off splits before RunSpec emission.
-This module owns timing arithmetic only, not project validation policy, session planning, or runtime launch checks."""
+"""Low-level frame-timing helpers for FPVS display compatibility. Core validation and
+compilation use these utilities to derive per-cycle frame counts and duty-cycle on/off
+splits before RunSpec emission. This module owns timing arithmetic only, not project
+validation policy, session planning, or runtime launch checks."""
 
 from __future__ import annotations
 

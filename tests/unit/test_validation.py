@@ -95,7 +95,9 @@ def test_project_validation_accepts_uniform_condition_repeat_cycle_settings(
     )
 
 
-def test_condition_fixation_guidance_reports_duration_and_max_feasible_changes(sample_project) -> None:
+def test_condition_fixation_guidance_reports_duration_and_max_feasible_changes(
+    sample_project,
+) -> None:
     sample_project.conditions[0].sequence_count = 2
     sample_project.conditions[0].oddball_cycle_repeats_per_sequence = 3
     sample_project.settings.fixation_task.target_duration_ms = 250

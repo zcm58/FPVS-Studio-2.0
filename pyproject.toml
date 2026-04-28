@@ -45,7 +45,7 @@ dev = [
 fpvs-studio = "fpvs_studio.app.main:main"
 
 [tool.pytest.ini_options]
-addopts = "-ra"
+addopts = "-ra --import-mode=importlib"
 pythonpath = ["src"]
 testpaths = ["tests"]
 

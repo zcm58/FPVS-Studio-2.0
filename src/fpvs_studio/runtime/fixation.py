@@ -1,11 +1,12 @@
-"""Runtime fixation-response scoring helpers.
-It turns raw response logs and compiled FixationEvent data from RunSpec playback into neutral fixation summaries stored in execution contracts.
-The module owns scoring math and summary derivation, not fixation scheduling, participant feedback rendering, or engine input handling."""
+"""Runtime fixation-response scoring helpers. It turns raw response logs and compiled
+FixationEvent data from RunSpec playback into neutral fixation summaries stored in
+execution contracts. The module owns scoring math and summary derivation, not fixation
+scheduling, participant feedback rendering, or engine input handling."""
 
 from __future__ import annotations
 
-from collections.abc import Sequence
 import math
+from collections.abc import Sequence
 
 from fpvs_studio.core.execution import (
     FixationResponseRecord,
@@ -48,7 +49,11 @@ def score_fixation_responses(
     fixation_results: list[FixationResponseRecord] = []
     for event in sorted(fixation_events, key=lambda item: item.event_index):
         matched_index = next(
-            (index for index, event_index in matched_response_indices.items() if event_index == event.event_index),
+            (
+                index
+                for index, event_index in matched_response_indices.items()
+                if event_index == event.event_index
+            ),
             None,
         )
         if matched_index is None:
@@ -81,11 +86,11 @@ def score_fixation_responses(
     scored_responses: list[ResponseRecord] = []
     for index, response in enumerate(ordered_responses):
         matched_event_index = matched_response_indices.get(index)
-        matched_event = event_lookup.get(matched_event_index) if matched_event_index is not None else None
+        matched_event = (
+            event_lookup.get(matched_event_index) if matched_event_index is not None else None
+        )
         rt_frames = (
-            response.frame_index - matched_event.start_frame
-            if matched_event is not None
-            else None
+            response.frame_index - matched_event.start_frame if matched_event is not None else None
         )
         is_false_alarm = matched_event_index is None and response.key == response_key
         scored_responses.append(
@@ -94,8 +99,12 @@ def score_fixation_responses(
                     "response_index": index,
                     "matched_event_index": matched_event_index,
                     "rt_frames": rt_frames,
-                    "correct": (matched_event_index is not None) if response.key == response_key else None,
-                    "outcome": "hit" if matched_event_index is not None else ("false_alarm" if is_false_alarm else None),
+                    "correct": (matched_event_index is not None)
+                    if response.key == response_key
+                    else None,
+                    "outcome": "hit"
+                    if matched_event_index is not None
+                    else ("false_alarm" if is_false_alarm else None),
                 }
             )
         )
@@ -121,11 +130,7 @@ def build_fixation_task_summary(
         for event in fixation_results
         if event.outcome == "hit" and event.rt_frames is not None
     ]
-    mean_rt_ms = (
-        math.fsum(hit_rt_ms) / len(hit_rt_ms)
-        if hit_rt_ms
-        else None
-    )
+    mean_rt_ms = math.fsum(hit_rt_ms) / len(hit_rt_ms) if hit_rt_ms else None
     return FixationTaskSummary(
         total_targets=total_targets,
         hit_count=hit_count,

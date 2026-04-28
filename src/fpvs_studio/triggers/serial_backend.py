@@ -1,6 +1,7 @@
-"""Serial trigger backend scaffold for future lab hardware integration.
-It reserves the runtime-facing adapter shape for configured serial ports while keeping serial specifics out of core contracts and GUI code.
-This module owns hardware hookup scaffolding only; trigger scheduling and export records remain in compiler and runtime."""
+"""Serial trigger backend scaffold for future lab hardware integration. It reserves the
+runtime-facing adapter shape for configured serial ports while keeping serial specifics
+out of core contracts and GUI code. This module owns hardware hookup scaffolding only;
+trigger scheduling and export records remain in compiler and runtime."""
 
 from __future__ import annotations
 
@@ -32,9 +33,7 @@ class SerialBackend(TriggerBackend):
         )
 
     def reset(self) -> None:
-        raise NotImplementedError(
-            "Serial trigger reset is not implemented in this scaffold yet."
-        )
+        raise NotImplementedError("Serial trigger reset is not implemented in this scaffold yet.")
 
     def close(self) -> None:
         return None

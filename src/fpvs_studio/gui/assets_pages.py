@@ -7,7 +7,6 @@ from pathlib import Path
 
 from PySide6.QtCore import QSignalBlocker, Qt
 from PySide6.QtWidgets import (
-    QApplication,
     QCheckBox,
     QFileDialog,
     QGridLayout,
@@ -15,7 +14,6 @@ from PySide6.QtWidgets import (
     QHeaderView,
     QLabel,
     QPlainTextEdit,
-    QProgressDialog,
     QPushButton,
     QSizePolicy,
     QTableWidget,
@@ -34,15 +32,18 @@ from fpvs_studio.gui.window_helpers import (
     _variant_label,
 )
 from fpvs_studio.gui.window_layout import NonHomePageShell, SectionCard
+from fpvs_studio.gui.workers import ProgressTask
 
 
 class AssetsPage(QWidget):
     """Stimuli manager page."""
 
-    def __init__(self, document: ProjectDocument, parent=None) -> None:
+    def __init__(self, document: ProjectDocument, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._document = document
         self._variant_checkboxes: dict[StimulusVariant, QCheckBox] = {}
+        self._active_task: ProgressTask | None = None
+        self._active_task_error_title = "Asset Task Error"
 
         controls_row = QWidget(self)
         controls_layout = QHBoxLayout(controls_row)
@@ -149,7 +150,9 @@ class AssetsPage(QWidget):
             self.assets_table.setRowCount(len(rows))
             for row_index, row in enumerate(rows):
                 self._set_table_item(row_index, 0, row.condition_name)
-                self._set_table_item(row_index, 1, row.role.title(), alignment=Qt.AlignmentFlag.AlignCenter)
+                self._set_table_item(
+                    row_index, 1, row.role.title(), alignment=Qt.AlignmentFlag.AlignCenter
+                )
                 source_item = self._set_table_item(
                     row_index,
                     2,
@@ -236,10 +239,24 @@ class AssetsPage(QWidget):
         selected_items = self.assets_table.selectedItems()
         if not selected_items:
             return None
-        return self.assets_table.item(selected_items[0].row(), 2).data(Qt.ItemDataRole.UserRole)
+        item = self.assets_table.item(selected_items[0].row(), 2)
+        if item is None:
+            return None
+        value = item.data(Qt.ItemDataRole.UserRole)
+        if (
+            isinstance(value, tuple)
+            and len(value) == 2
+            and isinstance(value[0], str)
+            and isinstance(value[1], str)
+        ):
+            return value
+        return None
 
     def _update_buttons(self) -> None:
-        self.import_source_button.setEnabled(self._selected_binding() is not None)
+        is_busy = self._active_task is not None
+        self.import_source_button.setEnabled(not is_busy and self._selected_binding() is not None)
+        self.refresh_button.setEnabled(not is_busy)
+        self.materialize_button.setEnabled(not is_busy)
 
     def _apply_supported_variants(self) -> None:
         variants = [
@@ -275,34 +292,49 @@ class AssetsPage(QWidget):
             _show_error_dialog(self, "Stimulus Import Error", error)
 
     def _refresh_inspection(self) -> None:
-        try:
-            self._run_with_progress(
-                "Refreshing stimulus source details...",
-                self._document.refresh_stimulus_inspection,
-            )
-        except Exception as error:
-            _show_error_dialog(self, "Source Inspection Error", error)
+        self._run_with_progress(
+            "Refreshing stimulus source details...",
+            self._document.refresh_stimulus_inspection,
+            error_title="Source Inspection Error",
+        )
 
     def _materialize_assets(self) -> None:
-        try:
-            self._run_with_progress(
-                "Building supported stimulus variants...",
-                self._document.materialize_assets,
-            )
-        except Exception as error:
-            _show_error_dialog(self, "Variant Build Error", error)
+        self._run_with_progress(
+            "Building supported stimulus variants...",
+            self._document.materialize_assets,
+            error_title="Variant Build Error",
+        )
 
-    def _run_with_progress(self, label: str, callback: Callable[[], object]) -> None:
-        dialog = QProgressDialog(label, "", 0, 0, self)
-        dialog.setCancelButton(None)
-        dialog.setWindowModality(Qt.WindowModality.WindowModal)
-        dialog.setMinimumDuration(0)
-        dialog.show()
-        QApplication.processEvents()
-        try:
-            callback()
-        finally:
-            dialog.close()
+    def _run_with_progress(
+        self,
+        label: str,
+        callback: Callable[[], object],
+        *,
+        error_title: str,
+    ) -> None:
+        if self._active_task is not None:
+            return
+        self._active_task_error_title = error_title
+        task = ProgressTask(parent_widget=self, label=label, callback=callback)
+        self._active_task = task
+        self._update_buttons()
+        task.succeeded.connect(self._on_background_task_succeeded)
+        task.failed.connect(self._on_background_task_failed)
+        task.finished.connect(self._on_background_task_finished)
+        task.start()
+
+    def _on_background_task_succeeded(self, _result: object) -> None:
+        self.refresh()
+
+    def _on_background_task_failed(self, error: object) -> None:
+        if isinstance(error, Exception):
+            _show_error_dialog(self, self._active_task_error_title, error)
+        else:
+            _show_error_dialog(self, self._active_task_error_title, RuntimeError(str(error)))
+
+    def _on_background_task_finished(self) -> None:
+        self._active_task = None
+        self._update_buttons()
 
 
 class AssetsReadinessEditor(QWidget):
@@ -313,11 +345,13 @@ class AssetsReadinessEditor(QWidget):
         document: ProjectDocument,
         *,
         object_name_prefix: str = "",
-        parent=None,
+        parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self._document = document
         self._variant_checkboxes: dict[StimulusVariant, QCheckBox] = {}
+        self._active_task: ProgressTask | None = None
+        self._active_task_error_title = "Asset Task Error"
 
         self.card = SectionCard(
             title="Assets Readiness",
@@ -325,8 +359,8 @@ class AssetsReadinessEditor(QWidget):
             object_name=_prefixed_object_name(object_name_prefix, "assets_readiness_card"),
             parent=self,
         )
-        self.card.layout().setContentsMargins(12, 10, 12, 10)
-        self.card.layout().setSpacing(8)
+        self.card.card_layout.setContentsMargins(12, 10, 12, 10)
+        self.card.card_layout.setSpacing(8)
         self.card.body_layout.setSpacing(8)
 
         variants_row = QWidget(self.card)
@@ -443,32 +477,51 @@ class AssetsReadinessEditor(QWidget):
             self.refresh()
 
     def _refresh_inspection(self) -> None:
-        try:
-            self._run_with_progress(
-                "Refreshing source inspection...",
-                self._document.refresh_stimulus_inspection,
-            )
-        except Exception as error:
-            _show_error_dialog(self, "Inspection Error", error)
+        self._run_with_progress(
+            "Refreshing source inspection...",
+            self._document.refresh_stimulus_inspection,
+            error_title="Inspection Error",
+        )
 
     def _materialize_assets(self) -> None:
-        try:
-            self._run_with_progress(
-                "Materializing project assets...",
-                self._document.materialize_assets,
-            )
-        except Exception as error:
-            _show_error_dialog(self, "Materialization Error", error)
+        self._run_with_progress(
+            "Materializing project assets...",
+            self._document.materialize_assets,
+            error_title="Materialization Error",
+        )
 
-    def _run_with_progress(self, label: str, callback: Callable[[], object]) -> None:
-        dialog = QProgressDialog(label, "", 0, 0, self)
-        dialog.setCancelButton(None)
-        dialog.setWindowModality(Qt.WindowModality.WindowModal)
-        dialog.setMinimumDuration(0)
-        dialog.show()
-        QApplication.processEvents()
-        try:
-            callback()
-        finally:
-            dialog.close()
+    def _run_with_progress(
+        self,
+        label: str,
+        callback: Callable[[], object],
+        *,
+        error_title: str,
+    ) -> None:
+        if self._active_task is not None:
+            return
+        self._active_task_error_title = error_title
+        task = ProgressTask(parent_widget=self, label=label, callback=callback)
+        self._active_task = task
+        self._update_task_buttons()
+        task.succeeded.connect(self._on_background_task_succeeded)
+        task.failed.connect(self._on_background_task_failed)
+        task.finished.connect(self._on_background_task_finished)
+        task.start()
 
+    def _update_task_buttons(self) -> None:
+        is_busy = self._active_task is not None
+        self.refresh_button.setEnabled(not is_busy)
+        self.materialize_button.setEnabled(not is_busy)
+
+    def _on_background_task_succeeded(self, _result: object) -> None:
+        self.refresh()
+
+    def _on_background_task_failed(self, error: object) -> None:
+        if isinstance(error, Exception):
+            _show_error_dialog(self, self._active_task_error_title, error)
+        else:
+            _show_error_dialog(self, self._active_task_error_title, RuntimeError(str(error)))
+
+    def _on_background_task_finished(self) -> None:
+        self._active_task = None
+        self._update_task_buttons()

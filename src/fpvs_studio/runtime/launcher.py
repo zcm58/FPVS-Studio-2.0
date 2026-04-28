@@ -1,6 +1,7 @@
-"""Runtime launch entrypoints for single runs and ordered sessions.
-It combines RunSpec or SessionPlan artifacts with machine-specific LaunchSettings, engine selection, preflight, and output-folder preparation.
-This module owns launch orchestration and runtime-only options, not compilation of project state or engine rendering internals."""
+"""Runtime launch entrypoints for single runs and ordered sessions. It combines RunSpec or
+SessionPlan artifacts with machine-specific LaunchSettings, engine selection, preflight,
+and output-folder preparation. This module owns launch orchestration and runtime-only
+options, not compilation of project state or engine rendering internals."""
 
 from __future__ import annotations
 

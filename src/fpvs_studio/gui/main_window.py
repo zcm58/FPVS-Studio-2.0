@@ -1,7 +1,7 @@
-"""Primary Phase 5 authoring window for FPVS Studio.
-It binds user actions to backend document services for project editing, preprocessing, validation, preflight, and test-mode launch workflows.
-The window owns top-level composition and honest runtime messaging, not protocol semantics, RunSpec compilation rules, or execution flow.
-"""
+"""Primary Phase 5 authoring window for FPVS Studio. It binds user actions to backend
+document services for project editing, preprocessing, validation, preflight, and test-
+mode launch workflows. The window owns top-level composition and honest runtime
+messaging, not protocol semantics, RunSpec compilation rules, or execution flow."""
 
 from __future__ import annotations
 
@@ -166,256 +166,190 @@ class StudioMainWindow(QMainWindow):
 
     def _apply_chrome_styles(self) -> None:
         self.setStyleSheet(
-            """
-            QTabWidget#main_tabs::pane {
-                border: 1px solid %s;
-                background-color: %s;
+            f"""
+            QTabWidget#main_tabs::pane {{
+                border: 1px solid {COLOR_BORDER};
+                background-color: {COLOR_SURFACE_ELEVATED};
                 top: -1px;
-            }
-            QPushButton {
-                border: 1px solid %s;
-                border-radius: %spx;
-                background-color: %s;
+            }}
+            QPushButton {{
+                border: 1px solid {COLOR_BORDER};
+                border-radius: {CARD_CORNER_RADIUS}px;
+                background-color: {COLOR_SURFACE_ELEVATED};
                 padding: 6px 12px;
-                color: %s;
+                color: {COLOR_TEXT_PRIMARY};
                 min-height: 30px;
-            }
-            QPushButton:hover {
-                border-color: %s;
-                background-color: %s;
-            }
-            QPushButton:pressed {
-                border-color: %s;
-                background-color: %s;
-            }
-            QPushButton:disabled {
-                border-color: %s;
-                background-color: %s;
+            }}
+            QPushButton:hover {{
+                border-color: {COLOR_BORDER_SOFT};
+                background-color: {COLOR_SURFACE_ALT};
+            }}
+            QPushButton:pressed {{
+                border-color: {COLOR_BORDER_SOFT};
+                background-color: {COLOR_SURFACE_ALT};
+            }}
+            QPushButton:disabled {{
+                border-color: {COLOR_BORDER_SOFT};
+                background-color: {COLOR_SURFACE_ALT};
                 color: #8a97a8;
-            }
+            }}
             QPushButton[launchActionRole="primary"],
-            QPushButton[primaryActionRole="true"] {
-                border-color: %s;
-                background-color: %s;
+            QPushButton[primaryActionRole="true"] {{
+                border-color: {COLOR_PRIMARY_BORDER};
+                background-color: {COLOR_PRIMARY};
                 color: #ffffff;
                 font-weight: 700;
                 padding-left: 14px;
                 padding-right: 14px;
-            }
+            }}
             QPushButton[launchActionRole="primary"]:hover,
-            QPushButton[primaryActionRole="true"]:hover {
-                border-color: %s;
-                background-color: %s;
-            }
+            QPushButton[primaryActionRole="true"]:hover {{
+                border-color: {COLOR_PRIMARY_HOVER};
+                background-color: {COLOR_PRIMARY_PRESSED};
+            }}
             QPushButton[launchActionRole="primary"]:pressed,
-            QPushButton[primaryActionRole="true"]:pressed {
-                border-color: %s;
-                background-color: %s;
-            }
+            QPushButton[primaryActionRole="true"]:pressed {{
+                border-color: {COLOR_PRIMARY_BORDER};
+                background-color: {COLOR_PRIMARY_PRESSED};
+            }}
             QPushButton[launchActionRole="primary"]:disabled,
-            QPushButton[primaryActionRole="true"]:disabled {
+            QPushButton[primaryActionRole="true"]:disabled {{
                 border-color: #93c5fd;
                 background-color: #93c5fd;
                 color: #eff6ff;
-            }
-            QPushButton[secondaryActionRole="true"] {
+            }}
+            QPushButton[secondaryActionRole="true"] {{
                 font-weight: 600;
-            }
-            QPushButton:focus {
-                border: 2px solid %s;
-            }
-            QLabel[statusBadge="true"] {
-                border: 1px solid %s;
-                border-radius: %spx;
-                background-color: %s;
-                color: %s;
+            }}
+            QPushButton:focus {{
+                border: 2px solid {COLOR_PRIMARY};
+            }}
+            QLabel[statusBadge="true"] {{
+                border: 1px solid {COLOR_BORDER_SOFT};
+                border-radius: {CARD_CORNER_RADIUS}px;
+                background-color: {COLOR_SURFACE_ELEVATED};
+                color: {COLOR_TEXT_PRIMARY};
                 padding: 5px 10px;
                 font-size: 12px;
                 font-weight: 700;
-            }
-            QLabel[statusBadge="true"][statusState="ready"] {
-                border-color: %s;
-                background-color: %s;
-                color: %s;
-            }
-            QLabel[statusBadge="true"][statusState="warning"] {
-                border-color: %s;
-                background-color: %s;
-                color: %s;
-            }
-            QLabel[statusBadge="true"][statusState="info"] {
-                border-color: %s;
-                background-color: %s;
-                color: %s;
-            }
-            QLabel[statusBadge="true"][statusState="pending"] {
-                border-color: %s;
-                background-color: %s;
-                color: %s;
-            }
-            QLabel[statusBadge="true"][statusState="error"] {
+            }}
+            QLabel[statusBadge="true"][statusState="ready"] {{
+                border-color: {COLOR_SUCCESS_BORDER};
+                background-color: {COLOR_SUCCESS_BG};
+                color: {COLOR_SUCCESS_TEXT};
+            }}
+            QLabel[statusBadge="true"][statusState="warning"] {{
+                border-color: {COLOR_WARNING_BORDER};
+                background-color: {COLOR_WARNING_BG};
+                color: {COLOR_WARNING_TEXT};
+            }}
+            QLabel[statusBadge="true"][statusState="info"] {{
+                border-color: {COLOR_INFO_BORDER};
+                background-color: {COLOR_INFO_BG};
+                color: {COLOR_INFO_TEXT};
+            }}
+            QLabel[statusBadge="true"][statusState="pending"] {{
+                border-color: {COLOR_PENDING_BORDER};
+                background-color: {COLOR_PENDING_BG};
+                color: {COLOR_PENDING_TEXT};
+            }}
+            QLabel[statusBadge="true"][statusState="error"] {{
                 border-color: #fca5a5;
                 background-color: #fef2f2;
                 color: #991b1b;
-            }
-            QLabel[pathValue="true"] {
-                border: 1px solid %s;
-                border-radius: %spx;
-                background-color: %s;
-                color: %s;
+            }}
+            QLabel[pathValue="true"] {{
+                border: 1px solid {COLOR_BORDER_SOFT};
+                border-radius: {CARD_CORNER_RADIUS}px;
+                background-color: {COLOR_SURFACE_ELEVATED};
+                color: {COLOR_TEXT_PRIMARY};
                 padding: 6px 8px;
-            }
+            }}
             QListWidget#condition_list,
             QListWidget#run_readiness_checklist,
             QListWidget#home_readiness_list,
-            QListWidget#dashboard_attention_list {
-                border: 1px solid %s;
-                border-radius: %spx;
-                background-color: %s;
+            QListWidget#dashboard_attention_list {{
+                border: 1px solid {COLOR_BORDER_SOFT};
+                border-radius: {CARD_CORNER_RADIUS}px;
+                background-color: {COLOR_SURFACE_ELEVATED};
                 outline: none;
-            }
-            QListWidget#condition_list {
+            }}
+            QListWidget#condition_list {{
                 padding: 4px;
-            }
-            QListWidget#condition_list::item {
+            }}
+            QListWidget#condition_list::item {{
                 padding: 7px 10px;
                 border-radius: 8px;
-            }
-            QListWidget#condition_list::item:hover {
-                background-color: %s;
-            }
-            QListWidget#condition_list::item:selected {
-                background-color: %s;
+            }}
+            QListWidget#condition_list::item:hover {{
+                background-color: {COLOR_SURFACE_ALT};
+            }}
+            QListWidget#condition_list::item:selected {{
+                background-color: {COLOR_PRIMARY};
                 color: #ffffff;
                 font-weight: 700;
-            }
+            }}
             QListWidget#run_readiness_checklist::item,
             QListWidget#home_readiness_list::item,
-            QListWidget#dashboard_attention_list::item {
+            QListWidget#dashboard_attention_list::item {{
                 padding: 4px 6px;
-            }
-            QTableWidget#assets_table {
-                border: 1px solid %s;
-                border-radius: %spx;
-                background-color: %s;
-                gridline-color: %s;
-                selection-background-color: %s;
+            }}
+            QTableWidget#assets_table {{
+                border: 1px solid {COLOR_BORDER_SOFT};
+                border-radius: {CARD_CORNER_RADIUS}px;
+                background-color: {COLOR_SURFACE_ELEVATED};
+                gridline-color: {COLOR_BORDER_SOFT};
+                selection-background-color: {COLOR_PRIMARY};
                 selection-color: #ffffff;
                 outline: none;
-            }
-            QTableWidget#assets_table QHeaderView::section {
-                background-color: %s;
+            }}
+            QTableWidget#assets_table QHeaderView::section {{
+                background-color: {COLOR_SURFACE_ALT};
                 border: none;
-                border-right: 1px solid %s;
-                border-bottom: 1px solid %s;
+                border-right: 1px solid {COLOR_BORDER_SOFT};
+                border-bottom: 1px solid {COLOR_BORDER_SOFT};
                 padding: 6px 8px;
-                color: %s;
+                color: {COLOR_TEXT_SECONDARY};
                 font-weight: 700;
-            }
-            QTableWidget#assets_table::item {
+            }}
+            QTableWidget#assets_table::item {{
                 padding: 4px 8px;
-            }
-            QTableWidget#assets_table::item:selected {
-                background-color: %s;
+            }}
+            QTableWidget#assets_table::item:selected {{
+                background-color: {COLOR_PRIMARY};
                 color: #ffffff;
-            }
-            QTableWidget#assets_table::item:hover {
-                background-color: %s;
-            }
+            }}
+            QTableWidget#assets_table::item:hover {{
+                background-color: {COLOR_SURFACE_ALT};
+            }}
             QPlainTextEdit#assets_status_text,
-            QPlainTextEdit#session_summary_text {
-                border: 1px solid %s;
-                border-radius: %spx;
-                background-color: %s;
-                color: %s;
-            }
-            QFrame#run_summary_empty_state {
-                border: 1px dashed %s;
-                border-radius: %spx;
-                background-color: %s;
-            }
-            QLabel#run_summary_empty_title {
-                color: %s;
+            QPlainTextEdit#session_summary_text {{
+                border: 1px solid {COLOR_BORDER_SOFT};
+                border-radius: {CARD_CORNER_RADIUS}px;
+                background-color: {COLOR_SURFACE_ELEVATED};
+                color: {COLOR_TEXT_PRIMARY};
+            }}
+            QFrame#run_summary_empty_state {{
+                border: 1px dashed {COLOR_BORDER_SOFT};
+                border-radius: {CARD_CORNER_RADIUS}px;
+                background-color: {COLOR_SURFACE_ELEVATED};
+            }}
+            QLabel#run_summary_empty_title {{
+                color: {COLOR_TEXT_PRIMARY};
                 font-size: 14px;
                 font-weight: 700;
-            }
-            QLabel#run_summary_empty_body {
-                color: %s;
-            }
+            }}
+            QLabel#run_summary_empty_body {{
+                color: {COLOR_TEXT_SECONDARY};
+            }}
             QLabel#home_launch_status_summary,
             QLabel#run_readiness_summary_value,
-            QLabel#dashboard_attention_note {
-                color: %s;
-            }
+            QLabel#dashboard_attention_note {{
+                color: {COLOR_TEXT_SECONDARY};
+            }}
             """
-            % (
-                COLOR_BORDER,
-                COLOR_SURFACE_ELEVATED,
-                COLOR_BORDER,
-                CARD_CORNER_RADIUS,
-                COLOR_SURFACE_ELEVATED,
-                COLOR_TEXT_PRIMARY,
-                COLOR_BORDER_SOFT,
-                COLOR_SURFACE_ALT,
-                COLOR_BORDER_SOFT,
-                COLOR_SURFACE_ALT,
-                COLOR_BORDER_SOFT,
-                COLOR_SURFACE_ALT,
-                COLOR_PRIMARY_BORDER,
-                COLOR_PRIMARY,
-                COLOR_PRIMARY_HOVER,
-                COLOR_PRIMARY_PRESSED,
-                COLOR_PRIMARY_BORDER,
-                COLOR_PRIMARY_PRESSED,
-                COLOR_PRIMARY,
-                COLOR_BORDER_SOFT,
-                CARD_CORNER_RADIUS,
-                COLOR_SURFACE_ELEVATED,
-                COLOR_TEXT_PRIMARY,
-                COLOR_SUCCESS_BORDER,
-                COLOR_SUCCESS_BG,
-                COLOR_SUCCESS_TEXT,
-                COLOR_WARNING_BORDER,
-                COLOR_WARNING_BG,
-                COLOR_WARNING_TEXT,
-                COLOR_INFO_BORDER,
-                COLOR_INFO_BG,
-                COLOR_INFO_TEXT,
-                COLOR_PENDING_BORDER,
-                COLOR_PENDING_BG,
-                COLOR_PENDING_TEXT,
-                COLOR_BORDER_SOFT,
-                CARD_CORNER_RADIUS,
-                COLOR_SURFACE_ELEVATED,
-                COLOR_TEXT_PRIMARY,
-                COLOR_BORDER_SOFT,
-                CARD_CORNER_RADIUS,
-                COLOR_SURFACE_ELEVATED,
-                COLOR_SURFACE_ALT,
-                COLOR_PRIMARY,
-                COLOR_BORDER_SOFT,
-                CARD_CORNER_RADIUS,
-                COLOR_SURFACE_ELEVATED,
-                COLOR_BORDER_SOFT,
-                COLOR_PRIMARY,
-                COLOR_SURFACE_ALT,
-                COLOR_BORDER_SOFT,
-                COLOR_BORDER_SOFT,
-                COLOR_TEXT_SECONDARY,
-                COLOR_PRIMARY,
-                COLOR_SURFACE_ALT,
-                COLOR_BORDER_SOFT,
-                CARD_CORNER_RADIUS,
-                COLOR_SURFACE_ELEVATED,
-                COLOR_TEXT_PRIMARY,
-                COLOR_BORDER_SOFT,
-                CARD_CORNER_RADIUS,
-                COLOR_SURFACE_ELEVATED,
-                COLOR_TEXT_PRIMARY,
-                COLOR_TEXT_SECONDARY,
-                COLOR_TEXT_SECONDARY,
-            )
         )
+
     def _install_button_hover_animations(self) -> None:
         self._button_hover_animators.clear()
         for button in self.findChildren(QPushButton):
@@ -442,9 +376,8 @@ class StudioMainWindow(QMainWindow):
 
     def _create_menu_and_toolbar(self) -> None:
         file_menu = self.menuBar().addMenu("File")
-        self._native_menu_style = (
-            QStyleFactory.create("WindowsVista")
-            or QStyleFactory.create("Windows")
+        self._native_menu_style = QStyleFactory.create("WindowsVista") or QStyleFactory.create(
+            "Windows"
         )
         if self._native_menu_style is not None:
             self.menuBar().setStyle(self._native_menu_style)
@@ -496,7 +429,7 @@ class StudioMainWindow(QMainWindow):
     def _request_settings(self) -> None:
         self._on_request_settings()
 
-    def _update_window_title(self, *_args) -> None:
+    def _update_window_title(self, *_args: object) -> None:
         dirty_prefix = "*" if self.document.dirty else ""
         self.setWindowTitle(
             f"{dirty_prefix}{self.document.project.meta.name} - FPVS Studio (Alpha)"

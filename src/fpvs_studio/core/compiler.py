@@ -1,13 +1,15 @@
-"""Compile editable project state into neutral execution contracts.
-This module transforms ProjectFile and manifest-backed assets into single-condition RunSpec and ordered SessionPlan artifacts with frame-based timing.
-It owns schedule derivation and fixation target realization, while runtime-only launch options and engine behavior stay out of compiled output."""
+"""Compile editable project state into neutral execution contracts. This module transforms
+ProjectFile and manifest-backed assets into single-condition RunSpec and ordered
+SessionPlan artifacts with frame-based timing. It owns schedule derivation and fixation
+target realization, while runtime-only launch options and engine behavior stay out of
+compiled output."""
 
 from __future__ import annotations
 
+import random
 from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
-import random
 
 from fpvs_studio.core.enums import DutyCycleMode, InterConditionMode, StimulusVariant
 from fpvs_studio.core.fixation_planning import (
@@ -17,7 +19,11 @@ from fpvs_studio.core.fixation_planning import (
     required_fixation_frames,
     seconds_to_frames,
 )
-from fpvs_studio.core.frame_validation import FrameValidationError, frames_per_stimulus, on_off_frames
+from fpvs_studio.core.frame_validation import (
+    FrameValidationError,
+    frames_per_stimulus,
+    on_off_frames,
+)
 from fpvs_studio.core.models import (
     Condition,
     FixationTaskSettings,
@@ -37,6 +43,7 @@ from fpvs_studio.core.run_spec import (
     FixationStyleSpec,
     RunSpec,
     StimulusEvent,
+    StimulusRole,
     TriggerEvent,
 )
 from fpvs_studio.core.serialization import read_json_file
@@ -60,6 +67,7 @@ RANDOM_SEED_UPPER_BOUND = 2**31
 
 class CompileError(ValueError):
     """Raised when editable project state cannot be compiled into a run spec."""
+
 
 def _make_run_id(condition_id: str, now: datetime | None = None) -> str:
     """Create a compact condition-run id."""
@@ -139,8 +147,7 @@ def _select_conditions(
         known_ids = {condition.condition_id for condition in ordered_conditions}
         missing_ids = sorted(selected_ids - known_ids)
         raise CompileError(
-            "Unknown condition_ids requested for session compilation: "
-            + ", ".join(missing_ids)
+            "Unknown condition_ids requested for session compilation: " + ", ".join(missing_ids)
         )
     return selected_conditions
 
@@ -189,7 +196,9 @@ def _validate_selected_condition(
         )
     if condition.duty_cycle_mode == DutyCycleMode.BLANK_50:
         try:
-            on_off_frames(frames_per_stimulus(refresh_hz, template.base_hz), condition.duty_cycle_mode)
+            on_off_frames(
+                frames_per_stimulus(refresh_hz, template.base_hz), condition.duty_cycle_mode
+            )
         except FrameValidationError as exc:
             raise CompileError(str(exc)) from exc
     return base_set, oddball_set
@@ -297,6 +306,7 @@ def _resolve_filesystem_image_paths(
 ) -> list[str]:
     """Resolve sorted project-relative image paths directly from the filesystem."""
 
+    allowed_suffixes: tuple[str, ...]
     if variant == StimulusVariant.ORIGINAL:
         source_dir = project_root / Path(stimulus_set.source_dir)
         allowed_suffixes = SUPPORTED_SOURCE_SUFFIXES
@@ -361,7 +371,7 @@ def _build_stimulus_sequence(
     sequence: list[StimulusEvent] = []
 
     for index in range(total_stimuli):
-        role = "oddball" if (index + 1) % oddball_every_n == 0 else "base"
+        role: StimulusRole = "oddball" if (index + 1) % oddball_every_n == 0 else "base"
         pool = oddball_paths if role == "oddball" else base_paths
         image_path = pool[role_counts[role] % len(pool)]
         role_counts[role] += 1
@@ -396,7 +406,8 @@ def _build_fixation_events(
     if available_gap_space < required_minimum:
         raise CompileError(
             "Fixation settings do not fit within one condition run at the selected refresh rate. "
-            f"Need at least {required_minimum} gap frames but only {available_gap_space} are available "
+            f"Need at least {required_minimum} gap frames but only "
+            f"{available_gap_space} are available "
             "after allocating fixation target durations."
         )
 
@@ -407,7 +418,8 @@ def _build_fixation_events(
     for event_index in range(total_event_count):
         if current_start + target_duration_frames > total_frames:
             raise CompileError(
-                "Fixation event scheduling exceeded the condition duration after applying spacing constraints."
+                "Fixation event scheduling exceeded the condition duration after "
+                "applying spacing constraints."
             )
         fixation_events.append(
             FixationEvent(
@@ -507,9 +519,7 @@ def compile_run_spec(
         frames_per_stimulus_value,
         condition.duty_cycle_mode,
     )
-    total_oddball_cycles = (
-        condition.oddball_cycle_repeats_per_sequence * condition.sequence_count
-    )
+    total_oddball_cycles = condition.oddball_cycle_repeats_per_sequence * condition.sequence_count
     total_stimuli = total_oddball_cycles * template.oddball_every_n
     total_frames = total_stimuli * frames_per_stimulus_value
 
@@ -575,19 +585,23 @@ def compile_run_spec(
             condition_repeat_count=condition.sequence_count,
         )
         raise CompileError(
-            "Fixation color-change settings do not fit this condition at the selected refresh rate. "
+            "Fixation color-change settings do not fit this condition at the "
+            "selected refresh rate. "
             f"Condition '{condition.name}' duration: {total_frames} frames / "
             f"{total_frames / refresh_hz:.2f} s at {refresh_hz:.2f} Hz across "
             f"{total_oddball_cycles} cycle(s). "
-            f"Required duration: {required_frames} frames / {required_frames / refresh_hz:.2f} s for "
+            f"Required duration: {required_frames} frames / "
+            f"{required_frames / refresh_hz:.2f} s for "
             f"{resolved_target_count} color changes (targets), "
             f"{fixation_settings.target_duration_ms} ms target duration, and "
             f"{fixation_settings.min_gap_ms} ms minimum gap. "
             "Color changes are distributed across the full condition duration. "
-            "Adjust one of these settings: reduce color-change count per condition, reduce minimum gap, "
+            "Adjust one of these settings: reduce color-change count per condition, "
+            "reduce minimum gap, "
             "reduce target duration, or increase cycle count. "
             f"Minimum cycle count needed at {refresh_hz:.2f} Hz: {minimum_total_cycles} total "
-            f"({minimum_cycles_per_repeat} per condition repeat with {condition.sequence_count} repeat(s))."
+            f"({minimum_cycles_per_repeat} per condition repeat with "
+            f"{condition.sequence_count} repeat(s))."
         )
     fixation_events = (
         _build_fixation_events(
@@ -634,7 +648,9 @@ def compile_run_spec(
             target_color=_color_to_string(fixation_settings.target_color),
             response_key=fixation_settings.response_key,
             response_window_frames=response_window_frames,
-            response_keys=[fixation_settings.response_key] if fixation_settings.accuracy_task_enabled else [],
+            response_keys=[fixation_settings.response_key]
+            if fixation_settings.accuracy_task_enabled
+            else [],
             cross_size_px=fixation_settings.cross_size_px,
             line_width_px=fixation_settings.line_width_px,
             target_duration_frames=target_duration_frames,
@@ -720,7 +736,8 @@ def compile_session_plan(
                 )
             except CompileError as exc:
                 raise CompileError(
-                    f"Condition '{condition.name}' (id '{condition.condition_id}') failed compilation: {exc}"
+                    f"Condition '{condition.name}' (id '{condition.condition_id}') "
+                    f"failed compilation: {exc}"
                 ) from exc
             entries.append(
                 SessionEntry(

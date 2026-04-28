@@ -10,8 +10,8 @@ from fpvs_studio.core.condition_template_profiles import (
     built_in_condition_template_profiles,
     delete_condition_template_profile,
     get_condition_template_profile,
-    load_condition_template_profile_library,
     list_condition_template_profiles,
+    load_condition_template_profile_library,
     save_condition_template_profile_library,
     upsert_condition_template_profile,
 )

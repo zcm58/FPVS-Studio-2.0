@@ -56,7 +56,9 @@ def _write_image_directory(target_dir: Path, *, size: tuple[int, int] = (96, 96)
     return target_dir
 
 
-def _open_created_project(controller: StudioController, qtbot, tmp_path: Path, name: str = "Demo Project"):
+def _open_created_project(
+    controller: StudioController, qtbot, tmp_path: Path, name: str = "Demo Project"
+):
     document = controller.create_project(name, tmp_path)
     assert controller.main_window is not None
     qtbot.addWidget(controller.main_window)
@@ -64,9 +66,7 @@ def _open_created_project(controller: StudioController, qtbot, tmp_path: Path, n
 
 
 def _list_widget_text(list_widget: QListWidget) -> str:
-    return "\n".join(
-        list_widget.item(index).text() for index in range(list_widget.count())
-    )
+    return "\n".join(list_widget.item(index).text() for index in range(list_widget.count()))
 
 
 def _find_profile_row(dialog: ConditionTemplateManagerDialog, profile_id: str) -> int:
@@ -720,14 +720,18 @@ def test_manage_condition_templates_add_edit_duplicate_delete_round_trip(
         editor.profile_id_edit.setText("custom-profile")
         editor.display_name_edit.setText("Custom Profile")
         editor.description_edit.setText("Custom profile for GUI lifecycle test.")
-        editor.duty_cycle_combo.setCurrentIndex(editor.duty_cycle_combo.findData(DutyCycleMode.BLANK_50))
+        editor.duty_cycle_combo.setCurrentIndex(
+            editor.duty_cycle_combo.findData(DutyCycleMode.BLANK_50)
+        )
         editor.sequence_count_spin.setValue(2)
         editor.oddball_cycles_spin.setValue(120)
         editor.preferred_refresh_enabled_checkbox.setChecked(True)
         editor.preferred_refresh_spin.setValue(120.0)
         editor.fixation_enabled_checkbox.setChecked(True)
         editor.accuracy_enabled_checkbox.setChecked(True)
-        editor.target_count_mode_combo.setCurrentIndex(editor.target_count_mode_combo.findData("fixed"))
+        editor.target_count_mode_combo.setCurrentIndex(
+            editor.target_count_mode_combo.findData("fixed")
+        )
         editor.changes_per_sequence_spin.setValue(5)
         editor.target_duration_spin.setValue(300)
         editor.min_gap_spin.setValue(900)
@@ -806,7 +810,10 @@ def test_create_project_flow_scaffolds_project_and_opens_main_window(
     assert window.isVisible()
     assert document.project_root.name == "visual-oddball"
     assert (document.project_root / "project.json").is_file()
-    assert window.setup_dashboard_page.project_overview_editor.project_name_edit.text() == "Visual Oddball"
+    assert (
+        window.setup_dashboard_page.project_overview_editor.project_name_edit.text()
+        == "Visual Oddball"
+    )
 
 
 def test_open_existing_project_populates_gui_correctly(
@@ -820,8 +827,15 @@ def test_open_existing_project_populates_gui_correctly(
     assert controller.main_window is not None
     qtbot.addWidget(controller.main_window)
 
-    assert controller.main_window.setup_dashboard_page.project_overview_editor.project_name_edit.text() == "Opened Project"
-    assert controller.main_window.setup_dashboard_page.project_overview_editor.project_root_value.text().endswith("opened-project")
+    assert (
+        controller.main_window.setup_dashboard_page.project_overview_editor.project_name_edit.text()
+        == "Opened Project"
+    )
+    assert (
+        controller.main_window.setup_dashboard_page.project_overview_editor.project_root_value.text().endswith(
+            "opened-project"
+        )
+    )
 
 
 def test_home_tab_is_first_and_existing_tabs_remain_usable(
@@ -978,7 +992,9 @@ def test_primary_tabs_fit_default_window_without_page_level_scrollbars(
     for page, scroll_area in page_specs:
         window.main_tabs.setCurrentWidget(page)
         QApplication.processEvents()
-        qtbot.waitUntil(lambda scroll_area=scroll_area: scroll_area.verticalScrollBar().maximum() <= 1)
+        qtbot.waitUntil(
+            lambda scroll_area=scroll_area: scroll_area.verticalScrollBar().maximum() <= 1
+        )
         assert scroll_area.verticalScrollBar().maximum() <= 1
 
 
@@ -993,8 +1009,14 @@ def test_conditions_tab_uses_horizontal_master_detail_shell(
     assert window.main_tabs.indexOf(conditions_page) == 2
     assert window.main_tabs.tabText(2) == "Conditions"
     assert conditions_page.shell.layout_mode == "single_column"
-    assert conditions_page.master_detail_layout.itemAt(0).widget() is conditions_page.condition_list_card
-    assert conditions_page.master_detail_layout.itemAt(1).widget() is conditions_page.condition_detail_stack
+    assert (
+        conditions_page.master_detail_layout.itemAt(0).widget()
+        is conditions_page.condition_list_card
+    )
+    assert (
+        conditions_page.master_detail_layout.itemAt(1).widget()
+        is conditions_page.condition_detail_stack
+    )
     detail_stack_layout = conditions_page.condition_detail_stack.layout()
     assert detail_stack_layout is not None
     assert detail_stack_layout.itemAt(0).widget() is conditions_page.condition_editor_card
@@ -1191,7 +1213,9 @@ def test_dedicated_tab_edits_refresh_setup_dashboard_controls(
     )
     assert dashboard.fixation_settings_editor.target_count_mode_combo.currentData() == "fixed"
     assert dashboard.fixation_settings_editor.changes_per_sequence_spin.value() == 7
-    assert dashboard.runtime_settings_editor.refresh_hz_spin.value() == pytest.approx(75.0, abs=0.01)
+    assert dashboard.runtime_settings_editor.refresh_hz_spin.value() == pytest.approx(
+        75.0, abs=0.01
+    )
     assert dashboard.runtime_settings_editor.serial_port_edit.text() == "COM4"
     assert dashboard.runtime_settings_editor.serial_baudrate_spin.value() == 230400
     assert dashboard.runtime_settings_editor.serial_baudrate_spin.isEnabled() is False
@@ -1290,7 +1314,9 @@ def test_home_header_updates_when_project_name_changes(
     assert header_label.parent() is window.home_page.page_container.header_widget
     assert header_label.text() == "Home Header Project"
 
-    window.setup_dashboard_page.project_overview_editor.project_name_edit.setText("Renamed Header Project")
+    window.setup_dashboard_page.project_overview_editor.project_name_edit.setText(
+        "Renamed Header Project"
+    )
     window.setup_dashboard_page.project_overview_editor.project_name_edit.editingFinished.emit()
 
     qtbot.waitUntil(lambda: header_label.text() == "Renamed Header Project")
@@ -1396,7 +1422,9 @@ def test_main_tabs_use_equal_width_tab_geometry(
     assert isinstance(tab_bar, AnimatedTabBar)
 
     qtbot.waitUntil(lambda: tab_bar.count() == window.main_tabs.count())
-    qtbot.waitUntil(lambda: all(tab_bar.tabRect(index).width() > 0 for index in range(tab_bar.count())))
+    qtbot.waitUntil(
+        lambda: all(tab_bar.tabRect(index).width() > 0 for index in range(tab_bar.count()))
+    )
 
     tab_widths = [tab_bar.tabRect(index).width() for index in range(tab_bar.count())]
     hint_widths = [tab_bar.tabSizeHint(index).width() for index in range(tab_bar.count())]
@@ -1493,7 +1521,7 @@ def test_no_standalone_preflight_controls_are_exposed(
     menu_labels = [
         action.text()
         for menu_action in window.menuBar().actions()
-        for action in ((menu_action.menu().actions() if menu_action.menu() is not None else []))
+        for action in (menu_action.menu().actions() if menu_action.menu() is not None else [])
         if action.text()
     ]
     assert "Settings..." in menu_labels
@@ -1566,7 +1594,10 @@ def test_home_overview_panels_show_project_session_and_runtime_metadata(
     assert "Condition Template" in project_labels
     assert window.setup_dashboard_page.project_overview_editor.condition_profile_combo is not None
     assert window.setup_dashboard_page.project_overview_editor.manage_templates_button is not None
-    assert window.setup_dashboard_page.project_overview_editor.apply_profile_to_conditions_button is not None
+    assert (
+        window.setup_dashboard_page.project_overview_editor.apply_profile_to_conditions_button
+        is not None
+    )
 
     assert condition_count_label.text() == "1"
     assert block_count_label.text() == "2"
@@ -1580,11 +1611,15 @@ def test_home_overview_panels_show_project_session_and_runtime_metadata(
     assert template_label.text() == "No template selected"
     assert description_label.text() == "No description set yet."
 
-    profile_index = window.setup_dashboard_page.project_overview_editor.condition_profile_combo.findData(
-        SIXTY_HZ_BLANK_FIXATION_PROFILE_ID
+    profile_index = (
+        window.setup_dashboard_page.project_overview_editor.condition_profile_combo.findData(
+            SIXTY_HZ_BLANK_FIXATION_PROFILE_ID
+        )
     )
     assert profile_index >= 0
-    window.setup_dashboard_page.project_overview_editor.condition_profile_combo.setCurrentIndex(profile_index)
+    window.setup_dashboard_page.project_overview_editor.condition_profile_combo.setCurrentIndex(
+        profile_index
+    )
     QApplication.processEvents()
     assert template_label.text() == "Default Template 2: 83ms blank"
     assert SIXTY_HZ_BLANK_FIXATION_PROFILE_ID not in template_label.text()
@@ -1605,9 +1640,16 @@ def test_background_color_control_is_run_tab_presets_only(
 ) -> None:
     _, window = _open_created_project(controller, qtbot, tmp_path, "Runtime Background Presets")
 
-    assert window.setup_dashboard_page.project_overview_editor.findChild(QWidget, "background_color_edit") is None
+    assert (
+        window.setup_dashboard_page.project_overview_editor.findChild(
+            QWidget, "background_color_edit"
+        )
+        is None
+    )
 
-    runtime_background_combo = window.run_page.findChild(QComboBox, "runtime_background_color_combo")
+    runtime_background_combo = window.run_page.findChild(
+        QComboBox, "runtime_background_color_combo"
+    )
     assert runtime_background_combo is not None
     assert runtime_background_combo.count() == 2
     assert runtime_background_combo.itemText(0) == "Black"
@@ -1633,7 +1675,9 @@ def test_run_page_refresh_normalizes_legacy_background_to_black_and_marks_dirty(
     legacy_display_settings = legacy_project.settings.display.model_copy(
         update={"background_color": "#123456"}
     )
-    legacy_settings = legacy_project.settings.model_copy(update={"display": legacy_display_settings})
+    legacy_settings = legacy_project.settings.model_copy(
+        update={"display": legacy_display_settings}
+    )
     save_project_file(
         legacy_project.model_copy(update={"settings": legacy_settings}),
         project_file_path,
@@ -1698,8 +1742,9 @@ def test_run_page_readiness_and_launch_feedback_is_updated_on_launch(
 
     assert captures["project_root"] == window.document.project_root
     qtbot.waitUntil(
-        lambda: "status: launch checks passed"
-        in window.run_page.summary_text.toPlainText().lower(),
+        lambda: (
+            "status: launch checks passed" in window.run_page.summary_text.toPlainText().lower()
+        ),
     )
 
 
@@ -1730,7 +1775,10 @@ def test_project_description_typing_round_trips_without_cursor_reset(
     reopened_window = controller.main_window
     reopened_project = load_project_file(reopened_window.document.project_file_path)
 
-    assert reopened_window.setup_dashboard_page.project_overview_editor.project_description_edit.toPlainText() == typed_text
+    assert (
+        reopened_window.setup_dashboard_page.project_overview_editor.project_description_edit.toPlainText()
+        == typed_text
+    )
     assert reopened_project.meta.description == typed_text
 
 
@@ -1883,13 +1931,21 @@ def test_fixation_cross_settings_page_exposes_accuracy_task_controls(
 
     window.main_tabs.setCurrentWidget(window.setup_dashboard_page)
     page = window.setup_dashboard_page.fixation_settings_editor
-    assert page.findChild(type(page.fixation_accuracy_checkbox), "fixation_accuracy_checkbox") is not None
+    assert (
+        page.findChild(type(page.fixation_accuracy_checkbox), "fixation_accuracy_checkbox")
+        is not None
+    )
     assert page.findChild(type(page.target_count_mode_combo), "target_count_mode_combo") is not None
     assert page.findChild(type(page.target_count_min_spin), "target_count_min_spin") is not None
     assert page.findChild(type(page.target_count_max_spin), "target_count_max_spin") is not None
-    assert page.findChild(type(page.no_repeat_count_checkbox), "no_immediate_repeat_count_checkbox") is not None
+    assert (
+        page.findChild(type(page.no_repeat_count_checkbox), "no_immediate_repeat_count_checkbox")
+        is not None
+    )
     assert page.findChild(type(page.response_key_edit), "response_key_edit") is not None
-    assert page.findChild(type(page.response_window_spin), "response_window_seconds_spin") is not None
+    assert (
+        page.findChild(type(page.response_window_spin), "response_window_seconds_spin") is not None
+    )
 
 
 def test_session_structure_rows_toggle_with_inter_condition_mode(
@@ -1937,7 +1993,9 @@ def test_fixation_color_change_mode_toggles_relevant_controls(
     assert not page.target_count_max_spin.isEnabled()
     assert not page.no_repeat_count_checkbox.isEnabled()
 
-    page.target_count_mode_combo.setCurrentIndex(page.target_count_mode_combo.findData("randomized"))
+    page.target_count_mode_combo.setCurrentIndex(
+        page.target_count_mode_combo.findData("randomized")
+    )
     QApplication.processEvents()
     assert not page.changes_per_sequence_spin.isEnabled()
     assert page.target_count_min_spin.isEnabled()
@@ -2148,11 +2206,15 @@ def test_new_condition_uses_project_condition_defaults(
 ) -> None:
     _, window = _open_created_project(controller, qtbot, tmp_path, "Condition Defaults")
 
-    profile_index = window.setup_dashboard_page.project_overview_editor.condition_profile_combo.findData(
-        SIXTY_HZ_BLANK_FIXATION_PROFILE_ID
+    profile_index = (
+        window.setup_dashboard_page.project_overview_editor.condition_profile_combo.findData(
+            SIXTY_HZ_BLANK_FIXATION_PROFILE_ID
+        )
     )
     assert profile_index >= 0
-    window.setup_dashboard_page.project_overview_editor.condition_profile_combo.setCurrentIndex(profile_index)
+    window.setup_dashboard_page.project_overview_editor.condition_profile_combo.setCurrentIndex(
+        profile_index
+    )
 
     qtbot.mouseClick(window.conditions_page.add_condition_button, Qt.MouseButton.LeftButton)
     condition_id = window.conditions_page.selected_condition_id()
@@ -2193,11 +2255,15 @@ def test_apply_condition_template_profile_to_all_conditions_standardizes_existin
         duty_cycle_mode=DutyCycleMode.CONTINUOUS,
     )
 
-    profile_index = window.setup_dashboard_page.project_overview_editor.condition_profile_combo.findData(
-        SIXTY_HZ_BLANK_FIXATION_PROFILE_ID
+    profile_index = (
+        window.setup_dashboard_page.project_overview_editor.condition_profile_combo.findData(
+            SIXTY_HZ_BLANK_FIXATION_PROFILE_ID
+        )
     )
     assert profile_index >= 0
-    window.setup_dashboard_page.project_overview_editor.condition_profile_combo.setCurrentIndex(profile_index)
+    window.setup_dashboard_page.project_overview_editor.condition_profile_combo.setCurrentIndex(
+        profile_index
+    )
 
     first_before = window.document.get_condition(first_condition_id)
     second_before = window.document.get_condition(second_condition_id)
@@ -2306,9 +2372,12 @@ def test_assets_preprocessing_import_and_materialize_updates_status(
     qtbot.mouseClick(window.assets_page.import_source_button, Qt.MouseButton.LeftButton)
     qtbot.mouseClick(window.assets_page.materialize_button, Qt.MouseButton.LeftButton)
 
+    qtbot.waitUntil(
+        lambda: StimulusVariant.GRAYSCALE
+        in window.document.project.stimulus_sets[0].available_variants
+    )
     assert window.document.manifest is not None
     assert "Catalog status:" in window.assets_page.assets_status_text.toPlainText()
-    assert StimulusVariant.GRAYSCALE in window.document.project.stimulus_sets[0].available_variants
 
 
 def test_assets_import_validation_failure_is_reported(
@@ -2449,7 +2518,7 @@ def test_launch_action_wires_runtime_launcher_with_serial_settings(
             progress_events.append("closed")
 
     def _fake_launch(project_root, session_plan, participant_number, launch_settings):
-        assert progress_events == ["created", "shown", "closed"]
+        assert progress_events == ["created", "shown"]
         captures["project_root"] = project_root
         captures["session_plan"] = session_plan
         captures["participant_number"] = participant_number
@@ -2493,14 +2562,19 @@ def test_launch_action_wires_runtime_launcher_with_serial_settings(
     window.document.update_trigger_settings(baudrate=57600)
     window.run_page.display_index_edit.setText("1")
     assert window.run_page.serial_baudrate_spin.isEnabled() is False
-    assert window.setup_dashboard_page.runtime_settings_editor.serial_baudrate_spin.isEnabled() is False
+    assert (
+        window.setup_dashboard_page.runtime_settings_editor.serial_baudrate_spin.isEnabled()
+        is False
+    )
     assert window.run_page.fullscreen_checkbox.isChecked() is True
 
     qtbot.mouseClick(window.run_page.launch_button, Qt.MouseButton.LeftButton)
 
+    qtbot.waitUntil(lambda: "launch_settings" in captures)
     launch_settings = captures["launch_settings"]
     assert len(progress_dialogs) == 1
     progress_dialog = progress_dialogs[0]
+    qtbot.waitUntil(lambda: progress_dialog.closed)
     assert prompt_calls == 1
     assert captures["participant_number"] == participant_number
     assert captures["project_root"] == window.document.project_root
@@ -2522,7 +2596,10 @@ def test_launch_action_wires_runtime_launcher_with_serial_settings(
     assert launch_settings.strict_timing is True
     assert launch_settings.strict_timing_warmup is False
     assert launch_settings.timing_miss_threshold_multiplier == 4.0
-    assert f"participant number: {participant_number}" in window.run_page.summary_text.toPlainText().lower()
+    assert (
+        f"participant number: {participant_number}"
+        in window.run_page.summary_text.toPlainText().lower()
+    )
     assert "runtime launch completed" in window.run_page.summary_text.toPlainText().lower()
 
 
@@ -2585,6 +2662,7 @@ def test_launch_after_preview_reprepares_once_per_click(
 
     assert len(prepare_calls) == 1
     assert len(preflight_session_ids) == 1
+    qtbot.waitUntil(lambda: bool(launched_session_ids))
     assert launched_session_ids == preflight_session_ids
     assert "runtime launch completed" in window.run_page.summary_text.toPlainText().lower()
 
@@ -2655,6 +2733,7 @@ def test_launch_action_surfaces_abort_reason_when_runtime_aborts(
 
     qtbot.mouseClick(window.run_page.launch_button, Qt.MouseButton.LeftButton)
 
+    qtbot.waitUntil(lambda: bool(warning_payloads))
     summary_text = window.run_page.summary_text.toPlainText().lower()
     assert info_calls == 0
     assert len(warning_payloads) == 1
@@ -2732,8 +2811,12 @@ def test_launch_action_closes_progress_dialog_when_runtime_launch_raises(
 
     qtbot.mouseClick(window.run_page.launch_button, Qt.MouseButton.LeftButton)
 
+    qtbot.waitUntil(lambda: bool(captured_errors))
     assert captured_errors == [("Launch Error", "Intentional launch failure.")]
-    assert events == ["created", "shown", "closed", "launch_called", "error_dialog"]
+    assert events[0:2] == ["created", "shown"]
+    assert "launch_called" in events
+    assert "closed" in events
+    assert "error_dialog" in events
 
 
 def test_launch_action_duplicate_participant_yes_still_launches(
@@ -2782,7 +2865,9 @@ def test_launch_action_duplicate_participant_yes_still_launches(
         ),
     )
     monkeypatch.setattr(window.run_page, "_prompt_participant_number", _fake_prompt)
-    monkeypatch.setattr(window.document, "has_completed_session_for_participant", lambda value: value == "00011")
+    monkeypatch.setattr(
+        window.document, "has_completed_session_for_participant", lambda value: value == "00011"
+    )
     monkeypatch.setattr("fpvs_studio.gui.main_window.QMessageBox.question", _fake_question)
     monkeypatch.setattr("fpvs_studio.gui.document.launch_session", _fake_launch)
     monkeypatch.setattr(
@@ -2793,6 +2878,7 @@ def test_launch_action_duplicate_participant_yes_still_launches(
     qtbot.mouseClick(window.run_page.launch_button, Qt.MouseButton.LeftButton)
 
     assert prompt_calls == 1
+    qtbot.waitUntil(lambda: "participant_number" in captures)
     assert captures["participant_number"] == "00011"
     assert len(warning_messages) == 1
     assert "already completed this study" in warning_messages[0]
@@ -2845,7 +2931,9 @@ def test_launch_action_duplicate_participant_no_reprompts_until_new_value(
         ),
     )
     monkeypatch.setattr(window.run_page, "_prompt_participant_number", _fake_prompt)
-    monkeypatch.setattr(window.document, "has_completed_session_for_participant", lambda value: value == "00011")
+    monkeypatch.setattr(
+        window.document, "has_completed_session_for_participant", lambda value: value == "00011"
+    )
     monkeypatch.setattr("fpvs_studio.gui.main_window.QMessageBox.question", _fake_question)
     monkeypatch.setattr("fpvs_studio.gui.document.launch_session", _fake_launch)
     monkeypatch.setattr(
@@ -2857,6 +2945,7 @@ def test_launch_action_duplicate_participant_no_reprompts_until_new_value(
 
     assert prompt_calls == 3
     assert len(warning_messages) == 2
+    qtbot.waitUntil(lambda: "participant_number" in captures)
     assert captures["participant_number"] == "00012"
 
 
@@ -2874,7 +2963,9 @@ def test_launch_action_cancelled_participant_prompt_aborts_launch(
     def _fake_launch(*args, **kwargs):
         nonlocal launch_calls
         launch_calls += 1
-        raise AssertionError("launch_session should not be called when participant entry is cancelled")
+        raise AssertionError(
+            "launch_session should not be called when participant entry is cancelled"
+        )
 
     monkeypatch.setattr(
         window.document,
@@ -2935,7 +3026,9 @@ def test_unsaved_changes_state_and_guard(
     assert window.document.dirty is False
     assert not window.windowTitle().startswith("*")
 
-    window.setup_dashboard_page.project_overview_editor.project_name_edit.setText("Dirty Project Updated")
+    window.setup_dashboard_page.project_overview_editor.project_name_edit.setText(
+        "Dirty Project Updated"
+    )
     window.setup_dashboard_page.project_overview_editor.project_name_edit.editingFinished.emit()
     assert window.document.dirty is True
 
@@ -2950,4 +3043,3 @@ def test_unsaved_changes_state_and_guard(
         lambda *args, **kwargs: QMessageBox.StandardButton.Discard,
     )
     assert window.maybe_save_changes() is True
-

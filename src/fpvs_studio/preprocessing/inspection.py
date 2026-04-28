@@ -1,6 +1,7 @@
-"""Image inspection helpers for preprocessing source directories.
-It measures hashes, formats, and resolutions so stimulus-set summaries and manifest records stay reproducible before compilation.
-The module owns source-asset facts only; it does not choose session order, derive RunSpec timing, or render anything."""
+"""Image inspection helpers for preprocessing source directories. It measures hashes,
+formats, and resolutions so stimulus-set summaries and manifest records stay
+reproducible before compilation. The module owns source-asset facts only; it does not
+choose session order, derive RunSpec timing, or render anything."""
 
 from __future__ import annotations
 
@@ -46,9 +47,7 @@ def inspect_source_directory(
     unsupported_files = [
         path.name for path in files if path.suffix.lower() not in SUPPORTED_SOURCE_SUFFIXES
     ]
-    supported_files = [
-        path for path in files if path.suffix.lower() in SUPPORTED_SOURCE_SUFFIXES
-    ]
+    supported_files = [path for path in files if path.suffix.lower() in SUPPORTED_SOURCE_SUFFIXES]
 
     if strict and unsupported_files:
         raise ImageInspectionError(
@@ -79,11 +78,11 @@ def inspect_source_directory(
 
     mixed_resolution = len(resolutions) > 1
     if strict and mixed_resolution:
-        raise ImageInspectionError(
-            "Stimulus sets must contain images with identical resolution."
-        )
+        raise ImageInspectionError("Stimulus sets must contain images with identical resolution.")
 
-    first_resolution = inspected_files[0].resolution if inspected_files and not mixed_resolution else None
+    first_resolution = (
+        inspected_files[0].resolution if inspected_files and not mixed_resolution else None
+    )
     return StimulusSetInspectionSummary(
         source_dir=Path(relative_prefix).as_posix(),
         image_count=len(inspected_files),

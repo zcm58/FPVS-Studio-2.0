@@ -1,6 +1,7 @@
-"""Public engine-neutral core surface for models, compilation, and templates.
-It re-exports editable ProjectFile state, compiled RunSpec and SessionPlan contracts, and execution-result schemas for downstream layers.
-No GUI, PsychoPy, or hardware behavior belongs here; callers consume neutral contracts only."""
+"""Public engine-neutral core surface for models, compilation, and templates. It re-exports
+editable ProjectFile state, compiled RunSpec and SessionPlan contracts, and execution-
+result schemas for downstream layers. No GUI, PsychoPy, or hardware behavior belongs
+here; callers consume neutral contracts only."""
 
 from fpvs_studio.core.compiler import CompileError, compile_run_spec, compile_session_plan
 from fpvs_studio.core.execution import (

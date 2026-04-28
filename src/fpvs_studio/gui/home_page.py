@@ -48,7 +48,7 @@ class SetupDashboardPage(QWidget):
         manage_condition_templates: Callable[[], list[ConditionTemplateProfile]],
         fullscreen_state_getter: Callable[[], bool] | None = None,
         fullscreen_state_setter: Callable[[bool], None] | None = None,
-        parent=None,
+        parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self._document = document
@@ -72,10 +72,12 @@ class SetupDashboardPage(QWidget):
             object_name="dashboard_attention_card",
             parent=self,
         )
-        self.setup_summary_card.layout().setContentsMargins(12, 10, 12, 10)
-        self.setup_summary_card.layout().setSpacing(8)
+        self.setup_summary_card.card_layout.setContentsMargins(12, 10, 12, 10)
+        self.setup_summary_card.card_layout.setSpacing(8)
         self.setup_summary_card.body_layout.setSpacing(6)
-        self.setup_summary_badge = StatusBadgeLabel("Checking readiness...", self.setup_summary_card)
+        self.setup_summary_badge = StatusBadgeLabel(
+            "Checking readiness...", self.setup_summary_card
+        )
         self.setup_summary_badge.setObjectName("dashboard_attention_badge")
         self.setup_summary_note = QLabel(self.setup_summary_card)
         self.setup_summary_note.setObjectName("dashboard_attention_note")
@@ -169,9 +171,7 @@ class SetupDashboardPage(QWidget):
             self._document,
             refresh_hz=self.runtime_settings_editor.current_refresh_hz(),
         )
-        issue_count = sum(
-            1 for item in report.readiness_items if item.startswith("[ACTION]")
-        )
+        issue_count = sum(1 for item in report.readiness_items if item.startswith("[ACTION]"))
         self.setup_summary_badge.set_state(report.badge_state, report.status_label)
         self.setup_summary_count.setText(f"Blockers: {issue_count}")
         first_blocker = next(
@@ -196,7 +196,7 @@ class HomePage(QWidget):
         document: ProjectDocument,
         *,
         load_condition_template_profiles: Callable[[], list[ConditionTemplateProfile]],
-        parent=None,
+        parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self._document = document
@@ -284,8 +284,8 @@ class HomePage(QWidget):
         self._add_summary_row(project_layout, "Description", self.project_description_value)
         self._add_summary_row(project_layout, "Template", self.project_template_value)
         self._add_summary_row(project_layout, "Root Path", self.project_root_value)
-        project_card.layout().setContentsMargins(12, 10, 12, 10)
-        project_card.layout().setSpacing(6)
+        project_card.card_layout.setContentsMargins(12, 10, 12, 10)
+        project_card.card_layout.setSpacing(6)
         project_card.body_layout.setSpacing(6)
         project_card.body_layout.addLayout(project_layout)
 
@@ -315,8 +315,8 @@ class HomePage(QWidget):
         self._add_summary_row(session_layout, "Order Strategy", self.session_randomization_value)
         self._add_summary_row(session_layout, "Fixation Task", self.fixation_task_value)
         self._add_summary_row(session_layout, "Accuracy Task", self.accuracy_task_value)
-        session_card.layout().setContentsMargins(12, 10, 12, 10)
-        session_card.layout().setSpacing(6)
+        session_card.card_layout.setContentsMargins(12, 10, 12, 10)
+        session_card.card_layout.setSpacing(6)
         session_card.body_layout.setSpacing(6)
         session_card.body_layout.addLayout(session_layout)
 
@@ -337,8 +337,8 @@ class HomePage(QWidget):
             object_name="home_status_card",
             parent=self,
         )
-        status_card.layout().setContentsMargins(12, 10, 12, 10)
-        status_card.layout().setSpacing(8)
+        status_card.card_layout.setContentsMargins(12, 10, 12, 10)
+        status_card.card_layout.setSpacing(8)
         status_card.body_layout.setSpacing(PAGE_SECTION_GAP)
         status_card.body_layout.addWidget(self.launch_status_label)
         status_card.body_layout.addWidget(self.launch_status_summary)
@@ -494,8 +494,7 @@ class HomePage(QWidget):
         if profile_id is None:
             return "No template selected"
         profiles_by_id = {
-            profile.profile_id: profile
-            for profile in self._load_condition_template_profiles()
+            profile.profile_id: profile for profile in self._load_condition_template_profiles()
         }
         profile = profiles_by_id.get(profile_id)
         if profile is None:

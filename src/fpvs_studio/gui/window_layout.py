@@ -40,7 +40,7 @@ class PageContainer(QWidget):
         self,
         *,
         width_preset: str = "wide",
-        parent=None,
+        parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         if width_preset not in _PAGE_WIDTH_PRESETS:
@@ -107,7 +107,9 @@ class PageContainer(QWidget):
         footer_layout.addWidget(self.footer_label, 1)
 
         self._outer_layout = QVBoxLayout(self)
-        self._outer_layout.setContentsMargins(PAGE_MARGIN_X, PAGE_MARGIN_Y, PAGE_MARGIN_X, PAGE_MARGIN_Y)
+        self._outer_layout.setContentsMargins(
+            PAGE_MARGIN_X, PAGE_MARGIN_Y, PAGE_MARGIN_X, PAGE_MARGIN_Y
+        )
         self._outer_layout.setSpacing(PAGE_SECTION_GAP)
         self._outer_layout.addWidget(self.header_widget)
         self._outer_layout.addWidget(self.scroll_area, 1)
@@ -146,7 +148,7 @@ class NonHomePageShell(QWidget):
         subtitle: str,
         layout_mode: str = "single_column",
         width_preset: str = "wide",
-        parent=None,
+        parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         if layout_mode not in {"single_column", "three_column"}:
@@ -203,33 +205,25 @@ class NonHomePageShell(QWidget):
         layout.addWidget(self.page_container)
 
         self.setStyleSheet(
-            """
-            QLabel#non_home_shell_title {
+            f"""
+            QLabel#non_home_shell_title {{
                 font-size: 24px;
                 font-weight: 700;
-                color: %s;
-            }
-            QLabel#non_home_shell_subtitle {
-                color: %s;
+                color: {COLOR_TEXT_PRIMARY};
+            }}
+            QLabel#non_home_shell_subtitle {{
+                color: {COLOR_TEXT_SECONDARY};
                 font-size: 13px;
-            }
-            QFrame#non_home_shell_footer_strip {
-                border: 1px solid %s;
-                border-radius: %spx;
-                background-color: %s;
-            }
-            QLabel#non_home_shell_footer_label {
-                color: %s;
-            }
+            }}
+            QFrame#non_home_shell_footer_strip {{
+                border: 1px solid {COLOR_BORDER_SOFT};
+                border-radius: {CARD_CORNER_RADIUS}px;
+                background-color: {COLOR_SURFACE};
+            }}
+            QLabel#non_home_shell_footer_label {{
+                color: {COLOR_TEXT_SECONDARY};
+            }}
             """
-            % (
-                COLOR_TEXT_PRIMARY,
-                COLOR_TEXT_SECONDARY,
-                COLOR_BORDER_SOFT,
-                CARD_CORNER_RADIUS,
-                COLOR_SURFACE,
-                COLOR_TEXT_SECONDARY,
-            )
         )
 
     def add_content_widget(self, widget: QWidget, *, stretch: int = 0) -> None:
@@ -295,7 +289,7 @@ class SectionCard(QFrame):
         subtitle: str | None = None,
         tooltip_text: str | None = None,
         object_name: str = "section_card",
-        parent=None,
+        parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self.setObjectName(object_name)
@@ -311,6 +305,7 @@ class SectionCard(QFrame):
         self.title_label.setProperty("sectionCardRole", "title")
         header_layout.addWidget(self.title_label)
 
+        self.tooltip_badge: QLabel | None = None
         if tooltip_text:
             self.tooltip_badge = QLabel("i", self)
             self.tooltip_badge.setObjectName("section_card_tooltip_badge")
@@ -318,63 +313,50 @@ class SectionCard(QFrame):
             self.tooltip_badge.setToolTip(tooltip_text)
             self.tooltip_badge.setFixedSize(16, 16)
             header_layout.addWidget(self.tooltip_badge)
-        else:
-            self.tooltip_badge = None
 
         header_layout.addStretch(1)
 
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(CARD_PADDING_X, CARD_PADDING_Y, CARD_PADDING_X, CARD_PADDING_Y)
-        layout.setSpacing(PAGE_SECTION_GAP)
-        layout.addLayout(header_layout)
+        self.card_layout = QVBoxLayout(self)
+        self.card_layout.setContentsMargins(
+            CARD_PADDING_X, CARD_PADDING_Y, CARD_PADDING_X, CARD_PADDING_Y
+        )
+        self.card_layout.setSpacing(PAGE_SECTION_GAP)
+        self.card_layout.addLayout(header_layout)
 
+        self.subtitle_label: QLabel | None = None
         if subtitle:
             self.subtitle_label = QLabel(subtitle, self)
             self.subtitle_label.setProperty("sectionCardRole", "subtitle")
             self.subtitle_label.setWordWrap(True)
-            layout.addWidget(self.subtitle_label)
-        else:
-            self.subtitle_label = None
+            self.card_layout.addWidget(self.subtitle_label)
 
         self.body_layout = QVBoxLayout()
         self.body_layout.setContentsMargins(0, 0, 0, 0)
         self.body_layout.setSpacing(PAGE_SECTION_GAP)
-        layout.addLayout(self.body_layout)
+        self.card_layout.addLayout(self.body_layout)
 
         self.setStyleSheet(
-            """
-            QFrame[sectionCard="true"] {
-                border: 1px solid %s;
-                border-radius: %spx;
-                background-color: %s;
-            }
-            QLabel[sectionCardRole="title"] {
+            f"""
+            QFrame[sectionCard="true"] {{
+                border: 1px solid {COLOR_BORDER};
+                border-radius: {CARD_CORNER_RADIUS}px;
+                background-color: {COLOR_SURFACE};
+            }}
+            QLabel[sectionCardRole="title"] {{
                 font-size: 15px;
                 font-weight: 700;
-                color: %s;
-            }
-            QLabel[sectionCardRole="subtitle"] {
-                color: %s;
-            }
-            QLabel#section_card_tooltip_badge {
-                border: 1px solid %s;
+                color: {COLOR_TEXT_PRIMARY};
+            }}
+            QLabel[sectionCardRole="subtitle"] {{
+                color: {COLOR_TEXT_SECONDARY};
+            }}
+            QLabel#section_card_tooltip_badge {{
+                border: 1px solid {COLOR_BORDER_SOFT};
                 border-radius: 8px;
-                background-color: %s;
-                color: %s;
+                background-color: {COLOR_SURFACE_ALT};
+                color: {COLOR_TEXT_PRIMARY};
                 font-size: 11px;
                 font-weight: 700;
-            }
+            }}
             """
-            % (
-                COLOR_BORDER,
-                CARD_CORNER_RADIUS,
-                COLOR_SURFACE,
-                COLOR_TEXT_PRIMARY,
-                COLOR_TEXT_SECONDARY,
-                COLOR_BORDER_SOFT,
-                COLOR_SURFACE_ALT,
-                COLOR_TEXT_PRIMARY,
-            )
         )
-
-

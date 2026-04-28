@@ -76,7 +76,7 @@ def set_truncated_label_text(label: QLabel, text: str, *, max_length: int) -> No
 class StatusBadgeLabel(QLabel):
     """Small badge-style label used for readiness and summary states."""
 
-    def __init__(self, text: str = "", parent=None) -> None:
+    def __init__(self, text: str = "", parent: QWidget | None = None) -> None:
         super().__init__(text, parent)
         self.setObjectName("status_badge_label")
         self.setProperty("statusBadge", "true")
@@ -94,11 +94,14 @@ class StatusBadgeLabel(QLabel):
 class PathValueLabel(QLabel):
     """Selectable label that shows a shortened path and preserves the full path tooltip."""
 
-    def __init__(self, text: str | QWidget = "", parent=None) -> None:
-        if isinstance(text, QWidget) and parent is None:
-            parent = text
-            text = ""
-        super().__init__(text, parent)
+    def __init__(self, text: str | QWidget = "", parent: QWidget | None = None) -> None:
+        if isinstance(text, QWidget):
+            if parent is None:
+                parent = text
+            label_text = ""
+        else:
+            label_text = text
+        super().__init__(label_text, parent)
         self.setObjectName("path_value_label")
         self.setProperty("pathValue", "true")
         self.setWordWrap(True)

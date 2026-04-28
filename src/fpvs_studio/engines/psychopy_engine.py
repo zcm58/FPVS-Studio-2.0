@@ -1,18 +1,26 @@
-"""PsychoPy-backed renderer for compiled FPVS runs.
-It lazily imports PsychoPy and executes one RunSpec at a time while honoring runtime-owned transition, feedback, and trigger seams.
-This module owns presentation details only; session flow, fixation scoring, and neutral export contracts stay outside the engine."""
+"""PsychoPy-backed renderer for compiled FPVS runs. It lazily imports PsychoPy and executes
+one RunSpec at a time while honoring runtime-owned transition, feedback, and trigger
+seams. This module owns presentation details only; session flow, fixation scoring, and
+neutral export contracts stay outside the engine."""
 
 from __future__ import annotations
 
+import sys
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-import sys
+from typing import Any
 
 from fpvs_studio.core.enums import EngineName, RunMode
-from fpvs_studio.core.execution import FrameIntervalRecord, ResponseRecord, RunExecutionSummary, RuntimeMetadata
-from fpvs_studio.core.run_spec import FixationEvent, RunSpec, StimulusEvent
+from fpvs_studio.core.execution import (
+    FrameIntervalRecord,
+    ResponseRecord,
+    RunExecutionSummary,
+    RuntimeMetadata,
+    TriggerRecord,
+)
+from fpvs_studio.core.run_spec import FixationEvent, RunSpec, StimulusEvent, TriggerEvent
 from fpvs_studio.engines.base import PresentationEngine
 from fpvs_studio.triggers.base import TriggerBackend
 
@@ -36,16 +44,16 @@ class PsychoPyEngine(PresentationEngine):
     """PsychoPy-backed presentation engine."""
 
     def __init__(self) -> None:
-        self._psychopy: object | None = None
-        self._visual: object | None = None
-        self._core: object | None = None
-        self._keyboard_module: object | None = None
-        self._window: object | None = None
-        self._keyboard: object | None = None
+        self._psychopy: Any | None = None
+        self._visual: Any | None = None
+        self._core: Any | None = None
+        self._keyboard_module: Any | None = None
+        self._window: Any | None = None
+        self._keyboard: Any | None = None
         self._runtime_options: dict[str, object] = {}
-        self._image_stim_cache: dict[str, object] = {}
+        self._image_stim_cache: dict[str, Any] = {}
         self._aborted = False
-        self._active_run_clock: object | None = None
+        self._active_run_clock: Any | None = None
 
     @property
     def engine_id(self) -> str:
@@ -72,8 +80,8 @@ class PsychoPyEngine(PresentationEngine):
             return
 
         psychopy = self._load_psychopy()
-        visual = getattr(psychopy, "visual")
-        keyboard_module = getattr(getattr(psychopy, "hardware"), "keyboard")
+        visual = psychopy.visual
+        keyboard_module = psychopy.hardware.keyboard
 
         self._runtime_options = dict(runtime_options or {})
         test_mode = bool(self._runtime_options.get("test_mode"))
@@ -91,7 +99,7 @@ class PsychoPyEngine(PresentationEngine):
             window_kwargs["size"] = [1280, 720]
 
         self._window = visual.Window(**window_kwargs)
-        setattr(self._window, "recordFrameIntervals", True)
+        self._window.recordFrameIntervals = True
         self._keyboard = keyboard_module.Keyboard()
         self._keyboard.clearEvents()
         self._aborted = False
@@ -166,7 +174,8 @@ class PsychoPyEngine(PresentationEngine):
         warmup_intervals: list[float] = []
 
         absolute_paths = {
-            event.image_path: project_root / Path(event.image_path) for event in run_spec.stimulus_sequence
+            event.image_path: project_root / Path(event.image_path)
+            for event in run_spec.stimulus_sequence
         }
         stimuli = self._prepare_stimuli(absolute_paths)
         fixation_stim = visual.ShapeStim(
@@ -186,10 +195,10 @@ class PsychoPyEngine(PresentationEngine):
         )
         keyboard.clock.reset()
         keyboard.clearEvents()
-        setattr(window, "color", run_spec.display.background_color)
-        setattr(window, "recordFrameIntervals", True)
+        window.color = run_spec.display.background_color
+        window.recordFrameIntervals = True
         if hasattr(window, "frameIntervals"):
-            setattr(window, "frameIntervals", [])
+            window.frameIntervals = []
 
         self._active_run_clock = core.Clock()
         warmup_last_flip_time: float | None = None
@@ -216,15 +225,15 @@ class PsychoPyEngine(PresentationEngine):
                     and interval_s > timing_config.miss_threshold_s
                 ):
                     timing_first_bad_frame_index = warmup_interval_index
-                post_settle_window = (
-                    warmup_frame_index >= timing_config.warmup_settle_frames
-                )
+                post_settle_window = warmup_frame_index >= timing_config.warmup_settle_frames
                 interval_is_miss = interval_s > timing_config.miss_threshold_s
                 interval_is_severe = interval_s > timing_config.severe_miss_threshold_s
                 if warmup_strict_timing_enabled and post_settle_window and interval_is_miss:
                     warmup_miss_count += 1
-                if warmup_strict_timing_enabled and post_settle_window and (
-                    interval_is_severe or warmup_miss_count >= 2
+                if (
+                    warmup_strict_timing_enabled
+                    and post_settle_window
+                    and (interval_is_severe or warmup_miss_count >= 2)
                 ):
                     timing_strict_abort = True
                     self._aborted = True
@@ -245,7 +254,7 @@ class PsychoPyEngine(PresentationEngine):
         last_flip_time: float | None = None
         frame_intervals: list[FrameIntervalRecord] = []
         response_log: list[ResponseRecord] = []
-        trigger_log: list[object] = []
+        trigger_log: list[TriggerRecord] = []
         trigger_event_lookup = self._build_trigger_lookup(run_spec)
 
         for frame_index in range(run_spec.display.total_frames):
@@ -261,7 +270,10 @@ class PsychoPyEngine(PresentationEngine):
             stimulus_event = (
                 run_spec.stimulus_sequence[stimulus_index] if run_spec.stimulus_sequence else None
             )
-            if self._should_draw_stimulus(stimulus_event, frame_index):
+            if stimulus_event is not None and self._should_draw_stimulus(
+                stimulus_event,
+                frame_index,
+            ):
                 stimuli[stimulus_event.image_path].draw()
 
             while (
@@ -289,7 +301,9 @@ class PsychoPyEngine(PresentationEngine):
                     )
 
             flip_time = window.flip()
-            current_time_s = float(flip_time) if flip_time is not None else self._active_run_clock.getTime()
+            current_time_s = (
+                float(flip_time) if flip_time is not None else self._active_run_clock.getTime()
+            )
             if last_flip_time is not None:
                 interval_s = current_time_s - last_flip_time
                 frame_intervals.append(
@@ -417,8 +431,8 @@ class PsychoPyEngine(PresentationEngine):
     def abort(self) -> None:
         self._aborted = True
 
-    def _build_trigger_lookup(self, run_spec: RunSpec) -> dict[int, tuple[object, ...]]:
-        trigger_lookup: dict[int, list[object]] = {}
+    def _build_trigger_lookup(self, run_spec: RunSpec) -> dict[int, tuple[TriggerEvent, ...]]:
+        trigger_lookup: dict[int, list[TriggerEvent]] = {}
         for trigger_event in run_spec.trigger_events:
             trigger_lookup.setdefault(trigger_event.frame_index, []).append(trigger_event)
         return {frame_index: tuple(events) for frame_index, events in trigger_lookup.items()}
@@ -449,13 +463,15 @@ class PsychoPyEngine(PresentationEngine):
         if not fixation_events:
             return default_color
         fixation_event = fixation_events[fixation_index]
-        if fixation_event.start_frame <= frame_index < (
-            fixation_event.start_frame + fixation_event.duration_frames
+        if (
+            fixation_event.start_frame
+            <= frame_index
+            < (fixation_event.start_frame + fixation_event.duration_frames)
         ):
             return target_color
         return default_color
 
-    def _prepare_stimuli(self, absolute_paths: Mapping[str, Path]) -> dict[str, object]:
+    def _prepare_stimuli(self, absolute_paths: Mapping[str, Path]) -> dict[str, Any]:
         visual = self._require_visual()
         window = self._require_window()
         for relative_path, absolute_path in absolute_paths.items():
@@ -488,16 +504,19 @@ class PsychoPyEngine(PresentationEngine):
         width = int(size[0]) if size is not None else None
         height = int(size[1]) if size is not None else None
         monitor = getattr(window, "monitor", None)
-        monitor_name = monitor.getName() if monitor is not None and hasattr(monitor, "getName") else None
+        monitor_name = (
+            monitor.getName() if monitor is not None and hasattr(monitor, "getName") else None
+        )
         psychopy = self._load_psychopy()
+        display_index = self._runtime_options.get("display_index")
+        if not isinstance(display_index, int):
+            display_index = None
 
         return RuntimeMetadata(
             engine_name=self.engine_id,
             engine_version=getattr(psychopy, "__version__", None),
             python_version=sys.version.split()[0],
-            display_index=self._runtime_options.get("display_index")
-            if isinstance(self._runtime_options.get("display_index"), int)
-            else None,
+            display_index=display_index,
             monitor_name=monitor_name,
             screen_width_px=width,
             screen_height_px=height,
@@ -527,7 +546,9 @@ class PsychoPyEngine(PresentationEngine):
         )
         raw_warmup_frames = self._runtime_options.get("timing_warmup_frames", 240)
         warmup_frames = (
-            raw_warmup_frames if isinstance(raw_warmup_frames, int) and raw_warmup_frames >= 0 else 240
+            raw_warmup_frames
+            if isinstance(raw_warmup_frames, int) and raw_warmup_frames >= 0
+            else 240
         )
         return _TimingConfig(
             strict_timing=strict_timing,
@@ -653,17 +674,18 @@ class PsychoPyEngine(PresentationEngine):
             if countdown_seconds is not None and screen_clock.getTime() >= countdown_seconds:
                 return False
 
-    def _load_psychopy(self) -> object:
+    def _load_psychopy(self) -> Any:
         if self._psychopy is not None:
             return self._psychopy
 
         try:
-            import psychopy  # type: ignore[import-not-found]
-            from psychopy import core, visual  # type: ignore[import-not-found]
-            from psychopy.hardware import keyboard  # type: ignore[import-not-found]
+            import psychopy  # type: ignore[import-untyped]
+            from psychopy import core, visual
+            from psychopy.hardware import keyboard  # type: ignore[import-untyped]
         except ImportError as exc:  # pragma: no cover - exercised by import-boundary tests
             raise RuntimeError(
-                "PsychoPy is not installed. Install the optional 'engine' dependencies to use this engine."
+                "PsychoPy is not installed. Install the optional 'engine' "
+                "dependencies to use this engine."
             ) from exc
 
         self._psychopy = psychopy
@@ -672,20 +694,20 @@ class PsychoPyEngine(PresentationEngine):
         self._keyboard_module = keyboard
         return psychopy
 
-    def _require_core(self) -> object:
+    def _require_core(self) -> Any:
         self._load_psychopy()
         return self._core
 
-    def _require_visual(self) -> object:
+    def _require_visual(self) -> Any:
         self._load_psychopy()
         return self._visual
 
-    def _require_window(self) -> object:
+    def _require_window(self) -> Any:
         if self._window is None:
             raise RuntimeError("PsychoPy session window has not been opened.")
         return self._window
 
-    def _require_keyboard(self) -> object:
+    def _require_keyboard(self) -> Any:
         if self._keyboard is None:
             raise RuntimeError("PsychoPy keyboard has not been initialized.")
         return self._keyboard

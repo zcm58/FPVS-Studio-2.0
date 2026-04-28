@@ -35,7 +35,9 @@ def psychopy_user_dirs(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
 
 def test_psychopy_engine_can_open_and_close_session_in_test_mode() -> None:
     engine = PsychoPyEngine()
-    engine.open_session(runtime_options={"test_mode": True, "fullscreen": False, "display_index": 0})
+    engine.open_session(
+        runtime_options={"test_mode": True, "fullscreen": False, "display_index": 0}
+    )
     engine.close_session()
 
 
@@ -58,7 +60,13 @@ def test_psychopy_engine_can_execute_tiny_runspec_in_test_mode(
         summary = engine.run_condition(
             run_spec,
             sample_project_root,
-            runtime_options={"test_mode": True, "fullscreen": False, "display_index": 0},
+            runtime_options={
+                "test_mode": True,
+                "fullscreen": False,
+                "display_index": 0,
+                "strict_timing": False,
+                "strict_timing_warmup": False,
+            },
             trigger_backend=NullBackend(),
         )
     finally:

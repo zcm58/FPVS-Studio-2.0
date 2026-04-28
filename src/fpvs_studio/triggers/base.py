@@ -1,6 +1,7 @@
-"""Abstract trigger backend contract used at runtime.
-It defines the minimal send/open/close behavior that runtime and engines can depend on without embedding serial-library details in core contracts.
-The module owns hardware interface shape only; trigger event planning and logging stay in compiler and runtime."""
+"""Abstract trigger backend contract used at runtime. It defines the minimal
+send/open/close behavior that runtime and engines can depend on without embedding
+serial-library details in core contracts. The module owns hardware interface shape only;
+trigger event planning and logging stay in compiler and runtime."""
 
 from __future__ import annotations
 

@@ -1,15 +1,17 @@
-"""Writers for runtime-owned neutral session artifacts.
-It serializes RunSpec, SessionPlan context, validation reports, and execution summaries into stable JSON and CSV outputs after playback completes.
-This module owns export file emission only; scoring, session flow, and engine behavior are provided by other runtime components."""
+"""Writers for runtime-owned neutral session artifacts. It serializes RunSpec, SessionPlan
+context, validation reports, and execution summaries into stable JSON and CSV outputs
+after playback completes. This module owns export file emission only; scoring, session
+flow, and engine behavior are provided by other runtime components."""
 
 from __future__ import annotations
 
 import csv
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Iterable
 
 from fpvs_studio.core.enums import DutyCycleMode
 from fpvs_studio.core.execution import RunExecutionSummary, SessionExecutionSummary
+from fpvs_studio.core.models import DisplayValidationReport
 from fpvs_studio.core.run_spec import RunSpec
 from fpvs_studio.core.serialization import write_json_file
 from fpvs_studio.core.session_plan import SessionPlan
@@ -30,7 +32,7 @@ def _write_warnings(path: Path, warnings: list[str]) -> None:
     path.write_text("\n".join(warnings) + ("\n" if warnings else ""), encoding="utf-8")
 
 
-def _display_report_for_run(run_spec: RunSpec):
+def _display_report_for_run(run_spec: RunSpec) -> DisplayValidationReport:
     duty_cycle_mode = (
         DutyCycleMode.BLANK_50 if run_spec.display.off_frames > 0 else DutyCycleMode.CONTINUOUS
     )
@@ -123,10 +125,7 @@ def write_run_artifacts(output_dir: Path, run_spec: RunSpec, summary: RunExecuti
     _write_csv(
         output_dir / "frame_intervals.csv",
         ["frame_index", "interval_s"],
-        [
-            (interval.frame_index, interval.interval_s)
-            for interval in summary.frame_intervals
-        ],
+        [(interval.frame_index, interval.interval_s) for interval in summary.frame_intervals],
     )
     _write_csv(
         output_dir / "trigger_log.csv",

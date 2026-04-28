@@ -1,6 +1,7 @@
-"""Engine-neutral execution-result contracts for completed runs and sessions.
-Runtime populates these models from RunSpec and SessionPlan playback so exporters can write stable summaries without depending on engine internals.
-This module owns result schemas and serialization shape, not scoring flow control or presentation behavior."""
+"""Engine-neutral execution-result contracts for completed runs and sessions. Runtime
+populates these models from RunSpec and SessionPlan playback so exporters can write
+stable summaries without depending on engine internals. This module owns result schemas
+and serialization shape, not scoring flow control or presentation behavior."""
 
 from __future__ import annotations
 
@@ -94,9 +95,13 @@ class FixationResponseRecord(FPVSBaseModel):
     outcome: FixationOutcome
 
     @model_validator(mode="after")
-    def validate_response_fields(self) -> "FixationResponseRecord":
+    def validate_response_fields(self) -> FixationResponseRecord:
         if self.responded:
-            if self.first_response_key is None or self.response_frame is None or self.rt_frames is None:
+            if (
+                self.first_response_key is None
+                or self.response_frame is None
+                or self.rt_frames is None
+            ):
                 raise ValueError(
                     "Responded fixation events must include the first response key, frame, and RT."
                 )

@@ -24,6 +24,7 @@ from fpvs_studio.core.enums import (
     StimulusVariant,
     ValidationSeverity,
 )
+from fpvs_studio.core.models import ImageResolution
 from fpvs_studio.gui.design_system import (
     CONTENT_MAX_WIDTHS,
     elide_middle,
@@ -95,7 +96,7 @@ def _transition_label(mode: InterConditionMode) -> str:
     }[mode]
 
 
-def _resolution_text(width_height) -> str:
+def _resolution_text(width_height: ImageResolution | None) -> str:
     if width_height is None:
         return "Not imported"
     return f"{width_height.width_px} x {width_height.height_px}"
@@ -121,9 +122,7 @@ def _sync_text_editor_contents(editor: QTextEdit | QPlainTextEdit, text: str) ->
     restored_cursor = editor.textCursor()
     restored_cursor.setPosition(min(anchor, len(text)))
     move_mode = (
-        QTextCursor.MoveMode.KeepAnchor
-        if anchor != position
-        else QTextCursor.MoveMode.MoveAnchor
+        QTextCursor.MoveMode.KeepAnchor if anchor != position else QTextCursor.MoveMode.MoveAnchor
     )
     restored_cursor.setPosition(min(position, len(text)), move_mode)
     editor.setTextCursor(restored_cursor)
@@ -192,7 +191,9 @@ def _conditions_have_assigned_assets(document: ProjectDocument, ordered_conditio
     )
 
 
-def _launcher_readiness_report(document: ProjectDocument, *, refresh_hz: float) -> LauncherReadinessReport:
+def _launcher_readiness_report(
+    document: ProjectDocument, *, refresh_hz: float
+) -> LauncherReadinessReport:
     ordered_conditions = document.ordered_conditions()
     validation = document.validation_report(refresh_hz=refresh_hz)
     blocking_issues = [
@@ -258,7 +259,8 @@ def _launcher_readiness_report(document: ProjectDocument, *, refresh_hz: float) 
         status_summary=status_summary,
         readiness_items=tuple(readiness_items),
         preview_note=(
-            "Session preview available for inspection. Launch will still compile and run launch checks automatically."
+            "Session preview available for inspection. Launch will still compile "
+            "and run launch checks automatically."
             if preview_available
             else "Launch will compile and run launch checks automatically."
         ),
@@ -268,10 +270,9 @@ def _launcher_readiness_report(document: ProjectDocument, *, refresh_hz: float) 
 class LeftToRightPlainTextEdit(QPlainTextEdit):
     """Plain-text editor with left-to-right document defaults."""
 
-    def __init__(self, parent=None) -> None:
+    def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.setLayoutDirection(Qt.LeftToRight)
+        self.setLayoutDirection(Qt.LayoutDirection.LeftToRight)
         text_option = self.document().defaultTextOption()
-        text_option.setTextDirection(Qt.LeftToRight)
+        text_option.setTextDirection(Qt.LayoutDirection.LeftToRight)
         self.document().setDefaultTextOption(text_option)
-

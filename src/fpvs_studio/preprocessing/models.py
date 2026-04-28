@@ -1,6 +1,8 @@
-"""Preprocessing schemas for inspection summaries and manifest records.
-These models capture source metadata, derived variants, hashes, geometry, and transform provenance that feed deterministic compilation inputs.
-The module owns preprocessing contracts only; editable ProjectFile state, RunSpec timing, and runtime exports live in other layers."""
+"""Preprocessing schemas for inspection summaries and manifest records. These models
+capture source metadata, derived variants, hashes, geometry, and transform provenance
+that feed deterministic compilation inputs. The module owns preprocessing contracts
+only; editable ProjectFile state, RunSpec timing, and runtime exports live in other
+layers."""
 
 from __future__ import annotations
 
