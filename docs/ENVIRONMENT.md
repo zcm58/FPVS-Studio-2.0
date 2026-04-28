@@ -108,7 +108,7 @@ New-Item -ItemType Directory -Force build\tmp, build\appdata, build\localappdata
   --maxfail=1 `
   --timeout=45 `
   -vv -s `
-  tests\gui\test_authoring_gui.py::test_welcome_window_smoke
+  tests\gui\test_welcome_settings_flow.py::test_welcome_window_smoke
 ```
 
 ## Manual Verification

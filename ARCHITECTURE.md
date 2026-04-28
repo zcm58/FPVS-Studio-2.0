@@ -24,6 +24,28 @@ code may lazily import PsychoPy.
 - `src/fpvs_studio/engines/`: presentation engine interface and PsychoPy implementation.
 - `tests/`: unit, integration, and pytest-qt GUI coverage.
 
+## Task Context Recipes
+
+Use these first reads before opening broad trees:
+
+- GUI task: `src/fpvs_studio/gui/AGENTS.md`,
+  `docs/GUI_WORKFLOW.md`, the specific page/dialog module, matching
+  `tests/gui/test_*.py`, and `tests/gui/helpers.py` if workflow setup matters.
+- Compiler/session task: `src/fpvs_studio/core/AGENTS.md`,
+  `src/fpvs_studio/core/compiler.py`,
+  `src/fpvs_studio/core/session_plan.py`,
+  `docs/RUNSPEC.md`, and `docs/SESSION_PLAN.md`.
+- Runtime task: `docs/RUNTIME_EXECUTION.md`,
+  `src/fpvs_studio/runtime/launcher.py`,
+  `src/fpvs_studio/runtime/preflight.py`,
+  `src/fpvs_studio/core/execution.py`, and the relevant
+  `tests/unit/test_runtime_*.py` file.
+- Preprocessing task: `src/fpvs_studio/preprocessing/`,
+  `src/fpvs_studio/core/models.py`, `tests/unit/test_preprocessing_assets.py`,
+  and `tests/unit/test_preprocessing_inspection.py`.
+- Docs-only task: `AGENTS.md`, this file, and the doc being edited. Avoid
+  source reads unless the doc describes a concrete contract.
+
 ## Contract Flow
 
 `ProjectFile` models compile into single-condition `RunSpec` entries. Session settings and
@@ -39,6 +61,15 @@ results. Exporters serialize those results without moving contracts into engine 
   PySide6 widget code.
 - Engines render presentation screens and may use PsychoPy lazily inside engine modules.
 - Core and preprocessing must remain engine-neutral.
+
+## Harness Commands
+
+- Full gate: `.\scripts\check_quality.ps1`
+- GUI smoke/workflow: `.\scripts\check_gui.ps1`
+- Runtime: `.\scripts\check_runtime.ps1`
+- Compiler/session: `.\scripts\check_compiler.ps1`
+- Preprocessing: `.\scripts\check_preprocessing.ps1`
+- Workspace cleanup: `.\scripts\clean_workspace.ps1`
 
 ## Deeper Docs
 

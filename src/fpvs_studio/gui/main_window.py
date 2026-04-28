@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
 from fpvs_studio.core.models import ConditionTemplateProfile
 from fpvs_studio.gui.animations import AnimatedTabBar, ButtonHoverAnimator
 from fpvs_studio.gui.assets_pages import AssetsPage
+from fpvs_studio.gui.condition_pages import ConditionsPage
 from fpvs_studio.gui.design_system import (
     CARD_CORNER_RADIUS,
     COLOR_BORDER,
@@ -51,8 +52,7 @@ from fpvs_studio.gui.design_system import (
 )
 from fpvs_studio.gui.document import ProjectDocument
 from fpvs_studio.gui.home_page import HomePage, SetupDashboardPage
-from fpvs_studio.gui.project_pages import ConditionsPage
-from fpvs_studio.gui.runtime_pages import ParticipantNumberDialog, RunPage
+from fpvs_studio.gui.run_page import ParticipantNumberDialog, RunPage
 from fpvs_studio.gui.session_pages import FixationCrossSettingsPage, SessionStructurePage
 from fpvs_studio.gui.window_helpers import (
     _LAUNCH_INTERSTITIAL_DURATION_MS,

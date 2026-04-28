@@ -25,8 +25,8 @@ from fpvs_studio.gui.design_system import (
     StatusBadgeLabel,
 )
 from fpvs_studio.gui.document import ProjectDocument
-from fpvs_studio.gui.project_pages import ProjectOverviewEditor
-from fpvs_studio.gui.runtime_pages import RuntimeSettingsEditor
+from fpvs_studio.gui.project_overview_page import ProjectOverviewEditor
+from fpvs_studio.gui.runtime_settings_page import RuntimeSettingsEditor
 from fpvs_studio.gui.session_pages import FixationSettingsEditor, SessionStructureEditor
 from fpvs_studio.gui.window_helpers import (
     LauncherReadinessReport,

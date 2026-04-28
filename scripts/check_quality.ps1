@@ -22,9 +22,9 @@ try {
         --maxfail=1 `
         --timeout=60 `
         -q `
-        tests\gui\test_authoring_gui.py::test_assets_preprocessing_import_and_materialize_updates_status `
-        tests\gui\test_authoring_gui.py::test_launch_action_wires_runtime_launcher_with_serial_settings `
-        tests\gui\test_authoring_gui.py::test_launch_action_closes_progress_dialog_when_runtime_launch_raises
+        tests\gui\test_assets_run_launch.py::test_assets_preprocessing_import_and_materialize_updates_status `
+        tests\gui\test_assets_run_launch.py::test_launch_action_wires_runtime_launcher_with_serial_settings `
+        tests\gui\test_assets_run_launch.py::test_launch_action_closes_progress_dialog_when_runtime_launch_raises
 }
 finally {
     Pop-Location

@@ -8,6 +8,8 @@ experiments, with PsychoPy isolated behind runtime/engine boundaries.
 ## Context map
 
 - Start with `ARCHITECTURE.md` for the current package and dependency map.
+- Use the "Task Context Recipes" in `ARCHITECTURE.md` before opening broad
+  source or test trees.
 - Use `docs/FPVS_Studio_v1_Architecture_Spec.md` for product and protocol scope.
 - Use `docs/GUI_WORKFLOW.md` for supported GUI behavior and GUI test guidance.
 - Use `docs/RUNSPEC.md`, `docs/SESSION_PLAN.md`, and `docs/RUNTIME_EXECUTION.md`
@@ -18,6 +20,9 @@ experiments, with PsychoPy isolated behind runtime/engine boundaries.
 ## Repository guardrails
 
 - Read this file and any nested `AGENTS.md` files in directories you touch before editing.
+- Keep recursive searches narrow; exclude `.venv*`, `build`, `.pytest_cache`,
+  `.ruff_cache`, `.mypy_cache`, and `.tmp` unless the task is explicitly about
+  generated or cached output.
 - Preserve existing functionality, processing order, persisted formats, and export formats.
 - Make surgical changes: do not refactor adjacent code or reformat unrelated files.
 - Prefer simple direct changes over speculative abstractions or hidden fallback behavior.
@@ -54,6 +59,10 @@ experiments, with PsychoPy isolated behind runtime/engine boundaries.
 - Run `python -m pytest -q` for broad behavior changes.
 - Run `python -m ruff check .` after Python edits when available.
 - Run `python -m mypy src` after typed contract or boundary changes when available.
+- Use `.\scripts\check_quality.ps1` as the repo gate when touching multiple layers.
+- Use `.\scripts\check_gui.ps1`, `.\scripts\check_runtime.ps1`,
+  `.\scripts\check_compiler.ps1`, or `.\scripts\check_preprocessing.ps1` for
+  narrower cleanup passes.
 - GUI changes need a focused pytest-qt smoke test, or documented manual smoke steps if
   automation is impractical.
 - Done means relevant checks pass, or every skipped/failing check is explained with the
