@@ -37,6 +37,7 @@ from PySide6.QtWidgets import (
     QSizePolicy,
     QSpinBox,
     QStatusBar,
+    QStyleFactory,
     QTableWidget,
     QTableWidgetItem,
     QTabWidget,
@@ -3941,49 +3942,6 @@ class StudioMainWindow(QMainWindow):
                 COLOR_TEXT_SECONDARY,
             )
         )
-        self.menuBar().setStyleSheet(
-            """
-            QMenuBar {
-                background: transparent;
-                color: %s;
-            }
-            QMenuBar::item {
-                background: transparent;
-                border: none;
-                border-radius: 0px;
-                margin: 0px;
-                padding: 4px 8px;
-            }
-            QMenuBar::item:selected,
-            QMenuBar::item:pressed {
-                background: transparent;
-                border: none;
-                color: %s;
-            }
-            QMenu {
-                border: 1px solid %s;
-                background-color: %s;
-                color: %s;
-            }
-            QMenu::item {
-                padding: 6px 24px 6px 12px;
-                background: transparent;
-            }
-            QMenu::item:selected {
-                background-color: %s;
-                color: #ffffff;
-            }
-            """
-            % (
-                COLOR_TEXT_PRIMARY,
-                COLOR_TEXT_PRIMARY,
-                COLOR_BORDER_SOFT,
-                COLOR_SURFACE_ELEVATED,
-                COLOR_TEXT_PRIMARY,
-                COLOR_PRIMARY,
-            )
-        )
-
     def _install_button_hover_animations(self) -> None:
         self._button_hover_animators.clear()
         for button in self.findChildren(QPushButton):
@@ -4010,6 +3968,15 @@ class StudioMainWindow(QMainWindow):
 
     def _create_menu_and_toolbar(self) -> None:
         file_menu = self.menuBar().addMenu("File")
+        self._native_menu_style = (
+            QStyleFactory.create("WindowsVista")
+            or QStyleFactory.create("Windows")
+        )
+        if self._native_menu_style is not None:
+            self.menuBar().setStyle(self._native_menu_style)
+            file_menu.setStyle(self._native_menu_style)
+        self.menuBar().setStyleSheet("")
+        self.menuBar().setFocusPolicy(Qt.FocusPolicy.NoFocus)
         file_menu.addAction(self.settings_action)
 
     def save_project(self) -> bool:

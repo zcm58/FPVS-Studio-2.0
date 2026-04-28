@@ -37,6 +37,7 @@ dev = [
   "pytest>=8.2,<9.0",
   "pytest-qt>=4.4,<5.0",
   "pytest-timeout>=2.3,<3.0",
+  "PyYAML>=6.0,<7.0",
   "ruff>=0.6,<1.0",
 ]
 

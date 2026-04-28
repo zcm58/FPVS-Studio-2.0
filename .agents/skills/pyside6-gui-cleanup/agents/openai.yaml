@@ -1,0 +1,4 @@
+interface:
+  display_name: "PySide6 GUI Cleanup"
+  short_description: "Refactor and review PySide6 GUI behavior safely."
+  default_prompt: "Use $pyside6-gui-cleanup for this PySide6 GUI task."

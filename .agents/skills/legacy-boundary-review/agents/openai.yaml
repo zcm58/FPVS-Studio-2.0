@@ -1,0 +1,4 @@
+interface:
+  display_name: "Legacy Boundary Review"
+  short_description: "Check protected legacy boundaries before refactors."
+  default_prompt: "Use $legacy-boundary-review before this boundary-sensitive refactor."

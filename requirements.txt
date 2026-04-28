@@ -1,0 +1,2 @@
+# Developer environment dependencies are declared in pyproject.toml.
+-e .[dev]

@@ -1,8 +1,28 @@
 # AGENTS.md
 
+## Repo purpose
+
+FPVS Studio is a Windows-focused PySide6 desktop authoring application for FPVS
+experiments, with PsychoPy isolated behind runtime/engine boundaries.
+
+## Context map
+
+- Start with `ARCHITECTURE.md` for the current package and dependency map.
+- Use `docs/FPVS_Studio_v1_Architecture_Spec.md` for product and protocol scope.
+- Use `docs/GUI_WORKFLOW.md` for supported GUI behavior and GUI test guidance.
+- Use `docs/RUNSPEC.md`, `docs/SESSION_PLAN.md`, and `docs/RUNTIME_EXECUTION.md`
+  for compiled execution contracts.
+- Use repo skills in `.agents/skills/` for repeatable GUI, path, legacy-boundary,
+  and pytest-qt workflows.
+
 ## Repository guardrails
 
 - Read this file and any nested `AGENTS.md` files in directories you touch before editing.
+- Preserve existing functionality, processing order, persisted formats, and export formats.
+- Make surgical changes: do not refactor adjacent code or reformat unrelated files.
+- Prefer simple direct changes over speculative abstractions or hidden fallback behavior.
+- Treat `Main_App/Legacy_App/**` and `Tools/SourceLocalization/**` as protected
+  legacy boundaries if present; do not edit them without an explicit user request.
 - Keep editable project models in `src/fpvs_studio/core/models.py`.
 - Keep the compiled execution contract in `src/fpvs_studio/core/run_spec.py`.
 - Keep the compiled multi-condition session contract in `src/fpvs_studio/core/session_plan.py`.
@@ -16,9 +36,25 @@
 - Runtime owns fixation-accuracy scoring and condition-level participant feedback flow; engines render the feedback screen content.
 - Only code under `src/fpvs_studio/engines/` may import PsychoPy, and those imports must stay lazy inside the engine implementation.
 - The PySide6 GUI is a first-class application surface in this phase; do not add end-user dependency fallbacks or alternate non-GUI modes around missing GUI dependencies.
+- PySide6 GUI code must stay PySide6-only; do not introduce CustomTkinter.
+- Import `QAction` from `PySide6.QtGui`.
+- Do not block the UI thread; long work belongs in Qt worker patterns such as `QThread`
+  or `QRunnable` with `QThreadPool`.
+- Use structured logging for application diagnostics, not `print`.
+- All project file I/O must use the active project root and preserve existing formats.
 - Preprocessing owns validated assets/manifests and must not depend on PsychoPy or runtime/engine code.
 - `RunSpec` must remain single-condition. Do not merge multiple conditions into one `RunSpec`.
 - Represent execution timing in frames inside `RunSpec`; do not reintroduce sleep-based timing abstractions.
 - Fixation accuracy behavior is an engagement task; it must not alter FPVS base/oddball scheduling.
 - GUI launch flows must stay honest about the currently supported runtime path; if launch remains test-mode oriented, keep that reflected in labels and help text.
 - Fullscreen presentation behavior belongs to runtime launch settings and engine window creation, not widget logic.
+
+## Standard verification
+
+- Run `python -m pytest -q` for broad behavior changes.
+- Run `python -m ruff check .` after Python edits when available.
+- Run `python -m mypy src` after typed contract or boundary changes when available.
+- GUI changes need a focused pytest-qt smoke test, or documented manual smoke steps if
+  automation is impractical.
+- Done means relevant checks pass, or every skipped/failing check is explained with the
+  command and failure.

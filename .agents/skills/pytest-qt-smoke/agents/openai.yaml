@@ -1,0 +1,4 @@
+interface:
+  display_name: "pytest-qt Smoke"
+  short_description: "Add focused smoke tests for PySide6 GUI changes."
+  default_prompt: "Use $pytest-qt-smoke for this GUI smoke test."
