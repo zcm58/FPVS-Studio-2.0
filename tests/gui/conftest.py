@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+import pytest
 from PySide6.QtCore import QSettings
 from PySide6.QtWidgets import QFileDialog, QMessageBox
-import pytest
 
 from fpvs_studio.gui.create_project_dialog import CreateProjectDialog
 
