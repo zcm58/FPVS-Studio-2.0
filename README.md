@@ -135,6 +135,17 @@ base/oddball schedule.
 
 ## Tests
 
+Use the repo-local scripts when you want the smallest useful gate for a task:
+
+| Task | Command |
+| --- | --- |
+| Full quality gate | `.\scripts\check_quality.ps1` |
+| GUI workflows | `.\scripts\check_gui.ps1` |
+| Runtime/session behavior | `.\scripts\check_runtime.ps1` |
+| Compiler/session contracts | `.\scripts\check_compiler.ps1` |
+| Preprocessing assets/inspection | `.\scripts\check_preprocessing.ps1` |
+| Remove generated output and caches | `.\scripts\clean_workspace.ps1` |
+
 Run the non-GUI/backend-focused checks:
 
 ```powershell

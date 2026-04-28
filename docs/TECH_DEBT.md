@@ -13,6 +13,16 @@ It is intentionally not a backlog for product features.
 | 4 | GUI responsiveness | GUI | Asset refresh/materialization and runtime launch now use Qt worker patterns. Keep future long-running GUI actions off the UI thread. | Focused pytest-qt smoke from `docs/GUI_WORKFLOW.md` | Passing |
 | 5 | Agent context | Tests/docs | Oversized GUI/runtime launcher tests have been split by workflow, and task recipes now point agents at narrow files first. | `.\scripts\check_gui.ps1`; `.\scripts\check_runtime.ps1` | Passing |
 
+## Current Verified State
+
+- Full gate: `.\scripts\check_quality.ps1` passes.
+- Broad suite: `.\.venv3.10\Scripts\python -m pytest -q` passes with 185 tests.
+- Focused gates: `.\scripts\check_gui.ps1`, `.\scripts\check_runtime.ps1`,
+  `.\scripts\check_compiler.ps1`, and `.\scripts\check_preprocessing.ps1` pass.
+- Lint/type status: Ruff is clean for `src tests`; mypy is clean for `src`.
+- Agent context status: GUI workflow tests and runtime launcher tests are split
+  by task area; use `ARCHITECTURE.md` task recipes before broad source reads.
+
 ## Notes
 
 - Do not change project JSON, `RunSpec`, `SessionPlan`, or runtime export formats as part of harness cleanup.
