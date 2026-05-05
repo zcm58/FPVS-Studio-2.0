@@ -133,6 +133,8 @@ results. Exporters serialize those results without moving contracts into engine 
 
 ## Harness Commands
 
+- GitHub Actions CI: `.github/workflows/ci.yml` runs `.\scripts\check_quality.ps1`
+  on Windows for pushes and pull requests.
 - Full gate: `.\scripts\check_quality.ps1`
 - GUI smoke/workflow: `.\scripts\check_gui.ps1`
 - Runtime: `.\scripts\check_runtime.ps1`
