@@ -45,6 +45,17 @@ The authoring window is organized into five pages:
   - refresh rate, display index, engine display, serial port, baud rate,
     compile, preflight, launch, and session-plan summary
 
+## GUI Implementation Map
+
+- Session structure widgets live in `src/fpvs_studio/gui/session_structure_page.py`.
+- Fixation-task widgets live in `src/fpvs_studio/gui/fixation_settings_page.py`.
+- `src/fpvs_studio/gui/session_pages.py` is a compatibility export facade for those
+  session/fixation page classes.
+- Condition-template management lives in
+  `src/fpvs_studio/gui/condition_template_manager_dialog.py`.
+- The condition-template profile editor lives in
+  `src/fpvs_studio/gui/condition_template_profile_editor_dialog.py`.
+
 ## Supported Authoring Tasks
 
 Phase 5 currently supports:

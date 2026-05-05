@@ -60,10 +60,20 @@ Current planned seams:
   (`compiler_assets.py`), stimulus/trigger/transition schedules
   (`compiler_schedules.py`), and fixation target/event planning
   (`compiler_fixation.py`).
-- `src/fpvs_studio/engines/psychopy_engine.py` should keep the `PsychoPyEngine` public
-  surface stable while moving implementation details toward focused helpers for lazy
-  PsychoPy loading, text-screen rendering, stimulus preparation, frame playback,
-  timing/metadata collection, and trigger emission.
+- `src/fpvs_studio/engines/psychopy_engine.py` keeps the `PsychoPyEngine` public
+  surface and main frame loop stable. Focused helper modules own lazy PsychoPy loading
+  (`psychopy_loader.py`), text-screen rendering (`psychopy_text_screens.py`), stimulus
+  preparation/draw decisions (`psychopy_stimuli.py`), timing configuration/QC
+  (`psychopy_timing.py`), runtime metadata (`psychopy_metadata.py`), window/fixation
+  stimulus construction (`psychopy_window.py`), and trigger lookup/emission
+  (`psychopy_triggers.py`).
+- GUI session/fixation authoring uses `session_pages.py` as a compatibility export
+  facade. Session structure editing lives in `session_structure_page.py`; fixation-task
+  controls live in `fixation_settings_page.py` because fixation behavior is expected to
+  evolve independently.
+- Condition-template profile management keeps `condition_template_manager_dialog.py` as
+  the manager dialog and compatibility import point. The profile editor dialog lives in
+  `condition_template_profile_editor_dialog.py`.
 - Large GUI page modules are acceptable when they model one cohesive page or editor. Split
   them only when a subcomponent has an independent lifecycle, test surface, or reusable
   responsibility.
@@ -74,8 +84,11 @@ Refactor priority:
 
 1. Keep the `ProjectDocument` helper split cohesive as GUI document behavior evolves.
 2. Keep compiler helper modules cohesive as compile behavior evolves.
-3. Split the PsychoPy engine after the compiler/runtime seams are stable because playback
-   behavior is integration-heavy and should move in small verified steps.
+3. Keep the PsychoPy engine helper split conservative. Move playback-loop code only when
+   a tested seam is clear; frame-accurate behavior is easier to preserve when the loop
+   stays readable and contiguous.
+4. Keep future fixation-task GUI work in `fixation_settings_page.py` unless it changes
+   model compilation or runtime scoring, which remain core/runtime responsibilities.
 
 ## Task Context Recipes
 

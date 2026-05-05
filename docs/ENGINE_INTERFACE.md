@@ -19,6 +19,19 @@ as PsychoPy. Runtime owns flow and calls engines through
 
 - Interface: `src/fpvs_studio/engines/base.py`
 - Registry: `src/fpvs_studio/engines/registry.py`
-- PsychoPy implementation: `src/fpvs_studio/engines/psychopy_engine.py`
+- PsychoPy implementation facade: `src/fpvs_studio/engines/psychopy_engine.py`
+- PsychoPy helpers:
+  - `src/fpvs_studio/engines/psychopy_loader.py`
+  - `src/fpvs_studio/engines/psychopy_text_screens.py`
+  - `src/fpvs_studio/engines/psychopy_stimuli.py`
+  - `src/fpvs_studio/engines/psychopy_timing.py`
+  - `src/fpvs_studio/engines/psychopy_metadata.py`
+  - `src/fpvs_studio/engines/psychopy_window.py`
+  - `src/fpvs_studio/engines/psychopy_triggers.py`
 - Runtime caller: `src/fpvs_studio/runtime/launcher.py`
 - Boundary test: `tests/unit/test_import_boundaries.py`
+
+Keep `PsychoPyEngine` as the public implementation surface. Prefer adding or editing
+focused helper modules for lazy loading, text screens, stimuli, timing, metadata, window
+construction, or trigger behavior before expanding the facade. Avoid splitting the frame
+loop unless the new seam has focused tests and preserves frame-accurate behavior.
