@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
     QApplication,
     QDialogButtonBox,
     QLabel,
+    QListWidget,
     QMessageBox,
     QPushButton,
     QWidget,
@@ -125,12 +126,72 @@ def test_welcome_window_hero_stack_is_centered_in_panel(controller: StudioContro
     assert abs(hero_center.y() - frame_center_y) <= 18.0
 
 
-def test_welcome_window_does_not_expose_recent_projects_panel(
+def test_welcome_window_hides_recent_projects_panel_when_empty(
     controller: StudioController,
 ) -> None:
     welcome = controller.welcome_window
     assert welcome is not None
-    assert welcome.findChild(QWidget, "welcome_recent_projects_panel") is None
+    recent_panel = welcome.findChild(QWidget, "welcome_recent_projects_panel")
+    recent_list = welcome.findChild(QListWidget, "welcome_recent_project_list")
+    assert recent_panel is not None
+    assert recent_list is not None
+    assert recent_panel.isVisible() is False
+    assert recent_list.count() == 0
+
+
+def test_recent_projects_render_and_open_from_welcome(
+    qtbot,
+    qapp,
+    tmp_path: Path,
+) -> None:
+    controller = StudioController(qapp)
+    root_dir = tmp_path / "fpvs-root"
+    root_dir.mkdir(parents=True, exist_ok=True)
+    controller.save_fpvs_root_dir(root_dir)
+    scaffold = create_project(root_dir, "Recent Launch Project")
+    stale_path = root_dir / "missing-project"
+    controller._settings.setValue(
+        "projects/recent_project_roots",
+        [str(stale_path), str(scaffold.project_root)],
+    )
+    controller._settings.sync()
+
+    controller.show_welcome()
+    assert controller.welcome_window is not None
+    qtbot.addWidget(controller.welcome_window)
+
+    recent_panel = controller.welcome_window.findChild(QWidget, "welcome_recent_projects_panel")
+    recent_list = controller.welcome_window.findChild(QListWidget, "welcome_recent_project_list")
+    assert recent_panel is not None
+    assert recent_list is not None
+    assert recent_panel.isVisible() is True
+    assert recent_list.count() == 1
+    assert recent_list.item(0).text() == str(scaffold.project_root)
+
+    qtbot.mouseClick(
+        recent_list.viewport(),
+        Qt.MouseButton.LeftButton,
+        pos=recent_list.visualItemRect(recent_list.item(0)).center(),
+    )
+
+    assert controller.main_window is not None
+    qtbot.addWidget(controller.main_window)
+    assert controller.main_window.document.project_root == scaffold.project_root
+
+
+def test_opening_project_records_recent_project_root(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+) -> None:
+    scaffold = create_project(tmp_path, "Recorded Recent Project")
+
+    document = controller.open_project(scaffold.project_root)
+
+    assert document is not None
+    assert controller.main_window is not None
+    qtbot.addWidget(controller.main_window)
+    assert controller.load_recent_project_roots() == [scaffold.project_root]
 
 
 def test_application_bootstrap_sets_non_null_welcome_icon(qapp) -> None:

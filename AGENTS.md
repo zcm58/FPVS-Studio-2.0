@@ -14,6 +14,8 @@ experiments, with PsychoPy isolated behind runtime/engine boundaries.
 - Use `docs/GUI_WORKFLOW.md` for supported GUI behavior and GUI test guidance.
 - Use `docs/RUNSPEC.md`, `docs/SESSION_PLAN.md`, and `docs/RUNTIME_EXECUTION.md`
   for compiled execution contracts.
+- Use `docs/exec-plans/` for feature-sized work that changes user workflows,
+  public contracts, or multiple layers.
 - Use repo skills in `.agents/skills/` for repeatable GUI, path, legacy-boundary,
   and pytest-qt workflows.
 

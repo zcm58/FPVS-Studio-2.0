@@ -16,6 +16,7 @@ The welcome window provides:
 
 - `Create New Project`
 - `Open Existing Project`
+- a recent-projects list when valid recent projects are available
 
 Creating a project asks for:
 
@@ -29,21 +30,20 @@ its `project.json` through the backend document layer.
 
 The authoring window is organized into five pages:
 
-- `Project`
-  - project name, description, root, template display, background color
+- `Home`
+  - launch-first project summary, readiness, and quick navigation
+- `Setup Guide`
+  - ordered setup steps for project details, conditions, stimuli, session/fixation,
+    runtime, and final readiness
 - `Conditions`
   - condition list, add/remove/reorder, instructions, trigger code, stimulus
     variant, duty cycle, base/oddball import actions, source summaries
-- `Fixation & Session`
-  - block count, stored session seed, randomization, transition settings,
-    fixation behavior, colors, fixed/randomized target-count mode, no-immediate
-    repeat setting, Space response-window settings, cross geometry
-- `Assets / Preprocessing`
+- `Stimuli Manager`
   - supported project variants, source import, inspection refresh,
     materialization, manifest and validation summaries
-- `Run / Runtime`
+- `Runtime`
   - refresh rate, display index, engine display, serial port, baud rate,
-    compile, preflight, launch, and session-plan summary
+    launch, and session-plan summary
 
 ## GUI Implementation Map
 
@@ -56,6 +56,8 @@ The authoring window is organized into five pages:
 - Fixation-task widgets live in `src/fpvs_studio/gui/fixation_settings_page.py`.
 - `src/fpvs_studio/gui/session_pages.py` is a compatibility export facade for those
   session/fixation page classes.
+- Feature-sized GUI workflow reworks should create or update an execution plan in
+  `docs/exec-plans/active/` before implementation.
 - Condition-template management lives in
   `src/fpvs_studio/gui/condition_template_manager_dialog.py`.
 - The condition-template profile editor lives in
@@ -84,6 +86,7 @@ Phase 5 currently supports:
 
 - creating a new project scaffold
 - opening and editing an existing project
+- reopening recent projects from the welcome screen
 - saving and reopening project state
 - configuring session transition settings and stored seed
 - configuring fixation settings, including an optional fixation accuracy task

@@ -114,6 +114,9 @@ Use these first reads before opening broad trees:
   and `tests/unit/test_preprocessing_inspection.py`.
 - Docs-only task: `AGENTS.md`, this file, and the doc being edited. Avoid
   source reads unless the doc describes a concrete contract.
+- Feature-sized workflow task: read `docs/exec-plans/README.md`, create or update an
+  active plan under `docs/exec-plans/active/`, then read the related package docs and
+  tests.
 
 ## Contract Flow
 
@@ -146,6 +149,7 @@ results. Exporters serialize those results without moving contracts into engine 
 ## Deeper Docs
 
 - Product and v1 scope: `docs/FPVS_Studio_v1_Architecture_Spec.md`
+- Feature execution plans: `docs/exec-plans/`
 - GUI behavior and smoke-test guidance: `docs/GUI_WORKFLOW.md`
 - Engine boundary: `docs/ENGINE_INTERFACE.md`
 - Run contract: `docs/RUNSPEC.md`

@@ -8,6 +8,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QApplication,
     QMessageBox,
+    QPushButton,
     QWidget,
 )
 from tests.gui.helpers import (
@@ -33,6 +34,10 @@ def test_project_description_typing_round_trips_without_cursor_reset(
     _, window = _open_created_project(controller, qtbot, tmp_path, "Description Project")
 
     window.main_tabs.setCurrentWidget(window.setup_dashboard_page)
+    qtbot.mouseClick(
+        window.setup_dashboard_page.findChild(QPushButton, "setup_guide_project_button"),
+        Qt.MouseButton.LeftButton,
+    )
     description_edit = window.setup_dashboard_page.project_overview_editor.project_description_edit
     description_edit.setFocus()
     qtbot.waitUntil(description_edit.hasFocus)
@@ -233,6 +238,10 @@ def test_session_structure_rows_toggle_with_inter_condition_mode(
 
     page = window.setup_dashboard_page.session_structure_editor
     window.main_tabs.setCurrentWidget(window.setup_dashboard_page)
+    qtbot.mouseClick(
+        window.setup_dashboard_page.findChild(QPushButton, "setup_guide_session_button"),
+        Qt.MouseButton.LeftButton,
+    )
     QApplication.processEvents()
 
     page.inter_condition_mode_combo.setCurrentIndex(
@@ -259,6 +268,10 @@ def test_fixation_color_change_mode_toggles_relevant_controls(
 
     page = window.setup_dashboard_page.fixation_settings_editor
     window.main_tabs.setCurrentWidget(window.setup_dashboard_page)
+    qtbot.mouseClick(
+        window.setup_dashboard_page.findChild(QPushButton, "setup_guide_session_button"),
+        Qt.MouseButton.LeftButton,
+    )
     page.fixation_enabled_checkbox.setChecked(True)
     QApplication.processEvents()
 
@@ -288,6 +301,10 @@ def test_fixation_accuracy_toggle_controls_response_visibility(
 
     page = window.setup_dashboard_page.fixation_settings_editor
     window.main_tabs.setCurrentWidget(window.setup_dashboard_page)
+    qtbot.mouseClick(
+        window.setup_dashboard_page.findChild(QPushButton, "setup_guide_session_button"),
+        Qt.MouseButton.LeftButton,
+    )
     page.fixation_enabled_checkbox.setChecked(True)
     QApplication.processEvents()
 
@@ -311,6 +328,10 @@ def test_fixation_disable_hides_dependent_sections(
 
     page = window.setup_dashboard_page.fixation_settings_editor
     window.main_tabs.setCurrentWidget(window.setup_dashboard_page)
+    qtbot.mouseClick(
+        window.setup_dashboard_page.findChild(QPushButton, "setup_guide_session_button"),
+        Qt.MouseButton.LeftButton,
+    )
     page.fixation_enabled_checkbox.setChecked(True)
     page.fixation_accuracy_checkbox.setChecked(True)
     QApplication.processEvents()

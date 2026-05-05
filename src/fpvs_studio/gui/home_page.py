@@ -1,4 +1,4 @@
-"""Home and setup dashboard pages for the FPVS Studio main window."""
+"""Home and setup-guide pages for the FPVS Studio main window."""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
     QFormLayout,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
     QListWidget,
@@ -28,6 +29,7 @@ from fpvs_studio.gui.components import (
     StatusBadgeLabel,
     apply_home_page_theme,
     mark_launch_action,
+    mark_secondary_action,
 )
 from fpvs_studio.gui.document import ProjectDocument
 from fpvs_studio.gui.project_overview_page import ProjectOverviewEditor
@@ -35,14 +37,24 @@ from fpvs_studio.gui.runtime_settings_page import RuntimeSettingsEditor
 from fpvs_studio.gui.session_pages import FixationSettingsEditor, SessionStructureEditor
 from fpvs_studio.gui.window_helpers import (
     LauncherReadinessReport,
+    _conditions_have_assigned_assets,
     _configure_read_only_list,
     _launcher_readiness_report,
     _set_list_items,
 )
 
+_SETUP_GUIDE_STEPS: tuple[tuple[str, str, str], ...] = (
+    ("project", "Project Details", "Edit Project"),
+    ("conditions", "Conditions", "Edit Conditions"),
+    ("stimuli", "Stimuli", "Open Stimuli"),
+    ("session", "Session / Fixation", "Edit Session"),
+    ("runtime", "Runtime", "Runtime Settings"),
+    ("ready", "Validate / Ready", "Review Readiness"),
+)
+
 
 class SetupDashboardPage(QWidget):
-    """Curated setup dashboard that surfaces key controls across tabs."""
+    """Guided setup page that keeps the existing editors available for compatibility."""
 
     def __init__(
         self,
@@ -56,23 +68,24 @@ class SetupDashboardPage(QWidget):
     ) -> None:
         super().__init__(parent)
         self._document = document
+        self._step_callbacks: dict[str, Callable[[], None]] = {}
         self.shell = NonHomePageShell(
-            title="Setup Dashboard",
+            title="Setup Guide",
             subtitle=(
-                "Configure project metadata, session structure, fixation behavior, runtime, "
-                "and asset readiness from one view."
+                "Follow the setup steps once, then return to Home for routine launches."
             ),
             layout_mode="single_column",
             width_preset="wide",
             parent=self,
         )
         self.shell.set_footer_text(
-            "Setup changes here update the shared project state used by Home and Run / Runtime."
+            "Setup Guide actions use the same project state and detailed editors as the "
+            "rest of FPVS Studio."
         )
 
         self.setup_summary_card = SectionCard(
-            title="Readiness Overview",
-            subtitle="Current launch state, blocker count, and the next issue to resolve.",
+            title="Setup Progress",
+            subtitle="Step-by-step status for getting this project ready to launch.",
             object_name="dashboard_attention_card",
             parent=self,
         )
@@ -82,7 +95,7 @@ class SetupDashboardPage(QWidget):
         self.setup_summary_badge = StatusBadgeLabel(
             "Checking readiness...", self.setup_summary_card
         )
-        self.setup_summary_badge.setObjectName("dashboard_attention_badge")
+        self.setup_summary_badge.setObjectName("setup_guide_ready_badge")
         self.setup_summary_note = QLabel(self.setup_summary_card)
         self.setup_summary_note.setObjectName("dashboard_attention_note")
         self.setup_summary_note.setWordWrap(True)
@@ -97,6 +110,31 @@ class SetupDashboardPage(QWidget):
         summary_strip_layout.addWidget(self.setup_summary_count, 0)
         summary_strip_layout.addWidget(self.setup_summary_note, 1)
         self.setup_summary_card.body_layout.addWidget(summary_strip)
+
+        self.setup_guide_step_list = QListWidget(self.setup_summary_card)
+        self.setup_guide_step_list.setObjectName("setup_guide_step_list")
+        _configure_read_only_list(self.setup_guide_step_list)
+        self.setup_summary_card.body_layout.addWidget(self.setup_guide_step_list)
+
+        self.step_actions_card = SectionCard(
+            title="Setup Steps",
+            subtitle="Use these actions to complete or review each setup area.",
+            object_name="setup_guide_steps_card",
+            parent=self,
+        )
+        self.step_action_buttons: dict[str, QPushButton] = {}
+        step_actions_grid = QGridLayout()
+        step_actions_grid.setContentsMargins(0, 0, 0, 0)
+        step_actions_grid.setHorizontalSpacing(PAGE_SECTION_GAP)
+        step_actions_grid.setVerticalSpacing(8)
+        for index, (step_key, _step_title, action_label) in enumerate(_SETUP_GUIDE_STEPS):
+            button = QPushButton(action_label, self.step_actions_card)
+            button.setObjectName(f"setup_guide_{step_key}_button")
+            mark_secondary_action(button)
+            button.clicked.connect(lambda _checked=False, key=step_key: self._activate_step(key))
+            self.step_action_buttons[step_key] = button
+            step_actions_grid.addWidget(button, index // 3, index % 3)
+        self.step_actions_card.body_layout.addLayout(step_actions_grid)
 
         self.project_overview_editor = ProjectOverviewEditor(
             document,
@@ -157,7 +195,9 @@ class SetupDashboardPage(QWidget):
         workspace_layout.addWidget(self.workspace_right_column, 3)
 
         self.shell.add_content_widget(self.setup_summary_card)
+        self.shell.add_content_widget(self.step_actions_card)
         self.shell.add_content_widget(self.workspace, stretch=1)
+        self.workspace.setVisible(False)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -169,6 +209,33 @@ class SetupDashboardPage(QWidget):
 
     def sync_fullscreen_checkbox(self, checked: bool) -> None:
         self.runtime_settings_editor.set_fullscreen_checked(checked)
+
+    def bind_step_navigation_actions(
+        self,
+        *,
+        edit_conditions: Callable[[], None],
+        open_stimuli_manager: Callable[[], None],
+        open_runtime_settings: Callable[[], None],
+    ) -> None:
+        self._step_callbacks = {
+            "project": self._show_embedded_setup_editors,
+            "conditions": edit_conditions,
+            "stimuli": open_stimuli_manager,
+            "session": self._show_embedded_setup_editors,
+            "runtime": open_runtime_settings,
+            "ready": self._hide_embedded_setup_editors,
+        }
+
+    def _activate_step(self, step_key: str) -> None:
+        callback = self._step_callbacks.get(step_key)
+        if callback is not None:
+            callback()
+
+    def _show_embedded_setup_editors(self) -> None:
+        self.workspace.setVisible(True)
+
+    def _hide_embedded_setup_editors(self) -> None:
+        self.workspace.setVisible(False)
 
     def _refresh_attention_summary(self) -> None:
         report = _launcher_readiness_report(
@@ -190,6 +257,40 @@ class SetupDashboardPage(QWidget):
         if report.preview_note:
             summary_text = f"{summary_text} {report.preview_note}"
         self.setup_summary_note.setText(summary_text)
+        _set_list_items(self.setup_guide_step_list, self._setup_step_lines(report))
+
+    def _setup_step_lines(self, report: LauncherReadinessReport) -> tuple[str, ...]:
+        ordered_conditions = self._document.ordered_conditions()
+        project_name = self._document.project.meta.name.strip()
+        project_ready = bool(project_name and self._document.project_root)
+        assets_ready = _conditions_have_assigned_assets(self._document, ordered_conditions)
+        runtime_ready = self.runtime_settings_editor.current_refresh_hz() > 0.0
+        launch_ready = report.badge_state == "ready"
+
+        project_label = project_name or "name required"
+        stimuli_label = (
+            "assigned for all conditions" if assets_ready else "base and oddball folders needed"
+        )
+        return (
+            f"{'[OK]' if project_ready else '[TODO]'} Project Details: {project_label}",
+            (
+                f"{'[OK]' if ordered_conditions else '[TODO]'} Conditions: "
+                f"{len(ordered_conditions)} configured"
+            ),
+            (
+                f"{'[OK]' if assets_ready else '[TODO]'} Stimuli: "
+                f"{stimuli_label}"
+            ),
+            "[OK] Session / Fixation: settings available",
+            (
+                f"{'[OK]' if runtime_ready else '[TODO]'} Runtime: "
+                f"{self.runtime_settings_editor.current_refresh_hz():.2f} Hz"
+            ),
+            (
+                f"{'[OK]' if launch_ready else '[TODO]'} Validate / Ready: "
+                f"{report.status_label}"
+            ),
+        )
 
 
 class HomePage(QWidget):
@@ -239,18 +340,30 @@ class HomePage(QWidget):
         self.open_project_button = QPushButton("Open Project", self)
         self.open_project_button.setObjectName("home_open_project_button")
         self.launch_button = QPushButton("Launch Experiment", self)
-        self.launch_button.setObjectName("home_launch_test_session_button")
+        self.launch_button.setObjectName("home_launch_experiment_button")
         mark_launch_action(self.launch_button, home=True)
         self.save_project_button = QPushButton("Save", self)
         self.save_project_button.setObjectName("home_save_project_button")
         self.new_project_button = QPushButton("Create New Project", self)
         self.new_project_button.setObjectName("home_create_project_button")
+        self.edit_setup_button = QPushButton("Edit Setup", self)
+        self.edit_setup_button.setObjectName("home_edit_setup_button")
+        mark_secondary_action(self.edit_setup_button)
+        self.stimuli_manager_button = QPushButton("Stimuli Manager", self)
+        self.stimuli_manager_button.setObjectName("home_stimuli_manager_button")
+        mark_secondary_action(self.stimuli_manager_button)
+        self.runtime_settings_button = QPushButton("Runtime Settings", self)
+        self.runtime_settings_button.setObjectName("home_runtime_settings_button")
+        mark_secondary_action(self.runtime_settings_button)
 
         for button in (
             self.open_project_button,
             self.new_project_button,
             self.save_project_button,
             self.launch_button,
+            self.edit_setup_button,
+            self.stimuli_manager_button,
+            self.runtime_settings_button,
         ):
             button.setMinimumHeight(38)
             button.setFixedWidth(176)
@@ -263,6 +376,14 @@ class HomePage(QWidget):
         action_layout.addWidget(self.save_project_button)
         action_layout.addStretch(1)
         action_layout.addWidget(self.launch_button)
+
+        navigation_layout = QHBoxLayout()
+        navigation_layout.setContentsMargins(0, 0, 0, 0)
+        navigation_layout.setSpacing(PAGE_SECTION_GAP)
+        navigation_layout.addWidget(self.edit_setup_button)
+        navigation_layout.addWidget(self.stimuli_manager_button)
+        navigation_layout.addWidget(self.runtime_settings_button)
+        navigation_layout.addStretch(1)
 
         project_card = SectionCard(
             title="Project Info",
@@ -361,6 +482,7 @@ class HomePage(QWidget):
 
         page_layout = self.page_container.content_layout
         page_layout.addLayout(action_layout)
+        page_layout.addLayout(navigation_layout)
         page_layout.addLayout(main_row)
 
         layout = QVBoxLayout(self)
@@ -397,6 +519,17 @@ class HomePage(QWidget):
             launch_action,
             "Launch Experiment",
         )
+
+    def bind_navigation_actions(
+        self,
+        *,
+        edit_setup: Callable[[], None],
+        open_stimuli_manager: Callable[[], None],
+        open_runtime_settings: Callable[[], None],
+    ) -> None:
+        self.edit_setup_button.clicked.connect(edit_setup)
+        self.stimuli_manager_button.clicked.connect(open_stimuli_manager)
+        self.runtime_settings_button.clicked.connect(open_runtime_settings)
 
     def refresh(self) -> None:
         project = self._document.project

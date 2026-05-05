@@ -345,7 +345,10 @@ def home_page_stylesheet() -> str:
     QPushButton#home_create_project_button,
     QPushButton#home_open_project_button,
     QPushButton#home_save_project_button,
-    QPushButton#home_launch_test_session_button {
+    QPushButton#home_launch_experiment_button,
+    QPushButton#home_edit_setup_button,
+    QPushButton#home_stimuli_manager_button,
+    QPushButton#home_runtime_settings_button {
         font-size: 14px;
         padding: 7px 12px;
     }
@@ -488,6 +491,31 @@ def welcome_window_stylesheet(palette: QPalette) -> str:
     QLabel#welcome_body_label {{
         color: {_rgba(muted_text)};
         font-size: 17px;
+    }}
+    QLabel#welcome_recent_projects_header {{
+        color: {_rgba(subtle_text)};
+        font-size: 13px;
+        font-weight: 600;
+    }}
+    QListWidget#welcome_recent_project_list {{
+        border: 1px solid {_rgba(mid_color)};
+        border-radius: 8px;
+        background-color: {_rgba(base_color)};
+        color: {_rgba(text_color)};
+        font-size: 13px;
+        outline: none;
+        padding: 4px;
+    }}
+    QListWidget#welcome_recent_project_list::item {{
+        padding: 5px 8px;
+        border-radius: 5px;
+    }}
+    QListWidget#welcome_recent_project_list::item:hover {{
+        background-color: {_rgba(row_hover_bg)};
+    }}
+    QListWidget#welcome_recent_project_list::item:selected {{
+        background-color: {_rgba(highlight_color)};
+        color: {_rgba(highlighted_text_color)};
     }}
     QPushButton {{
         border: 1px solid {_rgba(mid_color)};

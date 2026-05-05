@@ -96,7 +96,7 @@ class StudioMainWindow(QMainWindow):
         self.main_tabs.setObjectName("main_tabs")
         self.main_tabs.setTabBar(AnimatedTabBar(self.main_tabs))
         self.main_tabs.addTab(self.home_page, "Home")
-        self.main_tabs.addTab(self.setup_dashboard_page, "Setup Dashboard")
+        self.main_tabs.addTab(self.setup_dashboard_page, "Setup Guide")
         self.main_tabs.addTab(self.conditions_page, "Conditions")
         self.main_tabs.addTab(self.assets_page, "Stimuli Manager")
         self.main_tabs.addTab(self.run_page, "Runtime")
@@ -116,6 +116,16 @@ class StudioMainWindow(QMainWindow):
             open_project_action=self.open_project_action,
             save_project_action=self.save_project_action,
             launch_action=self.launch_action,
+        )
+        self.home_page.bind_navigation_actions(
+            edit_setup=lambda: self.main_tabs.setCurrentWidget(self.setup_dashboard_page),
+            open_stimuli_manager=lambda: self.main_tabs.setCurrentWidget(self.assets_page),
+            open_runtime_settings=lambda: self.main_tabs.setCurrentWidget(self.run_page),
+        )
+        self.setup_dashboard_page.bind_step_navigation_actions(
+            edit_conditions=lambda: self.main_tabs.setCurrentWidget(self.conditions_page),
+            open_stimuli_manager=lambda: self.main_tabs.setCurrentWidget(self.assets_page),
+            open_runtime_settings=lambda: self.main_tabs.setCurrentWidget(self.run_page),
         )
         self._create_menu_and_toolbar()
         self._button_hover_animators: list[ButtonHoverAnimator] = []

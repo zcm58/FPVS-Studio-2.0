@@ -8,6 +8,7 @@ import pytest
 from PySide6.QtCore import QSettings
 from PySide6.QtWidgets import QFileDialog, QMessageBox
 
+from fpvs_studio.gui import controller as controller_module
 from fpvs_studio.gui.controller import StudioController
 from fpvs_studio.gui.create_project_dialog import CreateProjectDialog
 
@@ -40,9 +41,11 @@ def _clear_fpvs_root_setting() -> None:
         "FPVS Studio",
     )
     settings.remove("paths/fpvs_root_dir")
+    settings.remove(controller_module._RECENT_PROJECT_ROOTS_KEY)
     settings.sync()
     yield
     settings.remove("paths/fpvs_root_dir")
+    settings.remove(controller_module._RECENT_PROJECT_ROOTS_KEY)
     settings.sync()
 
 

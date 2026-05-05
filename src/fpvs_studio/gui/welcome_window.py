@@ -11,6 +11,8 @@ from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QLabel,
+    QListWidget,
+    QListWidgetItem,
     QPushButton,
     QSizePolicy,
     QStyle,
@@ -26,6 +28,7 @@ class WelcomeWindow(QWidget):
 
     create_requested = Signal()
     open_requested = Signal()
+    recent_project_requested = Signal(str)
 
     def __init__(self) -> None:
         super().__init__()
@@ -78,6 +81,24 @@ class WelcomeWindow(QWidget):
         self.body_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         hero_layout.addWidget(self.body_label)
 
+        self.recent_projects_panel = QFrame(self.hero_container)
+        self.recent_projects_panel.setObjectName("welcome_recent_projects_panel")
+        self.recent_projects_panel.setVisible(False)
+        recent_layout = QVBoxLayout(self.recent_projects_panel)
+        recent_layout.setContentsMargins(0, 0, 0, 0)
+        recent_layout.setSpacing(8)
+        recent_header = QLabel("Recent Projects", self.recent_projects_panel)
+        recent_header.setObjectName("welcome_recent_projects_header")
+        recent_header.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.recent_project_list = QListWidget(self.recent_projects_panel)
+        self.recent_project_list.setObjectName("welcome_recent_project_list")
+        self.recent_project_list.setMaximumHeight(128)
+        self.recent_project_list.itemClicked.connect(self._open_recent_project_item)
+        self.recent_project_list.itemActivated.connect(self._open_recent_project_item)
+        recent_layout.addWidget(recent_header)
+        recent_layout.addWidget(self.recent_project_list)
+        hero_layout.addWidget(self.recent_projects_panel)
+
         action_layout = QHBoxLayout()
         action_layout.setSpacing(12)
         action_layout.setContentsMargins(0, 10, 0, 0)
@@ -103,6 +124,20 @@ class WelcomeWindow(QWidget):
         content_layout.addStretch(1)
 
         self._apply_theme_styles()
+
+    def set_recent_projects(self, project_roots: list[str]) -> None:
+        self.recent_project_list.clear()
+        for project_root in project_roots:
+            item = QListWidgetItem(project_root)
+            item.setToolTip(project_root)
+            item.setData(Qt.ItemDataRole.UserRole, project_root)
+            self.recent_project_list.addItem(item)
+        self.recent_projects_panel.setVisible(self.recent_project_list.count() > 0)
+
+    def _open_recent_project_item(self, item: QListWidgetItem) -> None:
+        project_root = item.data(Qt.ItemDataRole.UserRole)
+        if isinstance(project_root, str) and project_root:
+            self.recent_project_requested.emit(project_root)
 
     def changeEvent(self, event: QEvent) -> None:  # noqa: N802
         super().changeEvent(event)

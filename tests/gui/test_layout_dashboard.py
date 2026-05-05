@@ -44,7 +44,7 @@ def test_home_tab_is_first_and_existing_tabs_remain_usable(
 
     expected_tabs = [
         "Home",
-        "Setup Dashboard",
+        "Setup Guide",
         "Conditions",
         "Stimuli Manager",
         "Runtime",
@@ -68,19 +68,24 @@ def test_home_tab_is_first_and_existing_tabs_remain_usable(
     assert window.fixation_cross_settings_page.fixation_enabled_checkbox is not None
 
 
-def test_setup_dashboard_tab_exists_and_uses_single_column_shell_with_workspace(
+def test_setup_guide_tab_exists_and_uses_single_column_shell_with_steps(
     qtbot,
     controller: StudioController,
     tmp_path: Path,
 ) -> None:
-    _, window = _open_created_project(controller, qtbot, tmp_path, "Setup Dashboard Shell")
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Setup Guide Shell")
 
     dashboard = window.setup_dashboard_page
     dashboard_index = window.main_tabs.indexOf(dashboard)
     assert dashboard_index == 1
-    assert window.main_tabs.tabText(dashboard_index) == "Setup Dashboard"
+    assert window.main_tabs.tabText(dashboard_index) == "Setup Guide"
     assert dashboard.shell.layout_mode == "single_column"
+    assert dashboard.shell.title_label.text() == "Setup Guide"
+    assert dashboard.setup_guide_step_list.objectName() == "setup_guide_step_list"
+    assert dashboard.setup_summary_badge.objectName() == "setup_guide_ready_badge"
+    assert dashboard.setup_guide_step_list.count() == 6
     assert dashboard.workspace.layout() is not None
+    assert dashboard.workspace.isVisible() is False
 
 
 def test_major_tabs_share_page_container_width_presets(
@@ -220,12 +225,12 @@ def test_conditions_tab_uses_horizontal_master_detail_shell(
     assert detail_stack_layout.itemAt(1).widget() is conditions_page.stimulus_sources_card
 
 
-def test_setup_dashboard_surfaces_project_session_fixation_runtime_and_assets_controls(
+def test_setup_guide_surfaces_steps_and_keeps_shared_editors_available(
     qtbot,
     controller: StudioController,
     tmp_path: Path,
 ) -> None:
-    _, window = _open_created_project(controller, qtbot, tmp_path, "Setup Dashboard Content")
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Setup Guide Content")
     dashboard = window.setup_dashboard_page
     window.main_tabs.setCurrentWidget(dashboard)
     QApplication.processEvents()
@@ -267,6 +272,50 @@ def test_setup_dashboard_surfaces_project_session_fixation_runtime_and_assets_co
     assert dashboard.workspace_center_column.layout().itemAt(0).widget() is fixation_editor
     assert dashboard.workspace_right_column.layout().itemAt(0).widget() is assets_editor
     assert dashboard.workspace_right_column.layout().itemAt(1).widget() is runtime_editor
+    assert dashboard.setup_guide_step_list.count() == 6
+    assert "Project Details" in dashboard.setup_guide_step_list.item(0).text()
+    assert "Validate / Ready" in dashboard.setup_guide_step_list.item(5).text()
+
+
+def test_setup_guide_step_actions_navigate_to_existing_editors(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Setup Guide Actions")
+    guide = window.setup_dashboard_page
+    window.main_tabs.setCurrentWidget(guide)
+
+    project_button = guide.findChild(QPushButton, "setup_guide_project_button")
+    conditions_button = guide.findChild(QPushButton, "setup_guide_conditions_button")
+    stimuli_button = guide.findChild(QPushButton, "setup_guide_stimuli_button")
+    runtime_button = guide.findChild(QPushButton, "setup_guide_runtime_button")
+    ready_button = guide.findChild(QPushButton, "setup_guide_ready_button")
+    assert project_button is not None
+    assert conditions_button is not None
+    assert stimuli_button is not None
+    assert runtime_button is not None
+    assert ready_button is not None
+
+    assert guide.workspace.isVisible() is False
+    qtbot.mouseClick(project_button, Qt.MouseButton.LeftButton)
+    assert window.main_tabs.currentWidget() is guide
+    assert guide.workspace.isVisible() is True
+
+    qtbot.mouseClick(conditions_button, Qt.MouseButton.LeftButton)
+    assert window.main_tabs.currentWidget() is window.conditions_page
+    window.main_tabs.setCurrentWidget(guide)
+
+    qtbot.mouseClick(stimuli_button, Qt.MouseButton.LeftButton)
+    assert window.main_tabs.currentWidget() is window.assets_page
+    window.main_tabs.setCurrentWidget(guide)
+
+    qtbot.mouseClick(runtime_button, Qt.MouseButton.LeftButton)
+    assert window.main_tabs.currentWidget() is window.run_page
+    window.main_tabs.setCurrentWidget(guide)
+
+    qtbot.mouseClick(ready_button, Qt.MouseButton.LeftButton)
+    assert guide.workspace.isVisible() is False
 
 
 def test_setup_dashboard_edits_sync_document_and_dedicated_tabs(
@@ -535,11 +584,17 @@ def test_home_quick_action_buttons_present_and_wired(
     new_button = window.home_page.findChild(QPushButton, "home_create_project_button")
     open_button = window.home_page.findChild(QPushButton, "home_open_project_button")
     save_button = window.home_page.findChild(QPushButton, "home_save_project_button")
-    launch_button = window.home_page.findChild(QPushButton, "home_launch_test_session_button")
+    launch_button = window.home_page.findChild(QPushButton, "home_launch_experiment_button")
+    edit_setup_button = window.home_page.findChild(QPushButton, "home_edit_setup_button")
+    stimuli_button = window.home_page.findChild(QPushButton, "home_stimuli_manager_button")
+    runtime_button = window.home_page.findChild(QPushButton, "home_runtime_settings_button")
     assert new_button is not None
     assert open_button is not None
     assert save_button is not None
     assert launch_button is not None
+    assert edit_setup_button is not None
+    assert stimuli_button is not None
+    assert runtime_button is not None
     assert launch_button.text() == "Launch Experiment"
     assert window.run_page.launch_button.text() == "Launch Experiment"
     assert window.launch_action.text() == "Launch Experiment"
@@ -553,7 +608,7 @@ def test_home_quick_action_buttons_present_and_wired(
         "home_open_project_button",
         "home_create_project_button",
         "home_save_project_button",
-        "home_launch_test_session_button",
+        "home_launch_experiment_button",
     ]
     assert launch_button.geometry().right() == max(
         button.geometry().right() for button in ordered_buttons
@@ -580,6 +635,12 @@ def test_home_quick_action_buttons_present_and_wired(
     qtbot.mouseClick(open_button, Qt.MouseButton.LeftButton)
     qtbot.mouseClick(save_button, Qt.MouseButton.LeftButton)
     qtbot.mouseClick(launch_button, Qt.MouseButton.LeftButton)
+    qtbot.mouseClick(edit_setup_button, Qt.MouseButton.LeftButton)
+    assert window.main_tabs.currentWidget() is window.setup_dashboard_page
+    qtbot.mouseClick(stimuli_button, Qt.MouseButton.LeftButton)
+    assert window.main_tabs.currentWidget() is window.assets_page
+    qtbot.mouseClick(runtime_button, Qt.MouseButton.LeftButton)
+    assert window.main_tabs.currentWidget() is window.run_page
 
     assert trigger_counts == {"new": 1, "open": 1, "save": 1, "launch": 1}
 
@@ -590,7 +651,7 @@ def test_launch_buttons_share_primary_visual_role(
     tmp_path: Path,
 ) -> None:
     _, window = _open_created_project(controller, qtbot, tmp_path, "Launch Role Project")
-    home_launch_button = window.home_page.findChild(QPushButton, "home_launch_test_session_button")
+    home_launch_button = window.home_page.findChild(QPushButton, "home_launch_experiment_button")
     run_launch_button = window.run_page.findChild(QPushButton, "launch_test_session_button")
     assert home_launch_button is not None
     assert run_launch_button is not None

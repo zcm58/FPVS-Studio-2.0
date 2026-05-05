@@ -27,6 +27,8 @@ from fpvs_studio.gui.welcome_window import WelcomeWindow
 _SETTINGS_ORGANIZATION = "FPVS Studio"
 _SETTINGS_APPLICATION = "FPVS Studio"
 _FPVS_ROOT_DIR_KEY = "paths/fpvs_root_dir"
+_RECENT_PROJECT_ROOTS_KEY = "projects/recent_project_roots"
+_MAX_RECENT_PROJECTS = 8
 
 
 def _show_error(parent: QWidget | None, title: str, error: Exception) -> None:
@@ -66,9 +68,64 @@ class StudioController:
             self.welcome_window = WelcomeWindow()
             self.welcome_window.create_requested.connect(self.show_create_project_dialog)
             self.welcome_window.open_requested.connect(self.show_open_project_dialog)
+            self.welcome_window.recent_project_requested.connect(self.open_recent_project)
+        self.welcome_window.set_recent_projects(
+            [str(path) for path in self.load_recent_project_roots()]
+        )
         self.welcome_window.show()
         self.welcome_window.raise_()
         self.welcome_window.activateWindow()
+
+    def load_recent_project_roots(self) -> list[Path]:
+        """Return valid recent project roots, pruning stale settings entries."""
+
+        raw_value = self._settings.value(_RECENT_PROJECT_ROOTS_KEY, [], type=list)
+        recent_paths: list[Path] = []
+        seen: set[str] = set()
+        for raw_path in raw_value if isinstance(raw_value, list) else []:
+            if not isinstance(raw_path, str) or not raw_path:
+                continue
+            project_root = Path(raw_path).expanduser()
+            normalized = str(project_root)
+            if normalized in seen:
+                continue
+            if not (project_root / "project.json").is_file():
+                continue
+            recent_paths.append(project_root)
+            seen.add(normalized)
+            if len(recent_paths) >= _MAX_RECENT_PROJECTS:
+                break
+        self._settings.setValue(
+            _RECENT_PROJECT_ROOTS_KEY,
+            [str(path) for path in recent_paths],
+        )
+        self._settings.sync()
+        return recent_paths
+
+    def record_recent_project_root(self, project_root: Path) -> None:
+        """Persist a project root as the most recent launch/open target."""
+
+        normalized_root = Path(project_root).expanduser()
+        if not (normalized_root / "project.json").is_file():
+            return
+        existing = [
+            path
+            for path in self.load_recent_project_roots()
+            if str(path) != str(normalized_root)
+        ]
+        recent_paths = [normalized_root, *existing][:_MAX_RECENT_PROJECTS]
+        self._settings.setValue(
+            _RECENT_PROJECT_ROOTS_KEY,
+            [str(path) for path in recent_paths],
+        )
+        self._settings.sync()
+        if self.welcome_window is not None:
+            self.welcome_window.set_recent_projects([str(path) for path in recent_paths])
+
+    def open_recent_project(self, project_root: str) -> None:
+        """Open a project selected from the welcome screen recent-project list."""
+
+        self.open_project(Path(project_root))
 
     def load_fpvs_root_dir(self) -> Path | None:
         """Load the persisted FPVS Studio root folder when it still exists."""
@@ -252,6 +309,7 @@ class StudioController:
 
     def _open_document(self, document: ProjectDocument) -> None:
         document.randomize_session_seed_for_app_launch()
+        self.record_recent_project_root(document.project_root)
         previous_window = self.main_window
         self.main_window = StudioMainWindow(
             document=document,
