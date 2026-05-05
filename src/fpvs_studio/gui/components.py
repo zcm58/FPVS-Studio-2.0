@@ -258,6 +258,11 @@ def studio_theme_stylesheet() -> str:
     QListWidget#setup_wizard_review_readiness_list::item {{
         padding: 4px 6px;
     }}
+    QListWidget#setup_wizard_step_list::item:selected {{
+        background-color: {COLOR_PRIMARY};
+        color: #ffffff;
+        font-weight: 700;
+    }}
     QTableWidget#assets_table {{
         border: 1px solid {COLOR_BORDER_SOFT};
         border-radius: {CARD_CORNER_RADIUS}px;

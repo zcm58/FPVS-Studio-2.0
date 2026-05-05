@@ -40,7 +40,11 @@ The authoring window is organized around two user-facing modes:
   - ordered steps: Project Details, Conditions, Stimuli, Display / Runtime,
     Session / Fixation, Review / Ready
   - `Next` is disabled until the active step is complete
-  - `Advanced` exposes the existing detailed editor for the active setup area
+  - the left stepper uses numbered steps and human status text, not raw validation
+    tokens
+  - `Advanced` replaces the guided step content with the detailed editor for the
+    active setup area
+  - `Return Home` asks for confirmation when setup is incomplete
 
 Detailed Conditions, Stimuli Manager, and Runtime widgets remain available internally
 for wizard advanced access and existing document bindings, but they are not visible

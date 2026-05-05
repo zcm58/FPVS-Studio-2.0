@@ -166,7 +166,9 @@ def test_recent_projects_render_and_open_from_welcome(
     assert recent_list is not None
     assert recent_panel.isVisible() is True
     assert recent_list.count() == 1
-    assert recent_list.item(0).text() == str(scaffold.project_root)
+    assert recent_list.item(0).text() == "Recent Launch Project"
+    assert recent_list.item(0).toolTip() == str(scaffold.project_root)
+    assert recent_list.item(0).data(Qt.ItemDataRole.UserRole) == str(scaffold.project_root)
 
     qtbot.mouseClick(
         recent_list.viewport(),

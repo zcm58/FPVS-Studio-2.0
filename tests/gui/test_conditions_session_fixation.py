@@ -234,6 +234,10 @@ def test_session_structure_rows_toggle_with_inter_condition_mode(
     page = window.setup_dashboard_page.session_structure_editor
     window.setup_wizard_page.open_wizard(step_key="session")
     window.main_stack.setCurrentWidget(window.setup_wizard_page)
+    qtbot.mouseClick(
+        window.setup_wizard_page.setup_wizard_advanced_button,
+        Qt.MouseButton.LeftButton,
+    )
     QApplication.processEvents()
 
     page.inter_condition_mode_combo.setCurrentIndex(
@@ -261,6 +265,10 @@ def test_fixation_color_change_mode_toggles_relevant_controls(
     page = window.setup_dashboard_page.fixation_settings_editor
     window.setup_wizard_page.open_wizard(step_key="session")
     window.main_stack.setCurrentWidget(window.setup_wizard_page)
+    qtbot.mouseClick(
+        window.setup_wizard_page.setup_wizard_advanced_button,
+        Qt.MouseButton.LeftButton,
+    )
     page.fixation_enabled_checkbox.setChecked(True)
     QApplication.processEvents()
 
@@ -291,6 +299,10 @@ def test_fixation_accuracy_toggle_controls_response_visibility(
     page = window.setup_dashboard_page.fixation_settings_editor
     window.setup_wizard_page.open_wizard(step_key="session")
     window.main_stack.setCurrentWidget(window.setup_wizard_page)
+    qtbot.mouseClick(
+        window.setup_wizard_page.setup_wizard_advanced_button,
+        Qt.MouseButton.LeftButton,
+    )
     page.fixation_enabled_checkbox.setChecked(True)
     QApplication.processEvents()
 
@@ -315,6 +327,10 @@ def test_fixation_disable_hides_dependent_sections(
     page = window.setup_dashboard_page.fixation_settings_editor
     window.setup_wizard_page.open_wizard(step_key="session")
     window.main_stack.setCurrentWidget(window.setup_wizard_page)
+    qtbot.mouseClick(
+        window.setup_wizard_page.setup_wizard_advanced_button,
+        Qt.MouseButton.LeftButton,
+    )
     page.fixation_enabled_checkbox.setChecked(True)
     page.fixation_accuracy_checkbox.setChecked(True)
     QApplication.processEvents()

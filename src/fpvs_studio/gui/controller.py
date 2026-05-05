@@ -17,6 +17,8 @@ from fpvs_studio.core.condition_template_profiles import (
     normalize_condition_template_profile_root,
 )
 from fpvs_studio.core.models import ConditionTemplateProfile
+from fpvs_studio.core.paths import project_json_path
+from fpvs_studio.core.serialization import load_project_file
 from fpvs_studio.gui.condition_template_manager_dialog import ConditionTemplateManagerDialog
 from fpvs_studio.gui.create_project_dialog import CreateProjectDialog
 from fpvs_studio.gui.document import ProjectDocument
@@ -69,9 +71,7 @@ class StudioController:
             self.welcome_window.create_requested.connect(self.show_create_project_dialog)
             self.welcome_window.open_requested.connect(self.show_open_project_dialog)
             self.welcome_window.recent_project_requested.connect(self.open_recent_project)
-        self.welcome_window.set_recent_projects(
-            [str(path) for path in self.load_recent_project_roots()]
-        )
+        self.welcome_window.set_recent_projects(self.load_recent_project_entries())
         self.welcome_window.show()
         self.welcome_window.raise_()
         self.welcome_window.activateWindow()
@@ -102,6 +102,27 @@ class StudioController:
         self._settings.sync()
         return recent_paths
 
+    def load_recent_project_entries(self) -> list[tuple[str, str]]:
+        """Return display names and root paths for valid recent projects."""
+
+        entries: list[tuple[str, str]] = []
+        valid_roots: list[Path] = []
+        recent_roots = self.load_recent_project_roots()
+        for project_root in recent_roots:
+            try:
+                project = load_project_file(project_json_path(project_root))
+            except Exception:
+                continue
+            entries.append((project.meta.name, str(project_root)))
+            valid_roots.append(project_root)
+        if len(valid_roots) != len(recent_roots):
+            self._settings.setValue(
+                _RECENT_PROJECT_ROOTS_KEY,
+                [str(path) for path in valid_roots],
+            )
+            self._settings.sync()
+        return entries
+
     def record_recent_project_root(self, project_root: Path) -> None:
         """Persist a project root as the most recent launch/open target."""
 
@@ -120,7 +141,7 @@ class StudioController:
         )
         self._settings.sync()
         if self.welcome_window is not None:
-            self.welcome_window.set_recent_projects([str(path) for path in recent_paths])
+            self.welcome_window.set_recent_projects(self.load_recent_project_entries())
 
     def open_recent_project(self, project_root: str) -> None:
         """Open a project selected from the welcome screen recent-project list."""

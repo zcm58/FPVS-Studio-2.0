@@ -125,10 +125,10 @@ class WelcomeWindow(QWidget):
 
         self._apply_theme_styles()
 
-    def set_recent_projects(self, project_roots: list[str]) -> None:
+    def set_recent_projects(self, projects: list[tuple[str, str]]) -> None:
         self.recent_project_list.clear()
-        for project_root in project_roots:
-            item = QListWidgetItem(project_root)
+        for project_name, project_root in projects:
+            item = QListWidgetItem(project_name)
             item.setToolTip(project_root)
             item.setData(Qt.ItemDataRole.UserRole, project_root)
             self.recent_project_list.addItem(item)

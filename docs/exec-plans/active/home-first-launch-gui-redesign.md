@@ -25,6 +25,12 @@ only through step-level advanced access.
   - Display / Runtime
   - Session / Fixation
   - Review / Ready
+- Polish wizard progression:
+  - numbered stepper labels replace raw `[OK]` / `[TODO]` tokens
+  - guided and advanced views switch inside one primary content area
+  - dense Session / Fixation controls live behind Advanced to avoid cropped setup
+    content
+  - incomplete `Return Home` prompts before leaving setup
 - Keep detailed editors internal:
   - Conditions, Stimuli Manager, and Runtime remain instantiated for existing
     document bindings and advanced setup access.
@@ -57,8 +63,11 @@ only through step-level advanced access.
   - step order is stable
   - `Next` is disabled until the current step is complete
   - adding a condition enables the Conditions step
-  - `Advanced` exposes the existing detailed editor for the active step
-  - `Return Home` switches back to Home without launching
+  - no setup stepper text contains raw `[OK]` or `[TODO]` prefixes
+  - `Advanced` replaces guided content with the existing detailed editor for the
+    active step
+  - incomplete `Return Home` can keep the user in setup or return Home by confirmation
+  - ready `Return Home` switches back to Home without confirmation
 - Launch:
   - Home still exposes `Launch Experiment`
   - launch still prompts for participant number

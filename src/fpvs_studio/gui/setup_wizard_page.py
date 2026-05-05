@@ -6,10 +6,11 @@ from collections.abc import Callable
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QFrame,
+    QFormLayout,
     QHBoxLayout,
     QLabel,
     QListWidget,
+    QMessageBox,
     QPushButton,
     QStackedWidget,
     QVBoxLayout,
@@ -130,10 +131,23 @@ class SetupWizardPage(QWidget):
         self.step_instruction_label.setWordWrap(True)
         self.step_status_badge = StatusBadgeLabel("Step not checked", self)
         self.step_status_badge.setObjectName("setup_wizard_ready_badge")
+        self.step_status_label = QLabel(self)
+        self.step_status_label.setObjectName("setup_wizard_step_status_label")
+        self.step_status_label.setWordWrap(True)
 
         self.step_stack = QStackedWidget(self)
         self.step_stack.setObjectName("setup_wizard_step_stack")
         self._build_step_pages()
+
+        self.guided_panel = QWidget(self)
+        guided_layout = QVBoxLayout(self.guided_panel)
+        guided_layout.setContentsMargins(0, 0, 0, 0)
+        guided_layout.setSpacing(8)
+        guided_layout.addWidget(self.step_title_label)
+        guided_layout.addWidget(self.step_instruction_label)
+        guided_layout.addWidget(self.step_status_badge)
+        guided_layout.addWidget(self.step_status_label)
+        guided_layout.addWidget(self.step_stack, 1)
 
         step_card = SectionCard(
             title="Current Step",
@@ -143,10 +157,6 @@ class SetupWizardPage(QWidget):
         )
         step_card.card_layout.setContentsMargins(12, 10, 12, 10)
         step_card.body_layout.setSpacing(8)
-        step_card.body_layout.addWidget(self.step_title_label)
-        step_card.body_layout.addWidget(self.step_instruction_label)
-        step_card.body_layout.addWidget(self.step_status_badge)
-        step_card.body_layout.addWidget(self.step_stack, 1)
 
         self.advanced_stack = QStackedWidget(self)
         self.advanced_stack.setObjectName("setup_wizard_advanced_stack")
@@ -154,12 +164,13 @@ class SetupWizardPage(QWidget):
         self.advanced_stack.addWidget(self.conditions_page)
         self.advanced_stack.addWidget(self.assets_page)
         self.advanced_stack.addWidget(self.run_page)
-        self.advanced_frame = QFrame(self)
-        self.advanced_frame.setObjectName("setup_wizard_advanced_frame")
-        advanced_layout = QVBoxLayout(self.advanced_frame)
-        advanced_layout.setContentsMargins(0, 0, 0, 0)
-        advanced_layout.addWidget(self.advanced_stack)
-        self.advanced_frame.setVisible(False)
+        self.advanced_stack.addWidget(self._session_advanced_page())
+
+        self.content_stack = QStackedWidget(self)
+        self.content_stack.setObjectName("setup_wizard_content_stack")
+        self.content_stack.addWidget(self.guided_panel)
+        self.content_stack.addWidget(self.advanced_stack)
+        step_card.body_layout.addWidget(self.content_stack, 1)
 
         body_row = QWidget(self)
         body_layout = QHBoxLayout(body_row)
@@ -194,7 +205,6 @@ class SetupWizardPage(QWidget):
         button_layout.addWidget(self.setup_wizard_next_button)
 
         self.shell.add_content_widget(body_row)
-        self.shell.add_content_widget(self.advanced_frame, stretch=1)
         self.shell.add_content_widget(button_row)
 
         layout = QVBoxLayout(self)
@@ -217,7 +227,6 @@ class SetupWizardPage(QWidget):
         if step_key is not None:
             self._active_step_index = self._step_index_for_key(step_key)
         self._advanced_visible = False
-        self.advanced_frame.setVisible(False)
         self.refresh()
 
     def _build_step_pages(self) -> None:
@@ -247,11 +256,34 @@ class SetupWizardPage(QWidget):
 
     def _session_step_page(self) -> QWidget:
         page = QWidget(self)
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(8)
+        self.session_guided_summary_label = QLabel(page)
+        self.session_guided_summary_label.setObjectName("setup_wizard_session_summary")
+        self.session_guided_summary_label.setWordWrap(True)
+        summary_form = QFormLayout()
+        summary_form.setVerticalSpacing(7)
+        self.session_block_count_value = QLabel(page)
+        self.session_order_value = QLabel(page)
+        self.session_fixation_value = QLabel(page)
+        self.session_accuracy_value = QLabel(page)
+        summary_form.addRow("Block count", self.session_block_count_value)
+        summary_form.addRow("Order strategy", self.session_order_value)
+        summary_form.addRow("Fixation task", self.session_fixation_value)
+        summary_form.addRow("Accuracy task", self.session_accuracy_value)
+        layout.addWidget(self.session_guided_summary_label)
+        layout.addLayout(summary_form)
+        layout.addStretch(1)
+        return page
+
+    def _session_advanced_page(self) -> QWidget:
+        page = QWidget(self)
         layout = QHBoxLayout(page)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(PAGE_SECTION_GAP)
         layout.addWidget(self.session_structure_page, 1)
-        layout.addWidget(self.fixation_cross_settings_page, 1)
+        layout.addWidget(self.fixation_cross_settings_page, 2)
         return page
 
     def _review_step_page(self) -> QWidget:
@@ -301,6 +333,18 @@ class SetupWizardPage(QWidget):
         self.refresh()
 
     def _return_home(self) -> None:
+        if not self.is_launch_ready():
+            answer = QMessageBox.question(
+                self,
+                "Setup Incomplete",
+                "This project is not ready to launch yet. Return Home anyway?\n\n"
+                "Your setup changes are kept, but the experiment cannot launch until "
+                "setup is complete.",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if answer != QMessageBox.StandardButton.Yes:
+                return
         if self._on_return_home is not None:
             self._on_return_home()
 
@@ -331,10 +375,12 @@ class SetupWizardPage(QWidget):
         step_key, title, instruction = _WIZARD_STEPS[self._active_step_index]
         self.step_title_label.setText(title)
         self.step_instruction_label.setText(instruction)
+        self.step_status_label.setText(self._step_status_text(self._active_step_index))
         self.conditions_summary_label.setText(self._conditions_summary_text())
+        self._refresh_session_guided_summary()
         report = self._readiness_report()
         self.review_summary_label.setText(report.status_summary)
-        _set_list_items(self.review_readiness_list, report.readiness_items)
+        _set_list_items(self.review_readiness_list, self._human_readiness_items(report))
 
         step_valid = self._current_step_valid()
         self.step_status_badge.set_state(
@@ -349,10 +395,14 @@ class SetupWizardPage(QWidget):
         advanced_available = self._advanced_available_for_current_step()
         self.setup_wizard_advanced_button.setEnabled(advanced_available)
         self.setup_wizard_advanced_button.setText(
-            "Hide Advanced" if self._advanced_visible else "Advanced"
+            "Back to Guided Step" if self._advanced_visible else "Advanced"
         )
-        self.advanced_frame.setVisible(self._advanced_visible and advanced_available)
         self.advanced_stack.setCurrentIndex(self._advanced_index_for_step(step_key))
+        self.content_stack.setCurrentWidget(
+            self.advanced_stack
+            if self._advanced_visible and advanced_available
+            else self.guided_panel
+        )
 
     def _readiness_report(self) -> LauncherReadinessReport:
         return _launcher_readiness_report(
@@ -362,9 +412,21 @@ class SetupWizardPage(QWidget):
 
     def _step_list_lines(self) -> tuple[str, ...]:
         return tuple(
-            f"{'[OK]' if self._step_valid(index) else '[TODO]'} {title}"
+            f"{index + 1}. {title} - {self._step_status_text(index)}"
             for index, (_key, title, _instruction) in enumerate(_WIZARD_STEPS)
         )
+
+    def _step_status_text(self, index: int) -> str:
+        step_key = _WIZARD_STEPS[index][0]
+        if self._step_valid(index):
+            return "Ready" if step_key == "review" else "Complete"
+        if step_key == "conditions":
+            return "Add a condition"
+        if step_key == "stimuli":
+            return "Needs images"
+        if step_key == "review":
+            return "Review blockers"
+        return self._current_step_blocker() if index == self._active_step_index else "Needs setup"
 
     def _current_step_valid(self) -> bool:
         return self._step_valid(self._active_step_index)
@@ -407,15 +469,53 @@ class SetupWizardPage(QWidget):
         names = ", ".join(condition.name for condition in ordered_conditions)
         return f"{len(ordered_conditions)} condition(s) configured: {names}"
 
+    @staticmethod
+    def _human_readiness_items(report: LauncherReadinessReport) -> tuple[str, ...]:
+        replacements = {
+            "[OK] ": "Complete: ",
+            "[TODO] ": "Needs setup: ",
+            "[WARN] ": "Warning: ",
+            "[INFO] ": "Note: ",
+            "[ACTION] ": "Action: ",
+        }
+        lines: list[str] = []
+        for item in report.readiness_items:
+            line = item
+            for prefix, replacement in replacements.items():
+                if line.startswith(prefix):
+                    line = f"{replacement}{line.removeprefix(prefix)}"
+                    break
+            lines.append(line)
+        return tuple(lines)
+
+    def _refresh_session_guided_summary(self) -> None:
+        session = self._document.project.settings.session
+        fixation = self._document.project.settings.fixation_task
+        self.session_guided_summary_label.setText(
+            "Review the launch essentials below. Use Advanced for detailed session and "
+            "fixation timing controls."
+        )
+        self.session_block_count_value.setText(str(session.block_count))
+        self.session_order_value.setText(
+            "Randomized within each block"
+            if session.randomize_conditions_per_block
+            else "Fixed project order"
+        )
+        self.session_fixation_value.setText("Enabled" if fixation.enabled else "Disabled")
+        self.session_accuracy_value.setText(
+            "Enabled" if fixation.accuracy_task_enabled else "Disabled"
+        )
+
     def _advanced_available_for_current_step(self) -> bool:
         return _WIZARD_STEPS[self._active_step_index][0] in {
             "conditions",
             "stimuli",
             "runtime",
+            "session",
         }
 
     def _advanced_index_for_step(self, step_key: str) -> int:
-        return {"conditions": 1, "stimuli": 2, "runtime": 3}.get(step_key, 0)
+        return {"conditions": 1, "stimuli": 2, "runtime": 3, "session": 4}.get(step_key, 0)
 
     def _step_index_for_key(self, step_key: str) -> int:
         for index, (candidate, _title, _instruction) in enumerate(_WIZARD_STEPS):

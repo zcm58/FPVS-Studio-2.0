@@ -86,7 +86,14 @@ def test_setup_wizard_exists_and_uses_single_column_shell_with_steps(
     assert wizard.step_status_badge.objectName() == "setup_wizard_ready_badge"
     assert wizard.setup_wizard_step_list.count() == 6
     assert wizard.step_stack.count() == 6
-    assert wizard.advanced_frame.isVisible() is False
+    assert wizard.content_stack.currentWidget() is wizard.guided_panel
+    step_text = "\n".join(
+        wizard.setup_wizard_step_list.item(index).text()
+        for index in range(wizard.setup_wizard_step_list.count())
+    )
+    assert "[OK]" not in step_text
+    assert "[TODO]" not in step_text
+    assert "1. Project Details" in step_text
 
 
 def test_major_tabs_share_page_container_width_presets(
@@ -270,6 +277,7 @@ def test_setup_wizard_navigation_and_advanced_editor_access(
     qtbot,
     controller: StudioController,
     tmp_path: Path,
+    monkeypatch,
 ) -> None:
     _, window = _open_created_project(controller, qtbot, tmp_path, "Setup Guide Actions")
     guide = window.setup_wizard_page
@@ -294,13 +302,102 @@ def test_setup_wizard_navigation_and_advanced_editor_access(
     assert next_button.isEnabled()
     assert advanced_button.isEnabled()
     qtbot.mouseClick(advanced_button, Qt.MouseButton.LeftButton)
-    assert guide.advanced_frame.isVisible()
+    assert guide.content_stack.currentWidget() is guide.advanced_stack
     assert guide.advanced_stack.currentWidget() is window.conditions_page
+    assert advanced_button.text() == "Back to Guided Step"
 
     qtbot.mouseClick(back_button, Qt.MouseButton.LeftButton)
     assert guide.step_stack.currentIndex() == 0
+    assert guide.content_stack.currentWidget() is guide.guided_panel
 
+    monkeypatch.setattr(
+        "fpvs_studio.gui.setup_wizard_page.QMessageBox.question",
+        lambda *args, **kwargs: QMessageBox.StandardButton.Yes,
+    )
     qtbot.mouseClick(return_home_button, Qt.MouseButton.LeftButton)
+    assert window.main_stack.currentWidget() is window.home_page
+
+
+def test_setup_wizard_advanced_replaces_guided_view_for_session_step(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Session Advanced Swap")
+    guide = window.setup_wizard_page
+    window.main_stack.setCurrentWidget(guide)
+    guide.open_wizard(step_key="session")
+
+    assert guide.content_stack.currentWidget() is guide.guided_panel
+    assert guide.step_stack.currentWidget().findChild(QLabel, "setup_wizard_session_summary")
+    assert guide.advanced_stack.currentWidget() is not window.session_structure_page
+
+    qtbot.mouseClick(guide.setup_wizard_advanced_button, Qt.MouseButton.LeftButton)
+
+    assert guide.content_stack.currentWidget() is guide.advanced_stack
+    assert guide.advanced_stack.currentWidget().layout().itemAt(0).widget() is (
+        window.session_structure_page
+    )
+    assert guide.advanced_stack.currentWidget().layout().itemAt(1).widget() is (
+        window.fixation_cross_settings_page
+    )
+
+
+def test_setup_wizard_return_home_confirms_incomplete_setup(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Incomplete Exit Guard")
+    guide = window.setup_wizard_page
+    window.main_stack.setCurrentWidget(guide)
+
+    prompts: list[str] = []
+
+    def _decline_return(*args, **_kwargs):
+        prompts.append(str(args[2]))
+        return QMessageBox.StandardButton.No
+
+    monkeypatch.setattr(
+        "fpvs_studio.gui.setup_wizard_page.QMessageBox.question",
+        _decline_return,
+    )
+    qtbot.mouseClick(guide.setup_wizard_return_home_button, Qt.MouseButton.LeftButton)
+
+    assert window.main_stack.currentWidget() is guide
+    assert prompts
+    assert "not ready to launch" in prompts[0]
+
+    monkeypatch.setattr(
+        "fpvs_studio.gui.setup_wizard_page.QMessageBox.question",
+        lambda *args, **kwargs: QMessageBox.StandardButton.Yes,
+    )
+    qtbot.mouseClick(guide.setup_wizard_return_home_button, Qt.MouseButton.LeftButton)
+    assert window.main_stack.currentWidget() is window.home_page
+
+
+def test_setup_wizard_ready_project_returns_home_without_confirmation(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Ready Exit Guard")
+    _prepare_compile_ready_project(window, tmp_path / "ready-exit-assets")
+    assert window.save_project() is True
+    guide = window.setup_wizard_page
+    window.main_stack.setCurrentWidget(guide)
+
+    def _unexpected_prompt(*_args, **_kwargs):
+        raise AssertionError("Ready setup should not ask before returning Home.")
+
+    monkeypatch.setattr(
+        "fpvs_studio.gui.setup_wizard_page.QMessageBox.question",
+        _unexpected_prompt,
+    )
+    qtbot.mouseClick(guide.setup_wizard_return_home_button, Qt.MouseButton.LeftButton)
+
     assert window.main_stack.currentWidget() is window.home_page
 
 
