@@ -117,7 +117,7 @@ class SetupWizardPage(QWidget):
             title="Setup Wizard",
             subtitle="Complete each setup step once, then use Home for routine launches.",
             layout_mode="single_column",
-            width_preset="wide",
+            width_preset="full",
             parent=self,
         )
         self.shell.set_footer_text(

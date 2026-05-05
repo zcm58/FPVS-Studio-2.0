@@ -82,6 +82,7 @@ def test_setup_wizard_exists_and_uses_single_column_shell_with_steps(
     wizard = window.setup_wizard_page
     assert window.main_stack.indexOf(wizard) == 1
     assert wizard.shell.layout_mode == "single_column"
+    assert wizard.shell.page_container.width_preset == "full"
     assert wizard.shell.title_label.text() == "Setup Wizard"
     assert wizard.setup_wizard_step_list.objectName() == "setup_wizard_step_list"
     assert wizard.setup_wizard_step_list.isVisible() is False
@@ -117,7 +118,8 @@ def test_major_tabs_share_page_container_width_presets(
 
     assert window.home_page.page_container.width_preset == "wide"
     assert window.home_page.page_container.max_content_width() == 1280
-    assert window.setup_wizard_page.shell.page_container.width_preset == "wide"
+    assert window.setup_wizard_page.shell.page_container.width_preset == "full"
+    assert window.setup_wizard_page.shell.page_container.max_content_width() == 16_777_215
     assert window.conditions_page.shell.page_container.width_preset == "wide"
     assert window.assets_page.shell.page_container.width_preset == "full"
     assert window.assets_page.shell.page_container.max_content_width() == 16_777_215
