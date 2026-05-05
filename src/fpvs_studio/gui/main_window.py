@@ -16,22 +16,21 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QProgressDialog,
     QPushButton,
+    QStackedWidget,
     QStatusBar,
     QStyleFactory,
-    QTabWidget,
 )
 
 from fpvs_studio.core.models import ConditionTemplateProfile
-from fpvs_studio.gui.animations import AnimatedTabBar, ButtonHoverAnimator
-from fpvs_studio.gui.assets_pages import AssetsPage
+from fpvs_studio.gui.animations import ButtonHoverAnimator
 from fpvs_studio.gui.components import apply_studio_theme
-from fpvs_studio.gui.condition_pages import ConditionsPage
 from fpvs_studio.gui.document import ProjectDocument
-from fpvs_studio.gui.home_page import HomePage, SetupDashboardPage
-from fpvs_studio.gui.run_page import ParticipantNumberDialog, RunPage
-from fpvs_studio.gui.session_pages import FixationCrossSettingsPage, SessionStructurePage
+from fpvs_studio.gui.home_page import HomePage
+from fpvs_studio.gui.run_page import ParticipantNumberDialog
+from fpvs_studio.gui.setup_wizard_page import SetupWizardPage
 from fpvs_studio.gui.window_helpers import (
     _LAUNCH_INTERSTITIAL_DURATION_MS,
+    _launcher_readiness_report,
     _show_error_dialog,
 )
 
@@ -67,40 +66,34 @@ class StudioMainWindow(QMainWindow):
         self.setWindowTitle("FPVS Studio (Alpha)")
         self.resize(1440, 920)
 
-        self.conditions_page = ConditionsPage(document, self)
-        self.session_structure_page = SessionStructurePage(document, self)
-        self.fixation_cross_settings_page = FixationCrossSettingsPage(document, self)
-        self.assets_page = AssetsPage(document, self)
         self._runtime_fullscreen_ui_state = True
-        self.run_page = RunPage(
-            document,
-            fullscreen_state_getter=self._runtime_fullscreen_state,
-            fullscreen_state_setter=self._set_runtime_fullscreen_state,
-            parent=self,
-        )
-        self.setup_dashboard_page = SetupDashboardPage(
-            document,
-            load_condition_template_profiles=on_load_condition_template_profiles,
-            manage_condition_templates=on_manage_condition_templates,
-            fullscreen_state_getter=self._runtime_fullscreen_state,
-            fullscreen_state_setter=self._set_runtime_fullscreen_state,
-            parent=self,
-        )
         self.home_page = HomePage(
             document,
             load_condition_template_profiles=on_load_condition_template_profiles,
             parent=self,
         )
+        self.setup_wizard_page = SetupWizardPage(
+            document,
+            load_condition_template_profiles=on_load_condition_template_profiles,
+            manage_condition_templates=on_manage_condition_templates,
+            fullscreen_state_getter=self._runtime_fullscreen_state,
+            fullscreen_state_setter=self._set_runtime_fullscreen_state,
+            on_return_home=self.show_home,
+            parent=self,
+        )
+        self.setup_dashboard_page = self.setup_wizard_page
+        self.conditions_page = self.setup_wizard_page.conditions_page
+        self.assets_page = self.setup_wizard_page.assets_page
+        self.run_page = self.setup_wizard_page.run_page
+        self.session_structure_page = self.setup_wizard_page.session_structure_page
+        self.fixation_cross_settings_page = self.setup_wizard_page.fixation_cross_settings_page
 
-        self.main_tabs = QTabWidget(self)
-        self.main_tabs.setObjectName("main_tabs")
-        self.main_tabs.setTabBar(AnimatedTabBar(self.main_tabs))
-        self.main_tabs.addTab(self.home_page, "Home")
-        self.main_tabs.addTab(self.setup_dashboard_page, "Setup Guide")
-        self.main_tabs.addTab(self.conditions_page, "Conditions")
-        self.main_tabs.addTab(self.assets_page, "Stimuli Manager")
-        self.main_tabs.addTab(self.run_page, "Runtime")
-        self.setCentralWidget(self.main_tabs)
+        self.main_stack = QStackedWidget(self)
+        self.main_stack.setObjectName("main_stack")
+        self.main_stack.addWidget(self.home_page)
+        self.main_stack.addWidget(self.setup_wizard_page)
+        self.main_tabs = self.main_stack
+        self.setCentralWidget(self.main_stack)
         self._apply_chrome_styles()
 
         self.setStatusBar(QStatusBar(self))
@@ -118,20 +111,14 @@ class StudioMainWindow(QMainWindow):
             launch_action=self.launch_action,
         )
         self.home_page.bind_navigation_actions(
-            edit_setup=lambda: self.main_tabs.setCurrentWidget(self.setup_dashboard_page),
-            open_stimuli_manager=lambda: self.main_tabs.setCurrentWidget(self.assets_page),
-            open_runtime_settings=lambda: self.main_tabs.setCurrentWidget(self.run_page),
-        )
-        self.setup_dashboard_page.bind_step_navigation_actions(
-            edit_conditions=lambda: self.main_tabs.setCurrentWidget(self.conditions_page),
-            open_stimuli_manager=lambda: self.main_tabs.setCurrentWidget(self.assets_page),
-            open_runtime_settings=lambda: self.main_tabs.setCurrentWidget(self.run_page),
+            edit_setup=self.show_setup_wizard,
         )
         self._create_menu_and_toolbar()
         self._button_hover_animators: list[ButtonHoverAnimator] = []
         self._install_button_hover_animations()
         self._wire_document()
         self._update_window_title()
+        self._show_initial_workflow_surface()
 
     def _wire_document(self) -> None:
         self.document.project_changed.connect(self._update_window_title)
@@ -147,8 +134,29 @@ class StudioMainWindow(QMainWindow):
             return
         self._runtime_fullscreen_ui_state = checked_bool
         self.run_page.sync_fullscreen_checkbox(checked_bool)
-        self.setup_dashboard_page.sync_fullscreen_checkbox(checked_bool)
+        self.setup_wizard_page.sync_fullscreen_checkbox(checked_bool)
         self.home_page.refresh()
+
+    def show_home(self) -> None:
+        self.home_page.refresh()
+        self.main_stack.setCurrentWidget(self.home_page)
+
+    def show_setup_wizard(self) -> None:
+        self.setup_wizard_page.open_wizard()
+        self.main_stack.setCurrentWidget(self.setup_wizard_page)
+
+    def _show_initial_workflow_surface(self) -> None:
+        if self._current_project_is_ready_to_launch():
+            self.show_home()
+        else:
+            self.show_setup_wizard()
+
+    def _current_project_is_ready_to_launch(self) -> bool:
+        report = _launcher_readiness_report(
+            self.document,
+            refresh_hz=self.document.project.settings.display.preferred_refresh_hz or 60.0,
+        )
+        return report.badge_state == "ready"
 
     def _apply_chrome_styles(self) -> None:
         apply_studio_theme(self)

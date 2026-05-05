@@ -13,8 +13,9 @@ code may lazily import PsychoPy.
 ## Package Map
 
 - `src/fpvs_studio/app/`: application entry points and startup wiring.
-- `src/fpvs_studio/gui/`: PySide6 windows, dialogs, controllers, document binding, and
-  the `gui/components.py` public component/theme surface.
+- `src/fpvs_studio/gui/`: PySide6 windows, dialogs, controllers, document binding,
+  the Home/Setup Wizard workflow, and the `gui/components.py` public component/theme
+  surface.
 - `src/fpvs_studio/core/`: editable project models, validation, compilation, run/session
   contracts, project persistence, and engine-neutral domain logic.
 - `src/fpvs_studio/preprocessing/`: source image import, inspection, derived assets, and
@@ -74,6 +75,9 @@ Current planned seams:
 - GUI component/theme work starts from `src/fpvs_studio/gui/components.py`. It re-exports
   shared page/card/status/path widgets, owns reusable button roles and stylesheets, and
   keeps raw design tokens in `design_system.py`.
+- GUI workflow composition is Home-first. `main_window.py` uses a stack with Home and
+  `setup_wizard_page.py`; detailed Conditions, Stimuli Manager, and Runtime widgets stay
+  internal for wizard advanced access rather than visible top-level tabs.
 - Condition-template profile management keeps `condition_template_manager_dialog.py` as
   the manager dialog and compatibility import point. The profile editor dialog lives in
   `condition_template_profile_editor_dialog.py`.

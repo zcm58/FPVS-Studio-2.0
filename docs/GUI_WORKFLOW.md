@@ -28,22 +28,23 @@ its `project.json` through the backend document layer.
 
 ## Main Window
 
-The authoring window is organized into five pages:
+The authoring window is organized around two user-facing modes:
 
 - `Home`
-  - launch-first project summary, readiness, and quick navigation
-- `Setup Guide`
-  - ordered setup steps for project details, conditions, stimuli, session/fixation,
-    runtime, and final readiness
-- `Conditions`
-  - condition list, add/remove/reorder, instructions, trigger code, stimulus
-    variant, duty cycle, base/oddball import actions, source summaries
-- `Stimuli Manager`
-  - supported project variants, source import, inspection refresh,
-    materialization, manifest and validation summaries
-- `Runtime`
-  - refresh rate, display index, engine display, serial port, baud rate,
-    launch, and session-plan summary
+  - daily-use launch surface for ready projects
+  - project summary, launch readiness, project open/create/save actions, and
+    `Launch Experiment`
+  - `Edit Setup` opens the guided setup workflow
+- `Setup Wizard`
+  - in-window setup flow for new/incomplete projects and intentional edits
+  - ordered steps: Project Details, Conditions, Stimuli, Display / Runtime,
+    Session / Fixation, Review / Ready
+  - `Next` is disabled until the active step is complete
+  - `Advanced` exposes the existing detailed editor for the active setup area
+
+Detailed Conditions, Stimuli Manager, and Runtime widgets remain available internally
+for wizard advanced access and existing document bindings, but they are not visible
+top-level tabs during normal use.
 
 ## GUI Implementation Map
 
@@ -56,6 +57,9 @@ The authoring window is organized into five pages:
 - Fixation-task widgets live in `src/fpvs_studio/gui/fixation_settings_page.py`.
 - `src/fpvs_studio/gui/session_pages.py` is a compatibility export facade for those
   session/fixation page classes.
+- Guided setup composition lives in `src/fpvs_studio/gui/setup_wizard_page.py`; it
+  uses existing document services and editor widgets rather than duplicating project
+  state.
 - Feature-sized GUI workflow reworks should create or update an execution plan in
   `docs/exec-plans/active/` before implementation.
 - Condition-template management lives in
@@ -88,6 +92,8 @@ Phase 5 currently supports:
 - opening and editing an existing project
 - reopening recent projects from the welcome screen
 - saving and reopening project state
+- launching ready projects from Home without exposing setup tabs
+- completing or revisiting project setup through the Setup Wizard
 - configuring session transition settings and stored seed
 - configuring fixation settings, including an optional fixation accuracy task
   (Space within 1.0 s of each fixation color change)

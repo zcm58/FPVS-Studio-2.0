@@ -8,7 +8,6 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QApplication,
     QMessageBox,
-    QPushButton,
     QWidget,
 )
 from tests.gui.helpers import (
@@ -33,11 +32,7 @@ def test_project_description_typing_round_trips_without_cursor_reset(
     typed_text = "testing this, why is this happening"
     _, window = _open_created_project(controller, qtbot, tmp_path, "Description Project")
 
-    window.main_tabs.setCurrentWidget(window.setup_dashboard_page)
-    qtbot.mouseClick(
-        window.setup_dashboard_page.findChild(QPushButton, "setup_guide_project_button"),
-        Qt.MouseButton.LeftButton,
-    )
+    window.main_stack.setCurrentWidget(window.setup_wizard_page)
     description_edit = window.setup_dashboard_page.project_overview_editor.project_description_edit
     description_edit.setFocus()
     qtbot.waitUntil(description_edit.hasFocus)
@@ -193,7 +188,7 @@ def test_fixation_cross_settings_page_maps_fixed_target_count_mode_to_backend(
 ) -> None:
     _, window = _open_created_project(controller, qtbot, tmp_path, "Fixed Target Count")
 
-    window.main_tabs.setCurrentWidget(window.setup_dashboard_page)
+    window.main_stack.setCurrentWidget(window.setup_wizard_page)
     page = window.setup_dashboard_page.fixation_settings_editor
     page.target_count_mode_combo.setCurrentIndex(page.target_count_mode_combo.findData("fixed"))
     page.changes_per_sequence_spin.setValue(7)
@@ -210,7 +205,7 @@ def test_fixation_cross_settings_page_exposes_accuracy_task_controls(
 ) -> None:
     _, window = _open_created_project(controller, qtbot, tmp_path, "Fixation Controls")
 
-    window.main_tabs.setCurrentWidget(window.setup_dashboard_page)
+    window.main_stack.setCurrentWidget(window.setup_wizard_page)
     page = window.setup_dashboard_page.fixation_settings_editor
     assert (
         page.findChild(type(page.fixation_accuracy_checkbox), "fixation_accuracy_checkbox")
@@ -237,11 +232,8 @@ def test_session_structure_rows_toggle_with_inter_condition_mode(
     _, window = _open_created_project(controller, qtbot, tmp_path, "Session Structure Visibility")
 
     page = window.setup_dashboard_page.session_structure_editor
-    window.main_tabs.setCurrentWidget(window.setup_dashboard_page)
-    qtbot.mouseClick(
-        window.setup_dashboard_page.findChild(QPushButton, "setup_guide_session_button"),
-        Qt.MouseButton.LeftButton,
-    )
+    window.setup_wizard_page.open_wizard(step_key="session")
+    window.main_stack.setCurrentWidget(window.setup_wizard_page)
     QApplication.processEvents()
 
     page.inter_condition_mode_combo.setCurrentIndex(
@@ -267,11 +259,8 @@ def test_fixation_color_change_mode_toggles_relevant_controls(
     _, window = _open_created_project(controller, qtbot, tmp_path, "Fixation Mode Visibility")
 
     page = window.setup_dashboard_page.fixation_settings_editor
-    window.main_tabs.setCurrentWidget(window.setup_dashboard_page)
-    qtbot.mouseClick(
-        window.setup_dashboard_page.findChild(QPushButton, "setup_guide_session_button"),
-        Qt.MouseButton.LeftButton,
-    )
+    window.setup_wizard_page.open_wizard(step_key="session")
+    window.main_stack.setCurrentWidget(window.setup_wizard_page)
     page.fixation_enabled_checkbox.setChecked(True)
     QApplication.processEvents()
 
@@ -300,11 +289,8 @@ def test_fixation_accuracy_toggle_controls_response_visibility(
     _, window = _open_created_project(controller, qtbot, tmp_path, "Fixation Accuracy Visibility")
 
     page = window.setup_dashboard_page.fixation_settings_editor
-    window.main_tabs.setCurrentWidget(window.setup_dashboard_page)
-    qtbot.mouseClick(
-        window.setup_dashboard_page.findChild(QPushButton, "setup_guide_session_button"),
-        Qt.MouseButton.LeftButton,
-    )
+    window.setup_wizard_page.open_wizard(step_key="session")
+    window.main_stack.setCurrentWidget(window.setup_wizard_page)
     page.fixation_enabled_checkbox.setChecked(True)
     QApplication.processEvents()
 
@@ -327,11 +313,8 @@ def test_fixation_disable_hides_dependent_sections(
     _, window = _open_created_project(controller, qtbot, tmp_path, "Fixation Enablement Visibility")
 
     page = window.setup_dashboard_page.fixation_settings_editor
-    window.main_tabs.setCurrentWidget(window.setup_dashboard_page)
-    qtbot.mouseClick(
-        window.setup_dashboard_page.findChild(QPushButton, "setup_guide_session_button"),
-        Qt.MouseButton.LeftButton,
-    )
+    window.setup_wizard_page.open_wizard(step_key="session")
+    window.main_stack.setCurrentWidget(window.setup_wizard_page)
     page.fixation_enabled_checkbox.setChecked(True)
     page.fixation_accuracy_checkbox.setChecked(True)
     QApplication.processEvents()
@@ -369,7 +352,7 @@ def test_cycle_tooltips_and_fixation_feasibility_render_and_update(
     )
 
     page = window.setup_dashboard_page.fixation_settings_editor
-    window.main_tabs.setCurrentWidget(window.setup_dashboard_page)
+    window.main_stack.setCurrentWidget(window.setup_wizard_page)
     page.fixation_enabled_checkbox.setChecked(True)
     page.target_count_mode_combo.setCurrentIndex(page.target_count_mode_combo.findData("fixed"))
     page.changes_per_sequence_spin.setValue(4)
@@ -407,7 +390,7 @@ def test_fixation_feasibility_shows_single_value_for_uniform_condition_lengths(
     qtbot.mouseClick(window.conditions_page.add_condition_button, Qt.MouseButton.LeftButton)
 
     page = window.setup_dashboard_page.fixation_settings_editor
-    window.main_tabs.setCurrentWidget(window.setup_dashboard_page)
+    window.main_stack.setCurrentWidget(window.setup_wizard_page)
     QApplication.processEvents()
 
     guidance = page.fixation_feasibility_label.text()

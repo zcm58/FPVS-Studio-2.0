@@ -1,76 +1,74 @@
-# Home-First Launch Workflow GUI Rework
+# Home-Only Launch Surface With Guided Setup Wizard
 
 Status: Active
 
 ## Summary
 
-Keep the first tab named `Home`, but reshape it around the returning-user workflow:
-open FPVS Studio, select an existing/recent project, and launch the experiment in one
-or two clicks. First-time setup becomes a guided workflow, while detailed editors
-remain available for deeper changes.
+FPVS Studio now treats `Home` as the daily-use launch surface. Ready projects open to
+Home for routine participant sessions. New or incomplete projects open to an in-window
+Setup Wizard that guides the user through setup and keeps detailed editors available
+only through step-level advanced access.
 
 ## Key Changes
 
-- Add recent-project support through the GUI/controller layer.
-  - Store recently opened/created project roots in `QSettings`.
-  - Show recent valid projects on the welcome screen.
-  - Cap recent projects at 8, most recent first.
-  - Ignore missing/stale project folders when rendering.
-- Keep the first main tab named `Home`.
-  - Make `Home` the launch-first hub.
-  - Primary action remains `Launch Experiment`.
-  - Secondary actions: `Open Project`, `Create New Project`, `Save`, `Edit Setup`,
-    `Stimuli Manager`, and `Runtime Settings`.
-  - Preserve the participant-number prompt before launch.
-- Convert `Setup Dashboard` into a guided setup surface.
-  - Rename the tab to `Setup Guide`.
-  - Show ordered setup steps: Project Details, Conditions, Stimuli,
-    Session/Fixation, Runtime, Validate/Ready.
-  - Each step shows status, summary, and an action button that navigates to the
-    existing detailed editor/page.
-  - Do not duplicate project state or validation logic in the guide.
-- Keep existing focused pages.
-  - `Conditions`, `Stimuli Manager`, and `Runtime` remain available.
-  - No changes to project JSON schema, compiler contracts, runtime launch contracts,
-    PsychoPy engine behavior, or exports.
+- Replace visible top-level setup tabs with a main-window stack:
+  - `Home` for launch-ready projects.
+  - `Setup Wizard` for new/incomplete projects and `Edit Setup`.
+  - No visible top-level tabs for Conditions, Stimuli Manager, or Runtime.
+- Use computed readiness only:
+  - No persisted approval flag in this pass.
+  - Existing validation/readiness logic decides whether a project is ready.
+- Add a fixed setup wizard sequence:
+  - Project Details
+  - Conditions
+  - Stimuli
+  - Display / Runtime
+  - Session / Fixation
+  - Review / Ready
+- Keep detailed editors internal:
+  - Conditions, Stimuli Manager, and Runtime remain instantiated for existing
+    document bindings and advanced setup access.
+  - Home no longer exposes direct Stimuli Manager or Runtime Settings buttons.
+- Preserve backend contracts:
+  - No project JSON schema changes.
+  - No compiler, runtime, PsychoPy engine, preprocessing, or export contract changes.
 
 ## Public Interfaces
 
-- Add GUI/controller helpers for loading, recording, pruning, and opening recent
-  project roots.
-- Add stable object names:
-  - `welcome_recent_projects_panel`
-  - `welcome_recent_project_list`
-  - `home_launch_experiment_button`
-  - `home_edit_setup_button`
-  - `setup_guide_step_list`
-  - `setup_guide_ready_badge`
+- Stable wizard object names:
+  - `setup_wizard_page`
+  - `setup_wizard_step_list`
+  - `setup_wizard_back_button`
+  - `setup_wizard_next_button`
+  - `setup_wizard_return_home_button`
+  - `setup_wizard_advanced_button`
+  - `setup_wizard_ready_badge`
+- Existing editor/page attributes remain available on `StudioMainWindow` for internal
+  bindings and tests, but they are not visible top-level navigation.
 
 ## Test Plan
 
-- Recent projects:
-  - creating/opening a project records it as recent
-  - welcome screen renders recent valid projects
-  - clicking a recent project opens it
-  - stale project folders are omitted
-- Home launch workflow:
-  - first tab label remains `Home`
-  - `Home` exposes primary `Launch Experiment`
+- Navigation:
+  - incomplete projects open to Setup Wizard
+  - ready projects open to Home
+  - `Edit Setup` opens Setup Wizard
+  - detailed pages are not in the main workflow stack
+- Wizard:
+  - step order is stable
+  - `Next` is disabled until the current step is complete
+  - adding a condition enables the Conditions step
+  - `Advanced` exposes the existing detailed editor for the active step
+  - `Return Home` switches back to Home without launching
+- Launch:
+  - Home still exposes `Launch Experiment`
   - launch still prompts for participant number
-  - secondary actions navigate to setup, stimuli, runtime, open, create, and save flows
-- Setup guide:
-  - `Setup Guide` replaces `Setup Dashboard`
-  - setup steps reflect current project readiness
-  - step action buttons navigate to existing editors/pages
-  - existing detailed editing flows remain functional
+  - readiness uses existing validation/runtime checks
 - Verification:
   - `.\scripts\check_gui.ps1`
   - `.\scripts\check_quality.ps1`
 
 ## Assumptions
 
-- Returning users should usually use `Home` as the launch hub.
-- The first tab stays named `Home`, not `Launch`.
-- Participant number remains required before experiment launch.
-- Guided setup uses existing editors and document services rather than introducing a
-  second project-state path.
+- Returning users spend most of their time launching an already configured project.
+- Setup/editing is intentional and wizard-driven.
+- Manual project approval can be added later as a separate product decision.

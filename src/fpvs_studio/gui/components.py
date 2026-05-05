@@ -228,7 +228,9 @@ def studio_theme_stylesheet() -> str:
     QListWidget#condition_list,
     QListWidget#run_readiness_checklist,
     QListWidget#home_readiness_list,
-    QListWidget#dashboard_attention_list {{
+    QListWidget#dashboard_attention_list,
+    QListWidget#setup_wizard_step_list,
+    QListWidget#setup_wizard_review_readiness_list {{
         border: 1px solid {COLOR_BORDER_SOFT};
         border-radius: {CARD_CORNER_RADIUS}px;
         background-color: {COLOR_SURFACE_ELEVATED};
@@ -251,7 +253,9 @@ def studio_theme_stylesheet() -> str:
     }}
     QListWidget#run_readiness_checklist::item,
     QListWidget#home_readiness_list::item,
-    QListWidget#dashboard_attention_list::item {{
+    QListWidget#dashboard_attention_list::item,
+    QListWidget#setup_wizard_step_list::item,
+    QListWidget#setup_wizard_review_readiness_list::item {{
         padding: 4px 6px;
     }}
     QTableWidget#assets_table {{
@@ -346,9 +350,7 @@ def home_page_stylesheet() -> str:
     QPushButton#home_open_project_button,
     QPushButton#home_save_project_button,
     QPushButton#home_launch_experiment_button,
-    QPushButton#home_edit_setup_button,
-    QPushButton#home_stimuli_manager_button,
-    QPushButton#home_runtime_settings_button {
+    QPushButton#home_edit_setup_button {
         font-size: 14px;
         padding: 7px 12px;
     }

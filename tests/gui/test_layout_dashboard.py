@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from PySide6.QtCore import QEvent, QPoint, Qt
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
@@ -31,61 +31,62 @@ from fpvs_studio.core.condition_template_profiles import (
 from fpvs_studio.core.enums import DutyCycleMode, InterConditionMode, StimulusVariant
 from fpvs_studio.core.project_service import create_project
 from fpvs_studio.core.serialization import load_project_file, save_project_file
-from fpvs_studio.gui.animations import AnimatedTabBar
 from fpvs_studio.gui.controller import StudioController
 
 
-def test_home_tab_is_first_and_existing_tabs_remain_usable(
+def test_main_window_uses_home_and_setup_wizard_stack(
     qtbot,
     controller: StudioController,
     tmp_path: Path,
 ) -> None:
-    _, window = _open_created_project(controller, qtbot, tmp_path, "Home Tabs Project")
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Home Stack Project")
 
-    expected_tabs = [
-        "Home",
-        "Setup Guide",
-        "Conditions",
-        "Stimuli Manager",
-        "Runtime",
-    ]
-    tab_labels = [window.main_tabs.tabText(index) for index in range(window.main_tabs.count())]
-    assert tab_labels == expected_tabs
-
-    window.main_tabs.setCurrentWidget(window.setup_dashboard_page)
-    assert window.main_tabs.currentWidget() is window.setup_dashboard_page
-    window.main_tabs.setCurrentWidget(window.conditions_page)
-    assert window.main_tabs.currentWidget() is window.conditions_page
-    window.main_tabs.setCurrentWidget(window.assets_page)
-    assert window.main_tabs.currentWidget() is window.assets_page
-    window.main_tabs.setCurrentWidget(window.run_page)
-    assert window.main_tabs.currentWidget() is window.run_page
-    assert window.main_tabs.indexOf(window.conditions_page) == 2
-    assert window.main_tabs.indexOf(window.session_structure_page) == -1
-    assert window.main_tabs.indexOf(window.fixation_cross_settings_page) == -1
+    assert window.main_stack.count() == 2
+    assert window.main_stack.indexOf(window.home_page) == 0
+    assert window.main_stack.indexOf(window.setup_wizard_page) == 1
+    assert window.main_stack.indexOf(window.conditions_page) == -1
+    assert window.main_stack.indexOf(window.assets_page) == -1
+    assert window.main_stack.indexOf(window.run_page) == -1
+    assert window.main_stack.currentWidget() is window.setup_wizard_page
     assert window.conditions_page.add_condition_button is not None
     assert window.session_structure_page.block_count_spin is not None
     assert window.fixation_cross_settings_page.fixation_enabled_checkbox is not None
 
 
-def test_setup_guide_tab_exists_and_uses_single_column_shell_with_steps(
+def test_ready_project_reopens_to_home_launch_surface(
     qtbot,
     controller: StudioController,
     tmp_path: Path,
 ) -> None:
-    _, window = _open_created_project(controller, qtbot, tmp_path, "Setup Guide Shell")
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Ready Home Project")
+    _prepare_compile_ready_project(window, tmp_path / "ready-home-assets")
+    assert window.save_project() is True
 
-    dashboard = window.setup_dashboard_page
-    dashboard_index = window.main_tabs.indexOf(dashboard)
-    assert dashboard_index == 1
-    assert window.main_tabs.tabText(dashboard_index) == "Setup Guide"
-    assert dashboard.shell.layout_mode == "single_column"
-    assert dashboard.shell.title_label.text() == "Setup Guide"
-    assert dashboard.setup_guide_step_list.objectName() == "setup_guide_step_list"
-    assert dashboard.setup_summary_badge.objectName() == "setup_guide_ready_badge"
-    assert dashboard.setup_guide_step_list.count() == 6
-    assert dashboard.workspace.layout() is not None
-    assert dashboard.workspace.isVisible() is False
+    controller.open_project(window.document.project_root)
+    assert controller.main_window is not None
+    qtbot.addWidget(controller.main_window)
+
+    reopened = controller.main_window
+    assert reopened.main_stack.currentWidget() is reopened.home_page
+    assert reopened.home_page.findChild(QPushButton, "home_launch_experiment_button") is not None
+
+
+def test_setup_wizard_exists_and_uses_single_column_shell_with_steps(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Setup Wizard Shell")
+
+    wizard = window.setup_wizard_page
+    assert window.main_stack.indexOf(wizard) == 1
+    assert wizard.shell.layout_mode == "single_column"
+    assert wizard.shell.title_label.text() == "Setup Wizard"
+    assert wizard.setup_wizard_step_list.objectName() == "setup_wizard_step_list"
+    assert wizard.step_status_badge.objectName() == "setup_wizard_ready_badge"
+    assert wizard.setup_wizard_step_list.count() == 6
+    assert wizard.step_stack.count() == 6
+    assert wizard.advanced_frame.isVisible() is False
 
 
 def test_major_tabs_share_page_container_width_presets(
@@ -97,7 +98,7 @@ def test_major_tabs_share_page_container_width_presets(
 
     assert window.home_page.page_container.width_preset == "wide"
     assert window.home_page.page_container.max_content_width() == 1280
-    assert window.setup_dashboard_page.shell.page_container.width_preset == "wide"
+    assert window.setup_wizard_page.shell.page_container.width_preset == "wide"
     assert window.conditions_page.shell.page_container.width_preset == "wide"
     assert window.assets_page.shell.page_container.width_preset == "full"
     assert window.assets_page.shell.page_container.max_content_width() == 16_777_215
@@ -120,7 +121,7 @@ def test_page_headers_use_home_left_alignment_and_non_home_center_alignment(
     )
     assert window.home_page.current_project_header.alignment() & Qt.AlignmentFlag.AlignLeft
     assert window.home_page.current_project_subtitle.alignment() & Qt.AlignmentFlag.AlignLeft
-    assert window.setup_dashboard_page.shell.title_label.alignment() & Qt.AlignmentFlag.AlignCenter
+    assert window.setup_wizard_page.shell.title_label.alignment() & Qt.AlignmentFlag.AlignCenter
     assert window.conditions_page.shell.title_label.alignment() & Qt.AlignmentFlag.AlignCenter
     assert window.assets_page.shell.title_label.alignment() & Qt.AlignmentFlag.AlignCenter
 
@@ -134,7 +135,6 @@ def test_stimuli_manager_page_uses_table_focused_layout(
     page = window.assets_page
     header = page.assets_table.horizontalHeader()
 
-    assert window.main_tabs.tabText(window.main_tabs.indexOf(page)) == "Stimuli Manager"
     assert page.shell.title_label.text() == "Stimuli Manager"
     assert "stimulus sources" in page.shell.subtitle_label.text().lower()
     assert page.assets_table.horizontalHeaderItem(2).text() == "Source Path"
@@ -149,7 +149,7 @@ def test_stimuli_manager_page_uses_table_focused_layout(
     assert page.shell.page_container.layout().contentsMargins().right() == 24
 
 
-def test_switching_main_tabs_keeps_outer_window_size_stable(
+def test_switching_main_workflow_stack_keeps_outer_window_size_stable(
     qtbot,
     controller: StudioController,
     tmp_path: Path,
@@ -159,17 +159,14 @@ def test_switching_main_tabs_keeps_outer_window_size_stable(
 
     for page in (
         window.home_page,
-        window.setup_dashboard_page,
-        window.conditions_page,
-        window.assets_page,
-        window.run_page,
+        window.setup_wizard_page,
     ):
-        window.main_tabs.setCurrentWidget(page)
+        window.main_stack.setCurrentWidget(page)
         QApplication.processEvents()
         assert window.size() == initial_size
 
 
-def test_primary_tabs_fit_default_window_without_page_level_scrollbars(
+def test_primary_workflow_surfaces_fit_default_window_without_page_level_scrollbars(
     qtbot,
     controller: StudioController,
     tmp_path: Path,
@@ -183,16 +180,13 @@ def test_primary_tabs_fit_default_window_without_page_level_scrollbars(
     page_specs = [
         (window.home_page, window.home_page.page_container.scroll_area),
         (
-            window.setup_dashboard_page,
-            window.setup_dashboard_page.shell.page_container.scroll_area,
+            window.setup_wizard_page,
+            window.setup_wizard_page.shell.page_container.scroll_area,
         ),
-        (window.conditions_page, window.conditions_page.shell.page_container.scroll_area),
-        (window.assets_page, window.assets_page.shell.page_container.scroll_area),
-        (window.run_page, window.run_page.shell.page_container.scroll_area),
     ]
 
     for page, scroll_area in page_specs:
-        window.main_tabs.setCurrentWidget(page)
+        window.main_stack.setCurrentWidget(page)
         QApplication.processEvents()
         qtbot.waitUntil(
             lambda scroll_area=scroll_area: scroll_area.verticalScrollBar().maximum() <= 1
@@ -200,7 +194,7 @@ def test_primary_tabs_fit_default_window_without_page_level_scrollbars(
         assert scroll_area.verticalScrollBar().maximum() <= 1
 
 
-def test_conditions_tab_uses_horizontal_master_detail_shell(
+def test_conditions_advanced_editor_uses_horizontal_master_detail_shell(
     qtbot,
     controller: StudioController,
     tmp_path: Path,
@@ -208,8 +202,7 @@ def test_conditions_tab_uses_horizontal_master_detail_shell(
     _, window = _open_created_project(controller, qtbot, tmp_path, "Conditions Shell")
 
     conditions_page = window.conditions_page
-    assert window.main_tabs.indexOf(conditions_page) == 2
-    assert window.main_tabs.tabText(2) == "Conditions"
+    assert window.main_stack.indexOf(conditions_page) == -1
     assert conditions_page.shell.layout_mode == "single_column"
     assert (
         conditions_page.master_detail_layout.itemAt(0).widget()
@@ -225,14 +218,14 @@ def test_conditions_tab_uses_horizontal_master_detail_shell(
     assert detail_stack_layout.itemAt(1).widget() is conditions_page.stimulus_sources_card
 
 
-def test_setup_guide_surfaces_steps_and_keeps_shared_editors_available(
+def test_setup_wizard_surfaces_steps_and_keeps_shared_editors_available(
     qtbot,
     controller: StudioController,
     tmp_path: Path,
 ) -> None:
     _, window = _open_created_project(controller, qtbot, tmp_path, "Setup Guide Content")
-    dashboard = window.setup_dashboard_page
-    window.main_tabs.setCurrentWidget(dashboard)
+    dashboard = window.setup_wizard_page
+    window.main_stack.setCurrentWidget(dashboard)
     QApplication.processEvents()
 
     project_editor = dashboard.project_overview_editor
@@ -265,57 +258,50 @@ def test_setup_guide_surfaces_steps_and_keeps_shared_editors_available(
     assert assets_editor.refresh_button.text() == "Refresh Inspection"
     assert assets_editor.materialize_button.text() == "Materialize Supported Variants"
     assert "Condition stimulus rows:" in assets_editor.condition_rows_value.text()
-    assert dashboard.findChild(QWidget, "condition_name_edit") is None
-    assert dashboard.findChild(QWidget, "condition_list") is None
-    assert dashboard.workspace_left_column.layout().itemAt(0).widget() is project_editor
-    assert dashboard.workspace_left_column.layout().itemAt(1).widget() is session_editor
-    assert dashboard.workspace_center_column.layout().itemAt(0).widget() is fixation_editor
-    assert dashboard.workspace_right_column.layout().itemAt(0).widget() is assets_editor
-    assert dashboard.workspace_right_column.layout().itemAt(1).widget() is runtime_editor
-    assert dashboard.setup_guide_step_list.count() == 6
-    assert "Project Details" in dashboard.setup_guide_step_list.item(0).text()
-    assert "Validate / Ready" in dashboard.setup_guide_step_list.item(5).text()
+    assert dashboard.conditions_page is window.conditions_page
+    assert dashboard.assets_page is window.assets_page
+    assert dashboard.run_page is window.run_page
+    assert dashboard.setup_wizard_step_list.count() == 6
+    assert "Project Details" in dashboard.setup_wizard_step_list.item(0).text()
+    assert "Review / Ready" in dashboard.setup_wizard_step_list.item(5).text()
 
 
-def test_setup_guide_step_actions_navigate_to_existing_editors(
+def test_setup_wizard_navigation_and_advanced_editor_access(
     qtbot,
     controller: StudioController,
     tmp_path: Path,
 ) -> None:
     _, window = _open_created_project(controller, qtbot, tmp_path, "Setup Guide Actions")
-    guide = window.setup_dashboard_page
-    window.main_tabs.setCurrentWidget(guide)
+    guide = window.setup_wizard_page
+    window.main_stack.setCurrentWidget(guide)
 
-    project_button = guide.findChild(QPushButton, "setup_guide_project_button")
-    conditions_button = guide.findChild(QPushButton, "setup_guide_conditions_button")
-    stimuli_button = guide.findChild(QPushButton, "setup_guide_stimuli_button")
-    runtime_button = guide.findChild(QPushButton, "setup_guide_runtime_button")
-    ready_button = guide.findChild(QPushButton, "setup_guide_ready_button")
-    assert project_button is not None
-    assert conditions_button is not None
-    assert stimuli_button is not None
-    assert runtime_button is not None
-    assert ready_button is not None
+    back_button = guide.findChild(QPushButton, "setup_wizard_back_button")
+    next_button = guide.findChild(QPushButton, "setup_wizard_next_button")
+    advanced_button = guide.findChild(QPushButton, "setup_wizard_advanced_button")
+    return_home_button = guide.findChild(QPushButton, "setup_wizard_return_home_button")
+    assert back_button is not None
+    assert next_button is not None
+    assert advanced_button is not None
+    assert return_home_button is not None
 
-    assert guide.workspace.isVisible() is False
-    qtbot.mouseClick(project_button, Qt.MouseButton.LeftButton)
-    assert window.main_tabs.currentWidget() is guide
-    assert guide.workspace.isVisible() is True
+    assert guide.step_stack.currentIndex() == 0
+    assert next_button.isEnabled()
+    qtbot.mouseClick(next_button, Qt.MouseButton.LeftButton)
+    assert guide.step_stack.currentIndex() == 1
+    assert not next_button.isEnabled()
 
-    qtbot.mouseClick(conditions_button, Qt.MouseButton.LeftButton)
-    assert window.main_tabs.currentWidget() is window.conditions_page
-    window.main_tabs.setCurrentWidget(guide)
+    qtbot.mouseClick(guide.add_condition_button, Qt.MouseButton.LeftButton)
+    assert next_button.isEnabled()
+    assert advanced_button.isEnabled()
+    qtbot.mouseClick(advanced_button, Qt.MouseButton.LeftButton)
+    assert guide.advanced_frame.isVisible()
+    assert guide.advanced_stack.currentWidget() is window.conditions_page
 
-    qtbot.mouseClick(stimuli_button, Qt.MouseButton.LeftButton)
-    assert window.main_tabs.currentWidget() is window.assets_page
-    window.main_tabs.setCurrentWidget(guide)
+    qtbot.mouseClick(back_button, Qt.MouseButton.LeftButton)
+    assert guide.step_stack.currentIndex() == 0
 
-    qtbot.mouseClick(runtime_button, Qt.MouseButton.LeftButton)
-    assert window.main_tabs.currentWidget() is window.run_page
-    window.main_tabs.setCurrentWidget(guide)
-
-    qtbot.mouseClick(ready_button, Qt.MouseButton.LeftButton)
-    assert guide.workspace.isVisible() is False
+    qtbot.mouseClick(return_home_button, Qt.MouseButton.LeftButton)
+    assert window.main_stack.currentWidget() is window.home_page
 
 
 def test_setup_dashboard_edits_sync_document_and_dedicated_tabs(
@@ -332,8 +318,7 @@ def test_setup_dashboard_edits_sync_document_and_dedicated_tabs(
     project_editor.project_description_edit.setPlainText("Setup dashboard project description.")
 
     conditions_page = window.conditions_page
-    window.main_tabs.setCurrentWidget(conditions_page)
-    qtbot.mouseClick(conditions_page.add_condition_button, Qt.MouseButton.LeftButton)
+    conditions_page.add_condition_button.click()
     conditions_page.condition_name_edit.setText("Dashboard Faces")
     conditions_page.condition_name_edit.editingFinished.emit()
     conditions_page.instructions_edit.setPlainText("Look at the faces.")
@@ -346,7 +331,7 @@ def test_setup_dashboard_edits_sync_document_and_dedicated_tabs(
         conditions_page.duty_cycle_combo.findData(DutyCycleMode.BLANK_50)
     )
 
-    window.main_tabs.setCurrentWidget(dashboard)
+    window.main_stack.setCurrentWidget(dashboard)
     session_editor = dashboard.session_structure_editor
     session_editor.block_count_spin.setValue(4)
     session_editor.inter_condition_mode_combo.setCurrentIndex(
@@ -593,8 +578,8 @@ def test_home_quick_action_buttons_present_and_wired(
     assert save_button is not None
     assert launch_button is not None
     assert edit_setup_button is not None
-    assert stimuli_button is not None
-    assert runtime_button is not None
+    assert stimuli_button is None
+    assert runtime_button is None
     assert launch_button.text() == "Launch Experiment"
     assert window.run_page.launch_button.text() == "Launch Experiment"
     assert window.launch_action.text() == "Launch Experiment"
@@ -636,11 +621,7 @@ def test_home_quick_action_buttons_present_and_wired(
     qtbot.mouseClick(save_button, Qt.MouseButton.LeftButton)
     qtbot.mouseClick(launch_button, Qt.MouseButton.LeftButton)
     qtbot.mouseClick(edit_setup_button, Qt.MouseButton.LeftButton)
-    assert window.main_tabs.currentWidget() is window.setup_dashboard_page
-    qtbot.mouseClick(stimuli_button, Qt.MouseButton.LeftButton)
-    assert window.main_tabs.currentWidget() is window.assets_page
-    qtbot.mouseClick(runtime_button, Qt.MouseButton.LeftButton)
-    assert window.main_tabs.currentWidget() is window.run_page
+    assert window.main_stack.currentWidget() is window.setup_wizard_page
 
     assert trigger_counts == {"new": 1, "open": 1, "save": 1, "launch": 1}
 
@@ -661,34 +642,15 @@ def test_launch_buttons_share_primary_visual_role(
     assert run_launch_button.property("launchActionRole") == "primary"
 
 
-def test_main_tabs_use_animated_tab_bar(
+def test_main_window_no_longer_exposes_top_level_tab_bar(
     qtbot,
     controller: StudioController,
     tmp_path: Path,
 ) -> None:
-    _, window = _open_created_project(controller, qtbot, tmp_path, "Animated Tabs Project")
-    assert isinstance(window.main_tabs.tabBar(), AnimatedTabBar)
-
-
-def test_main_tabs_use_equal_width_tab_geometry(
-    qtbot,
-    controller: StudioController,
-    tmp_path: Path,
-) -> None:
-    _, window = _open_created_project(controller, qtbot, tmp_path, "Equal Width Tabs Project")
-    tab_bar = window.main_tabs.tabBar()
-    assert isinstance(tab_bar, AnimatedTabBar)
-
-    qtbot.waitUntil(lambda: tab_bar.count() == window.main_tabs.count())
-    qtbot.waitUntil(
-        lambda: all(tab_bar.tabRect(index).width() > 0 for index in range(tab_bar.count()))
-    )
-
-    tab_widths = [tab_bar.tabRect(index).width() for index in range(tab_bar.count())]
-    hint_widths = [tab_bar.tabSizeHint(index).width() for index in range(tab_bar.count())]
-
-    assert len(set(tab_widths)) == 1
-    assert len(set(hint_widths)) == 1
+    _, window = _open_created_project(controller, qtbot, tmp_path, "No Tabs Project")
+    assert not hasattr(window.main_stack, "tabBar")
+    assert window.main_stack.indexOf(window.home_page) >= 0
+    assert window.main_stack.indexOf(window.setup_wizard_page) >= 0
 
 
 def test_main_window_buttons_are_hover_animation_enabled(
@@ -736,30 +698,6 @@ def test_run_page_preview_copy_and_home_status_are_compile_agnostic(
     assert "compile once on run / runtime" not in _list_widget_text(readiness_list).lower()
     assert "needs compile" not in home_status.text().lower()
     assert "compile" not in home_status.toolTip().lower()
-
-
-def test_animated_tab_hover_progress_updates_on_mouse_move(
-    qtbot,
-    controller: StudioController,
-    tmp_path: Path,
-) -> None:
-    _, window = _open_created_project(controller, qtbot, tmp_path, "Animated Tab Hover Project")
-    tab_bar = window.main_tabs.tabBar()
-    assert isinstance(tab_bar, AnimatedTabBar)
-
-    target_index = 1
-    qtbot.waitUntil(lambda: tab_bar.tabRect(target_index).width() > 0)
-    target_center = tab_bar.tabRect(target_index).center()
-    qtbot.mouseMove(tab_bar, target_center)
-    if tab_bar.hovered_tab_index() != target_index:
-        tab_bar._set_hovered_tab(target_index)
-    qtbot.waitUntil(lambda: tab_bar.hovered_tab_index() == target_index)
-    qtbot.waitUntil(lambda: tab_bar.tab_hover_progress(target_index) > 0.0)
-
-    qtbot.mouseMove(window, QPoint(2, window.height() - 2))
-    if tab_bar.hovered_tab_index() != -1:
-        QApplication.sendEvent(tab_bar, QEvent(QEvent.Type.HoverLeave))
-    qtbot.waitUntil(lambda: tab_bar.hovered_tab_index() == -1)
 
 
 def test_no_standalone_preflight_controls_are_exposed(

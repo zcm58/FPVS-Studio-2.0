@@ -349,12 +349,6 @@ class HomePage(QWidget):
         self.edit_setup_button = QPushButton("Edit Setup", self)
         self.edit_setup_button.setObjectName("home_edit_setup_button")
         mark_secondary_action(self.edit_setup_button)
-        self.stimuli_manager_button = QPushButton("Stimuli Manager", self)
-        self.stimuli_manager_button.setObjectName("home_stimuli_manager_button")
-        mark_secondary_action(self.stimuli_manager_button)
-        self.runtime_settings_button = QPushButton("Runtime Settings", self)
-        self.runtime_settings_button.setObjectName("home_runtime_settings_button")
-        mark_secondary_action(self.runtime_settings_button)
 
         for button in (
             self.open_project_button,
@@ -362,8 +356,6 @@ class HomePage(QWidget):
             self.save_project_button,
             self.launch_button,
             self.edit_setup_button,
-            self.stimuli_manager_button,
-            self.runtime_settings_button,
         ):
             button.setMinimumHeight(38)
             button.setFixedWidth(176)
@@ -381,8 +373,6 @@ class HomePage(QWidget):
         navigation_layout.setContentsMargins(0, 0, 0, 0)
         navigation_layout.setSpacing(PAGE_SECTION_GAP)
         navigation_layout.addWidget(self.edit_setup_button)
-        navigation_layout.addWidget(self.stimuli_manager_button)
-        navigation_layout.addWidget(self.runtime_settings_button)
         navigation_layout.addStretch(1)
 
         project_card = SectionCard(
@@ -524,12 +514,8 @@ class HomePage(QWidget):
         self,
         *,
         edit_setup: Callable[[], None],
-        open_stimuli_manager: Callable[[], None],
-        open_runtime_settings: Callable[[], None],
     ) -> None:
         self.edit_setup_button.clicked.connect(edit_setup)
-        self.stimuli_manager_button.clicked.connect(open_stimuli_manager)
-        self.runtime_settings_button.clicked.connect(open_runtime_settings)
 
     def refresh(self) -> None:
         project = self._document.project
