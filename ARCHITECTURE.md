@@ -76,8 +76,9 @@ Current planned seams:
   shared page/card/status/path widgets, owns reusable button roles and stylesheets, and
   keeps raw design tokens in `design_system.py`.
 - GUI workflow composition is Home-first. `main_window.py` uses a stack with Home and
-  `setup_wizard_page.py`; detailed Conditions, Stimuli Manager, and Runtime widgets stay
-  internal for wizard advanced access rather than visible top-level tabs.
+  `setup_wizard_page.py`; the wizard uses a seven-step top-progress flow with detailed
+  Conditions, Stimuli Manager, Runtime, Session, and Fixation widgets kept internal for
+  step-level advanced access rather than visible top-level tabs.
 - Condition-template profile management keeps `condition_template_manager_dialog.py` as
   the manager dialog and compatibility import point. The profile editor dialog lives in
   `condition_template_profile_editor_dialog.py`.

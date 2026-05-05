@@ -37,11 +37,11 @@ The authoring window is organized around two user-facing modes:
   - `Edit Setup` opens the guided setup workflow
 - `Setup Wizard`
   - in-window setup flow for new/incomplete projects and intentional edits
-  - ordered steps: Project Details, Conditions, Stimuli, Display / Runtime,
-    Session / Fixation, Review / Ready
+  - ordered steps: Project Details, Conditions, Stimuli, Display Settings,
+    Session Design, Fixation Cross, Review
   - `Next` is disabled until the active step is complete
-  - the left stepper uses numbered steps and human status text, not raw validation
-    tokens
+  - the top progress header shows `Step X of 7` and a slim horizontal progress
+    indicator instead of a persistent left-hand step column
   - `Advanced` replaces the guided step content with the detailed editor for the
     active setup area
   - `Return Home` asks for confirmation when setup is incomplete

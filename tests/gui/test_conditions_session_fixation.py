@@ -263,7 +263,7 @@ def test_fixation_color_change_mode_toggles_relevant_controls(
     _, window = _open_created_project(controller, qtbot, tmp_path, "Fixation Mode Visibility")
 
     page = window.setup_dashboard_page.fixation_settings_editor
-    window.setup_wizard_page.open_wizard(step_key="session")
+    window.setup_wizard_page.open_wizard(step_key="fixation")
     window.main_stack.setCurrentWidget(window.setup_wizard_page)
     qtbot.mouseClick(
         window.setup_wizard_page.setup_wizard_advanced_button,
@@ -297,7 +297,7 @@ def test_fixation_accuracy_toggle_controls_response_visibility(
     _, window = _open_created_project(controller, qtbot, tmp_path, "Fixation Accuracy Visibility")
 
     page = window.setup_dashboard_page.fixation_settings_editor
-    window.setup_wizard_page.open_wizard(step_key="session")
+    window.setup_wizard_page.open_wizard(step_key="fixation")
     window.main_stack.setCurrentWidget(window.setup_wizard_page)
     qtbot.mouseClick(
         window.setup_wizard_page.setup_wizard_advanced_button,
@@ -325,7 +325,7 @@ def test_fixation_disable_hides_dependent_sections(
     _, window = _open_created_project(controller, qtbot, tmp_path, "Fixation Enablement Visibility")
 
     page = window.setup_dashboard_page.fixation_settings_editor
-    window.setup_wizard_page.open_wizard(step_key="session")
+    window.setup_wizard_page.open_wizard(step_key="fixation")
     window.main_stack.setCurrentWidget(window.setup_wizard_page)
     qtbot.mouseClick(
         window.setup_wizard_page.setup_wizard_advanced_button,

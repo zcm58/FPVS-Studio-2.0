@@ -263,6 +263,29 @@ def studio_theme_stylesheet() -> str:
         color: #ffffff;
         font-weight: 700;
     }}
+    QLabel[wizardStep="true"] {{
+        border: 1px solid {COLOR_BORDER_SOFT};
+        border-radius: {CARD_CORNER_RADIUS}px;
+        background-color: {COLOR_SURFACE_ELEVATED};
+        color: {COLOR_TEXT_SECONDARY};
+        padding: 6px 8px;
+        font-weight: 600;
+    }}
+    QLabel[wizardStep="true"][wizardStepState="complete"] {{
+        border-color: {COLOR_SUCCESS_BORDER};
+        background-color: {COLOR_SUCCESS_BG};
+        color: {COLOR_SUCCESS_TEXT};
+    }}
+    QLabel[wizardStep="true"][wizardStepState="current"] {{
+        border-color: {COLOR_PRIMARY_BORDER};
+        background-color: {COLOR_PRIMARY};
+        color: #ffffff;
+    }}
+    QLabel[wizardStep="true"][wizardStepState="upcoming"] {{
+        border-color: {COLOR_BORDER_SOFT};
+        background-color: {COLOR_SURFACE_ALT};
+        color: {COLOR_TEXT_SECONDARY};
+    }}
     QTableWidget#assets_table {{
         border: 1px solid {COLOR_BORDER_SOFT};
         border-radius: {CARD_CORNER_RADIUS}px;

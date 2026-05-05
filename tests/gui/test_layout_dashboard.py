@@ -83,17 +83,25 @@ def test_setup_wizard_exists_and_uses_single_column_shell_with_steps(
     assert wizard.shell.layout_mode == "single_column"
     assert wizard.shell.title_label.text() == "Setup Wizard"
     assert wizard.setup_wizard_step_list.objectName() == "setup_wizard_step_list"
+    assert wizard.setup_wizard_step_list.isVisible() is False
+    assert wizard.progress_header_label.objectName() == "setup_wizard_progress_header"
+    assert wizard.progress_steps.objectName() == "setup_wizard_progress_steps"
     assert wizard.step_status_badge.objectName() == "setup_wizard_ready_badge"
-    assert wizard.setup_wizard_step_list.count() == 6
-    assert wizard.step_stack.count() == 6
+    assert wizard.setup_wizard_step_list.count() == 7
+    assert wizard.step_stack.count() == 7
     assert wizard.content_stack.currentWidget() is wizard.guided_panel
     step_text = "\n".join(
-        wizard.setup_wizard_step_list.item(index).text()
-        for index in range(wizard.setup_wizard_step_list.count())
+        label.text()
+        for label in wizard.progress_step_labels
     )
     assert "[OK]" not in step_text
     assert "[TODO]" not in step_text
-    assert "1. Project Details" in step_text
+    assert wizard.progress_header_label.text() == "Step 1 of 7: Project Details"
+    assert "1 Project Details" in step_text
+    assert "4 Display Settings" in step_text
+    assert "5 Session Design" in step_text
+    assert "6 Fixation Cross" in step_text
+    assert "7 Review" in step_text
 
 
 def test_major_tabs_share_page_container_width_presets(
@@ -268,9 +276,12 @@ def test_setup_wizard_surfaces_steps_and_keeps_shared_editors_available(
     assert dashboard.conditions_page is window.conditions_page
     assert dashboard.assets_page is window.assets_page
     assert dashboard.run_page is window.run_page
-    assert dashboard.setup_wizard_step_list.count() == 6
+    assert dashboard.setup_wizard_step_list.count() == 7
     assert "Project Details" in dashboard.setup_wizard_step_list.item(0).text()
-    assert "Review / Ready" in dashboard.setup_wizard_step_list.item(5).text()
+    assert "Display Settings" in dashboard.setup_wizard_step_list.item(3).text()
+    assert "Session Design" in dashboard.setup_wizard_step_list.item(4).text()
+    assert "Fixation Cross" in dashboard.setup_wizard_step_list.item(5).text()
+    assert "Review" in dashboard.setup_wizard_step_list.item(6).text()
 
 
 def test_setup_wizard_navigation_and_advanced_editor_access(
@@ -330,17 +341,22 @@ def test_setup_wizard_advanced_replaces_guided_view_for_session_step(
 
     assert guide.content_stack.currentWidget() is guide.guided_panel
     assert guide.step_stack.currentWidget().findChild(QLabel, "setup_wizard_session_summary")
-    assert guide.advanced_stack.currentWidget() is not window.session_structure_page
 
     qtbot.mouseClick(guide.setup_wizard_advanced_button, Qt.MouseButton.LeftButton)
 
     assert guide.content_stack.currentWidget() is guide.advanced_stack
-    assert guide.advanced_stack.currentWidget().layout().itemAt(0).widget() is (
-        window.session_structure_page
-    )
-    assert guide.advanced_stack.currentWidget().layout().itemAt(1).widget() is (
-        window.fixation_cross_settings_page
-    )
+    assert guide.advanced_stack.currentWidget() is window.session_structure_page
+
+    qtbot.mouseClick(guide.setup_wizard_advanced_button, Qt.MouseButton.LeftButton)
+    guide.open_wizard(step_key="fixation")
+
+    assert guide.content_stack.currentWidget() is guide.guided_panel
+    assert guide.step_stack.currentWidget().findChild(QLabel, "setup_wizard_fixation_summary")
+
+    qtbot.mouseClick(guide.setup_wizard_advanced_button, Qt.MouseButton.LeftButton)
+
+    assert guide.content_stack.currentWidget() is guide.advanced_stack
+    assert guide.advanced_stack.currentWidget() is window.fixation_cross_settings_page
 
 
 def test_setup_wizard_return_home_confirms_incomplete_setup(

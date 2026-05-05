@@ -26,6 +26,7 @@ from fpvs_studio.gui.components import (
     StatusBadgeLabel,
     mark_primary_action,
     mark_secondary_action,
+    refresh_widget_style,
 )
 from fpvs_studio.gui.condition_pages import ConditionsPage
 from fpvs_studio.gui.document import ProjectDocument
@@ -45,9 +46,10 @@ _WIZARD_STEPS: tuple[tuple[str, str, str], ...] = (
     ("project", "Project Details", "Confirm the project name and template."),
     ("conditions", "Conditions", "Create and review the experiment conditions."),
     ("stimuli", "Stimuli", "Attach base and oddball image folders."),
-    ("runtime", "Display / Runtime", "Set refresh rate and launch display options."),
-    ("session", "Session / Fixation", "Choose block order and fixation task settings."),
-    ("review", "Review / Ready", "Resolve blockers before returning to Home."),
+    ("display", "Display Settings", "Set refresh rate and launch display options."),
+    ("session", "Session Design", "Choose block order and inter-condition flow."),
+    ("fixation", "Fixation Cross", "Configure fixation and accuracy-task essentials."),
+    ("review", "Review", "Resolve blockers before returning to Home."),
 )
 
 
@@ -121,6 +123,34 @@ class SetupWizardPage(QWidget):
         self.setup_wizard_step_list = QListWidget(self)
         self.setup_wizard_step_list.setObjectName("setup_wizard_step_list")
         _configure_read_only_list(self.setup_wizard_step_list)
+        self.setup_wizard_step_list.setVisible(False)
+
+        self.progress_header_label = QLabel(self)
+        self.progress_header_label.setObjectName("setup_wizard_progress_header")
+        self.progress_header_label.setProperty("sectionCardRole", "title")
+        self.progress_header_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        self.progress_steps = QWidget(self)
+        self.progress_steps.setObjectName("setup_wizard_progress_steps")
+        progress_steps_layout = QHBoxLayout(self.progress_steps)
+        progress_steps_layout.setContentsMargins(0, 0, 0, 0)
+        progress_steps_layout.setSpacing(6)
+        self.progress_step_labels: list[QLabel] = []
+        for index, (_key, title, _instruction) in enumerate(_WIZARD_STEPS):
+            label = QLabel(f"{index + 1} {title}", self.progress_steps)
+            label.setObjectName(f"setup_wizard_progress_step_{index + 1}")
+            label.setProperty("wizardStep", "true")
+            label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            label.setWordWrap(True)
+            self.progress_step_labels.append(label)
+            progress_steps_layout.addWidget(label, 1)
+
+        progress_panel = QWidget(self)
+        progress_layout = QVBoxLayout(progress_panel)
+        progress_layout.setContentsMargins(0, 0, 0, 0)
+        progress_layout.setSpacing(8)
+        progress_layout.addWidget(self.progress_header_label)
+        progress_layout.addWidget(self.progress_steps)
 
         self.step_title_label = QLabel(self)
         self.step_title_label.setObjectName("setup_wizard_step_title")
@@ -164,20 +194,14 @@ class SetupWizardPage(QWidget):
         self.advanced_stack.addWidget(self.conditions_page)
         self.advanced_stack.addWidget(self.assets_page)
         self.advanced_stack.addWidget(self.run_page)
-        self.advanced_stack.addWidget(self._session_advanced_page())
+        self.advanced_stack.addWidget(self.session_structure_page)
+        self.advanced_stack.addWidget(self.fixation_cross_settings_page)
 
         self.content_stack = QStackedWidget(self)
         self.content_stack.setObjectName("setup_wizard_content_stack")
         self.content_stack.addWidget(self.guided_panel)
         self.content_stack.addWidget(self.advanced_stack)
         step_card.body_layout.addWidget(self.content_stack, 1)
-
-        body_row = QWidget(self)
-        body_layout = QHBoxLayout(body_row)
-        body_layout.setContentsMargins(0, 0, 0, 0)
-        body_layout.setSpacing(PAGE_SECTION_GAP)
-        body_layout.addWidget(self.setup_wizard_step_list, 2)
-        body_layout.addWidget(step_card, 5)
 
         self.setup_wizard_back_button = QPushButton("Back", self)
         self.setup_wizard_back_button.setObjectName("setup_wizard_back_button")
@@ -204,7 +228,8 @@ class SetupWizardPage(QWidget):
         button_layout.addWidget(self.setup_wizard_back_button)
         button_layout.addWidget(self.setup_wizard_next_button)
 
-        self.shell.add_content_widget(body_row)
+        self.shell.add_content_widget(progress_panel)
+        self.shell.add_content_widget(step_card, stretch=1)
         self.shell.add_content_widget(button_row)
 
         layout = QVBoxLayout(self)
@@ -235,6 +260,7 @@ class SetupWizardPage(QWidget):
         self.step_stack.addWidget(self.assets_readiness_editor)
         self.step_stack.addWidget(self.runtime_settings_editor)
         self.step_stack.addWidget(self._session_step_page())
+        self.step_stack.addWidget(self._fixation_step_page())
         self.step_stack.addWidget(self._review_step_page())
 
     def _conditions_step_page(self) -> QWidget:
@@ -270,20 +296,34 @@ class SetupWizardPage(QWidget):
         self.session_accuracy_value = QLabel(page)
         summary_form.addRow("Block count", self.session_block_count_value)
         summary_form.addRow("Order strategy", self.session_order_value)
-        summary_form.addRow("Fixation task", self.session_fixation_value)
-        summary_form.addRow("Accuracy task", self.session_accuracy_value)
+        summary_form.addRow("Session seed", self.session_fixation_value)
+        summary_form.addRow("Transition", self.session_accuracy_value)
         layout.addWidget(self.session_guided_summary_label)
         layout.addLayout(summary_form)
         layout.addStretch(1)
         return page
 
-    def _session_advanced_page(self) -> QWidget:
+    def _fixation_step_page(self) -> QWidget:
         page = QWidget(self)
-        layout = QHBoxLayout(page)
+        layout = QVBoxLayout(page)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(PAGE_SECTION_GAP)
-        layout.addWidget(self.session_structure_page, 1)
-        layout.addWidget(self.fixation_cross_settings_page, 2)
+        layout.setSpacing(8)
+        self.fixation_guided_summary_label = QLabel(page)
+        self.fixation_guided_summary_label.setObjectName("setup_wizard_fixation_summary")
+        self.fixation_guided_summary_label.setWordWrap(True)
+        summary_form = QFormLayout()
+        summary_form.setVerticalSpacing(7)
+        self.fixation_enabled_value = QLabel(page)
+        self.fixation_accuracy_value = QLabel(page)
+        self.fixation_target_count_value = QLabel(page)
+        self.fixation_response_value = QLabel(page)
+        summary_form.addRow("Fixation task", self.fixation_enabled_value)
+        summary_form.addRow("Accuracy task", self.fixation_accuracy_value)
+        summary_form.addRow("Color changes", self.fixation_target_count_value)
+        summary_form.addRow("Response key", self.fixation_response_value)
+        layout.addWidget(self.fixation_guided_summary_label)
+        layout.addLayout(summary_form)
+        layout.addStretch(1)
         return page
 
     def _review_step_page(self) -> QWidget:
@@ -373,16 +413,19 @@ class SetupWizardPage(QWidget):
         self.setup_wizard_step_list.setCurrentRow(self._active_step_index)
 
         step_key, title, instruction = _WIZARD_STEPS[self._active_step_index]
+        self._refresh_progress_header()
         self.step_title_label.setText(title)
         self.step_instruction_label.setText(instruction)
-        self.step_status_label.setText(self._step_status_text(self._active_step_index))
         self.conditions_summary_label.setText(self._conditions_summary_text())
         self._refresh_session_guided_summary()
+        self._refresh_fixation_guided_summary()
         report = self._readiness_report()
         self.review_summary_label.setText(report.status_summary)
         _set_list_items(self.review_readiness_list, self._human_readiness_items(report))
 
         step_valid = self._current_step_valid()
+        self.step_status_label.setText(self._step_status_text(self._active_step_index))
+        self.step_status_label.setVisible(not step_valid)
         self.step_status_badge.set_state(
             "ready" if step_valid else "warning",
             "Step Complete" if step_valid else self._current_step_blocker(),
@@ -440,9 +483,9 @@ class SetupWizardPage(QWidget):
             return bool(ordered_conditions)
         if step_key == "stimuli":
             return _conditions_have_assigned_assets(self._document, ordered_conditions)
-        if step_key == "runtime":
+        if step_key == "display":
             return self.runtime_settings_editor.current_refresh_hz() > 0.0
-        if step_key == "session":
+        if step_key in {"session", "fixation"}:
             return True
         if step_key == "review":
             return self.is_launch_ready()
@@ -456,7 +499,7 @@ class SetupWizardPage(QWidget):
             return "Add at least one condition"
         if step_key == "stimuli":
             return "Assign base and oddball folders"
-        if step_key == "runtime":
+        if step_key == "display":
             return "Set a valid refresh rate"
         if step_key == "review":
             return self._readiness_report().status_label
@@ -490,10 +533,8 @@ class SetupWizardPage(QWidget):
 
     def _refresh_session_guided_summary(self) -> None:
         session = self._document.project.settings.session
-        fixation = self._document.project.settings.fixation_task
         self.session_guided_summary_label.setText(
-            "Review the launch essentials below. Use Advanced for detailed session and "
-            "fixation timing controls."
+            "Review the session sequence below. Use Advanced for detailed session controls."
         )
         self.session_block_count_value.setText(str(session.block_count))
         self.session_order_value.setText(
@@ -501,23 +542,67 @@ class SetupWizardPage(QWidget):
             if session.randomize_conditions_per_block
             else "Fixed project order"
         )
-        self.session_fixation_value.setText("Enabled" if fixation.enabled else "Disabled")
+        self.session_fixation_value.setText(str(session.session_seed))
         self.session_accuracy_value.setText(
+            "Fixed break"
+            if session.inter_condition_mode.value == "fixed_break"
+            else "Manual continue"
+            if session.inter_condition_mode.value == "manual_continue"
+            else "Unknown"
+        )
+
+    def _refresh_fixation_guided_summary(self) -> None:
+        fixation = self._document.project.settings.fixation_task
+        self.fixation_guided_summary_label.setText(
+            "Review fixation behavior below. Use Advanced for timing, color, and appearance "
+            "details."
+        )
+        self.fixation_enabled_value.setText("Enabled" if fixation.enabled else "Disabled")
+        self.fixation_accuracy_value.setText(
             "Enabled" if fixation.accuracy_task_enabled else "Disabled"
         )
+        if fixation.target_count_mode == "randomized":
+            target_text = f"{fixation.target_count_min}-{fixation.target_count_max} randomized"
+        else:
+            target_text = f"{fixation.changes_per_sequence} fixed"
+        self.fixation_target_count_value.setText(target_text)
+        self.fixation_response_value.setText(fixation.response_key)
 
     def _advanced_available_for_current_step(self) -> bool:
         return _WIZARD_STEPS[self._active_step_index][0] in {
             "conditions",
             "stimuli",
-            "runtime",
+            "display",
             "session",
+            "fixation",
         }
 
     def _advanced_index_for_step(self, step_key: str) -> int:
-        return {"conditions": 1, "stimuli": 2, "runtime": 3, "session": 4}.get(step_key, 0)
+        return {
+            "conditions": 1,
+            "stimuli": 2,
+            "display": 3,
+            "session": 4,
+            "fixation": 5,
+        }.get(step_key, 0)
+
+    def _refresh_progress_header(self) -> None:
+        current = self._active_step_index
+        _key, title, _instruction = _WIZARD_STEPS[current]
+        self.progress_header_label.setText(f"Step {current + 1} of {len(_WIZARD_STEPS)}: {title}")
+        for index, label in enumerate(self.progress_step_labels):
+            if index < current:
+                state = "complete"
+            elif index == current:
+                state = "current"
+            else:
+                state = "upcoming"
+            label.setProperty("wizardStepState", state)
+            refresh_widget_style(label)
 
     def _step_index_for_key(self, step_key: str) -> int:
+        aliases = {"runtime": "display"}
+        step_key = aliases.get(step_key, step_key)
         for index, (candidate, _title, _instruction) in enumerate(_WIZARD_STEPS):
             if candidate == step_key:
                 return index

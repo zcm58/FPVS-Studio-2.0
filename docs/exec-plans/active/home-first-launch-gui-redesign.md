@@ -22,14 +22,15 @@ only through step-level advanced access.
   - Project Details
   - Conditions
   - Stimuli
-  - Display / Runtime
-  - Session / Fixation
-  - Review / Ready
+  - Display Settings
+  - Session Design
+  - Fixation Cross
+  - Review
 - Polish wizard progression:
-  - numbered stepper labels replace raw `[OK]` / `[TODO]` tokens
+  - a compact top progress header replaces the persistent left-hand step column
   - guided and advanced views switch inside one primary content area
-  - dense Session / Fixation controls live behind Advanced to avoid cropped setup
-    content
+  - dense Session Design and Fixation Cross controls live behind step-level Advanced
+    access to avoid cropped setup content
   - incomplete `Return Home` prompts before leaving setup
 - Keep detailed editors internal:
   - Conditions, Stimuli Manager, and Runtime remain instantiated for existing
@@ -44,6 +45,8 @@ only through step-level advanced access.
 - Stable wizard object names:
   - `setup_wizard_page`
   - `setup_wizard_step_list`
+  - `setup_wizard_progress_header`
+  - `setup_wizard_progress_steps`
   - `setup_wizard_back_button`
   - `setup_wizard_next_button`
   - `setup_wizard_return_home_button`
@@ -61,6 +64,8 @@ only through step-level advanced access.
   - detailed pages are not in the main workflow stack
 - Wizard:
   - step order is stable
+  - `Display Settings`, `Session Design`, `Fixation Cross`, and `Review` are the
+    user-facing labels for the last four steps
   - `Next` is disabled until the current step is complete
   - adding a condition enables the Conditions step
   - no setup stepper text contains raw `[OK]` or `[TODO]` prefixes
