@@ -44,6 +44,8 @@ The authoring window is organized around two user-facing modes:
     indicator instead of a persistent left-hand step column
   - the guided Conditions step shows a compact condition list plus `Add Condition`;
     detailed condition editing stays in Advanced
+  - the Conditions step is complete only when every condition has a user-provided
+    name and imported base and oddball image folders
   - `Advanced` replaces the guided step content with the detailed editor for the
     active setup area
   - `Return Home` asks for confirmation when setup is incomplete

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable
 
 from PySide6.QtCore import Qt
@@ -52,6 +53,8 @@ _WIZARD_STEPS: tuple[tuple[str, str, str], ...] = (
     ("fixation", "Fixation Cross", "Configure fixation and accuracy-task essentials."),
     ("review", "Review", "Resolve blockers before returning to Home."),
 )
+_DEFAULT_CONDITION_NAME_RE = re.compile(r"^Condition \d+$")
+_CREATE_ALL_CONDITIONS_PROMPT = "Please ensure you create all conditions before proceeding."
 
 
 class SetupWizardPage(QWidget):
@@ -369,6 +372,12 @@ class SetupWizardPage(QWidget):
         self.conditions_page.refresh()
         self.refresh()
         self._select_guided_condition(condition_id)
+        if len(self._document.ordered_conditions()) == 1:
+            QMessageBox.information(
+                self,
+                "Create All Conditions",
+                _CREATE_ALL_CONDITIONS_PROMPT,
+            )
 
     def _go_back(self) -> None:
         if self._active_step_index > 0:
@@ -479,7 +488,12 @@ class SetupWizardPage(QWidget):
         if self._step_valid(index):
             return "Ready" if step_key == "review" else "Complete"
         if step_key == "conditions":
-            return "Add a condition"
+            ordered_conditions = self._document.ordered_conditions()
+            if not ordered_conditions:
+                return "Add a condition"
+            if not self._conditions_have_required_names(ordered_conditions):
+                return "Name every condition"
+            return "Assign base and oddball folders"
         if step_key == "stimuli":
             return "Needs images"
         if step_key == "review":
@@ -495,7 +509,7 @@ class SetupWizardPage(QWidget):
         if step_key == "project":
             return bool(self._document.project.meta.name.strip() and self._document.project_root)
         if step_key == "conditions":
-            return bool(ordered_conditions)
+            return self._conditions_ready_for_wizard(ordered_conditions)
         if step_key == "stimuli":
             return _conditions_have_assigned_assets(self._document, ordered_conditions)
         if step_key == "display":
@@ -511,7 +525,12 @@ class SetupWizardPage(QWidget):
         if step_key == "project":
             return "Project details needed"
         if step_key == "conditions":
-            return "Add at least one condition"
+            ordered_conditions = self._document.ordered_conditions()
+            if not ordered_conditions:
+                return "Add at least one condition"
+            if not self._conditions_have_required_names(ordered_conditions):
+                return "Name every condition"
+            return "Assign base and oddball folders"
         if step_key == "stimuli":
             return "Assign base and oddball folders"
         if step_key == "display":
@@ -524,8 +543,28 @@ class SetupWizardPage(QWidget):
         ordered_conditions = self._document.ordered_conditions()
         if not ordered_conditions:
             return "No conditions are configured yet. Add a condition to continue."
+        if not self._conditions_ready_for_wizard(ordered_conditions):
+            return (
+                f"{len(ordered_conditions)} condition(s) configured. Name every condition and "
+                "assign base and oddball image folders before proceeding."
+            )
         names = ", ".join(condition.name for condition in ordered_conditions)
         return f"{len(ordered_conditions)} condition(s) configured: {names}"
+
+    @staticmethod
+    def _conditions_have_required_names(ordered_conditions: list) -> bool:
+        return all(
+            condition.name.strip()
+            and _DEFAULT_CONDITION_NAME_RE.fullmatch(condition.name.strip()) is None
+            for condition in ordered_conditions
+        )
+
+    def _conditions_ready_for_wizard(self, ordered_conditions: list) -> bool:
+        return (
+            bool(ordered_conditions)
+            and self._conditions_have_required_names(ordered_conditions)
+            and _conditions_have_assigned_assets(self._document, ordered_conditions)
+        )
 
     def _refresh_guided_condition_list(self) -> None:
         selected_id = self._guided_condition_id()

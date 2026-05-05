@@ -22,6 +22,7 @@ from tests.gui.helpers import (
     _list_widget_text,
     _open_created_project,
     _prepare_compile_ready_project,
+    _write_image_directory,
 )
 
 from fpvs_studio.core.condition_template_profiles import (
@@ -315,13 +316,38 @@ def test_setup_wizard_navigation_and_advanced_editor_access(
     assert guided_condition_list is not None
     assert guided_condition_list.count() == 0
 
+    information_prompts: list[str] = []
+    monkeypatch.setattr(
+        "fpvs_studio.gui.setup_wizard_page.QMessageBox.information",
+        lambda *args, **kwargs: information_prompts.append(str(args[2])),
+    )
     qtbot.mouseClick(guide.add_condition_button, Qt.MouseButton.LeftButton)
-    assert next_button.isEnabled()
+    assert information_prompts == ["Please ensure you create all conditions before proceeding."]
+    assert not next_button.isEnabled()
     assert advanced_button.isEnabled()
     assert guided_condition_list.count() == 1
     assert guided_condition_list.item(0).text() in {
         condition.name for condition in guide._document.ordered_conditions()
     }
+    assert "name every condition" in guide.step_status_label.text().lower()
+
+    condition_id = guided_condition_list.item(0).data(Qt.ItemDataRole.UserRole)
+    assert isinstance(condition_id, str)
+    guide._document.update_condition(condition_id, name="Faces")
+    assert not next_button.isEnabled()
+    assert "assign base and oddball" in guide.step_status_label.text().lower()
+
+    base_dir = _write_image_directory(tmp_path / "wizard-condition-base")
+    oddball_dir = _write_image_directory(tmp_path / "wizard-condition-oddball")
+    guide._document.import_condition_stimulus_folder(condition_id, role="base", source_dir=base_dir)
+    assert not next_button.isEnabled()
+    guide._document.import_condition_stimulus_folder(
+        condition_id,
+        role="oddball",
+        source_dir=oddball_dir,
+    )
+    assert next_button.isEnabled()
+
     qtbot.mouseClick(advanced_button, Qt.MouseButton.LeftButton)
     assert guide.content_stack.currentWidget() is guide.advanced_stack
     assert guide.advanced_stack.currentWidget() is window.conditions_page

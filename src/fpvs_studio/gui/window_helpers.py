@@ -181,12 +181,19 @@ def _set_list_items(widget: QListWidget, lines: list[str] | tuple[str, ...]) -> 
 def _conditions_have_assigned_assets(document: ProjectDocument, ordered_conditions: list) -> bool:
     if not ordered_conditions:
         return False
-    available_set_ids = {stimulus_set.set_id for stimulus_set in document.project.stimulus_sets}
-    if not available_set_ids:
+    stimulus_sets_by_id = {
+        stimulus_set.set_id: stimulus_set for stimulus_set in document.project.stimulus_sets
+    }
+    if not stimulus_sets_by_id:
         return False
+
+    def has_imported_images(set_id: str) -> bool:
+        stimulus_set = stimulus_sets_by_id.get(set_id)
+        return stimulus_set is not None and stimulus_set.image_count > 0
+
     return all(
-        condition.base_stimulus_set_id in available_set_ids
-        and condition.oddball_stimulus_set_id in available_set_ids
+        has_imported_images(condition.base_stimulus_set_id)
+        and has_imported_images(condition.oddball_stimulus_set_id)
         for condition in ordered_conditions
     )
 
