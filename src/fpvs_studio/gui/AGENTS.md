@@ -19,6 +19,11 @@ backend-driven.
 - Keep runtime launch messaging honest about the currently supported test-mode
   path.
 - Surface user-facing errors clearly, but keep the application recoverable.
+- Use `fpvs_studio.gui.components` as the public component/theme surface for shared
+  page shells, section cards, status/path labels, button role helpers, and reusable
+  styles.
+- Avoid ad hoc `setStyleSheet(...)` in page or dialog modules for shared concepts;
+  add or reuse a named helper in `gui.components` instead.
 
 ## Hard restrictions
 

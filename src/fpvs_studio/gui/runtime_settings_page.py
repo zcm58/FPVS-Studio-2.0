@@ -18,8 +18,9 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from fpvs_studio.gui.design_system import (
+from fpvs_studio.gui.components import (
     PAGE_SECTION_GAP,
+    SectionCard,
 )
 from fpvs_studio.gui.document import ProjectDocument
 from fpvs_studio.gui.window_helpers import (
@@ -28,7 +29,6 @@ from fpvs_studio.gui.window_helpers import (
     _prefixed_object_name,
     _show_error_dialog,
 )
-from fpvs_studio.gui.window_layout import SectionCard
 
 
 class RuntimeSettingsEditor(QWidget):

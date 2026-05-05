@@ -24,9 +24,13 @@ from PySide6.QtWidgets import (
 )
 
 from fpvs_studio.core.session_plan import SessionPlan
-from fpvs_studio.gui.design_system import (
+from fpvs_studio.gui.components import (
     PAGE_SECTION_GAP,
+    NonHomePageShell,
+    SectionCard,
     StatusBadgeLabel,
+    mark_launch_action,
+    mark_secondary_action,
 )
 from fpvs_studio.gui.document import DocumentError, LaunchSummary, ProjectDocument
 from fpvs_studio.gui.runtime_settings_page import RuntimeSettingsEditor
@@ -36,7 +40,6 @@ from fpvs_studio.gui.window_helpers import (
     _launcher_readiness_report,
     _set_list_items,
 )
-from fpvs_studio.gui.window_layout import NonHomePageShell, SectionCard
 from fpvs_studio.gui.workers import ProgressTask
 
 
@@ -180,11 +183,10 @@ class RunPage(QWidget):
         self.compile_button = QPushButton("Preview Session Plan", self)
         self.compile_button.setObjectName("compile_session_button")
         self.compile_button.clicked.connect(self.compile_session)
-        self.compile_button.setProperty("secondaryActionRole", "true")
+        mark_secondary_action(self.compile_button)
         self.launch_button = QPushButton("Launch Experiment", self)
         self.launch_button.setObjectName("launch_test_session_button")
-        self.launch_button.setProperty("launchActionRole", "primary")
-        self.launch_button.setProperty("primaryActionRole", "true")
+        mark_launch_action(self.launch_button)
         self.launch_button.setToolTip(
             "Launch Experiment on the current alpha test-mode runtime path."
         )

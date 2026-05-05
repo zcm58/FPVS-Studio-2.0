@@ -19,10 +19,15 @@ from PySide6.QtWidgets import (
 
 from fpvs_studio.core.models import ConditionTemplateProfile
 from fpvs_studio.gui.assets_pages import AssetsReadinessEditor
-from fpvs_studio.gui.design_system import (
+from fpvs_studio.gui.components import (
     PAGE_SECTION_GAP,
+    NonHomePageShell,
+    PageContainer,
     PathValueLabel,
+    SectionCard,
     StatusBadgeLabel,
+    apply_home_page_theme,
+    mark_launch_action,
 )
 from fpvs_studio.gui.document import ProjectDocument
 from fpvs_studio.gui.project_overview_page import ProjectOverviewEditor
@@ -34,7 +39,6 @@ from fpvs_studio.gui.window_helpers import (
     _launcher_readiness_report,
     _set_list_items,
 )
-from fpvs_studio.gui.window_layout import NonHomePageShell, PageContainer, SectionCard
 
 
 class SetupDashboardPage(QWidget):
@@ -236,9 +240,7 @@ class HomePage(QWidget):
         self.open_project_button.setObjectName("home_open_project_button")
         self.launch_button = QPushButton("Launch Experiment", self)
         self.launch_button.setObjectName("home_launch_test_session_button")
-        self.launch_button.setProperty("launchActionRole", "primary")
-        self.launch_button.setProperty("homeActionRole", "primary")
-        self.launch_button.setProperty("primaryActionRole", "true")
+        mark_launch_action(self.launch_button, home=True)
         self.save_project_button = QPushButton("Save", self)
         self.save_project_button.setObjectName("home_save_project_button")
         self.new_project_button = QPushButton("Create New Project", self)
@@ -365,53 +367,7 @@ class HomePage(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self.page_container)
 
-        self.setStyleSheet(
-            """
-            QWidget#home_page {
-                color: #243447;
-                font-size: 13px;
-            }
-            QLabel#home_current_project_header {
-                font-size: 26px;
-                font-weight: 700;
-            }
-            QLabel#home_current_project_subtitle {
-                font-size: 13px;
-                color: #495869;
-            }
-            QLabel[homeFieldLabel="true"] {
-                color: #4c5d73;
-                font-size: 13px;
-                font-weight: 600;
-            }
-            QLabel[homeValueRole="primary"] {
-                color: #1f2f44;
-                font-size: 15px;
-                font-weight: 600;
-            }
-            QLabel[homeValueRole="secondary"] {
-                color: #2f435b;
-                font-size: 13px;
-            }
-            QPushButton#home_create_project_button,
-            QPushButton#home_open_project_button,
-            QPushButton#home_save_project_button,
-            QPushButton#home_launch_test_session_button {
-                font-size: 14px;
-                padding: 7px 12px;
-            }
-            QPushButton[launchActionRole="primary"],
-            QPushButton[homeActionRole="primary"] {
-                font-weight: 700;
-            }
-            QLabel#home_launch_status_indicator {
-                min-height: 28px;
-            }
-            QLabel#home_launch_status_summary {
-                color: #33485f;
-            }
-            """
-        )
+        apply_home_page_theme(self)
 
         self._document.project_changed.connect(self.refresh)
         self._document.session_plan_changed.connect(self.refresh)

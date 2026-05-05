@@ -23,7 +23,13 @@ from PySide6.QtWidgets import (
 )
 
 from fpvs_studio.core.enums import StimulusVariant
-from fpvs_studio.gui.design_system import PAGE_SECTION_GAP, elide_middle
+from fpvs_studio.gui.components import (
+    PAGE_SECTION_GAP,
+    NonHomePageShell,
+    SectionCard,
+    mark_primary_action,
+)
+from fpvs_studio.gui.design_system import elide_middle
 from fpvs_studio.gui.document import ConditionStimulusRow, ProjectDocument
 from fpvs_studio.gui.window_helpers import (
     _prefixed_object_name,
@@ -31,7 +37,6 @@ from fpvs_studio.gui.window_helpers import (
     _show_error_dialog,
     _variant_label,
 )
-from fpvs_studio.gui.window_layout import NonHomePageShell, SectionCard
 from fpvs_studio.gui.workers import ProgressTask
 
 
@@ -71,7 +76,7 @@ class AssetsPage(QWidget):
         self.refresh_button.clicked.connect(self._refresh_inspection)
         self.materialize_button = QPushButton("Build Supported Variants", self)
         self.materialize_button.setObjectName("materialize_assets_button")
-        self.materialize_button.setProperty("primaryActionRole", "true")
+        mark_primary_action(self.materialize_button)
         self.materialize_button.clicked.connect(self._materialize_assets)
 
         controls_layout.addWidget(self.import_source_button)

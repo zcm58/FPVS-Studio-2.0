@@ -13,16 +13,10 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from fpvs_studio.gui.components import apply_non_home_shell_theme, apply_section_card_theme
 from fpvs_studio.gui.design_system import (
-    CARD_CORNER_RADIUS,
     CARD_PADDING_X,
     CARD_PADDING_Y,
-    COLOR_BORDER,
-    COLOR_BORDER_SOFT,
-    COLOR_SURFACE,
-    COLOR_SURFACE_ALT,
-    COLOR_TEXT_PRIMARY,
-    COLOR_TEXT_SECONDARY,
     PAGE_MARGIN_X,
     PAGE_MARGIN_Y,
     PAGE_SECTION_GAP,
@@ -204,27 +198,7 @@ class NonHomePageShell(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self.page_container)
 
-        self.setStyleSheet(
-            f"""
-            QLabel#non_home_shell_title {{
-                font-size: 24px;
-                font-weight: 700;
-                color: {COLOR_TEXT_PRIMARY};
-            }}
-            QLabel#non_home_shell_subtitle {{
-                color: {COLOR_TEXT_SECONDARY};
-                font-size: 13px;
-            }}
-            QFrame#non_home_shell_footer_strip {{
-                border: 1px solid {COLOR_BORDER_SOFT};
-                border-radius: {CARD_CORNER_RADIUS}px;
-                background-color: {COLOR_SURFACE};
-            }}
-            QLabel#non_home_shell_footer_label {{
-                color: {COLOR_TEXT_SECONDARY};
-            }}
-            """
-        )
+        apply_non_home_shell_theme(self)
 
     def add_content_widget(self, widget: QWidget, *, stretch: int = 0) -> None:
         if self._single_column_layout is None:
@@ -335,28 +309,4 @@ class SectionCard(QFrame):
         self.body_layout.setSpacing(PAGE_SECTION_GAP)
         self.card_layout.addLayout(self.body_layout)
 
-        self.setStyleSheet(
-            f"""
-            QFrame[sectionCard="true"] {{
-                border: 1px solid {COLOR_BORDER};
-                border-radius: {CARD_CORNER_RADIUS}px;
-                background-color: {COLOR_SURFACE};
-            }}
-            QLabel[sectionCardRole="title"] {{
-                font-size: 15px;
-                font-weight: 700;
-                color: {COLOR_TEXT_PRIMARY};
-            }}
-            QLabel[sectionCardRole="subtitle"] {{
-                color: {COLOR_TEXT_SECONDARY};
-            }}
-            QLabel#section_card_tooltip_badge {{
-                border: 1px solid {COLOR_BORDER_SOFT};
-                border-radius: 8px;
-                background-color: {COLOR_SURFACE_ALT};
-                color: {COLOR_TEXT_PRIMARY};
-                font-size: 11px;
-                font-weight: 700;
-            }}
-            """
-        )
+        apply_section_card_theme(self)

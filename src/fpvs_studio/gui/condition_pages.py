@@ -29,10 +29,14 @@ from fpvs_studio.core.enums import (
 )
 from fpvs_studio.core.models import Condition
 from fpvs_studio.core.template_library import get_template
-from fpvs_studio.gui.design_system import (
+from fpvs_studio.gui.components import (
     PAGE_SECTION_GAP,
+    NonHomePageShell,
     PathValueLabel,
+    SectionCard,
     StatusBadgeLabel,
+    mark_primary_action,
+    mark_secondary_action,
 )
 from fpvs_studio.gui.document import ProjectDocument
 from fpvs_studio.gui.window_helpers import (
@@ -43,7 +47,6 @@ from fpvs_studio.gui.window_helpers import (
     _sync_text_editor_contents,
     _variant_label,
 )
-from fpvs_studio.gui.window_layout import NonHomePageShell, SectionCard
 
 
 class ConditionsPage(QWidget):
@@ -64,7 +67,7 @@ class ConditionsPage(QWidget):
         self.add_condition_button = QPushButton("Add", self)
         self.add_condition_button.setObjectName("add_condition_button")
         self.add_condition_button.clicked.connect(self._add_condition)
-        self.add_condition_button.setProperty("primaryActionRole", "true")
+        mark_primary_action(self.add_condition_button)
         self.remove_condition_button = QPushButton("Remove", self)
         self.remove_condition_button.setObjectName("remove_condition_button")
         self.remove_condition_button.clicked.connect(self._remove_condition)
@@ -157,7 +160,7 @@ class ConditionsPage(QWidget):
         self.base_import_button = QPushButton("Import Base Folder...", self)
         self.base_import_button.setObjectName("import_base_folder_button")
         self.base_import_button.clicked.connect(lambda: self._import_stimulus_folder("base"))
-        self.base_import_button.setProperty("secondaryActionRole", "true")
+        mark_secondary_action(self.base_import_button)
 
         self.oddball_source_value = PathValueLabel(self)
         self.oddball_source_value.setObjectName("oddball_source_value")
@@ -172,7 +175,7 @@ class ConditionsPage(QWidget):
         self.oddball_import_button = QPushButton("Import Oddball Folder...", self)
         self.oddball_import_button.setObjectName("import_oddball_folder_button")
         self.oddball_import_button.clicked.connect(lambda: self._import_stimulus_folder("oddball"))
-        self.oddball_import_button.setProperty("secondaryActionRole", "true")
+        mark_secondary_action(self.oddball_import_button)
 
         self.condition_editor_card = SectionCard(
             title="Condition Editor",

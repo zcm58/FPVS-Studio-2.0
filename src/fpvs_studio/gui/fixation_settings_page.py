@@ -19,12 +19,10 @@ from PySide6.QtWidgets import (
 )
 
 from fpvs_studio.core.validation import ConditionFixationGuidance
-from fpvs_studio.gui.design_system import (
-    CARD_CORNER_RADIUS,
-    COLOR_BORDER_SOFT,
-    COLOR_SURFACE_ELEVATED,
-    COLOR_TEXT_PRIMARY,
+from fpvs_studio.gui.components import (
     PAGE_SECTION_GAP,
+    SectionCard,
+    apply_fixation_settings_theme,
 )
 from fpvs_studio.gui.document import ProjectDocument
 from fpvs_studio.gui.window_helpers import (
@@ -32,7 +30,6 @@ from fpvs_studio.gui.window_helpers import (
     _set_form_row_visible,
     _show_error_dialog,
 )
-from fpvs_studio.gui.window_layout import SectionCard
 
 
 class FixationSettingsEditor(QWidget):
@@ -229,19 +226,7 @@ class FixationSettingsEditor(QWidget):
         layout.setSpacing(0)
         layout.addWidget(self.fixation_panel)
 
-        self.setStyleSheet(
-            f"""
-            QFrame#fixation_feasibility_card {{
-                border: 1px solid {COLOR_BORDER_SOFT};
-                border-radius: {CARD_CORNER_RADIUS}px;
-                background-color: {COLOR_SURFACE_ELEVATED};
-            }}
-            QLabel#fixation_feasibility_label {{
-                color: {COLOR_TEXT_PRIMARY};
-                font-weight: 600;
-            }}
-            """
-        )
+        apply_fixation_settings_theme(self)
 
         self._document.project_changed.connect(self.refresh)
         self.refresh()

@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
 )
 
 from fpvs_studio.core.enums import InterConditionMode
+from fpvs_studio.gui.components import NonHomePageShell, SectionCard
 from fpvs_studio.gui.document import ProjectDocument
 from fpvs_studio.gui.window_helpers import (
     _prefixed_object_name,
@@ -24,7 +25,6 @@ from fpvs_studio.gui.window_helpers import (
     _show_error_dialog,
     _transition_label,
 )
-from fpvs_studio.gui.window_layout import NonHomePageShell, SectionCard
 
 
 class SessionStructureEditor(QWidget):

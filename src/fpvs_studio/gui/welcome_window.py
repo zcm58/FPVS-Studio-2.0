@@ -6,7 +6,6 @@ layers handle application state transitions."""
 from __future__ import annotations
 
 from PySide6.QtCore import QEvent, Qt, Signal
-from PySide6.QtGui import QColor, QPalette
 from PySide6.QtWidgets import (
     QApplication,
     QFrame,
@@ -19,9 +18,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-
-def _rgba(color: QColor) -> str:
-    return f"rgba({color.red()}, {color.green()}, {color.blue()}, {color.alpha()})"
+from fpvs_studio.gui.components import apply_welcome_window_theme, mark_welcome_action
 
 
 class WelcomeWindow(QWidget):
@@ -88,7 +85,7 @@ class WelcomeWindow(QWidget):
 
         self.create_button = QPushButton("New Project", self.hero_container)
         self.create_button.setObjectName("create_project_button")
-        self.create_button.setProperty("welcomeRole", "primary")
+        mark_welcome_action(self.create_button, "primary")
         self.create_button.setMinimumHeight(52)
         self.create_button.setFixedWidth(220)
         self.create_button.clicked.connect(self.create_requested.emit)
@@ -96,7 +93,7 @@ class WelcomeWindow(QWidget):
 
         self.open_button = QPushButton("Open Project", self.hero_container)
         self.open_button.setObjectName("open_project_button")
-        self.open_button.setProperty("welcomeRole", "secondary")
+        mark_welcome_action(self.open_button, "secondary")
         self.open_button.setMinimumHeight(52)
         self.open_button.setFixedWidth(220)
         self.open_button.clicked.connect(self.open_requested.emit)
@@ -113,84 +110,7 @@ class WelcomeWindow(QWidget):
             self._apply_theme_styles()
 
     def _apply_theme_styles(self) -> None:
-        palette = self.palette()
-        window_color = palette.color(QPalette.ColorRole.Window)
-        base_color = palette.color(QPalette.ColorRole.Base)
-        mid_color = palette.color(QPalette.ColorRole.Mid)
-        text_color = palette.color(QPalette.ColorRole.Text)
-        highlight_color = palette.color(QPalette.ColorRole.Highlight)
-        highlighted_text_color = palette.color(QPalette.ColorRole.HighlightedText)
-
-        muted_text = QColor(text_color)
-        muted_text.setAlpha(190)
-        subtle_text = QColor(text_color)
-        subtle_text.setAlpha(150)
-        frame_border = QColor(mid_color)
-        frame_border.setAlpha(100 if window_color.lightness() >= 128 else 145)
-
-        is_dark = window_color.lightness() < 128
-        content_bg = window_color.lighter(106) if is_dark else window_color.lighter(102)
-        row_hover_bg = base_color.lighter(118) if is_dark else window_color.lighter(107)
-        focus_color = highlight_color.lighter(125) if is_dark else highlight_color.darker(110)
-        primary_hover = highlight_color.lighter(112) if is_dark else highlight_color.darker(108)
-        primary_pressed = highlight_color.lighter(124) if is_dark else highlight_color.darker(118)
-
-        self.setStyleSheet(
-            f"""
-            QFrame#welcome_content_frame {{
-                border: 1px solid {_rgba(frame_border)};
-                border-radius: 16px;
-                background-color: {_rgba(content_bg)};
-            }}
-            QWidget#welcome_hero_container {{
-                background: transparent;
-            }}
-            QLabel#welcome_brand_label {{
-                color: {_rgba(subtle_text)};
-                font-size: 14px;
-                font-weight: 600;
-            }}
-            QLabel#welcome_headline_label {{
-                color: {_rgba(text_color)};
-                font-size: 44px;
-                font-weight: 700;
-            }}
-            QLabel#welcome_body_label {{
-                color: {_rgba(muted_text)};
-                font-size: 17px;
-            }}
-            QPushButton {{
-                border: 1px solid {_rgba(mid_color)};
-                border-radius: 10px;
-                padding: 12px 26px;
-                background-color: {_rgba(base_color)};
-                color: {_rgba(text_color)};
-                font-size: 16px;
-                font-weight: 600;
-            }}
-            QPushButton:hover {{
-                background-color: {_rgba(row_hover_bg)};
-            }}
-            QPushButton:pressed {{
-                background-color: {_rgba(content_bg)};
-            }}
-            QPushButton[welcomeRole="primary"] {{
-                border-color: {_rgba(highlight_color.darker(115))};
-                background-color: {_rgba(highlight_color)};
-                color: {_rgba(highlighted_text_color)};
-                font-weight: 600;
-            }}
-            QPushButton[welcomeRole="primary"]:hover {{
-                background-color: {_rgba(primary_hover)};
-            }}
-            QPushButton[welcomeRole="primary"]:pressed {{
-                background-color: {_rgba(primary_pressed)};
-            }}
-            QPushButton:focus {{
-                border: 2px solid {_rgba(focus_color)};
-            }}
-            """
-        )
+        apply_welcome_window_theme(self)
 
     def _adopt_app_icon(self) -> None:
         app = QApplication.instance()

@@ -27,6 +27,7 @@ from fpvs_studio.core.condition_template_profiles import (
 )
 from fpvs_studio.core.enums import DutyCycleMode
 from fpvs_studio.core.models import ConditionTemplateProfile, FixationTaskSettings
+from fpvs_studio.gui.components import apply_condition_template_details_header_style
 from fpvs_studio.gui.condition_template_profile_editor_dialog import (
     ConditionTemplateProfileEditorDialog,
 )
@@ -154,9 +155,7 @@ class ConditionTemplateManagerDialog(QDialog):
         self.details_header = QLabel("Details", self)
         self.details_header.setObjectName("condition_template_details_header")
         self.details_header.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.details_header.setStyleSheet(
-            "font-size: 18px; font-weight: 700; text-decoration: underline;"
-        )
+        apply_condition_template_details_header_style(self.details_header)
 
         self.add_button = QPushButton("Add", self)
         self.add_button.setObjectName("condition_template_add_button")

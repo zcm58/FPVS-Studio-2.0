@@ -14,7 +14,7 @@ code may lazily import PsychoPy.
 
 - `src/fpvs_studio/app/`: application entry points and startup wiring.
 - `src/fpvs_studio/gui/`: PySide6 windows, dialogs, controllers, document binding, and
-  design-system helpers.
+  the `gui/components.py` public component/theme surface.
 - `src/fpvs_studio/core/`: editable project models, validation, compilation, run/session
   contracts, project persistence, and engine-neutral domain logic.
 - `src/fpvs_studio/preprocessing/`: source image import, inspection, derived assets, and
@@ -71,6 +71,9 @@ Current planned seams:
   facade. Session structure editing lives in `session_structure_page.py`; fixation-task
   controls live in `fixation_settings_page.py` because fixation behavior is expected to
   evolve independently.
+- GUI component/theme work starts from `src/fpvs_studio/gui/components.py`. It re-exports
+  shared page/card/status/path widgets, owns reusable button roles and stylesheets, and
+  keeps raw design tokens in `design_system.py`.
 - Condition-template profile management keeps `condition_template_manager_dialog.py` as
   the manager dialog and compatibility import point. The profile editor dialog lives in
   `condition_template_profile_editor_dialog.py`.

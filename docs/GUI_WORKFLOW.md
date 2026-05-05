@@ -47,6 +47,11 @@ The authoring window is organized into five pages:
 
 ## GUI Implementation Map
 
+- Shared GUI components and reusable theme styles live in
+  `src/fpvs_studio/gui/components.py`.
+- Raw color, spacing, width, and text-elision tokens live in
+  `src/fpvs_studio/gui/design_system.py`; page modules should prefer component
+  helpers instead of local stylesheets for shared UI concepts.
 - Session structure widgets live in `src/fpvs_studio/gui/session_structure_page.py`.
 - Fixation-task widgets live in `src/fpvs_studio/gui/fixation_settings_page.py`.
 - `src/fpvs_studio/gui/session_pages.py` is a compatibility export facade for those
@@ -55,6 +60,23 @@ The authoring window is organized into five pages:
   `src/fpvs_studio/gui/condition_template_manager_dialog.py`.
 - The condition-template profile editor lives in
   `src/fpvs_studio/gui/condition_template_profile_editor_dialog.py`.
+
+## GUI Theme and Components
+
+Use `fpvs_studio.gui.components` as the public starting point for shared page shells,
+section cards, status badges, path labels, action-button roles, and reusable stylesheet
+helpers.
+
+New GUI work should:
+
+- import shared widgets such as `SectionCard`, `NonHomePageShell`, `StatusBadgeLabel`,
+  and `PathValueLabel` from `gui.components`
+- use role helpers such as `mark_primary_action`, `mark_secondary_action`, and
+  `mark_launch_action` instead of setting shared button properties inline
+- add reusable styling through a named helper in `gui.components`, not a page-local
+  `setStyleSheet(...)`
+- keep project, compiler, preprocessing, runtime, and engine behavior outside the
+  component/theme layer
 
 ## Supported Authoring Tasks
 

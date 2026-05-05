@@ -17,8 +17,9 @@ from PySide6.QtWidgets import (
 )
 
 from fpvs_studio.core.models import ConditionTemplateProfile
-from fpvs_studio.gui.design_system import (
+from fpvs_studio.gui.components import (
     PathValueLabel,
+    SectionCard,
 )
 from fpvs_studio.gui.document import ProjectDocument
 from fpvs_studio.gui.window_helpers import (
@@ -26,7 +27,6 @@ from fpvs_studio.gui.window_helpers import (
     _show_error_dialog,
     _sync_text_editor_contents,
 )
-from fpvs_studio.gui.window_layout import SectionCard
 
 
 class ProjectOverviewEditor(QWidget):

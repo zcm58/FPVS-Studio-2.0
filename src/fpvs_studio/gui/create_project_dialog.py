@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
 
 from fpvs_studio.core.models import ConditionTemplateProfile
 from fpvs_studio.core.paths import slugify_project_name, validate_project_id
+from fpvs_studio.gui.components import mark_error_text
 
 
 class CreateProjectDialog(QDialog):
@@ -50,7 +51,7 @@ class CreateProjectDialog(QDialog):
         self.project_name_validation_label = QLabel(self)
         self.project_name_validation_label.setObjectName("project_name_validation_label")
         self.project_name_validation_label.setWordWrap(True)
-        self.project_name_validation_label.setStyleSheet("color: #a1332b;")
+        mark_error_text(self.project_name_validation_label)
         self.project_name_validation_label.setVisible(False)
         self.project_root_edit = QLineEdit(self)
         self.project_root_edit.setObjectName("project_root_edit")
