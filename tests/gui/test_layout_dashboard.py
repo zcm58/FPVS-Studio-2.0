@@ -102,6 +102,9 @@ def test_setup_wizard_exists_and_uses_single_column_shell_with_steps(
     assert "5 Session Design" in step_text
     assert "6 Fixation Cross" in step_text
     assert "7 Review" in step_text
+    label_text = "\n".join(label.text() for label in wizard.findChildren(QLabel))
+    assert "Current Step" not in label_text
+    assert "Only the controls needed for this setup step are shown." not in label_text
 
 
 def test_major_tabs_share_page_container_width_presets(
@@ -308,13 +311,23 @@ def test_setup_wizard_navigation_and_advanced_editor_access(
     qtbot.mouseClick(next_button, Qt.MouseButton.LeftButton)
     assert guide.step_stack.currentIndex() == 1
     assert not next_button.isEnabled()
+    guided_condition_list = guide.findChild(QListWidget, "setup_wizard_condition_list")
+    assert guided_condition_list is not None
+    assert guided_condition_list.count() == 0
 
     qtbot.mouseClick(guide.add_condition_button, Qt.MouseButton.LeftButton)
     assert next_button.isEnabled()
     assert advanced_button.isEnabled()
+    assert guided_condition_list.count() == 1
+    assert guided_condition_list.item(0).text() in {
+        condition.name for condition in guide._document.ordered_conditions()
+    }
     qtbot.mouseClick(advanced_button, Qt.MouseButton.LeftButton)
     assert guide.content_stack.currentWidget() is guide.advanced_stack
     assert guide.advanced_stack.currentWidget() is window.conditions_page
+    assert window.conditions_page.selected_condition_id() == guided_condition_list.item(0).data(
+        Qt.ItemDataRole.UserRole
+    )
     assert advanced_button.text() == "Back to Guided Step"
 
     qtbot.mouseClick(back_button, Qt.MouseButton.LeftButton)

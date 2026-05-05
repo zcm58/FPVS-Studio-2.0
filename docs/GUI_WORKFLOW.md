@@ -42,6 +42,8 @@ The authoring window is organized around two user-facing modes:
   - `Next` is disabled until the active step is complete
   - the top progress header shows `Step X of 7` and a slim horizontal progress
     indicator instead of a persistent left-hand step column
+  - the guided Conditions step shows a compact condition list plus `Add Condition`;
+    detailed condition editing stays in Advanced
   - `Advanced` replaces the guided step content with the detailed editor for the
     active setup area
   - `Return Home` asks for confirmation when setup is incomplete
