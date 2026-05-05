@@ -313,10 +313,11 @@ def test_setup_wizard_navigation_and_advanced_editor_access(
     assert next_button.isEnabled()
     qtbot.mouseClick(next_button, Qt.MouseButton.LeftButton)
     assert guide.step_stack.currentIndex() == 1
+    assert guide.step_stack.currentWidget() is window.conditions_page
+    assert guide.content_stack.currentWidget() is guide.guided_panel
     assert not next_button.isEnabled()
-    guided_condition_list = guide.findChild(QListWidget, "setup_wizard_condition_list")
-    assert guided_condition_list is not None
-    assert guided_condition_list.count() == 0
+    assert not advanced_button.isEnabled()
+    assert guide.findChild(QListWidget, "setup_wizard_condition_list") is None
 
     information_prompts: list[str] = []
     monkeypatch.setattr(
@@ -326,14 +327,10 @@ def test_setup_wizard_navigation_and_advanced_editor_access(
     qtbot.mouseClick(guide.add_condition_button, Qt.MouseButton.LeftButton)
     assert information_prompts == ["Please ensure you create all conditions before proceeding."]
     assert not next_button.isEnabled()
-    assert advanced_button.isEnabled()
-    assert guided_condition_list.count() == 1
-    assert guided_condition_list.item(0).text() in {
-        condition.name for condition in guide._document.ordered_conditions()
-    }
+    assert not advanced_button.isEnabled()
     assert "name every condition" in guide.step_status_label.text().lower()
 
-    condition_id = guided_condition_list.item(0).data(Qt.ItemDataRole.UserRole)
+    condition_id = window.conditions_page.selected_condition_id()
     assert isinstance(condition_id, str)
     guide._document.update_condition(condition_id, name="Faces")
     assert not next_button.isEnabled()
@@ -350,16 +347,16 @@ def test_setup_wizard_navigation_and_advanced_editor_access(
     )
     assert next_button.isEnabled()
 
+    qtbot.mouseClick(next_button, Qt.MouseButton.LeftButton)
+    assert guide.step_stack.currentWidget() is guide.assets_readiness_editor
+    assert advanced_button.isEnabled()
     qtbot.mouseClick(advanced_button, Qt.MouseButton.LeftButton)
     assert guide.content_stack.currentWidget() is guide.advanced_stack
-    assert guide.advanced_stack.currentWidget() is window.conditions_page
-    assert window.conditions_page.selected_condition_id() == guided_condition_list.item(0).data(
-        Qt.ItemDataRole.UserRole
-    )
+    assert guide.advanced_stack.currentWidget() is window.assets_page
     assert advanced_button.text() == "Back to Guided Step"
 
     qtbot.mouseClick(back_button, Qt.MouseButton.LeftButton)
-    assert guide.step_stack.currentIndex() == 0
+    assert guide.step_stack.currentIndex() == 1
     assert guide.content_stack.currentWidget() is guide.guided_panel
 
     monkeypatch.setattr(

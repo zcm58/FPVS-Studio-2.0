@@ -44,17 +44,17 @@ The authoring window is organized around two user-facing modes:
     indicator instead of a persistent left-hand step column
   - the wizard uses the full available window width so advanced editor content
     does not crop horizontally
-  - the guided Conditions step shows a compact condition list plus `Add Condition`;
-    detailed condition editing stays in Advanced
+  - the Conditions step uses the full Conditions editor directly so condition
+    ordering, identity, timing, and stimulus-source setup stay in one place
   - the Conditions step is complete only when every condition has a user-provided
     name and imported base and oddball image folders
   - `Advanced` replaces the guided step content with the detailed editor for the
     active setup area
   - `Return Home` asks for confirmation when setup is incomplete
 
-Detailed Conditions, Stimuli Manager, and Runtime widgets remain available internally
-for wizard advanced access and existing document bindings, but they are not visible
-top-level tabs during normal use.
+Detailed Stimuli Manager and Runtime widgets remain available internally for wizard
+advanced access and existing document bindings, while Conditions is used directly as
+its setup step. These pages are not visible top-level tabs during normal use.
 
 ## GUI Implementation Map
 

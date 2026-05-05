@@ -33,8 +33,9 @@ only through step-level advanced access.
     access to avoid cropped setup content
   - incomplete `Return Home` prompts before leaving setup
 - Keep detailed editors internal:
-  - Conditions, Stimuli Manager, and Runtime remain instantiated for existing
-    document bindings and advanced setup access.
+  - Conditions is used directly as the Conditions setup step.
+  - Stimuli Manager and Runtime remain instantiated for existing document bindings
+    and advanced setup access.
   - Home no longer exposes direct Stimuli Manager or Runtime Settings buttons.
 - Preserve backend contracts:
   - No project JSON schema changes.
@@ -67,7 +68,7 @@ only through step-level advanced access.
   - `Display Settings`, `Session Design`, `Fixation Cross`, and `Review` are the
     user-facing labels for the last four steps
   - `Next` is disabled until the current step is complete
-  - adding a condition enables the Conditions step
+  - Conditions uses the full condition editor in the normal step surface
   - no setup stepper text contains raw `[OK]` or `[TODO]` prefixes
   - `Advanced` replaces guided content with the existing detailed editor for the
     active step

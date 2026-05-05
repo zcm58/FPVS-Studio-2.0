@@ -11,7 +11,6 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QListWidget,
-    QListWidgetItem,
     QMessageBox,
     QPushButton,
     QStackedWidget,
@@ -79,6 +78,8 @@ class SetupWizardPage(QWidget):
         self._advanced_visible = False
 
         self.conditions_page = ConditionsPage(document, self)
+        self.add_condition_button = self.conditions_page.add_condition_button
+        self.add_condition_button.clicked.connect(self._show_first_condition_prompt_if_needed)
         self.assets_page = AssetsPage(document, self)
         self.run_page = RunPage(
             document,
@@ -195,7 +196,6 @@ class SetupWizardPage(QWidget):
         self.advanced_stack = QStackedWidget(self)
         self.advanced_stack.setObjectName("setup_wizard_advanced_stack")
         self.advanced_stack.addWidget(self._advanced_empty_page())
-        self.advanced_stack.addWidget(self.conditions_page)
         self.advanced_stack.addWidget(self.assets_page)
         self.advanced_stack.addWidget(self.run_page)
         self.advanced_stack.addWidget(self.session_structure_page)
@@ -260,41 +260,12 @@ class SetupWizardPage(QWidget):
 
     def _build_step_pages(self) -> None:
         self.step_stack.addWidget(self.project_overview_editor)
-        self.step_stack.addWidget(self._conditions_step_page())
+        self.step_stack.addWidget(self.conditions_page)
         self.step_stack.addWidget(self.assets_readiness_editor)
         self.step_stack.addWidget(self.runtime_settings_editor)
         self.step_stack.addWidget(self._session_step_page())
         self.step_stack.addWidget(self._fixation_step_page())
         self.step_stack.addWidget(self._review_step_page())
-
-    def _conditions_step_page(self) -> QWidget:
-        page = QWidget(self)
-        layout = QVBoxLayout(page)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(8)
-        self.conditions_summary_label = QLabel(page)
-        self.conditions_summary_label.setObjectName("setup_wizard_conditions_summary")
-        self.conditions_summary_label.setWordWrap(True)
-        self.setup_wizard_condition_list = QListWidget(page)
-        self.setup_wizard_condition_list.setObjectName("setup_wizard_condition_list")
-        self.setup_wizard_condition_list.setSelectionMode(QListWidget.SelectionMode.SingleSelection)
-        self.setup_wizard_condition_list.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        self.setup_wizard_condition_list.setWordWrap(True)
-        self.setup_wizard_condition_list.setSpacing(2)
-        self.setup_wizard_condition_list.setMinimumHeight(96)
-        self.setup_wizard_condition_list.setMaximumHeight(220)
-        self.setup_wizard_condition_list.currentItemChanged.connect(
-            self._sync_guided_condition_selection
-        )
-        self.add_condition_button = QPushButton("Add Condition", page)
-        self.add_condition_button.setObjectName("setup_wizard_add_condition_button")
-        self.add_condition_button.clicked.connect(self._add_condition)
-        mark_primary_action(self.add_condition_button)
-        layout.addWidget(self.conditions_summary_label)
-        layout.addWidget(self.setup_wizard_condition_list)
-        layout.addWidget(self.add_condition_button, 0, Qt.AlignmentFlag.AlignLeft)
-        layout.addStretch(1)
-        return page
 
     def _session_step_page(self) -> QWidget:
         page = QWidget(self)
@@ -367,11 +338,10 @@ class SetupWizardPage(QWidget):
         layout.addStretch(1)
         return page
 
-    def _add_condition(self) -> None:
-        condition_id = self._document.create_condition()
-        self.conditions_page.refresh()
-        self.refresh()
-        self._select_guided_condition(condition_id)
+    def _show_first_condition_prompt_if_needed(self) -> None:
+        step_key = _WIZARD_STEPS[self._active_step_index][0]
+        if step_key != "conditions" or self.content_stack.currentWidget() is not self.guided_panel:
+            return
         if len(self._document.ordered_conditions()) == 1:
             QMessageBox.information(
                 self,
@@ -439,8 +409,6 @@ class SetupWizardPage(QWidget):
         self._refresh_progress_header()
         self.step_title_label.setText(title)
         self.step_instruction_label.setText(instruction)
-        self.conditions_summary_label.setText(self._conditions_summary_text())
-        self._refresh_guided_condition_list()
         self._refresh_session_guided_summary()
         self._refresh_fixation_guided_summary()
         report = self._readiness_report()
@@ -448,8 +416,12 @@ class SetupWizardPage(QWidget):
         _set_list_items(self.review_readiness_list, self._human_readiness_items(report))
 
         step_valid = self._current_step_valid()
+        show_step_intro = step_key != "conditions"
+        self.step_title_label.setVisible(show_step_intro)
+        self.step_instruction_label.setVisible(show_step_intro)
+        self.step_status_badge.setVisible(show_step_intro)
         self.step_status_label.setText(self._step_status_text(self._active_step_index))
-        self.step_status_label.setVisible(not step_valid)
+        self.step_status_label.setVisible(show_step_intro and not step_valid)
         self.step_status_badge.set_state(
             "ready" if step_valid else "warning",
             "Step Complete" if step_valid else self._current_step_blocker(),
@@ -539,18 +511,6 @@ class SetupWizardPage(QWidget):
             return self._readiness_report().status_label
         return "Step needs attention"
 
-    def _conditions_summary_text(self) -> str:
-        ordered_conditions = self._document.ordered_conditions()
-        if not ordered_conditions:
-            return "No conditions are configured yet. Add a condition to continue."
-        if not self._conditions_ready_for_wizard(ordered_conditions):
-            return (
-                f"{len(ordered_conditions)} condition(s) configured. Name every condition and "
-                "assign base and oddball image folders before proceeding."
-            )
-        names = ", ".join(condition.name for condition in ordered_conditions)
-        return f"{len(ordered_conditions)} condition(s) configured: {names}"
-
     @staticmethod
     def _conditions_have_required_names(ordered_conditions: list) -> bool:
         return all(
@@ -565,45 +525,6 @@ class SetupWizardPage(QWidget):
             and self._conditions_have_required_names(ordered_conditions)
             and _conditions_have_assigned_assets(self._document, ordered_conditions)
         )
-
-    def _refresh_guided_condition_list(self) -> None:
-        selected_id = self._guided_condition_id()
-        self.setup_wizard_condition_list.blockSignals(True)
-        self.setup_wizard_condition_list.clear()
-        for condition in self._document.ordered_conditions():
-            item = QListWidgetItem(condition.name)
-            item.setData(Qt.ItemDataRole.UserRole, condition.condition_id)
-            self.setup_wizard_condition_list.addItem(item)
-            if condition.condition_id == selected_id:
-                self.setup_wizard_condition_list.setCurrentItem(item)
-        if selected_id is None and self.setup_wizard_condition_list.count() > 0:
-            self.setup_wizard_condition_list.setCurrentRow(0)
-        self.setup_wizard_condition_list.blockSignals(False)
-        self._sync_guided_condition_selection()
-
-    def _guided_condition_id(self) -> str | None:
-        item = self.setup_wizard_condition_list.currentItem()
-        if item is None:
-            return None
-        value = item.data(Qt.ItemDataRole.UserRole)
-        return value if isinstance(value, str) else None
-
-    def _select_guided_condition(self, condition_id: str) -> None:
-        for index in range(self.setup_wizard_condition_list.count()):
-            item = self.setup_wizard_condition_list.item(index)
-            if item.data(Qt.ItemDataRole.UserRole) == condition_id:
-                self.setup_wizard_condition_list.setCurrentItem(item)
-                break
-
-    def _sync_guided_condition_selection(self, *_args: object) -> None:
-        condition_id = self._guided_condition_id()
-        if condition_id is None:
-            return
-        for index in range(self.conditions_page.condition_list.count()):
-            item = self.conditions_page.condition_list.item(index)
-            if item.data(Qt.ItemDataRole.UserRole) == condition_id:
-                self.conditions_page.condition_list.setCurrentItem(item)
-                break
 
     @staticmethod
     def _human_readiness_items(report: LauncherReadinessReport) -> tuple[str, ...]:
@@ -663,7 +584,6 @@ class SetupWizardPage(QWidget):
 
     def _advanced_available_for_current_step(self) -> bool:
         return _WIZARD_STEPS[self._active_step_index][0] in {
-            "conditions",
             "stimuli",
             "display",
             "session",
@@ -672,11 +592,10 @@ class SetupWizardPage(QWidget):
 
     def _advanced_index_for_step(self, step_key: str) -> int:
         return {
-            "conditions": 1,
-            "stimuli": 2,
-            "display": 3,
-            "session": 4,
-            "fixation": 5,
+            "stimuli": 1,
+            "display": 2,
+            "session": 3,
+            "fixation": 4,
         }.get(step_key, 0)
 
     def _refresh_progress_header(self) -> None:
