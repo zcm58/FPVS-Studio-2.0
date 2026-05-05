@@ -10,6 +10,7 @@ Push-Location $RepoRoot
 try {
     & $Python -m ruff check src tests
     & $Python -m mypy src
+    & $Python -m pytest -q tests\unit\test_harness_docs.py
     & $Python -m pytest -q tests\unit\test_import_boundaries.py
 
     $env:QT_QPA_PLATFORM = "offscreen"

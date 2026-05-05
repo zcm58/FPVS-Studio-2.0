@@ -22,7 +22,58 @@ code may lazily import PsychoPy.
 - `src/fpvs_studio/runtime/`: launch settings, preflight, session execution, participant
   history, and runtime flow over compiled contracts.
 - `src/fpvs_studio/engines/`: presentation engine interface and PsychoPy implementation.
+- `src/fpvs_studio/triggers/`: optional trigger backend interfaces and hardware adapter
+  scaffolding used by runtime while keeping core contracts hardware-neutral.
 - `tests/`: unit, integration, and pytest-qt GUI coverage.
+
+## Documentation Freshness
+
+When a change moves source-of-truth contracts, adds or removes top-level packages, changes
+dependency boundaries, changes task context recipes, or changes supported verification
+commands, update this map and the relevant nested `AGENTS.md` or deeper `docs/` page in
+the same change.
+
+Run `python -m pytest -q tests\unit\test_harness_docs.py` after harness-documentation
+edits. The full quality gate also runs this check.
+
+## Planned Module Decomposition
+
+File length is a warning sign, not the architecture rule. Prefer splits when a file mixes
+distinct responsibilities, forces broad context reads for narrow tasks, or makes focused
+tests hard to locate. Do not split cohesive files only to satisfy a line-count target.
+
+The preferred split pattern is a behavior-preserving move behind the current public API:
+keep imports stable first, move one responsibility at a time, and run the narrow gate for
+that layer after each move.
+
+Current planned seams:
+
+- `src/fpvs_studio/gui/document.py` remains the GUI-facing `ProjectDocument` facade.
+  Focused helper modules own document support types/defaults
+  (`document_support.py`), condition mutation (`document_conditions.py`), stimulus import
+  and manifest sync (`document_stimuli.py`), and validation/compilation/preflight/launch
+  coordination (`document_runtime.py`).
+- `src/fpvs_studio/core/compiler.py` should keep the public compile entry points stable
+  while moving private helpers toward focused compiler modules for condition selection and
+  validation, image-path resolution, stimulus sequence construction, fixation planning,
+  trigger/transition compilation, and session-plan assembly.
+- `src/fpvs_studio/engines/psychopy_engine.py` should keep the `PsychoPyEngine` public
+  surface stable while moving implementation details toward focused helpers for lazy
+  PsychoPy loading, text-screen rendering, stimulus preparation, frame playback,
+  timing/metadata collection, and trigger emission.
+- Large GUI page modules are acceptable when they model one cohesive page or editor. Split
+  them only when a subcomponent has an independent lifecycle, test surface, or reusable
+  responsibility.
+- Large GUI tests should be split by workflow when they become hard to run or review
+  narrowly; production-module splits take priority over test-file line-count cleanup.
+
+Refactor priority:
+
+1. Keep the `ProjectDocument` helper split cohesive as GUI document behavior evolves.
+2. Split compiler internals next because the behavior is contract-sensitive and benefits
+   from smaller focused tests around each compile stage.
+3. Split the PsychoPy engine after the compiler/runtime seams are stable because playback
+   behavior is integration-heavy and should move in small verified steps.
 
 ## Task Context Recipes
 

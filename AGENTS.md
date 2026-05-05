@@ -20,6 +20,9 @@ experiments, with PsychoPy isolated behind runtime/engine boundaries.
 ## Repository guardrails
 
 - Read this file and any nested `AGENTS.md` files in directories you touch before editing.
+- Update `ARCHITECTURE.md`, relevant nested `AGENTS.md` files, and deeper docs
+  when package boundaries, source-of-truth contracts, task recipes, verification
+  commands, or supported workflows change.
 - Keep recursive searches narrow; exclude `.venv*`, `build`, `.pytest_cache`,
   `.ruff_cache`, `.mypy_cache`, and `.tmp` unless the task is explicitly about
   generated or cached output.
@@ -56,6 +59,9 @@ experiments, with PsychoPy isolated behind runtime/engine boundaries.
 
 ## Standard verification
 
+- Run `python -m pytest -q tests\unit\test_harness_docs.py` after changing
+  `AGENTS.md`, `ARCHITECTURE.md`, `.agents/skills/`, docs task recipes, package
+  boundaries, or harness scripts.
 - Run `python -m pytest -q` for broad behavior changes.
 - Run `python -m ruff check .` after Python edits when available.
 - Run `python -m mypy src` after typed contract or boundary changes when available.
