@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from PySide6.QtCore import QSignalBlocker
+from PySide6.QtCore import QSignalBlocker, Qt
 from PySide6.QtWidgets import (
     QComboBox,
     QFormLayout,
@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QMessageBox,
     QPushButton,
+    QSizePolicy,
     QVBoxLayout,
     QWidget,
 )
@@ -61,6 +62,12 @@ class ProjectOverviewEditor(QWidget):
 
         self.project_root_value = PathValueLabel(self)
         self.project_root_value.setObjectName("project_root_value")
+        self.project_root_value.setWordWrap(False)
+        self.project_root_value.setMaximumHeight(34)
+        self.project_root_value.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Fixed,
+        )
         self.condition_profile_combo = QComboBox(self)
         self.condition_profile_combo.setObjectName("project_condition_profile_combo")
         self.condition_profile_combo.setPlaceholderText("Select a condition template profile...")
@@ -85,26 +92,33 @@ class ProjectOverviewEditor(QWidget):
         condition_profile_layout.addWidget(self.apply_profile_to_conditions_button)
 
         self.project_overview_card = SectionCard(
-            title="Project Overview",
-            subtitle=("Project metadata and the default condition template for new rows."),
+            title="Project Details",
+            subtitle=("Confirm the experiment identity and default condition template."),
             object_name="dashboard_project_overview_card",
             parent=self,
         )
+        self.project_overview_card.setMaximumWidth(920)
+        self.project_overview_card.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Maximum,
+        )
         metadata_layout = QFormLayout()
-        metadata_layout.setVerticalSpacing(8)
+        metadata_layout.setVerticalSpacing(10)
+        metadata_layout.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
         metadata_layout.addRow("Name", self.project_name_edit)
         metadata_layout.addRow("Description", self.project_description_edit)
-        metadata_layout.addRow("Project Root", self.project_root_value)
+        metadata_layout.addRow("Project folder", self.project_root_value)
         metadata_layout.addRow("Condition Template", condition_profile_row)
-        self.project_overview_card.card_layout.setContentsMargins(12, 10, 12, 10)
-        self.project_overview_card.card_layout.setSpacing(8)
-        self.project_overview_card.body_layout.setSpacing(8)
+        self.project_overview_card.card_layout.setContentsMargins(16, 14, 16, 14)
+        self.project_overview_card.card_layout.setSpacing(10)
+        self.project_overview_card.body_layout.setSpacing(10)
         self.project_overview_card.body_layout.addLayout(metadata_layout)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
-        layout.addWidget(self.project_overview_card)
+        layout.addWidget(self.project_overview_card, 0, Qt.AlignmentFlag.AlignHCenter)
+        layout.addStretch(1)
 
         self._document.project_changed.connect(self.refresh)
         self.refresh()
@@ -114,7 +128,7 @@ class ProjectOverviewEditor(QWidget):
         with QSignalBlocker(self.project_name_edit):
             self.project_name_edit.setText(project.meta.name)
         _sync_text_editor_contents(self.project_description_edit, project.meta.description)
-        self.project_root_value.set_path_text(str(self._document.project_root), max_length=74)
+        self.project_root_value.set_path_text(str(self._document.project_root), max_length=92)
         self._refresh_condition_profile_widgets()
 
     def _refresh_condition_profile_widgets(self) -> None:

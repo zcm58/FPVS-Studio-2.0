@@ -261,6 +261,14 @@ def test_setup_wizard_surfaces_steps_and_keeps_shared_editors_available(
     assert project_editor.condition_profile_combo is not None
     assert project_editor.manage_templates_button is not None
     assert project_editor.apply_profile_to_conditions_button is not None
+    assert project_editor.project_overview_card.maximumWidth() == 920
+    assert project_editor.project_overview_card.title_label.text() == "Project Details"
+    assert project_editor.project_root_value.wordWrap() is False
+    assert project_editor.project_root_value.maximumHeight() <= 34
+    assert str(window.document.project_root) in {
+        project_editor.project_root_value.text(),
+        project_editor.project_root_value.toolTip(),
+    }
 
     assert session_editor.block_count_spin is not None
     assert session_editor.inter_condition_mode_combo is not None
