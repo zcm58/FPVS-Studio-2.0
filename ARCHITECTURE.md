@@ -53,10 +53,13 @@ Current planned seams:
   (`document_support.py`), condition mutation (`document_conditions.py`), stimulus import
   and manifest sync (`document_stimuli.py`), and validation/compilation/preflight/launch
   coordination (`document_runtime.py`).
-- `src/fpvs_studio/core/compiler.py` should keep the public compile entry points stable
-  while moving private helpers toward focused compiler modules for condition selection and
-  validation, image-path resolution, stimulus sequence construction, fixation planning,
-  trigger/transition compilation, and session-plan assembly.
+- `src/fpvs_studio/core/compiler.py` keeps the public `compile_run_spec` and
+  `compile_session_plan` entry points stable. Focused helper modules own shared compiler
+  support/errors/ids (`compiler_support.py`), condition selection and validation
+  (`compiler_conditions.py`), manifest/filesystem image-path resolution
+  (`compiler_assets.py`), stimulus/trigger/transition schedules
+  (`compiler_schedules.py`), and fixation target/event planning
+  (`compiler_fixation.py`).
 - `src/fpvs_studio/engines/psychopy_engine.py` should keep the `PsychoPyEngine` public
   surface stable while moving implementation details toward focused helpers for lazy
   PsychoPy loading, text-screen rendering, stimulus preparation, frame playback,
@@ -70,8 +73,7 @@ Current planned seams:
 Refactor priority:
 
 1. Keep the `ProjectDocument` helper split cohesive as GUI document behavior evolves.
-2. Split compiler internals next because the behavior is contract-sensitive and benefits
-   from smaller focused tests around each compile stage.
+2. Keep compiler helper modules cohesive as compile behavior evolves.
 3. Split the PsychoPy engine after the compiler/runtime seams are stable because playback
    behavior is integration-heavy and should move in small verified steps.
 
