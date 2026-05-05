@@ -457,6 +457,8 @@ class SetupWizardPage(QWidget):
 
     def _step_status_text(self, index: int) -> str:
         step_key = _WIZARD_STEPS[index][0]
+        if step_key == "project" and not self._project_details_ready():
+            return self._project_details_blocker()
         if self._step_valid(index):
             return "Ready" if step_key == "review" else "Complete"
         if step_key == "conditions":
@@ -479,7 +481,7 @@ class SetupWizardPage(QWidget):
         step_key = _WIZARD_STEPS[index][0]
         ordered_conditions = self._document.ordered_conditions()
         if step_key == "project":
-            return bool(self._document.project.meta.name.strip() and self._document.project_root)
+            return self._project_details_ready()
         if step_key == "conditions":
             return self._conditions_ready_for_wizard(ordered_conditions)
         if step_key == "stimuli":
@@ -495,7 +497,7 @@ class SetupWizardPage(QWidget):
     def _current_step_blocker(self) -> str:
         step_key = _WIZARD_STEPS[self._active_step_index][0]
         if step_key == "project":
-            return "Project details needed"
+            return self._project_details_blocker()
         if step_key == "conditions":
             ordered_conditions = self._document.ordered_conditions()
             if not ordered_conditions:
@@ -510,6 +512,24 @@ class SetupWizardPage(QWidget):
         if step_key == "review":
             return self._readiness_report().status_label
         return "Step needs attention"
+
+    def _project_details_ready(self) -> bool:
+        project = self._document.project
+        return bool(
+            project.meta.name.strip()
+            and project.meta.description.strip()
+            and self._document.project_root
+        )
+
+    def _project_details_blocker(self) -> str:
+        project = self._document.project
+        if not project.meta.name.strip():
+            return "Enter a project name"
+        if not project.meta.description.strip():
+            return "Enter a project description"
+        if not self._document.project_root:
+            return "Choose a project folder"
+        return "Project details needed"
 
     @staticmethod
     def _conditions_have_required_names(ordered_conditions: list) -> bool:

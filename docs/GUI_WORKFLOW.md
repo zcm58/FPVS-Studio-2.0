@@ -45,7 +45,8 @@ The authoring window is organized around two user-facing modes:
   - the wizard uses the full available window width so advanced editor content
     does not crop horizontally
   - Project Details uses a focused centered card inside the full-width wizard,
-    keeping the project folder path compact and secondary
+    keeping the project folder path compact and secondary; project name and
+    description are required before continuing to Conditions
   - the Conditions step uses the full Conditions editor directly so condition
     ordering, identity, timing, and stimulus-source setup stay in one place
   - the Conditions step is complete only when every condition has a user-provided

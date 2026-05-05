@@ -307,6 +307,9 @@ def test_setup_wizard_navigation_and_advanced_editor_access(
     _, window = _open_created_project(controller, qtbot, tmp_path, "Setup Guide Actions")
     guide = window.setup_wizard_page
     window.main_stack.setCurrentWidget(guide)
+    guide.project_overview_editor.project_description_edit.setPlainText(
+        "Required setup description."
+    )
 
     back_button = guide.findChild(QPushButton, "setup_wizard_back_button")
     next_button = guide.findChild(QPushButton, "setup_wizard_next_button")
@@ -373,6 +376,32 @@ def test_setup_wizard_navigation_and_advanced_editor_access(
     )
     qtbot.mouseClick(return_home_button, Qt.MouseButton.LeftButton)
     assert window.main_stack.currentWidget() is window.home_page
+
+
+def test_project_details_step_requires_description_before_next(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Description Gate")
+    guide = window.setup_wizard_page
+    window.main_stack.setCurrentWidget(guide)
+
+    next_button = guide.findChild(QPushButton, "setup_wizard_next_button")
+    description_edit = guide.project_overview_editor.project_description_edit
+    assert next_button is not None
+
+    description_edit.clear()
+    description_edit.textChanged.emit()
+    assert guide.step_stack.currentIndex() == 0
+    assert not next_button.isEnabled()
+    assert "project description" in guide.step_status_label.text().lower()
+
+    description_edit.setPlainText("This experiment measures FPVS responses.")
+    qtbot.waitUntil(next_button.isEnabled)
+
+    qtbot.mouseClick(next_button, Qt.MouseButton.LeftButton)
+    assert guide.step_stack.currentIndex() == 1
 
 
 def test_setup_wizard_advanced_replaces_guided_view_for_session_step(
