@@ -115,6 +115,9 @@ When iterating on GUI tests:
 - monkeypatch modal dialogs and runtime launch calls
 - do not let tests open real `QFileDialog`, `QMessageBox`, or launch the real
   PsychoPy runtime
+- use named helpers in `tests/gui/helpers.py` for common setup such as creating a
+  project window, preparing compile-ready stimuli, configuring fixation controls,
+  finding condition-template rows, and building fake runtime summaries
 
 Recommended invocation:
 

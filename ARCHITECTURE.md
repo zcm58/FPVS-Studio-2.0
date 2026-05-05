@@ -135,6 +135,7 @@ results. Exporters serialize those results without moving contracts into engine 
 - Runtime: `.\scripts\check_runtime.ps1`
 - Compiler/session: `.\scripts\check_compiler.ps1`
 - Preprocessing: `.\scripts\check_preprocessing.ps1`
+- Line-count report: `.\scripts\report_line_counts.ps1`
 - Workspace cleanup: `.\scripts\clean_workspace.ps1`
 
 ## Deeper Docs

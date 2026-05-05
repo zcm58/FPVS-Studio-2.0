@@ -69,6 +69,8 @@ experiments, with PsychoPy isolated behind runtime/engine boundaries.
 - Use `.\scripts\check_gui.ps1`, `.\scripts\check_runtime.ps1`,
   `.\scripts\check_compiler.ps1`, or `.\scripts\check_preprocessing.ps1` for
   narrower cleanup passes.
+- Use `.\scripts\report_line_counts.ps1` as an advisory context-size report before
+  planning more module decomposition; split by responsibility, not by line count alone.
 - GUI changes need a focused pytest-qt smoke test, or documented manual smoke steps if
   automation is impractical.
 - Done means relevant checks pass, or every skipped/failing check is explained with the
