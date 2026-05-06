@@ -9,7 +9,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from PySide6.QtGui import QColor, QPalette
+from PySide6.QtCore import QPoint, QSize, Qt
+from PySide6.QtGui import QBrush, QColor, QIcon, QPainter, QPalette, QPen, QPixmap, QPolygon
 from PySide6.QtWidgets import QLabel, QPushButton, QWidget
 
 from fpvs_studio.gui.design_system import (
@@ -67,6 +68,7 @@ __all__ = [
     "home_page_stylesheet",
     "mark_error_text",
     "mark_launch_action",
+    "mark_home_launch_action",
     "mark_primary_action",
     "mark_secondary_action",
     "mark_welcome_action",
@@ -112,6 +114,25 @@ def mark_launch_action(button: QPushButton, *, home: bool = False) -> None:
     _set_widget_property(button, "primaryActionRole", "true")
     if home:
         _set_widget_property(button, "homeActionRole", "primary")
+
+
+def mark_home_launch_action(button: QPushButton) -> None:
+    mark_launch_action(button, home=True)
+    _set_widget_property(button, "homeLaunchHeroAction", "true")
+    button.setIcon(_green_play_icon())
+    button.setIconSize(QSize(20, 20))
+
+
+def _green_play_icon() -> QIcon:
+    pixmap = QPixmap(24, 24)
+    pixmap.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+    painter.setPen(QPen(Qt.PenStyle.NoPen))
+    painter.setBrush(QBrush(QColor("#22c55e")))
+    painter.drawPolygon(QPolygon([QPoint(8, 5), QPoint(8, 19), QPoint(19, 12)]))
+    painter.end()
+    return QIcon(pixmap)
 
 
 def mark_welcome_action(button: QPushButton, role: str) -> None:
@@ -377,10 +398,28 @@ def home_page_stylesheet() -> str:
     QPushButton#home_create_project_button,
     QPushButton#home_open_project_button,
     QPushButton#home_save_project_button,
-    QPushButton#home_launch_experiment_button,
     QPushButton#home_edit_setup_button {
         font-size: 14px;
         padding: 7px 12px;
+    }
+    QWidget#home_launch_panel {
+        border: 1px solid #c7d2e5;
+        border-radius: 8px;
+        background-color: #f8fbff;
+    }
+    QLabel#home_metric_label {
+        color: #52637a;
+        font-size: 12px;
+        font-weight: 600;
+    }
+    QLabel[homeValueRole="primary"] {
+        font-size: 20px;
+        font-weight: 700;
+    }
+    QPushButton#home_launch_experiment_button {
+        font-size: 18px;
+        min-height: 54px;
+        padding: 10px 24px;
     }
     QPushButton[launchActionRole="primary"],
     QPushButton[homeActionRole="primary"] {

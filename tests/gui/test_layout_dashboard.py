@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
     QListWidget,
     QMessageBox,
     QPushButton,
+    QSizePolicy,
     QToolBar,
     QWidget,
 )
@@ -25,10 +26,6 @@ from tests.gui.helpers import (
     _write_image_directory,
 )
 
-from fpvs_studio.core.condition_template_profiles import (
-    SIXTY_HZ_BLANK_FIXATION_PROFILE_ID,
-    built_in_condition_template_profiles,
-)
 from fpvs_studio.core.enums import DutyCycleMode, InterConditionMode, StimulusVariant
 from fpvs_studio.core.project_service import create_project
 from fpvs_studio.core.serialization import load_project_file, save_project_file
@@ -890,22 +887,25 @@ def test_home_quick_action_buttons_present_and_wired(
     assert window.launch_action.text() == "Launch Experiment"
     assert "alpha test-mode" in window.launch_action.toolTip().lower()
     qtbot.waitUntil(lambda: launch_button.width() > 0)
+    utility_buttons = (open_button, new_button, save_button, edit_setup_button)
     ordered_buttons = sorted(
-        (open_button, new_button, save_button, launch_button),
+        utility_buttons,
         key=lambda button: button.geometry().x(),
     )
     assert [button.objectName() for button in ordered_buttons] == [
         "home_open_project_button",
         "home_create_project_button",
         "home_save_project_button",
-        "home_launch_experiment_button",
+        "home_edit_setup_button",
     ]
-    assert launch_button.geometry().right() == max(
-        button.geometry().right() for button in ordered_buttons
-    )
     assert len({button.width() for button in ordered_buttons}) == 1
-    assert {button.minimumWidth() for button in ordered_buttons} == {176}
-    assert {button.maximumWidth() for button in ordered_buttons} == {176}
+    assert {button.minimumWidth() for button in ordered_buttons} == {160}
+    assert launch_button.width() > ordered_buttons[0].width()
+    assert launch_button.parent() is window.home_page.findChild(QWidget, "home_launch_panel")
+    launch_panel = launch_button.parentWidget()
+    assert launch_panel is not None
+    assert launch_panel.maximumWidth() == 760
+    assert launch_button.sizePolicy().horizontalPolicy() == QSizePolicy.Policy.Fixed
 
     trigger_counts = {"new": 0, "open": 0, "save": 0, "launch": 0}
     window.new_project_action.triggered.connect(
@@ -944,6 +944,8 @@ def test_launch_buttons_share_primary_visual_role(
     assert home_launch_button.text() == "Launch Experiment"
     assert run_launch_button.text() == "Launch Experiment"
     assert home_launch_button.property("launchActionRole") == "primary"
+    assert home_launch_button.property("homeLaunchHeroAction") == "true"
+    assert not home_launch_button.icon().isNull()
     assert run_launch_button.property("launchActionRole") == "primary"
 
 
@@ -1058,7 +1060,7 @@ def test_window_title_and_status_bar_surface_alpha_runtime_designation(
     assert "(Alpha)" in window.windowTitle()
 
 
-def test_home_overview_panels_show_project_session_and_runtime_metadata(
+def test_home_launch_surface_shows_only_essential_project_session_metadata(
     qtbot,
     controller: StudioController,
     tmp_path: Path,
@@ -1076,14 +1078,20 @@ def test_home_overview_panels_show_project_session_and_runtime_metadata(
     description_label = window.home_page.findChild(QLabel, "home_project_description_value")
     root_path_label = window.home_page.findChild(QLabel, "home_project_root_value")
     status_label = window.home_page.findChild(QLabel, "home_launch_status_indicator")
+    launch_panel = window.home_page.findChild(QWidget, "home_launch_panel")
+    readiness_list = window.home_page.findChild(QListWidget, "home_readiness_list")
+    subtitle_label = window.home_page.findChild(QLabel, "home_current_project_subtitle")
     assert condition_count_label is not None
     assert block_count_label is not None
     assert fixation_label is not None
     assert accuracy_label is not None
-    assert template_label is not None
-    assert description_label is not None
-    assert root_path_label is not None
+    assert template_label is None
+    assert description_label is None
+    assert root_path_label is None
+    assert readiness_list is None
     assert status_label is not None
+    assert launch_panel is not None
+    assert subtitle_label is not None
 
     project_labels = {
         label.text().strip()
@@ -1104,34 +1112,14 @@ def test_home_overview_panels_show_project_session_and_runtime_metadata(
     assert block_count_label.text() == "2"
     assert fixation_label.text() == "Disabled"
     assert accuracy_label.text() == "Disabled"
-    assert str(window.document.project_root) in {
-        root_path_label.text(),
-        root_path_label.toolTip(),
-    }
     assert status_label.text().startswith("Status: ")
-    assert template_label.text() == "No template selected"
-    assert description_label.text() == "No description set yet."
+    assert subtitle_label.text() == "No description set yet."
 
-    profile_index = (
-        window.setup_dashboard_page.project_overview_editor.condition_profile_combo.findData(
-            SIXTY_HZ_BLANK_FIXATION_PROFILE_ID
-        )
-    )
-    assert profile_index >= 0
-    window.setup_dashboard_page.project_overview_editor.condition_profile_combo.setCurrentIndex(
-        profile_index
+    window.setup_dashboard_page.project_overview_editor.project_description_edit.setPlainText(
+        "This is the participant-facing project summary."
     )
     QApplication.processEvents()
-    assert template_label.text() == "50% Blank Between Images"
-    assert SIXTY_HZ_BLANK_FIXATION_PROFILE_ID not in template_label.text()
-    assert "fpvs_6hz_every5_v1" not in template_label.text()
-
-    missing_profile = built_in_condition_template_profiles()[0].model_copy(
-        update={"profile_id": "missing-home-template-profile"},
-    )
-    window.document.apply_condition_template_profile(missing_profile)
-    QApplication.processEvents()
-    assert template_label.text() == "Missing template: missing-home-template-profile"
+    assert subtitle_label.text() == "This is the participant-facing project summary."
 
 
 def test_background_color_control_is_run_tab_presets_only(

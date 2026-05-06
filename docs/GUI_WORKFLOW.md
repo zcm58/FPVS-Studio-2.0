@@ -32,8 +32,9 @@ The authoring window is organized around two user-facing modes:
 
 - `Home`
   - daily-use launch surface for ready projects
-  - project summary, launch readiness, project open/create/save actions, and
-    `Launch Experiment`
+  - project title, description, launch readiness badge, condition count, block
+    count, fixation task status, accuracy task status, project open/create/save
+    actions, setup editing, and a prominent centered `Launch Experiment`
   - `Edit Setup` opens the guided setup workflow
 - `Setup Wizard`
   - in-window setup flow for new/incomplete projects and intentional edits

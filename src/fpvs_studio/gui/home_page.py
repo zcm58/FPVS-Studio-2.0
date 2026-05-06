@@ -7,7 +7,6 @@ from collections.abc import Callable
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
-    QFormLayout,
     QGridLayout,
     QHBoxLayout,
     QLabel,
@@ -24,11 +23,10 @@ from fpvs_studio.gui.components import (
     PAGE_SECTION_GAP,
     NonHomePageShell,
     PageContainer,
-    PathValueLabel,
     SectionCard,
     StatusBadgeLabel,
     apply_home_page_theme,
-    mark_launch_action,
+    mark_home_launch_action,
     mark_secondary_action,
 )
 from fpvs_studio.gui.document import ProjectDocument
@@ -346,7 +344,7 @@ class HomePage(QWidget):
         self.open_project_button.setObjectName("home_open_project_button")
         self.launch_button = QPushButton("Launch Experiment", self)
         self.launch_button.setObjectName("home_launch_experiment_button")
-        mark_launch_action(self.launch_button, home=True)
+        mark_home_launch_action(self.launch_button)
         self.save_project_button = QPushButton("Save", self)
         self.save_project_button.setObjectName("home_save_project_button")
         self.new_project_button = QPushButton("Create New Project", self)
@@ -359,64 +357,30 @@ class HomePage(QWidget):
             self.open_project_button,
             self.new_project_button,
             self.save_project_button,
-            self.launch_button,
             self.edit_setup_button,
         ):
             button.setMinimumHeight(38)
-            button.setFixedWidth(176)
+            button.setMinimumWidth(160)
+            button.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
-        action_layout = QHBoxLayout()
+        self.launch_button.setMinimumWidth(260)
+        self.launch_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+
+        action_layout = QGridLayout()
         action_layout.setContentsMargins(0, 0, 0, 0)
-        action_layout.setSpacing(PAGE_SECTION_GAP)
-        action_layout.addWidget(self.open_project_button)
-        action_layout.addWidget(self.new_project_button)
-        action_layout.addWidget(self.save_project_button)
-        action_layout.addStretch(1)
-        action_layout.addWidget(self.launch_button)
+        action_layout.setHorizontalSpacing(PAGE_SECTION_GAP)
+        action_layout.setVerticalSpacing(PAGE_SECTION_GAP)
+        for column, button in enumerate(
+            (
+                self.open_project_button,
+                self.new_project_button,
+                self.save_project_button,
+                self.edit_setup_button,
+            )
+        ):
+            action_layout.addWidget(button, 0, column)
+            action_layout.setColumnStretch(column, 1)
 
-        navigation_layout = QHBoxLayout()
-        navigation_layout.setContentsMargins(0, 0, 0, 0)
-        navigation_layout.setSpacing(PAGE_SECTION_GAP)
-        navigation_layout.addWidget(self.edit_setup_button)
-        navigation_layout.addStretch(1)
-
-        project_card = SectionCard(
-            title="Project Info",
-            subtitle="Project identity and template settings.",
-            object_name="home_project_card",
-            parent=self,
-        )
-        project_layout = QFormLayout()
-        project_layout.setContentsMargins(0, 0, 0, 0)
-        project_layout.setVerticalSpacing(6)
-        project_layout.setHorizontalSpacing(12)
-        self.project_name_value = self._new_value_label(
-            "home_project_name_value",
-            role="primary",
-        )
-        self.project_root_value = PathValueLabel(self)
-        self.project_root_value.setObjectName("home_project_root_value")
-        self.project_template_value = self._new_value_label("home_project_template_value")
-        self.project_description_value = self._new_value_label("home_project_description_value")
-        self._add_summary_row(project_layout, "Project Name", self.project_name_value)
-        self._add_summary_row(project_layout, "Description", self.project_description_value)
-        self._add_summary_row(project_layout, "Template", self.project_template_value)
-        self._add_summary_row(project_layout, "Root Path", self.project_root_value)
-        project_card.card_layout.setContentsMargins(12, 10, 12, 10)
-        project_card.card_layout.setSpacing(6)
-        project_card.body_layout.setSpacing(6)
-        project_card.body_layout.addLayout(project_layout)
-
-        session_card = SectionCard(
-            title="Session Summary",
-            subtitle="Compact launch essentials.",
-            object_name="home_session_card",
-            parent=self,
-        )
-        session_layout = QFormLayout()
-        session_layout.setContentsMargins(0, 0, 0, 0)
-        session_layout.setVerticalSpacing(6)
-        session_layout.setHorizontalSpacing(12)
         self.condition_count_value = self._new_value_label(
             "home_condition_count_value",
             role="primary",
@@ -425,18 +389,8 @@ class HomePage(QWidget):
             "home_block_count_value",
             role="primary",
         )
-        self.session_randomization_value = self._new_value_label("home_session_randomization_value")
         self.fixation_task_value = self._new_value_label("home_fixation_task_value")
         self.accuracy_task_value = self._new_value_label("home_accuracy_task_value")
-        self._add_summary_row(session_layout, "Condition Count", self.condition_count_value)
-        self._add_summary_row(session_layout, "Block Count", self.block_count_value)
-        self._add_summary_row(session_layout, "Order Strategy", self.session_randomization_value)
-        self._add_summary_row(session_layout, "Fixation Task", self.fixation_task_value)
-        self._add_summary_row(session_layout, "Accuracy Task", self.accuracy_task_value)
-        session_card.card_layout.setContentsMargins(12, 10, 12, 10)
-        session_card.card_layout.setSpacing(6)
-        session_card.body_layout.setSpacing(6)
-        session_card.body_layout.addLayout(session_layout)
 
         self.launch_status_label = StatusBadgeLabel("Status: Setup Required", self)
         self.launch_status_label.setObjectName("home_launch_status_indicator")
@@ -445,40 +399,40 @@ class HomePage(QWidget):
         self.launch_status_summary.setObjectName("home_launch_status_summary")
         self.launch_status_summary.setWordWrap(True)
         self.launch_status_summary.setMinimumHeight(28)
-        self.launch_readiness_list = QListWidget(self)
-        self.launch_readiness_list.setObjectName("home_readiness_list")
-        _configure_read_only_list(self.launch_readiness_list)
 
-        status_card = SectionCard(
-            title="Launch Readiness",
-            subtitle="Project launch state, task checklist, and alpha runtime note.",
-            object_name="home_status_card",
-            parent=self,
-        )
-        status_card.card_layout.setContentsMargins(12, 10, 12, 10)
-        status_card.card_layout.setSpacing(8)
-        status_card.body_layout.setSpacing(PAGE_SECTION_GAP)
-        status_card.body_layout.addWidget(self.launch_status_label)
-        status_card.body_layout.addWidget(self.launch_status_summary)
-        status_card.body_layout.addWidget(self.launch_readiness_list)
+        launch_panel = QWidget(self)
+        launch_panel.setObjectName("home_launch_panel")
+        launch_panel.setMaximumWidth(760)
+        launch_panel_layout = QVBoxLayout(launch_panel)
+        launch_panel_layout.setContentsMargins(28, 24, 28, 24)
+        launch_panel_layout.setSpacing(18)
+        launch_panel_layout.addWidget(self.launch_status_label, 0, Qt.AlignmentFlag.AlignCenter)
+        launch_panel_layout.addWidget(self.launch_status_summary)
 
-        left_column = QWidget(self)
-        left_column_layout = QVBoxLayout(left_column)
-        left_column_layout.setContentsMargins(0, 0, 0, 0)
-        left_column_layout.setSpacing(PAGE_SECTION_GAP)
-        left_column_layout.addWidget(project_card)
-        left_column_layout.addWidget(session_card)
+        metrics_layout = QGridLayout()
+        metrics_layout.setContentsMargins(0, 0, 0, 0)
+        metrics_layout.setHorizontalSpacing(PAGE_SECTION_GAP)
+        metrics_layout.setVerticalSpacing(10)
+        self._add_metric(metrics_layout, 0, 0, "Conditions", self.condition_count_value)
+        self._add_metric(metrics_layout, 0, 1, "Blocks", self.block_count_value)
+        self._add_metric(metrics_layout, 1, 0, "Fixation Task", self.fixation_task_value)
+        self._add_metric(metrics_layout, 1, 1, "Accuracy Task", self.accuracy_task_value)
+        metrics_layout.setColumnStretch(0, 1)
+        metrics_layout.setColumnStretch(1, 1)
+        launch_panel_layout.addLayout(metrics_layout)
+        launch_panel_layout.addWidget(self.launch_button, 0, Qt.AlignmentFlag.AlignCenter)
 
-        main_row = QHBoxLayout()
-        main_row.setContentsMargins(0, 0, 0, 0)
-        main_row.setSpacing(PAGE_SECTION_GAP)
-        main_row.addWidget(left_column, 5)
-        main_row.addWidget(status_card, 4)
+        launch_panel_row = QHBoxLayout()
+        launch_panel_row.setContentsMargins(0, 18, 0, 0)
+        launch_panel_row.addStretch(1)
+        launch_panel_row.addWidget(launch_panel, 4)
+        launch_panel_row.addStretch(1)
 
         page_layout = self.page_container.content_layout
         page_layout.addLayout(action_layout)
-        page_layout.addLayout(navigation_layout)
-        page_layout.addLayout(main_row)
+        page_layout.addStretch(1)
+        page_layout.addLayout(launch_panel_row)
+        page_layout.addStretch(2)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -531,19 +485,11 @@ class HomePage(QWidget):
 
         self.current_project_header.setText(project.meta.name)
         self.current_project_subtitle.setText(
-            "Open a project, confirm readiness, and launch quickly."
-        )
-        self.project_name_value.setText(project.meta.name)
-        project_root_text = str(self._document.project_root)
-        self.project_root_value.set_path_text(project_root_text, max_length=96)
-        self.project_template_value.setText(self._condition_template_summary_text())
-        self.project_description_value.setText(
             self._project_description_text(project.meta.description)
         )
 
         self.condition_count_value.setText(str(len(ordered_conditions)))
         self.block_count_value.setText(str(session_settings.block_count))
-        self.session_randomization_value.setText(self._session_order_text())
         self.fixation_task_value.setText("Enabled" if fixation_settings.enabled else "Disabled")
         self.accuracy_task_value.setText(
             "Enabled" if fixation_settings.accuracy_task_enabled else "Disabled"
@@ -569,36 +515,25 @@ class HomePage(QWidget):
             compact = f"{compact[:157]}..."
         return compact
 
-    def _condition_template_summary_text(self) -> str:
-        profile_id = self._document.project.settings.condition_profile_id
-        if profile_id is None:
-            return "No template selected"
-        profiles_by_id = {
-            profile.profile_id: profile for profile in self._load_condition_template_profiles()
-        }
-        profile = profiles_by_id.get(profile_id)
-        if profile is None:
-            return f"Missing template: {profile_id}"
-        return profile.display_name
-
     def _set_status_indicator(self, report: LauncherReadinessReport) -> None:
         self.launch_status_label.set_state(report.badge_state, f"Status: {report.status_label}")
-        summary_text = report.status_summary
-        if report.preview_note:
-            summary_text = f"{summary_text} {report.preview_note}"
-        self.launch_status_summary.setText(summary_text)
-        _set_list_items(self.launch_readiness_list, report.readiness_items)
+        self.launch_status_summary.setText(report.status_summary)
 
-    def _add_summary_row(
+    def _add_metric(
         self,
-        layout: QFormLayout,
+        layout: QGridLayout,
+        row: int,
+        column: int,
         label_text: str,
-        value_widget: QWidget,
+        value_widget: QLabel,
     ) -> None:
         row_label = QLabel(label_text, self)
-        row_label.setProperty("homeFieldLabel", "true")
-        row_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
-        layout.addRow(row_label, value_widget)
+        row_label.setObjectName("home_metric_label")
+        row_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        value_widget.setProperty("homeValueRole", "primary")
+        value_widget.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(row_label, row * 2, column)
+        layout.addWidget(value_widget, row * 2 + 1, column)
 
     def _new_value_label(
         self,
@@ -624,14 +559,3 @@ class HomePage(QWidget):
             button.setStatusTip(action.statusTip())
         button.clicked.connect(lambda _checked=False, target=action: target.trigger())
 
-    def _session_order_text(self) -> str:
-        ordered_conditions = self._document.ordered_conditions()
-        if not ordered_conditions:
-            return "No conditions configured yet."
-
-        if (
-            self._document.project.settings.session.randomize_conditions_per_block
-            and len(ordered_conditions) > 1
-        ):
-            return "Randomized within each block."
-        return "Fixed project order."
