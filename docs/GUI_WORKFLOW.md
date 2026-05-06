@@ -42,9 +42,12 @@ The authoring window is organized around two user-facing modes:
     Session Design, Fixation Cross, Review
   - `Next` is disabled until the active step is complete
   - the top progress header shows `Step X of 7` and a slim horizontal progress
-    indicator instead of a persistent left-hand step column
+    indicator instead of a persistent left-hand step column; the current shared
+    component is a connected numbered stepper with completed/current/upcoming states
   - the wizard uses the full available window width so advanced editor content
     does not crop horizontally
+  - the wizard shell includes a thin bottom status strip for shared setup/runtime
+    context; individual step cards should not repeat generic instructional copy
   - Project Details uses a focused centered card inside the full-width wizard,
     keeping the project folder path compact and secondary; project name and
     description are required before continuing to Conditions
@@ -65,6 +68,9 @@ top-level tabs during normal use.
 
 - Shared GUI components and reusable theme styles live in
   `src/fpvs_studio/gui/components.py`.
+- Shared Setup Wizard presentation components include the connected progress stepper,
+  workspace frame, right-side panels, metric strips, source cards, and reusable setup
+  checklist panel.
 - Raw color, spacing, width, and text-elision tokens live in
   `src/fpvs_studio/gui/design_system.py`; page modules should prefer component
   helpers instead of local stylesheets for shared UI concepts.

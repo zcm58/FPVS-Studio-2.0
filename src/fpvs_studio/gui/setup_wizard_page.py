@@ -23,6 +23,7 @@ from fpvs_studio.gui.components import (
     PAGE_SECTION_GAP,
     NonHomePageShell,
     SectionCard,
+    SetupProgressStepper,
     StatusBadgeLabel,
     mark_primary_action,
     mark_secondary_action,
@@ -136,20 +137,11 @@ class SetupWizardPage(QWidget):
         self.progress_header_label.setProperty("sectionCardRole", "title")
         self.progress_header_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        self.progress_steps = QWidget(self)
-        self.progress_steps.setObjectName("setup_wizard_progress_steps")
-        progress_steps_layout = QHBoxLayout(self.progress_steps)
-        progress_steps_layout.setContentsMargins(0, 0, 0, 0)
-        progress_steps_layout.setSpacing(6)
-        self.progress_step_labels: list[QLabel] = []
-        for index, (_key, title) in enumerate(_WIZARD_STEPS):
-            label = QLabel(f"{index + 1} {title}", self.progress_steps)
-            label.setObjectName(f"setup_wizard_progress_step_{index + 1}")
-            label.setProperty("wizardStep", "true")
-            label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            label.setWordWrap(True)
-            self.progress_step_labels.append(label)
-            progress_steps_layout.addWidget(label, 1)
+        self.progress_steps = SetupProgressStepper(
+            tuple(title for _key, title in _WIZARD_STEPS),
+            parent=self,
+        )
+        self.progress_step_labels = self.progress_steps.step_labels
 
         progress_panel = QWidget(self)
         progress_layout = QVBoxLayout(progress_panel)
@@ -234,6 +226,7 @@ class SetupWizardPage(QWidget):
         self.shell.add_content_widget(progress_panel)
         self.shell.add_content_widget(step_card, stretch=1)
         self.shell.add_content_widget(button_row)
+        self._configure_status_strip()
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -243,6 +236,26 @@ class SetupWizardPage(QWidget):
         self._document.manifest_changed.connect(self.refresh)
         self._document.session_plan_changed.connect(self.refresh)
         self.refresh()
+
+    def _configure_status_strip(self) -> None:
+        self.shell.footer_strip.setObjectName("setup_wizard_status_strip")
+        self.shell.footer_label.setObjectName("setup_wizard_status_message")
+        self.shell.footer_label.setText(
+            "Setup Wizard uses the same project document, validation, and launch checks as Home."
+        )
+        self.setup_wizard_runtime_mode_label = QLabel(
+            "Alpha: test-mode runtime path only",
+            self.shell.footer_strip,
+        )
+        self.setup_wizard_runtime_mode_label.setObjectName("setup_wizard_runtime_mode_label")
+        footer_layout = self.shell.footer_strip.layout()
+        assert isinstance(footer_layout, QHBoxLayout)
+        footer_layout.addStretch(1)
+        footer_layout.addWidget(self.setup_wizard_runtime_mode_label)
+        self.shell.footer_strip.setVisible(True)
+        refresh_widget_style(self.shell.footer_strip)
+        refresh_widget_style(self.shell.footer_label)
+        refresh_widget_style(self.setup_wizard_runtime_mode_label)
 
     def sync_fullscreen_checkbox(self, checked: bool) -> None:
         self.runtime_settings_editor.set_fullscreen_checked(checked)
@@ -616,15 +629,7 @@ class SetupWizardPage(QWidget):
         current = self._active_step_index
         _key, title = _WIZARD_STEPS[current]
         self.progress_header_label.setText(f"Step {current + 1} of {len(_WIZARD_STEPS)}: {title}")
-        for index, label in enumerate(self.progress_step_labels):
-            if index < current:
-                state = "complete"
-            elif index == current:
-                state = "current"
-            else:
-                state = "upcoming"
-            label.setProperty("wizardStepState", state)
-            refresh_widget_style(label)
+        self.progress_steps.set_active_index(current)
 
     def _step_index_for_key(self, step_key: str) -> int:
         aliases = {"runtime": "display"}

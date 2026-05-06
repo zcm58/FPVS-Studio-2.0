@@ -89,25 +89,27 @@ def test_setup_wizard_exists_and_uses_single_column_shell_with_steps(
     assert wizard.setup_wizard_step_list.count() == 7
     assert wizard.step_stack.count() == 7
     assert wizard.content_stack.currentWidget() is wizard.guided_panel
-    step_text = "\n".join(
-        label.text()
-        for label in wizard.progress_step_labels
-    )
+    step_text = "\n".join(label.text() for label in wizard.progress_step_labels)
     assert "[OK]" not in step_text
     assert "[TODO]" not in step_text
     assert wizard.progress_header_label.text() == "Step 1 of 7: Project Details"
-    assert "1 Project Details" in step_text
-    assert "4 Display Settings" in step_text
-    assert "5 Session Design" in step_text
-    assert "6 Fixation Cross" in step_text
-    assert "7 Review" in step_text
+    assert "Project Details" in step_text
+    assert "Display Settings" in step_text
+    assert "Session Design" in step_text
+    assert "Fixation Cross" in step_text
+    assert "Review" in step_text
+    assert wizard.findChild(QWidget, "setup_wizard_step_1_project_details") is not None
+    assert wizard.findChild(QWidget, "setup_wizard_step_2_conditions") is not None
+    assert wizard.progress_steps.step_circles[0].property("setupProgressState") == "current"
     label_text = "\n".join(label.text() for label in wizard.findChildren(QLabel))
     assert "Current Step" not in label_text
     assert "Only the controls needed for this setup step are shown." not in label_text
     assert "Complete each setup step once" not in label_text
-    assert "Setup Wizard uses the same project document" not in label_text
+    assert "Setup Wizard uses the same project document" in label_text
     assert "Confirm the project name and template." not in label_text
-    assert wizard.shell.footer_strip.isVisible() is False
+    assert wizard.shell.footer_strip.objectName() == "setup_wizard_status_strip"
+    assert wizard.shell.footer_strip.isVisible()
+    assert wizard.setup_wizard_runtime_mode_label.text() == "Alpha: test-mode runtime path only"
     assert wizard.step_title_label.isVisible() is False
     assert wizard.step_status_badge.isVisible() is False
     assert wizard.step_card.property("wizardProjectStepFrame") == "true"
