@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 from collections.abc import Callable
 
 from PySide6.QtCore import Qt
@@ -30,7 +29,11 @@ from fpvs_studio.gui.components import (
     refresh_widget_style,
 )
 from fpvs_studio.gui.condition_pages import ConditionsPage
-from fpvs_studio.gui.condition_setup_step import ConditionSetupStep
+from fpvs_studio.gui.condition_setup_step import (
+    ConditionSetupStep,
+    is_guided_condition_name,
+    is_guided_trigger_code,
+)
 from fpvs_studio.gui.document import ProjectDocument
 from fpvs_studio.gui.project_overview_page import ProjectOverviewEditor
 from fpvs_studio.gui.run_page import RunPage
@@ -53,7 +56,6 @@ _WIZARD_STEPS: tuple[tuple[str, str], ...] = (
     ("fixation", "Fixation Cross"),
     ("review", "Review"),
 )
-_DEFAULT_CONDITION_NAME_RE = re.compile(r"^Condition \d+$")
 _CREATE_ALL_CONDITIONS_PROMPT = "Please ensure you create all conditions before proceeding."
 
 
@@ -462,6 +464,8 @@ class SetupWizardPage(QWidget):
                 return "Add a condition"
             if not self._conditions_have_required_names(ordered_conditions):
                 return "Name every condition"
+            if not self._conditions_have_required_trigger_codes(ordered_conditions):
+                return "Set trigger codes"
             return "Assign base and oddball folders"
         if step_key == "stimuli":
             return "Needs images"
@@ -498,7 +502,9 @@ class SetupWizardPage(QWidget):
             if not ordered_conditions:
                 return "Add at least one condition"
             if not self._conditions_have_required_names(ordered_conditions):
-                return "Name every condition"
+                return "Enter descriptive condition names"
+            if not self._conditions_have_required_trigger_codes(ordered_conditions):
+                return "Set trigger codes above 0"
             return "Assign base and oddball folders"
         if step_key == "stimuli":
             return "Assign base and oddball folders"
@@ -528,9 +534,12 @@ class SetupWizardPage(QWidget):
 
     @staticmethod
     def _conditions_have_required_names(ordered_conditions: list) -> bool:
+        return all(is_guided_condition_name(condition.name) for condition in ordered_conditions)
+
+    @staticmethod
+    def _conditions_have_required_trigger_codes(ordered_conditions: list) -> bool:
         return all(
-            condition.name.strip()
-            and _DEFAULT_CONDITION_NAME_RE.fullmatch(condition.name.strip()) is None
+            is_guided_trigger_code(condition.trigger_code)
             for condition in ordered_conditions
         )
 
@@ -538,6 +547,7 @@ class SetupWizardPage(QWidget):
         return (
             bool(ordered_conditions)
             and self._conditions_have_required_names(ordered_conditions)
+            and self._conditions_have_required_trigger_codes(ordered_conditions)
             and _conditions_have_assigned_assets(self._document, ordered_conditions)
         )
 

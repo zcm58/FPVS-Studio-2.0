@@ -462,6 +462,60 @@ def test_setup_wizard_conditions_step_duplicates_metadata_without_images(
     assert "Needs images" in step.condition_list.currentItem().text()
 
 
+def test_setup_wizard_conditions_step_requires_descriptive_name_and_positive_trigger(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Condition Gate")
+    guide = window.setup_wizard_page
+    step = guide.condition_setup_step
+    guide.open_wizard(step_key="conditions")
+    next_button = guide.findChild(QPushButton, "setup_wizard_next_button")
+    assert next_button is not None
+
+    qtbot.mouseClick(step.add_condition_button, Qt.MouseButton.LeftButton)
+    condition_id = step.selected_condition_id()
+    assert isinstance(condition_id, str)
+    assert "Needs name" in step.condition_list.currentItem().text()
+    assert step.name_check_status.text() == "Enter a descriptive name"
+    assert step.base_check_status.text() == "Base Images Not Selected"
+    assert step.oddball_check_status.text() == "Oddball Images Not Selected"
+    assert not next_button.isEnabled()
+
+    for invalid_name in ("A", "AB", "Condition 3"):
+        guide._document.update_condition(condition_id, name=invalid_name)
+        QApplication.processEvents()
+        assert step.name_check_status.text() == "Enter a descriptive name"
+        assert not next_button.isEnabled()
+
+    guide._document.update_condition(condition_id, name="Dog")
+    QApplication.processEvents()
+    assert step.name_check_status.text() == "Descriptive name entered"
+
+    guide._document.update_condition(condition_id, trigger_code=0)
+    QApplication.processEvents()
+    assert step.trigger_check_status.text() == "Use a trigger code of 1 or higher"
+
+    base_dir = _write_image_directory(tmp_path / "gated-condition-base")
+    oddball_dir = _write_image_directory(tmp_path / "gated-condition-oddball")
+    guide._document.import_condition_stimulus_folder(condition_id, role="base", source_dir=base_dir)
+    guide._document.import_condition_stimulus_folder(
+        condition_id,
+        role="oddball",
+        source_dir=oddball_dir,
+    )
+    QApplication.processEvents()
+    assert step.base_check_status.text() == "Base Images Selected"
+    assert step.oddball_check_status.text() == "Oddball Images Selected"
+    assert not next_button.isEnabled()
+
+    guide._document.update_condition(condition_id, trigger_code=1)
+    QApplication.processEvents()
+    assert step.trigger_check_status.text() == "Trigger set"
+    assert next_button.isEnabled()
+
+
 def test_setup_wizard_advanced_replaces_guided_view_for_session_step(
     qtbot,
     controller: StudioController,

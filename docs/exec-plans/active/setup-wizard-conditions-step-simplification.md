@@ -26,12 +26,11 @@ timing controls move out of the normal guided path.
   - optional drag/drop ordering for user organization only
 - Do not present `Move Up` / `Move Down` as primary actions because experiment display
   order is randomized and user-facing order is only organizational.
-- Keep per-condition readiness visible with compact status indicators:
-  - named
-  - trigger code assigned
+- Keep per-condition readiness visible with a compact checklist:
+  - descriptive name entered
+  - trigger code of 1 or higher assigned
   - base images selected
   - oddball images selected
-  - ready
 - Move advanced timing and technical controls out of the guided Conditions step:
   - condition repeats
   - cycles per repeat
@@ -73,9 +72,10 @@ timing controls move out of the normal guided path.
   - supports adding, duplicating, and removing conditions
   - keeps optional drag/drop ordering from changing runtime randomization semantics
 - Readiness:
-  - `Next` remains disabled until all conditions have user-provided names and both
-    base and oddball folders assigned
-  - per-condition status indicators update after editing names and importing folders
+  - `Next` remains disabled until all conditions have descriptive non-default names,
+    trigger codes above 0, and both base and oddball folders assigned
+  - per-condition checklist items update after editing names, changing trigger codes,
+    and importing folders
   - existing launch readiness still uses current backend validation
 - Regression:
   - existing condition editor remains available for advanced/internal access if kept
@@ -93,6 +93,8 @@ timing controls move out of the normal guided path.
 - Base and oddball image source selection belongs with the condition it defines.
 - Display order during experiments remains randomized; any visible condition ordering is
   for author organization only.
+- The guided wizard is stricter than the core project model: default `Condition N`
+  names, names shorter than 3 characters, and trigger code `0` are incomplete setup.
 - FPVS Studio defaults should carry technical timing choices for ordinary users.
 - Stimulus variant UX needs a separate design decision and should not be folded into
   this refactor opportunistically.

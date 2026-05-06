@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from PySide6.QtCore import QSignalBlocker, Qt
@@ -36,6 +37,21 @@ from fpvs_studio.gui.window_helpers import (
     _show_error_dialog,
     _sync_text_editor_contents,
 )
+
+_DEFAULT_CONDITION_NAME_RE = re.compile(r"^Condition \d+$")
+
+
+def is_guided_condition_name(value: str) -> bool:
+    """Return whether a condition name is intentional enough for guided setup."""
+
+    cleaned = value.strip()
+    return len(cleaned) >= 3 and _DEFAULT_CONDITION_NAME_RE.fullmatch(cleaned) is None
+
+
+def is_guided_trigger_code(value: int) -> bool:
+    """Return whether a trigger code is acceptable in guided setup."""
+
+    return value > 0
 
 
 class ConditionSetupStep(QWidget):
@@ -83,31 +99,36 @@ class ConditionSetupStep(QWidget):
 
         self.selected_condition_badge = StatusBadgeLabel("No condition selected", self)
         self.selected_condition_badge.setObjectName("setup_wizard_selected_condition_badge")
-        self.named_status = StatusBadgeLabel("Named", self)
-        self.named_status.setObjectName("setup_wizard_condition_named_status")
-        self.trigger_status = StatusBadgeLabel("Trigger", self)
-        self.trigger_status.setObjectName("setup_wizard_condition_trigger_status")
-        self.base_status = StatusBadgeLabel("Base images", self)
-        self.base_status.setObjectName("setup_wizard_condition_base_status")
-        self.oddball_status = StatusBadgeLabel("Oddball images", self)
-        self.oddball_status.setObjectName("setup_wizard_condition_oddball_status")
-        self.ready_status = StatusBadgeLabel("Ready", self)
-        self.ready_status.setObjectName("setup_wizard_condition_ready_status")
+        self.name_check_status = StatusBadgeLabel("Name needed", self)
+        self.name_check_status.setObjectName("setup_wizard_condition_name_check")
+        self.trigger_check_status = StatusBadgeLabel("Trigger needed", self)
+        self.trigger_check_status.setObjectName("setup_wizard_condition_trigger_check")
+        self.base_check_status = StatusBadgeLabel("Base Images Not Selected", self)
+        self.base_check_status.setObjectName("setup_wizard_condition_base_check")
+        self.oddball_check_status = StatusBadgeLabel("Oddball Images Not Selected", self)
+        self.oddball_check_status.setObjectName("setup_wizard_condition_oddball_check")
 
-        status_row = QWidget(self)
-        status_layout = QHBoxLayout(status_row)
-        status_layout.setContentsMargins(0, 0, 0, 0)
-        status_layout.setSpacing(8)
-        for badge in (
-            self.selected_condition_badge,
-            self.named_status,
-            self.trigger_status,
-            self.base_status,
-            self.oddball_status,
-            self.ready_status,
+        checklist_panel = QWidget(self)
+        checklist_panel.setObjectName("setup_wizard_condition_checklist")
+        checklist_layout = QGridLayout(checklist_panel)
+        checklist_layout.setContentsMargins(0, 0, 0, 0)
+        checklist_layout.setHorizontalSpacing(PAGE_SECTION_GAP)
+        checklist_layout.setVerticalSpacing(8)
+        checklist_title = QLabel("Setup Checklist", checklist_panel)
+        checklist_title.setProperty("sectionCardRole", "title")
+        checklist_layout.addWidget(checklist_title, 0, 0, 1, 2)
+        for row, (label, status) in enumerate(
+            (
+                ("Name", self.name_check_status),
+                ("Trigger", self.trigger_check_status),
+                ("Base Images", self.base_check_status),
+                ("Oddball Images", self.oddball_check_status),
+            ),
+            start=1,
         ):
-            status_layout.addWidget(badge)
-        status_layout.addStretch(1)
+            checklist_layout.addWidget(QLabel(label, checklist_panel), row, 0)
+            checklist_layout.addWidget(status, row, 1)
+        checklist_layout.setColumnStretch(1, 1)
 
         self.condition_name_edit = QLineEdit(self)
         self.condition_name_edit.setObjectName("setup_wizard_condition_name_edit")
@@ -185,8 +206,19 @@ class ConditionSetupStep(QWidget):
         detail_title = QLabel("Selected Condition", detail_panel)
         detail_title.setProperty("sectionCardRole", "title")
         detail_layout.addWidget(detail_title)
-        detail_layout.addWidget(status_row)
-        detail_layout.addLayout(form)
+        detail_top_row = QWidget(detail_panel)
+        detail_top_layout = QHBoxLayout(detail_top_row)
+        detail_top_layout.setContentsMargins(0, 0, 0, 0)
+        detail_top_layout.setSpacing(PAGE_SECTION_GAP)
+        form_panel = QWidget(detail_top_row)
+        form_panel_layout = QVBoxLayout(form_panel)
+        form_panel_layout.setContentsMargins(0, 0, 0, 0)
+        form_panel_layout.setSpacing(8)
+        form_panel_layout.addWidget(self.selected_condition_badge)
+        form_panel_layout.addLayout(form)
+        detail_top_layout.addWidget(form_panel, 3)
+        detail_top_layout.addWidget(checklist_panel, 2)
+        detail_layout.addWidget(detail_top_row)
         sources_title = QLabel("Image Sources", detail_panel)
         sources_title.setProperty("sectionCardRole", "title")
         detail_layout.addWidget(sources_title)
@@ -227,11 +259,14 @@ class ConditionSetupStep(QWidget):
     def _condition_list_text(self, condition: Condition) -> str:
         base_set = self._document.get_condition_stimulus_set(condition.condition_id, "base")
         oddball_set = self._document.get_condition_stimulus_set(condition.condition_id, "oddball")
-        status = (
-            "Ready"
-            if self._stimulus_ready(base_set) and self._stimulus_ready(oddball_set)
-            else "Needs images"
-        )
+        if not is_guided_condition_name(condition.name):
+            status = "Needs name"
+        elif not is_guided_trigger_code(condition.trigger_code):
+            status = "Needs trigger"
+        elif self._stimulus_ready(base_set) and self._stimulus_ready(oddball_set):
+            status = "Ready"
+        else:
+            status = "Needs images"
         return f"{condition.name}\n{status}"
 
     def _current_condition(self) -> Condition | None:
@@ -259,54 +294,53 @@ class ConditionSetupStep(QWidget):
                 self.trigger_code_spin.setValue(0)
             with QSignalBlocker(self.instructions_edit):
                 self.instructions_edit.clear()
-            self._set_status_badges(False, False, False, False)
+            self._set_checklist_statuses(False, False, False, False)
             self._set_source_summary(None, role="base")
             self._set_source_summary(None, role="oddball")
             return
 
         base_set = self._document.get_condition_stimulus_set(condition.condition_id, "base")
         oddball_set = self._document.get_condition_stimulus_set(condition.condition_id, "oddball")
-        named = bool(condition.name.strip())
-        trigger_ready = condition.trigger_code >= 0
+        named = is_guided_condition_name(condition.name)
+        trigger_ready = is_guided_trigger_code(condition.trigger_code)
         base_ready = self._stimulus_ready(base_set)
         oddball_ready = self._stimulus_ready(oddball_set)
-        self.selected_condition_badge.set_state("ready", condition.name)
+        condition_ready = named and trigger_ready and base_ready and oddball_ready
+        self.selected_condition_badge.set_state(
+            "ready" if condition_ready else "warning",
+            "Ready" if condition_ready else "Setup Incomplete",
+        )
         with QSignalBlocker(self.condition_name_edit):
             self.condition_name_edit.setText(condition.name)
         with QSignalBlocker(self.trigger_code_spin):
             self.trigger_code_spin.setValue(condition.trigger_code)
         _sync_text_editor_contents(self.instructions_edit, condition.instructions)
-        self._set_status_badges(named, trigger_ready, base_ready, oddball_ready)
+        self._set_checklist_statuses(named, trigger_ready, base_ready, oddball_ready)
         self._set_source_summary(base_set, role="base")
         self._set_source_summary(oddball_set, role="oddball")
 
-    def _set_status_badges(
+    def _set_checklist_statuses(
         self,
         named: bool,
         trigger_ready: bool,
         base_ready: bool,
         oddball_ready: bool,
     ) -> None:
-        self.named_status.set_state(
+        self.name_check_status.set_state(
             "ready" if named else "warning",
-            "Named" if named else "Name needed",
+            "Descriptive name entered" if named else "Enter a descriptive name",
         )
-        self.trigger_status.set_state(
+        self.trigger_check_status.set_state(
             "ready" if trigger_ready else "warning",
-            "Trigger set" if trigger_ready else "Trigger needed",
+            "Trigger set" if trigger_ready else "Use a trigger code of 1 or higher",
         )
-        self.base_status.set_state(
+        self.base_check_status.set_state(
             "ready" if base_ready else "warning",
-            "Base ready" if base_ready else "Base needed",
+            "Base Images Selected" if base_ready else "Base Images Not Selected",
         )
-        self.oddball_status.set_state(
+        self.oddball_check_status.set_state(
             "ready" if oddball_ready else "warning",
-            "Oddball ready" if oddball_ready else "Oddball needed",
-        )
-        ready = named and trigger_ready and base_ready and oddball_ready
-        self.ready_status.set_state(
-            "ready" if ready else "warning",
-            "Ready" if ready else "Not ready",
+            "Oddball Images Selected" if oddball_ready else "Oddball Images Not Selected",
         )
 
     def _set_source_summary(self, stimulus_set: StimulusSet | None, *, role: str) -> None:

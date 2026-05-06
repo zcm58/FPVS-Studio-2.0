@@ -50,7 +50,8 @@ The authoring window is organized around two user-facing modes:
   - the Conditions step uses a simplified condition setup surface for condition
     name, trigger code, participant instructions, and base/oddball image folders
   - the Conditions step is complete only when every condition has a user-provided
-    name and imported base and oddball image folders
+    descriptive name, a trigger code of 1 or higher, and imported base and oddball
+    image folders
   - `Advanced` replaces the guided step content with the detailed editor for the
     active setup area
   - `Return Home` asks for confirmation when setup is incomplete
