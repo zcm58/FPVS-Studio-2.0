@@ -266,6 +266,9 @@ def test_setup_wizard_surfaces_steps_and_keeps_shared_editors_available(
     assert project_editor.project_description_edit is not None
     assert project_editor.project_root_value is not None
     assert project_editor.condition_profile_combo is not None
+    assert project_editor.condition_profile_combo.itemText(0) == "Continuous Images"
+    assert project_editor.condition_profile_combo.itemData(0) is not None
+    assert "(" not in project_editor.condition_profile_combo.itemText(0)
     assert project_editor.manage_templates_button is not None
     assert project_editor.apply_profile_to_conditions_button is not None
     assert project_editor.project_overview_card.maximumWidth() == 920

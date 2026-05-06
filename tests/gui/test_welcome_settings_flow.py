@@ -551,6 +551,15 @@ def test_create_project_dialog_requires_condition_template_selection(
 ) -> None:
     dialog = CreateProjectDialog(condition_template_profiles=built_in_condition_template_profiles())
     qtbot.addWidget(dialog)
+    assert dialog.condition_profile_combo.itemText(0) == "Continuous Images"
+    assert dialog.condition_profile_combo.itemData(0) == STUDIO_DEFAULT_PROFILE_ID
+    assert STUDIO_DEFAULT_PROFILE_ID not in dialog.condition_profile_combo.itemText(0)
+    blank_index = dialog.condition_profile_combo.findData(SIXTY_HZ_BLANK_FIXATION_PROFILE_ID)
+    assert blank_index >= 0
+    assert dialog.condition_profile_combo.itemText(blank_index) == "50% Blank Between Images"
+    assert SIXTY_HZ_BLANK_FIXATION_PROFILE_ID not in dialog.condition_profile_combo.itemText(
+        blank_index
+    )
     messages: list[str] = []
     monkeypatch.setattr(
         "fpvs_studio.gui.create_project_dialog.QMessageBox.warning",

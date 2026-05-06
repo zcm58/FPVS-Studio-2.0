@@ -135,7 +135,7 @@ class CreateProjectDialog(QDialog):
             self.condition_profile_combo.clear()
             for profile in profiles:
                 self.condition_profile_combo.addItem(
-                    f"{profile.display_name} ({profile.profile_id})",
+                    profile.display_name,
                     userData=profile.profile_id,
                 )
             if current_profile_id is None:
