@@ -111,7 +111,7 @@ def test_setup_wizard_exists_and_uses_single_column_shell_with_steps(
     assert "Setup Wizard uses the same project document" not in label_text
     assert "Confirm the project name and template." not in label_text
     assert wizard.shell.footer_strip.isVisible() is False
-    assert window.conditions_page.shell.footer_strip.isVisible() is False
+    assert window.conditions_page.shell is None
     assert window.assets_page.shell.footer_strip.isVisible() is False
     assert window.run_page.shell.footer_strip.isVisible() is False
 
@@ -127,7 +127,8 @@ def test_major_tabs_share_page_container_width_presets(
     assert window.home_page.page_container.max_content_width() == 1280
     assert window.setup_wizard_page.shell.page_container.width_preset == "full"
     assert window.setup_wizard_page.shell.page_container.max_content_width() == 16_777_215
-    assert window.conditions_page.shell.page_container.width_preset == "wide"
+    assert window.conditions_page.embedded is True
+    assert window.conditions_page.shell is None
     assert window.assets_page.shell.page_container.width_preset == "full"
     assert window.assets_page.shell.page_container.max_content_width() == 16_777_215
     assert window.run_page.shell.page_container.width_preset == "medium"
@@ -150,7 +151,7 @@ def test_page_headers_use_home_left_alignment_and_non_home_center_alignment(
     assert window.home_page.current_project_header.alignment() & Qt.AlignmentFlag.AlignLeft
     assert window.home_page.current_project_subtitle.alignment() & Qt.AlignmentFlag.AlignLeft
     assert window.setup_wizard_page.shell.title_label.alignment() & Qt.AlignmentFlag.AlignCenter
-    assert window.conditions_page.shell.title_label.alignment() & Qt.AlignmentFlag.AlignCenter
+    assert window.conditions_page.embedded is True
     assert window.assets_page.shell.title_label.alignment() & Qt.AlignmentFlag.AlignCenter
 
 
@@ -222,7 +223,7 @@ def test_primary_workflow_surfaces_fit_default_window_without_page_level_scrollb
         assert scroll_area.verticalScrollBar().maximum() <= 1
 
 
-def test_conditions_advanced_editor_uses_horizontal_master_detail_shell(
+def test_conditions_advanced_editor_uses_flat_horizontal_master_detail_layout(
     qtbot,
     controller: StudioController,
     tmp_path: Path,
@@ -231,7 +232,11 @@ def test_conditions_advanced_editor_uses_horizontal_master_detail_shell(
 
     conditions_page = window.conditions_page
     assert window.main_stack.indexOf(conditions_page) == -1
-    assert conditions_page.shell.layout_mode == "single_column"
+    assert conditions_page.embedded is True
+    assert conditions_page.shell is None
+    assert conditions_page.condition_list_card.property("sectionCard") == "false"
+    assert conditions_page.condition_editor_card.property("sectionCard") == "false"
+    assert conditions_page.stimulus_sources_card.property("sectionCard") == "false"
     assert (
         conditions_page.master_detail_layout.itemAt(0).widget()
         is conditions_page.condition_list_card

@@ -80,7 +80,7 @@ class SetupWizardPage(QWidget):
         self._active_step_index = 0
         self._advanced_visible = False
 
-        self.conditions_page = ConditionsPage(document, self)
+        self.conditions_page = ConditionsPage(document, embedded=True, parent=self)
         self.condition_setup_step = ConditionSetupStep(document, self)
         self.add_condition_button = self.condition_setup_step.add_condition_button
         self.add_condition_button.clicked.connect(self._show_first_condition_prompt_if_needed)

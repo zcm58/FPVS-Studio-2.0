@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (
     QComboBox,
     QFileDialog,
     QFormLayout,
+    QFrame,
     QGridLayout,
     QHBoxLayout,
     QLabel,
@@ -37,6 +38,7 @@ from fpvs_studio.gui.components import (
     StatusBadgeLabel,
     mark_primary_action,
     mark_secondary_action,
+    refresh_widget_style,
 )
 from fpvs_studio.gui.document import ProjectDocument
 from fpvs_studio.gui.window_helpers import (
@@ -52,9 +54,16 @@ from fpvs_studio.gui.window_helpers import (
 class ConditionsPage(QWidget):
     """Condition list/editor page."""
 
-    def __init__(self, document: ProjectDocument, parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        document: ProjectDocument,
+        *,
+        embedded: bool = False,
+        parent: QWidget | None = None,
+    ) -> None:
         super().__init__(parent)
         self._document = document
+        self.embedded = embedded
 
         self.condition_list = QListWidget(self)
         self.condition_list.setObjectName("condition_list")
@@ -303,21 +312,43 @@ class ConditionsPage(QWidget):
         self.master_detail_layout.addWidget(self.condition_list_card, 3)
         self.master_detail_layout.addWidget(self.condition_detail_stack, 7)
 
-        self.shell = NonHomePageShell(
-            title="Conditions",
-            subtitle="",
-            layout_mode="single_column",
-            width_preset="wide",
-            parent=self,
-        )
-        self.shell.add_content_widget(self.master_detail_container, stretch=1)
-
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.addWidget(self.shell)
+        if embedded:
+            self.shell = None
+            self._flatten_embedded_layout()
+            layout.addWidget(self.master_detail_container, 1)
+        else:
+            self.shell = NonHomePageShell(
+                title="Conditions",
+                subtitle="",
+                layout_mode="single_column",
+                width_preset="wide",
+                parent=self,
+            )
+            self.shell.add_content_widget(self.master_detail_container, stretch=1)
+            layout.addWidget(self.shell)
 
         self._document.project_changed.connect(self.refresh)
         self.refresh()
+
+    def _flatten_embedded_layout(self) -> None:
+        """Remove nested card frames when the page is embedded in the setup wizard."""
+
+        for card in (
+            self.condition_list_card,
+            self.condition_editor_card,
+            self.stimulus_sources_card,
+        ):
+            card.setProperty("sectionCard", "false")
+            card.setFrameShape(QFrame.Shape.NoFrame)
+            card.card_layout.setContentsMargins(0, 0, 0, 0)
+            refresh_widget_style(card)
+
+        self.master_detail_layout.setSpacing(PAGE_SECTION_GAP)
+        detail_layout = self.condition_detail_stack.layout()
+        if detail_layout is not None:
+            detail_layout.setSpacing(PAGE_SECTION_GAP)
 
     def selected_condition_id(self) -> str | None:
         item = self.condition_list.currentItem()
