@@ -9,5 +9,7 @@ Before implementing a new feature or substantial GUI rework:
 2. State the user workflow, implementation boundaries, tests, and assumptions.
 3. Keep the plan current as decisions change.
 4. Move completed plans to `docs/exec-plans/completed/` after the work lands.
+5. Use `docs/exec-plans/tech-debt-tracker.md` for debt items that may become
+   execution plans.
 
 Small bug fixes and narrow refactors do not need an execution plan.

@@ -11,11 +11,17 @@ experiments, with PsychoPy isolated behind runtime/engine boundaries.
 - Use the "Task Context Recipes" in `ARCHITECTURE.md` before opening broad
   source or test trees.
 - Use `docs/FPVS_Studio_v1_Architecture_Spec.md` for product and protocol scope.
+- Use `docs/index.md` as the structured docs entry point and `docs/PRODUCT_SENSE.md`
+  for the current user-workflow framing.
+- Use `docs/DESIGN.md` and `docs/FRONTEND.md` for GUI design and PySide6 frontend
+  conventions.
 - Use `docs/GUI_WORKFLOW.md` for supported GUI behavior and GUI test guidance.
 - Use `docs/RUNSPEC.md`, `docs/SESSION_PLAN.md`, and `docs/RUNTIME_EXECUTION.md`
   for compiled execution contracts.
-- Use `docs/exec-plans/` for feature-sized work that changes user workflows,
-  public contracts, or multiple layers.
+- Use `docs/PLANS.md` and `docs/exec-plans/` for feature-sized work that changes
+  user workflows, public contracts, or multiple layers.
+- Use `docs/QUALITY_SCORE.md`, `docs/RELIABILITY.md`, and `docs/SECURITY.md` for
+  quality, reliability, and local security guardrails.
 - Use repo skills in `.agents/skills/` for repeatable GUI, path, legacy-boundary,
   and pytest-qt workflows.
 
