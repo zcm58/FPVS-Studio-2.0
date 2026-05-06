@@ -7,6 +7,7 @@ from collections.abc import Callable
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
+    QFrame,
     QGridLayout,
     QHBoxLayout,
     QLabel,
@@ -26,6 +27,7 @@ from fpvs_studio.gui.components import (
     SectionCard,
     StatusBadgeLabel,
     apply_home_page_theme,
+    create_home_project_icon,
     mark_home_launch_action,
     mark_secondary_action,
 )
@@ -312,34 +314,6 @@ class HomePage(QWidget):
         self.setObjectName("home_page")
         self.page_container = PageContainer(width_preset="wide", parent=self)
 
-        self.current_project_header = QLabel(self.page_container.header_widget)
-        self.current_project_header.setObjectName("home_current_project_header")
-        self.current_project_header.setAlignment(
-            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
-        )
-        self.current_project_header.setSizePolicy(
-            QSizePolicy.Policy.Expanding,
-            QSizePolicy.Policy.Preferred,
-        )
-
-        self.current_project_subtitle = QLabel(
-            "Open a project, confirm its identity, and launch quickly.",
-            self.page_container.header_widget,
-        )
-        self.current_project_subtitle.setObjectName("home_current_project_subtitle")
-        self.current_project_subtitle.setWordWrap(True)
-        self.current_project_subtitle.setAlignment(
-            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
-        )
-        self.current_project_subtitle.setSizePolicy(
-            QSizePolicy.Policy.Expanding,
-            QSizePolicy.Policy.Preferred,
-        )
-
-        self.page_container.header_layout.addWidget(self.current_project_header)
-        self.page_container.header_layout.addWidget(self.current_project_subtitle)
-        self.page_container.header_widget.setVisible(True)
-
         self.open_project_button = QPushButton("Open Project", self)
         self.open_project_button.setObjectName("home_open_project_button")
         self.launch_button = QPushButton("Launch Experiment", self)
@@ -366,6 +340,69 @@ class HomePage(QWidget):
         self.launch_button.setMinimumWidth(260)
         self.launch_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
 
+        self.launch_status_label = StatusBadgeLabel("Status: Setup Required", self)
+        self.launch_status_label.setObjectName("home_launch_status_indicator")
+        self.launch_status_label.setMinimumHeight(28)
+        self.launch_status_summary = QLabel(self)
+        self.launch_status_summary.setObjectName("home_launch_status_summary")
+        self.launch_status_summary.setWordWrap(True)
+        self.launch_status_summary.setMinimumHeight(28)
+
+        launch_panel = QWidget(self)
+        launch_panel.setObjectName("home_launch_panel")
+        launch_panel.setMaximumWidth(860)
+        launch_panel_layout = QVBoxLayout(launch_panel)
+        launch_panel_layout.setContentsMargins(30, 28, 30, 28)
+        launch_panel_layout.setSpacing(18)
+
+        identity_row = QHBoxLayout()
+        identity_row.setContentsMargins(0, 0, 0, 0)
+        identity_row.setSpacing(PAGE_SECTION_GAP)
+        self.project_icon = create_home_project_icon(launch_panel)
+        identity_text = QWidget(launch_panel)
+        identity_text_layout = QVBoxLayout(identity_text)
+        identity_text_layout.setContentsMargins(0, 0, 0, 0)
+        identity_text_layout.setSpacing(6)
+
+        self.current_project_header = QLabel(identity_text)
+        self.current_project_header.setObjectName("home_current_project_header")
+        self.current_project_header.setAlignment(
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
+        )
+        self.current_project_header.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Preferred,
+        )
+
+        self.current_project_subtitle = QLabel(
+            "Open a project, confirm its identity, and launch quickly.",
+            identity_text,
+        )
+        self.current_project_subtitle.setObjectName("home_current_project_subtitle")
+        self.current_project_subtitle.setWordWrap(True)
+        self.current_project_subtitle.setAlignment(
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
+        )
+        self.current_project_subtitle.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Preferred,
+        )
+
+        identity_text_layout.addWidget(self.current_project_header)
+        identity_text_layout.addWidget(self.current_project_subtitle)
+        identity_row.addWidget(
+            self.project_icon,
+            0,
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop,
+        )
+        identity_row.addWidget(identity_text, 1)
+        identity_row.addWidget(
+            self.launch_status_label,
+            0,
+            Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignTop,
+        )
+        launch_panel_layout.addLayout(identity_row)
+
         action_layout = QGridLayout()
         action_layout.setContentsMargins(0, 0, 0, 0)
         action_layout.setHorizontalSpacing(PAGE_SECTION_GAP)
@@ -380,6 +417,7 @@ class HomePage(QWidget):
         ):
             action_layout.addWidget(button, 0, column)
             action_layout.setColumnStretch(column, 1)
+        launch_panel_layout.addLayout(action_layout)
 
         self.condition_count_value = self._new_value_label(
             "home_condition_count_value",
@@ -392,47 +430,32 @@ class HomePage(QWidget):
         self.fixation_task_value = self._new_value_label("home_fixation_task_value")
         self.accuracy_task_value = self._new_value_label("home_accuracy_task_value")
 
-        self.launch_status_label = StatusBadgeLabel("Status: Setup Required", self)
-        self.launch_status_label.setObjectName("home_launch_status_indicator")
-        self.launch_status_label.setMinimumHeight(28)
-        self.launch_status_summary = QLabel(self)
-        self.launch_status_summary.setObjectName("home_launch_status_summary")
-        self.launch_status_summary.setWordWrap(True)
-        self.launch_status_summary.setMinimumHeight(28)
-
-        launch_panel = QWidget(self)
-        launch_panel.setObjectName("home_launch_panel")
-        launch_panel.setMaximumWidth(760)
-        launch_panel_layout = QVBoxLayout(launch_panel)
-        launch_panel_layout.setContentsMargins(28, 24, 28, 24)
-        launch_panel_layout.setSpacing(18)
-        launch_panel_layout.addWidget(self.launch_status_label, 0, Qt.AlignmentFlag.AlignCenter)
         launch_panel_layout.addWidget(self.launch_status_summary)
 
-        metrics_layout = QGridLayout()
+        metrics_panel = QFrame(launch_panel)
+        metrics_panel.setObjectName("home_metrics_panel")
+        metrics_layout = QGridLayout(metrics_panel)
         metrics_layout.setContentsMargins(0, 0, 0, 0)
-        metrics_layout.setHorizontalSpacing(PAGE_SECTION_GAP)
-        metrics_layout.setVerticalSpacing(10)
-        self._add_metric(metrics_layout, 0, 0, "Conditions", self.condition_count_value)
-        self._add_metric(metrics_layout, 0, 1, "Blocks", self.block_count_value)
-        self._add_metric(metrics_layout, 1, 0, "Fixation Task", self.fixation_task_value)
-        self._add_metric(metrics_layout, 1, 1, "Accuracy Task", self.accuracy_task_value)
-        metrics_layout.setColumnStretch(0, 1)
-        metrics_layout.setColumnStretch(1, 1)
-        launch_panel_layout.addLayout(metrics_layout)
+        metrics_layout.setHorizontalSpacing(0)
+        metrics_layout.setVerticalSpacing(0)
+        self._add_metric(metrics_layout, 0, "Conditions", self.condition_count_value)
+        self._add_metric(metrics_layout, 1, "Blocks", self.block_count_value)
+        self._add_metric(metrics_layout, 2, "Fixation Task", self.fixation_task_value)
+        self._add_metric(metrics_layout, 3, "Accuracy Task", self.accuracy_task_value)
+        for column in range(4):
+            metrics_layout.setColumnStretch(column, 1)
+        launch_panel_layout.addWidget(metrics_panel)
         launch_panel_layout.addWidget(self.launch_button, 0, Qt.AlignmentFlag.AlignCenter)
 
         launch_panel_row = QHBoxLayout()
-        launch_panel_row.setContentsMargins(0, 18, 0, 0)
+        launch_panel_row.setContentsMargins(0, 40, 0, 0)
         launch_panel_row.addStretch(1)
         launch_panel_row.addWidget(launch_panel, 4)
         launch_panel_row.addStretch(1)
 
         page_layout = self.page_container.content_layout
-        page_layout.addLayout(action_layout)
-        page_layout.addStretch(1)
         page_layout.addLayout(launch_panel_row)
-        page_layout.addStretch(2)
+        page_layout.addStretch(1)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -522,18 +545,23 @@ class HomePage(QWidget):
     def _add_metric(
         self,
         layout: QGridLayout,
-        row: int,
         column: int,
         label_text: str,
         value_widget: QLabel,
     ) -> None:
-        row_label = QLabel(label_text, self)
+        metric_cell = QFrame(self)
+        metric_cell.setObjectName("home_metric_cell")
+        cell_layout = QVBoxLayout(metric_cell)
+        cell_layout.setContentsMargins(14, 12, 14, 12)
+        cell_layout.setSpacing(8)
+        row_label = QLabel(label_text, metric_cell)
         row_label.setObjectName("home_metric_label")
         row_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         value_widget.setProperty("homeValueRole", "primary")
         value_widget.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(row_label, row * 2, column)
-        layout.addWidget(value_widget, row * 2 + 1, column)
+        cell_layout.addWidget(row_label)
+        cell_layout.addWidget(value_widget)
+        layout.addWidget(metric_cell, 0, column)
 
     def _new_value_label(
         self,

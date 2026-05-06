@@ -63,6 +63,7 @@ __all__ = [
     "apply_studio_theme",
     "apply_welcome_window_theme",
     "condition_template_details_header_stylesheet",
+    "create_home_project_icon",
     "error_text_stylesheet",
     "fixation_settings_stylesheet",
     "home_page_stylesheet",
@@ -123,6 +124,15 @@ def mark_home_launch_action(button: QPushButton) -> None:
     button.setIconSize(QSize(20, 20))
 
 
+def create_home_project_icon(parent: QWidget | None = None) -> QLabel:
+    label = QLabel(parent)
+    label.setObjectName("home_project_icon")
+    label.setPixmap(_home_project_pixmap())
+    label.setFixedSize(48, 48)
+    label.setScaledContents(False)
+    return label
+
+
 def _green_play_icon() -> QIcon:
     pixmap = QPixmap(24, 24)
     pixmap.fill(Qt.GlobalColor.transparent)
@@ -133,6 +143,30 @@ def _green_play_icon() -> QIcon:
     painter.drawPolygon(QPolygon([QPoint(8, 5), QPoint(8, 19), QPoint(19, 12)]))
     painter.end()
     return QIcon(pixmap)
+
+
+def _home_project_pixmap() -> QPixmap:
+    pixmap = QPixmap(48, 48)
+    pixmap.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+
+    painter.setPen(QPen(QColor("#1d4ed8"), 1))
+    painter.setBrush(QBrush(QColor("#eff6ff")))
+    painter.drawRoundedRect(4, 4, 40, 40, 10, 10)
+
+    painter.setPen(QPen(QColor("#2563eb"), 2))
+    painter.drawLine(14, 30, 34, 30)
+    painter.drawLine(14, 24, 34, 24)
+    painter.drawLine(14, 18, 34, 18)
+
+    painter.setPen(QPen(Qt.PenStyle.NoPen))
+    painter.setBrush(QBrush(QColor("#22c55e")))
+    painter.drawEllipse(12, 16, 5, 5)
+    painter.drawEllipse(31, 22, 5, 5)
+    painter.drawEllipse(20, 28, 5, 5)
+    painter.end()
+    return pixmap
 
 
 def mark_welcome_action(button: QPushButton, role: str) -> None:
@@ -374,8 +408,9 @@ def home_page_stylesheet() -> str:
         font-size: 13px;
     }
     QLabel#home_current_project_header {
-        font-size: 26px;
+        font-size: 28px;
         font-weight: 700;
+        color: #142033;
     }
     QLabel#home_current_project_subtitle {
         font-size: 13px;
@@ -406,6 +441,18 @@ def home_page_stylesheet() -> str:
         border: 1px solid #c7d2e5;
         border-radius: 8px;
         background-color: #f8fbff;
+    }
+    QWidget#home_launch_panel QLabel#home_launch_status_summary {
+        padding-top: 4px;
+    }
+    QFrame#home_metrics_panel {
+        border: 1px solid #d6e0ef;
+        border-radius: 8px;
+        background-color: #ffffff;
+    }
+    QFrame#home_metric_cell {
+        border-right: 1px solid #d6e0ef;
+        background-color: transparent;
     }
     QLabel#home_metric_label {
         color: #52637a;

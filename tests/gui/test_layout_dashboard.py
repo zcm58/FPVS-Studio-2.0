@@ -137,13 +137,23 @@ def test_page_headers_use_home_left_alignment_and_non_home_center_alignment(
     tmp_path: Path,
 ) -> None:
     _, window = _open_created_project(controller, qtbot, tmp_path, "Header Geometry")
+    home_launch_panel = window.home_page.findChild(QWidget, "home_launch_panel")
+    assert home_launch_panel is not None
     assert (
         window.home_page.current_project_header.parent()
-        is window.home_page.page_container.header_widget
+        is not window.home_page.page_container.header_widget
     )
     assert (
         window.home_page.current_project_subtitle.parent()
-        is window.home_page.page_container.header_widget
+        is not window.home_page.page_container.header_widget
+    )
+    assert (
+        window.home_page.current_project_header.parentWidget().parentWidget()
+        is home_launch_panel
+    )
+    assert (
+        window.home_page.current_project_subtitle.parentWidget().parentWidget()
+        is home_launch_panel
     )
     assert window.home_page.current_project_header.alignment() & Qt.AlignmentFlag.AlignLeft
     assert window.home_page.current_project_subtitle.alignment() & Qt.AlignmentFlag.AlignLeft
@@ -843,8 +853,10 @@ def test_home_header_updates_when_project_name_changes(
 ) -> None:
     _, window = _open_created_project(controller, qtbot, tmp_path, "Home Header Project")
     header_label = window.home_page.findChild(QLabel, "home_current_project_header")
+    launch_panel = window.home_page.findChild(QWidget, "home_launch_panel")
     assert header_label is not None
-    assert header_label.parent() is window.home_page.page_container.header_widget
+    assert launch_panel is not None
+    assert header_label.parentWidget().parentWidget() is launch_panel
     assert header_label.text() == "Home Header Project"
 
     window.setup_dashboard_page.project_overview_editor.project_name_edit.setText(
@@ -904,7 +916,7 @@ def test_home_quick_action_buttons_present_and_wired(
     assert launch_button.parent() is window.home_page.findChild(QWidget, "home_launch_panel")
     launch_panel = launch_button.parentWidget()
     assert launch_panel is not None
-    assert launch_panel.maximumWidth() == 760
+    assert launch_panel.maximumWidth() == 860
     assert launch_button.sizePolicy().horizontalPolicy() == QSizePolicy.Policy.Fixed
 
     trigger_counts = {"new": 0, "open": 0, "save": 0, "launch": 0}
@@ -1079,6 +1091,8 @@ def test_home_launch_surface_shows_only_essential_project_session_metadata(
     root_path_label = window.home_page.findChild(QLabel, "home_project_root_value")
     status_label = window.home_page.findChild(QLabel, "home_launch_status_indicator")
     launch_panel = window.home_page.findChild(QWidget, "home_launch_panel")
+    project_icon = window.home_page.findChild(QLabel, "home_project_icon")
+    metrics_panel = window.home_page.findChild(QWidget, "home_metrics_panel")
     readiness_list = window.home_page.findChild(QListWidget, "home_readiness_list")
     subtitle_label = window.home_page.findChild(QLabel, "home_current_project_subtitle")
     assert condition_count_label is not None
@@ -1091,6 +1105,9 @@ def test_home_launch_surface_shows_only_essential_project_session_metadata(
     assert readiness_list is None
     assert status_label is not None
     assert launch_panel is not None
+    assert project_icon is not None
+    assert not project_icon.pixmap().isNull()
+    assert metrics_panel is not None
     assert subtitle_label is not None
 
     project_labels = {
