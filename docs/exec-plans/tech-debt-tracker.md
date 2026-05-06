@@ -5,7 +5,9 @@ notes in `../TECH_DEBT.md`.
 
 ## Active Candidates
 
-- None currently promoted beyond the active execution plans.
+- Monitor large cohesive GUI modules with `.\scripts\report_line_counts.ps1`; split only
+  when responsibilities diverge or focused tests become hard to locate.
+- Continue replacing one-off GUI styling with helpers in `src/fpvs_studio/gui/components.py`.
 
 ## Tracking Rules
 

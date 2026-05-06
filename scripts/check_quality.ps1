@@ -12,6 +12,7 @@ try {
     & $Python -m mypy src
     & $Python -m pytest -q tests\unit\test_harness_docs.py
     & $Python -m pytest -q tests\unit\test_import_boundaries.py
+    & (Join-Path $PSScriptRoot "check_gc.ps1") -SkipLineCounts
 
     $env:QT_QPA_PLATFORM = "offscreen"
     $env:PYTEST_DISABLE_PLUGIN_AUTOLOAD = "1"

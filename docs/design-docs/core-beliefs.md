@@ -1,6 +1,6 @@
 # Core Beliefs
 
-FPVS Studio should feel like an experiment operations tool, not a general-purpose editor.
+FPVS Studio should feel like an experiment operations tool, not a general-purpose editor. 
 
 ## Beliefs
 

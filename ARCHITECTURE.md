@@ -145,6 +145,7 @@ results. Exporters serialize those results without moving contracts into engine 
 - GitHub Actions CI: `.github/workflows/ci.yml` runs `.\scripts\check_quality.ps1`
   on Windows for pushes and pull requests.
 - Full gate: `.\scripts\check_quality.ps1`
+- Harness garbage collection: `.\scripts\check_gc.ps1`
 - GUI smoke/workflow: `.\scripts\check_gui.ps1`
 - Runtime: `.\scripts\check_runtime.ps1`
 - Compiler/session: `.\scripts\check_compiler.ps1`

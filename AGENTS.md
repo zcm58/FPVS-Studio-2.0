@@ -74,6 +74,9 @@ experiments, with PsychoPy isolated behind runtime/engine boundaries.
 - Run `python -m ruff check .` after Python edits when available.
 - Run `python -m mypy src` after typed contract or boundary changes when available.
 - Use `.\scripts\check_quality.ps1` as the repo gate when touching multiple layers.
+- Use `.\scripts\check_gc.ps1` for harness garbage-collection checks that catch
+  mechanical drift such as forbidden GUI frameworks, source `print(...)`, stylesheet
+  drift, boundary leaks, and committed local paths.
 - Use `.\scripts\check_gui.ps1`, `.\scripts\check_runtime.ps1`,
   `.\scripts\check_compiler.ps1`, or `.\scripts\check_preprocessing.ps1` for
   narrower cleanup passes.
