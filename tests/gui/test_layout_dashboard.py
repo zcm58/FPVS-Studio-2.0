@@ -108,6 +108,9 @@ def test_setup_wizard_exists_and_uses_single_column_shell_with_steps(
     assert "Setup Wizard uses the same project document" not in label_text
     assert "Confirm the project name and template." not in label_text
     assert wizard.shell.footer_strip.isVisible() is False
+    assert wizard.step_title_label.isVisible() is False
+    assert wizard.step_status_badge.isVisible() is False
+    assert wizard.step_card.property("wizardProjectStepFrame") == "true"
     assert window.conditions_page.shell is None
     assert window.assets_page.shell.footer_strip.isVisible() is False
     assert window.run_page.shell.footer_strip.isVisible() is False
@@ -283,8 +286,30 @@ def test_setup_wizard_surfaces_steps_and_keeps_shared_editors_available(
     assert "(" not in project_editor.condition_profile_combo.itemText(0)
     assert project_editor.manage_templates_button is not None
     assert project_editor.apply_profile_to_conditions_button is not None
-    assert project_editor.project_overview_card.maximumWidth() == 920
+    assert project_editor.apply_profile_to_conditions_button.isVisible() is False
+    assert project_editor.project_overview_card.maximumWidth() == 820
     assert project_editor.project_overview_card.title_label.text() == "Project Details"
+    assert project_editor.project_overview_card.title_label.isVisible() is False
+    setup_icon = project_editor.findChild(QLabel, "setup_project_icon")
+    checklist = project_editor.setup_checklist
+    assert setup_icon is not None
+    assert setup_icon.width() == 52
+    assert setup_icon.height() == 52
+    assert project_editor.findChild(QLabel, "project_overview_title").text() == "Project Details"
+    assert project_editor.findChild(QLabel, "project_overview_step_badge").text() == "Step 1 of 7"
+    assert checklist.objectName() == "project_overview_checklist"
+    assert checklist.title_label.text() == "Ready for next step"
+    assert 210 <= checklist.minimumWidth() <= checklist.maximumWidth()
+    checklist_items = checklist.item_labels()
+    assert [label.text() for label in checklist_items] == [
+        "✓ Name",
+        "✕ Description",
+        "✕ Template",
+    ]
+    assert checklist_items[0].property("setupChecklistState") == "complete"
+    assert checklist_items[1].property("setupChecklistState") == "incomplete"
+    assert dashboard.step_title_label.isVisible() is False
+    assert dashboard.step_status_badge.isVisible() is False
     assert project_editor.project_root_value.wordWrap() is False
     assert project_editor.project_root_value.maximumHeight() <= 34
     assert str(window.document.project_root) in {
@@ -431,9 +456,17 @@ def test_project_details_step_requires_description_before_next(
     assert guide.step_stack.currentIndex() == 0
     assert not next_button.isEnabled()
     assert "project description" in guide.step_status_label.text().lower()
+    assert "✕ Description" in {
+        label.text()
+        for label in guide.project_overview_editor.setup_checklist.item_labels()
+    }
 
     description_edit.setPlainText("This experiment measures FPVS responses.")
     qtbot.waitUntil(next_button.isEnabled)
+    assert "✓ Description" in {
+        label.text()
+        for label in guide.project_overview_editor.setup_checklist.item_labels()
+    }
 
     qtbot.mouseClick(next_button, Qt.MouseButton.LeftButton)
     assert guide.step_stack.currentIndex() == 1

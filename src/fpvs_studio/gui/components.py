@@ -11,7 +11,7 @@ from typing import Any
 
 from PySide6.QtCore import QPoint, QSize, Qt
 from PySide6.QtGui import QBrush, QColor, QIcon, QPainter, QPalette, QPen, QPixmap, QPolygon
-from PySide6.QtWidgets import QLabel, QPushButton, QWidget
+from PySide6.QtWidgets import QFrame, QLabel, QPushButton, QVBoxLayout, QWidget
 
 from fpvs_studio.gui.design_system import (
     CARD_CORNER_RADIUS,
@@ -53,6 +53,7 @@ __all__ = [
     "PageContainer",
     "PathValueLabel",
     "SectionCard",
+    "SetupChecklistPanel",
     "StatusBadgeLabel",
     "apply_condition_template_details_header_style",
     "apply_error_text_style",
@@ -64,9 +65,12 @@ __all__ = [
     "apply_welcome_window_theme",
     "condition_template_details_header_stylesheet",
     "create_home_project_icon",
+    "create_setup_project_icon",
     "error_text_stylesheet",
     "fixation_settings_stylesheet",
     "home_page_stylesheet",
+    "apply_project_overview_theme",
+    "project_overview_stylesheet",
     "mark_error_text",
     "mark_launch_action",
     "mark_home_launch_action",
@@ -79,6 +83,62 @@ __all__ = [
     "studio_theme_stylesheet",
     "welcome_window_stylesheet",
 ]
+
+
+class SetupChecklistPanel(QFrame):
+    """Reusable read-only checklist for guided setup steps."""
+
+    def __init__(
+        self,
+        title: str = "Ready for next step",
+        *,
+        object_name: str = "setup_checklist_panel",
+        parent: QWidget | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self.setObjectName(object_name)
+        self.setProperty("setupChecklistPanel", "true")
+        self._item_labels: list[QLabel] = []
+
+        self._layout = QVBoxLayout(self)
+        self._layout.setContentsMargins(12, 12, 12, 12)
+        self._layout.setSpacing(8)
+
+        self.title_label = QLabel(title, self)
+        self.title_label.setObjectName(f"{object_name}_title")
+        self.title_label.setProperty("setupChecklistTitle", "true")
+        self._layout.addWidget(self.title_label)
+        self._layout.addStretch(1)
+
+    def set_items(self, items: list[tuple[str, bool]]) -> None:
+        for item_label in self._item_labels:
+            self._layout.removeWidget(item_label)
+            item_label.deleteLater()
+        self._item_labels = []
+
+        insert_index = max(1, self._layout.count() - 1)
+        for label_text, complete in items:
+            item_label = QLabel(self)
+            item_label.setObjectName(f"setup_checklist_item_{_object_suffix(label_text)}")
+            item_label.setProperty("setupChecklistItem", "true")
+            item_label.setProperty(
+                "setupChecklistState",
+                "complete" if complete else "incomplete",
+            )
+            mark = "✓" if complete else "✕"
+            item_label.setText(f"{mark} {label_text}")
+            refresh_widget_style(item_label)
+            self._layout.insertWidget(insert_index, item_label)
+            self._item_labels.append(item_label)
+            insert_index += 1
+
+    def item_labels(self) -> tuple[QLabel, ...]:
+        return tuple(self._item_labels)
+
+
+def _object_suffix(text: str) -> str:
+    suffix = "".join(character.lower() if character.isalnum() else "_" for character in text)
+    return "_".join(part for part in suffix.split("_") if part) or "item"
 
 
 def __getattr__(name: str) -> object:
@@ -133,6 +193,15 @@ def create_home_project_icon(parent: QWidget | None = None) -> QLabel:
     return label
 
 
+def create_setup_project_icon(parent: QWidget | None = None) -> QLabel:
+    label = QLabel(parent)
+    label.setObjectName("setup_project_icon")
+    label.setPixmap(_setup_project_pixmap())
+    label.setFixedSize(52, 52)
+    label.setScaledContents(False)
+    return label
+
+
 def _green_play_icon() -> QIcon:
     pixmap = QPixmap(24, 24)
     pixmap.fill(Qt.GlobalColor.transparent)
@@ -165,6 +234,32 @@ def _home_project_pixmap() -> QPixmap:
     painter.drawEllipse(12, 16, 5, 5)
     painter.drawEllipse(31, 22, 5, 5)
     painter.drawEllipse(20, 28, 5, 5)
+    painter.end()
+    return pixmap
+
+
+def _setup_project_pixmap() -> QPixmap:
+    pixmap = QPixmap(52, 52)
+    pixmap.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+
+    painter.setPen(QPen(QColor("#2563eb"), 2))
+    painter.setBrush(QBrush(QColor("#eff6ff")))
+    painter.drawRoundedRect(5, 5, 42, 42, 11, 11)
+
+    painter.setPen(QPen(QColor("#1d4ed8"), 2))
+    painter.drawRoundedRect(16, 13, 20, 25, 4, 4)
+    painter.drawLine(21, 20, 31, 20)
+    painter.drawLine(21, 25, 31, 25)
+    painter.drawLine(21, 30, 27, 30)
+
+    painter.setPen(QPen(Qt.PenStyle.NoPen))
+    painter.setBrush(QBrush(QColor("#22c55e")))
+    painter.drawEllipse(32, 32, 8, 8)
+    painter.setPen(QPen(QColor("#ffffff"), 2))
+    painter.drawLine(34, 36, 36, 38)
+    painter.drawLine(36, 38, 40, 33)
     painter.end()
     return pixmap
 
@@ -485,6 +580,60 @@ def apply_home_page_theme(widget: QWidget) -> None:
     widget.setStyleSheet(home_page_stylesheet())
 
 
+def project_overview_stylesheet() -> str:
+    return """
+    QFrame#dashboard_project_overview_card {
+        background-color: #f8fbff;
+    }
+    QLabel#project_overview_title {
+        color: #142033;
+        font-size: 24px;
+        font-weight: 700;
+    }
+    QLabel#project_overview_subtitle {
+        color: #495869;
+        font-size: 13px;
+    }
+    QLabel#project_overview_step_badge {
+        border: 1px solid #c7d2e5;
+        border-radius: 8px;
+        background-color: #eef6ff;
+        color: #27476f;
+        font-size: 12px;
+        font-weight: 700;
+        padding: 6px 10px;
+    }
+    QFrame#project_overview_checklist {
+        border: 1px solid #d6e0ef;
+        border-radius: 8px;
+        background-color: #ffffff;
+    }
+    QFrame[setupChecklistPanel="true"] {
+        border: 1px solid #d6e0ef;
+        border-radius: 8px;
+        background-color: #ffffff;
+    }
+    QLabel[setupChecklistTitle="true"] {
+        color: #142033;
+        font-size: 13px;
+        font-weight: 700;
+    }
+    QLabel[setupChecklistItem="true"] {
+        color: #166534;
+        font-size: 12px;
+        font-weight: 700;
+        padding: 3px 0;
+    }
+    QLabel[setupChecklistItem="true"][setupChecklistState="incomplete"] {
+        color: #991b1b;
+    }
+    """
+
+
+def apply_project_overview_theme(widget: QWidget) -> None:
+    widget.setStyleSheet(project_overview_stylesheet())
+
+
 def fixation_settings_stylesheet() -> str:
     return f"""
     QFrame#fixation_feasibility_card {{
@@ -535,6 +684,10 @@ def section_card_stylesheet() -> str:
         border: 1px solid {COLOR_BORDER};
         border-radius: {CARD_CORNER_RADIUS}px;
         background-color: {COLOR_SURFACE};
+    }}
+    QFrame#setup_wizard_current_step_card[wizardProjectStepFrame="true"] {{
+        border: none;
+        background-color: transparent;
     }}
     QLabel[sectionCardRole="title"] {{
         font-size: 15px;

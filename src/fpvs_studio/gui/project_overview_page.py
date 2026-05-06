@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (
     QComboBox,
     QFormLayout,
     QHBoxLayout,
+    QLabel,
     QLineEdit,
     QMessageBox,
     QPushButton,
@@ -21,6 +22,9 @@ from fpvs_studio.core.models import ConditionTemplateProfile
 from fpvs_studio.gui.components import (
     PathValueLabel,
     SectionCard,
+    SetupChecklistPanel,
+    apply_project_overview_theme,
+    create_setup_project_icon,
 )
 from fpvs_studio.gui.document import ProjectDocument
 from fpvs_studio.gui.window_helpers import (
@@ -82,6 +86,15 @@ class ProjectOverviewEditor(QWidget):
         )
         self.apply_profile_to_conditions_button.setObjectName("apply_profile_to_conditions_button")
         self.apply_profile_to_conditions_button.clicked.connect(self._apply_profile_to_conditions)
+        self.apply_profile_to_conditions_button.setVisible(False)
+
+        self.step_badge_label = QLabel("Step 1 of 7", self)
+        self.step_badge_label.setObjectName("project_overview_step_badge")
+        self.step_badge_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.setup_checklist = SetupChecklistPanel(
+            object_name="project_overview_checklist",
+            parent=self,
+        )
 
         condition_profile_row = QWidget(self)
         condition_profile_layout = QHBoxLayout(condition_profile_row)
@@ -89,29 +102,70 @@ class ProjectOverviewEditor(QWidget):
         condition_profile_layout.setSpacing(8)
         condition_profile_layout.addWidget(self.condition_profile_combo, 1)
         condition_profile_layout.addWidget(self.manage_templates_button)
-        condition_profile_layout.addWidget(self.apply_profile_to_conditions_button)
 
         self.project_overview_card = SectionCard(
             title="Project Details",
             object_name="dashboard_project_overview_card",
             parent=self,
         )
-        self.project_overview_card.setMaximumWidth(920)
+        self.project_overview_card.setMaximumWidth(820)
         self.project_overview_card.setSizePolicy(
             QSizePolicy.Policy.Expanding,
             QSizePolicy.Policy.Maximum,
         )
+        self.project_overview_card.title_label.setVisible(False)
+
+        header_row = QWidget(self.project_overview_card)
+        header_layout = QHBoxLayout(header_row)
+        header_layout.setContentsMargins(0, 0, 0, 0)
+        header_layout.setSpacing(12)
+        header_icon = create_setup_project_icon(header_row)
+        header_text = QWidget(header_row)
+        header_text_layout = QVBoxLayout(header_text)
+        header_text_layout.setContentsMargins(0, 0, 0, 0)
+        header_text_layout.setSpacing(4)
+        header_title = QLabel("Project Details", header_text)
+        header_title.setObjectName("project_overview_title")
+        header_subtitle = QLabel(
+            "Name the experiment and choose the default image timing template.",
+            header_text,
+        )
+        header_subtitle.setObjectName("project_overview_subtitle")
+        header_subtitle.setWordWrap(True)
+        header_text_layout.addWidget(header_title)
+        header_text_layout.addWidget(header_subtitle)
+        header_layout.addWidget(header_icon, 0, Qt.AlignmentFlag.AlignTop)
+        header_layout.addWidget(header_text, 1)
+        header_layout.addWidget(self.step_badge_label, 0, Qt.AlignmentFlag.AlignTop)
+
         metadata_layout = QFormLayout()
         metadata_layout.setVerticalSpacing(10)
         metadata_layout.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
-        metadata_layout.addRow("Name", self.project_name_edit)
+        metadata_layout.addRow("Project Name", self.project_name_edit)
         metadata_layout.addRow("Description", self.project_description_edit)
-        metadata_layout.addRow("Project folder", self.project_root_value)
+        metadata_layout.addRow("Project Folder", self.project_root_value)
         metadata_layout.addRow("Condition Template", condition_profile_row)
-        self.project_overview_card.card_layout.setContentsMargins(16, 14, 16, 14)
-        self.project_overview_card.card_layout.setSpacing(10)
-        self.project_overview_card.body_layout.setSpacing(10)
-        self.project_overview_card.body_layout.addLayout(metadata_layout)
+
+        form_panel = QWidget(self.project_overview_card)
+        form_layout = QVBoxLayout(form_panel)
+        form_layout.setContentsMargins(0, 0, 0, 0)
+        form_layout.addLayout(metadata_layout)
+
+        self.setup_checklist.setMinimumWidth(210)
+        self.setup_checklist.setMaximumWidth(240)
+
+        content_row = QWidget(self.project_overview_card)
+        content_layout = QHBoxLayout(content_row)
+        content_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.setSpacing(14)
+        content_layout.addWidget(form_panel, 1)
+        content_layout.addWidget(self.setup_checklist, 0)
+
+        self.project_overview_card.card_layout.setContentsMargins(20, 18, 20, 18)
+        self.project_overview_card.card_layout.setSpacing(12)
+        self.project_overview_card.body_layout.setSpacing(12)
+        self.project_overview_card.body_layout.addWidget(header_row)
+        self.project_overview_card.body_layout.addWidget(content_row)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -121,6 +175,7 @@ class ProjectOverviewEditor(QWidget):
 
         self._document.project_changed.connect(self.refresh)
         self.refresh()
+        apply_project_overview_theme(self)
 
     def refresh(self) -> None:
         project = self._document.project
@@ -129,6 +184,17 @@ class ProjectOverviewEditor(QWidget):
         _sync_text_editor_contents(self.project_description_edit, project.meta.description)
         self.project_root_value.set_path_text(str(self._document.project_root), max_length=92)
         self._refresh_condition_profile_widgets()
+        self._refresh_checklist()
+
+    def _refresh_checklist(self) -> None:
+        project = self._document.project
+        self.setup_checklist.set_items(
+            [
+                ("Name", bool(project.meta.name.strip())),
+                ("Description", bool(project.meta.description.strip())),
+                ("Template", bool(self.condition_profile_combo.currentData())),
+            ]
+        )
 
     def _refresh_condition_profile_widgets(self) -> None:
         profiles = self._load_condition_template_profiles()
@@ -157,6 +223,7 @@ class ProjectOverviewEditor(QWidget):
         self.apply_profile_to_conditions_button.setEnabled(
             selected_profile is not None and bool(self._document.project.conditions)
         )
+        self._refresh_checklist()
 
     def _apply_project_name(self) -> None:
         try:

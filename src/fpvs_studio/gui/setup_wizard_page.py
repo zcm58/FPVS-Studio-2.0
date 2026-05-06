@@ -186,6 +186,7 @@ class SetupWizardPage(QWidget):
             object_name="setup_wizard_current_step_card",
             parent=self,
         )
+        self.step_card = step_card
         step_card.title_label.setVisible(False)
         step_card.card_layout.setContentsMargins(12, 10, 12, 10)
         step_card.body_layout.setSpacing(8)
@@ -414,11 +415,16 @@ class SetupWizardPage(QWidget):
         _set_list_items(self.review_readiness_list, report.readiness_items)
 
         step_valid = self._current_step_valid()
-        show_step_intro = True
+        show_step_intro = step_key != "project"
         self.step_title_label.setVisible(show_step_intro)
         self.step_status_badge.setVisible(show_step_intro)
         self.step_status_label.setText(self._step_status_text(self._active_step_index))
         self.step_status_label.setVisible(show_step_intro and not step_valid)
+        self.step_card.setProperty(
+            "wizardProjectStepFrame",
+            "true" if step_key == "project" else "false",
+        )
+        refresh_widget_style(self.step_card)
         self.step_status_badge.set_state(
             "ready" if step_valid else "warning",
             "Step Complete" if step_valid else self._current_step_blocker(),
