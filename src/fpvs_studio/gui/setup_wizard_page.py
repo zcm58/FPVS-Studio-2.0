@@ -30,6 +30,7 @@ from fpvs_studio.gui.components import (
     refresh_widget_style,
 )
 from fpvs_studio.gui.condition_pages import ConditionsPage
+from fpvs_studio.gui.condition_setup_step import ConditionSetupStep
 from fpvs_studio.gui.document import ProjectDocument
 from fpvs_studio.gui.project_overview_page import ProjectOverviewEditor
 from fpvs_studio.gui.run_page import RunPage
@@ -78,7 +79,8 @@ class SetupWizardPage(QWidget):
         self._advanced_visible = False
 
         self.conditions_page = ConditionsPage(document, self)
-        self.add_condition_button = self.conditions_page.add_condition_button
+        self.condition_setup_step = ConditionSetupStep(document, self)
+        self.add_condition_button = self.condition_setup_step.add_condition_button
         self.add_condition_button.clicked.connect(self._show_first_condition_prompt_if_needed)
         self.assets_page = AssetsPage(document, self)
         self.run_page = RunPage(
@@ -189,6 +191,7 @@ class SetupWizardPage(QWidget):
         self.advanced_stack = QStackedWidget(self)
         self.advanced_stack.setObjectName("setup_wizard_advanced_stack")
         self.advanced_stack.addWidget(self._advanced_empty_page())
+        self.advanced_stack.addWidget(self.conditions_page)
         self.advanced_stack.addWidget(self.assets_page)
         self.advanced_stack.addWidget(self.run_page)
         self.advanced_stack.addWidget(self.session_structure_page)
@@ -253,7 +256,7 @@ class SetupWizardPage(QWidget):
 
     def _build_step_pages(self) -> None:
         self.step_stack.addWidget(self.project_overview_editor)
-        self.step_stack.addWidget(self.conditions_page)
+        self.step_stack.addWidget(self.condition_setup_step)
         self.step_stack.addWidget(self.assets_readiness_editor)
         self.step_stack.addWidget(self.runtime_settings_editor)
         self.step_stack.addWidget(self._session_step_page())
@@ -389,6 +392,7 @@ class SetupWizardPage(QWidget):
         self.run_page.refresh()
         self.session_structure_page.refresh()
         self.fixation_cross_settings_page.refresh()
+        self.condition_setup_step.refresh()
         self.conditions_page.refresh()
         self.assets_page.refresh()
         self.assets_readiness_editor.refresh()
@@ -408,7 +412,7 @@ class SetupWizardPage(QWidget):
         _set_list_items(self.review_readiness_list, self._human_readiness_items(report))
 
         step_valid = self._current_step_valid()
-        show_step_intro = step_key != "conditions"
+        show_step_intro = True
         self.step_title_label.setVisible(show_step_intro)
         self.step_status_badge.setVisible(show_step_intro)
         self.step_status_label.setText(self._step_status_text(self._active_step_index))
@@ -595,6 +599,7 @@ class SetupWizardPage(QWidget):
 
     def _advanced_available_for_current_step(self) -> bool:
         return _WIZARD_STEPS[self._active_step_index][0] in {
+            "conditions",
             "stimuli",
             "display",
             "session",
@@ -603,10 +608,11 @@ class SetupWizardPage(QWidget):
 
     def _advanced_index_for_step(self, step_key: str) -> int:
         return {
-            "stimuli": 1,
-            "display": 2,
-            "session": 3,
-            "fixation": 4,
+            "conditions": 1,
+            "stimuli": 2,
+            "display": 3,
+            "session": 4,
+            "fixation": 5,
         }.get(step_key, 0)
 
     def _refresh_progress_header(self) -> None:

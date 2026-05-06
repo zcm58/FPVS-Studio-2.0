@@ -47,17 +47,17 @@ The authoring window is organized around two user-facing modes:
   - Project Details uses a focused centered card inside the full-width wizard,
     keeping the project folder path compact and secondary; project name and
     description are required before continuing to Conditions
-  - the Conditions step uses the full Conditions editor directly so condition
-    ordering, identity, timing, and stimulus-source setup stay in one place
+  - the Conditions step uses a simplified condition setup surface for condition
+    name, trigger code, participant instructions, and base/oddball image folders
   - the Conditions step is complete only when every condition has a user-provided
     name and imported base and oddball image folders
   - `Advanced` replaces the guided step content with the detailed editor for the
     active setup area
   - `Return Home` asks for confirmation when setup is incomplete
 
-Detailed Stimuli Manager and Runtime widgets remain available internally for wizard
-advanced access and existing document bindings, while Conditions is used directly as
-its setup step. These pages are not visible top-level tabs during normal use.
+Detailed Conditions, Stimuli Manager, and Runtime widgets remain available internally
+for wizard advanced access and existing document bindings. These pages are not visible
+top-level tabs during normal use.
 
 ## GUI Implementation Map
 

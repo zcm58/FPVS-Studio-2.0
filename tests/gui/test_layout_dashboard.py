@@ -298,6 +298,14 @@ def test_setup_wizard_surfaces_steps_and_keeps_shared_editors_available(
     assert assets_editor.materialize_button.text() == "Materialize Supported Variants"
     assert "Condition stimulus rows:" in assets_editor.condition_rows_value.text()
     assert dashboard.conditions_page is window.conditions_page
+    assert dashboard.condition_setup_step.condition_name_edit is not None
+    assert dashboard.condition_setup_step.trigger_code_spin is not None
+    assert dashboard.condition_setup_step.instructions_edit is not None
+    assert dashboard.condition_setup_step.base_import_button is not None
+    assert dashboard.condition_setup_step.oddball_import_button is not None
+    assert not hasattr(dashboard.condition_setup_step, "sequence_count_spin")
+    assert not hasattr(dashboard.condition_setup_step, "duty_cycle_combo")
+    assert not hasattr(dashboard.condition_setup_step, "variant_combo")
     assert dashboard.assets_page is window.assets_page
     assert dashboard.run_page is window.run_page
     assert dashboard.setup_wizard_step_list.count() == 7
@@ -334,11 +342,16 @@ def test_setup_wizard_navigation_and_advanced_editor_access(
     assert next_button.isEnabled()
     qtbot.mouseClick(next_button, Qt.MouseButton.LeftButton)
     assert guide.step_stack.currentIndex() == 1
-    assert guide.step_stack.currentWidget() is window.conditions_page
+    assert guide.step_stack.currentWidget() is guide.condition_setup_step
     assert guide.content_stack.currentWidget() is guide.guided_panel
     assert not next_button.isEnabled()
-    assert not advanced_button.isEnabled()
-    assert guide.findChild(QListWidget, "setup_wizard_condition_list") is None
+    assert advanced_button.isEnabled()
+    assert guide.findChild(QListWidget, "setup_wizard_condition_list") is not None
+    qtbot.mouseClick(advanced_button, Qt.MouseButton.LeftButton)
+    assert guide.content_stack.currentWidget() is guide.advanced_stack
+    assert guide.advanced_stack.currentWidget() is window.conditions_page
+    qtbot.mouseClick(advanced_button, Qt.MouseButton.LeftButton)
+    assert guide.content_stack.currentWidget() is guide.guided_panel
 
     information_prompts: list[str] = []
     monkeypatch.setattr(
@@ -348,10 +361,10 @@ def test_setup_wizard_navigation_and_advanced_editor_access(
     qtbot.mouseClick(guide.add_condition_button, Qt.MouseButton.LeftButton)
     assert information_prompts == ["Please ensure you create all conditions before proceeding."]
     assert not next_button.isEnabled()
-    assert not advanced_button.isEnabled()
+    assert advanced_button.isEnabled()
     assert "name every condition" in guide.step_status_label.text().lower()
 
-    condition_id = window.conditions_page.selected_condition_id()
+    condition_id = guide.condition_setup_step.selected_condition_id()
     assert isinstance(condition_id, str)
     guide._document.update_condition(condition_id, name="Faces")
     assert not next_button.isEnabled()
@@ -412,6 +425,41 @@ def test_project_details_step_requires_description_before_next(
 
     qtbot.mouseClick(next_button, Qt.MouseButton.LeftButton)
     assert guide.step_stack.currentIndex() == 1
+
+
+def test_setup_wizard_conditions_step_duplicates_metadata_without_images(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Condition Duplicate")
+    guide = window.setup_wizard_page
+    step = guide.condition_setup_step
+    guide.open_wizard(step_key="conditions")
+
+    qtbot.mouseClick(step.add_condition_button, Qt.MouseButton.LeftButton)
+    condition_id = step.selected_condition_id()
+    assert isinstance(condition_id, str)
+    step.condition_name_edit.setText("Faces")
+    step.condition_name_edit.editingFinished.emit()
+    step.trigger_code_spin.setValue(42)
+    step.instructions_edit.setPlainText("Look at each image.")
+
+    qtbot.mouseClick(step.duplicate_condition_button, Qt.MouseButton.LeftButton)
+
+    duplicated_id = step.selected_condition_id()
+    assert isinstance(duplicated_id, str)
+    assert duplicated_id != condition_id
+    duplicated = window.document.get_condition(duplicated_id)
+    assert duplicated is not None
+    assert duplicated.name == "Faces Copy"
+    assert duplicated.trigger_code == 2
+    assert duplicated.instructions == "Look at each image."
+    base_set = window.document.get_condition_stimulus_set(duplicated_id, "base")
+    oddball_set = window.document.get_condition_stimulus_set(duplicated_id, "oddball")
+    assert base_set.image_count == 0
+    assert oddball_set.image_count == 0
+    assert "Needs images" in step.condition_list.currentItem().text()
 
 
 def test_setup_wizard_advanced_replaces_guided_view_for_session_step(

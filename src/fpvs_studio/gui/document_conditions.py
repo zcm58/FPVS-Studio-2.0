@@ -216,6 +216,49 @@ class DocumentConditionMixin:
         )
         self._replace_project(project)
 
+    def duplicate_condition(self, condition_id: str) -> str:
+        """Duplicate condition metadata with new empty base/oddball stimulus sets."""
+
+        source_condition = self.get_condition(condition_id)
+        if source_condition is None:
+            raise DocumentError(f"Unknown condition '{condition_id}'.")
+
+        ordered_conditions = self.ordered_conditions()
+        existing_condition_ids = {condition.condition_id for condition in self._project.conditions}
+        existing_set_ids = {stimulus_set.set_id for stimulus_set in self._project.stimulus_sets}
+        copy_name = f"{source_condition.name} Copy"
+        existing_names = {condition.name for condition in ordered_conditions}
+        suffix = 2
+        while copy_name in existing_names:
+            copy_name = f"{source_condition.name} Copy {suffix}"
+            suffix += 1
+        new_condition_id = self._unique_slug(copy_name, existing_condition_ids)
+        base_set_id = self._unique_slug(f"{new_condition_id}-base", existing_set_ids)
+        oddball_set_id = self._unique_slug(
+            f"{new_condition_id}-oddball", existing_set_ids | {base_set_id}
+        )
+        duplicated_condition = source_condition.model_copy(
+            update={
+                "condition_id": new_condition_id,
+                "name": copy_name,
+                "base_stimulus_set_id": base_set_id,
+                "oddball_stimulus_set_id": oddball_set_id,
+                "trigger_code": len(ordered_conditions) + 1,
+                "order_index": len(ordered_conditions),
+            }
+        )
+        new_sets = [
+            self._make_empty_stimulus_set(base_set_id, f"{copy_name} Base"),
+            self._make_empty_stimulus_set(oddball_set_id, f"{copy_name} Oddball"),
+        ]
+        project = validated_copy(
+            self._project,
+            conditions=self._reindex_conditions([*ordered_conditions, duplicated_condition]),
+            stimulus_sets=[*self._project.stimulus_sets, *new_sets],
+        )
+        self._replace_project(project)
+        return new_condition_id
+
     def move_condition(self, condition_id: str, *, offset: int) -> None:
         """Move one condition up or down within the ordered condition list."""
 
