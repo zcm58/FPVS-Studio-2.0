@@ -242,16 +242,18 @@ class SetupDashboardPage(QWidget):
             self._document,
             refresh_hz=self.runtime_settings_editor.current_refresh_hz(),
         )
-        issue_count = sum(1 for item in report.readiness_items if item.startswith("[ACTION]"))
+        action_items = tuple(
+            item
+            for item in report.readiness_items
+            if item.startswith(("Needs setup:", "Warning:"))
+        )
+        issue_count = len(action_items)
         self.setup_summary_badge.set_state(report.badge_state, report.status_label)
         self.setup_summary_count.setText(f"Blockers: {issue_count}")
-        first_blocker = next(
-            (
-                item.replace("[ACTION] ", "", 1)
-                for item in report.readiness_items
-                if item.startswith("[ACTION]")
-            ),
-            "No blockers. Setup is ready for preview or launch.",
+        first_blocker = (
+            action_items[0]
+            if action_items
+            else "No blockers. Setup is ready for preview or launch."
         )
         summary_text = first_blocker
         if report.preview_note:
@@ -272,22 +274,25 @@ class SetupDashboardPage(QWidget):
             "assigned for all conditions" if assets_ready else "base and oddball folders needed"
         )
         return (
-            f"{'[OK]' if project_ready else '[TODO]'} Project Details: {project_label}",
             (
-                f"{'[OK]' if ordered_conditions else '[TODO]'} Conditions: "
+                f"{'Complete' if project_ready else 'Needs setup'}: "
+                f"Project Details - {project_label}"
+            ),
+            (
+                f"{'Complete' if ordered_conditions else 'Needs setup'}: Conditions - "
                 f"{len(ordered_conditions)} configured"
             ),
             (
-                f"{'[OK]' if assets_ready else '[TODO]'} Stimuli: "
+                f"{'Complete' if assets_ready else 'Needs setup'}: Stimuli - "
                 f"{stimuli_label}"
             ),
-            "[OK] Session / Fixation: settings available",
+            "Complete: Session / Fixation - settings available",
             (
-                f"{'[OK]' if runtime_ready else '[TODO]'} Runtime: "
+                f"{'Complete' if runtime_ready else 'Needs setup'}: Runtime - "
                 f"{self.runtime_settings_editor.current_refresh_hz():.2f} Hz"
             ),
             (
-                f"{'[OK]' if launch_ready else '[TODO]'} Validate / Ready: "
+                f"{'Complete' if launch_ready else 'Needs setup'}: Validate / Ready - "
                 f"{report.status_label}"
             ),
         )

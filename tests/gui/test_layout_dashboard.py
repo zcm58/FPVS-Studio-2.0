@@ -1204,7 +1204,10 @@ def test_run_page_readiness_and_launch_feedback_is_updated_on_launch(
     assert run_readiness_list is not None
     assert run_launch_button is not None
     assert run_status_label is not None
-    assert "runtime path: alpha test-mode only" in _list_widget_text(run_readiness_list).lower()
+    readiness_text = _list_widget_text(run_readiness_list)
+    assert "[OK]" not in readiness_text
+    assert "[TODO]" not in readiness_text
+    assert "runtime path: alpha test-mode only" in readiness_text.lower()
     assert run_status_label.text()
 
     _prepare_compile_ready_project(window, tmp_path / "home-status-preflight")

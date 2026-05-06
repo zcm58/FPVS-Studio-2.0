@@ -411,7 +411,7 @@ class SetupWizardPage(QWidget):
         self._refresh_fixation_guided_summary()
         report = self._readiness_report()
         self.review_summary_label.setText(report.status_summary)
-        _set_list_items(self.review_readiness_list, self._human_readiness_items(report))
+        _set_list_items(self.review_readiness_list, report.readiness_items)
 
         step_valid = self._current_step_valid()
         show_step_intro = True
@@ -550,25 +550,6 @@ class SetupWizardPage(QWidget):
             and self._conditions_have_required_trigger_codes(ordered_conditions)
             and _conditions_have_assigned_assets(self._document, ordered_conditions)
         )
-
-    @staticmethod
-    def _human_readiness_items(report: LauncherReadinessReport) -> tuple[str, ...]:
-        replacements = {
-            "[OK] ": "Complete: ",
-            "[TODO] ": "Needs setup: ",
-            "[WARN] ": "Warning: ",
-            "[INFO] ": "Note: ",
-            "[ACTION] ": "Action: ",
-        }
-        lines: list[str] = []
-        for item in report.readiness_items:
-            line = item
-            for prefix, replacement in replacements.items():
-                if line.startswith(prefix):
-                    line = f"{replacement}{line.removeprefix(prefix)}"
-                    break
-            lines.append(line)
-        return tuple(lines)
 
     def _refresh_session_guided_summary(self) -> None:
         session = self._document.project.settings.session

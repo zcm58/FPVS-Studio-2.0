@@ -238,28 +238,28 @@ def _launcher_readiness_report(
 
     readiness_items: list[str] = []
     if conditions_ready:
-        readiness_items.append(f"[OK] Conditions configured: {len(ordered_conditions)}.")
+        readiness_items.append(f"Complete: Conditions configured: {len(ordered_conditions)}.")
     else:
-        readiness_items.append("[TODO] Add at least one condition.")
+        readiness_items.append("Needs setup: Add at least one condition.")
 
     if conditions_ready and assets_ready:
-        readiness_items.append("[OK] Stimulus assignments present for all conditions.")
+        readiness_items.append("Complete: Stimulus assignments present for all conditions.")
     elif conditions_ready:
-        readiness_items.append("[TODO] Assign base and oddball sets for each condition.")
+        readiness_items.append("Needs setup: Assign base and oddball sets for each condition.")
     else:
-        readiness_items.append("[TODO] Assign base and oddball sets for each condition.")
+        readiness_items.append("Needs setup: Assign base and oddball sets for each condition.")
 
     if blocking_issue_count > 0:
         readiness_items.append(
-            f"[WARN] Validation ({refresh_hz:.2f} Hz): {blocking_issue_count} blocking issue(s)."
+            f"Warning: Validation ({refresh_hz:.2f} Hz): {blocking_issue_count} blocking issue(s)."
         )
         readiness_items.append(
-            f"[WARN] First blocker: {_truncate_line(blocking_issues[0].message, 120)}"
+            f"Warning: First blocker: {_truncate_line(blocking_issues[0].message, 120)}"
         )
     else:
-        readiness_items.append(f"[OK] Validation ({refresh_hz:.2f} Hz) clear.")
+        readiness_items.append(f"Complete: Validation ({refresh_hz:.2f} Hz) clear.")
 
-    readiness_items.append("[INFO] Runtime path: alpha test-mode only.")
+    readiness_items.append("Note: Runtime path: alpha test-mode only.")
     return LauncherReadinessReport(
         status_label=status_label,
         badge_state=badge_state,
