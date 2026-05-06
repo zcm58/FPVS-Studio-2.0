@@ -40,11 +40,11 @@ def test_condition_template_library_is_seeded_with_built_ins(tmp_path) -> None:
     assert SIXTY_HZ_BLANK_FIXATION_PROFILE_ID in profile_ids
     assert (
         profiles_by_id[STUDIO_DEFAULT_PROFILE_ID].display_name
-        == "Default Template 1: Continuous Images"
+        == "Continuous Images"
     )
     assert (
         profiles_by_id[SIXTY_HZ_BLANK_FIXATION_PROFILE_ID].display_name
-        == "Default Template 2: 83ms blank"
+        == "50% Blank Between Images"
     )
     assert condition_template_library_path(tmp_path).is_file()
     assert all(profile.built_in for profile in profiles)

@@ -1012,7 +1012,7 @@ def test_home_overview_panels_show_project_session_and_runtime_metadata(
         profile_index
     )
     QApplication.processEvents()
-    assert template_label.text() == "Default Template 2: 83ms blank"
+    assert template_label.text() == "50% Blank Between Images"
     assert SIXTY_HZ_BLANK_FIXATION_PROFILE_ID not in template_label.text()
     assert "fpvs_6hz_every5_v1" not in template_label.text()
 

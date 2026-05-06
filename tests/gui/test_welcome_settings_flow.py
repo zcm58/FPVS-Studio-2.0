@@ -631,8 +631,8 @@ def test_manage_condition_templates_dialog_renders_hierarchical_details(
     qtbot.addWidget(dialog)
 
     list_text = _list_widget_text(dialog.profile_list)
-    assert "Default Template 1: Continuous Images" in list_text
-    assert "Default Template 2: 83ms blank" in list_text
+    assert "Continuous Images" in list_text
+    assert "50% Blank Between Images" in list_text
     assert STUDIO_DEFAULT_PROFILE_ID not in list_text
     assert SIXTY_HZ_BLANK_FIXATION_PROFILE_ID not in list_text
     assert "[Built-in]" not in list_text
@@ -671,7 +671,7 @@ def test_manage_condition_templates_dialog_renders_hierarchical_details(
         "Description</span>"
     ) in details_text
     assert details_text.count('<div style="height: 12px;"></div>') >= 4
-    assert "Template Name: Default Template 1: Continuous Images" in details_text
+    assert "Template Name: Continuous Images" in details_text
     assert "Built-in: Yes" in details_text
     assert "Display Refresh Rate: Not Set" in details_text
     assert "Display Resolution: Full Screen (1920 × 1080)" in details_text
@@ -695,7 +695,7 @@ def test_manage_condition_templates_dialog_renders_hierarchical_details(
     QApplication.processEvents()
 
     blank_details_text = dialog.profile_details.text()
-    assert "Template Name: Default Template 2: 83ms blank" in blank_details_text
+    assert "Template Name: 50% Blank Between Images" in blank_details_text
     assert "Duty Cycle: 50% Blank" in blank_details_text
     assert "Total cross color changes in each condition: 7 ± 1" in blank_details_text
     assert "Display Refresh Rate: Not Set" in blank_details_text

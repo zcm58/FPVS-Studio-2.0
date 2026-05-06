@@ -75,7 +75,7 @@ def built_in_condition_template_profiles() -> list[ConditionTemplateProfile]:
     return [
         _built_in_profile(
             profile_id=STUDIO_DEFAULT_PROFILE_ID,
-            display_name="Default Template 1: Continuous Images",
+            display_name="Continuous Images",
             description=(
                 "Continuous-image duty cycle template with fullscreen display defaults and "
                 "fixation cross accuracy task defaults."
@@ -84,7 +84,7 @@ def built_in_condition_template_profiles() -> list[ConditionTemplateProfile]:
         ),
         _built_in_profile(
             profile_id=SIXTY_HZ_BLANK_FIXATION_PROFILE_ID,
-            display_name="Default Template 2: 83ms blank",
+            display_name="50% Blank Between Images",
             description=(
                 "83 ms blank (50% blank duty cycle) template with fullscreen display defaults "
                 "and fixation cross accuracy task defaults."
