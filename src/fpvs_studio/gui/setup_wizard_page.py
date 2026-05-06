@@ -43,14 +43,14 @@ from fpvs_studio.gui.window_helpers import (
     _set_list_items,
 )
 
-_WIZARD_STEPS: tuple[tuple[str, str, str], ...] = (
-    ("project", "Project Details", "Confirm the project name and template."),
-    ("conditions", "Conditions", "Create and review the experiment conditions."),
-    ("stimuli", "Stimuli", "Attach base and oddball image folders."),
-    ("display", "Display Settings", "Set refresh rate and launch display options."),
-    ("session", "Session Design", "Choose block order and inter-condition flow."),
-    ("fixation", "Fixation Cross", "Configure fixation and accuracy-task essentials."),
-    ("review", "Review", "Resolve blockers before returning to Home."),
+_WIZARD_STEPS: tuple[tuple[str, str], ...] = (
+    ("project", "Project Details"),
+    ("conditions", "Conditions"),
+    ("stimuli", "Stimuli"),
+    ("display", "Display Settings"),
+    ("session", "Session Design"),
+    ("fixation", "Fixation Cross"),
+    ("review", "Review"),
 )
 _DEFAULT_CONDITION_NAME_RE = re.compile(r"^Condition \d+$")
 _CREATE_ALL_CONDITIONS_PROMPT = "Please ensure you create all conditions before proceeding."
@@ -116,13 +116,10 @@ class SetupWizardPage(QWidget):
 
         self.shell = NonHomePageShell(
             title="Setup Wizard",
-            subtitle="Complete each setup step once, then use Home for routine launches.",
+            subtitle="",
             layout_mode="single_column",
             width_preset="full",
             parent=self,
-        )
-        self.shell.set_footer_text(
-            "Setup Wizard uses the same project document, validation, and launch checks as Home."
         )
 
         self.setup_wizard_step_list = QListWidget(self)
@@ -141,7 +138,7 @@ class SetupWizardPage(QWidget):
         progress_steps_layout.setContentsMargins(0, 0, 0, 0)
         progress_steps_layout.setSpacing(6)
         self.progress_step_labels: list[QLabel] = []
-        for index, (_key, title, _instruction) in enumerate(_WIZARD_STEPS):
+        for index, (_key, title) in enumerate(_WIZARD_STEPS):
             label = QLabel(f"{index + 1} {title}", self.progress_steps)
             label.setObjectName(f"setup_wizard_progress_step_{index + 1}")
             label.setProperty("wizardStep", "true")
@@ -161,9 +158,6 @@ class SetupWizardPage(QWidget):
         self.step_title_label.setObjectName("setup_wizard_step_title")
         self.step_title_label.setProperty("sectionCardRole", "title")
         self.step_title_label.setWordWrap(True)
-        self.step_instruction_label = QLabel(self)
-        self.step_instruction_label.setObjectName("setup_wizard_step_instruction")
-        self.step_instruction_label.setWordWrap(True)
         self.step_status_badge = StatusBadgeLabel("Step not checked", self)
         self.step_status_badge.setObjectName("setup_wizard_ready_badge")
         self.step_status_label = QLabel(self)
@@ -179,7 +173,6 @@ class SetupWizardPage(QWidget):
         guided_layout.setContentsMargins(0, 0, 0, 0)
         guided_layout.setSpacing(8)
         guided_layout.addWidget(self.step_title_label)
-        guided_layout.addWidget(self.step_instruction_label)
         guided_layout.addWidget(self.step_status_badge)
         guided_layout.addWidget(self.step_status_label)
         guided_layout.addWidget(self.step_stack, 1)
@@ -405,10 +398,9 @@ class SetupWizardPage(QWidget):
         _set_list_items(self.setup_wizard_step_list, self._step_list_lines())
         self.setup_wizard_step_list.setCurrentRow(self._active_step_index)
 
-        step_key, title, instruction = _WIZARD_STEPS[self._active_step_index]
+        step_key, title = _WIZARD_STEPS[self._active_step_index]
         self._refresh_progress_header()
         self.step_title_label.setText(title)
-        self.step_instruction_label.setText(instruction)
         self._refresh_session_guided_summary()
         self._refresh_fixation_guided_summary()
         report = self._readiness_report()
@@ -418,7 +410,6 @@ class SetupWizardPage(QWidget):
         step_valid = self._current_step_valid()
         show_step_intro = step_key != "conditions"
         self.step_title_label.setVisible(show_step_intro)
-        self.step_instruction_label.setVisible(show_step_intro)
         self.step_status_badge.setVisible(show_step_intro)
         self.step_status_label.setText(self._step_status_text(self._active_step_index))
         self.step_status_label.setVisible(show_step_intro and not step_valid)
@@ -452,7 +443,7 @@ class SetupWizardPage(QWidget):
     def _step_list_lines(self) -> tuple[str, ...]:
         return tuple(
             f"{index + 1}. {title} - {self._step_status_text(index)}"
-            for index, (_key, title, _instruction) in enumerate(_WIZARD_STEPS)
+            for index, (_key, title) in enumerate(_WIZARD_STEPS)
         )
 
     def _step_status_text(self, index: int) -> str:
@@ -620,7 +611,7 @@ class SetupWizardPage(QWidget):
 
     def _refresh_progress_header(self) -> None:
         current = self._active_step_index
-        _key, title, _instruction = _WIZARD_STEPS[current]
+        _key, title = _WIZARD_STEPS[current]
         self.progress_header_label.setText(f"Step {current + 1} of {len(_WIZARD_STEPS)}: {title}")
         for index, label in enumerate(self.progress_step_labels):
             if index < current:
@@ -635,7 +626,7 @@ class SetupWizardPage(QWidget):
     def _step_index_for_key(self, step_key: str) -> int:
         aliases = {"runtime": "display"}
         step_key = aliases.get(step_key, step_key)
-        for index, (candidate, _title, _instruction) in enumerate(_WIZARD_STEPS):
+        for index, (candidate, _title) in enumerate(_WIZARD_STEPS):
             if candidate == step_key:
                 return index
         return 0

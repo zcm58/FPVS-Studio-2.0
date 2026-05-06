@@ -167,7 +167,6 @@ class RunPage(QWidget):
 
         display_card = SectionCard(
             title="Display & Engine",
-            subtitle="Display routing that stays specific to this page.",
             object_name="run_display_card",
             parent=self,
         )
@@ -203,7 +202,6 @@ class RunPage(QWidget):
 
         controls_card = SectionCard(
             title="Run Controls",
-            subtitle="Preview first, then launch with one primary action.",
             object_name="run_controls_card",
             parent=self,
         )
@@ -245,7 +243,6 @@ class RunPage(QWidget):
 
         summary_card = SectionCard(
             title="Session Summary & Runtime Feedback",
-            subtitle="Structured preview and launch diagnostics.",
             object_name="run_summary_card",
             parent=self,
         )
@@ -269,7 +266,6 @@ class RunPage(QWidget):
 
         readiness_card = SectionCard(
             title="Launch Readiness",
-            subtitle="Validation, asset checks, and launch prerequisites.",
             object_name="run_readiness_card",
             parent=self,
         )
@@ -282,10 +278,7 @@ class RunPage(QWidget):
 
         self.shell = NonHomePageShell(
             title="Run / Runtime",
-            subtitle=(
-                "Preview the session plan, review readiness, and launch from the "
-                "supported alpha path."
-            ),
+            subtitle="",
             layout_mode="three_column",
             width_preset="medium",
             parent=self,
@@ -296,9 +289,6 @@ class RunPage(QWidget):
         self.shell.add_column_widget(1, readiness_card, stretch=1)
         self.shell.add_column_widget(2, controls_card)
         self.shell.add_column_widget(2, summary_card, stretch=1)
-        self.shell.set_footer_text(
-            "Display index and runtime settings are available only on this page."
-        )
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)

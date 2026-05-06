@@ -160,6 +160,7 @@ class NonHomePageShell(QWidget):
         self.subtitle_label = QLabel(subtitle, self.page_container.header_widget)
         self.subtitle_label.setObjectName("non_home_shell_subtitle")
         self.subtitle_label.setWordWrap(True)
+        self.subtitle_label.setVisible(bool(subtitle))
         _configure_centered_page_header_label(self.subtitle_label)
 
         self.page_container.header_layout.addWidget(self.title_label)

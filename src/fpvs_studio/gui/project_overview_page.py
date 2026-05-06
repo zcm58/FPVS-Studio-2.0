@@ -93,7 +93,6 @@ class ProjectOverviewEditor(QWidget):
 
         self.project_overview_card = SectionCard(
             title="Project Details",
-            subtitle=("Confirm the experiment identity and default condition template."),
             object_name="dashboard_project_overview_card",
             parent=self,
         )

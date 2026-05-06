@@ -121,10 +121,7 @@ class AssetsPage(QWidget):
 
         self.shell = NonHomePageShell(
             title="Stimuli Manager",
-            subtitle=(
-                "Manage condition-level stimulus sources, inspect imported sets, and "
-                "prepare supported variants for the current project."
-            ),
+            subtitle="",
             layout_mode="single_column",
             width_preset="full",
             parent=self,
@@ -132,9 +129,6 @@ class AssetsPage(QWidget):
         self.shell.add_content_widget(controls_row)
         self.shell.add_content_widget(self.assets_table, stretch=1)
         self.shell.add_content_widget(self.assets_status_text)
-        self.shell.set_footer_text(
-            "Select a condition-role row to import or refresh its stimulus source."
-        )
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)

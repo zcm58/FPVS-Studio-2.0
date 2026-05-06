@@ -85,7 +85,6 @@ class ConditionsPage(QWidget):
         list_button_layout.addWidget(self.move_down_button)
         self.condition_list_card = SectionCard(
             title="Condition List",
-            subtitle="Create, remove, and reorder session conditions.",
             object_name="conditions_list_card",
             parent=self,
         )
@@ -179,7 +178,6 @@ class ConditionsPage(QWidget):
 
         self.condition_editor_card = SectionCard(
             title="Condition Editor",
-            subtitle="Edit identity, instructions, timing, and stimulus configuration.",
             object_name="conditions_editor_card",
             parent=self,
         )
@@ -243,7 +241,6 @@ class ConditionsPage(QWidget):
 
         self.stimulus_sources_card = SectionCard(
             title="Stimulus Sources & Status",
-            subtitle="Base and oddball sources shown side by side for quick comparison.",
             object_name="conditions_stimulus_sources_card",
             parent=self,
         )
@@ -308,19 +305,12 @@ class ConditionsPage(QWidget):
 
         self.shell = NonHomePageShell(
             title="Conditions",
-            subtitle=(
-                "Edit condition ordering, identity, logic, and stimulus sources in a "
-                "dedicated master-detail workspace."
-            ),
+            subtitle="",
             layout_mode="single_column",
             width_preset="wide",
             parent=self,
         )
         self.shell.add_content_widget(self.master_detail_container, stretch=1)
-        self.shell.set_footer_text(
-            "Condition edits update the shared project document used by Setup "
-            "Dashboard and Run / Runtime."
-        )
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)

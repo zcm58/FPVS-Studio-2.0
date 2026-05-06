@@ -107,6 +107,13 @@ def test_setup_wizard_exists_and_uses_single_column_shell_with_steps(
     label_text = "\n".join(label.text() for label in wizard.findChildren(QLabel))
     assert "Current Step" not in label_text
     assert "Only the controls needed for this setup step are shown." not in label_text
+    assert "Complete each setup step once" not in label_text
+    assert "Setup Wizard uses the same project document" not in label_text
+    assert "Confirm the project name and template." not in label_text
+    assert wizard.shell.footer_strip.isVisible() is False
+    assert window.conditions_page.shell.footer_strip.isVisible() is False
+    assert window.assets_page.shell.footer_strip.isVisible() is False
+    assert window.run_page.shell.footer_strip.isVisible() is False
 
 
 def test_major_tabs_share_page_container_width_presets(
@@ -157,7 +164,7 @@ def test_stimuli_manager_page_uses_table_focused_layout(
     header = page.assets_table.horizontalHeader()
 
     assert page.shell.title_label.text() == "Stimuli Manager"
-    assert "stimulus sources" in page.shell.subtitle_label.text().lower()
+    assert page.shell.subtitle_label.isVisible() is False
     assert page.assets_table.horizontalHeaderItem(2).text() == "Source Path"
     assert header.sectionResizeMode(0) == QHeaderView.ResizeMode.Interactive
     assert header.sectionResizeMode(1) == QHeaderView.ResizeMode.ResizeToContents
