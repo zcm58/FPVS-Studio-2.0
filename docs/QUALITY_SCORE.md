@@ -6,6 +6,7 @@ the current quality posture as the latest result of the standard gates.
 ## Standard Gates
 
 - Harness docs: `python -m pytest -q tests\unit\test_harness_docs.py`
+- Docs hygiene: `.\scripts\check_docs_hygiene.ps1`
 - Harness garbage collection: `.\scripts\check_gc.ps1`
 - Python lint: `python -m ruff check .`
 - Unit suite: `python -m pytest -q`
@@ -28,6 +29,8 @@ the current quality posture as the latest result of the standard gates.
 - shared GUI styles stay in `gui/components.py`, except the documented native menu reset
 - PsychoPy imports stay behind the engines boundary
 - local machine paths stay out of source, tests, and scripts
+- docs root stays focused on current hubs/contracts while historical setup and audit
+  docs live under `docs/references/archive/`
 
 The standalone script also prints an advisory line-count report. The full quality gate
 runs the hard garbage-collection checks without the advisory report.

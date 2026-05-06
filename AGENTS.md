@@ -77,6 +77,8 @@ experiments, with PsychoPy isolated behind runtime/engine boundaries.
 - Use `.\scripts\check_gc.ps1` for harness garbage-collection checks that catch
   mechanical drift such as forbidden GUI frameworks, source `print(...)`, stylesheet
   drift, boundary leaks, and committed local paths.
+- Use `.\scripts\check_docs_hygiene.ps1` to review planned/active/completed execution
+  plans and keep stale setup or audit docs out of the docs root.
 - Use `.\scripts\check_gui.ps1`, `.\scripts\check_runtime.ps1`,
   `.\scripts\check_compiler.ps1`, or `.\scripts\check_preprocessing.ps1` for
   narrower cleanup passes.

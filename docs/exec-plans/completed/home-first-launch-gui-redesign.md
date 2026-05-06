@@ -1,6 +1,8 @@
 # Home-Only Launch Surface With Guided Setup Wizard
 
-Status: Active
+Status: Completed
+
+Completed: 2026-05-06
 
 ## Summary
 

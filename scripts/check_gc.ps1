@@ -47,7 +47,8 @@ Push-Location $RepoRoot
 try {
     $failures = [System.Collections.Generic.List[string]]::new()
 
-    $printMatches = Invoke-GitGrep "print(" @("src", "scripts")
+    $printMatches = Invoke-GitGrep "print(" @("src", "scripts") |
+        Where-Object { $_ -notlike "scripts/check_gc.ps1:*" }
     Add-Failure $failures "Use structured logging instead of print(...) in source/scripts." $printMatches
 
     $customTkMatches = Invoke-GitGrep "[Cc]ustom[Tt]kinter" @("src", "tests")
@@ -71,6 +72,7 @@ try {
     Add-Failure $failures "Do not commit local machine paths into source, tests, or scripts." $localPathMatches
 
     & $Python -m pytest -q tests\unit\test_harness_docs.py tests\unit\test_import_boundaries.py
+    & (Join-Path $PSScriptRoot "check_docs_hygiene.ps1")
 
     if ($failures.Count -gt 0) {
         Write-Error ($failures -join [Environment]::NewLine)

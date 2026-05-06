@@ -123,6 +123,8 @@ Use these first reads before opening broad trees:
 - Feature-sized workflow task: read `docs/PLANS.md` and `docs/exec-plans/README.md`,
   create or update an active plan under `docs/exec-plans/active/`, then read the
   related package docs and tests.
+- Docs garbage-collection task: read `docs/exec-plans/plan-review-workflow.md`, run
+  `.\scripts\check_docs_hygiene.ps1`, then update plan status or move stale docs.
 
 ## Contract Flow
 
@@ -146,6 +148,7 @@ results. Exporters serialize those results without moving contracts into engine 
   on Windows for pushes and pull requests.
 - Full gate: `.\scripts\check_quality.ps1`
 - Harness garbage collection: `.\scripts\check_gc.ps1`
+- Docs hygiene: `.\scripts\check_docs_hygiene.ps1`
 - GUI smoke/workflow: `.\scripts\check_gui.ps1`
 - Runtime: `.\scripts\check_runtime.ps1`
 - Compiler/session: `.\scripts\check_compiler.ps1`
