@@ -51,6 +51,8 @@ def _settings_section(title: str, body: QWidget, *, parent: QWidget) -> QFrame:
     layout.setSpacing(6)
     title_label = QLabel(title, section)
     title_label.setProperty("sectionCardRole", "subtitle")
+    title_label.setProperty("fixationSettingsSectionTitle", "true")
+    title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
     layout.addWidget(title_label)
     layout.addWidget(body)
     return section
@@ -143,7 +145,7 @@ class FixationSettingsEditor(QWidget):
         schedule_row_behavior: str = "hide",
         layout_mode: str = "grid",
         title: str = "Fixation Cross Task",
-        subtitle: str = "Task enablement, behavior, timing, response, and appearance.",
+        subtitle: str | None = "Task enablement, behavior, timing, response, and appearance.",
         compact: bool = False,
         show_preview: bool = False,
         parent: QWidget | None = None,

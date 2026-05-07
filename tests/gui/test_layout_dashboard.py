@@ -1204,9 +1204,13 @@ def test_setup_wizard_experiment_and_fixation_steps_are_width_safe(
     guide.open_wizard(step_key="fixation")
     assert guide.step_stack.currentWidget() is guide.fixation_settings_editor
     assert not guide.setup_wizard_advanced_button.isEnabled()
+    assert not guide.step_title_label.isVisible()
+    assert not guide.step_status_badge.isVisible()
+    assert guide.step_card.property("wizardProjectStepFrame") == "true"
     assert guide.fixation_settings_editor.fixation_panel.title_label.text() == (
         "Fixation Cross Settings"
     )
+    assert guide.fixation_settings_editor.fixation_panel.subtitle_label is None
     assert guide.fixation_settings_editor.preview_card is None
     assert guide.fixation_settings_editor.preview_panel is not None
     assert guide.fixation_settings_editor.preview_widget is not None
@@ -1230,6 +1234,19 @@ def test_setup_wizard_experiment_and_fixation_steps_are_width_safe(
     assert "Response" in label_text
     assert "Appearance" in label_text
     assert "Preview" in label_text
+    assert "Color-change task, response, and cross appearance." not in label_text
+    section_titles = [
+        label
+        for label in guide.fixation_settings_editor.findChildren(QLabel)
+        if label.property("fixationSettingsSectionTitle") == "true"
+    ]
+    assert {label.text() for label in section_titles} == {
+        "Behavior",
+        "Timing",
+        "Response",
+        "Appearance",
+    }
+    assert all(label.alignment() & Qt.AlignmentFlag.AlignCenter for label in section_titles)
 
     preview = guide.fixation_settings_editor.preview_widget
     fixation = window.document.project.settings.fixation_task

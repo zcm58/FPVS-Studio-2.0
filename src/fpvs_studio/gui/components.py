@@ -1131,6 +1131,10 @@ def fixation_settings_stylesheet() -> str:
         color: {COLOR_TEXT_PRIMARY};
         font-weight: 600;
     }}
+    QLabel[fixationSettingsSectionTitle="true"] {{
+        color: {COLOR_TEXT_PRIMARY};
+        font-weight: 700;
+    }}
     """
 
 
