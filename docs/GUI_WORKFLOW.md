@@ -45,10 +45,9 @@ The authoring window is organized around two user-facing modes:
   - `Edit Setup` opens the guided setup workflow
 - `Setup Wizard`
   - in-window setup flow for new/incomplete projects and intentional edits
-  - ordered steps: Project Details, Conditions, Display Settings, Session Design,
-    Fixation Cross, Review
+  - ordered steps: Project Details, Conditions, Experiment Settings, Review
   - `Next` is disabled until the active step is complete
-  - the top progress header shows `Step X of 6` and a slim horizontal progress
+  - the top progress header shows `Step X of 4` and a slim horizontal progress
     indicator instead of a persistent left-hand step column; the current shared
     component is a connected numbered stepper with completed/current/upcoming states
   - the wizard uses the full available window width so advanced editor content
@@ -58,9 +57,15 @@ The authoring window is organized around two user-facing modes:
   - Project Details uses a focused centered card inside the full-width wizard,
     keeping the project folder path compact and secondary; project name and
     description are required before continuing to Conditions
-  - Display Settings exposes only display refresh rate and presentation background
+  - Experiment Settings combines display, session, and fixation controls in one
+    three-column guided page
+  - the Display column exposes only display refresh rate and presentation background
     (`Black` or `Dark Gray`); current launches always use PsychoPy, alpha test-mode,
     fullscreen playback, and the default display without exposing those as choices
+  - the Session column exposes block count, session seed, condition randomization, and
+    the fixed Space start key
+  - the Fixation Cross Settings column exposes fixation color-change, accuracy,
+    response, timing, and appearance settings
   - the Conditions step uses a simplified condition setup surface for condition
     name, trigger code, participant instructions, and base/oddball image folders
   - the Conditions step uses the shared setup workspace pattern: condition list on
@@ -91,9 +96,10 @@ The authoring window is organized around two user-facing modes:
   - does not update project conditions, stimulus sets, manifests, compiler
     contracts, runtime contracts, or PsychoPy behavior
 
-Detailed Conditions, Session, and Fixation widgets remain available internally for
-wizard advanced access and existing document bindings. The Run / Runtime page remains a
-launch, readiness, and session-preview surface, not a display-engine configuration step.
+Detailed Conditions remains available internally for wizard advanced access and existing
+document bindings. Session and Fixation controls are directly visible in Experiment
+Settings. The Run / Runtime page remains a launch, readiness, and session-preview
+surface, not a display-engine configuration step.
 The Stimuli Manager remains an internal support page for variant/materialization
 behavior, not a guided setup step or visible top-level tab during normal use.
 

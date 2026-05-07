@@ -83,13 +83,14 @@ Current planned seams:
 - GUI workflow composition is Home-first. `main_window.py` uses a stack with Home and
   `setup_wizard_page.py`; `Tools > Image Resizer` adds a standalone in-window utility
   page for folder-level FPVS image optimization without mutating project conditions.
-  The wizard uses a six-step top-progress flow with a
+  The wizard uses a four-step top-progress flow with a
   simplified Conditions setup step where users assign base/oddball image folders and
-  can optionally create derived-variant control conditions. Display Settings is limited
-  to refresh rate and black/dark-gray background choices. Detailed Conditions,
-  Session, and Fixation widgets stay internal for step-level advanced access
-  rather than visible top-level tabs; Stimuli Manager remains an internal support page,
-  not a guided setup step.
+  can optionally create derived-variant control conditions. Experiment Settings combines
+  display, session, and fixation controls into one guided three-column page. Display
+  settings are limited to refresh rate and black/dark-gray background choices. Detailed
+  Conditions remains available for step-level advanced access rather than as a visible
+  top-level tab; Stimuli Manager remains an internal support page, not a guided setup
+  step.
 - GUI project management uses `manage_projects_dialog.py` as a themed component-layer
   surface while `controller.py` owns disk-backed project discovery, recent-project
   settings, and Recycle Bin confirmation/deletion side effects.

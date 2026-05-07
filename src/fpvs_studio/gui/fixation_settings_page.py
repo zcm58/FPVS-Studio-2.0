@@ -40,13 +40,26 @@ class FixationSettingsEditor(QWidget):
         document: ProjectDocument,
         *,
         schedule_row_behavior: str = "hide",
+        layout_mode: str = "grid",
+        title: str = "Fixation Cross Task",
+        subtitle: str = "Task enablement, behavior, timing, response, and appearance.",
+        compact: bool = False,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         if schedule_row_behavior not in {"hide", "disable"}:
             raise ValueError(f"Unsupported schedule_row_behavior: {schedule_row_behavior}")
+        if layout_mode not in {"grid", "single_column"}:
+            raise ValueError(f"Unsupported fixation layout mode: {layout_mode}")
         self._document = document
         self._schedule_row_behavior = schedule_row_behavior
+        self._layout_mode = layout_mode
+        self._compact = compact
+        card_margin_y = 6 if compact else 10
+        card_spacing = 5 if compact else 8
+        form_spacing = 4 if compact else 7
+        feasibility_margin_y = 5 if compact else 8
+        section_spacing = 5 if compact else 8
 
         self.fixation_enabled_checkbox = QCheckBox(
             "Enable fixation color changes per condition", self
@@ -134,26 +147,26 @@ class FixationSettingsEditor(QWidget):
         self.line_width_spin.valueChanged.connect(self._apply_fixation_settings)
 
         self.fixation_panel = SectionCard(
-            title="Fixation Cross Task",
-            subtitle="Task enablement, behavior, timing, response, and appearance.",
+            title=title,
+            subtitle=subtitle,
             object_name="fixation_settings_panel",
             parent=self,
         )
-        self.fixation_panel.card_layout.setContentsMargins(12, 10, 12, 10)
-        self.fixation_panel.card_layout.setSpacing(8)
+        self.fixation_panel.card_layout.setContentsMargins(12, card_margin_y, 12, card_margin_y)
+        self.fixation_panel.card_layout.setSpacing(card_spacing)
         fixation_panel_layout = self.fixation_panel.body_layout
-        fixation_panel_layout.setSpacing(8)
+        fixation_panel_layout.setSpacing(section_spacing)
 
         enablement_layout = QHBoxLayout()
         enablement_layout.setContentsMargins(0, 0, 0, 0)
-        enablement_layout.setSpacing(6)
+        enablement_layout.setSpacing(5 if compact else 6)
         enablement_layout.addWidget(self.fixation_enabled_checkbox)
         enablement_layout.addWidget(self.fixation_accuracy_checkbox)
         enablement_layout.addStretch(1)
 
         self.fixation_behavior_group = QWidget(self.fixation_panel)
         self.fixation_behavior_layout = QFormLayout(self.fixation_behavior_group)
-        self.fixation_behavior_layout.setVerticalSpacing(7)
+        self.fixation_behavior_layout.setVerticalSpacing(form_spacing)
         self.fixation_behavior_layout.addRow("Color change schedule", self.target_count_mode_combo)
         self.fixation_behavior_layout.addRow(
             "Changes per condition", self.changes_per_sequence_spin
@@ -164,20 +177,20 @@ class FixationSettingsEditor(QWidget):
 
         self.fixation_timing_group = QWidget(self.fixation_panel)
         timing_layout = QFormLayout(self.fixation_timing_group)
-        timing_layout.setVerticalSpacing(7)
+        timing_layout.setVerticalSpacing(form_spacing)
         timing_layout.addRow("Color change duration (ms)", self.target_duration_spin)
         timing_layout.addRow("Minimum gap (ms)", self.min_gap_spin)
         timing_layout.addRow("Maximum gap (ms)", self.max_gap_spin)
 
         self.fixation_response_group = QWidget(self.fixation_panel)
         response_layout = QFormLayout(self.fixation_response_group)
-        response_layout.setVerticalSpacing(7)
+        response_layout.setVerticalSpacing(form_spacing)
         response_layout.addRow("Response key", self.response_key_edit)
         response_layout.addRow("Response window (s)", self.response_window_spin)
 
         self.fixation_appearance_group = QWidget(self.fixation_panel)
         appearance_layout = QFormLayout(self.fixation_appearance_group)
-        appearance_layout.setVerticalSpacing(7)
+        appearance_layout.setVerticalSpacing(form_spacing)
         appearance_layout.addRow("Default color", self.base_color_edit)
         appearance_layout.addRow("Change color", self.target_color_edit)
         appearance_layout.addRow("Cross size (px)", self.cross_size_spin)
@@ -187,8 +200,8 @@ class FixationSettingsEditor(QWidget):
         feasibility_card.setObjectName("fixation_feasibility_card")
         feasibility_card.setToolTip(_FIXATION_FEASIBILITY_TOOLTIP_TEXT)
         feasibility_layout = QVBoxLayout(feasibility_card)
-        feasibility_layout.setContentsMargins(10, 8, 10, 8)
-        feasibility_layout.setSpacing(4)
+        feasibility_layout.setContentsMargins(10, feasibility_margin_y, 10, feasibility_margin_y)
+        feasibility_layout.setSpacing(3 if compact else 4)
         self.fixation_feasibility_label = QLabel(feasibility_card)
         self.fixation_feasibility_label.setObjectName("fixation_feasibility_label")
         self.fixation_feasibility_label.setToolTip(_FIXATION_FEASIBILITY_TOOLTIP_TEXT)
@@ -197,10 +210,6 @@ class FixationSettingsEditor(QWidget):
 
         fixation_panel_layout.addLayout(enablement_layout)
         fixation_panel_layout.addWidget(feasibility_card)
-        settings_grid = QGridLayout()
-        settings_grid.setContentsMargins(0, 0, 0, 0)
-        settings_grid.setHorizontalSpacing(PAGE_SECTION_GAP)
-        settings_grid.setVerticalSpacing(8)
         behavior_header = QLabel("Behavior", self.fixation_panel)
         behavior_header.setProperty("sectionCardRole", "subtitle")
         timing_header = QLabel("Timing", self.fixation_panel)
@@ -209,17 +218,35 @@ class FixationSettingsEditor(QWidget):
         response_header.setProperty("sectionCardRole", "subtitle")
         appearance_header = QLabel("Appearance", self.fixation_panel)
         appearance_header.setProperty("sectionCardRole", "subtitle")
-        settings_grid.addWidget(behavior_header, 0, 0)
-        settings_grid.addWidget(timing_header, 0, 1)
-        settings_grid.addWidget(self.fixation_behavior_group, 1, 0)
-        settings_grid.addWidget(self.fixation_timing_group, 1, 1)
-        settings_grid.addWidget(response_header, 2, 0)
-        settings_grid.addWidget(appearance_header, 2, 1)
-        settings_grid.addWidget(self.fixation_response_group, 3, 0)
-        settings_grid.addWidget(self.fixation_appearance_group, 3, 1)
-        settings_grid.setColumnStretch(0, 1)
-        settings_grid.setColumnStretch(1, 1)
-        fixation_panel_layout.addLayout(settings_grid)
+        if self._layout_mode == "single_column":
+            settings_layout = QVBoxLayout()
+            settings_layout.setContentsMargins(0, 0, 0, 0)
+            settings_layout.setSpacing(section_spacing)
+            for header, group in (
+                (behavior_header, self.fixation_behavior_group),
+                (timing_header, self.fixation_timing_group),
+                (response_header, self.fixation_response_group),
+                (appearance_header, self.fixation_appearance_group),
+            ):
+                settings_layout.addWidget(header)
+                settings_layout.addWidget(group)
+            fixation_panel_layout.addLayout(settings_layout)
+        else:
+            settings_grid = QGridLayout()
+            settings_grid.setContentsMargins(0, 0, 0, 0)
+            settings_grid.setHorizontalSpacing(PAGE_SECTION_GAP)
+            settings_grid.setVerticalSpacing(section_spacing)
+            settings_grid.addWidget(behavior_header, 0, 0)
+            settings_grid.addWidget(timing_header, 0, 1)
+            settings_grid.addWidget(self.fixation_behavior_group, 1, 0)
+            settings_grid.addWidget(self.fixation_timing_group, 1, 1)
+            settings_grid.addWidget(response_header, 2, 0)
+            settings_grid.addWidget(appearance_header, 2, 1)
+            settings_grid.addWidget(self.fixation_response_group, 3, 0)
+            settings_grid.addWidget(self.fixation_appearance_group, 3, 1)
+            settings_grid.setColumnStretch(0, 1)
+            settings_grid.setColumnStretch(1, 1)
+            fixation_panel_layout.addLayout(settings_grid)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)

@@ -35,6 +35,8 @@ class SessionStructureEditor(QWidget):
         document: ProjectDocument,
         *,
         object_name_prefix: str = "",
+        title: str = "Session Structure",
+        subtitle: str = "Block order and inter-condition flow.",
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
@@ -93,8 +95,8 @@ class SessionStructureEditor(QWidget):
         self.continue_key_edit.setEnabled(False)
 
         self.session_card = SectionCard(
-            title="Session Structure",
-            subtitle="Block order and inter-condition flow.",
+            title=title,
+            subtitle=subtitle,
             object_name=_prefixed_object_name(object_name_prefix, "session_structure_card"),
             parent=self,
         )

@@ -131,6 +131,9 @@ class PageContainer(QWidget):
     def max_content_width(self) -> int:
         return _PAGE_WIDTH_PRESETS[self.width_preset]
 
+    def set_page_margins(self, left: int, top: int, right: int, bottom: int) -> None:
+        self._outer_layout.setContentsMargins(left, top, right, bottom)
+
 
 class NonHomePageShell(QWidget):
     """Reusable shell for non-home pages with bounded, top-aligned content."""
@@ -230,6 +233,17 @@ class NonHomePageShell(QWidget):
 
     def set_width_preset(self, width_preset: str) -> None:
         self.page_container.set_width_preset(width_preset)
+
+    def set_content_spacing(self, spacing: int) -> None:
+        if self._single_column_layout is not None:
+            self._single_column_layout.setSpacing(spacing)
+            return
+        columns_layout = self.content_frame.layout()
+        if isinstance(columns_layout, QHBoxLayout):
+            columns_layout.setSpacing(spacing)
+
+    def set_page_margins(self, left: int, top: int, right: int, bottom: int) -> None:
+        self.page_container.set_page_margins(left, top, right, bottom)
 
     def set_footer_text(self, text: str | None) -> None:
         if not text:
