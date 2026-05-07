@@ -7,6 +7,7 @@ Use this page to find planning material before making feature-sized changes.
 - Plan instructions: `exec-plans/README.md`
 - Review workflow: `exec-plans/plan-review-workflow.md`
 - Planned future work: `exec-plans/planned/`
+- Planned image preparation tool: `exec-plans/planned/fpvs-toolbox-image-prep-tool.md`
 - Active plans: `exec-plans/active/`
 - Completed plans: `exec-plans/completed/`
 - Technical debt tracker: `exec-plans/tech-debt-tracker.md`

@@ -11,6 +11,8 @@ development. Keep stable source-of-truth docs here, and keep the compact repo ma
 - Design and GUI workflow: `DESIGN.md`, `FRONTEND.md`, and `GUI_WORKFLOW.md`
 - Execution planning: `PLANS.md`, `exec-plans/README.md`, and
   `exec-plans/plan-review-workflow.md`
+- Future image preparation tool planning:
+  `exec-plans/planned/fpvs-toolbox-image-prep-tool.md`
 - Quality, reliability, and security: `QUALITY_SCORE.md`, `RELIABILITY.md`, and
   `SECURITY.md`
 

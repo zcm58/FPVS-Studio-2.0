@@ -20,6 +20,9 @@ code may lazily import PsychoPy.
   contracts, project persistence, and engine-neutral domain logic.
 - `src/fpvs_studio/preprocessing/`: source image import, inspection, derived assets, and
   manifests. This layer must stay independent of GUI runtime and PsychoPy.
+- `src/fpvs_studio/tools/`: imported/reference tool code for future Studio-native
+  utilities. Current files from FPVS Toolbox are planning ground truth for the image
+  preparation tool and must be adapted before user-facing integration.
 - `src/fpvs_studio/runtime/`: launch settings, preflight, session execution, participant
   history, and runtime flow over compiled contracts.
 - `src/fpvs_studio/engines/`: presentation engine interface and PsychoPy implementation.
@@ -118,6 +121,9 @@ Use these first reads before opening broad trees:
 - Preprocessing task: `src/fpvs_studio/preprocessing/`,
   `src/fpvs_studio/core/models.py`, `tests/unit/test_preprocessing_assets.py`,
   and `tests/unit/test_preprocessing_inspection.py`.
+- Image preparation tool task: `docs/exec-plans/planned/fpvs-toolbox-image-prep-tool.md`,
+  `src/fpvs_studio/tools/`, `src/fpvs_studio/preprocessing/`,
+  `src/fpvs_studio/gui/components.py`, and `src/fpvs_studio/gui/AGENTS.md`.
 - Docs-only task: `AGENTS.md`, this file, `docs/index.md`, and the doc being edited.
   Avoid source reads unless the doc describes a concrete contract.
 - Feature-sized workflow task: read `docs/PLANS.md` and `docs/exec-plans/README.md`,
