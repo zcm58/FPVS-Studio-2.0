@@ -1423,7 +1423,8 @@ def test_setup_wizard_review_uses_centered_confirmation_checklist(
     assert "2 conditions configured" in label_text
     assert "Faces: base 3 images, oddball 3 images" not in label_text
     assert "Objects: base 3 images, oddball 3 images" not in label_text
-    assert "Each condition will repeat 2 times in random block order" in label_text
+    assert "Each condition will repeat 2 times in randomized block order" in label_text
+    assert "Random order seed:" in label_text
     assert "Display: 60.00 Hz, Black background" in label_text
     assert "Fixation cross has been configured" in label_text
     assert "Launch requirements are satisfied" not in label_text
@@ -1443,7 +1444,7 @@ def test_setup_wizard_review_uses_centered_confirmation_checklist(
         if label.property("reviewCheckIcon") == "true"
     ]
     assert len(summary_sections) == 4
-    assert len(checklist_rows) == 5
+    assert len(checklist_rows) == 6
     assert len(check_icons) == len(checklist_rows)
 
     assert guide.review_save_button.text() == "Save Experiment"

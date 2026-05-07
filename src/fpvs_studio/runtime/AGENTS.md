@@ -16,6 +16,7 @@ This phase should establish:
 - run/test mode handling
 - trigger backend wiring/logging
 - session export writers
+- participant and seed-history lookup
 - engine selection plumbing
 - real session execution flow against the engine seam
 
@@ -34,6 +35,8 @@ This phase should establish:
 - trigger participant-facing end-of-condition feedback via the engine when the fixation accuracy task is enabled
 - aggregate run results into a session result
 - write run/session export artifacts
+- append project-level reporting indexes under `logs/` while keeping detailed
+  execution artifacts under `runs/` as the source of truth
 - preserve clear separation from GUI code
 
 ## Restrictions
@@ -60,5 +63,6 @@ Even if the exporter is skeletal in this phase, define a stable shape for:
 - `frame_intervals.csv`
 - `trigger_log.csv`
 - `display_report.json`
+- project-level `logs/session_condition_history.csv`
 
 Use simple, explicit writer utilities and keep them easy to test.

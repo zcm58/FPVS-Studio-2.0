@@ -264,8 +264,7 @@ def compile_session_plan(
     global_order_index = 0
     for block_index in range(project.settings.session.block_count):
         block_conditions = list(selected_conditions)
-        if project.settings.session.randomize_conditions_per_block:
-            session_rng.shuffle(block_conditions)
+        session_rng.shuffle(block_conditions)
 
         entries: list[SessionEntry] = []
         for index_within_block, condition in enumerate(block_conditions):

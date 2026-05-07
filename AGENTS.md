@@ -45,11 +45,13 @@ experiments, with PsychoPy isolated behind runtime/engine boundaries.
 - Keep execution-result/export contracts in `src/fpvs_studio/core/execution.py`.
 - The compiler must transform project models into `RunSpec`; runtime and engines consume `RunSpec`, not `ProjectFile`.
 - Session compilation must transform project models/session settings into `SessionPlan`; runtime consumes `SessionPlan` and iterates its ordered `RunSpec` entries.
+- Current Studio sessions always randomize condition order within each block by the random order seed; keep legacy fixed-order fields schema-compatible but do not expose them as current GUI behavior.
 - Session compilation owns realized fixation target-count selection for each ordered run (including randomized/no-immediate-repeat behavior when enabled); do not move that logic into GUI or runtime.
 - Runtime execution must transform `RunSpec` / `SessionPlan` playback into core-owned execution-result contracts; exporters serialize those contracts without moving them into engine code.
 - Runtime-only launch or machine options must stay outside `RunSpec`.
 - Runtime owns inter-condition and inter-block session flow; engines render instruction, break, and completion screens.
 - Runtime owns fixation-accuracy scoring and condition-level participant feedback flow; engines render the feedback screen content.
+- Runtime owns project-level run-history indexes under `logs/`; detailed execution artifacts under `runs/` remain the source of truth.
 - Only code under `src/fpvs_studio/engines/` may import PsychoPy, and those imports must stay lazy inside the engine implementation.
 - The PySide6 GUI is a first-class application surface in this phase; do not add end-user dependency fallbacks or alternate non-GUI modes around missing GUI dependencies.
 - PySide6 GUI code must stay PySide6-only; do not introduce CustomTkinter.

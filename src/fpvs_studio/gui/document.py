@@ -51,6 +51,10 @@ from fpvs_studio.preprocessing.manifest import (
 )
 from fpvs_studio.preprocessing.models import StimulusManifest
 from fpvs_studio.runtime.launcher import launch_session
+from fpvs_studio.runtime.participant_history import (
+    completed_session_seeds,
+    generate_unused_session_seed,
+)
 from fpvs_studio.runtime.preflight import preflight_session_plan
 
 _SESSION_SEED_UPPER_BOUND = 2**31
@@ -196,22 +200,44 @@ class ProjectDocument(
         self._apply_project_update(settings=settings)
 
     def generate_new_session_seed(self) -> int:
-        """Generate and persist a fresh stored session seed."""
+        """Generate and persist a fresh stored random order seed."""
 
-        seed = random.SystemRandom().randrange(_SESSION_SEED_UPPER_BOUND)
+        seed = self._generate_unused_session_seed()
         self.update_session_settings(session_seed=seed)
         return seed
 
     def randomize_session_seed_for_app_launch(self) -> int:
-        """Generate a fresh session seed for the current app launch without marking dirty."""
+        """Generate a fresh random order seed for the current app launch without marking dirty."""
 
-        seed = random.SystemRandom().randrange(_SESSION_SEED_UPPER_BOUND)
+        seed = self._generate_unused_session_seed()
+        self._replace_session_seed_without_dirty(seed)
+        return seed
+
+    def ensure_unused_session_seed_for_launch(self) -> int:
+        """Ensure the current launch seed has not been consumed by a prior session."""
+
+        seed = self._project.settings.session.session_seed
+        if seed in completed_session_seeds(self._project_root):
+            seed = self._generate_unused_session_seed()
+            self._replace_session_seed_without_dirty(seed)
+        return seed
+
+    def _generate_unused_session_seed(self) -> int:
+        try:
+            return generate_unused_session_seed(
+                self._project_root,
+                rng=random.SystemRandom(),
+                upper_bound=_SESSION_SEED_UPPER_BOUND,
+            )
+        except RuntimeError as exc:
+            raise DocumentError(str(exc)) from exc
+
+    def _replace_session_seed_without_dirty(self, seed: int) -> None:
         session = _validated_copy(self._project.settings.session, session_seed=seed)
         settings = _validated_copy(self._project.settings, session=session)
         self._project = _validated_copy(self._project, settings=settings)
         self._last_session_plan = None
         self.project_changed.emit()
-        return seed
 
     def update_fixation_settings(self, **updates: object) -> None:
         """Update fixation settings through Pydantic validation."""

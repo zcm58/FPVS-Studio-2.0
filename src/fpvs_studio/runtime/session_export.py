@@ -7,15 +7,48 @@ from __future__ import annotations
 
 import csv
 from collections.abc import Iterable
+from datetime import datetime, timezone
 from pathlib import Path
 
 from fpvs_studio.core.enums import DutyCycleMode
 from fpvs_studio.core.execution import RunExecutionSummary, SessionExecutionSummary
 from fpvs_studio.core.models import DisplayValidationReport
+from fpvs_studio.core.paths import logs_dir
 from fpvs_studio.core.run_spec import RunSpec
 from fpvs_studio.core.serialization import write_json_file
-from fpvs_studio.core.session_plan import SessionPlan
+from fpvs_studio.core.session_plan import SessionEntry, SessionPlan
 from fpvs_studio.core.validation import validate_display_refresh
+
+SESSION_CONDITION_HISTORY_FILENAME = "session_condition_history.csv"
+SESSION_CONDITION_HISTORY_HEADER = [
+    "logged_at_utc",
+    "project_id",
+    "project_name",
+    "participant_number",
+    "session_id",
+    "session_seed",
+    "session_started_at",
+    "session_finished_at",
+    "output_dir",
+    "block_index",
+    "index_within_block",
+    "global_order_index",
+    "condition_id",
+    "condition_name",
+    "run_id",
+    "run_started_at",
+    "run_finished_at",
+    "completed_frames",
+    "run_aborted",
+    "abort_reason",
+    "total_targets",
+    "hit_count",
+    "miss_count",
+    "false_alarm_count",
+    "accuracy_percent",
+    "mean_rt_ms",
+    "block_accuracy_percent",
+]
 
 
 def _write_csv(path: Path, header: Iterable[str], rows: Iterable[Iterable[object]] = ()) -> None:
@@ -160,6 +193,8 @@ def write_session_artifacts(
     output_dir: Path,
     session_plan: SessionPlan,
     summary: SessionExecutionSummary,
+    *,
+    project_root: Path | None = None,
 ) -> None:
     """Write the session-level artifact bundle for a compiled/executed session."""
 
@@ -319,3 +354,113 @@ def write_session_artifacts(
         ],
     )
     _write_warnings(output_dir / "warnings.log", summary.warnings)
+    if project_root is not None:
+        append_session_condition_history(project_root, session_plan, summary)
+
+
+def append_session_condition_history(
+    project_root: Path,
+    session_plan: SessionPlan,
+    summary: SessionExecutionSummary,
+) -> Path:
+    """Append project-level condition-history rows for one launched session."""
+
+    path = logs_dir(project_root) / SESSION_CONDITION_HISTORY_FILENAME
+    path.parent.mkdir(parents=True, exist_ok=True)
+    needs_header = not path.is_file() or path.stat().st_size == 0
+    with path.open("a", encoding="utf-8", newline="") as handle:
+        writer = csv.writer(handle)
+        if needs_header:
+            writer.writerow(SESSION_CONDITION_HISTORY_HEADER)
+        writer.writerows(_session_condition_history_rows(session_plan, summary))
+    return path
+
+
+def _session_condition_history_rows(
+    session_plan: SessionPlan,
+    summary: SessionExecutionSummary,
+) -> list[list[object]]:
+    logged_at = datetime.now(timezone.utc).isoformat()
+    run_results_by_id = {run_result.run_id: run_result for run_result in summary.run_results}
+    block_accuracy = _block_accuracy_percentages(session_plan, run_results_by_id)
+    return [
+        _session_condition_history_row(
+            entry,
+            summary,
+            run_results_by_id.get(entry.run_id),
+            logged_at=logged_at,
+            block_accuracy_percent=block_accuracy.get(entry.block_index),
+        )
+        for entry in session_plan.ordered_entries()
+    ]
+
+
+def _session_condition_history_row(
+    entry: SessionEntry,
+    summary: SessionExecutionSummary,
+    run_result: RunExecutionSummary | None,
+    *,
+    logged_at: str,
+    block_accuracy_percent: float | None,
+) -> list[object]:
+    fixation = run_result.fixation_task_summary if run_result is not None else None
+    return [
+        logged_at,
+        summary.project_id,
+        entry.run_spec.project_name,
+        summary.participant_number or "",
+        summary.session_id,
+        summary.random_seed if summary.random_seed is not None else "",
+        _datetime_value(summary.started_at),
+        _datetime_value(summary.finished_at),
+        summary.output_dir or "",
+        entry.block_index + 1,
+        entry.index_within_block + 1,
+        entry.global_order_index + 1,
+        entry.condition_id,
+        entry.condition_name,
+        entry.run_id,
+        _datetime_value(run_result.started_at if run_result is not None else None),
+        _datetime_value(run_result.finished_at if run_result is not None else None),
+        run_result.completed_frames if run_result is not None else "",
+        run_result.aborted if run_result is not None else "",
+        run_result.abort_reason if run_result is not None and run_result.abort_reason else "",
+        fixation.total_targets if fixation is not None else "",
+        fixation.hit_count if fixation is not None else "",
+        fixation.miss_count if fixation is not None else "",
+        fixation.false_alarm_count if fixation is not None else "",
+        _float_value(fixation.accuracy_percent if fixation is not None else None),
+        _float_value(fixation.mean_rt_ms if fixation is not None else None),
+        _float_value(block_accuracy_percent),
+    ]
+
+
+def _block_accuracy_percentages(
+    session_plan: SessionPlan,
+    run_results_by_id: dict[str, RunExecutionSummary],
+) -> dict[int, float | None]:
+    percentages: dict[int, float | None] = {}
+    for block in session_plan.blocks:
+        total_targets = 0
+        hit_count = 0
+        for entry in block.entries:
+            run_result = run_results_by_id.get(entry.run_id)
+            if run_result is None or run_result.fixation_task_summary is None:
+                continue
+            fixation = run_result.fixation_task_summary
+            total_targets += fixation.total_targets
+            hit_count += fixation.hit_count
+        percentages[block.block_index] = (
+            (hit_count / total_targets) * 100.0 if total_targets > 0 else None
+        )
+    return percentages
+
+
+def _datetime_value(value: object | None) -> str:
+    if value is None:
+        return ""
+    return value.isoformat() if hasattr(value, "isoformat") else str(value)
+
+
+def _float_value(value: float | None) -> str:
+    return "" if value is None else f"{value:.2f}"

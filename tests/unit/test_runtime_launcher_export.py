@@ -24,6 +24,7 @@ def test_session_export_captures_seed_and_runtime_logs(
     multi_condition_project,
     multi_condition_project_root,
 ) -> None:
+    multi_condition_project.settings.fixation_task.accuracy_task_enabled = True
     captures: dict[str, object] = {}
     register_engine("stub-export", lambda: StubEngine(captures))
     try:
@@ -59,6 +60,7 @@ def test_session_export_captures_seed_and_runtime_logs(
     assert (session_output_dir / "fixation_events.csv").is_file()
     assert (session_output_dir / "responses.csv").is_file()
     assert (session_output_dir / "trigger_log.csv").is_file()
+    assert (multi_condition_project_root / "logs" / "session_condition_history.csv").is_file()
     assert [run_result.run_id for run_result in exported_summary.run_results] == [
         entry.run_id for entry in session_plan.ordered_entries()
     ]
@@ -71,10 +73,20 @@ def test_session_export_captures_seed_and_runtime_logs(
     fixation_rows = _read_csv_rows(session_output_dir / "fixation_events.csv")
     response_rows = _read_csv_rows(session_output_dir / "responses.csv")
     trigger_rows = _read_csv_rows(session_output_dir / "trigger_log.csv")
+    condition_history_rows = _read_csv_rows(
+        multi_condition_project_root / "logs" / "session_condition_history.csv"
+    )
 
     assert [row["run_id"] for row in conditions_rows] == [
         entry.run_id for entry in session_plan.ordered_entries()
     ]
+    assert [row["run_id"] for row in condition_history_rows] == [
+        entry.run_id for entry in session_plan.ordered_entries()
+    ]
+    assert all(row["participant_number"] == PARTICIPANT_NUMBER for row in condition_history_rows)
+    assert all(row["session_seed"] == "77" for row in condition_history_rows)
+    assert all(row["output_dir"] == summary.output_dir for row in condition_history_rows)
+    assert all(row["block_accuracy_percent"] for row in condition_history_rows)
     assert len(fixation_rows) == sum(
         len(run_result.fixation_responses) for run_result in exported_summary.run_results
     )

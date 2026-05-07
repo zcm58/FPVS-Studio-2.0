@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from PySide6.QtCore import QSignalBlocker, Qt
 from PySide6.QtWidgets import (
-    QCheckBox,
     QComboBox,
     QDoubleSpinBox,
     QFormLayout,
     QHBoxLayout,
+    QLabel,
     QLineEdit,
     QPushButton,
     QSpinBox,
@@ -55,6 +55,9 @@ class SessionStructureEditor(QWidget):
             _prefixed_object_name(object_name_prefix, "session_seed_spin")
         )
         self.session_seed_spin.setRange(0, 2_147_483_647)
+        self.session_seed_spin.setToolTip(
+            "Controls the randomized condition order within each block."
+        )
         self.session_seed_spin.valueChanged.connect(self._apply_session_settings)
 
         self.generate_seed_button = QPushButton("New Seed", self)
@@ -62,13 +65,19 @@ class SessionStructureEditor(QWidget):
             _prefixed_object_name(object_name_prefix, "generate_seed_button")
         )
         self.generate_seed_button.setMaximumWidth(92)
+        self.generate_seed_button.setToolTip(
+            "Generate a random order seed that has not been used by a completed session."
+        )
         self.generate_seed_button.clicked.connect(self._generate_seed)
 
-        self.randomize_checkbox = QCheckBox("Randomize conditions within each block", self)
-        self.randomize_checkbox.setObjectName(
-            _prefixed_object_name(object_name_prefix, "randomize_conditions_checkbox")
+        self.seed_help_label = QLabel(
+            "Condition order is randomized within each block using this seed.",
+            self,
         )
-        self.randomize_checkbox.stateChanged.connect(self._apply_session_settings)
+        self.seed_help_label.setObjectName(
+            _prefixed_object_name(object_name_prefix, "random_order_seed_help_label")
+        )
+        self.seed_help_label.setWordWrap(True)
 
         self.inter_condition_mode_combo = QComboBox(self)
         self.inter_condition_mode_combo.setObjectName(
@@ -103,8 +112,8 @@ class SessionStructureEditor(QWidget):
         seed_layout.addWidget(self.session_seed_spin, 1, Qt.AlignmentFlag.AlignVCenter)
         seed_layout.addWidget(self.generate_seed_button, 0, Qt.AlignmentFlag.AlignVCenter)
         self.session_layout.addRow("Repeats per condition", self.block_count_spin)
-        self.session_layout.addRow("Session seed", seed_layout)
-        self.session_layout.addRow("", self.randomize_checkbox)
+        self.session_layout.addRow("Random order seed", seed_layout)
+        self.session_layout.addRow("", self.seed_help_label)
         self.session_layout.addRow("Start key", self.continue_key_edit)
 
         layout = QVBoxLayout(self)
@@ -135,8 +144,6 @@ class SessionStructureEditor(QWidget):
             self.block_count_spin.setValue(session.block_count)
         with QSignalBlocker(self.session_seed_spin):
             self.session_seed_spin.setValue(session.session_seed)
-        with QSignalBlocker(self.randomize_checkbox):
-            self.randomize_checkbox.setChecked(session.randomize_conditions_per_block)
         with QSignalBlocker(self.inter_condition_mode_combo):
             self.inter_condition_mode_combo.setCurrentIndex(
                 self.inter_condition_mode_combo.findData(InterConditionMode.MANUAL_CONTINUE)
@@ -164,7 +171,7 @@ class SessionStructureEditor(QWidget):
             self._document.update_session_settings(
                 block_count=self.block_count_spin.value(),
                 session_seed=self.session_seed_spin.value(),
-                randomize_conditions_per_block=self.randomize_checkbox.isChecked(),
+                randomize_conditions_per_block=True,
                 inter_condition_mode=InterConditionMode.MANUAL_CONTINUE,
                 inter_condition_break_seconds=0.0,
                 continue_key="space",
@@ -179,7 +186,7 @@ class SessionStructureEditor(QWidget):
         try:
             self._document.generate_new_session_seed()
         except Exception as error:
-            _show_error_dialog(self, "Session Seed Error", error)
+            _show_error_dialog(self, "Random Order Seed Error", error)
 
 
 class SessionStructurePage(QWidget):
@@ -204,7 +211,7 @@ class SessionStructurePage(QWidget):
         self.block_count_spin = self.editor.block_count_spin
         self.session_seed_spin = self.editor.session_seed_spin
         self.generate_seed_button = self.editor.generate_seed_button
-        self.randomize_checkbox = self.editor.randomize_checkbox
+        self.seed_help_label = self.editor.seed_help_label
         self.inter_condition_mode_combo = self.editor.inter_condition_mode_combo
         self.break_seconds_spin = self.editor.break_seconds_spin
         self.continue_key_edit = self.editor.continue_key_edit

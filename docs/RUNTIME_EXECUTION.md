@@ -42,6 +42,7 @@ SessionPlan
   -> engine.show_completion_screen(...)
   -> engine.close_session()
   -> runtime writes session artifacts
+  -> runtime appends logs/session_condition_history.csv
 ```
 
 The engine never receives `ProjectFile`. It only receives one compiled
@@ -103,6 +104,15 @@ Scoring semantics for the fixation accuracy task:
 
 ## Exports
 
+Project-level reporting index:
+
+- `logs/session_condition_history.csv`
+  - append-only one-row-per-condition-occurrence session history
+  - includes participant number, random order seed, run timing, block/order
+    metadata, abort fields, fixation metrics, and block accuracy
+  - used for reporting convenience; the detailed audit source remains the
+    session/run artifacts under `runs/`
+
 Per session:
 
 - `session_plan.json`
@@ -139,6 +149,7 @@ In the current v1 runtime it means:
 
 - runtime launch still flows through the test-mode seam and test-mode metadata
 - GUI launch currently fixes PsychoPy test-mode playback to fullscreen presentation
+- session order is randomized within each block using the current random order seed
 - every condition waits for the participant to press Space before playback starts
 - trigger output stays on the logged null backend
 - completion screens auto-dismiss quickly

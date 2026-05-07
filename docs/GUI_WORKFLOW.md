@@ -64,8 +64,8 @@ The authoring window is organized around two user-facing modes:
   - the Display column exposes only display refresh rate and presentation background
     (`Black` or `Dark Gray`); current launches always use PsychoPy, alpha test-mode,
     fullscreen playback, and the default display without exposing those as choices
-  - the Session column exposes repeats per condition, session seed, condition
-    randomization, and the fixed Space start key
+  - the Session column exposes repeats per condition, the random order seed, and
+    the fixed Space start key; condition order is always randomized within each block
   - Fixation Cross is its own guided step and exposes fixation color-change behavior,
     timing, response, appearance, and a live preview on the current display background
   - the Conditions step uses a simplified condition setup surface for condition
@@ -170,8 +170,8 @@ Phase 5 currently supports:
 - saving and reopening project state
 - launching ready projects from Home without exposing setup tabs
 - completing or revisiting project setup through the Setup Wizard
-- configuring session block order and stored seed; condition starts are fixed to
-  `Press Space to begin`
+- configuring repeats per condition and the random order seed; condition order is
+  randomized within each block and condition starts are fixed to `Press Space to begin`
 - configuring display refresh rate and choosing a black or dark-gray presentation
   background
 - configuring fixation settings, including an optional fixation accuracy task

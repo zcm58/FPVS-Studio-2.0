@@ -26,7 +26,8 @@ code may lazily import PsychoPy.
   utilities. Current files from FPVS Toolbox are planning ground truth for the image
   preparation tool and must be adapted before user-facing integration.
 - `src/fpvs_studio/runtime/`: launch settings, preflight, session execution, participant
-  history, and runtime flow over compiled contracts.
+  history, seed-history lookup, project-level run-log exports, and runtime flow over
+  compiled contracts.
 - `src/fpvs_studio/engines/`: presentation engine interface and PsychoPy implementation.
 - `src/fpvs_studio/triggers/`: optional trigger backend interfaces and hardware adapter
   scaffolding used by runtime while keeping core contracts hardware-neutral.
@@ -86,8 +87,10 @@ Current planned seams:
   The wizard uses a five-step top-progress flow with a
   simplified Conditions setup step where users assign base/oddball image folders and
   can optionally create derived-variant control conditions. Experiment Settings combines
-  display and session settings in one compact centered card, while Fixation Cross is a
-  guided page with behavior, timing, response, appearance, and live-preview sections.
+  display and session settings in one compact centered card; session order is always
+  randomized within each block using the random order seed while legacy fixed-order
+  fields stay schema-compatible. Fixation Cross is a guided page with behavior, timing,
+  response, appearance, and live-preview sections.
   Display settings are limited to refresh rate and black/dark-gray background choices. Detailed
   Conditions no longer exposes a wizard advanced editor; duty-cycle selection is
   centralized in the Project Details condition template selector. Stimuli Manager
@@ -134,6 +137,8 @@ Use these first reads before opening broad trees:
 - Runtime task: `docs/RUNTIME_EXECUTION.md`,
   `src/fpvs_studio/runtime/launcher.py`,
   `src/fpvs_studio/runtime/preflight.py`,
+  `src/fpvs_studio/runtime/participant_history.py`,
+  `src/fpvs_studio/runtime/session_export.py`,
   `src/fpvs_studio/core/execution.py`, and the relevant
   `tests/unit/test_runtime_*.py` file.
 - Preprocessing task: `src/fpvs_studio/preprocessing/`,
@@ -155,8 +160,11 @@ Use these first reads before opening broad trees:
 
 `ProjectFile` models compile into single-condition `RunSpec` entries. Session settings and
 ordered conditions compile into a `SessionPlan` that owns realized fixation target-count
-selection. Runtime consumes `RunSpec` or `SessionPlan` and produces core-owned execution
-results. Exporters serialize those results without moving contracts into engine code.
+selection and randomized block order for the current random order seed. Runtime consumes
+`RunSpec` or `SessionPlan` and produces core-owned execution results. Exporters serialize
+those results without moving contracts into engine code; `runs/` remains the detailed
+artifact source, while `logs/session_condition_history.csv` is a runtime-owned reporting
+index.
 
 ## Dependency Rules
 

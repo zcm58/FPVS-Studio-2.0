@@ -209,7 +209,12 @@ class RuntimeWorker:
             run_results=run_results,
             output_dir=relative_output_dir,
         )
-        write_session_artifacts(output_dir, session_plan, session_summary)
+        write_session_artifacts(
+            output_dir,
+            session_plan,
+            session_summary,
+            project_root=project_root,
+        )
         return session_summary
 
     def _finalize_run_summary(

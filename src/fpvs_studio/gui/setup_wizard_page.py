@@ -654,13 +654,10 @@ class SetupWizardPage(QWidget):
         block_count = session.block_count
         background_label = self._display_background_label(str(display.background_color))
         repeat_word = "time" if block_count == 1 else "times"
-        order_label = (
-            "random block order"
-            if session.randomize_conditions_per_block
-            else "configured block order"
-        )
         experiment_lines = (
-            f"Each condition will repeat {block_count} {repeat_word} in {order_label}",
+            f"Each condition will repeat {block_count} {repeat_word} "
+            f"in randomized block order",
+            f"Random order seed: {session.session_seed}",
             f"Display: {self.runtime_settings_editor.current_refresh_hz():.2f} Hz, "
             f"{background_label}",
         )

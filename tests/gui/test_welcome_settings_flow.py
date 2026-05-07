@@ -27,9 +27,10 @@ from fpvs_studio.core.condition_template_profiles import (
     built_in_condition_template_profiles,
     list_condition_template_profiles,
 )
-from fpvs_studio.core.enums import DutyCycleMode
+from fpvs_studio.core.enums import DutyCycleMode, RunMode
+from fpvs_studio.core.execution import SessionExecutionSummary
 from fpvs_studio.core.project_service import create_project
-from fpvs_studio.core.serialization import load_project_file
+from fpvs_studio.core.serialization import load_project_file, write_json_file
 from fpvs_studio.gui.application import create_application
 from fpvs_studio.gui.condition_template_manager_dialog import (
     ConditionTemplateManagerDialog,
@@ -477,6 +478,48 @@ def test_open_project_randomizes_session_seed_per_open_without_dirtying_document
     assert controller.main_window.document.project.settings.session.session_seed == 222_222_222
     assert controller.main_window.document.dirty is False
     assert load_project_file(project_file_path).settings.session.session_seed == persisted_seed
+
+
+def test_open_project_session_seed_skips_completed_prior_seed(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Seed History Skip")
+    project_root = window.document.project_root
+    summary = SessionExecutionSummary(
+        project_id=window.document.project.meta.project_id,
+        session_id="session-0000111111",
+        engine_name="stub",
+        run_mode=RunMode.TEST,
+        participant_number="0001",
+        random_seed=111_111_111,
+        total_condition_count=2,
+        completed_condition_count=2,
+        aborted=False,
+        output_dir="runs/0001",
+    )
+    write_json_file(project_root / "runs" / "0001" / "session_summary.json", summary)
+
+    seed_values = iter((111_111_111, 222_222_222))
+
+    class _DeterministicSystemRandom:
+        def randrange(self, _upper_bound: int) -> int:
+            return next(seed_values)
+
+    monkeypatch.setattr(
+        "fpvs_studio.gui.document.random.SystemRandom",
+        lambda: _DeterministicSystemRandom(),
+    )
+
+    opened = controller.open_project(project_root)
+
+    assert opened is not None
+    assert controller.main_window is not None
+    qtbot.addWidget(controller.main_window)
+    assert controller.main_window.document.project.settings.session.session_seed == 222_222_222
+    assert controller.main_window.document.dirty is False
 
 
 def test_create_project_dialog_prefills_saved_root_parent_directory(

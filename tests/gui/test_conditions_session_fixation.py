@@ -7,6 +7,7 @@ from pathlib import Path
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QApplication,
+    QFormLayout,
     QMessageBox,
     QWidget,
 )
@@ -19,8 +20,9 @@ from fpvs_studio.core.condition_template_profiles import (
     SIXTY_HZ_BLANK_FIXATION_PROFILE_ID,
     STUDIO_DEFAULT_PROFILE_ID,
 )
-from fpvs_studio.core.enums import DutyCycleMode, InterConditionMode, StimulusVariant
-from fpvs_studio.core.serialization import load_project_file
+from fpvs_studio.core.enums import DutyCycleMode, InterConditionMode, RunMode, StimulusVariant
+from fpvs_studio.core.execution import SessionExecutionSummary
+from fpvs_studio.core.serialization import load_project_file, write_json_file
 from fpvs_studio.gui.controller import StudioController
 from fpvs_studio.gui.document import _CONDITION_LENGTH_ERROR_MESSAGE
 
@@ -132,7 +134,7 @@ def test_session_and_fixation_settings_round_trip(
     session_page = window.session_structure_page
     session_page.block_count_spin.setValue(3)
     session_page.session_seed_spin.setValue(123456)
-    session_page.randomize_checkbox.setChecked(False)
+    assert not hasattr(session_page, "randomize_checkbox")
 
     fixation_page = window.fixation_cross_settings_page
     fixation_page.fixation_enabled_checkbox.setChecked(True)
@@ -174,7 +176,7 @@ def test_session_and_fixation_settings_round_trip(
     fixation = reopened_project.settings.fixation_task
     assert session.block_count == 3
     assert session.session_seed == 123456
-    assert session.randomize_conditions_per_block is False
+    assert session.randomize_conditions_per_block is True
     assert session.inter_condition_mode == InterConditionMode.MANUAL_CONTINUE
     assert session.continue_key == "space"
     assert fixation.enabled is True
@@ -255,12 +257,103 @@ def test_session_structure_uses_space_start_without_timed_break_controls(
 
     QApplication.processEvents()
     assert page.inter_condition_mode_combo.findData(InterConditionMode.FIXED_BREAK) == -1
+    assert not hasattr(page, "randomize_checkbox")
+    form_labels = [
+        page.session_layout.itemAt(row, QFormLayout.ItemRole.LabelRole).widget().text()
+        for row in range(page.session_layout.rowCount())
+        if page.session_layout.itemAt(row, QFormLayout.ItemRole.LabelRole) is not None
+    ]
+    assert "Random order seed" in form_labels
+    assert page.session_seed_spin.toolTip()
+    assert page.generate_seed_button.toolTip()
+    assert page.seed_help_label.text() == (
+        "Condition order is randomized within each block using this seed."
+    )
     assert not page.inter_condition_mode_combo.isVisible()
     assert not page.break_seconds_spin.isVisible()
     assert not page.break_seconds_spin.isEnabled()
     assert page.continue_key_edit.isVisible()
     assert not page.continue_key_edit.isEnabled()
     assert page.continue_key_edit.text() == "space"
+
+
+def test_session_new_seed_skips_completed_prior_seed(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "New Seed History")
+    project_root = window.document.project_root
+    summary = SessionExecutionSummary(
+        project_id=window.document.project.meta.project_id,
+        session_id="session-0000000101",
+        engine_name="stub",
+        run_mode=RunMode.TEST,
+        participant_number="0001",
+        random_seed=101,
+        total_condition_count=2,
+        completed_condition_count=2,
+        aborted=False,
+        output_dir="runs/0001",
+    )
+    write_json_file(project_root / "runs" / "0001" / "session_summary.json", summary)
+    seed_values = iter((101, 202))
+
+    class _DeterministicSystemRandom:
+        def randrange(self, _upper_bound: int) -> int:
+            return next(seed_values)
+
+    monkeypatch.setattr(
+        "fpvs_studio.gui.document.random.SystemRandom",
+        lambda: _DeterministicSystemRandom(),
+    )
+
+    page = window.setup_dashboard_page.session_structure_editor
+    qtbot.mouseClick(page.generate_seed_button, Qt.MouseButton.LeftButton)
+
+    assert window.document.project.settings.session.session_seed == 202
+    assert page.session_seed_spin.value() == 202
+
+
+def test_compile_session_replaces_completed_prior_seed_before_launch(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Compile Seed History")
+    _prepare_compile_ready_project(window, tmp_path / "compile-seed-history")
+    project_root = window.document.project_root
+    window.document.update_session_settings(session_seed=101)
+    summary = SessionExecutionSummary(
+        project_id=window.document.project.meta.project_id,
+        session_id="session-0000000101",
+        engine_name="stub",
+        run_mode=RunMode.TEST,
+        participant_number="0001",
+        random_seed=101,
+        total_condition_count=1,
+        completed_condition_count=1,
+        aborted=False,
+        output_dir="runs/0001",
+    )
+    write_json_file(project_root / "runs" / "0001" / "session_summary.json", summary)
+    seed_values = iter((101, 202))
+
+    class _DeterministicSystemRandom:
+        def randrange(self, _upper_bound: int) -> int:
+            return next(seed_values)
+
+    monkeypatch.setattr(
+        "fpvs_studio.gui.document.random.SystemRandom",
+        lambda: _DeterministicSystemRandom(),
+    )
+
+    plan = window.document.compile_session(refresh_hz=60.0)
+
+    assert plan.random_seed == 202
+    assert window.document.project.settings.session.session_seed == 202
 
 
 def test_fixation_color_change_mode_toggles_relevant_controls(

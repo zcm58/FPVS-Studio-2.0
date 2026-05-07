@@ -104,6 +104,25 @@ def test_session_plan_reproducibility_and_seed_variation(
     )
 
 
+def test_session_plan_randomizes_blocks_even_when_legacy_flag_is_false(
+    multi_condition_project,
+    multi_condition_project_root,
+) -> None:
+    multi_condition_project.settings.session.randomize_conditions_per_block = False
+
+    session_plan = compile_session_plan(
+        multi_condition_project,
+        refresh_hz=60.0,
+        project_root=multi_condition_project_root,
+        random_seed=42,
+    )
+
+    assert _block_orders(session_plan) == [
+        ["condition-3", "condition-2", "condition-4", "condition-1"],
+        ["condition-4", "condition-2", "condition-3", "condition-1"],
+    ]
+
+
 def test_session_plan_transition_settings_force_space_start_metadata(
     multi_condition_project,
     multi_condition_project_root,

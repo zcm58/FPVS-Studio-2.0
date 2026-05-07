@@ -8,7 +8,8 @@ It sits above `RunSpec`:
 - `SessionPlan` = one ordered play-once session made of many `RunSpec` entries
 
 This keeps single-run timing explicit and engine-neutral while letting runtime
-own session flow, block randomization, and transition behavior.
+own session flow and transition behavior. Core session compilation owns block
+randomization so the planned order is deterministic for a given random order seed.
 
 ## Compile flow
 
@@ -57,7 +58,7 @@ Top-level session fields:
 
 - session id
 - project id and project name
-- session random seed
+- random order seed
 - refresh rate used during compilation
 - block count
 - transition spec
@@ -69,8 +70,9 @@ Top-level session fields:
 The current v1 policy is:
 
 - all selected conditions appear exactly once per block
-- each block gets its own randomized order when randomization is enabled
-- session compilation stores the random seed for reproducibility
+- each block gets its own randomized order
+- current Studio GUI/runtime behavior does not honor legacy fixed-order settings
+- session compilation stores the random order seed for reproducibility
 - the same project + same seed + same refresh rate produces the same block
   order
 
@@ -94,7 +96,7 @@ Engines still consume one `RunSpec` at a time.
 `SessionExecutionSummary` in `core.execution` is the realized execution result.
 It stores:
 
-- session random seed
+- random order seed
 - realized block order
 - runtime metadata
 - ordered run results
@@ -105,6 +107,6 @@ That split keeps planning and execution artifacts distinct.
 
 The session exports should preserve:
 
-- the stored session random seed
+- the stored random order seed
 - the planned block order for each block
 - the ordered `run_results` matching `SessionPlan.ordered_entries()`

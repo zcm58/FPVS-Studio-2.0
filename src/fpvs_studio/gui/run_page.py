@@ -494,7 +494,7 @@ class RunPage(QWidget):
         self.summary_stack.setCurrentWidget(self.summary_text)
         lines = [
             f"Session ID: {session_plan.session_id}",
-            f"Session Seed: {session_plan.random_seed}",
+            f"Random Order Seed: {session_plan.random_seed}",
             f"Block Count: {session_plan.block_count}",
             f"Run Count: {session_plan.total_runs}",
             f"Refresh (Hz): {session_plan.refresh_hz:.2f}",

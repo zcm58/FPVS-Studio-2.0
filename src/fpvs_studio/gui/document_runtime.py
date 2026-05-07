@@ -52,6 +52,7 @@ class DocumentRuntimeMixin:
     def compile_session(self, *, refresh_hz: float) -> SessionPlan:
         """Compile the current project into a session plan."""
 
+        self.ensure_unused_session_seed_for_launch()
         report = self.validation_report(refresh_hz=refresh_hz)
         if not report.is_valid:
             raise DocumentError(format_validation_report(report))
