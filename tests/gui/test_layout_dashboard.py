@@ -222,11 +222,10 @@ def test_setup_wizard_exists_and_uses_single_column_shell_with_steps(
     assert "Current Step" not in label_text
     assert "Only the controls needed for this setup step are shown." not in label_text
     assert "Complete each setup step once" not in label_text
-    assert "Setup Wizard uses the same project document" in label_text
+    assert "Setup Wizard uses the same project document" not in label_text
+    assert "Alpha: test-mode runtime path only" not in label_text
     assert "Confirm the project name and template." not in label_text
-    assert wizard.shell.footer_strip.objectName() == "setup_wizard_status_strip"
-    assert wizard.shell.footer_strip.isVisible()
-    assert wizard.setup_wizard_runtime_mode_label.text() == "Alpha: test-mode runtime path only"
+    assert wizard.shell.footer_strip.isVisible() is False
     assert wizard.step_title_label.isVisible() is False
     assert wizard.step_status_badge.isVisible() is False
     assert wizard.step_card.property("wizardProjectStepFrame") == "true"
@@ -1792,8 +1791,7 @@ def test_window_title_and_status_bar_surface_alpha_runtime_designation(
     _, window = _open_created_project(controller, qtbot, tmp_path, "Alpha Label Project")
     alpha_label = window.findChild(QLabel, "alpha_runtime_status_label")
 
-    assert alpha_label is not None
-    assert alpha_label.text() == "Alpha: test-mode runtime path only"
+    assert alpha_label is None
     assert "(Alpha)" in window.windowTitle()
 
 

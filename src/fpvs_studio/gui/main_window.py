@@ -11,7 +11,6 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QAction, QCloseEvent
 from PySide6.QtWidgets import (
     QFileDialog,
-    QLabel,
     QMainWindow,
     QMessageBox,
     QProgressDialog,
@@ -103,12 +102,6 @@ class StudioMainWindow(QMainWindow):
         self._apply_chrome_styles()
 
         self.setStatusBar(QStatusBar(self))
-        self.alpha_status_label = QLabel("Alpha: test-mode runtime path only", self)
-        self.alpha_status_label.setObjectName("alpha_runtime_status_label")
-        self.alpha_status_label.setToolTip(
-            "Runtime launch currently supports the alpha test-mode path only (test_mode=True)."
-        )
-        self.statusBar().addPermanentWidget(self.alpha_status_label)
         self._create_actions()
         self.home_page.bind_quick_actions(
             new_project_action=self.new_project_action,

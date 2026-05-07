@@ -889,10 +889,6 @@ def studio_theme_stylesheet() -> str:
         border-top: 1px solid {COLOR_BORDER_SOFT};
         background-color: {COLOR_SURFACE};
     }}
-    QLabel#setup_wizard_status_message,
-    QLabel#setup_wizard_runtime_mode_label {{
-        color: {COLOR_TEXT_SECONDARY};
-    }}
     QLabel[wizardStep="true"] {{
         border: 1px solid {COLOR_BORDER_SOFT};
         border-radius: {CARD_CORNER_RADIUS}px;

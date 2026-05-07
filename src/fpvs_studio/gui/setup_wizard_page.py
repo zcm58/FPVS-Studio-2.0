@@ -275,7 +275,6 @@ class SetupWizardPage(QWidget):
 
         self.shell.add_content_widget(progress_panel)
         self.shell.add_content_widget(step_card, stretch=1)
-        self._configure_status_strip()
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -288,26 +287,6 @@ class SetupWizardPage(QWidget):
         self._document.manifest_changed.connect(self.schedule_refresh)
         self._document.session_plan_changed.connect(self.schedule_refresh)
         self.refresh()
-
-    def _configure_status_strip(self) -> None:
-        self.shell.footer_strip.setObjectName("setup_wizard_status_strip")
-        self.shell.footer_label.setObjectName("setup_wizard_status_message")
-        self.shell.footer_label.setText(
-            "Setup Wizard uses the same project document, validation, and launch checks as Home."
-        )
-        self.setup_wizard_runtime_mode_label = QLabel(
-            "Alpha: test-mode runtime path only",
-            self.shell.footer_strip,
-        )
-        self.setup_wizard_runtime_mode_label.setObjectName("setup_wizard_runtime_mode_label")
-        footer_layout = self.shell.footer_strip.layout()
-        assert isinstance(footer_layout, QHBoxLayout)
-        footer_layout.addStretch(1)
-        footer_layout.addWidget(self.setup_wizard_runtime_mode_label)
-        self.shell.footer_strip.setVisible(True)
-        refresh_widget_style(self.shell.footer_strip)
-        refresh_widget_style(self.shell.footer_label)
-        refresh_widget_style(self.setup_wizard_runtime_mode_label)
 
     def sync_fullscreen_checkbox(self, _checked: bool) -> None:
         return
