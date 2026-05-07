@@ -108,7 +108,7 @@ def test_setup_workspace_and_summary_components_construct(qtbot) -> None:
     source_card = SetupSourceCard("Base Images", "Choose Base Images...")
     source_card.set_source_state(
         ready=True,
-        folder="stimuli/source/condition-1-base/originals",
+        folder="stimuli/original-images/condition-1-base",
         image_count="16 images",
         resolution="512 x 512",
         variants="original",

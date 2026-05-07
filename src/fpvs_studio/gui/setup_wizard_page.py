@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from PySide6.QtCore import QSize, Qt
+from PySide6.QtCore import QSize, Qt, QTimer
 from PySide6.QtWidgets import (
     QFormLayout,
     QHBoxLayout,
@@ -93,6 +93,13 @@ class SetupWizardPage(QWidget):
         self._on_return_home = on_return_home
         self._active_step_index = 0
         self._advanced_visible = False
+        self._readiness_cache: tuple[tuple[int, float, bool], LauncherReadinessReport] | None = (
+            None
+        )
+        self._refresh_timer = QTimer(self)
+        self._refresh_timer.setSingleShot(True)
+        self._refresh_timer.setInterval(0)
+        self._refresh_timer.timeout.connect(self.refresh)
 
         self.conditions_page = ConditionsPage(document, embedded=True, parent=self)
         self.condition_setup_step = ConditionSetupStep(document, self)
@@ -122,6 +129,9 @@ class SetupWizardPage(QWidget):
             load_condition_template_profiles=load_condition_template_profiles,
             manage_condition_templates=manage_condition_templates,
             parent=self,
+        )
+        self.project_overview_editor.project_description_edit.textChanged.connect(
+            self.schedule_refresh
         )
         self.runtime_settings_editor = RuntimeSettingsEditor(
             document,
@@ -268,9 +278,9 @@ class SetupWizardPage(QWidget):
         layout.addWidget(self.shell, 1)
         layout.addWidget(self.shell.footer_strip)
 
-        self._document.project_changed.connect(self.refresh)
-        self._document.manifest_changed.connect(self.refresh)
-        self._document.session_plan_changed.connect(self.refresh)
+        self._document.project_changed.connect(self.schedule_refresh)
+        self._document.manifest_changed.connect(self.schedule_refresh)
+        self._document.session_plan_changed.connect(self.schedule_refresh)
         self.refresh()
 
     def _configure_status_strip(self) -> None:
@@ -301,10 +311,21 @@ class SetupWizardPage(QWidget):
         return self._readiness_report().badge_state == "ready"
 
     def open_wizard(self, *, step_key: str | None = None) -> None:
+        self.flush_pending_edits()
         if step_key is not None:
             self._active_step_index = self._step_index_for_key(step_key)
         self._advanced_visible = False
         self.refresh()
+
+    def flush_pending_edits(self) -> None:
+        self.project_overview_editor.flush_pending_edits()
+        self.condition_setup_step.flush_pending_edits()
+        self.conditions_page.flush_pending_edits()
+
+    def schedule_refresh(self) -> None:
+        self._readiness_cache = None
+        if not self._refresh_timer.isActive():
+            self._refresh_timer.start()
 
     def _build_step_pages(self) -> None:
         self.step_stack.addWidget(self.project_overview_editor)
@@ -390,6 +411,7 @@ class SetupWizardPage(QWidget):
         step_key = _WIZARD_STEPS[self._active_step_index][0]
         if step_key != "conditions" or self.content_stack.currentWidget() is not self.guided_panel:
             return
+        self.refresh()
         if len(self._document.ordered_conditions()) == 1:
             QMessageBox.information(
                 self,
@@ -398,12 +420,14 @@ class SetupWizardPage(QWidget):
             )
 
     def _go_back(self) -> None:
+        self.flush_pending_edits()
         if self._active_step_index > 0:
             self._active_step_index -= 1
             self._advanced_visible = False
             self.refresh()
 
     def _go_next(self) -> None:
+        self.flush_pending_edits()
         if not self._current_step_valid():
             return
         if self._active_step_index == len(_WIZARD_STEPS) - 1:
@@ -414,6 +438,7 @@ class SetupWizardPage(QWidget):
         self.refresh()
 
     def _return_home(self) -> None:
+        self.flush_pending_edits()
         if not self.is_launch_ready():
             answer = QMessageBox.question(
                 self,
@@ -430,36 +455,38 @@ class SetupWizardPage(QWidget):
             self._on_return_home()
 
     def _toggle_advanced(self) -> None:
+        self.flush_pending_edits()
         if not self._advanced_available_for_current_step():
             return
         self._advanced_visible = not self._advanced_visible
         self.refresh()
 
     def _show_conditions_advanced_timing(self) -> None:
+        self.flush_pending_edits()
         self._active_step_index = self._step_index_for_key("conditions")
         self._advanced_visible = True
         self.refresh()
 
     def refresh(self) -> None:
+        self._readiness_cache = None
         self._active_step_index = max(
             0,
             min(self._active_step_index, len(_WIZARD_STEPS) - 1),
         )
-        self.runtime_settings_editor.refresh()
-        self.run_page.refresh()
-        self.session_structure_page.refresh()
-        self.fixation_cross_settings_page.refresh()
-        self.condition_setup_step.refresh()
-        self.conditions_page.refresh()
-        self.assets_page.refresh()
-        self.assets_readiness_editor.refresh()
-
+        step_key, title = _WIZARD_STEPS[self._active_step_index]
         self.step_stack.setCurrentIndex(self._active_step_index)
+        self.advanced_stack.setCurrentIndex(self._advanced_index_for_step(step_key))
+        advanced_available = self._advanced_available_for_current_step()
+        advanced_visible = self._advanced_visible and advanced_available
+        self.content_stack.setCurrentWidget(
+            self.advanced_stack if advanced_visible else self.guided_panel
+        )
+        self._refresh_current_editor_page(advanced_visible=advanced_visible)
+
         self.setup_wizard_step_list.setCurrentRow(self._active_step_index)
         _set_list_items(self.setup_wizard_step_list, self._step_list_lines())
         self.setup_wizard_step_list.setCurrentRow(self._active_step_index)
 
-        step_key, title = _WIZARD_STEPS[self._active_step_index]
         self._refresh_progress_header()
         self.step_title_label.setText(title)
         self._refresh_session_guided_summary()
@@ -488,23 +515,36 @@ class SetupWizardPage(QWidget):
         self.setup_wizard_next_button.setText(
             "Return Home" if self._active_step_index == len(_WIZARD_STEPS) - 1 else "Next"
         )
-        advanced_available = self._advanced_available_for_current_step()
         self.setup_wizard_advanced_button.setEnabled(advanced_available)
         self.setup_wizard_advanced_button.setText(
             "Back to Guided Step" if self._advanced_visible else "Advanced"
         )
-        self.advanced_stack.setCurrentIndex(self._advanced_index_for_step(step_key))
-        self.content_stack.setCurrentWidget(
-            self.advanced_stack
-            if self._advanced_visible and advanced_available
-            else self.guided_panel
-        )
+
+    def _refresh_current_editor_page(self, *, advanced_visible: bool) -> None:
+        if advanced_visible:
+            current_advanced_widget = self.advanced_stack.currentWidget()
+            refresh = getattr(current_advanced_widget, "refresh", None)
+            if callable(refresh):
+                refresh()
+            return
+
+        current_guided_widget = self.step_stack.currentWidget()
+        refresh = getattr(current_guided_widget, "refresh", None)
+        if callable(refresh):
+            refresh()
 
     def _readiness_report(self) -> LauncherReadinessReport:
-        return _launcher_readiness_report(
-            self._document,
-            refresh_hz=self.runtime_settings_editor.current_refresh_hz(),
+        refresh_hz = self.runtime_settings_editor.current_refresh_hz()
+        cache_key = (
+            id(self._document.project),
+            refresh_hz,
+            self._document.last_session_plan is not None,
         )
+        if self._readiness_cache is not None and self._readiness_cache[0] == cache_key:
+            return self._readiness_cache[1]
+        report = _launcher_readiness_report(self._document, refresh_hz=refresh_hz)
+        self._readiness_cache = (cache_key, report)
+        return report
 
     def _step_list_lines(self) -> tuple[str, ...]:
         return tuple(
@@ -578,7 +618,7 @@ class SetupWizardPage(QWidget):
         project = self._document.project
         return bool(
             project.meta.name.strip()
-            and project.meta.description.strip()
+            and self.project_overview_editor.project_description_edit.toPlainText().strip()
             and self._document.project_root
         )
 
@@ -586,7 +626,7 @@ class SetupWizardPage(QWidget):
         project = self._document.project
         if not project.meta.name.strip():
             return "Enter a project name"
-        if not project.meta.description.strip():
+        if not self.project_overview_editor.project_description_edit.toPlainText().strip():
             return "Enter a project description"
         if not self._document.project_root:
             return "Choose a project folder"

@@ -13,9 +13,11 @@ STIMULI_DIRNAME = "stimuli"
 RUNS_DIRNAME = "runs"
 CACHE_DIRNAME = "cache"
 LOGS_DIRNAME = "logs"
-SOURCE_DIRNAME = "source"
-DERIVED_DIRNAME = "derived"
-ORIGINALS_DIRNAME = "originals"
+ORIGINAL_IMAGES_DIRNAME = "original-images"
+GENERATED_VARIANTS_DIRNAME = "generated-variants"
+GRAYSCALE_VARIANTS_DIRNAME = "grayscale-variants"
+ROTATED_180_VARIANTS_DIRNAME = "rotated-180-variants"
+SCRAMBLED_VARIANTS_DIRNAME = "scrambled-variants"
 MANIFEST_FILENAME = "manifest.json"
 TEMPLATES_DIRNAME = "templates"
 CONDITION_TEMPLATE_LIBRARY_FILENAME = "condition_templates.json"
@@ -68,28 +70,38 @@ def stimuli_dir(project_root: Path) -> Path:
     return project_root / STIMULI_DIRNAME
 
 
-def stimulus_source_root(project_root: Path) -> Path:
-    """Return the root directory for imported source images."""
+def stimulus_original_images_root(project_root: Path) -> Path:
+    """Return the root directory for imported original images."""
 
-    return stimuli_dir(project_root) / SOURCE_DIRNAME
+    return stimuli_dir(project_root) / ORIGINAL_IMAGES_DIRNAME
 
 
-def stimulus_derived_root(project_root: Path) -> Path:
-    """Return the root directory for derived stimuli."""
+def stimulus_generated_variants_root(project_root: Path) -> Path:
+    """Return the root directory for generated stimulus variants."""
 
-    return stimuli_dir(project_root) / DERIVED_DIRNAME
+    return stimuli_dir(project_root) / GENERATED_VARIANTS_DIRNAME
 
 
 def stimulus_originals_dir(project_root: Path, set_id: str) -> Path:
-    """Return the originals directory for a stimulus set."""
+    """Return the original-images directory for a stimulus set."""
 
-    return stimulus_source_root(project_root) / set_id / ORIGINALS_DIRNAME
+    return stimulus_original_images_root(project_root) / set_id
 
 
 def stimulus_derived_dir(project_root: Path, set_id: str) -> Path:
-    """Return the derived-assets directory for a stimulus set."""
+    """Return the generated-variants directory for a stimulus set."""
 
-    return stimulus_derived_root(project_root) / set_id
+    return stimulus_generated_variants_root(project_root) / set_id
+
+
+def stimulus_variant_dirname(variant_value: str) -> str:
+    """Return the user-facing folder name for a generated variant."""
+
+    return {
+        "grayscale": GRAYSCALE_VARIANTS_DIRNAME,
+        "rot180": ROTATED_180_VARIANTS_DIRNAME,
+        "phase_scrambled": SCRAMBLED_VARIANTS_DIRNAME,
+    }.get(variant_value, variant_value)
 
 
 def stimulus_manifest_path(project_root: Path) -> Path:

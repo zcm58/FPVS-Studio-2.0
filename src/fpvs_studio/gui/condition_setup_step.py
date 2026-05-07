@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
 
 from fpvs_studio.core.enums import DutyCycleMode
 from fpvs_studio.core.models import Condition, StimulusSet
+from fpvs_studio.core.paths import stimuli_dir
 from fpvs_studio.core.template_library import get_template
 from fpvs_studio.gui.components import (
     PAGE_SECTION_GAP,
@@ -37,6 +38,7 @@ from fpvs_studio.gui.components import (
 )
 from fpvs_studio.gui.document import ProjectDocument
 from fpvs_studio.gui.window_helpers import (
+    DebouncedTextCommitter,
     _resolution_text,
     _show_error_dialog,
     _sync_text_editor_contents,
@@ -67,13 +69,14 @@ class ConditionSetupStep(QWidget):
     def __init__(self, document: ProjectDocument, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._document = document
+        self._pending_instruction_condition_id: str | None = None
 
         self.condition_list = QListWidget(self)
         self.condition_list.setObjectName("setup_wizard_condition_list")
         self.condition_list.setProperty("setupConditionsList", "true")
         self.condition_list.setSelectionMode(QListWidget.SelectionMode.SingleSelection)
         self.condition_list.setAlternatingRowColors(True)
-        self.condition_list.currentItemChanged.connect(self._refresh_editor)
+        self.condition_list.currentItemChanged.connect(self._handle_current_condition_changed)
 
         self.add_condition_button = QPushButton("+ Add Condition", self)
         self.add_condition_button.setObjectName("setup_wizard_add_condition_button")
@@ -131,7 +134,11 @@ class ConditionSetupStep(QWidget):
         self.instructions_edit.setObjectName("setup_wizard_condition_instructions_edit")
         self.instructions_edit.setMinimumHeight(90)
         self.instructions_edit.setMaximumHeight(130)
-        self.instructions_edit.textChanged.connect(self._apply_instructions)
+        self._instructions_committer = DebouncedTextCommitter(
+            self.instructions_edit,
+            self._apply_instructions,
+        )
+        self.instructions_edit.textChanged.connect(self._schedule_instruction_commit)
 
         form = QFormLayout()
         form.setVerticalSpacing(8)
@@ -252,6 +259,8 @@ class ConditionSetupStep(QWidget):
         return value if isinstance(value, str) else None
 
     def refresh(self) -> None:
+        if self._instructions_committer.pending:
+            self._instructions_committer.flush()
         selected_condition_id = self.selected_condition_id()
         with QSignalBlocker(self.condition_list):
             self.condition_list.clear()
@@ -263,6 +272,13 @@ class ConditionSetupStep(QWidget):
                     self.condition_list.setCurrentItem(item)
             if selected_condition_id is None and self.condition_list.count() > 0:
                 self.condition_list.setCurrentRow(0)
+        self._refresh_editor()
+
+    def flush_pending_edits(self) -> None:
+        self._instructions_committer.flush()
+
+    def _handle_current_condition_changed(self, *_args: object) -> None:
+        self.flush_pending_edits()
         self._refresh_editor()
 
     def _condition_list_text(self, condition: Condition) -> str:
@@ -329,7 +345,8 @@ class ConditionSetupStep(QWidget):
             self.condition_name_edit.setText(condition.name)
         with QSignalBlocker(self.trigger_code_spin):
             self.trigger_code_spin.setValue(condition.trigger_code)
-        _sync_text_editor_contents(self.instructions_edit, condition.instructions)
+        if not self._instructions_committer.pending:
+            _sync_text_editor_contents(self.instructions_edit, condition.instructions)
         self._set_checklist_statuses(named, trigger_ready, base_ready, oddball_ready)
         self._set_source_summary(base_set, role="base")
         self._set_source_summary(oddball_set, role="oddball")
@@ -422,6 +439,7 @@ class ConditionSetupStep(QWidget):
         )
 
     def _add_condition(self) -> None:
+        self.flush_pending_edits()
         try:
             condition_id = self._document.create_condition()
         except Exception as error:
@@ -430,6 +448,7 @@ class ConditionSetupStep(QWidget):
         self._select_condition(condition_id)
 
     def _duplicate_condition(self) -> None:
+        self.flush_pending_edits()
         condition_id = self.selected_condition_id()
         if condition_id is None:
             return
@@ -441,6 +460,7 @@ class ConditionSetupStep(QWidget):
         self._select_condition(duplicated_id)
 
     def _remove_condition(self) -> None:
+        self.flush_pending_edits()
         condition_id = self.selected_condition_id()
         if condition_id is None:
             return
@@ -474,8 +494,13 @@ class ConditionSetupStep(QWidget):
             _show_error_dialog(self, "Condition Error", error)
             self.refresh()
 
+    def _schedule_instruction_commit(self) -> None:
+        self._pending_instruction_condition_id = self.selected_condition_id()
+        self._instructions_committer.schedule()
+
     def _apply_instructions(self) -> None:
-        condition_id = self.selected_condition_id()
+        condition_id = self._pending_instruction_condition_id or self.selected_condition_id()
+        self._pending_instruction_condition_id = None
         if condition_id is None:
             return
         try:
@@ -494,7 +519,7 @@ class ConditionSetupStep(QWidget):
         directory = QFileDialog.getExistingDirectory(
             self,
             f"Choose {role.title()} Stimulus Folder",
-            str(Path.home()),
+            str(self._stimulus_dialog_start_dir()),
         )
         if not directory:
             return
@@ -506,6 +531,10 @@ class ConditionSetupStep(QWidget):
             )
         except Exception as error:
             _show_error_dialog(self, "Stimulus Import Error", error)
+
+    def _stimulus_dialog_start_dir(self) -> Path:
+        project_stimuli_dir = stimuli_dir(self._document.project_root)
+        return project_stimuli_dir if project_stimuli_dir.exists() else self._document.project_root
 
     def _select_condition(self, condition_id: str) -> None:
         self.refresh()

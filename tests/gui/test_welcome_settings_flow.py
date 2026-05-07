@@ -37,20 +37,29 @@ from fpvs_studio.gui.condition_template_manager_dialog import (
 )
 from fpvs_studio.gui.controller import StudioController
 from fpvs_studio.gui.create_project_dialog import CreateProjectDialog
+from fpvs_studio.gui.manage_projects_dialog import ManageProjectsDialog
 from fpvs_studio.gui.settings_dialog import AppSettingsDialog
 from fpvs_studio.gui.welcome_window import WelcomeWindow
 
 
-def test_welcome_window_smoke(qtbot, controller: StudioController) -> None:
+def test_welcome_window_smoke(qtbot, controller: StudioController, monkeypatch) -> None:
     welcome = controller.welcome_window
     assert welcome is not None
     create_button = welcome.findChild(QPushButton, "create_project_button")
     open_button = welcome.findChild(QPushButton, "open_project_button")
+    manage_button = welcome.findChild(QPushButton, "manage_projects_button")
+    monkeypatch.setattr(
+        ManageProjectsDialog,
+        "exec",
+        lambda self: int(ManageProjectsDialog.DialogCode.Rejected),
+    )
 
     with qtbot.waitSignal(welcome.create_requested, timeout=1000):
         qtbot.mouseClick(create_button, Qt.MouseButton.LeftButton)
     with qtbot.waitSignal(welcome.open_requested, timeout=1000):
         qtbot.mouseClick(open_button, Qt.MouseButton.LeftButton)
+    with qtbot.waitSignal(welcome.manage_projects_requested, timeout=1000):
+        qtbot.mouseClick(manage_button, Qt.MouseButton.LeftButton)
 
 
 def test_welcome_window_copy_and_primary_hierarchy(controller: StudioController) -> None:
@@ -61,18 +70,22 @@ def test_welcome_window_copy_and_primary_hierarchy(controller: StudioController)
     body = welcome.findChild(QLabel, "welcome_body_label")
     create_button = welcome.findChild(QPushButton, "create_project_button")
     open_button = welcome.findChild(QPushButton, "open_project_button")
+    manage_button = welcome.findChild(QPushButton, "manage_projects_button")
 
     assert headline is not None
     assert body is not None
     assert create_button is not None
     assert open_button is not None
+    assert manage_button is not None
 
     assert headline.text() == "Welcome to FPVS Studio"
     assert body.text() == "Create a new FPVS project or open an existing one."
     assert create_button.text() == "New Project"
     assert open_button.text() == "Open Project"
+    assert manage_button.text() == "Manage Projects"
     assert create_button.property("welcomeRole") == "primary"
     assert open_button.property("welcomeRole") != "primary"
+    assert manage_button.property("welcomeRole") != "primary"
 
 
 def test_welcome_window_action_buttons_are_horizontally_centered(
@@ -84,10 +97,12 @@ def test_welcome_window_action_buttons_are_horizontally_centered(
     content_frame = welcome.findChild(QWidget, "welcome_content_frame")
     create_button = welcome.findChild(QPushButton, "create_project_button")
     open_button = welcome.findChild(QPushButton, "open_project_button")
+    manage_button = welcome.findChild(QPushButton, "manage_projects_button")
 
     assert content_frame is not None
     assert create_button is not None
     assert open_button is not None
+    assert manage_button is not None
 
     welcome.resize(1200, 760)
     QApplication.processEvents()
@@ -96,9 +111,11 @@ def test_welcome_window_action_buttons_are_horizontally_centered(
     create_right = create_button.mapTo(content_frame, create_button.rect().bottomRight()).x()
     open_left = open_button.mapTo(content_frame, open_button.rect().topLeft()).x()
     open_right = open_button.mapTo(content_frame, open_button.rect().bottomRight()).x()
+    manage_left = manage_button.mapTo(content_frame, manage_button.rect().topLeft()).x()
+    manage_right = manage_button.mapTo(content_frame, manage_button.rect().bottomRight()).x()
 
-    group_left = min(create_left, open_left)
-    group_right = max(create_right, open_right)
+    group_left = min(create_left, open_left, manage_left)
+    group_right = max(create_right, open_right, manage_right)
     button_group_midpoint = (group_left + group_right) / 2.0
     content_midpoint = content_frame.width() / 2.0
 
@@ -194,6 +211,200 @@ def test_opening_project_records_recent_project_root(
     assert controller.main_window is not None
     qtbot.addWidget(controller.main_window)
     assert controller.load_recent_project_roots() == [scaffold.project_root]
+
+
+def test_manage_projects_dialog_lists_projects_from_saved_root(
+    qtbot,
+    controller: StudioController,
+) -> None:
+    root_dir = controller.load_fpvs_root_dir()
+    assert root_dir is not None
+    scaffold = create_project(root_dir, "Managed Root Project")
+
+    dialog = ManageProjectsDialog(entries=controller.load_manageable_project_entries())
+    qtbot.addWidget(dialog)
+
+    project_list = dialog.findChild(QListWidget, "manage_projects_list")
+    open_button = dialog.findChild(QPushButton, "manage_projects_open_button")
+    delete_button = dialog.findChild(QPushButton, "manage_projects_delete_button")
+
+    assert project_list is not None
+    assert open_button is not None
+    assert delete_button is not None
+    assert project_list.count() == 1
+    assert project_list.item(0).text() == "Managed Root Project"
+    assert project_list.item(0).toolTip() == str(scaffold.project_root)
+    assert open_button.isEnabled()
+    assert delete_button.isEnabled()
+
+
+def test_manage_projects_discovers_nested_project_folders_from_disk(
+    controller: StudioController,
+) -> None:
+    root_dir = controller.load_fpvs_root_dir()
+    assert root_dir is not None
+    nested_parent = root_dir / "nested" / "projects"
+    scaffold = create_project(nested_parent, "Nested Managed Project")
+
+    entries = controller.load_manageable_project_entries()
+
+    assert [(entry.name, entry.root) for entry in entries] == [
+        ("Nested Managed Project", scaffold.project_root)
+    ]
+
+
+def test_manage_projects_reloads_saved_root_before_listing_projects(
+    controller: StudioController,
+) -> None:
+    root_dir = controller.load_fpvs_root_dir()
+    assert root_dir is not None
+    scaffold = create_project(root_dir, "Launch Refresh Project")
+    controller._fpvs_root_dir = None
+
+    entries = controller.load_manageable_project_entries()
+
+    assert [(entry.name, entry.root) for entry in entries] == [
+        ("Launch Refresh Project", scaffold.project_root)
+    ]
+
+
+def test_file_manage_projects_action_opens_themed_dialog(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Manage Menu Project")
+    assert window.manage_projects_action.text() == "Manage Projects..."
+    assert window.manage_projects_action.objectName() == "manage_projects_action"
+
+    captured: list[ManageProjectsDialog] = []
+
+    def _capture_exec(dialog: ManageProjectsDialog) -> int:
+        captured.append(dialog)
+        qtbot.addWidget(dialog)
+        return int(dialog.DialogCode.Rejected)
+
+    monkeypatch.setattr(ManageProjectsDialog, "exec", _capture_exec)
+
+    window.manage_projects_action.trigger()
+
+    assert captured
+    project_list = captured[0].findChild(QListWidget, "manage_projects_list")
+    assert project_list is not None
+
+
+def test_delete_project_cancel_keeps_project_folder(
+    controller: StudioController,
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    scaffold = create_project(tmp_path, "Cancel Delete Project")
+    controller.record_recent_project_root(scaffold.project_root)
+    monkeypatch.setattr(
+        "fpvs_studio.gui.controller.QMessageBox.question",
+        lambda *_args, **_kwargs: QMessageBox.StandardButton.No,
+    )
+
+    deleted = controller.delete_project(scaffold.project_root)
+
+    assert deleted is False
+    assert scaffold.project_root.is_dir()
+    assert controller.load_recent_project_roots() == [scaffold.project_root]
+
+
+def test_delete_project_yes_moves_folder_to_recycle_and_removes_recent_entry(
+    controller: StudioController,
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    scaffold = create_project(tmp_path, "Delete This Project")
+    controller.record_recent_project_root(scaffold.project_root)
+    recycled_paths: list[Path] = []
+
+    def _fake_recycle(project_root: Path) -> None:
+        recycled_paths.append(project_root)
+        shutil.rmtree(project_root)
+
+    monkeypatch.setattr(
+        "fpvs_studio.gui.controller._move_project_tree_to_recycle_bin",
+        _fake_recycle,
+    )
+    monkeypatch.setattr(
+        "fpvs_studio.gui.controller.QMessageBox.question",
+        lambda *_args, **_kwargs: QMessageBox.StandardButton.Yes,
+    )
+
+    deleted = controller.delete_project(scaffold.project_root)
+
+    assert deleted is True
+    assert recycled_paths == [scaffold.project_root]
+    assert not scaffold.project_root.exists()
+    assert controller.load_recent_project_roots() == []
+
+
+def test_delete_project_keeps_recent_entry_when_recycle_does_not_remove_folder(
+    controller: StudioController,
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    scaffold = create_project(tmp_path, "Recycle Failure Project")
+    controller.record_recent_project_root(scaffold.project_root)
+    monkeypatch.setattr(
+        "fpvs_studio.gui.controller._move_project_tree_to_recycle_bin",
+        lambda _project_root: None,
+    )
+    monkeypatch.setattr(
+        "fpvs_studio.gui.controller.QMessageBox.question",
+        lambda *_args, **_kwargs: QMessageBox.StandardButton.Yes,
+    )
+
+    deleted = controller.delete_project(scaffold.project_root)
+
+    assert deleted is False
+    assert scaffold.project_root.exists()
+    assert controller.load_recent_project_roots() == [scaffold.project_root]
+
+
+def test_manage_projects_refreshes_dialog_after_failed_recycle(
+    qtbot,
+    controller: StudioController,
+    monkeypatch,
+) -> None:
+    root_dir = controller.load_fpvs_root_dir()
+    assert root_dir is not None
+    scaffold = create_project(root_dir, "Failed Recycle Visible Project")
+    dialog = ManageProjectsDialog(entries=controller.load_manageable_project_entries())
+    qtbot.addWidget(dialog)
+    monkeypatch.setattr(
+        "fpvs_studio.gui.controller._move_project_tree_to_recycle_bin",
+        lambda _project_root: None,
+    )
+    monkeypatch.setattr(
+        "fpvs_studio.gui.controller.QMessageBox.question",
+        lambda *_args, **_kwargs: QMessageBox.StandardButton.Yes,
+    )
+
+    controller._delete_managed_project(dialog, str(scaffold.project_root))
+
+    project_list = dialog.findChild(QListWidget, "manage_projects_list")
+    assert project_list is not None
+    assert project_list.count() == 1
+    assert project_list.item(0).text() == "Failed Recycle Visible Project"
+    assert project_list.item(0).toolTip() == str(scaffold.project_root)
+
+
+def test_delete_project_blocks_current_open_project(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Current Delete Project")
+
+    deleted = controller.delete_project(window.document.project_root)
+
+    assert deleted is False
+    assert window.document.project_root.is_dir()
 
 
 def test_application_bootstrap_sets_non_null_welcome_icon(qapp) -> None:

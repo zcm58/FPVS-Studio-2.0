@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import traceback
+from collections.abc import Callable
 from dataclasses import dataclass
 
-from PySide6.QtCore import QSignalBlocker, Qt
+from PySide6.QtCore import QEvent, QObject, QSignalBlocker, Qt, QTimer
 from PySide6.QtGui import QTextCursor
 from PySide6.QtWidgets import (
     QFormLayout,
@@ -283,3 +284,48 @@ class LeftToRightPlainTextEdit(QPlainTextEdit):
         text_option = self.document().defaultTextOption()
         text_option.setTextDirection(Qt.LayoutDirection.LeftToRight)
         self.document().setDefaultTextOption(text_option)
+
+
+class DebouncedTextCommitter(QObject):
+    """Coalesce text-editor commits while preserving focus-loss flushing."""
+
+    def __init__(
+        self,
+        editor: QTextEdit | QPlainTextEdit,
+        commit: Callable[[], None],
+        *,
+        delay_ms: int = 250,
+    ) -> None:
+        super().__init__(editor)
+        self._editor = editor
+        self._commit = commit
+        self._pending = False
+        self._timer = QTimer(self)
+        self._timer.setSingleShot(True)
+        self._timer.setInterval(delay_ms)
+        self._timer.timeout.connect(self.flush)
+        self._editor.installEventFilter(self)
+
+    @property
+    def pending(self) -> bool:
+        return self._pending
+
+    def schedule(self) -> None:
+        self._pending = True
+        self._timer.start()
+
+    def flush(self) -> None:
+        if not self._pending:
+            return
+        self._timer.stop()
+        self._pending = False
+        self._commit()
+
+    def cancel(self) -> None:
+        self._timer.stop()
+        self._pending = False
+
+    def eventFilter(self, watched: QObject, event: QEvent) -> bool:
+        if watched is self._editor and event.type() == QEvent.Type.FocusOut:
+            self.flush()
+        return super().eventFilter(watched, event)

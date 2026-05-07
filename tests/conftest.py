@@ -107,14 +107,14 @@ def _build_project(project_id: str, project_name: str, *, condition_count: int) 
             StimulusSet(
                 set_id="base-set",
                 name="Base Set",
-                source_dir="stimuli/source/base-set/originals",
+                source_dir="stimuli/original-images/base-set",
                 resolution=ImageResolution(width_px=256, height_px=256),
                 image_count=3,
             ),
             StimulusSet(
                 set_id="oddball-set",
                 name="Oddball Set",
-                source_dir="stimuli/source/oddball-set/originals",
+                source_dir="stimuli/original-images/oddball-set",
                 resolution=ImageResolution(width_px=256, height_px=256),
                 image_count=3,
             ),

@@ -120,11 +120,11 @@ def test_compiler_assigns_image_paths_deterministically(
         event.image_path for event in run_spec_b.stimulus_sequence
     ]
     assert first_five_paths == [
-        "stimuli/source/base-set/originals/base-set-01.png",
-        "stimuli/source/base-set/originals/base-set-02.png",
-        "stimuli/source/base-set/originals/base-set-03.png",
-        "stimuli/source/base-set/originals/base-set-01.png",
-        "stimuli/source/oddball-set/originals/oddball-set-01.png",
+        "stimuli/original-images/base-set/base-set-01.png",
+        "stimuli/original-images/base-set/base-set-02.png",
+        "stimuli/original-images/base-set/base-set-03.png",
+        "stimuli/original-images/base-set/base-set-01.png",
+        "stimuli/original-images/oddball-set/oddball-set-01.png",
     ]
 
 
@@ -154,7 +154,7 @@ def test_compiler_resolves_manifest_backed_variant_paths(
     )
     first_path = run_spec.stimulus_sequence[0].image_path
 
-    assert first_path.startswith("stimuli/derived/base-set/grayscale/")
+    assert first_path.startswith("stimuli/generated-variants/base-set/grayscale-variants/")
     assert (sample_project_root / Path(first_path)).is_file()
 
 

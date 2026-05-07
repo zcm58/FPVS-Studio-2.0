@@ -24,8 +24,8 @@ def test_project_scaffolding_creates_expected_directories_and_files(tmp_path) ->
 
     assert project_root.name == "example-project"
     assert (project_root / "stimuli").is_dir()
-    assert (project_root / "stimuli" / "source").is_dir()
-    assert (project_root / "stimuli" / "derived").is_dir()
+    assert (project_root / "stimuli" / "original-images").is_dir()
+    assert (project_root / "stimuli" / "generated-variants").is_dir()
     assert (project_root / "runs").is_dir()
     assert (project_root / "cache").is_dir()
     assert (project_root / "logs").is_dir()

@@ -14,7 +14,8 @@ package map.
 - Users choose `continuous` or `blank_50` duty cycle; do not expose editable
   base/oddball frequencies in v1 UI.
 - Project-facing schemas must remain engine-neutral.
-- Derived stimuli belong under the active project folder in `stimuli/derived/...`.
+- Generated stimulus variants belong under the active project folder in
+  `stimuli/generated-variants/...`.
 - Persist project-facing paths as project-relative POSIX-style strings in JSON.
 - Supported source image formats are `.jpg`, `.jpeg`, and `.png`.
 - All images inside a stimulus set must share resolution; base and oddball sets

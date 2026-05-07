@@ -16,6 +16,7 @@ The welcome window provides:
 
 - `Create New Project`
 - `Open Existing Project`
+- `Manage Projects`
 - a recent-projects list when valid recent projects are available
 
 Creating a project asks for:
@@ -25,6 +26,12 @@ Creating a project asks for:
 
 Opening a project currently selects an existing project directory and resolves
 its `project.json` through the backend document layer.
+
+Managing projects reloads the configured FPVS Studio Root Folder and lists current FPVS
+project folders discovered on disk, plus valid recent projects. The dialog can open a
+project or move a project folder to the Windows Recycle Bin after an explicit Yes/No
+confirmation. The currently open project is shown but cannot be deleted from its own
+open window.
 
 ## Main Window
 
@@ -73,6 +80,11 @@ Detailed Conditions, Stimuli Manager, and Runtime widgets remain available inter
 for wizard advanced access and existing document bindings. These pages are not visible
 top-level tabs during normal use.
 
+The `File` menu exposes manage-projects and settings actions. Moving a project to the
+Recycle Bin remains a controller-owned filesystem operation guarded by `project.json`
+validation, confirmation, a post-action path check, and a disk refresh of the manage
+list after each attempt.
+
 ## GUI Implementation Map
 
 - Shared GUI components and reusable theme styles live in
@@ -96,6 +108,9 @@ top-level tabs during normal use.
   `src/fpvs_studio/gui/condition_template_manager_dialog.py`.
 - The condition-template profile editor lives in
   `src/fpvs_studio/gui/condition_template_profile_editor_dialog.py`.
+- Project management lives in `src/fpvs_studio/gui/manage_projects_dialog.py`; it uses
+  shared component-layer cards, path labels, status badges, and button role helpers while
+  leaving project discovery and deletion side effects in the controller.
 
 ## GUI Theme and Components
 
@@ -121,6 +136,7 @@ Phase 5 currently supports:
 - creating a new project scaffold
 - opening and editing an existing project
 - reopening recent projects from the welcome screen
+- managing known projects and moving project folders to the Recycle Bin after confirmation
 - saving and reopening project state
 - launching ready projects from Home without exposing setup tabs
 - completing or revisiting project setup through the Setup Wizard

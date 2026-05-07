@@ -29,6 +29,7 @@ from fpvs_studio.core.enums import (
     StimulusVariant,
 )
 from fpvs_studio.core.models import Condition
+from fpvs_studio.core.paths import stimuli_dir
 from fpvs_studio.core.template_library import get_template
 from fpvs_studio.gui.components import (
     PAGE_SECTION_GAP,
@@ -43,6 +44,7 @@ from fpvs_studio.gui.components import (
 from fpvs_studio.gui.document import ProjectDocument
 from fpvs_studio.gui.window_helpers import (
     _CYCLE_HELP_TEXT,
+    DebouncedTextCommitter,
     _duty_cycle_label,
     _resolution_text,
     _show_error_dialog,
@@ -64,6 +66,7 @@ class ConditionsPage(QWidget):
         super().__init__(parent)
         self._document = document
         self.embedded = embedded
+        self._pending_instruction_condition_id: str | None = None
 
         self.condition_list = QListWidget(self)
         self.condition_list.setObjectName("condition_list")
@@ -71,7 +74,7 @@ class ConditionsPage(QWidget):
         self.condition_list.setAlternatingRowColors(True)
         self.condition_list.setMinimumWidth(260)
         self.condition_list.setMinimumHeight(0)
-        self.condition_list.currentItemChanged.connect(self._refresh_editor)
+        self.condition_list.currentItemChanged.connect(self._handle_current_condition_changed)
 
         self.add_condition_button = QPushButton("Add", self)
         self.add_condition_button.setObjectName("add_condition_button")
@@ -113,7 +116,11 @@ class ConditionsPage(QWidget):
 
         self.instructions_edit = QTextEdit(self)
         self.instructions_edit.setObjectName("condition_instructions_edit")
-        self.instructions_edit.textChanged.connect(self._apply_instructions)
+        self._instructions_committer = DebouncedTextCommitter(
+            self.instructions_edit,
+            self._apply_instructions,
+        )
+        self.instructions_edit.textChanged.connect(self._schedule_instruction_commit)
 
         self.trigger_code_spin = QSpinBox(self)
         self.trigger_code_spin.setObjectName("condition_trigger_code_spin")
@@ -358,6 +365,8 @@ class ConditionsPage(QWidget):
         return value if isinstance(value, str) else None
 
     def refresh(self) -> None:
+        if self._instructions_committer.pending:
+            self._instructions_committer.flush()
         selected_condition_id = self.selected_condition_id()
         with QSignalBlocker(self.condition_list):
             self.condition_list.clear()
@@ -369,6 +378,13 @@ class ConditionsPage(QWidget):
                     self.condition_list.setCurrentItem(item)
             if selected_condition_id is None and self.condition_list.count() > 0:
                 self.condition_list.setCurrentRow(0)
+        self._refresh_editor()
+
+    def flush_pending_edits(self) -> None:
+        self._instructions_committer.flush()
+
+    def _handle_current_condition_changed(self, *_args: object) -> None:
+        self.flush_pending_edits()
         self._refresh_editor()
 
     def _current_condition(self) -> Condition | None:
@@ -424,7 +440,8 @@ class ConditionsPage(QWidget):
 
         with QSignalBlocker(self.condition_name_edit):
             self.condition_name_edit.setText(condition.name)
-        _sync_text_editor_contents(self.instructions_edit, condition.instructions)
+        if not self._instructions_committer.pending:
+            _sync_text_editor_contents(self.instructions_edit, condition.instructions)
         with QSignalBlocker(self.trigger_code_spin):
             self.trigger_code_spin.setValue(condition.trigger_code)
         with QSignalBlocker(self.sequence_count_spin):
@@ -467,6 +484,7 @@ class ConditionsPage(QWidget):
         )
 
     def _add_condition(self) -> None:
+        self.flush_pending_edits()
         try:
             condition_id = self._document.create_condition()
         except Exception as error:
@@ -480,6 +498,7 @@ class ConditionsPage(QWidget):
                 break
 
     def _remove_condition(self) -> None:
+        self.flush_pending_edits()
         condition_id = self.selected_condition_id()
         if condition_id is None:
             return
@@ -489,6 +508,7 @@ class ConditionsPage(QWidget):
             _show_error_dialog(self, "Condition Error", error)
 
     def _move_condition(self, offset: int) -> None:
+        self.flush_pending_edits()
         condition_id = self.selected_condition_id()
         if condition_id is None:
             return
@@ -514,8 +534,13 @@ class ConditionsPage(QWidget):
             _show_error_dialog(self, "Condition Error", error)
             self.refresh()
 
+    def _schedule_instruction_commit(self) -> None:
+        self._pending_instruction_condition_id = self.selected_condition_id()
+        self._instructions_committer.schedule()
+
     def _apply_instructions(self) -> None:
-        condition_id = self.selected_condition_id()
+        condition_id = self._pending_instruction_condition_id or self.selected_condition_id()
+        self._pending_instruction_condition_id = None
         if condition_id is None:
             return
         try:
@@ -563,7 +588,7 @@ class ConditionsPage(QWidget):
         directory = QFileDialog.getExistingDirectory(
             self,
             f"Choose {role.title()} Stimulus Folder",
-            str(Path.home()),
+            str(self._stimulus_dialog_start_dir()),
         )
         if not directory:
             return
@@ -575,3 +600,7 @@ class ConditionsPage(QWidget):
             )
         except Exception as error:
             _show_error_dialog(self, "Stimulus Import Error", error)
+
+    def _stimulus_dialog_start_dir(self) -> Path:
+        project_stimuli_dir = stimuli_dir(self._document.project_root)
+        return project_stimuli_dir if project_stimuli_dir.exists() else self._document.project_root

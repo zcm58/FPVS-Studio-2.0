@@ -28,6 +28,7 @@ from fpvs_studio.gui.components import (
 )
 from fpvs_studio.gui.document import ProjectDocument
 from fpvs_studio.gui.window_helpers import (
+    DebouncedTextCommitter,
     LeftToRightPlainTextEdit,
     _show_error_dialog,
     _sync_text_editor_contents,
@@ -62,7 +63,11 @@ class ProjectOverviewEditor(QWidget):
         )
         self.project_description_edit.setFixedHeight(64)
         self.project_description_edit.setMaximumBlockCount(20)
-        self.project_description_edit.textChanged.connect(self._apply_project_description)
+        self._description_committer = DebouncedTextCommitter(
+            self.project_description_edit,
+            self._apply_project_description,
+        )
+        self.project_description_edit.textChanged.connect(self._description_committer.schedule)
 
         self.project_root_value = PathValueLabel(self)
         self.project_root_value.setObjectName("project_root_value")
@@ -181,17 +186,21 @@ class ProjectOverviewEditor(QWidget):
         project = self._document.project
         with QSignalBlocker(self.project_name_edit):
             self.project_name_edit.setText(project.meta.name)
-        _sync_text_editor_contents(self.project_description_edit, project.meta.description)
+        if not self._description_committer.pending:
+            _sync_text_editor_contents(self.project_description_edit, project.meta.description)
         self.project_root_value.set_path_text(str(self._document.project_root), max_length=92)
         self._refresh_condition_profile_widgets()
         self._refresh_checklist()
+
+    def flush_pending_edits(self) -> None:
+        self._description_committer.flush()
 
     def _refresh_checklist(self) -> None:
         project = self._document.project
         self.setup_checklist.set_items(
             [
                 ("Name", bool(project.meta.name.strip())),
-                ("Description", bool(project.meta.description.strip())),
+                ("Description", bool(self.project_description_edit.toPlainText().strip())),
                 ("Template", bool(self.condition_profile_combo.currentData())),
             ]
         )

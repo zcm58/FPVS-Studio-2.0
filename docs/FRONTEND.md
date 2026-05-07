@@ -15,6 +15,8 @@ the active app.
 
 - Home is the daily launch surface for ready projects.
 - Setup Wizard is the guided setup/editing surface.
+- Manage Projects is the welcome/File-menu surface for opening known projects or
+  moving project folders to the Windows Recycle Bin with confirmation.
 - Dense editors stay available inside wizard Advanced views when they are useful.
 - GUI code may coordinate document services and runtime launches, but core validation,
   compilation, session planning, and runtime flow remain outside widgets.

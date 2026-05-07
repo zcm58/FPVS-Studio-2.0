@@ -25,8 +25,8 @@ from fpvs_studio.core.paths import (
     runs_dir,
     slugify_project_name,
     stimuli_dir,
-    stimulus_derived_root,
-    stimulus_source_root,
+    stimulus_generated_variants_root,
+    stimulus_original_images_root,
     validate_project_id,
 )
 from fpvs_studio.core.serialization import save_project_file
@@ -90,8 +90,8 @@ def create_project(
     for folder in (
         target_dir,
         stimuli_dir(target_dir),
-        stimulus_source_root(target_dir),
-        stimulus_derived_root(target_dir),
+        stimulus_original_images_root(target_dir),
+        stimulus_generated_variants_root(target_dir),
         runs_dir(target_dir),
         cache_dir(target_dir),
         logs_dir(target_dir),

@@ -90,6 +90,7 @@ __all__ = [
     "mark_home_launch_action",
     "mark_primary_action",
     "mark_secondary_action",
+    "mark_destructive_action",
     "mark_welcome_action",
     "non_home_shell_stylesheet",
     "refresh_widget_style",
@@ -507,6 +508,10 @@ def mark_primary_action(button: QPushButton) -> None:
 
 def mark_secondary_action(button: QPushButton) -> None:
     _set_widget_property(button, "secondaryActionRole", "true")
+
+
+def mark_destructive_action(button: QPushButton) -> None:
+    _set_widget_property(button, "destructiveActionRole", "true")
 
 
 def mark_launch_action(button: QPushButton, *, home: bool = False) -> None:

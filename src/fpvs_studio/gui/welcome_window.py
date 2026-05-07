@@ -28,6 +28,7 @@ class WelcomeWindow(QWidget):
 
     create_requested = Signal()
     open_requested = Signal()
+    manage_projects_requested = Signal()
     recent_project_requested = Signal(str)
 
     def __init__(self) -> None:
@@ -119,6 +120,14 @@ class WelcomeWindow(QWidget):
         self.open_button.setFixedWidth(220)
         self.open_button.clicked.connect(self.open_requested.emit)
         action_layout.addWidget(self.open_button)
+
+        self.manage_projects_button = QPushButton("Manage Projects", self.hero_container)
+        self.manage_projects_button.setObjectName("manage_projects_button")
+        mark_welcome_action(self.manage_projects_button, "secondary")
+        self.manage_projects_button.setMinimumHeight(52)
+        self.manage_projects_button.setFixedWidth(220)
+        self.manage_projects_button.clicked.connect(self.manage_projects_requested.emit)
+        action_layout.addWidget(self.manage_projects_button)
         hero_layout.addLayout(action_layout)
 
         content_layout.addStretch(1)

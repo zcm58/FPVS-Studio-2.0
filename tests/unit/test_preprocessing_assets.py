@@ -26,7 +26,9 @@ def test_materialize_grayscale_outputs_png_and_updates_manifest(
     derivative = manifest_set.assets[0].derivatives[0]
 
     assert derivative.variant == StimulusVariant.GRAYSCALE
-    assert derivative.relative_path.startswith("stimuli/derived/base-set/grayscale/")
+    assert derivative.relative_path.startswith(
+        "stimuli/generated-variants/base-set/grayscale-variants/"
+    )
     with Image.open(sample_project_root / Path(derivative.relative_path)) as image:
         assert image.size == (256, 256)
 
@@ -46,7 +48,9 @@ def test_materialize_rot180_outputs_png_and_updates_manifest(
     derivative = manifest_set.assets[0].derivatives[0]
 
     assert derivative.variant == StimulusVariant.ROT180
-    assert derivative.relative_path.startswith("stimuli/derived/oddball-set/rot180/")
+    assert derivative.relative_path.startswith(
+        "stimuli/generated-variants/oddball-set/rotated-180-variants/"
+    )
     with Image.open(sample_project_root / Path(derivative.relative_path)) as image:
         assert image.size == (256, 256)
 
@@ -75,7 +79,9 @@ def test_materialize_phase_scrambled_is_deterministic_and_updates_manifest(
     second_derivative = second_set.assets[0].derivatives[0]
 
     assert first_derivative.variant == StimulusVariant.PHASE_SCRAMBLED
-    assert first_derivative.relative_path.startswith("stimuli/derived/base-set/phase_scrambled/")
+    assert first_derivative.relative_path.startswith(
+        "stimuli/generated-variants/base-set/scrambled-variants/"
+    )
     assert first_derivative.sha256 == second_derivative.sha256
     assert first_derivative.seed == second_derivative.seed
     assert first_derivative.deterministic_policy is not None

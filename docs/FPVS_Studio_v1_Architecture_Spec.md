@@ -73,17 +73,16 @@ The true per-sequence duration is derived from the active display's refresh-comp
   <ProjectSlug>/
     project.json
     stimuli/
-      source/
+      original-images/
         <set_id>/
-          originals/
-            *.jpg|*.jpeg|*.png
-      derived/
+          *.jpg|*.jpeg|*.png
+      generated-variants/
         <set_id>/
-          grayscale/
+          grayscale-variants/
             *.png
-          rot180/
+          rotated-180-variants/
             *.png
-          phase_scrambled/
+          scrambled-variants/
             *.png
       manifest.json
     runs/
@@ -108,7 +107,7 @@ The true per-sequence duration is derived from the active display's refresh-comp
 - All images in a stimulus set must have the same resolution.
 - A condition's base and oddball stimulus sets must also match in resolution.
 - No automatic resizing is allowed as a validation shortcut.
-- Derived assets are saved into the project and then reused from disk.
+- Generated variants are saved into the project and then reused from disk.
 
 ## 7. Architecture rules
 
@@ -162,4 +161,3 @@ Expose trigger settings in project settings, including a serial port string and 
 ## 11. Repository-scaffolding phase goal
 
 This phase should end with a trustworthy domain layer, a clear repo layout, validation/tests, and enough runtime/engine scaffolding that later GUI and PsychoPy work can plug into stable contracts.
-

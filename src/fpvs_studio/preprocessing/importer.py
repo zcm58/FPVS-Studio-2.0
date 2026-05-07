@@ -13,7 +13,12 @@ from pathlib import Path
 
 from fpvs_studio.core.enums import StimulusVariant
 from fpvs_studio.core.models import ProjectFile, StimulusSet
-from fpvs_studio.core.paths import stimulus_originals_dir, to_project_relative_posix
+from fpvs_studio.core.paths import (
+    stimulus_manifest_path,
+    stimulus_originals_dir,
+    stimulus_variant_dirname,
+    to_project_relative_posix,
+)
 from fpvs_studio.preprocessing.controls import (
     generate_phase_scrambled_png,
     generate_rot180_png,
@@ -110,7 +115,7 @@ def materialize_project_assets(
 def _load_or_create_manifest(project: ProjectFile, project_root: Path) -> StimulusManifest:
     """Load the current manifest or create an empty one for the project."""
 
-    manifest_path = project_root / "stimuli" / "manifest.json"
+    manifest_path = stimulus_manifest_path(project_root)
     if manifest_path.is_file():
         return read_stimulus_manifest(project_root)
     return create_empty_manifest(project.meta.project_id)
@@ -266,7 +271,13 @@ def _derived_relative_path(
 
     source_name = Path(source_relative_path).stem
     filename = f"{source_name}-{source_sha256[:12]}.png"
-    return (Path("stimuli") / "derived" / set_id / variant.value / filename).as_posix()
+    return (
+        Path("stimuli")
+        / "generated-variants"
+        / set_id
+        / stimulus_variant_dirname(variant.value)
+        / filename
+    ).as_posix()
 
 
 def _variant_seed(source_sha256: str, *, variant: StimulusVariant) -> int:

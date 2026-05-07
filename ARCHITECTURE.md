@@ -18,8 +18,8 @@ code may lazily import PsychoPy.
   surface.
 - `src/fpvs_studio/core/`: editable project models, validation, compilation, run/session
   contracts, project persistence, and engine-neutral domain logic.
-- `src/fpvs_studio/preprocessing/`: source image import, inspection, derived assets, and
-  manifests. This layer must stay independent of GUI runtime and PsychoPy.
+- `src/fpvs_studio/preprocessing/`: original image import, inspection, generated
+  variants, and manifests. This layer must stay independent of GUI runtime and PsychoPy.
 - `src/fpvs_studio/tools/`: imported/reference tool code for future Studio-native
   utilities. Current files from FPVS Toolbox are planning ground truth for the image
   preparation tool and must be adapted before user-facing integration.
@@ -83,6 +83,9 @@ Current planned seams:
   simplified Conditions setup step and detailed Conditions, Stimuli Manager, Runtime,
   Session, and Fixation widgets kept internal for step-level advanced access rather
   than visible top-level tabs.
+- GUI project management uses `manage_projects_dialog.py` as a themed component-layer
+  surface while `controller.py` owns disk-backed project discovery, recent-project
+  settings, and Recycle Bin confirmation/deletion side effects.
 - Condition-template profile management keeps `condition_template_manager_dialog.py` as
   the manager dialog and compatibility import point. The profile editor dialog lives in
   `condition_template_profile_editor_dialog.py`.

@@ -54,6 +54,7 @@ class StudioMainWindow(QMainWindow):
         document: ProjectDocument,
         on_request_new_project: Callable[[], None],
         on_request_open_project: Callable[[], None],
+        on_request_manage_projects: Callable[[], None],
         on_request_settings: Callable[[], None],
         on_load_condition_template_profiles: Callable[[], list[ConditionTemplateProfile]],
         on_manage_condition_templates: Callable[[], list[ConditionTemplateProfile]],
@@ -62,6 +63,7 @@ class StudioMainWindow(QMainWindow):
         self.document = document
         self._on_request_new_project = on_request_new_project
         self._on_request_open_project = on_request_open_project
+        self._on_request_manage_projects = on_request_manage_projects
         self._on_request_settings = on_request_settings
         self.setWindowTitle("FPVS Studio (Alpha)")
         self.resize(1440, 920)
@@ -138,6 +140,7 @@ class StudioMainWindow(QMainWindow):
         self.home_page.refresh()
 
     def show_home(self) -> None:
+        self.flush_pending_edits()
         self.home_page.refresh()
         self.main_stack.setCurrentWidget(self.home_page)
 
@@ -158,6 +161,9 @@ class StudioMainWindow(QMainWindow):
         )
         return report.badge_state == "ready"
 
+    def flush_pending_edits(self) -> None:
+        self.setup_wizard_page.flush_pending_edits()
+
     def _apply_chrome_styles(self) -> None:
         apply_studio_theme(self)
 
@@ -171,6 +177,9 @@ class StudioMainWindow(QMainWindow):
         self.new_project_action.triggered.connect(self._request_new_project)
         self.open_project_action = QAction("Open Project...", self)
         self.open_project_action.triggered.connect(self._request_open_project)
+        self.manage_projects_action = QAction("Manage Projects...", self)
+        self.manage_projects_action.setObjectName("manage_projects_action")
+        self.manage_projects_action.triggered.connect(self._request_manage_projects)
         self.save_project_action = QAction("Save", self)
         self.save_project_action.triggered.connect(self.save_project)
         self.settings_action = QAction("Settings...", self)
@@ -195,9 +204,12 @@ class StudioMainWindow(QMainWindow):
             file_menu.setStyle(self._native_menu_style)
         self.menuBar().setStyleSheet("")
         self.menuBar().setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        file_menu.addAction(self.manage_projects_action)
+        file_menu.addSeparator()
         file_menu.addAction(self.settings_action)
 
     def save_project(self) -> bool:
+        self.flush_pending_edits()
         try:
             self.document.save()
         except Exception as error:
@@ -206,6 +218,7 @@ class StudioMainWindow(QMainWindow):
         return True
 
     def maybe_save_changes(self) -> bool:
+        self.flush_pending_edits()
         if not self.document.dirty:
             return True
         result = QMessageBox.question(
@@ -236,6 +249,9 @@ class StudioMainWindow(QMainWindow):
     def _request_open_project(self) -> None:
         if self.maybe_save_changes():
             self._on_request_open_project()
+
+    def _request_manage_projects(self) -> None:
+        self._on_request_manage_projects()
 
     def _request_settings(self) -> None:
         self._on_request_settings()

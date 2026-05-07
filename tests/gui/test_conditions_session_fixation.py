@@ -103,6 +103,7 @@ def test_condition_instructions_strip_bidi_controls_during_edit(
 
     qtbot.mouseClick(window.conditions_page.add_condition_button, Qt.MouseButton.LeftButton)
     window.conditions_page.instructions_edit.setPlainText("\u202eRead this text.\u202c")
+    window.flush_pending_edits()
 
     condition_id = window.conditions_page.selected_condition_id()
     assert condition_id is not None

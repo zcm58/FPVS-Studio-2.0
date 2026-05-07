@@ -14,6 +14,7 @@ from fpvs_studio.core.models import StimulusSet, validate_project_relative_path
 from fpvs_studio.core.paths import (
     stimulus_derived_dir,
     stimulus_manifest_path,
+    stimulus_variant_dirname,
     to_project_relative_posix,
 )
 from fpvs_studio.core.serialization import read_json_file
@@ -111,7 +112,8 @@ def _synthetic_image_paths(
     if variant == StimulusVariant.ORIGINAL:
         base_dir = stimulus_set.source_dir
     else:
-        base_dir = f"stimuli/derived/{stimulus_set.set_id}/{variant.value}"
+        variant_dirname = stimulus_variant_dirname(variant.value)
+        base_dir = f"stimuli/generated-variants/{stimulus_set.set_id}/{variant_dirname}"
     return [
         validate_project_relative_path(f"{base_dir}/image_{index:04d}.png")
         for index in range(1, stimulus_set.image_count + 1)
@@ -131,7 +133,10 @@ def _resolve_filesystem_image_paths(
         source_dir = project_root / Path(stimulus_set.source_dir)
         allowed_suffixes = SUPPORTED_SOURCE_SUFFIXES
     else:
-        source_dir = stimulus_derived_dir(project_root, stimulus_set.set_id) / variant.value
+        source_dir = (
+            stimulus_derived_dir(project_root, stimulus_set.set_id)
+            / stimulus_variant_dirname(variant.value)
+        )
         allowed_suffixes = SUPPORTED_DERIVED_SUFFIXES
 
     if source_dir.exists() and source_dir.is_dir():

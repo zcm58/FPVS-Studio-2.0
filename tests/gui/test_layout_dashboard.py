@@ -9,6 +9,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
+    QFileDialog,
     QGroupBox,
     QHeaderView,
     QLabel,
@@ -373,6 +374,8 @@ def test_setup_wizard_navigation_and_advanced_editor_access(
     guide.project_overview_editor.project_description_edit.setPlainText(
         "Required setup description."
     )
+    guide.flush_pending_edits()
+    guide.refresh()
 
     back_button = guide.findChild(QPushButton, "setup_wizard_back_button")
     next_button = guide.findChild(QPushButton, "setup_wizard_next_button")
@@ -434,19 +437,23 @@ def test_setup_wizard_navigation_and_advanced_editor_access(
     condition_id = guide.condition_setup_step.selected_condition_id()
     assert isinstance(condition_id, str)
     guide._document.update_condition(condition_id, name="Faces")
+    qtbot.waitUntil(
+        lambda: "assign base and oddball" in guide.step_status_label.text().lower()
+    )
     assert not next_button.isEnabled()
     assert "assign base and oddball" in guide.step_status_label.text().lower()
 
     base_dir = _write_image_directory(tmp_path / "wizard-condition-base")
     oddball_dir = _write_image_directory(tmp_path / "wizard-condition-oddball")
     guide._document.import_condition_stimulus_folder(condition_id, role="base", source_dir=base_dir)
+    QApplication.processEvents()
     assert not next_button.isEnabled()
     guide._document.import_condition_stimulus_folder(
         condition_id,
         role="oddball",
         source_dir=oddball_dir,
     )
-    assert next_button.isEnabled()
+    qtbot.waitUntil(next_button.isEnabled)
 
     qtbot.mouseClick(next_button, Qt.MouseButton.LeftButton)
     assert guide.step_stack.currentWidget() is guide.runtime_settings_editor
@@ -482,7 +489,8 @@ def test_project_details_step_requires_description_before_next(
     assert next_button is not None
 
     description_edit.clear()
-    description_edit.textChanged.emit()
+    guide.flush_pending_edits()
+    guide.refresh()
     assert guide.step_stack.currentIndex() == 0
     assert not next_button.isEnabled()
     assert "project description" in guide.step_status_label.text().lower()
@@ -492,6 +500,8 @@ def test_project_details_step_requires_description_before_next(
     }
 
     description_edit.setPlainText("This experiment measures FPVS responses.")
+    guide.flush_pending_edits()
+    guide.refresh()
     qtbot.waitUntil(next_button.isEnabled)
     assert "✓ Description" in {
         label.text()
@@ -500,6 +510,106 @@ def test_project_details_step_requires_description_before_next(
 
     qtbot.mouseClick(next_button, Qt.MouseButton.LeftButton)
     assert guide.step_stack.currentIndex() == 1
+
+
+def test_project_description_typing_commits_once_after_debounce(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Description Debounce")
+    guide = window.setup_wizard_page
+    description_edit = guide.project_overview_editor.project_description_edit
+    project_changes = 0
+
+    def _count_project_change() -> None:
+        nonlocal project_changes
+        project_changes += 1
+
+    window.document.project_changed.connect(_count_project_change)
+    description_edit.setPlainText("Debounced project description.")
+
+    assert window.document.project.meta.description == ""
+    assert project_changes == 0
+
+    qtbot.waitUntil(
+        lambda: window.document.project.meta.description == "Debounced project description.",
+        timeout=1000,
+    )
+    assert project_changes <= 1
+
+
+def test_pending_text_edits_flush_before_setup_navigation(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Navigation Flush")
+    guide = window.setup_wizard_page
+    next_button = guide.findChild(QPushButton, "setup_wizard_next_button")
+    assert next_button is not None
+
+    guide.project_overview_editor.project_description_edit.setPlainText(
+        "Navigation should commit this description."
+    )
+    QApplication.processEvents()
+    qtbot.waitUntil(next_button.isEnabled)
+    assert window.document.project.meta.description == ""
+    qtbot.mouseClick(next_button, Qt.MouseButton.LeftButton)
+
+    assert window.document.project.meta.description == "Navigation should commit this description."
+    assert guide.step_stack.currentIndex() == 1
+
+
+def test_setup_wizard_refresh_skips_hidden_heavy_pages(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Refresh Scope")
+    guide = window.setup_wizard_page
+    guide.open_wizard(step_key="project")
+    calls = {"assets": 0, "run": 0}
+
+    def _count_assets_refresh() -> None:
+        calls["assets"] += 1
+
+    def _count_run_refresh() -> None:
+        calls["run"] += 1
+
+    monkeypatch.setattr(window.assets_page, "refresh", _count_assets_refresh)
+    monkeypatch.setattr(window.run_page, "refresh", _count_run_refresh)
+
+    guide.refresh()
+
+    assert calls == {"assets": 0, "run": 0}
+
+
+def test_project_description_typing_reduces_validation_churn(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Validation Churn")
+    guide = window.setup_wizard_page
+    validation_calls = 0
+    original_validation_report = window.document.validation_report
+
+    def _count_validation_report(*args, **kwargs):
+        nonlocal validation_calls
+        validation_calls += 1
+        return original_validation_report(*args, **kwargs)
+
+    monkeypatch.setattr(window.document, "validation_report", _count_validation_report)
+    guide.project_overview_editor.project_description_edit.setPlainText("Validation debounce.")
+
+    qtbot.waitUntil(
+        lambda: window.document.project.meta.description == "Validation debounce.",
+        timeout=1000,
+    )
+    assert validation_calls <= 8
 
 
 def test_setup_wizard_conditions_step_duplicates_metadata_without_images(
@@ -589,6 +699,67 @@ def test_setup_wizard_conditions_step_requires_descriptive_name_and_positive_tri
     QApplication.processEvents()
     assert step.trigger_check_status.text() == "Complete"
     assert next_button.isEnabled()
+
+
+def test_setup_wizard_condition_image_picker_starts_in_project_stimuli_folder(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Wizard Image Picker")
+    guide = window.setup_wizard_page
+    step = guide.condition_setup_step
+    guide.open_wizard(step_key="conditions")
+    qtbot.mouseClick(step.add_condition_button, Qt.MouseButton.LeftButton)
+
+    calls: list[tuple[str, str]] = []
+
+    def _capture_directory(_parent, title: str, directory: str) -> str:
+        calls.append((title, directory))
+        return ""
+
+    monkeypatch.setattr(
+        "fpvs_studio.gui.condition_setup_step.QFileDialog.getExistingDirectory",
+        _capture_directory,
+    )
+
+    qtbot.mouseClick(step.base_import_button, Qt.MouseButton.LeftButton)
+    qtbot.mouseClick(step.oddball_import_button, Qt.MouseButton.LeftButton)
+
+    expected_start = str(window.document.project_root / "stimuli")
+    assert calls == [
+        ("Choose Base Stimulus Folder", expected_start),
+        ("Choose Oddball Stimulus Folder", expected_start),
+    ]
+
+
+def test_advanced_conditions_image_picker_starts_in_project_stimuli_folder(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Advanced Image Picker")
+    page = window.conditions_page
+    qtbot.mouseClick(page.add_condition_button, Qt.MouseButton.LeftButton)
+
+    calls: list[tuple[str, str]] = []
+
+    def _capture_directory(_parent, title: str, directory: str) -> str:
+        calls.append((title, directory))
+        return ""
+
+    monkeypatch.setattr(QFileDialog, "getExistingDirectory", _capture_directory)
+
+    qtbot.mouseClick(page.base_import_button, Qt.MouseButton.LeftButton)
+    qtbot.mouseClick(page.oddball_import_button, Qt.MouseButton.LeftButton)
+
+    expected_start = str(window.document.project_root / "stimuli")
+    assert calls == [
+        ("Choose Base Stimulus Folder", expected_start),
+        ("Choose Oddball Stimulus Folder", expected_start),
+    ]
 
 
 def test_setup_wizard_advanced_replaces_guided_view_for_session_step(
@@ -733,6 +904,7 @@ def test_setup_dashboard_edits_sync_document_and_dedicated_tabs(
     runtime_editor.serial_port_edit.setText("COM9")
     runtime_editor.serial_port_edit.editingFinished.emit()
     runtime_editor.fullscreen_checkbox.setChecked(False)
+    window.flush_pending_edits()
     QApplication.processEvents()
 
     conditions = window.document.ordered_conditions()
@@ -1198,6 +1370,7 @@ def test_home_launch_surface_shows_only_essential_project_session_metadata(
     window.setup_dashboard_page.project_overview_editor.project_description_edit.setPlainText(
         "This is the participant-facing project summary."
     )
+    window.flush_pending_edits()
     QApplication.processEvents()
     assert subtitle_label.text() == "This is the participant-facing project summary."
 

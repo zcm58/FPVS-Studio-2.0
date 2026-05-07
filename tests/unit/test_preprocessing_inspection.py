@@ -17,7 +17,7 @@ def test_image_inspection_rejects_unsupported_extensions(tmp_path) -> None:
     (tmp_path / "notes.gif").write_bytes(b"GIF89a")
 
     with pytest.raises(ImageInspectionError, match="Unsupported source image files"):
-        inspect_source_directory(tmp_path, relative_prefix="stimuli/source/base-set/originals")
+        inspect_source_directory(tmp_path, relative_prefix="stimuli/original-images/base-set")
 
 
 def test_image_inspection_rejects_mixed_resolutions(tmp_path) -> None:
@@ -25,4 +25,4 @@ def test_image_inspection_rejects_mixed_resolutions(tmp_path) -> None:
     _write_image(tmp_path / "b.png", (128, 64))
 
     with pytest.raises(ImageInspectionError, match="identical resolution"):
-        inspect_source_directory(tmp_path, relative_prefix="stimuli/source/base-set/originals")
+        inspect_source_directory(tmp_path, relative_prefix="stimuli/original-images/base-set")

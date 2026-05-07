@@ -5,7 +5,12 @@ error surfacing, not core protocol semantics or runtime execution internals."""
 
 from __future__ import annotations
 
+import ctypes
+import os
+import shutil
+import stat
 import traceback
+from ctypes import wintypes
 from pathlib import Path
 
 from PySide6.QtCore import QSettings
@@ -23,6 +28,7 @@ from fpvs_studio.gui.condition_template_manager_dialog import ConditionTemplateM
 from fpvs_studio.gui.create_project_dialog import CreateProjectDialog
 from fpvs_studio.gui.document import ProjectDocument
 from fpvs_studio.gui.main_window import StudioMainWindow
+from fpvs_studio.gui.manage_projects_dialog import ManageProjectsDialog, ProjectManagementEntry
 from fpvs_studio.gui.settings_dialog import AppSettingsDialog
 from fpvs_studio.gui.welcome_window import WelcomeWindow
 
@@ -70,6 +76,9 @@ class StudioController:
             self.welcome_window = WelcomeWindow()
             self.welcome_window.create_requested.connect(self.show_create_project_dialog)
             self.welcome_window.open_requested.connect(self.show_open_project_dialog)
+            self.welcome_window.manage_projects_requested.connect(
+                self.show_manage_projects_dialog
+            )
             self.welcome_window.recent_project_requested.connect(self.open_recent_project)
         self.welcome_window.set_recent_projects(self.load_recent_project_entries())
         self.welcome_window.show()
@@ -135,6 +144,23 @@ class StudioController:
             if str(path) != str(normalized_root)
         ]
         recent_paths = [normalized_root, *existing][:_MAX_RECENT_PROJECTS]
+        self._settings.setValue(
+            _RECENT_PROJECT_ROOTS_KEY,
+            [str(path) for path in recent_paths],
+        )
+        self._settings.sync()
+        if self.welcome_window is not None:
+            self.welcome_window.set_recent_projects(self.load_recent_project_entries())
+
+    def remove_recent_project_root(self, project_root: Path) -> None:
+        """Remove one project root from the recent-project settings list."""
+
+        normalized_root = self._normalize_path(project_root)
+        recent_paths = [
+            path
+            for path in self.load_recent_project_roots()
+            if self._normalize_path(path) != normalized_root
+        ]
         self._settings.setValue(
             _RECENT_PROJECT_ROOTS_KEY,
             [str(path) for path in recent_paths],
@@ -261,6 +287,22 @@ class StudioController:
             return
         self.open_project(Path(directory))
 
+    def show_manage_projects_dialog(self) -> None:
+        """Show the project management dialog for known FPVS projects."""
+
+        if not self.ensure_fpvs_root_configured():
+            return
+        if not self._normalize_fpvs_root_layout():
+            return
+        parent = self.main_window if self.main_window is not None else self.welcome_window
+        dialog = ManageProjectsDialog(
+            entries=self.load_manageable_project_entries(),
+            parent=parent,
+        )
+        dialog.open_requested.connect(lambda root: self._open_managed_project(dialog, root))
+        dialog.delete_requested.connect(lambda root: self._delete_managed_project(dialog, root))
+        dialog.exec()
+
     def create_project(
         self,
         project_name: str,
@@ -336,6 +378,7 @@ class StudioController:
             document=document,
             on_request_new_project=self.show_create_project_dialog,
             on_request_open_project=self.show_open_project_dialog,
+            on_request_manage_projects=self.show_manage_projects_dialog,
             on_request_settings=self.show_settings_dialog,
             on_load_condition_template_profiles=self._load_condition_template_profiles,
             on_manage_condition_templates=self._show_condition_template_manager,
@@ -365,6 +408,144 @@ class StudioController:
         dialog.exec()
         return self._load_condition_template_profiles()
 
+    def load_manageable_project_entries(self) -> list[ProjectManagementEntry]:
+        """Return projects discoverable from the Studio root and recent-project list."""
+
+        self.load_fpvs_root_dir()
+        roots: list[Path] = []
+        seen: set[Path] = set()
+        for project_root in (*self._discover_project_roots(), *self.load_recent_project_roots()):
+            normalized_root = self._normalize_path(project_root)
+            if normalized_root in seen:
+                continue
+            seen.add(normalized_root)
+            roots.append(project_root)
+
+        entries = [self._project_management_entry(root) for root in roots]
+        return sorted(entries, key=lambda entry: entry.name.casefold())
+
+    def _discover_project_roots(self) -> list[Path]:
+        root_dir = self._fpvs_root_dir
+        if root_dir is None or not root_dir.is_dir():
+            return []
+        project_roots: list[Path] = []
+        pending_dirs = [root_dir]
+        while pending_dirs:
+            current_dir = pending_dirs.pop()
+            if project_json_path(current_dir).is_file():
+                project_roots.append(current_dir)
+                continue
+            try:
+                children = list(current_dir.iterdir())
+            except OSError:
+                continue
+            pending_dirs.extend(child for child in children if child.is_dir())
+        return project_roots
+
+    def _project_management_entry(self, project_root: Path) -> ProjectManagementEntry:
+        normalized_root = self._normalize_path(project_root)
+        is_current = self._current_project_root() == normalized_root
+        try:
+            project = load_project_file(project_json_path(project_root))
+        except Exception:
+            return ProjectManagementEntry(
+                name=project_root.name,
+                root=project_root,
+                status_text="Invalid Project",
+                status_state="warning",
+                can_open=False,
+                can_delete=False,
+            )
+        return ProjectManagementEntry(
+            name=project.meta.name,
+            root=project_root,
+            status_text="Open Project" if is_current else "Ready",
+            status_state="info" if is_current else "ready",
+            can_open=not is_current,
+            can_delete=not is_current,
+        )
+
+    def _open_managed_project(self, dialog: ManageProjectsDialog, project_root: str) -> None:
+        if self.main_window is not None and not self.main_window.maybe_save_changes():
+            return
+        dialog.accept()
+        self.open_project(Path(project_root))
+
+    def _delete_managed_project(self, dialog: ManageProjectsDialog, project_root: str) -> None:
+        self.delete_project(Path(project_root), parent=dialog)
+        dialog.set_project_entries(self.load_manageable_project_entries())
+
+    def delete_project(self, project_root: Path, *, parent: QWidget | None = None) -> bool:
+        """Move an existing FPVS project folder to the Recycle Bin after confirmation."""
+
+        normalized_root = self._normalize_path(project_root)
+        if self._current_project_root() == normalized_root:
+            QMessageBox.warning(
+                parent,
+                "Delete Project",
+                "The currently open project cannot be deleted. Open a different project "
+                "before deleting this project folder.",
+            )
+            return False
+        if not project_root.exists():
+            self.remove_recent_project_root(project_root)
+            QMessageBox.warning(
+                parent,
+                "Delete Project",
+                "This project folder no longer exists. It was removed from Recent Projects.",
+            )
+            return False
+        if not project_root.is_dir() or not project_json_path(project_root).is_file():
+            QMessageBox.warning(
+                parent,
+                "Delete Project",
+                "Only folders containing an FPVS Studio project.json file can be deleted.",
+            )
+            return False
+
+        try:
+            project = load_project_file(project_json_path(project_root))
+            project_name = project.meta.name
+        except Exception as error:
+            _show_error(parent, "Delete Project Error", error)
+            return False
+
+        answer = QMessageBox.question(
+            parent,
+            "Move Project to Recycle Bin",
+            f'Are you sure you want to move this project to the Recycle Bin?\n\n'
+            f'"{project_name}"\n\n'
+            f"Folder:\n{project_root}\n\n"
+            "You can restore it from the Windows Recycle Bin until the Recycle Bin is emptied.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return False
+
+        try:
+            _move_project_tree_to_recycle_bin(project_root)
+            if project_root.exists():
+                raise OSError(
+                    "Windows reported that the project was moved to the Recycle Bin, "
+                    f"but the project folder still exists: {project_root}"
+                )
+        except Exception as error:
+            _show_error(parent, "Delete Project Error", error)
+            return False
+
+        self.remove_recent_project_root(project_root)
+        return True
+
+    def _current_project_root(self) -> Path | None:
+        if self.main_window is None:
+            return None
+        return self._normalize_path(self.main_window.document.project_root)
+
+    @staticmethod
+    def _normalize_path(path: Path) -> Path:
+        return Path(path).expanduser().resolve()
+
     def _normalize_fpvs_root_layout(self) -> bool:
         root_dir = self._fpvs_root_dir
         if root_dir is None:
@@ -379,3 +560,52 @@ class StudioController:
             )
             return False
         return True
+
+
+class _SHFILEOPSTRUCTW(ctypes.Structure):
+    _fields_ = [
+        ("hwnd", wintypes.HWND),
+        ("wFunc", wintypes.UINT),
+        ("pFrom", wintypes.LPCWSTR),
+        ("pTo", wintypes.LPCWSTR),
+        ("fFlags", wintypes.WORD),
+        ("fAnyOperationsAborted", wintypes.BOOL),
+        ("hNameMappings", wintypes.LPVOID),
+        ("lpszProgressTitle", wintypes.LPCWSTR),
+    ]
+
+
+def _move_project_tree_to_recycle_bin(project_root: Path) -> None:
+    """Move a project tree to the Windows Recycle Bin."""
+
+    if os.name != "nt":
+        _remove_project_tree(project_root)
+        return
+
+    file_operation = _SHFILEOPSTRUCTW()
+    file_operation.hwnd = None
+    file_operation.wFunc = 0x0003  # FO_DELETE
+    file_operation.pFrom = f"{project_root.resolve()}\0\0"
+    file_operation.pTo = None
+    file_operation.fFlags = 0x0040 | 0x0010 | 0x0400 | 0x0004
+    result = ctypes.windll.shell32.SHFileOperationW(ctypes.byref(file_operation))
+    if result != 0:
+        raise OSError(
+            result,
+            f"Windows could not move this project to the Recycle Bin: {project_root}",
+        )
+    if file_operation.fAnyOperationsAborted:
+        raise OSError(f"Move to Recycle Bin was canceled for this project: {project_root}")
+
+
+def _remove_project_tree(project_root: Path) -> None:
+    """Remove a project tree, retrying Windows read-only permission failures."""
+
+    def _make_writable_and_retry(function, path, exc_info) -> None:
+        error = exc_info[1]
+        if not isinstance(error, PermissionError):
+            raise error
+        os.chmod(path, stat.S_IREAD | stat.S_IWRITE | stat.S_IEXEC)
+        function(path)
+
+    shutil.rmtree(project_root, onerror=_make_writable_and_retry)
