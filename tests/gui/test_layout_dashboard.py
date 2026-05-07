@@ -1448,9 +1448,21 @@ def test_setup_wizard_review_uses_centered_confirmation_checklist(
     assert len(checklist_rows) == 6
     assert len(check_icons) == len(checklist_rows)
 
-    assert guide.review_save_button.text() == "Save Experiment"
-    assert guide.review_return_home_button.text() == "Return Home"
+    assert guide.review_save_button.text() == "Save and Return Home"
+    assert guide.review_return_home_button.text() == "Return Home Without Saving"
     assert guide.setup_wizard_return_home_button.isHidden()
+    assert guide.setup_wizard_next_button.isHidden()
+    assert guide.setup_wizard_back_button.isVisible()
+    assert (
+        len(
+            [
+                button
+                for button in review_card.findChildren(QPushButton)
+                if button.text() == "Return Home Without Saving"
+            ]
+        )
+        == 1
+    )
     assert window.document.dirty is True
 
     prompts: list[str] = []
@@ -1463,21 +1475,108 @@ def test_setup_wizard_review_uses_centered_confirmation_checklist(
         "fpvs_studio.gui.setup_wizard_page.QMessageBox.question",
         _decline_unsaved_return,
     )
+    save_confirmations: list[str] = []
+
+    def _capture_save_confirmation(*args, **_kwargs):
+        save_confirmations.append(str(args[2]))
+        assert window.main_stack.currentWidget() is guide
+        return QMessageBox.StandardButton.Ok
+
+    monkeypatch.setattr(
+        "fpvs_studio.gui.setup_wizard_page.QMessageBox.information",
+        _capture_save_confirmation,
+    )
     qtbot.mouseClick(guide.review_return_home_button, Qt.MouseButton.LeftButton)
-    qtbot.mouseClick(guide.setup_wizard_next_button, Qt.MouseButton.LeftButton)
 
     assert window.main_stack.currentWidget() is guide
-    assert prompts == [
-        "Are you sure you want to return home without saving your changes?",
-        "Are you sure you want to return home without saving your changes?",
-    ]
+    assert prompts == ["Are you sure you want to return home without saving your changes?"]
 
     qtbot.mouseClick(guide.review_save_button, Qt.MouseButton.LeftButton)
     assert window.document.dirty is False
+    assert save_confirmations == ["Experiment settings have been saved."]
+    assert window.main_stack.currentWidget() is window.home_page
+
+    window.main_stack.setCurrentWidget(guide)
+    guide.open_wizard(step_key="review")
+    QApplication.processEvents()
+    prompts.clear()
+    qtbot.mouseClick(guide.review_return_home_button, Qt.MouseButton.LeftButton)
+    assert window.main_stack.currentWidget() is guide
+    assert prompts == ["Are you sure you want to return home without saving your changes?"]
 
     window.home_page.refresh()
     assert "Launch requirements are satisfied" not in window.home_page.launch_status_summary.text()
     assert window.home_page.launch_status_summary.text() == "Setup is ready for launch."
+
+
+def test_setup_wizard_review_save_failure_stays_on_review(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Review Save Failure")
+    guide = window.setup_wizard_page
+    window.main_stack.setCurrentWidget(guide)
+    guide.open_wizard(step_key="review")
+    QApplication.processEvents()
+    save_calls = 0
+    return_home_calls = 0
+    save_confirmations: list[str] = []
+
+    def _save_failure() -> bool:
+        nonlocal save_calls
+        save_calls += 1
+        return False
+
+    def _return_home() -> None:
+        nonlocal return_home_calls
+        return_home_calls += 1
+
+    monkeypatch.setattr(
+        "fpvs_studio.gui.setup_wizard_page.QMessageBox.information",
+        lambda *args, **kwargs: save_confirmations.append(str(args[2])),
+    )
+
+    guide._on_save_project = _save_failure
+    guide._on_return_home = _return_home
+
+    qtbot.mouseClick(guide.review_save_button, Qt.MouseButton.LeftButton)
+
+    assert save_calls == 1
+    assert return_home_calls == 0
+    assert save_confirmations == []
+    assert window.main_stack.currentWidget() is guide
+
+
+def test_setup_wizard_review_return_without_saving_accepts_confirmation(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Review Return Without Save")
+    guide = window.setup_wizard_page
+    window.main_stack.setCurrentWidget(guide)
+    guide.open_wizard(step_key="review")
+    QApplication.processEvents()
+    save_calls = 0
+
+    def _unexpected_save() -> bool:
+        nonlocal save_calls
+        save_calls += 1
+        return True
+
+    guide._on_save_project = _unexpected_save
+    monkeypatch.setattr(
+        "fpvs_studio.gui.setup_wizard_page.QMessageBox.question",
+        lambda *args, **kwargs: QMessageBox.StandardButton.Yes,
+    )
+
+    qtbot.mouseClick(guide.review_return_home_button, Qt.MouseButton.LeftButton)
+
+    assert save_calls == 0
+    assert window.main_stack.currentWidget() is window.home_page
 
 
 def test_setup_wizard_return_home_confirms_incomplete_setup(

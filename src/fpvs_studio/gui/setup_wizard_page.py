@@ -417,11 +417,14 @@ class SetupWizardPage(QWidget):
         action_row = QHBoxLayout()
         action_row.setContentsMargins(0, 0, 0, 0)
         action_row.addStretch(1)
-        self.review_save_button = QPushButton("Save Experiment", self.review_card)
+        self.review_save_button = QPushButton("Save and Return Home", self.review_card)
         self.review_save_button.setObjectName("setup_wizard_review_save_button")
         self.review_save_button.clicked.connect(self._save_from_review)
         mark_primary_action(self.review_save_button)
-        self.review_return_home_button = QPushButton("Return Home", self.review_card)
+        self.review_return_home_button = QPushButton(
+            "Return Home Without Saving",
+            self.review_card,
+        )
         self.review_return_home_button.setObjectName("setup_wizard_review_return_home_button")
         self.review_return_home_button.clicked.connect(self._return_home)
         mark_secondary_action(self.review_return_home_button)
@@ -518,7 +521,7 @@ class SetupWizardPage(QWidget):
 
     def _return_home(self) -> None:
         self.flush_pending_edits()
-        if self._current_step_key() == "review" and self._document.dirty:
+        if self._current_step_key() == "review":
             answer = QMessageBox.question(
                 self,
                 "Unsaved Changes",
@@ -546,7 +549,15 @@ class SetupWizardPage(QWidget):
     def _save_from_review(self) -> None:
         self.flush_pending_edits()
         if self._on_save_project is not None:
-            self._on_save_project()
+            saved = self._on_save_project()
+            if saved and self._on_return_home is not None:
+                QMessageBox.information(
+                    self,
+                    "Experiment Saved",
+                    "Experiment settings have been saved.",
+                    QMessageBox.StandardButton.Ok,
+                )
+                self._on_return_home()
 
     def refresh(self) -> None:
         self._readiness_cache = None
@@ -581,9 +592,8 @@ class SetupWizardPage(QWidget):
         )
         self.setup_wizard_back_button.setEnabled(self._active_step_index > 0)
         self.setup_wizard_next_button.setEnabled(step_valid)
-        self.setup_wizard_next_button.setText(
-            "Return Home" if self._active_step_index == len(_WIZARD_STEPS) - 1 else "Next"
-        )
+        self.setup_wizard_next_button.setText("Next")
+        self.setup_wizard_next_button.setVisible(step_key != "review")
         self.setup_wizard_return_home_button.setVisible(step_key != "review")
 
     def _refresh_current_editor_page(self) -> None:
