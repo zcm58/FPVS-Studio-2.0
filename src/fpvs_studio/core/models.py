@@ -306,7 +306,7 @@ class TriggerSettings(FPVSBaseModel):
 class SessionSettings(FPVSBaseModel):
     """Project-level session flow settings."""
 
-    block_count: int = Field(default=1, ge=1)
+    block_count: int = Field(default=2, ge=1)
     session_seed: int = Field(default_factory=default_session_seed, ge=0)
     randomize_conditions_per_block: bool = True
     inter_condition_mode: InterConditionMode = InterConditionMode.MANUAL_CONTINUE

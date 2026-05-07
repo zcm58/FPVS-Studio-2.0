@@ -556,8 +556,8 @@ def test_setup_wizard_navigation_and_advanced_editor_access(
 
     qtbot.mouseClick(next_button, Qt.MouseButton.LeftButton)
     assert guide.step_stack.currentWidget().objectName() == "setup_wizard_experiment_settings_page"
-    assert guide.runtime_settings_editor.parent() is guide.step_stack.currentWidget()
-    assert guide.session_structure_editor.parent() is guide.step_stack.currentWidget()
+    assert guide.experiment_settings_card.isAncestorOf(guide.runtime_settings_editor)
+    assert guide.experiment_settings_card.isAncestorOf(guide.session_structure_editor)
     assert not advanced_button.isEnabled()
     assert guide.content_stack.currentWidget() is guide.guided_panel
 
@@ -1125,6 +1125,30 @@ def test_setup_wizard_experiment_and_fixation_steps_are_width_safe(
     assert guide.runtime_settings_editor.refresh_hz_spin is not None
     assert guide.session_structure_editor.block_count_spin is not None
     assert guide.fixation_settings_editor is not guide.step_stack.currentWidget()
+    assert guide.runtime_settings_editor.card is None
+    assert guide.session_structure_editor.session_card is None
+    assert guide.experiment_settings_card.objectName() == "setup_wizard_experiment_settings_card"
+    assert guide.experiment_settings_card.maximumWidth() == 860
+    assert guide.experiment_settings_card.subtitle_label is None
+    assert guide.experiment_settings_card.title_label.alignment() & Qt.AlignmentFlag.AlignCenter
+    assert guide.session_structure_editor.block_count_spin.value() == 2
+    assert guide.session_structure_editor.generate_seed_button.text() == "New Seed"
+    assert guide.session_structure_editor.generate_seed_button.maximumWidth() == 92
+    assert not guide.runtime_settings_editor.runtime_background_scope_label.isVisible()
+    experiment_labels = "\n".join(
+        label.text() for label in guide.experiment_settings_card.findChildren(QLabel)
+    )
+    assert "Display refresh rate" in experiment_labels
+    assert "Repeats per condition" in experiment_labels
+    assert "Block count" not in experiment_labels
+    assert "Used during FPVS image presentation." not in experiment_labels
+    assert len(
+        [
+            widget
+            for widget in guide.experiment_settings_card.findChildren(QWidget)
+            if widget.property("experimentSettingsSection") == "true"
+        ]
+    ) == 2
     assert window.minimumWidth() == 1366
     assert window.minimumHeight() == 820
 
@@ -1132,20 +1156,29 @@ def test_setup_wizard_experiment_and_fixation_steps_are_width_safe(
         window.resize(width, height)
         QApplication.processEvents()
         experiment_page = guide.step_stack.currentWidget()
+        experiment_card = guide.experiment_settings_card
         display_panel = guide.runtime_settings_editor
         session_panel = guide.session_structure_editor
         assert guide.shell.page_container.scroll_area.horizontalScrollBar().maximum() == 0
-        display_right = display_panel.mapTo(
+        card_left = experiment_card.mapTo(experiment_page, QPoint(0, 0)).x()
+        card_right = experiment_card.mapTo(
             experiment_page,
+            QPoint(experiment_card.width(), 0),
+        ).x()
+        display_right = display_panel.mapTo(
+            experiment_card,
             QPoint(display_panel.width(), 0),
         ).x()
-        session_left = session_panel.mapTo(experiment_page, QPoint(0, 0)).x()
+        session_left = session_panel.mapTo(experiment_card, QPoint(0, 0)).x()
         session_right = session_panel.mapTo(
-            experiment_page,
+            experiment_card,
             QPoint(session_panel.width(), 0),
         ).x()
+        assert card_left >= 0
+        assert card_right <= experiment_page.width()
+        assert experiment_card.width() <= 860
         assert display_right <= session_left
-        assert session_right <= experiment_page.width()
+        assert session_right <= experiment_card.width()
 
         review_item = guide.progress_steps.step_items[-1]
         review_right = review_item.mapTo(

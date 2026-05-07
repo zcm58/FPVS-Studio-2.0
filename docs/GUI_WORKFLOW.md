@@ -57,12 +57,12 @@ The authoring window is organized around two user-facing modes:
   - Project Details uses a focused centered card inside the full-width wizard,
     keeping the project folder path compact and secondary; project name and
     description are required before continuing to Conditions
-  - Experiment Settings combines display and session logistics in one compact guided page
+  - Experiment Settings combines display and session settings in one compact centered card
   - the Display column exposes only display refresh rate and presentation background
     (`Black` or `Dark Gray`); current launches always use PsychoPy, alpha test-mode,
     fullscreen playback, and the default display without exposing those as choices
-  - the Session column exposes block count, session seed, condition randomization, and
-    the fixed Space start key
+  - the Session column exposes repeats per condition, session seed, condition
+    randomization, and the fixed Space start key
   - Fixation Cross is its own guided step and exposes fixation color-change behavior,
     timing, response, appearance, and a live preview on the current display background
   - the Conditions step uses a simplified condition setup surface for condition

@@ -32,6 +32,7 @@ class DisplaySettingsEditor(QWidget):
         object_name_prefix: str = "",
         editable: bool = True,
         framed: bool = False,
+        show_scope_label: bool = True,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
@@ -72,9 +73,13 @@ class DisplaySettingsEditor(QWidget):
         self.form_layout.setContentsMargins(0, 0, 0, 0)
         self.form_layout.setHorizontalSpacing(12)
         self.form_layout.setVerticalSpacing(8)
-        self.form_layout.addRow("Refresh (Hz)", self.refresh_hz_spin)
+        self.form_layout.addRow("Display refresh rate", self.refresh_hz_spin)
         self.form_layout.addRow("Background", self.runtime_background_color_combo)
-        self.form_layout.addRow("", self.runtime_background_scope_label)
+        if show_scope_label:
+            self.form_layout.addRow("", self.runtime_background_scope_label)
+        else:
+            self.runtime_background_scope_label.setText("")
+            self.runtime_background_scope_label.setVisible(False)
 
         self.summary_container = QWidget(self)
         self.summary_layout = QFormLayout(self.summary_container)

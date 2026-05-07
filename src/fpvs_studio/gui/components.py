@@ -1169,6 +1169,11 @@ def section_card_stylesheet() -> str:
         border: none;
         background-color: transparent;
     }}
+    QFrame[experimentSettingsSection="true"] {{
+        border: 1px solid {COLOR_BORDER_SOFT};
+        border-radius: {CARD_CORNER_RADIUS}px;
+        background-color: {COLOR_SURFACE_ELEVATED};
+    }}
     QLabel[sectionCardRole="title"] {{
         font-size: 15px;
         font-weight: 700;

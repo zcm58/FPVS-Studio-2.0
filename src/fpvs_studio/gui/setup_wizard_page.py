@@ -7,6 +7,7 @@ from collections.abc import Callable
 from PySide6.QtCore import QSize, Qt, QTimer
 from PySide6.QtWidgets import (
     QDialog,
+    QFrame,
     QHBoxLayout,
     QLabel,
     QListWidget,
@@ -129,13 +130,15 @@ class SetupWizardPage(QWidget):
         )
         self.runtime_settings_editor = DisplaySettingsEditor(
             document,
-            framed=True,
+            framed=False,
+            show_scope_label=False,
             parent=self,
         )
         self.session_structure_editor = SessionStructureEditor(
             document,
             title="Session",
             subtitle="Block order and participant start behavior.",
+            framed=False,
             parent=self,
         )
         self.session_structure_page = self.session_structure_editor
@@ -339,24 +342,65 @@ class SetupWizardPage(QWidget):
     def _experiment_settings_step_page(self) -> QWidget:
         page = QWidget(self)
         page.setObjectName("setup_wizard_experiment_settings_page")
-        layout = QHBoxLayout(page)
+        layout = QVBoxLayout(page)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(PAGE_SECTION_GAP)
+        layout.setSpacing(0)
+
+        self.experiment_settings_card = SectionCard(
+            title="Experiment Settings",
+            object_name="setup_wizard_experiment_settings_card",
+            parent=page,
+        )
+        self.experiment_settings_card.setMaximumWidth(860)
+        self.experiment_settings_card.card_layout.setContentsMargins(12, 10, 12, 10)
+        self.experiment_settings_card.card_layout.setSpacing(8)
+        self.experiment_settings_card.body_layout.setSpacing(PAGE_SECTION_GAP)
+        self.experiment_settings_card.title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        header_layout = self.experiment_settings_card.card_layout.itemAt(0).layout()
+        if header_layout is not None:
+            header_layout.insertStretch(0, 1)
+
+        content = QWidget(self.experiment_settings_card)
+        content_layout = QHBoxLayout(content)
+        content_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.setSpacing(PAGE_SECTION_GAP)
+
+        display_column = QFrame(content)
+        display_column.setProperty("experimentSettingsSection", "true")
+        display_column_layout = QVBoxLayout(display_column)
+        display_column_layout.setContentsMargins(10, 8, 10, 8)
+        display_column_layout.setSpacing(8)
+        display_title = QLabel("Display Settings", display_column)
+        display_title.setProperty("sectionCardRole", "title")
+        display_column_layout.addWidget(display_title)
+        display_column_layout.addWidget(self.runtime_settings_editor)
+        display_column_layout.addStretch(1)
+
+        session_column = QFrame(content)
+        session_column.setProperty("experimentSettingsSection", "true")
+        session_column_layout = QVBoxLayout(session_column)
+        session_column_layout.setContentsMargins(10, 8, 10, 8)
+        session_column_layout.setSpacing(8)
+        session_title = QLabel("Session", session_column)
+        session_title.setProperty("sectionCardRole", "title")
+        session_column_layout.addWidget(session_title)
+        session_column_layout.addWidget(self.session_structure_editor)
+        session_column_layout.addStretch(1)
+
         self.runtime_settings_editor.setSizePolicy(
-            QSizePolicy.Policy.Fixed,
+            QSizePolicy.Policy.Expanding,
             QSizePolicy.Policy.Preferred,
         )
         self.session_structure_editor.setSizePolicy(
-            QSizePolicy.Policy.Fixed,
+            QSizePolicy.Policy.Expanding,
             QSizePolicy.Policy.Preferred,
         )
-        self.runtime_settings_editor.setFixedWidth(210)
-        self.session_structure_editor.setFixedWidth(360)
-        layout.addWidget(self.runtime_settings_editor, 0)
-        layout.addWidget(self.session_structure_editor, 0)
+        content_layout.addWidget(display_column, 1)
+        content_layout.addWidget(session_column, 2)
+        self.experiment_settings_card.body_layout.addWidget(content)
+
+        layout.addWidget(self.experiment_settings_card, 0, Qt.AlignmentFlag.AlignHCenter)
         layout.addStretch(1)
-        layout.setAlignment(self.runtime_settings_editor, Qt.AlignmentFlag.AlignTop)
-        layout.setAlignment(self.session_structure_editor, Qt.AlignmentFlag.AlignTop)
         return page
 
     def _review_step_page(self) -> QWidget:

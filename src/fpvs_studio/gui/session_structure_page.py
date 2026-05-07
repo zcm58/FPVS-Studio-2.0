@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import QSignalBlocker
+from PySide6.QtCore import QSignalBlocker, Qt
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -37,6 +37,7 @@ class SessionStructureEditor(QWidget):
         object_name_prefix: str = "",
         title: str = "Session Structure",
         subtitle: str = "Block order and inter-condition flow.",
+        framed: bool = True,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
@@ -56,10 +57,11 @@ class SessionStructureEditor(QWidget):
         self.session_seed_spin.setRange(0, 2_147_483_647)
         self.session_seed_spin.valueChanged.connect(self._apply_session_settings)
 
-        self.generate_seed_button = QPushButton("Generate New Seed", self)
+        self.generate_seed_button = QPushButton("New Seed", self)
         self.generate_seed_button.setObjectName(
             _prefixed_object_name(object_name_prefix, "generate_seed_button")
         )
+        self.generate_seed_button.setMaximumWidth(92)
         self.generate_seed_button.clicked.connect(self._generate_seed)
 
         self.randomize_checkbox = QCheckBox("Randomize conditions within each block", self)
@@ -94,30 +96,35 @@ class SessionStructureEditor(QWidget):
         )
         self.continue_key_edit.setEnabled(False)
 
-        self.session_card = SectionCard(
-            title=title,
-            subtitle=subtitle,
-            object_name=_prefixed_object_name(object_name_prefix, "session_structure_card"),
-            parent=self,
-        )
         self.session_layout = QFormLayout()
         self.session_layout.setVerticalSpacing(7)
         seed_layout = QHBoxLayout()
-        seed_layout.addWidget(self.session_seed_spin, 1)
-        seed_layout.addWidget(self.generate_seed_button)
-        self.session_layout.addRow("Block count", self.block_count_spin)
+        seed_layout.setAlignment(Qt.AlignmentFlag.AlignVCenter)
+        seed_layout.addWidget(self.session_seed_spin, 1, Qt.AlignmentFlag.AlignVCenter)
+        seed_layout.addWidget(self.generate_seed_button, 0, Qt.AlignmentFlag.AlignVCenter)
+        self.session_layout.addRow("Repeats per condition", self.block_count_spin)
         self.session_layout.addRow("Session seed", seed_layout)
         self.session_layout.addRow("", self.randomize_checkbox)
         self.session_layout.addRow("Start key", self.continue_key_edit)
-        self.session_card.card_layout.setContentsMargins(12, 10, 12, 10)
-        self.session_card.card_layout.setSpacing(8)
-        self.session_card.body_layout.setSpacing(8)
-        self.session_card.body_layout.addLayout(self.session_layout)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
-        layout.addWidget(self.session_card)
+        if framed:
+            self.session_card: SectionCard | None = SectionCard(
+                title=title,
+                subtitle=subtitle,
+                object_name=_prefixed_object_name(object_name_prefix, "session_structure_card"),
+                parent=self,
+            )
+            self.session_card.card_layout.setContentsMargins(12, 10, 12, 10)
+            self.session_card.card_layout.setSpacing(8)
+            self.session_card.body_layout.setSpacing(8)
+            self.session_card.body_layout.addLayout(self.session_layout)
+            layout.addWidget(self.session_card)
+        else:
+            self.session_card = None
+            layout.addLayout(self.session_layout)
 
         self._document.project_changed.connect(self.refresh)
         self.refresh()

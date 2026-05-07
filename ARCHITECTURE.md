@@ -86,7 +86,7 @@ Current planned seams:
   The wizard uses a five-step top-progress flow with a
   simplified Conditions setup step where users assign base/oddball image folders and
   can optionally create derived-variant control conditions. Experiment Settings combines
-  display and session logistics in one compact guided page, while Fixation Cross is a
+  display and session settings in one compact centered card, while Fixation Cross is a
   guided page with behavior, timing, response, appearance, and live-preview sections.
   Display settings are limited to refresh rate and black/dark-gray background choices. Detailed
   Conditions remains available for step-level advanced access rather than as a visible

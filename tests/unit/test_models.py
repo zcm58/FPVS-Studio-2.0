@@ -33,6 +33,7 @@ def test_condition_instructions_strip_bidi_control_characters() -> None:
 def test_session_settings_default_to_space_gated_condition_starts() -> None:
     session = SessionSettings()
 
+    assert session.block_count == 2
     assert session.inter_condition_mode == InterConditionMode.MANUAL_CONTINUE
     assert session.inter_condition_break_seconds == 0.0
     assert session.continue_key == "space"
