@@ -518,6 +518,16 @@ class SetupWizardPage(QWidget):
 
     def _return_home(self) -> None:
         self.flush_pending_edits()
+        if self._current_step_key() == "review" and self._document.dirty:
+            answer = QMessageBox.question(
+                self,
+                "Unsaved Changes",
+                "Are you sure you want to return home without saving your changes?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if answer != QMessageBox.StandardButton.Yes:
+                return
         if not self.is_launch_ready():
             answer = QMessageBox.question(
                 self,
@@ -574,6 +584,7 @@ class SetupWizardPage(QWidget):
         self.setup_wizard_next_button.setText(
             "Return Home" if self._active_step_index == len(_WIZARD_STEPS) - 1 else "Next"
         )
+        self.setup_wizard_return_home_button.setVisible(step_key != "review")
 
     def _refresh_current_editor_page(self) -> None:
         current_guided_widget = self.step_stack.currentWidget()
@@ -786,3 +797,6 @@ class SetupWizardPage(QWidget):
             if candidate == step_key:
                 return index
         return 0
+
+    def _current_step_key(self) -> str:
+        return _WIZARD_STEPS[self._active_step_index][0]

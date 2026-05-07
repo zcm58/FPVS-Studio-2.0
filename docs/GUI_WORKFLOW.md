@@ -86,7 +86,8 @@ The authoring window is organized around two user-facing modes:
   - the Conditions step is complete only when every condition has a user-provided
     descriptive name, a trigger code of 1 or higher, and imported base and oddball
     image folders
-  - `Return Home` asks for confirmation when setup is incomplete
+  - `Return Home` asks for confirmation when setup is incomplete; on Review, returning
+    home with unsaved changes asks for explicit confirmation
 - `Tools > Image Resizer`
   - in-window utility for optimizing an arbitrary folder of source images
   - primary action is `Optimize Images for FPVS`

@@ -1366,6 +1366,7 @@ def test_setup_wizard_review_uses_centered_confirmation_checklist(
     qtbot,
     controller: StudioController,
     tmp_path: Path,
+    monkeypatch,
 ) -> None:
     _, window = _open_created_project(controller, qtbot, tmp_path, "Review Checklist Project")
     guide = window.setup_wizard_page
@@ -1449,7 +1450,28 @@ def test_setup_wizard_review_uses_centered_confirmation_checklist(
 
     assert guide.review_save_button.text() == "Save Experiment"
     assert guide.review_return_home_button.text() == "Return Home"
+    assert guide.setup_wizard_return_home_button.isHidden()
     assert window.document.dirty is True
+
+    prompts: list[str] = []
+
+    def _decline_unsaved_return(*args, **_kwargs):
+        prompts.append(str(args[2]))
+        return QMessageBox.StandardButton.No
+
+    monkeypatch.setattr(
+        "fpvs_studio.gui.setup_wizard_page.QMessageBox.question",
+        _decline_unsaved_return,
+    )
+    qtbot.mouseClick(guide.review_return_home_button, Qt.MouseButton.LeftButton)
+    qtbot.mouseClick(guide.setup_wizard_next_button, Qt.MouseButton.LeftButton)
+
+    assert window.main_stack.currentWidget() is guide
+    assert prompts == [
+        "Are you sure you want to return home without saving your changes?",
+        "Are you sure you want to return home without saving your changes?",
+    ]
+
     qtbot.mouseClick(guide.review_save_button, Qt.MouseButton.LeftButton)
     assert window.document.dirty is False
 
