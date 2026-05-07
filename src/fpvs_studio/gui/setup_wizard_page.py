@@ -161,11 +161,6 @@ class SetupWizardPage(QWidget):
         self.shell.set_page_margins(PAGE_MARGIN_X, 12, PAGE_MARGIN_X, 12)
         self.shell.set_content_spacing(8)
 
-        self.progress_header_label = QLabel(self)
-        self.progress_header_label.setObjectName("setup_wizard_progress_header")
-        self.progress_header_label.setProperty("sectionCardRole", "title")
-        self.progress_header_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-
         self.progress_steps = SetupProgressStepper(
             tuple(title for _key, title in _WIZARD_STEPS),
             parent=self,
@@ -179,8 +174,7 @@ class SetupWizardPage(QWidget):
         self.progress_panel = progress_panel
         progress_layout = QVBoxLayout(progress_panel)
         progress_layout.setContentsMargins(0, 0, 0, 0)
-        progress_layout.setSpacing(6)
-        progress_layout.addWidget(self.progress_header_label)
+        progress_layout.setSpacing(0)
         progress_layout.addWidget(self.progress_steps)
 
         progress_panel_shell = QWidget(self)
@@ -556,7 +550,7 @@ class SetupWizardPage(QWidget):
         self.content_stack.setCurrentWidget(self.guided_panel)
         self._refresh_current_editor_page()
 
-        self._refresh_progress_header()
+        self._refresh_progress_steps()
         self.step_title_label.setText(title)
         self._refresh_review_summary()
 
@@ -780,10 +774,8 @@ class SetupWizardPage(QWidget):
             and _conditions_have_assigned_assets(self._document, ordered_conditions)
         )
 
-    def _refresh_progress_header(self) -> None:
+    def _refresh_progress_steps(self) -> None:
         current = self._active_step_index
-        _key, title = _WIZARD_STEPS[current]
-        self.progress_header_label.setText(f"Step {current + 1} of {len(_WIZARD_STEPS)}: {title}")
         self.progress_steps.set_active_index(current)
 
     def _step_index_for_key(self, step_key: str) -> int:

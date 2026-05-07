@@ -47,9 +47,8 @@ The authoring window is organized around two user-facing modes:
   - in-window setup flow for new/incomplete projects and intentional edits
   - ordered steps: Project Details, Conditions, Experiment Settings, Fixation Cross, Review
   - `Next` is disabled until the active step is complete
-  - the top progress header shows `Step X of 5` and a slim horizontal progress
-    indicator instead of a persistent left-hand step column; the current shared
-    component is a connected numbered stepper with completed/current/upcoming states
+  - the top progress indicator is a compact connected numbered stepper with
+    completed/current/upcoming states, without a redundant `Step X of 5` text line
   - the wizard keeps the step content full-width while the progress stepper is
     centered and compact; the guided steps do not expose an Advanced button or
     vertical scrolling

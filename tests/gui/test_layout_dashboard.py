@@ -226,7 +226,7 @@ def test_setup_wizard_exists_and_uses_single_column_shell_with_steps(
     assert wizard.shell.page_container.width_preset == "full"
     assert wizard.shell.title_label.text() == "Setup Wizard"
     assert wizard.findChild(QListWidget, "setup_wizard_step_list") is None
-    assert wizard.progress_header_label.objectName() == "setup_wizard_progress_header"
+    assert wizard.findChild(QLabel, "setup_wizard_progress_header") is None
     assert wizard.progress_steps.objectName() == "setup_wizard_progress_steps"
     assert wizard.step_status_badge.objectName() == "setup_wizard_ready_badge"
     assert len(wizard.progress_steps.step_items) == 5
@@ -242,7 +242,7 @@ def test_setup_wizard_exists_and_uses_single_column_shell_with_steps(
     step_metadata_text = "\n".join(item.toolTip() for item in wizard.progress_steps.step_items)
     assert "[OK]" not in step_text
     assert "[TODO]" not in step_text
-    assert wizard.progress_header_label.text() == "Step 1 of 5: Project Details"
+    assert "Step 1 of 5" not in "\n".join(label.text() for label in wizard.findChildren(QLabel))
     assert "Project Details" in step_metadata_text
     assert "Conditions" in step_metadata_text
     assert "Stimuli" not in step_metadata_text
@@ -481,7 +481,7 @@ def test_setup_wizard_surfaces_steps_and_keeps_shared_editors_available(
     assert setup_icon.width() == 52
     assert setup_icon.height() == 52
     assert project_editor.findChild(QLabel, "project_overview_title").text() == "Project Details"
-    assert project_editor.findChild(QLabel, "project_overview_step_badge").text() == "Step 1 of 5"
+    assert project_editor.findChild(QLabel, "project_overview_step_badge") is None
     assert checklist.objectName() == "project_overview_checklist"
     assert checklist.title_label.text() == "Ready for next step"
     assert 210 <= checklist.minimumWidth() <= checklist.maximumWidth()

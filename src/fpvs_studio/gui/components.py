@@ -1137,15 +1137,6 @@ def project_overview_stylesheet() -> str:
         color: #495869;
         font-size: 13px;
     }
-    QLabel#project_overview_step_badge {
-        border: 1px solid #c7d2e5;
-        border-radius: 8px;
-        background-color: #eef6ff;
-        color: #27476f;
-        font-size: 12px;
-        font-weight: 700;
-        padding: 6px 10px;
-    }
     QFrame#project_overview_checklist {
         border: 1px solid #d6e0ef;
         border-radius: 8px;

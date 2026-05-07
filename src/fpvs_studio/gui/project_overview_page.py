@@ -93,9 +93,6 @@ class ProjectOverviewEditor(QWidget):
         self.apply_profile_to_conditions_button.clicked.connect(self._apply_profile_to_conditions)
         self.apply_profile_to_conditions_button.setVisible(False)
 
-        self.step_badge_label = QLabel("Step 1 of 5", self)
-        self.step_badge_label.setObjectName("project_overview_step_badge")
-        self.step_badge_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.setup_checklist = SetupChecklistPanel(
             object_name="project_overview_checklist",
             parent=self,
@@ -141,7 +138,6 @@ class ProjectOverviewEditor(QWidget):
         header_text_layout.addWidget(header_subtitle)
         header_layout.addWidget(header_icon, 0, Qt.AlignmentFlag.AlignTop)
         header_layout.addWidget(header_text, 1)
-        header_layout.addWidget(self.step_badge_label, 0, Qt.AlignmentFlag.AlignTop)
 
         metadata_layout = QFormLayout()
         metadata_layout.setVerticalSpacing(10)
