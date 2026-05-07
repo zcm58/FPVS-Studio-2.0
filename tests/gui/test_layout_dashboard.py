@@ -963,11 +963,6 @@ def test_setup_dashboard_edits_sync_document_and_dedicated_tabs(
     window.main_stack.setCurrentWidget(dashboard)
     session_editor = dashboard.session_structure_editor
     session_editor.block_count_spin.setValue(4)
-    session_editor.inter_condition_mode_combo.setCurrentIndex(
-        session_editor.inter_condition_mode_combo.findData(InterConditionMode.MANUAL_CONTINUE)
-    )
-    session_editor.continue_key_edit.setText("return")
-    session_editor.continue_key_edit.editingFinished.emit()
 
     fixation_editor = dashboard.fixation_settings_editor
     fixation_editor.fixation_enabled_checkbox.setChecked(True)
@@ -1004,7 +999,7 @@ def test_setup_dashboard_edits_sync_document_and_dedicated_tabs(
     settings = window.document.project.settings
     assert settings.session.block_count == 4
     assert settings.session.inter_condition_mode == InterConditionMode.MANUAL_CONTINUE
-    assert settings.session.continue_key == "return"
+    assert settings.session.continue_key == "space"
     assert settings.fixation_task.target_count_mode == "randomized"
     assert settings.fixation_task.target_count_min == 2
     assert settings.fixation_task.target_count_max == 5
@@ -1019,6 +1014,10 @@ def test_setup_dashboard_edits_sync_document_and_dedicated_tabs(
         window.session_structure_page.inter_condition_mode_combo.currentData()
         == InterConditionMode.MANUAL_CONTINUE
     )
+    assert window.session_structure_page.inter_condition_mode_combo.isVisible() is False
+    assert window.session_structure_page.break_seconds_spin.isVisible() is False
+    assert window.session_structure_page.continue_key_edit.text() == "space"
+    assert window.session_structure_page.continue_key_edit.isEnabled() is False
     assert window.fixation_cross_settings_page.target_count_mode_combo.currentData() == "randomized"
     assert window.fixation_cross_settings_page.target_count_min_spin.value() == 2
     assert window.fixation_cross_settings_page.target_count_max_spin.value() == 5
@@ -1039,12 +1038,6 @@ def test_dedicated_tab_edits_refresh_setup_dashboard_controls(
     _, window = _open_created_project(controller, qtbot, tmp_path, "Setup Dashboard Reverse Sync")
 
     window.session_structure_page.block_count_spin.setValue(6)
-    window.session_structure_page.inter_condition_mode_combo.setCurrentIndex(
-        window.session_structure_page.inter_condition_mode_combo.findData(
-            InterConditionMode.FIXED_BREAK
-        )
-    )
-    window.session_structure_page.break_seconds_spin.setValue(8.5)
 
     fixation_page = window.fixation_cross_settings_page
     fixation_page.fixation_enabled_checkbox.setChecked(True)
@@ -1066,12 +1059,11 @@ def test_dedicated_tab_edits_refresh_setup_dashboard_controls(
     assert dashboard.session_structure_editor.block_count_spin.value() == 6
     assert (
         dashboard.session_structure_editor.inter_condition_mode_combo.currentData()
-        == InterConditionMode.FIXED_BREAK
+        == InterConditionMode.MANUAL_CONTINUE
     )
-    assert dashboard.session_structure_editor.break_seconds_spin.value() == pytest.approx(
-        8.5,
-        abs=0.01,
-    )
+    assert dashboard.session_structure_editor.inter_condition_mode_combo.isVisible() is False
+    assert dashboard.session_structure_editor.break_seconds_spin.isVisible() is False
+    assert dashboard.session_structure_editor.continue_key_edit.text() == "space"
     assert dashboard.fixation_settings_editor.target_count_mode_combo.currentData() == "fixed"
     assert dashboard.fixation_settings_editor.changes_per_sequence_spin.value() == 7
     assert dashboard.runtime_settings_editor.refresh_hz_spin.value() == pytest.approx(
@@ -1094,13 +1086,6 @@ def test_setup_dashboard_save_load_smoke_persists_dashboard_edited_settings(
     dashboard = window.setup_dashboard_page
 
     dashboard.session_structure_editor.block_count_spin.setValue(3)
-    dashboard.session_structure_editor.inter_condition_mode_combo.setCurrentIndex(
-        dashboard.session_structure_editor.inter_condition_mode_combo.findData(
-            InterConditionMode.MANUAL_CONTINUE
-        )
-    )
-    dashboard.session_structure_editor.continue_key_edit.setText("space")
-    dashboard.session_structure_editor.continue_key_edit.editingFinished.emit()
 
     fixation_editor = dashboard.fixation_settings_editor
     fixation_editor.fixation_enabled_checkbox.setChecked(True)

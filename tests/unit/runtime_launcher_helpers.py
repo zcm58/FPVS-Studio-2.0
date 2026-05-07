@@ -54,6 +54,7 @@ class StubEngine(PresentationEngine):
         body: str | None = None,
         countdown_seconds: float | None = None,
         continue_key: str | None = None,
+        continue_prompt: str | None = None,
     ) -> bool:
         self._captures.setdefault("transitions", []).append(
             {
@@ -61,9 +62,10 @@ class StubEngine(PresentationEngine):
                 "body": body,
                 "countdown_seconds": countdown_seconds,
                 "continue_key": continue_key,
+                "continue_prompt": continue_prompt,
             }
         )
-        return False
+        return bool(self._captures.get("abort_on_transition", False))
 
     def show_block_break_screen(
         self,

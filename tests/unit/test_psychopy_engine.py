@@ -6,6 +6,7 @@ from types import SimpleNamespace
 
 from fpvs_studio.core.compiler import compile_run_spec
 from fpvs_studio.engines.psychopy_engine import PsychoPyEngine
+from fpvs_studio.engines.psychopy_text_screens import show_text_screen
 
 
 class _FakeWindow:
@@ -167,6 +168,42 @@ def test_psychopy_engine_opens_fullscreen_window_for_launched_session(monkeypatc
         "color": "black",
         "units": "pix",
     }
+
+
+def test_text_screen_uses_custom_space_begin_prompt() -> None:
+    captured_text: list[str] = []
+
+    class _PromptStim:
+        def __init__(self, *args, text: str, **kwargs) -> None:
+            captured_text.append(text)
+
+        def draw(self) -> None:
+            return None
+
+    class _PromptKeyboard:
+        def clearEvents(self) -> None:
+            return None
+
+        def getKeys(self, **kwargs) -> list[object]:
+            return [SimpleNamespace(name="space")]
+
+    window = _FakeWindow()
+    aborted = show_text_screen(
+        visual=SimpleNamespace(TextStim=_PromptStim),
+        core=SimpleNamespace(Clock=lambda: _FakeClock(window)),
+        window=window,
+        keyboard=_PromptKeyboard(),
+        is_aborted=lambda: False,
+        set_aborted=lambda: None,
+        heading="Condition 1 of 1: Faces",
+        body=None,
+        countdown_seconds=None,
+        continue_key="space",
+        continue_prompt="Press Space to begin.",
+    )
+
+    assert aborted is False
+    assert "Press Space to begin. Press Escape to abort." in captured_text
 
 
 def test_psychopy_engine_strict_timing_keeps_stable_intervals_running(

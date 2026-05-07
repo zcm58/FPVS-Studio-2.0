@@ -142,7 +142,8 @@ Phase 5 currently supports:
 - saving and reopening project state
 - launching ready projects from Home without exposing setup tabs
 - completing or revisiting project setup through the Setup Wizard
-- configuring session transition settings and stored seed
+- configuring session block order and stored seed; condition starts are fixed to
+  `Press Space to begin`
 - configuring fixation settings, including an optional fixation accuracy task
   (Space within 1.0 s of each fixation color change)
 - configuring fixed or randomized fixation target counts per condition run with
@@ -164,6 +165,7 @@ Current honest behavior:
 
 - runtime launch still requires `test_mode=True`
 - launched PsychoPy playback opens fullscreen on the selected display by default
+- each condition waits for `Space` before playback starts
 - non-final blocks show a separate `Press Space to continue` break screen
 - PsychoPy remains behind the runtime and engine layers
 - serial port and baud rate flow through launch settings and trigger seams

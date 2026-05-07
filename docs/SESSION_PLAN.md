@@ -22,14 +22,13 @@ SessionPlan -> runtime preflight -> runtime session flow -> engine
 
 ### `InterConditionTransitionSpec`
 
-Captures the session-level transition policy applied before each compiled run:
+Captures the session-level transition policy applied before each compiled run.
+Current Studio-authored sessions are participant-gated:
 
-- `fixed_break`
 - `manual_continue`
 
-For fixed breaks, `break_seconds` is populated.
-
-For manual continue, `continue_key` is populated.
+`continue_key` is populated with `space`. Legacy project fields may still contain
+fixed-break values, but current compilation does not emit timed condition starts.
 
 ### `SessionEntry`
 
@@ -82,8 +81,7 @@ Runtime consumes `SessionPlan` and:
 - preflights all referenced assets before launch
 - validates display timing across every embedded `RunSpec`
 - opens one engine session/window for the whole plan
-- shows per-condition instruction/transition screens
-- applies `fixed_break` and `manual_continue` policy above the engine
+- shows a Space-required start screen before every condition run
 - iterates `SessionEntry.run_spec` in order
 - aggregates run execution results into a `SessionExecutionSummary`
 

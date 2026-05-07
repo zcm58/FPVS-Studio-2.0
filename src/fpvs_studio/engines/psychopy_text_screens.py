@@ -17,6 +17,7 @@ def show_text_screen(
     body: str | None,
     countdown_seconds: float | None,
     continue_key: str | None,
+    continue_prompt: str | None = None,
 ) -> bool:
     """Render one transition-style text screen."""
 
@@ -29,7 +30,8 @@ def show_text_screen(
 
         footer = ""
         if continue_key is not None:
-            footer = f"Press '{continue_key}' to continue. Press Escape to abort."
+            prompt = continue_prompt or f"Press '{continue_key}' to continue."
+            footer = f"{prompt} Press Escape to abort."
         elif countdown_seconds is not None:
             remaining = max(0.0, countdown_seconds - screen_clock.getTime())
             footer = f"Starting automatically in {remaining:0.1f} s. Press Escape to abort."

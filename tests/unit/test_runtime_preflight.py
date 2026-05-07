@@ -33,6 +33,7 @@ class _PreflightEngine(PresentationEngine):
         body: str | None = None,
         countdown_seconds: float | None = None,
         continue_key: str | None = None,
+        continue_prompt: str | None = None,
     ) -> bool:
         return False
 

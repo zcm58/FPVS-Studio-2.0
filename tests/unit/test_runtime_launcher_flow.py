@@ -56,6 +56,15 @@ def test_runtime_launcher_dispatches_runspec_to_registered_engine(
 
     assert captures["open_count"] == 1
     assert captures["close_count"] == 1
+    assert captures["transitions"] == [
+        {
+            "heading": "Condition 1 of 1: Faces",
+            "body": None,
+            "countdown_seconds": None,
+            "continue_key": "space",
+            "continue_prompt": "Press Space to begin.",
+        }
+    ]
     assert captures["run_ids"] == ["faces-run"]
     assert captures["runtime_options"] == {
         "engine_name": "stub",
@@ -145,6 +154,11 @@ def test_launch_session_runs_all_entries_with_stub_engine_and_reuses_session_win
     assert captures["close_count"] == 1
     assert captures["run_ids"] == [entry.run_id for entry in session_plan.ordered_entries()]
     assert len(captures["transitions"]) == session_plan.total_runs
+    assert all(item["countdown_seconds"] is None for item in captures["transitions"])
+    assert all(item["continue_key"] == "space" for item in captures["transitions"])
+    assert all(
+        item["continue_prompt"] == "Press Space to begin." for item in captures["transitions"]
+    )
     assert captures["block_breaks"] == [
         {
             "completed_block_index": 0,
@@ -231,11 +245,12 @@ def test_launch_session_reuses_participant_number_with_incremented_output_labels
 
 
 
-def test_session_launch_fixed_break_transition_path_is_honored(
+def test_session_launch_ignores_legacy_fixed_break_transition_path(
     multi_condition_project,
     multi_condition_project_root,
 ) -> None:
     captures: dict[str, object] = {}
+    multi_condition_project.settings.session.inter_condition_mode = InterConditionMode.FIXED_BREAK
     multi_condition_project.settings.session.inter_condition_break_seconds = 5.0
     register_engine("stub-fixed-break", lambda: StubEngine(captures))
     try:
@@ -255,13 +270,16 @@ def test_session_launch_fixed_break_transition_path_is_honored(
     finally:
         unregister_engine("stub-fixed-break")
 
-    assert all(item["countdown_seconds"] == 5.0 for item in captures["transitions"])
-    assert all(item["continue_key"] is None for item in captures["transitions"])
+    assert all(item["countdown_seconds"] is None for item in captures["transitions"])
+    assert all(item["continue_key"] == "space" for item in captures["transitions"])
+    assert all(
+        item["continue_prompt"] == "Press Space to begin." for item in captures["transitions"]
+    )
 
 
 
 
-def test_session_launch_manual_continue_transition_path_is_honored(
+def test_session_launch_forces_space_transition_key(
     multi_condition_project,
     multi_condition_project_root,
 ) -> None:
@@ -289,7 +307,40 @@ def test_session_launch_manual_continue_transition_path_is_honored(
         unregister_engine("stub-manual")
 
     assert all(item["countdown_seconds"] is None for item in captures["transitions"])
-    assert all(item["continue_key"] == "return" for item in captures["transitions"])
+    assert all(item["continue_key"] == "space" for item in captures["transitions"])
+    assert all(
+        item["continue_prompt"] == "Press Space to begin." for item in captures["transitions"]
+    )
+
+
+def test_single_run_launch_aborts_before_playback_when_start_screen_is_cancelled(
+    sample_project,
+    sample_project_root,
+) -> None:
+    captures: dict[str, object] = {"abort_on_transition": True}
+    register_engine("stub-start-abort", lambda: StubEngine(captures))
+    try:
+        run_spec = compile_run_spec(
+            sample_project,
+            refresh_hz=60.0,
+            project_root=sample_project_root,
+            run_id="faces-run",
+        )
+
+        summary = launch_run(
+            sample_project_root,
+            run_spec,
+            participant_number=PARTICIPANT_NUMBER,
+            launch_settings=LaunchSettings(engine_name="stub-start-abort", test_mode=True),
+        )
+    finally:
+        unregister_engine("stub-start-abort")
+
+    assert summary.aborted is True
+    assert summary.abort_reason == "Run aborted during the start screen."
+    assert summary.completed_frames == 0
+    assert "run_ids" not in captures
+    assert (sample_project_root / "runs" / "faces-run" / "run_summary.json").is_file()
 
 
 

@@ -8,7 +8,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from pathlib import Path
 
-from fpvs_studio.core.enums import InterConditionMode, RunMode
+from fpvs_studio.core.enums import RunMode
 from fpvs_studio.core.execution import (
     FixationTaskSummary,
     FrameIntervalRecord,
@@ -49,36 +49,45 @@ class RuntimeWorker:
             self._engine.open_session(runtime_options=runtime_options)
             session_open = True
             trigger_start_index = len(trigger_backend.records)
-            run_summary = self._engine.run_condition(
-                run_spec,
-                project_root,
-                runtime_options=runtime_options,
-                trigger_backend=trigger_backend,
-            )
-            run_summary = self._finalize_run_summary(
-                run_summary,
-                run_spec,
-                runtime_options=runtime_options,
-                relative_output_dir=relative_output_dir,
-                session_id=run_summary.session_id,
-                participant_number=participant_number,
-                trigger_backend=trigger_backend,
-                trigger_start_index=trigger_start_index,
-                warnings=trigger_warnings,
-            )
-            if not run_summary.aborted and self._show_condition_feedback(run_spec, run_summary):
-                run_summary = run_summary.model_copy(
-                    update={
-                        "aborted": True,
-                        "abort_reason": "Run aborted during the condition feedback screen.",
-                    }
+            if self._show_run_start(run_spec):
+                run_summary = _build_start_aborted_summary(
+                    run_spec,
+                    engine_name=self._engine.engine_id,
+                    runtime_options=runtime_options,
+                    participant_number=participant_number,
+                    warnings=trigger_warnings,
                 )
-            if not run_summary.aborted:
-                self._engine.show_completion_screen(
-                    completed_condition_count=1,
-                    total_condition_count=1,
-                    was_aborted=False,
+            else:
+                run_summary = self._engine.run_condition(
+                    run_spec,
+                    project_root,
+                    runtime_options=runtime_options,
+                    trigger_backend=trigger_backend,
                 )
+                run_summary = self._finalize_run_summary(
+                    run_summary,
+                    run_spec,
+                    runtime_options=runtime_options,
+                    relative_output_dir=relative_output_dir,
+                    session_id=run_summary.session_id,
+                    participant_number=participant_number,
+                    trigger_backend=trigger_backend,
+                    trigger_start_index=trigger_start_index,
+                    warnings=trigger_warnings,
+                )
+                if not run_summary.aborted and self._show_condition_feedback(run_spec, run_summary):
+                    run_summary = run_summary.model_copy(
+                        update={
+                            "aborted": True,
+                            "abort_reason": "Run aborted during the condition feedback screen.",
+                        }
+                    )
+                if not run_summary.aborted:
+                    self._engine.show_completion_screen(
+                        completed_condition_count=1,
+                        total_condition_count=1,
+                        was_aborted=False,
+                    )
         finally:
             if session_open:
                 self._engine.close_session()
@@ -287,21 +296,26 @@ class RuntimeWorker:
         if entry.run_spec.condition.instructions_text:
             body_parts.insert(0, entry.run_spec.condition.instructions_text)
 
-        if session_plan.transition.mode == InterConditionMode.FIXED_BREAK:
-            return self._engine.show_transition_screen(
-                heading=heading,
-                body="\n\n".join(body_parts),
-                countdown_seconds=session_plan.transition.break_seconds,
-                continue_key=None,
-            )
-
-        continue_key = session_plan.transition.continue_key or "space"
-        body_parts.append(f"Press '{continue_key}' to continue.")
+        continue_key = "space"
         return self._engine.show_transition_screen(
             heading=heading,
             body="\n\n".join(body_parts),
             countdown_seconds=None,
             continue_key=continue_key,
+            continue_prompt="Press Space to begin.",
+        )
+
+    def _show_run_start(
+        self,
+        run_spec: RunSpec,
+    ) -> bool:
+        heading = f"Condition 1 of 1: {run_spec.condition.name}"
+        return self._engine.show_transition_screen(
+            heading=heading,
+            body=run_spec.condition.instructions_text,
+            countdown_seconds=None,
+            continue_key="space",
+            continue_prompt="Press Space to begin.",
         )
 
     def _show_block_break(
@@ -366,6 +380,37 @@ def _pick_session_runtime_metadata(
 
 def _run_mode(runtime_options: Mapping[str, object] | None) -> RunMode:
     return RunMode.TEST if bool((runtime_options or {}).get("test_mode")) else RunMode.SESSION
+
+
+def _build_start_aborted_summary(
+    run_spec: RunSpec,
+    *,
+    engine_name: str,
+    runtime_options: Mapping[str, object] | None,
+    participant_number: str,
+    warnings: list[str] | tuple[str, ...],
+) -> RunExecutionSummary:
+    return RunExecutionSummary(
+        project_id=run_spec.project_id,
+        session_id=None,
+        run_id=run_spec.run_id,
+        condition_id=run_spec.condition.condition_id,
+        condition_name=run_spec.condition.name,
+        engine_name=engine_name,
+        run_mode=_run_mode(runtime_options),
+        participant_number=participant_number,
+        completed_frames=0,
+        aborted=True,
+        abort_reason="Run aborted during the start screen.",
+        warnings=list(warnings),
+        runtime_metadata=RuntimeMetadata(
+            engine_name=engine_name,
+            display_index=_coerce_int(runtime_options, "display_index"),
+            fullscreen=bool((runtime_options or {}).get("fullscreen", True)),
+            requested_refresh_hz=run_spec.display.refresh_hz,
+            test_mode=bool((runtime_options or {}).get("test_mode")),
+        ),
+    )
 
 
 def _latest_fixation_task_summary(

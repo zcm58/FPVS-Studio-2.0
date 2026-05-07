@@ -54,15 +54,8 @@ def build_trigger_events(trigger_code: int | None) -> list[TriggerEvent]:
 def compile_transition_spec(project: ProjectFile) -> InterConditionTransitionSpec:
     """Compile session transition settings into an explicit transition spec."""
 
-    session_settings = project.settings.session
-    if session_settings.inter_condition_mode == InterConditionMode.FIXED_BREAK:
-        return InterConditionTransitionSpec(
-            mode=session_settings.inter_condition_mode,
-            break_seconds=session_settings.inter_condition_break_seconds,
-            continue_key=None,
-        )
     return InterConditionTransitionSpec(
-        mode=session_settings.inter_condition_mode,
+        mode=InterConditionMode.MANUAL_CONTINUE,
         break_seconds=None,
-        continue_key=session_settings.continue_key,
+        continue_key="space",
     )

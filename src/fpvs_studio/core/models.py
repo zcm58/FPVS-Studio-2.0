@@ -309,8 +309,8 @@ class SessionSettings(FPVSBaseModel):
     block_count: int = Field(default=1, ge=1)
     session_seed: int = Field(default_factory=default_session_seed, ge=0)
     randomize_conditions_per_block: bool = True
-    inter_condition_mode: InterConditionMode = InterConditionMode.FIXED_BREAK
-    inter_condition_break_seconds: float = Field(default=30.0, ge=0)
+    inter_condition_mode: InterConditionMode = InterConditionMode.MANUAL_CONTINUE
+    inter_condition_break_seconds: float = Field(default=0.0, ge=0)
     continue_key: str = "space"
 
     @field_validator("continue_key")

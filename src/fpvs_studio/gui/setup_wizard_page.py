@@ -648,13 +648,7 @@ class SetupWizardPage(QWidget):
             else "Fixed project order"
         )
         self.session_fixation_value.setText(str(session.session_seed))
-        self.session_accuracy_value.setText(
-            "Fixed break"
-            if session.inter_condition_mode.value == "fixed_break"
-            else "Manual continue"
-            if session.inter_condition_mode.value == "manual_continue"
-            else "Unknown"
-        )
+        self.session_accuracy_value.setText("Press Space to begin")
 
     def _refresh_fixation_guided_summary(self) -> None:
         fixation = self._document.project.settings.fixation_task

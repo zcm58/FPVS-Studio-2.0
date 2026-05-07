@@ -125,11 +125,6 @@ def test_session_and_fixation_settings_round_trip(
     session_page.block_count_spin.setValue(3)
     session_page.session_seed_spin.setValue(123456)
     session_page.randomize_checkbox.setChecked(False)
-    session_page.inter_condition_mode_combo.setCurrentIndex(
-        session_page.inter_condition_mode_combo.findData(InterConditionMode.MANUAL_CONTINUE)
-    )
-    session_page.continue_key_edit.setText("return")
-    session_page.continue_key_edit.editingFinished.emit()
 
     fixation_page = window.fixation_cross_settings_page
     fixation_page.fixation_enabled_checkbox.setChecked(True)
@@ -164,7 +159,7 @@ def test_session_and_fixation_settings_round_trip(
     assert session.session_seed == 123456
     assert session.randomize_conditions_per_block is False
     assert session.inter_condition_mode == InterConditionMode.MANUAL_CONTINUE
-    assert session.continue_key == "return"
+    assert session.continue_key == "space"
     assert fixation.enabled is True
     assert fixation.accuracy_task_enabled is True
     assert fixation.target_count_mode == "randomized"
@@ -225,12 +220,12 @@ def test_fixation_cross_settings_page_exposes_accuracy_task_controls(
     )
 
 
-def test_session_structure_rows_toggle_with_inter_condition_mode(
+def test_session_structure_uses_space_start_without_timed_break_controls(
     qtbot,
     controller: StudioController,
     tmp_path: Path,
 ) -> None:
-    _, window = _open_created_project(controller, qtbot, tmp_path, "Session Structure Visibility")
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Session Space Start")
 
     page = window.setup_dashboard_page.session_structure_editor
     window.setup_wizard_page.open_wizard(step_key="session")
@@ -241,19 +236,14 @@ def test_session_structure_rows_toggle_with_inter_condition_mode(
     )
     QApplication.processEvents()
 
-    page.inter_condition_mode_combo.setCurrentIndex(
-        page.inter_condition_mode_combo.findData(InterConditionMode.FIXED_BREAK)
-    )
     QApplication.processEvents()
-    assert page.break_seconds_spin.isVisible()
-    assert not page.continue_key_edit.isVisible()
-
-    page.inter_condition_mode_combo.setCurrentIndex(
-        page.inter_condition_mode_combo.findData(InterConditionMode.MANUAL_CONTINUE)
-    )
-    QApplication.processEvents()
+    assert page.inter_condition_mode_combo.findData(InterConditionMode.FIXED_BREAK) == -1
+    assert not page.inter_condition_mode_combo.isVisible()
     assert not page.break_seconds_spin.isVisible()
+    assert not page.break_seconds_spin.isEnabled()
     assert page.continue_key_edit.isVisible()
+    assert not page.continue_key_edit.isEnabled()
+    assert page.continue_key_edit.text() == "space"
 
 
 def test_fixation_color_change_mode_toggles_relevant_controls(

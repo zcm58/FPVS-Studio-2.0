@@ -104,11 +104,11 @@ def test_session_plan_reproducibility_and_seed_variation(
     )
 
 
-def test_session_plan_transition_settings_preserve_break_and_continue_metadata(
+def test_session_plan_transition_settings_force_space_start_metadata(
     multi_condition_project,
     multi_condition_project_root,
 ) -> None:
-    fixed_break_plan = compile_session_plan(
+    default_plan = compile_session_plan(
         multi_condition_project,
         refresh_hz=60.0,
         project_root=multi_condition_project_root,
@@ -120,19 +120,19 @@ def test_session_plan_transition_settings_preserve_break_and_continue_metadata(
     )
     multi_condition_project.settings.session.inter_condition_break_seconds = 5.0
     multi_condition_project.settings.session.continue_key = "return"
-    manual_continue_plan = compile_session_plan(
+    legacy_override_plan = compile_session_plan(
         multi_condition_project,
         refresh_hz=60.0,
         project_root=multi_condition_project_root,
         random_seed=7,
     )
 
-    assert fixed_break_plan.transition.mode == InterConditionMode.FIXED_BREAK
-    assert fixed_break_plan.transition.break_seconds == 30.0
-    assert fixed_break_plan.transition.continue_key is None
-    assert manual_continue_plan.transition.mode == InterConditionMode.MANUAL_CONTINUE
-    assert manual_continue_plan.transition.break_seconds is None
-    assert manual_continue_plan.transition.continue_key == "return"
+    assert default_plan.transition.mode == InterConditionMode.MANUAL_CONTINUE
+    assert default_plan.transition.break_seconds is None
+    assert default_plan.transition.continue_key == "space"
+    assert legacy_override_plan.transition.mode == InterConditionMode.MANUAL_CONTINUE
+    assert legacy_override_plan.transition.break_seconds is None
+    assert legacy_override_plan.transition.continue_key == "space"
 
 
 def test_session_plan_generated_ids_avoid_redundant_prefixes(

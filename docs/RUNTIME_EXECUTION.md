@@ -31,7 +31,7 @@ SessionPlan
   -> create trigger backend
   -> engine.open_session(...)
   -> for each SessionEntry in order:
-       -> engine.show_transition_screen(...)
+       -> engine.show_transition_screen(..., continue_key="space")
        -> engine.run_condition(RunSpec, ...)
        -> if this completed a non-final block:
             -> engine.show_block_break_screen(...)
@@ -56,7 +56,7 @@ The PsychoPy implementation:
 - opens one `visual.Window` per launched session
 - reuses that window across all runs in the `SessionPlan`
 - opens launched playback fullscreen on the selected display by default
-- shows transition/completion text screens
+- shows Space-required condition-start screens and completion text screens
 - shows a dedicated manual inter-block break screen between non-final blocks
 - preloads image stimuli before each condition
 - executes the compiled frame schedule directly from `RunSpec`
@@ -139,6 +139,7 @@ In the current v1 runtime it means:
 
 - runtime launch still flows through the test-mode seam and test-mode metadata
 - PsychoPy launch settings may still request fullscreen presentation
+- every condition waits for the participant to press Space before playback starts
 - trigger output stays on the logged null backend
 - completion screens auto-dismiss quickly
 - launch entry points reject `test_mode=False` until the non-test path is

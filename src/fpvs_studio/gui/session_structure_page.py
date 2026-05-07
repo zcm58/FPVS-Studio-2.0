@@ -70,8 +70,10 @@ class SessionStructureEditor(QWidget):
         self.inter_condition_mode_combo.setObjectName(
             _prefixed_object_name(object_name_prefix, "inter_condition_mode_combo")
         )
-        for mode in InterConditionMode:
-            self.inter_condition_mode_combo.addItem(_transition_label(mode), userData=mode)
+        self.inter_condition_mode_combo.addItem(
+            _transition_label(InterConditionMode.MANUAL_CONTINUE),
+            userData=InterConditionMode.MANUAL_CONTINUE,
+        )
         self.inter_condition_mode_combo.currentIndexChanged.connect(
             self._on_inter_condition_mode_changed
         )
@@ -88,7 +90,7 @@ class SessionStructureEditor(QWidget):
         self.continue_key_edit.setObjectName(
             _prefixed_object_name(object_name_prefix, "continue_key_edit")
         )
-        self.continue_key_edit.editingFinished.connect(self._apply_session_settings)
+        self.continue_key_edit.setEnabled(False)
 
         self.session_card = SectionCard(
             title="Session Structure",
@@ -104,9 +106,7 @@ class SessionStructureEditor(QWidget):
         self.session_layout.addRow("Block count", self.block_count_spin)
         self.session_layout.addRow("Session seed", seed_layout)
         self.session_layout.addRow("", self.randomize_checkbox)
-        self.session_layout.addRow("Inter-condition mode", self.inter_condition_mode_combo)
-        self.session_layout.addRow("Break seconds", self.break_seconds_spin)
-        self.session_layout.addRow("Continue key", self.continue_key_edit)
+        self.session_layout.addRow("Start key", self.continue_key_edit)
         self.session_card.card_layout.setContentsMargins(12, 10, 12, 10)
         self.session_card.card_layout.setSpacing(8)
         self.session_card.body_layout.setSpacing(8)
@@ -130,22 +130,21 @@ class SessionStructureEditor(QWidget):
             self.randomize_checkbox.setChecked(session.randomize_conditions_per_block)
         with QSignalBlocker(self.inter_condition_mode_combo):
             self.inter_condition_mode_combo.setCurrentIndex(
-                self.inter_condition_mode_combo.findData(session.inter_condition_mode)
+                self.inter_condition_mode_combo.findData(InterConditionMode.MANUAL_CONTINUE)
             )
         with QSignalBlocker(self.break_seconds_spin):
             self.break_seconds_spin.setValue(session.inter_condition_break_seconds)
         with QSignalBlocker(self.continue_key_edit):
-            self.continue_key_edit.setText(session.continue_key)
+            self.continue_key_edit.setText("space")
         self._update_session_visibility_state()
 
     def _update_session_visibility_state(self) -> None:
-        mode = self.inter_condition_mode_combo.currentData()
-        show_break_seconds = mode == InterConditionMode.FIXED_BREAK
-        show_continue_key = mode == InterConditionMode.MANUAL_CONTINUE
-        _set_form_row_visible(self.session_layout, self.break_seconds_spin, show_break_seconds)
-        _set_form_row_visible(self.session_layout, self.continue_key_edit, show_continue_key)
-        self.break_seconds_spin.setEnabled(show_break_seconds)
-        self.continue_key_edit.setEnabled(show_continue_key)
+        _set_form_row_visible(self.session_layout, self.inter_condition_mode_combo, False)
+        _set_form_row_visible(self.session_layout, self.break_seconds_spin, False)
+        _set_form_row_visible(self.session_layout, self.continue_key_edit, True)
+        self.inter_condition_mode_combo.setEnabled(False)
+        self.break_seconds_spin.setEnabled(False)
+        self.continue_key_edit.setEnabled(False)
 
     def _on_inter_condition_mode_changed(self) -> None:
         self._update_session_visibility_state()
@@ -157,9 +156,9 @@ class SessionStructureEditor(QWidget):
                 block_count=self.block_count_spin.value(),
                 session_seed=self.session_seed_spin.value(),
                 randomize_conditions_per_block=self.randomize_checkbox.isChecked(),
-                inter_condition_mode=self.inter_condition_mode_combo.currentData(),
-                inter_condition_break_seconds=self.break_seconds_spin.value(),
-                continue_key=self.continue_key_edit.text().strip(),
+                inter_condition_mode=InterConditionMode.MANUAL_CONTINUE,
+                inter_condition_break_seconds=0.0,
+                continue_key="space",
             )
         except Exception as error:
             _show_error_dialog(self, "Session Settings Error", error)

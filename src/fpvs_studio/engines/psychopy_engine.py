@@ -95,12 +95,14 @@ class PsychoPyEngine(PresentationEngine):
         body: str | None = None,
         countdown_seconds: float | None = None,
         continue_key: str | None = None,
+        continue_prompt: str | None = None,
     ) -> bool:
         return self._show_text_screen(
             heading=heading,
             body=body,
             countdown_seconds=countdown_seconds,
             continue_key=continue_key,
+            continue_prompt=continue_prompt,
         )
 
     def show_block_break_screen(
@@ -117,6 +119,7 @@ class PsychoPyEngine(PresentationEngine):
             body=body,
             countdown_seconds=None,
             continue_key="space",
+            continue_prompt=None,
         )
 
     def show_condition_feedback_screen(
@@ -131,6 +134,7 @@ class PsychoPyEngine(PresentationEngine):
             body=body,
             countdown_seconds=None,
             continue_key=continue_key,
+            continue_prompt=None,
         )
 
     def run_condition(
@@ -387,6 +391,7 @@ class PsychoPyEngine(PresentationEngine):
             body=body,
             countdown_seconds=countdown_seconds,
             continue_key=None,
+            continue_prompt=None,
         )
 
     def close_session(self) -> None:
@@ -494,6 +499,7 @@ class PsychoPyEngine(PresentationEngine):
         body: str | None,
         countdown_seconds: float | None,
         continue_key: str | None,
+        continue_prompt: str | None,
     ) -> bool:
         self.open_session(runtime_options=self._runtime_options)
         return show_text_screen(
@@ -507,6 +513,7 @@ class PsychoPyEngine(PresentationEngine):
             body=body,
             countdown_seconds=countdown_seconds,
             continue_key=continue_key,
+            continue_prompt=continue_prompt,
         )
 
     def _load_psychopy(self) -> Any:

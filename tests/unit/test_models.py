@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from fpvs_studio.core.enums import DutyCycleMode
-from fpvs_studio.core.models import Condition, ProjectFile
+from fpvs_studio.core.enums import DutyCycleMode, InterConditionMode
+from fpvs_studio.core.models import Condition, ProjectFile, SessionSettings
 from fpvs_studio.core.serialization import load_project_file, save_project_file
 
 
@@ -28,6 +28,14 @@ def test_condition_instructions_strip_bidi_control_characters() -> None:
     )
 
     assert condition.instructions == "Read the instructions."
+
+
+def test_session_settings_default_to_space_gated_condition_starts() -> None:
+    session = SessionSettings()
+
+    assert session.inter_condition_mode == InterConditionMode.MANUAL_CONTINUE
+    assert session.inter_condition_break_seconds == 0.0
+    assert session.continue_key == "space"
 
 
 def test_project_model_backfills_condition_profile_defaults_for_legacy_payload(

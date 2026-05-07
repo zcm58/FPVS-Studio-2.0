@@ -57,6 +57,7 @@ class PresentationEngine(ABC):
         body: str | None = None,
         countdown_seconds: float | None = None,
         continue_key: str | None = None,
+        continue_prompt: str | None = None,
     ) -> bool:
         """Show a text transition screen and return whether the session was aborted."""
 

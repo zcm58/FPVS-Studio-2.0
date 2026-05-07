@@ -539,12 +539,8 @@ class RunPage(QWidget):
             f"Block Count: {session_plan.block_count}",
             f"Run Count: {session_plan.total_runs}",
             f"Refresh (Hz): {session_plan.refresh_hz:.2f}",
-            f"Transition Mode: {session_plan.transition.mode.value}",
+            "Condition Start: Press Space to begin",
         ]
-        if session_plan.transition.break_seconds is not None:
-            lines.append(f"Break Seconds: {session_plan.transition.break_seconds}")
-        if session_plan.transition.continue_key is not None:
-            lines.append(f"Continue Key: {session_plan.transition.continue_key}")
         lines.append("")
         for block in session_plan.blocks:
             lines.append(f"Block {block.block_index + 1}: " + " -> ".join(block.condition_order))
