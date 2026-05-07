@@ -10,7 +10,17 @@ from __future__ import annotations
 from typing import Any
 
 from PySide6.QtCore import QPoint, QSize, Qt, Signal
-from PySide6.QtGui import QBrush, QColor, QIcon, QPainter, QPalette, QPen, QPixmap, QPolygon
+from PySide6.QtGui import (
+    QBrush,
+    QColor,
+    QIcon,
+    QPainter,
+    QPalette,
+    QPen,
+    QPixmap,
+    QPolygon,
+    QResizeEvent,
+)
 from PySide6.QtWidgets import (
     QFrame,
     QGridLayout,
@@ -211,6 +221,8 @@ class SetupProgressStepper(QWidget):
             item = QWidget(self)
             item.setObjectName(f"setup_wizard_step_{index + 1}_{_object_suffix(title)}")
             item.setProperty("setupProgressStep", "true")
+            item.setMinimumWidth(0)
+            item.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
             item_layout = QHBoxLayout(item)
             item_layout.setContentsMargins(0, 0, 0, 0)
             item_layout.setSpacing(6)
@@ -224,11 +236,12 @@ class SetupProgressStepper(QWidget):
             label = QLabel(title, item)
             label.setObjectName(f"{item.objectName()}_label")
             label.setProperty("setupProgressLabel", "true")
-            label.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Preferred)
+            label.setMinimumWidth(0)
+            label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
 
             item_layout.addWidget(circle)
-            item_layout.addWidget(label)
-            layout.addWidget(item, 0)
+            item_layout.addWidget(label, 1)
+            layout.addWidget(item, 1)
             self.step_items.append(item)
             self.step_circles.append(circle)
             self.step_labels.append(label)
@@ -246,6 +259,10 @@ class SetupProgressStepper(QWidget):
                 self.connectors.append(connector)
 
         self.set_active_index(0)
+
+    def resizeEvent(self, event: QResizeEvent) -> None:  # noqa: N802
+        super().resizeEvent(event)
+        self._refresh_elided_labels()
 
     def set_active_index(self, active_index: int) -> None:
         active_index = max(0, min(active_index, len(self._steps) - 1))
@@ -272,6 +289,18 @@ class SetupProgressStepper(QWidget):
             state = "complete" if index < active_index else "upcoming"
             connector.setProperty("setupProgressState", state)
             refresh_widget_style(connector)
+        self._refresh_elided_labels()
+
+    def _refresh_elided_labels(self) -> None:
+        for title, label in zip(self._steps, self.step_labels, strict=True):
+            available_width = max(1, label.width())
+            label.setText(
+                label.fontMetrics().elidedText(
+                    title,
+                    Qt.TextElideMode.ElideRight,
+                    available_width,
+                )
+            )
 
 
 class SetupWorkspaceFrame(QFrame):

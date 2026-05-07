@@ -57,6 +57,7 @@ _WIZARD_STEPS: tuple[tuple[str, str], ...] = (
     ("project", "Project Details"),
     ("conditions", "Conditions"),
     ("experiment", "Experiment Settings"),
+    ("fixation", "Fixation Cross"),
     ("review", "Review"),
 )
 _CREATE_ALL_CONDITIONS_PROMPT = "Please ensure you create all conditions before proceeding."
@@ -144,7 +145,7 @@ class SetupWizardPage(QWidget):
             layout_mode="grid",
             title="Fixation Cross Settings",
             subtitle="Color-change task, response, and cross appearance.",
-            compact=True,
+            show_preview=True,
             parent=self,
         )
         self.fixation_cross_settings_page = self.fixation_settings_editor
@@ -332,6 +333,7 @@ class SetupWizardPage(QWidget):
         self.step_stack.addWidget(self.project_overview_editor)
         self.step_stack.addWidget(self.condition_setup_step)
         self.step_stack.addWidget(self._experiment_settings_step_page())
+        self.step_stack.addWidget(self.fixation_settings_editor)
         self.step_stack.addWidget(self._review_step_page())
 
     def _experiment_settings_step_page(self) -> QWidget:
@@ -340,15 +342,21 @@ class SetupWizardPage(QWidget):
         layout = QHBoxLayout(page)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(PAGE_SECTION_GAP)
-        for editor in (
-            self.runtime_settings_editor,
-            self.session_structure_editor,
-            self.fixation_settings_editor,
-        ):
-            editor.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
-        layout.addWidget(self.runtime_settings_editor, 2, Qt.AlignmentFlag.AlignTop)
-        layout.addWidget(self.session_structure_editor, 2, Qt.AlignmentFlag.AlignTop)
-        layout.addWidget(self.fixation_settings_editor, 3, Qt.AlignmentFlag.AlignTop)
+        self.runtime_settings_editor.setSizePolicy(
+            QSizePolicy.Policy.Fixed,
+            QSizePolicy.Policy.Preferred,
+        )
+        self.session_structure_editor.setSizePolicy(
+            QSizePolicy.Policy.Fixed,
+            QSizePolicy.Policy.Preferred,
+        )
+        self.runtime_settings_editor.setFixedWidth(210)
+        self.session_structure_editor.setFixedWidth(360)
+        layout.addWidget(self.runtime_settings_editor, 0)
+        layout.addWidget(self.session_structure_editor, 0)
+        layout.addStretch(1)
+        layout.setAlignment(self.runtime_settings_editor, Qt.AlignmentFlag.AlignTop)
+        layout.setAlignment(self.session_structure_editor, Qt.AlignmentFlag.AlignTop)
         return page
 
     def _review_step_page(self) -> QWidget:
@@ -603,6 +611,8 @@ class SetupWizardPage(QWidget):
             return self._conditions_ready_for_wizard(ordered_conditions)
         if step_key == "experiment":
             return self.runtime_settings_editor.current_refresh_hz() > 0.0
+        if step_key == "fixation":
+            return True
         if step_key == "review":
             return self.is_launch_ready()
         return False
@@ -680,7 +690,6 @@ class SetupWizardPage(QWidget):
     def _step_index_for_key(self, step_key: str) -> int:
         aliases = {
             "display": "experiment",
-            "fixation": "experiment",
             "runtime": "experiment",
             "session": "experiment",
         }

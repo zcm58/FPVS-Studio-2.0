@@ -83,11 +83,12 @@ Current planned seams:
 - GUI workflow composition is Home-first. `main_window.py` uses a stack with Home and
   `setup_wizard_page.py`; `Tools > Image Resizer` adds a standalone in-window utility
   page for folder-level FPVS image optimization without mutating project conditions.
-  The wizard uses a four-step top-progress flow with a
+  The wizard uses a five-step top-progress flow with a
   simplified Conditions setup step where users assign base/oddball image folders and
   can optionally create derived-variant control conditions. Experiment Settings combines
-  display, session, and fixation controls into one guided three-column page. Display
-  settings are limited to refresh rate and black/dark-gray background choices. Detailed
+  display and session logistics in one compact guided page, while Fixation Cross is a
+  guided page with behavior, timing, response, appearance, and live-preview sections.
+  Display settings are limited to refresh rate and black/dark-gray background choices. Detailed
   Conditions remains available for step-level advanced access rather than as a visible
   top-level tab; Stimuli Manager remains an internal support page, not a guided setup
   step.
@@ -123,6 +124,9 @@ Use these first reads before opening broad trees:
 - Display settings GUI task: `src/fpvs_studio/gui/runtime_settings_page.py`,
   `src/fpvs_studio/gui/run_page.py`, `src/fpvs_studio/gui/setup_wizard_page.py`,
   and `tests/gui/test_layout_dashboard.py`.
+- Fixation Cross setup task: `src/fpvs_studio/gui/fixation_settings_page.py`,
+  `src/fpvs_studio/gui/setup_wizard_page.py`, `docs/GUI_WORKFLOW.md`, and
+  `tests/gui/test_conditions_session_fixation.py`.
 - Compiler/session task: `src/fpvs_studio/core/AGENTS.md`,
   `src/fpvs_studio/core/compiler.py`,
   `src/fpvs_studio/core/session_plan.py`,

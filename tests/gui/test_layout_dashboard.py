@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 from PIL import Image
-from PySide6.QtCore import QObject, Qt, Signal
+from PySide6.QtCore import QObject, QPoint, Qt, Signal
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
@@ -196,24 +196,27 @@ def test_setup_wizard_exists_and_uses_single_column_shell_with_steps(
     assert wizard.progress_header_label.objectName() == "setup_wizard_progress_header"
     assert wizard.progress_steps.objectName() == "setup_wizard_progress_steps"
     assert wizard.step_status_badge.objectName() == "setup_wizard_ready_badge"
-    assert wizard.setup_wizard_step_list.count() == 4
-    assert wizard.step_stack.count() == 4
+    assert wizard.setup_wizard_step_list.count() == 5
+    assert wizard.step_stack.count() == 5
     assert wizard.content_stack.currentWidget() is wizard.guided_panel
     step_text = "\n".join(label.text() for label in wizard.progress_step_labels)
+    step_metadata_text = "\n".join(item.toolTip() for item in wizard.progress_steps.step_items)
     assert "[OK]" not in step_text
     assert "[TODO]" not in step_text
-    assert wizard.progress_header_label.text() == "Step 1 of 4: Project Details"
-    assert "Project Details" in step_text
-    assert "Conditions" in step_text
-    assert "Stimuli" not in step_text
-    assert "Experiment Settings" in step_text
-    assert "Display Settings" not in step_text
-    assert "Session Design" not in step_text
-    assert "Fixation Cross" not in step_text
-    assert "Review" in step_text
+    assert wizard.progress_header_label.text() == "Step 1 of 5: Project Details"
+    assert "Project Details" in step_metadata_text
+    assert "Conditions" in step_metadata_text
+    assert "Stimuli" not in step_metadata_text
+    assert "Experiment Settings" in step_metadata_text
+    assert "Display Settings" not in step_metadata_text
+    assert "Session Design" not in step_metadata_text
+    assert "Fixation Cross" in step_metadata_text
+    assert "Review" in step_metadata_text
     assert wizard.findChild(QWidget, "setup_wizard_step_1_project_details") is not None
     assert wizard.findChild(QWidget, "setup_wizard_step_2_conditions") is not None
     assert wizard.findChild(QWidget, "setup_wizard_step_3_experiment_settings") is not None
+    assert wizard.findChild(QWidget, "setup_wizard_step_4_fixation_cross") is not None
+    assert wizard.findChild(QWidget, "setup_wizard_step_5_review") is not None
     assert wizard.progress_steps.step_circles[0].property("setupProgressState") == "current"
     label_text = "\n".join(label.text() for label in wizard.findChildren(QLabel))
     assert "Current Step" not in label_text
@@ -414,7 +417,7 @@ def test_setup_wizard_surfaces_steps_and_keeps_shared_editors_available(
     assert setup_icon.width() == 52
     assert setup_icon.height() == 52
     assert project_editor.findChild(QLabel, "project_overview_title").text() == "Project Details"
-    assert project_editor.findChild(QLabel, "project_overview_step_badge").text() == "Step 1 of 4"
+    assert project_editor.findChild(QLabel, "project_overview_step_badge").text() == "Step 1 of 5"
     assert checklist.objectName() == "project_overview_checklist"
     assert checklist.title_label.text() == "Ready for next step"
     assert 210 <= checklist.minimumWidth() <= checklist.maximumWidth()
@@ -462,11 +465,12 @@ def test_setup_wizard_surfaces_steps_and_keeps_shared_editors_available(
     assert not hasattr(dashboard.condition_setup_step, "variant_combo")
     assert dashboard.assets_page is window.assets_page
     assert dashboard.run_page is window.run_page
-    assert dashboard.setup_wizard_step_list.count() == 4
+    assert dashboard.setup_wizard_step_list.count() == 5
     assert "Project Details" in dashboard.setup_wizard_step_list.item(0).text()
     assert "Conditions" in dashboard.setup_wizard_step_list.item(1).text()
     assert "Experiment Settings" in dashboard.setup_wizard_step_list.item(2).text()
-    assert "Review" in dashboard.setup_wizard_step_list.item(3).text()
+    assert "Fixation Cross" in dashboard.setup_wizard_step_list.item(3).text()
+    assert "Review" in dashboard.setup_wizard_step_list.item(4).text()
 
 
 def test_setup_wizard_navigation_and_advanced_editor_access(
@@ -554,10 +558,17 @@ def test_setup_wizard_navigation_and_advanced_editor_access(
     assert guide.step_stack.currentWidget().objectName() == "setup_wizard_experiment_settings_page"
     assert guide.runtime_settings_editor.parent() is guide.step_stack.currentWidget()
     assert guide.session_structure_editor.parent() is guide.step_stack.currentWidget()
-    assert guide.fixation_settings_editor.parent() is guide.step_stack.currentWidget()
     assert not advanced_button.isEnabled()
     assert guide.content_stack.currentWidget() is guide.guided_panel
 
+    qtbot.mouseClick(next_button, Qt.MouseButton.LeftButton)
+    assert guide.step_stack.currentWidget() is guide.fixation_settings_editor
+    assert guide.step_title_label.text() == "Fixation Cross"
+    assert guide.fixation_settings_editor.preview_widget is not None
+    assert not advanced_button.isEnabled()
+
+    qtbot.mouseClick(back_button, Qt.MouseButton.LeftButton)
+    assert guide.step_stack.currentWidget().objectName() == "setup_wizard_experiment_settings_page"
     qtbot.mouseClick(back_button, Qt.MouseButton.LeftButton)
     assert guide.step_stack.currentIndex() == 1
     assert guide.content_stack.currentWidget() is guide.guided_panel
@@ -1098,7 +1109,7 @@ def test_advanced_conditions_image_picker_starts_in_project_stimuli_folder(
     ]
 
 
-def test_setup_wizard_experiment_settings_has_no_advanced_replacement_view(
+def test_setup_wizard_experiment_and_fixation_steps_are_width_safe(
     qtbot,
     controller: StudioController,
     tmp_path: Path,
@@ -1113,13 +1124,103 @@ def test_setup_wizard_experiment_settings_has_no_advanced_replacement_view(
     assert not guide.setup_wizard_advanced_button.isEnabled()
     assert guide.runtime_settings_editor.refresh_hz_spin is not None
     assert guide.session_structure_editor.block_count_spin is not None
-    assert guide.fixation_settings_editor.fixation_enabled_checkbox is not None
-    assert guide.fixation_settings_editor.fixation_panel.title_label.text() == (
-        "Fixation Cross Settings"
-    )
+    assert guide.fixation_settings_editor is not guide.step_stack.currentWidget()
+    assert window.minimumWidth() == 1366
+    assert window.minimumHeight() == 820
+
+    for width, height in ((1366, 820), (1440, 920)):
+        window.resize(width, height)
+        QApplication.processEvents()
+        experiment_page = guide.step_stack.currentWidget()
+        display_panel = guide.runtime_settings_editor
+        session_panel = guide.session_structure_editor
+        assert guide.shell.page_container.scroll_area.horizontalScrollBar().maximum() == 0
+        display_right = display_panel.mapTo(
+            experiment_page,
+            QPoint(display_panel.width(), 0),
+        ).x()
+        session_left = session_panel.mapTo(experiment_page, QPoint(0, 0)).x()
+        session_right = session_panel.mapTo(
+            experiment_page,
+            QPoint(session_panel.width(), 0),
+        ).x()
+        assert display_right <= session_left
+        assert session_right <= experiment_page.width()
+
+        review_item = guide.progress_steps.step_items[-1]
+        review_right = review_item.mapTo(
+            guide.progress_steps,
+            QPoint(review_item.width(), 0),
+        ).x()
+        assert review_right <= guide.progress_steps.width()
+
     window.resize(1440, 920)
     QApplication.processEvents()
     assert guide.shell.page_container.scroll_area.verticalScrollBar().maximum() == 0
+    next_bottom = guide.setup_wizard_next_button.mapTo(
+        guide,
+        QPoint(0, guide.setup_wizard_next_button.height()),
+    ).y()
+    back_bottom = guide.setup_wizard_back_button.mapTo(
+        guide,
+        QPoint(0, guide.setup_wizard_back_button.height()),
+    ).y()
+    assert next_bottom <= guide.height()
+    assert back_bottom <= guide.height()
+
+    guide.open_wizard(step_key="fixation")
+    assert guide.step_stack.currentWidget() is guide.fixation_settings_editor
+    assert not guide.setup_wizard_advanced_button.isEnabled()
+    assert guide.fixation_settings_editor.fixation_panel.title_label.text() == (
+        "Fixation Cross Settings"
+    )
+    assert guide.fixation_settings_editor.preview_card is not None
+    assert guide.fixation_settings_editor.preview_widget is not None
+    label_text = "\n".join(
+        label.text() for label in guide.fixation_settings_editor.findChildren(QLabel)
+    )
+    assert "Behavior" in label_text
+    assert "Timing" in label_text
+    assert "Response" in label_text
+    assert "Appearance" in label_text
+    assert "Preview" in label_text
+
+    preview = guide.fixation_settings_editor.preview_widget
+    fixation = window.document.project.settings.fixation_task
+    assert preview.preview_state() == (
+        "#000000",
+        str(fixation.base_color),
+        str(fixation.target_color),
+        fixation.cross_size_px,
+        fixation.line_width_px,
+    )
+    guide.fixation_settings_editor.base_color_edit.setText("#112233")
+    guide.fixation_settings_editor.base_color_edit.editingFinished.emit()
+    guide.fixation_settings_editor.target_color_edit.setText("#445566")
+    guide.fixation_settings_editor.target_color_edit.editingFinished.emit()
+    guide.fixation_settings_editor.cross_size_spin.setValue(72)
+    guide.fixation_settings_editor.line_width_spin.setValue(6)
+    QApplication.processEvents()
+    assert preview.preview_state() == ("#000000", "#112233", "#445566", 72, 6)
+
+    for width, height in ((1366, 820), (1440, 920)):
+        window.resize(width, height)
+        QApplication.processEvents()
+        fixation_page = guide.step_stack.currentWidget()
+        fixation_panel = guide.fixation_settings_editor.fixation_panel
+        preview_card = guide.fixation_settings_editor.preview_card
+        assert preview_card is not None
+        assert guide.shell.page_container.scroll_area.horizontalScrollBar().maximum() == 0
+        fixation_right = fixation_panel.mapTo(
+            fixation_page,
+            QPoint(fixation_panel.width(), 0),
+        ).x()
+        preview_right = preview_card.mapTo(
+            fixation_page,
+            QPoint(preview_card.width(), 0),
+        ).x()
+        assert fixation_right <= preview_card.mapTo(fixation_page, QPoint(0, 0)).x()
+        assert preview_right <= fixation_page.width()
 
 
 def test_setup_wizard_return_home_confirms_incomplete_setup(

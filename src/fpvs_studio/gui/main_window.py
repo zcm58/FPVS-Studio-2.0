@@ -67,6 +67,7 @@ class StudioMainWindow(QMainWindow):
         self._on_request_manage_projects = on_request_manage_projects
         self._on_request_settings = on_request_settings
         self.setWindowTitle("FPVS Studio (Alpha)")
+        self.setMinimumSize(1366, 820)
         self.resize(1440, 920)
 
         self._runtime_fullscreen_ui_state = True

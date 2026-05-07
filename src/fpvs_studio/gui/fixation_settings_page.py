@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import QSignalBlocker
+from PySide6.QtCore import QSignalBlocker, Qt
+from PySide6.QtGui import QColor, QPainter, QPaintEvent, QPen
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -13,6 +14,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QSizePolicy,
     QSpinBox,
     QVBoxLayout,
     QWidget,
@@ -27,9 +29,94 @@ from fpvs_studio.gui.components import (
 from fpvs_studio.gui.document import ProjectDocument
 from fpvs_studio.gui.window_helpers import (
     _FIXATION_FEASIBILITY_TOOLTIP_TEXT,
+    _canonical_runtime_background_hex,
     _set_form_row_visible,
     _show_error_dialog,
 )
+
+
+def _preview_color(color_text: str, *, fallback: str) -> QColor:
+    color = QColor(color_text)
+    if color.isValid():
+        return color
+    return QColor(fallback)
+
+
+class FixationCrossPreview(QWidget):
+    """Paint a lightweight preview of default and changed fixation crosses."""
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setObjectName("fixation_cross_preview")
+        self.setMinimumSize(220, 180)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self.background_color = "#000000"
+        self.base_color = "#FFFFFF"
+        self.target_color = "#FF0000"
+        self.cross_size_px = 44
+        self.line_width_px = 3
+
+    def set_preview_settings(
+        self,
+        *,
+        background_color: str,
+        base_color: str,
+        target_color: str,
+        cross_size_px: int,
+        line_width_px: int,
+    ) -> None:
+        self.background_color = background_color
+        self.base_color = base_color
+        self.target_color = target_color
+        self.cross_size_px = cross_size_px
+        self.line_width_px = line_width_px
+        self.update()
+
+    def preview_state(self) -> tuple[str, str, str, int, int]:
+        return (
+            self.background_color,
+            self.base_color,
+            self.target_color,
+            self.cross_size_px,
+            self.line_width_px,
+        )
+
+    def paintEvent(self, event: QPaintEvent) -> None:  # noqa: N802
+        super().paintEvent(event)
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        painter.fillRect(self.rect(), _preview_color(self.background_color, fallback="#000000"))
+
+        half_width = max(1, self.width() // 2)
+        centers = (
+            (half_width // 2, self.height() // 2),
+            (half_width + half_width // 2, self.height() // 2),
+        )
+        labels = (("Default", self.base_color), ("Change", self.target_color))
+        max_cross_size = max(8, min(half_width, self.height()) - 64)
+        cross_size = max(4, min(self.cross_size_px, max_cross_size))
+        line_width = max(1, min(self.line_width_px, 24))
+
+        painter.setPen(QPen(QColor("#94a3b8")))
+        painter.drawText(0, 10, half_width, 20, Qt.AlignmentFlag.AlignCenter, labels[0][0])
+        painter.drawText(
+            half_width,
+            10,
+            half_width,
+            20,
+            Qt.AlignmentFlag.AlignCenter,
+            labels[1][0],
+        )
+
+        for center, (_label, color_text) in zip(centers, labels, strict=True):
+            pen = QPen(_preview_color(color_text, fallback="#FFFFFF"))
+            pen.setWidth(line_width)
+            pen.setCapStyle(Qt.PenCapStyle.SquareCap)
+            painter.setPen(pen)
+            center_x, center_y = center
+            radius = cross_size // 2
+            painter.drawLine(center_x - radius, center_y, center_x + radius, center_y)
+            painter.drawLine(center_x, center_y - radius, center_x, center_y + radius)
 
 
 class FixationSettingsEditor(QWidget):
@@ -44,6 +131,7 @@ class FixationSettingsEditor(QWidget):
         title: str = "Fixation Cross Task",
         subtitle: str = "Task enablement, behavior, timing, response, and appearance.",
         compact: bool = False,
+        show_preview: bool = False,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
@@ -55,6 +143,7 @@ class FixationSettingsEditor(QWidget):
         self._schedule_row_behavior = schedule_row_behavior
         self._layout_mode = layout_mode
         self._compact = compact
+        self._show_preview = show_preview
         card_margin_y = 6 if compact else 10
         card_spacing = 5 if compact else 8
         form_spacing = 4 if compact else 7
@@ -157,12 +246,13 @@ class FixationSettingsEditor(QWidget):
         fixation_panel_layout = self.fixation_panel.body_layout
         fixation_panel_layout.setSpacing(section_spacing)
 
-        enablement_layout = QHBoxLayout()
+        enablement_layout = QVBoxLayout() if compact else QHBoxLayout()
         enablement_layout.setContentsMargins(0, 0, 0, 0)
         enablement_layout.setSpacing(5 if compact else 6)
         enablement_layout.addWidget(self.fixation_enabled_checkbox)
         enablement_layout.addWidget(self.fixation_accuracy_checkbox)
-        enablement_layout.addStretch(1)
+        if not compact:
+            enablement_layout.addStretch(1)
 
         self.fixation_behavior_group = QWidget(self.fixation_panel)
         self.fixation_behavior_layout = QFormLayout(self.fixation_behavior_group)
@@ -251,7 +341,35 @@ class FixationSettingsEditor(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
-        layout.addWidget(self.fixation_panel)
+        self.preview_card: SectionCard | None = None
+        self.preview_widget: FixationCrossPreview | None = None
+        if show_preview:
+            self.preview_card = SectionCard(
+                title="Preview",
+                subtitle="Default and changed fixation colors on the presentation background.",
+                object_name="fixation_cross_preview_card",
+                parent=self,
+            )
+            self.preview_widget = FixationCrossPreview(self.preview_card)
+            self.preview_card.body_layout.addWidget(self.preview_widget, 1)
+
+            preview_layout = QHBoxLayout()
+            preview_layout.setContentsMargins(0, 0, 0, 0)
+            preview_layout.setSpacing(PAGE_SECTION_GAP)
+            self.fixation_panel.setSizePolicy(
+                QSizePolicy.Policy.Expanding,
+                QSizePolicy.Policy.Preferred,
+            )
+            self.preview_card.setMinimumWidth(280)
+            self.preview_card.setSizePolicy(
+                QSizePolicy.Policy.Preferred,
+                QSizePolicy.Policy.Expanding,
+            )
+            preview_layout.addWidget(self.fixation_panel, 2)
+            preview_layout.addWidget(self.preview_card, 1)
+            layout.addLayout(preview_layout)
+        else:
+            layout.addWidget(self.fixation_panel)
 
         apply_fixation_settings_theme(self)
 
@@ -296,6 +414,7 @@ class FixationSettingsEditor(QWidget):
             self.line_width_spin.setValue(fixation.line_width_px)
         self._update_fixation_visibility_state()
         self._refresh_condition_guidance()
+        self._refresh_preview()
 
     def _update_fixation_visibility_state(self) -> None:
         fixation_enabled = self.fixation_enabled_checkbox.isChecked()
@@ -387,6 +506,22 @@ class FixationSettingsEditor(QWidget):
             )
         )
 
+    def _refresh_preview(self) -> None:
+        if self.preview_widget is None:
+            return
+        fixation = self._document.project.settings.fixation_task
+        background_color = self._document.project.settings.display.background_color
+        if not isinstance(background_color, str):
+            background_color = "#000000"
+        canonical_background = _canonical_runtime_background_hex(background_color) or "#000000"
+        self.preview_widget.set_preview_settings(
+            background_color=canonical_background,
+            base_color=str(fixation.base_color),
+            target_color=str(fixation.target_color),
+            cross_size_px=fixation.cross_size_px,
+            line_width_px=fixation.line_width_px,
+        )
+
     def _on_fixation_enabled_toggled(self) -> None:
         self._update_fixation_visibility_state()
         self._apply_fixation_settings()
@@ -421,6 +556,7 @@ class FixationSettingsEditor(QWidget):
                 cross_size_px=self.cross_size_spin.value(),
                 line_width_px=self.line_width_spin.value(),
             )
+            self._refresh_preview()
         except Exception as error:
             _show_error_dialog(self, "Fixation Settings Error", error)
             self.refresh()
