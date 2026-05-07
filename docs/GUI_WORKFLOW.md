@@ -38,7 +38,7 @@ The authoring window is organized around two user-facing modes:
   - `Edit Setup` opens the guided setup workflow
 - `Setup Wizard`
   - in-window setup flow for new/incomplete projects and intentional edits
-  - ordered steps: Project Details, Conditions, Stimuli, Display Settings,
+  - ordered steps: Project Details, Stimuli, Conditions, Display Settings,
     Session Design, Fixation Cross, Review
   - `Next` is disabled until the active step is complete
   - the top progress header shows `Step X of 7` and a slim horizontal progress
@@ -50,7 +50,11 @@ The authoring window is organized around two user-facing modes:
     context; individual step cards should not repeat generic instructional copy
   - Project Details uses a focused centered card inside the full-width wizard,
     keeping the project folder path compact and secondary; project name and
-    description are required before continuing to Conditions
+    description are required before continuing to Stimuli
+  - the Stimuli step appears before Conditions so users can review or prepare image
+    folders before assigning them to condition roles; in the current implementation
+    it is non-blocking and keeps detailed stimulus management available through
+    `Advanced`
   - the Conditions step uses a simplified condition setup surface for condition
     name, trigger code, participant instructions, and base/oddball image folders
   - the Conditions step uses the shared setup workspace pattern: condition list on

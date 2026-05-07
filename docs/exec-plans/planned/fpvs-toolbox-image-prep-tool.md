@@ -47,17 +47,50 @@ not be treated as final production architecture.
 
 ## Setup Wizard Direction
 
-The dedicated tool should be accessible outside the wizard. Future wizard
-integration should be a convenience path, not a hidden validation fallback.
+The future Setup Wizard order should put `Stimuli` before `Conditions`:
+
+1. `Project Details`
+2. `Stimuli`
+3. `Conditions`
+4. `Display Settings`
+5. `Session Design`
+6. `Fixation Cross`
+7. `Review`
+
+This order lets users prepare image folders before they are asked to assign those
+folders to base and oddball sources in condition setup.
+
+The dedicated tool should also be accessible outside the wizard. Wizard
+integration is a convenience path, not a hidden validation fallback.
 
 When source inspection detects mixed image sizes, the wizard may show a clear
 action such as `Prepare Images...` that opens the tool with the relevant source
 folder prefilled. The wizard should still surface the validation problem directly
 and should not silently resize images to make readiness pass.
 
-The guided wizard can eventually remove required Stimuli / Assets Readiness
-steps once the dedicated image preparation workflow exists. Condition base and
-oddball folder selection can remain in the Conditions step.
+The `Stimuli` step should become an image preparation workspace rather than only
+an assets-readiness snapshot. It can expose:
+
+- input folder and output folder selection
+- target size and output format controls
+- optional generated variants, such as grayscale, rot180, and phase-scrambled
+- a non-blocking validation/readiness summary for supported formats and mixed
+  resolutions
+- a clear output-folder summary that users can select later in `Conditions`
+
+The `Conditions` step should remain focused on experiment structure:
+
+- condition name
+- trigger code
+- participant instructions
+- base image folder assignment
+- oddball image folder assignment
+- condition-level readiness
+
+Do not automatically wire generated outputs into conditions unless the active
+implementation plan explicitly scopes that behavior. The safer default is for the
+Stimuli step to prepare folders and for the Conditions step to let users choose
+which prepared folders belong to each condition.
 
 ## Boundaries
 
@@ -84,6 +117,8 @@ oddball folder selection can remain in the Conditions step.
   start/cancel state, progress/status updates, and completion summaries.
 - Wizard regression tests confirming mixed-resolution detection can point to the
   tool without hiding validation errors.
+- Wizard order tests confirming `Stimuli` appears before `Conditions` and that
+  Conditions assignment remains explicit after image preparation.
 
 Verification commands:
 
@@ -104,3 +139,5 @@ For this planned-doc scaffold, only the harness-doc test is required.
   application for easier UX updates.
 - The first production pass should reuse behavior from the imported files, not
   preserve their module structure or legacy imports.
+- The desired future wizard order is `Project Details`, `Stimuli`, `Conditions`,
+  `Display Settings`, `Session Design`, `Fixation Cross`, `Review`.

@@ -51,8 +51,8 @@ from fpvs_studio.gui.window_helpers import (
 
 _WIZARD_STEPS: tuple[tuple[str, str], ...] = (
     ("project", "Project Details"),
-    ("conditions", "Conditions"),
     ("stimuli", "Stimuli"),
+    ("conditions", "Conditions"),
     ("display", "Display Settings"),
     ("session", "Session Design"),
     ("fixation", "Fixation Cross"),
@@ -308,8 +308,8 @@ class SetupWizardPage(QWidget):
 
     def _build_step_pages(self) -> None:
         self.step_stack.addWidget(self.project_overview_editor)
-        self.step_stack.addWidget(self.condition_setup_step)
         self.step_stack.addWidget(self.assets_readiness_editor)
+        self.step_stack.addWidget(self.condition_setup_step)
         self.step_stack.addWidget(self.runtime_settings_editor)
         self.step_stack.addWidget(self._session_step_page())
         self.step_stack.addWidget(self._fixation_step_page())
@@ -528,7 +528,7 @@ class SetupWizardPage(QWidget):
                 return "Set trigger codes"
             return "Assign base and oddball folders"
         if step_key == "stimuli":
-            return "Needs images"
+            return "Ready"
         if step_key == "review":
             return "Review blockers"
         return self._current_step_blocker() if index == self._active_step_index else "Needs setup"
@@ -544,7 +544,7 @@ class SetupWizardPage(QWidget):
         if step_key == "conditions":
             return self._conditions_ready_for_wizard(ordered_conditions)
         if step_key == "stimuli":
-            return _conditions_have_assigned_assets(self._document, ordered_conditions)
+            return True
         if step_key == "display":
             return self.runtime_settings_editor.current_refresh_hz() > 0.0
         if step_key in {"session", "fixation"}:
@@ -567,7 +567,7 @@ class SetupWizardPage(QWidget):
                 return "Set trigger codes above 0"
             return "Assign base and oddball folders"
         if step_key == "stimuli":
-            return "Assign base and oddball folders"
+            return "Review or prepare image folders"
         if step_key == "display":
             return "Set a valid refresh rate"
         if step_key == "review":

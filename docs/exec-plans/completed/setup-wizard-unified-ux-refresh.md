@@ -1,6 +1,8 @@
 # Setup Wizard Unified UX Refresh
 
-Status: Active
+Status: Completed
+
+Completed: 2026-05-07
 
 Progress:
 
@@ -9,9 +11,10 @@ Progress:
 - Phase 3 completed: wizard shell uses the connected stepper and bottom status strip.
 - Phase 4 completed: guided Conditions step now uses the left/main/right setup
   workspace, source cards, protocol defaults, and reusable setup checklist.
-- Phase 5 pending: align remaining setup steps with the shared wizard language where
-  useful.
-- Phase 6 pending: final polish and edge-case pass.
+- Phase 5 completed: remaining setup steps align with the shared wizard language where
+  useful, and `Stimuli` now appears before `Conditions` to support future image
+  preparation workflow integration.
+- Phase 6 completed: final polish and verification pass completed.
 
 ## Purpose
 
@@ -80,8 +83,8 @@ The Setup Wizard header should show:
 The stepper labels, in order:
 
 1. `Project Details`
-2. `Conditions`
-3. `Stimuli`
+2. `Stimuli`
+3. `Conditions`
 4. `Display Settings`
 5. `Session Design`
 6. `Fixation Cross`
@@ -103,8 +106,8 @@ Required stable object names:
 Add clear child object names for tests:
 
 - `setup_wizard_step_1_project_details`
-- `setup_wizard_step_2_conditions`
-- `setup_wizard_step_3_stimuli`
+- `setup_wizard_step_2_stimuli`
+- `setup_wizard_step_3_conditions`
 - `setup_wizard_step_4_display_settings`
 - `setup_wizard_step_5_session_design`
 - `setup_wizard_step_6_fixation_cross`
@@ -381,9 +384,11 @@ language.
 
 - `Project Details`: project name, description, project folder, condition template,
   with right-side checklist.
-- `Conditions`: primary target step matching the mockup.
-- `Stimuli`: stimulus readiness and materialization/image-version status; avoid
-  duplicating base/oddball source selection unless the existing workflow requires it.
+- `Stimuli`: image preparation, source inspection, resize/convert entry point,
+  variant generation, and readiness guidance. This step comes before `Conditions`
+  so users can normalize image folders before assigning them to conditions.
+- `Conditions`: condition naming, trigger codes, participant instructions, and explicit
+  base/oddball folder assignment. Keep this step focused on experiment structure.
 - `Display Settings`: refresh rate, fullscreen, launch/display target, compatibility
   summary.
 - `Session Design`: block count, randomization/order behavior, seed, transition
@@ -511,6 +516,11 @@ Preserve:
 Update remaining steps to share shell/component language. Do not force identical
 layouts. Use the three-zone pattern only where appropriate.
 
+Include the planned wizard-order change when the image preparation plan becomes
+active: `Stimuli` should become step 2 and `Conditions` should become step 3.
+That change must preserve existing condition mutation behavior and should not
+silently resize images to satisfy validation.
+
 ### Phase 6 - Polish, Edge Cases, And Verification
 
 Polish spacing, alignment, button sizes, focus states, badges, disabled states, empty
@@ -531,7 +541,11 @@ Add Setup Wizard tests:
 - Conditions step has left condition list
 - Conditions step has main selected-condition editor
 - Conditions step has right protocol/checklist panels
-- existing object names remain stable
+- wizard step order is Project Details, Stimuli, Conditions, Display Settings,
+  Session Design, Fixation Cross, Review
+- Stimuli step can point users toward image preparation when mixed resolutions are
+  detected without hiding validation errors
+- non-step object names remain stable; step object names should reflect the new order
 - `Stimulus Variant` no longer appears in guided Setup Wizard UI
 - `Image Version` appears in guided Setup Wizard UI
 - `Cycles / Repeat` no longer appears in guided Setup Wizard UI

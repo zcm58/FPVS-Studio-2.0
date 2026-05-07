@@ -99,7 +99,8 @@ def test_setup_wizard_exists_and_uses_single_column_shell_with_steps(
     assert "Fixation Cross" in step_text
     assert "Review" in step_text
     assert wizard.findChild(QWidget, "setup_wizard_step_1_project_details") is not None
-    assert wizard.findChild(QWidget, "setup_wizard_step_2_conditions") is not None
+    assert wizard.findChild(QWidget, "setup_wizard_step_2_stimuli") is not None
+    assert wizard.findChild(QWidget, "setup_wizard_step_3_conditions") is not None
     assert wizard.progress_steps.step_circles[0].property("setupProgressState") == "current"
     label_text = "\n".join(label.text() for label in wizard.findChildren(QLabel))
     assert "Current Step" not in label_text
@@ -352,6 +353,8 @@ def test_setup_wizard_surfaces_steps_and_keeps_shared_editors_available(
     assert dashboard.run_page is window.run_page
     assert dashboard.setup_wizard_step_list.count() == 7
     assert "Project Details" in dashboard.setup_wizard_step_list.item(0).text()
+    assert "Stimuli" in dashboard.setup_wizard_step_list.item(1).text()
+    assert "Conditions" in dashboard.setup_wizard_step_list.item(2).text()
     assert "Display Settings" in dashboard.setup_wizard_step_list.item(3).text()
     assert "Session Design" in dashboard.setup_wizard_step_list.item(4).text()
     assert "Fixation Cross" in dashboard.setup_wizard_step_list.item(5).text()
@@ -384,6 +387,18 @@ def test_setup_wizard_navigation_and_advanced_editor_access(
     assert next_button.isEnabled()
     qtbot.mouseClick(next_button, Qt.MouseButton.LeftButton)
     assert guide.step_stack.currentIndex() == 1
+    assert guide.step_stack.currentWidget() is guide.assets_readiness_editor
+    assert guide.content_stack.currentWidget() is guide.guided_panel
+    assert next_button.isEnabled()
+    assert advanced_button.isEnabled()
+    qtbot.mouseClick(advanced_button, Qt.MouseButton.LeftButton)
+    assert guide.content_stack.currentWidget() is guide.advanced_stack
+    assert guide.advanced_stack.currentWidget() is window.assets_page
+    qtbot.mouseClick(advanced_button, Qt.MouseButton.LeftButton)
+    assert guide.content_stack.currentWidget() is guide.guided_panel
+
+    qtbot.mouseClick(next_button, Qt.MouseButton.LeftButton)
+    assert guide.step_stack.currentIndex() == 2
     assert guide.step_stack.currentWidget() is guide.condition_setup_step
     assert guide.content_stack.currentWidget() is guide.guided_panel
     assert not next_button.isEnabled()
@@ -434,15 +449,15 @@ def test_setup_wizard_navigation_and_advanced_editor_access(
     assert next_button.isEnabled()
 
     qtbot.mouseClick(next_button, Qt.MouseButton.LeftButton)
-    assert guide.step_stack.currentWidget() is guide.assets_readiness_editor
+    assert guide.step_stack.currentWidget() is guide.runtime_settings_editor
     assert advanced_button.isEnabled()
     qtbot.mouseClick(advanced_button, Qt.MouseButton.LeftButton)
     assert guide.content_stack.currentWidget() is guide.advanced_stack
-    assert guide.advanced_stack.currentWidget() is window.assets_page
+    assert guide.advanced_stack.currentWidget() is window.run_page
     assert advanced_button.text() == "Back to Guided Step"
 
     qtbot.mouseClick(back_button, Qt.MouseButton.LeftButton)
-    assert guide.step_stack.currentIndex() == 1
+    assert guide.step_stack.currentIndex() == 2
     assert guide.content_stack.currentWidget() is guide.guided_panel
 
     monkeypatch.setattr(
