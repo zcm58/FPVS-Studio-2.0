@@ -216,7 +216,7 @@ class FixationTaskSettings(FPVSBaseModel):
     target_count_min: int = Field(default=1, ge=0)
     target_count_max: int = Field(default=3, ge=0)
     no_immediate_repeat_count: bool = True
-    base_color: str | tuple[int, int, int] = "#FFFFFF"
+    base_color: str | tuple[int, int, int] = "#0000FF"
     target_color: str | tuple[int, int, int] = "#FF0000"
     target_duration_ms: int = Field(default=250, ge=0)
     min_gap_ms: int = Field(default=1500, ge=0)

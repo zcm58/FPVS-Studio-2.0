@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pydantic import ValidationError
 from PySide6.QtCore import QSignalBlocker, Qt
 from PySide6.QtGui import QColor, QPainter, QPaintEvent, QPen
 from PySide6.QtWidgets import (
@@ -34,6 +35,15 @@ from fpvs_studio.gui.window_helpers import (
     _show_error_dialog,
 )
 
+_BASE_COLOR_OPTIONS = (("Blue", "#0000FF"), ("White", "#FFFFFF"))
+_TARGET_COLOR_OPTIONS = (("Red", "#FF0000"),)
+_DEFAULT_BASE_COLOR = "#0000FF"
+_DEFAULT_TARGET_COLOR = "#FF0000"
+_BASE_COLOR_TOOLTIP = "Normal fixation cross color shown during presentation."
+_TARGET_COLOR_TOOLTIP = (
+    "Temporary fixation cross color participants respond to during the accuracy task."
+)
+
 
 def _preview_color(color_text: str, *, fallback: str) -> QColor:
     color = QColor(color_text)
@@ -54,8 +64,42 @@ def _settings_section(title: str, body: QWidget, *, parent: QWidget) -> QFrame:
     title_label.setProperty("fixationSettingsSectionTitle", "true")
     title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
     layout.addWidget(title_label)
+    layout.addStretch(1)
     layout.addWidget(body)
+    layout.addStretch(1)
     return section
+
+
+def _color_combo(*, object_name: str, tooltip: str, parent: QWidget) -> QComboBox:
+    combo = QComboBox(parent)
+    combo.setObjectName(object_name)
+    combo.setToolTip(tooltip)
+    return combo
+
+
+def _populate_color_combo(combo: QComboBox, options: tuple[tuple[str, str], ...]) -> None:
+    for label, color in options:
+        combo.addItem(label, userData=color)
+
+
+def _select_color_combo_value(combo: QComboBox, color: str, *, fallback: str) -> None:
+    index = combo.findData(color)
+    if index < 0:
+        index = combo.findData(fallback)
+    combo.setCurrentIndex(max(0, index))
+
+
+def _fixation_settings_error_message(error: Exception) -> str | None:
+    if not isinstance(error, ValidationError):
+        return None
+    for issue in error.errors():
+        message = str(issue.get("msg", ""))
+        if "target_count_min" in message and "target_count_max" in message:
+            return (
+                "Minimum changes per condition cannot be higher than maximum changes. "
+                "Lower Minimum changes or increase Maximum changes, then try again."
+            )
+    return None
 
 
 class FixationCrossPreview(QWidget):
@@ -64,11 +108,12 @@ class FixationCrossPreview(QWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setObjectName("fixation_cross_preview")
-        self.setMinimumSize(220, 180)
-        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self.setMinimumSize(220, 150)
+        self.setMaximumHeight(300)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         self.background_color = "#000000"
-        self.base_color = "#FFFFFF"
-        self.target_color = "#FF0000"
+        self.base_color = _DEFAULT_BASE_COLOR
+        self.target_color = _DEFAULT_TARGET_COLOR
         self.cross_size_px = 44
         self.line_width_px = 3
 
@@ -109,7 +154,7 @@ class FixationCrossPreview(QWidget):
             (half_width + half_width // 2, self.height() // 2),
         )
         labels = (("Default", self.base_color), ("Change", self.target_color))
-        max_cross_size = max(8, min(half_width, self.height()) - 64)
+        max_cross_size = max(8, min(half_width, self.height()) - 56)
         cross_size = max(4, min(self.cross_size_px, max_cross_size))
         line_width = max(1, min(self.line_width_px, 24))
 
@@ -163,7 +208,6 @@ class FixationSettingsEditor(QWidget):
         card_margin_y = 6 if compact else 10
         card_spacing = 5 if compact else 8
         form_spacing = 4 if compact else 7
-        feasibility_margin_y = 5 if compact else 8
         section_spacing = 5 if compact else 8
 
         self.fixation_enabled_checkbox = QCheckBox(
@@ -222,13 +266,21 @@ class FixationSettingsEditor(QWidget):
         self.max_gap_spin.setRange(0, 10000)
         self.max_gap_spin.valueChanged.connect(self._apply_fixation_settings)
 
-        self.base_color_edit = QLineEdit(self)
-        self.base_color_edit.setObjectName("fixation_base_color_edit")
-        self.base_color_edit.editingFinished.connect(self._apply_fixation_settings)
+        self.base_color_combo = _color_combo(
+            object_name="fixation_base_color_combo",
+            tooltip=_BASE_COLOR_TOOLTIP,
+            parent=self,
+        )
+        _populate_color_combo(self.base_color_combo, _BASE_COLOR_OPTIONS)
+        self.base_color_combo.currentIndexChanged.connect(self._apply_fixation_settings)
 
-        self.target_color_edit = QLineEdit(self)
-        self.target_color_edit.setObjectName("fixation_target_color_edit")
-        self.target_color_edit.editingFinished.connect(self._apply_fixation_settings)
+        self.target_color_combo = _color_combo(
+            object_name="fixation_target_color_combo",
+            tooltip=_TARGET_COLOR_TOOLTIP,
+            parent=self,
+        )
+        _populate_color_combo(self.target_color_combo, _TARGET_COLOR_OPTIONS)
+        self.target_color_combo.currentIndexChanged.connect(self._apply_fixation_settings)
 
         self.response_key_edit = QLineEdit(self)
         self.response_key_edit.setObjectName("response_key_edit")
@@ -297,21 +349,26 @@ class FixationSettingsEditor(QWidget):
         self.fixation_appearance_group = QWidget(self.fixation_panel)
         appearance_layout = QFormLayout(self.fixation_appearance_group)
         appearance_layout.setVerticalSpacing(form_spacing)
-        appearance_layout.addRow("Default color", self.base_color_edit)
-        appearance_layout.addRow("Change color", self.target_color_edit)
+        appearance_layout.addRow("Default color", self.base_color_combo)
+        appearance_layout.addRow("Change color", self.target_color_combo)
         appearance_layout.addRow("Cross size (px)", self.cross_size_spin)
         appearance_layout.addRow("Line width (px)", self.line_width_spin)
 
         feasibility_card = QFrame(self.fixation_panel)
         feasibility_card.setObjectName("fixation_feasibility_card")
         feasibility_card.setToolTip(_FIXATION_FEASIBILITY_TOOLTIP_TEXT)
+        feasibility_card.setMaximumHeight(42)
+        feasibility_card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         feasibility_layout = QVBoxLayout(feasibility_card)
-        feasibility_layout.setContentsMargins(10, feasibility_margin_y, 10, feasibility_margin_y)
-        feasibility_layout.setSpacing(3 if compact else 4)
+        feasibility_layout.setContentsMargins(10, 4, 10, 4)
+        feasibility_layout.setSpacing(0)
         self.fixation_feasibility_label = QLabel(feasibility_card)
         self.fixation_feasibility_label.setObjectName("fixation_feasibility_label")
         self.fixation_feasibility_label.setToolTip(_FIXATION_FEASIBILITY_TOOLTIP_TEXT)
         self.fixation_feasibility_label.setWordWrap(True)
+        self.fixation_feasibility_label.setAlignment(
+            Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft
+        )
         feasibility_layout.addWidget(self.fixation_feasibility_label)
 
         settings_column = QWidget(self.fixation_panel)
@@ -375,6 +432,7 @@ class FixationSettingsEditor(QWidget):
             self.preview_panel = QFrame(self)
             self.preview_panel.setObjectName("fixation_cross_preview_panel")
             self.preview_panel.setProperty("fixationPreviewPanel", "true")
+            self.preview_panel.setMaximumHeight(360)
             preview_panel_layout = QVBoxLayout(self.preview_panel)
             preview_panel_layout.setContentsMargins(10, 8, 10, 8)
             preview_panel_layout.setSpacing(8)
@@ -434,10 +492,18 @@ class FixationSettingsEditor(QWidget):
             self.min_gap_spin.setValue(fixation.min_gap_ms)
         with QSignalBlocker(self.max_gap_spin):
             self.max_gap_spin.setValue(fixation.max_gap_ms)
-        with QSignalBlocker(self.base_color_edit):
-            self.base_color_edit.setText(str(fixation.base_color))
-        with QSignalBlocker(self.target_color_edit):
-            self.target_color_edit.setText(str(fixation.target_color))
+        with QSignalBlocker(self.base_color_combo):
+            _select_color_combo_value(
+                self.base_color_combo,
+                str(fixation.base_color),
+                fallback=_DEFAULT_BASE_COLOR,
+            )
+        with QSignalBlocker(self.target_color_combo):
+            _select_color_combo_value(
+                self.target_color_combo,
+                str(fixation.target_color),
+                fallback=_DEFAULT_TARGET_COLOR,
+            )
         with QSignalBlocker(self.response_key_edit):
             self.response_key_edit.setText(fixation.response_key)
         with QSignalBlocker(self.response_window_spin):
@@ -591,8 +657,8 @@ class FixationSettingsEditor(QWidget):
                 target_duration_ms=self.target_duration_spin.value(),
                 min_gap_ms=self.min_gap_spin.value(),
                 max_gap_ms=self.max_gap_spin.value(),
-                base_color=self.base_color_edit.text().strip(),
-                target_color=self.target_color_edit.text().strip(),
+                base_color=str(self.base_color_combo.currentData()),
+                target_color=str(self.target_color_combo.currentData()),
                 response_key=response_key,
                 response_window_seconds=self.response_window_spin.value(),
                 response_keys=[response_key],
@@ -601,7 +667,14 @@ class FixationSettingsEditor(QWidget):
             )
             self._refresh_preview()
         except Exception as error:
-            _show_error_dialog(self, "Fixation Settings Error", error)
+            display_error = error
+            if message := _fixation_settings_error_message(error):
+                display_error = ValueError(message)
+            _show_error_dialog(
+                self,
+                "Fixation Settings Error",
+                display_error,
+            )
             self.refresh()
 
 

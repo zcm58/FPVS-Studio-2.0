@@ -137,10 +137,17 @@ def test_session_and_fixation_settings_round_trip(
     fixation_page.target_count_max_spin.setValue(5)
     fixation_page.no_repeat_count_checkbox.setChecked(True)
     fixation_page.target_duration_spin.setValue(300)
-    fixation_page.base_color_edit.setText("#112233")
-    fixation_page.base_color_edit.editingFinished.emit()
-    fixation_page.target_color_edit.setText("#445566")
-    fixation_page.target_color_edit.editingFinished.emit()
+    assert fixation_page.base_color_combo.findData("#0000FF") >= 0
+    assert fixation_page.base_color_combo.findData("#FFFFFF") >= 0
+    assert fixation_page.target_color_combo.findData("#FF0000") >= 0
+    assert fixation_page.base_color_combo.toolTip()
+    assert fixation_page.target_color_combo.toolTip()
+    fixation_page.base_color_combo.setCurrentIndex(
+        fixation_page.base_color_combo.findData("#FFFFFF")
+    )
+    fixation_page.target_color_combo.setCurrentIndex(
+        fixation_page.target_color_combo.findData("#FF0000")
+    )
     fixation_page.response_key_edit.setText("space")
     fixation_page.response_key_edit.editingFinished.emit()
     fixation_page.response_window_spin.setValue(1.25)
@@ -168,8 +175,8 @@ def test_session_and_fixation_settings_round_trip(
     assert fixation.target_count_max == 5
     assert fixation.no_immediate_repeat_count is True
     assert fixation.target_duration_ms == 300
-    assert fixation.base_color == "#112233"
-    assert fixation.target_color == "#445566"
+    assert fixation.base_color == "#FFFFFF"
+    assert fixation.target_color == "#FF0000"
     assert fixation.response_key == "space"
     assert fixation.response_window_seconds == 1.25
     assert fixation.response_keys == ["space"]
@@ -272,6 +279,46 @@ def test_fixation_color_change_mode_toggles_relevant_controls(
     assert page.no_repeat_count_checkbox.isEnabled()
 
 
+def test_fixation_randomized_min_above_max_shows_plain_language_error(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Fixation Range Error")
+
+    page = window.setup_dashboard_page.fixation_settings_editor
+    window.setup_wizard_page.open_wizard(step_key="fixation")
+    window.main_stack.setCurrentWidget(window.setup_wizard_page)
+    page.fixation_enabled_checkbox.setChecked(True)
+    page.target_count_mode_combo.setCurrentIndex(
+        page.target_count_mode_combo.findData("randomized")
+    )
+    QApplication.processEvents()
+
+    captured_errors: list[tuple[str, str]] = []
+
+    def _capture_error(_parent, title, error):
+        captured_errors.append((title, str(error)))
+
+    monkeypatch.setattr(
+        "fpvs_studio.gui.fixation_settings_page._show_error_dialog",
+        _capture_error,
+    )
+    page.target_count_min_spin.setValue(page.target_count_max_spin.value() + 1)
+    QApplication.processEvents()
+
+    assert captured_errors == [
+        (
+            "Fixation Settings Error",
+            "Minimum changes per condition cannot be higher than maximum changes. "
+            "Lower Minimum changes or increase Maximum changes, then try again.",
+        )
+    ]
+    assert "target_count_min" not in captured_errors[0][1]
+    assert "ValidationError" not in captured_errors[0][1]
+
+
 def test_fixation_accuracy_toggle_controls_response_visibility(
     qtbot,
     controller: StudioController,
@@ -311,7 +358,7 @@ def test_fixation_disable_hides_dependent_sections(
     QApplication.processEvents()
     assert page.target_count_mode_combo.isVisible()
     assert page.target_duration_spin.isVisible()
-    assert page.base_color_edit.isVisible()
+    assert page.base_color_combo.isVisible()
     assert page.response_key_edit.isVisible()
     assert page.fixation_accuracy_checkbox.isEnabled()
 
@@ -319,7 +366,7 @@ def test_fixation_disable_hides_dependent_sections(
     QApplication.processEvents()
     assert not page.target_count_mode_combo.isVisible()
     assert not page.target_duration_spin.isVisible()
-    assert not page.base_color_edit.isVisible()
+    assert not page.base_color_combo.isVisible()
     assert not page.response_key_edit.isVisible()
     assert not page.fixation_accuracy_checkbox.isEnabled()
     assert page.fixation_accuracy_checkbox.isChecked() is False

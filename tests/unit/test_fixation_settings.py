@@ -32,13 +32,15 @@ def test_fixation_settings_fixed_mode_remains_valid() -> None:
     assert settings.changes_per_sequence == 3
 
 
-def test_fixation_settings_defaults_are_backward_compatible() -> None:
+def test_fixation_settings_defaults_match_current_gui_presets() -> None:
     settings = FixationTaskSettings()
 
     assert settings.enabled is False
     assert settings.accuracy_task_enabled is False
     assert settings.changes_per_sequence == 0
     assert settings.target_count_mode == "fixed"
+    assert settings.base_color == "#0000FF"
+    assert settings.target_color == "#FF0000"
     assert settings.response_key == "space"
     assert settings.response_window_seconds == 1.0
 

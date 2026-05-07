@@ -1214,6 +1214,14 @@ def test_setup_wizard_experiment_and_fixation_steps_are_width_safe(
     assert guide.fixation_settings_editor.preview_card is None
     assert guide.fixation_settings_editor.preview_panel is not None
     assert guide.fixation_settings_editor.preview_widget is not None
+    assert guide.fixation_settings_editor.preview_panel.maximumHeight() == 360
+    assert guide.fixation_settings_editor.preview_widget.maximumHeight() == 300
+    feasibility_card = guide.fixation_settings_editor.findChild(
+        QWidget,
+        "fixation_feasibility_card",
+    )
+    assert feasibility_card is not None
+    assert feasibility_card.maximumHeight() == 42
     assert guide.findChild(QWidget, "fixation_cross_preview_card") is None
     assert (
         guide.fixation_settings_editor.preview_panel.property("fixationPreviewPanel")
@@ -1247,6 +1255,10 @@ def test_setup_wizard_experiment_and_fixation_steps_are_width_safe(
         "Appearance",
     }
     assert all(label.alignment() & Qt.AlignmentFlag.AlignCenter for label in section_titles)
+    title_offsets = {
+        label.mapTo(label.parentWidget(), QPoint(0, 0)).y() for label in section_titles
+    }
+    assert len(title_offsets) == 1
 
     preview = guide.fixation_settings_editor.preview_widget
     fixation = window.document.project.settings.fixation_task
@@ -1257,14 +1269,18 @@ def test_setup_wizard_experiment_and_fixation_steps_are_width_safe(
         fixation.cross_size_px,
         fixation.line_width_px,
     )
-    guide.fixation_settings_editor.base_color_edit.setText("#112233")
-    guide.fixation_settings_editor.base_color_edit.editingFinished.emit()
-    guide.fixation_settings_editor.target_color_edit.setText("#445566")
-    guide.fixation_settings_editor.target_color_edit.editingFinished.emit()
+    base_color_combo = guide.fixation_settings_editor.base_color_combo
+    target_color_combo = guide.fixation_settings_editor.target_color_combo
+    assert base_color_combo.findData("#0000FF") >= 0
+    assert base_color_combo.findData("#FFFFFF") >= 0
+    assert target_color_combo.findData("#FF0000") >= 0
+    assert base_color_combo.toolTip()
+    assert target_color_combo.toolTip()
+    base_color_combo.setCurrentIndex(base_color_combo.findData("#FFFFFF"))
     guide.fixation_settings_editor.cross_size_spin.setValue(72)
     guide.fixation_settings_editor.line_width_spin.setValue(6)
     QApplication.processEvents()
-    assert preview.preview_state() == ("#000000", "#112233", "#445566", 72, 6)
+    assert preview.preview_state() == ("#000000", "#FFFFFF", "#FF0000", 72, 6)
 
     for width, height in ((1366, 820), (1440, 920)):
         window.resize(width, height)
@@ -1498,10 +1514,12 @@ def test_setup_dashboard_save_load_smoke_persists_dashboard_edited_settings(
         fixation_editor.target_count_mode_combo.findData("fixed")
     )
     fixation_editor.changes_per_sequence_spin.setValue(6)
-    fixation_editor.base_color_edit.setText("#112233")
-    fixation_editor.base_color_edit.editingFinished.emit()
-    fixation_editor.target_color_edit.setText("#445566")
-    fixation_editor.target_color_edit.editingFinished.emit()
+    fixation_editor.base_color_combo.setCurrentIndex(
+        fixation_editor.base_color_combo.findData("#FFFFFF")
+    )
+    fixation_editor.target_color_combo.setCurrentIndex(
+        fixation_editor.target_color_combo.findData("#FF0000")
+    )
     fixation_editor.response_key_edit.setText("space")
     fixation_editor.response_key_edit.editingFinished.emit()
 
@@ -1531,8 +1549,8 @@ def test_setup_dashboard_save_load_smoke_persists_dashboard_edited_settings(
     assert fixation.accuracy_task_enabled is True
     assert fixation.target_count_mode == "fixed"
     assert fixation.changes_per_sequence == 6
-    assert fixation.base_color == "#112233"
-    assert fixation.target_color == "#445566"
+    assert fixation.base_color == "#FFFFFF"
+    assert fixation.target_color == "#FF0000"
     assert fixation.response_key == "space"
     assert display.preferred_refresh_hz == pytest.approx(120.0, abs=0.01)
     assert display.background_color == "#101010"
