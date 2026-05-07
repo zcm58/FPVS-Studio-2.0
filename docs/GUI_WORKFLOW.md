@@ -50,8 +50,9 @@ The authoring window is organized around two user-facing modes:
   - the top progress header shows `Step X of 5` and a slim horizontal progress
     indicator instead of a persistent left-hand step column; the current shared
     component is a connected numbered stepper with completed/current/upcoming states
-  - the wizard uses the full available window width so advanced editor content
-    does not crop horizontally
+  - the wizard keeps the step content full-width while the progress stepper is
+    centered and compact; the guided steps do not expose an Advanced button or
+    vertical scrolling
   - the wizard shell includes a thin bottom status strip for shared setup/runtime
     context; individual step cards should not repeat generic instructional copy
   - Project Details uses a focused centered card inside the full-width wizard,

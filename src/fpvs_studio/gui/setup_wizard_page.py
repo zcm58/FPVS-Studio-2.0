@@ -94,7 +94,6 @@ class SetupWizardPage(QWidget):
         self._on_return_home = on_return_home
         self._on_save_project = on_save_project
         self._active_step_index = 0
-        self._advanced_visible = False
         self._readiness_cache: tuple[tuple[int, float, bool], LauncherReadinessReport] | None = (
             None
         )
@@ -155,6 +154,10 @@ class SetupWizardPage(QWidget):
             width_preset="full",
             parent=self,
         )
+        self.shell.page_container.scroll_area.setVerticalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        )
+        self.shell.page_container.scroll_area.verticalScrollBar().setEnabled(False)
         self.shell.set_page_margins(PAGE_MARGIN_X, 12, PAGE_MARGIN_X, 12)
         self.shell.set_content_spacing(8)
 
@@ -237,7 +240,7 @@ class SetupWizardPage(QWidget):
 
         self.advanced_stack = _CurrentWidgetStack(self)
         self.advanced_stack.setObjectName("setup_wizard_advanced_stack")
-        self.advanced_stack.addWidget(self._advanced_empty_page())
+        self.advanced_stack.addWidget(QWidget(self))
         self.advanced_stack.addWidget(self.conditions_page)
 
         self.content_stack = _CurrentWidgetStack(self)
@@ -261,17 +264,12 @@ class SetupWizardPage(QWidget):
         self.setup_wizard_return_home_button = QPushButton("Return Home", self)
         self.setup_wizard_return_home_button.setObjectName("setup_wizard_return_home_button")
         self.setup_wizard_return_home_button.clicked.connect(self._return_home)
-        self.setup_wizard_advanced_button = QPushButton("Advanced", self)
-        self.setup_wizard_advanced_button.setObjectName("setup_wizard_advanced_button")
-        self.setup_wizard_advanced_button.clicked.connect(self._toggle_advanced)
-        mark_secondary_action(self.setup_wizard_advanced_button)
 
         button_row = QWidget(self)
         button_layout = QHBoxLayout(button_row)
         button_layout.setContentsMargins(PAGE_MARGIN_X, 0, PAGE_MARGIN_X, 8)
         button_layout.setSpacing(PAGE_SECTION_GAP)
         button_layout.addWidget(self.setup_wizard_return_home_button)
-        button_layout.addWidget(self.setup_wizard_advanced_button)
         button_layout.addStretch(1)
         button_layout.addWidget(self.setup_wizard_back_button)
         button_layout.addWidget(self.setup_wizard_next_button)
@@ -301,7 +299,6 @@ class SetupWizardPage(QWidget):
         self.flush_pending_edits()
         if step_key is not None:
             self._active_step_index = self._step_index_for_key(step_key)
-        self._advanced_visible = False
         self.refresh()
 
     def flush_pending_edits(self) -> None:
@@ -444,16 +441,6 @@ class SetupWizardPage(QWidget):
         layout.addStretch(2)
         return page
 
-    def _advanced_empty_page(self) -> QWidget:
-        page = QWidget(self)
-        layout = QVBoxLayout(page)
-        layout.setContentsMargins(12, 10, 12, 10)
-        label = QLabel("Advanced editor is not needed for this step.", page)
-        label.setWordWrap(True)
-        layout.addWidget(label)
-        layout.addStretch(1)
-        return page
-
     def _show_first_condition_prompt_if_needed(self) -> None:
         step_key = _WIZARD_STEPS[self._active_step_index][0]
         if step_key != "conditions" or self.content_stack.currentWidget() is not self.guided_panel:
@@ -470,7 +457,6 @@ class SetupWizardPage(QWidget):
         self.flush_pending_edits()
         if self._active_step_index > 0:
             self._active_step_index -= 1
-            self._advanced_visible = False
             self.refresh()
 
     def _go_next(self) -> None:
@@ -489,7 +475,6 @@ class SetupWizardPage(QWidget):
 
     def _advance_to_next_step(self) -> None:
         self._active_step_index += 1
-        self._advanced_visible = False
         self.refresh()
 
     def _maybe_normalize_condition_images_before_advance(self) -> bool:
@@ -559,13 +544,6 @@ class SetupWizardPage(QWidget):
         if self._on_save_project is not None:
             self._on_save_project()
 
-    def _toggle_advanced(self) -> None:
-        self.flush_pending_edits()
-        if not self._advanced_available_for_current_step():
-            return
-        self._advanced_visible = not self._advanced_visible
-        self.refresh()
-
     def refresh(self) -> None:
         self._readiness_cache = None
         self._active_step_index = max(
@@ -574,13 +552,9 @@ class SetupWizardPage(QWidget):
         )
         step_key, title = _WIZARD_STEPS[self._active_step_index]
         self.step_stack.setCurrentIndex(self._active_step_index)
-        self.advanced_stack.setCurrentIndex(self._advanced_index_for_step(step_key))
-        advanced_available = self._advanced_available_for_current_step()
-        advanced_visible = self._advanced_visible and advanced_available
-        self.content_stack.setCurrentWidget(
-            self.advanced_stack if advanced_visible else self.guided_panel
-        )
-        self._refresh_current_editor_page(advanced_visible=advanced_visible)
+        self.advanced_stack.setCurrentIndex(0)
+        self.content_stack.setCurrentWidget(self.guided_panel)
+        self._refresh_current_editor_page()
 
         self._refresh_progress_header()
         self.step_title_label.setText(title)
@@ -606,19 +580,8 @@ class SetupWizardPage(QWidget):
         self.setup_wizard_next_button.setText(
             "Return Home" if self._active_step_index == len(_WIZARD_STEPS) - 1 else "Next"
         )
-        self.setup_wizard_advanced_button.setEnabled(advanced_available)
-        self.setup_wizard_advanced_button.setText(
-            "Back to Guided Step" if self._advanced_visible else "Advanced"
-        )
 
-    def _refresh_current_editor_page(self, *, advanced_visible: bool) -> None:
-        if advanced_visible:
-            current_advanced_widget = self.advanced_stack.currentWidget()
-            refresh = getattr(current_advanced_widget, "refresh", None)
-            if callable(refresh):
-                refresh()
-            return
-
+    def _refresh_current_editor_page(self) -> None:
         current_guided_widget = self.step_stack.currentWidget()
         refresh = getattr(current_guided_widget, "refresh", None)
         if callable(refresh):
@@ -816,12 +779,6 @@ class SetupWizardPage(QWidget):
             and self._conditions_have_required_trigger_codes(ordered_conditions)
             and _conditions_have_assigned_assets(self._document, ordered_conditions)
         )
-
-    def _advanced_available_for_current_step(self) -> bool:
-        return False
-
-    def _advanced_index_for_step(self, step_key: str) -> int:
-        return 0
 
     def _refresh_progress_header(self) -> None:
         current = self._active_step_index

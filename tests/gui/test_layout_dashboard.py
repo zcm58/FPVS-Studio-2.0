@@ -97,6 +97,12 @@ def _assert_balanced_setup_stepper(wizard) -> None:
     assert max(center_gaps) - min(center_gaps) <= 2
 
 
+def _assert_setup_wizard_vertical_scrolling_disabled(wizard) -> None:
+    scroll_area = wizard.shell.page_container.scroll_area
+    assert scroll_area.verticalScrollBarPolicy() == Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+    assert not scroll_area.verticalScrollBar().isEnabled()
+
+
 def test_main_window_uses_home_and_setup_wizard_stack(
     qtbot,
     controller: StudioController,
@@ -215,6 +221,7 @@ def test_setup_wizard_exists_and_uses_single_column_shell_with_steps(
 
     wizard = window.setup_wizard_page
     assert window.main_stack.indexOf(wizard) == 1
+    _assert_setup_wizard_vertical_scrolling_disabled(wizard)
     assert wizard.shell.layout_mode == "single_column"
     assert wizard.shell.page_container.width_preset == "full"
     assert wizard.shell.title_label.text() == "Setup Wizard"
@@ -227,6 +234,7 @@ def test_setup_wizard_exists_and_uses_single_column_shell_with_steps(
     assert wizard.content_stack.currentWidget() is wizard.guided_panel
     assert wizard.advanced_stack.indexOf(wizard.conditions_page) >= 0
     assert wizard.conditions_page.isVisible() is False
+    assert wizard.findChild(QPushButton, "setup_wizard_advanced_button") is None
     QApplication.processEvents()
     qtbot.waitUntil(lambda: all(label.text().strip() for label in wizard.progress_step_labels))
     _assert_balanced_setup_stepper(wizard)
@@ -270,6 +278,12 @@ def test_setup_wizard_exists_and_uses_single_column_shell_with_steps(
     label_text = "\n".join(label.text() for label in wizard.findChildren(QLabel))
     assert "Current Step" not in label_text
     assert "Only the controls needed for this setup step are shown." not in label_text
+    for step_key in ("project", "conditions", "experiment", "fixation", "review"):
+        wizard.open_wizard(step_key=step_key)
+        QApplication.processEvents()
+        _assert_setup_wizard_vertical_scrolling_disabled(wizard)
+    wizard.open_wizard(step_key="project")
+    QApplication.processEvents()
     assert "Complete each setup step once" not in label_text
     assert "Setup Wizard uses the same project document" not in label_text
     assert "Alpha: test-mode runtime path only" not in label_text
@@ -388,7 +402,7 @@ def test_primary_workflow_surfaces_fit_default_window_with_bounded_page_scrollba
         (
             window.setup_wizard_page,
             window.setup_wizard_page.shell.page_container.scroll_area,
-            80,
+            0,
         ),
     ]
 
@@ -401,6 +415,7 @@ def test_primary_workflow_surfaces_fit_default_window_with_bounded_page_scrollba
             )
         )
         assert scroll_area.verticalScrollBar().maximum() <= max_scroll
+    _assert_setup_wizard_vertical_scrolling_disabled(window.setup_wizard_page)
 
 
 def test_conditions_advanced_editor_uses_flat_horizontal_master_detail_layout(
@@ -540,11 +555,10 @@ def test_setup_wizard_navigation_has_no_conditions_advanced_editor(
 
     back_button = guide.findChild(QPushButton, "setup_wizard_back_button")
     next_button = guide.findChild(QPushButton, "setup_wizard_next_button")
-    advanced_button = guide.findChild(QPushButton, "setup_wizard_advanced_button")
     return_home_button = guide.findChild(QPushButton, "setup_wizard_return_home_button")
     assert back_button is not None
     assert next_button is not None
-    assert advanced_button is not None
+    assert guide.findChild(QPushButton, "setup_wizard_advanced_button") is None
     assert return_home_button is not None
 
     assert guide.step_stack.currentIndex() == 0
@@ -554,7 +568,6 @@ def test_setup_wizard_navigation_has_no_conditions_advanced_editor(
     assert guide.step_stack.currentWidget() is guide.condition_setup_step
     assert guide.content_stack.currentWidget() is guide.guided_panel
     assert not next_button.isEnabled()
-    assert not advanced_button.isEnabled()
     assert guide.findChild(QListWidget, "setup_wizard_condition_list") is not None
     assert guide.findChild(QWidget, "setup_conditions_left_panel") is not None
     assert guide.findChild(QWidget, "setup_conditions_main_panel") is not None
@@ -567,8 +580,6 @@ def test_setup_wizard_navigation_has_no_conditions_advanced_editor(
     assert "Image Version:" in label_text
     assert "Stimulus Variant" not in label_text
     assert "Cycles / Repeat" not in label_text
-    qtbot.mouseClick(advanced_button, Qt.MouseButton.LeftButton)
-    assert guide.content_stack.currentWidget() is guide.guided_panel
 
     information_prompts: list[str] = []
     monkeypatch.setattr(
@@ -578,7 +589,6 @@ def test_setup_wizard_navigation_has_no_conditions_advanced_editor(
     qtbot.mouseClick(guide.add_condition_button, Qt.MouseButton.LeftButton)
     assert information_prompts == ["Please ensure you create all conditions before proceeding."]
     assert not next_button.isEnabled()
-    assert not advanced_button.isEnabled()
     assert "name every condition" in guide.step_status_label.text().lower()
 
     condition_id = guide.condition_setup_step.selected_condition_id()
@@ -606,14 +616,12 @@ def test_setup_wizard_navigation_has_no_conditions_advanced_editor(
     assert guide.step_stack.currentWidget().objectName() == "setup_wizard_experiment_settings_page"
     assert guide.experiment_settings_card.isAncestorOf(guide.runtime_settings_editor)
     assert guide.experiment_settings_card.isAncestorOf(guide.session_structure_editor)
-    assert not advanced_button.isEnabled()
     assert guide.content_stack.currentWidget() is guide.guided_panel
 
     qtbot.mouseClick(next_button, Qt.MouseButton.LeftButton)
     assert guide.step_stack.currentWidget() is guide.fixation_settings_editor
     assert guide.step_title_label.text() == "Fixation Cross"
     assert guide.fixation_settings_editor.preview_widget is not None
-    assert not advanced_button.isEnabled()
 
     qtbot.mouseClick(back_button, Qt.MouseButton.LeftButton)
     assert guide.step_stack.currentWidget().objectName() == "setup_wizard_experiment_settings_page"
@@ -1169,7 +1177,8 @@ def test_setup_wizard_experiment_and_fixation_steps_are_width_safe(
 
     assert guide.content_stack.currentWidget() is guide.guided_panel
     assert guide.step_stack.currentWidget().objectName() == "setup_wizard_experiment_settings_page"
-    assert not guide.setup_wizard_advanced_button.isEnabled()
+    assert guide.findChild(QPushButton, "setup_wizard_advanced_button") is None
+    _assert_setup_wizard_vertical_scrolling_disabled(guide)
     assert guide.runtime_settings_editor.refresh_hz_spin is not None
     assert guide.session_structure_editor.block_count_spin is not None
     assert guide.fixation_settings_editor is not guide.step_stack.currentWidget()
@@ -1208,6 +1217,7 @@ def test_setup_wizard_experiment_and_fixation_steps_are_width_safe(
         display_panel = guide.runtime_settings_editor
         session_panel = guide.session_structure_editor
         assert guide.shell.page_container.scroll_area.horizontalScrollBar().maximum() == 0
+        _assert_setup_wizard_vertical_scrolling_disabled(guide)
         _assert_balanced_setup_stepper(guide)
         card_left = experiment_card.mapTo(experiment_page, QPoint(0, 0)).x()
         card_right = experiment_card.mapTo(
@@ -1252,7 +1262,8 @@ def test_setup_wizard_experiment_and_fixation_steps_are_width_safe(
 
     guide.open_wizard(step_key="fixation")
     assert guide.step_stack.currentWidget() is guide.fixation_settings_editor
-    assert not guide.setup_wizard_advanced_button.isEnabled()
+    assert guide.findChild(QPushButton, "setup_wizard_advanced_button") is None
+    _assert_setup_wizard_vertical_scrolling_disabled(guide)
     assert not guide.step_title_label.isVisible()
     assert not guide.step_status_badge.isVisible()
     assert guide.step_card.property("wizardProjectStepFrame") == "true"
