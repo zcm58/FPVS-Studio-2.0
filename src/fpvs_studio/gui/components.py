@@ -1121,6 +1121,12 @@ def fixation_settings_stylesheet() -> str:
         border-radius: {CARD_CORNER_RADIUS}px;
         background-color: {COLOR_SURFACE_ELEVATED};
     }}
+    QFrame[fixationSettingsSection="true"],
+    QFrame[fixationPreviewPanel="true"] {{
+        border: 1px solid {COLOR_BORDER_SOFT};
+        border-radius: {CARD_CORNER_RADIUS}px;
+        background-color: {COLOR_SURFACE_ELEVATED};
+    }}
     QLabel#fixation_feasibility_label {{
         color: {COLOR_TEXT_PRIMARY};
         font-weight: 600;

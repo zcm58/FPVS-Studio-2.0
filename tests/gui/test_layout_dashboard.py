@@ -1207,8 +1207,21 @@ def test_setup_wizard_experiment_and_fixation_steps_are_width_safe(
     assert guide.fixation_settings_editor.fixation_panel.title_label.text() == (
         "Fixation Cross Settings"
     )
-    assert guide.fixation_settings_editor.preview_card is not None
+    assert guide.fixation_settings_editor.preview_card is None
+    assert guide.fixation_settings_editor.preview_panel is not None
     assert guide.fixation_settings_editor.preview_widget is not None
+    assert guide.findChild(QWidget, "fixation_cross_preview_card") is None
+    assert (
+        guide.fixation_settings_editor.preview_panel.property("fixationPreviewPanel")
+        == "true"
+    )
+    assert len(
+        [
+            widget
+            for widget in guide.fixation_settings_editor.findChildren(QWidget)
+            if widget.property("fixationSettingsSection") == "true"
+        ]
+    ) == 4
     label_text = "\n".join(
         label.text() for label in guide.fixation_settings_editor.findChildren(QLabel)
     )
@@ -1241,19 +1254,19 @@ def test_setup_wizard_experiment_and_fixation_steps_are_width_safe(
         QApplication.processEvents()
         fixation_page = guide.step_stack.currentWidget()
         fixation_panel = guide.fixation_settings_editor.fixation_panel
-        preview_card = guide.fixation_settings_editor.preview_card
-        assert preview_card is not None
+        preview_panel = guide.fixation_settings_editor.preview_panel
+        assert preview_panel is not None
         assert guide.shell.page_container.scroll_area.horizontalScrollBar().maximum() == 0
         fixation_right = fixation_panel.mapTo(
             fixation_page,
             QPoint(fixation_panel.width(), 0),
         ).x()
-        preview_right = preview_card.mapTo(
-            fixation_page,
-            QPoint(preview_card.width(), 0),
+        preview_right = preview_panel.mapTo(
+            fixation_panel,
+            QPoint(preview_panel.width(), 0),
         ).x()
-        assert fixation_right <= preview_card.mapTo(fixation_page, QPoint(0, 0)).x()
-        assert preview_right <= fixation_page.width()
+        assert fixation_right <= fixation_page.width()
+        assert preview_right <= fixation_panel.width()
 
 
 def test_setup_wizard_return_home_confirms_incomplete_setup(

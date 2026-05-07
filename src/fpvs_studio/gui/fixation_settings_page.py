@@ -42,6 +42,20 @@ def _preview_color(color_text: str, *, fallback: str) -> QColor:
     return QColor(fallback)
 
 
+def _settings_section(title: str, body: QWidget, *, parent: QWidget) -> QFrame:
+    section = QFrame(parent)
+    section.setObjectName(f"fixation_{title.lower()}_section")
+    section.setProperty("fixationSettingsSection", "true")
+    layout = QVBoxLayout(section)
+    layout.setContentsMargins(10, 8, 10, 8)
+    layout.setSpacing(6)
+    title_label = QLabel(title, section)
+    title_label.setProperty("sectionCardRole", "subtitle")
+    layout.addWidget(title_label)
+    layout.addWidget(body)
+    return section
+
+
 class FixationCrossPreview(QWidget):
     """Paint a lightweight preview of default and changed fixation crosses."""
 
@@ -298,77 +312,95 @@ class FixationSettingsEditor(QWidget):
         self.fixation_feasibility_label.setWordWrap(True)
         feasibility_layout.addWidget(self.fixation_feasibility_label)
 
-        fixation_panel_layout.addLayout(enablement_layout)
-        fixation_panel_layout.addWidget(feasibility_card)
-        behavior_header = QLabel("Behavior", self.fixation_panel)
-        behavior_header.setProperty("sectionCardRole", "subtitle")
-        timing_header = QLabel("Timing", self.fixation_panel)
-        timing_header.setProperty("sectionCardRole", "subtitle")
-        response_header = QLabel("Response", self.fixation_panel)
-        response_header.setProperty("sectionCardRole", "subtitle")
-        appearance_header = QLabel("Appearance", self.fixation_panel)
-        appearance_header.setProperty("sectionCardRole", "subtitle")
+        settings_column = QWidget(self.fixation_panel)
+        settings_column_layout = QVBoxLayout(settings_column)
+        settings_column_layout.setContentsMargins(0, 0, 0, 0)
+        settings_column_layout.setSpacing(section_spacing)
+        settings_column_layout.addLayout(enablement_layout)
+        settings_column_layout.addWidget(feasibility_card)
+        self.fixation_behavior_panel = _settings_section(
+            "Behavior",
+            self.fixation_behavior_group,
+            parent=self.fixation_panel,
+        )
+        self.fixation_timing_panel = _settings_section(
+            "Timing",
+            self.fixation_timing_group,
+            parent=self.fixation_panel,
+        )
+        self.fixation_response_panel = _settings_section(
+            "Response",
+            self.fixation_response_group,
+            parent=self.fixation_panel,
+        )
+        self.fixation_appearance_panel = _settings_section(
+            "Appearance",
+            self.fixation_appearance_group,
+            parent=self.fixation_panel,
+        )
         if self._layout_mode == "single_column":
             settings_layout = QVBoxLayout()
             settings_layout.setContentsMargins(0, 0, 0, 0)
             settings_layout.setSpacing(section_spacing)
-            for header, group in (
-                (behavior_header, self.fixation_behavior_group),
-                (timing_header, self.fixation_timing_group),
-                (response_header, self.fixation_response_group),
-                (appearance_header, self.fixation_appearance_group),
+            for panel in (
+                self.fixation_behavior_panel,
+                self.fixation_timing_panel,
+                self.fixation_response_panel,
+                self.fixation_appearance_panel,
             ):
-                settings_layout.addWidget(header)
-                settings_layout.addWidget(group)
-            fixation_panel_layout.addLayout(settings_layout)
+                settings_layout.addWidget(panel)
+            settings_column_layout.addLayout(settings_layout)
         else:
             settings_grid = QGridLayout()
             settings_grid.setContentsMargins(0, 0, 0, 0)
             settings_grid.setHorizontalSpacing(PAGE_SECTION_GAP)
             settings_grid.setVerticalSpacing(section_spacing)
-            settings_grid.addWidget(behavior_header, 0, 0)
-            settings_grid.addWidget(timing_header, 0, 1)
-            settings_grid.addWidget(self.fixation_behavior_group, 1, 0)
-            settings_grid.addWidget(self.fixation_timing_group, 1, 1)
-            settings_grid.addWidget(response_header, 2, 0)
-            settings_grid.addWidget(appearance_header, 2, 1)
-            settings_grid.addWidget(self.fixation_response_group, 3, 0)
-            settings_grid.addWidget(self.fixation_appearance_group, 3, 1)
+            settings_grid.addWidget(self.fixation_behavior_panel, 0, 0)
+            settings_grid.addWidget(self.fixation_timing_panel, 0, 1)
+            settings_grid.addWidget(self.fixation_response_panel, 1, 0)
+            settings_grid.addWidget(self.fixation_appearance_panel, 1, 1)
             settings_grid.setColumnStretch(0, 1)
             settings_grid.setColumnStretch(1, 1)
-            fixation_panel_layout.addLayout(settings_grid)
+            settings_column_layout.addLayout(settings_grid)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
         self.preview_card: SectionCard | None = None
+        self.preview_panel: QFrame | None = None
         self.preview_widget: FixationCrossPreview | None = None
         if show_preview:
-            self.preview_card = SectionCard(
-                title="Preview",
-                subtitle="Default and changed fixation colors on the presentation background.",
-                object_name="fixation_cross_preview_card",
-                parent=self,
-            )
-            self.preview_widget = FixationCrossPreview(self.preview_card)
-            self.preview_card.body_layout.addWidget(self.preview_widget, 1)
+            self.preview_panel = QFrame(self)
+            self.preview_panel.setObjectName("fixation_cross_preview_panel")
+            self.preview_panel.setProperty("fixationPreviewPanel", "true")
+            preview_panel_layout = QVBoxLayout(self.preview_panel)
+            preview_panel_layout.setContentsMargins(10, 8, 10, 8)
+            preview_panel_layout.setSpacing(8)
+            preview_title = QLabel("Preview", self.preview_panel)
+            preview_title.setProperty("sectionCardRole", "title")
+            preview_panel_layout.addWidget(preview_title)
 
-            preview_layout = QHBoxLayout()
-            preview_layout.setContentsMargins(0, 0, 0, 0)
-            preview_layout.setSpacing(PAGE_SECTION_GAP)
+            self.preview_widget = FixationCrossPreview(self.preview_panel)
+            preview_panel_layout.addWidget(self.preview_widget, 1)
+
             self.fixation_panel.setSizePolicy(
                 QSizePolicy.Policy.Expanding,
                 QSizePolicy.Policy.Preferred,
             )
-            self.preview_card.setMinimumWidth(280)
-            self.preview_card.setSizePolicy(
+            self.preview_panel.setMinimumWidth(280)
+            self.preview_panel.setSizePolicy(
                 QSizePolicy.Policy.Preferred,
                 QSizePolicy.Policy.Expanding,
             )
-            preview_layout.addWidget(self.fixation_panel, 2)
-            preview_layout.addWidget(self.preview_card, 1)
-            layout.addLayout(preview_layout)
+            content_layout = QHBoxLayout()
+            content_layout.setContentsMargins(0, 0, 0, 0)
+            content_layout.setSpacing(PAGE_SECTION_GAP)
+            content_layout.addWidget(settings_column, 2)
+            content_layout.addWidget(self.preview_panel, 1)
+            fixation_panel_layout.addLayout(content_layout)
+            layout.addWidget(self.fixation_panel)
         else:
+            fixation_panel_layout.addWidget(settings_column)
             layout.addWidget(self.fixation_panel)
 
         apply_fixation_settings_theme(self)
@@ -430,6 +462,13 @@ class FixationSettingsEditor(QWidget):
         ):
             group.setVisible(fixation_enabled)
             group.setEnabled(fixation_enabled)
+        for panel in (
+            self.fixation_behavior_panel,
+            self.fixation_timing_panel,
+            self.fixation_appearance_panel,
+        ):
+            panel.setVisible(fixation_enabled)
+            panel.setEnabled(fixation_enabled)
 
         randomized_mode = self.target_count_mode_combo.currentData() == "randomized"
         if self._schedule_row_behavior == "hide":
@@ -470,6 +509,8 @@ class FixationSettingsEditor(QWidget):
             self.no_repeat_count_checkbox.setEnabled(fixation_enabled and randomized_mode)
 
         accuracy_enabled = fixation_enabled and self.fixation_accuracy_checkbox.isChecked()
+        self.fixation_response_panel.setVisible(accuracy_enabled)
+        self.fixation_response_panel.setEnabled(accuracy_enabled)
         self.fixation_response_group.setVisible(accuracy_enabled)
         self.fixation_response_group.setEnabled(accuracy_enabled)
 
