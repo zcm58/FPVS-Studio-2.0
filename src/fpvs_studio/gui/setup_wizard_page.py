@@ -170,11 +170,23 @@ class SetupWizardPage(QWidget):
         self.progress_step_labels = self.progress_steps.step_labels
 
         progress_panel = QWidget(self)
+        progress_panel.setObjectName("setup_wizard_progress_panel")
+        progress_panel.setMaximumWidth(1120)
+        progress_panel.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.progress_panel = progress_panel
         progress_layout = QVBoxLayout(progress_panel)
         progress_layout.setContentsMargins(0, 0, 0, 0)
         progress_layout.setSpacing(6)
         progress_layout.addWidget(self.progress_header_label)
         progress_layout.addWidget(self.progress_steps)
+
+        progress_panel_shell = QWidget(self)
+        progress_panel_shell.setObjectName("setup_wizard_progress_panel_shell")
+        progress_panel_shell_layout = QHBoxLayout(progress_panel_shell)
+        progress_panel_shell_layout.setContentsMargins(0, 0, 0, 0)
+        progress_panel_shell_layout.addStretch(1)
+        progress_panel_shell_layout.addWidget(progress_panel)
+        progress_panel_shell_layout.addStretch(1)
 
         self.step_title_label = QLabel(self)
         self.step_title_label.setObjectName("setup_wizard_step_title")
@@ -264,7 +276,7 @@ class SetupWizardPage(QWidget):
         button_layout.addWidget(self.setup_wizard_back_button)
         button_layout.addWidget(self.setup_wizard_next_button)
 
-        self.shell.add_content_widget(progress_panel)
+        self.shell.add_content_widget(progress_panel_shell)
         self.shell.add_content_widget(step_card, stretch=1)
 
         layout = QVBoxLayout(self)

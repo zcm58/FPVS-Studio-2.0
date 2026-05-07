@@ -72,6 +72,31 @@ def _write_mixed_image_directory(target_dir: Path) -> Path:
     return target_dir
 
 
+def _assert_balanced_setup_stepper(wizard) -> None:
+    assert wizard.progress_panel.maximumWidth() == 1120
+    assert wizard.progress_panel.width() <= 1120
+    circle_centers: list[int] = []
+    for circle, label in zip(
+        wizard.progress_steps.step_circles,
+        wizard.progress_steps.step_labels,
+        strict=True,
+    ):
+        circle_center = circle.mapTo(
+            wizard.progress_steps,
+            QPoint(circle.width() // 2, 0),
+        ).x()
+        label_center = label.mapTo(
+            wizard.progress_steps,
+            QPoint(label.width() // 2, 0),
+        ).x()
+        circle_centers.append(circle_center)
+        assert abs(label_center - circle_center) <= 2
+    center_gaps = [
+        right - left for left, right in zip(circle_centers, circle_centers[1:], strict=False)
+    ]
+    assert max(center_gaps) - min(center_gaps) <= 2
+
+
 def test_main_window_uses_home_and_setup_wizard_stack(
     qtbot,
     controller: StudioController,
@@ -204,6 +229,7 @@ def test_setup_wizard_exists_and_uses_single_column_shell_with_steps(
     assert wizard.conditions_page.isVisible() is False
     QApplication.processEvents()
     qtbot.waitUntil(lambda: all(label.text().strip() for label in wizard.progress_step_labels))
+    _assert_balanced_setup_stepper(wizard)
     step_text = "\n".join(label.text() for label in wizard.progress_step_labels)
     step_metadata_text = "\n".join(item.toolTip() for item in wizard.progress_steps.step_items)
     assert "[OK]" not in step_text
@@ -240,6 +266,7 @@ def test_setup_wizard_exists_and_uses_single_column_shell_with_steps(
     qtbot.mouseClick(back_button, Qt.MouseButton.LeftButton)
     QApplication.processEvents()
     assert [label.text() for label in wizard.progress_step_labels] == initial_progress_labels
+    _assert_balanced_setup_stepper(wizard)
     label_text = "\n".join(label.text() for label in wizard.findChildren(QLabel))
     assert "Current Step" not in label_text
     assert "Only the controls needed for this setup step are shown." not in label_text
@@ -1181,6 +1208,7 @@ def test_setup_wizard_experiment_and_fixation_steps_are_width_safe(
         display_panel = guide.runtime_settings_editor
         session_panel = guide.session_structure_editor
         assert guide.shell.page_container.scroll_area.horizontalScrollBar().maximum() == 0
+        _assert_balanced_setup_stepper(guide)
         card_left = experiment_card.mapTo(experiment_page, QPoint(0, 0)).x()
         card_right = experiment_card.mapTo(
             experiment_page,

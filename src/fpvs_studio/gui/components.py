@@ -198,6 +198,14 @@ class SetupChecklistPanel(QFrame):
 class SetupProgressStepper(QWidget):
     """Connected horizontal progress indicator for Setup Wizard steps."""
 
+    _CIRCLE_SIZE = 30
+    _CIRCLE_TOP = 0
+    _CONNECTOR_GAP = 10
+    _LABEL_TOP = 34
+    _LABEL_HEIGHT = 22
+    _STEPPER_HEIGHT = 58
+    _SLOT_LABEL_MARGIN = 4
+
     def __init__(
         self,
         steps: list[str] | tuple[str, ...],
@@ -215,9 +223,9 @@ class SetupProgressStepper(QWidget):
         self.connectors: list[QFrame] = []
         self._label_refresh_scheduled = False
 
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(8)
+        self.setMinimumHeight(self._STEPPER_HEIGHT)
+        self.setMaximumHeight(self._STEPPER_HEIGHT)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
         for index, title in enumerate(self._steps):
             item = QWidget(self)
@@ -225,25 +233,20 @@ class SetupProgressStepper(QWidget):
             item.setProperty("setupProgressStep", "true")
             item.setMinimumWidth(0)
             item.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
-            item_layout = QHBoxLayout(item)
-            item_layout.setContentsMargins(0, 0, 0, 0)
-            item_layout.setSpacing(6)
 
             circle = QLabel(str(index + 1), item)
             circle.setObjectName(f"{item.objectName()}_circle")
             circle.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            circle.setFixedSize(30, 30)
+            circle.setFixedSize(self._CIRCLE_SIZE, self._CIRCLE_SIZE)
             circle.setProperty("setupProgressCircle", "true")
 
             label = QLabel(title, item)
             label.setObjectName(f"{item.objectName()}_label")
             label.setProperty("setupProgressLabel", "true")
+            label.setAlignment(Qt.AlignmentFlag.AlignCenter)
             label.setMinimumWidth(0)
             label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
 
-            item_layout.addWidget(circle)
-            item_layout.addWidget(label, 1)
-            layout.addWidget(item, 1)
             self.step_items.append(item)
             self.step_circles.append(circle)
             self.step_labels.append(label)
@@ -257,13 +260,21 @@ class SetupProgressStepper(QWidget):
                     QSizePolicy.Policy.Expanding,
                     QSizePolicy.Policy.Fixed,
                 )
-                layout.addWidget(connector, 1)
+                connector.lower()
                 self.connectors.append(connector)
 
         self.set_active_index(0)
+        self._position_step_widgets()
+
+    def sizeHint(self) -> QSize:
+        return QSize(920, self._STEPPER_HEIGHT)
+
+    def minimumSizeHint(self) -> QSize:
+        return QSize(680, self._STEPPER_HEIGHT)
 
     def resizeEvent(self, event: QResizeEvent) -> None:  # noqa: N802
         super().resizeEvent(event)
+        self._position_step_widgets()
         self._schedule_elided_label_refresh()
 
     def showEvent(self, event: QShowEvent) -> None:  # noqa: N802
@@ -307,19 +318,65 @@ class SetupProgressStepper(QWidget):
         self._label_refresh_scheduled = False
         self._refresh_elided_labels()
 
+    def _position_step_widgets(self) -> None:
+        step_count = len(self.step_items)
+        if step_count == 0:
+            return
+
+        width = max(0, self.width())
+        if width <= 0:
+            return
+
+        for index, (item, circle, label) in enumerate(
+            zip(self.step_items, self.step_circles, self.step_labels, strict=True)
+        ):
+            slot_left = round(width * index / step_count)
+            slot_right = round(width * (index + 1) / step_count)
+            slot_width = max(0, slot_right - slot_left)
+            item.setGeometry(slot_left, 0, slot_width, self._STEPPER_HEIGHT)
+            circle_x = max(0, round((slot_width - self._CIRCLE_SIZE) / 2))
+            circle.setGeometry(
+                circle_x,
+                self._CIRCLE_TOP,
+                self._CIRCLE_SIZE,
+                self._CIRCLE_SIZE,
+            )
+            label.setGeometry(
+                self._SLOT_LABEL_MARGIN,
+                self._LABEL_TOP,
+                max(0, slot_width - (self._SLOT_LABEL_MARGIN * 2)),
+                self._LABEL_HEIGHT,
+            )
+
+        circle_radius = self._CIRCLE_SIZE // 2
+        connector_y = self._CIRCLE_TOP + circle_radius
+        for index, connector in enumerate(self.connectors):
+            left_center = round(width * (index + 0.5) / step_count)
+            right_center = round(width * (index + 1.5) / step_count)
+            connector_left = left_center + circle_radius + self._CONNECTOR_GAP
+            connector_right = right_center - circle_radius - self._CONNECTOR_GAP
+            connector.setGeometry(
+                connector_left,
+                connector_y,
+                max(0, connector_right - connector_left),
+                2,
+            )
+            connector.lower()
+
     def _refresh_elided_labels(self) -> None:
         for title, label in zip(self._steps, self.step_labels, strict=True):
             available_width = label.width()
             if available_width <= 1:
                 label.setText(title)
+                label.setToolTip(title)
                 continue
-            label.setText(
-                label.fontMetrics().elidedText(
-                    title,
-                    Qt.TextElideMode.ElideRight,
-                    available_width,
-                )
+            display_text = label.fontMetrics().elidedText(
+                title,
+                Qt.TextElideMode.ElideRight,
+                available_width,
             )
+            label.setText(display_text)
+            label.setToolTip(title if display_text != title else "")
 
 
 class SetupWorkspaceFrame(QFrame):
