@@ -7,5 +7,14 @@ from fpvs_studio.preprocessing.importer import (
     import_stimulus_source_directory,
     materialize_project_assets,
 )
+from fpvs_studio.preprocessing.normalization import (
+    normalize_stimulus_sets,
+    scan_stimulus_sets_for_normalization,
+)
 
-__all__ = ["import_stimulus_source_directory", "materialize_project_assets"]
+__all__ = [
+    "import_stimulus_source_directory",
+    "materialize_project_assets",
+    "normalize_stimulus_sets",
+    "scan_stimulus_sets_for_normalization",
+]

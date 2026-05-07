@@ -24,7 +24,11 @@ from fpvs_studio.preprocessing.controls import (
     generate_rot180_png,
 )
 from fpvs_studio.preprocessing.grayscale import generate_grayscale_png
-from fpvs_studio.preprocessing.inspection import inspect_source_directory, summary_to_stimulus_set
+from fpvs_studio.preprocessing.inspection import (
+    SUPPORTED_SOURCE_SUFFIXES,
+    inspect_source_directory,
+    summary_to_stimulus_set,
+)
 from fpvs_studio.preprocessing.manifest import (
     create_empty_manifest,
     find_manifest_set,
@@ -51,6 +55,7 @@ def import_stimulus_source_directory(
     project_root: Path,
     set_id: str,
     set_name: str,
+    strict: bool = True,
 ) -> tuple[StimulusSetInspectionSummary, StimulusSet]:
     """Copy supported source images into a project and summarize the imported set."""
 
@@ -60,10 +65,10 @@ def import_stimulus_source_directory(
     summary = inspect_source_directory(
         source_dir,
         relative_prefix=to_project_relative_posix(project_root, destination_dir),
-        strict=True,
+        strict=strict,
     )
     for item in source_dir.iterdir():
-        if item.is_file() and item.suffix.lower() in {".jpg", ".jpeg", ".png"}:
+        if item.is_file() and item.suffix.lower() in SUPPORTED_SOURCE_SUFFIXES:
             shutil.copy2(item, destination_dir / item.name)
 
     return summary, summary_to_stimulus_set(set_id=set_id, name=set_name, summary=summary)

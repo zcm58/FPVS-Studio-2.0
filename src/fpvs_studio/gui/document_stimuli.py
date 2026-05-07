@@ -19,6 +19,12 @@ from fpvs_studio.preprocessing.manifest import (
     write_stimulus_manifest,
 )
 from fpvs_studio.preprocessing.models import StimulusManifest
+from fpvs_studio.preprocessing.normalization import (
+    ImageNormalizationResult,
+    ImageNormalizationScan,
+    normalize_stimulus_sets,
+    scan_stimulus_sets_for_normalization,
+)
 
 
 class DocumentStimulusMixin:
@@ -53,6 +59,7 @@ class DocumentStimulusMixin:
             project_root=self._project_root,
             set_id=stimulus_set.set_id,
             set_name=stimulus_set.name,
+            strict=False,
         )
         updated_sets = [
             imported_set if item.set_id == imported_set.set_id else item
@@ -110,6 +117,62 @@ class DocumentStimulusMixin:
         self.manifest_changed.emit()
         return manifest
 
+    def scan_condition_image_normalization(self) -> ImageNormalizationScan:
+        """Scan image sets referenced by conditions for normalization needs."""
+
+        return scan_stimulus_sets_for_normalization(
+            project_root=self._project_root,
+            stimulus_sets=self._condition_stimulus_sets(),
+        )
+
+    def normalize_condition_images(self, *, target_size: int = 512) -> ImageNormalizationResult:
+        """Normalize condition stimulus sets and repoint them to generated PNG folders."""
+
+        result = normalize_stimulus_sets(
+            project_root=self._project_root,
+            stimulus_sets=self._condition_stimulus_sets(),
+            target_size=target_size,
+        )
+        result_by_set_id = {item.set_id: item for item in result.sets}
+        updated_sets = []
+        for stimulus_set in self._project.stimulus_sets:
+            normalized = result_by_set_id.get(stimulus_set.set_id)
+            if normalized is None:
+                updated_sets.append(stimulus_set)
+                continue
+            updated_sets.append(
+                stimulus_set.model_copy(
+                    update={
+                        "source_dir": normalized.source_dir,
+                        "resolution": normalized.resolution,
+                        "image_count": normalized.image_count,
+                        "available_variants": stimulus_set.available_variants,
+                    }
+                )
+            )
+
+        manifest = self._manifest or create_empty_manifest(self._project.meta.project_id)
+        for normalized in result.sets:
+            summary = inspect_source_directory(
+                self._project_root / Path(normalized.source_dir),
+                relative_prefix=normalized.source_dir,
+                strict=True,
+            )
+            manifest = upsert_manifest_set(
+                manifest,
+                inspection_summary_to_manifest_set(
+                    set_id=normalized.set_id,
+                    summary=summary,
+                ),
+            )
+
+        project = validated_copy(self._project, stimulus_sets=updated_sets)
+        self._replace_project(project)
+        self._manifest = manifest
+        write_stimulus_manifest(self._project_root, manifest)
+        self.manifest_changed.emit()
+        return result
+
     def _update_manifest_for_stimulus_set(self, set_id: str) -> None:
         stimulus_set = self.get_stimulus_set(set_id)
         if stimulus_set is None:
@@ -118,7 +181,7 @@ class DocumentStimulusMixin:
         summary = inspect_source_directory(
             source_dir,
             relative_prefix=stimulus_set.source_dir,
-            strict=True,
+            strict=False,
         )
         manifest = self._manifest or create_empty_manifest(self._project.meta.project_id)
         manifest = upsert_manifest_set(
@@ -158,3 +221,15 @@ class DocumentStimulusMixin:
                 )
             )
         return synced_sets
+
+    def _condition_stimulus_sets(self) -> list[StimulusSet]:
+        set_ids = {
+            set_id
+            for condition in self._project.conditions
+            for set_id in (condition.base_stimulus_set_id, condition.oddball_stimulus_set_id)
+        }
+        return [
+            stimulus_set
+            for stimulus_set in self._project.stimulus_sets
+            if stimulus_set.set_id in set_ids and stimulus_set.image_count > 0
+        ]

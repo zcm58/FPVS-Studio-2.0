@@ -65,6 +65,9 @@ The authoring window is organized around two user-facing modes:
     protocol defaults plus setup checklist on the right
   - the Conditions step owns image folder selection; users choose base and oddball
     folders while creating each condition
+  - when users leave Conditions, FPVS Studio checks selected condition images for
+    mixed sizes or file types; inconsistent folders can be normalized to PNG copies
+    at `512x512` or `256x256` before moving on
   - the Conditions step includes a secondary `Create Control Condition...` action for
     optional grayscale, 180 degree rotated, or phase-scrambled control conditions that
     reuse the selected condition's existing base and oddball image folders
@@ -150,6 +153,7 @@ Phase 5 currently supports:
   deterministic no-immediate-repeat behavior across consecutive compiled runs
 - authoring multiple conditions
 - importing base and oddball image folders
+- normalizing inconsistent condition image folders to project-local PNG copies
 - creating optional derived-variant control conditions from existing condition stimuli
 - materializing original, grayscale, rot180, and phase-scrambled variants
 - validating and compiling the multi-condition session plan

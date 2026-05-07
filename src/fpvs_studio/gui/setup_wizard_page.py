@@ -6,6 +6,7 @@ from collections.abc import Callable
 
 from PySide6.QtCore import QSize, Qt, QTimer
 from PySide6.QtWidgets import (
+    QDialog,
     QFormLayout,
     QHBoxLayout,
     QLabel,
@@ -37,6 +38,7 @@ from fpvs_studio.gui.condition_setup_step import (
     is_guided_trigger_code,
 )
 from fpvs_studio.gui.document import ProjectDocument
+from fpvs_studio.gui.image_normalization_dialog import ImageNormalizationDialog
 from fpvs_studio.gui.project_overview_page import ProjectOverviewEditor
 from fpvs_studio.gui.run_page import RunPage
 from fpvs_studio.gui.runtime_settings_page import RuntimeSettingsEditor
@@ -47,7 +49,9 @@ from fpvs_studio.gui.window_helpers import (
     _configure_read_only_list,
     _launcher_readiness_report,
     _set_list_items,
+    _show_error_dialog,
 )
+from fpvs_studio.gui.workers import ProgressTask
 
 _WIZARD_STEPS: tuple[tuple[str, str], ...] = (
     ("project", "Project Details"),
@@ -95,6 +99,7 @@ class SetupWizardPage(QWidget):
         self._readiness_cache: tuple[tuple[int, float, bool], LauncherReadinessReport] | None = (
             None
         )
+        self._active_normalization_task: ProgressTask | None = None
         self._refresh_timer = QTimer(self)
         self._refresh_timer.setSingleShot(True)
         self._refresh_timer.setInterval(0)
@@ -419,13 +424,66 @@ class SetupWizardPage(QWidget):
 
     def _go_next(self) -> None:
         self.flush_pending_edits()
+        if self._active_normalization_task is not None:
+            return
         if not self._current_step_valid():
             return
         if self._active_step_index == len(_WIZARD_STEPS) - 1:
             self._return_home()
             return
+        if _WIZARD_STEPS[self._active_step_index][0] == "conditions":
+            if self._maybe_normalize_condition_images_before_advance():
+                return
+        self._advance_to_next_step()
+
+    def _advance_to_next_step(self) -> None:
         self._active_step_index += 1
         self._advanced_visible = False
+        self.refresh()
+
+    def _maybe_normalize_condition_images_before_advance(self) -> bool:
+        try:
+            scan = self._document.scan_condition_image_normalization()
+        except Exception as error:
+            _show_error_dialog(self, "Image Readiness Error", error)
+            return True
+        if not scan.needs_normalization:
+            return False
+        if not scan.can_normalize:
+            _show_error_dialog(
+                self,
+                "Image Readiness Error",
+                RuntimeError("Selected image folders cannot be normalized automatically."),
+            )
+            return True
+        dialog = ImageNormalizationDialog(scan, parent=self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return True
+        self._start_condition_image_normalization(dialog.target_size())
+        return True
+
+    def _start_condition_image_normalization(self, target_size: int) -> None:
+        task = ProgressTask(
+            parent_widget=self,
+            label="Normalizing condition images...",
+            callback=lambda: self._document.normalize_condition_images(target_size=target_size),
+            window_title="Normalizing Images",
+        )
+        self._active_normalization_task = task
+        self.setup_wizard_next_button.setEnabled(False)
+        task.succeeded.connect(lambda _result: self._advance_to_next_step())
+        task.failed.connect(self._on_condition_image_normalization_failed)
+        task.finished.connect(self._on_condition_image_normalization_finished)
+        task.start()
+
+    def _on_condition_image_normalization_failed(self, error: object) -> None:
+        if isinstance(error, Exception):
+            _show_error_dialog(self, "Image Normalization Error", error)
+        else:
+            _show_error_dialog(self, "Image Normalization Error", RuntimeError(str(error)))
+
+    def _on_condition_image_normalization_finished(self) -> None:
+        self._active_normalization_task = None
         self.refresh()
 
     def _return_home(self) -> None:

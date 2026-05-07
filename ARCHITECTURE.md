@@ -18,8 +18,9 @@ code may lazily import PsychoPy.
   surface.
 - `src/fpvs_studio/core/`: editable project models, validation, compilation, run/session
   contracts, project persistence, and engine-neutral domain logic.
-- `src/fpvs_studio/preprocessing/`: original image import, inspection, generated
-  variants, and manifests. This layer must stay independent of GUI runtime and PsychoPy.
+- `src/fpvs_studio/preprocessing/`: original image import, inspection, image
+  normalization, generated variants, and manifests. This layer must stay independent
+  of GUI runtime and PsychoPy.
 - `src/fpvs_studio/tools/`: imported/reference tool code for future Studio-native
   utilities. Current files from FPVS Toolbox are planning ground truth for the image
   preparation tool and must be adapted before user-facing integration.

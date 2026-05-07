@@ -13,7 +13,7 @@ from PIL import Image
 from fpvs_studio.core.models import ImageResolution, StimulusSet
 from fpvs_studio.preprocessing.models import InspectionFileRecord, StimulusSetInspectionSummary
 
-SUPPORTED_SOURCE_SUFFIXES = frozenset({".jpg", ".jpeg", ".png"})
+SUPPORTED_SOURCE_SUFFIXES = frozenset({".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff"})
 
 
 class ImageInspectionError(ValueError):

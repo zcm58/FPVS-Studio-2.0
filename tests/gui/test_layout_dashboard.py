@@ -5,7 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from PySide6.QtCore import Qt
+from PIL import Image
+from PySide6.QtCore import QObject, Qt, Signal
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
@@ -32,6 +33,41 @@ from fpvs_studio.core.enums import DutyCycleMode, InterConditionMode, StimulusVa
 from fpvs_studio.core.project_service import create_project
 from fpvs_studio.core.serialization import load_project_file, save_project_file
 from fpvs_studio.gui.controller import StudioController
+
+
+class _ImmediateProgressTask(QObject):
+    succeeded = Signal(object)
+    failed = Signal(object)
+    finished = Signal()
+
+    def __init__(
+        self,
+        *,
+        parent_widget: QWidget,
+        label: str,
+        callback,
+        dialog_factory=None,
+        window_title: str | None = None,
+    ) -> None:
+        super().__init__(parent_widget)
+        self._callback = callback
+
+    def start(self) -> None:
+        try:
+            result = self._callback()
+        except Exception as error:
+            self.failed.emit(error)
+        else:
+            self.succeeded.emit(result)
+        finally:
+            self.finished.emit()
+
+
+def _write_mixed_image_directory(target_dir: Path) -> Path:
+    target_dir.mkdir(parents=True, exist_ok=True)
+    Image.new("RGB", (96, 96), color=(20, 40, 60)).save(target_dir / "stimulus-01.png")
+    Image.new("RGB", (128, 96), color=(60, 40, 20)).save(target_dir / "stimulus-02.jpg")
+    return target_dir
 
 
 def test_main_window_uses_home_and_setup_wizard_stack(
@@ -685,6 +721,150 @@ def test_setup_wizard_conditions_step_requires_descriptive_name_and_positive_tri
     QApplication.processEvents()
     assert step.trigger_check_status.text() == "Complete"
     assert next_button.isEnabled()
+
+
+def test_setup_wizard_conditions_next_silently_advances_when_images_are_uniform(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Uniform Image Gate")
+    guide = window.setup_wizard_page
+    step = guide.condition_setup_step
+    guide.open_wizard(step_key="conditions")
+    qtbot.mouseClick(step.add_condition_button, Qt.MouseButton.LeftButton)
+    condition_id = step.selected_condition_id()
+    assert isinstance(condition_id, str)
+    guide._document.update_condition(condition_id, name="Faces", trigger_code=1)
+    guide._document.import_condition_stimulus_folder(
+        condition_id,
+        role="base",
+        source_dir=_write_image_directory(tmp_path / "uniform-base"),
+    )
+    guide._document.import_condition_stimulus_folder(
+        condition_id,
+        role="oddball",
+        source_dir=_write_image_directory(tmp_path / "uniform-oddball"),
+    )
+    QApplication.processEvents()
+
+    def _unexpected_dialog(*_args, **_kwargs):
+        raise AssertionError("Normalization dialog should not be shown for uniform images.")
+
+    monkeypatch.setattr(
+        "fpvs_studio.gui.setup_wizard_page.ImageNormalizationDialog",
+        _unexpected_dialog,
+    )
+
+    qtbot.mouseClick(guide.setup_wizard_next_button, Qt.MouseButton.LeftButton)
+    QApplication.processEvents()
+
+    assert guide.step_title_label.text() == "Display Settings"
+
+
+def test_setup_wizard_conditions_next_normalizes_mixed_images_before_advancing(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Mixed Image Gate")
+    guide = window.setup_wizard_page
+    step = guide.condition_setup_step
+    guide.open_wizard(step_key="conditions")
+    qtbot.mouseClick(step.add_condition_button, Qt.MouseButton.LeftButton)
+    condition_id = step.selected_condition_id()
+    assert isinstance(condition_id, str)
+    guide._document.update_condition(condition_id, name="Faces", trigger_code=1)
+    guide._document.import_condition_stimulus_folder(
+        condition_id,
+        role="base",
+        source_dir=_write_mixed_image_directory(tmp_path / "mixed-base"),
+    )
+    guide._document.import_condition_stimulus_folder(
+        condition_id,
+        role="oddball",
+        source_dir=_write_image_directory(tmp_path / "mixed-oddball"),
+    )
+    QApplication.processEvents()
+
+    class _AcceptDialog:
+        def __init__(self, scan, *, parent=None) -> None:
+            self.scan = scan
+
+        def exec(self):
+            return QDialog.DialogCode.Accepted
+
+        def target_size(self) -> int:
+            return 512
+
+    monkeypatch.setattr("fpvs_studio.gui.setup_wizard_page.ProgressTask", _ImmediateProgressTask)
+    monkeypatch.setattr("fpvs_studio.gui.setup_wizard_page.ImageNormalizationDialog", _AcceptDialog)
+
+    qtbot.mouseClick(guide.setup_wizard_next_button, Qt.MouseButton.LeftButton)
+    QApplication.processEvents()
+
+    assert guide.step_title_label.text() == "Display Settings"
+    base_set = window.document.get_condition_stimulus_set(condition_id, "base")
+    oddball_set = window.document.get_condition_stimulus_set(condition_id, "oddball")
+    assert base_set.source_dir == "stimuli/normalized-images/condition-1-base"
+    assert oddball_set.source_dir == "stimuli/normalized-images/condition-1-oddball"
+    assert base_set.resolution is not None
+    assert base_set.resolution.as_tuple() == (512, 512)
+    assert all(
+        path.suffix == ".png"
+        for path in (window.document.project_root / Path(base_set.source_dir)).iterdir()
+    )
+
+
+def test_setup_wizard_conditions_next_stays_put_when_normalization_is_cancelled(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Cancel Image Gate")
+    guide = window.setup_wizard_page
+    step = guide.condition_setup_step
+    guide.open_wizard(step_key="conditions")
+    qtbot.mouseClick(step.add_condition_button, Qt.MouseButton.LeftButton)
+    condition_id = step.selected_condition_id()
+    assert isinstance(condition_id, str)
+    guide._document.update_condition(condition_id, name="Faces", trigger_code=1)
+    guide._document.import_condition_stimulus_folder(
+        condition_id,
+        role="base",
+        source_dir=_write_mixed_image_directory(tmp_path / "cancel-base"),
+    )
+    guide._document.import_condition_stimulus_folder(
+        condition_id,
+        role="oddball",
+        source_dir=_write_image_directory(tmp_path / "cancel-oddball"),
+    )
+    QApplication.processEvents()
+
+    class _RejectDialog:
+        def __init__(self, scan, *, parent=None) -> None:
+            self.scan = scan
+
+        def exec(self):
+            return QDialog.DialogCode.Rejected
+
+    monkeypatch.setattr("fpvs_studio.gui.setup_wizard_page.ImageNormalizationDialog", _RejectDialog)
+
+    before_source_dir = window.document.get_condition_stimulus_set(
+        condition_id,
+        "base",
+    ).source_dir
+    qtbot.mouseClick(guide.setup_wizard_next_button, Qt.MouseButton.LeftButton)
+    QApplication.processEvents()
+
+    assert guide.step_title_label.text() == "Conditions"
+    assert (
+        window.document.get_condition_stimulus_set(condition_id, "base").source_dir
+        == before_source_dir
+    )
 
 
 def test_setup_wizard_condition_image_picker_starts_in_project_stimuli_folder(

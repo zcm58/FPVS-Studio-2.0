@@ -15,6 +15,7 @@ CACHE_DIRNAME = "cache"
 LOGS_DIRNAME = "logs"
 ORIGINAL_IMAGES_DIRNAME = "original-images"
 GENERATED_VARIANTS_DIRNAME = "generated-variants"
+NORMALIZED_IMAGES_DIRNAME = "normalized-images"
 GRAYSCALE_VARIANTS_DIRNAME = "grayscale-variants"
 ROTATED_180_VARIANTS_DIRNAME = "rotated-180-variants"
 SCRAMBLED_VARIANTS_DIRNAME = "scrambled-variants"
@@ -80,6 +81,18 @@ def stimulus_generated_variants_root(project_root: Path) -> Path:
     """Return the root directory for generated stimulus variants."""
 
     return stimuli_dir(project_root) / GENERATED_VARIANTS_DIRNAME
+
+
+def stimulus_normalized_images_root(project_root: Path) -> Path:
+    """Return the root directory for normalized image outputs."""
+
+    return stimuli_dir(project_root) / NORMALIZED_IMAGES_DIRNAME
+
+
+def stimulus_normalized_dir(project_root: Path, set_id: str) -> Path:
+    """Return the normalized image directory for a stimulus set."""
+
+    return stimulus_normalized_images_root(project_root) / set_id
 
 
 def stimulus_originals_dir(project_root: Path, set_id: str) -> Path:
