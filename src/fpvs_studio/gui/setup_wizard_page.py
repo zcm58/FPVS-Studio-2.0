@@ -19,7 +19,7 @@ from PySide6.QtWidgets import (
 )
 
 from fpvs_studio.core.models import ConditionTemplateProfile
-from fpvs_studio.gui.assets_pages import AssetsPage, AssetsReadinessEditor
+from fpvs_studio.gui.assets_pages import AssetsPage
 from fpvs_studio.gui.components import (
     PAGE_SECTION_GAP,
     NonHomePageShell,
@@ -51,7 +51,6 @@ from fpvs_studio.gui.window_helpers import (
 
 _WIZARD_STEPS: tuple[tuple[str, str], ...] = (
     ("project", "Project Details"),
-    ("stimuli", "Stimuli"),
     ("conditions", "Conditions"),
     ("display", "Display Settings"),
     ("session", "Session Design"),
@@ -139,12 +138,6 @@ class SetupWizardPage(QWidget):
             fullscreen_state_setter=fullscreen_state_setter,
             parent=self,
         )
-        self.assets_readiness_editor = AssetsReadinessEditor(
-            document,
-            object_name_prefix="wizard_",
-            parent=self,
-        )
-
         self.shell = NonHomePageShell(
             title="Setup Wizard",
             subtitle="",
@@ -227,7 +220,6 @@ class SetupWizardPage(QWidget):
         self.advanced_stack.setObjectName("setup_wizard_advanced_stack")
         self.advanced_stack.addWidget(self._advanced_empty_page())
         self.advanced_stack.addWidget(self.conditions_page)
-        self.advanced_stack.addWidget(self.assets_page)
         self.advanced_stack.addWidget(self.run_page)
         self.advanced_stack.addWidget(self.session_structure_page)
         self.advanced_stack.addWidget(self.fixation_cross_settings_page)
@@ -329,7 +321,6 @@ class SetupWizardPage(QWidget):
 
     def _build_step_pages(self) -> None:
         self.step_stack.addWidget(self.project_overview_editor)
-        self.step_stack.addWidget(self.assets_readiness_editor)
         self.step_stack.addWidget(self.condition_setup_step)
         self.step_stack.addWidget(self.runtime_settings_editor)
         self.step_stack.addWidget(self._session_step_page())
@@ -567,8 +558,6 @@ class SetupWizardPage(QWidget):
             if not self._conditions_have_required_trigger_codes(ordered_conditions):
                 return "Set trigger codes"
             return "Assign base and oddball folders"
-        if step_key == "stimuli":
-            return "Ready"
         if step_key == "review":
             return "Review blockers"
         return self._current_step_blocker() if index == self._active_step_index else "Needs setup"
@@ -583,8 +572,6 @@ class SetupWizardPage(QWidget):
             return self._project_details_ready()
         if step_key == "conditions":
             return self._conditions_ready_for_wizard(ordered_conditions)
-        if step_key == "stimuli":
-            return True
         if step_key == "display":
             return self.runtime_settings_editor.current_refresh_hz() > 0.0
         if step_key in {"session", "fixation"}:
@@ -606,8 +593,6 @@ class SetupWizardPage(QWidget):
             if not self._conditions_have_required_trigger_codes(ordered_conditions):
                 return "Set trigger codes above 0"
             return "Assign base and oddball folders"
-        if step_key == "stimuli":
-            return "Review or prepare image folders"
         if step_key == "display":
             return "Set a valid refresh rate"
         if step_key == "review":
@@ -691,7 +676,6 @@ class SetupWizardPage(QWidget):
     def _advanced_available_for_current_step(self) -> bool:
         return _WIZARD_STEPS[self._active_step_index][0] in {
             "conditions",
-            "stimuli",
             "display",
             "session",
             "fixation",
@@ -700,10 +684,9 @@ class SetupWizardPage(QWidget):
     def _advanced_index_for_step(self, step_key: str) -> int:
         return {
             "conditions": 1,
-            "stimuli": 2,
-            "display": 3,
-            "session": 4,
-            "fixation": 5,
+            "display": 2,
+            "session": 3,
+            "fixation": 4,
         }.get(step_key, 0)
 
     def _refresh_progress_header(self) -> None:

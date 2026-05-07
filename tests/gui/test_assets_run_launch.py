@@ -35,16 +35,16 @@ def test_assets_preprocessing_import_and_materialize_updates_status(
     oddball_dir = _write_image_directory(tmp_path / "asset-oddball")
     selection = iter([str(base_dir), str(oddball_dir)])
     monkeypatch.setattr(
-        "fpvs_studio.gui.main_window.QFileDialog.getExistingDirectory",
+        "fpvs_studio.gui.assets_pages.QFileDialog.getExistingDirectory",
         lambda *args, **kwargs: next(selection),
     )
 
-    window.main_tabs.setCurrentWidget(window.assets_page)
+    window.assets_page.refresh()
     window.assets_page.assets_table.selectRow(0)
-    qtbot.mouseClick(window.assets_page.import_source_button, Qt.MouseButton.LeftButton)
+    window.assets_page.import_source_button.click()
     window.assets_page.assets_table.selectRow(1)
-    qtbot.mouseClick(window.assets_page.import_source_button, Qt.MouseButton.LeftButton)
-    qtbot.mouseClick(window.assets_page.materialize_button, Qt.MouseButton.LeftButton)
+    window.assets_page.import_source_button.click()
+    window.assets_page.materialize_button.click()
 
     qtbot.waitUntil(
         lambda: StimulusVariant.GRAYSCALE
@@ -69,7 +69,7 @@ def test_assets_import_validation_failure_is_reported(
 
     messages: list[str] = []
     monkeypatch.setattr(
-        "fpvs_studio.gui.main_window.QFileDialog.getExistingDirectory",
+        "fpvs_studio.gui.assets_pages.QFileDialog.getExistingDirectory",
         lambda *args, **kwargs: str(invalid_dir),
     )
 
@@ -77,11 +77,11 @@ def test_assets_import_validation_failure_is_reported(
         messages.append(dialog.text())
         return int(QMessageBox.StandardButton.Ok)
 
-    monkeypatch.setattr("fpvs_studio.gui.main_window.QMessageBox.exec", _capture_exec)
+    monkeypatch.setattr("fpvs_studio.gui.window_helpers.QMessageBox.exec", _capture_exec)
 
-    window.main_tabs.setCurrentWidget(window.assets_page)
+    window.assets_page.refresh()
     window.assets_page.assets_table.selectRow(0)
-    qtbot.mouseClick(window.assets_page.import_source_button, Qt.MouseButton.LeftButton)
+    window.assets_page.import_source_button.click()
 
     assert any("identical resolution" in message for message in messages)
 

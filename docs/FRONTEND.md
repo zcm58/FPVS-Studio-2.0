@@ -15,6 +15,8 @@ the active app.
 
 - Home is the daily launch surface for ready projects.
 - Setup Wizard is the guided setup/editing surface.
+- Conditions is the guided setup area for assigning base/oddball image folders and
+  creating optional derived-variant control conditions.
 - Manage Projects is the welcome/File-menu surface for opening known projects or
   moving project folders to the Windows Recycle Bin with confirmation.
 - Dense editors stay available inside wizard Advanced views when they are useful.

@@ -9,6 +9,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
+    QDialog,
     QFileDialog,
     QGroupBox,
     QHeaderView,
@@ -87,21 +88,23 @@ def test_setup_wizard_exists_and_uses_single_column_shell_with_steps(
     assert wizard.progress_header_label.objectName() == "setup_wizard_progress_header"
     assert wizard.progress_steps.objectName() == "setup_wizard_progress_steps"
     assert wizard.step_status_badge.objectName() == "setup_wizard_ready_badge"
-    assert wizard.setup_wizard_step_list.count() == 7
-    assert wizard.step_stack.count() == 7
+    assert wizard.setup_wizard_step_list.count() == 6
+    assert wizard.step_stack.count() == 6
     assert wizard.content_stack.currentWidget() is wizard.guided_panel
     step_text = "\n".join(label.text() for label in wizard.progress_step_labels)
     assert "[OK]" not in step_text
     assert "[TODO]" not in step_text
-    assert wizard.progress_header_label.text() == "Step 1 of 7: Project Details"
+    assert wizard.progress_header_label.text() == "Step 1 of 6: Project Details"
     assert "Project Details" in step_text
+    assert "Conditions" in step_text
+    assert "Stimuli" not in step_text
     assert "Display Settings" in step_text
     assert "Session Design" in step_text
     assert "Fixation Cross" in step_text
     assert "Review" in step_text
     assert wizard.findChild(QWidget, "setup_wizard_step_1_project_details") is not None
-    assert wizard.findChild(QWidget, "setup_wizard_step_2_stimuli") is not None
-    assert wizard.findChild(QWidget, "setup_wizard_step_3_conditions") is not None
+    assert wizard.findChild(QWidget, "setup_wizard_step_2_conditions") is not None
+    assert wizard.findChild(QWidget, "setup_wizard_step_3_display_settings") is not None
     assert wizard.progress_steps.step_circles[0].property("setupProgressState") == "current"
     label_text = "\n".join(label.text() for label in wizard.findChildren(QLabel))
     assert "Current Step" not in label_text
@@ -282,7 +285,6 @@ def test_setup_wizard_surfaces_steps_and_keeps_shared_editors_available(
     session_editor = dashboard.session_structure_editor
     fixation_editor = dashboard.fixation_settings_editor
     runtime_editor = dashboard.runtime_settings_editor
-    assets_editor = dashboard.assets_readiness_editor
 
     assert project_editor.project_name_edit is not None
     assert project_editor.project_description_edit is not None
@@ -303,7 +305,7 @@ def test_setup_wizard_surfaces_steps_and_keeps_shared_editors_available(
     assert setup_icon.width() == 52
     assert setup_icon.height() == 52
     assert project_editor.findChild(QLabel, "project_overview_title").text() == "Project Details"
-    assert project_editor.findChild(QLabel, "project_overview_step_badge").text() == "Step 1 of 7"
+    assert project_editor.findChild(QLabel, "project_overview_step_badge").text() == "Step 1 of 6"
     assert checklist.objectName() == "project_overview_checklist"
     assert checklist.title_label.text() == "Ready for next step"
     assert 210 <= checklist.minimumWidth() <= checklist.maximumWidth()
@@ -338,9 +340,6 @@ def test_setup_wizard_surfaces_steps_and_keeps_shared_editors_available(
     assert runtime_editor.serial_baudrate_spin.isEnabled() is False
     assert not hasattr(runtime_editor, "display_index_edit")
 
-    assert assets_editor.refresh_button.text() == "Refresh Inspection"
-    assert assets_editor.materialize_button.text() == "Materialize Supported Variants"
-    assert "Condition stimulus rows:" in assets_editor.condition_rows_value.text()
     assert dashboard.conditions_page is window.conditions_page
     assert dashboard.condition_setup_step.condition_name_edit is not None
     assert dashboard.condition_setup_step.trigger_code_spin is not None
@@ -352,14 +351,13 @@ def test_setup_wizard_surfaces_steps_and_keeps_shared_editors_available(
     assert not hasattr(dashboard.condition_setup_step, "variant_combo")
     assert dashboard.assets_page is window.assets_page
     assert dashboard.run_page is window.run_page
-    assert dashboard.setup_wizard_step_list.count() == 7
+    assert dashboard.setup_wizard_step_list.count() == 6
     assert "Project Details" in dashboard.setup_wizard_step_list.item(0).text()
-    assert "Stimuli" in dashboard.setup_wizard_step_list.item(1).text()
-    assert "Conditions" in dashboard.setup_wizard_step_list.item(2).text()
-    assert "Display Settings" in dashboard.setup_wizard_step_list.item(3).text()
-    assert "Session Design" in dashboard.setup_wizard_step_list.item(4).text()
-    assert "Fixation Cross" in dashboard.setup_wizard_step_list.item(5).text()
-    assert "Review" in dashboard.setup_wizard_step_list.item(6).text()
+    assert "Conditions" in dashboard.setup_wizard_step_list.item(1).text()
+    assert "Display Settings" in dashboard.setup_wizard_step_list.item(2).text()
+    assert "Session Design" in dashboard.setup_wizard_step_list.item(3).text()
+    assert "Fixation Cross" in dashboard.setup_wizard_step_list.item(4).text()
+    assert "Review" in dashboard.setup_wizard_step_list.item(5).text()
 
 
 def test_setup_wizard_navigation_and_advanced_editor_access(
@@ -390,18 +388,6 @@ def test_setup_wizard_navigation_and_advanced_editor_access(
     assert next_button.isEnabled()
     qtbot.mouseClick(next_button, Qt.MouseButton.LeftButton)
     assert guide.step_stack.currentIndex() == 1
-    assert guide.step_stack.currentWidget() is guide.assets_readiness_editor
-    assert guide.content_stack.currentWidget() is guide.guided_panel
-    assert next_button.isEnabled()
-    assert advanced_button.isEnabled()
-    qtbot.mouseClick(advanced_button, Qt.MouseButton.LeftButton)
-    assert guide.content_stack.currentWidget() is guide.advanced_stack
-    assert guide.advanced_stack.currentWidget() is window.assets_page
-    qtbot.mouseClick(advanced_button, Qt.MouseButton.LeftButton)
-    assert guide.content_stack.currentWidget() is guide.guided_panel
-
-    qtbot.mouseClick(next_button, Qt.MouseButton.LeftButton)
-    assert guide.step_stack.currentIndex() == 2
     assert guide.step_stack.currentWidget() is guide.condition_setup_step
     assert guide.content_stack.currentWidget() is guide.guided_panel
     assert not next_button.isEnabled()
@@ -464,7 +450,7 @@ def test_setup_wizard_navigation_and_advanced_editor_access(
     assert advanced_button.text() == "Back to Guided Step"
 
     qtbot.mouseClick(back_button, Qt.MouseButton.LeftButton)
-    assert guide.step_stack.currentIndex() == 2
+    assert guide.step_stack.currentIndex() == 1
     assert guide.content_stack.currentWidget() is guide.guided_panel
 
     monkeypatch.setattr(
@@ -732,6 +718,103 @@ def test_setup_wizard_condition_image_picker_starts_in_project_stimuli_folder(
         ("Choose Base Stimulus Folder", expected_start),
         ("Choose Oddball Stimulus Folder", expected_start),
     ]
+
+
+def test_setup_wizard_control_condition_button_requires_assigned_images(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Control Condition Enable")
+    guide = window.setup_wizard_page
+    step = guide.condition_setup_step
+    guide.open_wizard(step_key="conditions")
+
+    assert not step.create_control_condition_button.isEnabled()
+
+    qtbot.mouseClick(step.add_condition_button, Qt.MouseButton.LeftButton)
+    condition_id = step.selected_condition_id()
+    assert condition_id is not None
+    assert not step.create_control_condition_button.isEnabled()
+
+    base_dir = _write_image_directory(tmp_path / "control-enable-base")
+    oddball_dir = _write_image_directory(tmp_path / "control-enable-oddball")
+    window.document.import_condition_stimulus_folder(condition_id, role="base", source_dir=base_dir)
+    window.document.import_condition_stimulus_folder(
+        condition_id,
+        role="oddball",
+        source_dir=oddball_dir,
+    )
+    qtbot.waitUntil(step.create_control_condition_button.isEnabled)
+
+
+@pytest.mark.parametrize(
+    ("variant", "name"),
+    [
+        (StimulusVariant.GRAYSCALE, "Faces Grayscale Control"),
+        (StimulusVariant.ROT180, "Faces 180 Degree Rotated Control"),
+        (StimulusVariant.PHASE_SCRAMBLED, "Faces Phase-Scrambled Control"),
+    ],
+)
+def test_setup_wizard_creates_control_condition_from_existing_stimuli(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+    monkeypatch,
+    variant: StimulusVariant,
+    name: str,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, f"{variant.value} Control")
+    guide = window.setup_wizard_page
+    step = guide.condition_setup_step
+    guide.open_wizard(step_key="conditions")
+    qtbot.mouseClick(step.add_condition_button, Qt.MouseButton.LeftButton)
+    condition_id = step.selected_condition_id()
+    assert condition_id is not None
+    window.document.update_condition(condition_id, name="Faces")
+    base_dir = _write_image_directory(tmp_path / f"{variant.value}-base")
+    oddball_dir = _write_image_directory(tmp_path / f"{variant.value}-oddball")
+    window.document.import_condition_stimulus_folder(condition_id, role="base", source_dir=base_dir)
+    window.document.import_condition_stimulus_folder(
+        condition_id,
+        role="oddball",
+        source_dir=oddball_dir,
+    )
+    qtbot.waitUntil(step.create_control_condition_button.isEnabled)
+    materialize_calls = 0
+
+    def _count_materialization() -> None:
+        nonlocal materialize_calls
+        materialize_calls += 1
+
+    monkeypatch.setattr(
+        "fpvs_studio.gui.condition_setup_step.ControlConditionDialog.exec",
+        lambda self: QDialog.DialogCode.Accepted,
+    )
+    monkeypatch.setattr(
+        "fpvs_studio.gui.condition_setup_step.ControlConditionDialog.selected_variant",
+        lambda self: variant,
+    )
+    monkeypatch.setattr(
+        "fpvs_studio.gui.condition_setup_step.ControlConditionDialog.condition_name",
+        lambda self: name,
+    )
+    monkeypatch.setattr(step, "_materialize_control_variant", _count_materialization)
+
+    qtbot.mouseClick(step.create_control_condition_button, Qt.MouseButton.LeftButton)
+
+    selected_id = step.selected_condition_id()
+    assert selected_id is not None
+    source = window.document.get_condition(condition_id)
+    control = window.document.get_condition(selected_id)
+    assert source is not None
+    assert control is not None
+    assert control.name == name
+    assert control.base_stimulus_set_id == source.base_stimulus_set_id
+    assert control.oddball_stimulus_set_id == source.oddball_stimulus_set_id
+    assert control.stimulus_variant == variant
+    assert control.trigger_code == 2
+    assert materialize_calls == 1
 
 
 def test_advanced_conditions_image_picker_starts_in_project_stimuli_folder(

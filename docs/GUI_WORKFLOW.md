@@ -45,10 +45,10 @@ The authoring window is organized around two user-facing modes:
   - `Edit Setup` opens the guided setup workflow
 - `Setup Wizard`
   - in-window setup flow for new/incomplete projects and intentional edits
-  - ordered steps: Project Details, Stimuli, Conditions, Display Settings,
-    Session Design, Fixation Cross, Review
+  - ordered steps: Project Details, Conditions, Display Settings, Session Design,
+    Fixation Cross, Review
   - `Next` is disabled until the active step is complete
-  - the top progress header shows `Step X of 7` and a slim horizontal progress
+  - the top progress header shows `Step X of 6` and a slim horizontal progress
     indicator instead of a persistent left-hand step column; the current shared
     component is a connected numbered stepper with completed/current/upcoming states
   - the wizard uses the full available window width so advanced editor content
@@ -57,16 +57,17 @@ The authoring window is organized around two user-facing modes:
     context; individual step cards should not repeat generic instructional copy
   - Project Details uses a focused centered card inside the full-width wizard,
     keeping the project folder path compact and secondary; project name and
-    description are required before continuing to Stimuli
-  - the Stimuli step appears before Conditions so users can review or prepare image
-    folders before assigning them to condition roles; in the current implementation
-    it is non-blocking and keeps detailed stimulus management available through
-    `Advanced`
+    description are required before continuing to Conditions
   - the Conditions step uses a simplified condition setup surface for condition
     name, trigger code, participant instructions, and base/oddball image folders
   - the Conditions step uses the shared setup workspace pattern: condition list on
     the left, selected-condition editor and image source cards in the center, and
     protocol defaults plus setup checklist on the right
+  - the Conditions step owns image folder selection; users choose base and oddball
+    folders while creating each condition
+  - the Conditions step includes a secondary `Create Control Condition...` action for
+    optional grayscale, 180 degree rotated, or phase-scrambled control conditions that
+    reuse the selected condition's existing base and oddball image folders
   - guided Conditions copy uses `Image Version` for stimulus variant selection; raw
     timing fields such as `Cycles / Repeat` remain advanced-only concepts
   - the Conditions step is complete only when every condition has a user-provided
@@ -76,9 +77,10 @@ The authoring window is organized around two user-facing modes:
     active setup area
   - `Return Home` asks for confirmation when setup is incomplete
 
-Detailed Conditions, Stimuli Manager, and Runtime widgets remain available internally
-for wizard advanced access and existing document bindings. These pages are not visible
-top-level tabs during normal use.
+Detailed Conditions and Runtime widgets remain available internally for wizard advanced
+access and existing document bindings. The Stimuli Manager remains an internal support
+page for variant/materialization behavior, not a guided setup step or visible top-level
+tab during normal use.
 
 The `File` menu exposes manage-projects and settings actions. Moving a project to the
 Recycle Bin remains a controller-owned filesystem operation guarded by `project.json`
@@ -147,6 +149,7 @@ Phase 5 currently supports:
   deterministic no-immediate-repeat behavior across consecutive compiled runs
 - authoring multiple conditions
 - importing base and oddball image folders
+- creating optional derived-variant control conditions from existing condition stimuli
 - materializing original, grayscale, rot180, and phase-scrambled variants
 - validating and compiling the multi-condition session plan
 - running the current test-mode launch path with fullscreen PsychoPy playback

@@ -79,10 +79,12 @@ Current planned seams:
   shared page/card/status/path widgets, owns reusable button roles and stylesheets, and
   keeps raw design tokens in `design_system.py`.
 - GUI workflow composition is Home-first. `main_window.py` uses a stack with Home and
-  `setup_wizard_page.py`; the wizard uses a seven-step top-progress flow with a
-  simplified Conditions setup step and detailed Conditions, Stimuli Manager, Runtime,
-  Session, and Fixation widgets kept internal for step-level advanced access rather
-  than visible top-level tabs.
+  `setup_wizard_page.py`; the wizard uses a six-step top-progress flow with a
+  simplified Conditions setup step where users assign base/oddball image folders and
+  can optionally create derived-variant control conditions. Detailed Conditions,
+  Runtime, Session, and Fixation widgets stay internal for step-level advanced access
+  rather than visible top-level tabs; Stimuli Manager remains an internal support page,
+  not a guided setup step.
 - GUI project management uses `manage_projects_dialog.py` as a themed component-layer
   surface while `controller.py` owns disk-backed project discovery, recent-project
   settings, and Recycle Bin confirmation/deletion side effects.
