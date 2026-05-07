@@ -2,6 +2,17 @@
 
 Status: Active
 
+Progress:
+
+- Phase 1 completed: plan added and current wizard/component inventory reviewed.
+- Phase 2 completed: shared setup wizard component layer added.
+- Phase 3 completed: wizard shell uses the connected stepper and bottom status strip.
+- Phase 4 completed: guided Conditions step now uses the left/main/right setup
+  workspace, source cards, protocol defaults, and reusable setup checklist.
+- Phase 5 pending: align remaining setup steps with the shared wizard language where
+  useful.
+- Phase 6 pending: final polish and edge-case pass.
+
 ## Purpose
 
 Refresh the FPVS Studio Setup Wizard into a cohesive, polished, Windows-native

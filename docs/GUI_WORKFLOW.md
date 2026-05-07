@@ -53,6 +53,11 @@ The authoring window is organized around two user-facing modes:
     description are required before continuing to Conditions
   - the Conditions step uses a simplified condition setup surface for condition
     name, trigger code, participant instructions, and base/oddball image folders
+  - the Conditions step uses the shared setup workspace pattern: condition list on
+    the left, selected-condition editor and image source cards in the center, and
+    protocol defaults plus setup checklist on the right
+  - guided Conditions copy uses `Image Version` for stimulus variant selection; raw
+    timing fields such as `Cycles / Repeat` remain advanced-only concepts
   - the Conditions step is complete only when every condition has a user-provided
     descriptive name, a trigger code of 1 or higher, and imported base and oddball
     image folders

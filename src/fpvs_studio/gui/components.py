@@ -448,7 +448,7 @@ class SetupSourceCard(QFrame):
 
         self.choose_button = QPushButton(button_text, self)
         self.choose_button.setObjectName(f"{object_name}_choose_button")
-        self.choose_button.clicked.connect(self.choose_requested)
+        self.choose_button.clicked.connect(self.choose_requested.emit)
         mark_secondary_action(self.choose_button)
         self._layout.addWidget(self.choose_button)
 
@@ -670,6 +670,10 @@ def studio_theme_stylesheet() -> str:
     QPushButton[secondaryActionRole="true"] {{
         font-weight: 600;
     }}
+    QPushButton[destructiveActionRole="true"] {{
+        color: #b91c1c;
+        font-weight: 600;
+    }}
     QPushButton:focus {{
         border: 2px solid {COLOR_PRIMARY};
     }}
@@ -715,6 +719,7 @@ def studio_theme_stylesheet() -> str:
         padding: 6px 8px;
     }}
     QListWidget#condition_list,
+    QListWidget#setup_wizard_condition_list,
     QListWidget#run_readiness_checklist,
     QListWidget#home_readiness_list,
     QListWidget#dashboard_attention_list,
@@ -728,14 +733,29 @@ def studio_theme_stylesheet() -> str:
     QListWidget#condition_list {{
         padding: 4px;
     }}
+    QListWidget#setup_wizard_condition_list {{
+        padding: 5px;
+    }}
     QListWidget#condition_list::item {{
         padding: 7px 10px;
+        border-radius: 8px;
+    }}
+    QListWidget#setup_wizard_condition_list::item {{
+        padding: 10px 12px;
         border-radius: 8px;
     }}
     QListWidget#condition_list::item:hover {{
         background-color: {COLOR_SURFACE_ALT};
     }}
+    QListWidget#setup_wizard_condition_list::item:hover {{
+        background-color: {COLOR_SURFACE_ALT};
+    }}
     QListWidget#condition_list::item:selected {{
+        background-color: {COLOR_PRIMARY};
+        color: #ffffff;
+        font-weight: 700;
+    }}
+    QListWidget#setup_wizard_condition_list::item:selected {{
         background-color: {COLOR_PRIMARY};
         color: #ffffff;
         font-weight: 700;

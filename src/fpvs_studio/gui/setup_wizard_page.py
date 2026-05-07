@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QSize, Qt
 from PySide6.QtWidgets import (
     QFormLayout,
     QHBoxLayout,
@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
     QListWidget,
     QMessageBox,
     QPushButton,
+    QSizePolicy,
     QStackedWidget,
     QVBoxLayout,
     QWidget,
@@ -60,6 +61,18 @@ _WIZARD_STEPS: tuple[tuple[str, str], ...] = (
 _CREATE_ALL_CONDITIONS_PROMPT = "Please ensure you create all conditions before proceeding."
 
 
+class _CurrentWidgetStack(QStackedWidget):
+    """Stacked widget whose size hint follows only the active page."""
+
+    def sizeHint(self) -> QSize:
+        widget = self.currentWidget()
+        return widget.sizeHint() if widget is not None else super().sizeHint()
+
+    def minimumSizeHint(self) -> QSize:
+        widget = self.currentWidget()
+        return widget.minimumSizeHint() if widget is not None else super().minimumSizeHint()
+
+
 class SetupWizardPage(QWidget):
     """In-window guided setup flow backed by the shared project document."""
 
@@ -85,6 +98,9 @@ class SetupWizardPage(QWidget):
         self.condition_setup_step = ConditionSetupStep(document, self)
         self.add_condition_button = self.condition_setup_step.add_condition_button
         self.add_condition_button.clicked.connect(self._show_first_condition_prompt_if_needed)
+        self.condition_setup_step.advanced_timing_requested.connect(
+            self._show_conditions_advanced_timing
+        )
         self.assets_page = AssetsPage(document, self)
         self.run_page = RunPage(
             document,
@@ -160,11 +176,20 @@ class SetupWizardPage(QWidget):
         self.step_status_label.setObjectName("setup_wizard_step_status_label")
         self.step_status_label.setWordWrap(True)
 
-        self.step_stack = QStackedWidget(self)
+        self.step_stack = _CurrentWidgetStack(self)
         self.step_stack.setObjectName("setup_wizard_step_stack")
+        self.step_stack.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Ignored,
+        )
         self._build_step_pages()
 
         self.guided_panel = QWidget(self)
+        self.guided_panel.setMinimumHeight(0)
+        self.guided_panel.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Ignored,
+        )
         guided_layout = QVBoxLayout(self.guided_panel)
         guided_layout.setContentsMargins(0, 0, 0, 0)
         guided_layout.setSpacing(8)
@@ -179,11 +204,16 @@ class SetupWizardPage(QWidget):
             parent=self,
         )
         self.step_card = step_card
+        step_card.setMinimumHeight(0)
+        step_card.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Ignored,
+        )
         step_card.title_label.setVisible(False)
         step_card.card_layout.setContentsMargins(12, 10, 12, 10)
         step_card.body_layout.setSpacing(8)
 
-        self.advanced_stack = QStackedWidget(self)
+        self.advanced_stack = _CurrentWidgetStack(self)
         self.advanced_stack.setObjectName("setup_wizard_advanced_stack")
         self.advanced_stack.addWidget(self._advanced_empty_page())
         self.advanced_stack.addWidget(self.conditions_page)
@@ -192,8 +222,13 @@ class SetupWizardPage(QWidget):
         self.advanced_stack.addWidget(self.session_structure_page)
         self.advanced_stack.addWidget(self.fixation_cross_settings_page)
 
-        self.content_stack = QStackedWidget(self)
+        self.content_stack = _CurrentWidgetStack(self)
         self.content_stack.setObjectName("setup_wizard_content_stack")
+        self.content_stack.setMinimumHeight(0)
+        self.content_stack.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Ignored,
+        )
         self.content_stack.addWidget(self.guided_panel)
         self.content_stack.addWidget(self.advanced_stack)
         step_card.body_layout.addWidget(self.content_stack, 1)
@@ -230,7 +265,8 @@ class SetupWizardPage(QWidget):
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.addWidget(self.shell)
+        layout.addWidget(self.shell, 1)
+        layout.addWidget(self.shell.footer_strip)
 
         self._document.project_changed.connect(self.refresh)
         self._document.manifest_changed.connect(self.refresh)
@@ -397,6 +433,11 @@ class SetupWizardPage(QWidget):
         if not self._advanced_available_for_current_step():
             return
         self._advanced_visible = not self._advanced_visible
+        self.refresh()
+
+    def _show_conditions_advanced_timing(self) -> None:
+        self._active_step_index = self._step_index_for_key("conditions")
+        self._advanced_visible = True
         self.refresh()
 
     def refresh(self) -> None:

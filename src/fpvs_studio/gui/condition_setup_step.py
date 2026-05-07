@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from PySide6.QtCore import QSignalBlocker, Qt
+from PySide6.QtCore import QSignalBlocker, Qt, Signal
 from PySide6.QtWidgets import (
     QFileDialog,
     QFormLayout,
@@ -16,17 +16,21 @@ from PySide6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QPushButton,
-    QSizePolicy,
     QSpinBox,
     QTextEdit,
     QVBoxLayout,
     QWidget,
 )
 
+from fpvs_studio.core.enums import DutyCycleMode
 from fpvs_studio.core.models import Condition, StimulusSet
+from fpvs_studio.core.template_library import get_template
 from fpvs_studio.gui.components import (
     PAGE_SECTION_GAP,
-    PathValueLabel,
+    SetupChecklistPanel,
+    SetupSidePanel,
+    SetupSourceCard,
+    SetupWorkspaceFrame,
     StatusBadgeLabel,
     mark_primary_action,
     mark_secondary_action,
@@ -36,6 +40,7 @@ from fpvs_studio.gui.window_helpers import (
     _resolution_text,
     _show_error_dialog,
     _sync_text_editor_contents,
+    _variant_label,
 )
 
 _DEFAULT_CONDITION_NAME_RE = re.compile(r"^Condition \d+$")
@@ -57,17 +62,20 @@ def is_guided_trigger_code(value: int) -> bool:
 class ConditionSetupStep(QWidget):
     """Focused wizard step for condition identity and linked image sources."""
 
+    advanced_timing_requested = Signal()
+
     def __init__(self, document: ProjectDocument, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._document = document
 
         self.condition_list = QListWidget(self)
         self.condition_list.setObjectName("setup_wizard_condition_list")
+        self.condition_list.setProperty("setupConditionsList", "true")
         self.condition_list.setSelectionMode(QListWidget.SelectionMode.SingleSelection)
         self.condition_list.setAlternatingRowColors(True)
         self.condition_list.currentItemChanged.connect(self._refresh_editor)
 
-        self.add_condition_button = QPushButton("Add Condition", self)
+        self.add_condition_button = QPushButton("+ Add Condition", self)
         self.add_condition_button.setObjectName("setup_wizard_add_condition_button")
         self.add_condition_button.clicked.connect(self._add_condition)
         mark_primary_action(self.add_condition_button)
@@ -78,57 +86,39 @@ class ConditionSetupStep(QWidget):
         self.remove_condition_button = QPushButton("Remove", self)
         self.remove_condition_button.setObjectName("setup_wizard_remove_condition_button")
         self.remove_condition_button.clicked.connect(self._remove_condition)
-
-        list_buttons = QGridLayout()
-        list_buttons.setContentsMargins(0, 0, 0, 0)
-        list_buttons.setHorizontalSpacing(8)
-        list_buttons.setVerticalSpacing(8)
-        list_buttons.addWidget(self.add_condition_button, 0, 0)
-        list_buttons.addWidget(self.duplicate_condition_button, 0, 1)
-        list_buttons.addWidget(self.remove_condition_button, 1, 0, 1, 2)
+        self.remove_condition_button.setProperty("destructiveActionRole", "true")
 
         list_panel = QWidget(self)
+        list_panel.setObjectName("setup_conditions_left_panel")
         list_layout = QVBoxLayout(list_panel)
         list_layout.setContentsMargins(0, 0, 0, 0)
-        list_layout.setSpacing(8)
-        list_title = QLabel("Conditions", list_panel)
+        list_layout.setSpacing(10)
+        list_title = QLabel("Condition List", list_panel)
         list_title.setProperty("sectionCardRole", "title")
+        list_note = QLabel("Create, remove, and reorder conditions.", list_panel)
+        list_note.setProperty("setupPanelHelper", "true")
+        list_note.setWordWrap(True)
         list_layout.addWidget(list_title)
+        list_layout.addWidget(list_note)
         list_layout.addWidget(self.condition_list, 1)
-        list_layout.addLayout(list_buttons)
+        list_layout.addWidget(self.add_condition_button)
+        list_layout.addWidget(self.duplicate_condition_button)
+        list_layout.addWidget(self.remove_condition_button)
 
         self.selected_condition_badge = StatusBadgeLabel("No condition selected", self)
         self.selected_condition_badge.setObjectName("setup_wizard_selected_condition_badge")
-        self.name_check_status = StatusBadgeLabel("Name needed", self)
+        self.selected_condition_note = QLabel(self)
+        self.selected_condition_note.setObjectName("setup_wizard_selected_condition_note")
+        self.selected_condition_note.setProperty("setupPanelHelper", "true")
+        self.selected_condition_note.setAlignment(Qt.AlignmentFlag.AlignRight)
+        self.name_check_status = QLabel("Missing", self)
         self.name_check_status.setObjectName("setup_wizard_condition_name_check")
-        self.trigger_check_status = StatusBadgeLabel("Trigger needed", self)
+        self.trigger_check_status = QLabel("Missing", self)
         self.trigger_check_status.setObjectName("setup_wizard_condition_trigger_check")
-        self.base_check_status = StatusBadgeLabel("Base Images Not Selected", self)
+        self.base_check_status = QLabel("Missing", self)
         self.base_check_status.setObjectName("setup_wizard_condition_base_check")
-        self.oddball_check_status = StatusBadgeLabel("Oddball Images Not Selected", self)
+        self.oddball_check_status = QLabel("Missing", self)
         self.oddball_check_status.setObjectName("setup_wizard_condition_oddball_check")
-
-        checklist_panel = QWidget(self)
-        checklist_panel.setObjectName("setup_wizard_condition_checklist")
-        checklist_layout = QGridLayout(checklist_panel)
-        checklist_layout.setContentsMargins(0, 0, 0, 0)
-        checklist_layout.setHorizontalSpacing(PAGE_SECTION_GAP)
-        checklist_layout.setVerticalSpacing(8)
-        checklist_title = QLabel("Setup Checklist", checklist_panel)
-        checklist_title.setProperty("sectionCardRole", "title")
-        checklist_layout.addWidget(checklist_title, 0, 0, 1, 2)
-        for row, (label, status) in enumerate(
-            (
-                ("Name", self.name_check_status),
-                ("Trigger", self.trigger_check_status),
-                ("Base Images", self.base_check_status),
-                ("Oddball Images", self.oddball_check_status),
-            ),
-            start=1,
-        ):
-            checklist_layout.addWidget(QLabel(label, checklist_panel), row, 0)
-            checklist_layout.addWidget(status, row, 1)
-        checklist_layout.setColumnStretch(1, 1)
 
         self.condition_name_edit = QLineEdit(self)
         self.condition_name_edit.setObjectName("setup_wizard_condition_name_edit")
@@ -150,86 +140,105 @@ class ConditionSetupStep(QWidget):
         form.addRow("Trigger Code", self.trigger_code_spin)
         form.addRow("Participant Instructions", self.instructions_edit)
 
-        self.base_source_value = PathValueLabel(self)
+        self.base_source_card = SetupSourceCard(
+            "Base Images",
+            "Choose Base Images...",
+            object_name="setup_conditions_base_source_card",
+            parent=self,
+        )
+        self.base_source_value = self.base_source_card.folder_value
         self.base_source_value.setObjectName("setup_wizard_base_source_value")
         self.base_count_value = QLabel(self)
         self.base_count_value.setObjectName("setup_wizard_base_count_value")
         self.base_resolution_value = QLabel(self)
         self.base_resolution_value.setObjectName("setup_wizard_base_resolution_value")
-        self.base_import_button = QPushButton("Choose Base Images...", self)
+        self.base_import_button = self.base_source_card.choose_button
         self.base_import_button.setObjectName("setup_wizard_import_base_folder_button")
-        self.base_import_button.clicked.connect(lambda: self._import_stimulus_folder("base"))
-        mark_secondary_action(self.base_import_button)
+        self.base_source_card.choose_requested.connect(lambda: self._import_stimulus_folder("base"))
 
-        self.oddball_source_value = PathValueLabel(self)
+        self.oddball_source_card = SetupSourceCard(
+            "Oddball Images",
+            "Choose Oddball Images...",
+            object_name="setup_conditions_oddball_source_card",
+            parent=self,
+        )
+        self.oddball_source_value = self.oddball_source_card.folder_value
         self.oddball_source_value.setObjectName("setup_wizard_oddball_source_value")
         self.oddball_count_value = QLabel(self)
         self.oddball_count_value.setObjectName("setup_wizard_oddball_count_value")
         self.oddball_resolution_value = QLabel(self)
         self.oddball_resolution_value.setObjectName("setup_wizard_oddball_resolution_value")
-        self.oddball_import_button = QPushButton("Choose Oddball Images...", self)
+        self.oddball_import_button = self.oddball_source_card.choose_button
         self.oddball_import_button.setObjectName("setup_wizard_import_oddball_folder_button")
-        self.oddball_import_button.clicked.connect(
+        self.oddball_source_card.choose_requested.connect(
             lambda: self._import_stimulus_folder("oddball")
         )
-        mark_secondary_action(self.oddball_import_button)
 
         sources_grid = QGridLayout()
         sources_grid.setContentsMargins(0, 0, 0, 0)
         sources_grid.setHorizontalSpacing(PAGE_SECTION_GAP)
         sources_grid.setVerticalSpacing(8)
-        self._add_source_column(
-            sources_grid,
-            0,
-            "Base Images",
-            self.base_source_value,
-            self.base_count_value,
-            self.base_resolution_value,
-            self.base_import_button,
-        )
-        self._add_source_column(
-            sources_grid,
-            1,
-            "Oddball Images",
-            self.oddball_source_value,
-            self.oddball_count_value,
-            self.oddball_resolution_value,
-            self.oddball_import_button,
-        )
+        sources_grid.addWidget(self.base_source_card, 0, 0)
+        sources_grid.addWidget(self.oddball_source_card, 0, 1)
         sources_grid.setColumnStretch(0, 1)
         sources_grid.setColumnStretch(1, 1)
 
         detail_panel = QWidget(self)
+        detail_panel.setObjectName("setup_conditions_main_panel")
         detail_layout = QVBoxLayout(detail_panel)
         detail_layout.setContentsMargins(0, 0, 0, 0)
         detail_layout.setSpacing(12)
-        detail_title = QLabel("Selected Condition", detail_panel)
+        detail_header = QWidget(detail_panel)
+        detail_header_layout = QHBoxLayout(detail_header)
+        detail_header_layout.setContentsMargins(0, 0, 0, 0)
+        detail_header_layout.setSpacing(8)
+        detail_title = QLabel("Selected Condition", detail_header)
         detail_title.setProperty("sectionCardRole", "title")
-        detail_layout.addWidget(detail_title)
-        detail_top_row = QWidget(detail_panel)
-        detail_top_layout = QHBoxLayout(detail_top_row)
-        detail_top_layout.setContentsMargins(0, 0, 0, 0)
-        detail_top_layout.setSpacing(PAGE_SECTION_GAP)
-        form_panel = QWidget(detail_top_row)
-        form_panel_layout = QVBoxLayout(form_panel)
-        form_panel_layout.setContentsMargins(0, 0, 0, 0)
-        form_panel_layout.setSpacing(8)
-        form_panel_layout.addWidget(self.selected_condition_badge)
-        form_panel_layout.addLayout(form)
-        detail_top_layout.addWidget(form_panel, 3)
-        detail_top_layout.addWidget(checklist_panel, 2)
-        detail_layout.addWidget(detail_top_row)
+        detail_header_layout.addWidget(detail_title)
+        detail_header_layout.addWidget(self.selected_condition_badge)
+        detail_header_layout.addStretch(1)
+        detail_header_layout.addWidget(self.selected_condition_note)
+        detail_layout.addWidget(detail_header)
+        detail_layout.addLayout(form)
         sources_title = QLabel("Image Sources", detail_panel)
         sources_title.setProperty("sectionCardRole", "title")
         detail_layout.addWidget(sources_title)
         detail_layout.addLayout(sources_grid)
         detail_layout.addStretch(1)
 
-        layout = QHBoxLayout(self)
+        self.protocol_defaults_panel = SetupSidePanel(
+            "Protocol Defaults",
+            object_name="setup_conditions_protocol_defaults_panel",
+            parent=self,
+        )
+        self.edit_advanced_timing_button = QPushButton("Edit Advanced Timing", self)
+        self.edit_advanced_timing_button.setObjectName(
+            "setup_conditions_edit_advanced_timing_button"
+        )
+        self.edit_advanced_timing_button.clicked.connect(self.advanced_timing_requested)
+        mark_secondary_action(self.edit_advanced_timing_button)
+        self.protocol_defaults_panel.add_action_button(self.edit_advanced_timing_button)
+        self.protocol_defaults_panel.add_helper_text("Most projects should keep these defaults.")
+
+        self.setup_checklist = SetupChecklistPanel(
+            "Setup Checklist",
+            object_name="setup_conditions_checklist_panel",
+            parent=self,
+        )
+
+        right_panel = QWidget(self)
+        right_panel.setObjectName("setup_conditions_right_panel")
+        right_layout = QVBoxLayout(right_panel)
+        right_layout.setContentsMargins(0, 0, 0, 0)
+        right_layout.setSpacing(PAGE_SECTION_GAP)
+        right_layout.addWidget(self.protocol_defaults_panel)
+        right_layout.addWidget(self.setup_checklist, 1)
+
+        workspace = SetupWorkspaceFrame(object_name="setup_conditions_workspace", parent=self)
+        workspace.set_regions(left=list_panel, main=detail_panel, right=right_panel)
+        layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(PAGE_SECTION_GAP)
-        layout.addWidget(list_panel, 1)
-        layout.addWidget(detail_panel, 3)
+        layout.addWidget(workspace, 1)
 
         self._document.project_changed.connect(self.refresh)
         self._document.manifest_changed.connect(self.refresh)
@@ -286,8 +295,10 @@ class ConditionSetupStep(QWidget):
             self.oddball_import_button,
         ):
             widget.setEnabled(enabled)
+        self.edit_advanced_timing_button.setEnabled(enabled)
         if condition is None:
             self.selected_condition_badge.set_state("pending", "No condition selected")
+            self.selected_condition_note.setText("Choose a condition in the list to edit it.")
             with QSignalBlocker(self.condition_name_edit):
                 self.condition_name_edit.clear()
             with QSignalBlocker(self.trigger_code_spin):
@@ -297,6 +308,7 @@ class ConditionSetupStep(QWidget):
             self._set_checklist_statuses(False, False, False, False)
             self._set_source_summary(None, role="base")
             self._set_source_summary(None, role="oddball")
+            self._set_protocol_defaults(None)
             return
 
         base_set = self._document.get_condition_stimulus_set(condition.condition_id, "base")
@@ -310,6 +322,9 @@ class ConditionSetupStep(QWidget):
             "ready" if condition_ready else "warning",
             "Ready" if condition_ready else "Setup Incomplete",
         )
+        self.selected_condition_note.setText(
+            f"Condition ID: {condition.condition_id}   |   Trigger code: {condition.trigger_code}"
+        )
         with QSignalBlocker(self.condition_name_edit):
             self.condition_name_edit.setText(condition.name)
         with QSignalBlocker(self.trigger_code_spin):
@@ -318,6 +333,7 @@ class ConditionSetupStep(QWidget):
         self._set_checklist_statuses(named, trigger_ready, base_ready, oddball_ready)
         self._set_source_summary(base_set, role="base")
         self._set_source_summary(oddball_set, role="oddball")
+        self._set_protocol_defaults(condition)
 
     def _set_checklist_statuses(
         self,
@@ -326,22 +342,22 @@ class ConditionSetupStep(QWidget):
         base_ready: bool,
         oddball_ready: bool,
     ) -> None:
-        self.name_check_status.set_state(
-            "ready" if named else "warning",
-            "Descriptive name entered" if named else "Enter a descriptive name",
+        name_status = "Complete" if named else "Enter a descriptive name"
+        trigger_status = "Complete" if trigger_ready else "Use a trigger code of 1 or higher"
+        base_status = "Complete" if base_ready else "Base Images Not Selected"
+        oddball_status = "Complete" if oddball_ready else "Oddball Images Not Selected"
+        self.setup_checklist.set_items(
+            [
+                ("Name", named, name_status),
+                ("Trigger", trigger_ready, trigger_status),
+                ("Base Images", base_ready, base_status),
+                ("Oddball Images", oddball_ready, oddball_status),
+            ]
         )
-        self.trigger_check_status.set_state(
-            "ready" if trigger_ready else "warning",
-            "Trigger set" if trigger_ready else "Use a trigger code of 1 or higher",
-        )
-        self.base_check_status.set_state(
-            "ready" if base_ready else "warning",
-            "Base Images Selected" if base_ready else "Base Images Not Selected",
-        )
-        self.oddball_check_status.set_state(
-            "ready" if oddball_ready else "warning",
-            "Oddball Images Selected" if oddball_ready else "Oddball Images Not Selected",
-        )
+        self.name_check_status.setText(name_status)
+        self.trigger_check_status.setText(trigger_status)
+        self.base_check_status.setText(base_status)
+        self.oddball_check_status.setText(oddball_status)
 
     def _set_source_summary(self, stimulus_set: StimulusSet | None, *, role: str) -> None:
         source_value = self.base_source_value if role == "base" else self.oddball_source_value
@@ -349,14 +365,61 @@ class ConditionSetupStep(QWidget):
         resolution_value = (
             self.base_resolution_value if role == "base" else self.oddball_resolution_value
         )
+        source_card = self.base_source_card if role == "base" else self.oddball_source_card
         if stimulus_set is None:
             source_value.set_path_text("Not configured", max_length=86)
             count_value.setText("0 images")
             resolution_value.setText("Not imported")
+            source_card.set_source_state(
+                ready=False,
+                folder="Not configured",
+                image_count="0 images",
+                resolution="Not imported",
+                variants="original",
+            )
             return
         source_value.set_path_text(stimulus_set.source_dir, max_length=86)
-        count_value.setText(f"{stimulus_set.image_count} images")
-        resolution_value.setText(_resolution_text(stimulus_set.resolution))
+        count_text = f"{stimulus_set.image_count} images"
+        resolution_text = _resolution_text(stimulus_set.resolution)
+        variants_text = ", ".join(item.value for item in stimulus_set.available_variants)
+        count_value.setText(count_text)
+        resolution_value.setText(resolution_text)
+        source_card.set_source_state(
+            ready=self._stimulus_ready(stimulus_set),
+            folder=stimulus_set.source_dir,
+            image_count=count_text,
+            resolution=resolution_text,
+            variants=variants_text,
+        )
+
+    def _set_protocol_defaults(self, condition: Condition | None) -> None:
+        template = get_template(self._document.project.meta.template_id)
+        if condition is None:
+            self.protocol_defaults_panel.set_rows(
+                [
+                    ("Timing Template:", template.display_name),
+                    ("Image Version:", "Original"),
+                    ("Estimated Duration:", "Not available"),
+                    ("Base Rate:", f"{template.base_hz:.1f} Hz"),
+                    ("Oddball Rate:", f"{template.oddball_hz:.1f} Hz"),
+                ]
+            )
+            return
+
+        total_oddball_cycles = (
+            condition.sequence_count * condition.oddball_cycle_repeats_per_sequence
+        )
+        total_stimuli = total_oddball_cycles * template.oddball_every_n
+        duration_seconds = total_stimuli / template.base_hz
+        self.protocol_defaults_panel.set_rows(
+            [
+                ("Timing Template:", self._timing_template_label(condition)),
+                ("Image Version:", _variant_label(condition.stimulus_variant)),
+                ("Estimated Duration:", f"{duration_seconds:.1f} s"),
+                ("Base Rate:", f"{template.base_hz:.1f} Hz"),
+                ("Oddball Rate:", f"{template.oddball_hz:.1f} Hz"),
+            ]
+        )
 
     def _add_condition(self) -> None:
         try:
@@ -457,26 +520,7 @@ class ConditionSetupStep(QWidget):
         return stimulus_set.image_count > 0
 
     @staticmethod
-    def _add_source_column(
-        layout: QGridLayout,
-        column: int,
-        title: str,
-        source_value: PathValueLabel,
-        count_value: QLabel,
-        resolution_value: QLabel,
-        import_button: QPushButton,
-    ) -> None:
-        title_label = QLabel(title)
-        title_label.setProperty("sectionCardRole", "title")
-        layout.addWidget(title_label, 0, column)
-        layout.addWidget(source_value, 1, column)
-        detail_row = QWidget()
-        detail_layout = QHBoxLayout(detail_row)
-        detail_layout.setContentsMargins(0, 0, 0, 0)
-        detail_layout.setSpacing(8)
-        detail_layout.addWidget(count_value)
-        detail_layout.addWidget(resolution_value)
-        detail_layout.addStretch(1)
-        layout.addWidget(detail_row, 2, column)
-        layout.addWidget(import_button, 3, column)
-        import_button.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+    def _timing_template_label(condition: Condition) -> str:
+        if condition.duty_cycle_mode == DutyCycleMode.BLANK_50:
+            return "50% Blank Between Images"
+        return "Continuous Images"

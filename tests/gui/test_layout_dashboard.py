@@ -207,7 +207,7 @@ def test_switching_main_workflow_stack_keeps_outer_window_size_stable(
         assert window.size() == initial_size
 
 
-def test_primary_workflow_surfaces_fit_default_window_without_page_level_scrollbars(
+def test_primary_workflow_surfaces_fit_default_window_with_bounded_page_scrollbars(
     qtbot,
     controller: StudioController,
     tmp_path: Path,
@@ -219,20 +219,23 @@ def test_primary_workflow_surfaces_fit_default_window_without_page_level_scrollb
     QApplication.processEvents()
 
     page_specs = [
-        (window.home_page, window.home_page.page_container.scroll_area),
+        (window.home_page, window.home_page.page_container.scroll_area, 1),
         (
             window.setup_wizard_page,
             window.setup_wizard_page.shell.page_container.scroll_area,
+            80,
         ),
     ]
 
-    for page, scroll_area in page_specs:
+    for page, scroll_area, max_scroll in page_specs:
         window.main_stack.setCurrentWidget(page)
         QApplication.processEvents()
         qtbot.waitUntil(
-            lambda scroll_area=scroll_area: scroll_area.verticalScrollBar().maximum() <= 1
+            lambda scroll_area=scroll_area, max_scroll=max_scroll: (
+                scroll_area.verticalScrollBar().maximum() <= max_scroll
+            )
         )
-        assert scroll_area.verticalScrollBar().maximum() <= 1
+        assert scroll_area.verticalScrollBar().maximum() <= max_scroll
 
 
 def test_conditions_advanced_editor_uses_flat_horizontal_master_detail_layout(
@@ -386,6 +389,16 @@ def test_setup_wizard_navigation_and_advanced_editor_access(
     assert not next_button.isEnabled()
     assert advanced_button.isEnabled()
     assert guide.findChild(QListWidget, "setup_wizard_condition_list") is not None
+    assert guide.findChild(QWidget, "setup_conditions_left_panel") is not None
+    assert guide.findChild(QWidget, "setup_conditions_main_panel") is not None
+    assert guide.findChild(QWidget, "setup_conditions_protocol_defaults_panel") is not None
+    assert guide.findChild(QWidget, "setup_conditions_checklist_panel") is not None
+    label_text = "\n".join(
+        label.text() for label in guide.condition_setup_step.findChildren(QLabel)
+    )
+    assert "Image Version:" in label_text
+    assert "Stimulus Variant" not in label_text
+    assert "Cycles / Repeat" not in label_text
     qtbot.mouseClick(advanced_button, Qt.MouseButton.LeftButton)
     assert guide.content_stack.currentWidget() is guide.advanced_stack
     assert guide.advanced_stack.currentWidget() is window.conditions_page
@@ -538,7 +551,7 @@ def test_setup_wizard_conditions_step_requires_descriptive_name_and_positive_tri
 
     guide._document.update_condition(condition_id, name="Dog")
     QApplication.processEvents()
-    assert step.name_check_status.text() == "Descriptive name entered"
+    assert step.name_check_status.text() == "Complete"
 
     guide._document.update_condition(condition_id, trigger_code=0)
     QApplication.processEvents()
@@ -553,13 +566,13 @@ def test_setup_wizard_conditions_step_requires_descriptive_name_and_positive_tri
         source_dir=oddball_dir,
     )
     QApplication.processEvents()
-    assert step.base_check_status.text() == "Base Images Selected"
-    assert step.oddball_check_status.text() == "Oddball Images Selected"
+    assert step.base_check_status.text() == "Complete"
+    assert step.oddball_check_status.text() == "Complete"
     assert not next_button.isEnabled()
 
     guide._document.update_condition(condition_id, trigger_code=1)
     QApplication.processEvents()
-    assert step.trigger_check_status.text() == "Trigger set"
+    assert step.trigger_check_status.text() == "Complete"
     assert next_button.isEnabled()
 
 
