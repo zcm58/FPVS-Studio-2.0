@@ -344,6 +344,7 @@ class HomePage(QWidget):
         self.launch_status_summary.setObjectName("home_launch_status_summary")
         self.launch_status_summary.setWordWrap(True)
         self.launch_status_summary.setMinimumHeight(28)
+        self.launch_status_summary.setVisible(False)
 
         launch_panel = QWidget(self)
         launch_panel.setObjectName("home_launch_panel")
@@ -445,12 +446,17 @@ class HomePage(QWidget):
         launch_panel_layout.addWidget(self.launch_button, 0, Qt.AlignmentFlag.AlignCenter)
 
         launch_panel_row = QHBoxLayout()
-        launch_panel_row.setContentsMargins(0, 40, 0, 0)
+        launch_panel_row.setContentsMargins(0, 0, 0, 0)
         launch_panel_row.addStretch(1)
         launch_panel_row.addWidget(launch_panel, 4)
         launch_panel_row.addStretch(1)
 
         page_layout = self.page_container.content_layout
+        self.page_container.content_frame.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Expanding,
+        )
+        page_layout.addStretch(1)
         page_layout.addLayout(launch_panel_row)
         page_layout.addStretch(1)
 
@@ -538,11 +544,12 @@ class HomePage(QWidget):
     def _set_status_indicator(self, report: LauncherReadinessReport) -> None:
         self.launch_status_label.set_state(report.badge_state, f"Status: {report.status_label}")
         summary_text = (
-            "Setup is ready for launch."
+            ""
             if report.badge_state == "ready"
             else report.status_summary
         )
         self.launch_status_summary.setText(summary_text)
+        self.launch_status_summary.setVisible(bool(summary_text))
 
     def _add_metric(
         self,

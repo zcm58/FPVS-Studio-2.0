@@ -346,6 +346,35 @@ def test_page_headers_use_home_left_alignment_and_non_home_center_alignment(
     assert window.assets_page.shell.title_label.alignment() & Qt.AlignmentFlag.AlignCenter
 
 
+def test_home_launch_card_is_centered_in_page_viewport(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Home Centered Card")
+    _prepare_compile_ready_project(window, tmp_path)
+    window.main_stack.setCurrentWidget(window.home_page)
+    window.home_page.refresh()
+    QApplication.processEvents()
+
+    launch_panel = window.home_page.findChild(QWidget, "home_launch_panel")
+    summary_label = window.home_page.findChild(QLabel, "home_launch_status_summary")
+    viewport = window.home_page.page_container.scroll_area.viewport()
+
+    assert launch_panel is not None
+    assert summary_label is not None
+    qtbot.waitUntil(lambda: launch_panel.width() > 0 and viewport.width() > 0)
+
+    panel_center = launch_panel.mapTo(
+        viewport,
+        QPoint(launch_panel.width() // 2, launch_panel.height() // 2),
+    )
+    assert abs(panel_center.x() - (viewport.width() / 2)) < 20
+    assert abs(panel_center.y() - (viewport.height() / 2)) < 35
+    assert summary_label.text() == ""
+    assert not summary_label.isVisible()
+
+
 def test_stimuli_manager_page_uses_table_focused_layout(
     qtbot,
     controller: StudioController,
@@ -1506,7 +1535,7 @@ def test_setup_wizard_review_uses_centered_confirmation_checklist(
 
     window.home_page.refresh()
     assert "Launch requirements are satisfied" not in window.home_page.launch_status_summary.text()
-    assert window.home_page.launch_status_summary.text() == "Setup is ready for launch."
+    assert window.home_page.launch_status_summary.text() == ""
 
 
 def test_setup_wizard_review_save_failure_stays_on_review(
