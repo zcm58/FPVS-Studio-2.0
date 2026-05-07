@@ -39,7 +39,7 @@ The authoring window is organized around two user-facing modes:
 
 - `Home`
   - daily-use launch surface for ready projects
-  - project title, description, launch readiness badge, condition count, block
+  - a centered project card with project title, description, launch readiness badge, condition count, block
     count, fixation task status, accuracy task status, project open/create/save
     actions, setup editing, and a prominent centered `Launch Experiment`
   - `Edit Setup` opens the guided setup workflow
@@ -52,8 +52,8 @@ The authoring window is organized around two user-facing modes:
   - the wizard keeps the step content full-width while the progress stepper is
     centered and compact; the guided steps do not expose an Advanced button or
     vertical scrolling
-  - the wizard shell includes a thin bottom status strip for shared setup/runtime
-    context; individual step cards should not repeat generic instructional copy
+  - the wizard avoids generic footer/status copy; individual step cards should
+    only show information needed for the current decision
   - Project Details uses a focused centered card inside the full-width wizard,
     keeping the project folder path compact and secondary; project name and
     description are required before continuing to Conditions

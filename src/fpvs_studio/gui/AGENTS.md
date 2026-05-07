@@ -17,6 +17,8 @@ backend-driven.
 - Preserve the Home/Setup Wizard workflow: Home is the returning-user launch surface;
   detailed setup widgets should be reached through the guided wizard, not new top-level
   tabs.
+- Do not reintroduce Setup Wizard Advanced buttons or generic footer/status copy
+  without an explicit workflow plan.
 - Keep fixation accuracy-task controls in the Fixation/Session UI as model-bound settings only; compile-time realization, runtime scoring, and participant feedback flow must remain outside widget code.
 - Keep PsychoPy startup lazy; opening the GUI alone must not create a PsychoPy window.
 - Keep runtime launch messaging honest about the currently supported test-mode

@@ -13,13 +13,17 @@ the active app.
 
 ## GUI Architecture
 
-- Home is the daily launch surface for ready projects.
+- Home is the daily launch surface for ready projects, centered around one launch
+  card with project actions, readiness, summary metrics, and the primary launch
+  action.
 - Setup Wizard is the guided setup/editing surface.
 - Conditions is the guided setup area for assigning base/oddball image folders and
   creating optional derived-variant control conditions.
 - Manage Projects is the welcome/File-menu surface for opening known projects or
   moving project folders to the Windows Recycle Bin with confirmation.
-- Dense editors stay available inside wizard Advanced views when they are useful.
+- The current Setup Wizard does not expose Advanced buttons; dense/internal support
+  pages should remain behind guided workflows unless a future plan explicitly
+  reintroduces them.
 - GUI code may coordinate document services and runtime launches, but core validation,
   compilation, session planning, and runtime flow remain outside widgets.
 

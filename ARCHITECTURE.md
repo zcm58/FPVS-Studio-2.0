@@ -81,9 +81,10 @@ Current planned seams:
 - GUI component/theme work starts from `src/fpvs_studio/gui/components.py`. It re-exports
   shared page/card/status/path widgets, owns reusable button roles and stylesheets, and
   keeps raw design tokens in `design_system.py`.
-- GUI workflow composition is Home-first. `main_window.py` uses a stack with Home and
-  `setup_wizard_page.py`; `Tools > Image Resizer` adds a standalone in-window utility
-  page for folder-level FPVS image optimization without mutating project conditions.
+- GUI workflow composition is Home-first. `main_window.py` uses a stack with a
+  centered Home launch card and `setup_wizard_page.py`; `Tools > Image Resizer`
+  adds a standalone in-window utility page for folder-level FPVS image optimization
+  without mutating project conditions.
   The wizard uses a five-step top-progress flow with a
   simplified Conditions setup step where users assign base/oddball image folders and
   can optionally create derived-variant control conditions. Experiment Settings combines

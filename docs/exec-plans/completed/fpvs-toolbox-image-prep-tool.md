@@ -1,6 +1,6 @@
 # FPVS Toolbox Image Prep Tool
 
-Status: Planned
+Status: Completed
 
 ## Summary
 
@@ -10,8 +10,9 @@ project-linked readiness normalization gate, while `Tools > Image Resizer` shoul
 provide a standalone folder utility for users who only want quick FPVS-ready PNG
 copies.
 
-This plan is a scaffold only. The imported files are reference material and should
-not be treated as final production architecture.
+This plan started as a scaffold for imported reference files and is now completed:
+Studio owns the production preprocessing services and component-layer GUI surfaces,
+while the imported Toolbox files remain reference material only.
 
 ## Ground Truth Files
 
@@ -115,6 +116,15 @@ python -m pytest -q tests\unit\test_preprocessing_normalization.py
 python -m pytest -q tests\gui\test_layout_dashboard.py
 python -m pytest -q tests\unit\test_harness_docs.py
 ```
+
+## Completion Notes
+
+- Conditions uses a readiness gate that scans selected base/oddball image folders
+  and offers project-linked PNG normalization only when needed.
+- `Tools > Image Resizer` is an in-window standalone utility for center-cropped
+  PNG folder optimization and does not mutate active project conditions.
+- The imported FPVS Toolbox files remain under `src/fpvs_studio/tools/` as
+  reference material, not a GUI/runtime dependency.
 
 ## Assumptions
 
