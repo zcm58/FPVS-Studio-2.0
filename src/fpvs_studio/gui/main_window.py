@@ -26,6 +26,7 @@ from fpvs_studio.gui.animations import ButtonHoverAnimator
 from fpvs_studio.gui.components import apply_studio_theme
 from fpvs_studio.gui.document import ProjectDocument
 from fpvs_studio.gui.home_page import HomePage
+from fpvs_studio.gui.image_resizer_page import ImageResizerPage
 from fpvs_studio.gui.run_page import ParticipantNumberDialog
 from fpvs_studio.gui.setup_wizard_page import SetupWizardPage
 from fpvs_studio.gui.window_helpers import (
@@ -94,6 +95,8 @@ class StudioMainWindow(QMainWindow):
         self.main_stack.setObjectName("main_stack")
         self.main_stack.addWidget(self.home_page)
         self.main_stack.addWidget(self.setup_wizard_page)
+        self.image_resizer_page = ImageResizerPage(on_return_home=self.show_home, parent=self)
+        self.main_stack.addWidget(self.image_resizer_page)
         self.main_tabs = self.main_stack
         self.setCentralWidget(self.main_stack)
         self._apply_chrome_styles()
@@ -148,6 +151,10 @@ class StudioMainWindow(QMainWindow):
         self.setup_wizard_page.open_wizard()
         self.main_stack.setCurrentWidget(self.setup_wizard_page)
 
+    def show_image_resizer(self) -> None:
+        self.flush_pending_edits()
+        self.main_stack.setCurrentWidget(self.image_resizer_page)
+
     def _show_initial_workflow_surface(self) -> None:
         if self._current_project_is_ready_to_launch():
             self.show_home()
@@ -193,20 +200,26 @@ class StudioMainWindow(QMainWindow):
         self.launch_action.setToolTip(launch_help)
         self.launch_action.setStatusTip(launch_help)
         self.launch_action.triggered.connect(self.run_page.launch_test_session)
+        self.image_resizer_action = QAction("Image Resizer", self)
+        self.image_resizer_action.setObjectName("image_resizer_action")
+        self.image_resizer_action.triggered.connect(self.show_image_resizer)
 
     def _create_menu_and_toolbar(self) -> None:
-        file_menu = self.menuBar().addMenu("File")
+        self.file_menu = self.menuBar().addMenu("File")
+        self.tools_menu = self.menuBar().addMenu("Tools")
         self._native_menu_style = QStyleFactory.create("WindowsVista") or QStyleFactory.create(
             "Windows"
         )
         if self._native_menu_style is not None:
             self.menuBar().setStyle(self._native_menu_style)
-            file_menu.setStyle(self._native_menu_style)
+            self.file_menu.setStyle(self._native_menu_style)
+            self.tools_menu.setStyle(self._native_menu_style)
         self.menuBar().setStyleSheet("")
         self.menuBar().setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        file_menu.addAction(self.manage_projects_action)
-        file_menu.addSeparator()
-        file_menu.addAction(self.settings_action)
+        self.file_menu.addAction(self.manage_projects_action)
+        self.file_menu.addSeparator()
+        self.file_menu.addAction(self.settings_action)
+        self.tools_menu.addAction(self.image_resizer_action)
 
     def save_project(self) -> bool:
         self.flush_pending_edits()

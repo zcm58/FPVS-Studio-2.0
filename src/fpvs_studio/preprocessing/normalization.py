@@ -25,7 +25,7 @@ from fpvs_studio.core.paths import (
 NORMALIZATION_INPUT_SUFFIXES = frozenset({".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff"})
 COMPILER_READY_SUFFIXES = frozenset({".jpg", ".jpeg", ".png"})
 NORMALIZED_OUTPUT_SUFFIX = ".png"
-SUPPORTED_NORMALIZATION_SIZES = (256, 512)
+SUPPORTED_NORMALIZATION_SIZES = (256, 512, 1024)
 
 
 class ImageNormalizationError(ValueError):
@@ -102,6 +102,27 @@ class ImageNormalizationResult:
     processed_count: int
 
 
+@dataclass(frozen=True)
+class ImageFolderOptimizationIssue:
+    """One skipped or failed file from a standalone folder optimization run."""
+
+    filename: str
+    reason: str
+
+
+@dataclass(frozen=True)
+class ImageFolderOptimizationResult:
+    """Aggregate result for a standalone folder optimization run."""
+
+    input_dir: Path
+    output_dir: Path
+    target_size: int
+    processed_count: int
+    skipped_files: tuple[ImageFolderOptimizationIssue, ...] = ()
+    failed_files: tuple[ImageFolderOptimizationIssue, ...] = ()
+    output_files: tuple[Path, ...] = ()
+
+
 def scan_stimulus_sets_for_normalization(
     *,
     project_root: Path,
@@ -137,8 +158,7 @@ def normalize_stimulus_sets(
 ) -> ImageNormalizationResult:
     """Resize selected stimulus sets to square PNG folders under the project root."""
 
-    if target_size not in SUPPORTED_NORMALIZATION_SIZES:
-        raise ImageNormalizationError("Normalized image size must be 256 or 512 pixels.")
+    _validate_target_size(target_size)
 
     selected_sets = _unique_stimulus_sets(stimulus_sets)
     scan = scan_stimulus_sets_for_normalization(
@@ -210,6 +230,90 @@ def normalize_stimulus_sets(
     return ImageNormalizationResult(
         sets=tuple(normalized_sets),
         processed_count=processed_count,
+    )
+
+
+def optimize_image_folder_for_fpvs(
+    *,
+    input_dir: Path,
+    output_dir: Path,
+    target_size: int = 512,
+    cancel_flag: Callable[[], bool] | None = None,
+) -> ImageFolderOptimizationResult:
+    """Create square PNG copies of supported images in one folder."""
+
+    _validate_target_size(target_size)
+    source_dir = input_dir.expanduser()
+    destination_dir = output_dir.expanduser()
+    if not source_dir.exists() or not source_dir.is_dir():
+        raise ImageNormalizationError(f"Image source folder does not exist: {source_dir}")
+    if source_dir.resolve() == destination_dir.resolve(strict=False):
+        raise ImageNormalizationError("Output folder must be different from the source folder.")
+
+    files = [
+        path
+        for path in sorted(source_dir.iterdir(), key=lambda item: item.name.lower())
+        if path.is_file()
+    ]
+    if not files:
+        raise ImageNormalizationError("Image source folder does not contain any files.")
+
+    try:
+        destination_dir.mkdir(parents=True, exist_ok=True)
+    except OSError as error:
+        message = f"Could not create output folder: {destination_dir}"
+        raise ImageNormalizationError(message) from error
+
+    cancel = cancel_flag or (lambda: False)
+    processed_count = 0
+    skipped_files: list[ImageFolderOptimizationIssue] = []
+    failed_files: list[ImageFolderOptimizationIssue] = []
+    output_files: list[Path] = []
+
+    for path in files:
+        if cancel():
+            raise ImageNormalizationError("Image optimization was cancelled.")
+        suffix = path.suffix.lower()
+        if suffix not in NORMALIZATION_INPUT_SUFFIXES:
+            skipped_files.append(
+                ImageFolderOptimizationIssue(
+                    filename=path.name,
+                    reason="Unsupported image format",
+                )
+            )
+            continue
+        destination_path = destination_dir / _normalized_filename(path)
+        if destination_path.exists():
+            skipped_files.append(
+                ImageFolderOptimizationIssue(
+                    filename=path.name,
+                    reason="Output file already exists",
+                )
+            )
+            continue
+        try:
+            _resize_center_crop_png(
+                path,
+                destination_path,
+                target_width=target_size,
+                target_height=target_size,
+            )
+        except Exception as error:  # pragma: no cover - covered by integration paths
+            failed_files.append(
+                ImageFolderOptimizationIssue(filename=path.name, reason=str(error))
+            )
+            continue
+        processed_count += 1
+        output_files.append(destination_path)
+
+    return ImageFolderOptimizationResult(
+        input_dir=source_dir,
+        output_dir=destination_dir,
+        target_size=target_size,
+        processed_count=processed_count,
+        skipped_files=tuple(skipped_files),
+        failed_files=tuple(failed_files),
+        output_files=tuple(output_files),
     )
 
 
@@ -311,6 +415,13 @@ def _canonical_file_type(suffix: str) -> str:
     if suffix == ".jpeg":
         return ".jpg"
     return suffix
+
+
+def _validate_target_size(target_size: int) -> None:
+    if target_size not in SUPPORTED_NORMALIZATION_SIZES:
+        raise ImageNormalizationError(
+            "Normalized image size must be 256, 512, or 1024 pixels."
+        )
 
 
 def _scan_blocker_message(scan: ImageNormalizationScan) -> str:

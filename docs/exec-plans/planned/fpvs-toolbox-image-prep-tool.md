@@ -5,9 +5,10 @@ Status: Planned
 ## Summary
 
 Adapt the imported FPVS Toolbox image resizer logic in `src/fpvs_studio/tools/`
-into a Studio-native Conditions-step normalization gate. Users should assign
-condition image folders normally. Studio should only prompt for resizing and
-file-type conversion when the selected condition images are inconsistent.
+into Studio-native image preparation workflows. Conditions should keep their
+project-linked readiness normalization gate, while `Tools > Image Resizer` should
+provide a standalone folder utility for users who only want quick FPVS-ready PNG
+copies.
 
 This plan is a scaffold only. The imported files are reference material and should
 not be treated as final production architecture.
@@ -29,7 +30,7 @@ not be treated as final production architecture.
     failures explicitly
   - preserve center-crop resize behavior unless the active implementation plan
     chooses a different policy
-- Add a Conditions-step readiness gate:
+- Keep the Conditions-step readiness gate:
   - scan all distinct base/oddball stimulus sets referenced by conditions when the
     user clicks `Next`
   - silently advance when selected images already share one resolution and one
@@ -41,6 +42,14 @@ not be treated as final production architecture.
   - run batch work through Qt workers and signals
 - After successful normalization, update affected `StimulusSet.source_dir` values
   to project-relative folders under `stimuli/normalized-images/<set-id>/`.
+- Add a standalone `Tools > Image Resizer` utility:
+  - open as an in-window page from the main menu, not a modal workflow
+  - use `fpvs_studio.gui.components` page shells, cards, path labels, status badges,
+    and button role helpers
+  - expose `Optimize Images for FPVS` as the primary action
+  - default to `512x512` PNG output, with secondary `256x256` and `1024x1024` choices
+  - suggest a sibling output folder named `<source-folder>-fpvs-optimized`
+  - never update project condition paths, stimulus sets, or manifests
 
 ## Setup Wizard Direction
 
@@ -62,6 +71,15 @@ and continue to the next setup step.
 This feature must not include grayscale, 180 degree rotated, phase-scrambled, or
 control-condition creation. Those workflows remain separate.
 
+## Standalone Tools Direction
+
+The Tools menu should host lightweight in-window utilities that reuse Studio backend
+services without becoming part of setup validation. `Tools > Image Resizer` should
+optimize a chosen folder into a chosen output folder, write PNG files only, and leave
+the active project untouched. It may read the same resizer-safe formats as the Toolbox
+logic (`.jpg`, `.jpeg`, `.png`, `.bmp`, `.tif`, `.tiff`) while keeping PNG as the only
+Studio output format for now.
+
 ## Boundaries
 
 - No compiler, runtime, `RunSpec`, `SessionPlan`, export, or PsychoPy engine
@@ -70,6 +88,8 @@ control-condition creation. Those workflows remain separate.
   and deterministic transform metadata.
 - GUI owns user intent, progress display, cancellation, and non-blocking status
   only.
+- Standalone tools may use preprocessing services but must not silently mutate the
+  active project.
 - Runtime and engines must never perform image preparation.
 - Persisted project-facing paths remain project-relative POSIX strings.
 
@@ -82,6 +102,10 @@ control-condition creation. Those workflows remain separate.
   - mixed images prompt for normalization
   - accepted normalization updates stimulus-set paths and advances
   - cancellation keeps the wizard on Conditions without mutating paths
+- Focused pytest-qt smoke tests for `Tools > Image Resizer`:
+  - menu action opens the in-window tool page
+  - source folder selection suggests a sibling output folder
+  - optimization runs through a worker and updates the result panel
 
 Verification commands:
 

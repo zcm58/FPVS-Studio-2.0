@@ -77,9 +77,10 @@ def test_main_window_uses_home_and_setup_wizard_stack(
 ) -> None:
     _, window = _open_created_project(controller, qtbot, tmp_path, "Home Stack Project")
 
-    assert window.main_stack.count() == 2
+    assert window.main_stack.count() == 3
     assert window.main_stack.indexOf(window.home_page) == 0
     assert window.main_stack.indexOf(window.setup_wizard_page) == 1
+    assert window.main_stack.indexOf(window.image_resizer_page) == 2
     assert window.main_stack.indexOf(window.conditions_page) == -1
     assert window.main_stack.indexOf(window.assets_page) == -1
     assert window.main_stack.indexOf(window.run_page) == -1
@@ -87,6 +88,77 @@ def test_main_window_uses_home_and_setup_wizard_stack(
     assert window.conditions_page.add_condition_button is not None
     assert window.session_structure_page.block_count_spin is not None
     assert window.fixation_cross_settings_page.fixation_enabled_checkbox is not None
+
+
+def test_tools_menu_exposes_in_window_image_resizer(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Image Resizer Menu")
+
+    assert [action.text() for action in window.menuBar().actions()] == ["File", "Tools"]
+    assert [action.text() for action in window.tools_menu.actions()] == ["Image Resizer"]
+
+    window.image_resizer_action.trigger()
+
+    assert window.main_stack.currentWidget() is window.image_resizer_page
+    qtbot.mouseClick(
+        window.image_resizer_page.return_home_button,
+        Qt.MouseButton.LeftButton,
+    )
+    assert window.main_stack.currentWidget() is window.home_page
+
+
+def test_image_resizer_source_selection_suggests_output_folder(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Image Resizer Source")
+    page = window.image_resizer_page
+    source_dir = tmp_path / "raw-images"
+    _write_image_directory(source_dir)
+    monkeypatch.setattr(
+        "fpvs_studio.gui.image_resizer_page.QFileDialog.getExistingDirectory",
+        lambda *args, **kwargs: str(source_dir),
+    )
+
+    qtbot.mouseClick(page.source_button, Qt.MouseButton.LeftButton)
+
+    expected_output = tmp_path / "raw-images-fpvs-optimized"
+    assert page._source_dir == source_dir
+    assert page._output_dir == expected_output
+    assert page.optimize_button.isEnabled()
+
+
+def test_image_resizer_optimizes_folder_and_updates_results(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Image Resizer Run")
+    page = window.image_resizer_page
+    source_dir = tmp_path / "raw-images"
+    output_dir = tmp_path / "optimized"
+    source_dir.mkdir(parents=True)
+    Image.new("RGB", (96, 96), color=(20, 40, 60)).save(source_dir / "stimulus-01.png")
+    monkeypatch.setattr(
+        "fpvs_studio.gui.image_resizer_page.ProgressTask",
+        _ImmediateProgressTask,
+    )
+
+    page._set_source_dir(source_dir)
+    page._set_output_dir(output_dir, user_selected=True)
+    qtbot.mouseClick(page.optimize_button, Qt.MouseButton.LeftButton)
+
+    assert page.status_badge.text() == "Optimization complete"
+    assert "Optimized 1 image(s)" in page.result_label.text()
+    output_paths = sorted(output_dir.iterdir())
+    assert len(output_paths) == 1
+    assert output_paths[0].suffix == ".png"
 
 
 def test_ready_project_reopens_to_home_launch_surface(

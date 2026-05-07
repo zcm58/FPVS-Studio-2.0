@@ -8,7 +8,7 @@ For the current phase, the priority is **deterministic derived-asset materializa
 
 ## Hard requirements
 
-- Supported source formats are:
+- Supported condition stimulus source formats are:
   - `.jpg`
   - `.jpeg`
   - `.png`
@@ -18,6 +18,9 @@ For the current phase, the priority is **deterministic derived-asset materializa
 - Do not silently resize images.
 - Generated derivatives should be written as PNG in the project folder.
 - Persist enough metadata to make preprocessing reproducible.
+- Standalone `Tools > Image Resizer` optimization may additionally read `.bmp`, `.tif`,
+  and `.tiff`, but it must write separate PNG copies and must not mutate project stimulus
+  sets or manifests.
 
 ## v1 derivative semantics
 

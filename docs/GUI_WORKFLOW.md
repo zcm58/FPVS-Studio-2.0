@@ -79,6 +79,14 @@ The authoring window is organized around two user-facing modes:
   - `Advanced` replaces the guided step content with the detailed editor for the
     active setup area
   - `Return Home` asks for confirmation when setup is incomplete
+- `Tools > Image Resizer`
+  - in-window utility for optimizing an arbitrary folder of source images
+  - primary action is `Optimize Images for FPVS`
+  - outputs center-cropped PNG copies at `512x512` by default, with secondary
+    `256x256` and `1024x1024` choices
+  - suggests a sibling output folder named `<source-folder>-fpvs-optimized`
+  - does not update project conditions, stimulus sets, manifests, compiler
+    contracts, runtime contracts, or PsychoPy behavior
 
 Detailed Conditions and Runtime widgets remain available internally for wizard advanced
 access and existing document bindings. The Stimuli Manager remains an internal support
@@ -88,7 +96,9 @@ tab during normal use.
 The `File` menu exposes manage-projects and settings actions. Moving a project to the
 Recycle Bin remains a controller-owned filesystem operation guarded by `project.json`
 validation, confirmation, a post-action path check, and a disk refresh of the manage
-list after each attempt.
+list after each attempt. The `Tools` menu exposes standalone utilities such as Image
+Resizer; these utilities may use preprocessing services but must not silently mutate the
+active project.
 
 ## GUI Implementation Map
 
@@ -116,6 +126,8 @@ list after each attempt.
 - Project management lives in `src/fpvs_studio/gui/manage_projects_dialog.py`; it uses
   shared component-layer cards, path labels, status badges, and button role helpers while
   leaving project discovery and deletion side effects in the controller.
+- Standalone image resizing lives in `src/fpvs_studio/gui/image_resizer_page.py`; it uses
+  the shared component layer and delegates batch work to preprocessing through Qt workers.
 
 ## GUI Theme and Components
 
@@ -154,6 +166,7 @@ Phase 5 currently supports:
 - authoring multiple conditions
 - importing base and oddball image folders
 - normalizing inconsistent condition image folders to project-local PNG copies
+- using `Tools > Image Resizer` to create standalone FPVS-ready PNG copies
 - creating optional derived-variant control conditions from existing condition stimuli
 - materializing original, grayscale, rot180, and phase-scrambled variants
 - validating and compiling the multi-condition session plan

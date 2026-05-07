@@ -9,6 +9,7 @@ from fpvs_studio.preprocessing.importer import (
 )
 from fpvs_studio.preprocessing.normalization import (
     normalize_stimulus_sets,
+    optimize_image_folder_for_fpvs,
     scan_stimulus_sets_for_normalization,
 )
 
@@ -16,5 +17,6 @@ __all__ = [
     "import_stimulus_source_directory",
     "materialize_project_assets",
     "normalize_stimulus_sets",
+    "optimize_image_folder_for_fpvs",
     "scan_stimulus_sets_for_normalization",
 ]

@@ -11,6 +11,7 @@ from fpvs_studio.core.models import StimulusSet
 from fpvs_studio.preprocessing.normalization import (
     ImageNormalizationError,
     normalize_stimulus_sets,
+    optimize_image_folder_for_fpvs,
     scan_stimulus_sets_for_normalization,
 )
 
@@ -113,11 +114,26 @@ def test_normalization_supports_256_outputs(tmp_path: Path) -> None:
         assert image.size == (256, 256)
 
 
+def test_normalization_supports_1024_outputs(tmp_path: Path) -> None:
+    source_dir = tmp_path / "stimuli" / "original-images" / "base-set"
+    _write_image(source_dir / "a.png", (64, 96))
+
+    result = normalize_stimulus_sets(
+        project_root=tmp_path,
+        stimulus_sets=[_stimulus_set("base-set", "stimuli/original-images/base-set")],
+        target_size=1024,
+    )
+
+    output_path = next((tmp_path / result.sets[0].source_dir).iterdir())
+    with Image.open(output_path) as image:
+        assert image.size == (1024, 1024)
+
+
 def test_normalization_rejects_invalid_sizes_without_writing_outputs(tmp_path: Path) -> None:
     source_dir = tmp_path / "stimuli" / "original-images" / "base-set"
     _write_image(source_dir / "a.png", (64, 96))
 
-    with pytest.raises(ImageNormalizationError, match="256 or 512"):
+    with pytest.raises(ImageNormalizationError, match="256, 512, or 1024"):
         normalize_stimulus_sets(
             project_root=tmp_path,
             stimulus_sets=[_stimulus_set("base-set", "stimuli/original-images/base-set")],
@@ -125,3 +141,66 @@ def test_normalization_rejects_invalid_sizes_without_writing_outputs(tmp_path: P
         )
 
     assert not (tmp_path / "stimuli" / "normalized-images").exists()
+
+
+@pytest.mark.parametrize("target_size", [256, 512, 1024])
+def test_folder_optimizer_writes_square_png_outputs(
+    tmp_path: Path,
+    target_size: int,
+) -> None:
+    source_dir = tmp_path / "raw-images"
+    output_dir = tmp_path / "raw-images-fpvs-optimized"
+    _write_image(source_dir / "a.jpg", (64, 96))
+    _write_image(source_dir / "b.tiff", (128, 64))
+    (source_dir / "notes.txt").write_text("metadata", encoding="utf-8")
+
+    result = optimize_image_folder_for_fpvs(
+        input_dir=source_dir,
+        output_dir=output_dir,
+        target_size=target_size,
+    )
+
+    assert result.processed_count == 2
+    assert [issue.filename for issue in result.skipped_files] == ["notes.txt"]
+    assert result.failed_files == ()
+    assert {path.suffix for path in result.output_files} == {".png"}
+    assert (source_dir / "a.jpg").exists()
+    for output_path in result.output_files:
+        with Image.open(output_path) as image:
+            assert image.size == (target_size, target_size)
+
+
+def test_folder_optimizer_reports_existing_outputs_without_overwriting(
+    tmp_path: Path,
+) -> None:
+    source_dir = tmp_path / "raw-images"
+    output_dir = tmp_path / "optimized"
+    _write_image(source_dir / "a.png", (64, 96))
+
+    first = optimize_image_folder_for_fpvs(input_dir=source_dir, output_dir=output_dir)
+    second = optimize_image_folder_for_fpvs(input_dir=source_dir, output_dir=output_dir)
+
+    assert first.processed_count == 1
+    assert second.processed_count == 0
+    assert second.skipped_files[0].filename == "a.png"
+    assert second.skipped_files[0].reason == "Output file already exists"
+
+
+def test_folder_optimizer_rejects_missing_empty_and_same_output_folders(
+    tmp_path: Path,
+) -> None:
+    with pytest.raises(ImageNormalizationError, match="does not exist"):
+        optimize_image_folder_for_fpvs(
+            input_dir=tmp_path / "missing",
+            output_dir=tmp_path / "out",
+        )
+
+    empty_dir = tmp_path / "empty"
+    empty_dir.mkdir()
+    with pytest.raises(ImageNormalizationError, match="does not contain any files"):
+        optimize_image_folder_for_fpvs(input_dir=empty_dir, output_dir=tmp_path / "out")
+
+    source_dir = tmp_path / "raw-images"
+    _write_image(source_dir / "a.png", (64, 96))
+    with pytest.raises(ImageNormalizationError, match="different from the source"):
+        optimize_image_folder_for_fpvs(input_dir=source_dir, output_dir=source_dir)

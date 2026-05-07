@@ -15,7 +15,8 @@ code may lazily import PsychoPy.
 - `src/fpvs_studio/app/`: application entry points and startup wiring.
 - `src/fpvs_studio/gui/`: PySide6 windows, dialogs, controllers, document binding,
   the Home/Setup Wizard workflow, and the `gui/components.py` public component/theme
-  surface.
+  surface. The main window also hosts lightweight in-window utilities from the `Tools`
+  menu.
 - `src/fpvs_studio/core/`: editable project models, validation, compilation, run/session
   contracts, project persistence, and engine-neutral domain logic.
 - `src/fpvs_studio/preprocessing/`: original image import, inspection, image
@@ -80,7 +81,9 @@ Current planned seams:
   shared page/card/status/path widgets, owns reusable button roles and stylesheets, and
   keeps raw design tokens in `design_system.py`.
 - GUI workflow composition is Home-first. `main_window.py` uses a stack with Home and
-  `setup_wizard_page.py`; the wizard uses a six-step top-progress flow with a
+  `setup_wizard_page.py`; `Tools > Image Resizer` adds a standalone in-window utility
+  page for folder-level FPVS image optimization without mutating project conditions.
+  The wizard uses a six-step top-progress flow with a
   simplified Conditions setup step where users assign base/oddball image folders and
   can optionally create derived-variant control conditions. Detailed Conditions,
   Runtime, Session, and Fixation widgets stay internal for step-level advanced access
@@ -129,7 +132,8 @@ Use these first reads before opening broad trees:
   and `tests/unit/test_preprocessing_inspection.py`.
 - Image preparation tool task: `docs/exec-plans/planned/fpvs-toolbox-image-prep-tool.md`,
   `src/fpvs_studio/tools/`, `src/fpvs_studio/preprocessing/`,
-  `src/fpvs_studio/gui/components.py`, and `src/fpvs_studio/gui/AGENTS.md`.
+  `src/fpvs_studio/gui/components.py`, `src/fpvs_studio/gui/image_resizer_page.py`,
+  and `src/fpvs_studio/gui/AGENTS.md`.
 - Docs-only task: `AGENTS.md`, this file, `docs/index.md`, and the doc being edited.
   Avoid source reads unless the doc describes a concrete contract.
 - Feature-sized workflow task: read `docs/PLANS.md` and `docs/exec-plans/README.md`,
