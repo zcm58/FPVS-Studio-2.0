@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from PySide6.QtCore import QPoint, QSize, Qt, Signal
+from PySide6.QtCore import QPoint, QSize, Qt, QTimer, Signal
 from PySide6.QtGui import (
     QBrush,
     QColor,
@@ -20,6 +20,7 @@ from PySide6.QtGui import (
     QPixmap,
     QPolygon,
     QResizeEvent,
+    QShowEvent,
 )
 from PySide6.QtWidgets import (
     QFrame,
@@ -212,6 +213,7 @@ class SetupProgressStepper(QWidget):
         self.step_circles: list[QLabel] = []
         self.step_labels: list[QLabel] = []
         self.connectors: list[QFrame] = []
+        self._label_refresh_scheduled = False
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -262,7 +264,11 @@ class SetupProgressStepper(QWidget):
 
     def resizeEvent(self, event: QResizeEvent) -> None:  # noqa: N802
         super().resizeEvent(event)
-        self._refresh_elided_labels()
+        self._schedule_elided_label_refresh()
+
+    def showEvent(self, event: QShowEvent) -> None:  # noqa: N802
+        super().showEvent(event)
+        self._schedule_elided_label_refresh()
 
     def set_active_index(self, active_index: int) -> None:
         active_index = max(0, min(active_index, len(self._steps) - 1))
@@ -291,9 +297,22 @@ class SetupProgressStepper(QWidget):
             refresh_widget_style(connector)
         self._refresh_elided_labels()
 
+    def _schedule_elided_label_refresh(self) -> None:
+        if self._label_refresh_scheduled:
+            return
+        self._label_refresh_scheduled = True
+        QTimer.singleShot(0, self._run_scheduled_label_refresh)
+
+    def _run_scheduled_label_refresh(self) -> None:
+        self._label_refresh_scheduled = False
+        self._refresh_elided_labels()
+
     def _refresh_elided_labels(self) -> None:
         for title, label in zip(self._steps, self.step_labels, strict=True):
-            available_width = max(1, label.width())
+            available_width = label.width()
+            if available_width <= 1:
+                label.setText(title)
+                continue
             label.setText(
                 label.fontMetrics().elidedText(
                     title,
@@ -756,9 +775,7 @@ def studio_theme_stylesheet() -> str:
     QListWidget#setup_wizard_condition_list,
     QListWidget#run_readiness_checklist,
     QListWidget#home_readiness_list,
-    QListWidget#dashboard_attention_list,
-    QListWidget#setup_wizard_step_list,
-    QListWidget#setup_wizard_review_readiness_list {{
+    QListWidget#dashboard_attention_list {{
         border: 1px solid {COLOR_BORDER_SOFT};
         border-radius: {CARD_CORNER_RADIUS}px;
         background-color: {COLOR_SURFACE_ELEVATED};
@@ -796,15 +813,8 @@ def studio_theme_stylesheet() -> str:
     }}
     QListWidget#run_readiness_checklist::item,
     QListWidget#home_readiness_list::item,
-    QListWidget#dashboard_attention_list::item,
-    QListWidget#setup_wizard_step_list::item,
-    QListWidget#setup_wizard_review_readiness_list::item {{
+    QListWidget#dashboard_attention_list::item {{
         padding: 4px 6px;
-    }}
-    QListWidget#setup_wizard_step_list::item:selected {{
-        background-color: {COLOR_PRIMARY};
-        color: #ffffff;
-        font-weight: 700;
     }}
     QWidget[setupProgressStepper="true"] {{
         background-color: transparent;
@@ -1180,6 +1190,15 @@ def section_card_stylesheet() -> str:
         border-radius: {CARD_CORNER_RADIUS}px;
         background-color: {COLOR_SURFACE_ELEVATED};
     }}
+    QFrame[reviewSummarySection="true"] {{
+        border: 1px solid {COLOR_BORDER_SOFT};
+        border-radius: {CARD_CORNER_RADIUS}px;
+        background-color: {COLOR_SURFACE_ELEVATED};
+    }}
+    QFrame[reviewChecklistRow="true"] {{
+        border: none;
+        background-color: transparent;
+    }}
     QLabel[sectionCardRole="title"] {{
         font-size: 15px;
         font-weight: 700;
@@ -1187,6 +1206,27 @@ def section_card_stylesheet() -> str:
     }}
     QLabel[sectionCardRole="subtitle"] {{
         color: {COLOR_TEXT_SECONDARY};
+    }}
+    QLabel[reviewChecklistSection="true"],
+    QLabel[reviewSummarySectionTitle="true"] {{
+        color: {COLOR_TEXT_PRIMARY};
+        font-weight: 700;
+        padding-top: 2px;
+    }}
+    QLabel[reviewChecklistLine="true"] {{
+        color: {COLOR_TEXT_PRIMARY};
+    }}
+    QLabel[reviewCheckIcon="true"] {{
+        border: 1px solid {COLOR_SUCCESS_BORDER};
+        border-radius: 10px;
+        background-color: {COLOR_SUCCESS_BG};
+        color: {COLOR_SUCCESS_TEXT};
+        font-size: 12px;
+        font-weight: 700;
+        min-width: 20px;
+        max-width: 20px;
+        min-height: 20px;
+        max-height: 20px;
     }}
     QLabel#section_card_tooltip_badge {{
         border: 1px solid {COLOR_BORDER_SOFT};

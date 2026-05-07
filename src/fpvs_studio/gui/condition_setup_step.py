@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from PySide6.QtCore import QSignalBlocker, Qt, Signal
+from PySide6.QtCore import QSignalBlocker, Qt
 from PySide6.QtWidgets import (
     QDialog,
     QFileDialog,
@@ -66,8 +66,6 @@ def is_guided_trigger_code(value: int) -> bool:
 
 class ConditionSetupStep(QWidget):
     """Focused wizard step for condition identity and linked image sources."""
-
-    advanced_timing_requested = Signal()
 
     def __init__(self, document: ProjectDocument, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -229,13 +227,6 @@ class ConditionSetupStep(QWidget):
             object_name="setup_conditions_protocol_defaults_panel",
             parent=self,
         )
-        self.edit_advanced_timing_button = QPushButton("Edit Advanced Timing", self)
-        self.edit_advanced_timing_button.setObjectName(
-            "setup_conditions_edit_advanced_timing_button"
-        )
-        self.edit_advanced_timing_button.clicked.connect(self.advanced_timing_requested)
-        mark_secondary_action(self.edit_advanced_timing_button)
-        self.protocol_defaults_panel.add_action_button(self.edit_advanced_timing_button)
         self.protocol_defaults_panel.add_helper_text("Most projects should keep these defaults.")
 
         self.setup_checklist = SetupChecklistPanel(
@@ -322,7 +313,6 @@ class ConditionSetupStep(QWidget):
             self.oddball_import_button,
         ):
             widget.setEnabled(enabled)
-        self.edit_advanced_timing_button.setEnabled(enabled)
         self.create_control_condition_button.setEnabled(
             enabled and self._condition_has_control_sources(condition)
         )

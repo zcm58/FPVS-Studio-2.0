@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
     QFileDialog,
+    QFrame,
     QGroupBox,
     QHeaderView,
     QLabel,
@@ -29,6 +30,7 @@ from tests.gui.helpers import (
     _write_image_directory,
 )
 
+from fpvs_studio.core.condition_template_profiles import SIXTY_HZ_BLANK_FIXATION_PROFILE_ID
 from fpvs_studio.core.enums import DutyCycleMode, InterConditionMode, StimulusVariant
 from fpvs_studio.core.project_service import create_project
 from fpvs_studio.core.serialization import load_project_file, save_project_file
@@ -191,14 +193,17 @@ def test_setup_wizard_exists_and_uses_single_column_shell_with_steps(
     assert wizard.shell.layout_mode == "single_column"
     assert wizard.shell.page_container.width_preset == "full"
     assert wizard.shell.title_label.text() == "Setup Wizard"
-    assert wizard.setup_wizard_step_list.objectName() == "setup_wizard_step_list"
-    assert wizard.setup_wizard_step_list.isVisible() is False
+    assert wizard.findChild(QListWidget, "setup_wizard_step_list") is None
     assert wizard.progress_header_label.objectName() == "setup_wizard_progress_header"
     assert wizard.progress_steps.objectName() == "setup_wizard_progress_steps"
     assert wizard.step_status_badge.objectName() == "setup_wizard_ready_badge"
-    assert wizard.setup_wizard_step_list.count() == 5
+    assert len(wizard.progress_steps.step_items) == 5
     assert wizard.step_stack.count() == 5
     assert wizard.content_stack.currentWidget() is wizard.guided_panel
+    assert wizard.advanced_stack.indexOf(wizard.conditions_page) >= 0
+    assert wizard.conditions_page.isVisible() is False
+    QApplication.processEvents()
+    qtbot.waitUntil(lambda: all(label.text().strip() for label in wizard.progress_step_labels))
     step_text = "\n".join(label.text() for label in wizard.progress_step_labels)
     step_metadata_text = "\n".join(item.toolTip() for item in wizard.progress_steps.step_items)
     assert "[OK]" not in step_text
@@ -218,6 +223,23 @@ def test_setup_wizard_exists_and_uses_single_column_shell_with_steps(
     assert wizard.findChild(QWidget, "setup_wizard_step_4_fixation_cross") is not None
     assert wizard.findChild(QWidget, "setup_wizard_step_5_review") is not None
     assert wizard.progress_steps.step_circles[0].property("setupProgressState") == "current"
+    initial_progress_labels = [label.text() for label in wizard.progress_step_labels]
+    for item in wizard.progress_steps.step_items:
+        item_right = item.mapTo(
+            wizard.progress_steps,
+            QPoint(item.width(), 0),
+        ).x()
+        assert item_right <= wizard.progress_steps.width()
+    wizard.project_overview_editor.project_description_edit.setPlainText("First paint smoke.")
+    wizard.flush_pending_edits()
+    next_button = wizard.findChild(QPushButton, "setup_wizard_next_button")
+    back_button = wizard.findChild(QPushButton, "setup_wizard_back_button")
+    assert next_button is not None
+    assert back_button is not None
+    qtbot.mouseClick(next_button, Qt.MouseButton.LeftButton)
+    qtbot.mouseClick(back_button, Qt.MouseButton.LeftButton)
+    QApplication.processEvents()
+    assert [label.text() for label in wizard.progress_step_labels] == initial_progress_labels
     label_text = "\n".join(label.text() for label in wizard.findChildren(QLabel))
     assert "Current Step" not in label_text
     assert "Only the controls needed for this setup step are shown." not in label_text
@@ -368,6 +390,7 @@ def test_conditions_advanced_editor_uses_flat_horizontal_master_detail_layout(
     assert conditions_page.condition_list_card.property("sectionCard") == "false"
     assert conditions_page.condition_editor_card.property("sectionCard") == "false"
     assert conditions_page.stimulus_sources_card.property("sectionCard") == "false"
+    assert not hasattr(conditions_page, "duty_cycle_combo")
     assert (
         conditions_page.master_detail_layout.itemAt(0).widget()
         is conditions_page.condition_list_card
@@ -464,15 +487,16 @@ def test_setup_wizard_surfaces_steps_and_keeps_shared_editors_available(
     assert not hasattr(dashboard.condition_setup_step, "variant_combo")
     assert dashboard.assets_page is window.assets_page
     assert dashboard.run_page is window.run_page
-    assert dashboard.setup_wizard_step_list.count() == 5
-    assert "Project Details" in dashboard.setup_wizard_step_list.item(0).text()
-    assert "Conditions" in dashboard.setup_wizard_step_list.item(1).text()
-    assert "Experiment Settings" in dashboard.setup_wizard_step_list.item(2).text()
-    assert "Fixation Cross" in dashboard.setup_wizard_step_list.item(3).text()
-    assert "Review" in dashboard.setup_wizard_step_list.item(4).text()
+    assert len(dashboard.progress_steps.step_items) == 5
+    step_metadata_text = "\n".join(item.toolTip() for item in dashboard.progress_steps.step_items)
+    assert "Project Details" in step_metadata_text
+    assert "Conditions" in step_metadata_text
+    assert "Experiment Settings" in step_metadata_text
+    assert "Fixation Cross" in step_metadata_text
+    assert "Review" in step_metadata_text
 
 
-def test_setup_wizard_navigation_and_advanced_editor_access(
+def test_setup_wizard_navigation_has_no_conditions_advanced_editor(
     qtbot,
     controller: StudioController,
     tmp_path: Path,
@@ -503,21 +527,19 @@ def test_setup_wizard_navigation_and_advanced_editor_access(
     assert guide.step_stack.currentWidget() is guide.condition_setup_step
     assert guide.content_stack.currentWidget() is guide.guided_panel
     assert not next_button.isEnabled()
-    assert advanced_button.isEnabled()
+    assert not advanced_button.isEnabled()
     assert guide.findChild(QListWidget, "setup_wizard_condition_list") is not None
     assert guide.findChild(QWidget, "setup_conditions_left_panel") is not None
     assert guide.findChild(QWidget, "setup_conditions_main_panel") is not None
     assert guide.findChild(QWidget, "setup_conditions_protocol_defaults_panel") is not None
     assert guide.findChild(QWidget, "setup_conditions_checklist_panel") is not None
+    assert guide.findChild(QPushButton, "setup_conditions_edit_advanced_timing_button") is None
     label_text = "\n".join(
         label.text() for label in guide.condition_setup_step.findChildren(QLabel)
     )
     assert "Image Version:" in label_text
     assert "Stimulus Variant" not in label_text
     assert "Cycles / Repeat" not in label_text
-    qtbot.mouseClick(advanced_button, Qt.MouseButton.LeftButton)
-    assert guide.content_stack.currentWidget() is guide.advanced_stack
-    assert guide.advanced_stack.currentWidget() is window.conditions_page
     qtbot.mouseClick(advanced_button, Qt.MouseButton.LeftButton)
     assert guide.content_stack.currentWidget() is guide.guided_panel
 
@@ -529,7 +551,7 @@ def test_setup_wizard_navigation_and_advanced_editor_access(
     qtbot.mouseClick(guide.add_condition_button, Qt.MouseButton.LeftButton)
     assert information_prompts == ["Please ensure you create all conditions before proceeding."]
     assert not next_button.isEnabled()
-    assert advanced_button.isEnabled()
+    assert not advanced_button.isEnabled()
     assert "name every condition" in guide.step_status_label.text().lower()
 
     condition_id = guide.condition_setup_step.selected_condition_id()
@@ -1301,6 +1323,101 @@ def test_setup_wizard_experiment_and_fixation_steps_are_width_safe(
         assert preview_right <= fixation_panel.width()
 
 
+def test_setup_wizard_review_uses_centered_confirmation_checklist(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Review Checklist Project")
+    guide = window.setup_wizard_page
+    guide.project_overview_editor.project_description_edit.setPlainText(
+        "Review checklist project description."
+    )
+    guide.flush_pending_edits()
+
+    for index, condition_name in enumerate(("Faces", "Objects"), start=1):
+        window.conditions_page._add_condition()
+        condition_id = window.conditions_page.selected_condition_id()
+        assert condition_id is not None
+        window.document.update_condition(
+            condition_id,
+            name=condition_name,
+            trigger_code=index,
+        )
+        window.document.import_condition_stimulus_folder(
+            condition_id,
+            role="base",
+            source_dir=_write_image_directory(tmp_path / f"{condition_name}-base"),
+        )
+        window.document.import_condition_stimulus_folder(
+            condition_id,
+            role="oddball",
+            source_dir=_write_image_directory(tmp_path / f"{condition_name}-oddball"),
+        )
+
+    guide.session_structure_editor.block_count_spin.setValue(2)
+    guide.fixation_settings_editor.fixation_enabled_checkbox.setChecked(True)
+    guide.fixation_settings_editor.fixation_accuracy_checkbox.setChecked(True)
+    guide.fixation_settings_editor._set_response_key("g")
+    window.main_stack.setCurrentWidget(guide)
+    guide.open_wizard(step_key="review")
+    QApplication.processEvents()
+
+    review_card = guide.review_card
+    assert review_card.minimumWidth() == 620
+    assert review_card.maximumWidth() == 700
+    review_page = guide.step_stack.currentWidget()
+    card_left = review_card.mapTo(review_page, QPoint(0, 0)).x()
+    card_center = card_left + (review_card.width() / 2)
+    assert abs(card_center - (review_page.width() / 2)) < 20
+    assert review_card.width() >= 620
+
+    label_text = "\n".join(label.text() for label in review_card.findChildren(QLabel))
+    assert "Review Your Experiment" in label_text
+    assert "Please confirm your experiment settings." in label_text
+    assert "Would you like to save your experiment?" in label_text
+    assert "Project Details" in label_text
+    assert "Conditions" in label_text
+    assert "Experiment Settings" in label_text
+    assert "Fixation Cross" in label_text
+    assert "Project details complete: Review Checklist Project" in label_text
+    assert "2 conditions configured" in label_text
+    assert "Faces: base 3 images, oddball 3 images" not in label_text
+    assert "Objects: base 3 images, oddball 3 images" not in label_text
+    assert "Each condition will repeat 2 times in random block order" in label_text
+    assert "Display: 60.00 Hz, Black background" in label_text
+    assert "Fixation cross has been configured" in label_text
+    assert "Launch requirements are satisfied" not in label_text
+    summary_sections = [
+        section
+        for section in review_card.findChildren(QFrame)
+        if section.property("reviewSummarySection") == "true"
+    ]
+    checklist_rows = [
+        row
+        for row in review_card.findChildren(QFrame)
+        if row.property("reviewChecklistRow") == "true"
+    ]
+    check_icons = [
+        label
+        for label in review_card.findChildren(QLabel)
+        if label.property("reviewCheckIcon") == "true"
+    ]
+    assert len(summary_sections) == 4
+    assert len(checklist_rows) == 5
+    assert len(check_icons) == len(checklist_rows)
+
+    assert guide.review_save_button.text() == "Save Experiment"
+    assert guide.review_return_home_button.text() == "Return Home"
+    assert window.document.dirty is True
+    qtbot.mouseClick(guide.review_save_button, Qt.MouseButton.LeftButton)
+    assert window.document.dirty is False
+
+    window.home_page.refresh()
+    assert "Launch requirements are satisfied" not in window.home_page.launch_status_summary.text()
+    assert window.home_page.launch_status_summary.text() == "Setup is ready for launch."
+
+
 def test_setup_wizard_return_home_confirms_incomplete_setup(
     qtbot,
     controller: StudioController,
@@ -1371,6 +1488,11 @@ def test_setup_dashboard_edits_sync_document_and_dedicated_tabs(
     project_editor.project_name_edit.setText("Dashboard Renamed Project")
     project_editor.project_name_edit.editingFinished.emit()
     project_editor.project_description_edit.setPlainText("Setup dashboard project description.")
+    blank_index = project_editor.condition_profile_combo.findData(
+        SIXTY_HZ_BLANK_FIXATION_PROFILE_ID
+    )
+    assert blank_index >= 0
+    project_editor.condition_profile_combo.setCurrentIndex(blank_index)
 
     conditions_page = window.conditions_page
     conditions_page.add_condition_button.click()
@@ -1382,9 +1504,7 @@ def test_setup_dashboard_edits_sync_document_and_dedicated_tabs(
     conditions_page.variant_combo.setCurrentIndex(
         conditions_page.variant_combo.findData(StimulusVariant.GRAYSCALE)
     )
-    conditions_page.duty_cycle_combo.setCurrentIndex(
-        conditions_page.duty_cycle_combo.findData(DutyCycleMode.BLANK_50)
-    )
+    assert not hasattr(conditions_page, "duty_cycle_combo")
 
     window.main_stack.setCurrentWidget(dashboard)
     session_editor = dashboard.session_structure_editor
@@ -1519,8 +1639,7 @@ def test_setup_dashboard_save_load_smoke_persists_dashboard_edited_settings(
     fixation_editor.target_color_combo.setCurrentIndex(
         fixation_editor.target_color_combo.findData("#FF0000")
     )
-    fixation_editor.response_key_edit.setText("space")
-    fixation_editor.response_key_edit.editingFinished.emit()
+    fixation_editor._set_response_key("g")
 
     runtime_editor = dashboard.runtime_settings_editor
     runtime_editor.refresh_hz_spin.setValue(120.0)
@@ -1550,7 +1669,7 @@ def test_setup_dashboard_save_load_smoke_persists_dashboard_edited_settings(
     assert fixation.changes_per_sequence == 6
     assert fixation.base_color == "#FFFFFF"
     assert fixation.target_color == "#FF0000"
-    assert fixation.response_key == "space"
+    assert fixation.response_key == "g"
     assert display.preferred_refresh_hz == pytest.approx(120.0, abs=0.01)
     assert display.background_color == "#101010"
     assert triggers.serial_port is None

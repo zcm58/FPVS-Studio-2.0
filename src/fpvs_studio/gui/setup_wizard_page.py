@@ -10,7 +10,6 @@ from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QLabel,
-    QListWidget,
     QMessageBox,
     QPushButton,
     QSizePolicy,
@@ -47,9 +46,7 @@ from fpvs_studio.gui.session_pages import FixationSettingsEditor, SessionStructu
 from fpvs_studio.gui.window_helpers import (
     LauncherReadinessReport,
     _conditions_have_assigned_assets,
-    _configure_read_only_list,
     _launcher_readiness_report,
-    _set_list_items,
     _show_error_dialog,
 )
 from fpvs_studio.gui.workers import ProgressTask
@@ -88,12 +85,14 @@ class SetupWizardPage(QWidget):
         fullscreen_state_getter: Callable[[], bool] | None = None,
         fullscreen_state_setter: Callable[[bool], None] | None = None,
         on_return_home: Callable[[], None] | None = None,
+        on_save_project: Callable[[], bool] | None = None,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self.setObjectName("setup_wizard_page")
         self._document = document
         self._on_return_home = on_return_home
+        self._on_save_project = on_save_project
         self._active_step_index = 0
         self._advanced_visible = False
         self._readiness_cache: tuple[tuple[int, float, bool], LauncherReadinessReport] | None = (
@@ -109,9 +108,6 @@ class SetupWizardPage(QWidget):
         self.condition_setup_step = ConditionSetupStep(document, self)
         self.add_condition_button = self.condition_setup_step.add_condition_button
         self.add_condition_button.clicked.connect(self._show_first_condition_prompt_if_needed)
-        self.condition_setup_step.advanced_timing_requested.connect(
-            self._show_conditions_advanced_timing
-        )
         self.assets_page = AssetsPage(document, self)
         self.run_page = RunPage(
             document,
@@ -161,11 +157,6 @@ class SetupWizardPage(QWidget):
         )
         self.shell.set_page_margins(PAGE_MARGIN_X, 12, PAGE_MARGIN_X, 12)
         self.shell.set_content_spacing(8)
-
-        self.setup_wizard_step_list = QListWidget(self)
-        self.setup_wizard_step_list.setObjectName("setup_wizard_step_list")
-        _configure_read_only_list(self.setup_wizard_step_list)
-        self.setup_wizard_step_list.setVisible(False)
 
         self.progress_header_label = QLabel(self)
         self.progress_header_label.setObjectName("setup_wizard_progress_header")
@@ -386,15 +377,59 @@ class SetupWizardPage(QWidget):
         page = QWidget(self)
         layout = QVBoxLayout(page)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(8)
-        self.review_summary_label = QLabel(page)
-        self.review_summary_label.setObjectName("setup_wizard_review_summary")
-        self.review_summary_label.setWordWrap(True)
-        self.review_readiness_list = QListWidget(page)
-        self.review_readiness_list.setObjectName("setup_wizard_review_readiness_list")
-        _configure_read_only_list(self.review_readiness_list)
-        layout.addWidget(self.review_summary_label)
-        layout.addWidget(self.review_readiness_list, 1)
+        layout.setSpacing(0)
+
+        self.review_card = SectionCard(
+            title="Review Your Experiment",
+            subtitle="Please confirm your experiment settings.",
+            object_name="setup_wizard_review_card",
+            parent=page,
+        )
+        self.review_card.setMinimumWidth(620)
+        self.review_card.setMaximumWidth(700)
+        self.review_card.card_layout.setContentsMargins(16, 14, 16, 14)
+        self.review_card.card_layout.setSpacing(10)
+        self.review_card.title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        if self.review_card.subtitle_label is not None:
+            self.review_card.subtitle_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        header_layout = self.review_card.card_layout.itemAt(0).layout()
+        if header_layout is not None:
+            header_layout.insertStretch(0, 1)
+
+        self.review_checklist_container = QWidget(self.review_card)
+        self.review_checklist_container.setObjectName("setup_wizard_review_checklist")
+        self.review_checklist_layout = QVBoxLayout(self.review_checklist_container)
+        self.review_checklist_layout.setContentsMargins(0, 0, 0, 0)
+        self.review_checklist_layout.setSpacing(7)
+        self.review_card.body_layout.addWidget(self.review_checklist_container)
+
+        self.review_save_prompt_label = QLabel(
+            "Would you like to save your experiment?",
+            self.review_card,
+        )
+        self.review_save_prompt_label.setObjectName("setup_wizard_review_save_prompt")
+        self.review_save_prompt_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.review_card.body_layout.addWidget(self.review_save_prompt_label)
+
+        action_row = QHBoxLayout()
+        action_row.setContentsMargins(0, 0, 0, 0)
+        action_row.addStretch(1)
+        self.review_save_button = QPushButton("Save Experiment", self.review_card)
+        self.review_save_button.setObjectName("setup_wizard_review_save_button")
+        self.review_save_button.clicked.connect(self._save_from_review)
+        mark_primary_action(self.review_save_button)
+        self.review_return_home_button = QPushButton("Return Home", self.review_card)
+        self.review_return_home_button.setObjectName("setup_wizard_review_return_home_button")
+        self.review_return_home_button.clicked.connect(self._return_home)
+        mark_secondary_action(self.review_return_home_button)
+        action_row.addWidget(self.review_save_button)
+        action_row.addWidget(self.review_return_home_button)
+        action_row.addStretch(1)
+        self.review_card.body_layout.addLayout(action_row)
+
+        layout.addStretch(1)
+        layout.addWidget(self.review_card, 0, Qt.AlignmentFlag.AlignHCenter)
+        layout.addStretch(2)
         return page
 
     def _advanced_empty_page(self) -> QWidget:
@@ -507,17 +542,16 @@ class SetupWizardPage(QWidget):
         if self._on_return_home is not None:
             self._on_return_home()
 
+    def _save_from_review(self) -> None:
+        self.flush_pending_edits()
+        if self._on_save_project is not None:
+            self._on_save_project()
+
     def _toggle_advanced(self) -> None:
         self.flush_pending_edits()
         if not self._advanced_available_for_current_step():
             return
         self._advanced_visible = not self._advanced_visible
-        self.refresh()
-
-    def _show_conditions_advanced_timing(self) -> None:
-        self.flush_pending_edits()
-        self._active_step_index = self._step_index_for_key("conditions")
-        self._advanced_visible = True
         self.refresh()
 
     def refresh(self) -> None:
@@ -536,15 +570,9 @@ class SetupWizardPage(QWidget):
         )
         self._refresh_current_editor_page(advanced_visible=advanced_visible)
 
-        self.setup_wizard_step_list.setCurrentRow(self._active_step_index)
-        _set_list_items(self.setup_wizard_step_list, self._step_list_lines())
-        self.setup_wizard_step_list.setCurrentRow(self._active_step_index)
-
         self._refresh_progress_header()
         self.step_title_label.setText(title)
-        report = self._readiness_report()
-        self.review_summary_label.setText(report.status_summary)
-        _set_list_items(self.review_readiness_list, report.readiness_items)
+        self._refresh_review_summary()
 
         step_valid = self._current_step_valid()
         show_step_intro = step_key not in {"project", "fixation"}
@@ -597,11 +625,92 @@ class SetupWizardPage(QWidget):
         self._readiness_cache = (cache_key, report)
         return report
 
-    def _step_list_lines(self) -> tuple[str, ...]:
-        return tuple(
-            f"{index + 1}. {title} - {self._step_status_text(index)}"
-            for index, (_key, title) in enumerate(_WIZARD_STEPS)
+    def _refresh_review_summary(self) -> None:
+        while self.review_checklist_layout.count():
+            item = self.review_checklist_layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.setParent(None)
+                widget.deleteLater()
+
+        for section_title, lines in self._review_checklist_sections():
+            self.review_checklist_layout.addWidget(
+                self._review_summary_section(section_title, lines),
+            )
+
+    def _review_summary_section(self, title: str, lines: tuple[str, ...]) -> QFrame:
+        section = QFrame(self.review_checklist_container)
+        section.setProperty("reviewSummarySection", "true")
+        section_layout = QVBoxLayout(section)
+        section_layout.setContentsMargins(12, 9, 12, 9)
+        section_layout.setSpacing(6)
+
+        title_label = QLabel(title, section)
+        title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        title_label.setProperty("reviewSummarySectionTitle", "true")
+        section_layout.addWidget(title_label)
+
+        for line in lines:
+            section_layout.addWidget(self._review_checklist_row(line, parent=section))
+        return section
+
+    def _review_checklist_row(self, text: str, *, parent: QWidget) -> QFrame:
+        row = QFrame(parent)
+        row.setProperty("reviewChecklistRow", "true")
+        row_layout = QHBoxLayout(row)
+        row_layout.setContentsMargins(0, 3, 0, 3)
+        row_layout.setSpacing(8)
+
+        check_icon = QLabel("\u2713", row)
+        check_icon.setProperty("reviewCheckIcon", "true")
+        check_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        row_layout.addWidget(check_icon, 0, Qt.AlignmentFlag.AlignTop)
+
+        label = QLabel(text, row)
+        label.setWordWrap(True)
+        label.setProperty("reviewChecklistLine", "true")
+        row_layout.addWidget(label, 1)
+        return row
+
+    def _review_checklist_sections(self) -> tuple[tuple[str, tuple[str, ...]], ...]:
+        project = self._document.project
+        conditions = self._document.ordered_conditions()
+        session = project.settings.session
+        display = project.settings.display
+
+        condition_lines = (
+            f"{len(conditions)} condition{'s' if len(conditions) != 1 else ''} configured",
         )
+
+        block_count = session.block_count
+        background_label = self._display_background_label(str(display.background_color))
+        repeat_word = "time" if block_count == 1 else "times"
+        order_label = (
+            "random block order"
+            if session.randomize_conditions_per_block
+            else "configured block order"
+        )
+        experiment_lines = (
+            f"Each condition will repeat {block_count} {repeat_word} in {order_label}",
+            f"Display: {self.runtime_settings_editor.current_refresh_hz():.2f} Hz, "
+            f"{background_label}",
+        )
+        return (
+            ("Project Details", (f"Project details complete: {project.meta.name}",)),
+            ("Conditions", tuple(condition_lines)),
+            ("Experiment Settings", experiment_lines),
+            ("Fixation Cross", (self._fixation_review_line(),)),
+        )
+
+    @staticmethod
+    def _display_background_label(background_color: str) -> str:
+        return {
+            "#000000": "Black background",
+            "#101010": "Dark gray background",
+        }.get(background_color, background_color)
+
+    def _fixation_review_line(self) -> str:
+        return "Fixation cross has been configured"
 
     def _step_status_text(self, index: int) -> str:
         step_key = _WIZARD_STEPS[index][0]
@@ -697,12 +806,10 @@ class SetupWizardPage(QWidget):
         )
 
     def _advanced_available_for_current_step(self) -> bool:
-        return _WIZARD_STEPS[self._active_step_index][0] == "conditions"
+        return False
 
     def _advanced_index_for_step(self, step_key: str) -> int:
-        return {
-            "conditions": 1,
-        }.get(step_key, 0)
+        return 0
 
     def _refresh_progress_header(self) -> None:
         current = self._active_step_index

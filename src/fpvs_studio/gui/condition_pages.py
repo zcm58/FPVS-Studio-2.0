@@ -24,10 +24,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from fpvs_studio.core.enums import (
-    DutyCycleMode,
-    StimulusVariant,
-)
+from fpvs_studio.core.enums import StimulusVariant
 from fpvs_studio.core.models import Condition
 from fpvs_studio.core.paths import stimuli_dir
 from fpvs_studio.core.template_library import get_template
@@ -45,7 +42,6 @@ from fpvs_studio.gui.document import ProjectDocument
 from fpvs_studio.gui.window_helpers import (
     _CYCLE_HELP_TEXT,
     DebouncedTextCommitter,
-    _duty_cycle_label,
     _resolution_text,
     _show_error_dialog,
     _sync_text_editor_contents,
@@ -145,12 +141,6 @@ class ConditionsPage(QWidget):
             self.variant_combo.addItem(_variant_label(variant), userData=variant)
         self.variant_combo.currentIndexChanged.connect(self._apply_variant_fields)
 
-        self.duty_cycle_combo = QComboBox(self)
-        self.duty_cycle_combo.setObjectName("condition_duty_cycle_combo")
-        for mode in DutyCycleMode:
-            self.duty_cycle_combo.addItem(_duty_cycle_label(mode), userData=mode)
-        self.duty_cycle_combo.currentIndexChanged.connect(self._apply_variant_fields)
-
         self.template_info_label = QLabel(self)
         self.template_info_label.setWordWrap(True)
         self.template_info_label.setObjectName("template_info_label")
@@ -227,8 +217,6 @@ class ConditionsPage(QWidget):
         timing_grid.addWidget(self.oddball_cycles_spin, 1, 1)
         timing_grid.addWidget(QLabel("Stimulus Variant", self.condition_editor_card), 0, 2)
         timing_grid.addWidget(self.variant_combo, 0, 3)
-        timing_grid.addWidget(QLabel("Duty Cycle", self.condition_editor_card), 1, 2)
-        timing_grid.addWidget(self.duty_cycle_combo, 1, 3)
         timing_grid.setColumnStretch(1, 1)
         timing_grid.setColumnStretch(3, 1)
         basics_header = QLabel("Basics / Identity", self.condition_editor_card)
@@ -401,7 +389,6 @@ class ConditionsPage(QWidget):
             self.sequence_count_spin,
             self.oddball_cycles_spin,
             self.variant_combo,
-            self.duty_cycle_combo,
             self.base_import_button,
             self.oddball_import_button,
             self.remove_condition_button,
@@ -451,10 +438,6 @@ class ConditionsPage(QWidget):
         with QSignalBlocker(self.variant_combo):
             self.variant_combo.setCurrentIndex(
                 self.variant_combo.findData(condition.stimulus_variant)
-            )
-        with QSignalBlocker(self.duty_cycle_combo):
-            self.duty_cycle_combo.setCurrentIndex(
-                self.duty_cycle_combo.findData(condition.duty_cycle_mode)
             )
         self.template_info_label.setText(
             f"{template.display_name}: base {template.base_hz:.1f} Hz, oddball every "
@@ -575,7 +558,6 @@ class ConditionsPage(QWidget):
             self._document.update_condition(
                 condition_id,
                 stimulus_variant=self.variant_combo.currentData(),
-                duty_cycle_mode=self.duty_cycle_combo.currentData(),
             )
         except Exception as error:
             _show_error_dialog(self, "Condition Error", error)

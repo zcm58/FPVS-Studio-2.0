@@ -17,6 +17,7 @@ from tests.gui.helpers import (
 
 from fpvs_studio.core.condition_template_profiles import (
     SIXTY_HZ_BLANK_FIXATION_PROFILE_ID,
+    STUDIO_DEFAULT_PROFILE_ID,
 )
 from fpvs_studio.core.enums import DutyCycleMode, InterConditionMode, StimulusVariant
 from fpvs_studio.core.serialization import load_project_file
@@ -65,6 +66,15 @@ def test_condition_editor_round_trip(
 ) -> None:
     _, window = _open_created_project(controller, qtbot, tmp_path, "Roundtrip Conditions")
 
+    blank_index = (
+        window.setup_dashboard_page.project_overview_editor.condition_profile_combo.findData(
+            SIXTY_HZ_BLANK_FIXATION_PROFILE_ID
+        )
+    )
+    assert blank_index >= 0
+    window.setup_dashboard_page.project_overview_editor.condition_profile_combo.setCurrentIndex(
+        blank_index
+    )
     qtbot.mouseClick(window.conditions_page.add_condition_button, Qt.MouseButton.LeftButton)
     window.conditions_page.condition_name_edit.clear()
     window.conditions_page.condition_name_edit.setText("Faces Condition")
@@ -75,9 +85,7 @@ def test_condition_editor_round_trip(
     window.conditions_page.variant_combo.setCurrentIndex(
         window.conditions_page.variant_combo.findData(StimulusVariant.GRAYSCALE)
     )
-    window.conditions_page.duty_cycle_combo.setCurrentIndex(
-        window.conditions_page.duty_cycle_combo.findData(DutyCycleMode.BLANK_50)
-    )
+    assert not hasattr(window.conditions_page, "duty_cycle_combo")
 
     assert window.save_project() is True
     controller.open_project(window.document.project_root)
@@ -148,8 +156,10 @@ def test_session_and_fixation_settings_round_trip(
     fixation_page.target_color_combo.setCurrentIndex(
         fixation_page.target_color_combo.findData("#FF0000")
     )
-    fixation_page.response_key_edit.setText("space")
-    fixation_page.response_key_edit.editingFinished.emit()
+    qtbot.mouseClick(fixation_page.response_key_button, Qt.MouseButton.LeftButton)
+    f_key_button = fixation_page.response_key_popover.key_button("f")
+    assert f_key_button is not None
+    qtbot.mouseClick(f_key_button, Qt.MouseButton.LeftButton)
     fixation_page.response_window_spin.setValue(1.25)
     fixation_page.cross_size_spin.setValue(52)
     fixation_page.line_width_spin.setValue(6)
@@ -177,9 +187,9 @@ def test_session_and_fixation_settings_round_trip(
     assert fixation.target_duration_ms == 300
     assert fixation.base_color == "#FFFFFF"
     assert fixation.target_color == "#FF0000"
-    assert fixation.response_key == "space"
+    assert fixation.response_key == "f"
     assert fixation.response_window_seconds == 1.25
-    assert fixation.response_keys == ["space"]
+    assert fixation.response_keys == ["f"]
     assert fixation.cross_size_px == 52
     assert fixation.line_width_px == 6
 
@@ -222,6 +232,10 @@ def test_fixation_cross_settings_page_exposes_accuracy_task_controls(
         is not None
     )
     assert page.findChild(type(page.response_key_edit), "response_key_edit") is not None
+    assert page.response_key_edit.isReadOnly()
+    assert page.findChild(type(page.response_key_button), "response_key_choose_button") is not None
+    assert page.response_key_edit.toolTip()
+    assert page.response_key_button.toolTip()
     assert (
         page.findChild(type(page.response_window_spin), "response_window_seconds_spin") is not None
     )
@@ -277,6 +291,49 @@ def test_fixation_color_change_mode_toggles_relevant_controls(
     assert page.target_count_min_spin.isEnabled()
     assert page.target_count_max_spin.isEnabled()
     assert page.no_repeat_count_checkbox.isEnabled()
+
+
+def test_fixation_response_key_picker_updates_model_with_keyboard_buttons(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Response Key Picker")
+
+    page = window.setup_dashboard_page.fixation_settings_editor
+    window.setup_wizard_page.open_wizard(step_key="fixation")
+    window.main_stack.setCurrentWidget(window.setup_wizard_page)
+    page.fixation_enabled_checkbox.setChecked(True)
+    page.fixation_accuracy_checkbox.setChecked(True)
+    QApplication.processEvents()
+
+    assert page.response_key_edit.text() == "space"
+    assert page.response_key_popover.isVisible() is False
+    assert "escape" not in page.response_key_popover.key_values()
+
+    qtbot.mouseClick(page.response_key_button, Qt.MouseButton.LeftButton)
+    QApplication.processEvents()
+    assert page.response_key_popover.isVisible()
+
+    f_key_button = page.response_key_popover.key_button("f")
+    g_key_button = page.response_key_popover.key_button("g")
+    assert f_key_button is not None
+    assert g_key_button is not None
+    assert f_key_button.property("hoverAnimationEnabled") is True
+    assert g_key_button.property("hoverAnimationEnabled") is True
+    assert page.response_key_popover.key_button("left") is None
+    assert page.response_key_popover.key_button("right") is None
+    assert page.response_key_popover.key_button("up") is None
+    assert page.response_key_popover.key_button("down") is None
+    assert page.response_key_popover.key_button("f1") is None
+    assert page.response_key_popover.key_button("f12") is None
+
+    qtbot.mouseClick(g_key_button, Qt.MouseButton.LeftButton)
+    QApplication.processEvents()
+    assert page.response_key_popover.isVisible() is False
+    assert page.response_key_edit.text() == "g"
+    assert window.document.project.settings.fixation_task.response_key == "g"
+    assert window.document.project.settings.fixation_task.response_keys == ["g"]
 
 
 def test_fixation_randomized_min_above_max_shows_plain_language_error(
@@ -335,11 +392,13 @@ def test_fixation_accuracy_toggle_controls_response_visibility(
     page.fixation_accuracy_checkbox.setChecked(False)
     QApplication.processEvents()
     assert not page.response_key_edit.isVisible()
+    assert not page.response_key_button.isVisible()
     assert not page.response_window_spin.isVisible()
 
     page.fixation_accuracy_checkbox.setChecked(True)
     QApplication.processEvents()
     assert page.response_key_edit.isVisible()
+    assert page.response_key_button.isVisible()
     assert page.response_window_spin.isVisible()
 
 
@@ -360,6 +419,7 @@ def test_fixation_disable_hides_dependent_sections(
     assert page.target_duration_spin.isVisible()
     assert page.base_color_combo.isVisible()
     assert page.response_key_edit.isVisible()
+    assert page.response_key_button.isVisible()
     assert page.fixation_accuracy_checkbox.isEnabled()
 
     page.fixation_enabled_checkbox.setChecked(False)
@@ -368,6 +428,7 @@ def test_fixation_disable_hides_dependent_sections(
     assert not page.target_duration_spin.isVisible()
     assert not page.base_color_combo.isVisible()
     assert not page.response_key_edit.isVisible()
+    assert not page.response_key_button.isVisible()
     assert not page.fixation_accuracy_checkbox.isEnabled()
     assert page.fixation_accuracy_checkbox.isChecked() is False
 
@@ -545,7 +606,7 @@ def test_new_condition_uses_project_condition_defaults(
     assert condition.oddball_cycle_repeats_per_sequence == 146
 
 
-def test_apply_condition_template_profile_to_all_conditions_standardizes_existing_rows(
+def test_condition_template_selection_standardizes_existing_rows(
     qtbot,
     controller: StudioController,
     tmp_path: Path,
@@ -583,18 +644,6 @@ def test_apply_condition_template_profile_to_all_conditions_standardizes_existin
         profile_index
     )
 
-    first_before = window.document.get_condition(first_condition_id)
-    second_before = window.document.get_condition(second_condition_id)
-    assert first_before is not None
-    assert second_before is not None
-    assert first_before.sequence_count == 2
-    assert second_before.sequence_count == 3
-
-    qtbot.mouseClick(
-        window.setup_dashboard_page.project_overview_editor.apply_profile_to_conditions_button,
-        Qt.MouseButton.LeftButton,
-    )
-
     first_after = window.document.get_condition(first_condition_id)
     second_after = window.document.get_condition(second_condition_id)
     assert first_after is not None
@@ -605,6 +654,49 @@ def test_apply_condition_template_profile_to_all_conditions_standardizes_existin
     assert second_after.sequence_count == 1
     assert first_after.oddball_cycle_repeats_per_sequence == 146
     assert second_after.oddball_cycle_repeats_per_sequence == 146
+
+
+def test_switching_existing_blank_project_to_continuous_compiles_without_blank_frames(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Continuous Launch")
+
+    blank_index = (
+        window.setup_dashboard_page.project_overview_editor.condition_profile_combo.findData(
+            SIXTY_HZ_BLANK_FIXATION_PROFILE_ID
+        )
+    )
+    assert blank_index >= 0
+    window.setup_dashboard_page.project_overview_editor.condition_profile_combo.setCurrentIndex(
+        blank_index
+    )
+    _prepare_compile_ready_project(window, tmp_path / "continuous-launch")
+    condition_id = window.conditions_page.selected_condition_id()
+    assert condition_id is not None
+    condition = window.document.get_condition(condition_id)
+    assert condition is not None
+    assert condition.duty_cycle_mode == DutyCycleMode.BLANK_50
+
+    continuous_index = (
+        window.setup_dashboard_page.project_overview_editor.condition_profile_combo.findData(
+            STUDIO_DEFAULT_PROFILE_ID
+        )
+    )
+    assert continuous_index >= 0
+    window.setup_dashboard_page.project_overview_editor.condition_profile_combo.setCurrentIndex(
+        continuous_index
+    )
+
+    condition = window.document.get_condition(condition_id)
+    assert condition is not None
+    assert condition.duty_cycle_mode == DutyCycleMode.CONTINUOUS
+    session_plan = window.document.compile_session(refresh_hz=60.0)
+    run_spec = session_plan.ordered_entries()[0].run_spec
+    assert run_spec.display.on_frames == run_spec.display.frames_per_stimulus
+    assert run_spec.display.off_frames == 0
+    assert all(event.off_frames == 0 for event in run_spec.stimulus_sequence)
 
 
 def test_launch_reports_actionable_condition_level_fixation_error_before_prompt(

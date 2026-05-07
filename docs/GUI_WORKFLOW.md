@@ -57,6 +57,9 @@ The authoring window is organized around two user-facing modes:
   - Project Details uses a focused centered card inside the full-width wizard,
     keeping the project folder path compact and secondary; project name and
     description are required before continuing to Conditions
+  - the Project Details condition template selector is the user-facing source of
+    truth for condition duty-cycle mode; existing conditions are standardized
+    when the selected template changes
   - Experiment Settings combines display and session settings in one compact centered card
   - the Display column exposes only display refresh rate and presentation background
     (`Black` or `Dark Gray`); current launches always use PsychoPy, alpha test-mode,
@@ -79,12 +82,10 @@ The authoring window is organized around two user-facing modes:
     optional grayscale, 180 degree rotated, or phase-scrambled control conditions that
     reuse the selected condition's existing base and oddball image folders
   - guided Conditions copy uses `Image Version` for stimulus variant selection; raw
-    timing fields such as `Cycles / Repeat` remain advanced-only concepts
+    timing fields such as `Cycles / Repeat` are hidden from the guided workflow
   - the Conditions step is complete only when every condition has a user-provided
     descriptive name, a trigger code of 1 or higher, and imported base and oddball
     image folders
-  - `Advanced` replaces the guided step content with the detailed editor for the
-    active setup area
   - `Return Home` asks for confirmation when setup is incomplete
 - `Tools > Image Resizer`
   - in-window utility for optimizing an arbitrary folder of source images
@@ -95,8 +96,9 @@ The authoring window is organized around two user-facing modes:
   - does not update project conditions, stimulus sets, manifests, compiler
     contracts, runtime contracts, or PsychoPy behavior
 
-Detailed Conditions remains available internally for wizard advanced access and existing
-document bindings. Session controls are directly visible in Experiment Settings, and
+Detailed Conditions remains available internally for existing document bindings, but it
+is no longer exposed as a wizard advanced step and does not expose duty-cycle editing.
+Session controls are directly visible in Experiment Settings, and
 Fixation Cross is a guided setup page. The Run / Runtime page remains a launch, readiness, and session-preview
 surface, not a display-engine configuration step.
 The Stimuli Manager remains an internal support page for variant/materialization

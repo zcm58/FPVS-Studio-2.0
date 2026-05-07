@@ -101,8 +101,7 @@ def configure_fixation_task(
     page.target_duration_spin.setValue(target_duration_ms)
     page.min_gap_spin.setValue(min_gap_ms)
     page.max_gap_spin.setValue(max_gap_ms)
-    page.response_key_edit.setText(response_key)
-    page.response_key_edit.editingFinished.emit()
+    page._set_response_key(response_key)
     page.response_window_spin.setValue(response_window_seconds)
 
 

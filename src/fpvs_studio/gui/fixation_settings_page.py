@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pydantic import ValidationError
-from PySide6.QtCore import QSignalBlocker, Qt
+from PySide6.QtCore import QSignalBlocker, Qt, Signal
 from PySide6.QtGui import QColor, QPainter, QPaintEvent, QPen
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QPushButton,
     QSizePolicy,
     QSpinBox,
     QVBoxLayout,
@@ -22,10 +23,12 @@ from PySide6.QtWidgets import (
 )
 
 from fpvs_studio.core.validation import ConditionFixationGuidance
+from fpvs_studio.gui.animations import ButtonHoverAnimator
 from fpvs_studio.gui.components import (
     PAGE_SECTION_GAP,
     SectionCard,
     apply_fixation_settings_theme,
+    mark_secondary_action,
 )
 from fpvs_studio.gui.document import ProjectDocument
 from fpvs_studio.gui.window_helpers import (
@@ -42,6 +45,72 @@ _DEFAULT_TARGET_COLOR = "#FF0000"
 _BASE_COLOR_TOOLTIP = "Normal fixation cross color shown during presentation."
 _TARGET_COLOR_TOOLTIP = (
     "Temporary fixation cross color participants respond to during the accuracy task."
+)
+_RESPONSE_KEY_TOOLTIP = (
+    "Key participants press when the fixation cross changes color during the accuracy task."
+)
+_KEYBOARD_ROWS = (
+    (
+        ("`", "`"),
+        ("1", "1"),
+        ("2", "2"),
+        ("3", "3"),
+        ("4", "4"),
+        ("5", "5"),
+        ("6", "6"),
+        ("7", "7"),
+        ("8", "8"),
+        ("9", "9"),
+        ("0", "0"),
+        ("-", "-"),
+        ("=", "="),
+        ("Backspace", "backspace"),
+    ),
+    (
+        ("Tab", "tab"),
+        ("Q", "q"),
+        ("W", "w"),
+        ("E", "e"),
+        ("R", "r"),
+        ("T", "t"),
+        ("Y", "y"),
+        ("U", "u"),
+        ("I", "i"),
+        ("O", "o"),
+        ("P", "p"),
+        ("[", "["),
+        ("]", "]"),
+        ("\\", "\\"),
+    ),
+    (
+        ("A", "a"),
+        ("S", "s"),
+        ("D", "d"),
+        ("F", "f"),
+        ("G", "g"),
+        ("H", "h"),
+        ("J", "j"),
+        ("K", "k"),
+        ("L", "l"),
+        (";", ";"),
+        ("'", "'"),
+        ("Enter", "enter"),
+    ),
+    (
+        ("Z", "z"),
+        ("X", "x"),
+        ("C", "c"),
+        ("V", "v"),
+        ("B", "b"),
+        ("N", "n"),
+        ("M", "m"),
+        (",", ","),
+        (".", "."),
+        ("/", "/"),
+    ),
+    (
+        ("Space", "space"),
+    ),
 )
 
 
@@ -100,6 +169,58 @@ def _fixation_settings_error_message(error: Exception) -> str | None:
                 "Lower Minimum changes or increase Maximum changes, then try again."
             )
     return None
+
+
+class ResponseKeyPickerPopover(QFrame):
+    """Transient keyboard-style picker for fixation response keys."""
+
+    key_selected = Signal(str)
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent, Qt.WindowType.Popup)
+        self.setObjectName("response_key_picker_popover")
+        self._key_buttons: dict[str, QPushButton] = {}
+        self._hover_animators: list[ButtonHoverAnimator] = []
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setSpacing(6)
+        for row_index, row in enumerate(_KEYBOARD_ROWS):
+            row_layout = QHBoxLayout()
+            row_layout.setContentsMargins(0, 0, 0, 0)
+            row_layout.setSpacing(4)
+            if row_index == len(_KEYBOARD_ROWS) - 1:
+                row_layout.addStretch(1)
+            if row_index in {2, 3}:
+                row_layout.addSpacing(18 if row_index == 2 else 34)
+            for label, key in row:
+                button = QPushButton(label, self)
+                button.setObjectName(f"response_key_{key}_button")
+                button.setProperty("keyboardKey", key)
+                button.setToolTip(f"Use {label} as the fixation response key.")
+                button.setMinimumHeight(28)
+                if key == "space":
+                    button.setMinimumWidth(150)
+                elif len(label) > 1:
+                    button.setMinimumWidth(74)
+                else:
+                    button.setMinimumWidth(36)
+                button.clicked.connect(lambda _checked=False, value=key: self._select_key(value))
+                self._key_buttons[key] = button
+                self._hover_animators.append(ButtonHoverAnimator(button, parent=self))
+                row_layout.addWidget(button)
+            row_layout.addStretch(1)
+            layout.addLayout(row_layout)
+
+    def key_button(self, key: str) -> QPushButton | None:
+        return self._key_buttons.get(key)
+
+    def key_values(self) -> set[str]:
+        return set(self._key_buttons)
+
+    def _select_key(self, key: str) -> None:
+        self.key_selected.emit(key)
+        self.close()
 
 
 class FixationCrossPreview(QWidget):
@@ -284,7 +405,16 @@ class FixationSettingsEditor(QWidget):
 
         self.response_key_edit = QLineEdit(self)
         self.response_key_edit.setObjectName("response_key_edit")
-        self.response_key_edit.editingFinished.connect(self._apply_fixation_settings)
+        self.response_key_edit.setReadOnly(True)
+        self.response_key_edit.setToolTip(_RESPONSE_KEY_TOOLTIP)
+        self.response_key_edit.setText("space")
+        self.response_key_button = QPushButton("Choose Key...", self)
+        self.response_key_button.setObjectName("response_key_choose_button")
+        self.response_key_button.setToolTip(_RESPONSE_KEY_TOOLTIP)
+        mark_secondary_action(self.response_key_button)
+        self.response_key_button.clicked.connect(self._show_response_key_picker)
+        self.response_key_popover = ResponseKeyPickerPopover(self)
+        self.response_key_popover.key_selected.connect(self._set_response_key)
 
         self.response_window_spin = QDoubleSpinBox(self)
         self.response_window_spin.setObjectName("response_window_seconds_spin")
@@ -343,7 +473,13 @@ class FixationSettingsEditor(QWidget):
         self.fixation_response_group = QWidget(self.fixation_panel)
         response_layout = QFormLayout(self.fixation_response_group)
         response_layout.setVerticalSpacing(form_spacing)
-        response_layout.addRow("Response key", self.response_key_edit)
+        response_key_row = QWidget(self.fixation_response_group)
+        response_key_row_layout = QHBoxLayout(response_key_row)
+        response_key_row_layout.setContentsMargins(0, 0, 0, 0)
+        response_key_row_layout.setSpacing(6)
+        response_key_row_layout.addWidget(self.response_key_edit, 1)
+        response_key_row_layout.addWidget(self.response_key_button)
+        response_layout.addRow("Response key", response_key_row)
         response_layout.addRow("Response window (s)", self.response_window_spin)
 
         self.fixation_appearance_group = QWidget(self.fixation_panel)
@@ -581,6 +717,8 @@ class FixationSettingsEditor(QWidget):
         self.fixation_response_panel.setEnabled(accuracy_enabled)
         self.fixation_response_group.setVisible(accuracy_enabled)
         self.fixation_response_group.setEnabled(accuracy_enabled)
+        if not accuracy_enabled:
+            self.response_key_popover.close()
 
     def _build_compact_feasibility_text(
         self,
@@ -641,6 +779,24 @@ class FixationSettingsEditor(QWidget):
 
     def _on_fixation_accuracy_toggled(self) -> None:
         self._update_fixation_visibility_state()
+        self._apply_fixation_settings()
+
+    def _show_response_key_picker(self) -> None:
+        if self.response_key_popover.isVisible():
+            self.response_key_popover.close()
+            return
+        self.response_key_popover.adjustSize()
+        position = self.response_key_button.mapToGlobal(
+            self.response_key_button.rect().bottomLeft()
+        )
+        self.response_key_popover.move(position)
+        self.response_key_popover.show()
+        self.response_key_popover.raise_()
+
+    def _set_response_key(self, key: str) -> None:
+        normalized = key.strip().lower() or "space"
+        with QSignalBlocker(self.response_key_edit):
+            self.response_key_edit.setText(normalized)
         self._apply_fixation_settings()
 
     def _apply_fixation_settings(self) -> None:

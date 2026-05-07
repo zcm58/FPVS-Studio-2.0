@@ -255,8 +255,6 @@ class SetupDashboardPage(QWidget):
             else "No blockers. Setup is ready for preview or launch."
         )
         summary_text = first_blocker
-        if report.preview_note:
-            summary_text = f"{summary_text} {report.preview_note}"
         self.setup_summary_note.setText(summary_text)
         _set_list_items(self.setup_guide_step_list, self._setup_step_lines(report))
 
@@ -539,7 +537,12 @@ class HomePage(QWidget):
 
     def _set_status_indicator(self, report: LauncherReadinessReport) -> None:
         self.launch_status_label.set_state(report.badge_state, f"Status: {report.status_label}")
-        self.launch_status_summary.setText(report.status_summary)
+        summary_text = (
+            "Setup is ready for launch."
+            if report.badge_state == "ready"
+            else report.status_summary
+        )
+        self.launch_status_summary.setText(summary_text)
 
     def _add_metric(
         self,

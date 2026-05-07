@@ -82,6 +82,7 @@ class StudioMainWindow(QMainWindow):
             fullscreen_state_getter=self._runtime_fullscreen_state,
             fullscreen_state_setter=self._set_runtime_fullscreen_state,
             on_return_home=self.show_home,
+            on_save_project=self.save_project,
             parent=self,
         )
         self.setup_dashboard_page = self.setup_wizard_page
@@ -142,8 +143,8 @@ class StudioMainWindow(QMainWindow):
         self.main_stack.setCurrentWidget(self.home_page)
 
     def show_setup_wizard(self) -> None:
-        self.setup_wizard_page.open_wizard()
         self.main_stack.setCurrentWidget(self.setup_wizard_page)
+        self.setup_wizard_page.open_wizard()
 
     def show_image_resizer(self) -> None:
         self.flush_pending_edits()
@@ -171,6 +172,8 @@ class StudioMainWindow(QMainWindow):
     def _install_button_hover_animations(self) -> None:
         self._button_hover_animators.clear()
         for button in self.findChildren(QPushButton):
+            if button.property("hoverAnimationEnabled") is True:
+                continue
             self._button_hover_animators.append(ButtonHoverAnimator(button, parent=self))
 
     def _create_actions(self) -> None:

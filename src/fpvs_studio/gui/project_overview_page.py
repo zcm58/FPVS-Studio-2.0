@@ -261,7 +261,7 @@ class ProjectOverviewEditor(QWidget):
         try:
             self._document.apply_condition_template_profile(
                 profile,
-                apply_to_existing_conditions=False,
+                apply_to_existing_conditions=bool(self._document.project.conditions),
             )
         except Exception as error:
             _show_error_dialog(self, "Condition Template Error", error)

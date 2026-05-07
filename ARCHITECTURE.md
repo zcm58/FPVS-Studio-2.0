@@ -89,9 +89,9 @@ Current planned seams:
   display and session settings in one compact centered card, while Fixation Cross is a
   guided page with behavior, timing, response, appearance, and live-preview sections.
   Display settings are limited to refresh rate and black/dark-gray background choices. Detailed
-  Conditions remains available for step-level advanced access rather than as a visible
-  top-level tab; Stimuli Manager remains an internal support page, not a guided setup
-  step.
+  Conditions no longer exposes a wizard advanced editor; duty-cycle selection is
+  centralized in the Project Details condition template selector. Stimuli Manager
+  remains an internal support page, not a guided setup step.
 - GUI project management uses `manage_projects_dialog.py` as a themed component-layer
   surface while `controller.py` owns disk-backed project discovery, recent-project
   settings, and Recycle Bin confirmation/deletion side effects.
