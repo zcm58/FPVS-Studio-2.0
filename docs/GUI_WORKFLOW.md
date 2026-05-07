@@ -58,6 +58,9 @@ The authoring window is organized around two user-facing modes:
   - Project Details uses a focused centered card inside the full-width wizard,
     keeping the project folder path compact and secondary; project name and
     description are required before continuing to Conditions
+  - Display Settings exposes only display refresh rate and presentation background
+    (`Black` or `Dark Gray`); current launches always use PsychoPy, alpha test-mode,
+    fullscreen playback, and the default display without exposing those as choices
   - the Conditions step uses a simplified condition setup surface for condition
     name, trigger code, participant instructions, and base/oddball image folders
   - the Conditions step uses the shared setup workspace pattern: condition list on
@@ -88,10 +91,11 @@ The authoring window is organized around two user-facing modes:
   - does not update project conditions, stimulus sets, manifests, compiler
     contracts, runtime contracts, or PsychoPy behavior
 
-Detailed Conditions and Runtime widgets remain available internally for wizard advanced
-access and existing document bindings. The Stimuli Manager remains an internal support
-page for variant/materialization behavior, not a guided setup step or visible top-level
-tab during normal use.
+Detailed Conditions, Session, and Fixation widgets remain available internally for
+wizard advanced access and existing document bindings. The Run / Runtime page remains a
+launch, readiness, and session-preview surface, not a display-engine configuration step.
+The Stimuli Manager remains an internal support page for variant/materialization
+behavior, not a guided setup step or visible top-level tab during normal use.
 
 The `File` menu exposes manage-projects and settings actions. Moving a project to the
 Recycle Bin remains a controller-owned filesystem operation guarded by `project.json`
@@ -117,6 +121,8 @@ active project.
 - Guided setup composition lives in `src/fpvs_studio/gui/setup_wizard_page.py`; it
   uses existing document services and editor widgets rather than duplicating project
   state.
+- Display settings editing lives in `src/fpvs_studio/gui/runtime_settings_page.py`;
+  it is intentionally limited to refresh rate and background color.
 - Feature-sized GUI workflow reworks should create or update an execution plan in
   `docs/exec-plans/active/` before implementation.
 - Condition-template management lives in
@@ -159,6 +165,8 @@ Phase 5 currently supports:
 - completing or revisiting project setup through the Setup Wizard
 - configuring session block order and stored seed; condition starts are fixed to
   `Press Space to begin`
+- configuring display refresh rate and choosing a black or dark-gray presentation
+  background
 - configuring fixation settings, including an optional fixation accuracy task
   (Space within 1.0 s of each fixation color change)
 - configuring fixed or randomized fixation target counts per condition run with
@@ -181,11 +189,12 @@ production launch button.
 Current honest behavior:
 
 - runtime launch still requires `test_mode=True`
-- launched PsychoPy playback opens fullscreen on the selected display by default
+- launched PsychoPy playback opens fullscreen on the default display
 - each condition waits for `Space` before playback starts
 - non-final blocks show a separate `Press Space to continue` break screen
 - PsychoPy remains behind the runtime and engine layers
-- serial port and baud rate flow through launch settings and trigger seams
+- serial trigger model fields remain in backend contracts, but serial trigger settings
+  are not exposed in the current GUI
 - GUI startup itself still does not initialize PsychoPy
 - non-test validation remains deferred
 

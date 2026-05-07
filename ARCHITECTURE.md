@@ -85,8 +85,9 @@ Current planned seams:
   page for folder-level FPVS image optimization without mutating project conditions.
   The wizard uses a six-step top-progress flow with a
   simplified Conditions setup step where users assign base/oddball image folders and
-  can optionally create derived-variant control conditions. Detailed Conditions,
-  Runtime, Session, and Fixation widgets stay internal for step-level advanced access
+  can optionally create derived-variant control conditions. Display Settings is limited
+  to refresh rate and black/dark-gray background choices. Detailed Conditions,
+  Session, and Fixation widgets stay internal for step-level advanced access
   rather than visible top-level tabs; Stimuli Manager remains an internal support page,
   not a guided setup step.
 - GUI project management uses `manage_projects_dialog.py` as a themed component-layer
@@ -118,6 +119,9 @@ Use these first reads before opening broad trees:
 - GUI task: `src/fpvs_studio/gui/AGENTS.md`,
   `docs/FRONTEND.md`, `docs/GUI_WORKFLOW.md`, the specific page/dialog module, matching
   `tests/gui/test_*.py`, and `tests/gui/helpers.py` if workflow setup matters.
+- Display settings GUI task: `src/fpvs_studio/gui/runtime_settings_page.py`,
+  `src/fpvs_studio/gui/run_page.py`, `src/fpvs_studio/gui/setup_wizard_page.py`,
+  and `tests/gui/test_layout_dashboard.py`.
 - Compiler/session task: `src/fpvs_studio/core/AGENTS.md`,
   `src/fpvs_studio/core/compiler.py`,
   `src/fpvs_studio/core/session_plan.py`,

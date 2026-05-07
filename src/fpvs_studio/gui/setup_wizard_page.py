@@ -41,7 +41,7 @@ from fpvs_studio.gui.document import ProjectDocument
 from fpvs_studio.gui.image_normalization_dialog import ImageNormalizationDialog
 from fpvs_studio.gui.project_overview_page import ProjectOverviewEditor
 from fpvs_studio.gui.run_page import RunPage
-from fpvs_studio.gui.runtime_settings_page import RuntimeSettingsEditor
+from fpvs_studio.gui.runtime_settings_page import DisplaySettingsEditor
 from fpvs_studio.gui.session_pages import FixationSettingsEditor, SessionStructurePage
 from fpvs_studio.gui.window_helpers import (
     LauncherReadinessReport,
@@ -137,10 +137,8 @@ class SetupWizardPage(QWidget):
         self.project_overview_editor.project_description_edit.textChanged.connect(
             self.schedule_refresh
         )
-        self.runtime_settings_editor = RuntimeSettingsEditor(
+        self.runtime_settings_editor = DisplaySettingsEditor(
             document,
-            fullscreen_state_getter=fullscreen_state_getter,
-            fullscreen_state_setter=fullscreen_state_setter,
             parent=self,
         )
         self.shell = NonHomePageShell(
@@ -225,7 +223,6 @@ class SetupWizardPage(QWidget):
         self.advanced_stack.setObjectName("setup_wizard_advanced_stack")
         self.advanced_stack.addWidget(self._advanced_empty_page())
         self.advanced_stack.addWidget(self.conditions_page)
-        self.advanced_stack.addWidget(self.run_page)
         self.advanced_stack.addWidget(self.session_structure_page)
         self.advanced_stack.addWidget(self.fixation_cross_settings_page)
 
@@ -300,9 +297,8 @@ class SetupWizardPage(QWidget):
         refresh_widget_style(self.shell.footer_label)
         refresh_widget_style(self.setup_wizard_runtime_mode_label)
 
-    def sync_fullscreen_checkbox(self, checked: bool) -> None:
-        self.runtime_settings_editor.set_fullscreen_checked(checked)
-        self.run_page.sync_fullscreen_checkbox(checked)
+    def sync_fullscreen_checkbox(self, _checked: bool) -> None:
+        return
 
     def is_launch_ready(self) -> bool:
         return self._readiness_report().badge_state == "ready"
@@ -728,7 +724,6 @@ class SetupWizardPage(QWidget):
     def _advanced_available_for_current_step(self) -> bool:
         return _WIZARD_STEPS[self._active_step_index][0] in {
             "conditions",
-            "display",
             "session",
             "fixation",
         }
@@ -736,9 +731,8 @@ class SetupWizardPage(QWidget):
     def _advanced_index_for_step(self, step_key: str) -> int:
         return {
             "conditions": 1,
-            "display": 2,
-            "session": 3,
-            "fixation": 4,
+            "session": 2,
+            "fixation": 3,
         }.get(step_key, 0)
 
     def _refresh_progress_header(self) -> None:

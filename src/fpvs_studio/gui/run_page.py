@@ -32,8 +32,8 @@ from fpvs_studio.gui.components import (
     mark_launch_action,
     mark_secondary_action,
 )
-from fpvs_studio.gui.document import DocumentError, LaunchSummary, ProjectDocument
-from fpvs_studio.gui.runtime_settings_page import RuntimeSettingsEditor
+from fpvs_studio.gui.document import LaunchSummary, ProjectDocument
+from fpvs_studio.gui.runtime_settings_page import DisplaySettingsEditor
 from fpvs_studio.gui.window_helpers import (
     LauncherReadinessReport,
     _configure_read_only_list,
@@ -140,10 +140,9 @@ class RunPage(QWidget):
         self._active_launch_session_plan: SessionPlan | None = None
         self._active_launch_participant_number: str | None = None
 
-        self.runtime_settings_editor = RuntimeSettingsEditor(
+        self.runtime_settings_editor = DisplaySettingsEditor(
             document,
-            fullscreen_state_getter=fullscreen_state_getter,
-            fullscreen_state_setter=fullscreen_state_setter,
+            framed=True,
             parent=self,
         )
         self.refresh_hz_spin = self.runtime_settings_editor.refresh_hz_spin
@@ -153,31 +152,6 @@ class RunPage(QWidget):
         self.runtime_background_scope_label = (
             self.runtime_settings_editor.runtime_background_scope_label
         )
-        self.serial_port_edit = self.runtime_settings_editor.serial_port_edit
-        self.serial_baudrate_spin = self.runtime_settings_editor.serial_baudrate_spin
-        self.test_mode_checkbox = self.runtime_settings_editor.test_mode_checkbox
-        self.fullscreen_checkbox = self.runtime_settings_editor.fullscreen_checkbox
-
-        self.display_index_edit = QLineEdit(self)
-        self.display_index_edit.setObjectName("display_index_edit")
-        self.display_index_edit.setPlaceholderText("Leave blank for default display")
-
-        self.engine_name_value = QLabel("psychopy", self)
-        self.engine_name_value.setObjectName("engine_name_value")
-
-        display_card = SectionCard(
-            title="Display & Engine",
-            object_name="run_display_card",
-            parent=self,
-        )
-        display_card.card_layout.setContentsMargins(12, 10, 12, 10)
-        display_card.card_layout.setSpacing(8)
-        display_card.body_layout.setSpacing(8)
-        display_layout = QFormLayout()
-        display_layout.setVerticalSpacing(8)
-        display_layout.addRow("Display Index", self.display_index_edit)
-        display_layout.addRow("Engine", self.engine_name_value)
-        display_card.body_layout.addLayout(display_layout)
 
         self.compile_button = QPushButton("Preview Session Plan", self)
         self.compile_button.setObjectName("compile_session_button")
@@ -285,7 +259,6 @@ class RunPage(QWidget):
         )
         self.shell.set_column_stretches(4, 3, 3)
         self.shell.add_column_widget(0, self.runtime_settings_editor)
-        self.shell.add_column_widget(0, display_card)
         self.shell.add_column_widget(1, readiness_card, stretch=1)
         self.shell.add_column_widget(2, controls_card)
         self.shell.add_column_widget(2, summary_card, stretch=1)
@@ -301,20 +274,8 @@ class RunPage(QWidget):
     def current_refresh_hz(self) -> float:
         return self.runtime_settings_editor.current_refresh_hz()
 
-    def sync_fullscreen_checkbox(self, checked: bool) -> None:
-        self.runtime_settings_editor.set_fullscreen_checked(checked)
-
-    def current_display_index(self) -> int | None:
-        raw_value = self.display_index_edit.text().strip()
-        if not raw_value:
-            return None
-        try:
-            display_index = int(raw_value)
-        except ValueError as exc:
-            raise DocumentError("Display index must be blank or a non-negative integer.") from exc
-        if display_index < 0:
-            raise DocumentError("Display index must be blank or a non-negative integer.")
-        return display_index
+    def sync_fullscreen_checkbox(self, _checked: bool) -> None:
+        return
 
     def _status_report(self) -> LauncherReadinessReport:
         return _launcher_readiness_report(
@@ -361,7 +322,6 @@ class RunPage(QWidget):
         try:
             refresh_hz = self.current_refresh_hz()
             session_plan = self._document.prepare_test_session_launch(refresh_hz=refresh_hz)
-            display_index = self.current_display_index()
         except Exception as error:
             _show_runtime_error_dialog(self, "Launch Blocked", error)
             return
@@ -373,14 +333,13 @@ class RunPage(QWidget):
         participant_number = self._collect_launch_participant_number()
         if participant_number is None:
             return
-        display_fullscreen = self.fullscreen_checkbox.isChecked()
 
         def _launch() -> LaunchSummary:
             return self._document.launch_compiled_session(
                 session_plan,
                 participant_number=participant_number,
-                display_index=display_index,
-                fullscreen=display_fullscreen,
+                display_index=None,
+                fullscreen=True,
             )
 
         self._active_launch_session_plan = session_plan

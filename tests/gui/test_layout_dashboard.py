@@ -445,8 +445,10 @@ def test_setup_wizard_surfaces_steps_and_keeps_shared_editors_available(
 
     assert runtime_editor.refresh_hz_spin is not None
     assert runtime_editor.runtime_background_color_combo is not None
-    assert runtime_editor.serial_baudrate_spin.isEnabled() is False
-    assert not hasattr(runtime_editor, "display_index_edit")
+    assert not hasattr(runtime_editor, "serial_port_edit")
+    assert not hasattr(runtime_editor, "serial_baudrate_spin")
+    assert not hasattr(runtime_editor, "fullscreen_checkbox")
+    assert not hasattr(runtime_editor, "test_mode_checkbox")
 
     assert dashboard.conditions_page is window.conditions_page
     assert dashboard.condition_setup_step.condition_name_edit is not None
@@ -551,11 +553,8 @@ def test_setup_wizard_navigation_and_advanced_editor_access(
 
     qtbot.mouseClick(next_button, Qt.MouseButton.LeftButton)
     assert guide.step_stack.currentWidget() is guide.runtime_settings_editor
-    assert advanced_button.isEnabled()
-    qtbot.mouseClick(advanced_button, Qt.MouseButton.LeftButton)
-    assert guide.content_stack.currentWidget() is guide.advanced_stack
-    assert guide.advanced_stack.currentWidget() is window.run_page
-    assert advanced_button.text() == "Back to Guided Step"
+    assert not advanced_button.isEnabled()
+    assert guide.content_stack.currentWidget() is guide.guided_panel
 
     qtbot.mouseClick(back_button, Qt.MouseButton.LeftButton)
     assert guide.step_stack.currentIndex() == 1
@@ -1231,9 +1230,6 @@ def test_setup_dashboard_edits_sync_document_and_dedicated_tabs(
     dark_gray_index = runtime_editor.runtime_background_color_combo.findData("#101010")
     assert dark_gray_index >= 0
     runtime_editor.runtime_background_color_combo.setCurrentIndex(dark_gray_index)
-    runtime_editor.serial_port_edit.setText("COM9")
-    runtime_editor.serial_port_edit.editingFinished.emit()
-    runtime_editor.fullscreen_checkbox.setChecked(False)
     window.flush_pending_edits()
     QApplication.processEvents()
 
@@ -1258,7 +1254,7 @@ def test_setup_dashboard_edits_sync_document_and_dedicated_tabs(
     assert settings.fixation_task.no_immediate_repeat_count is True
     assert settings.display.preferred_refresh_hz == pytest.approx(59.94, abs=0.01)
     assert settings.display.background_color == "#101010"
-    assert settings.triggers.serial_port == "COM9"
+    assert settings.triggers.serial_port is None
     assert settings.triggers.baudrate == 115200
 
     assert window.session_structure_page.block_count_spin.value() == 4
@@ -1275,11 +1271,12 @@ def test_setup_dashboard_edits_sync_document_and_dedicated_tabs(
     assert window.fixation_cross_settings_page.target_count_max_spin.value() == 5
     assert window.run_page.refresh_hz_spin.value() == pytest.approx(59.94, abs=0.01)
     assert window.run_page.runtime_background_color_combo.currentData() == "#101010"
-    assert window.run_page.serial_port_edit.text() == "COM9"
-    assert window.run_page.serial_baudrate_spin.value() == 115200
-    assert dashboard.runtime_settings_editor.serial_baudrate_spin.isEnabled() is False
-    assert window.run_page.serial_baudrate_spin.isEnabled() is False
-    assert window.run_page.fullscreen_checkbox.isChecked() is False
+    assert window.run_page.findChild(QWidget, "serial_port_edit") is None
+    assert window.run_page.findChild(QWidget, "serial_baudrate_spin") is None
+    assert window.run_page.findChild(QWidget, "fullscreen_checkbox") is None
+    assert window.run_page.findChild(QWidget, "test_mode_checkbox") is None
+    assert window.run_page.findChild(QWidget, "display_index_edit") is None
+    assert window.run_page.findChild(QWidget, "engine_name_value") is None
 
 
 def test_dedicated_tab_edits_refresh_setup_dashboard_controls(
@@ -1301,10 +1298,6 @@ def test_dedicated_tab_edits_refresh_setup_dashboard_controls(
 
     run_page = window.run_page
     run_page.refresh_hz_spin.setValue(75.0)
-    run_page.serial_port_edit.setText("COM4")
-    run_page.serial_port_edit.editingFinished.emit()
-    window.document.update_trigger_settings(baudrate=230400)
-    run_page.fullscreen_checkbox.setChecked(False)
     QApplication.processEvents()
 
     dashboard = window.setup_dashboard_page
@@ -1321,12 +1314,11 @@ def test_dedicated_tab_edits_refresh_setup_dashboard_controls(
     assert dashboard.runtime_settings_editor.refresh_hz_spin.value() == pytest.approx(
         75.0, abs=0.01
     )
-    assert dashboard.runtime_settings_editor.serial_port_edit.text() == "COM4"
-    assert dashboard.runtime_settings_editor.serial_baudrate_spin.value() == 230400
-    assert dashboard.runtime_settings_editor.serial_baudrate_spin.isEnabled() is False
-    assert run_page.serial_baudrate_spin.value() == 230400
-    assert run_page.serial_baudrate_spin.isEnabled() is False
-    assert dashboard.runtime_settings_editor.fullscreen_checkbox.isChecked() is False
+    assert not hasattr(dashboard.runtime_settings_editor, "serial_port_edit")
+    assert not hasattr(dashboard.runtime_settings_editor, "serial_baudrate_spin")
+    assert not hasattr(dashboard.runtime_settings_editor, "fullscreen_checkbox")
+    assert not hasattr(run_page, "serial_baudrate_spin")
+    assert not hasattr(run_page, "fullscreen_checkbox")
 
 
 def test_setup_dashboard_save_load_smoke_persists_dashboard_edited_settings(
@@ -1358,10 +1350,6 @@ def test_setup_dashboard_save_load_smoke_persists_dashboard_edited_settings(
     dark_gray_index = runtime_editor.runtime_background_color_combo.findData("#101010")
     assert dark_gray_index >= 0
     runtime_editor.runtime_background_color_combo.setCurrentIndex(dark_gray_index)
-    runtime_editor.serial_port_edit.setText("COM5")
-    runtime_editor.serial_port_edit.editingFinished.emit()
-    window.document.update_trigger_settings(baudrate=38400)
-    runtime_editor.fullscreen_checkbox.setChecked(False)
 
     assert window.save_project() is True
     controller.open_project(window.document.project_root)
@@ -1388,17 +1376,21 @@ def test_setup_dashboard_save_load_smoke_persists_dashboard_edited_settings(
     assert fixation.response_key == "space"
     assert display.preferred_refresh_hz == pytest.approx(120.0, abs=0.01)
     assert display.background_color == "#101010"
-    assert triggers.serial_port == "COM5"
-    assert triggers.baudrate == 38400
+    assert triggers.serial_port is None
+    assert triggers.baudrate == 115200
 
     assert reopened_dashboard.session_structure_editor.block_count_spin.value() == 3
     assert reopened_dashboard.fixation_settings_editor.changes_per_sequence_spin.value() == 6
-    assert reopened_dashboard.runtime_settings_editor.serial_port_edit.text() == "COM5"
-    assert reopened_dashboard.runtime_settings_editor.serial_baudrate_spin.value() == 38400
-    assert reopened_dashboard.runtime_settings_editor.serial_baudrate_spin.isEnabled() is False
-    assert reopened_window.run_page.serial_baudrate_spin.value() == 38400
-    assert reopened_window.run_page.serial_baudrate_spin.isEnabled() is False
-    assert reopened_window.run_page.fullscreen_checkbox.isChecked() is True
+    assert reopened_dashboard.runtime_settings_editor.refresh_hz_spin.value() == pytest.approx(
+        120.0, abs=0.01
+    )
+    reopened_background = (
+        reopened_dashboard.runtime_settings_editor.runtime_background_color_combo.currentData()
+    )
+    assert reopened_background == "#101010"
+    assert not hasattr(reopened_dashboard.runtime_settings_editor, "serial_port_edit")
+    assert not hasattr(reopened_window.run_page, "serial_baudrate_spin")
+    assert not hasattr(reopened_window.run_page, "fullscreen_checkbox")
 
 
 def test_home_header_updates_when_project_name_changes(
@@ -1811,5 +1803,42 @@ def test_run_page_readiness_and_launch_feedback_is_updated_on_launch(
             "status: launch checks passed" in window.run_page.summary_text.toPlainText().lower()
         ),
     )
+
+
+def test_run_page_launch_uses_fixed_current_runtime_defaults(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Fixed Runtime Defaults")
+    _prepare_compile_ready_project(window, tmp_path / "fixed-runtime-defaults")
+    monkeypatch.setattr(
+        "fpvs_studio.gui.document.create_engine",
+        lambda engine_name: {"engine_name": engine_name},
+    )
+    monkeypatch.setattr(
+        "fpvs_studio.gui.document.preflight_session_plan",
+        lambda project_root, session_plan, engine: None,
+    )
+    monkeypatch.setattr("fpvs_studio.gui.run_page.ProgressTask", _ImmediateProgressTask)
+    monkeypatch.setattr(window.run_page, "_prompt_participant_number", lambda: "7")
+    monkeypatch.setattr(window.run_page, "_on_launch_succeeded", lambda result: None)
+    captures: dict[str, object] = {}
+
+    def _capture_launch(session_plan, **kwargs):
+        captures["session_id"] = session_plan.session_id
+        captures.update(kwargs)
+        return object()
+
+    monkeypatch.setattr(window.document, "launch_compiled_session", _capture_launch)
+
+    qtbot.mouseClick(window.run_page.launch_button, Qt.MouseButton.LeftButton)
+
+    assert captures["participant_number"] == "7"
+    assert captures["display_index"] is None
+    assert captures["fullscreen"] is True
+    assert window.run_page.findChild(QWidget, "display_index_edit") is None
+    assert window.run_page.findChild(QWidget, "engine_name_value") is None
 
 

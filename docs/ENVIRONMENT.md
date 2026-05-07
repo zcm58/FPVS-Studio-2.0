@@ -52,15 +52,15 @@ fpvs-studio
 
 ## Runtime Honesty
 
-The currently supported launch path is still the windowed test-mode runtime.
+The currently supported launch path is still the fullscreen PsychoPy test-mode runtime.
 
 That means:
 
 - the GUI exposes `Launch Test Session`
 - runtime launch still requires `test_mode=True`
-- fullscreen/non-test behavior remains deferred
-- serial settings are configurable, but hardware behavior is not yet lab
-  validated
+- fullscreen playback is the current default and is not user-configurable in the GUI
+- serial trigger settings remain backend fields, but they are not exposed in the
+  current GUI until the hardware workflow is ready
 
 ## GUI Test Environment
 

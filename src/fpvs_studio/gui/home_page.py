@@ -33,7 +33,7 @@ from fpvs_studio.gui.components import (
 )
 from fpvs_studio.gui.document import ProjectDocument
 from fpvs_studio.gui.project_overview_page import ProjectOverviewEditor
-from fpvs_studio.gui.runtime_settings_page import RuntimeSettingsEditor
+from fpvs_studio.gui.runtime_settings_page import DisplaySettingsEditor
 from fpvs_studio.gui.session_pages import FixationSettingsEditor, SessionStructureEditor
 from fpvs_studio.gui.window_helpers import (
     LauncherReadinessReport,
@@ -48,7 +48,7 @@ _SETUP_GUIDE_STEPS: tuple[tuple[str, str, str], ...] = (
     ("conditions", "Conditions", "Edit Conditions"),
     ("stimuli", "Stimuli", "Open Stimuli"),
     ("session", "Session / Fixation", "Edit Session"),
-    ("runtime", "Runtime", "Runtime Settings"),
+    ("runtime", "Display", "Display Settings"),
     ("ready", "Validate / Ready", "Review Readiness"),
 )
 
@@ -152,12 +152,11 @@ class SetupDashboardPage(QWidget):
             schedule_row_behavior="disable",
             parent=self.shell,
         )
-        self.runtime_settings_editor = RuntimeSettingsEditor(
+        self.runtime_settings_editor = DisplaySettingsEditor(
             document,
             object_name_prefix="dashboard_",
             editable=False,
-            fullscreen_state_getter=fullscreen_state_getter,
-            fullscreen_state_setter=fullscreen_state_setter,
+            framed=True,
             parent=self.shell,
         )
         self.assets_readiness_editor = AssetsReadinessEditor(
@@ -207,8 +206,8 @@ class SetupDashboardPage(QWidget):
         self._document.session_plan_changed.connect(self._refresh_attention_summary)
         self._refresh_attention_summary()
 
-    def sync_fullscreen_checkbox(self, checked: bool) -> None:
-        self.runtime_settings_editor.set_fullscreen_checked(checked)
+    def sync_fullscreen_checkbox(self, _checked: bool) -> None:
+        return
 
     def bind_step_navigation_actions(
         self,
@@ -288,7 +287,7 @@ class SetupDashboardPage(QWidget):
             ),
             "Complete: Session / Fixation - settings available",
             (
-                f"{'Complete' if runtime_ready else 'Needs setup'}: Runtime - "
+                f"{'Complete' if runtime_ready else 'Needs setup'}: Display - "
                 f"{self.runtime_settings_editor.current_refresh_hz():.2f} Hz"
             ),
             (

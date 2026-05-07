@@ -3,6 +3,11 @@
 from __future__ import annotations
 
 from fpvs_studio.gui.run_page import ParticipantNumberDialog, RunPage
-from fpvs_studio.gui.runtime_settings_page import RuntimeSettingsEditor
+from fpvs_studio.gui.runtime_settings_page import DisplaySettingsEditor, RuntimeSettingsEditor
 
-__all__ = ["ParticipantNumberDialog", "RunPage", "RuntimeSettingsEditor"]
+__all__ = [
+    "DisplaySettingsEditor",
+    "ParticipantNumberDialog",
+    "RunPage",
+    "RuntimeSettingsEditor",
+]

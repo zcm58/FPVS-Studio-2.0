@@ -55,7 +55,7 @@ The PsychoPy implementation:
 - keeps imports lazy inside `psychopy_engine.py`
 - opens one `visual.Window` per launched session
 - reuses that window across all runs in the `SessionPlan`
-- opens launched playback fullscreen on the selected display by default
+- opens launched playback fullscreen on the default display
 - shows Space-required condition-start screens and completion text screens
 - shows a dedicated manual inter-block break screen between non-final blocks
 - preloads image stimuli before each condition
@@ -138,7 +138,7 @@ launch mode in the current Phase 4 backend.
 In the current v1 runtime it means:
 
 - runtime launch still flows through the test-mode seam and test-mode metadata
-- PsychoPy launch settings may still request fullscreen presentation
+- GUI launch currently fixes PsychoPy test-mode playback to fullscreen presentation
 - every condition waits for the participant to press Space before playback starts
 - trigger output stays on the logged null backend
 - completion screens auto-dismiss quickly
