@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "fpvs-studio"
-version = "0.1.0"
+version = "1.0.0"
 description = "FPVS Studio desktop authoring GUI with a PsychoPy-backed test-mode runtime."
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -39,6 +39,9 @@ dev = [
   "pytest-timeout>=2.3,<3.0",
   "PyYAML>=6.0,<7.0",
   "ruff>=0.6,<1.0",
+]
+packaging = [
+  "pyinstaller>=6,<7",
 ]
 
 [project.scripts]

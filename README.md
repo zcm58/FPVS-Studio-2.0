@@ -73,6 +73,7 @@ Notes:
 
 See [docs/ENVIRONMENT.md](docs/ENVIRONMENT.md) for environment details and
 [docs/GUI_WORKFLOW.md](docs/GUI_WORKFLOW.md) for the GUI authoring workflow.
+See [docs/PACKAGING.md](docs/PACKAGING.md) for local Windows executable builds.
 
 ## Launching The GUI
 

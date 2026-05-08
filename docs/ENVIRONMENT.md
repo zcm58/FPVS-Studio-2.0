@@ -27,6 +27,12 @@ path:
 .\.venv\Scripts\python -m pip install -e '.[dev,engine]'
 ```
 
+Install the packaging extra when you want to build the Windows executable:
+
+```powershell
+.\.venv3.10\Scripts\python -m pip install -e ".[dev,engine,packaging]"
+```
+
 Notes:
 
 - the default install includes PySide6 because the GUI is now the primary app
@@ -35,6 +41,7 @@ Notes:
   `src/fpvs_studio/engines/`
 - the dev extra includes `pytest`, `pytest-qt`, and `pytest-timeout` for GUI
   verification
+- the packaging extra includes PyInstaller for local executable builds
 
 ## Launching The App
 
@@ -49,6 +56,14 @@ or the installed script:
 ```powershell
 fpvs-studio
 ```
+
+Build the local Windows executable with:
+
+```powershell
+.\scripts\build_exe.ps1
+```
+
+See `docs/PACKAGING.md` for the full developer packaging workflow.
 
 ## Runtime Honesty
 

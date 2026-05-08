@@ -32,6 +32,8 @@ code may lazily import PsychoPy.
 - `src/fpvs_studio/triggers/`: optional trigger backend interfaces and hardware adapter
   scaffolding used by runtime while keeping core contracts hardware-neutral.
 - `tests/`: unit, integration, and pytest-qt GUI coverage.
+- `packaging/`: developer packaging configuration for PyInstaller-based Windows
+  executable builds.
 
 ## Documentation Freshness
 
@@ -42,6 +44,23 @@ the same change.
 
 Run `python -m pytest -q tests\unit\test_harness_docs.py` after harness-documentation
 edits. The full quality gate also runs this check.
+
+## Versioning And Packaging
+
+The current app version is declared once in `pyproject.toml`. The Python distribution
+name is `fpvs-studio`, while the user-facing application name remains FPVS Studio.
+`src/fpvs_studio/__init__.py` derives `__version__` from installed package metadata, and
+`tests/unit/test_package_metadata.py` guards the contract. Use `docs/PACKAGING.md` for
+the developer version-bump and build workflow.
+
+Local executable builds use `scripts/build_exe.ps1`, which runs the checked-in
+PyInstaller spec at `packaging/pyinstaller/fpvs_studio.spec` and writes ignored build
+artifacts under `build/` and `dist/`. The first distributable artifact is a PyInstaller
+onedir folder containing `dist\FPVS Studio\FPVS Studio.exe`; installer wrapping and
+GitHub release automation remain future packaging work.
+
+Future app icon work should add a real `.ico` under `packaging/assets/`, wire it into
+the PyInstaller spec, and update GUI application/window icon loading in the same change.
 
 ## Planned Module Decomposition
 
@@ -164,6 +183,9 @@ Use these first reads before opening broad trees:
   and `src/fpvs_studio/gui/AGENTS.md`.
 - Docs-only task: `AGENTS.md`, this file, `docs/index.md`, and the doc being edited.
   Avoid source reads unless the doc describes a concrete contract.
+- Packaging task: `docs/PACKAGING.md`, `pyproject.toml`,
+  `packaging/pyinstaller/fpvs_studio.spec`, `scripts/build_exe.ps1`,
+  `tests/unit/test_package_metadata.py`, and this file.
 - Feature-sized workflow task: read `docs/PLANS.md` and `docs/exec-plans/README.md`,
   create or update an active plan under `docs/exec-plans/active/`, then read the
   related package docs and tests.
@@ -200,6 +222,7 @@ index.
 - Runtime: `.\scripts\check_runtime.ps1`
 - Compiler/session: `.\scripts\check_compiler.ps1`
 - Preprocessing: `.\scripts\check_preprocessing.ps1`
+- Local Windows executable build: `.\scripts\build_exe.ps1`
 - Line-count report: `.\scripts\report_line_counts.ps1`
 - Workspace cleanup: `.\scripts\clean_workspace.ps1`
 
@@ -209,6 +232,7 @@ index.
 - Product and v1 scope: `docs/PRODUCT_SENSE.md`, `docs/product-specs/`, and
   `docs/FPVS_Studio_v1_Architecture_Spec.md`
 - Design docs: `docs/DESIGN.md` and `docs/design-docs/`
+- Packaging developer builds: `docs/PACKAGING.md`
 - Feature execution plans: `docs/PLANS.md` and `docs/exec-plans/`
 - GUI behavior and smoke-test guidance: `docs/FRONTEND.md` and `docs/GUI_WORKFLOW.md`
 - Quality, reliability, and security: `docs/QUALITY_SCORE.md`, `docs/RELIABILITY.md`,

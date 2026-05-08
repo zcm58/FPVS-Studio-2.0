@@ -3,6 +3,8 @@ neutral core contracts, preprocessing, runtime, engines, and the PySide6 GUI und
 namespace. The package itself is only an import boundary; protocol ownership stays in
 core models and compiled artifacts."""
 
+from importlib.metadata import version
+
 __all__ = ["__version__"]
 
-__version__ = "0.1.0"
+__version__ = version("fpvs-studio")
