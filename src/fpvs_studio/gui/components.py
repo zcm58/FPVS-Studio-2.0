@@ -88,6 +88,7 @@ __all__ = [
     "apply_home_page_theme",
     "apply_non_home_shell_theme",
     "apply_section_card_theme",
+    "apply_setup_wizard_theme",
     "apply_studio_theme",
     "apply_welcome_window_theme",
     "condition_template_details_header_stylesheet",
@@ -1369,6 +1370,26 @@ def section_card_stylesheet() -> str:
 
 def apply_section_card_theme(widget: QWidget) -> None:
     widget.setStyleSheet(section_card_stylesheet())
+
+
+def setup_wizard_stylesheet(palette: QPalette) -> str:
+    return (
+        section_card_stylesheet()
+        + launch_surface_frame_stylesheet(palette)
+        + """
+    QWidget#setup_wizard_page QScrollArea#page_container_scroll_area,
+    QWidget#setup_wizard_page QWidget#page_container_scroll_content,
+    QWidget#setup_wizard_page QFrame#page_container_content_frame,
+    QWidget#setup_wizard_page QFrame#non_home_shell_content_frame {
+        border: none;
+        background: transparent;
+    }
+    """
+    )
+
+
+def apply_setup_wizard_theme(widget: QWidget) -> None:
+    widget.setStyleSheet(setup_wizard_stylesheet(widget.palette()))
 
 
 def _rgba(color: QColor) -> str:

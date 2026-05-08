@@ -104,6 +104,19 @@ def _assert_setup_wizard_vertical_scrolling_disabled(wizard) -> None:
     assert not scroll_area.verticalScrollBar().isEnabled()
 
 
+def _assert_visible_children_within_parent(root: QWidget) -> None:
+    for child in root.findChildren(QWidget):
+        parent = child.parentWidget()
+        if parent is None or not child.isVisible():
+            continue
+        top_left = child.mapTo(parent, child.rect().topLeft())
+        bottom_right = child.mapTo(parent, child.rect().bottomRight())
+        assert top_left.x() >= -1, child.objectName()
+        assert top_left.y() >= -1, child.objectName()
+        assert bottom_right.x() <= parent.width() + 1, child.objectName()
+        assert bottom_right.y() <= parent.height() + 1, child.objectName()
+
+
 def test_main_window_uses_home_and_setup_wizard_stack(
     qtbot,
     controller: StudioController,
@@ -335,6 +348,7 @@ def test_setup_wizard_exists_and_uses_single_column_shell_with_steps(
         wizard.open_wizard(step_key=step_key)
         QApplication.processEvents()
         _assert_setup_wizard_vertical_scrolling_disabled(wizard)
+        _assert_visible_children_within_parent(wizard.step_stack.currentWidget())
         assert not wizard.step_status_badge.isVisible()
     wizard.open_wizard(step_key="project")
     QApplication.processEvents()
@@ -345,7 +359,25 @@ def test_setup_wizard_exists_and_uses_single_column_shell_with_steps(
     assert wizard.shell.footer_strip.isVisible() is False
     assert wizard.step_title_label.isVisible() is False
     assert wizard.step_status_badge.isVisible() is False
-    assert wizard.step_card.property("wizardProjectStepFrame") == "true"
+    assert wizard.property("launchSurfaceRoot") == "true"
+    assert wizard.step_card.property("launchSurfaceFrame") == "true"
+    assert wizard.step_card.property("sectionCard") == "false"
+    assert wizard.step_card.property("wizardProjectStepFrame") == "false"
+    assert 'QFrame[launchSurfaceFrame="true"]' in wizard.styleSheet()
+    assert "QFrame#non_home_shell_content_frame" in wizard.styleSheet()
+    assert "QWidget#page_container_scroll_content" in wizard.styleSheet()
+    assert wizard.step_card.isAncestorOf(wizard.progress_panel_shell)
+    assert wizard.step_card.isAncestorOf(wizard.step_content_anchor)
+    assert wizard.step_content_anchor.isAncestorOf(wizard.content_stack)
+    assert wizard.step_card.sizePolicy().verticalPolicy() == QSizePolicy.Policy.Expanding
+    assert wizard.progress_panel_shell.sizePolicy().verticalPolicy() == (
+        QSizePolicy.Policy.Fixed
+    )
+    progress_top = wizard.progress_panel_shell.mapTo(
+        wizard.step_card,
+        wizard.progress_panel_shell.rect().topLeft(),
+    ).y()
+    assert progress_top <= 12
     assert window.conditions_page.shell is None
     assert window.assets_page.shell.footer_strip.isVisible() is False
     assert window.run_page.shell.footer_strip.isVisible() is False
@@ -366,6 +398,14 @@ def test_major_tabs_share_page_container_width_presets(
     assert 'QWidget[launchSurfaceRoot="true"]' in window.home_page.styleSheet()
     assert window.setup_wizard_page.shell.page_container.width_preset == "full"
     assert window.setup_wizard_page.shell.page_container.max_content_width() == 16_777_215
+    assert window.setup_wizard_page.property("launchSurfaceRoot") == "true"
+    assert window.setup_wizard_page.step_card.property("launchSurfaceFrame") == "true"
+    assert window.setup_wizard_page.step_card.sizePolicy().verticalPolicy() == (
+        QSizePolicy.Policy.Expanding
+    )
+    assert window.setup_wizard_page.step_card.isAncestorOf(
+        window.setup_wizard_page.progress_panel_shell
+    )
     assert window.conditions_page.embedded is True
     assert window.conditions_page.shell is None
     assert window.assets_page.shell.page_container.width_preset == "full"
@@ -1446,7 +1486,8 @@ def test_setup_wizard_experiment_and_fixation_steps_are_width_safe(
     _assert_setup_wizard_vertical_scrolling_disabled(guide)
     assert not guide.step_title_label.isVisible()
     assert not guide.step_status_badge.isVisible()
-    assert guide.step_card.property("wizardProjectStepFrame") == "true"
+    assert guide.step_card.property("launchSurfaceFrame") == "true"
+    assert guide.step_card.property("wizardProjectStepFrame") == "false"
     assert guide.fixation_schedule_editor.fixation_panel.title_label.text() == "Fixation Cross"
     assert guide.fixation_schedule_editor.fixation_panel.subtitle_label is None
     assert guide.fixation_schedule_editor.preview_card is None

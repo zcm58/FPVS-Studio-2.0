@@ -134,10 +134,17 @@ class ConditionSetupStep(QWidget):
         list_layout.addWidget(list_note)
         list_layout.addWidget(self.condition_list, 1)
         if mode == "details":
-            list_layout.addWidget(self.add_condition_button)
-            list_layout.addWidget(self.duplicate_condition_button)
-            list_layout.addWidget(self.create_control_condition_button)
-            list_layout.addWidget(self.remove_condition_button)
+            action_grid = QGridLayout()
+            action_grid.setContentsMargins(0, 0, 0, 0)
+            action_grid.setHorizontalSpacing(8)
+            action_grid.setVerticalSpacing(8)
+            action_grid.addWidget(self.add_condition_button, 0, 0)
+            action_grid.addWidget(self.duplicate_condition_button, 0, 1)
+            action_grid.addWidget(self.create_control_condition_button, 1, 0)
+            action_grid.addWidget(self.remove_condition_button, 1, 1)
+            action_grid.setColumnStretch(0, 1)
+            action_grid.setColumnStretch(1, 1)
+            list_layout.addLayout(action_grid)
         else:
             for button in (
                 self.add_condition_button,

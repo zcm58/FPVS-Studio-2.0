@@ -8,6 +8,7 @@ from PySide6.QtCore import QSize, Qt, QTimer
 from PySide6.QtWidgets import (
     QDialog,
     QFrame,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
     QMessageBox,
@@ -26,6 +27,7 @@ from fpvs_studio.gui.components import (
     SectionCard,
     SetupProgressStepper,
     StatusBadgeLabel,
+    apply_setup_wizard_theme,
     mark_primary_action,
     mark_secondary_action,
     refresh_widget_style,
@@ -150,6 +152,7 @@ class SetupWizardPage(QWidget):
     ) -> None:
         super().__init__(parent)
         self.setObjectName("setup_wizard_page")
+        self.setProperty("launchSurfaceRoot", "true")
         self._document = document
         self._on_return_home = on_return_home
         self._on_save_project = on_save_project
@@ -254,11 +257,16 @@ class SetupWizardPage(QWidget):
 
         progress_panel_shell = QWidget(self)
         progress_panel_shell.setObjectName("setup_wizard_progress_panel_shell")
+        progress_panel_shell.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Fixed,
+        )
         progress_panel_shell_layout = QHBoxLayout(progress_panel_shell)
         progress_panel_shell_layout.setContentsMargins(0, 0, 0, 0)
         progress_panel_shell_layout.addStretch(1)
         progress_panel_shell_layout.addWidget(progress_panel)
         progress_panel_shell_layout.addStretch(1)
+        self.progress_panel_shell = progress_panel_shell
 
         self.step_title_label = QLabel(self)
         self.step_title_label.setObjectName("setup_wizard_step_title")
@@ -298,10 +306,12 @@ class SetupWizardPage(QWidget):
             parent=self,
         )
         self.step_card = step_card
+        step_card.setProperty("sectionCard", "false")
+        step_card.setProperty("launchSurfaceFrame", "true")
         step_card.setMinimumHeight(0)
         step_card.setSizePolicy(
             QSizePolicy.Policy.Expanding,
-            QSizePolicy.Policy.Preferred,
+            QSizePolicy.Policy.Expanding,
         )
         step_card.title_label.setVisible(False)
         step_card.card_layout.setContentsMargins(12, 8, 12, 8)
@@ -321,7 +331,20 @@ class SetupWizardPage(QWidget):
         )
         self.content_stack.addWidget(self.guided_panel)
         self.content_stack.addWidget(self.advanced_stack)
-        step_card.body_layout.addWidget(self.content_stack)
+
+        self.step_content_anchor = QWidget(self)
+        self.step_content_anchor.setObjectName("setup_wizard_content_anchor")
+        self.step_content_anchor.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Expanding,
+        )
+        step_content_layout = QVBoxLayout(self.step_content_anchor)
+        step_content_layout.setContentsMargins(0, 0, 0, 0)
+        step_content_layout.setSpacing(0)
+        step_content_layout.addWidget(self.content_stack, 1)
+
+        step_card.body_layout.addWidget(progress_panel_shell, 0, Qt.AlignmentFlag.AlignTop)
+        step_card.body_layout.addWidget(self.step_content_anchor, 1)
 
         self.setup_wizard_back_button = QPushButton("Back", self)
         self.setup_wizard_back_button.setObjectName("setup_wizard_back_button")
@@ -343,8 +366,7 @@ class SetupWizardPage(QWidget):
         button_layout.addWidget(self.setup_wizard_back_button)
         button_layout.addWidget(self.setup_wizard_next_button)
 
-        self.shell.add_content_widget(progress_panel_shell)
-        self.shell.add_content_widget(step_card)
+        self.shell.add_content_widget(step_card, stretch=1)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -356,6 +378,7 @@ class SetupWizardPage(QWidget):
         self._document.project_changed.connect(self.schedule_refresh)
         self._document.manifest_changed.connect(self.schedule_refresh)
         self._document.session_plan_changed.connect(self.schedule_refresh)
+        apply_setup_wizard_theme(self)
         self.refresh()
 
     def sync_fullscreen_checkbox(self, _checked: bool) -> None:
@@ -511,8 +534,9 @@ class SetupWizardPage(QWidget):
         )
         self.review_card.setMinimumWidth(620)
         self.review_card.setMaximumWidth(700)
-        self.review_card.card_layout.setContentsMargins(16, 14, 16, 14)
-        self.review_card.card_layout.setSpacing(10)
+        self.review_card.card_layout.setContentsMargins(14, 10, 14, 10)
+        self.review_card.card_layout.setSpacing(6)
+        self.review_card.body_layout.setSpacing(6)
         self.review_card.title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         if self.review_card.subtitle_label is not None:
             self.review_card.subtitle_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -522,9 +546,10 @@ class SetupWizardPage(QWidget):
 
         self.review_checklist_container = QWidget(self.review_card)
         self.review_checklist_container.setObjectName("setup_wizard_review_checklist")
-        self.review_checklist_layout = QVBoxLayout(self.review_checklist_container)
+        self.review_checklist_layout = QGridLayout(self.review_checklist_container)
         self.review_checklist_layout.setContentsMargins(0, 0, 0, 0)
-        self.review_checklist_layout.setSpacing(7)
+        self.review_checklist_layout.setHorizontalSpacing(8)
+        self.review_checklist_layout.setVerticalSpacing(6)
         self.review_card.body_layout.addWidget(self.review_checklist_container)
 
         self.review_save_prompt_label = QLabel(
@@ -702,7 +727,7 @@ class SetupWizardPage(QWidget):
         self.step_status_label.setVisible(not step_valid and step_key in {"conditions", "images"})
         self.step_card.setProperty(
             "wizardProjectStepFrame",
-            "true" if step_key in {"project", "fixation", "response"} else "false",
+            "false",
         )
         refresh_widget_style(self.step_card)
         self.setup_wizard_back_button.setEnabled(self._active_step_index > 0)
@@ -713,9 +738,8 @@ class SetupWizardPage(QWidget):
         self._sync_guided_panel_height()
 
     def _sync_guided_panel_height(self) -> None:
-        natural_height = max(1, self.guided_panel.sizeHint().height())
-        self.guided_panel.setMaximumHeight(natural_height)
-        self.content_stack.setMaximumHeight(natural_height)
+        self.guided_panel.setMaximumHeight(16_777_215)
+        self.content_stack.setMaximumHeight(16_777_215)
 
     def _refresh_current_editor_page(self) -> None:
         current_guided_widget = self.step_stack.currentWidget()
@@ -744,17 +768,19 @@ class SetupWizardPage(QWidget):
                 widget.setParent(None)
                 widget.deleteLater()
 
-        for section_title, lines in self._review_checklist_sections():
+        for index, (section_title, lines) in enumerate(self._review_checklist_sections()):
             self.review_checklist_layout.addWidget(
                 self._review_summary_section(section_title, lines),
+                index // 2,
+                index % 2,
             )
 
     def _review_summary_section(self, title: str, lines: tuple[str, ...]) -> QFrame:
         section = QFrame(self.review_checklist_container)
         section.setProperty("reviewSummarySection", "true")
         section_layout = QVBoxLayout(section)
-        section_layout.setContentsMargins(12, 9, 12, 9)
-        section_layout.setSpacing(6)
+        section_layout.setContentsMargins(10, 6, 10, 6)
+        section_layout.setSpacing(3)
 
         title_label = QLabel(title, section)
         title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -769,8 +795,8 @@ class SetupWizardPage(QWidget):
         row = QFrame(parent)
         row.setProperty("reviewChecklistRow", "true")
         row_layout = QHBoxLayout(row)
-        row_layout.setContentsMargins(0, 3, 0, 3)
-        row_layout.setSpacing(8)
+        row_layout.setContentsMargins(0, 1, 0, 1)
+        row_layout.setSpacing(6)
 
         check_icon = QLabel("\u2713", row)
         check_icon.setProperty("reviewCheckIcon", "true")
