@@ -18,7 +18,9 @@ the active app.
   action.
 - Welcome and Home share the same launch-surface frame/styling so opening a ready
   project keeps a stable outer window and card treatment.
-- Setup Wizard is the guided setup/editing surface.
+- Setup Wizard is the guided setup/editing surface. Entering setup expands the main
+  window to the workspace size; returning Home restores the compact launch-surface
+  size unless the user manually resized the larger setup window.
 - Conditions is the guided setup area for assigning base/oddball image folders and
   creating optional derived-variant control conditions. Raw folder selection is
   permissive; inconsistent image sizes are handled by the guided normalization flow.

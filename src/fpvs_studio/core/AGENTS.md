@@ -14,6 +14,8 @@ This directory is the most important foundation in the repo. It should remain im
 - dedicated execution-result schemas in `execution.py`
 - enums and type aliases
 - template metadata
+- app-level condition-template profile storage under the configured FPVS Studio root
+  in `.fpvs-studio/templates/`
 - JSON serialization
 - validation
 - project scaffolding helpers

@@ -25,7 +25,9 @@ from fpvs_studio.core.models import (
     FixationTaskSettings,
 )
 from fpvs_studio.core.paths import (
+    APP_DATA_DIRNAME,
     CONDITION_TEMPLATE_LIBRARY_FILENAME,
+    TEMPLATES_DIRNAME,
     condition_template_library_path,
 )
 from fpvs_studio.core.serialization import write_json_file
@@ -47,6 +49,10 @@ def test_condition_template_library_is_seeded_with_built_ins(tmp_path) -> None:
         == "50% Blank Between Images"
     )
     assert condition_template_library_path(tmp_path).is_file()
+    assert condition_template_library_path(tmp_path).parent == (
+        tmp_path / APP_DATA_DIRNAME / TEMPLATES_DIRNAME
+    )
+    assert not (tmp_path / TEMPLATES_DIRNAME).exists()
     assert all(profile.built_in for profile in profiles)
 
 
@@ -59,13 +65,34 @@ def test_condition_template_library_migrates_legacy_root_file_idempotently(tmp_p
 
     assert condition_template_library_path(tmp_path).is_file()
     assert not legacy_path.exists()
+    assert not (tmp_path / TEMPLATES_DIRNAME).exists()
     assert migrated_once == migrated_twice
     migrated_ids = {profile.profile_id for profile in migrated_once.profiles}
     assert STUDIO_DEFAULT_PROFILE_ID in migrated_ids
     assert SIXTY_HZ_BLANK_FIXATION_PROFILE_ID in migrated_ids
 
 
-def test_condition_template_library_save_load_stays_under_templates_dir(tmp_path) -> None:
+def test_condition_template_library_migrates_legacy_top_level_templates_dir(
+    tmp_path,
+) -> None:
+    legacy_templates_dir = tmp_path / TEMPLATES_DIRNAME
+    legacy_templates_dir.mkdir()
+    legacy_path = legacy_templates_dir / CONDITION_TEMPLATE_LIBRARY_FILENAME
+    write_json_file(legacy_path, ConditionTemplateProfileLibrary())
+
+    migrated = load_condition_template_profile_library(tmp_path)
+
+    assert condition_template_library_path(tmp_path).is_file()
+    assert not legacy_path.exists()
+    assert not legacy_templates_dir.exists()
+    migrated_ids = {profile.profile_id for profile in migrated.profiles}
+    assert STUDIO_DEFAULT_PROFILE_ID in migrated_ids
+    assert SIXTY_HZ_BLANK_FIXATION_PROFILE_ID in migrated_ids
+
+
+def test_condition_template_library_save_load_stays_under_app_templates_dir(
+    tmp_path,
+) -> None:
     user_profile = ConditionTemplateProfile(
         profile_id="custom-profile",
         display_name="Custom Profile",
@@ -96,7 +123,11 @@ def test_condition_template_library_save_load_stays_under_templates_dir(tmp_path
     loaded = load_condition_template_profile_library(tmp_path)
 
     assert condition_template_library_path(tmp_path).is_file()
+    assert condition_template_library_path(tmp_path).parent == (
+        tmp_path / APP_DATA_DIRNAME / TEMPLATES_DIRNAME
+    )
     assert not (tmp_path / CONDITION_TEMPLATE_LIBRARY_FILENAME).exists()
+    assert not (tmp_path / TEMPLATES_DIRNAME).exists()
     loaded_ids = {profile.profile_id for profile in loaded.profiles}
     assert "custom-profile" in loaded_ids
 

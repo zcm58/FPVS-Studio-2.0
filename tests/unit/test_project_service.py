@@ -2,20 +2,36 @@
 
 from __future__ import annotations
 
-import pytest
-
 from fpvs_studio.core.condition_template_profiles import get_condition_template_profile
-from fpvs_studio.core.paths import project_json_path, stimulus_manifest_path
+from fpvs_studio.core.paths import (
+    APP_DATA_DIRNAME,
+    TEMPLATES_DIRNAME,
+    condition_template_library_path,
+    project_json_path,
+    stimulus_manifest_path,
+)
 from fpvs_studio.core.project_service import create_project
 from fpvs_studio.core.serialization import load_project_file, read_json_file
 from fpvs_studio.preprocessing.models import StimulusManifest
 
 
-def test_project_scaffolding_rejects_reserved_templates_root_name(tmp_path) -> None:
-    with pytest.raises(ValueError, match="reserved root folder 'templates'"):
-        create_project(tmp_path, "Templates")
+def test_project_scaffolding_allows_templates_project_name_separate_from_app_templates(
+    tmp_path,
+) -> None:
+    profile = get_condition_template_profile(tmp_path, "sixty-hz-blank50-fixation-v1")
 
-    assert not (tmp_path / "templates").exists()
+    scaffold = create_project(
+        tmp_path,
+        "Templates",
+        condition_template_profile=profile,
+    )
+
+    assert scaffold.project_root == tmp_path / "templates"
+    assert project_json_path(scaffold.project_root).is_file()
+    assert condition_template_library_path(tmp_path).is_file()
+    assert condition_template_library_path(tmp_path).parent == (
+        tmp_path / APP_DATA_DIRNAME / TEMPLATES_DIRNAME
+    )
 
 
 def test_project_scaffolding_creates_expected_directories_and_files(tmp_path) -> None:

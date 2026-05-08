@@ -21,6 +21,7 @@ from fpvs_studio.core.models import (
 )
 from fpvs_studio.core.paths import (
     CONDITION_TEMPLATE_LIBRARY_FILENAME,
+    TEMPLATES_DIRNAME,
     condition_template_library_path,
     templates_dir,
 )
@@ -113,16 +114,28 @@ def _normalize_library(
 
 
 def normalize_condition_template_profile_root(root_dir: Path) -> Path:
-    """Ensure dedicated template storage exists and migrate legacy root-level library files."""
+    """Ensure app template storage exists and migrate legacy library files."""
 
     root_dir = Path(root_dir)
     templates_root = templates_dir(root_dir)
     templates_root.mkdir(parents=True, exist_ok=True)
 
     canonical_library_path = condition_template_library_path(root_dir)
+    legacy_templates_dir = root_dir / TEMPLATES_DIRNAME
+    legacy_templates_library_path = (
+        legacy_templates_dir / CONDITION_TEMPLATE_LIBRARY_FILENAME
+    )
     legacy_library_path = root_dir / CONDITION_TEMPLATE_LIBRARY_FILENAME
-    if legacy_library_path.is_file() and not canonical_library_path.is_file():
-        legacy_library_path.replace(canonical_library_path)
+    if not canonical_library_path.is_file():
+        for legacy_path in (legacy_templates_library_path, legacy_library_path):
+            if legacy_path.is_file():
+                legacy_path.replace(canonical_library_path)
+                break
+    if legacy_templates_dir.is_dir():
+        try:
+            legacy_templates_dir.rmdir()
+        except OSError:
+            pass
 
     return canonical_library_path
 

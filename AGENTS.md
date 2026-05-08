@@ -60,6 +60,8 @@ experiments, with PsychoPy isolated behind runtime/engine boundaries.
   or `QRunnable` with `QThreadPool`.
 - Use structured logging for application diagnostics, not `print`.
 - All project file I/O must use the active project root and preserve existing formats.
+- App-level condition-template profile I/O belongs under the configured FPVS Studio
+  root at `.fpvs-studio/templates/`, not beside experiment folders.
 - Preprocessing owns validated assets/manifests and must not depend on PsychoPy or runtime/engine code.
 - `RunSpec` must remain single-condition. Do not merge multiple conditions into one `RunSpec`.
 - Represent execution timing in frames inside `RunSpec`; do not reintroduce sleep-based timing abstractions.

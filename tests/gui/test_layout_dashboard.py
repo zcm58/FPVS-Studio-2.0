@@ -462,6 +462,10 @@ def test_switching_main_workflow_stack_keeps_outer_window_size_stable(
     assert window.width() == 1040
     assert window.height() == 680
 
+    window.resize(1110, 700)
+    QApplication.processEvents()
+    compact_home_size = window.size()
+
     window.show_setup_wizard()
     QApplication.processEvents()
 
@@ -472,6 +476,19 @@ def test_switching_main_workflow_stack_keeps_outer_window_size_stable(
     assert window.minimumHeight() == 820
     assert window.width() == 1440
     assert window.height() == 920
+
+    window.show_home()
+    QApplication.processEvents()
+
+    assert window.main_stack.currentWidget() is window.home_page
+    assert not window.menuBar().isVisible()
+    assert not window.statusBar().isVisible()
+    assert window.minimumWidth() == 760
+    assert window.minimumHeight() == 520
+    assert window.size() == compact_home_size
+
+    window.show_setup_wizard()
+    QApplication.processEvents()
 
     window.resize(1500, 950)
     window.show_home()

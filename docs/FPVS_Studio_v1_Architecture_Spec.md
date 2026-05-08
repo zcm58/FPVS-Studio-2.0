@@ -66,10 +66,13 @@ The true per-sequence duration is derived from the active display's refresh-comp
 - additional behavioral tasks
 - user-editable base/oddball frequencies in v1
 
-## 5. Project folder structure
+## 5. FPVS Studio root and project folder structure
 
 ```text
-<ProjectRoot>/
+<FPVSRoot>/
+  .fpvs-studio/
+    templates/
+      condition_templates.json
   <ProjectSlug>/
     project.json
     stimuli/

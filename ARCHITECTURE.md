@@ -85,6 +85,8 @@ Current planned seams:
   centered Home launch card and `setup_wizard_page.py`; `Tools > Image Resizer`
   adds a standalone in-window utility page for folder-level FPVS image optimization
   without mutating project conditions.
+  `StudioMainWindow` owns mode-specific sizing: compact launch-surface sizing for
+  Welcome/Home handoff and larger workspace sizing for Setup and tool pages.
   The wizard uses a five-step top-progress flow with a
   simplified Conditions setup step where users assign base/oddball image folders and
   can optionally create derived-variant control conditions. Experiment Settings combines
@@ -98,7 +100,9 @@ Current planned seams:
   remains an internal support page, not a guided setup step.
 - GUI project management uses `manage_projects_dialog.py` as a themed component-layer
   surface while `controller.py` owns disk-backed project discovery, recent-project
-  settings, and Recycle Bin confirmation/deletion side effects.
+  settings, app-level condition-template storage under
+  `<FPVSRoot>/.fpvs-studio/templates/`, and Recycle Bin confirmation/deletion side
+  effects.
 - Condition-template profile management keeps `condition_template_manager_dialog.py` as
   the manager dialog and compatibility import point. The profile editor dialog lives in
   `condition_template_profile_editor_dialog.py`.

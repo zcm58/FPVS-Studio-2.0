@@ -29,6 +29,7 @@ from fpvs_studio.core.condition_template_profiles import (
 )
 from fpvs_studio.core.enums import DutyCycleMode, RunMode
 from fpvs_studio.core.execution import SessionExecutionSummary
+from fpvs_studio.core.paths import condition_template_library_path
 from fpvs_studio.core.project_service import create_project
 from fpvs_studio.core.serialization import load_project_file, write_json_file
 from fpvs_studio.gui.application import create_application
@@ -540,7 +541,7 @@ def test_show_create_project_dialog_normalizes_legacy_template_library(
     legacy_path = root_dir / "condition_templates.json"
     legacy_path.write_text('{"profiles":[]}', encoding="utf-8")
     assert legacy_path.is_file()
-    assert not (root_dir / "templates" / "condition_templates.json").exists()
+    assert not condition_template_library_path(root_dir).exists()
 
     def _capture_exec(_dialog: CreateProjectDialog) -> int:
         return int(CreateProjectDialog.DialogCode.Rejected)
@@ -549,7 +550,8 @@ def test_show_create_project_dialog_normalizes_legacy_template_library(
     controller.show_create_project_dialog()
 
     assert not legacy_path.exists()
-    assert (root_dir / "templates" / "condition_templates.json").is_file()
+    assert condition_template_library_path(root_dir).is_file()
+    assert not (root_dir / "templates").exists()
 
 
 def test_show_welcome_requires_fpvs_root_and_cancel_path_exits_app(
@@ -820,7 +822,7 @@ def test_create_project_dialog_requires_condition_template_selection(
     assert dialog.result() == int(dialog.DialogCode.Accepted)
 
 
-def test_create_project_dialog_rejects_reserved_project_name(
+def test_create_project_dialog_allows_templates_project_name(
     qtbot,
     tmp_path: Path,
     monkeypatch,
@@ -839,18 +841,12 @@ def test_create_project_dialog_rejects_reserved_project_name(
     dialog.project_name_edit.setText("Templates")
     dialog.project_root_edit.setText(str(tmp_path))
     dialog.condition_profile_combo.setCurrentIndex(0)
-    assert dialog.project_name_validation_label.text() != ""
-    assert "reserved root folder 'templates'" in dialog.project_name_validation_label.text().lower()
-    assert ok_button.isEnabled() is False
-
-    dialog.accept()
-    assert dialog.result() != int(dialog.DialogCode.Accepted)
-    assert any("reserved root folder 'templates'" in message.lower() for message in messages)
-
-    dialog.project_name_edit.setText("Valid Project")
+    assert dialog.project_name_validation_label.text() == ""
     assert ok_button.isEnabled() is True
+
     dialog.accept()
     assert dialog.result() == int(dialog.DialogCode.Accepted)
+    assert messages == []
 
 
 def test_create_project_dialog_manage_templates_refreshes_profile_options(qtbot) -> None:

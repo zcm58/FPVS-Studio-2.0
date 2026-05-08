@@ -48,6 +48,7 @@ _COMPACT_HOME_MINIMUM_SIZE = (760, 520)
 _COMPACT_HOME_DEFAULT_SIZE = (1040, 680)
 _WORKSPACE_MINIMUM_SIZE = (1366, 820)
 _WORKSPACE_DEFAULT_SIZE = (1440, 920)
+_AUTO_WORKSPACE_SIZE_TOLERANCE = 16
 
 
 class StudioMainWindow(QMainWindow):
@@ -73,6 +74,8 @@ class StudioMainWindow(QMainWindow):
         self._on_request_settings = on_request_settings
         self.setWindowTitle("FPVS Studio (Alpha)")
         self._auto_workspace_sized = False
+        self._auto_workspace_return_size: tuple[int, int] | None = None
+        self._auto_workspace_size: tuple[int, int] | None = None
         self._apply_compact_window_size()
 
         self._runtime_fullscreen_ui_state = True
@@ -183,31 +186,46 @@ class StudioMainWindow(QMainWindow):
             self.statusBar().setVisible(visible)
 
     def _apply_compact_window_size(self) -> None:
-        self.setMinimumSize(*_COMPACT_HOME_MINIMUM_SIZE)
-        if (
-            self._auto_workspace_sized
-            and self.width() == _WORKSPACE_DEFAULT_SIZE[0]
-            and self.height() == _WORKSPACE_DEFAULT_SIZE[1]
-        ):
-            self.resize(*_COMPACT_HOME_DEFAULT_SIZE)
-        elif (
+        was_below_compact_minimum = (
             self.width() < _COMPACT_HOME_MINIMUM_SIZE[0]
             or self.height() < _COMPACT_HOME_MINIMUM_SIZE[1]
-        ):
+        )
+        self.setMinimumSize(*_COMPACT_HOME_MINIMUM_SIZE)
+        if self._auto_workspace_sized and self._auto_workspace_return_size is not None:
+            if self._window_still_at_auto_workspace_size():
+                self.resize(*self._auto_workspace_return_size)
+            self._clear_auto_workspace_size()
+        elif was_below_compact_minimum:
             self.resize(*_COMPACT_HOME_DEFAULT_SIZE)
-        self._auto_workspace_sized = False
 
     def _apply_workspace_window_size(self) -> None:
         needs_workspace_resize = (
             self.width() < _WORKSPACE_MINIMUM_SIZE[0]
             or self.height() < _WORKSPACE_MINIMUM_SIZE[1]
         )
+        compact_return_size = (self.width(), self.height())
         self.setMinimumSize(*_WORKSPACE_MINIMUM_SIZE)
         if needs_workspace_resize:
             self.resize(*_WORKSPACE_DEFAULT_SIZE)
             self._auto_workspace_sized = True
+            self._auto_workspace_return_size = compact_return_size
+            self._auto_workspace_size = (self.width(), self.height())
         else:
-            self._auto_workspace_sized = False
+            self._clear_auto_workspace_size()
+
+    def _window_still_at_auto_workspace_size(self) -> bool:
+        if self._auto_workspace_size is None:
+            return True
+        auto_width, auto_height = self._auto_workspace_size
+        return (
+            self.width() <= auto_width + _AUTO_WORKSPACE_SIZE_TOLERANCE
+            and self.height() <= auto_height + _AUTO_WORKSPACE_SIZE_TOLERANCE
+        )
+
+    def _clear_auto_workspace_size(self) -> None:
+        self._auto_workspace_sized = False
+        self._auto_workspace_return_size = None
+        self._auto_workspace_size = None
 
     def _apply_chrome_styles(self) -> None:
         apply_studio_theme(self)

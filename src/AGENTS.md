@@ -16,6 +16,8 @@ package map.
 - Project-facing schemas must remain engine-neutral.
 - Generated stimulus variants belong under the active project folder in
   `stimuli/generated-variants/...`.
+- App-level condition-template profiles belong under the configured FPVS Studio
+  root in `.fpvs-studio/templates/`, outside the top-level experiment folder list.
 - Persist project-facing paths as project-relative POSIX-style strings in JSON.
 - Supported source image formats are `.jpg`, `.jpeg`, and `.png`.
 - All images inside a stimulus set must share resolution; base and oddball sets

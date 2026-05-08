@@ -20,9 +20,10 @@ GRAYSCALE_VARIANTS_DIRNAME = "grayscale-variants"
 ROTATED_180_VARIANTS_DIRNAME = "rotated-180-variants"
 SCRAMBLED_VARIANTS_DIRNAME = "scrambled-variants"
 MANIFEST_FILENAME = "manifest.json"
+APP_DATA_DIRNAME = ".fpvs-studio"
 TEMPLATES_DIRNAME = "templates"
 CONDITION_TEMPLATE_LIBRARY_FILENAME = "condition_templates.json"
-RESERVED_ROOT_ENTRY_NAMES = frozenset({TEMPLATES_DIRNAME})
+RESERVED_ROOT_ENTRY_NAMES = frozenset({APP_DATA_DIRNAME})
 
 _NON_ALNUM_RE = re.compile(r"[^a-z0-9]+")
 
@@ -141,10 +142,16 @@ def logs_dir(project_root: Path) -> Path:
     return project_root / LOGS_DIRNAME
 
 
-def templates_dir(root_dir: Path) -> Path:
-    """Return the app-level templates directory path under the FPVS root."""
+def app_data_dir(root_dir: Path) -> Path:
+    """Return the app-owned metadata directory under the FPVS root."""
 
-    return root_dir / TEMPLATES_DIRNAME
+    return root_dir / APP_DATA_DIRNAME
+
+
+def templates_dir(root_dir: Path) -> Path:
+    """Return the app-level condition-template directory under app metadata."""
+
+    return app_data_dir(root_dir) / TEMPLATES_DIRNAME
 
 
 def condition_template_library_path(root_dir: Path) -> Path:

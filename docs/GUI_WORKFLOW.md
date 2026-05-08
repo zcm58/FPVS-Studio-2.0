@@ -28,6 +28,10 @@ project or move a project folder to the Windows Recycle Bin after an explicit Ye
 confirmation. The currently open project is shown but cannot be deleted from its own
 open window.
 
+Condition-template profiles are app-level metadata for the configured FPVS Studio Root
+Folder. They are stored under `.fpvs-studio/templates/condition_templates.json`, keeping
+template storage out of the top-level folder list used for experiment projects.
+
 ## Main Window
 
 The authoring window is organized around two user-facing modes:
@@ -40,6 +44,8 @@ The authoring window is organized around two user-facing modes:
   - uses the same shared launch-surface frame as Welcome so the outer window and
     inner card styling stay aligned across the two launch surfaces
   - `Edit Setup` opens the guided setup workflow
+  - returning from app-expanded Setup restores the compact Home footprint unless
+    the user manually resized the larger setup window
 - `Setup Wizard`
   - in-window setup flow for new/incomplete projects and intentional edits
   - ordered steps: Project Details, Conditions, Experiment Settings, Fixation Cross, Review
