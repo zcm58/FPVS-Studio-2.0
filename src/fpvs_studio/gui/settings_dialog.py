@@ -29,6 +29,7 @@ class AppSettingsDialog(QDialog):
         *,
         fpvs_root_dir: Path,
         on_change_fpvs_root_dir: Callable[[Path], None],
+        on_show_root_folder_setup: Callable[[QWidget], Path | None] | None = None,
         on_manage_condition_templates: Callable[[], object] | None = None,
         parent: QWidget | None = None,
     ) -> None:
@@ -40,6 +41,7 @@ class AppSettingsDialog(QDialog):
 
         self._fpvs_root_dir = fpvs_root_dir
         self._on_change_fpvs_root_dir = on_change_fpvs_root_dir
+        self._on_show_root_folder_setup = on_show_root_folder_setup
         self._on_manage_condition_templates = on_manage_condition_templates
 
         self.fpvs_root_dir_value = QLabel(str(fpvs_root_dir), self)
@@ -58,6 +60,11 @@ class AppSettingsDialog(QDialog):
 
         form_layout = QFormLayout()
         form_layout.addRow("FPVS Studio Root Folder", fpvs_root_row)
+        self.root_folder_setup_button = QPushButton("Root Folder Setup...", self)
+        self.root_folder_setup_button.setObjectName("root_folder_setup_button")
+        self.root_folder_setup_button.setEnabled(self._on_show_root_folder_setup is not None)
+        self.root_folder_setup_button.clicked.connect(self._show_root_folder_setup)
+        form_layout.addRow("Root Folder Setup", self.root_folder_setup_button)
         self.manage_templates_button = QPushButton("Manage Condition Templates...", self)
         self.manage_templates_button.setObjectName("manage_condition_templates_button")
         self.manage_templates_button.setEnabled(self._on_manage_condition_templates is not None)
@@ -85,6 +92,15 @@ class AppSettingsDialog(QDialog):
         if not selected_path.is_dir():
             return
         self._on_change_fpvs_root_dir(selected_path)
+        self._fpvs_root_dir = selected_path
+        self.fpvs_root_dir_value.setText(str(selected_path))
+
+    def _show_root_folder_setup(self) -> None:
+        if self._on_show_root_folder_setup is None:
+            return
+        selected_path = self._on_show_root_folder_setup(self)
+        if selected_path is None:
+            return
         self._fpvs_root_dir = selected_path
         self.fpvs_root_dir_value.setText(str(selected_path))
 

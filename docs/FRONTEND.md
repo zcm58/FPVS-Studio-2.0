@@ -13,6 +13,8 @@ the active app.
 
 ## GUI Architecture
 
+- First-run startup shows a concise FPVS Studio Root Folder setup guide before the
+  native folder picker when no valid root is configured.
 - Home is the daily launch surface for ready projects, centered around one launch
   card with project actions, readiness, summary metrics, and the primary launch
   action.

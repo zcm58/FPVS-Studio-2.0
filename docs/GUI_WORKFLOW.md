@@ -12,6 +12,11 @@ The installed script entry point is also available as `fpvs-studio`.
 
 ## Welcome Flow
 
+If no valid FPVS Studio Root Folder is configured, FPVS Studio first shows a
+`Set Up FPVS Studio` dialog explaining the root folder before opening the native
+folder picker. Canceling the picker returns to the setup dialog; choosing
+`Exit FPVS Studio` quits without configuring a root.
+
 The welcome window provides:
 
 - `Create New Project`
@@ -31,6 +36,8 @@ open window.
 Condition-template profiles are app-level metadata for the configured FPVS Studio Root
 Folder. They are stored under `.fpvs-studio/templates/condition_templates.json`, keeping
 template storage out of the top-level folder list used for experiment projects.
+The Settings dialog can reopen the root-folder setup guide and can still change the
+root folder directly.
 
 ## Main Window
 
@@ -147,6 +154,9 @@ active project.
   `src/fpvs_studio/gui/condition_template_manager_dialog.py`.
 - The condition-template profile editor lives in
   `src/fpvs_studio/gui/condition_template_profile_editor_dialog.py`.
+- First-run and Settings root-folder onboarding lives in
+  `src/fpvs_studio/gui/root_folder_setup_dialog.py`; the controller owns folder
+  selection and settings persistence.
 - Project management lives in `src/fpvs_studio/gui/manage_projects_dialog.py`; it uses
   shared component-layer cards, path labels, status badges, and button role helpers while
   leaving project discovery and deletion side effects in the controller.

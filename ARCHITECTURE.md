@@ -85,6 +85,8 @@ Current planned seams:
   centered Home launch card and `setup_wizard_page.py`; `Tools > Image Resizer`
   adds a standalone in-window utility page for folder-level FPVS image optimization
   without mutating project conditions.
+  `root_folder_setup_dialog.py` provides first-run and Settings-accessible guidance
+  for choosing the FPVS Studio Root Folder before the native folder picker opens.
   `StudioMainWindow` owns mode-specific sizing: compact launch-surface sizing for
   Welcome/Home handoff and larger workspace sizing for Setup and tool pages.
   The wizard uses a five-step top-progress flow with a

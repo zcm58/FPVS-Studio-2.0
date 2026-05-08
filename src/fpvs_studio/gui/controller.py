@@ -29,6 +29,7 @@ from fpvs_studio.gui.create_project_dialog import CreateProjectDialog
 from fpvs_studio.gui.document import ProjectDocument
 from fpvs_studio.gui.main_window import StudioMainWindow
 from fpvs_studio.gui.manage_projects_dialog import ManageProjectsDialog, ProjectManagementEntry
+from fpvs_studio.gui.root_folder_setup_dialog import RootFolderSetupDialog
 from fpvs_studio.gui.settings_dialog import AppSettingsDialog
 from fpvs_studio.gui.welcome_window import WelcomeWindow
 
@@ -207,37 +208,68 @@ class StudioController:
 
         parent = self.main_window if self.main_window is not None else self.welcome_window
         while True:
-            directory = QFileDialog.getExistingDirectory(
-                parent,
-                "Choose FPVS Studio Root Folder",
-                str(Path.home()),
+            setup_dialog = RootFolderSetupDialog(
+                current_root=None,
+                first_run=True,
+                parent=parent,
             )
-            if directory:
-                selected_path = Path(directory)
-                if selected_path.is_dir():
-                    self.save_fpvs_root_dir(selected_path)
-                    if self._normalize_fpvs_root_layout():
-                        return True
-                    continue
-                QMessageBox.warning(
-                    parent,
-                    "Invalid FPVS Studio Root Folder",
-                    "Choose an existing folder for the FPVS Studio Root Folder.",
-                )
-                continue
+            if setup_dialog.exec() != setup_dialog.DialogCode.Accepted:
+                self._app.quit()
+                return False
 
-            answer = QMessageBox.question(
-                parent,
-                "FPVS Studio Root Folder Required",
-                "FPVS Studio Root Folder is required before opening or creating projects. "
-                "Exit FPVS Studio now?",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                QMessageBox.StandardButton.Yes,
-            )
-            if answer == QMessageBox.StandardButton.No:
+            selected_path = self._choose_fpvs_root_dir(parent=parent, initial_dir=Path.home())
+            if selected_path is None:
                 continue
-            self._app.quit()
-            return False
+            self.save_fpvs_root_dir(selected_path)
+            if self._normalize_fpvs_root_layout():
+                return True
+
+    def show_root_folder_setup(self, parent: QWidget | None = None) -> Path | None:
+        """Show root-folder guidance and optionally choose a different root folder."""
+
+        current_root = self.load_fpvs_root_dir()
+        dialog_parent = parent or self.main_window or self.welcome_window
+        setup_dialog = RootFolderSetupDialog(
+            current_root=current_root,
+            first_run=False,
+            parent=dialog_parent,
+        )
+        if setup_dialog.exec() != setup_dialog.DialogCode.Accepted:
+            return None
+
+        selected_path = self._choose_fpvs_root_dir(
+            parent=dialog_parent,
+            initial_dir=current_root or Path.home(),
+        )
+        if selected_path is None:
+            return None
+        self.save_fpvs_root_dir(selected_path)
+        if self._normalize_fpvs_root_layout():
+            return selected_path
+        return None
+
+    def _choose_fpvs_root_dir(
+        self,
+        *,
+        parent: QWidget | None,
+        initial_dir: Path,
+    ) -> Path | None:
+        directory = QFileDialog.getExistingDirectory(
+            parent,
+            "Choose FPVS Studio Root Folder",
+            str(initial_dir),
+        )
+        if not directory:
+            return None
+        selected_path = Path(directory)
+        if selected_path.is_dir():
+            return selected_path
+        QMessageBox.warning(
+            parent,
+            "Invalid FPVS Studio Root Folder",
+            "Choose an existing folder for the FPVS Studio Root Folder.",
+        )
+        return None
 
     def show_create_project_dialog(self) -> None:
         """Collect new-project inputs and scaffold a project when confirmed."""
@@ -358,6 +390,7 @@ class StudioController:
         dialog = AppSettingsDialog(
             fpvs_root_dir=root_dir,
             on_change_fpvs_root_dir=self.save_fpvs_root_dir,
+            on_show_root_folder_setup=self.show_root_folder_setup,
             on_manage_condition_templates=self._show_condition_template_manager,
             parent=parent,
         )

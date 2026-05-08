@@ -40,6 +40,7 @@ from fpvs_studio.gui.condition_template_manager_dialog import (
 from fpvs_studio.gui.controller import StudioController
 from fpvs_studio.gui.create_project_dialog import CreateProjectDialog
 from fpvs_studio.gui.manage_projects_dialog import ManageProjectsDialog
+from fpvs_studio.gui.root_folder_setup_dialog import RootFolderSetupDialog
 from fpvs_studio.gui.settings_dialog import AppSettingsDialog
 from fpvs_studio.gui.welcome_window import WelcomeWindow
 
@@ -590,31 +591,26 @@ def test_show_welcome_requires_fpvs_root_and_cancel_path_exits_app(
 ) -> None:
     controller = StudioController(qapp)
 
-    prompt_calls = 0
+    setup_dialogs: list[RootFolderSetupDialog] = []
     quit_calls = 0
 
-    def _cancel_selection(*_args, **_kwargs) -> str:
-        nonlocal prompt_calls
-        prompt_calls += 1
-        return ""
-
-    def _confirm_exit(*_args, **_kwargs):
-        return QMessageBox.StandardButton.Yes
+    def _reject_setup(dialog: RootFolderSetupDialog) -> int:
+        setup_dialogs.append(dialog)
+        return int(RootFolderSetupDialog.DialogCode.Rejected)
 
     def _capture_quit() -> None:
         nonlocal quit_calls
         quit_calls += 1
 
-    monkeypatch.setattr(
-        "fpvs_studio.gui.controller.QFileDialog.getExistingDirectory",
-        _cancel_selection,
-    )
-    monkeypatch.setattr("fpvs_studio.gui.controller.QMessageBox.question", _confirm_exit)
+    monkeypatch.setattr(RootFolderSetupDialog, "exec", _reject_setup)
     monkeypatch.setattr(qapp, "quit", _capture_quit)
 
     controller.show_welcome()
 
-    assert prompt_calls == 1
+    assert len(setup_dialogs) == 1
+    assert setup_dialogs[0].windowTitle() == "Set Up FPVS Studio"
+    assert setup_dialogs[0].choose_button.text() == "Choose Root Folder..."
+    assert setup_dialogs[0].secondary_button.text() == "Exit FPVS Studio"
     assert quit_calls == 1
     assert controller.welcome_window is None
 
@@ -629,12 +625,18 @@ def test_show_welcome_prompts_for_missing_root_then_persists_selection(
     selected_root = tmp_path / "selected-fpvs-root"
     selected_root.mkdir(parents=True, exist_ok=True)
 
+    setup_dialogs: list[RootFolderSetupDialog] = []
     prompt_titles: list[str] = []
+
+    def _accept_setup(dialog: RootFolderSetupDialog) -> int:
+        setup_dialogs.append(dialog)
+        return int(RootFolderSetupDialog.DialogCode.Accepted)
 
     def _select_root(_parent, title, _initial_directory) -> str:
         prompt_titles.append(title)
         return str(selected_root)
 
+    monkeypatch.setattr(RootFolderSetupDialog, "exec", _accept_setup)
     monkeypatch.setattr(
         "fpvs_studio.gui.controller.QFileDialog.getExistingDirectory",
         _select_root,
@@ -646,7 +648,41 @@ def test_show_welcome_prompts_for_missing_root_then_persists_selection(
     qtbot.addWidget(controller.welcome_window)
     assert controller.welcome_window.isVisible()
     assert controller.load_fpvs_root_dir() == selected_root
+    assert len(setup_dialogs) == 1
+    assert "shared location" in setup_dialogs[0].body_label.text()
+    assert "Each FPVS experiment project" in setup_dialogs[0].details_label.text()
     assert prompt_titles == ["Choose FPVS Studio Root Folder"]
+
+
+def test_show_welcome_canceling_root_picker_returns_to_setup_dialog(
+    qtbot,
+    qapp,
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    controller = StudioController(qapp)
+    selected_root = tmp_path / "selected-after-cancel"
+    selected_root.mkdir(parents=True, exist_ok=True)
+    setup_dialog_count = 0
+    selected_dirs = iter(("", str(selected_root)))
+
+    def _accept_setup(_dialog: RootFolderSetupDialog) -> int:
+        nonlocal setup_dialog_count
+        setup_dialog_count += 1
+        return int(RootFolderSetupDialog.DialogCode.Accepted)
+
+    monkeypatch.setattr(RootFolderSetupDialog, "exec", _accept_setup)
+    monkeypatch.setattr(
+        "fpvs_studio.gui.controller.QFileDialog.getExistingDirectory",
+        lambda *_args, **_kwargs: next(selected_dirs),
+    )
+
+    controller.show_welcome()
+
+    assert controller.welcome_window is not None
+    qtbot.addWidget(controller.welcome_window)
+    assert setup_dialog_count == 2
+    assert controller.load_fpvs_root_dir() == selected_root
 
 
 def test_invalid_saved_root_is_reprompted_on_startup(
@@ -664,13 +700,20 @@ def test_invalid_saved_root_is_reprompted_on_startup(
     replacement_root = tmp_path / "replacement-root"
     replacement_root.mkdir(parents=True, exist_ok=True)
 
+    setup_calls = 0
     prompt_calls = 0
+
+    def _accept_setup(_dialog: RootFolderSetupDialog) -> int:
+        nonlocal setup_calls
+        setup_calls += 1
+        return int(RootFolderSetupDialog.DialogCode.Accepted)
 
     def _select_replacement(*_args, **_kwargs) -> str:
         nonlocal prompt_calls
         prompt_calls += 1
         return str(replacement_root)
 
+    monkeypatch.setattr(RootFolderSetupDialog, "exec", _accept_setup)
     monkeypatch.setattr(
         "fpvs_studio.gui.controller.QFileDialog.getExistingDirectory",
         _select_replacement,
@@ -680,6 +723,7 @@ def test_invalid_saved_root_is_reprompted_on_startup(
 
     assert controller.welcome_window is not None
     qtbot.addWidget(controller.welcome_window)
+    assert setup_calls == 1
     assert prompt_calls == 1
     assert controller.load_fpvs_root_dir() == replacement_root
 
@@ -715,6 +759,68 @@ def test_settings_dialog_shows_root_and_change_button_updates_value(
 
     assert changed_roots == [updated_root]
     assert root_value_label.text() == str(updated_root)
+
+
+def test_settings_dialog_root_folder_setup_button_updates_root_label(
+    qtbot,
+    tmp_path: Path,
+) -> None:
+    initial_root = tmp_path / "initial-root"
+    initial_root.mkdir(parents=True, exist_ok=True)
+    updated_root = tmp_path / "updated-root"
+    updated_root.mkdir(parents=True, exist_ok=True)
+    callback_parents: list[QWidget] = []
+
+    def _show_setup(parent: QWidget) -> Path:
+        callback_parents.append(parent)
+        return updated_root
+
+    dialog = AppSettingsDialog(
+        fpvs_root_dir=initial_root,
+        on_change_fpvs_root_dir=lambda _path: None,
+        on_show_root_folder_setup=_show_setup,
+    )
+    qtbot.addWidget(dialog)
+
+    root_value_label = dialog.findChild(QLabel, "fpvs_root_dir_value")
+    setup_button = dialog.findChild(QPushButton, "root_folder_setup_button")
+    assert root_value_label is not None
+    assert setup_button is not None
+
+    qtbot.mouseClick(setup_button, Qt.MouseButton.LeftButton)
+
+    assert callback_parents == [dialog]
+    assert root_value_label.text() == str(updated_root)
+
+
+def test_controller_root_folder_setup_changes_saved_root(
+    controller: StudioController,
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    selected_root = tmp_path / "setup-selected-root"
+    selected_root.mkdir(parents=True, exist_ok=True)
+    setup_dialogs: list[RootFolderSetupDialog] = []
+
+    def _accept_setup(dialog: RootFolderSetupDialog) -> int:
+        setup_dialogs.append(dialog)
+        return int(RootFolderSetupDialog.DialogCode.Accepted)
+
+    monkeypatch.setattr(RootFolderSetupDialog, "exec", _accept_setup)
+    monkeypatch.setattr(
+        "fpvs_studio.gui.controller.QFileDialog.getExistingDirectory",
+        lambda *_args, **_kwargs: str(selected_root),
+    )
+
+    updated_root = controller.show_root_folder_setup()
+
+    assert updated_root == selected_root
+    assert controller.load_fpvs_root_dir() == selected_root
+    assert len(setup_dialogs) == 1
+    assert not setup_dialogs[0].current_root_value.isHidden()
+    assert setup_dialogs[0].current_root_value.toolTip() != ""
+    assert setup_dialogs[0].choose_button.text() == "Choose Different Root Folder..."
+    assert setup_dialogs[0].secondary_button.text() == "Close"
 
 
 def test_settings_dialog_manage_templates_button_triggers_callback(
