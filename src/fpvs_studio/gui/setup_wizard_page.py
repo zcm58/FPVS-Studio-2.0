@@ -61,6 +61,9 @@ _WIZARD_STEPS: tuple[tuple[str, str], ...] = (
     ("review", "Review"),
 )
 _CREATE_ALL_CONDITIONS_PROMPT = "Please ensure you create all conditions before proceeding."
+_SETUP_STEP_SURFACE_MAX_WIDTH = 980
+_SETUP_STEP_NARROW_SURFACE_MAX_WIDTH = 820
+_SETUP_STEP_SURFACE_MIN_HEIGHT = 360
 
 
 class _CurrentWidgetStack(QStackedWidget):
@@ -85,6 +88,49 @@ class _NaturalSizePanel(QWidget):
     def minimumSizeHint(self) -> QSize:
         layout = self.layout()
         return layout.minimumSize() if layout is not None else super().minimumSizeHint()
+
+
+class _SetupStepSurface(_NaturalSizePanel):
+    """Shared sizing and alignment surface for compact setup wizard steps."""
+
+    def __init__(
+        self,
+        content: QWidget,
+        *,
+        object_name: str,
+        max_width: int = _SETUP_STEP_SURFACE_MAX_WIDTH,
+        center_vertically: bool = False,
+        parent: QWidget | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self.setObjectName(object_name)
+        self.setProperty("setupStepSurface", "true")
+        self.content = content
+        self.setMinimumHeight(_SETUP_STEP_SURFACE_MIN_HEIGHT)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        content.setMaximumWidth(max_width)
+        content.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        if center_vertically:
+            layout.addStretch(1)
+        row = QWidget(self)
+        row_layout = QHBoxLayout(row)
+        row_layout.setContentsMargins(0, 0, 0, 0)
+        row_layout.setSpacing(0)
+        row_layout.addStretch(1)
+        row_layout.addWidget(content)
+        row_layout.addStretch(1)
+        layout.addWidget(row)
+        if center_vertically:
+            layout.addStretch(1)
+
+    def refresh(self) -> None:
+        refresh = getattr(self.content, "refresh", None)
+        if callable(refresh):
+            refresh()
 
 
 class SetupWizardPage(QWidget):
@@ -336,13 +382,53 @@ class SetupWizardPage(QWidget):
             self._refresh_timer.start()
 
     def _build_step_pages(self) -> None:
-        self.step_stack.addWidget(self.project_overview_editor)
-        self.step_stack.addWidget(self.condition_setup_step)
-        self.step_stack.addWidget(self.condition_images_step)
-        self.step_stack.addWidget(self._experiment_settings_step_page())
-        self.step_stack.addWidget(self.fixation_schedule_editor)
-        self.step_stack.addWidget(self.fixation_response_editor)
-        self.step_stack.addWidget(self._review_step_page())
+        self.project_step_surface = _SetupStepSurface(
+            self.project_overview_editor,
+            object_name="setup_wizard_project_surface",
+            center_vertically=True,
+            parent=self,
+        )
+        self.conditions_step_surface = _SetupStepSurface(
+            self.condition_setup_step,
+            object_name="setup_wizard_conditions_surface",
+            parent=self,
+        )
+        self.images_step_surface = _SetupStepSurface(
+            self.condition_images_step,
+            object_name="setup_wizard_images_surface",
+            parent=self,
+        )
+        self.experiment_step_surface = _SetupStepSurface(
+            self._experiment_settings_step_page(),
+            object_name="setup_wizard_experiment_surface",
+            center_vertically=True,
+            parent=self,
+        )
+        self.fixation_step_surface = _SetupStepSurface(
+            self.fixation_schedule_editor,
+            object_name="setup_wizard_fixation_surface",
+            max_width=_SETUP_STEP_NARROW_SURFACE_MAX_WIDTH,
+            center_vertically=True,
+            parent=self,
+        )
+        self.response_step_surface = _SetupStepSurface(
+            self.fixation_response_editor,
+            object_name="setup_wizard_response_surface",
+            parent=self,
+        )
+        self.review_step_surface = _SetupStepSurface(
+            self._review_step_page(),
+            object_name="setup_wizard_review_surface",
+            center_vertically=True,
+            parent=self,
+        )
+        self.step_stack.addWidget(self.project_step_surface)
+        self.step_stack.addWidget(self.conditions_step_surface)
+        self.step_stack.addWidget(self.images_step_surface)
+        self.step_stack.addWidget(self.experiment_step_surface)
+        self.step_stack.addWidget(self.fixation_step_surface)
+        self.step_stack.addWidget(self.response_step_surface)
+        self.step_stack.addWidget(self.review_step_surface)
 
     def _experiment_settings_step_page(self) -> QWidget:
         page = QWidget(self)
@@ -404,8 +490,11 @@ class SetupWizardPage(QWidget):
         content_layout.addWidget(session_column, 2)
         self.experiment_settings_card.body_layout.addWidget(content)
 
-        layout.addWidget(self.experiment_settings_card, 0, Qt.AlignmentFlag.AlignHCenter)
-        layout.addStretch(1)
+        layout.addWidget(
+            self.experiment_settings_card,
+            0,
+            Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter,
+        )
         return page
 
     def _review_step_page(self) -> QWidget:
@@ -465,9 +554,7 @@ class SetupWizardPage(QWidget):
         action_row.addStretch(1)
         self.review_card.body_layout.addLayout(action_row)
 
-        layout.addStretch(1)
         layout.addWidget(self.review_card, 0, Qt.AlignmentFlag.AlignHCenter)
-        layout.addStretch(2)
         return page
 
     def _show_first_condition_prompt_if_needed(self) -> None:
@@ -608,20 +695,16 @@ class SetupWizardPage(QWidget):
         self._refresh_review_summary()
 
         step_valid = self._current_step_valid()
-        show_step_intro = step_key not in {"project", "fixation", "response"}
+        show_step_intro = step_key in {"conditions", "images"}
         self.step_title_label.setVisible(show_step_intro)
-        self.step_status_badge.setVisible(show_step_intro)
+        self.step_status_badge.setVisible(False)
         self.step_status_label.setText(self._step_status_text(self._active_step_index))
-        self.step_status_label.setVisible(show_step_intro and not step_valid)
+        self.step_status_label.setVisible(not step_valid and step_key in {"conditions", "images"})
         self.step_card.setProperty(
             "wizardProjectStepFrame",
             "true" if step_key in {"project", "fixation", "response"} else "false",
         )
         refresh_widget_style(self.step_card)
-        self.step_status_badge.set_state(
-            "ready" if step_valid else "warning",
-            "Step Complete" if step_valid else self._current_step_blocker(),
-        )
         self.setup_wizard_back_button.setEnabled(self._active_step_index > 0)
         self.setup_wizard_next_button.setEnabled(step_valid)
         self.setup_wizard_next_button.setText("Next")

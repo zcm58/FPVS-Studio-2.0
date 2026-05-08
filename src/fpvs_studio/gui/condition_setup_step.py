@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from PySide6.QtCore import QSignalBlocker, Qt
+from PySide6.QtCore import QSignalBlocker, QSize, Qt
 from PySide6.QtWidgets import (
     QDialog,
     QFileDialog,
@@ -116,7 +116,7 @@ class ConditionSetupStep(QWidget):
         list_panel.setObjectName("setup_conditions_left_panel")
         list_layout = QVBoxLayout(list_panel)
         list_layout.setContentsMargins(0, 0, 0, 0)
-        list_layout.setSpacing(10)
+        list_layout.setSpacing(8)
         list_title = QLabel(
             "Condition List" if mode == "details" else "Condition Images",
             list_panel,
@@ -171,8 +171,8 @@ class ConditionSetupStep(QWidget):
         self.trigger_code_spin.valueChanged.connect(self._apply_trigger_code)
         self.instructions_edit = QTextEdit(self)
         self.instructions_edit.setObjectName("setup_wizard_condition_instructions_edit")
-        self.instructions_edit.setMinimumHeight(90)
-        self.instructions_edit.setMaximumHeight(130)
+        self.instructions_edit.setMinimumHeight(76)
+        self.instructions_edit.setMaximumHeight(108)
         self._instructions_committer = DebouncedTextCommitter(
             self.instructions_edit,
             self._apply_instructions,
@@ -246,15 +246,13 @@ class ConditionSetupStep(QWidget):
         detail_panel.setObjectName("setup_conditions_main_panel")
         detail_layout = QVBoxLayout(detail_panel)
         detail_layout.setContentsMargins(0, 0, 0, 0)
-        detail_layout.setSpacing(12)
+        detail_layout.setSpacing(8)
         detail_header = QWidget(detail_panel)
         detail_header_layout = QHBoxLayout(detail_header)
         detail_header_layout.setContentsMargins(0, 0, 0, 0)
         detail_header_layout.setSpacing(8)
-        detail_title = QLabel(
-            "Selected Condition" if mode == "details" else "Selected Image Set",
-            detail_header,
-        )
+        detail_title = QLabel("Selected Condition" if mode == "details" else "", detail_header)
+        self.detail_title = detail_title
         detail_title.setProperty("sectionCardRole", "title")
         detail_header_layout.addWidget(detail_title)
         detail_header_layout.addWidget(self.selected_condition_badge)
@@ -269,24 +267,17 @@ class ConditionSetupStep(QWidget):
             self.protocol_defaults_panel.setVisible(False)
             self.setup_checklist.setVisible(False)
         else:
+            self.detail_title.setVisible(False)
+            self.selected_condition_badge.setVisible(False)
             for widget in (
                 self.condition_name_edit,
                 self.trigger_code_spin,
                 self.instructions_edit,
             ):
                 widget.setVisible(False)
-            sources_title = QLabel("Image Sources", detail_panel)
-            sources_title.setProperty("sectionCardRole", "title")
-            detail_layout.addWidget(sources_title)
             detail_layout.addLayout(sources_grid)
-
-            summary_row = QWidget(detail_panel)
-            summary_layout = QHBoxLayout(summary_row)
-            summary_layout.setContentsMargins(0, 0, 0, 0)
-            summary_layout.setSpacing(PAGE_SECTION_GAP)
-            summary_layout.addWidget(self.protocol_defaults_panel, 1)
-            summary_layout.addWidget(self.setup_checklist, 1)
-            detail_layout.addWidget(summary_row)
+            self.protocol_defaults_panel.setVisible(False)
+            self.setup_checklist.setVisible(False)
         detail_layout.addStretch(1)
 
         workspace = SetupWorkspaceFrame(object_name="setup_conditions_workspace", parent=self)
@@ -313,7 +304,9 @@ class ConditionSetupStep(QWidget):
         with QSignalBlocker(self.condition_list):
             self.condition_list.clear()
             for condition in self._document.ordered_conditions():
-                item = QListWidgetItem(self._condition_list_text(condition))
+                item = QListWidgetItem(condition.name)
+                item.setToolTip(self._condition_status_text(condition))
+                item.setSizeHint(QSize(0, 34))
                 item.setData(Qt.ItemDataRole.UserRole, condition.condition_id)
                 self.condition_list.addItem(item)
                 if condition.condition_id == selected_condition_id:
@@ -329,18 +322,17 @@ class ConditionSetupStep(QWidget):
         self.flush_pending_edits()
         self._refresh_editor()
 
-    def _condition_list_text(self, condition: Condition) -> str:
+    def _condition_status_text(self, condition: Condition) -> str:
         base_set = self._document.get_condition_stimulus_set(condition.condition_id, "base")
         oddball_set = self._document.get_condition_stimulus_set(condition.condition_id, "oddball")
         if not is_guided_condition_name(condition.name):
-            status = "Needs name"
+            return "Needs name"
         elif not is_guided_trigger_code(condition.trigger_code):
-            status = "Needs trigger"
+            return "Needs trigger"
         elif self._stimulus_ready(base_set) and self._stimulus_ready(oddball_set):
-            status = "Ready"
+            return "Ready"
         else:
-            status = "Needs images"
-        return f"{condition.name}\n{status}"
+            return "Needs images"
 
     def _current_condition(self) -> Condition | None:
         condition_id = self.selected_condition_id()

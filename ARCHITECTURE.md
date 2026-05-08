@@ -92,7 +92,9 @@ Current planned seams:
   The wizard uses a seven-step compact top-progress flow: Project, Conditions, Images,
   Experiment, Fixation, Response, and Review. Conditions handles condition identity and
   list actions, while Images handles base/oddball folder assignment and normalization.
-  Experiment combines display and session settings in one compact centered card; session
+  Setup steps share a compact content surface, with the top progress stepper carrying
+  complete-state feedback instead of page-wide completion bars. Experiment combines
+  display and session settings in one compact centered card; session
   order is always randomized within each block using the random order seed while legacy
   fixed-order fields stay schema-compatible. Fixation handles schedule/timing, and
   Response handles accuracy tracking, response key/window, appearance, and live preview.

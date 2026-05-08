@@ -22,11 +22,14 @@ the active app.
   project keeps a stable outer window and card treatment.
 - Setup Wizard is the guided setup/editing surface. Setup uses the compact
   Welcome/Home-sized default window, with Image Resizer retaining the larger
-  workspace sizing.
+  workspace sizing. Wizard pages share the same setup step surface so content
+  width, margins, and vertical alignment stay consistent across steps.
 - Conditions and Images are split guided setup areas: Conditions handles condition
   list/actions, names, triggers, and instructions; Images handles base/oddball
-  folder assignment and image normalization. Raw folder selection is permissive;
-  inconsistent image sizes are handled by the guided normalization flow.
+  folder assignment and image normalization. Conditions uses compact list rows,
+  and Images starts directly with source cards instead of extra section headers.
+  Raw folder selection is permissive; inconsistent image sizes are handled by the
+  guided normalization flow.
 - Fixation and Response are split guided setup areas: Fixation handles color-change
   schedule/timing, while Response handles accuracy tracking, response key/window,
   appearance, and preview.

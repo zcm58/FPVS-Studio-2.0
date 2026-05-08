@@ -58,9 +58,11 @@ The authoring window is organized around two user-facing modes:
   - ordered steps: Project, Conditions, Images, Experiment, Fixation, Response, Review
   - `Next` is disabled until the active step is complete
   - the top progress indicator is a compact connected numbered stepper with
-    completed/current/upcoming states, without a redundant `Step X of 7` text line
+    completed/current/upcoming states, without redundant complete-state status bars
   - the wizard uses the compact Welcome/Home-sized default window while keeping
     guided steps free of Advanced buttons and vertical scrolling
+  - guided steps use a shared setup step surface for consistent width, margins,
+    and alignment inside the wizard card
   - the wizard avoids generic footer/status copy; individual step cards should
     only show information needed for the current decision
   - Project uses a focused centered card, keeping the project folder path compact
@@ -75,10 +77,12 @@ The authoring window is organized around two user-facing modes:
     fullscreen playback, and the default display without exposing those as choices
   - the Session column exposes repeats per condition, the random order seed, and
     the fixed Space start key; condition order is always randomized within each block
-  - the Conditions step uses a simplified condition setup surface for condition
-    list actions, name, trigger code, and participant instructions
-  - the Images step owns base/oddball folder selection, selected-condition image
-    source cards, protocol defaults, and image readiness
+  - the Conditions step uses compact condition rows and a simplified condition
+    setup surface for condition list actions, name, trigger code, and participant
+    instructions
+  - the Images step owns base/oddball folder selection and selected-condition image
+    source cards without extra section headers or secondary summary panels above
+    the source-card workflow
   - raw image-folder import is permissive; folders with mixed image sizes are not
     rejected at selection time
   - when users leave Images, FPVS Studio checks selected condition images for
@@ -131,8 +135,8 @@ active project.
 - Welcome and Home use the shared `LaunchSurfaceFrame` helper for the full-window
   launch card, border styling, and first-paint background.
 - Shared Setup Wizard presentation components include the connected progress stepper,
-  workspace frame, side panels, metric strips, source cards, and reusable setup
-  checklist panel used by compact guided pages.
+  shared setup step surface, workspace frame, side panels, metric strips, source
+  cards, and reusable setup checklist panel used by compact guided pages.
 - Raw color, spacing, width, and text-elision tokens live in
   `src/fpvs_studio/gui/design_system.py`; page modules should prefer component
   helpers instead of local stylesheets for shared UI concepts.

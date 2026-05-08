@@ -900,21 +900,24 @@ def studio_theme_stylesheet() -> str:
     QListWidget#condition_list {{
         padding: 4px;
     }}
-    QListWidget#setup_wizard_condition_list {{
+    QListWidget#setup_wizard_condition_list,
+    QListWidget#setup_wizard_condition_image_list {{
         padding: 5px;
     }}
     QListWidget#condition_list::item {{
         padding: 7px 10px;
         border-radius: 8px;
     }}
-    QListWidget#setup_wizard_condition_list::item {{
-        padding: 10px 12px;
+    QListWidget#setup_wizard_condition_list::item,
+    QListWidget#setup_wizard_condition_image_list::item {{
+        padding: 5px 10px;
         border-radius: 8px;
     }}
     QListWidget#condition_list::item:hover {{
         background-color: {COLOR_SURFACE_ALT};
     }}
-    QListWidget#setup_wizard_condition_list::item:hover {{
+    QListWidget#setup_wizard_condition_list::item:hover,
+    QListWidget#setup_wizard_condition_image_list::item:hover {{
         background-color: {COLOR_SURFACE_ALT};
     }}
     QListWidget#condition_list::item:selected {{
@@ -922,7 +925,8 @@ def studio_theme_stylesheet() -> str:
         color: #ffffff;
         font-weight: 700;
     }}
-    QListWidget#setup_wizard_condition_list::item:selected {{
+    QListWidget#setup_wizard_condition_list::item:selected,
+    QListWidget#setup_wizard_condition_image_list::item:selected {{
         background-color: {COLOR_PRIMARY};
         color: #ffffff;
         font-weight: 700;
