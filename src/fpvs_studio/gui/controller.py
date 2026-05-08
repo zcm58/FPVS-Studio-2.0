@@ -75,12 +75,9 @@ class StudioController:
         if self.welcome_window is None:
             self.welcome_window = WelcomeWindow()
             self.welcome_window.create_requested.connect(self.show_create_project_dialog)
-            self.welcome_window.open_requested.connect(self.show_open_project_dialog)
             self.welcome_window.manage_projects_requested.connect(
                 self.show_manage_projects_dialog
             )
-            self.welcome_window.recent_project_requested.connect(self.open_recent_project)
-        self.welcome_window.set_recent_projects(self.load_recent_project_entries())
         self.welcome_window.show()
         self.welcome_window.raise_()
         self.welcome_window.activateWindow()
@@ -149,8 +146,6 @@ class StudioController:
             [str(path) for path in recent_paths],
         )
         self._settings.sync()
-        if self.welcome_window is not None:
-            self.welcome_window.set_recent_projects(self.load_recent_project_entries())
 
     def remove_recent_project_root(self, project_root: Path) -> None:
         """Remove one project root from the recent-project settings list."""
@@ -166,8 +161,6 @@ class StudioController:
             [str(path) for path in recent_paths],
         )
         self._settings.sync()
-        if self.welcome_window is not None:
-            self.welcome_window.set_recent_projects(self.load_recent_project_entries())
 
     def open_recent_project(self, project_root: str) -> None:
         """Open a project selected from the welcome screen recent-project list."""

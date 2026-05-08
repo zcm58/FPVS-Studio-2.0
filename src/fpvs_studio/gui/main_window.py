@@ -144,16 +144,19 @@ class StudioMainWindow(QMainWindow):
     def show_home(self) -> None:
         self.flush_pending_edits()
         self.home_page.refresh()
+        self._set_home_chrome_visible(False)
         self._apply_compact_window_size()
         self.main_stack.setCurrentWidget(self.home_page)
 
     def show_setup_wizard(self) -> None:
+        self._set_home_chrome_visible(True)
         self._apply_workspace_window_size()
         self.main_stack.setCurrentWidget(self.setup_wizard_page)
         self.setup_wizard_page.open_wizard()
 
     def show_image_resizer(self) -> None:
         self.flush_pending_edits()
+        self._set_home_chrome_visible(True)
         self._apply_workspace_window_size()
         self.main_stack.setCurrentWidget(self.image_resizer_page)
 
@@ -172,6 +175,11 @@ class StudioMainWindow(QMainWindow):
 
     def flush_pending_edits(self) -> None:
         self.setup_wizard_page.flush_pending_edits()
+
+    def _set_home_chrome_visible(self, visible: bool) -> None:
+        self.menuBar().setVisible(visible)
+        if self.statusBar() is not None:
+            self.statusBar().setVisible(visible)
 
     def _apply_compact_window_size(self) -> None:
         self.setMinimumSize(*_COMPACT_HOME_MINIMUM_SIZE)

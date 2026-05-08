@@ -15,19 +15,14 @@ The installed script entry point is also available as `fpvs-studio`.
 The welcome window provides:
 
 - `Create New Project`
-- `Open Existing Project`
-- `Manage Projects`
-- a recent-projects list when valid recent projects are available
+- `Open Projects`
 
 Creating a project asks for:
 
 - project name
 - parent folder where the project root will be scaffolded
 
-Opening a project currently selects an existing project directory and resolves
-its `project.json` through the backend document layer.
-
-Managing projects reloads the configured FPVS Studio Root Folder and lists current FPVS
+Opening projects reloads the configured FPVS Studio Root Folder and lists current FPVS
 project folders discovered on disk, plus valid recent projects. The dialog can open a
 project or move a project folder to the Windows Recycle Bin after an explicit Yes/No
 confirmation. The currently open project is shown but cannot be deleted from its own
@@ -166,7 +161,7 @@ Phase 5 currently supports:
 
 - creating a new project scaffold
 - opening and editing an existing project
-- reopening recent projects from the welcome screen
+- opening known or recent projects from `Open Projects`
 - managing known projects and moving project folders to the Recycle Bin after confirmation
 - saving and reopening project state
 - launching ready projects from Home without exposing setup tabs

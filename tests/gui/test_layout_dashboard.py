@@ -330,8 +330,10 @@ def test_major_tabs_share_page_container_width_presets(
 ) -> None:
     _, window = _open_created_project(controller, qtbot, tmp_path, "Shared Page Container")
 
-    assert window.home_page.page_container.width_preset == "wide"
-    assert window.home_page.page_container.max_content_width() == 1280
+    assert not hasattr(window.home_page, "page_container")
+    assert window.home_page.launch_surface.page_layout.contentsMargins().left() == 32
+    assert window.home_page.launch_surface.content_layout.contentsMargins().left() == 44
+    assert window.home_page.launch_surface.hero_container.maximumWidth() == 760
     assert window.setup_wizard_page.shell.page_container.width_preset == "full"
     assert window.setup_wizard_page.shell.page_container.max_content_width() == 16_777_215
     assert window.conditions_page.embedded is True
@@ -348,22 +350,16 @@ def test_page_headers_use_home_left_alignment_and_non_home_center_alignment(
 ) -> None:
     _, window = _open_created_project(controller, qtbot, tmp_path, "Header Geometry")
     home_launch_panel = window.home_page.findChild(QWidget, "home_launch_panel")
+    home_hero_container = window.home_page.findChild(QWidget, "home_hero_container")
     assert home_launch_panel is not None
-    assert (
-        window.home_page.current_project_header.parent()
-        is not window.home_page.page_container.header_widget
-    )
-    assert (
-        window.home_page.current_project_subtitle.parent()
-        is not window.home_page.page_container.header_widget
-    )
+    assert home_hero_container is not None
     assert (
         window.home_page.current_project_header.parentWidget().parentWidget()
-        is home_launch_panel
+        is home_hero_container
     )
     assert (
         window.home_page.current_project_subtitle.parentWidget().parentWidget()
-        is home_launch_panel
+        is home_hero_container
     )
     assert window.home_page.current_project_header.alignment() & Qt.AlignmentFlag.AlignLeft
     assert window.home_page.current_project_subtitle.alignment() & Qt.AlignmentFlag.AlignLeft
@@ -385,18 +381,19 @@ def test_home_launch_card_is_centered_in_page_viewport(
 
     launch_panel = window.home_page.findChild(QWidget, "home_launch_panel")
     summary_label = window.home_page.findChild(QLabel, "home_launch_status_summary")
-    viewport = window.home_page.page_container.scroll_area.viewport()
 
     assert launch_panel is not None
     assert summary_label is not None
-    qtbot.waitUntil(lambda: launch_panel.width() > 0 and viewport.width() > 0)
+    assert launch_panel.property("launchSurfaceFrame") == "true"
+    assert 'QFrame[launchSurfaceFrame="true"]' in window.home_page.styleSheet()
+    qtbot.waitUntil(lambda: launch_panel.width() > 0 and window.home_page.width() > 0)
 
     panel_center = launch_panel.mapTo(
-        viewport,
+        window.home_page,
         QPoint(launch_panel.width() // 2, launch_panel.height() // 2),
     )
-    assert abs(panel_center.x() - (viewport.width() / 2)) < 20
-    assert abs(panel_center.y() - (viewport.height() / 2)) < 35
+    assert abs(panel_center.x() - (window.home_page.width() / 2)) < 20
+    assert abs(panel_center.y() - (window.home_page.height() / 2)) < 35
     assert summary_label.text() == ""
     assert not summary_label.isVisible()
 
@@ -432,6 +429,8 @@ def test_switching_main_workflow_stack_keeps_outer_window_size_stable(
     _, window = _open_created_project(controller, qtbot, tmp_path, "Workflow Window Size")
 
     assert window.main_stack.currentWidget() is window.setup_wizard_page
+    assert window.menuBar().isVisible()
+    assert window.statusBar().isVisible()
     assert window.minimumWidth() == 1366
     assert window.minimumHeight() == 820
     assert window.width() == 1440
@@ -441,6 +440,8 @@ def test_switching_main_workflow_stack_keeps_outer_window_size_stable(
     QApplication.processEvents()
 
     assert window.main_stack.currentWidget() is window.home_page
+    assert not window.menuBar().isVisible()
+    assert not window.statusBar().isVisible()
     assert window.minimumWidth() == 760
     assert window.minimumHeight() == 520
     assert window.width() == 1040
@@ -450,6 +451,8 @@ def test_switching_main_workflow_stack_keeps_outer_window_size_stable(
     QApplication.processEvents()
 
     assert window.main_stack.currentWidget() is window.setup_wizard_page
+    assert window.menuBar().isVisible()
+    assert window.statusBar().isVisible()
     assert window.minimumWidth() == 1366
     assert window.minimumHeight() == 820
     assert window.width() == 1440
@@ -460,6 +463,8 @@ def test_switching_main_workflow_stack_keeps_outer_window_size_stable(
     QApplication.processEvents()
 
     assert window.main_stack.currentWidget() is window.home_page
+    assert not window.menuBar().isVisible()
+    assert not window.statusBar().isVisible()
     assert window.minimumWidth() == 760
     assert window.minimumHeight() == 520
     assert window.width() == 1500
@@ -477,24 +482,18 @@ def test_primary_workflow_surfaces_fit_default_window_with_bounded_page_scrollba
     window.show()
     QApplication.processEvents()
 
-    page_specs = [
-        (window.home_page, window.home_page.page_container.scroll_area, 1),
-        (
-            window.setup_wizard_page,
-            window.setup_wizard_page.shell.page_container.scroll_area,
-            0,
-        ),
-    ]
+    window.main_stack.setCurrentWidget(window.home_page)
+    QApplication.processEvents()
+    launch_panel = window.home_page.findChild(QWidget, "home_launch_panel")
+    assert launch_panel is not None
+    assert launch_panel.height() <= window.home_page.height()
+    assert launch_panel.width() <= window.home_page.width()
 
-    for page, scroll_area, max_scroll in page_specs:
-        window.main_stack.setCurrentWidget(page)
-        QApplication.processEvents()
-        qtbot.waitUntil(
-            lambda scroll_area=scroll_area, max_scroll=max_scroll: (
-                scroll_area.verticalScrollBar().maximum() <= max_scroll
-            )
-        )
-        assert scroll_area.verticalScrollBar().maximum() <= max_scroll
+    window.main_stack.setCurrentWidget(window.setup_wizard_page)
+    QApplication.processEvents()
+    setup_scroll_area = window.setup_wizard_page.shell.page_container.scroll_area
+    qtbot.waitUntil(lambda: setup_scroll_area.verticalScrollBar().maximum() <= 0)
+    assert setup_scroll_area.verticalScrollBar().maximum() == 0
     _assert_setup_wizard_vertical_scrolling_disabled(window.setup_wizard_page)
 
 
@@ -1938,9 +1937,11 @@ def test_home_header_updates_when_project_name_changes(
     _, window = _open_created_project(controller, qtbot, tmp_path, "Home Header Project")
     header_label = window.home_page.findChild(QLabel, "home_current_project_header")
     launch_panel = window.home_page.findChild(QWidget, "home_launch_panel")
+    home_hero_container = window.home_page.findChild(QWidget, "home_hero_container")
     assert header_label is not None
     assert launch_panel is not None
-    assert header_label.parentWidget().parentWidget() is launch_panel
+    assert home_hero_container is not None
+    assert header_label.parentWidget().parentWidget() is home_hero_container
     assert header_label.text() == "Home Header Project"
 
     window.setup_dashboard_page.project_overview_editor.project_name_edit.setText(
@@ -2004,10 +2005,12 @@ def test_home_quick_action_buttons_present_and_wired(
     assert len({button.width() for button in ordered_buttons}) == 1
     assert {button.minimumWidth() for button in ordered_buttons} == {160}
     assert launch_button.width() > ordered_buttons[0].width()
-    assert launch_button.parent() is window.home_page.findChild(QWidget, "home_launch_panel")
-    launch_panel = launch_button.parentWidget()
+    assert launch_button.parent() is window.home_page.findChild(QWidget, "home_hero_container")
+    launch_panel = window.home_page.findChild(QWidget, "home_launch_panel")
+    home_hero_container = window.home_page.findChild(QWidget, "home_hero_container")
     assert launch_panel is not None
-    assert launch_panel.maximumWidth() == 860
+    assert home_hero_container is not None
+    assert home_hero_container.maximumWidth() == 760
     assert launch_button.sizePolicy().horizontalPolicy() == QSizePolicy.Policy.Fixed
 
     trigger_counts = {"new": 0, "open": 0, "launch": 0}

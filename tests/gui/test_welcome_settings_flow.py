@@ -47,8 +47,9 @@ def test_welcome_window_smoke(qtbot, controller: StudioController, monkeypatch) 
     welcome = controller.welcome_window
     assert welcome is not None
     create_button = welcome.findChild(QPushButton, "create_project_button")
-    open_button = welcome.findChild(QPushButton, "open_project_button")
-    manage_button = welcome.findChild(QPushButton, "manage_projects_button")
+    open_projects_button = welcome.findChild(QPushButton, "open_projects_button")
+    assert create_button is not None
+    assert open_projects_button is not None
     monkeypatch.setattr(
         ManageProjectsDialog,
         "exec",
@@ -57,36 +58,34 @@ def test_welcome_window_smoke(qtbot, controller: StudioController, monkeypatch) 
 
     with qtbot.waitSignal(welcome.create_requested, timeout=1000):
         qtbot.mouseClick(create_button, Qt.MouseButton.LeftButton)
-    with qtbot.waitSignal(welcome.open_requested, timeout=1000):
-        qtbot.mouseClick(open_button, Qt.MouseButton.LeftButton)
     with qtbot.waitSignal(welcome.manage_projects_requested, timeout=1000):
-        qtbot.mouseClick(manage_button, Qt.MouseButton.LeftButton)
+        qtbot.mouseClick(open_projects_button, Qt.MouseButton.LeftButton)
 
 
 def test_welcome_window_copy_and_primary_hierarchy(controller: StudioController) -> None:
     welcome = controller.welcome_window
     assert welcome is not None
 
+    brand = welcome.findChild(QLabel, "welcome_brand_label")
     headline = welcome.findChild(QLabel, "welcome_headline_label")
     body = welcome.findChild(QLabel, "welcome_body_label")
     create_button = welcome.findChild(QPushButton, "create_project_button")
     open_button = welcome.findChild(QPushButton, "open_project_button")
-    manage_button = welcome.findChild(QPushButton, "manage_projects_button")
+    open_projects_button = welcome.findChild(QPushButton, "open_projects_button")
 
+    assert brand is None
     assert headline is not None
     assert body is not None
     assert create_button is not None
-    assert open_button is not None
-    assert manage_button is not None
+    assert open_button is None
+    assert open_projects_button is not None
 
     assert headline.text() == "Welcome to FPVS Studio"
     assert body.text() == "Create a new FPVS project or open an existing one."
-    assert create_button.text() == "New Project"
-    assert open_button.text() == "Open Project"
-    assert manage_button.text() == "Manage Projects"
+    assert create_button.text() == "Create New Project"
+    assert open_projects_button.text() == "Open Projects"
     assert create_button.property("welcomeRole") == "primary"
-    assert open_button.property("welcomeRole") != "primary"
-    assert manage_button.property("welcomeRole") != "primary"
+    assert open_projects_button.property("welcomeRole") != "primary"
 
 
 def test_welcome_window_action_buttons_are_horizontally_centered(
@@ -97,26 +96,26 @@ def test_welcome_window_action_buttons_are_horizontally_centered(
 
     content_frame = welcome.findChild(QWidget, "welcome_content_frame")
     create_button = welcome.findChild(QPushButton, "create_project_button")
-    open_button = welcome.findChild(QPushButton, "open_project_button")
-    manage_button = welcome.findChild(QPushButton, "manage_projects_button")
+    open_projects_button = welcome.findChild(QPushButton, "open_projects_button")
 
     assert content_frame is not None
     assert create_button is not None
-    assert open_button is not None
-    assert manage_button is not None
+    assert open_projects_button is not None
 
     welcome.resize(1200, 760)
     QApplication.processEvents()
 
     create_left = create_button.mapTo(content_frame, create_button.rect().topLeft()).x()
     create_right = create_button.mapTo(content_frame, create_button.rect().bottomRight()).x()
-    open_left = open_button.mapTo(content_frame, open_button.rect().topLeft()).x()
-    open_right = open_button.mapTo(content_frame, open_button.rect().bottomRight()).x()
-    manage_left = manage_button.mapTo(content_frame, manage_button.rect().topLeft()).x()
-    manage_right = manage_button.mapTo(content_frame, manage_button.rect().bottomRight()).x()
+    open_left = open_projects_button.mapTo(
+        content_frame, open_projects_button.rect().topLeft()
+    ).x()
+    open_right = open_projects_button.mapTo(
+        content_frame, open_projects_button.rect().bottomRight()
+    ).x()
 
-    group_left = min(create_left, open_left, manage_left)
-    group_right = max(create_right, open_right, manage_right)
+    group_left = min(create_left, open_left)
+    group_right = max(create_right, open_right)
     button_group_midpoint = (group_left + group_right) / 2.0
     content_midpoint = content_frame.width() / 2.0
 
@@ -132,6 +131,8 @@ def test_welcome_window_hero_stack_is_centered_in_panel(controller: StudioContro
 
     assert content_frame is not None
     assert hero_container is not None
+    assert content_frame.property("launchSurfaceFrame") == "true"
+    assert 'QFrame[launchSurfaceFrame="true"]' in welcome.styleSheet()
 
     welcome.resize(1280, 720)
     QApplication.processEvents()
@@ -144,20 +145,18 @@ def test_welcome_window_hero_stack_is_centered_in_panel(controller: StudioContro
     assert abs(hero_center.y() - frame_center_y) <= 18.0
 
 
-def test_welcome_window_hides_recent_projects_panel_when_empty(
+def test_welcome_window_does_not_render_recent_projects_panel(
     controller: StudioController,
 ) -> None:
     welcome = controller.welcome_window
     assert welcome is not None
     recent_panel = welcome.findChild(QWidget, "welcome_recent_projects_panel")
     recent_list = welcome.findChild(QListWidget, "welcome_recent_project_list")
-    assert recent_panel is not None
-    assert recent_list is not None
-    assert recent_panel.isVisible() is False
-    assert recent_list.count() == 0
+    assert recent_panel is None
+    assert recent_list is None
 
 
-def test_recent_projects_render_and_open_from_welcome(
+def test_recent_projects_feed_open_projects_dialog_entries(
     qtbot,
     qapp,
     tmp_path: Path,
@@ -177,26 +176,13 @@ def test_recent_projects_render_and_open_from_welcome(
     controller.show_welcome()
     assert controller.welcome_window is not None
     qtbot.addWidget(controller.welcome_window)
+    assert controller.welcome_window.findChild(QWidget, "welcome_recent_projects_panel") is None
 
-    recent_panel = controller.welcome_window.findChild(QWidget, "welcome_recent_projects_panel")
-    recent_list = controller.welcome_window.findChild(QListWidget, "welcome_recent_project_list")
-    assert recent_panel is not None
-    assert recent_list is not None
-    assert recent_panel.isVisible() is True
-    assert recent_list.count() == 1
-    assert recent_list.item(0).text() == "Recent Launch Project"
-    assert recent_list.item(0).toolTip() == str(scaffold.project_root)
-    assert recent_list.item(0).data(Qt.ItemDataRole.UserRole) == str(scaffold.project_root)
+    entries = controller.load_manageable_project_entries()
 
-    qtbot.mouseClick(
-        recent_list.viewport(),
-        Qt.MouseButton.LeftButton,
-        pos=recent_list.visualItemRect(recent_list.item(0)).center(),
-    )
-
-    assert controller.main_window is not None
-    qtbot.addWidget(controller.main_window)
-    assert controller.main_window.document.project_root == scaffold.project_root
+    assert [(entry.name, entry.root) for entry in entries] == [
+        ("Recent Launch Project", scaffold.project_root)
+    ]
 
 
 def test_opening_project_records_recent_project_root(

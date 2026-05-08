@@ -68,6 +68,7 @@ PageContainer: Any
 SectionCard: Any
 
 __all__ = [
+    "LaunchSurfaceFrame",
     "NonHomePageShell",
     "PAGE_SECTION_GAP",
     "PageContainer",
@@ -109,6 +110,58 @@ __all__ = [
     "studio_theme_stylesheet",
     "welcome_window_stylesheet",
 ]
+
+
+class LaunchSurfaceFrame(QWidget):
+    """Shared full-window launch/welcome frame with centered inner content."""
+
+    def __init__(
+        self,
+        *,
+        frame_object_name: str,
+        hero_object_name: str,
+        parent: QWidget | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self.setObjectName(f"{frame_object_name}_surface")
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+
+        self.page_layout = QVBoxLayout(self)
+        self.page_layout.setContentsMargins(32, 32, 32, 32)
+        self.page_layout.setSpacing(16)
+
+        self.content_frame = QFrame(self)
+        self.content_frame.setObjectName(frame_object_name)
+        self.content_frame.setProperty("launchSurfaceFrame", "true")
+        self.content_frame.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Expanding,
+        )
+        self.page_layout.addWidget(self.content_frame, 1)
+
+        self.content_layout = QVBoxLayout(self.content_frame)
+        self.content_layout.setContentsMargins(44, 40, 44, 40)
+        self.content_layout.setSpacing(0)
+        self.content_layout.addStretch(1)
+
+        self.hero_container = QWidget(self.content_frame)
+        self.hero_container.setObjectName(hero_object_name)
+        self.hero_container.setMaximumWidth(760)
+        self.hero_container.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Maximum,
+        )
+        self.content_layout.addWidget(
+            self.hero_container,
+            0,
+            Qt.AlignmentFlag.AlignHCenter,
+        )
+
+        self.hero_layout = QVBoxLayout(self.hero_container)
+        self.hero_layout.setContentsMargins(0, 0, 0, 0)
+        self.hero_layout.setSpacing(18)
+
+        self.content_layout.addStretch(1)
 
 
 class SetupChecklistPanel(QFrame):
@@ -1039,8 +1092,27 @@ def apply_studio_theme(widget: QWidget) -> None:
     widget.setStyleSheet(studio_theme_stylesheet())
 
 
-def home_page_stylesheet() -> str:
-    return """
+def launch_surface_frame_stylesheet(palette: QPalette) -> str:
+    window_color = palette.color(QPalette.ColorRole.Window)
+    mid_color = palette.color(QPalette.ColorRole.Mid)
+    is_dark = window_color.lightness() < 128
+    content_bg = window_color.lighter(106) if is_dark else window_color.lighter(102)
+    frame_border = QColor(mid_color)
+    frame_border.setAlpha(100 if window_color.lightness() >= 128 else 145)
+
+    return f"""
+    QFrame[launchSurfaceFrame="true"] {{
+        border: 1px solid {_rgba(frame_border)};
+        border-radius: 16px;
+        background-color: {_rgba(content_bg)};
+    }}
+    """
+
+
+def home_page_stylesheet(palette: QPalette) -> str:
+    return (
+        launch_surface_frame_stylesheet(palette)
+        + """
     QWidget#home_page {
         color: #243447;
         font-size: 13px;
@@ -1074,12 +1146,7 @@ def home_page_stylesheet() -> str:
         font-size: 14px;
         padding: 7px 12px;
     }
-    QWidget#home_launch_panel {
-        border: 1px solid #c7d2e5;
-        border-radius: 8px;
-        background-color: #f8fbff;
-    }
-    QWidget#home_launch_panel QLabel#home_launch_status_summary {
+    QFrame#home_launch_panel QLabel#home_launch_status_summary {
         padding-top: 4px;
     }
     QFrame#home_metrics_panel {
@@ -1116,10 +1183,11 @@ def home_page_stylesheet() -> str:
         color: #33485f;
     }
     """
+    )
 
 
 def apply_home_page_theme(widget: QWidget) -> None:
-    widget.setStyleSheet(home_page_stylesheet())
+    widget.setStyleSheet(home_page_stylesheet(widget.palette()))
 
 
 def project_overview_stylesheet() -> str:
@@ -1304,10 +1372,6 @@ def welcome_window_stylesheet(palette: QPalette) -> str:
 
     muted_text = QColor(text_color)
     muted_text.setAlpha(190)
-    subtle_text = QColor(text_color)
-    subtle_text.setAlpha(150)
-    frame_border = QColor(mid_color)
-    frame_border.setAlpha(100 if window_color.lightness() >= 128 else 145)
 
     is_dark = window_color.lightness() < 128
     content_bg = window_color.lighter(106) if is_dark else window_color.lighter(102)
@@ -1316,19 +1380,9 @@ def welcome_window_stylesheet(palette: QPalette) -> str:
     primary_hover = highlight_color.lighter(112) if is_dark else highlight_color.darker(108)
     primary_pressed = highlight_color.lighter(124) if is_dark else highlight_color.darker(118)
 
-    return f"""
-    QFrame#welcome_content_frame {{
-        border: 1px solid {_rgba(frame_border)};
-        border-radius: 16px;
-        background-color: {_rgba(content_bg)};
-    }}
+    return launch_surface_frame_stylesheet(palette) + f"""
     QWidget#welcome_hero_container {{
         background: transparent;
-    }}
-    QLabel#welcome_brand_label {{
-        color: {_rgba(subtle_text)};
-        font-size: 14px;
-        font-weight: 600;
     }}
     QLabel#welcome_headline_label {{
         color: {_rgba(text_color)};
@@ -1338,31 +1392,6 @@ def welcome_window_stylesheet(palette: QPalette) -> str:
     QLabel#welcome_body_label {{
         color: {_rgba(muted_text)};
         font-size: 17px;
-    }}
-    QLabel#welcome_recent_projects_header {{
-        color: {_rgba(subtle_text)};
-        font-size: 13px;
-        font-weight: 600;
-    }}
-    QListWidget#welcome_recent_project_list {{
-        border: 1px solid {_rgba(mid_color)};
-        border-radius: 8px;
-        background-color: {_rgba(base_color)};
-        color: {_rgba(text_color)};
-        font-size: 13px;
-        outline: none;
-        padding: 4px;
-    }}
-    QListWidget#welcome_recent_project_list::item {{
-        padding: 5px 8px;
-        border-radius: 5px;
-    }}
-    QListWidget#welcome_recent_project_list::item:hover {{
-        background-color: {_rgba(row_hover_bg)};
-    }}
-    QListWidget#welcome_recent_project_list::item:selected {{
-        background-color: {_rgba(highlight_color)};
-        color: {_rgba(highlighted_text_color)};
     }}
     QPushButton {{
         border: 1px solid {_rgba(mid_color)};

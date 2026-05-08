@@ -19,8 +19,9 @@ the active app.
 - Setup Wizard is the guided setup/editing surface.
 - Conditions is the guided setup area for assigning base/oddball image folders and
   creating optional derived-variant control conditions.
-- Manage Projects is the welcome/File-menu surface for opening known projects or
-  moving project folders to the Windows Recycle Bin with confirmation.
+- Open Projects is the welcome entry point for the Manage Projects surface, which
+  opens known projects or moves project folders to the Windows Recycle Bin with
+  confirmation. The File menu still exposes the same management surface.
 - The current Setup Wizard does not expose Advanced buttons; dense/internal support
   pages should remain behind guided workflows unless a future plan explicitly
   reintroduces them.

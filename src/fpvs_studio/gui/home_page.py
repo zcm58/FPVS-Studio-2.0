@@ -22,8 +22,8 @@ from fpvs_studio.core.models import ConditionTemplateProfile
 from fpvs_studio.gui.assets_pages import AssetsReadinessEditor
 from fpvs_studio.gui.components import (
     PAGE_SECTION_GAP,
+    LaunchSurfaceFrame,
     NonHomePageShell,
-    PageContainer,
     SectionCard,
     StatusBadgeLabel,
     apply_home_page_theme,
@@ -309,7 +309,6 @@ class HomePage(QWidget):
         self._document = document
         self._load_condition_template_profiles = load_condition_template_profiles
         self.setObjectName("home_page")
-        self.page_container = PageContainer(width_preset="wide", parent=self)
 
         self.open_project_button = QPushButton("Open Project", self)
         self.open_project_button.setObjectName("home_open_project_button")
@@ -343,12 +342,13 @@ class HomePage(QWidget):
         self.launch_status_summary.setMinimumHeight(28)
         self.launch_status_summary.setVisible(False)
 
-        launch_panel = QWidget(self)
-        launch_panel.setObjectName("home_launch_panel")
-        launch_panel.setMaximumWidth(860)
-        launch_panel_layout = QVBoxLayout(launch_panel)
-        launch_panel_layout.setContentsMargins(30, 28, 30, 28)
-        launch_panel_layout.setSpacing(18)
+        self.launch_surface = LaunchSurfaceFrame(
+            frame_object_name="home_launch_panel",
+            hero_object_name="home_hero_container",
+            parent=self,
+        )
+        launch_panel = self.launch_surface.content_frame
+        launch_panel_layout = self.launch_surface.hero_layout
 
         identity_row = QHBoxLayout()
         identity_row.setContentsMargins(0, 0, 0, 0)
@@ -441,24 +441,9 @@ class HomePage(QWidget):
         launch_panel_layout.addWidget(metrics_panel)
         launch_panel_layout.addWidget(self.launch_button, 0, Qt.AlignmentFlag.AlignCenter)
 
-        launch_panel_row = QHBoxLayout()
-        launch_panel_row.setContentsMargins(0, 0, 0, 0)
-        launch_panel_row.addStretch(1)
-        launch_panel_row.addWidget(launch_panel, 4)
-        launch_panel_row.addStretch(1)
-
-        page_layout = self.page_container.content_layout
-        self.page_container.content_frame.setSizePolicy(
-            QSizePolicy.Policy.Expanding,
-            QSizePolicy.Policy.Expanding,
-        )
-        page_layout.addStretch(1)
-        page_layout.addLayout(launch_panel_row)
-        page_layout.addStretch(1)
-
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.addWidget(self.page_container)
+        layout.addWidget(self.launch_surface)
 
         apply_home_page_theme(self)
 
