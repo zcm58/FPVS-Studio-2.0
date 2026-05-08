@@ -23,17 +23,13 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from fpvs_studio.core.enums import DutyCycleMode, StimulusVariant
+from fpvs_studio.core.enums import StimulusVariant
 from fpvs_studio.core.models import Condition, StimulusSet
 from fpvs_studio.core.paths import stimuli_dir
-from fpvs_studio.core.template_library import get_template
 from fpvs_studio.gui.components import (
     PAGE_SECTION_GAP,
-    SetupChecklistPanel,
-    SetupSidePanel,
     SetupSourceCard,
     SetupWorkspaceFrame,
-    StatusBadgeLabel,
     mark_primary_action,
     mark_secondary_action,
 )
@@ -44,7 +40,6 @@ from fpvs_studio.gui.window_helpers import (
     _resolution_text,
     _show_error_dialog,
     _sync_text_editor_contents,
-    _variant_label,
 )
 from fpvs_studio.gui.workers import ProgressTask
 
@@ -65,29 +60,20 @@ def is_guided_trigger_code(value: int) -> bool:
 
 
 class ConditionSetupStep(QWidget):
-    """Focused wizard step for condition identity or linked image sources."""
+    """Focused wizard step for condition identity and linked image sources."""
 
     def __init__(
         self,
         document: ProjectDocument,
         parent: QWidget | None = None,
-        *,
-        mode: str = "details",
     ) -> None:
         super().__init__(parent)
-        if mode not in {"details", "images"}:
-            raise ValueError(f"Unsupported condition setup mode: {mode}")
         self._document = document
-        self._mode = mode
         self._pending_instruction_condition_id: str | None = None
         self._active_task: ProgressTask | None = None
 
         self.condition_list = QListWidget(self)
-        self.condition_list.setObjectName(
-            "setup_wizard_condition_image_list"
-            if mode == "images"
-            else "setup_wizard_condition_list"
-        )
+        self.condition_list.setObjectName("setup_wizard_condition_list")
         self.condition_list.setProperty("setupConditionsList", "true")
         self.condition_list.setSelectionMode(QListWidget.SelectionMode.SingleSelection)
         self.condition_list.setAlternatingRowColors(True)
@@ -117,45 +103,19 @@ class ConditionSetupStep(QWidget):
         list_layout = QVBoxLayout(list_panel)
         list_layout.setContentsMargins(0, 0, 0, 0)
         list_layout.setSpacing(8)
-        list_title = QLabel(
-            "Condition List" if mode == "details" else "Condition Images",
-            list_panel,
-        )
-        list_title.setProperty("sectionCardRole", "title")
-        list_note = QLabel(
-            "Create, remove, and reorder conditions."
-            if mode == "details"
-            else "Choose a condition and assign its base and oddball image folders.",
-            list_panel,
-        )
-        list_note.setProperty("setupPanelHelper", "true")
-        list_note.setWordWrap(True)
-        list_layout.addWidget(list_title)
-        list_layout.addWidget(list_note)
         list_layout.addWidget(self.condition_list, 1)
-        if mode == "details":
-            action_grid = QGridLayout()
-            action_grid.setContentsMargins(0, 0, 0, 0)
-            action_grid.setHorizontalSpacing(8)
-            action_grid.setVerticalSpacing(8)
-            action_grid.addWidget(self.add_condition_button, 0, 0)
-            action_grid.addWidget(self.duplicate_condition_button, 0, 1)
-            action_grid.addWidget(self.create_control_condition_button, 1, 0)
-            action_grid.addWidget(self.remove_condition_button, 1, 1)
-            action_grid.setColumnStretch(0, 1)
-            action_grid.setColumnStretch(1, 1)
-            list_layout.addLayout(action_grid)
-        else:
-            for button in (
-                self.add_condition_button,
-                self.duplicate_condition_button,
-                self.create_control_condition_button,
-                self.remove_condition_button,
-            ):
-                button.setVisible(False)
+        action_grid = QGridLayout()
+        action_grid.setContentsMargins(0, 0, 0, 0)
+        action_grid.setHorizontalSpacing(8)
+        action_grid.setVerticalSpacing(8)
+        action_grid.addWidget(self.add_condition_button, 0, 0)
+        action_grid.addWidget(self.duplicate_condition_button, 0, 1)
+        action_grid.addWidget(self.create_control_condition_button, 1, 0)
+        action_grid.addWidget(self.remove_condition_button, 1, 1)
+        action_grid.setColumnStretch(0, 1)
+        action_grid.setColumnStretch(1, 1)
+        list_layout.addLayout(action_grid)
 
-        self.selected_condition_badge = StatusBadgeLabel("No condition selected", self)
-        self.selected_condition_badge.setObjectName("setup_wizard_selected_condition_badge")
         self.selected_condition_note = QLabel(self)
         self.selected_condition_note.setObjectName("setup_wizard_selected_condition_note")
         self.selected_condition_note.setProperty("setupPanelHelper", "true")
@@ -197,6 +157,8 @@ class ConditionSetupStep(QWidget):
             "Base Images",
             "Choose Base Images...",
             object_name="setup_conditions_base_source_card",
+            compact=True,
+            show_variants=False,
             parent=self,
         )
         self.base_source_value = self.base_source_card.folder_value
@@ -213,6 +175,8 @@ class ConditionSetupStep(QWidget):
             "Oddball Images",
             "Choose Oddball Images...",
             object_name="setup_conditions_oddball_source_card",
+            compact=True,
+            show_variants=False,
             parent=self,
         )
         self.oddball_source_value = self.oddball_source_card.folder_value
@@ -236,19 +200,6 @@ class ConditionSetupStep(QWidget):
         sources_grid.setColumnStretch(0, 1)
         sources_grid.setColumnStretch(1, 1)
 
-        self.protocol_defaults_panel = SetupSidePanel(
-            "Protocol Defaults",
-            object_name="setup_conditions_protocol_defaults_panel",
-            parent=self,
-        )
-        self.protocol_defaults_panel.add_helper_text("Most projects should keep these defaults.")
-
-        self.setup_checklist = SetupChecklistPanel(
-            "Setup Checklist",
-            object_name="setup_conditions_checklist_panel",
-            parent=self,
-        )
-
         detail_panel = QWidget(self)
         detail_panel.setObjectName("setup_conditions_main_panel")
         detail_layout = QVBoxLayout(detail_panel)
@@ -258,33 +209,12 @@ class ConditionSetupStep(QWidget):
         detail_header_layout = QHBoxLayout(detail_header)
         detail_header_layout.setContentsMargins(0, 0, 0, 0)
         detail_header_layout.setSpacing(8)
-        detail_title = QLabel("Selected Condition" if mode == "details" else "", detail_header)
-        self.detail_title = detail_title
-        detail_title.setProperty("sectionCardRole", "title")
-        detail_header_layout.addWidget(detail_title)
-        detail_header_layout.addWidget(self.selected_condition_badge)
         detail_header_layout.addStretch(1)
         detail_header_layout.addWidget(self.selected_condition_note)
         detail_layout.addWidget(detail_header)
 
-        if mode == "details":
-            detail_layout.addLayout(form)
-            self.base_source_card.setVisible(False)
-            self.oddball_source_card.setVisible(False)
-            self.protocol_defaults_panel.setVisible(False)
-            self.setup_checklist.setVisible(False)
-        else:
-            self.detail_title.setVisible(False)
-            self.selected_condition_badge.setVisible(False)
-            for widget in (
-                self.condition_name_edit,
-                self.trigger_code_spin,
-                self.instructions_edit,
-            ):
-                widget.setVisible(False)
-            detail_layout.addLayout(sources_grid)
-            self.protocol_defaults_panel.setVisible(False)
-            self.setup_checklist.setVisible(False)
+        detail_layout.addLayout(form)
+        detail_layout.addLayout(sources_grid)
         detail_layout.addStretch(1)
 
         workspace = SetupWorkspaceFrame(object_name="setup_conditions_workspace", parent=self)
@@ -361,8 +291,12 @@ class ConditionSetupStep(QWidget):
         self.create_control_condition_button.setEnabled(
             enabled and self._condition_has_control_sources(condition)
         )
+        self.create_control_condition_button.setToolTip(
+            ""
+            if self.create_control_condition_button.isEnabled()
+            else "Choose base and oddball images before creating a control condition."
+        )
         if condition is None:
-            self.selected_condition_badge.set_state("pending", "No condition selected")
             self.selected_condition_note.setText("Choose a condition in the list to edit it.")
             with QSignalBlocker(self.condition_name_edit):
                 self.condition_name_edit.clear()
@@ -373,7 +307,6 @@ class ConditionSetupStep(QWidget):
             self._set_checklist_statuses(False, False, False, False)
             self._set_source_summary(None, role="base")
             self._set_source_summary(None, role="oddball")
-            self._set_protocol_defaults(None)
             return
 
         base_set = self._document.get_condition_stimulus_set(condition.condition_id, "base")
@@ -382,11 +315,6 @@ class ConditionSetupStep(QWidget):
         trigger_ready = is_guided_trigger_code(condition.trigger_code)
         base_ready = self._stimulus_ready(base_set)
         oddball_ready = self._stimulus_ready(oddball_set)
-        condition_ready = named and trigger_ready and base_ready and oddball_ready
-        self.selected_condition_badge.set_state(
-            "ready" if condition_ready else "warning",
-            "Ready" if condition_ready else "Setup Incomplete",
-        )
         self.selected_condition_note.setText(
             f"Condition ID: {condition.condition_id}   |   Trigger code: {condition.trigger_code}"
         )
@@ -399,7 +327,6 @@ class ConditionSetupStep(QWidget):
         self._set_checklist_statuses(named, trigger_ready, base_ready, oddball_ready)
         self._set_source_summary(base_set, role="base")
         self._set_source_summary(oddball_set, role="oddball")
-        self._set_protocol_defaults(condition)
 
     def _set_checklist_statuses(
         self,
@@ -412,14 +339,6 @@ class ConditionSetupStep(QWidget):
         trigger_status = "Complete" if trigger_ready else "Use a trigger code of 1 or higher"
         base_status = "Complete" if base_ready else "Base Images Not Selected"
         oddball_status = "Complete" if oddball_ready else "Oddball Images Not Selected"
-        self.setup_checklist.set_items(
-            [
-                ("Name", named, name_status),
-                ("Trigger", trigger_ready, trigger_status),
-                ("Base Images", base_ready, base_status),
-                ("Oddball Images", oddball_ready, oddball_status),
-            ]
-        )
         self.name_check_status.setText(name_status)
         self.trigger_check_status.setText(trigger_status)
         self.base_check_status.setText(base_status)
@@ -456,35 +375,6 @@ class ConditionSetupStep(QWidget):
             image_count=count_text,
             resolution=resolution_text,
             variants=variants_text,
-        )
-
-    def _set_protocol_defaults(self, condition: Condition | None) -> None:
-        template = get_template(self._document.project.meta.template_id)
-        if condition is None:
-            self.protocol_defaults_panel.set_rows(
-                [
-                    ("Timing Template:", template.display_name),
-                    ("Image Version:", "Original"),
-                    ("Estimated Duration:", "Not available"),
-                    ("Base Rate:", f"{template.base_hz:.1f} Hz"),
-                    ("Oddball Rate:", f"{template.oddball_hz:.1f} Hz"),
-                ]
-            )
-            return
-
-        total_oddball_cycles = (
-            condition.sequence_count * condition.oddball_cycle_repeats_per_sequence
-        )
-        total_stimuli = total_oddball_cycles * template.oddball_every_n
-        duration_seconds = total_stimuli / template.base_hz
-        self.protocol_defaults_panel.set_rows(
-            [
-                ("Timing Template:", self._timing_template_label(condition)),
-                ("Image Version:", _variant_label(condition.stimulus_variant)),
-                ("Estimated Duration:", f"{duration_seconds:.1f} s"),
-                ("Base Rate:", f"{template.base_hz:.1f} Hz"),
-                ("Oddball Rate:", f"{template.oddball_hz:.1f} Hz"),
-            ]
         )
 
     def _add_condition(self) -> None:
@@ -667,9 +557,3 @@ class ConditionSetupStep(QWidget):
     @staticmethod
     def _stimulus_ready(stimulus_set: StimulusSet) -> bool:
         return stimulus_set.image_count > 0
-
-    @staticmethod
-    def _timing_template_label(condition: Condition) -> str:
-        if condition.duty_cycle_mode == DutyCycleMode.BLANK_50:
-            return "50% Blank Between Images"
-        return "Continuous Images"

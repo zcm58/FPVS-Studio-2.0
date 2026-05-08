@@ -55,7 +55,7 @@ The authoring window is organized around two user-facing modes:
     the user manually resized the larger setup window
 - `Setup Wizard`
   - in-window setup flow for new/incomplete projects and intentional edits
-  - ordered steps: Project, Conditions, Images, Experiment, Fixation, Response, Review
+  - ordered steps: Project, Conditions, Experiment, Fixation, Response, Review
   - `Next` is disabled until the active step is complete
   - the top progress indicator is a compact connected numbered stepper with
     completed/current/upcoming states, without redundant complete-state status bars
@@ -63,6 +63,9 @@ The authoring window is organized around two user-facing modes:
     guided steps free of Advanced buttons and vertical scrolling
   - guided steps use a shared setup step surface for consistent width, margins,
     and alignment inside the wizard card
+  - all six setup steps must fit inside the compact `1040x680` setup window
+    without bottom clipping, visible child widgets outside their parent bounds,
+    or required vertical scrolling
   - the wizard avoids generic footer/status copy; individual step cards should
     only show information needed for the current decision
   - Project uses a focused centered card, keeping the project folder path compact
@@ -77,24 +80,20 @@ The authoring window is organized around two user-facing modes:
     fullscreen playback, and the default display without exposing those as choices
   - the Session column exposes repeats per condition, the random order seed, and
     the fixed Space start key; condition order is always randomized within each block
-  - the Conditions step uses compact condition rows and a simplified condition
-    setup surface for condition list actions, name, trigger code, and participant
-    instructions
-  - the Images step owns base/oddball folder selection and selected-condition image
-    source cards without extra section headers or secondary summary panels above
-    the source-card workflow
+  - the Conditions step uses compact condition rows and a combined condition
+    setup surface for condition list actions, name, trigger code, participant
+    instructions, and base/oddball image source cards
   - raw image-folder import is permissive; folders with mixed image sizes are not
     rejected at selection time
-  - when users leave Images, FPVS Studio checks selected condition images for
+  - when users leave Conditions, FPVS Studio checks selected condition images for
     mixed sizes or file types; inconsistent folders can be normalized to PNG copies
     at `512x512` or `256x256` before moving on
   - the Conditions step includes a secondary `Create Control Condition...` action for
     optional grayscale, 180 degree rotated, or phase-scrambled control conditions that
     reuse the selected condition's existing base and oddball image folders
   - raw timing fields such as `Cycles / Repeat` are hidden from the guided workflow
-  - Conditions is complete when every condition has a descriptive name and trigger
-    code of 1 or higher; Images is complete when every condition has imported base
-    and oddball image folders
+  - Conditions is complete when every condition has a descriptive name, trigger
+    code of 1 or higher, and imported base and oddball image folders
   - Fixation exposes fixation color-change enablement, schedule, target counts, and
     timing
   - Response exposes accuracy tracking, response key/window, appearance, and a live

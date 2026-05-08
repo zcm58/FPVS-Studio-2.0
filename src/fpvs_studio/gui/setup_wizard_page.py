@@ -56,7 +56,6 @@ from fpvs_studio.gui.workers import ProgressTask
 _WIZARD_STEPS: tuple[tuple[str, str], ...] = (
     ("project", "Project"),
     ("conditions", "Conditions"),
-    ("images", "Images"),
     ("experiment", "Experiment"),
     ("fixation", "Fixation"),
     ("response", "Response"),
@@ -66,6 +65,7 @@ _CREATE_ALL_CONDITIONS_PROMPT = "Please ensure you create all conditions before 
 _SETUP_STEP_SURFACE_MAX_WIDTH = 980
 _SETUP_STEP_NARROW_SURFACE_MAX_WIDTH = 820
 _SETUP_STEP_SURFACE_MIN_HEIGHT = 360
+_SETUP_STEP_CARD_MAX_HEIGHT = 528
 
 
 class _CurrentWidgetStack(QStackedWidget):
@@ -167,8 +167,7 @@ class SetupWizardPage(QWidget):
         self._refresh_timer.timeout.connect(self.refresh)
 
         self.conditions_page = ConditionsPage(document, embedded=True, parent=self)
-        self.condition_setup_step = ConditionSetupStep(document, self, mode="details")
-        self.condition_images_step = ConditionSetupStep(document, self, mode="images")
+        self.condition_setup_step = ConditionSetupStep(document, self)
         self.add_condition_button = self.condition_setup_step.add_condition_button
         self.add_condition_button.clicked.connect(self._show_first_condition_prompt_if_needed)
         self.assets_page = AssetsPage(document, self)
@@ -381,6 +380,11 @@ class SetupWizardPage(QWidget):
         apply_setup_wizard_theme(self)
         self.refresh()
 
+    def resizeEvent(self, event) -> None:  # noqa: N802
+        super().resizeEvent(event)
+        self._sync_guided_panel_height()
+        QTimer.singleShot(0, self._sync_guided_panel_height)
+
     def sync_fullscreen_checkbox(self, _checked: bool) -> None:
         return
 
@@ -396,7 +400,6 @@ class SetupWizardPage(QWidget):
     def flush_pending_edits(self) -> None:
         self.project_overview_editor.flush_pending_edits()
         self.condition_setup_step.flush_pending_edits()
-        self.condition_images_step.flush_pending_edits()
         self.conditions_page.flush_pending_edits()
 
     def schedule_refresh(self) -> None:
@@ -414,11 +417,6 @@ class SetupWizardPage(QWidget):
         self.conditions_step_surface = _SetupStepSurface(
             self.condition_setup_step,
             object_name="setup_wizard_conditions_surface",
-            parent=self,
-        )
-        self.images_step_surface = _SetupStepSurface(
-            self.condition_images_step,
-            object_name="setup_wizard_images_surface",
             parent=self,
         )
         self.experiment_step_surface = _SetupStepSurface(
@@ -447,7 +445,6 @@ class SetupWizardPage(QWidget):
         )
         self.step_stack.addWidget(self.project_step_surface)
         self.step_stack.addWidget(self.conditions_step_surface)
-        self.step_stack.addWidget(self.images_step_surface)
         self.step_stack.addWidget(self.experiment_step_surface)
         self.step_stack.addWidget(self.fixation_step_surface)
         self.step_stack.addWidget(self.response_step_surface)
@@ -609,7 +606,7 @@ class SetupWizardPage(QWidget):
         if self._active_step_index == len(_WIZARD_STEPS) - 1:
             self._return_home()
             return
-        if _WIZARD_STEPS[self._active_step_index][0] == "images":
+        if _WIZARD_STEPS[self._active_step_index][0] == "conditions":
             if self._maybe_normalize_condition_images_before_advance():
                 return
         self._advance_to_next_step()
@@ -720,11 +717,10 @@ class SetupWizardPage(QWidget):
         self._refresh_review_summary()
 
         step_valid = self._current_step_valid()
-        show_step_intro = step_key in {"conditions", "images"}
-        self.step_title_label.setVisible(show_step_intro)
+        self.step_title_label.setVisible(False)
         self.step_status_badge.setVisible(False)
         self.step_status_label.setText(self._step_status_text(self._active_step_index))
-        self.step_status_label.setVisible(not step_valid and step_key in {"conditions", "images"})
+        self.step_status_label.setVisible(not step_valid and step_key == "conditions")
         self.step_card.setProperty(
             "wizardProjectStepFrame",
             "false",
@@ -738,8 +734,26 @@ class SetupWizardPage(QWidget):
         self._sync_guided_panel_height()
 
     def _sync_guided_panel_height(self) -> None:
-        self.guided_panel.setMaximumHeight(16_777_215)
-        self.content_stack.setMaximumHeight(16_777_215)
+        viewport_height = self.shell.page_container.scroll_area.viewport().height()
+        if viewport_height <= 0:
+            return
+        viewport_height = min(viewport_height, _SETUP_STEP_CARD_MAX_HEIGHT)
+
+        card_margins = self.step_card.card_layout.contentsMargins()
+        progress_height = self.progress_panel_shell.sizeHint().height()
+        body_spacing = self.step_card.body_layout.spacing()
+        content_height = max(
+            0,
+            viewport_height
+            - card_margins.top()
+            - card_margins.bottom()
+            - progress_height
+            - body_spacing,
+        )
+        self.step_card.setMaximumHeight(viewport_height)
+        self.step_content_anchor.setMaximumHeight(content_height)
+        self.content_stack.setMaximumHeight(content_height)
+        self.guided_panel.setMaximumHeight(content_height)
 
     def _refresh_current_editor_page(self) -> None:
         current_guided_widget = self.step_stack.currentWidget()
@@ -860,11 +874,6 @@ class SetupWizardPage(QWidget):
                 return "Name every condition"
             if not self._conditions_have_required_trigger_codes(ordered_conditions):
                 return "Set trigger codes"
-            return "Complete condition details"
-        if step_key == "images":
-            ordered_conditions = self._document.ordered_conditions()
-            if not ordered_conditions:
-                return "Add conditions first"
             return "Assign base and oddball folders"
         if step_key == "review":
             return "Review blockers"
@@ -879,8 +888,6 @@ class SetupWizardPage(QWidget):
         if step_key == "project":
             return self._project_details_ready()
         if step_key == "conditions":
-            return self._conditions_identity_ready(ordered_conditions)
-        if step_key == "images":
             return self._conditions_images_ready(ordered_conditions)
         if step_key == "experiment":
             return self.runtime_settings_editor.current_refresh_hz() > 0.0
@@ -904,11 +911,6 @@ class SetupWizardPage(QWidget):
                 return "Enter descriptive condition names"
             if not self._conditions_have_required_trigger_codes(ordered_conditions):
                 return "Set trigger codes above 0"
-            return "Complete condition details"
-        if step_key == "images":
-            ordered_conditions = self._document.ordered_conditions()
-            if not ordered_conditions:
-                return "Add at least one condition"
             return "Assign base and oddball folders"
         if step_key == "experiment":
             return "Set a valid refresh rate"
@@ -967,8 +969,9 @@ class SetupWizardPage(QWidget):
             "display": "experiment",
             "runtime": "experiment",
             "session": "experiment",
-            "stimuli": "images",
-            "assets": "images",
+            "images": "conditions",
+            "stimuli": "conditions",
+            "assets": "conditions",
             "fixation_cross": "fixation",
             "accuracy": "response",
             "appearance": "response",

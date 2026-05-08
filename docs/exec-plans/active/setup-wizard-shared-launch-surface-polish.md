@@ -16,9 +16,12 @@ compact window without clipping.
   anchored to the top of that shared frame, independent of each step's content.
 - [ ] Step 2: Adjust Project vertical spacing so the full page fits inside the
   compact setup frame.
-- [x] Step 3: Adjust Conditions vertical spacing and list density so controls fit.
-- [ ] Step 4: Remove redundant `Images` copy and card-within-card treatment on
-  Images while preserving source-card behavior.
+- [x] Step 3: Combine Conditions and Images into one compact Conditions workbench
+  so creating/naming conditions, assigning base/oddball folders, and creating
+  control conditions happen in one logical step. The wizard now uses six steps:
+  Project, Conditions, Experiment, Fixation, Response, and Review.
+- [x] Step 4: Remove the redundant standalone Images page and route old Images /
+  Stimuli / Assets step aliases to Conditions.
 - [ ] Step 5: Fix Experiment vertical clipping and spacing.
 - [ ] Step 6: Fix Fixation vertical clipping and make the section more compact.
 - [ ] Step 7: Widen Response content horizontally while preserving current controls.
@@ -39,5 +42,5 @@ compact window without clipping.
 - `python -m pytest -q tests\unit\test_harness_docs.py`
 - Ruff on touched Python files.
 - `.\scripts\check_gui.ps1`
-- Manual smoke: open Setup at `1040x680`, visit all seven steps, confirm no clipping,
+- Manual smoke: open Setup at `1040x680`, visit all six steps, confirm no clipping,
   no required vertical scrolling, and bottom navigation remains visible.

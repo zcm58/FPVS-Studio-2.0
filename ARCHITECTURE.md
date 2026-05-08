@@ -89,12 +89,15 @@ Current planned seams:
   for choosing the FPVS Studio Root Folder before the native folder picker opens.
   `StudioMainWindow` owns mode-specific sizing: compact launch-surface sizing for
   Welcome/Home handoff, compact Setup sizing, and larger workspace sizing for tool pages.
-  The wizard uses a seven-step compact top-progress flow: Project, Conditions, Images,
-  Experiment, Fixation, Response, and Review. Conditions handles condition identity and
-  list actions, while Images handles base/oddball folder assignment and normalization.
+  The wizard uses a six-step compact top-progress flow: Project, Conditions,
+  Experiment, Fixation, Response, and Review. Conditions handles condition identity,
+  list actions, base/oddball folder assignment, control-condition creation, and image
+  normalization.
   Setup steps share a compact content surface, with the top progress stepper carrying
-  complete-state feedback instead of page-wide completion bars. Experiment combines
-  display and session settings in one compact centered card; session
+  complete-state feedback instead of page-wide completion bars. The setup surface is
+  guarded by pytest-qt coverage that checks all six steps at `1040x680` for stable
+  frame positioning, disabled vertical scrolling, and visible child-widget clipping.
+  Experiment combines display and session settings in one compact centered card; session
   order is always randomized within each block using the random order seed while legacy
   fixed-order fields stay schema-compatible. Fixation handles schedule/timing, and
   Response handles accuracy tracking, response key/window, appearance, and live preview.

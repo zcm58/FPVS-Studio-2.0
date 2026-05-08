@@ -23,13 +23,14 @@ the active app.
 - Setup Wizard is the guided setup/editing surface. Setup uses the compact
   Welcome/Home-sized default window, with Image Resizer retaining the larger
   workspace sizing. Wizard pages share the same setup step surface so content
-  width, margins, and vertical alignment stay consistent across steps.
-- Conditions and Images are split guided setup areas: Conditions handles condition
-  list/actions, names, triggers, and instructions; Images handles base/oddball
-  folder assignment and image normalization. Conditions uses compact list rows,
-  and Images starts directly with source cards instead of extra section headers.
-  Raw folder selection is permissive; inconsistent image sizes are handled by the
-  guided normalization flow.
+  width, margins, and vertical alignment stay consistent across steps. The shared
+  setup frame, top progress stepper, bottom navigation, and visible child widgets
+  must fit at `1040x680` without bottom clipping or required vertical scrolling.
+- Conditions is a combined guided setup area for condition list/actions, names,
+  triggers, instructions, base/oddball folder assignment, control-condition creation,
+  and image normalization. It uses compact list rows and source cards without extra
+  section headers. Raw folder selection is permissive; inconsistent image sizes are
+  handled by the guided normalization flow before leaving Conditions.
 - Fixation and Response are split guided setup areas: Fixation handles color-change
   schedule/timing, while Response handles accuracy tracking, response key/window,
   appearance, and preview.
@@ -47,5 +48,8 @@ the active app.
 ## Verification
 
 - Focused GUI changes need pytest-qt coverage or documented manual smoke steps.
+- Setup Wizard layout changes must run or update the focused compact no-clipping
+  coverage in `tests/gui/test_layout_dashboard.py` and should smoke all six
+  steps at `1040x680`.
 - Run `.\scripts\check_gui.ps1` for GUI workflow changes.
 - Run `.\scripts\check_quality.ps1` when GUI changes touch multiple layers.

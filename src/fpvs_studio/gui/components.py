@@ -536,6 +536,7 @@ class SetupMetricStrip(QFrame):
         self,
         *,
         object_name: str = "setup_metric_strip",
+        compact: bool = False,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
@@ -543,9 +544,12 @@ class SetupMetricStrip(QFrame):
         self.setProperty("setupMetricStrip", "true")
         self._rows: list[tuple[QLabel, QLabel]] = []
         self._layout = QGridLayout(self)
-        self._layout.setContentsMargins(12, 10, 12, 10)
-        self._layout.setHorizontalSpacing(14)
-        self._layout.setVerticalSpacing(8)
+        if compact:
+            self._layout.setContentsMargins(8, 6, 8, 6)
+        else:
+            self._layout.setContentsMargins(12, 10, 12, 10)
+        self._layout.setHorizontalSpacing(10 if compact else 14)
+        self._layout.setVerticalSpacing(4 if compact else 8)
         self._layout.setColumnStretch(1, 1)
 
     def set_rows(self, rows: list[tuple[str, str]]) -> None:
@@ -577,14 +581,20 @@ class SetupSourceCard(QFrame):
         button_text: str,
         *,
         object_name: str = "setup_source_card",
+        compact: bool = False,
+        show_variants: bool = True,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self.setObjectName(object_name)
         self.setProperty("setupSourceCard", "true")
+        self._show_variants = show_variants
         self._layout = QVBoxLayout(self)
-        self._layout.setContentsMargins(14, 14, 14, 14)
-        self._layout.setSpacing(10)
+        if compact:
+            self._layout.setContentsMargins(10, 8, 10, 8)
+        else:
+            self._layout.setContentsMargins(14, 14, 14, 14)
+        self._layout.setSpacing(6 if compact else 10)
 
         header = QWidget(self)
         header_layout = QHBoxLayout(header)
@@ -605,7 +615,11 @@ class SetupSourceCard(QFrame):
         self._layout.addWidget(folder_label)
         self._layout.addWidget(self.folder_value)
 
-        self.metrics = SetupMetricStrip(object_name=f"{object_name}_metrics", parent=self)
+        self.metrics = SetupMetricStrip(
+            object_name=f"{object_name}_metrics",
+            compact=compact,
+            parent=self,
+        )
         self._layout.addWidget(self.metrics)
 
         self.choose_button = QPushButton(button_text, self)
@@ -628,13 +642,13 @@ class SetupSourceCard(QFrame):
             "Ready" if ready else "Missing",
         )
         self.folder_value.set_path_text(folder or "Not configured", max_length=74)
-        self.metrics.set_rows(
-            [
-                ("Image Count", image_count),
-                ("Resolution", resolution),
-                ("Variants", variants),
-            ]
-        )
+        rows = [
+            ("Image Count", image_count),
+            ("Resolution", resolution),
+        ]
+        if self._show_variants:
+            rows.append(("Variants", variants))
+        self.metrics.set_rows(rows)
 
 
 def _object_suffix(text: str) -> str:

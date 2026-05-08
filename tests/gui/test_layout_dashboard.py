@@ -277,11 +277,10 @@ def test_setup_wizard_exists_and_uses_single_column_shell_with_steps(
     assert wizard.findChild(QLabel, "setup_wizard_progress_header") is None
     assert wizard.progress_steps.objectName() == "setup_wizard_progress_steps"
     assert wizard.step_status_badge.objectName() == "setup_wizard_ready_badge"
-    assert len(wizard.progress_steps.step_items) == 7
-    assert wizard.step_stack.count() == 7
+    assert len(wizard.progress_steps.step_items) == 6
+    assert wizard.step_stack.count() == 6
     assert wizard.project_step_surface.property("setupStepSurface") == "true"
     assert wizard.conditions_step_surface.property("setupStepSurface") == "true"
-    assert wizard.images_step_surface.property("setupStepSurface") == "true"
     assert wizard.experiment_step_surface.property("setupStepSurface") == "true"
     assert wizard.fixation_step_surface.property("setupStepSurface") == "true"
     assert wizard.response_step_surface.property("setupStepSurface") == "true"
@@ -297,10 +296,9 @@ def test_setup_wizard_exists_and_uses_single_column_shell_with_steps(
     step_metadata_text = "\n".join(item.toolTip() for item in wizard.progress_steps.step_items)
     assert "[OK]" not in step_text
     assert "[TODO]" not in step_text
-    assert "Step 1 of 7" not in "\n".join(label.text() for label in wizard.findChildren(QLabel))
+    assert "Step 1 of 6" not in "\n".join(label.text() for label in wizard.findChildren(QLabel))
     assert "Project" in step_metadata_text
     assert "Conditions" in step_metadata_text
-    assert "Images" in step_metadata_text
     assert "Experiment" in step_metadata_text
     assert "Display Settings" not in step_metadata_text
     assert "Session Design" not in step_metadata_text
@@ -309,11 +307,10 @@ def test_setup_wizard_exists_and_uses_single_column_shell_with_steps(
     assert "Review" in step_metadata_text
     assert wizard.findChild(QWidget, "setup_wizard_step_1_project") is not None
     assert wizard.findChild(QWidget, "setup_wizard_step_2_conditions") is not None
-    assert wizard.findChild(QWidget, "setup_wizard_step_3_images") is not None
-    assert wizard.findChild(QWidget, "setup_wizard_step_4_experiment") is not None
-    assert wizard.findChild(QWidget, "setup_wizard_step_5_fixation") is not None
-    assert wizard.findChild(QWidget, "setup_wizard_step_6_response") is not None
-    assert wizard.findChild(QWidget, "setup_wizard_step_7_review") is not None
+    assert wizard.findChild(QWidget, "setup_wizard_step_3_experiment") is not None
+    assert wizard.findChild(QWidget, "setup_wizard_step_4_fixation") is not None
+    assert wizard.findChild(QWidget, "setup_wizard_step_5_response") is not None
+    assert wizard.findChild(QWidget, "setup_wizard_step_6_review") is not None
     assert wizard.progress_steps.step_circles[0].property("setupProgressState") == "current"
     initial_progress_labels = [label.text() for label in wizard.progress_step_labels]
     for item in wizard.progress_steps.step_items:
@@ -339,7 +336,6 @@ def test_setup_wizard_exists_and_uses_single_column_shell_with_steps(
     for step_key in (
         "project",
         "conditions",
-        "images",
         "experiment",
         "fixation",
         "response",
@@ -381,6 +377,59 @@ def test_setup_wizard_exists_and_uses_single_column_shell_with_steps(
     assert window.conditions_page.shell is None
     assert window.assets_page.shell.footer_strip.isVisible() is False
     assert window.run_page.shell.footer_strip.isVisible() is False
+
+
+def test_setup_wizard_compact_steps_do_not_clip_visible_content(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Setup No Clip")
+    wizard = window.setup_wizard_page
+    window.resize(1040, 680)
+    window.show_setup_wizard()
+    QApplication.processEvents()
+
+    frame_heights: list[int] = []
+    frame_tops: list[int] = []
+    progress_tops: list[int] = []
+    for step_key in (
+        "project",
+        "conditions",
+        "experiment",
+        "fixation",
+        "response",
+        "review",
+    ):
+        wizard.open_wizard(step_key=step_key)
+        QApplication.processEvents()
+        _assert_setup_wizard_vertical_scrolling_disabled(wizard)
+        assert wizard.shell.page_container.scroll_area.verticalScrollBar().maximum() == 0
+        _assert_visible_children_within_parent(wizard.step_stack.currentWidget())
+
+        frame_heights.append(wizard.step_card.height())
+        frame_tops.append(wizard.step_card.mapTo(wizard, wizard.step_card.rect().topLeft()).y())
+        progress_tops.append(
+            wizard.progress_panel_shell.mapTo(
+                wizard.step_card,
+                wizard.progress_panel_shell.rect().topLeft(),
+            ).y()
+        )
+        assert wizard.step_stack.currentWidget().height() <= wizard.content_stack.height()
+
+        for button in (
+            wizard.setup_wizard_back_button,
+            wizard.setup_wizard_next_button,
+            wizard.setup_wizard_return_home_button,
+        ):
+            if button.isVisible():
+                bottom = button.mapTo(wizard, button.rect().bottomLeft()).y()
+                assert bottom <= wizard.height()
+
+    assert len(set(frame_heights)) == 1
+    assert len(set(frame_tops)) == 1
+    assert len(set(progress_tops)) == 1
+    assert progress_tops[0] <= 12
 
 
 def test_major_tabs_share_page_container_width_presets(
@@ -692,18 +741,17 @@ def test_setup_wizard_surfaces_steps_and_keeps_shared_editors_available(
     assert dashboard.condition_setup_step.condition_name_edit is not None
     assert dashboard.condition_setup_step.trigger_code_spin is not None
     assert dashboard.condition_setup_step.instructions_edit is not None
-    assert dashboard.condition_images_step.base_import_button is not None
-    assert dashboard.condition_images_step.oddball_import_button is not None
+    assert dashboard.condition_setup_step.base_import_button is not None
+    assert dashboard.condition_setup_step.oddball_import_button is not None
     assert not hasattr(dashboard.condition_setup_step, "sequence_count_spin")
     assert not hasattr(dashboard.condition_setup_step, "duty_cycle_combo")
     assert not hasattr(dashboard.condition_setup_step, "variant_combo")
     assert dashboard.assets_page is window.assets_page
     assert dashboard.run_page is window.run_page
-    assert len(dashboard.progress_steps.step_items) == 7
+    assert len(dashboard.progress_steps.step_items) == 6
     step_metadata_text = "\n".join(item.toolTip() for item in dashboard.progress_steps.step_items)
     assert "Project" in step_metadata_text
     assert "Conditions" in step_metadata_text
-    assert "Images" in step_metadata_text
     assert "Experiment" in step_metadata_text
     assert "Fixation" in step_metadata_text
     assert "Response" in step_metadata_text
@@ -748,7 +796,10 @@ def test_setup_wizard_navigation_has_no_conditions_advanced_editor(
     label_text = "\n".join(
         label.text() for label in guide.condition_setup_step.findChildren(QLabel)
     )
-    assert "Condition List" in label_text
+    assert "Condition List" not in label_text
+    assert "Selected Condition" not in label_text
+    assert "Base Images" in label_text
+    assert "Oddball Images" in label_text
     assert "Stimulus Variant" not in label_text
     assert "Cycles / Repeat" not in label_text
 
@@ -765,35 +816,22 @@ def test_setup_wizard_navigation_has_no_conditions_advanced_editor(
     condition_id = guide.condition_setup_step.selected_condition_id()
     assert isinstance(condition_id, str)
     guide._document.update_condition(condition_id, name="Faces")
-    qtbot.waitUntil(next_button.isEnabled)
-    assert next_button.isEnabled()
-
-    qtbot.mouseClick(next_button, Qt.MouseButton.LeftButton)
-    assert guide.step_stack.currentWidget() is guide.images_step_surface
-    assert guide.images_step_surface.content is guide.condition_images_step
-    assert guide.step_title_label.text() == "Images"
+    qtbot.waitUntil(lambda: "assign base and oddball" in guide.step_status_label.text().lower())
     assert not next_button.isEnabled()
     assert "assign base and oddball" in guide.step_status_label.text().lower()
-    image_labels = "\n".join(
-        label.text() for label in guide.condition_images_step.findChildren(QLabel)
-    )
-    assert "Selected Image Set" not in image_labels
-    assert "Image Sources" not in image_labels
-    assert not guide.condition_images_step.selected_condition_badge.isVisible()
-    image_condition_id = guide.condition_images_step.selected_condition_id()
-    assert image_condition_id == condition_id
+    assert guide.condition_setup_step.selected_condition_id() == condition_id
 
     base_dir = _write_image_directory(tmp_path / "wizard-condition-base")
     oddball_dir = _write_image_directory(tmp_path / "wizard-condition-oddball")
     guide._document.import_condition_stimulus_folder(
-        image_condition_id,
+        condition_id,
         role="base",
         source_dir=base_dir,
     )
     QApplication.processEvents()
     assert not next_button.isEnabled()
     guide._document.import_condition_stimulus_folder(
-        image_condition_id,
+        condition_id,
         role="oddball",
         source_dir=oddball_dir,
     )
@@ -823,8 +861,6 @@ def test_setup_wizard_navigation_has_no_conditions_advanced_editor(
     assert guide.step_stack.currentWidget() is guide.fixation_step_surface
     qtbot.mouseClick(back_button, Qt.MouseButton.LeftButton)
     assert guide.step_stack.currentWidget() is guide.experiment_step_surface
-    qtbot.mouseClick(back_button, Qt.MouseButton.LeftButton)
-    assert guide.step_stack.currentWidget() is guide.images_step_surface
     qtbot.mouseClick(back_button, Qt.MouseButton.LeftButton)
     assert guide.step_stack.currentIndex() == 1
     assert guide.content_stack.currentWidget() is guide.guided_panel
@@ -1050,14 +1086,8 @@ def test_setup_wizard_conditions_step_requires_descriptive_name_and_positive_tri
     guide._document.update_condition(condition_id, trigger_code=1)
     QApplication.processEvents()
     assert step.trigger_check_status.text() == "Complete"
-    assert next_button.isEnabled()
-
-    qtbot.mouseClick(next_button, Qt.MouseButton.LeftButton)
-    image_step = guide.condition_images_step
-    assert guide.step_stack.currentWidget() is guide.images_step_surface
-    assert guide.images_step_surface.content is image_step
-    assert image_step.base_check_status.text() == "Base Images Not Selected"
-    assert image_step.oddball_check_status.text() == "Oddball Images Not Selected"
+    assert step.base_check_status.text() == "Base Images Not Selected"
+    assert step.oddball_check_status.text() == "Oddball Images Not Selected"
     assert not next_button.isEnabled()
 
     base_dir = _write_image_directory(tmp_path / "gated-condition-base")
@@ -1069,8 +1099,8 @@ def test_setup_wizard_conditions_step_requires_descriptive_name_and_positive_tri
         source_dir=oddball_dir,
     )
     QApplication.processEvents()
-    assert image_step.base_check_status.text() == "Complete"
-    assert image_step.oddball_check_status.text() == "Complete"
+    assert step.base_check_status.text() == "Complete"
+    assert step.oddball_check_status.text() == "Complete"
     assert next_button.isEnabled()
 
 
@@ -1109,10 +1139,11 @@ def test_setup_wizard_conditions_next_silently_advances_when_images_are_uniform(
     )
 
     guide.open_wizard(step_key="images")
+    assert guide.step_stack.currentWidget() is guide.conditions_step_surface
     qtbot.mouseClick(guide.setup_wizard_next_button, Qt.MouseButton.LeftButton)
     QApplication.processEvents()
 
-    assert guide.step_title_label.text() == "Experiment"
+    assert guide.step_stack.currentWidget() is guide.experiment_step_surface
 
 
 def test_setup_wizard_conditions_next_normalizes_mixed_images_before_advancing(
@@ -1155,10 +1186,11 @@ def test_setup_wizard_conditions_next_normalizes_mixed_images_before_advancing(
     monkeypatch.setattr("fpvs_studio.gui.setup_wizard_page.ImageNormalizationDialog", _AcceptDialog)
 
     guide.open_wizard(step_key="images")
+    assert guide.step_stack.currentWidget() is guide.conditions_step_surface
     qtbot.mouseClick(guide.setup_wizard_next_button, Qt.MouseButton.LeftButton)
     QApplication.processEvents()
 
-    assert guide.step_title_label.text() == "Experiment"
+    assert guide.step_stack.currentWidget() is guide.experiment_step_surface
     base_set = window.document.get_condition_stimulus_set(condition_id, "base")
     oddball_set = window.document.get_condition_stimulus_set(condition_id, "oddball")
     assert base_set.source_dir == "stimuli/normalized-images/condition-1-base"
@@ -1211,10 +1243,11 @@ def test_setup_wizard_conditions_next_stays_put_when_normalization_is_cancelled(
         "base",
     ).source_dir
     guide.open_wizard(step_key="images")
+    assert guide.step_stack.currentWidget() is guide.conditions_step_surface
     qtbot.mouseClick(guide.setup_wizard_next_button, Qt.MouseButton.LeftButton)
     QApplication.processEvents()
 
-    assert guide.step_title_label.text() == "Images"
+    assert guide.step_stack.currentWidget() is guide.conditions_step_surface
     assert (
         window.document.get_condition_stimulus_set(condition_id, "base").source_dir
         == before_source_dir
@@ -1229,11 +1262,11 @@ def test_setup_wizard_condition_image_picker_starts_in_project_stimuli_folder(
 ) -> None:
     _, window = _open_created_project(controller, qtbot, tmp_path, "Wizard Image Picker")
     guide = window.setup_wizard_page
-    condition_step = guide.condition_setup_step
+    step = guide.condition_setup_step
     guide.open_wizard(step_key="conditions")
-    qtbot.mouseClick(condition_step.add_condition_button, Qt.MouseButton.LeftButton)
-    step = guide.condition_images_step
+    qtbot.mouseClick(step.add_condition_button, Qt.MouseButton.LeftButton)
     guide.open_wizard(step_key="images")
+    assert guide.step_stack.currentWidget() is guide.conditions_step_surface
 
     calls: list[tuple[str, str]] = []
 
