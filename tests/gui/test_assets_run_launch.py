@@ -54,7 +54,7 @@ def test_assets_preprocessing_import_and_materialize_updates_status(
     assert "Catalog status:" in window.assets_page.assets_status_text.toPlainText()
 
 
-def test_assets_import_validation_failure_is_reported(
+def test_assets_import_allows_mixed_resolution_for_later_normalization(
     qtbot,
     controller: StudioController,
     tmp_path: Path,
@@ -83,7 +83,10 @@ def test_assets_import_validation_failure_is_reported(
     window.assets_page.assets_table.selectRow(0)
     window.assets_page.import_source_button.click()
 
-    assert any("identical resolution" in message for message in messages)
+    imported_set = window.document.project.stimulus_sets[0]
+    assert messages == []
+    assert imported_set.image_count == 4
+    assert imported_set.resolution is None
 
 
 def test_launch_invokes_backend_preflight_before_participant_prompt(
@@ -140,7 +143,7 @@ def test_launch_invokes_backend_preflight_before_participant_prompt(
     assert "launch checks passed" in window.run_page.summary_text.toPlainText().lower()
 
 
-def test_launch_action_wires_runtime_launcher_with_serial_settings(
+def test_launch_action_wires_runtime_launcher_with_backend_launch_settings(
     qtbot,
     controller: StudioController,
     tmp_path: Path,
@@ -231,16 +234,11 @@ def test_launch_action_wires_runtime_launcher_with_serial_settings(
         lambda *args, **kwargs: QMessageBox.StandardButton.Ok,
     )
 
-    window.run_page.serial_port_edit.setText("COM3")
-    window.run_page.serial_port_edit.editingFinished.emit()
-    window.document.update_trigger_settings(baudrate=57600)
-    window.run_page.display_index_edit.setText("1")
-    assert window.run_page.serial_baudrate_spin.isEnabled() is False
-    assert (
-        window.setup_dashboard_page.runtime_settings_editor.serial_baudrate_spin.isEnabled()
-        is False
-    )
-    assert window.run_page.fullscreen_checkbox.isChecked() is True
+    assert not hasattr(window.run_page, "serial_port_edit")
+    assert not hasattr(window.run_page, "display_index_edit")
+    assert not hasattr(window.run_page, "serial_baudrate_spin")
+    assert not hasattr(window.run_page, "fullscreen_checkbox")
+    window.document.update_trigger_settings(serial_port="COM3", baudrate=57600)
 
     qtbot.mouseClick(window.run_page.launch_button, Qt.MouseButton.LeftButton)
 
@@ -264,7 +262,7 @@ def test_launch_action_wires_runtime_launcher_with_serial_settings(
     assert progress_events == ["created", "shown", "closed"]
     assert launch_settings.serial_port == "COM3"
     assert launch_settings.serial_baudrate == 57600
-    assert launch_settings.display_index == 1
+    assert launch_settings.display_index is None
     assert launch_settings.test_mode is True
     assert launch_settings.fullscreen is True
     assert launch_settings.strict_timing is True

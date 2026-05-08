@@ -16,9 +16,12 @@ the active app.
 - Home is the daily launch surface for ready projects, centered around one launch
   card with project actions, readiness, summary metrics, and the primary launch
   action.
+- Welcome and Home share the same launch-surface frame/styling so opening a ready
+  project keeps a stable outer window and card treatment.
 - Setup Wizard is the guided setup/editing surface.
 - Conditions is the guided setup area for assigning base/oddball image folders and
-  creating optional derived-variant control conditions.
+  creating optional derived-variant control conditions. Raw folder selection is
+  permissive; inconsistent image sizes are handled by the guided normalization flow.
 - Open Projects is the welcome entry point for the Manage Projects surface, which
   opens known projects or moves project folders to the Windows Recycle Bin with
   confirmation. The File menu still exposes the same management surface.
@@ -27,6 +30,8 @@ the active app.
   reintroduces them.
 - GUI code may coordinate document services and runtime launches, but core validation,
   compilation, session planning, and runtime flow remain outside widgets.
+- Current runtime launch controls intentionally do not expose serial trigger settings,
+  display selection, or fullscreen toggles; those remain backend/runtime contract values.
 
 ## Verification
 

@@ -37,6 +37,8 @@ The authoring window is organized around two user-facing modes:
   - a centered project card with project title, description, launch readiness badge, condition count, block
     count, fixation cross status, accuracy tracking status, project open/create
     actions, setup editing, and a prominent centered `Launch Experiment`
+  - uses the same shared launch-surface frame as Welcome so the outer window and
+    inner card styling stay aligned across the two launch surfaces
   - `Edit Setup` opens the guided setup workflow
 - `Setup Wizard`
   - in-window setup flow for new/incomplete projects and intentional edits
@@ -70,6 +72,8 @@ The authoring window is organized around two user-facing modes:
     protocol defaults plus setup checklist on the right
   - the Conditions step owns image folder selection; users choose base and oddball
     folders while creating each condition
+  - raw image-folder import is permissive; folders with mixed image sizes are not
+    rejected at selection time
   - when users leave Conditions, FPVS Studio checks selected condition images for
     mixed sizes or file types; inconsistent folders can be normalized to PNG copies
     at `512x512` or `256x256` before moving on
@@ -98,7 +102,10 @@ Session controls are directly visible in Experiment Settings, and
 Fixation Cross is a guided setup page. The Run / Runtime page remains a launch, readiness, and session-preview
 surface, not a display-engine configuration step.
 The Stimuli Manager remains an internal support page for variant/materialization
-behavior, not a guided setup step or visible top-level tab during normal use.
+behavior, not a guided setup step or visible top-level tab during normal use. Its raw
+source-folder import path is permissive like guided Conditions import; strict inspection
+and materialization still surface invalid or inconsistent source details before runtime
+launch.
 
 The `File` menu exposes manage-projects and settings actions. Moving a project to the
 Recycle Bin remains a controller-owned filesystem operation guarded by `project.json`
@@ -111,6 +118,8 @@ active project.
 
 - Shared GUI components and reusable theme styles live in
   `src/fpvs_studio/gui/components.py`.
+- Welcome and Home use the shared `LaunchSurfaceFrame` helper for the full-window
+  launch card, border styling, and first-paint background.
 - Shared Setup Wizard presentation components include the connected progress stepper,
   workspace frame, right-side panels, metric strips, source cards, and reusable setup
   checklist panel.
@@ -193,6 +202,8 @@ Current honest behavior:
 
 - runtime launch still requires `test_mode=True`
 - launched PsychoPy playback opens fullscreen on the default display
+- display-index and fullscreen launch controls are not exposed in the current GUI;
+  launch uses the default display and fullscreen playback
 - each condition waits for `Space` before playback starts
 - non-final blocks show a separate `Press Space to continue` break screen
 - PsychoPy remains behind the runtime and engine layers
