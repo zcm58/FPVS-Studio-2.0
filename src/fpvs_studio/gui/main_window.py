@@ -45,11 +45,13 @@ __all__ = [
 ]
 
 _COMPACT_HOME_MINIMUM_SIZE = (760, 520)
-_COMPACT_HOME_DEFAULT_SIZE = (1040, 680)
+_COMPACT_HOME_DEFAULT_SIZE = (1120, 720)
 _COMPACT_SETUP_MINIMUM_SIZE = (960, 640)
-_COMPACT_SETUP_DEFAULT_SIZE = (1040, 680)
+_COMPACT_SETUP_DEFAULT_SIZE = (1120, 720)
 _WORKSPACE_MINIMUM_SIZE = (1366, 820)
 _WORKSPACE_DEFAULT_SIZE = (1440, 920)
+_UTILITY_MINIMUM_SIZE = (960, 640)
+_UTILITY_DEFAULT_SIZE = (1120, 720)
 _AUTO_WORKSPACE_SIZE_TOLERANCE = 16
 
 
@@ -163,7 +165,7 @@ class StudioMainWindow(QMainWindow):
     def show_image_resizer(self) -> None:
         self.flush_pending_edits()
         self._set_home_chrome_visible(True)
-        self._apply_workspace_window_size()
+        self._apply_utility_window_size()
         self.main_stack.setCurrentWidget(self.image_resizer_page)
 
     def _show_initial_workflow_surface(self) -> None:
@@ -209,6 +211,21 @@ class StudioMainWindow(QMainWindow):
         self.setMinimumSize(*_WORKSPACE_MINIMUM_SIZE)
         if needs_workspace_resize:
             self.resize(*_WORKSPACE_DEFAULT_SIZE)
+            self._auto_workspace_sized = True
+            self._auto_workspace_return_size = compact_return_size
+            self._auto_workspace_size = (self.width(), self.height())
+        else:
+            self._clear_auto_workspace_size()
+
+    def _apply_utility_window_size(self) -> None:
+        needs_utility_resize = (
+            self.width() < _UTILITY_MINIMUM_SIZE[0]
+            or self.height() < _UTILITY_MINIMUM_SIZE[1]
+        )
+        compact_return_size = (self.width(), self.height())
+        self.setMinimumSize(*_UTILITY_MINIMUM_SIZE)
+        if needs_utility_resize:
+            self.resize(*_UTILITY_DEFAULT_SIZE)
             self._auto_workspace_sized = True
             self._auto_workspace_return_size = compact_return_size
             self._auto_workspace_size = (self.width(), self.height())

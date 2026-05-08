@@ -59,6 +59,11 @@ from fpvs_studio.gui.design_system import (
     COLOR_WARNING_BG,
     COLOR_WARNING_BORDER,
     COLOR_WARNING_TEXT,
+    FONT_SIZE_BODY,
+    FONT_SIZE_CONTROL,
+    FONT_SIZE_META,
+    FONT_SIZE_PAGE_TITLE,
+    FONT_SIZE_SECTION_TITLE,
     PAGE_SECTION_GAP,
     PathValueLabel,
     StatusBadgeLabel,
@@ -799,6 +804,11 @@ def studio_theme_stylesheet() -> str:
     QMainWindow#studio_main_window,
     QStackedWidget#main_stack {{
         background-color: {COLOR_PAGE_BACKGROUND};
+        color: {COLOR_TEXT_PRIMARY};
+        font-size: {FONT_SIZE_BODY}px;
+    }}
+    QMainWindow#studio_main_window QWidget {{
+        font-size: {FONT_SIZE_BODY}px;
     }}
     QTabWidget#main_tabs::pane {{
         border: 1px solid {COLOR_BORDER};
@@ -811,6 +821,7 @@ def studio_theme_stylesheet() -> str:
         background-color: {COLOR_SURFACE_ELEVATED};
         padding: 6px 12px;
         color: {COLOR_TEXT_PRIMARY};
+        font-size: {FONT_SIZE_CONTROL}px;
         min-height: 30px;
     }}
     QPushButton:hover {{
@@ -867,7 +878,7 @@ def studio_theme_stylesheet() -> str:
         background-color: {COLOR_SURFACE_ELEVATED};
         color: {COLOR_TEXT_PRIMARY};
         padding: 5px 10px;
-        font-size: 12px;
+        font-size: {FONT_SIZE_META}px;
         font-weight: 700;
     }}
     QLabel[statusBadge="true"][statusState="ready"] {{
@@ -962,7 +973,7 @@ def studio_theme_stylesheet() -> str:
         border-radius: 15px;
         background-color: {COLOR_SURFACE_ELEVATED};
         color: {COLOR_TEXT_SECONDARY};
-        font-size: 13px;
+        font-size: {FONT_SIZE_CONTROL}px;
         font-weight: 700;
     }}
     QLabel[setupProgressCircle="true"][setupProgressState="complete"] {{
@@ -977,6 +988,7 @@ def studio_theme_stylesheet() -> str:
     }}
     QLabel[setupProgressLabel="true"] {{
         color: {COLOR_TEXT_SECONDARY};
+        font-size: {FONT_SIZE_META}px;
         font-weight: 500;
     }}
     QLabel[setupProgressLabel="true"][setupProgressState="current"] {{
@@ -996,6 +1008,7 @@ def studio_theme_stylesheet() -> str:
         max-height: 2px;
     }}
     QFrame[setupWorkspaceFrame="true"],
+    QFrame[conditionDetailsSection="true"],
     QFrame[setupSidePanel="true"],
     QFrame[setupSourceCard="true"],
     QFrame[setupMetricStrip="true"] {{
@@ -1006,12 +1019,13 @@ def studio_theme_stylesheet() -> str:
     QLabel[setupSidePanelTitle="true"],
     QLabel[setupSourceTitle="true"] {{
         color: {COLOR_TEXT_PRIMARY};
-        font-size: 15px;
+        font-size: {FONT_SIZE_SECTION_TITLE}px;
         font-weight: 700;
     }}
     QLabel[setupMetricLabel="true"],
     QLabel[setupPanelHelper="true"] {{
         color: {COLOR_TEXT_SECONDARY};
+        font-size: {FONT_SIZE_META}px;
     }}
     QLabel[setupMetricValue="true"] {{
         color: {COLOR_TEXT_PRIMARY};
@@ -1019,7 +1033,7 @@ def studio_theme_stylesheet() -> str:
     }}
     QLabel[setupChecklistStatus="true"] {{
         color: {COLOR_SUCCESS_TEXT};
-        font-size: 12px;
+        font-size: {FONT_SIZE_META}px;
         font-weight: 600;
     }}
     QLabel[setupChecklistStatus="true"][setupChecklistState="incomplete"] {{
@@ -1099,7 +1113,7 @@ def studio_theme_stylesheet() -> str:
     }}
     QLabel#run_summary_empty_title {{
         color: {COLOR_TEXT_PRIMARY};
-        font-size: 14px;
+        font-size: {FONT_SIZE_SECTION_TITLE}px;
         font-weight: 700;
     }}
     QLabel#run_summary_empty_body {{
@@ -1294,13 +1308,13 @@ def apply_fixation_settings_theme(widget: QWidget) -> None:
 def non_home_shell_stylesheet() -> str:
     return f"""
     QLabel#non_home_shell_title {{
-        font-size: 24px;
+        font-size: {FONT_SIZE_PAGE_TITLE}px;
         font-weight: 700;
         color: {COLOR_TEXT_PRIMARY};
     }}
     QLabel#non_home_shell_subtitle {{
         color: {COLOR_TEXT_SECONDARY};
-        font-size: 13px;
+        font-size: {FONT_SIZE_BODY}px;
     }}
     QFrame#non_home_shell_footer_strip {{
         border: 1px solid {COLOR_BORDER_SOFT};
@@ -1343,7 +1357,7 @@ def section_card_stylesheet() -> str:
         background-color: transparent;
     }}
     QLabel[sectionCardRole="title"] {{
-        font-size: 15px;
+        font-size: {FONT_SIZE_SECTION_TITLE}px;
         font-weight: 700;
         color: {COLOR_TEXT_PRIMARY};
     }}
@@ -1364,7 +1378,7 @@ def section_card_stylesheet() -> str:
         border-radius: 10px;
         background-color: {COLOR_SUCCESS_BG};
         color: {COLOR_SUCCESS_TEXT};
-        font-size: 12px;
+        font-size: {FONT_SIZE_META}px;
         font-weight: 700;
         min-width: 20px;
         max-width: 20px;
@@ -1376,7 +1390,7 @@ def section_card_stylesheet() -> str:
         border-radius: 8px;
         background-color: {COLOR_SURFACE_ALT};
         color: {COLOR_TEXT_PRIMARY};
-        font-size: 11px;
+        font-size: {FONT_SIZE_META}px;
         font-weight: 700;
     }}
     """
@@ -1390,14 +1404,18 @@ def setup_wizard_stylesheet(palette: QPalette) -> str:
     return (
         section_card_stylesheet()
         + launch_surface_frame_stylesheet(palette)
-        + """
+        + f"""
     QWidget#setup_wizard_page QScrollArea#page_container_scroll_area,
     QWidget#setup_wizard_page QWidget#page_container_scroll_content,
     QWidget#setup_wizard_page QFrame#page_container_content_frame,
-    QWidget#setup_wizard_page QFrame#non_home_shell_content_frame {
+    QWidget#setup_wizard_page QFrame#non_home_shell_content_frame {{
         border: none;
         background: transparent;
-    }
+    }}
+    QWidget#setup_wizard_page {{
+        color: {COLOR_TEXT_PRIMARY};
+        font-size: {FONT_SIZE_BODY}px;
+    }}
     """
     )
 

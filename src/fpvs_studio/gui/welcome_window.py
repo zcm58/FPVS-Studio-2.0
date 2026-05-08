@@ -33,7 +33,7 @@ class WelcomeWindow(QWidget):
         super().__init__()
         self.setWindowTitle("FPVS Studio")
         self.setMinimumSize(760, 520)
-        self.resize(1040, 680)
+        self.resize(1120, 720)
         self._adopt_app_icon()
 
         self.launch_surface = LaunchSurfaceFrame(

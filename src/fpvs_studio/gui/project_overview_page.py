@@ -110,7 +110,7 @@ class ProjectOverviewEditor(QWidget):
             object_name="dashboard_project_overview_card",
             parent=self,
         )
-        self.project_overview_card.setMaximumWidth(820)
+        self.project_overview_card.setMaximumWidth(880)
         self.project_overview_card.setSizePolicy(
             QSizePolicy.Policy.Expanding,
             QSizePolicy.Policy.Maximum,

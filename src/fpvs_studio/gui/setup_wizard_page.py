@@ -62,10 +62,10 @@ _WIZARD_STEPS: tuple[tuple[str, str], ...] = (
     ("review", "Review"),
 )
 _CREATE_ALL_CONDITIONS_PROMPT = "Please ensure you create all conditions before proceeding."
-_SETUP_STEP_SURFACE_MAX_WIDTH = 980
-_SETUP_STEP_NARROW_SURFACE_MAX_WIDTH = 820
+_SETUP_STEP_SURFACE_MAX_WIDTH = 880
+_SETUP_STEP_WORKBENCH_SURFACE_MAX_WIDTH = 1040
 _SETUP_STEP_SURFACE_MIN_HEIGHT = 360
-_SETUP_STEP_CARD_MAX_HEIGHT = 528
+_SETUP_STEP_CARD_MAX_HEIGHT = 552
 
 
 class _CurrentWidgetStack(QStackedWidget):
@@ -207,6 +207,7 @@ class SetupWizardPage(QWidget):
             title="Fixation Cross",
             subtitle=None,
             compact=True,
+            framed=False,
             section_mode="fixation",
             show_preview=False,
             parent=self,
@@ -218,6 +219,7 @@ class SetupWizardPage(QWidget):
             title="Response and Appearance",
             subtitle=None,
             compact=True,
+            framed=False,
             section_mode="response",
             show_preview=True,
             parent=self,
@@ -235,7 +237,7 @@ class SetupWizardPage(QWidget):
             Qt.ScrollBarPolicy.ScrollBarAlwaysOff
         )
         self.shell.page_container.scroll_area.verticalScrollBar().setEnabled(False)
-        self.shell.set_page_margins(PAGE_MARGIN_X, 12, PAGE_MARGIN_X, 12)
+        self.shell.set_page_margins(PAGE_MARGIN_X, 12, PAGE_MARGIN_X, 6)
         self.shell.set_content_spacing(8)
 
         self.progress_steps = SetupProgressStepper(
@@ -358,7 +360,7 @@ class SetupWizardPage(QWidget):
 
         button_row = QWidget(self)
         button_layout = QHBoxLayout(button_row)
-        button_layout.setContentsMargins(PAGE_MARGIN_X, 0, PAGE_MARGIN_X, 8)
+        button_layout.setContentsMargins(PAGE_MARGIN_X, 0, PAGE_MARGIN_X, 2)
         button_layout.setSpacing(PAGE_SECTION_GAP)
         button_layout.addWidget(self.setup_wizard_return_home_button)
         button_layout.addStretch(1)
@@ -417,6 +419,7 @@ class SetupWizardPage(QWidget):
         self.conditions_step_surface = _SetupStepSurface(
             self.condition_setup_step,
             object_name="setup_wizard_conditions_surface",
+            max_width=_SETUP_STEP_WORKBENCH_SURFACE_MAX_WIDTH,
             parent=self,
         )
         self.experiment_step_surface = _SetupStepSurface(
@@ -428,13 +431,13 @@ class SetupWizardPage(QWidget):
         self.fixation_step_surface = _SetupStepSurface(
             self.fixation_schedule_editor,
             object_name="setup_wizard_fixation_surface",
-            max_width=_SETUP_STEP_NARROW_SURFACE_MAX_WIDTH,
             center_vertically=True,
             parent=self,
         )
         self.response_step_surface = _SetupStepSurface(
             self.fixation_response_editor,
             object_name="setup_wizard_response_surface",
+            max_width=_SETUP_STEP_WORKBENCH_SURFACE_MAX_WIDTH,
             parent=self,
         )
         self.review_step_surface = _SetupStepSurface(
@@ -457,30 +460,29 @@ class SetupWizardPage(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
-        self.experiment_settings_card = SectionCard(
-            title="Experiment Settings",
-            object_name="setup_wizard_experiment_settings_card",
-            parent=page,
+        self.experiment_settings_card = QWidget(page)
+        self.experiment_settings_card.setObjectName("setup_wizard_experiment_settings_card")
+        self.experiment_settings_card.setMaximumWidth(_SETUP_STEP_SURFACE_MAX_WIDTH)
+        self.experiment_settings_card.setMinimumHeight(280)
+        self.experiment_settings_card.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Preferred,
         )
-        self.experiment_settings_card.setMaximumWidth(860)
-        self.experiment_settings_card.card_layout.setContentsMargins(12, 10, 12, 10)
-        self.experiment_settings_card.card_layout.setSpacing(8)
-        self.experiment_settings_card.body_layout.setSpacing(PAGE_SECTION_GAP)
-        self.experiment_settings_card.title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        header_layout = self.experiment_settings_card.card_layout.itemAt(0).layout()
-        if header_layout is not None:
-            header_layout.insertStretch(0, 1)
+        experiment_layout = QVBoxLayout(self.experiment_settings_card)
+        experiment_layout.setContentsMargins(0, 0, 0, 0)
+        experiment_layout.setSpacing(0)
 
         content = QWidget(self.experiment_settings_card)
         content_layout = QHBoxLayout(content)
         content_layout.setContentsMargins(0, 0, 0, 0)
-        content_layout.setSpacing(PAGE_SECTION_GAP)
+        content_layout.setSpacing(PAGE_SECTION_GAP + 4)
 
         display_column = QFrame(content)
         display_column.setProperty("experimentSettingsSection", "true")
+        display_column.setMinimumHeight(224)
         display_column_layout = QVBoxLayout(display_column)
-        display_column_layout.setContentsMargins(10, 8, 10, 8)
-        display_column_layout.setSpacing(8)
+        display_column_layout.setContentsMargins(14, 12, 14, 12)
+        display_column_layout.setSpacing(12)
         display_title = QLabel("Display Settings", display_column)
         display_title.setProperty("sectionCardRole", "title")
         display_column_layout.addWidget(display_title)
@@ -489,9 +491,10 @@ class SetupWizardPage(QWidget):
 
         session_column = QFrame(content)
         session_column.setProperty("experimentSettingsSection", "true")
+        session_column.setMinimumHeight(224)
         session_column_layout = QVBoxLayout(session_column)
-        session_column_layout.setContentsMargins(10, 8, 10, 8)
-        session_column_layout.setSpacing(8)
+        session_column_layout.setContentsMargins(14, 12, 14, 12)
+        session_column_layout.setSpacing(12)
         session_title = QLabel("Session", session_column)
         session_title.setProperty("sectionCardRole", "title")
         session_column_layout.addWidget(session_title)
@@ -506,9 +509,9 @@ class SetupWizardPage(QWidget):
             QSizePolicy.Policy.Expanding,
             QSizePolicy.Policy.Preferred,
         )
-        content_layout.addWidget(display_column, 1)
-        content_layout.addWidget(session_column, 2)
-        self.experiment_settings_card.body_layout.addWidget(content)
+        content_layout.addWidget(display_column, 2)
+        content_layout.addWidget(session_column, 3)
+        experiment_layout.addWidget(content)
 
         layout.addWidget(
             self.experiment_settings_card,
@@ -529,8 +532,8 @@ class SetupWizardPage(QWidget):
             object_name="setup_wizard_review_card",
             parent=page,
         )
-        self.review_card.setMinimumWidth(620)
-        self.review_card.setMaximumWidth(700)
+        self.review_card.setMinimumWidth(700)
+        self.review_card.setMaximumWidth(_SETUP_STEP_SURFACE_MAX_WIDTH)
         self.review_card.card_layout.setContentsMargins(14, 10, 14, 10)
         self.review_card.card_layout.setSpacing(6)
         self.review_card.body_layout.setSpacing(6)
@@ -720,7 +723,7 @@ class SetupWizardPage(QWidget):
         self.step_title_label.setVisible(False)
         self.step_status_badge.setVisible(False)
         self.step_status_label.setText(self._step_status_text(self._active_step_index))
-        self.step_status_label.setVisible(not step_valid and step_key == "conditions")
+        self.step_status_label.setVisible(False)
         self.step_card.setProperty(
             "wizardProjectStepFrame",
             "false",

@@ -433,43 +433,27 @@ def test_fixation_randomized_min_above_max_shows_plain_language_error(
     qtbot,
     controller: StudioController,
     tmp_path: Path,
-    monkeypatch,
 ) -> None:
     _, window = _open_created_project(controller, qtbot, tmp_path, "Fixation Range Error")
 
     page = window.setup_dashboard_page.fixation_schedule_editor
     window.setup_wizard_page.open_wizard(step_key="fixation")
     window.main_stack.setCurrentWidget(window.setup_wizard_page)
-    page.fixation_enabled_checkbox.setChecked(True)
     page.target_count_mode_combo.setCurrentIndex(
         page.target_count_mode_combo.findData("randomized")
     )
     QApplication.processEvents()
 
-    captured_errors: list[tuple[str, str]] = []
-
-    def _capture_error(_parent, title, error):
-        captured_errors.append((title, str(error)))
-
-    monkeypatch.setattr(
-        "fpvs_studio.gui.fixation_settings_page._show_error_dialog",
-        _capture_error,
-    )
     page.target_count_min_spin.setValue(page.target_count_max_spin.value() + 1)
     QApplication.processEvents()
 
-    assert captured_errors == [
-        (
-            "Fixation Settings Error",
-            "Minimum changes per condition cannot be higher than maximum changes. "
-            "Lower Minimum changes or increase Maximum changes, then try again.",
-        )
-    ]
-    assert "target_count_min" not in captured_errors[0][1]
-    assert "ValidationError" not in captured_errors[0][1]
+    fixation = window.document.project.settings.fixation_task
+    assert page.target_count_min_spin.value() == page.target_count_max_spin.value()
+    assert fixation.target_count_min == fixation.target_count_max
+    assert fixation.no_immediate_repeat_count is False
 
 
-def test_fixation_accuracy_toggle_controls_response_visibility(
+def test_fixation_accuracy_toggle_disables_response_controls_without_reflow(
     qtbot,
     controller: StudioController,
     tmp_path: Path,
@@ -480,22 +464,32 @@ def test_fixation_accuracy_toggle_controls_response_visibility(
     window.setup_wizard_page.open_wizard(step_key="response")
     window.main_stack.setCurrentWidget(window.setup_wizard_page)
     page.fixation_enabled_checkbox.setChecked(True)
+    page.fixation_accuracy_checkbox.setChecked(True)
     QApplication.processEvents()
+    before_geometry = page.fixation_response_panel.geometry()
 
     page.fixation_accuracy_checkbox.setChecked(False)
     QApplication.processEvents()
-    assert not page.response_key_edit.isVisible()
-    assert not page.response_key_button.isVisible()
-    assert not page.response_window_spin.isVisible()
-
-    page.fixation_accuracy_checkbox.setChecked(True)
-    QApplication.processEvents()
+    assert page.fixation_response_panel.geometry() == before_geometry
     assert page.response_key_edit.isVisible()
     assert page.response_key_button.isVisible()
     assert page.response_window_spin.isVisible()
+    assert not page.response_key_edit.isEnabled()
+    assert not page.response_key_button.isEnabled()
+    assert not page.response_window_spin.isEnabled()
+
+    page.fixation_accuracy_checkbox.setChecked(True)
+    QApplication.processEvents()
+    assert page.fixation_response_panel.geometry() == before_geometry
+    assert page.response_key_edit.isVisible()
+    assert page.response_key_button.isVisible()
+    assert page.response_window_spin.isVisible()
+    assert page.response_key_edit.isEnabled()
+    assert page.response_key_button.isEnabled()
+    assert page.response_window_spin.isEnabled()
 
 
-def test_fixation_disable_hides_dependent_sections(
+def test_fixation_color_changes_are_always_enabled(
     qtbot,
     controller: StudioController,
     tmp_path: Path,
@@ -506,9 +500,9 @@ def test_fixation_disable_hides_dependent_sections(
     response_page = window.setup_dashboard_page.fixation_response_editor
     window.setup_wizard_page.open_wizard(step_key="fixation")
     window.main_stack.setCurrentWidget(window.setup_wizard_page)
-    schedule_page.fixation_enabled_checkbox.setChecked(True)
     response_page.fixation_accuracy_checkbox.setChecked(True)
     QApplication.processEvents()
+    assert not schedule_page.fixation_enabled_checkbox.isVisible()
     assert schedule_page.target_count_mode_combo.isVisible()
     assert schedule_page.target_duration_spin.isVisible()
     window.setup_wizard_page.open_wizard(step_key="response")
@@ -520,13 +514,17 @@ def test_fixation_disable_hides_dependent_sections(
 
     schedule_page.fixation_enabled_checkbox.setChecked(False)
     QApplication.processEvents()
-    assert not schedule_page.target_count_mode_combo.isVisible()
-    assert not schedule_page.target_duration_spin.isVisible()
-    assert not response_page.base_color_combo.isVisible()
-    assert not response_page.response_key_edit.isVisible()
-    assert not response_page.response_key_button.isVisible()
-    assert not response_page.fixation_accuracy_checkbox.isEnabled()
-    assert response_page.fixation_accuracy_checkbox.isChecked() is False
+    assert window.document.project.settings.fixation_task.enabled is True
+    window.setup_wizard_page.open_wizard(step_key="fixation")
+    QApplication.processEvents()
+    assert schedule_page.target_count_mode_combo.isVisible()
+    assert schedule_page.target_duration_spin.isVisible()
+    window.setup_wizard_page.open_wizard(step_key="response")
+    QApplication.processEvents()
+    assert response_page.base_color_combo.isVisible()
+    assert response_page.response_key_edit.isVisible()
+    assert response_page.response_key_button.isVisible()
+    assert response_page.fixation_accuracy_checkbox.isEnabled()
 
 
 def test_cycle_tooltips_and_fixation_feasibility_render_and_update(
@@ -548,13 +546,12 @@ def test_cycle_tooltips_and_fixation_feasibility_render_and_update(
 
     page = window.setup_dashboard_page.fixation_schedule_editor
     window.main_stack.setCurrentWidget(window.setup_wizard_page)
-    page.fixation_enabled_checkbox.setChecked(True)
     page.target_count_mode_combo.setCurrentIndex(page.target_count_mode_combo.findData("fixed"))
     page.changes_per_sequence_spin.setValue(4)
     QApplication.processEvents()
 
     guidance_before = page.fixation_feasibility_label.text()
-    assert "Estimated maximum feasible cross changes per condition:" in guidance_before
+    assert "Recommended maximum cross changes per condition:" in guidance_before
     assert "Refresh rate:" not in guidance_before
     assert "Per-condition estimated feasible max color changes:" not in guidance_before
     assert (
@@ -568,11 +565,16 @@ def test_cycle_tooltips_and_fixation_feasibility_render_and_update(
         == "Derived from each condition's duration and the current fixation timing settings."
     )
 
-    page.target_duration_spin.setValue(900)
+    condition_id = window.conditions_page.selected_condition_id()
+    assert condition_id is not None
+    window.document.update_condition(
+        condition_id,
+        oddball_cycle_repeats_per_sequence=72,
+    )
     QApplication.processEvents()
     guidance_after = page.fixation_feasibility_label.text()
     assert guidance_after != guidance_before
-    assert "Estimated maximum feasible cross changes per condition:" in guidance_after
+    assert "Recommended maximum cross changes per condition:" in guidance_after
 
 
 def test_fixation_feasibility_shows_single_value_for_uniform_condition_lengths(
@@ -589,7 +591,7 @@ def test_fixation_feasibility_shows_single_value_for_uniform_condition_lengths(
     QApplication.processEvents()
 
     guidance = page.fixation_feasibility_label.text()
-    assert "Estimated maximum feasible cross changes per condition:" in guidance
+    assert "Recommended maximum cross changes per condition:" in guidance
     assert "varies by condition" not in guidance
     assert "\n" not in guidance
 
@@ -795,11 +797,10 @@ def test_switching_existing_blank_project_to_continuous_compiles_without_blank_f
     assert all(event.off_frames == 0 for event in run_spec.stimulus_sequence)
 
 
-def test_launch_reports_actionable_condition_level_fixation_error_before_prompt(
+def test_short_condition_clamps_fixation_count_before_launch(
     qtbot,
     controller: StudioController,
     tmp_path: Path,
-    monkeypatch,
 ) -> None:
     _, window = _open_created_project(controller, qtbot, tmp_path, "Fixation Fit Error")
     _prepare_compile_ready_project(window, tmp_path / "fixation-fit-error")
@@ -812,45 +813,15 @@ def test_launch_reports_actionable_condition_level_fixation_error_before_prompt(
     )
 
     page = window.fixation_cross_settings_page
-    page.fixation_enabled_checkbox.setChecked(True)
     page.target_count_mode_combo.setCurrentIndex(page.target_count_mode_combo.findData("fixed"))
     page.changes_per_sequence_spin.setValue(4)
     page.target_duration_spin.setValue(230)
     page.min_gap_spin.setValue(1000)
     page.max_gap_spin.setValue(3000)
+    QApplication.processEvents()
 
-    messages: list[str] = []
-
-    def _capture_exec(dialog: QMessageBox) -> int:
-        messages.append(dialog.text())
-        return int(QMessageBox.StandardButton.Ok)
-
-    monkeypatch.setattr("fpvs_studio.gui.main_window.QMessageBox.exec", _capture_exec)
-    prompt_calls = 0
-    launch_calls = 0
-
-    def _capture_prompt() -> str:
-        nonlocal prompt_calls
-        prompt_calls += 1
-        return "00123"
-
-    def _capture_launch(*_args, **_kwargs):
-        nonlocal launch_calls
-        launch_calls += 1
-        raise AssertionError("launch_session should not be called when launch preflight fails")
-
-    monkeypatch.setattr(window.run_page, "_prompt_participant_number", _capture_prompt)
-    monkeypatch.setattr("fpvs_studio.gui.document.launch_session", _capture_launch)
-
-    qtbot.mouseClick(window.run_page.launch_button, Qt.MouseButton.LeftButton)
-
-    assert any("Required duration:" in message for message in messages)
-    assert any(
-        "Color changes are distributed across the full condition duration." in message
-        for message in messages
-    )
-    assert any("Minimum cycle count needed" in message for message in messages)
-    assert prompt_calls == 0
-    assert launch_calls == 0
+    assert page.changes_per_sequence_spin.maximum() == 0
+    assert page.changes_per_sequence_spin.value() == 0
+    assert window.document.project.settings.fixation_task.changes_per_sequence == 0
 
 

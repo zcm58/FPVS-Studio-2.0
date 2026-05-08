@@ -313,6 +313,7 @@ class FixationSettingsEditor(QWidget):
         title: str = "Fixation Cross Task",
         subtitle: str | None = "Task enablement, behavior, timing, response, and appearance.",
         compact: bool = False,
+        framed: bool = True,
         show_preview: bool = False,
         section_mode: str = "all",
         parent: QWidget | None = None,
@@ -328,6 +329,7 @@ class FixationSettingsEditor(QWidget):
         self._schedule_row_behavior = schedule_row_behavior
         self._layout_mode = layout_mode
         self._compact = compact
+        self._framed = framed
         self._show_preview = show_preview
         self._section_mode = section_mode
         card_margin_y = 6 if compact else 10
@@ -340,6 +342,7 @@ class FixationSettingsEditor(QWidget):
         )
         self.fixation_enabled_checkbox.setObjectName("fixation_enabled_checkbox")
         self.fixation_enabled_checkbox.stateChanged.connect(self._on_fixation_enabled_toggled)
+        self.fixation_enabled_checkbox.setVisible(False)
 
         self.fixation_accuracy_checkbox = QCheckBox(
             "Enable fixation accuracy task",
@@ -347,6 +350,8 @@ class FixationSettingsEditor(QWidget):
         )
         self.fixation_accuracy_checkbox.setObjectName("fixation_accuracy_checkbox")
         self.fixation_accuracy_checkbox.stateChanged.connect(self._on_fixation_accuracy_toggled)
+        self.fixation_accuracy_checkbox.setVisible(section_mode in {"all", "response"})
+        self._recommended_change_cap: int | None = None
 
         self.target_count_mode_combo = QComboBox(self)
         self.target_count_mode_combo.setObjectName("target_count_mode_combo")
@@ -412,9 +417,11 @@ class FixationSettingsEditor(QWidget):
         self.response_key_edit.setReadOnly(True)
         self.response_key_edit.setToolTip(_RESPONSE_KEY_TOOLTIP)
         self.response_key_edit.setText("space")
+        self.response_key_edit.setMinimumWidth(72)
         self.response_key_button = QPushButton("Choose Key...", self)
         self.response_key_button.setObjectName("response_key_choose_button")
         self.response_key_button.setToolTip(_RESPONSE_KEY_TOOLTIP)
+        self.response_key_button.setMinimumWidth(112)
         mark_secondary_action(self.response_key_button)
         self.response_key_button.clicked.connect(self._show_response_key_picker)
         self.response_key_popover = ResponseKeyPickerPopover(self)
@@ -437,24 +444,33 @@ class FixationSettingsEditor(QWidget):
         self.line_width_spin.setRange(1, 1000)
         self.line_width_spin.valueChanged.connect(self._apply_fixation_settings)
 
-        self.fixation_panel = SectionCard(
-            title=title,
-            subtitle=subtitle,
-            object_name="fixation_settings_panel",
-            parent=self,
-        )
-        self.fixation_panel.card_layout.setContentsMargins(12, card_margin_y, 12, card_margin_y)
-        self.fixation_panel.card_layout.setSpacing(card_spacing)
-        fixation_panel_layout = self.fixation_panel.body_layout
-        fixation_panel_layout.setSpacing(section_spacing)
+        if framed:
+            self.fixation_panel: SectionCard | QWidget = SectionCard(
+                title=title,
+                subtitle=subtitle,
+                object_name="fixation_settings_panel",
+                parent=self,
+            )
+            self.fixation_panel.card_layout.setContentsMargins(
+                12,
+                card_margin_y,
+                12,
+                card_margin_y,
+            )
+            self.fixation_panel.card_layout.setSpacing(card_spacing)
+            fixation_panel_layout = self.fixation_panel.body_layout
+        else:
+            self.fixation_panel = QWidget(self)
+            self.fixation_panel.setObjectName("fixation_settings_panel")
+            fixation_panel_layout = QVBoxLayout(self.fixation_panel)
+            fixation_panel_layout.setContentsMargins(0, 0, 0, 0)
+        fixation_panel_layout.setSpacing(PAGE_SECTION_GAP if not framed else section_spacing)
 
         enablement_layout = QVBoxLayout() if compact else QHBoxLayout()
         enablement_layout.setContentsMargins(0, 0, 0, 0)
         enablement_layout.setSpacing(5 if compact else 6)
         if section_mode in {"all", "fixation"}:
-            enablement_layout.addWidget(self.fixation_enabled_checkbox)
-        if section_mode in {"all", "response"}:
-            enablement_layout.addWidget(self.fixation_accuracy_checkbox)
+            self.fixation_enabled_checkbox.setParent(self.fixation_panel)
         if not compact:
             enablement_layout.addStretch(1)
 
@@ -477,16 +493,27 @@ class FixationSettingsEditor(QWidget):
         timing_layout.addRow("Maximum gap (ms)", self.max_gap_spin)
 
         self.fixation_response_group = QWidget(self.fixation_panel)
-        response_layout = QFormLayout(self.fixation_response_group)
+        response_group_layout = QVBoxLayout(self.fixation_response_group)
+        response_group_layout.setContentsMargins(0, 0, 0, 0)
+        response_group_layout.setSpacing(form_spacing + 2)
+        if section_mode in {"all", "response"}:
+            response_group_layout.addWidget(self.fixation_accuracy_checkbox)
+        self.response_controls_group = QWidget(self.fixation_response_group)
+        response_layout = QFormLayout(self.response_controls_group)
+        response_layout.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
+        response_layout.setHorizontalSpacing(PAGE_SECTION_GAP)
         response_layout.setVerticalSpacing(form_spacing)
         response_key_row = QWidget(self.fixation_response_group)
+        response_key_row.setObjectName("fixation_response_key_row")
+        response_key_row.setMinimumWidth(210)
         response_key_row_layout = QHBoxLayout(response_key_row)
         response_key_row_layout.setContentsMargins(0, 0, 0, 0)
-        response_key_row_layout.setSpacing(6)
+        response_key_row_layout.setSpacing(8)
         response_key_row_layout.addWidget(self.response_key_edit, 1)
         response_key_row_layout.addWidget(self.response_key_button)
         response_layout.addRow("Response key", response_key_row)
         response_layout.addRow("Response window (s)", self.response_window_spin)
+        response_group_layout.addWidget(self.response_controls_group)
 
         self.fixation_appearance_group = QWidget(self.fixation_panel)
         appearance_layout = QFormLayout(self.fixation_appearance_group)
@@ -538,7 +565,7 @@ class FixationSettingsEditor(QWidget):
             parent=self.fixation_panel,
         )
         self.fixation_appearance_panel = _settings_section(
-            "Appearance",
+            "Fixation Cross Appearance",
             self.fixation_appearance_group,
             parent=self.fixation_panel,
         )
@@ -547,11 +574,17 @@ class FixationSettingsEditor(QWidget):
                 self.fixation_behavior_panel,
                 self.fixation_timing_panel,
             )
+            if not framed:
+                self.fixation_behavior_panel.setMinimumHeight(210)
+                self.fixation_timing_panel.setMinimumHeight(210)
         elif section_mode == "response":
             visible_panels = (
                 self.fixation_response_panel,
                 self.fixation_appearance_panel,
             )
+            if not framed:
+                self.fixation_response_panel.setMinimumHeight(182)
+                self.fixation_appearance_panel.setMinimumHeight(182)
         else:
             visible_panels = (
                 self.fixation_behavior_panel,
@@ -573,8 +606,15 @@ class FixationSettingsEditor(QWidget):
             settings_grid.setVerticalSpacing(section_spacing)
             for index, panel in enumerate(visible_panels):
                 settings_grid.addWidget(panel, index // 2, index % 2)
-            settings_grid.setColumnStretch(0, 1)
-            settings_grid.setColumnStretch(1, 1)
+            if section_mode == "fixation" and not framed:
+                settings_grid.setColumnStretch(0, 3)
+                settings_grid.setColumnStretch(1, 2)
+            elif section_mode == "response" and not framed:
+                settings_grid.setColumnStretch(0, 4)
+                settings_grid.setColumnStretch(1, 3)
+            else:
+                settings_grid.setColumnStretch(0, 1)
+                settings_grid.setColumnStretch(1, 1)
             settings_column_layout.addLayout(settings_grid)
 
         layout = QVBoxLayout(self)
@@ -631,8 +671,11 @@ class FixationSettingsEditor(QWidget):
 
     def refresh(self) -> None:
         fixation = self._document.project.settings.fixation_task
+        if not fixation.enabled:
+            self._document.update_fixation_settings(enabled=True)
+            return
         with QSignalBlocker(self.fixation_enabled_checkbox):
-            self.fixation_enabled_checkbox.setChecked(fixation.enabled)
+            self.fixation_enabled_checkbox.setChecked(True)
         with QSignalBlocker(self.fixation_accuracy_checkbox):
             self.fixation_accuracy_checkbox.setChecked(fixation.accuracy_task_enabled)
         with QSignalBlocker(self.target_count_mode_combo):
@@ -675,13 +718,12 @@ class FixationSettingsEditor(QWidget):
             self.line_width_spin.setValue(fixation.line_width_px)
         self._update_fixation_visibility_state()
         self._refresh_condition_guidance()
+        self._apply_recommended_change_cap()
         self._refresh_preview()
 
     def _update_fixation_visibility_state(self) -> None:
-        fixation_enabled = self.fixation_enabled_checkbox.isChecked()
-        if not fixation_enabled and self.fixation_accuracy_checkbox.isChecked():
-            with QSignalBlocker(self.fixation_accuracy_checkbox):
-                self.fixation_accuracy_checkbox.setChecked(False)
+        fixation_enabled = True
+        self.fixation_enabled_checkbox.setChecked(True)
         self.fixation_accuracy_checkbox.setEnabled(fixation_enabled)
 
         show_fixation_sections = self._section_mode in {"all", "fixation"}
@@ -741,11 +783,11 @@ class FixationSettingsEditor(QWidget):
             self.no_repeat_count_checkbox.setEnabled(fixation_enabled and randomized_mode)
 
         accuracy_enabled = fixation_enabled and self.fixation_accuracy_checkbox.isChecked()
-        response_visible = show_response_sections and accuracy_enabled
-        self.fixation_response_panel.setVisible(response_visible)
-        self.fixation_response_panel.setEnabled(response_visible)
-        self.fixation_response_group.setVisible(response_visible)
-        self.fixation_response_group.setEnabled(response_visible)
+        self.fixation_response_panel.setVisible(show_response_sections)
+        self.fixation_response_panel.setEnabled(show_response_sections)
+        self.fixation_response_group.setVisible(show_response_sections)
+        self.fixation_response_group.setEnabled(show_response_sections)
+        self.response_controls_group.setEnabled(show_response_sections and accuracy_enabled)
         if not accuracy_enabled:
             self.response_key_popover.close()
 
@@ -755,17 +797,26 @@ class FixationSettingsEditor(QWidget):
         guidance_rows: list[ConditionFixationGuidance] | None,
         guidance_error: Exception | None,
     ) -> str:
-        label = "Estimated maximum feasible cross changes per condition"
+        label = "Recommended maximum cross changes per condition"
         if guidance_error is not None:
             return f"{label}: unavailable ({guidance_error})"
         if not guidance_rows:
             return f"{label}: unavailable (add a condition)."
         estimated_values = sorted(
-            {row.estimated_max_color_changes_per_condition for row in guidance_rows}
+            {row.recommended_max_color_changes_per_condition for row in guidance_rows}
         )
         if len(estimated_values) == 1:
             return f"{label}: {estimated_values[0]}"
         return f"{label}: {estimated_values[0]}-{estimated_values[-1]} (varies by condition)"
+
+    def _recommended_project_change_cap(
+        self,
+        guidance_rows: list[ConditionFixationGuidance] | None,
+        guidance_error: Exception | None,
+    ) -> int | None:
+        if guidance_error is not None or not guidance_rows:
+            return None
+        return min(row.recommended_max_color_changes_per_condition for row in guidance_rows)
 
     def _refresh_condition_guidance(self) -> None:
         refresh_hz = self._document.project.settings.display.preferred_refresh_hz or 60.0
@@ -775,12 +826,45 @@ class FixationSettingsEditor(QWidget):
             guidance_rows = self._document.fixation_guidance(refresh_hz=refresh_hz)
         except Exception as error:
             guidance_error = error
+        self._recommended_change_cap = self._recommended_project_change_cap(
+            guidance_rows,
+            guidance_error,
+        )
         self.fixation_feasibility_label.setText(
             self._build_compact_feasibility_text(
                 guidance_rows=guidance_rows,
                 guidance_error=guidance_error,
             )
         )
+
+    def _apply_recommended_change_cap(self) -> None:
+        cap = self._recommended_change_cap
+        maximum = cap if cap is not None else 1000
+        changed = False
+        with QSignalBlocker(self.changes_per_sequence_spin):
+            self.changes_per_sequence_spin.setMaximum(maximum)
+            if self.changes_per_sequence_spin.value() > maximum:
+                self.changes_per_sequence_spin.setValue(maximum)
+                changed = True
+        with QSignalBlocker(self.target_count_max_spin):
+            self.target_count_max_spin.setMaximum(maximum)
+            if self.target_count_max_spin.value() > maximum:
+                self.target_count_max_spin.setValue(maximum)
+                changed = True
+        with QSignalBlocker(self.target_count_min_spin):
+            self.target_count_min_spin.setMaximum(maximum)
+            if self.target_count_min_spin.value() > self.target_count_max_spin.value():
+                self.target_count_min_spin.setValue(self.target_count_max_spin.value())
+                changed = True
+        if (
+            self.no_repeat_count_checkbox.isChecked()
+            and self.target_count_min_spin.value() == self.target_count_max_spin.value()
+        ):
+            with QSignalBlocker(self.no_repeat_count_checkbox):
+                self.no_repeat_count_checkbox.setChecked(False)
+            changed = True
+        if changed:
+            self._apply_fixation_settings()
 
     def _refresh_preview(self) -> None:
         if self.preview_widget is None:
@@ -799,6 +883,9 @@ class FixationSettingsEditor(QWidget):
         )
 
     def _on_fixation_enabled_toggled(self) -> None:
+        if not self.fixation_enabled_checkbox.isChecked():
+            with QSignalBlocker(self.fixation_enabled_checkbox):
+                self.fixation_enabled_checkbox.setChecked(True)
         self._update_fixation_visibility_state()
         self._apply_fixation_settings()
 
@@ -828,17 +915,34 @@ class FixationSettingsEditor(QWidget):
             self.response_key_edit.setText(normalized)
         self._apply_fixation_settings()
 
+    def _normalized_target_count_values(self) -> tuple[int, int, bool]:
+        target_min = self.target_count_min_spin.value()
+        target_max = self.target_count_max_spin.value()
+        no_immediate_repeat = self.no_repeat_count_checkbox.isChecked()
+        if target_min > target_max:
+            target_max = target_min
+            with QSignalBlocker(self.target_count_max_spin):
+                self.target_count_max_spin.setValue(target_max)
+        if target_min == target_max and no_immediate_repeat:
+            no_immediate_repeat = False
+            with QSignalBlocker(self.no_repeat_count_checkbox):
+                self.no_repeat_count_checkbox.setChecked(False)
+        return target_min, target_max, no_immediate_repeat
+
     def _apply_fixation_settings(self) -> None:
         try:
             response_key = self.response_key_edit.text().strip().lower() or "space"
+            target_count_min, target_count_max, no_immediate_repeat = (
+                self._normalized_target_count_values()
+            )
             self._document.update_fixation_settings(
-                enabled=self.fixation_enabled_checkbox.isChecked(),
+                enabled=True,
                 accuracy_task_enabled=self.fixation_accuracy_checkbox.isChecked(),
                 target_count_mode=self.target_count_mode_combo.currentData(),
                 changes_per_sequence=self.changes_per_sequence_spin.value(),
-                target_count_min=self.target_count_min_spin.value(),
-                target_count_max=self.target_count_max_spin.value(),
-                no_immediate_repeat_count=self.no_repeat_count_checkbox.isChecked(),
+                target_count_min=target_count_min,
+                target_count_max=target_count_max,
+                no_immediate_repeat_count=no_immediate_repeat,
                 target_duration_ms=self.target_duration_spin.value(),
                 min_gap_ms=self.min_gap_spin.value(),
                 max_gap_ms=self.max_gap_spin.value(),

@@ -112,3 +112,4 @@ def test_condition_fixation_guidance_reports_duration_and_max_feasible_changes(
     assert row.total_frames == 300
     assert row.condition_duration_seconds == 5.0
     assert row.estimated_max_color_changes_per_condition == 3
+    assert row.recommended_max_color_changes_per_condition == 1

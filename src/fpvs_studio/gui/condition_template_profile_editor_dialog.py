@@ -111,6 +111,8 @@ class ConditionTemplateProfileEditorDialog(QDialog):
 
         self.fixation_enabled_checkbox = QCheckBox("Fixation task enabled", self)
         self.fixation_enabled_checkbox.setObjectName("condition_profile_fixation_enabled_checkbox")
+        self.fixation_enabled_checkbox.setChecked(True)
+        self.fixation_enabled_checkbox.setVisible(False)
         self.accuracy_enabled_checkbox = QCheckBox("Fixation accuracy scoring enabled", self)
         self.accuracy_enabled_checkbox.setObjectName("condition_profile_fixation_accuracy_checkbox")
         self.changes_per_sequence_spin = QSpinBox(self)
@@ -168,8 +170,7 @@ class ConditionTemplateProfileEditorDialog(QDialog):
 
         fixation_group = QGroupBox("Fixation Defaults", self)
         fixation_layout = QGridLayout(fixation_group)
-        fixation_layout.addWidget(self.fixation_enabled_checkbox, 0, 0, 1, 2)
-        fixation_layout.addWidget(self.accuracy_enabled_checkbox, 1, 0, 1, 2)
+        fixation_layout.addWidget(self.accuracy_enabled_checkbox, 0, 0, 1, 2)
 
         fixation_form = QFormLayout()
         fixation_form.addRow("Color changes / condition", self.changes_per_sequence_spin)
@@ -187,7 +188,7 @@ class ConditionTemplateProfileEditorDialog(QDialog):
         fixation_form.addRow("Response window (s)", self.response_window_spin)
         fixation_form.addRow("Cross size (px)", self.cross_size_spin)
         fixation_form.addRow("Line width (px)", self.line_width_spin)
-        fixation_layout.addLayout(fixation_form, 2, 0, 1, 2)
+        fixation_layout.addLayout(fixation_form, 1, 0, 1, 2)
 
         self.button_box = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel,
@@ -242,7 +243,7 @@ class ConditionTemplateProfileEditorDialog(QDialog):
         )
 
         fixation = profile.defaults.fixation_task
-        self.fixation_enabled_checkbox.setChecked(fixation.enabled)
+        self.fixation_enabled_checkbox.setChecked(True)
         self.accuracy_enabled_checkbox.setChecked(fixation.accuracy_task_enabled)
         self.changes_per_sequence_spin.setValue(fixation.changes_per_sequence)
         self.target_count_mode_combo.setCurrentIndex(
@@ -296,7 +297,7 @@ class ConditionTemplateProfileEditorDialog(QDialog):
                 ),
                 display=ConditionTemplateDisplayDefaults(preferred_refresh_hz=preferred_refresh_hz),
                 fixation_task=FixationTaskSettings(
-                    enabled=self.fixation_enabled_checkbox.isChecked(),
+                    enabled=True,
                     accuracy_task_enabled=self.accuracy_enabled_checkbox.isChecked(),
                     changes_per_sequence=self.changes_per_sequence_spin.value(),
                     target_count_mode=self.target_count_mode_combo.currentData(),

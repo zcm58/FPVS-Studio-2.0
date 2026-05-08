@@ -6,6 +6,7 @@ time diagnostics, not manifest generation, session execution, or engine timing l
 from __future__ import annotations
 
 from dataclasses import dataclass
+from math import floor
 
 from fpvs_studio.core.enums import DutyCycleMode, ValidationSeverity
 from fpvs_studio.core.fixation_planning import (
@@ -37,6 +38,13 @@ class ConditionFixationGuidance:
     total_frames: int
     condition_duration_seconds: float
     estimated_max_color_changes_per_condition: int
+    recommended_max_color_changes_per_condition: int
+
+
+def duration_based_fixation_change_cap(condition_duration_seconds: float) -> int:
+    """Return the conservative fixation change cap derived from condition duration."""
+
+    return max(1, floor(condition_duration_seconds * 15 / 120))
 
 
 def validate_display_refresh(
@@ -173,6 +181,12 @@ def condition_fixation_guidance(
         total_cycles = condition.oddball_cycle_repeats_per_sequence * condition.sequence_count
         total_stimuli = total_cycles * template.oddball_every_n
         total_frames = total_stimuli * frames_per_stimulus_value
+        physical_max = max_supported_color_changes(
+            total_frames=total_frames,
+            target_duration_frames=target_duration_frames,
+            min_gap_frames=min_gap_frames,
+        )
+        duration_cap = duration_based_fixation_change_cap(total_frames / refresh_hz)
         guidance_rows.append(
             ConditionFixationGuidance(
                 condition_id=condition.condition_id,
@@ -180,11 +194,8 @@ def condition_fixation_guidance(
                 total_cycles=total_cycles,
                 total_frames=total_frames,
                 condition_duration_seconds=total_frames / refresh_hz,
-                estimated_max_color_changes_per_condition=max_supported_color_changes(
-                    total_frames=total_frames,
-                    target_duration_frames=target_duration_frames,
-                    min_gap_frames=min_gap_frames,
-                ),
+                estimated_max_color_changes_per_condition=physical_max,
+                recommended_max_color_changes_per_condition=min(physical_max, duration_cap),
             )
         )
     return guidance_rows

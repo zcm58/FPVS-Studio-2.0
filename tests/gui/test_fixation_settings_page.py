@@ -85,25 +85,80 @@ def test_fixation_settings_editor_toggles_fixed_and_randomized_rows(
     assert editor.no_repeat_count_checkbox.isEnabled()
 
 
-def test_fixation_settings_editor_disabling_task_clears_accuracy_controls(
+def test_fixation_settings_editor_caps_counts_from_condition_duration(
+    qtbot,
+    tmp_path: Path,
+) -> None:
+    document, editor = _build_editor(qtbot, tmp_path, schedule_row_behavior="disable")
+    condition_id = document.create_condition(name="Sixty Seconds")
+    document.update_condition(
+        condition_id,
+        sequence_count=1,
+        oddball_cycle_repeats_per_sequence=72,
+    )
+    QApplication.processEvents()
+
+    assert editor.changes_per_sequence_spin.maximum() == 7
+    assert editor.target_count_max_spin.maximum() == 7
+    assert editor.fixation_feasibility_label.text() == (
+        "Recommended maximum cross changes per condition: 7"
+    )
+
+    editor.target_count_mode_combo.setCurrentIndex(
+        editor.target_count_mode_combo.findData("fixed")
+    )
+    editor.changes_per_sequence_spin.setValue(99)
+    QApplication.processEvents()
+    assert editor.changes_per_sequence_spin.value() == 7
+    assert document.project.settings.fixation_task.changes_per_sequence == 7
+
+    editor.target_count_mode_combo.setCurrentIndex(
+        editor.target_count_mode_combo.findData("randomized")
+    )
+    editor.target_count_min_spin.setValue(9)
+    editor.target_count_max_spin.setValue(99)
+    QApplication.processEvents()
+    fixation = document.project.settings.fixation_task
+    assert editor.target_count_min_spin.value() == 7
+    assert editor.target_count_max_spin.value() == 7
+    assert fixation.target_count_min == 7
+    assert fixation.target_count_max == 7
+    assert fixation.no_immediate_repeat_count is False
+
+
+def test_fixation_settings_editor_caps_roughly_120_seconds_at_fifteen(
+    qtbot,
+    tmp_path: Path,
+) -> None:
+    document, editor = _build_editor(qtbot, tmp_path)
+    condition_id = document.create_condition(name="Two Minutes")
+    document.update_condition(
+        condition_id,
+        sequence_count=1,
+        oddball_cycle_repeats_per_sequence=144,
+    )
+    QApplication.processEvents()
+
+    assert editor.changes_per_sequence_spin.maximum() == 15
+    assert editor.target_count_max_spin.maximum() == 15
+    assert editor.fixation_feasibility_label.text() == (
+        "Recommended maximum cross changes per condition: 15"
+    )
+
+
+def test_fixation_settings_editor_keeps_color_changes_enabled(
     qtbot,
     tmp_path: Path,
 ) -> None:
     document, editor = _build_editor(qtbot, tmp_path)
 
-    configure_fixation_task(editor, enabled=True, accuracy_enabled=True)
-    QApplication.processEvents()
-    assert document.project.settings.fixation_task.accuracy_task_enabled is True
-    assert editor.fixation_accuracy_checkbox.isEnabled()
-
-    editor.fixation_enabled_checkbox.setChecked(False)
+    document.update_fixation_settings(enabled=False, accuracy_task_enabled=False)
     QApplication.processEvents()
 
     fixation = document.project.settings.fixation_task
-    assert fixation.enabled is False
-    assert fixation.accuracy_task_enabled is False
-    assert not editor.fixation_accuracy_checkbox.isEnabled()
-    assert not editor.fixation_accuracy_checkbox.isChecked()
+    assert fixation.enabled is True
+    assert not editor.fixation_enabled_checkbox.isVisible()
+    assert editor.fixation_accuracy_checkbox.isEnabled()
 
 
 def test_fixation_settings_editor_shows_feasibility_without_conditions(
@@ -114,7 +169,7 @@ def test_fixation_settings_editor_shows_feasibility_without_conditions(
 
     assert (
         editor.fixation_feasibility_label.text()
-        == "Estimated maximum feasible cross changes per condition: unavailable (add a condition)."
+        == "Recommended maximum cross changes per condition: unavailable (add a condition)."
     )
     assert (
         editor.fixation_feasibility_label.toolTip()

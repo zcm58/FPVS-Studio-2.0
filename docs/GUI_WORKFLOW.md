@@ -63,7 +63,7 @@ The authoring window is organized around two user-facing modes:
     guided steps free of Advanced buttons and vertical scrolling
   - guided steps use a shared setup step surface for consistent width, margins,
     and alignment inside the wizard card
-  - all six setup steps must fit inside the compact `1040x680` setup window
+  - all six setup steps must fit inside the compact `1120x720` setup window
     without bottom clipping, visible child widgets outside their parent bounds,
     or required vertical scrolling
   - the wizard avoids generic footer/status copy; individual step cards should
@@ -94,8 +94,8 @@ The authoring window is organized around two user-facing modes:
   - raw timing fields such as `Cycles / Repeat` are hidden from the guided workflow
   - Conditions is complete when every condition has a descriptive name, trigger
     code of 1 or higher, and imported base and oddball image folders
-  - Fixation exposes fixation color-change enablement, schedule, target counts, and
-    timing
+  - Fixation keeps color changes enabled and exposes schedule, capped target counts,
+    and timing
   - Response exposes accuracy tracking, response key/window, appearance, and a live
     preview on the current display background
   - Review is a card-only decision point: users can `Save and Return Home` or

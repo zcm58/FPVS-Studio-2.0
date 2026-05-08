@@ -10,8 +10,8 @@ from PySide6.QtWidgets import (
     QDialog,
     QFileDialog,
     QFormLayout,
+    QFrame,
     QGridLayout,
-    QHBoxLayout,
     QLabel,
     QLineEdit,
     QListWidget,
@@ -44,6 +44,49 @@ from fpvs_studio.gui.window_helpers import (
 from fpvs_studio.gui.workers import ProgressTask
 
 _DEFAULT_CONDITION_NAME_RE = re.compile(r"^Condition \d+$")
+_SOURCE_CARD_WIDTH = 210
+_SOURCE_CARD_HEIGHT = 232
+_SOURCE_ROW_MIN_WIDTH = (_SOURCE_CARD_WIDTH * 2) + PAGE_SECTION_GAP
+_SOURCE_FOLDER_VALUE_HEIGHT = 68
+_SOURCE_METRICS_HEIGHT = 58
+_INSTRUCTIONS_HEIGHT = 92
+_CONDITION_STEP_MIN_WIDTH = 840
+
+
+class _ConditionSourcesRow(QWidget):
+    """Fixed source-card row with deterministic bottom-edge alignment."""
+
+    def __init__(
+        self,
+        base_card: SetupSourceCard,
+        oddball_card: SetupSourceCard,
+        parent: QWidget | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self.setObjectName("setup_conditions_sources_row")
+        self.setFixedHeight(_SOURCE_CARD_HEIGHT)
+        self.setMinimumWidth(_SOURCE_ROW_MIN_WIDTH)
+        self._base_card = base_card
+        self._oddball_card = oddball_card
+        self._base_card.setParent(self)
+        self._oddball_card.setParent(self)
+
+    def resizeEvent(self, event) -> None:  # noqa: N802
+        super().resizeEvent(event)
+        left = max(0, round((self.width() - _SOURCE_ROW_MIN_WIDTH) / 2))
+        card_top = 0
+        self._base_card.setGeometry(
+            left,
+            card_top,
+            _SOURCE_CARD_WIDTH,
+            _SOURCE_CARD_HEIGHT,
+        )
+        self._oddball_card.setGeometry(
+            left + _SOURCE_CARD_WIDTH + PAGE_SECTION_GAP,
+            card_top,
+            _SOURCE_CARD_WIDTH,
+            _SOURCE_CARD_HEIGHT,
+        )
 
 
 def is_guided_condition_name(value: str) -> bool:
@@ -68,6 +111,7 @@ class ConditionSetupStep(QWidget):
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
+        self.setMinimumWidth(_CONDITION_STEP_MIN_WIDTH)
         self._document = document
         self._pending_instruction_condition_id: str | None = None
         self._active_task: ProgressTask | None = None
@@ -116,10 +160,6 @@ class ConditionSetupStep(QWidget):
         action_grid.setColumnStretch(1, 1)
         list_layout.addLayout(action_grid)
 
-        self.selected_condition_note = QLabel(self)
-        self.selected_condition_note.setObjectName("setup_wizard_selected_condition_note")
-        self.selected_condition_note.setProperty("setupPanelHelper", "true")
-        self.selected_condition_note.setAlignment(Qt.AlignmentFlag.AlignRight)
         self.name_check_status = QLabel("Missing", self)
         self.name_check_status.setObjectName("setup_wizard_condition_name_check")
         self.trigger_check_status = QLabel("Missing", self)
@@ -138,20 +178,28 @@ class ConditionSetupStep(QWidget):
         self.trigger_code_spin.valueChanged.connect(self._apply_trigger_code)
         self.instructions_edit = QTextEdit(self)
         self.instructions_edit.setObjectName("setup_wizard_condition_instructions_edit")
-        self.instructions_edit.setMinimumHeight(76)
-        self.instructions_edit.setMaximumHeight(108)
+        self.instructions_edit.setFixedHeight(_INSTRUCTIONS_HEIGHT)
         self._instructions_committer = DebouncedTextCommitter(
             self.instructions_edit,
             self._apply_instructions,
         )
         self.instructions_edit.textChanged.connect(self._schedule_instruction_commit)
 
+        self.condition_details_section = QFrame(self)
+        self.condition_details_section.setObjectName("setup_conditions_details_section")
+        self.condition_details_section.setProperty("conditionDetailsSection", "true")
+        details_section_layout = QVBoxLayout(self.condition_details_section)
+        details_section_layout.setContentsMargins(10, 8, 10, 8)
+        details_section_layout.setSpacing(0)
+
         form = QFormLayout()
+        form.setContentsMargins(0, 0, 0, 0)
         form.setVerticalSpacing(8)
         form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
         form.addRow("Condition Name", self.condition_name_edit)
         form.addRow("Trigger Code", self.trigger_code_spin)
         form.addRow("Participant Instructions", self.instructions_edit)
+        details_section_layout.addLayout(form)
 
         self.base_source_card = SetupSourceCard(
             "Base Images",
@@ -161,12 +209,16 @@ class ConditionSetupStep(QWidget):
             show_variants=False,
             parent=self,
         )
+        self.base_source_card.status_badge.setVisible(False)
+        self.base_source_card.setFixedSize(_SOURCE_CARD_WIDTH, _SOURCE_CARD_HEIGHT)
         self.base_source_value = self.base_source_card.folder_value
         self.base_source_value.setObjectName("setup_wizard_base_source_value")
+        self.base_source_value.setFixedHeight(_SOURCE_FOLDER_VALUE_HEIGHT)
         self.base_count_value = QLabel(self)
         self.base_count_value.setObjectName("setup_wizard_base_count_value")
         self.base_resolution_value = QLabel(self)
         self.base_resolution_value.setObjectName("setup_wizard_base_resolution_value")
+        self.base_source_card.metrics.setFixedHeight(_SOURCE_METRICS_HEIGHT)
         self.base_import_button = self.base_source_card.choose_button
         self.base_import_button.setObjectName("setup_wizard_import_base_folder_button")
         self.base_source_card.choose_requested.connect(lambda: self._import_stimulus_folder("base"))
@@ -179,43 +231,37 @@ class ConditionSetupStep(QWidget):
             show_variants=False,
             parent=self,
         )
+        self.oddball_source_card.status_badge.setVisible(False)
+        self.oddball_source_card.setFixedSize(_SOURCE_CARD_WIDTH, _SOURCE_CARD_HEIGHT)
         self.oddball_source_value = self.oddball_source_card.folder_value
         self.oddball_source_value.setObjectName("setup_wizard_oddball_source_value")
+        self.oddball_source_value.setFixedHeight(_SOURCE_FOLDER_VALUE_HEIGHT)
         self.oddball_count_value = QLabel(self)
         self.oddball_count_value.setObjectName("setup_wizard_oddball_count_value")
         self.oddball_resolution_value = QLabel(self)
         self.oddball_resolution_value.setObjectName("setup_wizard_oddball_resolution_value")
+        self.oddball_source_card.metrics.setFixedHeight(_SOURCE_METRICS_HEIGHT)
         self.oddball_import_button = self.oddball_source_card.choose_button
         self.oddball_import_button.setObjectName("setup_wizard_import_oddball_folder_button")
         self.oddball_source_card.choose_requested.connect(
             lambda: self._import_stimulus_folder("oddball")
         )
 
-        sources_grid = QGridLayout()
-        sources_grid.setContentsMargins(0, 0, 0, 0)
-        sources_grid.setHorizontalSpacing(PAGE_SECTION_GAP)
-        sources_grid.setVerticalSpacing(8)
-        sources_grid.addWidget(self.base_source_card, 0, 0)
-        sources_grid.addWidget(self.oddball_source_card, 0, 1)
-        sources_grid.setColumnStretch(0, 1)
-        sources_grid.setColumnStretch(1, 1)
+        sources_row = _ConditionSourcesRow(
+            self.base_source_card,
+            self.oddball_source_card,
+            parent=self,
+        )
 
         detail_panel = QWidget(self)
         detail_panel.setObjectName("setup_conditions_main_panel")
         detail_layout = QVBoxLayout(detail_panel)
         detail_layout.setContentsMargins(0, 0, 0, 0)
         detail_layout.setSpacing(8)
-        detail_header = QWidget(detail_panel)
-        detail_header_layout = QHBoxLayout(detail_header)
-        detail_header_layout.setContentsMargins(0, 0, 0, 0)
-        detail_header_layout.setSpacing(8)
-        detail_header_layout.addStretch(1)
-        detail_header_layout.addWidget(self.selected_condition_note)
-        detail_layout.addWidget(detail_header)
 
-        detail_layout.addLayout(form)
-        detail_layout.addLayout(sources_grid)
+        detail_layout.addWidget(self.condition_details_section)
         detail_layout.addStretch(1)
+        detail_layout.addWidget(sources_row)
 
         workspace = SetupWorkspaceFrame(object_name="setup_conditions_workspace", parent=self)
         workspace.set_regions(left=list_panel, main=detail_panel)
@@ -297,7 +343,6 @@ class ConditionSetupStep(QWidget):
             else "Choose base and oddball images before creating a control condition."
         )
         if condition is None:
-            self.selected_condition_note.setText("Choose a condition in the list to edit it.")
             with QSignalBlocker(self.condition_name_edit):
                 self.condition_name_edit.clear()
             with QSignalBlocker(self.trigger_code_spin):
@@ -315,9 +360,6 @@ class ConditionSetupStep(QWidget):
         trigger_ready = is_guided_trigger_code(condition.trigger_code)
         base_ready = self._stimulus_ready(base_set)
         oddball_ready = self._stimulus_ready(oddball_set)
-        self.selected_condition_note.setText(
-            f"Condition ID: {condition.condition_id}   |   Trigger code: {condition.trigger_code}"
-        )
         with QSignalBlocker(self.condition_name_edit):
             self.condition_name_edit.setText(condition.name)
         with QSignalBlocker(self.trigger_code_spin):

@@ -64,7 +64,7 @@ class SessionStructureEditor(QWidget):
         self.generate_seed_button.setObjectName(
             _prefixed_object_name(object_name_prefix, "generate_seed_button")
         )
-        self.generate_seed_button.setMaximumWidth(92)
+        self.generate_seed_button.setFixedWidth(96)
         self.generate_seed_button.setToolTip(
             "Generate a random order seed that has not been used by a completed session."
         )
@@ -106,15 +106,30 @@ class SessionStructureEditor(QWidget):
         self.continue_key_edit.setEnabled(False)
 
         self.session_layout = QFormLayout()
-        self.session_layout.setVerticalSpacing(7)
-        seed_layout = QHBoxLayout()
+        self.session_layout.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
+        self.session_layout.setHorizontalSpacing(12)
+        self.session_layout.setVerticalSpacing(10)
+        self.seed_row_widget = QWidget(self)
+        self.seed_row_widget.setObjectName(
+            _prefixed_object_name(object_name_prefix, "session_seed_row")
+        )
+        self.seed_row_widget.setMinimumWidth(220)
+        seed_layout = QHBoxLayout(self.seed_row_widget)
+        seed_layout.setContentsMargins(0, 0, 0, 0)
+        seed_layout.setSpacing(8)
         seed_layout.setAlignment(Qt.AlignmentFlag.AlignVCenter)
         seed_layout.addWidget(self.session_seed_spin, 1, Qt.AlignmentFlag.AlignVCenter)
         seed_layout.addWidget(self.generate_seed_button, 0, Qt.AlignmentFlag.AlignVCenter)
-        self.session_layout.addRow("Repeats per condition", self.block_count_spin)
-        self.session_layout.addRow("Random order seed", seed_layout)
+        self.session_layout.addRow(
+            self._form_label("Repeats per condition"),
+            self.block_count_spin,
+        )
+        self.session_layout.addRow(
+            self._form_label("Random order seed"),
+            self.seed_row_widget,
+        )
         self.session_layout.addRow("", self.seed_help_label)
-        self.session_layout.addRow("Start key", self.continue_key_edit)
+        self.session_layout.addRow(self._form_label("Start key"), self.continue_key_edit)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -137,6 +152,13 @@ class SessionStructureEditor(QWidget):
 
         self._document.project_changed.connect(self.refresh)
         self.refresh()
+
+    @staticmethod
+    def _form_label(text: str) -> QLabel:
+        label = QLabel(text)
+        label.setFixedWidth(132)
+        label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        return label
 
     def refresh(self) -> None:
         session = self._document.project.settings.session

@@ -21,11 +21,12 @@ the active app.
 - Welcome and Home share the same launch-surface frame/styling so opening a ready
   project keeps a stable outer window and card treatment.
 - Setup Wizard is the guided setup/editing surface. Setup uses the compact
-  Welcome/Home-sized default window, with Image Resizer retaining the larger
-  workspace sizing. Wizard pages share the same setup step surface so content
+  Welcome/Home-sized `1120x720` default window, with Image Resizer using the
+  same focused utility footprint instead of the larger workspace sizing. Wizard
+  pages share the same setup step surface so content
   width, margins, and vertical alignment stay consistent across steps. The shared
   setup frame, top progress stepper, bottom navigation, and visible child widgets
-  must fit at `1040x680` without bottom clipping or required vertical scrolling.
+  must fit at `1120x720` without bottom clipping or required vertical scrolling.
 - Conditions is a combined guided setup area for condition list/actions, names,
   triggers, instructions, base/oddball folder assignment, control-condition creation,
   and image normalization. It uses compact list rows and source cards without extra
@@ -50,6 +51,6 @@ the active app.
 - Focused GUI changes need pytest-qt coverage or documented manual smoke steps.
 - Setup Wizard layout changes must run or update the focused compact no-clipping
   coverage in `tests/gui/test_layout_dashboard.py` and should smoke all six
-  steps at `1040x680`.
+  steps at `1120x720`.
 - Run `.\scripts\check_gui.ps1` for GUI workflow changes.
 - Run `.\scripts\check_quality.ps1` when GUI changes touch multiple layers.
