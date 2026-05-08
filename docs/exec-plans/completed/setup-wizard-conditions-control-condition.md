@@ -1,5 +1,7 @@
 # Setup Wizard Conditions Control Condition
 
+Status: Completed
+
 ## Summary
 
 Rework setup so selecting image folders is treated as part of condition creation rather

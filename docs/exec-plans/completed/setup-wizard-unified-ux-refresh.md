@@ -16,6 +16,10 @@ Progress:
   preparation workflow integration.
 - Phase 6 completed: final polish and verification pass completed.
 
+Current-state note: later completed setup work replaced the temporary Stimuli-before-
+Conditions ordering. The current guided wizard order is Project, Conditions,
+Experiment, Fixation, Response, and Review.
+
 ## Purpose
 
 Refresh the FPVS Studio Setup Wizard into a cohesive, polished, Windows-native

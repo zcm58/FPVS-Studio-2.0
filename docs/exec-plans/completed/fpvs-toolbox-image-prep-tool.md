@@ -125,6 +125,9 @@ python -m pytest -q tests\unit\test_harness_docs.py
   PNG folder optimization and does not mutate active project conditions.
 - The imported FPVS Toolbox files remain under `src/fpvs_studio/tools/` as
   reference material, not a GUI/runtime dependency.
+- Current boundary debt: `src/fpvs_studio/tools/pyside_resizer.py` still contains
+  PySide6 imports as reference-only code and fails the PySide6 import-boundary test
+  until a follow-up cleanup removes, relocates, or explicitly archives it.
 
 ## Assumptions
 

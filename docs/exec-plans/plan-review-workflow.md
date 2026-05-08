@@ -32,6 +32,7 @@ feature-sized work.
 
 - `Status: Active` means implementation or review is still in progress.
 - `Status: Planned` belongs in `planned/`, not `active/`.
-- `Status: Completed` belongs in `completed/`.
+- `Status: Completed` belongs in `completed/`; completed plans should keep the status
+  line so agents can distinguish shipped history from active instructions.
 - `Status: Archived` belongs in `docs/references/archive/` only when the plan is
   historical context rather than future work.

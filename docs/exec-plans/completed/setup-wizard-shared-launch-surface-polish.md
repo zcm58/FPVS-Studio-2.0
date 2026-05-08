@@ -1,5 +1,7 @@
 # Setup Wizard Shared Launch-Surface Polish
 
+Status: Completed
+
 ## Summary
 
 Refine Setup Wizard presentation without changing Welcome or Home. The Setup Wizard

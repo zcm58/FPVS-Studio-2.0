@@ -1,5 +1,7 @@
 # Combine Setup Wizard Experiment Settings
 
+Status: Completed
+
 ## Summary
 
 Merge the separate guided `Display Settings`, `Session Design`, and `Fixation Cross`

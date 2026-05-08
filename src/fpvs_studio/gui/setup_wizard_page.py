@@ -353,6 +353,9 @@ class SetupWizardPage(QWidget):
         self.setup_wizard_next_button = QPushButton("Next", self)
         self.setup_wizard_next_button.setObjectName("setup_wizard_next_button")
         self.setup_wizard_next_button.clicked.connect(self._go_next)
+        next_button_size_policy = self.setup_wizard_next_button.sizePolicy()
+        next_button_size_policy.setRetainSizeWhenHidden(True)
+        self.setup_wizard_next_button.setSizePolicy(next_button_size_policy)
         mark_primary_action(self.setup_wizard_next_button)
         self.setup_wizard_return_home_button = QPushButton("Return Home", self)
         self.setup_wizard_return_home_button.setObjectName("setup_wizard_return_home_button")
@@ -551,14 +554,6 @@ class SetupWizardPage(QWidget):
         self.review_checklist_layout.setHorizontalSpacing(8)
         self.review_checklist_layout.setVerticalSpacing(6)
         self.review_card.body_layout.addWidget(self.review_checklist_container)
-
-        self.review_save_prompt_label = QLabel(
-            "Would you like to save your experiment?",
-            self.review_card,
-        )
-        self.review_save_prompt_label.setObjectName("setup_wizard_review_save_prompt")
-        self.review_save_prompt_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.review_card.body_layout.addWidget(self.review_save_prompt_label)
 
         action_row = QHBoxLayout()
         action_row.setContentsMargins(0, 0, 0, 0)
@@ -818,12 +813,12 @@ class SetupWizardPage(QWidget):
         check_icon = QLabel("\u2713", row)
         check_icon.setProperty("reviewCheckIcon", "true")
         check_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        row_layout.addWidget(check_icon, 0, Qt.AlignmentFlag.AlignTop)
+        row_layout.addWidget(check_icon, 0, Qt.AlignmentFlag.AlignVCenter)
 
         label = QLabel(text, row)
         label.setWordWrap(True)
         label.setProperty("reviewChecklistLine", "true")
-        row_layout.addWidget(label, 1)
+        row_layout.addWidget(label, 1, Qt.AlignmentFlag.AlignVCenter)
         return row
 
     def _review_checklist_sections(self) -> tuple[tuple[str, tuple[str, ...]], ...]:

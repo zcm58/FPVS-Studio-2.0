@@ -1,5 +1,7 @@
 # Split Fixation Cross Into Its Own Guided Wizard Step
 
+Status: Completed
+
 ## Summary
 
 Rework Setup Wizard from four guided steps to five guided steps:

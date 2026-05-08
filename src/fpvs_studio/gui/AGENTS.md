@@ -2,7 +2,7 @@
 
 ## Scope of this directory
 
-`src/fpvs_studio/gui/` contains the Phase 5 PySide6 authoring application.
+`src/fpvs_studio/gui/` contains the current PySide6 authoring application.
 
 The GUI is now a real user-facing workflow, but it still must remain thin and
 backend-driven.

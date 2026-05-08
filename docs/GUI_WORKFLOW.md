@@ -182,7 +182,7 @@ New GUI work should:
 
 ## Supported Authoring Tasks
 
-Phase 5 currently supports:
+The current GUI supports:
 
 - creating a new project scaffold
 - opening and editing an existing project

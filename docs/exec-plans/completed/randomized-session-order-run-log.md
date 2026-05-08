@@ -1,5 +1,7 @@
 # Randomized Session Order Run Log
 
+Status: Completed
+
 ## Summary
 
 Make randomized condition order the fixed current workflow, protect against reusing
@@ -43,7 +45,7 @@ Each row records:
 - GUI tests cover hidden randomization checkbox, random order seed wording, project-open
   seed randomization, `New Seed` skip behavior, and review wording.
 - Docs are updated after implementation to describe the actual final behavior.
-- Move this file to `docs/exec-plans/completed/` after verification.
+- This file was moved to `docs/exec-plans/completed/` after verification.
 
 ## Completion Notes
 

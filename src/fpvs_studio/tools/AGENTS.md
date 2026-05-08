@@ -2,17 +2,17 @@
 
 ## Scope of this directory
 
-`src/fpvs_studio/tools/` holds imported/reference utility code that may become
-Studio-native tools after an execution plan moves to active implementation.
+`src/fpvs_studio/tools/` holds imported/reference image-resizing utility code.
 
-Current files from FPVS Toolbox are planning ground truth for the future image
-preparation tool. They are not final production architecture.
+The current user-facing `Tools > Image Resizer` page is Studio-native code in
+`src/fpvs_studio/gui/image_resizer_page.py` backed by preprocessing normalization
+services. Files in this package remain reference/comparison material unless a future
+plan explicitly scopes their extraction.
 
 ## Requirements
 
-- Start image-preparation work from
-  `docs/exec-plans/planned/fpvs-toolbox-image-prep-tool.md` until that plan is
-  moved to `docs/exec-plans/active/`.
+- Use `docs/exec-plans/completed/fpvs-toolbox-image-prep-tool.md` for the landed
+  Image Resizer workflow and boundaries.
 - Adapt behavior into FPVS Studio boundaries before exposing it to users.
 - Use `fpvs_studio.preprocessing` for resize, conversion, inspection, derived
   variants, manifests, and deterministic transform metadata.
@@ -20,6 +20,9 @@ preparation tool. They are not final production architecture.
 - Run long image work through Qt worker patterns; do not block the UI thread.
 - Return structured processing results from backend code instead of GUI log
   strings.
+- Do not import `pyside_resizer.py` from Studio code; it is reference-only and its
+  PySide6 imports are tracked boundary debt until the file is removed, relocated, or
+  explicitly archived.
 
 ## Restrictions
 

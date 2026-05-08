@@ -22,9 +22,9 @@ code may lazily import PsychoPy.
 - `src/fpvs_studio/preprocessing/`: original image import, inspection, image
   normalization, generated variants, and manifests. This layer must stay independent
   of GUI runtime and PsychoPy.
-- `src/fpvs_studio/tools/`: imported/reference tool code for future Studio-native
-  utilities. Current files from FPVS Toolbox are planning ground truth for the image
-  preparation tool and must be adapted before user-facing integration.
+- `src/fpvs_studio/tools/`: imported/reference image-resizing utility code kept for
+  comparison and future extraction. Current user-facing image optimization lives in the
+  GUI/preprocessing path, not in this reference package.
 - `src/fpvs_studio/runtime/`: launch settings, preflight, session execution, participant
   history, seed-history lookup, project-level run-log exports, and runtime flow over
   compiled contracts.
@@ -157,7 +157,7 @@ Use these first reads before opening broad trees:
 - Preprocessing task: `src/fpvs_studio/preprocessing/`,
   `src/fpvs_studio/core/models.py`, `tests/unit/test_preprocessing_assets.py`,
   and `tests/unit/test_preprocessing_inspection.py`.
-- Image preparation tool task: `docs/exec-plans/planned/fpvs-toolbox-image-prep-tool.md`,
+- Image Resizer utility task: `docs/exec-plans/completed/fpvs-toolbox-image-prep-tool.md`,
   `src/fpvs_studio/tools/`, `src/fpvs_studio/preprocessing/`,
   `src/fpvs_studio/gui/components.py`, `src/fpvs_studio/gui/image_resizer_page.py`,
   and `src/fpvs_studio/gui/AGENTS.md`.

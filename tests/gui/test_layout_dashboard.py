@@ -399,6 +399,7 @@ def test_setup_wizard_compact_steps_do_not_clip_visible_content(
     frame_heights: list[int] = []
     frame_tops: list[int] = []
     progress_tops: list[int] = []
+    back_button_lefts: list[int] = []
     for step_key in (
         "project",
         "conditions",
@@ -421,6 +422,12 @@ def test_setup_wizard_compact_steps_do_not_clip_visible_content(
                 wizard.progress_panel_shell.rect().topLeft(),
             ).y()
         )
+        back_button_lefts.append(
+            wizard.setup_wizard_back_button.mapTo(
+                wizard,
+                wizard.setup_wizard_back_button.rect().topLeft(),
+            ).x()
+        )
         assert wizard.step_stack.currentWidget().height() <= wizard.content_stack.height()
 
         for button in (
@@ -435,6 +442,7 @@ def test_setup_wizard_compact_steps_do_not_clip_visible_content(
     assert len(set(frame_heights)) == 1
     assert len(set(frame_tops)) == 1
     assert len(set(progress_tops)) == 1
+    assert len(set(back_button_lefts)) == 1
     assert progress_tops[0] <= 12
 
 
@@ -1833,7 +1841,7 @@ def test_setup_wizard_review_uses_centered_confirmation_checklist(
     label_text = "\n".join(label.text() for label in review_card.findChildren(QLabel))
     assert "Review Your Experiment" in label_text
     assert "Please confirm your experiment settings." in label_text
-    assert "Would you like to save your experiment?" in label_text
+    assert "Would you like to save your experiment?" not in label_text
     assert "Project Details" in label_text
     assert "Conditions" in label_text
     assert "Experiment Settings" in label_text
@@ -1865,6 +1873,33 @@ def test_setup_wizard_review_uses_centered_confirmation_checklist(
     assert len(summary_sections) == 4
     assert len(checklist_rows) == 6
     assert len(check_icons) == len(checklist_rows)
+    fixation_row = next(
+        row
+        for row in checklist_rows
+        if any(
+            label.text() == "Fixation cross has been configured"
+            for label in row.findChildren(QLabel)
+        )
+    )
+    fixation_check_icon = next(
+        label
+        for label in fixation_row.findChildren(QLabel)
+        if label.property("reviewCheckIcon") == "true"
+    )
+    fixation_text_label = next(
+        label
+        for label in fixation_row.findChildren(QLabel)
+        if label.property("reviewChecklistLine") == "true"
+    )
+    icon_center_y = fixation_check_icon.mapTo(
+        fixation_row,
+        QPoint(0, fixation_check_icon.height() // 2),
+    ).y()
+    text_center_y = fixation_text_label.mapTo(
+        fixation_row,
+        QPoint(0, fixation_text_label.height() // 2),
+    ).y()
+    assert abs(icon_center_y - text_center_y) <= 1
 
     assert guide.review_save_button.text() == "Save and Return Home"
     assert guide.review_return_home_button.text() == "Return Home Without Saving"
