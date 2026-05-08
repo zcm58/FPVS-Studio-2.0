@@ -383,6 +383,11 @@ class StudioController:
             on_load_condition_template_profiles=self._load_condition_template_profiles,
             on_manage_condition_templates=self._show_condition_template_manager,
         )
+        if (
+            self.welcome_window is not None
+            and self.main_window.main_stack.currentWidget() is self.main_window.home_page
+        ):
+            self.main_window.setGeometry(self.welcome_window.geometry())
         self.main_window.show()
         self.main_window.raise_()
         self.main_window.activateWindow()

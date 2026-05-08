@@ -212,6 +212,32 @@ def test_ready_project_reopens_to_home_launch_surface(
     assert reopened.home_page.findChild(QPushButton, "home_launch_experiment_button") is not None
 
 
+def test_ready_project_home_inherits_welcome_window_size(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Welcome Sized Home")
+    _prepare_compile_ready_project(window, tmp_path / "welcome-sized-home-assets")
+    assert window.save_project() is True
+    project_root = window.document.project_root
+    assert project_root is not None
+    welcome = controller.welcome_window
+    assert welcome is not None
+
+    welcome.resize(1110, 700)
+    QApplication.processEvents()
+    welcome_size = welcome.size()
+
+    controller.open_project(project_root)
+    assert controller.main_window is not None
+    qtbot.addWidget(controller.main_window)
+
+    reopened = controller.main_window
+    assert reopened.main_stack.currentWidget() is reopened.home_page
+    assert reopened.size() == welcome_size
+
+
 def test_setup_wizard_exists_and_uses_single_column_shell_with_steps(
     qtbot,
     controller: StudioController,
@@ -403,16 +429,41 @@ def test_switching_main_workflow_stack_keeps_outer_window_size_stable(
     controller: StudioController,
     tmp_path: Path,
 ) -> None:
-    _, window = _open_created_project(controller, qtbot, tmp_path, "Stable Window Size")
-    initial_size = window.size()
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Workflow Window Size")
 
-    for page in (
-        window.home_page,
-        window.setup_wizard_page,
-    ):
-        window.main_stack.setCurrentWidget(page)
-        QApplication.processEvents()
-        assert window.size() == initial_size
+    assert window.main_stack.currentWidget() is window.setup_wizard_page
+    assert window.minimumWidth() == 1366
+    assert window.minimumHeight() == 820
+    assert window.width() == 1440
+    assert window.height() == 920
+
+    window.show_home()
+    QApplication.processEvents()
+
+    assert window.main_stack.currentWidget() is window.home_page
+    assert window.minimumWidth() == 760
+    assert window.minimumHeight() == 520
+    assert window.width() == 1040
+    assert window.height() == 680
+
+    window.show_setup_wizard()
+    QApplication.processEvents()
+
+    assert window.main_stack.currentWidget() is window.setup_wizard_page
+    assert window.minimumWidth() == 1366
+    assert window.minimumHeight() == 820
+    assert window.width() == 1440
+    assert window.height() == 920
+
+    window.resize(1500, 950)
+    window.show_home()
+    QApplication.processEvents()
+
+    assert window.main_stack.currentWidget() is window.home_page
+    assert window.minimumWidth() == 760
+    assert window.minimumHeight() == 520
+    assert window.width() == 1500
+    assert window.height() == 950
 
 
 def test_primary_workflow_surfaces_fit_default_window_with_bounded_page_scrollbars(
@@ -1922,7 +1973,7 @@ def test_home_quick_action_buttons_present_and_wired(
     runtime_button = window.home_page.findChild(QPushButton, "home_runtime_settings_button")
     assert new_button is not None
     assert open_button is not None
-    assert save_button is not None
+    assert save_button is None
     assert launch_button is not None
     assert edit_setup_button is not None
     assert stimuli_button is None
@@ -1932,7 +1983,15 @@ def test_home_quick_action_buttons_present_and_wired(
     assert window.launch_action.text() == "Launch Experiment"
     assert "alpha test-mode" in window.launch_action.toolTip().lower()
     qtbot.waitUntil(lambda: launch_button.width() > 0)
-    utility_buttons = (open_button, new_button, save_button, edit_setup_button)
+    metric_text = "\n".join(
+        label.text() for label in window.home_page.findChildren(QLabel)
+    )
+    assert "Fixation Cross" in metric_text
+    assert "Accuracy Tracking" in metric_text
+    assert "Fixation Task" not in metric_text
+    assert "Accuracy Task" not in metric_text
+
+    utility_buttons = (open_button, new_button, edit_setup_button)
     ordered_buttons = sorted(
         utility_buttons,
         key=lambda button: button.geometry().x(),
@@ -1940,7 +1999,6 @@ def test_home_quick_action_buttons_present_and_wired(
     assert [button.objectName() for button in ordered_buttons] == [
         "home_open_project_button",
         "home_create_project_button",
-        "home_save_project_button",
         "home_edit_setup_button",
     ]
     assert len({button.width() for button in ordered_buttons}) == 1
@@ -1952,15 +2010,12 @@ def test_home_quick_action_buttons_present_and_wired(
     assert launch_panel.maximumWidth() == 860
     assert launch_button.sizePolicy().horizontalPolicy() == QSizePolicy.Policy.Fixed
 
-    trigger_counts = {"new": 0, "open": 0, "save": 0, "launch": 0}
+    trigger_counts = {"new": 0, "open": 0, "launch": 0}
     window.new_project_action.triggered.connect(
         lambda _checked=False: trigger_counts.__setitem__("new", trigger_counts["new"] + 1)
     )
     window.open_project_action.triggered.connect(
         lambda _checked=False: trigger_counts.__setitem__("open", trigger_counts["open"] + 1)
-    )
-    window.save_project_action.triggered.connect(
-        lambda _checked=False: trigger_counts.__setitem__("save", trigger_counts["save"] + 1)
     )
     window.launch_action.triggered.connect(
         lambda _checked=False: trigger_counts.__setitem__("launch", trigger_counts["launch"] + 1)
@@ -1968,12 +2023,11 @@ def test_home_quick_action_buttons_present_and_wired(
 
     qtbot.mouseClick(new_button, Qt.MouseButton.LeftButton)
     qtbot.mouseClick(open_button, Qt.MouseButton.LeftButton)
-    qtbot.mouseClick(save_button, Qt.MouseButton.LeftButton)
     qtbot.mouseClick(launch_button, Qt.MouseButton.LeftButton)
     qtbot.mouseClick(edit_setup_button, Qt.MouseButton.LeftButton)
     assert window.main_stack.currentWidget() is window.setup_wizard_page
 
-    assert trigger_counts == {"new": 1, "open": 1, "save": 1, "launch": 1}
+    assert trigger_counts == {"new": 1, "open": 1, "launch": 1}
 
 
 def test_launch_buttons_share_primary_visual_role(

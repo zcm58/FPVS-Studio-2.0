@@ -316,8 +316,6 @@ class HomePage(QWidget):
         self.launch_button = QPushButton("Launch Experiment", self)
         self.launch_button.setObjectName("home_launch_experiment_button")
         mark_home_launch_action(self.launch_button)
-        self.save_project_button = QPushButton("Save", self)
-        self.save_project_button.setObjectName("home_save_project_button")
         self.new_project_button = QPushButton("Create New Project", self)
         self.new_project_button.setObjectName("home_create_project_button")
         self.edit_setup_button = QPushButton("Edit Setup", self)
@@ -327,7 +325,6 @@ class HomePage(QWidget):
         for button in (
             self.open_project_button,
             self.new_project_button,
-            self.save_project_button,
             self.edit_setup_button,
         ):
             button.setMinimumHeight(38)
@@ -409,7 +406,6 @@ class HomePage(QWidget):
             (
                 self.open_project_button,
                 self.new_project_button,
-                self.save_project_button,
                 self.edit_setup_button,
             )
         ):
@@ -438,8 +434,8 @@ class HomePage(QWidget):
         metrics_layout.setVerticalSpacing(0)
         self._add_metric(metrics_layout, 0, "Conditions", self.condition_count_value)
         self._add_metric(metrics_layout, 1, "Blocks", self.block_count_value)
-        self._add_metric(metrics_layout, 2, "Fixation Task", self.fixation_task_value)
-        self._add_metric(metrics_layout, 3, "Accuracy Task", self.accuracy_task_value)
+        self._add_metric(metrics_layout, 2, "Fixation Cross", self.fixation_task_value)
+        self._add_metric(metrics_layout, 3, "Accuracy Tracking", self.accuracy_task_value)
         for column in range(4):
             metrics_layout.setColumnStretch(column, 1)
         launch_panel_layout.addWidget(metrics_panel)
@@ -475,7 +471,6 @@ class HomePage(QWidget):
         *,
         new_project_action: QAction,
         open_project_action: QAction,
-        save_project_action: QAction,
         launch_action: QAction,
     ) -> None:
         self._bind_button_to_action(
@@ -488,7 +483,6 @@ class HomePage(QWidget):
             open_project_action,
             "Open Project",
         )
-        self._bind_button_to_action(self.save_project_button, save_project_action, "Save")
         self._bind_button_to_action(
             self.launch_button,
             launch_action,

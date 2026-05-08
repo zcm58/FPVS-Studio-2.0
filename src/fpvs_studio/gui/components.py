@@ -1070,7 +1070,6 @@ def home_page_stylesheet() -> str:
     }
     QPushButton#home_create_project_button,
     QPushButton#home_open_project_button,
-    QPushButton#home_save_project_button,
     QPushButton#home_edit_setup_button {
         font-size: 14px;
         padding: 7px 12px;

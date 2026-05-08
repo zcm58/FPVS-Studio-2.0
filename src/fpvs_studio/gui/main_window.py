@@ -44,6 +44,11 @@ __all__ = [
     "_show_error_dialog",
 ]
 
+_COMPACT_HOME_MINIMUM_SIZE = (760, 520)
+_COMPACT_HOME_DEFAULT_SIZE = (1040, 680)
+_WORKSPACE_MINIMUM_SIZE = (1366, 820)
+_WORKSPACE_DEFAULT_SIZE = (1440, 920)
+
 
 class StudioMainWindow(QMainWindow):
     """Main window hosting the Phase 5 authoring tabs."""
@@ -66,8 +71,8 @@ class StudioMainWindow(QMainWindow):
         self._on_request_manage_projects = on_request_manage_projects
         self._on_request_settings = on_request_settings
         self.setWindowTitle("FPVS Studio (Alpha)")
-        self.setMinimumSize(1366, 820)
-        self.resize(1440, 920)
+        self._auto_workspace_sized = False
+        self._apply_compact_window_size()
 
         self._runtime_fullscreen_ui_state = True
         self.home_page = HomePage(
@@ -107,7 +112,6 @@ class StudioMainWindow(QMainWindow):
         self.home_page.bind_quick_actions(
             new_project_action=self.new_project_action,
             open_project_action=self.open_project_action,
-            save_project_action=self.save_project_action,
             launch_action=self.launch_action,
         )
         self.home_page.bind_navigation_actions(
@@ -140,14 +144,17 @@ class StudioMainWindow(QMainWindow):
     def show_home(self) -> None:
         self.flush_pending_edits()
         self.home_page.refresh()
+        self._apply_compact_window_size()
         self.main_stack.setCurrentWidget(self.home_page)
 
     def show_setup_wizard(self) -> None:
+        self._apply_workspace_window_size()
         self.main_stack.setCurrentWidget(self.setup_wizard_page)
         self.setup_wizard_page.open_wizard()
 
     def show_image_resizer(self) -> None:
         self.flush_pending_edits()
+        self._apply_workspace_window_size()
         self.main_stack.setCurrentWidget(self.image_resizer_page)
 
     def _show_initial_workflow_surface(self) -> None:
@@ -165,6 +172,33 @@ class StudioMainWindow(QMainWindow):
 
     def flush_pending_edits(self) -> None:
         self.setup_wizard_page.flush_pending_edits()
+
+    def _apply_compact_window_size(self) -> None:
+        self.setMinimumSize(*_COMPACT_HOME_MINIMUM_SIZE)
+        if (
+            self._auto_workspace_sized
+            and self.width() == _WORKSPACE_DEFAULT_SIZE[0]
+            and self.height() == _WORKSPACE_DEFAULT_SIZE[1]
+        ):
+            self.resize(*_COMPACT_HOME_DEFAULT_SIZE)
+        elif (
+            self.width() < _COMPACT_HOME_MINIMUM_SIZE[0]
+            or self.height() < _COMPACT_HOME_MINIMUM_SIZE[1]
+        ):
+            self.resize(*_COMPACT_HOME_DEFAULT_SIZE)
+        self._auto_workspace_sized = False
+
+    def _apply_workspace_window_size(self) -> None:
+        needs_workspace_resize = (
+            self.width() < _WORKSPACE_MINIMUM_SIZE[0]
+            or self.height() < _WORKSPACE_MINIMUM_SIZE[1]
+        )
+        self.setMinimumSize(*_WORKSPACE_MINIMUM_SIZE)
+        if needs_workspace_resize:
+            self.resize(*_WORKSPACE_DEFAULT_SIZE)
+            self._auto_workspace_sized = True
+        else:
+            self._auto_workspace_sized = False
 
     def _apply_chrome_styles(self) -> None:
         apply_studio_theme(self)
