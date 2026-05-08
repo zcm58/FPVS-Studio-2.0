@@ -314,6 +314,7 @@ class FixationSettingsEditor(QWidget):
         subtitle: str | None = "Task enablement, behavior, timing, response, and appearance.",
         compact: bool = False,
         show_preview: bool = False,
+        section_mode: str = "all",
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
@@ -321,11 +322,14 @@ class FixationSettingsEditor(QWidget):
             raise ValueError(f"Unsupported schedule_row_behavior: {schedule_row_behavior}")
         if layout_mode not in {"grid", "single_column"}:
             raise ValueError(f"Unsupported fixation layout mode: {layout_mode}")
+        if section_mode not in {"all", "fixation", "response"}:
+            raise ValueError(f"Unsupported fixation section mode: {section_mode}")
         self._document = document
         self._schedule_row_behavior = schedule_row_behavior
         self._layout_mode = layout_mode
         self._compact = compact
         self._show_preview = show_preview
+        self._section_mode = section_mode
         card_margin_y = 6 if compact else 10
         card_spacing = 5 if compact else 8
         form_spacing = 4 if compact else 7
@@ -447,8 +451,10 @@ class FixationSettingsEditor(QWidget):
         enablement_layout = QVBoxLayout() if compact else QHBoxLayout()
         enablement_layout.setContentsMargins(0, 0, 0, 0)
         enablement_layout.setSpacing(5 if compact else 6)
-        enablement_layout.addWidget(self.fixation_enabled_checkbox)
-        enablement_layout.addWidget(self.fixation_accuracy_checkbox)
+        if section_mode in {"all", "fixation"}:
+            enablement_layout.addWidget(self.fixation_enabled_checkbox)
+        if section_mode in {"all", "response"}:
+            enablement_layout.addWidget(self.fixation_accuracy_checkbox)
         if not compact:
             enablement_layout.addStretch(1)
 
@@ -512,7 +518,10 @@ class FixationSettingsEditor(QWidget):
         settings_column_layout.setContentsMargins(0, 0, 0, 0)
         settings_column_layout.setSpacing(section_spacing)
         settings_column_layout.addLayout(enablement_layout)
-        settings_column_layout.addWidget(feasibility_card)
+        if section_mode in {"all", "fixation"}:
+            settings_column_layout.addWidget(feasibility_card)
+        else:
+            feasibility_card.setVisible(False)
         self.fixation_behavior_panel = _settings_section(
             "Behavior",
             self.fixation_behavior_group,
@@ -533,16 +542,28 @@ class FixationSettingsEditor(QWidget):
             self.fixation_appearance_group,
             parent=self.fixation_panel,
         )
-        if self._layout_mode == "single_column":
-            settings_layout = QVBoxLayout()
-            settings_layout.setContentsMargins(0, 0, 0, 0)
-            settings_layout.setSpacing(section_spacing)
-            for panel in (
+        if section_mode == "fixation":
+            visible_panels = (
+                self.fixation_behavior_panel,
+                self.fixation_timing_panel,
+            )
+        elif section_mode == "response":
+            visible_panels = (
+                self.fixation_response_panel,
+                self.fixation_appearance_panel,
+            )
+        else:
+            visible_panels = (
                 self.fixation_behavior_panel,
                 self.fixation_timing_panel,
                 self.fixation_response_panel,
                 self.fixation_appearance_panel,
-            ):
+            )
+        if self._layout_mode == "single_column":
+            settings_layout = QVBoxLayout()
+            settings_layout.setContentsMargins(0, 0, 0, 0)
+            settings_layout.setSpacing(section_spacing)
+            for panel in visible_panels:
                 settings_layout.addWidget(panel)
             settings_column_layout.addLayout(settings_layout)
         else:
@@ -550,10 +571,8 @@ class FixationSettingsEditor(QWidget):
             settings_grid.setContentsMargins(0, 0, 0, 0)
             settings_grid.setHorizontalSpacing(PAGE_SECTION_GAP)
             settings_grid.setVerticalSpacing(section_spacing)
-            settings_grid.addWidget(self.fixation_behavior_panel, 0, 0)
-            settings_grid.addWidget(self.fixation_timing_panel, 0, 1)
-            settings_grid.addWidget(self.fixation_response_panel, 1, 0)
-            settings_grid.addWidget(self.fixation_appearance_panel, 1, 1)
+            for index, panel in enumerate(visible_panels):
+                settings_grid.addWidget(panel, index // 2, index % 2)
             settings_grid.setColumnStretch(0, 1)
             settings_grid.setColumnStretch(1, 1)
             settings_column_layout.addLayout(settings_grid)
@@ -568,7 +587,7 @@ class FixationSettingsEditor(QWidget):
             self.preview_panel = QFrame(self)
             self.preview_panel.setObjectName("fixation_cross_preview_panel")
             self.preview_panel.setProperty("fixationPreviewPanel", "true")
-            self.preview_panel.setMaximumHeight(360)
+            self.preview_panel.setMaximumHeight(220 if compact else 360)
             preview_panel_layout = QVBoxLayout(self.preview_panel)
             preview_panel_layout.setContentsMargins(10, 8, 10, 8)
             preview_panel_layout.setSpacing(8)
@@ -577,6 +596,8 @@ class FixationSettingsEditor(QWidget):
             preview_panel_layout.addWidget(preview_title)
 
             self.preview_widget = FixationCrossPreview(self.preview_panel)
+            if compact:
+                self.preview_widget.setMaximumHeight(170)
             preview_panel_layout.addWidget(self.preview_widget, 1)
 
             self.fixation_panel.setSizePolicy(
@@ -588,12 +609,16 @@ class FixationSettingsEditor(QWidget):
                 QSizePolicy.Policy.Preferred,
                 QSizePolicy.Policy.Expanding,
             )
-            content_layout = QHBoxLayout()
-            content_layout.setContentsMargins(0, 0, 0, 0)
-            content_layout.setSpacing(PAGE_SECTION_GAP)
-            content_layout.addWidget(settings_column, 2)
-            content_layout.addWidget(self.preview_panel, 1)
-            fixation_panel_layout.addLayout(content_layout)
+            if compact:
+                fixation_panel_layout.addWidget(settings_column)
+                fixation_panel_layout.addWidget(self.preview_panel)
+            else:
+                content_layout = QHBoxLayout()
+                content_layout.setContentsMargins(0, 0, 0, 0)
+                content_layout.setSpacing(PAGE_SECTION_GAP)
+                content_layout.addWidget(settings_column, 2)
+                content_layout.addWidget(self.preview_panel, 1)
+                fixation_panel_layout.addLayout(content_layout)
             layout.addWidget(self.fixation_panel)
         else:
             fixation_panel_layout.addWidget(settings_column)
@@ -659,20 +684,23 @@ class FixationSettingsEditor(QWidget):
                 self.fixation_accuracy_checkbox.setChecked(False)
         self.fixation_accuracy_checkbox.setEnabled(fixation_enabled)
 
-        for group in (
-            self.fixation_behavior_group,
-            self.fixation_timing_group,
-            self.fixation_appearance_group,
+        show_fixation_sections = self._section_mode in {"all", "fixation"}
+        for group, panel in (
+            (self.fixation_behavior_group, self.fixation_behavior_panel),
+            (self.fixation_timing_group, self.fixation_timing_panel),
         ):
-            group.setVisible(fixation_enabled)
-            group.setEnabled(fixation_enabled)
-        for panel in (
-            self.fixation_behavior_panel,
-            self.fixation_timing_panel,
-            self.fixation_appearance_panel,
-        ):
-            panel.setVisible(fixation_enabled)
-            panel.setEnabled(fixation_enabled)
+            visible = show_fixation_sections and fixation_enabled
+            group.setVisible(visible)
+            group.setEnabled(visible)
+            panel.setVisible(visible)
+            panel.setEnabled(visible)
+
+        show_response_sections = self._section_mode in {"all", "response"}
+        appearance_visible = show_response_sections and fixation_enabled
+        self.fixation_appearance_group.setVisible(appearance_visible)
+        self.fixation_appearance_group.setEnabled(appearance_visible)
+        self.fixation_appearance_panel.setVisible(appearance_visible)
+        self.fixation_appearance_panel.setEnabled(appearance_visible)
 
         randomized_mode = self.target_count_mode_combo.currentData() == "randomized"
         if self._schedule_row_behavior == "hide":
@@ -713,10 +741,11 @@ class FixationSettingsEditor(QWidget):
             self.no_repeat_count_checkbox.setEnabled(fixation_enabled and randomized_mode)
 
         accuracy_enabled = fixation_enabled and self.fixation_accuracy_checkbox.isChecked()
-        self.fixation_response_panel.setVisible(accuracy_enabled)
-        self.fixation_response_panel.setEnabled(accuracy_enabled)
-        self.fixation_response_group.setVisible(accuracy_enabled)
-        self.fixation_response_group.setEnabled(accuracy_enabled)
+        response_visible = show_response_sections and accuracy_enabled
+        self.fixation_response_panel.setVisible(response_visible)
+        self.fixation_response_panel.setEnabled(response_visible)
+        self.fixation_response_group.setVisible(response_visible)
+        self.fixation_response_group.setEnabled(response_visible)
         if not accuracy_enabled:
             self.response_key_popover.close()
 

@@ -204,7 +204,7 @@ def test_fixation_cross_settings_page_maps_fixed_target_count_mode_to_backend(
     _, window = _open_created_project(controller, qtbot, tmp_path, "Fixed Target Count")
 
     window.main_stack.setCurrentWidget(window.setup_wizard_page)
-    page = window.setup_dashboard_page.fixation_settings_editor
+    page = window.setup_dashboard_page.fixation_schedule_editor
     page.target_count_mode_combo.setCurrentIndex(page.target_count_mode_combo.findData("fixed"))
     page.changes_per_sequence_spin.setValue(7)
 
@@ -221,7 +221,7 @@ def test_fixation_cross_settings_page_exposes_accuracy_task_controls(
     _, window = _open_created_project(controller, qtbot, tmp_path, "Fixation Controls")
 
     window.main_stack.setCurrentWidget(window.setup_wizard_page)
-    page = window.setup_dashboard_page.fixation_settings_editor
+    page = window.setup_dashboard_page.fixation_response_editor
     assert (
         page.findChild(type(page.fixation_accuracy_checkbox), "fixation_accuracy_checkbox")
         is not None
@@ -363,7 +363,7 @@ def test_fixation_color_change_mode_toggles_relevant_controls(
 ) -> None:
     _, window = _open_created_project(controller, qtbot, tmp_path, "Fixation Mode Visibility")
 
-    page = window.setup_dashboard_page.fixation_settings_editor
+    page = window.setup_dashboard_page.fixation_schedule_editor
     window.setup_wizard_page.open_wizard(step_key="fixation")
     window.main_stack.setCurrentWidget(window.setup_wizard_page)
     page.fixation_enabled_checkbox.setChecked(True)
@@ -393,8 +393,8 @@ def test_fixation_response_key_picker_updates_model_with_keyboard_buttons(
 ) -> None:
     _, window = _open_created_project(controller, qtbot, tmp_path, "Response Key Picker")
 
-    page = window.setup_dashboard_page.fixation_settings_editor
-    window.setup_wizard_page.open_wizard(step_key="fixation")
+    page = window.setup_dashboard_page.fixation_response_editor
+    window.setup_wizard_page.open_wizard(step_key="response")
     window.main_stack.setCurrentWidget(window.setup_wizard_page)
     page.fixation_enabled_checkbox.setChecked(True)
     page.fixation_accuracy_checkbox.setChecked(True)
@@ -437,7 +437,7 @@ def test_fixation_randomized_min_above_max_shows_plain_language_error(
 ) -> None:
     _, window = _open_created_project(controller, qtbot, tmp_path, "Fixation Range Error")
 
-    page = window.setup_dashboard_page.fixation_settings_editor
+    page = window.setup_dashboard_page.fixation_schedule_editor
     window.setup_wizard_page.open_wizard(step_key="fixation")
     window.main_stack.setCurrentWidget(window.setup_wizard_page)
     page.fixation_enabled_checkbox.setChecked(True)
@@ -476,8 +476,8 @@ def test_fixation_accuracy_toggle_controls_response_visibility(
 ) -> None:
     _, window = _open_created_project(controller, qtbot, tmp_path, "Fixation Accuracy Visibility")
 
-    page = window.setup_dashboard_page.fixation_settings_editor
-    window.setup_wizard_page.open_wizard(step_key="fixation")
+    page = window.setup_dashboard_page.fixation_response_editor
+    window.setup_wizard_page.open_wizard(step_key="response")
     window.main_stack.setCurrentWidget(window.setup_wizard_page)
     page.fixation_enabled_checkbox.setChecked(True)
     QApplication.processEvents()
@@ -502,28 +502,31 @@ def test_fixation_disable_hides_dependent_sections(
 ) -> None:
     _, window = _open_created_project(controller, qtbot, tmp_path, "Fixation Enablement Visibility")
 
-    page = window.setup_dashboard_page.fixation_settings_editor
+    schedule_page = window.setup_dashboard_page.fixation_schedule_editor
+    response_page = window.setup_dashboard_page.fixation_response_editor
     window.setup_wizard_page.open_wizard(step_key="fixation")
     window.main_stack.setCurrentWidget(window.setup_wizard_page)
-    page.fixation_enabled_checkbox.setChecked(True)
-    page.fixation_accuracy_checkbox.setChecked(True)
+    schedule_page.fixation_enabled_checkbox.setChecked(True)
+    response_page.fixation_accuracy_checkbox.setChecked(True)
     QApplication.processEvents()
-    assert page.target_count_mode_combo.isVisible()
-    assert page.target_duration_spin.isVisible()
-    assert page.base_color_combo.isVisible()
-    assert page.response_key_edit.isVisible()
-    assert page.response_key_button.isVisible()
-    assert page.fixation_accuracy_checkbox.isEnabled()
+    assert schedule_page.target_count_mode_combo.isVisible()
+    assert schedule_page.target_duration_spin.isVisible()
+    window.setup_wizard_page.open_wizard(step_key="response")
+    QApplication.processEvents()
+    assert response_page.base_color_combo.isVisible()
+    assert response_page.response_key_edit.isVisible()
+    assert response_page.response_key_button.isVisible()
+    assert response_page.fixation_accuracy_checkbox.isEnabled()
 
-    page.fixation_enabled_checkbox.setChecked(False)
+    schedule_page.fixation_enabled_checkbox.setChecked(False)
     QApplication.processEvents()
-    assert not page.target_count_mode_combo.isVisible()
-    assert not page.target_duration_spin.isVisible()
-    assert not page.base_color_combo.isVisible()
-    assert not page.response_key_edit.isVisible()
-    assert not page.response_key_button.isVisible()
-    assert not page.fixation_accuracy_checkbox.isEnabled()
-    assert page.fixation_accuracy_checkbox.isChecked() is False
+    assert not schedule_page.target_count_mode_combo.isVisible()
+    assert not schedule_page.target_duration_spin.isVisible()
+    assert not response_page.base_color_combo.isVisible()
+    assert not response_page.response_key_edit.isVisible()
+    assert not response_page.response_key_button.isVisible()
+    assert not response_page.fixation_accuracy_checkbox.isEnabled()
+    assert response_page.fixation_accuracy_checkbox.isChecked() is False
 
 
 def test_cycle_tooltips_and_fixation_feasibility_render_and_update(
@@ -543,7 +546,7 @@ def test_cycle_tooltips_and_fixation_feasibility_render_and_update(
         == "Cycle = one turn of base presentations plus one oddball presentation."
     )
 
-    page = window.setup_dashboard_page.fixation_settings_editor
+    page = window.setup_dashboard_page.fixation_schedule_editor
     window.main_stack.setCurrentWidget(window.setup_wizard_page)
     page.fixation_enabled_checkbox.setChecked(True)
     page.target_count_mode_combo.setCurrentIndex(page.target_count_mode_combo.findData("fixed"))
@@ -581,7 +584,7 @@ def test_fixation_feasibility_shows_single_value_for_uniform_condition_lengths(
     qtbot.mouseClick(window.conditions_page.add_condition_button, Qt.MouseButton.LeftButton)
     qtbot.mouseClick(window.conditions_page.add_condition_button, Qt.MouseButton.LeftButton)
 
-    page = window.setup_dashboard_page.fixation_settings_editor
+    page = window.setup_dashboard_page.fixation_schedule_editor
     window.main_stack.setCurrentWidget(window.setup_wizard_page)
     QApplication.processEvents()
 

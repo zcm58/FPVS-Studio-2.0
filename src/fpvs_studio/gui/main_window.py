@@ -46,6 +46,8 @@ __all__ = [
 
 _COMPACT_HOME_MINIMUM_SIZE = (760, 520)
 _COMPACT_HOME_DEFAULT_SIZE = (1040, 680)
+_COMPACT_SETUP_MINIMUM_SIZE = (960, 640)
+_COMPACT_SETUP_DEFAULT_SIZE = (1040, 680)
 _WORKSPACE_MINIMUM_SIZE = (1366, 820)
 _WORKSPACE_DEFAULT_SIZE = (1440, 920)
 _AUTO_WORKSPACE_SIZE_TOLERANCE = 16
@@ -154,7 +156,7 @@ class StudioMainWindow(QMainWindow):
 
     def show_setup_wizard(self) -> None:
         self._set_home_chrome_visible(True)
-        self._apply_workspace_window_size()
+        self._apply_setup_window_size()
         self.main_stack.setCurrentWidget(self.setup_wizard_page)
         self.setup_wizard_page.open_wizard()
 
@@ -207,6 +209,21 @@ class StudioMainWindow(QMainWindow):
         self.setMinimumSize(*_WORKSPACE_MINIMUM_SIZE)
         if needs_workspace_resize:
             self.resize(*_WORKSPACE_DEFAULT_SIZE)
+            self._auto_workspace_sized = True
+            self._auto_workspace_return_size = compact_return_size
+            self._auto_workspace_size = (self.width(), self.height())
+        else:
+            self._clear_auto_workspace_size()
+
+    def _apply_setup_window_size(self) -> None:
+        needs_setup_resize = (
+            self.width() < _COMPACT_SETUP_MINIMUM_SIZE[0]
+            or self.height() < _COMPACT_SETUP_MINIMUM_SIZE[1]
+        )
+        compact_return_size = (self.width(), self.height())
+        self.setMinimumSize(*_COMPACT_SETUP_MINIMUM_SIZE)
+        if needs_setup_resize:
+            self.resize(*_COMPACT_SETUP_DEFAULT_SIZE)
             self._auto_workspace_sized = True
             self._auto_workspace_return_size = compact_return_size
             self._auto_workspace_size = (self.width(), self.height())

@@ -65,16 +65,29 @@ def is_guided_trigger_code(value: int) -> bool:
 
 
 class ConditionSetupStep(QWidget):
-    """Focused wizard step for condition identity and linked image sources."""
+    """Focused wizard step for condition identity or linked image sources."""
 
-    def __init__(self, document: ProjectDocument, parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        document: ProjectDocument,
+        parent: QWidget | None = None,
+        *,
+        mode: str = "details",
+    ) -> None:
         super().__init__(parent)
+        if mode not in {"details", "images"}:
+            raise ValueError(f"Unsupported condition setup mode: {mode}")
         self._document = document
+        self._mode = mode
         self._pending_instruction_condition_id: str | None = None
         self._active_task: ProgressTask | None = None
 
         self.condition_list = QListWidget(self)
-        self.condition_list.setObjectName("setup_wizard_condition_list")
+        self.condition_list.setObjectName(
+            "setup_wizard_condition_image_list"
+            if mode == "images"
+            else "setup_wizard_condition_list"
+        )
         self.condition_list.setProperty("setupConditionsList", "true")
         self.condition_list.setSelectionMode(QListWidget.SelectionMode.SingleSelection)
         self.condition_list.setAlternatingRowColors(True)
@@ -104,18 +117,35 @@ class ConditionSetupStep(QWidget):
         list_layout = QVBoxLayout(list_panel)
         list_layout.setContentsMargins(0, 0, 0, 0)
         list_layout.setSpacing(10)
-        list_title = QLabel("Condition List", list_panel)
+        list_title = QLabel(
+            "Condition List" if mode == "details" else "Condition Images",
+            list_panel,
+        )
         list_title.setProperty("sectionCardRole", "title")
-        list_note = QLabel("Create, remove, and reorder conditions.", list_panel)
+        list_note = QLabel(
+            "Create, remove, and reorder conditions."
+            if mode == "details"
+            else "Choose a condition and assign its base and oddball image folders.",
+            list_panel,
+        )
         list_note.setProperty("setupPanelHelper", "true")
         list_note.setWordWrap(True)
         list_layout.addWidget(list_title)
         list_layout.addWidget(list_note)
         list_layout.addWidget(self.condition_list, 1)
-        list_layout.addWidget(self.add_condition_button)
-        list_layout.addWidget(self.duplicate_condition_button)
-        list_layout.addWidget(self.create_control_condition_button)
-        list_layout.addWidget(self.remove_condition_button)
+        if mode == "details":
+            list_layout.addWidget(self.add_condition_button)
+            list_layout.addWidget(self.duplicate_condition_button)
+            list_layout.addWidget(self.create_control_condition_button)
+            list_layout.addWidget(self.remove_condition_button)
+        else:
+            for button in (
+                self.add_condition_button,
+                self.duplicate_condition_button,
+                self.create_control_condition_button,
+                self.remove_condition_button,
+            ):
+                button.setVisible(False)
 
         self.selected_condition_badge = StatusBadgeLabel("No condition selected", self)
         self.selected_condition_badge.setObjectName("setup_wizard_selected_condition_badge")
@@ -199,29 +229,6 @@ class ConditionSetupStep(QWidget):
         sources_grid.setColumnStretch(0, 1)
         sources_grid.setColumnStretch(1, 1)
 
-        detail_panel = QWidget(self)
-        detail_panel.setObjectName("setup_conditions_main_panel")
-        detail_layout = QVBoxLayout(detail_panel)
-        detail_layout.setContentsMargins(0, 0, 0, 0)
-        detail_layout.setSpacing(12)
-        detail_header = QWidget(detail_panel)
-        detail_header_layout = QHBoxLayout(detail_header)
-        detail_header_layout.setContentsMargins(0, 0, 0, 0)
-        detail_header_layout.setSpacing(8)
-        detail_title = QLabel("Selected Condition", detail_header)
-        detail_title.setProperty("sectionCardRole", "title")
-        detail_header_layout.addWidget(detail_title)
-        detail_header_layout.addWidget(self.selected_condition_badge)
-        detail_header_layout.addStretch(1)
-        detail_header_layout.addWidget(self.selected_condition_note)
-        detail_layout.addWidget(detail_header)
-        detail_layout.addLayout(form)
-        sources_title = QLabel("Image Sources", detail_panel)
-        sources_title.setProperty("sectionCardRole", "title")
-        detail_layout.addWidget(sources_title)
-        detail_layout.addLayout(sources_grid)
-        detail_layout.addStretch(1)
-
         self.protocol_defaults_panel = SetupSidePanel(
             "Protocol Defaults",
             object_name="setup_conditions_protocol_defaults_panel",
@@ -235,16 +242,55 @@ class ConditionSetupStep(QWidget):
             parent=self,
         )
 
-        right_panel = QWidget(self)
-        right_panel.setObjectName("setup_conditions_right_panel")
-        right_layout = QVBoxLayout(right_panel)
-        right_layout.setContentsMargins(0, 0, 0, 0)
-        right_layout.setSpacing(PAGE_SECTION_GAP)
-        right_layout.addWidget(self.protocol_defaults_panel)
-        right_layout.addWidget(self.setup_checklist, 1)
+        detail_panel = QWidget(self)
+        detail_panel.setObjectName("setup_conditions_main_panel")
+        detail_layout = QVBoxLayout(detail_panel)
+        detail_layout.setContentsMargins(0, 0, 0, 0)
+        detail_layout.setSpacing(12)
+        detail_header = QWidget(detail_panel)
+        detail_header_layout = QHBoxLayout(detail_header)
+        detail_header_layout.setContentsMargins(0, 0, 0, 0)
+        detail_header_layout.setSpacing(8)
+        detail_title = QLabel(
+            "Selected Condition" if mode == "details" else "Selected Image Set",
+            detail_header,
+        )
+        detail_title.setProperty("sectionCardRole", "title")
+        detail_header_layout.addWidget(detail_title)
+        detail_header_layout.addWidget(self.selected_condition_badge)
+        detail_header_layout.addStretch(1)
+        detail_header_layout.addWidget(self.selected_condition_note)
+        detail_layout.addWidget(detail_header)
+
+        if mode == "details":
+            detail_layout.addLayout(form)
+            self.base_source_card.setVisible(False)
+            self.oddball_source_card.setVisible(False)
+            self.protocol_defaults_panel.setVisible(False)
+            self.setup_checklist.setVisible(False)
+        else:
+            for widget in (
+                self.condition_name_edit,
+                self.trigger_code_spin,
+                self.instructions_edit,
+            ):
+                widget.setVisible(False)
+            sources_title = QLabel("Image Sources", detail_panel)
+            sources_title.setProperty("sectionCardRole", "title")
+            detail_layout.addWidget(sources_title)
+            detail_layout.addLayout(sources_grid)
+
+            summary_row = QWidget(detail_panel)
+            summary_layout = QHBoxLayout(summary_row)
+            summary_layout.setContentsMargins(0, 0, 0, 0)
+            summary_layout.setSpacing(PAGE_SECTION_GAP)
+            summary_layout.addWidget(self.protocol_defaults_panel, 1)
+            summary_layout.addWidget(self.setup_checklist, 1)
+            detail_layout.addWidget(summary_row)
+        detail_layout.addStretch(1)
 
         workspace = SetupWorkspaceFrame(object_name="setup_conditions_workspace", parent=self)
-        workspace.set_regions(left=list_panel, main=detail_panel, right=right_panel)
+        workspace.set_regions(left=list_panel, main=detail_panel)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(workspace, 1)

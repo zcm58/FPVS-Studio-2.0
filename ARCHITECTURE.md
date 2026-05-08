@@ -88,14 +88,14 @@ Current planned seams:
   `root_folder_setup_dialog.py` provides first-run and Settings-accessible guidance
   for choosing the FPVS Studio Root Folder before the native folder picker opens.
   `StudioMainWindow` owns mode-specific sizing: compact launch-surface sizing for
-  Welcome/Home handoff and larger workspace sizing for Setup and tool pages.
-  The wizard uses a five-step top-progress flow with a
-  simplified Conditions setup step where users assign base/oddball image folders and
-  can optionally create derived-variant control conditions. Experiment Settings combines
-  display and session settings in one compact centered card; session order is always
-  randomized within each block using the random order seed while legacy fixed-order
-  fields stay schema-compatible. Fixation Cross is a guided page with behavior, timing,
-  response, appearance, and live-preview sections.
+  Welcome/Home handoff, compact Setup sizing, and larger workspace sizing for tool pages.
+  The wizard uses a seven-step compact top-progress flow: Project, Conditions, Images,
+  Experiment, Fixation, Response, and Review. Conditions handles condition identity and
+  list actions, while Images handles base/oddball folder assignment and normalization.
+  Experiment combines display and session settings in one compact centered card; session
+  order is always randomized within each block using the random order seed while legacy
+  fixed-order fields stay schema-compatible. Fixation handles schedule/timing, and
+  Response handles accuracy tracking, response key/window, appearance, and live preview.
   Display settings are limited to refresh rate and black/dark-gray background choices. Detailed
   Conditions no longer exposes a wizard advanced editor; duty-cycle selection is
   centralized in the Project Details condition template selector. Stimuli Manager

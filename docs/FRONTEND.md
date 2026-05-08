@@ -20,12 +20,16 @@ the active app.
   action.
 - Welcome and Home share the same launch-surface frame/styling so opening a ready
   project keeps a stable outer window and card treatment.
-- Setup Wizard is the guided setup/editing surface. Entering setup expands the main
-  window to the workspace size; returning Home restores the compact launch-surface
-  size unless the user manually resized the larger setup window.
-- Conditions is the guided setup area for assigning base/oddball image folders and
-  creating optional derived-variant control conditions. Raw folder selection is
-  permissive; inconsistent image sizes are handled by the guided normalization flow.
+- Setup Wizard is the guided setup/editing surface. Setup uses the compact
+  Welcome/Home-sized default window, with Image Resizer retaining the larger
+  workspace sizing.
+- Conditions and Images are split guided setup areas: Conditions handles condition
+  list/actions, names, triggers, and instructions; Images handles base/oddball
+  folder assignment and image normalization. Raw folder selection is permissive;
+  inconsistent image sizes are handled by the guided normalization flow.
+- Fixation and Response are split guided setup areas: Fixation handles color-change
+  schedule/timing, while Response handles accuracy tracking, response key/window,
+  appearance, and preview.
 - Open Projects is the welcome entry point for the Manage Projects surface, which
   opens known projects or moves project folders to the Windows Recycle Bin with
   confirmation. The File menu still exposes the same management surface.

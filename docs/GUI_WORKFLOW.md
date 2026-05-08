@@ -55,49 +55,46 @@ The authoring window is organized around two user-facing modes:
     the user manually resized the larger setup window
 - `Setup Wizard`
   - in-window setup flow for new/incomplete projects and intentional edits
-  - ordered steps: Project Details, Conditions, Experiment Settings, Fixation Cross, Review
+  - ordered steps: Project, Conditions, Images, Experiment, Fixation, Response, Review
   - `Next` is disabled until the active step is complete
   - the top progress indicator is a compact connected numbered stepper with
-    completed/current/upcoming states, without a redundant `Step X of 5` text line
-  - the wizard keeps the step content full-width while the progress stepper is
-    centered and compact; the guided steps do not expose an Advanced button or
-    vertical scrolling
+    completed/current/upcoming states, without a redundant `Step X of 7` text line
+  - the wizard uses the compact Welcome/Home-sized default window while keeping
+    guided steps free of Advanced buttons and vertical scrolling
   - the wizard avoids generic footer/status copy; individual step cards should
     only show information needed for the current decision
-  - Project Details uses a focused centered card inside the full-width wizard,
-    keeping the project folder path compact and secondary; project name and
-    description are required before continuing to Conditions
-  - the Project Details condition template selector is the user-facing source of
+  - Project uses a focused centered card, keeping the project folder path compact
+    and secondary; project name and description are required before continuing to
+    Conditions
+  - the Project condition template selector is the user-facing source of
     truth for condition duty-cycle mode; existing conditions are standardized
     when the selected template changes
-  - Experiment Settings combines display and session settings in one compact centered card
+  - Experiment combines display and session settings in one compact centered card
   - the Display column exposes only display refresh rate and presentation background
     (`Black` or `Dark Gray`); current launches always use PsychoPy, alpha test-mode,
     fullscreen playback, and the default display without exposing those as choices
   - the Session column exposes repeats per condition, the random order seed, and
     the fixed Space start key; condition order is always randomized within each block
-  - Fixation Cross is its own guided step and exposes fixation color-change behavior,
-    timing, response, appearance, and a live preview on the current display background
   - the Conditions step uses a simplified condition setup surface for condition
-    name, trigger code, participant instructions, and base/oddball image folders
-  - the Conditions step uses the shared setup workspace pattern: condition list on
-    the left, selected-condition editor and image source cards in the center, and
-    protocol defaults plus setup checklist on the right
-  - the Conditions step owns image folder selection; users choose base and oddball
-    folders while creating each condition
+    list actions, name, trigger code, and participant instructions
+  - the Images step owns base/oddball folder selection, selected-condition image
+    source cards, protocol defaults, and image readiness
   - raw image-folder import is permissive; folders with mixed image sizes are not
     rejected at selection time
-  - when users leave Conditions, FPVS Studio checks selected condition images for
+  - when users leave Images, FPVS Studio checks selected condition images for
     mixed sizes or file types; inconsistent folders can be normalized to PNG copies
     at `512x512` or `256x256` before moving on
   - the Conditions step includes a secondary `Create Control Condition...` action for
     optional grayscale, 180 degree rotated, or phase-scrambled control conditions that
     reuse the selected condition's existing base and oddball image folders
-  - guided Conditions copy uses `Image Version` for stimulus variant selection; raw
-    timing fields such as `Cycles / Repeat` are hidden from the guided workflow
-  - the Conditions step is complete only when every condition has a user-provided
-    descriptive name, a trigger code of 1 or higher, and imported base and oddball
-    image folders
+  - raw timing fields such as `Cycles / Repeat` are hidden from the guided workflow
+  - Conditions is complete when every condition has a descriptive name and trigger
+    code of 1 or higher; Images is complete when every condition has imported base
+    and oddball image folders
+  - Fixation exposes fixation color-change enablement, schedule, target counts, and
+    timing
+  - Response exposes accuracy tracking, response key/window, appearance, and a live
+    preview on the current display background
   - Review is a card-only decision point: users can `Save and Return Home` or
     `Return Home Without Saving`; returning without saving always asks for confirmation
 - `Tools > Image Resizer`
@@ -112,7 +109,7 @@ The authoring window is organized around two user-facing modes:
 Detailed Conditions remains available internally for existing document bindings, but it
 is no longer exposed as a wizard advanced step and does not expose duty-cycle editing.
 Session controls are directly visible in Experiment Settings, and
-Fixation Cross is a guided setup page. The Run / Runtime page remains a launch, readiness, and session-preview
+Fixation and Response are guided setup pages. The Run / Runtime page remains a launch, readiness, and session-preview
 surface, not a display-engine configuration step.
 The Stimuli Manager remains an internal support page for variant/materialization
 behavior, not a guided setup step or visible top-level tab during normal use. Its raw
@@ -134,8 +131,8 @@ active project.
 - Welcome and Home use the shared `LaunchSurfaceFrame` helper for the full-window
   launch card, border styling, and first-paint background.
 - Shared Setup Wizard presentation components include the connected progress stepper,
-  workspace frame, right-side panels, metric strips, source cards, and reusable setup
-  checklist panel.
+  workspace frame, side panels, metric strips, source cards, and reusable setup
+  checklist panel used by compact guided pages.
 - Raw color, spacing, width, and text-elision tokens live in
   `src/fpvs_studio/gui/design_system.py`; page modules should prefer component
   helpers instead of local stylesheets for shared UI concepts.
