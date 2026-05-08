@@ -35,6 +35,7 @@ from fpvs_studio.core.enums import DutyCycleMode, InterConditionMode, StimulusVa
 from fpvs_studio.core.project_service import create_project
 from fpvs_studio.core.serialization import load_project_file, save_project_file
 from fpvs_studio.gui.controller import StudioController
+from fpvs_studio.gui.design_system import COLOR_PAGE_BACKGROUND
 
 
 class _ImmediateProgressTask(QObject):
@@ -225,6 +226,10 @@ def test_ready_project_home_inherits_welcome_window_size(
     welcome = controller.welcome_window
     assert welcome is not None
 
+    QApplication.processEvents()
+    controller.show_welcome()
+    QApplication.processEvents()
+    assert welcome.isVisible()
     welcome.resize(1110, 700)
     QApplication.processEvents()
     welcome_size = welcome.size()
@@ -235,7 +240,11 @@ def test_ready_project_home_inherits_welcome_window_size(
 
     reopened = controller.main_window
     assert reopened.main_stack.currentWidget() is reopened.home_page
+    assert reopened.isVisible()
+    assert welcome.isVisible()
     assert reopened.size() == welcome_size
+    QApplication.processEvents()
+    qtbot.waitUntil(lambda: not welcome.isVisible())
 
 
 def test_setup_wizard_exists_and_uses_single_column_shell_with_steps(
@@ -334,6 +343,8 @@ def test_major_tabs_share_page_container_width_presets(
     assert window.home_page.launch_surface.page_layout.contentsMargins().left() == 32
     assert window.home_page.launch_surface.content_layout.contentsMargins().left() == 44
     assert window.home_page.launch_surface.hero_container.maximumWidth() == 760
+    assert window.home_page.launch_surface.property("launchSurfaceRoot") == "true"
+    assert 'QWidget[launchSurfaceRoot="true"]' in window.home_page.styleSheet()
     assert window.setup_wizard_page.shell.page_container.width_preset == "full"
     assert window.setup_wizard_page.shell.page_container.max_content_width() == 16_777_215
     assert window.conditions_page.embedded is True
@@ -429,6 +440,10 @@ def test_switching_main_workflow_stack_keeps_outer_window_size_stable(
     _, window = _open_created_project(controller, qtbot, tmp_path, "Workflow Window Size")
 
     assert window.main_stack.currentWidget() is window.setup_wizard_page
+    assert window.objectName() == "studio_main_window"
+    assert "QMainWindow#studio_main_window" in window.styleSheet()
+    assert "QStackedWidget#main_stack" in window.styleSheet()
+    assert f"background-color: {COLOR_PAGE_BACKGROUND};" in window.styleSheet()
     assert window.menuBar().isVisible()
     assert window.statusBar().isVisible()
     assert window.minimumWidth() == 1366

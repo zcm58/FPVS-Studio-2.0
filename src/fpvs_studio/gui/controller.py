@@ -13,7 +13,7 @@ import traceback
 from ctypes import wintypes
 from pathlib import Path
 
-from PySide6.QtCore import QSettings
+from PySide6.QtCore import QSettings, QTimer
 from PySide6.QtWidgets import QApplication, QFileDialog, QMessageBox, QWidget
 
 from fpvs_studio.core.condition_template_profiles import (
@@ -381,12 +381,37 @@ class StudioController:
             and self.main_window.main_stack.currentWidget() is self.main_window.home_page
         ):
             self.main_window.setGeometry(self.welcome_window.geometry())
-        self.main_window.show()
-        self.main_window.raise_()
-        self.main_window.activateWindow()
+        self._show_opened_main_window(previous_window)
+
+    def _show_opened_main_window(self, previous_window: StudioMainWindow | None) -> None:
+        target_window = self.main_window
+        if target_window is None:
+            return
+        target_window.ensurePolished()
+        target_window.main_stack.ensurePolished()
+        target_window.show()
+        target_window.raise_()
+        target_window.activateWindow()
+        target_window.repaint()
+
+        QTimer.singleShot(
+            0,
+            lambda: self._finish_opened_main_window_handoff(
+                target_window,
+                previous_window,
+            ),
+        )
+
+    def _finish_opened_main_window_handoff(
+        self,
+        target_window: StudioMainWindow,
+        previous_window: StudioMainWindow | None,
+    ) -> None:
+        if self.main_window is not target_window:
+            return
         if self.welcome_window is not None:
             self.welcome_window.hide()
-        if previous_window is not None and previous_window is not self.main_window:
+        if previous_window is not None and previous_window is not target_window:
             previous_window.close()
 
     def _load_condition_template_profiles(self) -> list[ConditionTemplateProfile]:

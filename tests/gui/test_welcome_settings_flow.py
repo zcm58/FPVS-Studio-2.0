@@ -131,6 +131,8 @@ def test_welcome_window_hero_stack_is_centered_in_panel(controller: StudioContro
 
     assert content_frame is not None
     assert hero_container is not None
+    assert welcome.launch_surface.property("launchSurfaceRoot") == "true"
+    assert 'QWidget[launchSurfaceRoot="true"]' in welcome.styleSheet()
     assert content_frame.property("launchSurfaceFrame") == "true"
     assert 'QFrame[launchSurfaceFrame="true"]' in welcome.styleSheet()
 

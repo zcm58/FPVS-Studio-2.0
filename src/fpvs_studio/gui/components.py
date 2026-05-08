@@ -40,6 +40,7 @@ from fpvs_studio.gui.design_system import (
     COLOR_INFO_BG,
     COLOR_INFO_BORDER,
     COLOR_INFO_TEXT,
+    COLOR_PAGE_BACKGROUND,
     COLOR_PENDING_BG,
     COLOR_PENDING_BORDER,
     COLOR_PENDING_TEXT,
@@ -124,6 +125,7 @@ class LaunchSurfaceFrame(QWidget):
     ) -> None:
         super().__init__(parent)
         self.setObjectName(f"{frame_object_name}_surface")
+        self.setProperty("launchSurfaceRoot", "true")
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
         self.page_layout = QVBoxLayout(self)
@@ -779,6 +781,10 @@ def mark_error_text(label: QLabel) -> None:
 
 def studio_theme_stylesheet() -> str:
     return f"""
+    QMainWindow#studio_main_window,
+    QStackedWidget#main_stack {{
+        background-color: {COLOR_PAGE_BACKGROUND};
+    }}
     QTabWidget#main_tabs::pane {{
         border: 1px solid {COLOR_BORDER};
         background-color: {COLOR_SURFACE_ELEVATED};
@@ -1101,6 +1107,9 @@ def launch_surface_frame_stylesheet(palette: QPalette) -> str:
     frame_border.setAlpha(100 if window_color.lightness() >= 128 else 145)
 
     return f"""
+    QWidget[launchSurfaceRoot="true"] {{
+        background-color: {_rgba(window_color)};
+    }}
     QFrame[launchSurfaceFrame="true"] {{
         border: 1px solid {_rgba(frame_border)};
         border-radius: 16px;

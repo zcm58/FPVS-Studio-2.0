@@ -65,6 +65,7 @@ class StudioMainWindow(QMainWindow):
         on_manage_condition_templates: Callable[[], list[ConditionTemplateProfile]],
     ) -> None:
         super().__init__()
+        self.setObjectName("studio_main_window")
         self.document = document
         self._on_request_new_project = on_request_new_project
         self._on_request_open_project = on_request_open_project
