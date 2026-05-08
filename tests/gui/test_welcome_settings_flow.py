@@ -356,6 +356,36 @@ def test_delete_project_keeps_recent_entry_when_recycle_does_not_remove_folder(
     assert controller.load_recent_project_roots() == [scaffold.project_root]
 
 
+def test_delete_project_removes_partial_recycle_leftover_folder(
+    controller: StudioController,
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    scaffold = create_project(tmp_path, "Partial Recycle Project")
+    controller.record_recent_project_root(scaffold.project_root)
+    leftover_file = scaffold.project_root / "leftover.txt"
+    leftover_file.write_text("left behind by a partial shell delete", encoding="utf-8")
+
+    def _fake_partial_recycle(project_root: Path) -> None:
+        project_json_path = project_root / "project.json"
+        project_json_path.unlink()
+
+    monkeypatch.setattr(
+        "fpvs_studio.gui.controller._move_project_tree_to_recycle_bin",
+        _fake_partial_recycle,
+    )
+    monkeypatch.setattr(
+        "fpvs_studio.gui.controller.QMessageBox.question",
+        lambda *_args, **_kwargs: QMessageBox.StandardButton.Yes,
+    )
+
+    deleted = controller.delete_project(scaffold.project_root)
+
+    assert deleted is True
+    assert not scaffold.project_root.exists()
+    assert controller.load_recent_project_roots() == []
+
+
 def test_manage_projects_refreshes_dialog_after_failed_recycle(
     qtbot,
     controller: StudioController,

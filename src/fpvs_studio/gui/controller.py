@@ -548,10 +548,12 @@ class StudioController:
 
         try:
             _move_project_tree_to_recycle_bin(project_root)
+            if project_root.exists() and not project_json_path(project_root).exists():
+                _remove_project_tree(project_root)
             if project_root.exists():
                 raise OSError(
-                    "Windows reported that the project was moved to the Recycle Bin, "
-                    f"but the project folder still exists: {project_root}"
+                    "Windows did not fully remove this project folder: "
+                    f"{project_root}"
                 )
         except Exception as error:
             _show_error(parent, "Delete Project Error", error)
