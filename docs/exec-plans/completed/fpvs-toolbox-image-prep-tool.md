@@ -4,22 +4,25 @@ Status: Completed
 
 ## Summary
 
-Adapt the imported FPVS Toolbox image resizer logic in `src/fpvs_studio/tools/`
+Adapt the imported FPVS Toolbox image resizer logic
 into Studio-native image preparation workflows. Conditions should keep their
 project-linked readiness normalization gate, while `Tools > Image Resizer` should
 provide a standalone folder utility for users who only want quick FPVS-ready PNG
 copies.
 
 This plan started as a scaffold for imported reference files and is now completed:
-Studio owns the production preprocessing services and component-layer GUI surfaces,
-while the imported Toolbox files remain reference material only.
+Studio owns the production preprocessing services and component-layer GUI surfaces.
+The imported Toolbox files are archived as reference material under
+`docs/references/archive/fpvs-toolbox-image-resizer/`.
 
 ## Ground Truth Files
 
-- `src/fpvs_studio/tools/image_resize_core.py` is the behavioral ground truth for
+- `docs/references/archive/fpvs-toolbox-image-resizer/image_resize_core.py` is the
+  behavioral reference for
   center-crop batch resizing and file-type conversion.
-- `src/fpvs_studio/tools/pyside_resizer.py` is a UX reference only. Rebuild the UI
-  with `fpvs_studio.gui.components` instead of preserving its current widget layer.
+- `docs/references/archive/fpvs-toolbox-image-resizer/pyside_resizer.py` is a UX
+  reference only. Rebuild the UI with `fpvs_studio.gui.components` instead of
+  preserving its current widget layer.
 - Do not import or preserve legacy `Main_App.gui.*` dependencies.
 
 ## Key Changes
@@ -123,16 +126,13 @@ python -m pytest -q tests\unit\test_harness_docs.py
   and offers project-linked PNG normalization only when needed.
 - `Tools > Image Resizer` is an in-window standalone utility for center-cropped
   PNG folder optimization and does not mutate active project conditions.
-- The imported FPVS Toolbox files remain under `src/fpvs_studio/tools/` as
-  reference material, not a GUI/runtime dependency.
-- Current boundary debt: `src/fpvs_studio/tools/pyside_resizer.py` still contains
-  PySide6 imports as reference-only code and fails the PySide6 import-boundary test
-  until a follow-up cleanup removes, relocates, or explicitly archives it.
+- The imported FPVS Toolbox files were moved out of `src/` into
+  `docs/references/archive/fpvs-toolbox-image-resizer/` as reference material, not a
+  GUI/runtime dependency.
 
 ## Assumptions
 
-- The imported files under `src/fpvs_studio/tools/` are intentional reference
-  material from FPVS Toolbox.
+- The imported archive files are intentional reference material from FPVS Toolbox.
 - The Studio UI should share the same component layer as the rest of the
   application.
 - Production code should reuse behavior from the imported files, not their module

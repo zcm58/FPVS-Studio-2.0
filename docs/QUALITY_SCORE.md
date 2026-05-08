@@ -36,12 +36,5 @@ the current quality posture as the latest result of the standard gates.
 The standalone script also prints an advisory line-count report. The full quality gate
 runs the hard garbage-collection checks without the advisory report.
 
-Current known exception: `src/fpvs_studio/tools/pyside_resizer.py` is imported FPVS
-Toolbox reference material and still contains PySide6 imports. It is not the
-Studio-native Image Resizer path, but it currently keeps
-`tests\unit\test_import_boundaries.py::test_pyside6_imports_are_confined_to_gui_package`
-red until the reference file is removed, relocated, or otherwise excluded by an explicit
-cleanup plan.
-
 When a check is skipped or fails, record the command and reason in the final work note or
 the relevant execution plan.
