@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from PySide6.QtCore import QSize, Qt, QTimer
+from PySide6.QtGui import QResizeEvent
 from PySide6.QtWidgets import (
     QDialog,
     QFrame,
@@ -385,7 +386,7 @@ class SetupWizardPage(QWidget):
         apply_setup_wizard_theme(self)
         self.refresh()
 
-    def resizeEvent(self, event) -> None:  # noqa: N802
+    def resizeEvent(self, event: QResizeEvent) -> None:  # noqa: N802
         super().resizeEvent(event)
         self._sync_guided_panel_height()
         QTimer.singleShot(0, self._sync_guided_panel_height)
@@ -775,6 +776,8 @@ class SetupWizardPage(QWidget):
     def _refresh_review_summary(self) -> None:
         while self.review_checklist_layout.count():
             item = self.review_checklist_layout.takeAt(0)
+            if item is None:
+                continue
             widget = item.widget()
             if widget is not None:
                 widget.setParent(None)

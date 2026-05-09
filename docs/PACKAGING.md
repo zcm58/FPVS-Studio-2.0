@@ -1,7 +1,8 @@
 # Packaging FPVS Studio
 
-This guide is for developer builds of the Windows executable. End users should only
-interact with the built `FPVS Studio.exe`, not the source tree or Python environment.
+This guide is for developer builds of the Windows executable bundle and installer. End
+users should only interact with the installed `FPVS Studio.exe`, not the source tree or
+Python environment.
 
 ## Build Environment
 
@@ -28,6 +29,9 @@ That is the only developer entry point for changing the app version.
 and the PyInstaller spec includes that metadata in the bundled app.
 The package distribution name is `fpvs-studio`; the GUI and executable still use the
 display name `FPVS Studio`.
+
+For the first beta package, use the PEP 440-compatible package version `0.9.0b1`.
+The GitHub Release title can still use the friendlier label `v0.9.0-beta`.
 
 Use simple semantic versioning:
 
@@ -104,15 +108,62 @@ For internal testing, zip the entire folder:
 Compress-Archive -Path "dist\FPVS Studio\*" -DestinationPath "dist\FPVS-Studio.zip" -Force
 ```
 
-Later release work can wrap `dist\FPVS Studio\` in an installer EXE and upload that
-installer to GitHub Releases.
+## Build The Installer
 
-## Future App Icon
+Install Inno Setup 6 locally before building an installer. The build script looks for
+`ISCC.exe` on `PATH`, in the default Inno Setup install folders, through `ISCC_EXE`, or
+through the explicit `-InnoCompiler` argument.
 
-The current build uses the default window/icon behavior. When adding a real app icon:
+Build the PyInstaller bundle first:
+
+```powershell
+.\scripts\build_exe.ps1
+```
+
+Then build the setup EXE:
+
+```powershell
+.\scripts\build_installer.ps1
+```
+
+Expected output for the first beta package:
+
+```text
+dist\installer\FPVS-Studio-Setup-0.9.0b1.exe
+```
+
+If Inno Setup is installed somewhere custom:
+
+```powershell
+.\scripts\build_installer.ps1 -InnoCompiler "C:\Path\To\ISCC.exe"
+```
+
+The installer wraps the whole `dist\FPVS Studio\` folder. It installs per-user under
+`%LOCALAPPDATA%\Programs\FPVS Studio`, creates Start Menu shortcuts, and offers an
+optional Desktop shortcut. User settings, projects, templates, run history, and logs
+remain outside the install folder.
+
+Upload the setup EXE to the matching GitHub Release after smoke testing install,
+launch, update install, and uninstall behavior.
+
+## App Icon And Branding
+
+The build uses a shared FPVS Studio icon for application windows, the PyInstaller EXE,
+and the Inno Setup installer. When replacing the icon later:
 
 - add the source icon as `packaging/assets/fpvs-studio.ico`
+- include the standard Windows icon sizes in the `.ico`: `16x16`, `24x24`, `32x32`,
+  `48x48`, `64x64`, `128x128`, and `256x256`; use 32-bit color with alpha transparency
 - wire that `.ico` into `packaging/pyinstaller/fpvs_studio.spec`
+- wire that `.ico` into `packaging/inno/fpvs_studio.iss`
 - update GUI startup to use the same icon for application and window icons
 - rebuild with `.\scripts\build_exe.ps1` and confirm the icon appears on the EXE,
   taskbar, and app windows
+
+Current branding assets:
+
+- `packaging/assets/fpvs-studio-icon-1024.png`: high-resolution source PNG
+- `packaging/assets/fpvs-studio.ico`: release icon for PyInstaller and Inno Setup
+- `docs/assets/fpvs-studio-icon.png`: README/GitHub icon image
+- `docs/assets/fpvs-studio-readme-header.png`: README header image
+- `docs/assets/fpvs-studio-social-preview.png`: GitHub social preview image

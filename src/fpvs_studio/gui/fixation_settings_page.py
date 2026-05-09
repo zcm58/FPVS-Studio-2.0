@@ -570,7 +570,7 @@ class FixationSettingsEditor(QWidget):
             parent=self.fixation_panel,
         )
         if section_mode == "fixation":
-            visible_panels = (
+            visible_panels: tuple[QFrame, ...] = (
                 self.fixation_behavior_panel,
                 self.fixation_timing_panel,
             )

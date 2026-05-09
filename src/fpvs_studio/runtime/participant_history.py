@@ -19,8 +19,8 @@ _MAX_SEED_GENERATION_ATTEMPTS = 10_000
 
 
 class _SeedRng(Protocol):
-    def randrange(self, stop: int) -> int:
-        """Return a random integer in ``range(stop)``."""
+    def randrange(self, start: int, stop: int | None = None, step: int = 1) -> int:
+        """Return a random integer from the requested range."""
         ...
 
 

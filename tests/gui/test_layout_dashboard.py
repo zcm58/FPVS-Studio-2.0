@@ -355,7 +355,7 @@ def test_setup_wizard_exists_and_uses_single_column_shell_with_steps(
     QApplication.processEvents()
     assert "Complete each setup step once" not in label_text
     assert "Setup Wizard uses the same project document" not in label_text
-    assert "Alpha: test-mode runtime path only" not in label_text
+    assert "Beta: test-mode runtime path only" not in label_text
     assert "Confirm the project name and template." not in label_text
     assert wizard.shell.footer_strip.isVisible() is False
     assert wizard.step_title_label.isVisible() is False
@@ -2356,7 +2356,7 @@ def test_home_quick_action_buttons_present_and_wired(
     assert launch_button.text() == "Launch Experiment"
     assert window.run_page.launch_button.text() == "Launch Experiment"
     assert window.launch_action.text() == "Launch Experiment"
-    assert "alpha test-mode" in window.launch_action.toolTip().lower()
+    assert "beta test-mode" in window.launch_action.toolTip().lower()
     qtbot.waitUntil(lambda: launch_button.width() > 0)
     metric_text = "\n".join(
         label.text() for label in window.home_page.findChildren(QLabel)
@@ -2523,16 +2523,16 @@ def test_no_standalone_preflight_controls_are_exposed(
     assert "Preflight" not in toolbar_labels
 
 
-def test_window_title_and_status_bar_surface_alpha_runtime_designation(
+def test_window_title_and_status_bar_surface_beta_runtime_designation(
     qtbot,
     controller: StudioController,
     tmp_path: Path,
 ) -> None:
-    _, window = _open_created_project(controller, qtbot, tmp_path, "Alpha Label Project")
-    alpha_label = window.findChild(QLabel, "alpha_runtime_status_label")
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Beta Label Project")
+    beta_label = window.findChild(QLabel, "beta_runtime_status_label")
 
-    assert alpha_label is None
-    assert "(Alpha)" in window.windowTitle()
+    assert beta_label is None
+    assert "FPVS Studio Beta" in window.windowTitle()
 
 
 def test_home_launch_surface_shows_only_essential_project_session_metadata(
@@ -2681,7 +2681,7 @@ def test_run_page_readiness_and_launch_feedback_is_updated_on_launch(
     readiness_text = _list_widget_text(run_readiness_list)
     assert "[OK]" not in readiness_text
     assert "[TODO]" not in readiness_text
-    assert "runtime path: alpha test-mode only" in readiness_text.lower()
+    assert "runtime path: beta test-mode only" in readiness_text.lower()
     assert run_status_label.text()
 
     _prepare_compile_ready_project(window, tmp_path / "home-status-preflight")

@@ -13,6 +13,8 @@ code may lazily import PsychoPy.
 ## Package Map
 
 - `src/fpvs_studio/app/`: application entry points and startup wiring.
+- `src/fpvs_studio/assets/`: packaged static image assets used by the GUI at runtime,
+  currently the shared FPVS Studio app icon.
 - `src/fpvs_studio/gui/`: PySide6 windows, dialogs, controllers, document binding,
   the Home/Setup Wizard workflow, and the `gui/components.py` public component/theme
   surface. The main window also hosts lightweight in-window utilities from the `Tools`
@@ -55,12 +57,14 @@ the developer version-bump and build workflow.
 
 Local executable builds use `scripts/build_exe.ps1`, which runs the checked-in
 PyInstaller spec at `packaging/pyinstaller/fpvs_studio.spec` and writes ignored build
-artifacts under `build/` and `dist/`. The first distributable artifact is a PyInstaller
-onedir folder containing `dist\FPVS Studio\FPVS Studio.exe`; installer wrapping and
-GitHub release automation remain future packaging work.
+artifacts under `build/` and `dist/`. Installer builds use `scripts/build_installer.ps1`,
+which wraps the whole PyInstaller onedir folder with the checked-in Inno Setup script at
+`packaging/inno/fpvs_studio.iss` and writes `dist\installer\FPVS-Studio-Setup-*.exe`.
+GitHub release uploads remain a manual release step.
 
-Future app icon work should add a real `.ico` under `packaging/assets/`, wire it into
-the PyInstaller spec, and update GUI application/window icon loading in the same change.
+The shared app icon lives in `packaging/assets/fpvs-studio.ico` for release tooling and
+`src/fpvs_studio/assets/fpvs-studio.ico` for GUI window icons. README/GitHub branding
+images live under `docs/assets/`.
 
 ## Planned Module Decomposition
 
@@ -184,7 +188,8 @@ Use these first reads before opening broad trees:
 - Docs-only task: `AGENTS.md`, this file, `docs/index.md`, and the doc being edited.
   Avoid source reads unless the doc describes a concrete contract.
 - Packaging task: `docs/PACKAGING.md`, `pyproject.toml`,
-  `packaging/pyinstaller/fpvs_studio.spec`, `scripts/build_exe.ps1`,
+  `packaging/pyinstaller/fpvs_studio.spec`, `packaging/inno/fpvs_studio.iss`,
+  `scripts/build_exe.ps1`, `scripts/build_installer.ps1`,
   `tests/unit/test_package_metadata.py`, and this file.
 - Feature-sized workflow task: read `docs/PLANS.md` and `docs/exec-plans/README.md`,
   create or update an active plan under `docs/exec-plans/active/`, then read the
@@ -223,6 +228,7 @@ index.
 - Compiler/session: `.\scripts\check_compiler.ps1`
 - Preprocessing: `.\scripts\check_preprocessing.ps1`
 - Local Windows executable build: `.\scripts\build_exe.ps1`
+- Local Windows installer build: `.\scripts\build_installer.ps1`
 - Line-count report: `.\scripts\report_line_counts.ps1`
 - Workspace cleanup: `.\scripts\clean_workspace.ps1`
 

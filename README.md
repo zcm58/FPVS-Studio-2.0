@@ -1,13 +1,31 @@
 # FPVS Studio
 
+![FPVS Studio](docs/assets/fpvs-studio-readme-header.png)
+
 FPVS Studio is a Python 3.10 desktop application for authoring fast periodic
 visual stimulation experiments with a PySide6 GUI and a PsychoPy-backed runtime
 hidden behind the engine boundary.
 
-Phase 5 introduces the first usable authoring GUI. Users can now create or open
-projects, edit conditions and session settings, import and materialize assets,
-save and reopen `project.json`, preflight the compiled session, and launch the
-currently supported test-mode runtime path.
+The current beta package provides the first complete authoring workflow. Users can
+create or open projects, edit conditions and session settings, import and materialize
+assets, save and reopen `project.json`, preflight the compiled session, and launch the
+currently supported PsychoPy-backed runtime path.
+
+## Beta Package
+
+The current package version is `0.9.0b1`. GitHub release notes may use the friendlier
+label `v0.9.0-beta`, while Python packaging metadata uses the PEP 440-compatible
+version string.
+
+This beta package includes:
+
+- the PySide6 authoring GUI
+- project creation, opening, editing, saving, and reopening
+- guided setup for project details, conditions, experiment settings, fixation, response,
+  and review
+- image import, normalization, and standalone `Tools > Image Resizer`
+- PsychoPy-backed fullscreen experiment launch through the current runtime path
+- PyInstaller-based Windows executable packaging
 
 ## Architecture
 
@@ -67,9 +85,9 @@ Notes:
 - PySide6 is a required application dependency in the default install.
 - PsychoPy stays optional at install time and remains isolated to
   `src/fpvs_studio/engines/`.
-- The current honest launch path is still `test_mode=True`, but launched
-  PsychoPy playback now opens fullscreen on the selected display.
-- Non-test validation and lab-grade trigger validation remain deferred.
+- The current launch path still runs through the runtime `test_mode=True` seam, while
+  PsychoPy playback opens fullscreen on the selected display.
+- Non-test launch validation and serial trigger hardware I/O remain deferred.
 
 See [docs/ENVIRONMENT.md](docs/ENVIRONMENT.md) for environment details and
 [docs/GUI_WORKFLOW.md](docs/GUI_WORKFLOW.md) for the GUI authoring workflow.
@@ -104,7 +122,7 @@ The main authoring window provides pages for:
 
 ## Current GUI Workflow
 
-Phase 5 currently supports:
+The beta GUI currently supports:
 
 - creating a new project scaffold in a chosen parent folder
 - opening an existing project directory through the GUI; the backend document
@@ -185,9 +203,9 @@ dialogs or launch the real PsychoPy runtime.
 
 ## Deferred Items
 
-The following remain intentionally deferred after Phase 5:
+The following remain intentionally deferred after this beta package:
 
 - non-test launch validation
-- lab-validated serial trigger hardware behavior
+- serial trigger hardware I/O
 - alternate non-PsychoPy presentation engines
-- broader theming/polish beyond the first usable authoring GUI
+- broader theming/polish beyond the current authoring GUI

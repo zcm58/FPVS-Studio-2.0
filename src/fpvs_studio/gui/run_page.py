@@ -161,7 +161,7 @@ class RunPage(QWidget):
         self.launch_button.setObjectName("launch_test_session_button")
         mark_launch_action(self.launch_button)
         self.launch_button.setToolTip(
-            "Launch Experiment on the current alpha test-mode runtime path."
+            "Launch Experiment on the current beta test-mode runtime path."
         )
         self.launch_button.setMinimumHeight(42)
         self.launch_button.clicked.connect(self.launch_test_session)
@@ -413,7 +413,7 @@ class RunPage(QWidget):
             QMessageBox.warning(
                 self,
                 "Launch Aborted",
-                "The experiment aborted on the current alpha test-mode path.\n\n"
+                "The experiment aborted on the current beta test-mode path.\n\n"
                 f"Reason: {abort_reason}\n"
                 "Completed Conditions: "
                 f"{summary.completed_condition_count}/{summary.total_condition_count}\n"
@@ -430,7 +430,7 @@ class RunPage(QWidget):
         QMessageBox.information(
             self,
             "Launch Complete",
-            "The experiment finished on the current alpha test-mode path. "
+            "The experiment finished on the current beta test-mode path. "
             "Review run exports in the project runs folder.",
         )
 

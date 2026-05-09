@@ -39,6 +39,8 @@ class DocumentRuntimeMixin:
         _last_session_plan: SessionPlan | None
         session_plan_changed: Any
 
+        def ensure_unused_session_seed_for_launch(self) -> int: ...
+
     def validation_report(self, *, refresh_hz: float) -> ProjectValidationReport:
         """Validate the current project at a specific compile refresh rate."""
 

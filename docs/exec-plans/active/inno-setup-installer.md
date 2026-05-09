@@ -39,7 +39,7 @@ End-user flow:
 4. Install a newer release later without losing QSettings, configured FPVS Studio Root
    Folder, projects, run history, or custom condition templates.
 
-## Proposed Files
+## Implemented Files
 
 - `packaging/inno/fpvs_studio.iss`
   - checked-in Inno Setup script
@@ -59,7 +59,7 @@ End-user flow:
     `build_exe.ps1`, then `build_installer.ps1`
   - document smoke tests for fresh install, update install, and uninstall
 - `packaging/AGENTS.md`
-  - document Inno-specific guardrails once installer files exist
+  - documents Inno-specific guardrails now that installer files exist
 
 ## Installer Contract
 
@@ -93,6 +93,9 @@ path is stable.
 If the app icon is ready during this work, use one shared icon asset:
 
 - `packaging/assets/fpvs-studio.ico`
+
+The `.ico` should include standard Windows sizes: `16x16`, `24x24`, `32x32`,
+`48x48`, `64x64`, `128x128`, and `256x256`, using 32-bit color with alpha transparency.
 
 Wire it into both:
 

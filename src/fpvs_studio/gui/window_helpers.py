@@ -260,7 +260,7 @@ def _launcher_readiness_report(
     else:
         readiness_items.append(f"Complete: Validation ({refresh_hz:.2f} Hz) clear.")
 
-    readiness_items.append("Note: Runtime path: alpha test-mode only.")
+    readiness_items.append("Note: Runtime path: beta test-mode only.")
     return LauncherReadinessReport(
         status_label=status_label,
         badge_state=badge_state,

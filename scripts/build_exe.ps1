@@ -42,7 +42,7 @@ function Remove-RepoOutput {
 
 Push-Location $RepoRoot
 try {
-    $pythonVersion = & $Python -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')"
+    $pythonVersion = & $Python -c "import sys; sys.stdout.write(f'{sys.version_info.major}.{sys.version_info.minor}')"
     if ($LASTEXITCODE -ne 0) {
         throw "Could not run Python executable: $Python"
     }

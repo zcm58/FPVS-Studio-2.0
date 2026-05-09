@@ -76,7 +76,7 @@ The authoring window is organized around two user-facing modes:
     when the selected template changes
   - Experiment combines display and session settings in one compact centered card
   - the Display column exposes only display refresh rate and presentation background
-    (`Black` or `Dark Gray`); current launches always use PsychoPy, alpha test-mode,
+    (`Black` or `Dark Gray`); current launches always use PsychoPy, beta test-mode,
     fullscreen playback, and the default display without exposing those as choices
   - the Session column exposes repeats per condition, the random order seed, and
     the fixed Space start key; condition order is always randomized within each block

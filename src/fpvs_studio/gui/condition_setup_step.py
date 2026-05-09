@@ -6,6 +6,7 @@ import re
 from pathlib import Path
 
 from PySide6.QtCore import QSignalBlocker, QSize, Qt
+from PySide6.QtGui import QResizeEvent
 from PySide6.QtWidgets import (
     QDialog,
     QFileDialog,
@@ -71,7 +72,7 @@ class _ConditionSourcesRow(QWidget):
         self._base_card.setParent(self)
         self._oddball_card.setParent(self)
 
-    def resizeEvent(self, event) -> None:  # noqa: N802
+    def resizeEvent(self, event: QResizeEvent) -> None:  # noqa: N802
         super().resizeEvent(event)
         left = max(0, round((self.width() - _SOURCE_ROW_MIN_WIDTH) / 2))
         card_top = 0

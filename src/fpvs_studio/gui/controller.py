@@ -10,8 +10,10 @@ import os
 import shutil
 import stat
 import traceback
+from collections.abc import Callable
 from ctypes import wintypes
 from pathlib import Path
+from types import TracebackType
 
 from PySide6.QtCore import QSettings, QTimer
 from PySide6.QtWidgets import QApplication, QFileDialog, QMessageBox, QWidget
@@ -659,7 +661,11 @@ def _move_project_tree_to_recycle_bin(project_root: Path) -> None:
 def _remove_project_tree(project_root: Path) -> None:
     """Remove a project tree, retrying Windows read-only permission failures."""
 
-    def _make_writable_and_retry(function, path, exc_info) -> None:
+    def _make_writable_and_retry(
+        function: Callable[[str], object],
+        path: str,
+        exc_info: tuple[type[BaseException], BaseException, TracebackType],
+    ) -> None:
         error = exc_info[1]
         if not isinstance(error, PermissionError):
             raise error

@@ -6,15 +6,24 @@ not persistent model truth or runtime execution logic."""
 from __future__ import annotations
 
 import sys
+from pathlib import Path
 
+from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication, QStyle
 
 from fpvs_studio.gui.controller import StudioController
+
+_APP_ICON_PATH = Path(__file__).resolve().parent.parent / "assets" / "fpvs-studio.ico"
 
 
 def _ensure_application_icon(app: QApplication) -> None:
     if not app.windowIcon().isNull():
         return
+    if _APP_ICON_PATH.is_file():
+        app_icon = QIcon(str(_APP_ICON_PATH))
+        if not app_icon.isNull():
+            app.setWindowIcon(app_icon)
+            return
     fallback_icon = app.style().standardIcon(QStyle.StandardPixmap.SP_ComputerIcon)
     if not fallback_icon.isNull():
         app.setWindowIcon(fallback_icon)

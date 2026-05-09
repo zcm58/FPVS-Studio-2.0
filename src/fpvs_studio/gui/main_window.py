@@ -76,7 +76,7 @@ class StudioMainWindow(QMainWindow):
         self._on_request_open_project = on_request_open_project
         self._on_request_manage_projects = on_request_manage_projects
         self._on_request_settings = on_request_settings
-        self.setWindowTitle("FPVS Studio (Alpha)")
+        self.setWindowTitle("FPVS Studio Beta")
         self._auto_workspace_sized = False
         self._auto_workspace_return_size: tuple[int, int] | None = None
         self._auto_workspace_size: tuple[int, int] | None = None
@@ -286,7 +286,7 @@ class StudioMainWindow(QMainWindow):
         self.settings_action.triggered.connect(self._request_settings)
         self.launch_action = QAction("Launch Experiment", self)
         launch_help = (
-            "Launch Experiment on the current alpha test-mode runtime path. "
+            "Launch Experiment on the current beta test-mode runtime path. "
             "Launch checks run automatically before participant entry."
         )
         self.launch_action.setToolTip(launch_help)
@@ -364,5 +364,5 @@ class StudioMainWindow(QMainWindow):
     def _update_window_title(self, *_args: object) -> None:
         dirty_prefix = "*" if self.document.dirty else ""
         self.setWindowTitle(
-            f"{dirty_prefix}{self.document.project.meta.name} - FPVS Studio (Alpha)"
+            f"{dirty_prefix}{self.document.project.meta.name} - FPVS Studio Beta"
         )
