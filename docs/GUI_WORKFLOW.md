@@ -123,7 +123,8 @@ and materialization still surface invalid or inconsistent source details before 
 launch.
 
 The `File` menu exposes manage-projects, settings, `Check for Updates`, and `About`
-actions. Settings shows the current app version from package metadata.
+actions. Settings shows the current app version from `pyproject.toml` during source-tree
+runs and from package metadata in bundled installs.
 Moving a project to the Recycle Bin remains a controller-owned filesystem operation
 guarded by `project.json` validation, confirmation, a post-action path check, and a disk
 refresh of the manage list after each attempt. `Check for Updates` queries GitHub

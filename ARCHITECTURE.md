@@ -53,7 +53,8 @@ edits. The full quality gate also runs this check.
 
 The current app version is declared once in `pyproject.toml`. The Python distribution
 name is `fpvs-studio`, while the user-facing application name remains FPVS Studio.
-`src/fpvs_studio/__init__.py` derives `__version__` from installed package metadata, and
+`src/fpvs_studio/__init__.py` reads `__version__` from source-tree `pyproject.toml`
+when present and falls back to installed package metadata for bundled installs.
 `tests/unit/test_package_metadata.py` guards the contract. Use `docs/PACKAGING.md` for
 the developer version-bump and build workflow.
 

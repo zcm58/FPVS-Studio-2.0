@@ -16,8 +16,9 @@ settings, templates, or runtime/session contracts.
 - Keep build outputs under ignored `build/` and `dist/` paths.
 - Keep packaging dependencies in the `packaging` optional dependency group.
 - Keep app-version changes centralized in `pyproject.toml`; `src/fpvs_studio/__init__.py`
-  must derive `__version__` from installed package metadata, and
-  `tests/unit/test_package_metadata.py` guards this.
+  must read `__version__` from source-tree `pyproject.toml` when present and fall back
+  to installed package metadata for bundled installs, and `tests/unit/test_package_metadata.py`
+  guards this.
 - If adding an app icon, prefer `packaging/assets/fpvs-studio.ico`, wire it through the
   PyInstaller spec and Inno Setup script, and update GUI application-window icon loading
   in the same change.

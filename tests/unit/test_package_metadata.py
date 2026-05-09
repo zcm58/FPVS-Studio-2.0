@@ -38,7 +38,8 @@ def test_package_version_matches_pyproject_version() -> None:
     pyproject_match = re.search(r'^version = "([^"]+)"$', PYPROJECT_TEXT, re.MULTILINE)
 
     assert pyproject_match is not None
-    assert "__version__ = version(\"fpvs-studio\")" in PACKAGE_INIT_TEXT
+    assert "version(\"fpvs-studio\")" in PACKAGE_INIT_TEXT
+    assert "_source_tree_version() or version(\"fpvs-studio\")" in PACKAGE_INIT_TEXT
     assert "__version__ = \"0.1.0\"" not in PACKAGE_INIT_TEXT
     assert __version__ == pyproject_match.group(1)
 

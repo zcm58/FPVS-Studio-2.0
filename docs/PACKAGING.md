@@ -25,8 +25,9 @@ Before building a release candidate, update the package metadata version:
 - `pyproject.toml`: `[project] version = "X.Y.Z"`
 
 That is the only developer entry point for changing the app version.
-`src/fpvs_studio/__init__.py` derives `__version__` from installed package metadata,
-and the PyInstaller spec includes that metadata in the bundled app.
+`src/fpvs_studio/__init__.py` reads `__version__` from source-tree `pyproject.toml`
+when present and falls back to installed package metadata for bundled installs.
+The PyInstaller spec includes package metadata in the bundled app.
 The package distribution name is `fpvs-studio`; the GUI and executable still use the
 display name `FPVS Studio`.
 
@@ -39,7 +40,7 @@ Use simple semantic versioning:
 - minor version for new user-facing features
 - major version only for breaking project/runtime compatibility changes
 
-The package metadata test fails if package metadata and the importable app version drift:
+The package metadata test fails if the importable app version and `pyproject.toml` drift:
 
 ```powershell
 .\.venv3.10\Scripts\python -m pip install -e ".[dev,engine,packaging]"
