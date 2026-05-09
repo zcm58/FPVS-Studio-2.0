@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from pathlib import Path
 
+from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QMessageBox
 from tests.gui.helpers import open_created_project
 
@@ -101,6 +102,69 @@ def test_startup_update_check_prompts_only_when_update_available(
     assert "projects, templates, settings, run history, and logs" in dialog.status_label.text()
     assert dialog.download_button.isEnabled()
     assert dialog.close_button.text() == "Remind Me Later"
+
+
+def test_update_dialog_initial_result_is_themed_and_remind_later_dismisses(qtbot) -> None:
+    dialog = UpdateDialog(auto_check=False, initial_result=_available_update())
+    qtbot.addWidget(dialog)
+    dialog.show()
+
+    qtbot.waitUntil(lambda: dialog.close_button.text() == "Remind Me Later")
+    assert "QDialog#update_dialog" in dialog.styleSheet()
+    assert "QPushButton" in dialog.styleSheet()
+
+    dialog.close_button.click()
+
+    qtbot.waitUntil(lambda: not dialog.isVisible())
+
+
+def test_startup_update_prompt_remind_later_returns_to_welcome(
+    qapp,
+    qtbot,
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    controller = StudioController(qapp)
+    fpvs_root_dir = tmp_path / "fpvs-root"
+    fpvs_root_dir.mkdir(parents=True, exist_ok=True)
+    controller.save_fpvs_root_dir(fpvs_root_dir)
+    controller._startup_update_check_callback = _available_update
+    original_exec = UpdateDialog.exec
+    dialog_versions: list[str] = []
+
+    def _click_remind_later(dialog: UpdateDialog) -> int:
+        dialog_versions.append(dialog.current_version_label.text())
+        QTimer.singleShot(0, dialog.close_button.click)
+        return original_exec(dialog)
+
+    monkeypatch.setattr(UpdateDialog, "exec", _click_remind_later)
+
+    controller.show_welcome()
+    assert controller.welcome_window is not None
+    qtbot.addWidget(controller.welcome_window)
+
+    qtbot.waitUntil(lambda: bool(dialog_versions), timeout=5000)
+    qtbot.waitUntil(lambda: controller._startup_update_thread is None, timeout=5000)
+
+    assert dialog_versions == ["Current version: 0.9.0b1"]
+    assert controller.welcome_window.isVisible()
+
+
+def test_update_dialog_action_buttons_fit_text_at_compact_width(qtbot) -> None:
+    dialog = UpdateDialog(auto_check=False, initial_result=_available_update())
+    qtbot.addWidget(dialog)
+    dialog.resize(dialog.minimumSizeHint())
+    dialog.show()
+    qtbot.waitUntil(lambda: dialog.close_button.width() > 0)
+
+    for button in (
+        dialog.check_button,
+        dialog.download_button,
+        dialog.install_button,
+        dialog.close_button,
+    ):
+        required_width = button.fontMetrics().horizontalAdvance(button.text()) + 20
+        assert button.width() >= required_width, button.text()
 
 
 def test_startup_update_check_is_silent_when_no_update_or_error(

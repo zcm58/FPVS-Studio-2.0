@@ -65,7 +65,9 @@ PyInstaller spec at `packaging/pyinstaller/fpvs_studio.spec` and writes ignored 
 artifacts under `build/` and `dist/`. Installer builds use `scripts/build_installer.ps1`,
 which wraps the whole PyInstaller onedir folder with the checked-in Inno Setup script at
 `packaging/inno/fpvs_studio.iss` and writes `dist\installer\FPVS-Studio-Setup-*.exe`.
-GitHub release uploads remain a manual release step.
+`scripts/smoke_packaged_app.ps1` runs the packaged executable in a bounded diagnostic
+mode to verify installed metadata and update-dialog behavior before release. GitHub
+release uploads remain a manual release step.
 
 The shared app icon lives in `packaging/assets/fpvs-studio.ico` for release tooling and
 `src/fpvs_studio/assets/fpvs-studio.ico` for GUI window icons. README/GitHub branding
@@ -244,6 +246,7 @@ index.
 - Preprocessing: `.\scripts\check_preprocessing.ps1`
 - Local Windows executable build: `.\scripts\build_exe.ps1`
 - Local Windows installer build: `.\scripts\build_installer.ps1`
+- Packaged app smoke check: `.\scripts\smoke_packaged_app.ps1`
 - Line-count report: `.\scripts\report_line_counts.ps1`
 - Workspace cleanup: `.\scripts\clean_workspace.ps1`
 

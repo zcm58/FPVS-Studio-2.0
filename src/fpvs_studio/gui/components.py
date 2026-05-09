@@ -802,13 +802,40 @@ def mark_error_text(label: QLabel) -> None:
 def studio_theme_stylesheet() -> str:
     return f"""
     QMainWindow#studio_main_window,
-    QStackedWidget#main_stack {{
+    QStackedWidget#main_stack,
+    QDialog#update_dialog {{
         background-color: {COLOR_PAGE_BACKGROUND};
         color: {COLOR_TEXT_PRIMARY};
         font-size: {FONT_SIZE_BODY}px;
     }}
     QMainWindow#studio_main_window QWidget {{
         font-size: {FONT_SIZE_BODY}px;
+    }}
+    QLabel#update_dialog_title {{
+        color: {COLOR_TEXT_PRIMARY};
+        font-size: {FONT_SIZE_SECTION_TITLE}px;
+        font-weight: 700;
+    }}
+    QLabel#update_dialog_status,
+    QLabel#update_dialog_notes {{
+        color: {COLOR_TEXT_PRIMARY};
+        font-size: {FONT_SIZE_BODY}px;
+    }}
+    QLabel#update_dialog_notes_heading {{
+        color: {COLOR_TEXT_PRIMARY};
+        font-size: {FONT_SIZE_CONTROL}px;
+        font-weight: 700;
+    }}
+    QDialog#update_dialog QProgressBar {{
+        border: 1px solid {COLOR_BORDER_SOFT};
+        border-radius: {CARD_CORNER_RADIUS}px;
+        background-color: {COLOR_SURFACE_ELEVATED};
+        min-height: 14px;
+        text-align: center;
+    }}
+    QDialog#update_dialog QProgressBar::chunk {{
+        border-radius: {CARD_CORNER_RADIUS}px;
+        background-color: {COLOR_PRIMARY};
     }}
     QTabWidget#main_tabs::pane {{
         border: 1px solid {COLOR_BORDER};

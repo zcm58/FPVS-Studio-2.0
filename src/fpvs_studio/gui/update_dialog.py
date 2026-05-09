@@ -21,7 +21,11 @@ from PySide6.QtWidgets import (
 )
 
 from fpvs_studio import __version__
-from fpvs_studio.gui.components import mark_primary_action, mark_secondary_action
+from fpvs_studio.gui.components import (
+    apply_studio_theme,
+    mark_primary_action,
+    mark_secondary_action,
+)
 from fpvs_studio.updates.downloader import download_installer
 from fpvs_studio.updates.github_releases import check_for_updates
 from fpvs_studio.updates.installer import launch_installer
@@ -77,7 +81,7 @@ class UpdateDialog(QDialog):
         super().__init__(parent)
         self.setObjectName("update_dialog")
         self.setWindowTitle("Check for Updates")
-        self.setMinimumWidth(520)
+        self.setMinimumWidth(680)
 
         self._check_callback = check_callback
         self._download_callback = download_callback
@@ -142,28 +146,38 @@ class UpdateDialog(QDialog):
         layout.addLayout(button_row)
 
         self.button_box = QDialogButtonBox(self)
+        self.button_box.setObjectName("update_dialog_button_box")
         self.check_button = self.button_box.addButton(
             "Check Again",
             QDialogButtonBox.ButtonRole.ActionRole,
         )
+        self.check_button.setObjectName("update_dialog_check_button")
         self.download_button = self.button_box.addButton(
             "Download Update",
             QDialogButtonBox.ButtonRole.ActionRole,
         )
+        self.download_button.setObjectName("update_dialog_download_button")
         self.install_button = self.button_box.addButton(
             "Install and Restart",
             QDialogButtonBox.ButtonRole.ActionRole,
         )
-        self.close_button = self.button_box.addButton(QDialogButtonBox.StandardButton.Close)
+        self.install_button.setObjectName("update_dialog_install_button")
+        self.close_button = self.button_box.addButton(
+            "Close",
+            QDialogButtonBox.ButtonRole.RejectRole,
+        )
         self.close_button.setObjectName("update_dialog_close_button")
         mark_secondary_action(self.check_button)
         mark_primary_action(self.download_button)
         mark_primary_action(self.install_button)
+        mark_secondary_action(self.close_button)
         self.check_button.clicked.connect(self.start_update_check)
         self.download_button.clicked.connect(self.start_download)
         self.install_button.clicked.connect(self.install_and_restart)
-        self.close_button.clicked.connect(self.reject)
+        self.close_button.clicked.connect(self._dismiss_dialog)
         layout.addWidget(self.button_box)
+        apply_studio_theme(self)
+        self._fit_action_buttons()
 
     @Slot()
     def start_update_check(self) -> None:
@@ -266,11 +280,11 @@ class UpdateDialog(QDialog):
                 "install folder."
             )
             self.download_button.setEnabled(True)
-            self.close_button.setText("Remind Me Later")
+            self._set_close_button_text("Remind Me Later")
         else:
             self.status_label.setText("FPVS Studio is up to date.")
             self.download_button.setEnabled(False)
-            self.close_button.setText("Close")
+            self._set_close_button_text("Close")
         self.check_button.setEnabled(True)
         self.install_button.setEnabled(False)
         self.close_button.setEnabled(True)
@@ -302,7 +316,7 @@ class UpdateDialog(QDialog):
         self.download_button.setEnabled(False)
         self.install_button.setEnabled(False)
         self.close_button.setEnabled(True)
-        self.close_button.setText("Close")
+        self._set_close_button_text("Close")
 
     @Slot(int, object)
     def _handle_download_progress(self, downloaded: int, total: object) -> None:
@@ -324,7 +338,7 @@ class UpdateDialog(QDialog):
         self.install_button.setEnabled(False)
         self.check_button.setEnabled(True)
         self.close_button.setEnabled(True)
-        self.close_button.setText("Close")
+        self._set_close_button_text("Close")
 
     def _set_busy_state(self, status_text: str) -> None:
         self.status_label.setText(status_text)
@@ -332,6 +346,30 @@ class UpdateDialog(QDialog):
         self.download_button.setEnabled(False)
         self.install_button.setEnabled(False)
         self.close_button.setEnabled(False)
+
+    @Slot()
+    def _dismiss_dialog(self) -> None:
+        self.close_button.setEnabled(False)
+        QTimer.singleShot(0, self.reject)
+
+    def _set_close_button_text(self, text: str) -> None:
+        self.close_button.setText(text)
+        self._fit_action_buttons()
+
+    def _fit_action_buttons(self) -> None:
+        buttons = (
+            self.check_button,
+            self.download_button,
+            self.install_button,
+            self.close_button,
+        )
+        for button in buttons:
+            text_width = button.fontMetrics().horizontalAdvance(button.text())
+            button.setMinimumWidth(max(button.minimumSizeHint().width(), text_width + 36))
+        required_width = sum(button.minimumWidth() for button in buttons) + (
+            12 * max(0, len(buttons) - 1)
+        ) + 36
+        self.setMinimumWidth(max(self.minimumWidth(), required_width))
 
     def _open_release_notes(self) -> None:
         if self._result is None or self._result.release_url is None:

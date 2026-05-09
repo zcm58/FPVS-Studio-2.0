@@ -31,7 +31,7 @@ The PyInstaller spec includes package metadata in the bundled app.
 The package distribution name is `fpvs-studio`; the GUI and executable still use the
 display name `FPVS Studio`.
 
-For the current beta package, use the PEP 440-compatible package version `0.9.1b4`.
+For the current beta package, use the PEP 440-compatible package version `0.9.0b7`.
 The GitHub Release title can still use the friendlier label `v0.9.1-beta`.
 
 Use simple semantic versioning:
@@ -165,7 +165,25 @@ Then build the setup EXE:
 Expected output for the current beta package:
 
 ```text
-dist\installer\FPVS-Studio-Setup-0.9.1b4.exe
+dist\installer\FPVS-Studio-Setup-0.9.0b7.exe
+```
+
+The release wrapper also runs the packaged-app smoke check before building the installer.
+That check launches the bundled executable in a bounded diagnostic mode and verifies that
+the bundled package metadata matches `pyproject.toml`, the update dialog has the shared
+theme applied, `Remind Me Later` dismisses an update prompt, and update-dialog action
+buttons fit their labels.
+
+To run that smoke check against an existing bundle:
+
+```powershell
+.\scripts\smoke_packaged_app.ps1
+```
+
+To run it against the installed app:
+
+```powershell
+.\scripts\smoke_packaged_app.ps1 -ExePath "$env:LOCALAPPDATA\Programs\FPVS Studio\FPVS Studio.exe"
 ```
 
 If Inno Setup is installed somewhere custom:

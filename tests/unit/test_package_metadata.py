@@ -15,6 +15,10 @@ PACKAGE_INIT_TEXT = (REPO_ROOT / "src" / "fpvs_studio" / "__init__.py").read_tex
 PYINSTALLER_SPEC_TEXT = (
     REPO_ROOT / "packaging" / "pyinstaller" / "fpvs_studio.spec"
 ).read_text(encoding="utf-8")
+BUILD_EXE_TEXT = (REPO_ROOT / "scripts" / "build_exe.ps1").read_text(encoding="utf-8")
+INNO_SCRIPT_TEXT = (REPO_ROOT / "packaging" / "inno" / "fpvs_studio.iss").read_text(
+    encoding="utf-8"
+)
 
 
 def _extract_list_assignment(name: str) -> str:
@@ -61,3 +65,16 @@ def test_pyinstaller_includes_psychopy_visual_lazy_imports() -> None:
     assert '"psychopy.visual.backends.pygletbackend"' in PYINSTALLER_SPEC_TEXT
     assert '"psychopy.visual.backends.glfwbackend"' in PYINSTALLER_SPEC_TEXT
     assert '"psychopy.visual.line"' in PYINSTALLER_SPEC_TEXT
+
+
+def test_build_exe_fails_on_stale_installed_package_metadata() -> None:
+    assert "Assert-PackageMetadataVersion" in BUILD_EXE_TEXT
+    assert "Assert-BundledPackageMetadataVersion" in BUILD_EXE_TEXT
+    assert "m.version('fpvs-studio')" in BUILD_EXE_TEXT
+    assert "Package version drift before PyInstaller build" in BUILD_EXE_TEXT
+
+
+def test_installer_removes_stale_fpvs_studio_metadata_before_update() -> None:
+    assert "[InstallDelete]" in INNO_SCRIPT_TEXT
+    assert r'Name: "{app}\_internal\fpvs_studio-*.dist-info"' in INNO_SCRIPT_TEXT
+    assert r'Name: "{app}\pyproject.toml"' in INNO_SCRIPT_TEXT
