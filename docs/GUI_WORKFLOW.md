@@ -80,8 +80,8 @@ The authoring window is organized around two user-facing modes:
   - the Display column exposes only display refresh rate and presentation background
     (`Black` or `Dark Gray`); current launches always use PsychoPy, beta test-mode,
     fullscreen playback, and the default display without exposing those as choices
-  - the Session column exposes repeats per condition, the random order seed, and
-    the fixed Space start key; condition order is always randomized within each block
+  - the Session column exposes repeats per condition and the fixed Space start key;
+    condition order is always randomized automatically for each launch
   - the Conditions step uses compact condition rows and a combined condition
     setup surface for condition list actions, name, trigger code, participant
     instructions, and base/oddball image source cards
@@ -128,13 +128,14 @@ Moving a project to the Recycle Bin remains a controller-owned filesystem operat
 guarded by `project.json` validation, confirmation, a post-action path check, and a disk
 refresh of the manage list after each attempt. `Check for Updates` queries GitHub
 Releases without blocking the GUI, shows current/latest versions and release notes,
-downloads the matching Windows installer with progress, and asks before closing FPVS
-Studio to launch the installer. A silent startup update check runs once after the
-Welcome window is shown; it stays silent unless an update is available. The Home page
-keeps full project descriptions in project data but shows a bounded preview under the
-project title to avoid launch-surface clipping. The `Tools` menu exposes standalone
-utilities such as Image Resizer; these utilities may use preprocessing services but must
-not silently mutate the active project.
+downloads the matching Windows installer with progress, supports this-launch-only
+`Remind Me Later`, and asks before closing FPVS Studio to launch the installer. Manual
+update-check failures show a clear try-again-later message. A silent startup update
+check runs once after the Welcome window is shown; it stays silent unless an update is
+available. The Home page keeps full project descriptions in project data but shows a
+bounded preview under the project title to avoid launch-surface clipping. The `Tools`
+menu exposes standalone utilities such as Image Resizer; these utilities may use
+preprocessing services but must not silently mutate the active project.
 
 ## GUI Implementation Map
 
@@ -205,8 +206,8 @@ The current GUI supports:
 - saving and reopening project state
 - launching ready projects from Home without exposing setup tabs
 - completing or revisiting project setup through the Setup Wizard
-- configuring repeats per condition and the random order seed; condition order is
-  randomized within each block and condition starts are fixed to `Press Space to begin`
+- configuring repeats per condition; condition order is randomized automatically for
+  each launch and condition starts are fixed to `Press Space to begin`
 - configuring display refresh rate and choosing a black or dark-gray presentation
   background
 - configuring fixation settings, including an optional fixation accuracy task

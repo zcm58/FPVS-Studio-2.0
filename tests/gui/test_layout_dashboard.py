@@ -1555,11 +1555,9 @@ def test_setup_wizard_experiment_and_fixation_steps_are_width_safe(
         "setup_wizard_experiment_settings_card_title",
     ) is None
     assert guide.session_structure_editor.block_count_spin.value() == 2
-    assert guide.session_structure_editor.generate_seed_button.text() == "New Seed"
-    assert guide.session_structure_editor.generate_seed_button.width() == 96
-    assert guide.session_structure_editor.generate_seed_button.minimumWidth() == 96
-    assert guide.session_structure_editor.generate_seed_button.maximumWidth() == 96
-    assert guide.session_structure_editor.seed_row_widget.objectName() == "session_seed_row"
+    assert not guide.session_structure_editor.generate_seed_button.isVisible()
+    assert not guide.session_structure_editor.session_seed_spin.isVisible()
+    assert not guide.session_structure_editor.seed_row_widget.isVisible()
     assert guide.session_structure_editor.session_layout.horizontalSpacing() == 12
     assert guide.session_structure_editor.session_layout.verticalSpacing() == 10
     assert not guide.runtime_settings_editor.runtime_background_scope_label.isVisible()
@@ -1568,8 +1566,12 @@ def test_setup_wizard_experiment_and_fixation_steps_are_width_safe(
     )
     assert "Display refresh rate" in experiment_labels
     assert "Repeats per condition" in experiment_labels
+    assert "Condition order" in experiment_labels
+    assert "randomized automatically" in experiment_labels
     assert "Experiment Settings" not in experiment_labels
     assert "Block count" not in experiment_labels
+    assert "Random order seed" not in experiment_labels
+    assert "New Seed" not in experiment_labels
     assert "Used during FPVS image presentation." not in experiment_labels
     assert len(
         [
@@ -1608,12 +1610,6 @@ def test_setup_wizard_experiment_and_fixation_steps_are_width_safe(
             experiment_card,
             QPoint(session_panel.width(), 0),
         ).x()
-        seed_button = guide.session_structure_editor.generate_seed_button
-        seed_spin = guide.session_structure_editor.session_seed_spin
-        assert abs(
-            seed_button.mapTo(experiment_card, QPoint(0, seed_button.height() // 2)).y()
-            - seed_spin.mapTo(experiment_card, QPoint(0, seed_spin.height() // 2)).y()
-        ) <= 1
         assert card_left >= 0
         assert card_right <= experiment_page.width()
         assert experiment_card.width() <= 880
@@ -1856,7 +1852,8 @@ def test_setup_wizard_review_uses_centered_confirmation_checklist(
     assert "Faces: base 3 images, oddball 3 images" not in label_text
     assert "Objects: base 3 images, oddball 3 images" not in label_text
     assert "Each condition will repeat 2 times in randomized block order" in label_text
-    assert "Random order seed:" in label_text
+    assert "Condition order is randomized automatically at launch" in label_text
+    assert "Random order seed:" not in label_text
     assert "Display: 60.00 Hz, Black background" in label_text
     assert "Fixation cross has been configured" in label_text
     assert "Launch requirements are satisfied" not in label_text
@@ -2595,7 +2592,7 @@ def test_home_launch_surface_shows_only_essential_project_session_metadata(
 
     assert condition_count_label.text() == "1"
     assert block_count_label.text() == "2"
-    assert fixation_label.text() == "Enabled"
+    assert fixation_label.text() == "Disabled"
     assert accuracy_label.text() == "Disabled"
     assert status_label.text().startswith("Status: ")
     assert subtitle_label.text() == "No description set yet."

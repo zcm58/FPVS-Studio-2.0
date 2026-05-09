@@ -671,9 +671,6 @@ class FixationSettingsEditor(QWidget):
 
     def refresh(self) -> None:
         fixation = self._document.project.settings.fixation_task
-        if not fixation.enabled:
-            self._document.update_fixation_settings(enabled=True)
-            return
         with QSignalBlocker(self.fixation_enabled_checkbox):
             self.fixation_enabled_checkbox.setChecked(True)
         with QSignalBlocker(self.fixation_accuracy_checkbox):

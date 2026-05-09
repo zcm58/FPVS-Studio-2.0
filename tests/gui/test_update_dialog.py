@@ -97,8 +97,10 @@ def test_startup_update_check_prompts_only_when_update_available(
     qtbot.waitUntil(lambda: bool(dialogs), timeout=5000)
 
     dialog = dialogs[0]
-    assert dialog.status_label.text() == "A new FPVS Studio version is available."
+    assert "A new FPVS Studio version is available." in dialog.status_label.text()
+    assert "projects, templates, settings, run history, and logs" in dialog.status_label.text()
     assert dialog.download_button.isEnabled()
+    assert dialog.close_button.text() == "Remind Me Later"
 
 
 def test_startup_update_check_is_silent_when_no_update_or_error(
@@ -182,9 +184,13 @@ def test_update_dialog_downloads_then_launches_installer(
 
     dialog.start_update_check()
     qtbot.waitUntil(lambda: dialog.download_button.isEnabled())
-    assert dialog.status_label.text() == "A new FPVS Studio version is available."
+    assert "A new FPVS Studio version is available." in dialog.status_label.text()
+    assert "projects, templates, settings, run history, and logs" in dialog.status_label.text()
+    assert "0.9.0b1" in dialog.current_version_label.text()
     assert "0.9.0b2" in dialog.latest_version_label.text()
     assert "Improved update flow" in dialog.notes_label.text()
+    assert dialog.release_notes_button.isEnabled()
+    assert dialog.close_button.text() == "Remind Me Later"
 
     dialog.start_download()
     qtbot.waitUntil(lambda: dialog.install_button.isEnabled())
@@ -222,6 +228,26 @@ def test_update_dialog_reports_no_update(qtbot) -> None:
 
     assert dialog.download_button.isEnabled() is False
     assert dialog.install_button.isEnabled() is False
+    assert dialog.close_button.text() == "Close"
+
+
+def test_update_dialog_reports_manual_server_error(qtbot) -> None:
+    dialog = UpdateDialog(
+        auto_check=False,
+        check_callback=lambda: (_ for _ in ()).throw(RuntimeError("network unavailable")),
+    )
+    qtbot.addWidget(dialog)
+    dialog.show()
+
+    dialog.start_update_check()
+    qtbot.waitUntil(
+        lambda: "try again later from File > Check for Updates" in dialog.status_label.text()
+    )
+
+    assert "network unavailable" in dialog.notes_label.text()
+    assert dialog.download_button.isEnabled() is False
+    assert dialog.install_button.isEnabled() is False
+    assert dialog.close_button.text() == "Close"
 
 
 def _download_with_progress(

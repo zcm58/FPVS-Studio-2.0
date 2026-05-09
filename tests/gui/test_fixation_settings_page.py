@@ -146,7 +146,7 @@ def test_fixation_settings_editor_caps_roughly_120_seconds_at_fifteen(
     )
 
 
-def test_fixation_settings_editor_keeps_color_changes_enabled(
+def test_fixation_settings_editor_refresh_does_not_enable_color_changes(
     qtbot,
     tmp_path: Path,
 ) -> None:
@@ -156,9 +156,16 @@ def test_fixation_settings_editor_keeps_color_changes_enabled(
     QApplication.processEvents()
 
     fixation = document.project.settings.fixation_task
-    assert fixation.enabled is True
+    assert fixation.enabled is False
     assert not editor.fixation_enabled_checkbox.isVisible()
     assert editor.fixation_accuracy_checkbox.isEnabled()
+
+    editor.fixation_accuracy_checkbox.setChecked(True)
+    QApplication.processEvents()
+
+    fixation = document.project.settings.fixation_task
+    assert fixation.enabled is True
+    assert fixation.accuracy_task_enabled is True
 
 
 def test_fixation_settings_editor_shows_feasibility_without_conditions(

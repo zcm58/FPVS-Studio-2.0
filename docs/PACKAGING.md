@@ -159,9 +159,11 @@ launch, update install, and uninstall behavior.
 
 Installed users can use `File > Check for Updates`. FPVS Studio also runs one silent
 startup check after the Welcome window appears. The app checks GitHub Releases, compares
-the installed `fpvs_studio.__version__` with the latest eligible release tag, and
-downloads the matching `FPVS-Studio-Setup-*.exe` asset only after the user chooses
-`Download Update`. Startup checks stay silent unless an update is available.
+the installed `fpvs_studio.__version__` with the latest eligible release tag, shows the
+current and latest versions plus a short release-notes summary, and downloads the
+matching `FPVS-Studio-Setup-*.exe` asset only after the user chooses `Download Update`.
+Manual update-check failures show a clear try-again-later message. Startup checks stay
+silent unless an update is available.
 
 Release requirements for the updater:
 
@@ -175,8 +177,10 @@ Release requirements for the updater:
 The updater stores downloaded installers in a user-writable update cache, never in the
 install folder or project folders. On `Install and Restart`, FPVS Studio asks for final
 confirmation, launches the downloaded Inno installer with `/RELAUNCH=1`, and exits. The
-installer remains responsible for replacing app files and relaunching FPVS Studio. Normal
-first-time installer runs still show the standard launch checkbox on the final page.
+installer remains responsible for replacing app files and relaunching FPVS Studio. User
+projects, app settings, condition templates, run history, and logs remain outside the
+install folder during updates. Normal first-time installer runs still show the standard
+launch checkbox on the final page.
 
 ## App Icon And Branding
 

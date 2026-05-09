@@ -58,7 +58,7 @@ class SessionStructureEditor(QWidget):
         self.session_seed_spin.setToolTip(
             "Controls the randomized condition order within each block."
         )
-        self.session_seed_spin.valueChanged.connect(self._apply_session_settings)
+        self.session_seed_spin.setVisible(False)
 
         self.generate_seed_button = QPushButton("New Seed", self)
         self.generate_seed_button.setObjectName(
@@ -68,10 +68,10 @@ class SessionStructureEditor(QWidget):
         self.generate_seed_button.setToolTip(
             "Generate a random order seed that has not been used by a completed session."
         )
-        self.generate_seed_button.clicked.connect(self._generate_seed)
+        self.generate_seed_button.setVisible(False)
 
         self.seed_help_label = QLabel(
-            "Condition order is randomized within each block using this seed.",
+            "Condition order is randomized automatically for each launch.",
             self,
         )
         self.seed_help_label.setObjectName(
@@ -113,6 +113,7 @@ class SessionStructureEditor(QWidget):
         self.seed_row_widget.setObjectName(
             _prefixed_object_name(object_name_prefix, "session_seed_row")
         )
+        self.seed_row_widget.setVisible(False)
         self.seed_row_widget.setMinimumWidth(220)
         seed_layout = QHBoxLayout(self.seed_row_widget)
         seed_layout.setContentsMargins(0, 0, 0, 0)
@@ -124,11 +125,7 @@ class SessionStructureEditor(QWidget):
             self._form_label("Repeats per condition"),
             self.block_count_spin,
         )
-        self.session_layout.addRow(
-            self._form_label("Random order seed"),
-            self.seed_row_widget,
-        )
-        self.session_layout.addRow("", self.seed_help_label)
+        self.session_layout.addRow(self._form_label("Condition order"), self.seed_help_label)
         self.session_layout.addRow(self._form_label("Start key"), self.continue_key_edit)
 
         layout = QVBoxLayout(self)
@@ -192,7 +189,6 @@ class SessionStructureEditor(QWidget):
         try:
             self._document.update_session_settings(
                 block_count=self.block_count_spin.value(),
-                session_seed=self.session_seed_spin.value(),
                 randomize_conditions_per_block=True,
                 inter_condition_mode=InterConditionMode.MANUAL_CONTINUE,
                 inter_condition_break_seconds=0.0,

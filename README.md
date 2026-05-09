@@ -50,7 +50,7 @@ The Setup Wizard walks through:
 
 - `Project`: project name, description, and experiment template.
 - `Conditions`: condition names, trigger codes, instructions, and image folders.
-- `Experiment`: display refresh rate, background color, repeats, and random order seed.
+- `Experiment`: display refresh rate, background color, and repeats per condition.
 - `Fixation`: fixation cross timing and target schedule.
 - `Response`: optional fixation accuracy tracking.
 - `Review`: final readiness summary before returning home.
@@ -116,10 +116,11 @@ not replace them.
 
 ## Updating FPVS Studio
 
-Use `File > Check for Updates` inside FPVS Studio. If a newer release is available, the
-app can download the installer, show progress, and restart into the installer after you
-confirm. Updates replace the application files while leaving your projects, settings,
-templates, run history, and logs outside the install folder.
+Use `File > Check for Updates` inside FPVS Studio. FPVS Studio checks GitHub Releases,
+shows the current and latest versions, and displays a short "What's New" summary when an
+update is available. The app can download the installer, show progress, and restart into
+the installer after you confirm. Updates replace the application files while leaving your
+projects, settings, templates, run history, and logs outside the install folder.
 
 ## Current Beta Notes
 

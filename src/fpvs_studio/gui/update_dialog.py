@@ -155,6 +155,7 @@ class UpdateDialog(QDialog):
             QDialogButtonBox.ButtonRole.ActionRole,
         )
         self.close_button = self.button_box.addButton(QDialogButtonBox.StandardButton.Close)
+        self.close_button.setObjectName("update_dialog_close_button")
         mark_secondary_action(self.check_button)
         mark_primary_action(self.download_button)
         mark_primary_action(self.install_button)
@@ -259,11 +260,17 @@ class UpdateDialog(QDialog):
             self.notes_label.setText("Release notes will appear when an update is available.")
 
         if result.update_available and result.installer_asset is not None:
-            self.status_label.setText("A new FPVS Studio version is available.")
+            self.status_label.setText(
+                "A new FPVS Studio version is available. Updates replace app files only; "
+                "projects, templates, settings, run history, and logs stay outside the "
+                "install folder."
+            )
             self.download_button.setEnabled(True)
+            self.close_button.setText("Remind Me Later")
         else:
             self.status_label.setText("FPVS Studio is up to date.")
             self.download_button.setEnabled(False)
+            self.close_button.setText("Close")
         self.check_button.setEnabled(True)
         self.install_button.setEnabled(False)
         self.close_button.setEnabled(True)
@@ -286,15 +293,16 @@ class UpdateDialog(QDialog):
     @Slot(object)
     def _handle_task_error(self, error: object) -> None:
         self.status_label.setText(
-            "The update check could not be completed. You can still visit GitHub "
-            "Releases manually."
+            "The update check could not be completed. Check your internet connection "
+            "and try again later from File > Check for Updates."
         )
-        self.notes_label.setText(str(error))
+        self.notes_label.setText(str(error) or "GitHub Releases could not be reached.")
         self.progress_bar.setVisible(False)
         self.check_button.setEnabled(True)
         self.download_button.setEnabled(False)
         self.install_button.setEnabled(False)
         self.close_button.setEnabled(True)
+        self.close_button.setText("Close")
 
     @Slot(int, object)
     def _handle_download_progress(self, downloaded: int, total: object) -> None:
@@ -316,6 +324,7 @@ class UpdateDialog(QDialog):
         self.install_button.setEnabled(False)
         self.check_button.setEnabled(True)
         self.close_button.setEnabled(True)
+        self.close_button.setText("Close")
 
     def _set_busy_state(self, status_text: str) -> None:
         self.status_label.setText(status_text)

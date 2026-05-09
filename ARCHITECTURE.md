@@ -133,8 +133,9 @@ Current planned seams:
   guarded by pytest-qt coverage that checks all six steps at `1120x720` for stable
   frame positioning, disabled vertical scrolling, and visible child-widget clipping.
   Experiment combines display and session settings in one compact centered card; session
-  order is always randomized within each block using the random order seed while legacy
-  fixed-order fields stay schema-compatible. Fixation handles schedule/timing, and
+  order is always randomized automatically at launch while the realized seed remains
+  runtime metadata for reproducibility and legacy fixed-order fields stay
+  schema-compatible. Fixation handles schedule/timing, and
   Response handles accuracy tracking, response key/window, appearance, and live preview.
   Display settings are limited to refresh rate and black/dark-gray background choices. Detailed
   Conditions no longer exposes a wizard advanced editor; duty-cycle selection is

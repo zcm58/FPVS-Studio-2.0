@@ -133,7 +133,6 @@ def test_session_and_fixation_settings_round_trip(
 
     session_page = window.session_structure_page
     session_page.block_count_spin.setValue(3)
-    session_page.session_seed_spin.setValue(123456)
     assert not hasattr(session_page, "randomize_checkbox")
 
     fixation_page = window.fixation_cross_settings_page
@@ -175,7 +174,6 @@ def test_session_and_fixation_settings_round_trip(
     session = reopened_project.settings.session
     fixation = reopened_project.settings.fixation_task
     assert session.block_count == 3
-    assert session.session_seed == 123456
     assert session.randomize_conditions_per_block is True
     assert session.inter_condition_mode == InterConditionMode.MANUAL_CONTINUE
     assert session.continue_key == "space"
@@ -263,11 +261,12 @@ def test_session_structure_uses_space_start_without_timed_break_controls(
         for row in range(page.session_layout.rowCount())
         if page.session_layout.itemAt(row, QFormLayout.ItemRole.LabelRole) is not None
     ]
-    assert "Random order seed" in form_labels
-    assert page.session_seed_spin.toolTip()
-    assert page.generate_seed_button.toolTip()
+    assert "Random order seed" not in form_labels
+    assert "Condition order" in form_labels
+    assert not page.session_seed_spin.isVisible()
+    assert not page.generate_seed_button.isVisible()
     assert page.seed_help_label.text() == (
-        "Condition order is randomized within each block using this seed."
+        "Condition order is randomized automatically for each launch."
     )
     assert not page.inter_condition_mode_combo.isVisible()
     assert not page.break_seconds_spin.isVisible()
@@ -277,7 +276,7 @@ def test_session_structure_uses_space_start_without_timed_break_controls(
     assert page.continue_key_edit.text() == "space"
 
 
-def test_session_new_seed_skips_completed_prior_seed(
+def test_document_new_seed_skips_completed_prior_seed(
     qtbot,
     controller: StudioController,
     tmp_path: Path,
@@ -309,11 +308,10 @@ def test_session_new_seed_skips_completed_prior_seed(
         lambda: _DeterministicSystemRandom(),
     )
 
-    page = window.setup_dashboard_page.session_structure_editor
-    qtbot.mouseClick(page.generate_seed_button, Qt.MouseButton.LeftButton)
+    generated_seed = window.document.generate_new_session_seed()
 
+    assert generated_seed == 202
     assert window.document.project.settings.session.session_seed == 202
-    assert page.session_seed_spin.value() == 202
 
 
 def test_compile_session_replaces_completed_prior_seed_before_launch(

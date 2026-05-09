@@ -840,7 +840,7 @@ class SetupWizardPage(QWidget):
         experiment_lines = (
             f"Each condition will repeat {block_count} {repeat_word} "
             f"in randomized block order",
-            f"Random order seed: {session.session_seed}",
+            "Condition order is randomized automatically at launch",
             f"Display: {self.runtime_settings_editor.current_refresh_hz():.2f} Hz, "
             f"{background_label}",
         )
