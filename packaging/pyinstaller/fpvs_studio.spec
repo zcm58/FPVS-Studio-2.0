@@ -49,10 +49,14 @@ def _copy_metadata(distribution_name: str) -> list[tuple[str, str]]:
 hiddenimports = []
 hiddenimports += _collect_submodules("fpvs_studio")
 hiddenimports += _collect_submodules("serial")
+hiddenimports += _collect_submodules("psychopy.visual.backends")
 hiddenimports += [
     "psychopy",
     "psychopy.core",
     "psychopy.visual",
+    "psychopy.visual.backends",
+    "psychopy.visual.backends.glfwbackend",
+    "psychopy.visual.backends.pygletbackend",
     "psychopy.hardware",
     "psychopy.hardware.keyboard",
     "psychtoolbox",

@@ -45,6 +45,8 @@ The authoring window is organized around two user-facing modes:
 
 - `Home`
   - daily-use launch surface for ready projects
+  - keeps the main `File` and `Tools` menus available while preserving the same centered
+    launch-card placement used by the menu-free home surface
   - a centered project card with project title, description, launch readiness badge, condition count, block
     count, fixation cross status, accuracy tracking status, project open/create
     actions, setup editing, and a prominent centered `Launch Experiment`
@@ -120,12 +122,15 @@ source-folder import path is permissive like guided Conditions import; strict in
 and materialization still surface invalid or inconsistent source details before runtime
 launch.
 
-The `File` menu exposes manage-projects and settings actions. Moving a project to the
-Recycle Bin remains a controller-owned filesystem operation guarded by `project.json`
-validation, confirmation, a post-action path check, and a disk refresh of the manage
-list after each attempt. The `Tools` menu exposes standalone utilities such as Image
-Resizer; these utilities may use preprocessing services but must not silently mutate the
-active project.
+The `File` menu exposes manage-projects, settings, and `Check for Updates` actions.
+Moving a project to the Recycle Bin remains a controller-owned filesystem operation
+guarded by `project.json` validation, confirmation, a post-action path check, and a disk
+refresh of the manage list after each attempt. `Check for Updates` queries GitHub
+Releases without blocking the GUI, shows current/latest versions and release notes,
+downloads the matching Windows installer with progress, and asks before closing FPVS
+Studio to launch the installer. The `Tools` menu exposes standalone utilities such as
+Image Resizer; these utilities may use preprocessing services but must not silently
+mutate the active project.
 
 ## GUI Implementation Map
 
@@ -160,6 +165,9 @@ active project.
 - Project management lives in `src/fpvs_studio/gui/manage_projects_dialog.py`; it uses
   shared component-layer cards, path labels, status badges, and button role helpers while
   leaving project discovery and deletion side effects in the controller.
+- In-app update presentation lives in `src/fpvs_studio/gui/update_dialog.py`; release
+  parsing, version comparison, installer download, and installer launch helpers stay in
+  `src/fpvs_studio/updates/`.
 - Standalone image resizing lives in `src/fpvs_studio/gui/image_resizer_page.py`; it uses
   the shared component layer and delegates batch work to preprocessing through Qt workers.
 
@@ -199,6 +207,7 @@ The current GUI supports:
   (Space within 1.0 s of each fixation color change)
 - configuring fixed or randomized fixation target counts per condition run with
   deterministic no-immediate-repeat behavior across consecutive compiled runs
+- checking for app updates from `File > Check for Updates`
 - authoring multiple conditions
 - importing base and oddball image folders
 - normalizing inconsistent condition image folders to project-local PNG copies

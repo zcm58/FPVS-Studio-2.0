@@ -28,6 +28,7 @@ from fpvs_studio.gui.home_page import HomePage
 from fpvs_studio.gui.image_resizer_page import ImageResizerPage
 from fpvs_studio.gui.run_page import ParticipantNumberDialog
 from fpvs_studio.gui.setup_wizard_page import SetupWizardPage
+from fpvs_studio.gui.update_dialog import UpdateDialog
 from fpvs_studio.gui.window_helpers import (
     _LAUNCH_INTERSTITIAL_DURATION_MS,
     _launcher_readiness_report,
@@ -152,8 +153,9 @@ class StudioMainWindow(QMainWindow):
     def show_home(self) -> None:
         self.flush_pending_edits()
         self.home_page.refresh()
-        self._set_home_chrome_visible(False)
+        self._set_home_chrome_visible(True, status_visible=False)
         self._apply_compact_window_size()
+        self._sync_home_chrome_offset()
         self.main_stack.setCurrentWidget(self.home_page)
 
     def show_setup_wizard(self) -> None:
@@ -184,10 +186,19 @@ class StudioMainWindow(QMainWindow):
     def flush_pending_edits(self) -> None:
         self.setup_wizard_page.flush_pending_edits()
 
-    def _set_home_chrome_visible(self, visible: bool) -> None:
+    def _set_home_chrome_visible(
+        self,
+        visible: bool,
+        *,
+        status_visible: bool | None = None,
+    ) -> None:
         self.menuBar().setVisible(visible)
         if self.statusBar() is not None:
-            self.statusBar().setVisible(visible)
+            self.statusBar().setVisible(visible if status_visible is None else status_visible)
+
+    def _sync_home_chrome_offset(self) -> None:
+        menu_height = self.menuBar().height() or self.menuBar().sizeHint().height()
+        self.home_page.set_top_chrome_offset(menu_height if self.menuBar().isVisible() else 0)
 
     def _apply_compact_window_size(self) -> None:
         was_below_compact_minimum = (
@@ -284,6 +295,9 @@ class StudioMainWindow(QMainWindow):
         self.settings_action = QAction("Settings...", self)
         self.settings_action.setObjectName("settings_action")
         self.settings_action.triggered.connect(self._request_settings)
+        self.check_updates_action = QAction("Check for Updates", self)
+        self.check_updates_action.setObjectName("check_updates_action")
+        self.check_updates_action.triggered.connect(self.show_update_dialog)
         self.launch_action = QAction("Launch Experiment", self)
         launch_help = (
             "Launch Experiment on the current beta test-mode runtime path. "
@@ -311,7 +325,12 @@ class StudioMainWindow(QMainWindow):
         self.file_menu.addAction(self.manage_projects_action)
         self.file_menu.addSeparator()
         self.file_menu.addAction(self.settings_action)
+        self.file_menu.addAction(self.check_updates_action)
         self.tools_menu.addAction(self.image_resizer_action)
+
+    def show_update_dialog(self) -> None:
+        dialog = UpdateDialog(parent=self, on_before_install=self.maybe_save_changes)
+        dialog.exec()
 
     def save_project(self) -> bool:
         self.flush_pending_edits()

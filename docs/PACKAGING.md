@@ -30,8 +30,8 @@ and the PyInstaller spec includes that metadata in the bundled app.
 The package distribution name is `fpvs-studio`; the GUI and executable still use the
 display name `FPVS Studio`.
 
-For the first beta package, use the PEP 440-compatible package version `0.9.0b1`.
-The GitHub Release title can still use the friendlier label `v0.9.0-beta`.
+For the current beta package, use the PEP 440-compatible package version `0.9.1b2`.
+The GitHub Release title can still use the friendlier label `v0.9.1-beta`.
 
 Use simple semantic versioning:
 
@@ -51,8 +51,10 @@ package metadata can otherwise still report the previous version. A normal
 `.\scripts\build_exe.ps1` run also refreshes this metadata; `-SkipInstall` should only
 be used after dependencies and package metadata are already current.
 
-For future GitHub Releases, tag the matching commit as `vX.Y.Z` and upload the build
-artifact from the same versioned source.
+For future GitHub Releases, tag the matching commit with a PEP 440-compatible version
+such as `v0.9.0b2` or `v1.0.0` and upload the build artifact from the same versioned
+source. The in-app updater uses the release tag for version comparison; the release
+title can use friendlier wording such as `v0.9.0-beta`.
 
 ## Build The App
 
@@ -100,6 +102,12 @@ If PyInstaller reports multiple Qt bindings, keep `PySide6` and remove or exclud
 unrelated Qt bindings such as `PyQt5` or `PyQt6` from the build environment. The checked
 in spec already excludes those bindings for the local build.
 
+The PsychoPy runtime window backend is loaded dynamically at launch time. The checked-in
+PyInstaller spec explicitly includes `psychopy.visual.backends.pygletbackend` and
+`psychopy.visual.backends.glfwbackend`; keep those hidden imports in place or installed
+apps can build successfully but fail when `Launch Experiment` tries to open the
+presentation window.
+
 ## Sharing A Lab Build
 
 For internal testing, zip the entire folder:
@@ -126,10 +134,10 @@ Then build the setup EXE:
 .\scripts\build_installer.ps1
 ```
 
-Expected output for the first beta package:
+Expected output for the current beta package:
 
 ```text
-dist\installer\FPVS-Studio-Setup-0.9.0b1.exe
+dist\installer\FPVS-Studio-Setup-0.9.1b2.exe
 ```
 
 If Inno Setup is installed somewhere custom:
@@ -145,6 +153,28 @@ remain outside the install folder.
 
 Upload the setup EXE to the matching GitHub Release after smoke testing install,
 launch, update install, and uninstall behavior.
+
+## In-App Update Flow
+
+Installed users can use `File > Check for Updates`. The app checks GitHub Releases,
+compares the installed `fpvs_studio.__version__` with the latest eligible release tag,
+and downloads the matching `FPVS-Studio-Setup-*.exe` asset only after the user chooses
+`Download Update`.
+
+Release requirements for the updater:
+
+- release tags must be parseable package versions, such as `v0.9.0b2` or `v1.0.0`
+- each release should include exactly one Windows installer asset named
+  `FPVS-Studio-Setup-<version>.exe`
+- beta/prerelease users can see prerelease updates; stable users ignore prereleases by
+  default
+- draft releases are ignored
+
+The updater stores downloaded installers in a user-writable update cache, never in the
+install folder or project folders. On `Install and Restart`, FPVS Studio asks for final
+confirmation, launches the downloaded Inno installer with `/RELAUNCH=1`, and exits. The
+installer remains responsible for replacing app files and relaunching FPVS Studio. Normal
+first-time installer runs still show the standard launch checkbox on the final page.
 
 ## App Icon And Branding
 

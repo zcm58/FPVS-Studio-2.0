@@ -33,6 +33,8 @@ code may lazily import PsychoPy.
 - `src/fpvs_studio/engines/`: presentation engine interface and PsychoPy implementation.
 - `src/fpvs_studio/triggers/`: optional trigger backend interfaces and hardware adapter
   scaffolding used by runtime while keeping core contracts hardware-neutral.
+- `src/fpvs_studio/updates/`: backend-only GitHub Releases update checks, installer
+  download helpers, and explicit installer launch support for the GUI update flow.
 - `tests/`: unit, integration, and pytest-qt GUI coverage.
 - `packaging/`: developer packaging configuration for PyInstaller-based Windows
   executable builds.
@@ -65,6 +67,13 @@ GitHub release uploads remain a manual release step.
 The shared app icon lives in `packaging/assets/fpvs-studio.ico` for release tooling and
 `src/fpvs_studio/assets/fpvs-studio.ico` for GUI window icons. README/GitHub branding
 images live under `docs/assets/`.
+
+In-app update checks use `src/fpvs_studio/updates/` to query GitHub Releases, compare
+against `fpvs_studio.__version__`, download the expected `FPVS-Studio-Setup-*.exe`
+asset to a user-writable update cache, and launch the Inno installer only after explicit
+user confirmation from `File > Check for Updates`. The GUI owns presentation and Qt
+threading; the updater backend must stay free of PySide6, PsychoPy, project-folder, and
+runtime dependencies.
 
 ## Planned Module Decomposition
 

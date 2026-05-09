@@ -12,6 +12,9 @@ PYPROJECT_TEXT = (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
 PACKAGE_INIT_TEXT = (REPO_ROOT / "src" / "fpvs_studio" / "__init__.py").read_text(
     encoding="utf-8"
 )
+PYINSTALLER_SPEC_TEXT = (
+    REPO_ROOT / "packaging" / "pyinstaller" / "fpvs_studio.spec"
+).read_text(encoding="utf-8")
 
 
 def _extract_list_assignment(name: str) -> str:
@@ -50,3 +53,9 @@ def test_default_install_requires_pyside6_but_keeps_psychopy_optional() -> None:
     assert "pytest-qt" in dev_dependencies_block
     assert "pytest-timeout" in dev_dependencies_block
     assert "pyinstaller" in packaging_dependencies_block
+
+
+def test_pyinstaller_includes_psychopy_visual_backends() -> None:
+    assert '_collect_submodules("psychopy.visual.backends")' in PYINSTALLER_SPEC_TEXT
+    assert '"psychopy.visual.backends.pygletbackend"' in PYINSTALLER_SPEC_TEXT
+    assert '"psychopy.visual.backends.glfwbackend"' in PYINSTALLER_SPEC_TEXT

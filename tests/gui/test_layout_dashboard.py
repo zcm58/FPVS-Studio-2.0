@@ -577,8 +577,13 @@ def test_switching_main_workflow_stack_keeps_outer_window_size_stable(
     QApplication.processEvents()
 
     assert window.main_stack.currentWidget() is window.home_page
-    assert not window.menuBar().isVisible()
+    assert window.menuBar().isVisible()
     assert not window.statusBar().isVisible()
+    menu_height = window.menuBar().height() or window.menuBar().sizeHint().height()
+    assert window.home_page.launch_surface.page_layout.contentsMargins().top() == max(
+        0,
+        32 - menu_height,
+    )
     assert window.minimumWidth() == 760
     assert window.minimumHeight() == 520
     assert window.width() == 1120
@@ -603,7 +608,7 @@ def test_switching_main_workflow_stack_keeps_outer_window_size_stable(
     QApplication.processEvents()
 
     assert window.main_stack.currentWidget() is window.home_page
-    assert not window.menuBar().isVisible()
+    assert window.menuBar().isVisible()
     assert not window.statusBar().isVisible()
     assert window.minimumWidth() == 760
     assert window.minimumHeight() == 520
@@ -617,7 +622,7 @@ def test_switching_main_workflow_stack_keeps_outer_window_size_stable(
     QApplication.processEvents()
 
     assert window.main_stack.currentWidget() is window.home_page
-    assert not window.menuBar().isVisible()
+    assert window.menuBar().isVisible()
     assert not window.statusBar().isVisible()
     assert window.minimumWidth() == 760
     assert window.minimumHeight() == 520

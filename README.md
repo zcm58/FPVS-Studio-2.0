@@ -116,9 +116,10 @@ not replace them.
 
 ## Updating FPVS Studio
 
-Download the newer installer from GitHub Releases and run it. The update replaces the
-application files while leaving your projects, settings, templates, run history, and logs
-outside the install folder.
+Use `File > Check for Updates` inside FPVS Studio. If a newer release is available, the
+app can download the installer, show progress, and restart into the installer after you
+confirm. Updates replace the application files while leaving your projects, settings,
+templates, run history, and logs outside the install folder.
 
 ## Current Beta Notes
 

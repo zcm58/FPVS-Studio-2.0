@@ -347,6 +347,13 @@ class HomePage(QWidget):
             hero_object_name="home_hero_container",
             parent=self,
         )
+        base_margins = self.launch_surface.page_layout.contentsMargins()
+        self._launch_surface_base_margins = (
+            base_margins.left(),
+            base_margins.top(),
+            base_margins.right(),
+            base_margins.bottom(),
+        )
         launch_panel = self.launch_surface.content_frame
         launch_panel_layout = self.launch_surface.hero_layout
 
@@ -450,6 +457,13 @@ class HomePage(QWidget):
         self._document.project_changed.connect(self.refresh)
         self._document.session_plan_changed.connect(self.refresh)
         self.refresh()
+
+    def set_top_chrome_offset(self, offset: int) -> None:
+        """Keep the launch surface visually stable when main-window chrome is visible."""
+
+        left, top, right, bottom = self._launch_surface_base_margins
+        adjusted_top = max(0, top - max(0, offset))
+        self.launch_surface.page_layout.setContentsMargins(left, adjusted_top, right, bottom)
 
     def bind_quick_actions(
         self,
