@@ -15,7 +15,7 @@ from ctypes import wintypes
 from pathlib import Path
 from types import TracebackType
 
-from PySide6.QtCore import QSettings, QTimer
+from PySide6.QtCore import QObject, QSettings, QThread, QTimer, Signal, Slot
 from PySide6.QtWidgets import QApplication, QFileDialog, QMessageBox, QWidget
 
 from fpvs_studio.core.condition_template_profiles import (
@@ -33,7 +33,10 @@ from fpvs_studio.gui.main_window import StudioMainWindow
 from fpvs_studio.gui.manage_projects_dialog import ManageProjectsDialog, ProjectManagementEntry
 from fpvs_studio.gui.root_folder_setup_dialog import RootFolderSetupDialog
 from fpvs_studio.gui.settings_dialog import AppSettingsDialog
+from fpvs_studio.gui.update_dialog import UpdateDialog
 from fpvs_studio.gui.welcome_window import WelcomeWindow
+from fpvs_studio.updates.github_releases import check_for_updates
+from fpvs_studio.updates.models import UpdateCheckResult
 
 _SETTINGS_ORGANIZATION = "FPVS Studio"
 _SETTINGS_APPLICATION = "FPVS Studio"
@@ -53,6 +56,27 @@ def _show_error(parent: QWidget | None, title: str, error: Exception) -> None:
     dialog.exec()
 
 
+class _StartupUpdateCheckWorker(QObject):
+    succeeded = Signal(object)
+    failed = Signal(object)
+    finished = Signal()
+
+    def __init__(self, callback: Callable[[], UpdateCheckResult]) -> None:
+        super().__init__()
+        self._callback = callback
+
+    @Slot()
+    def run(self) -> None:
+        try:
+            result = self._callback()
+        except Exception as error:
+            self.failed.emit(error)
+        else:
+            self.succeeded.emit(result)
+        finally:
+            self.finished.emit()
+
+
 class StudioController:
     """Own the top-level FPVS Studio windows and project-opening flows."""
 
@@ -68,6 +92,11 @@ class StudioController:
         )
         self._fpvs_root_dir: Path | None = None
         self._projects_parent_dir = Path.cwd()
+        self.startup_update_checks_enabled = True
+        self._startup_update_check_started = False
+        self._startup_update_thread: QThread | None = None
+        self._startup_update_worker: _StartupUpdateCheckWorker | None = None
+        self._startup_update_check_callback: Callable[[], UpdateCheckResult] = check_for_updates
 
     def show_welcome(self) -> None:
         """Show the welcome window."""
@@ -84,6 +113,55 @@ class StudioController:
         self.welcome_window.show()
         self.welcome_window.raise_()
         self.welcome_window.activateWindow()
+        self._schedule_startup_update_check()
+
+    def _schedule_startup_update_check(self) -> None:
+        if not self.startup_update_checks_enabled or self._startup_update_check_started:
+            return
+        self._startup_update_check_started = True
+        QTimer.singleShot(0, self._start_startup_update_check)
+
+    def _start_startup_update_check(self) -> None:
+        if self._startup_update_thread is not None:
+            return
+        worker = _StartupUpdateCheckWorker(self._startup_update_check_callback)
+        thread = QThread(self._app)
+        worker.moveToThread(thread)
+        thread.started.connect(worker.run)
+        worker.succeeded.connect(self._handle_startup_update_check_result)
+        worker.failed.connect(lambda _error: None)
+        worker.finished.connect(thread.quit)
+        worker.finished.connect(worker.deleteLater)
+        thread.finished.connect(thread.deleteLater)
+        thread.finished.connect(self._handle_startup_update_thread_finished)
+        self._startup_update_worker = worker
+        self._startup_update_thread = thread
+        thread.start()
+
+    @Slot(object)
+    def _handle_startup_update_check_result(self, result: object) -> None:
+        if not isinstance(result, UpdateCheckResult):
+            return
+        if not result.update_available or result.installer_asset is None:
+            return
+        parent = self.main_window or self.welcome_window
+        dialog = UpdateDialog(
+            parent=parent,
+            auto_check=False,
+            initial_result=result,
+            on_before_install=self._maybe_save_current_project,
+        )
+        dialog.exec()
+
+    @Slot()
+    def _handle_startup_update_thread_finished(self) -> None:
+        self._startup_update_thread = None
+        self._startup_update_worker = None
+
+    def _maybe_save_current_project(self) -> bool:
+        if self.main_window is None:
+            return True
+        return self.main_window.maybe_save_changes()
 
     def load_recent_project_roots(self) -> list[Path]:
         """Return valid recent project roots, pruning stale settings entries."""

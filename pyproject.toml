@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "fpvs-studio"
-version = "0.9.1b2"
+version = "0.9.1b4"
 description = "FPVS Studio beta desktop authoring GUI with a PsychoPy-backed runtime."
 readme = "README.md"
 license = { file = "LICENSE" }

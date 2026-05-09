@@ -122,15 +122,19 @@ source-folder import path is permissive like guided Conditions import; strict in
 and materialization still surface invalid or inconsistent source details before runtime
 launch.
 
-The `File` menu exposes manage-projects, settings, and `Check for Updates` actions.
+The `File` menu exposes manage-projects, settings, `Check for Updates`, and `About`
+actions. Settings shows the current app version from package metadata.
 Moving a project to the Recycle Bin remains a controller-owned filesystem operation
 guarded by `project.json` validation, confirmation, a post-action path check, and a disk
 refresh of the manage list after each attempt. `Check for Updates` queries GitHub
 Releases without blocking the GUI, shows current/latest versions and release notes,
 downloads the matching Windows installer with progress, and asks before closing FPVS
-Studio to launch the installer. The `Tools` menu exposes standalone utilities such as
-Image Resizer; these utilities may use preprocessing services but must not silently
-mutate the active project.
+Studio to launch the installer. A silent startup update check runs once after the
+Welcome window is shown; it stays silent unless an update is available. The Home page
+keeps full project descriptions in project data but shows a bounded preview under the
+project title to avoid launch-surface clipping. The `Tools` menu exposes standalone
+utilities such as Image Resizer; these utilities may use preprocessing services but must
+not silently mutate the active project.
 
 ## GUI Implementation Map
 
@@ -168,6 +172,8 @@ mutate the active project.
 - In-app update presentation lives in `src/fpvs_studio/gui/update_dialog.py`; release
   parsing, version comparison, installer download, and installer launch helpers stay in
   `src/fpvs_studio/updates/`.
+- Startup update-check orchestration lives in `src/fpvs_studio/gui/controller.py`; it
+  should stay silent unless a newer release is available.
 - Standalone image resizing lives in `src/fpvs_studio/gui/image_resizer_page.py`; it uses
   the shared component layer and delegates batch work to preprocessing through Qt workers.
 

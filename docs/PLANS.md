@@ -14,7 +14,8 @@ Use this page to find planning material before making feature-sized changes.
 Current inventory:
 
 - Planned plans: none beyond `exec-plans/planned/README.md`.
-- Active plans: `exec-plans/active/inno-setup-installer.md`.
+- Active plans: `exec-plans/active/inno-setup-installer.md`,
+  `exec-plans/active/beta-4-startup-updates-about.md`.
 - Recently completed GUI/tooling plans include the setup wizard shared launch-surface
   polish, the FPVS Toolbox image preparation tool, and the in-app update checker.
 

@@ -71,7 +71,9 @@ images live under `docs/assets/`.
 In-app update checks use `src/fpvs_studio/updates/` to query GitHub Releases, compare
 against `fpvs_studio.__version__`, download the expected `FPVS-Studio-Setup-*.exe`
 asset to a user-writable update cache, and launch the Inno installer only after explicit
-user confirmation from `File > Check for Updates`. The GUI owns presentation and Qt
+user confirmation. The manual entry point is `File > Check for Updates`; the controller
+also runs one silent startup check after the Welcome window appears and only opens the
+update dialog when a newer release is available. The GUI owns presentation and Qt
 threading; the updater backend must stay free of PySide6, PsychoPy, project-folder, and
 runtime dependencies.
 

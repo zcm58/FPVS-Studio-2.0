@@ -21,6 +21,7 @@ from tests.gui.helpers import (
     _open_created_project,
 )
 
+from fpvs_studio import __version__
 from fpvs_studio.core.condition_template_profiles import (
     SIXTY_HZ_BLANK_FIXATION_PROFILE_ID,
     STUDIO_DEFAULT_PROFILE_ID,
@@ -759,6 +760,21 @@ def test_settings_dialog_shows_root_and_change_button_updates_value(
 
     assert changed_roots == [updated_root]
     assert root_value_label.text() == str(updated_root)
+
+
+def test_settings_dialog_displays_app_version(qtbot, tmp_path: Path) -> None:
+    root_dir = tmp_path / "settings-root"
+    root_dir.mkdir(parents=True, exist_ok=True)
+
+    dialog = AppSettingsDialog(
+        fpvs_root_dir=root_dir,
+        on_change_fpvs_root_dir=lambda _path: None,
+    )
+    qtbot.addWidget(dialog)
+
+    version_value = dialog.findChild(QLabel, "app_version_value")
+    assert version_value is not None
+    assert version_value.text() == f"FPVS Studio version {__version__}"
 
 
 def test_settings_dialog_root_folder_setup_button_updates_root_label(

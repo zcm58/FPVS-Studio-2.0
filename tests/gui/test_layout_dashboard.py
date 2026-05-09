@@ -2607,6 +2607,26 @@ def test_home_launch_surface_shows_only_essential_project_session_metadata(
     QApplication.processEvents()
     assert subtitle_label.text() == "This is the participant-facing project summary."
 
+    long_description = " ".join(
+        [
+            "This FPVS Studio project description is intentionally long enough to test",
+            "the bounded Home screen preview without limiting the saved project text.",
+            "It should not overlap action buttons, metrics, or the launch control.",
+        ]
+    )
+    window.setup_dashboard_page.project_overview_editor.project_description_edit.setPlainText(
+        long_description
+    )
+    window.flush_pending_edits()
+    QApplication.processEvents()
+
+    assert window.document.project.meta.description == long_description
+    assert subtitle_label.text().endswith("...")
+    assert len(subtitle_label.text()) <= 96
+    assert subtitle_label.toolTip() == long_description
+    assert subtitle_label.maximumHeight() <= subtitle_label.fontMetrics().lineSpacing() * 2 + 4
+    _assert_visible_children_within_parent(launch_panel)
+
 
 def test_background_color_control_is_run_tab_presets_only(
     qtbot,

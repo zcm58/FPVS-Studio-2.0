@@ -20,6 +20,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from fpvs_studio import __version__
+
 
 class AppSettingsDialog(QDialog):
     """Expose lightweight app-level settings that are not project-scoped."""
@@ -37,7 +39,7 @@ class AppSettingsDialog(QDialog):
         self.setObjectName("fpvs_root_settings_dialog")
         self.setWindowTitle("Settings")
         self.setModal(True)
-        self.resize(700, 240)
+        self.resize(700, 280)
 
         self._fpvs_root_dir = fpvs_root_dir
         self._on_change_fpvs_root_dir = on_change_fpvs_root_dir
@@ -59,6 +61,9 @@ class AppSettingsDialog(QDialog):
         fpvs_root_layout.addWidget(self.change_fpvs_root_button)
 
         form_layout = QFormLayout()
+        self.version_value = QLabel(f"FPVS Studio version {__version__}", self)
+        self.version_value.setObjectName("app_version_value")
+        form_layout.addRow("Version", self.version_value)
         form_layout.addRow("FPVS Studio Root Folder", fpvs_root_row)
         self.root_folder_setup_button = QPushButton("Root Folder Setup...", self)
         self.root_folder_setup_button.setObjectName("root_folder_setup_button")

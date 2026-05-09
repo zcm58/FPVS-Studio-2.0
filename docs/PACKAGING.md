@@ -30,7 +30,7 @@ and the PyInstaller spec includes that metadata in the bundled app.
 The package distribution name is `fpvs-studio`; the GUI and executable still use the
 display name `FPVS Studio`.
 
-For the current beta package, use the PEP 440-compatible package version `0.9.1b2`.
+For the current beta package, use the PEP 440-compatible package version `0.9.1b4`.
 The GitHub Release title can still use the friendlier label `v0.9.1-beta`.
 
 Use simple semantic versioning:
@@ -102,11 +102,12 @@ If PyInstaller reports multiple Qt bindings, keep `PySide6` and remove or exclud
 unrelated Qt bindings such as `PyQt5` or `PyQt6` from the build environment. The checked
 in spec already excludes those bindings for the local build.
 
-The PsychoPy runtime window backend is loaded dynamically at launch time. The checked-in
-PyInstaller spec explicitly includes `psychopy.visual.backends.pygletbackend` and
-`psychopy.visual.backends.glfwbackend`; keep those hidden imports in place or installed
-apps can build successfully but fail when `Launch Experiment` tries to open the
-presentation window.
+PsychoPy loads visual primitives and the runtime window backend dynamically at launch
+time. The checked-in PyInstaller spec collects `psychopy.visual` submodules and
+explicitly includes `psychopy.visual.backends.pygletbackend`,
+`psychopy.visual.backends.glfwbackend`, and `psychopy.visual.line`; keep those hidden
+imports in place or installed apps can build successfully but fail when
+`Launch Experiment` tries to open the presentation window.
 
 ## Sharing A Lab Build
 
@@ -137,7 +138,7 @@ Then build the setup EXE:
 Expected output for the current beta package:
 
 ```text
-dist\installer\FPVS-Studio-Setup-0.9.1b2.exe
+dist\installer\FPVS-Studio-Setup-0.9.1b4.exe
 ```
 
 If Inno Setup is installed somewhere custom:
@@ -156,10 +157,11 @@ launch, update install, and uninstall behavior.
 
 ## In-App Update Flow
 
-Installed users can use `File > Check for Updates`. The app checks GitHub Releases,
-compares the installed `fpvs_studio.__version__` with the latest eligible release tag,
-and downloads the matching `FPVS-Studio-Setup-*.exe` asset only after the user chooses
-`Download Update`.
+Installed users can use `File > Check for Updates`. FPVS Studio also runs one silent
+startup check after the Welcome window appears. The app checks GitHub Releases, compares
+the installed `fpvs_studio.__version__` with the latest eligible release tag, and
+downloads the matching `FPVS-Studio-Setup-*.exe` asset only after the user chooses
+`Download Update`. Startup checks stay silent unless an update is available.
 
 Release requirements for the updater:
 

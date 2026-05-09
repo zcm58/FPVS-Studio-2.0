@@ -70,6 +70,7 @@ class UpdateDialog(QDialog):
             DownloadedInstaller,
         ] = lambda asset, progress: download_installer(asset, progress_callback=progress),
         installer_launcher: Callable[[Path], object] = launch_installer,
+        initial_result: UpdateCheckResult | None = None,
         on_before_install: Callable[[], bool] | None = None,
         quit_app: Callable[[], None] | None = None,
     ) -> None:
@@ -90,7 +91,9 @@ class UpdateDialog(QDialog):
 
         self._build_ui()
         self._set_idle_state()
-        if auto_check:
+        if initial_result is not None:
+            self.show_update_result(initial_result)
+        elif auto_check:
             QTimer.singleShot(0, self.start_update_check)
 
     def _build_ui(self) -> None:
@@ -170,6 +173,11 @@ class UpdateDialog(QDialog):
         self._set_busy_state("Checking GitHub Releases...")
         self.progress_bar.setVisible(False)
         self._start_task(lambda _progress: self._check_callback(), self._handle_check_result)
+
+    def show_update_result(self, result: UpdateCheckResult) -> None:
+        """Populate the dialog from an already-completed update check."""
+
+        self._handle_check_result(result)
 
     @Slot()
     def start_download(self) -> None:

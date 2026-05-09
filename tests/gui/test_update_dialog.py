@@ -8,6 +8,7 @@ from pathlib import Path
 from PySide6.QtWidgets import QMessageBox
 from tests.gui.helpers import open_created_project
 
+from fpvs_studio.gui.controller import StudioController
 from fpvs_studio.gui.update_dialog import UpdateDialog
 from fpvs_studio.updates.models import DownloadedInstaller, InstallerAsset, UpdateCheckResult
 
@@ -40,6 +41,120 @@ def test_main_window_exposes_file_check_for_updates_action(
 
     assert window.check_updates_action.text() == "Check for Updates"
     assert "Check for Updates" in actions
+
+
+def test_main_window_exposes_file_about_action(
+    controller,
+    qtbot,
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _document, window = open_created_project(controller, qtbot, tmp_path)
+    messages: list[tuple[str, str]] = []
+
+    monkeypatch.setattr(
+        QMessageBox,
+        "information",
+        lambda _parent, title, message: messages.append((title, message)),
+    )
+
+    actions = [action.text() for action in window.file_menu.actions()]
+    assert window.about_action.text() == "About"
+    assert "About" in actions
+
+    window.about_action.trigger()
+
+    assert messages
+    assert messages[0][0] == "About FPVS Studio"
+    assert "FPVS Studio version" in messages[0][1]
+    assert "Zack Murphy" in messages[0][1]
+    assert "Neural Engineering Research Division, Mississippi State University" in messages[0][1]
+
+
+def test_startup_update_check_prompts_only_when_update_available(
+    qapp,
+    qtbot,
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    controller = StudioController(qapp)
+    fpvs_root_dir = tmp_path / "fpvs-root"
+    fpvs_root_dir.mkdir(parents=True, exist_ok=True)
+    controller.save_fpvs_root_dir(fpvs_root_dir)
+    controller._startup_update_check_callback = _available_update
+    dialogs: list[UpdateDialog] = []
+
+    def _capture_exec(dialog: UpdateDialog) -> int:
+        dialogs.append(dialog)
+        return int(dialog.DialogCode.Accepted)
+
+    monkeypatch.setattr("fpvs_studio.gui.controller.UpdateDialog.exec", _capture_exec)
+
+    controller.show_welcome()
+    assert controller.welcome_window is not None
+    qtbot.addWidget(controller.welcome_window)
+
+    qtbot.waitUntil(lambda: bool(dialogs), timeout=5000)
+
+    dialog = dialogs[0]
+    assert dialog.status_label.text() == "A new FPVS Studio version is available."
+    assert dialog.download_button.isEnabled()
+
+
+def test_startup_update_check_is_silent_when_no_update_or_error(
+    qapp,
+    qtbot,
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    exec_calls: list[str] = []
+
+    monkeypatch.setattr(
+        "fpvs_studio.gui.controller.UpdateDialog.exec",
+        lambda _dialog: exec_calls.append("dialog"),
+    )
+
+    callbacks: list[Callable[[], UpdateCheckResult]] = []
+    callback_calls: list[int] = []
+
+    def _no_update() -> UpdateCheckResult:
+        callback_calls.append(0)
+        return UpdateCheckResult(
+            current_version="0.9.1b4",
+            latest_version="0.9.1b4",
+            update_available=False,
+            release_url=None,
+            release_notes_summary="",
+            installer_asset=None,
+            is_prerelease=True,
+        )
+
+    def _update_error() -> UpdateCheckResult:
+        callback_calls.append(1)
+        raise RuntimeError("network unavailable")
+
+    callbacks.extend((_no_update, _update_error))
+    for index, callback in enumerate(callbacks):
+        controller = StudioController(qapp)
+        fpvs_root_dir = tmp_path / f"fpvs-root-{index}"
+        fpvs_root_dir.mkdir(parents=True, exist_ok=True)
+        controller.save_fpvs_root_dir(fpvs_root_dir)
+        controller._startup_update_check_callback = callback
+
+        controller.show_welcome()
+        assert controller.welcome_window is not None
+        qtbot.addWidget(controller.welcome_window)
+
+        qtbot.waitUntil(
+            lambda target=controller, expected_index=index: (
+                expected_index in callback_calls
+                and target._startup_update_check_started
+                and target._startup_update_thread is None
+            ),
+            timeout=5000,
+        )
+
+    assert exec_calls == []
 
 
 def test_update_dialog_downloads_then_launches_installer(

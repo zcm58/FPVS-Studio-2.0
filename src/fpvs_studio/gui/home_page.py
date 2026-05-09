@@ -382,6 +382,9 @@ class HomePage(QWidget):
         )
         self.current_project_subtitle.setObjectName("home_current_project_subtitle")
         self.current_project_subtitle.setWordWrap(True)
+        self.current_project_subtitle.setMaximumHeight(
+            self.current_project_subtitle.fontMetrics().lineSpacing() * 2 + 4
+        )
         self.current_project_subtitle.setAlignment(
             Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
         )
@@ -503,8 +506,10 @@ class HomePage(QWidget):
         report = self._status_report()
 
         self.current_project_header.setText(project.meta.name)
-        self.current_project_subtitle.setText(
-            self._project_description_text(project.meta.description)
+        subtitle_text = self._project_description_text(project.meta.description)
+        self.current_project_subtitle.setText(subtitle_text)
+        self.current_project_subtitle.setToolTip(
+            " ".join(project.meta.description.split()) or "No description set yet."
         )
 
         self.condition_count_value.setText(str(len(ordered_conditions)))
@@ -530,8 +535,8 @@ class HomePage(QWidget):
         compact = " ".join(description.split())
         if not compact:
             return "No description set yet."
-        if len(compact) > 160:
-            compact = f"{compact[:157]}..."
+        if len(compact) > 96:
+            compact = f"{compact[:93]}..."
         return compact
 
     def _set_status_indicator(self, report: LauncherReadinessReport) -> None:

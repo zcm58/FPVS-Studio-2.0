@@ -16,6 +16,7 @@ from fpvs_studio.gui.create_project_dialog import CreateProjectDialog
 @pytest.fixture
 def controller(qtbot, qapp, tmp_path: Path) -> StudioController:
     controller = StudioController(qapp)
+    controller.startup_update_checks_enabled = False
     fpvs_root_dir = tmp_path / "fpvs-root"
     fpvs_root_dir.mkdir(parents=True, exist_ok=True)
     controller.save_fpvs_root_dir(fpvs_root_dir)

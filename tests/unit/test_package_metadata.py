@@ -55,7 +55,8 @@ def test_default_install_requires_pyside6_but_keeps_psychopy_optional() -> None:
     assert "pyinstaller" in packaging_dependencies_block
 
 
-def test_pyinstaller_includes_psychopy_visual_backends() -> None:
-    assert '_collect_submodules("psychopy.visual.backends")' in PYINSTALLER_SPEC_TEXT
+def test_pyinstaller_includes_psychopy_visual_lazy_imports() -> None:
+    assert '_collect_submodules("psychopy.visual")' in PYINSTALLER_SPEC_TEXT
     assert '"psychopy.visual.backends.pygletbackend"' in PYINSTALLER_SPEC_TEXT
     assert '"psychopy.visual.backends.glfwbackend"' in PYINSTALLER_SPEC_TEXT
+    assert '"psychopy.visual.line"' in PYINSTALLER_SPEC_TEXT

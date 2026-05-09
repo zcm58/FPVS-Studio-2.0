@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
     QStyleFactory,
 )
 
+from fpvs_studio import __version__
 from fpvs_studio.core.models import ConditionTemplateProfile
 from fpvs_studio.gui.animations import ButtonHoverAnimator
 from fpvs_studio.gui.components import apply_studio_theme
@@ -298,6 +299,9 @@ class StudioMainWindow(QMainWindow):
         self.check_updates_action = QAction("Check for Updates", self)
         self.check_updates_action.setObjectName("check_updates_action")
         self.check_updates_action.triggered.connect(self.show_update_dialog)
+        self.about_action = QAction("About", self)
+        self.about_action.setObjectName("about_action")
+        self.about_action.triggered.connect(self.show_about_dialog)
         self.launch_action = QAction("Launch Experiment", self)
         launch_help = (
             "Launch Experiment on the current beta test-mode runtime path. "
@@ -326,11 +330,22 @@ class StudioMainWindow(QMainWindow):
         self.file_menu.addSeparator()
         self.file_menu.addAction(self.settings_action)
         self.file_menu.addAction(self.check_updates_action)
+        self.file_menu.addAction(self.about_action)
         self.tools_menu.addAction(self.image_resizer_action)
 
     def show_update_dialog(self) -> None:
         dialog = UpdateDialog(parent=self, on_before_install=self.maybe_save_changes)
         dialog.exec()
+
+    def show_about_dialog(self) -> None:
+        QMessageBox.information(
+            self,
+            "About FPVS Studio",
+            (
+                f"FPVS Studio version {__version__} was developed by Zack Murphy, "
+                "Neural Engineering Research Division, Mississippi State University"
+            ),
+        )
 
     def save_project(self) -> bool:
         self.flush_pending_edits()
