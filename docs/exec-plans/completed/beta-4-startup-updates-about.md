@@ -1,10 +1,10 @@
 # Beta 4 Startup Updates And About UI
 
-Status: Active
+Status: Completed
 
 ## Summary
 
-Prepare FPVS Studio `0.9.1b4` by adding a silent startup update check, app-version
+Prepared FPVS Studio `0.9.1b4` by adding a silent startup update check, app-version
 visibility in Settings, a `File > About` item, and a bounded Home description preview.
 
 ## Implementation
@@ -21,6 +21,6 @@ visibility in Settings, a `File > About` item, and a bounded Home description pr
 
 ## Verification
 
-- Add GUI coverage for startup update prompting, silent no-update/error behavior, About,
-  Settings version display, and Home description clipping prevention.
-- Run focused updater/package GUI tests and build the beta 4 EXE and installer.
+- Added GUI coverage for startup update prompting, silent no-update/error behavior,
+  About, Settings version display, and Home description clipping prevention.
+- Built the beta 4 EXE and installer during implementation.

@@ -14,11 +14,11 @@ Use this page to find planning material before making feature-sized changes.
 Current inventory:
 
 - Planned plans: none beyond `exec-plans/planned/README.md`.
-- Active plans: `exec-plans/active/inno-setup-installer.md`,
-  `exec-plans/active/beta-4-startup-updates-about.md`,
-  `exec-plans/active/beta-5-planned-update.md`.
-- Recently completed GUI/tooling plans include the setup wizard shared launch-surface
-  polish, the FPVS Toolbox image preparation tool, and the in-app update checker.
+- Active plans: none beyond `exec-plans/active/README.md`.
+- Recently completed GUI/tooling plans include the Inno Setup installer workflow, the
+  beta 4 startup update/About polish, the beta 5 setup/update UX polish, the setup wizard
+  shared launch-surface polish, the FPVS Toolbox image preparation tool, and the in-app
+  update checker.
 
 Draft concrete future work in `planned/`. Move it to `active/` before implementing
 changes that affect user workflows, public contracts, or multiple layers. Keep small bug

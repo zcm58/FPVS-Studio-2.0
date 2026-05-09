@@ -1,28 +1,28 @@
 # Beta 5 Planned Update
 
-Status: Active
+Status: Completed
 
 ## Summary
 
-Beta 5 is a reliability and UX polish release after `0.9.1b4`. The goal is to
-remove confusing setup controls, fix project-open state behavior, improve update-dialog
-clarity, and align user-facing docs with the current installer/update workflow.
+Beta 5 is a reliability and UX polish release after `0.9.1b4`. The work removed
+confusing setup controls, fixed project-open state behavior, improved update-dialog
+clarity, and aligned user-facing docs with the current installer/update workflow.
 
 ## Key Changes
 
-- Remove random-order-seed editing from the normal setup UX.
-- Keep the realized random order seed as reproducibility metadata in Run/logs/results.
-- Update setup/review wording to say condition order is randomized automatically.
-- Fix dirty-on-open behavior so opening a project does not mark it modified unless the
+- Removed random-order-seed editing from the normal setup UX.
+- Kept the realized random order seed as reproducibility metadata in Run/logs/results.
+- Updated setup/review wording to say condition order is randomized automatically.
+- Fixed dirty-on-open behavior so opening a project does not mark it modified unless the
   user actually edits something.
-- Improve the update dialog with clearer current/latest version text, concise release
+- Improved the update dialog with clearer current/latest version text, concise release
   notes, full release-notes link, and this-launch-only `Remind Me Later` behavior.
 - Show clear manual update-check errors when GitHub cannot be reached while keeping
   startup update-check failures silent.
-- Update README, packaging, and workflow docs so GitHub Releases updates and preserved
+- Updated README, packaging, and workflow docs so GitHub Releases updates and preserved
   user data are described accurately.
 
-## Test Plan
+## Verification
 
 - GUI tests confirm setup/session UX no longer exposes editable random-order-seed
   controls.
@@ -35,11 +35,11 @@ clarity, and align user-facing docs with the current installer/update workflow.
   release-notes link, this-launch-only remind-later behavior, and manual server-error
   messaging.
 - Startup update tests continue to verify no-update and server-error paths stay silent.
-- Docs hygiene check passes after README/packaging/workflow docs are updated.
+- `.\scripts\check_quality.ps1` passed after implementation.
 
 ## Assumptions
 
 - Beta 5 remains a polish/reliability release, not a schema or runtime-contract release.
-- No advanced manual seed override is added in beta 5.
+- No advanced manual seed override was added in beta 5.
 - `Remind Me Later` only suppresses the update prompt until the app restarts.
 - Manual update checks show clear errors; startup update failures remain silent.

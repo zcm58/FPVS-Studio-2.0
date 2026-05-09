@@ -1,14 +1,14 @@
 # Inno Setup Installer Preparation
 
-Status: Active
+Status: Completed
 
 ## Summary
 
-Prepare FPVS Studio for a single installer EXE release path by wrapping the existing
-PyInstaller `onedir` output with Inno Setup. The developer workflow should stay simple:
-build the app bundle first, then build the installer from that bundle. End users should
-download one installer EXE from GitHub Releases, install FPVS Studio, and launch it from
-normal Windows shortcuts without installing Python or opening the source tree.
+Prepared FPVS Studio for a single installer EXE release path by wrapping the existing
+PyInstaller `onedir` output with Inno Setup. The developer workflow stays simple: build
+the app bundle first, then build the installer from that bundle. End users download one
+installer EXE from GitHub Releases, install FPVS Studio, and launch it from normal
+Windows shortcuts without installing Python or opening the source tree.
 
 The current PyInstaller build remains the runtime packaging boundary:
 
@@ -18,7 +18,7 @@ dist\FPVS Studio\FPVS Studio.exe
 dist\FPVS Studio\_internal\...
 ```
 
-The installer layer should consume that whole folder and produce a versioned setup EXE.
+The installer layer consumes that whole folder and produces a versioned setup EXE.
 
 ## User Workflow
 
@@ -27,7 +27,7 @@ Developer release flow:
 1. Update `[project] version` in `pyproject.toml`.
 2. Run `.\scripts\build_exe.ps1`.
 3. Smoke test `dist\FPVS Studio\FPVS Studio.exe`.
-4. Run a new installer build script.
+4. Run `.\scripts\build_installer.ps1`.
 5. Smoke test install, launch, update install, and uninstall behavior.
 6. Upload the installer EXE to a matching GitHub Release.
 
@@ -55,9 +55,8 @@ End-user flow:
   - writes installer output under ignored `dist\installer\`
   - prints the exact setup EXE path
 - `docs/PACKAGING.md`
-  - update developer tutorial with the two-step release build:
-    `build_exe.ps1`, then `build_installer.ps1`
-  - document smoke tests for fresh install, update install, and uninstall
+  - documents the two-step release build: `build_exe.ps1`, then `build_installer.ps1`
+  - documents smoke tests for fresh install, update install, and uninstall
 - `packaging/AGENTS.md`
   - documents Inno-specific guardrails now that installer files exist
 
@@ -74,46 +73,37 @@ End-user flow:
 
 ## Update Behavior
 
-The installer should support installing a newer version over an older version by
-replacing installed application files while leaving external user data untouched.
+The installer supports installing a newer version over an older version by replacing
+installed application files while leaving external user data untouched.
 
-The first implementation does not need an automatic in-app updater. GitHub Releases can
-be the manual update channel:
-
-1. User downloads the new setup EXE.
-2. User runs it over the existing install.
-3. Installer replaces app files.
-4. Existing settings and project data remain available on next launch.
-
-Future work can add in-app release checking against GitHub Releases after the installer
-path is stable.
+GitHub Releases are the release distribution channel. FPVS Studio now also includes an
+in-app update checker that compares the installed version against GitHub Releases,
+downloads the matching setup EXE after user approval, launches the Inno installer with
+`/RELAUNCH=1`, and exits so the installer can update and relaunch the app.
 
 ## Icon Direction
 
-If the app icon is ready during this work, use one shared icon asset:
+The shared app icon is wired through:
 
 - `packaging/assets/fpvs-studio.ico`
-
-The `.ico` should include standard Windows sizes: `16x16`, `24x24`, `32x32`,
-`48x48`, `64x64`, `128x128`, and `256x256`, using 32-bit color with alpha transparency.
-
-Wire it into both:
-
 - `packaging/pyinstaller/fpvs_studio.spec`
 - `packaging/inno/fpvs_studio.iss`
 
-If the icon is not ready, keep installer work unblocked and leave the icon as a follow-up.
+The `.ico` should continue to include standard Windows sizes: `16x16`, `24x24`,
+`32x32`, `48x48`, `64x64`, `128x128`, and `256x256`, using 32-bit color with alpha
+transparency.
 
 ## Boundaries
 
-- No compiler, runtime, engine, preprocessing, or GUI workflow changes are required.
-- No installer logic should depend on PsychoPy internals.
-- No vendored Inno Setup binaries or third-party installers should be committed.
-- No GitHub Actions automation is required in the first pass.
+- No compiler, runtime, engine, preprocessing, or GUI workflow changes were required for
+  installer wrapping.
+- No installer logic depends on PsychoPy internals.
+- No vendored Inno Setup binaries or third-party installers are committed.
+- No GitHub Actions automation is included.
 - No true PyInstaller `--onefile` migration is required; the installer wraps the safer
   current `onedir` bundle.
 
-## Test Plan
+## Verification
 
 Developer-script checks:
 
@@ -147,8 +137,8 @@ Manual installer smoke tests:
 - The setup EXE version matches `[project] version` in `pyproject.toml`.
 - Installer output is ignored under `dist\installer\`.
 - The installed app launches without system Python.
-- Updating the installed app does not overwrite user settings, projects, templates,
-  run history, or logs.
+- Updating the installed app does not overwrite user settings, projects, templates, run
+  history, or logs.
 - Packaging docs describe the EXE bundle build, installer build, smoke test, and GitHub
   Release upload flow.
 
@@ -157,5 +147,5 @@ Manual installer smoke tests:
 - Inno Setup is installed locally on the developer machine, or the build script can emit
   a clear install-path error.
 - The current PyInstaller onedir output is the stable input to installer packaging.
-- GitHub Releases remain a manual upload step for the first installer release.
+- GitHub Releases remain a manual upload step.
 - End users interact with the installed app and shortcuts, not the source repository.
