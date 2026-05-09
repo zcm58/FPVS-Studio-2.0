@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "fpvs-studio"
-version = "0.9.1b4"
+version = "0.9.1b5"
 description = "FPVS Studio beta desktop authoring GUI with a PsychoPy-backed runtime."
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -13,7 +13,7 @@ authors = [
   { name = "Zack Murphy" },
 ]
 classifiers = [
-  "Development Status :: 4 - Beta",
+  "Development Status :: 5 - Beta",
   "Intended Audience :: Science/Research",
   "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
   "Programming Language :: Python :: 3",
