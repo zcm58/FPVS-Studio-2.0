@@ -32,7 +32,8 @@ The package distribution name is `fpvs-studio`; the GUI and executable still use
 display name `FPVS Studio`.
 
 For the current beta package, use the PEP 440-compatible package version `0.9.0b7`.
-The GitHub Release title can still use the friendlier label `v0.9.1-beta`.
+The GitHub Release title can use a friendlier beta label, but the release tag and
+installer filename must use the exact package version.
 
 Use simple semantic versioning:
 
