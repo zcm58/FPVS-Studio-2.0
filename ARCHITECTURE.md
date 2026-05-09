@@ -58,6 +58,8 @@ when present and falls back to installed package metadata for bundled installs.
 `tests/unit/test_package_metadata.py` guards the contract. Use `docs/PACKAGING.md` for
 the developer version-bump and build workflow.
 
+Local release builds can use `scripts/build_release.ps1`, or double-click
+`scripts/build_release.cmd`, to run the executable and installer stages in order.
 Local executable builds use `scripts/build_exe.ps1`, which runs the checked-in
 PyInstaller spec at `packaging/pyinstaller/fpvs_studio.spec` and writes ignored build
 artifacts under `build/` and `dist/`. Installer builds use `scripts/build_installer.ps1`,

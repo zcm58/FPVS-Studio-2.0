@@ -124,7 +124,33 @@ Install Inno Setup 6 locally before building an installer. The build script look
 `ISCC.exe` on `PATH`, in the default Inno Setup install folders, through `ISCC_EXE`, or
 through the explicit `-InnoCompiler` argument.
 
-Build the PyInstaller bundle first:
+For the normal release build, run the one-step wrapper:
+
+```powershell
+.\scripts\build_release.ps1
+```
+
+Or double-click:
+
+```text
+scripts\build_release.cmd
+```
+
+The wrapper builds the PyInstaller bundle first, then builds the setup EXE from that
+fresh bundle. When iterating after dependencies are already installed, use:
+
+```powershell
+.\scripts\build_release.ps1 -SkipInstall
+```
+
+If Inno Setup is installed somewhere custom:
+
+```powershell
+.\scripts\build_release.ps1 -InnoCompiler "C:\Path\To\ISCC.exe"
+```
+
+The individual commands remain available when you need to run only one stage. Build the
+PyInstaller bundle first:
 
 ```powershell
 .\scripts\build_exe.ps1

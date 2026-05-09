@@ -20,8 +20,8 @@ experiments, with PsychoPy isolated behind runtime/engine boundaries.
   for compiled execution contracts.
 - Use `docs/PLANS.md` and `docs/exec-plans/` for feature-sized work that changes
   user workflows, public contracts, or multiple layers.
-- Use `docs/PACKAGING.md`, `packaging/AGENTS.md`, and `scripts/build_exe.ps1` for
-  local Windows executable builds, app versioning, and future release packaging work.
+- Use `docs/PACKAGING.md`, `packaging/AGENTS.md`, and `scripts/build_release.ps1` for
+  local Windows release builds, app versioning, and future release packaging work.
 - Use `docs/QUALITY_SCORE.md`, `docs/RELIABILITY.md`, and `docs/SECURITY.md` for
   quality, reliability, and local security guardrails.
 - Use repo skills in `.agents/skills/` for repeatable GUI, path, legacy-boundary,

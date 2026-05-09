@@ -13,6 +13,8 @@ settings, templates, or runtime/session contracts.
 - Keep `scripts/build_exe.ps1` as the developer entry point for local executable builds.
 - Keep `scripts/build_installer.ps1` as the developer entry point for local Inno Setup
   installer builds.
+- Keep `scripts/build_release.ps1` and `scripts/build_release.cmd` as thin convenience
+  wrappers over the executable and installer scripts; do not duplicate stage logic there.
 - Keep build outputs under ignored `build/` and `dist/` paths.
 - Keep packaging dependencies in the `packaging` optional dependency group.
 - Keep app-version changes centralized in `pyproject.toml`; `src/fpvs_studio/__init__.py`
