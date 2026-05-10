@@ -552,6 +552,7 @@ class HomePage(QWidget):
 
     def _set_status_indicator(self, report: LauncherReadinessReport) -> None:
         self.launch_status_label.set_state(report.badge_state, f"Status: {report.status_label}")
+        self.launch_button.setEnabled(report.badge_state == "ready")
         summary_text = (
             ""
             if report.badge_state == "ready"

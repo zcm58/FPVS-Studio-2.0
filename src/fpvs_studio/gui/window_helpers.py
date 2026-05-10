@@ -215,7 +215,7 @@ def _launcher_readiness_report(
 
     if not conditions_ready:
         status_label = "Setup Required"
-        badge_state = "pending"
+        badge_state = "error"
     elif not assets_ready:
         status_label = "Missing Required Assets"
         badge_state = "warning"

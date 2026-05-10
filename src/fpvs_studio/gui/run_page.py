@@ -386,8 +386,9 @@ class RunPage(QWidget):
 
     def _update_launch_buttons(self) -> None:
         is_busy = self._active_launch_task is not None
+        launch_ready = self._status_report().badge_state == "ready"
         self.compile_button.setEnabled(not is_busy)
-        self.launch_button.setEnabled(not is_busy)
+        self.launch_button.setEnabled(not is_busy and launch_ready)
 
     def _apply_launch_summary(
         self,
@@ -487,6 +488,7 @@ class RunPage(QWidget):
             summary_text = f"{summary_text} {report.preview_note}"
         self.readiness_summary_value.setText(summary_text)
         _set_list_items(self.readiness_checklist, report.readiness_items)
+        self._update_launch_buttons()
 
     def _set_summary(
         self, session_plan: SessionPlan, *, extra_lines: list[str] | None = None

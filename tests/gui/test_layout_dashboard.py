@@ -2359,6 +2359,8 @@ def test_home_quick_action_buttons_present_and_wired(
     assert window.run_page.launch_button.text() == "Launch Experiment"
     assert window.launch_action.text() == "Launch Experiment"
     assert "beta test-mode" in window.launch_action.toolTip().lower()
+    assert launch_button.isEnabled() is False
+    assert launch_button.property("launchActionRole") == "primary"
     qtbot.waitUntil(lambda: launch_button.width() > 0)
     metric_text = "\n".join(
         label.text() for label in window.home_page.findChildren(QLabel)
@@ -2406,7 +2408,7 @@ def test_home_quick_action_buttons_present_and_wired(
     qtbot.mouseClick(edit_setup_button, Qt.MouseButton.LeftButton)
     assert window.main_stack.currentWidget() is window.setup_wizard_page
 
-    assert trigger_counts == {"new": 1, "open": 1, "launch": 1}
+    assert trigger_counts == {"new": 1, "open": 1, "launch": 0}
 
 
 def test_launch_buttons_share_primary_visual_role(
@@ -2425,6 +2427,26 @@ def test_launch_buttons_share_primary_visual_role(
     assert home_launch_button.property("homeLaunchHeroAction") == "true"
     assert not home_launch_button.icon().isNull()
     assert run_launch_button.property("launchActionRole") == "primary"
+
+
+def test_incomplete_home_launch_state_is_error_and_disabled(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Incomplete Home State")
+
+    status_label = window.home_page.findChild(QLabel, "home_launch_status_indicator")
+    home_launch_button = window.home_page.findChild(QPushButton, "home_launch_experiment_button")
+    run_launch_button = window.run_page.findChild(QPushButton, "launch_test_session_button")
+
+    assert status_label is not None
+    assert home_launch_button is not None
+    assert run_launch_button is not None
+    assert status_label.text() == "Status: Setup Required"
+    assert status_label.property("statusState") == "error"
+    assert home_launch_button.isEnabled() is False
+    assert run_launch_button.isEnabled() is False
 
 
 def test_main_window_no_longer_exposes_top_level_tab_bar(
