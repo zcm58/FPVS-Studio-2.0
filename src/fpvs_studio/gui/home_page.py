@@ -333,7 +333,7 @@ class HomePage(QWidget):
         self.launch_button.setMinimumWidth(260)
         self.launch_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
 
-        self.launch_status_label = StatusBadgeLabel("Status: Setup Required", self)
+        self.launch_status_label = StatusBadgeLabel("Setup Required", self)
         self.launch_status_label.setObjectName("home_launch_status_indicator")
         self.launch_status_label.setMinimumHeight(28)
         self.launch_status_summary = QLabel(self)
@@ -551,7 +551,7 @@ class HomePage(QWidget):
         return compact
 
     def _set_status_indicator(self, report: LauncherReadinessReport) -> None:
-        self.launch_status_label.set_state(report.badge_state, f"Status: {report.status_label}")
+        self.launch_status_label.set_state(report.badge_state, report.status_label)
         self.launch_button.setEnabled(report.badge_state == "ready")
         summary_text = (
             ""

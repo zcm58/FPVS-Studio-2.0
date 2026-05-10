@@ -225,7 +225,7 @@ class RunPage(QWidget):
         summary_card.body_layout.setSpacing(8)
         summary_card.body_layout.addWidget(self.summary_stack)
 
-        self.readiness_badge = StatusBadgeLabel("Status: Setup Required", self)
+        self.readiness_badge = StatusBadgeLabel("Setup Required", self)
         self.readiness_badge.setObjectName("run_readiness_badge")
         self.readiness_badge.setMinimumHeight(34)
 
@@ -482,7 +482,7 @@ class RunPage(QWidget):
 
     def _refresh_readiness_panel(self) -> None:
         report = self._status_report()
-        self.readiness_badge.set_state(report.badge_state, f"Status: {report.status_label}")
+        self.readiness_badge.set_state(report.badge_state, report.status_label)
         summary_text = report.status_summary
         if report.preview_note:
             summary_text = f"{summary_text} {report.preview_note}"

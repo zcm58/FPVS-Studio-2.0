@@ -259,7 +259,7 @@ class StatusBadgeLabel(QLabel):
         self.setObjectName("status_badge_label")
         self.setProperty("statusBadge", "true")
         self.setWordWrap(True)
-        self.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
     def set_state(self, state: str, text: str) -> None:
         self.setText(text)
