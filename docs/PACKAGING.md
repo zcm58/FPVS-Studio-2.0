@@ -89,7 +89,7 @@ Open the packaged app:
 & "dist\FPVS Studio\FPVS Studio.exe"
 ```
 
-Before sharing a build, manually confirm:
+Before sharing a build, manually confirm on a Windows x64-compatible machine:
 
 - the app launches on a Windows machine without system Python installed
 - create/open project works
@@ -169,11 +169,13 @@ Expected output for the current beta package:
 dist\installer\FPVS-Studio-Setup-0.9.0b7.exe
 ```
 
-The release wrapper also runs the packaged-app smoke check before building the installer.
-That check launches the bundled executable in a bounded diagnostic mode and verifies that
-the bundled package metadata matches `pyproject.toml`, the update dialog has the shared
-theme applied, `Remind Me Later` dismisses an update prompt, and update-dialog action
-buttons fit their labels.
+The installer build validates that the PyInstaller bundle has an `_internal` folder and
+exactly one bundled `fpvs_studio-*.dist-info` metadata directory, then runs the
+packaged-app smoke check unless `-SkipSmoke` is passed. That check launches the bundled
+executable in a bounded diagnostic mode and verifies that the bundled package metadata
+matches `pyproject.toml`, the update dialog has the shared theme applied, `Remind Me
+Later` dismisses an update prompt, update-dialog action buttons fit their labels, and
+PsychoPy/runtime dependency imports needed by packaged launch are present.
 
 To run that smoke check against an existing bundle:
 
@@ -193,13 +195,30 @@ If Inno Setup is installed somewhere custom:
 .\scripts\build_installer.ps1 -InnoCompiler "C:\Path\To\ISCC.exe"
 ```
 
+For advanced local iteration only, after you have already run the packaged smoke check
+against the exact bundle being wrapped, the installer smoke gate can be skipped:
+
+```powershell
+.\scripts\build_installer.ps1 -SkipSmoke
+```
+
 The installer wraps the whole `dist\FPVS Studio\` folder. It installs per-user under
 `%LOCALAPPDATA%\Programs\FPVS Studio`, creates Start Menu shortcuts, and offers an
 optional Desktop shortcut. User settings, projects, templates, run history, and logs
 remain outside the install folder.
 
-Upload the setup EXE to the matching GitHub Release after smoke testing install,
-launch, update install, and uninstall behavior.
+Upload the setup EXE to the matching GitHub Release after smoke testing fresh install,
+launch, update-over-old-version install, and uninstall behavior. The clean-PC or clean-VM
+release check is:
+
+- install on a Windows x64-compatible machine without system Python
+- launch FPVS Studio from the Start Menu or Desktop shortcut
+- run `.\scripts\smoke_packaged_app.ps1 -ExePath "$env:LOCALAPPDATA\Programs\FPVS Studio\FPVS Studio.exe"`
+- create/open a project
+- open `Tools > Image Resizer`
+- run the PsychoPy test launch path
+- install a newer setup EXE over the older installed app and confirm settings, projects,
+  condition templates, `runs/`, and `logs/` remain intact
 
 ## In-App Update Flow
 

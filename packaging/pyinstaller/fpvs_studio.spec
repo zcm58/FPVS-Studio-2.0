@@ -21,29 +21,37 @@ app_icon = repo_root / "packaging" / "assets" / "fpvs-studio.ico"
 def _collect_submodules(package_name: str) -> list[str]:
     try:
         return collect_submodules(package_name)
-    except Exception:
-        return []
+    except Exception as error:
+        raise RuntimeError(
+            f"Could not collect PyInstaller submodules for {package_name}."
+        ) from error
 
 
 def _collect_data(package_name: str) -> list[tuple[str, str]]:
     try:
         return collect_data_files(package_name)
-    except Exception:
-        return []
+    except Exception as error:
+        raise RuntimeError(
+            f"Could not collect PyInstaller data files for {package_name}."
+        ) from error
 
 
 def _collect_binaries(package_name: str) -> list[tuple[str, str]]:
     try:
         return collect_dynamic_libs(package_name)
-    except Exception:
-        return []
+    except Exception as error:
+        raise RuntimeError(
+            f"Could not collect PyInstaller dynamic libraries for {package_name}."
+        ) from error
 
 
 def _copy_metadata(distribution_name: str) -> list[tuple[str, str]]:
     try:
         return copy_metadata(distribution_name)
-    except Exception:
-        return []
+    except Exception as error:
+        raise RuntimeError(
+            f"Could not copy PyInstaller package metadata for {distribution_name}."
+        ) from error
 
 
 hiddenimports = []

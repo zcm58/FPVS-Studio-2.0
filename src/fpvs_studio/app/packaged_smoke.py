@@ -5,7 +5,9 @@ from __future__ import annotations
 import json
 import os
 import sys
+import tempfile
 from collections.abc import Sequence
+from importlib import import_module
 from importlib.metadata import version as package_version
 from pathlib import Path
 from typing import Any
@@ -30,6 +32,7 @@ def collect_packaged_smoke_report() -> dict[str, Any]:
     """Create the update dialog offscreen and verify package-only contracts."""
 
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    psychopy_user_dirs = _isolate_psychopy_user_dirs()
 
     from PySide6.QtWidgets import QApplication
 
@@ -88,6 +91,8 @@ def collect_packaged_smoke_report() -> dict[str, Any]:
     styled = "QDialog#update_dialog" in style_sheet and "QPushButton" in style_sheet
     buttons_fit = all(button["fits"] for button in button_reports)
     dist_info_count_ok = len(dist_info_names) == 1
+    runtime_dependency_report = _runtime_dependency_report()
+    runtime_dependencies_ok = runtime_dependency_report["ok"]
 
     return {
         "ok": (
@@ -96,6 +101,7 @@ def collect_packaged_smoke_report() -> dict[str, Any]:
             and buttons_fit
             and remind_later_dismissed
             and dist_info_count_ok
+            and runtime_dependencies_ok
         ),
         "app_version": __version__,
         "metadata_version": metadata_version,
@@ -106,6 +112,9 @@ def collect_packaged_smoke_report() -> dict[str, Any]:
         "remind_later_dismissed": remind_later_dismissed,
         "buttons_fit": buttons_fit,
         "button_reports": button_reports,
+        "psychopy_user_dirs": psychopy_user_dirs,
+        "runtime_dependencies_ok": runtime_dependencies_ok,
+        "runtime_dependency_report": runtime_dependency_report,
     }
 
 
@@ -130,9 +139,63 @@ def _write_report(output_path: Path | None, report: dict[str, Any]) -> None:
     output_path.write_text(report_text + "\n", encoding="utf-8")
 
 
+def _isolate_psychopy_user_dirs() -> dict[str, str]:
+    smoke_root = Path(tempfile.gettempdir()) / "fpvs-studio-packaged-smoke" / str(os.getpid())
+    paths = {
+        "APPDATA": smoke_root / "appdata",
+        "LOCALAPPDATA": smoke_root / "localappdata",
+        "HOME": smoke_root / "home",
+        "USERPROFILE": smoke_root / "userprofile",
+    }
+    for path in paths.values():
+        path.mkdir(parents=True, exist_ok=True)
+    for key, path in paths.items():
+        os.environ[key] = str(path)
+    return {key: str(path) for key, path in paths.items()}
+
+
 def _fpvs_studio_dist_info_names() -> list[str]:
     bundle_internal = getattr(sys, "_MEIPASS", None)
     if bundle_internal is None:
         return []
     internal_path = Path(bundle_internal)
     return sorted(path.name for path in internal_path.glob("fpvs_studio-*.dist-info"))
+
+
+def _runtime_dependency_report() -> dict[str, Any]:
+    modules = (
+        "fpvs_studio.engines.registry",
+        "fpvs_studio.engines.psychopy_loader",
+        "psychopy",
+        "psychopy.core",
+        "psychopy.visual",
+        "psychopy.visual.backends.pygletbackend",
+        "psychopy.visual.backends.glfwbackend",
+        "psychopy.visual.line",
+        "psychopy.hardware.keyboard",
+        "psychtoolbox",
+        "pyglet",
+        "sounddevice",
+        "serial",
+    )
+    imports: list[dict[str, object]] = []
+    ok = True
+    for module_name in modules:
+        try:
+            import_module(module_name)
+        except Exception as error:
+            ok = False
+            imports.append(
+                {
+                    "module": module_name,
+                    "ok": False,
+                    "error": f"{type(error).__name__}: {error}",
+                }
+            )
+        else:
+            imports.append({"module": module_name, "ok": True})
+
+    return {
+        "ok": ok,
+        "imports": imports,
+    }

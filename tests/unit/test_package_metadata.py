@@ -16,6 +16,15 @@ PYINSTALLER_SPEC_TEXT = (
     REPO_ROOT / "packaging" / "pyinstaller" / "fpvs_studio.spec"
 ).read_text(encoding="utf-8")
 BUILD_EXE_TEXT = (REPO_ROOT / "scripts" / "build_exe.ps1").read_text(encoding="utf-8")
+BUILD_INSTALLER_TEXT = (REPO_ROOT / "scripts" / "build_installer.ps1").read_text(
+    encoding="utf-8"
+)
+BUILD_RELEASE_TEXT = (REPO_ROOT / "scripts" / "build_release.ps1").read_text(
+    encoding="utf-8"
+)
+PACKAGED_SMOKE_TEXT = (REPO_ROOT / "src" / "fpvs_studio" / "app" / "packaged_smoke.py").read_text(
+    encoding="utf-8"
+)
 INNO_SCRIPT_TEXT = (REPO_ROOT / "packaging" / "inno" / "fpvs_studio.iss").read_text(
     encoding="utf-8"
 )
@@ -54,7 +63,9 @@ def test_default_install_requires_pyside6_but_keeps_psychopy_optional() -> None:
     packaging_dependencies_block = _extract_list_assignment("packaging").lower()
     assert "psychopy" not in dependencies_block
     assert "pyside6" in dependencies_block
-    assert "psychopy" in _extract_list_assignment("engine").lower()
+    engine_dependencies_block = _extract_list_assignment("engine").lower()
+    assert "psychopy" in engine_dependencies_block
+    assert "sounddevice" in engine_dependencies_block
     assert "pytest-qt" in dev_dependencies_block
     assert "pytest-timeout" in dev_dependencies_block
     assert "pyinstaller" in packaging_dependencies_block
@@ -65,6 +76,8 @@ def test_pyinstaller_includes_psychopy_visual_lazy_imports() -> None:
     assert '"psychopy.visual.backends.pygletbackend"' in PYINSTALLER_SPEC_TEXT
     assert '"psychopy.visual.backends.glfwbackend"' in PYINSTALLER_SPEC_TEXT
     assert '"psychopy.visual.line"' in PYINSTALLER_SPEC_TEXT
+    assert "Could not collect PyInstaller submodules" in PYINSTALLER_SPEC_TEXT
+    assert "Could not copy PyInstaller package metadata" in PYINSTALLER_SPEC_TEXT
 
 
 def test_build_exe_fails_on_stale_installed_package_metadata() -> None:
@@ -78,3 +91,28 @@ def test_installer_removes_stale_fpvs_studio_metadata_before_update() -> None:
     assert "[InstallDelete]" in INNO_SCRIPT_TEXT
     assert r'Name: "{app}\_internal\fpvs_studio-*.dist-info"' in INNO_SCRIPT_TEXT
     assert r'Name: "{app}\pyproject.toml"' in INNO_SCRIPT_TEXT
+
+
+def test_installer_build_validates_bundle_and_runs_packaged_smoke() -> None:
+    assert "[switch]$SkipSmoke" in BUILD_INSTALLER_TEXT
+    assert "Assert-BundleInput" in BUILD_INSTALLER_TEXT
+    assert "dist\\FPVS Studio\\_internal" in BUILD_INSTALLER_TEXT
+    assert (
+        'Get-ChildItem -Path $BundleInternalPath -Directory -Filter "fpvs_studio-*.dist-info"'
+        in BUILD_INSTALLER_TEXT
+    )
+    assert "Running packaged app smoke check before installer build" in BUILD_INSTALLER_TEXT
+    assert "Invoke-PackagedSmoke" in BUILD_INSTALLER_TEXT
+    assert "$SmokePackagedAppScript" not in BUILD_RELEASE_TEXT
+
+
+def test_packaged_smoke_checks_runtime_dependency_imports() -> None:
+    assert "_isolate_psychopy_user_dirs" in PACKAGED_SMOKE_TEXT
+    assert '"APPDATA"' in PACKAGED_SMOKE_TEXT
+    assert '"LOCALAPPDATA"' in PACKAGED_SMOKE_TEXT
+    assert "runtime_dependencies_ok" in PACKAGED_SMOKE_TEXT
+    assert "runtime_dependency_report" in PACKAGED_SMOKE_TEXT
+    assert '"psychopy.visual.backends.pygletbackend"' in PACKAGED_SMOKE_TEXT
+    assert '"psychopy.visual.backends.glfwbackend"' in PACKAGED_SMOKE_TEXT
+    assert '"psychtoolbox"' in PACKAGED_SMOKE_TEXT
+    assert '"sounddevice"' in PACKAGED_SMOKE_TEXT

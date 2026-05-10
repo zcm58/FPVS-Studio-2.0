@@ -8,7 +8,6 @@ $ErrorActionPreference = "Stop"
 $RepoRoot = Split-Path -Parent $PSScriptRoot
 $BuildExeScript = Join-Path $PSScriptRoot "build_exe.ps1"
 $BuildInstallerScript = Join-Path $PSScriptRoot "build_installer.ps1"
-$SmokePackagedAppScript = Join-Path $PSScriptRoot "smoke_packaged_app.ps1"
 
 function Invoke-RepoScript {
     param(
@@ -35,10 +34,6 @@ try {
     else {
         Invoke-RepoScript -ScriptPath $BuildExeScript
     }
-
-    Write-Output ""
-    Write-Output "Running packaged app smoke check..."
-    Invoke-RepoScript -ScriptPath $SmokePackagedAppScript
 
     $installerArguments = @()
     if ($InnoCompiler) {

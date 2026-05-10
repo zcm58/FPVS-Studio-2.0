@@ -1,5 +1,6 @@
 param(
-    [string]$InnoCompiler
+    [string]$InnoCompiler,
+    [switch]$SkipSmoke
 )
 
 $ErrorActionPreference = "Stop"
@@ -7,7 +8,9 @@ $ErrorActionPreference = "Stop"
 $RepoRoot = Split-Path -Parent $PSScriptRoot
 $SpecPath = Join-Path $RepoRoot "packaging\inno\fpvs_studio.iss"
 $BundleExePath = Join-Path $RepoRoot "dist\FPVS Studio\FPVS Studio.exe"
+$BundleInternalPath = Join-Path $RepoRoot "dist\FPVS Studio\_internal"
 $InstallerOutputDir = Join-Path $RepoRoot "dist\installer"
+$SmokePackagedAppScript = Join-Path $PSScriptRoot "smoke_packaged_app.ps1"
 
 function Invoke-Native {
     param(
@@ -30,6 +33,34 @@ function Get-AppVersion {
         throw "Could not find [project] version in pyproject.toml."
     }
     return $versionLine.Matches[0].Groups[1].Value
+}
+
+function Assert-BundleInput {
+    if (-not (Test-Path -LiteralPath $BundleExePath)) {
+        throw "Expected PyInstaller bundle was not found. Run .\scripts\build_exe.ps1 first."
+    }
+    if (-not (Test-Path -LiteralPath $BundleInternalPath)) {
+        throw "Expected PyInstaller bundle internals were not found: $BundleInternalPath"
+    }
+
+    $metadataDirs = @(
+        Get-ChildItem -Path $BundleInternalPath -Directory -Filter "fpvs_studio-*.dist-info"
+    )
+    if ($metadataDirs.Count -ne 1) {
+        throw "Expected exactly one bundled fpvs-studio dist-info directory; found $($metadataDirs.Count)."
+    }
+
+    $metadataPath = Join-Path $metadataDirs[0].FullName "METADATA"
+    if (-not (Test-Path -LiteralPath $metadataPath)) {
+        throw "Bundled fpvs-studio metadata was missing: $metadataPath"
+    }
+}
+
+function Invoke-PackagedSmoke {
+    if (-not (Test-Path -LiteralPath $SmokePackagedAppScript)) {
+        throw "Packaged app smoke script was not found: $SmokePackagedAppScript"
+    }
+    & $SmokePackagedAppScript -ExePath $BundleExePath
 }
 
 function Resolve-InnoCompiler {
@@ -76,8 +107,10 @@ try {
     if (-not (Test-Path -LiteralPath $SpecPath)) {
         throw "Inno Setup script was not found: $SpecPath"
     }
-    if (-not (Test-Path -LiteralPath $BundleExePath)) {
-        throw "Expected PyInstaller bundle was not found. Run .\scripts\build_exe.ps1 first."
+    Assert-BundleInput
+    if (-not $SkipSmoke) {
+        Write-Output "Running packaged app smoke check before installer build..."
+        Invoke-PackagedSmoke
     }
 
     $appVersion = Get-AppVersion
