@@ -35,30 +35,6 @@ from PySide6.QtWidgets import (
 
 from fpvs_studio.gui.design_system import (
     CARD_CORNER_RADIUS,
-    COLOR_BORDER,
-    COLOR_BORDER_SOFT,
-    COLOR_INFO_BG,
-    COLOR_INFO_BORDER,
-    COLOR_INFO_TEXT,
-    COLOR_PAGE_BACKGROUND,
-    COLOR_PENDING_BG,
-    COLOR_PENDING_BORDER,
-    COLOR_PENDING_TEXT,
-    COLOR_PRIMARY,
-    COLOR_PRIMARY_BORDER,
-    COLOR_PRIMARY_HOVER,
-    COLOR_PRIMARY_PRESSED,
-    COLOR_SUCCESS_BG,
-    COLOR_SUCCESS_BORDER,
-    COLOR_SUCCESS_TEXT,
-    COLOR_SURFACE,
-    COLOR_SURFACE_ALT,
-    COLOR_SURFACE_ELEVATED,
-    COLOR_TEXT_PRIMARY,
-    COLOR_TEXT_SECONDARY,
-    COLOR_WARNING_BG,
-    COLOR_WARNING_BORDER,
-    COLOR_WARNING_TEXT,
     FONT_SIZE_BODY,
     FONT_SIZE_CONTROL,
     FONT_SIZE_META,
@@ -67,6 +43,8 @@ from fpvs_studio.gui.design_system import (
     PAGE_SECTION_GAP,
     PathValueLabel,
     StatusBadgeLabel,
+    StudioTheme,
+    resolve_studio_theme,
 )
 
 NonHomePageShell: Any
@@ -799,145 +777,176 @@ def mark_error_text(label: QLabel) -> None:
     apply_error_text_style(label)
 
 
-def studio_theme_stylesheet() -> str:
+def _resolved_theme(theme: StudioTheme | QPalette | None = None) -> StudioTheme:
+    if isinstance(theme, StudioTheme):
+        return theme
+    return resolve_studio_theme(theme)
+
+
+def studio_theme_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
+    theme = _resolved_theme(theme)
+    color_page_background = theme.page_background
+    color_surface = theme.surface
+    color_surface_alt = theme.surface_alt
+    color_surface_elevated = theme.surface_elevated
+    color_border = theme.border
+    color_border_soft = theme.border_soft
+    color_text_primary = theme.text_primary
+    color_text_secondary = theme.text_secondary
+    color_primary = theme.primary
+    color_primary_border = theme.primary_border
+    color_primary_hover = theme.primary_hover
+    color_primary_pressed = theme.primary_pressed
+    color_success_bg = theme.success_bg
+    color_success_border = theme.success_border
+    color_success_text = theme.success_text
+    color_warning_bg = theme.warning_bg
+    color_warning_border = theme.warning_border
+    color_warning_text = theme.warning_text
+    color_info_bg = theme.info_bg
+    color_info_border = theme.info_border
+    color_info_text = theme.info_text
+    color_pending_bg = theme.pending_bg
+    color_pending_border = theme.pending_border
+    color_pending_text = theme.pending_text
     return f"""
     QMainWindow#studio_main_window,
     QStackedWidget#main_stack,
     QDialog#update_dialog {{
-        background-color: {COLOR_PAGE_BACKGROUND};
-        color: {COLOR_TEXT_PRIMARY};
+        background-color: {color_page_background};
+        color: {color_text_primary};
         font-size: {FONT_SIZE_BODY}px;
     }}
     QMainWindow#studio_main_window QWidget {{
         font-size: {FONT_SIZE_BODY}px;
     }}
     QLabel#update_dialog_title {{
-        color: {COLOR_TEXT_PRIMARY};
+        color: {color_text_primary};
         font-size: {FONT_SIZE_SECTION_TITLE}px;
         font-weight: 700;
     }}
     QLabel#update_dialog_status,
     QLabel#update_dialog_notes {{
-        color: {COLOR_TEXT_PRIMARY};
+        color: {color_text_primary};
         font-size: {FONT_SIZE_BODY}px;
     }}
     QLabel#update_dialog_notes_heading {{
-        color: {COLOR_TEXT_PRIMARY};
+        color: {color_text_primary};
         font-size: {FONT_SIZE_CONTROL}px;
         font-weight: 700;
     }}
     QDialog#update_dialog QProgressBar {{
-        border: 1px solid {COLOR_BORDER_SOFT};
+        border: 1px solid {color_border_soft};
         border-radius: {CARD_CORNER_RADIUS}px;
-        background-color: {COLOR_SURFACE_ELEVATED};
+        background-color: {color_surface_elevated};
         min-height: 14px;
         text-align: center;
     }}
     QDialog#update_dialog QProgressBar::chunk {{
         border-radius: {CARD_CORNER_RADIUS}px;
-        background-color: {COLOR_PRIMARY};
+        background-color: {color_primary};
     }}
     QTabWidget#main_tabs::pane {{
-        border: 1px solid {COLOR_BORDER};
-        background-color: {COLOR_SURFACE_ELEVATED};
+        border: 1px solid {color_border};
+        background-color: {color_surface_elevated};
         top: -1px;
     }}
     QPushButton {{
-        border: 1px solid {COLOR_BORDER};
+        border: 1px solid {color_border};
         border-radius: {CARD_CORNER_RADIUS}px;
-        background-color: {COLOR_SURFACE_ELEVATED};
+        background-color: {color_surface_elevated};
         padding: 6px 12px;
-        color: {COLOR_TEXT_PRIMARY};
+        color: {color_text_primary};
         font-size: {FONT_SIZE_CONTROL}px;
         min-height: 30px;
     }}
     QPushButton:hover {{
-        border-color: {COLOR_BORDER_SOFT};
-        background-color: {COLOR_SURFACE_ALT};
+        border-color: {color_border_soft};
+        background-color: {color_surface_alt};
     }}
     QPushButton:pressed {{
-        border-color: {COLOR_BORDER_SOFT};
-        background-color: {COLOR_SURFACE_ALT};
+        border-color: {color_border_soft};
+        background-color: {color_surface_alt};
     }}
     QPushButton:disabled {{
-        border-color: {COLOR_BORDER_SOFT};
-        background-color: {COLOR_SURFACE_ALT};
-        color: #8a97a8;
+        border-color: {color_border_soft};
+        background-color: {color_surface_alt};
+        color: {theme.disabled_text};
     }}
     QPushButton[launchActionRole="primary"],
     QPushButton[primaryActionRole="true"] {{
-        border-color: {COLOR_PRIMARY_BORDER};
-        background-color: {COLOR_PRIMARY};
-        color: #ffffff;
+        border-color: {color_primary_border};
+        background-color: {color_primary};
+        color: {theme.selected_text};
         font-weight: 700;
         padding-left: 14px;
         padding-right: 14px;
     }}
     QPushButton[launchActionRole="primary"]:hover,
     QPushButton[primaryActionRole="true"]:hover {{
-        border-color: {COLOR_PRIMARY_HOVER};
-        background-color: {COLOR_PRIMARY_PRESSED};
+        border-color: {color_primary_hover};
+        background-color: {color_primary_pressed};
     }}
     QPushButton[launchActionRole="primary"]:pressed,
     QPushButton[primaryActionRole="true"]:pressed {{
-        border-color: {COLOR_PRIMARY_BORDER};
-        background-color: {COLOR_PRIMARY_PRESSED};
+        border-color: {color_primary_border};
+        background-color: {color_primary_pressed};
     }}
     QPushButton[launchActionRole="primary"]:disabled,
     QPushButton[primaryActionRole="true"]:disabled {{
-        border-color: #93c5fd;
-        background-color: #93c5fd;
-        color: #eff6ff;
+        border-color: {theme.primary_disabled_bg};
+        background-color: {theme.primary_disabled_bg};
+        color: {theme.primary_disabled_text};
     }}
     QPushButton[secondaryActionRole="true"] {{
         font-weight: 600;
     }}
     QPushButton[destructiveActionRole="true"] {{
-        color: #b91c1c;
+        color: {theme.destructive_text};
         font-weight: 600;
     }}
     QPushButton:focus {{
-        border: 2px solid {COLOR_PRIMARY};
+        border: 2px solid {theme.focus_ring};
     }}
     QLabel[statusBadge="true"] {{
-        border: 1px solid {COLOR_BORDER_SOFT};
+        border: 1px solid {color_border_soft};
         border-radius: {CARD_CORNER_RADIUS}px;
-        background-color: {COLOR_SURFACE_ELEVATED};
-        color: {COLOR_TEXT_PRIMARY};
+        background-color: {color_surface_elevated};
+        color: {color_text_primary};
         padding: 5px 10px;
         font-size: {FONT_SIZE_META}px;
         font-weight: 700;
     }}
     QLabel[statusBadge="true"][statusState="ready"] {{
-        border-color: {COLOR_SUCCESS_BORDER};
-        background-color: {COLOR_SUCCESS_BG};
-        color: {COLOR_SUCCESS_TEXT};
+        border-color: {color_success_border};
+        background-color: {color_success_bg};
+        color: {color_success_text};
     }}
     QLabel[statusBadge="true"][statusState="warning"] {{
-        border-color: {COLOR_WARNING_BORDER};
-        background-color: {COLOR_WARNING_BG};
-        color: {COLOR_WARNING_TEXT};
+        border-color: {color_warning_border};
+        background-color: {color_warning_bg};
+        color: {color_warning_text};
     }}
     QLabel[statusBadge="true"][statusState="info"] {{
-        border-color: {COLOR_INFO_BORDER};
-        background-color: {COLOR_INFO_BG};
-        color: {COLOR_INFO_TEXT};
+        border-color: {color_info_border};
+        background-color: {color_info_bg};
+        color: {color_info_text};
     }}
     QLabel[statusBadge="true"][statusState="pending"] {{
-        border-color: {COLOR_PENDING_BORDER};
-        background-color: {COLOR_PENDING_BG};
-        color: {COLOR_PENDING_TEXT};
+        border-color: {color_pending_border};
+        background-color: {color_pending_bg};
+        color: {color_pending_text};
     }}
     QLabel[statusBadge="true"][statusState="error"] {{
-        border-color: #fca5a5;
-        background-color: #fef2f2;
-        color: #991b1b;
+        border-color: {theme.error_border};
+        background-color: {theme.error_bg};
+        color: {theme.error_text};
     }}
     QLabel[pathValue="true"] {{
-        border: 1px solid {COLOR_BORDER_SOFT};
+        border: 1px solid {color_border_soft};
         border-radius: {CARD_CORNER_RADIUS}px;
-        background-color: {COLOR_SURFACE_ELEVATED};
-        color: {COLOR_TEXT_PRIMARY};
+        background-color: {color_surface_elevated};
+        color: {color_text_primary};
         padding: 6px 8px;
     }}
     QListWidget#condition_list,
@@ -945,9 +954,9 @@ def studio_theme_stylesheet() -> str:
     QListWidget#run_readiness_checklist,
     QListWidget#home_readiness_list,
     QListWidget#dashboard_attention_list {{
-        border: 1px solid {COLOR_BORDER_SOFT};
+        border: 1px solid {color_border_soft};
         border-radius: {CARD_CORNER_RADIUS}px;
-        background-color: {COLOR_SURFACE_ELEVATED};
+        background-color: {color_surface_elevated};
         outline: none;
     }}
     QListWidget#condition_list {{
@@ -967,21 +976,21 @@ def studio_theme_stylesheet() -> str:
         border-radius: 8px;
     }}
     QListWidget#condition_list::item:hover {{
-        background-color: {COLOR_SURFACE_ALT};
+        background-color: {color_surface_alt};
     }}
     QListWidget#setup_wizard_condition_list::item:hover,
     QListWidget#setup_wizard_condition_image_list::item:hover {{
-        background-color: {COLOR_SURFACE_ALT};
+        background-color: {color_surface_alt};
     }}
     QListWidget#condition_list::item:selected {{
-        background-color: {COLOR_PRIMARY};
-        color: #ffffff;
+        background-color: {color_primary};
+        color: {theme.selected_text};
         font-weight: 700;
     }}
     QListWidget#setup_wizard_condition_list::item:selected,
     QListWidget#setup_wizard_condition_image_list::item:selected {{
-        background-color: {COLOR_PRIMARY};
-        color: #ffffff;
+        background-color: {color_primary};
+        color: {theme.selected_text};
         font-weight: 700;
     }}
     QListWidget#run_readiness_checklist::item,
@@ -996,42 +1005,42 @@ def studio_theme_stylesheet() -> str:
         background-color: transparent;
     }}
     QLabel[setupProgressCircle="true"] {{
-        border: 1px solid {COLOR_BORDER_SOFT};
+        border: 1px solid {color_border_soft};
         border-radius: 15px;
-        background-color: {COLOR_SURFACE_ELEVATED};
-        color: {COLOR_TEXT_SECONDARY};
+        background-color: {color_surface_elevated};
+        color: {color_text_secondary};
         font-size: {FONT_SIZE_CONTROL}px;
         font-weight: 700;
     }}
     QLabel[setupProgressCircle="true"][setupProgressState="complete"] {{
-        border-color: {COLOR_SUCCESS_BORDER};
-        background-color: {COLOR_SUCCESS_BG};
-        color: {COLOR_SUCCESS_TEXT};
+        border-color: {color_success_border};
+        background-color: {color_success_bg};
+        color: {color_success_text};
     }}
     QLabel[setupProgressCircle="true"][setupProgressState="current"] {{
-        border-color: {COLOR_PRIMARY_BORDER};
-        background-color: {COLOR_PRIMARY};
-        color: #ffffff;
+        border-color: {color_primary_border};
+        background-color: {color_primary};
+        color: {theme.selected_text};
     }}
     QLabel[setupProgressLabel="true"] {{
-        color: {COLOR_TEXT_SECONDARY};
+        color: {color_text_secondary};
         font-size: {FONT_SIZE_META}px;
         font-weight: 500;
     }}
     QLabel[setupProgressLabel="true"][setupProgressState="current"] {{
-        color: {COLOR_PRIMARY};
+        color: {color_primary};
         font-weight: 700;
     }}
     QLabel[setupProgressLabel="true"][setupProgressState="complete"] {{
-        color: {COLOR_TEXT_PRIMARY};
+        color: {color_text_primary};
     }}
     QFrame[setupProgressConnector="true"] {{
         border: none;
-        border-top: 1px solid {COLOR_BORDER_SOFT};
+        border-top: 1px solid {color_border_soft};
         max-height: 1px;
     }}
     QFrame[setupProgressConnector="true"][setupProgressState="complete"] {{
-        border-top: 2px solid {COLOR_PRIMARY};
+        border-top: 2px solid {color_primary};
         max-height: 2px;
     }}
     QFrame[setupWorkspaceFrame="true"],
@@ -1039,218 +1048,214 @@ def studio_theme_stylesheet() -> str:
     QFrame[setupSidePanel="true"],
     QFrame[setupSourceCard="true"],
     QFrame[setupMetricStrip="true"] {{
-        border: 1px solid {COLOR_BORDER_SOFT};
+        border: 1px solid {color_border_soft};
         border-radius: {CARD_CORNER_RADIUS}px;
-        background-color: {COLOR_SURFACE_ELEVATED};
+        background-color: {color_surface_elevated};
     }}
     QLabel[setupSidePanelTitle="true"],
     QLabel[setupSourceTitle="true"] {{
-        color: {COLOR_TEXT_PRIMARY};
+        color: {color_text_primary};
         font-size: {FONT_SIZE_SECTION_TITLE}px;
         font-weight: 700;
     }}
     QLabel[setupMetricLabel="true"],
     QLabel[setupPanelHelper="true"] {{
-        color: {COLOR_TEXT_SECONDARY};
+        color: {color_text_secondary};
         font-size: {FONT_SIZE_META}px;
     }}
     QLabel[setupMetricValue="true"] {{
-        color: {COLOR_TEXT_PRIMARY};
+        color: {color_text_primary};
         font-weight: 600;
     }}
     QLabel[setupChecklistStatus="true"] {{
-        color: {COLOR_SUCCESS_TEXT};
+        color: {color_success_text};
         font-size: {FONT_SIZE_META}px;
         font-weight: 600;
     }}
     QLabel[setupChecklistStatus="true"][setupChecklistState="incomplete"] {{
-        color: #991b1b;
+        color: {theme.error_text};
     }}
     QFrame[setupChecklistDivider="true"] {{
         border: none;
-        border-top: 1px solid {COLOR_BORDER_SOFT};
+        border-top: 1px solid {color_border_soft};
         max-height: 1px;
     }}
     QFrame#setup_wizard_status_strip {{
-        border-top: 1px solid {COLOR_BORDER_SOFT};
-        background-color: {COLOR_SURFACE};
+        border-top: 1px solid {color_border_soft};
+        background-color: {color_surface};
     }}
     QLabel[wizardStep="true"] {{
-        border: 1px solid {COLOR_BORDER_SOFT};
+        border: 1px solid {color_border_soft};
         border-radius: {CARD_CORNER_RADIUS}px;
-        background-color: {COLOR_SURFACE_ELEVATED};
-        color: {COLOR_TEXT_SECONDARY};
+        background-color: {color_surface_elevated};
+        color: {color_text_secondary};
         padding: 6px 8px;
         font-weight: 600;
     }}
     QLabel[wizardStep="true"][wizardStepState="complete"] {{
-        border-color: {COLOR_SUCCESS_BORDER};
-        background-color: {COLOR_SUCCESS_BG};
-        color: {COLOR_SUCCESS_TEXT};
+        border-color: {color_success_border};
+        background-color: {color_success_bg};
+        color: {color_success_text};
     }}
     QLabel[wizardStep="true"][wizardStepState="current"] {{
-        border-color: {COLOR_PRIMARY_BORDER};
-        background-color: {COLOR_PRIMARY};
-        color: #ffffff;
+        border-color: {color_primary_border};
+        background-color: {color_primary};
+        color: {theme.selected_text};
     }}
     QLabel[wizardStep="true"][wizardStepState="upcoming"] {{
-        border-color: {COLOR_BORDER_SOFT};
-        background-color: {COLOR_SURFACE_ALT};
-        color: {COLOR_TEXT_SECONDARY};
+        border-color: {color_border_soft};
+        background-color: {color_surface_alt};
+        color: {color_text_secondary};
     }}
     QTableWidget#assets_table {{
-        border: 1px solid {COLOR_BORDER_SOFT};
+        border: 1px solid {color_border_soft};
         border-radius: {CARD_CORNER_RADIUS}px;
-        background-color: {COLOR_SURFACE_ELEVATED};
-        gridline-color: {COLOR_BORDER_SOFT};
-        selection-background-color: {COLOR_PRIMARY};
-        selection-color: #ffffff;
+        background-color: {color_surface_elevated};
+        gridline-color: {color_border_soft};
+        selection-background-color: {color_primary};
+        selection-color: {theme.selected_text};
         outline: none;
     }}
     QTableWidget#assets_table QHeaderView::section {{
-        background-color: {COLOR_SURFACE_ALT};
+        background-color: {color_surface_alt};
         border: none;
-        border-right: 1px solid {COLOR_BORDER_SOFT};
-        border-bottom: 1px solid {COLOR_BORDER_SOFT};
+        border-right: 1px solid {color_border_soft};
+        border-bottom: 1px solid {color_border_soft};
         padding: 6px 8px;
-        color: {COLOR_TEXT_SECONDARY};
+        color: {color_text_secondary};
         font-weight: 700;
     }}
     QTableWidget#assets_table::item {{
         padding: 4px 8px;
     }}
     QTableWidget#assets_table::item:selected {{
-        background-color: {COLOR_PRIMARY};
-        color: #ffffff;
+        background-color: {color_primary};
+        color: {theme.selected_text};
     }}
     QTableWidget#assets_table::item:hover {{
-        background-color: {COLOR_SURFACE_ALT};
+        background-color: {color_surface_alt};
     }}
     QPlainTextEdit#assets_status_text,
     QPlainTextEdit#session_summary_text {{
-        border: 1px solid {COLOR_BORDER_SOFT};
+        border: 1px solid {color_border_soft};
         border-radius: {CARD_CORNER_RADIUS}px;
-        background-color: {COLOR_SURFACE_ELEVATED};
-        color: {COLOR_TEXT_PRIMARY};
+        background-color: {color_surface_elevated};
+        color: {color_text_primary};
     }}
     QFrame#run_summary_empty_state {{
-        border: 1px dashed {COLOR_BORDER_SOFT};
+        border: 1px dashed {color_border_soft};
         border-radius: {CARD_CORNER_RADIUS}px;
-        background-color: {COLOR_SURFACE_ELEVATED};
+        background-color: {color_surface_elevated};
     }}
     QLabel#run_summary_empty_title {{
-        color: {COLOR_TEXT_PRIMARY};
+        color: {color_text_primary};
         font-size: {FONT_SIZE_SECTION_TITLE}px;
         font-weight: 700;
     }}
     QLabel#run_summary_empty_body {{
-        color: {COLOR_TEXT_SECONDARY};
+        color: {color_text_secondary};
     }}
     QLabel#home_launch_status_summary,
     QLabel#run_readiness_summary_value,
     QLabel#dashboard_attention_note {{
-        color: {COLOR_TEXT_SECONDARY};
+        color: {color_text_secondary};
     }}
     """
 
 
 def apply_studio_theme(widget: QWidget) -> None:
-    widget.setStyleSheet(studio_theme_stylesheet())
+    widget.setStyleSheet(studio_theme_stylesheet(widget.palette()))
 
 
-def launch_surface_frame_stylesheet(palette: QPalette) -> str:
-    window_color = palette.color(QPalette.ColorRole.Window)
-    mid_color = palette.color(QPalette.ColorRole.Mid)
-    is_dark = window_color.lightness() < 128
-    content_bg = window_color.lighter(106) if is_dark else window_color.lighter(102)
-    frame_border = QColor(mid_color)
-    frame_border.setAlpha(100 if window_color.lightness() >= 128 else 145)
+def launch_surface_frame_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
+    theme = _resolved_theme(theme)
 
     return f"""
     QWidget[launchSurfaceRoot="true"] {{
-        background-color: {_rgba(window_color)};
+        background-color: {theme.page_background};
     }}
     QFrame[launchSurfaceFrame="true"] {{
-        border: 1px solid {_rgba(frame_border)};
+        border: 1px solid {theme.border_soft};
         border-radius: 16px;
-        background-color: {_rgba(content_bg)};
+        background-color: {theme.surface};
     }}
     """
 
 
-def home_page_stylesheet(palette: QPalette) -> str:
+def home_page_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
+    theme = _resolved_theme(theme)
     return (
-        launch_surface_frame_stylesheet(palette)
-        + """
-    QWidget#home_page {
-        color: #243447;
+        launch_surface_frame_stylesheet(theme)
+        + f"""
+    QWidget#home_page {{
+        color: {theme.text_primary};
         font-size: 13px;
-    }
-    QLabel#home_current_project_header {
+    }}
+    QLabel#home_current_project_header {{
         font-size: 28px;
         font-weight: 700;
-        color: #142033;
-    }
-    QLabel#home_current_project_subtitle {
+        color: {theme.text_primary};
+    }}
+    QLabel#home_current_project_subtitle {{
         font-size: 13px;
-        color: #495869;
-    }
-    QLabel[homeFieldLabel="true"] {
-        color: #4c5d73;
+        color: {theme.text_secondary};
+    }}
+    QLabel[homeFieldLabel="true"] {{
+        color: {theme.text_muted};
         font-size: 13px;
         font-weight: 600;
-    }
-    QLabel[homeValueRole="primary"] {
-        color: #1f2f44;
+    }}
+    QLabel[homeValueRole="primary"] {{
+        color: {theme.text_primary};
         font-size: 15px;
         font-weight: 600;
-    }
-    QLabel[homeValueRole="secondary"] {
-        color: #2f435b;
+    }}
+    QLabel[homeValueRole="secondary"] {{
+        color: {theme.text_secondary};
         font-size: 13px;
-    }
+    }}
     QPushButton#home_create_project_button,
     QPushButton#home_open_project_button,
-    QPushButton#home_edit_setup_button {
+    QPushButton#home_edit_setup_button {{
         font-size: 14px;
         padding: 7px 12px;
-    }
-    QFrame#home_launch_panel QLabel#home_launch_status_summary {
+    }}
+    QFrame#home_launch_panel QLabel#home_launch_status_summary {{
         padding-top: 4px;
-    }
-    QFrame#home_metrics_panel {
-        border: 1px solid #d6e0ef;
+    }}
+    QFrame#home_metrics_panel {{
+        border: 1px solid {theme.border_soft};
         border-radius: 8px;
-        background-color: #ffffff;
-    }
-    QFrame#home_metric_cell {
-        border-right: 1px solid #d6e0ef;
+        background-color: {theme.surface_elevated};
+    }}
+    QFrame#home_metric_cell {{
+        border-right: 1px solid {theme.border_soft};
         background-color: transparent;
-    }
-    QLabel#home_metric_label {
-        color: #52637a;
+    }}
+    QLabel#home_metric_label {{
+        color: {theme.text_muted};
         font-size: 12px;
         font-weight: 600;
-    }
-    QLabel[homeValueRole="primary"] {
+    }}
+    QLabel[homeValueRole="primary"] {{
         font-size: 20px;
         font-weight: 700;
-    }
-    QPushButton#home_launch_experiment_button {
+    }}
+    QPushButton#home_launch_experiment_button {{
         font-size: 18px;
         min-height: 54px;
         padding: 10px 24px;
-    }
+    }}
     QPushButton[launchActionRole="primary"],
-    QPushButton[homeActionRole="primary"] {
+    QPushButton[homeActionRole="primary"] {{
         font-weight: 700;
-    }
-    QLabel#home_launch_status_indicator {
+    }}
+    QLabel#home_launch_status_indicator {{
         min-height: 28px;
-    }
-    QLabel#home_launch_status_summary {
-        color: #33485f;
-    }
+    }}
+    QLabel#home_launch_status_summary {{
+        color: {theme.text_secondary};
+    }}
     """
     )
 
@@ -1259,125 +1264,129 @@ def apply_home_page_theme(widget: QWidget) -> None:
     widget.setStyleSheet(home_page_stylesheet(widget.palette()))
 
 
-def project_overview_stylesheet() -> str:
-    return """
-    QFrame#dashboard_project_overview_card {
-        background-color: #f8fbff;
-    }
-    QLabel#project_overview_title {
-        color: #142033;
+def project_overview_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
+    theme = _resolved_theme(theme)
+    return f"""
+    QFrame#dashboard_project_overview_card {{
+        background-color: {theme.surface};
+    }}
+    QLabel#project_overview_title {{
+        color: {theme.text_primary};
         font-size: 24px;
         font-weight: 700;
-    }
-    QLabel#project_overview_subtitle {
-        color: #495869;
+    }}
+    QLabel#project_overview_subtitle {{
+        color: {theme.text_secondary};
         font-size: 13px;
-    }
-    QFrame#project_overview_checklist {
-        border: 1px solid #d6e0ef;
+    }}
+    QFrame#project_overview_checklist {{
+        border: 1px solid {theme.border_soft};
         border-radius: 8px;
-        background-color: #ffffff;
-    }
-    QFrame[setupChecklistPanel="true"] {
-        border: 1px solid #d6e0ef;
+        background-color: {theme.surface_elevated};
+    }}
+    QFrame[setupChecklistPanel="true"] {{
+        border: 1px solid {theme.border_soft};
         border-radius: 8px;
-        background-color: #ffffff;
-    }
-    QLabel[setupChecklistTitle="true"] {
-        color: #142033;
+        background-color: {theme.surface_elevated};
+    }}
+    QLabel[setupChecklistTitle="true"] {{
+        color: {theme.text_primary};
         font-size: 13px;
         font-weight: 700;
-    }
-    QLabel[setupChecklistItem="true"] {
-        color: #166534;
+    }}
+    QLabel[setupChecklistItem="true"] {{
+        color: {theme.success_text};
         font-size: 12px;
         font-weight: 700;
         padding: 3px 0;
-    }
-    QLabel[setupChecklistItem="true"][setupChecklistState="incomplete"] {
-        color: #991b1b;
-    }
+    }}
+    QLabel[setupChecklistItem="true"][setupChecklistState="incomplete"] {{
+        color: {theme.error_text};
+    }}
     """
 
 
 def apply_project_overview_theme(widget: QWidget) -> None:
-    widget.setStyleSheet(project_overview_stylesheet())
+    widget.setStyleSheet(project_overview_stylesheet(widget.palette()))
 
 
-def fixation_settings_stylesheet() -> str:
+def fixation_settings_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
+    theme = _resolved_theme(theme)
     return f"""
     QFrame#fixation_feasibility_card {{
-        border: 1px solid {COLOR_BORDER_SOFT};
+        border: 1px solid {theme.border_soft};
         border-radius: {CARD_CORNER_RADIUS}px;
-        background-color: {COLOR_SURFACE_ELEVATED};
+        background-color: {theme.surface_elevated};
     }}
     QFrame[fixationSettingsSection="true"],
     QFrame[fixationPreviewPanel="true"] {{
-        border: 1px solid {COLOR_BORDER_SOFT};
+        border: 1px solid {theme.border_soft};
         border-radius: {CARD_CORNER_RADIUS}px;
-        background-color: {COLOR_SURFACE_ELEVATED};
+        background-color: {theme.surface_elevated};
     }}
     QLabel#fixation_feasibility_label {{
-        color: {COLOR_TEXT_PRIMARY};
+        color: {theme.text_primary};
         font-weight: 600;
     }}
     QLabel[fixationSettingsSectionTitle="true"] {{
-        color: {COLOR_TEXT_PRIMARY};
+        color: {theme.text_primary};
         font-weight: 700;
     }}
     """
 
 
 def apply_fixation_settings_theme(widget: QWidget) -> None:
-    widget.setStyleSheet(fixation_settings_stylesheet())
+    widget.setStyleSheet(fixation_settings_stylesheet(widget.palette()))
 
 
-def non_home_shell_stylesheet() -> str:
+def non_home_shell_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
+    theme = _resolved_theme(theme)
     return f"""
     QLabel#non_home_shell_title {{
         font-size: {FONT_SIZE_PAGE_TITLE}px;
         font-weight: 700;
-        color: {COLOR_TEXT_PRIMARY};
+        color: {theme.text_primary};
     }}
     QLabel#non_home_shell_subtitle {{
-        color: {COLOR_TEXT_SECONDARY};
+        color: {theme.text_secondary};
         font-size: {FONT_SIZE_BODY}px;
     }}
     QFrame#non_home_shell_footer_strip {{
-        border: 1px solid {COLOR_BORDER_SOFT};
+        border: 1px solid {theme.border_soft};
         border-radius: {CARD_CORNER_RADIUS}px;
-        background-color: {COLOR_SURFACE};
+        background-color: {theme.surface};
     }}
     QLabel#non_home_shell_footer_label {{
-        color: {COLOR_TEXT_SECONDARY};
+        color: {theme.text_secondary};
     }}
     """
 
 
 def apply_non_home_shell_theme(widget: QWidget) -> None:
-    widget.setStyleSheet(non_home_shell_stylesheet())
+    widget.setStyleSheet(non_home_shell_stylesheet(widget.palette()))
 
 
-def section_card_stylesheet() -> str:
+def section_card_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
+    theme = _resolved_theme(theme)
     return f"""
     QFrame[sectionCard="true"] {{
-        border: 1px solid {COLOR_BORDER};
+        border: 1px solid {theme.border};
         border-radius: {CARD_CORNER_RADIUS}px;
-        background-color: {COLOR_SURFACE};
+        background-color: {theme.surface};
     }}
     QFrame#setup_wizard_current_step_card[wizardProjectStepFrame="true"] {{
         border: none;
         background-color: transparent;
     }}
     QFrame[experimentSettingsSection="true"] {{
-        border: 1px solid {COLOR_BORDER_SOFT};
+        border: 1px solid {theme.border_soft};
         border-radius: {CARD_CORNER_RADIUS}px;
-        background-color: {COLOR_SURFACE_ELEVATED};
+        background-color: {theme.surface_elevated};
     }}
     QFrame[reviewSummarySection="true"] {{
-        border: 1px solid {COLOR_BORDER_SOFT};
+        border: 1px solid {theme.border_soft};
         border-radius: {CARD_CORNER_RADIUS}px;
-        background-color: {COLOR_SURFACE_ELEVATED};
+        background-color: {theme.surface_elevated};
     }}
     QFrame[reviewChecklistRow="true"] {{
         border: none;
@@ -1386,25 +1395,25 @@ def section_card_stylesheet() -> str:
     QLabel[sectionCardRole="title"] {{
         font-size: {FONT_SIZE_SECTION_TITLE}px;
         font-weight: 700;
-        color: {COLOR_TEXT_PRIMARY};
+        color: {theme.text_primary};
     }}
     QLabel[sectionCardRole="subtitle"] {{
-        color: {COLOR_TEXT_SECONDARY};
+        color: {theme.text_secondary};
     }}
     QLabel[reviewChecklistSection="true"],
     QLabel[reviewSummarySectionTitle="true"] {{
-        color: {COLOR_TEXT_PRIMARY};
+        color: {theme.text_primary};
         font-weight: 700;
         padding-top: 2px;
     }}
     QLabel[reviewChecklistLine="true"] {{
-        color: {COLOR_TEXT_PRIMARY};
+        color: {theme.text_primary};
     }}
     QLabel[reviewCheckIcon="true"] {{
-        border: 1px solid {COLOR_SUCCESS_BORDER};
+        border: 1px solid {theme.success_border};
         border-radius: 10px;
-        background-color: {COLOR_SUCCESS_BG};
-        color: {COLOR_SUCCESS_TEXT};
+        background-color: {theme.success_bg};
+        color: {theme.success_text};
         font-size: {FONT_SIZE_META}px;
         font-weight: 700;
         min-width: 20px;
@@ -1413,10 +1422,10 @@ def section_card_stylesheet() -> str:
         max-height: 20px;
     }}
     QLabel#section_card_tooltip_badge {{
-        border: 1px solid {COLOR_BORDER_SOFT};
+        border: 1px solid {theme.border_soft};
         border-radius: 8px;
-        background-color: {COLOR_SURFACE_ALT};
-        color: {COLOR_TEXT_PRIMARY};
+        background-color: {theme.surface_alt};
+        color: {theme.text_primary};
         font-size: {FONT_SIZE_META}px;
         font-weight: 700;
     }}
@@ -1424,13 +1433,14 @@ def section_card_stylesheet() -> str:
 
 
 def apply_section_card_theme(widget: QWidget) -> None:
-    widget.setStyleSheet(section_card_stylesheet())
+    widget.setStyleSheet(section_card_stylesheet(widget.palette()))
 
 
-def setup_wizard_stylesheet(palette: QPalette) -> str:
+def setup_wizard_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
+    theme = _resolved_theme(theme)
     return (
-        section_card_stylesheet()
-        + launch_surface_frame_stylesheet(palette)
+        section_card_stylesheet(theme)
+        + launch_surface_frame_stylesheet(theme)
         + f"""
     QWidget#setup_wizard_page QScrollArea#page_container_scroll_area,
     QWidget#setup_wizard_page QWidget#page_container_scroll_content,
@@ -1440,7 +1450,7 @@ def setup_wizard_stylesheet(palette: QPalette) -> str:
         background: transparent;
     }}
     QWidget#setup_wizard_page {{
-        color: {COLOR_TEXT_PRIMARY};
+        color: {theme.text_primary};
         font-size: {FONT_SIZE_BODY}px;
     }}
     """
@@ -1451,70 +1461,50 @@ def apply_setup_wizard_theme(widget: QWidget) -> None:
     widget.setStyleSheet(setup_wizard_stylesheet(widget.palette()))
 
 
-def _rgba(color: QColor) -> str:
-    return f"rgba({color.red()}, {color.green()}, {color.blue()}, {color.alpha()})"
-
-
-def welcome_window_stylesheet(palette: QPalette) -> str:
-    window_color = palette.color(QPalette.ColorRole.Window)
-    base_color = palette.color(QPalette.ColorRole.Base)
-    mid_color = palette.color(QPalette.ColorRole.Mid)
-    text_color = palette.color(QPalette.ColorRole.Text)
-    highlight_color = palette.color(QPalette.ColorRole.Highlight)
-    highlighted_text_color = palette.color(QPalette.ColorRole.HighlightedText)
-
-    muted_text = QColor(text_color)
-    muted_text.setAlpha(190)
-
-    is_dark = window_color.lightness() < 128
-    content_bg = window_color.lighter(106) if is_dark else window_color.lighter(102)
-    row_hover_bg = base_color.lighter(118) if is_dark else window_color.lighter(107)
-    focus_color = highlight_color.lighter(125) if is_dark else highlight_color.darker(110)
-    primary_hover = highlight_color.lighter(112) if is_dark else highlight_color.darker(108)
-    primary_pressed = highlight_color.lighter(124) if is_dark else highlight_color.darker(118)
-
-    return launch_surface_frame_stylesheet(palette) + f"""
+def welcome_window_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
+    theme = _resolved_theme(theme)
+    return launch_surface_frame_stylesheet(theme) + f"""
     QWidget#welcome_hero_container {{
         background: transparent;
     }}
     QLabel#welcome_headline_label {{
-        color: {_rgba(text_color)};
+        color: {theme.text_primary};
         font-size: 44px;
         font-weight: 700;
     }}
     QLabel#welcome_body_label {{
-        color: {_rgba(muted_text)};
+        color: {theme.text_secondary};
         font-size: 17px;
     }}
     QPushButton {{
-        border: 1px solid {_rgba(mid_color)};
+        border: 1px solid {theme.border};
         border-radius: 10px;
         padding: 12px 26px;
-        background-color: {_rgba(base_color)};
-        color: {_rgba(text_color)};
+        background-color: {theme.surface_elevated};
+        color: {theme.text_primary};
         font-size: 16px;
         font-weight: 600;
     }}
     QPushButton:hover {{
-        background-color: {_rgba(row_hover_bg)};
+        background-color: {theme.surface_alt};
     }}
     QPushButton:pressed {{
-        background-color: {_rgba(content_bg)};
+        background-color: {theme.surface};
     }}
     QPushButton[welcomeRole="primary"] {{
-        border-color: {_rgba(highlight_color.darker(115))};
-        background-color: {_rgba(highlight_color)};
-        color: {_rgba(highlighted_text_color)};
+        border-color: {theme.primary_border};
+        background-color: {theme.primary};
+        color: {theme.selected_text};
         font-weight: 600;
     }}
     QPushButton[welcomeRole="primary"]:hover {{
-        background-color: {_rgba(primary_hover)};
+        background-color: {theme.primary_hover};
     }}
     QPushButton[welcomeRole="primary"]:pressed {{
-        background-color: {_rgba(primary_pressed)};
+        background-color: {theme.primary_pressed};
     }}
     QPushButton:focus {{
-        border: 2px solid {_rgba(focus_color)};
+        border: 2px solid {theme.focus_ring};
     }}
     """
 

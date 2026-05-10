@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QEvent, Qt
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
     QFrame,
@@ -460,6 +460,17 @@ class HomePage(QWidget):
         self._document.project_changed.connect(self.refresh)
         self._document.session_plan_changed.connect(self.refresh)
         self.refresh()
+
+    def changeEvent(self, event: QEvent) -> None:  # noqa: N802
+        super().changeEvent(event)
+        if event.type() in (QEvent.Type.PaletteChange, QEvent.Type.ApplicationPaletteChange):
+            if getattr(self, "_theme_refreshing", False):
+                return
+            self._theme_refreshing = True
+            try:
+                apply_home_page_theme(self)
+            finally:
+                self._theme_refreshing = False
 
     def set_top_chrome_offset(self, offset: int) -> None:
         """Keep the launch surface visually stable when main-window chrome is visible."""

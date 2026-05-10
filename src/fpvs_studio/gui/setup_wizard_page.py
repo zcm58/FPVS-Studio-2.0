@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from PySide6.QtCore import QSize, Qt, QTimer
+from PySide6.QtCore import QEvent, QSize, Qt, QTimer
 from PySide6.QtGui import QResizeEvent
 from PySide6.QtWidgets import (
     QDialog,
@@ -390,6 +390,17 @@ class SetupWizardPage(QWidget):
         super().resizeEvent(event)
         self._sync_guided_panel_height()
         QTimer.singleShot(0, self._sync_guided_panel_height)
+
+    def changeEvent(self, event: QEvent) -> None:  # noqa: N802
+        super().changeEvent(event)
+        if event.type() in (QEvent.Type.PaletteChange, QEvent.Type.ApplicationPaletteChange):
+            if getattr(self, "_theme_refreshing", False):
+                return
+            self._theme_refreshing = True
+            try:
+                apply_setup_wizard_theme(self)
+            finally:
+                self._theme_refreshing = False
 
     def sync_fullscreen_checkbox(self, _checked: bool) -> None:
         return

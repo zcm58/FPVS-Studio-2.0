@@ -89,7 +89,13 @@ class WelcomeWindow(QWidget):
     def changeEvent(self, event: QEvent) -> None:  # noqa: N802
         super().changeEvent(event)
         if event.type() in (QEvent.Type.PaletteChange, QEvent.Type.ApplicationPaletteChange):
-            self._apply_theme_styles()
+            if getattr(self, "_theme_refreshing", False):
+                return
+            self._theme_refreshing = True
+            try:
+                self._apply_theme_styles()
+            finally:
+                self._theme_refreshing = False
 
     def _apply_theme_styles(self) -> None:
         apply_welcome_window_theme(self)

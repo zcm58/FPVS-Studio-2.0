@@ -269,6 +269,7 @@ def test_file_manage_projects_action_opens_themed_dialog(
     _, window = _open_created_project(controller, qtbot, tmp_path, "Manage Menu Project")
     assert window.manage_projects_action.text() == "Manage Projects..."
     assert window.manage_projects_action.objectName() == "manage_projects_action"
+    assert not hasattr(window, "_native_menu_style")
 
     captured: list[ManageProjectsDialog] = []
 

@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QEvent, Qt
 from PySide6.QtGui import QAction, QCloseEvent
 from PySide6.QtWidgets import (
     QFileDialog,
@@ -17,7 +17,6 @@ from PySide6.QtWidgets import (
     QPushButton,
     QStackedWidget,
     QStatusBar,
-    QStyleFactory,
 )
 
 from fpvs_studio import __version__
@@ -276,6 +275,17 @@ class StudioMainWindow(QMainWindow):
     def _apply_chrome_styles(self) -> None:
         apply_studio_theme(self)
 
+    def changeEvent(self, event: QEvent) -> None:  # noqa: N802
+        super().changeEvent(event)
+        if event.type() in (QEvent.Type.PaletteChange, QEvent.Type.ApplicationPaletteChange):
+            if getattr(self, "_theme_refreshing", False):
+                return
+            self._theme_refreshing = True
+            try:
+                self._apply_chrome_styles()
+            finally:
+                self._theme_refreshing = False
+
     def _install_button_hover_animations(self) -> None:
         self._button_hover_animators.clear()
         for button in self.findChildren(QPushButton):
@@ -317,14 +327,6 @@ class StudioMainWindow(QMainWindow):
     def _create_menu_and_toolbar(self) -> None:
         self.file_menu = self.menuBar().addMenu("File")
         self.tools_menu = self.menuBar().addMenu("Tools")
-        self._native_menu_style = QStyleFactory.create("WindowsVista") or QStyleFactory.create(
-            "Windows"
-        )
-        if self._native_menu_style is not None:
-            self.menuBar().setStyle(self._native_menu_style)
-            self.file_menu.setStyle(self._native_menu_style)
-            self.tools_menu.setStyle(self._native_menu_style)
-        self.menuBar().setStyleSheet("")
         self.menuBar().setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.file_menu.addAction(self.manage_projects_action)
         self.file_menu.addSeparator()

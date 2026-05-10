@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from PySide6.QtGui import QColor, QPalette
 from PySide6.QtWidgets import QLabel, QPushButton
 
 from fpvs_studio.gui.components import (
@@ -22,9 +23,32 @@ from fpvs_studio.gui.components import (
     mark_secondary_action,
     mark_welcome_action,
     section_card_stylesheet,
+    setup_wizard_stylesheet,
     studio_theme_stylesheet,
     welcome_window_stylesheet,
 )
+from fpvs_studio.gui.design_system import (
+    DARK_STUDIO_THEME,
+    LIGHT_STUDIO_THEME,
+    StudioColorScheme,
+    contrast_ratio,
+    resolve_studio_theme,
+)
+
+
+def _palette_with_window_color(window_color: str) -> QPalette:
+    palette = QPalette()
+    color = QColor(window_color)
+    palette.setColor(QPalette.ColorRole.Window, color)
+    palette.setColor(QPalette.ColorRole.Base, color)
+    palette.setColor(QPalette.ColorRole.Button, color)
+    text_color = QColor("#f3f6fb" if color.lightness() < 128 else "#1f2f44")
+    palette.setColor(QPalette.ColorRole.Text, text_color)
+    palette.setColor(
+        QPalette.ColorRole.WindowText,
+        text_color,
+    )
+    return palette
 
 
 def test_action_role_helpers_mark_expected_properties(qtbot) -> None:
@@ -135,3 +159,37 @@ def test_theme_stylesheet_builders_expose_expected_selectors(qapp) -> None:
     assert "setup_wizard_status_strip" in studio_theme_stylesheet()
     assert "#a1332b" in error_text_stylesheet()
     assert "text-decoration: underline" in condition_template_details_header_stylesheet()
+
+
+def test_theme_resolver_maps_light_and_dark_palettes(qapp) -> None:
+    assert resolve_studio_theme(_palette_with_window_color("#f4f7fb")).scheme is (
+        StudioColorScheme.LIGHT
+    )
+    assert resolve_studio_theme(_palette_with_window_color("#202124")).scheme is (
+        StudioColorScheme.DARK
+    )
+
+
+def test_studio_themes_keep_accessible_text_contrast(qapp) -> None:
+    for theme in (LIGHT_STUDIO_THEME, DARK_STUDIO_THEME):
+        assert contrast_ratio(theme.text_primary, theme.page_background) >= 4.5
+        assert contrast_ratio(theme.text_primary, theme.surface_elevated) >= 4.5
+        assert contrast_ratio(theme.text_secondary, theme.surface_elevated) >= 4.5
+        assert contrast_ratio(theme.selected_text, theme.primary) >= 4.5
+
+
+def test_dark_theme_stylesheets_use_dark_tokens(qapp) -> None:
+    dark_palette = _palette_with_window_color("#202124")
+    dark_theme = resolve_studio_theme(dark_palette)
+
+    assert "background-color: #ffffff;" not in home_page_stylesheet(dark_palette)
+    assert f"background-color: {dark_theme.page_background};" in home_page_stylesheet(
+        dark_palette
+    )
+    assert f"background-color: {dark_theme.surface};" in welcome_window_stylesheet(
+        dark_palette
+    )
+    assert f"background-color: {dark_theme.surface_elevated};" in section_card_stylesheet(
+        dark_palette
+    )
+    assert f"color: {dark_theme.text_primary};" in setup_wizard_stylesheet(dark_palette)
