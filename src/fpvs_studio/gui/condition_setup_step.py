@@ -45,9 +45,9 @@ from fpvs_studio.gui.window_helpers import (
 from fpvs_studio.gui.workers import ProgressTask
 
 _DEFAULT_CONDITION_NAME_RE = re.compile(r"^Condition \d+$")
-_SOURCE_CARD_WIDTH = 210
+_SOURCE_CARD_MIN_WIDTH = 210
 _SOURCE_CARD_HEIGHT = 232
-_SOURCE_ROW_MIN_WIDTH = (_SOURCE_CARD_WIDTH * 2) + PAGE_SECTION_GAP
+_SOURCE_ROW_MIN_WIDTH = (_SOURCE_CARD_MIN_WIDTH * 2) + PAGE_SECTION_GAP
 _SOURCE_FOLDER_VALUE_HEIGHT = 68
 _SOURCE_METRICS_HEIGHT = 58
 _INSTRUCTIONS_HEIGHT = 92
@@ -74,18 +74,22 @@ class _ConditionSourcesRow(QWidget):
 
     def resizeEvent(self, event: QResizeEvent) -> None:  # noqa: N802
         super().resizeEvent(event)
-        left = max(0, round((self.width() - _SOURCE_ROW_MIN_WIDTH) / 2))
+        available_width = max(self.width(), _SOURCE_ROW_MIN_WIDTH)
+        card_width = max(
+            _SOURCE_CARD_MIN_WIDTH,
+            round((available_width - PAGE_SECTION_GAP) / 2),
+        )
         card_top = 0
         self._base_card.setGeometry(
-            left,
+            0,
             card_top,
-            _SOURCE_CARD_WIDTH,
+            card_width,
             _SOURCE_CARD_HEIGHT,
         )
         self._oddball_card.setGeometry(
-            left + _SOURCE_CARD_WIDTH + PAGE_SECTION_GAP,
+            available_width - card_width,
             card_top,
-            _SOURCE_CARD_WIDTH,
+            card_width,
             _SOURCE_CARD_HEIGHT,
         )
 
@@ -208,10 +212,12 @@ class ConditionSetupStep(QWidget):
             object_name="setup_conditions_base_source_card",
             compact=True,
             show_variants=False,
+            center_title=True,
+            center_content=True,
             parent=self,
         )
         self.base_source_card.status_badge.setVisible(False)
-        self.base_source_card.setFixedSize(_SOURCE_CARD_WIDTH, _SOURCE_CARD_HEIGHT)
+        self.base_source_card.setMinimumSize(_SOURCE_CARD_MIN_WIDTH, _SOURCE_CARD_HEIGHT)
         self.base_source_value = self.base_source_card.folder_value
         self.base_source_value.setObjectName("setup_wizard_base_source_value")
         self.base_source_value.setFixedHeight(_SOURCE_FOLDER_VALUE_HEIGHT)
@@ -230,10 +236,12 @@ class ConditionSetupStep(QWidget):
             object_name="setup_conditions_oddball_source_card",
             compact=True,
             show_variants=False,
+            center_title=True,
+            center_content=True,
             parent=self,
         )
         self.oddball_source_card.status_badge.setVisible(False)
-        self.oddball_source_card.setFixedSize(_SOURCE_CARD_WIDTH, _SOURCE_CARD_HEIGHT)
+        self.oddball_source_card.setMinimumSize(_SOURCE_CARD_MIN_WIDTH, _SOURCE_CARD_HEIGHT)
         self.oddball_source_value = self.oddball_source_card.folder_value
         self.oddball_source_value.setObjectName("setup_wizard_oddball_source_value")
         self.oddball_source_value.setFixedHeight(_SOURCE_FOLDER_VALUE_HEIGHT)

@@ -35,7 +35,7 @@ from fpvs_studio.core.enums import DutyCycleMode, InterConditionMode, StimulusVa
 from fpvs_studio.core.project_service import create_project
 from fpvs_studio.core.serialization import load_project_file, save_project_file
 from fpvs_studio.gui.controller import StudioController
-from fpvs_studio.gui.design_system import COLOR_PAGE_BACKGROUND
+from fpvs_studio.gui.design_system import COLOR_PAGE_BACKGROUND, PAGE_SECTION_GAP
 
 
 class _ImmediateProgressTask(QObject):
@@ -1185,11 +1185,46 @@ def test_setup_wizard_conditions_step_keeps_source_geometry_for_incomplete_condi
     assert step.instructions_edit.size() == before_geometry["instructions"]
     sources_row = step.findChild(QWidget, "setup_conditions_sources_row")
     assert sources_row is not None
+    main_panel = step.findChild(QWidget, "setup_conditions_main_panel")
+    assert main_panel is not None
+    details_left = step.condition_details_section.mapTo(
+        main_panel,
+        step.condition_details_section.rect().topLeft(),
+    ).x()
+    details_right = step.condition_details_section.mapTo(
+        main_panel,
+        step.condition_details_section.rect().topRight(),
+    ).x()
+    base_left = step.base_source_card.mapTo(
+        main_panel,
+        step.base_source_card.rect().topLeft(),
+    ).x()
+    base_right = step.base_source_card.mapTo(
+        main_panel,
+        step.base_source_card.rect().topRight(),
+    ).x()
+    oddball_left = step.oddball_source_card.mapTo(
+        main_panel,
+        step.oddball_source_card.rect().topLeft(),
+    ).x()
     oddball_right = step.oddball_source_card.mapTo(
-        sources_row,
+        main_panel,
         step.oddball_source_card.rect().topRight(),
     ).x()
-    assert oddball_right <= sources_row.width()
+    assert base_left == details_left
+    assert oddball_right == details_right
+    assert oddball_left - base_right >= PAGE_SECTION_GAP
+    assert step.base_source_card.width() > 210
+    assert step.oddball_source_card.width() > 210
+    assert step.base_source_card.title_label.alignment() & Qt.AlignmentFlag.AlignHCenter
+    assert step.oddball_source_card.title_label.alignment() & Qt.AlignmentFlag.AlignHCenter
+    assert step.base_source_value.alignment() & Qt.AlignmentFlag.AlignHCenter
+    assert step.oddball_source_value.alignment() & Qt.AlignmentFlag.AlignHCenter
+    assert step.base_source_card.metrics._rows[0][1].alignment() & Qt.AlignmentFlag.AlignHCenter
+    assert (
+        step.oddball_source_card.metrics._rows[0][1].alignment()
+        & Qt.AlignmentFlag.AlignHCenter
+    )
 
     base_bottom = step.base_source_card.mapTo(
         workspace,

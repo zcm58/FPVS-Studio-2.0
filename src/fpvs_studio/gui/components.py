@@ -520,11 +520,13 @@ class SetupMetricStrip(QFrame):
         *,
         object_name: str = "setup_metric_strip",
         compact: bool = False,
+        center_content: bool = False,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self.setObjectName(object_name)
         self.setProperty("setupMetricStrip", "true")
+        self._center_content = center_content
         self._rows: list[tuple[QLabel, QLabel]] = []
         self._layout = QGridLayout(self)
         if compact:
@@ -539,15 +541,25 @@ class SetupMetricStrip(QFrame):
         for label, value in self._rows:
             self._layout.removeWidget(label)
             self._layout.removeWidget(value)
+            label.setVisible(False)
+            value.setVisible(False)
             label.deleteLater()
             value.deleteLater()
         self._rows = []
         for row, (label_text, value_text) in enumerate(rows):
             label = QLabel(label_text, self)
             label.setProperty("setupMetricLabel", "true")
+            label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+            label.setMinimumWidth(0)
             value = QLabel(value_text, self)
             value.setProperty("setupMetricValue", "true")
-            value.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            value.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+            value.setMinimumWidth(0)
+            if self._center_content:
+                label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                value.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            else:
+                value.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
             self._layout.addWidget(label, row, 0)
             self._layout.addWidget(value, row, 1)
             self._rows.append((label, value))
@@ -566,6 +578,8 @@ class SetupSourceCard(QFrame):
         object_name: str = "setup_source_card",
         compact: bool = False,
         show_variants: bool = True,
+        center_title: bool = False,
+        center_content: bool = False,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
@@ -586,21 +600,30 @@ class SetupSourceCard(QFrame):
         self.title_label = QLabel(title, header)
         self.title_label.setProperty("setupSourceTitle", "true")
         self.status_badge = StatusBadgeLabel("Missing", header)
-        header_layout.addWidget(self.title_label)
-        header_layout.addStretch(1)
-        header_layout.addWidget(self.status_badge)
+        if center_title:
+            self.title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            header_layout.addWidget(self.title_label, 1)
+            self.status_badge.setVisible(False)
+        else:
+            header_layout.addWidget(self.title_label)
+            header_layout.addStretch(1)
+            header_layout.addWidget(self.status_badge)
         self._layout.addWidget(header)
 
         folder_label = QLabel("Folder", self)
         folder_label.setProperty("setupMetricLabel", "true")
         self.folder_value = PathValueLabel(self)
         self.folder_value.setObjectName(f"{object_name}_folder")
+        if center_content:
+            folder_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.folder_value.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._layout.addWidget(folder_label)
         self._layout.addWidget(self.folder_value)
 
         self.metrics = SetupMetricStrip(
             object_name=f"{object_name}_metrics",
             compact=compact,
+            center_content=center_content,
             parent=self,
         )
         self._layout.addWidget(self.metrics)
