@@ -46,16 +46,28 @@ def prepare_stimuli(
     *,
     visual: Any,
     window: Any,
-    image_stim_cache: dict[str, Any],
     absolute_paths: Mapping[str, Path],
 ) -> dict[str, Any]:
-    """Create or reuse PsychoPy image stimuli for one run."""
+    """Create PsychoPy image stimuli for one condition run."""
 
+    stimuli: dict[str, Any] = {}
     for relative_path, absolute_path in absolute_paths.items():
-        if relative_path not in image_stim_cache:
-            image_stim_cache[relative_path] = visual.ImageStim(
+        try:
+            stimuli[relative_path] = visual.ImageStim(
                 window,
                 image=str(absolute_path),
                 autoLog=False,
             )
-    return {path: image_stim_cache[path] for path in absolute_paths}
+        except Exception:
+            release_stimuli(stimuli)
+            raise
+    return stimuli
+
+
+def release_stimuli(stimuli: Mapping[str, Any]) -> None:
+    """Release PsychoPy stimulus textures for one condition run."""
+
+    for stimulus in stimuli.values():
+        clear_textures = getattr(stimulus, "clearTextures", None)
+        if callable(clear_textures):
+            clear_textures()

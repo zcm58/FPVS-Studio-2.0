@@ -59,7 +59,8 @@ The PsychoPy implementation:
 - opens launched playback fullscreen on the default display
 - shows Space-required condition-start screens and completion text screens
 - shows a dedicated manual inter-block break screen between non-final blocks
-- preloads image stimuli before each condition
+- preloads each condition's unique image stimuli before playback and releases them when
+  the condition ends
 - executes the compiled frame schedule directly from `RunSpec`
 - draws the fixation cross continuously and switches color on compiled
   `FixationEvent` windows

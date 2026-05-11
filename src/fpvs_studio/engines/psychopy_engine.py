@@ -25,6 +25,7 @@ from fpvs_studio.engines.psychopy_metadata import runtime_metadata_for_run
 from fpvs_studio.engines.psychopy_stimuli import (
     fixation_color_for_frame,
     prepare_stimuli,
+    release_stimuli,
     should_draw_stimulus,
 )
 from fpvs_studio.engines.psychopy_text_screens import show_text_screen
@@ -49,7 +50,6 @@ class PsychoPyEngine(PresentationEngine):
         self._window: Any | None = None
         self._keyboard: Any | None = None
         self._runtime_options: dict[str, object] = {}
-        self._image_stim_cache: dict[str, Any] = {}
         self._aborted = False
         self._active_run_clock: Any | None = None
 
@@ -160,217 +160,230 @@ class PsychoPyEngine(PresentationEngine):
         timing_max_interval_s: float | None = None
         timing_strict_abort = False
         warmup_intervals: list[float] = []
+        stimuli: dict[str, Any] = {}
 
-        absolute_paths = {
-            event.image_path: project_root / Path(event.image_path)
-            for event in run_spec.stimulus_sequence
-        }
-        stimuli = self._prepare_stimuli(absolute_paths)
-        fixation_stim = create_fixation_stim(visual=visual, window=window, run_spec=run_spec)
-        keyboard.clock.reset()
-        keyboard.clearEvents()
-        window.color = run_spec.display.background_color
-        window.recordFrameIntervals = True
-        if hasattr(window, "frameIntervals"):
-            window.frameIntervals = []
+        try:
+            absolute_paths = {
+                event.image_path: project_root / Path(event.image_path)
+                for event in run_spec.stimulus_sequence
+            }
+            stimuli = self._prepare_stimuli(absolute_paths)
+            fixation_stim = create_fixation_stim(visual=visual, window=window, run_spec=run_spec)
+            keyboard.clock.reset()
+            keyboard.clearEvents()
+            window.color = run_spec.display.background_color
+            window.recordFrameIntervals = True
+            if hasattr(window, "frameIntervals"):
+                window.frameIntervals = []
 
-        self._active_run_clock = core.Clock()
-        warmup_last_flip_time: float | None = None
-        warmup_miss_count = 0
-        warmup_strict_timing_enabled = (
-            timing_config.strict_timing and timing_config.strict_timing_warmup
-        )
-        for warmup_frame_index in range(timing_config.warmup_frames):
-            flip_time = window.flip()
-            current_time_s = (
-                float(flip_time) if flip_time is not None else self._active_run_clock.getTime()
+            self._active_run_clock = core.Clock()
+            warmup_last_flip_time: float | None = None
+            warmup_miss_count = 0
+            warmup_strict_timing_enabled = (
+                timing_config.strict_timing and timing_config.strict_timing_warmup
             )
-            if warmup_last_flip_time is not None:
-                warmup_interval_index = warmup_frame_index - 1
-                interval_s = current_time_s - warmup_last_flip_time
-                warmup_intervals.append(interval_s)
-                timing_max_interval_s = (
-                    interval_s
-                    if timing_max_interval_s is None
-                    else max(timing_max_interval_s, interval_s)
+            for warmup_frame_index in range(timing_config.warmup_frames):
+                flip_time = window.flip()
+                current_time_s = (
+                    float(flip_time)
+                    if flip_time is not None
+                    else self._active_run_clock.getTime()
                 )
-                if (
-                    timing_first_bad_frame_index is None
-                    and interval_s > timing_config.miss_threshold_s
-                ):
-                    timing_first_bad_frame_index = warmup_interval_index
-                post_settle_window = warmup_frame_index >= timing_config.warmup_settle_frames
-                interval_is_miss = interval_s > timing_config.miss_threshold_s
-                interval_is_severe = interval_s > timing_config.severe_miss_threshold_s
-                if warmup_strict_timing_enabled and post_settle_window and interval_is_miss:
-                    warmup_miss_count += 1
-                if (
-                    warmup_strict_timing_enabled
-                    and post_settle_window
-                    and (interval_is_severe or warmup_miss_count >= 2)
-                ):
-                    timing_strict_abort = True
-                    self._aborted = True
-                    abort_reason = self._timing_abort_reason(
-                        phase="warmup",
-                        frame_index=warmup_interval_index,
-                        interval_s=interval_s,
-                        timing_config=timing_config,
+                if warmup_last_flip_time is not None:
+                    warmup_interval_index = warmup_frame_index - 1
+                    interval_s = current_time_s - warmup_last_flip_time
+                    warmup_intervals.append(interval_s)
+                    timing_max_interval_s = (
+                        interval_s
+                        if timing_max_interval_s is None
+                        else max(timing_max_interval_s, interval_s)
                     )
+                    if (
+                        timing_first_bad_frame_index is None
+                        and interval_s > timing_config.miss_threshold_s
+                    ):
+                        timing_first_bad_frame_index = warmup_interval_index
+                    post_settle_window = warmup_frame_index >= timing_config.warmup_settle_frames
+                    interval_is_miss = interval_s > timing_config.miss_threshold_s
+                    interval_is_severe = interval_s > timing_config.severe_miss_threshold_s
+                    if warmup_strict_timing_enabled and post_settle_window and interval_is_miss:
+                        warmup_miss_count += 1
+                    if (
+                        warmup_strict_timing_enabled
+                        and post_settle_window
+                        and (interval_is_severe or warmup_miss_count >= 2)
+                    ):
+                        timing_strict_abort = True
+                        self._aborted = True
+                        abort_reason = self._timing_abort_reason(
+                            phase="warmup",
+                            frame_index=warmup_interval_index,
+                            interval_s=interval_s,
+                            timing_config=timing_config,
+                        )
+                        break
+                warmup_last_flip_time = current_time_s
+
+            keyboard.clock.reset()
+            keyboard.clearEvents()
+            stimulus_index = 0
+            fixation_index = 0
+            completed_frames = 0
+            last_flip_time: float | None = None
+            frame_intervals: list[FrameIntervalRecord] = []
+            response_log: list[ResponseRecord] = []
+            trigger_log: list[TriggerRecord] = []
+            trigger_event_lookup = self._build_trigger_lookup(run_spec)
+
+            for frame_index in range(run_spec.display.total_frames):
+                if self._aborted:
                     break
-            warmup_last_flip_time = current_time_s
 
-        keyboard.clock.reset()
-        keyboard.clearEvents()
-        stimulus_index = 0
-        fixation_index = 0
-        completed_frames = 0
-        last_flip_time: float | None = None
-        frame_intervals: list[FrameIntervalRecord] = []
-        response_log: list[ResponseRecord] = []
-        trigger_log: list[TriggerRecord] = []
-        trigger_event_lookup = self._build_trigger_lookup(run_spec)
-
-        for frame_index in range(run_spec.display.total_frames):
-            if self._aborted:
-                break
-
-            while (
-                stimulus_index + 1 < len(run_spec.stimulus_sequence)
-                and run_spec.stimulus_sequence[stimulus_index + 1].on_start_frame <= frame_index
-            ):
-                stimulus_index += 1
-
-            stimulus_event = (
-                run_spec.stimulus_sequence[stimulus_index] if run_spec.stimulus_sequence else None
-            )
-            if stimulus_event is not None and should_draw_stimulus(
-                stimulus_event,
-                frame_index,
-            ):
-                stimuli[stimulus_event.image_path].draw()
-
-            while (
-                fixation_index + 1 < len(run_spec.fixation_events)
-                and run_spec.fixation_events[fixation_index + 1].start_frame <= frame_index
-            ):
-                fixation_index += 1
-            fixation_stim.lineColor = self._fixation_color_for_frame(
-                run_spec.fixation_events,
-                run_spec.fixation.default_color,
-                run_spec.fixation.target_color,
-                fixation_index,
-                frame_index,
-            )
-            fixation_stim.draw()
-
-            for trigger_event in trigger_event_lookup.get(frame_index, ()):
-                if trigger_backend is not None:
-                    window.callOnFlip(
-                        self._emit_trigger,
-                        trigger_backend,
-                        trigger_event.code,
-                        trigger_event.label,
-                        frame_index,
-                    )
-
-            flip_time = window.flip()
-            current_time_s = (
-                float(flip_time) if flip_time is not None else self._active_run_clock.getTime()
-            )
-            if last_flip_time is not None:
-                interval_s = current_time_s - last_flip_time
-                frame_intervals.append(
-                    FrameIntervalRecord(
-                        frame_index=frame_index - 1,
-                        interval_s=interval_s,
-                    )
-                )
-                timing_max_interval_s = (
-                    interval_s
-                    if timing_max_interval_s is None
-                    else max(timing_max_interval_s, interval_s)
-                )
-                if (
-                    timing_first_bad_frame_index is None
-                    and interval_s > timing_config.miss_threshold_s
+                while (
+                    stimulus_index + 1 < len(run_spec.stimulus_sequence)
+                    and run_spec.stimulus_sequence[stimulus_index + 1].on_start_frame
+                    <= frame_index
                 ):
-                    timing_first_bad_frame_index = frame_index - 1
-                if timing_config.strict_timing and interval_s > timing_config.miss_threshold_s:
-                    timing_strict_abort = True
-                    self._aborted = True
-                    abort_reason = self._timing_abort_reason(
-                        phase="run",
-                        frame_index=frame_index - 1,
-                        interval_s=interval_s,
-                        timing_config=timing_config,
-                    )
-            last_flip_time = current_time_s
-            completed_frames = frame_index + 1
+                    stimulus_index += 1
 
-            if self._aborted:
-                break
-
-            keys = keyboard.getKeys(
-                keyList=list(run_spec.fixation.response_keys) + ["escape"],
-                waitRelease=False,
-                clear=True,
-            )
-            for key in keys:
-                key_name = getattr(key, "name", str(key))
-                if key_name == "escape":
-                    self._aborted = True
-                    if abort_reason is None:
-                        abort_reason = "Escape pressed during condition playback."
-                    break
-                key_time = getattr(key, "rt", None)
-                response_log.append(
-                    ResponseRecord(
-                        response_index=len(response_log),
-                        key=key_name,
-                        frame_index=frame_index,
-                        time_s=(
-                            float(key_time)
-                            if key_time is not None
-                            else self._active_run_clock.getTime()
-                        ),
-                    )
+                stimulus_event = (
+                    run_spec.stimulus_sequence[stimulus_index]
+                    if run_spec.stimulus_sequence
+                    else None
                 )
-            if self._aborted:
-                break
+                if stimulus_event is not None and should_draw_stimulus(
+                    stimulus_event,
+                    frame_index,
+                ):
+                    stimuli[stimulus_event.image_path].draw()
 
-        finished_at = datetime.now(timezone.utc)
-        runtime_metadata = self._runtime_metadata_for_run(
-            run_spec,
-            frame_intervals,
-            timing_config=timing_config,
-            warmup_intervals=warmup_intervals,
-            timing_max_interval_s=timing_max_interval_s,
-            timing_first_bad_frame_index=timing_first_bad_frame_index,
-            timing_strict_abort=timing_strict_abort,
-        )
-        self._active_run_clock = None
-        return RunExecutionSummary(
-            project_id=run_spec.project_id,
-            session_id=None,
-            run_id=run_spec.run_id,
-            condition_id=run_spec.condition.condition_id,
-            condition_name=run_spec.condition.name,
-            engine_name=self.engine_id,
-            run_mode=(
-                RunMode.TEST if bool((runtime_options or {}).get("test_mode")) else RunMode.SESSION
-            ),
-            started_at=started_at,
-            finished_at=finished_at,
-            completed_frames=completed_frames,
-            aborted=self._aborted,
-            abort_reason=abort_reason if self._aborted else None,
-            runtime_metadata=runtime_metadata,
-            frame_intervals=frame_intervals,
-            fixation_responses=[],
-            response_log=response_log,
-            trigger_log=trigger_log,
-        )
+                while (
+                    fixation_index + 1 < len(run_spec.fixation_events)
+                    and run_spec.fixation_events[fixation_index + 1].start_frame <= frame_index
+                ):
+                    fixation_index += 1
+                fixation_stim.lineColor = self._fixation_color_for_frame(
+                    run_spec.fixation_events,
+                    run_spec.fixation.default_color,
+                    run_spec.fixation.target_color,
+                    fixation_index,
+                    frame_index,
+                )
+                fixation_stim.draw()
+
+                for trigger_event in trigger_event_lookup.get(frame_index, ()):
+                    if trigger_backend is not None:
+                        window.callOnFlip(
+                            self._emit_trigger,
+                            trigger_backend,
+                            trigger_event.code,
+                            trigger_event.label,
+                            frame_index,
+                        )
+
+                flip_time = window.flip()
+                current_time_s = (
+                    float(flip_time)
+                    if flip_time is not None
+                    else self._active_run_clock.getTime()
+                )
+                if last_flip_time is not None:
+                    interval_s = current_time_s - last_flip_time
+                    frame_intervals.append(
+                        FrameIntervalRecord(
+                            frame_index=frame_index - 1,
+                            interval_s=interval_s,
+                        )
+                    )
+                    timing_max_interval_s = (
+                        interval_s
+                        if timing_max_interval_s is None
+                        else max(timing_max_interval_s, interval_s)
+                    )
+                    if (
+                        timing_first_bad_frame_index is None
+                        and interval_s > timing_config.miss_threshold_s
+                    ):
+                        timing_first_bad_frame_index = frame_index - 1
+                    if timing_config.strict_timing and interval_s > timing_config.miss_threshold_s:
+                        timing_strict_abort = True
+                        self._aborted = True
+                        abort_reason = self._timing_abort_reason(
+                            phase="run",
+                            frame_index=frame_index - 1,
+                            interval_s=interval_s,
+                            timing_config=timing_config,
+                        )
+                last_flip_time = current_time_s
+                completed_frames = frame_index + 1
+
+                if self._aborted:
+                    break
+
+                keys = keyboard.getKeys(
+                    keyList=list(run_spec.fixation.response_keys) + ["escape"],
+                    waitRelease=False,
+                    clear=True,
+                )
+                for key in keys:
+                    key_name = getattr(key, "name", str(key))
+                    if key_name == "escape":
+                        self._aborted = True
+                        if abort_reason is None:
+                            abort_reason = "Escape pressed during condition playback."
+                        break
+                    key_time = getattr(key, "rt", None)
+                    response_log.append(
+                        ResponseRecord(
+                            response_index=len(response_log),
+                            key=key_name,
+                            frame_index=frame_index,
+                            time_s=(
+                                float(key_time)
+                                if key_time is not None
+                                else self._active_run_clock.getTime()
+                            ),
+                        )
+                    )
+                if self._aborted:
+                    break
+
+            finished_at = datetime.now(timezone.utc)
+            runtime_metadata = self._runtime_metadata_for_run(
+                run_spec,
+                frame_intervals,
+                timing_config=timing_config,
+                warmup_intervals=warmup_intervals,
+                timing_max_interval_s=timing_max_interval_s,
+                timing_first_bad_frame_index=timing_first_bad_frame_index,
+                timing_strict_abort=timing_strict_abort,
+            )
+            return RunExecutionSummary(
+                project_id=run_spec.project_id,
+                session_id=None,
+                run_id=run_spec.run_id,
+                condition_id=run_spec.condition.condition_id,
+                condition_name=run_spec.condition.name,
+                engine_name=self.engine_id,
+                run_mode=(
+                    RunMode.TEST
+                    if bool((runtime_options or {}).get("test_mode"))
+                    else RunMode.SESSION
+                ),
+                started_at=started_at,
+                finished_at=finished_at,
+                completed_frames=completed_frames,
+                aborted=self._aborted,
+                abort_reason=abort_reason if self._aborted else None,
+                runtime_metadata=runtime_metadata,
+                frame_intervals=frame_intervals,
+                fixation_responses=[],
+                response_log=response_log,
+                trigger_log=trigger_log,
+            )
+        finally:
+            release_stimuli(stimuli)
+            self._active_run_clock = None
 
     def show_completion_screen(
         self,
@@ -398,7 +411,6 @@ class PsychoPyEngine(PresentationEngine):
         window = self._window
         self._window = None
         self._keyboard = None
-        self._image_stim_cache = {}
         self._active_run_clock = None
         if window is not None:
             window.close()
@@ -444,7 +456,6 @@ class PsychoPyEngine(PresentationEngine):
         return prepare_stimuli(
             visual=self._require_visual(),
             window=self._require_window(),
-            image_stim_cache=self._image_stim_cache,
             absolute_paths=absolute_paths,
         )
 
