@@ -13,7 +13,7 @@ Use this page to find planning material before making feature-sized changes.
 
 Current inventory:
 
-- Planned plans: none beyond `exec-plans/planned/README.md`.
+- Planned plans: `exec-plans/planned/patch-update-workflow.md`.
 - Active plans: none beyond `exec-plans/active/README.md`.
 - Recently completed GUI/tooling plans include the packaged update-checker regression
   repair, the Inno Setup installer workflow, the beta 4 startup update/About polish, the
