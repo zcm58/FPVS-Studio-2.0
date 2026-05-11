@@ -730,37 +730,26 @@ def test_invalid_saved_root_is_reprompted_on_startup(
     assert controller.load_fpvs_root_dir() == replacement_root
 
 
-def test_settings_dialog_shows_root_and_change_button_updates_value(
+def test_settings_dialog_uses_root_setup_without_direct_root_picker(
     qtbot,
     tmp_path: Path,
-    monkeypatch,
 ) -> None:
     initial_root = tmp_path / "initial-root"
     initial_root.mkdir(parents=True, exist_ok=True)
-    updated_root = tmp_path / "updated-root"
-    updated_root.mkdir(parents=True, exist_ok=True)
 
-    changed_roots: list[Path] = []
     dialog = AppSettingsDialog(
         fpvs_root_dir=initial_root,
-        on_change_fpvs_root_dir=lambda path: changed_roots.append(path),
+        on_show_root_folder_setup=lambda _parent: None,
     )
     qtbot.addWidget(dialog)
 
     root_value_label = dialog.findChild(QLabel, "fpvs_root_dir_value")
     change_button = dialog.findChild(QPushButton, "change_fpvs_root_dir_button")
-    assert root_value_label is not None
-    assert change_button is not None
-    assert root_value_label.text() == str(initial_root)
-
-    monkeypatch.setattr(
-        "fpvs_studio.gui.settings_dialog.QFileDialog.getExistingDirectory",
-        lambda *_args, **_kwargs: str(updated_root),
-    )
-    qtbot.mouseClick(change_button, Qt.MouseButton.LeftButton)
-
-    assert changed_roots == [updated_root]
-    assert root_value_label.text() == str(updated_root)
+    setup_button = dialog.findChild(QPushButton, "root_folder_setup_button")
+    assert root_value_label is None
+    assert change_button is None
+    assert setup_button is not None
+    assert setup_button.text() == "Root Folder Setup..."
 
 
 def test_settings_dialog_displays_app_version(qtbot, tmp_path: Path) -> None:
@@ -769,13 +758,13 @@ def test_settings_dialog_displays_app_version(qtbot, tmp_path: Path) -> None:
 
     dialog = AppSettingsDialog(
         fpvs_root_dir=root_dir,
-        on_change_fpvs_root_dir=lambda _path: None,
     )
     qtbot.addWidget(dialog)
 
     version_value = dialog.findChild(QLabel, "app_version_value")
     assert version_value is not None
     assert version_value.text() == f"FPVS Studio version {__version__}"
+    assert version_value.alignment() & Qt.AlignmentFlag.AlignHCenter
 
 
 def test_settings_dialog_root_folder_setup_button_updates_root_label(
@@ -794,20 +783,18 @@ def test_settings_dialog_root_folder_setup_button_updates_root_label(
 
     dialog = AppSettingsDialog(
         fpvs_root_dir=initial_root,
-        on_change_fpvs_root_dir=lambda _path: None,
         on_show_root_folder_setup=_show_setup,
     )
     qtbot.addWidget(dialog)
 
     root_value_label = dialog.findChild(QLabel, "fpvs_root_dir_value")
     setup_button = dialog.findChild(QPushButton, "root_folder_setup_button")
-    assert root_value_label is not None
+    assert root_value_label is None
     assert setup_button is not None
 
     qtbot.mouseClick(setup_button, Qt.MouseButton.LeftButton)
 
     assert callback_parents == [dialog]
-    assert root_value_label.text() == str(updated_root)
 
 
 def test_controller_root_folder_setup_changes_saved_root(
@@ -854,7 +841,6 @@ def test_settings_dialog_manage_templates_button_triggers_callback(
 
     dialog = AppSettingsDialog(
         fpvs_root_dir=root_dir,
-        on_change_fpvs_root_dir=lambda _path: None,
         on_manage_condition_templates=_capture_manage_templates,
     )
     qtbot.addWidget(dialog)
@@ -881,18 +867,19 @@ def test_file_settings_action_changes_root_and_updates_open_create_defaults(
     assert window.settings_action.text() == "Settings..."
     assert window.settings_action.objectName() == "settings_action"
 
-    monkeypatch.setattr(
-        "fpvs_studio.gui.settings_dialog.QFileDialog.getExistingDirectory",
-        lambda *_args, **_kwargs: str(updated_root),
-    )
+    def _show_setup(_parent: QWidget) -> Path:
+        controller.save_fpvs_root_dir(updated_root)
+        return updated_root
 
     def _fake_settings_exec(dialog: AppSettingsDialog) -> int:
         root_value_label = dialog.findChild(QLabel, "fpvs_root_dir_value")
-        assert root_value_label is not None
-        assert root_value_label.text() == str(original_root)
-        dialog._change_fpvs_root_directory()
+        change_button = dialog.findChild(QPushButton, "change_fpvs_root_dir_button")
+        assert root_value_label is None
+        assert change_button is None
+        dialog._show_root_folder_setup()
         return int(dialog.DialogCode.Accepted)
 
+    monkeypatch.setattr(controller, "show_root_folder_setup", _show_setup)
     monkeypatch.setattr(AppSettingsDialog, "exec", _fake_settings_exec)
 
     window.settings_action.trigger()

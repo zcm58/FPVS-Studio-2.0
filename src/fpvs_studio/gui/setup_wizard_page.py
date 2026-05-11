@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from math import ceil
 
 from PySide6.QtCore import QEvent, QSize, Qt, QTimer
 from PySide6.QtGui import QResizeEvent
@@ -21,6 +22,7 @@ from PySide6.QtWidgets import (
 )
 
 from fpvs_studio.core.models import ConditionTemplateProfile
+from fpvs_studio.core.validation import condition_fixation_guidance
 from fpvs_studio.gui.assets_pages import AssetsPage
 from fpvs_studio.gui.components import (
     PAGE_SECTION_GAP,
@@ -63,6 +65,7 @@ _WIZARD_STEPS: tuple[tuple[str, str], ...] = (
     ("review", "Review"),
 )
 _CREATE_ALL_CONDITIONS_PROMPT = "Please ensure you create all conditions before proceeding."
+_ESTIMATED_INTER_CONDITION_BREAK_SECONDS = 30
 _SETUP_STEP_SURFACE_MAX_WIDTH = 880
 _SETUP_STEP_WORKBENCH_SURFACE_MAX_WIDTH = 1040
 _SETUP_STEP_SURFACE_MIN_HEIGHT = 360
@@ -813,8 +816,15 @@ class SetupWizardPage(QWidget):
         title_label.setProperty("reviewSummarySectionTitle", "true")
         section_layout.addWidget(title_label)
 
+        body = QWidget(section)
+        body_layout = QVBoxLayout(body)
+        body_layout.setContentsMargins(0, 0, 0, 0)
+        body_layout.setSpacing(3)
+        body_layout.addStretch(1)
         for line in lines:
-            section_layout.addWidget(self._review_checklist_row(line, parent=section))
+            body_layout.addWidget(self._review_checklist_row(line, parent=body))
+        body_layout.addStretch(1)
+        section_layout.addWidget(body, 1)
         return section
 
     def _review_checklist_row(self, text: str, *, parent: QWidget) -> QFrame:
@@ -831,6 +841,7 @@ class SetupWizardPage(QWidget):
 
         label = QLabel(text, row)
         label.setWordWrap(True)
+        label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         label.setProperty("reviewChecklistLine", "true")
         row_layout.addWidget(label, 1, Qt.AlignmentFlag.AlignVCenter)
         return row
@@ -854,6 +865,7 @@ class SetupWizardPage(QWidget):
             "Condition order is randomized automatically at launch",
             f"Display: {self.runtime_settings_editor.current_refresh_hz():.2f} Hz, "
             f"{background_label}",
+            *self._review_timing_estimate_lines(),
         )
         return (
             ("Project Details", (f"Project details complete: {project.meta.name}",)),
@@ -861,6 +873,27 @@ class SetupWizardPage(QWidget):
             ("Experiment Settings", experiment_lines),
             ("Fixation Cross", (self._fixation_review_line(),)),
         )
+
+    def _review_timing_estimate_lines(self) -> tuple[str, ...]:
+        conditions = self._document.ordered_conditions()
+        if not conditions:
+            return ("Estimated run time: unavailable",)
+
+        guidance = condition_fixation_guidance(
+            self._document.project,
+            refresh_hz=self.runtime_settings_editor.current_refresh_hz(),
+        )
+        condition_ids = {condition.condition_id for condition in conditions}
+        ordered_guidance = [row for row in guidance if row.condition_id in condition_ids]
+        block_count = self._document.project.settings.session.block_count
+        condition_time_seconds = sum(row.condition_duration_seconds for row in ordered_guidance)
+        total_condition_runs = len(ordered_guidance) * block_count
+        break_count = max(0, total_condition_runs - 1)
+        break_seconds = break_count * _ESTIMATED_INTER_CONDITION_BREAK_SECONDS
+        total_seconds = (condition_time_seconds * block_count) + break_seconds
+        estimated_minutes = max(1, ceil(total_seconds / 60))
+        minute_word = "minute" if estimated_minutes == 1 else "minutes"
+        return (f"Estimated run time: {estimated_minutes} {minute_word}",)
 
     @staticmethod
     def _display_background_label(background_color: str) -> str:

@@ -8,12 +8,12 @@ from __future__ import annotations
 from collections.abc import Callable
 from pathlib import Path
 
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
-    QFileDialog,
     QFormLayout,
-    QHBoxLayout,
+    QGridLayout,
     QLabel,
     QPushButton,
     QVBoxLayout,
@@ -30,7 +30,6 @@ class AppSettingsDialog(QDialog):
         self,
         *,
         fpvs_root_dir: Path,
-        on_change_fpvs_root_dir: Callable[[Path], None],
         on_show_root_folder_setup: Callable[[QWidget], Path | None] | None = None,
         on_manage_condition_templates: Callable[[], object] | None = None,
         parent: QWidget | None = None,
@@ -42,29 +41,10 @@ class AppSettingsDialog(QDialog):
         self.resize(700, 280)
 
         self._fpvs_root_dir = fpvs_root_dir
-        self._on_change_fpvs_root_dir = on_change_fpvs_root_dir
         self._on_show_root_folder_setup = on_show_root_folder_setup
         self._on_manage_condition_templates = on_manage_condition_templates
 
-        self.fpvs_root_dir_value = QLabel(str(fpvs_root_dir), self)
-        self.fpvs_root_dir_value.setObjectName("fpvs_root_dir_value")
-        self.fpvs_root_dir_value.setWordWrap(True)
-
-        self.change_fpvs_root_button = QPushButton("Change...", self)
-        self.change_fpvs_root_button.setObjectName("change_fpvs_root_dir_button")
-        self.change_fpvs_root_button.clicked.connect(self._change_fpvs_root_directory)
-
-        fpvs_root_row = QWidget(self)
-        fpvs_root_layout = QHBoxLayout(fpvs_root_row)
-        fpvs_root_layout.setContentsMargins(0, 0, 0, 0)
-        fpvs_root_layout.addWidget(self.fpvs_root_dir_value, 1)
-        fpvs_root_layout.addWidget(self.change_fpvs_root_button)
-
         form_layout = QFormLayout()
-        self.version_value = QLabel(f"FPVS Studio version {__version__}", self)
-        self.version_value.setObjectName("app_version_value")
-        form_layout.addRow("Version", self.version_value)
-        form_layout.addRow("FPVS Studio Root Folder", fpvs_root_row)
         self.root_folder_setup_button = QPushButton("Root Folder Setup...", self)
         self.root_folder_setup_button.setObjectName("root_folder_setup_button")
         self.root_folder_setup_button.setEnabled(self._on_show_root_folder_setup is not None)
@@ -80,25 +60,22 @@ class AppSettingsDialog(QDialog):
         self.button_box.setObjectName("settings_button_box")
         self.button_box.rejected.connect(self.reject)
 
+        self.version_value = QLabel(f"FPVS Studio version {__version__}", self)
+        self.version_value.setObjectName("app_version_value")
+        self.version_value.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        footer_layout = QGridLayout()
+        footer_layout.setContentsMargins(0, 0, 0, 0)
+        footer_layout.setColumnStretch(0, 1)
+        footer_layout.setColumnStretch(1, 1)
+        footer_layout.setColumnStretch(2, 1)
+        footer_layout.addWidget(self.version_value, 0, 1, Qt.AlignmentFlag.AlignCenter)
+        footer_layout.addWidget(self.button_box, 0, 2, Qt.AlignmentFlag.AlignRight)
+
         layout = QVBoxLayout(self)
         layout.addLayout(form_layout)
         layout.addStretch(1)
-        layout.addWidget(self.button_box)
-
-    def _change_fpvs_root_directory(self) -> None:
-        directory = QFileDialog.getExistingDirectory(
-            self,
-            "Choose FPVS Studio Root Folder",
-            str(self._fpvs_root_dir),
-        )
-        if not directory:
-            return
-        selected_path = Path(directory)
-        if not selected_path.is_dir():
-            return
-        self._on_change_fpvs_root_dir(selected_path)
-        self._fpvs_root_dir = selected_path
-        self.fpvs_root_dir_value.setText(str(selected_path))
+        layout.addLayout(footer_layout)
 
     def _show_root_folder_setup(self) -> None:
         if self._on_show_root_folder_setup is None:
@@ -107,7 +84,6 @@ class AppSettingsDialog(QDialog):
         if selected_path is None:
             return
         self._fpvs_root_dir = selected_path
-        self.fpvs_root_dir_value.setText(str(selected_path))
 
     def _manage_condition_templates(self) -> None:
         if self._on_manage_condition_templates is None:

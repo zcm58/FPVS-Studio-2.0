@@ -1842,6 +1842,7 @@ def test_setup_wizard_review_uses_centered_confirmation_checklist(
             condition_id,
             name=condition_name,
             trigger_code=index,
+            oddball_cycle_repeats_per_sequence=144,
         )
         window.document.import_condition_stimulus_folder(
             condition_id,
@@ -1888,6 +1889,10 @@ def test_setup_wizard_review_uses_centered_confirmation_checklist(
     assert "Objects: base 3 images, oddball 3 images" not in label_text
     assert "Each condition will repeat 2 times in randomized block order" in label_text
     assert "Condition order is randomized automatically at launch" in label_text
+    assert "Estimated run time: 10 minutes" in label_text
+    assert "Condition durations:" not in label_text
+    assert "Break estimate:" not in label_text
+    assert "Total estimated run:" not in label_text
     assert "Random order seed:" not in label_text
     assert "Display: 60.00 Hz, Black background" in label_text
     assert "Fixation cross has been configured" in label_text
@@ -1908,8 +1913,24 @@ def test_setup_wizard_review_uses_centered_confirmation_checklist(
         if label.property("reviewCheckIcon") == "true"
     ]
     assert len(summary_sections) == 4
-    assert len(checklist_rows) == 6
+    assert len(checklist_rows) == 7
     assert len(check_icons) == len(checklist_rows)
+    section_title_tops = [
+        next(
+            label
+            for label in section.findChildren(QLabel)
+            if label.property("reviewSummarySectionTitle") == "true"
+        ).mapTo(section, QPoint(0, 0)).y()
+        for section in summary_sections
+    ]
+    assert max(section_title_tops) - min(section_title_tops) <= 1
+    for row in checklist_rows:
+        text_label = next(
+            label
+            for label in row.findChildren(QLabel)
+            if label.property("reviewChecklistLine") == "true"
+        )
+        assert text_label.alignment() & Qt.AlignmentFlag.AlignHCenter
     fixation_row = next(
         row
         for row in checklist_rows

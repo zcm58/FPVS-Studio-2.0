@@ -469,7 +469,6 @@ class StudioController:
             return
         dialog = AppSettingsDialog(
             fpvs_root_dir=root_dir,
-            on_change_fpvs_root_dir=self.save_fpvs_root_dir,
             on_show_root_folder_setup=self.show_root_folder_setup,
             on_manage_condition_templates=self._show_condition_template_manager,
             parent=parent,
