@@ -30,7 +30,10 @@ from tests.gui.helpers import (
     _write_image_directory,
 )
 
-from fpvs_studio.core.condition_template_profiles import SIXTY_HZ_BLANK_FIXATION_PROFILE_ID
+from fpvs_studio.core.condition_template_profiles import (
+    SIXTY_HZ_BLANK_FIXATION_PROFILE_ID,
+    STUDIO_DEFAULT_PROFILE_ID,
+)
 from fpvs_studio.core.enums import DutyCycleMode, InterConditionMode, StimulusVariant
 from fpvs_studio.core.project_service import create_project
 from fpvs_studio.core.serialization import load_project_file, save_project_file
@@ -707,6 +710,26 @@ def test_setup_wizard_surfaces_steps_and_keeps_shared_editors_available(
     assert project_editor.condition_profile_combo.itemText(0) == "Continuous Images"
     assert project_editor.condition_profile_combo.itemData(0) is not None
     assert "(" not in project_editor.condition_profile_combo.itemText(0)
+    continuous_index = project_editor.condition_profile_combo.findData(STUDIO_DEFAULT_PROFILE_ID)
+    blank_index = project_editor.condition_profile_combo.findData(
+        SIXTY_HZ_BLANK_FIXATION_PROFILE_ID
+    )
+    assert (
+        project_editor.condition_profile_combo.itemData(
+            continuous_index,
+            Qt.ItemDataRole.ToolTipRole,
+        )
+        == "Use this template if you want to display one image immediately after the "
+        "previous image with no blanks in between."
+    )
+    assert (
+        project_editor.condition_profile_combo.itemData(
+            blank_index,
+            Qt.ItemDataRole.ToolTipRole,
+        )
+        == "Use this template if you'd like to display images with 50% of the image "
+        "display period being blank before the next image is shown."
+    )
     assert project_editor.manage_templates_button is not None
     assert project_editor.apply_profile_to_conditions_button is not None
     assert project_editor.apply_profile_to_conditions_button.isVisible() is False

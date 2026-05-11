@@ -18,6 +18,10 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from fpvs_studio.core.condition_template_profiles import (
+    SIXTY_HZ_BLANK_FIXATION_PROFILE_ID,
+    STUDIO_DEFAULT_PROFILE_ID,
+)
 from fpvs_studio.core.models import ConditionTemplateProfile
 from fpvs_studio.gui.components import (
     PathValueLabel,
@@ -33,6 +37,17 @@ from fpvs_studio.gui.window_helpers import (
     _show_error_dialog,
     _sync_text_editor_contents,
 )
+
+_CONDITION_PROFILE_TOOLTIPS = {
+    STUDIO_DEFAULT_PROFILE_ID: (
+        "Use this template if you want to display one image immediately after the "
+        "previous image with no blanks in between."
+    ),
+    SIXTY_HZ_BLANK_FIXATION_PROFILE_ID: (
+        "Use this template if you'd like to display images with 50% of the image "
+        "display period being blank before the next image is shown."
+    ),
+}
 
 
 class ProjectOverviewEditor(QWidget):
@@ -212,6 +227,14 @@ class ProjectOverviewEditor(QWidget):
                     profile.display_name,
                     userData=profile.profile_id,
                 )
+                item_index = self.condition_profile_combo.count() - 1
+                tooltip = _CONDITION_PROFILE_TOOLTIPS.get(profile.profile_id)
+                if tooltip is not None:
+                    self.condition_profile_combo.setItemData(
+                        item_index,
+                        tooltip,
+                        Qt.ItemDataRole.ToolTipRole,
+                    )
             if selected_profile_id is None:
                 self.condition_profile_combo.setCurrentIndex(-1)
             else:
