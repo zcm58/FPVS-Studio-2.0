@@ -10,6 +10,7 @@ from PySide6.QtWidgets import QMessageBox
 from tests.gui.helpers import open_created_project
 
 from fpvs_studio.gui.controller import StudioController
+from fpvs_studio.gui.main_window import _TUTORIALS_URL
 from fpvs_studio.gui.update_dialog import UpdateDialog
 from fpvs_studio.updates.models import DownloadedInstaller, InstallerAsset, UpdateCheckResult
 
@@ -70,6 +71,29 @@ def test_main_window_exposes_file_about_action(
     assert "FPVS Studio version" in messages[0][1]
     assert "Zack Murphy" in messages[0][1]
     assert "Neural Engineering Research Division, Mississippi State University" in messages[0][1]
+
+
+def test_main_window_exposes_file_tutorials_action(
+    controller,
+    qtbot,
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _document, window = open_created_project(controller, qtbot, tmp_path)
+    opened_urls: list[str] = []
+
+    monkeypatch.setattr(
+        "fpvs_studio.gui.main_window.QDesktopServices.openUrl",
+        lambda url: opened_urls.append(url.toString()),
+    )
+
+    actions = [action.text() for action in window.file_menu.actions()]
+    assert window.tutorials_action.text() == "Tutorials"
+    assert "Tutorials" in actions
+
+    window.tutorials_action.trigger()
+
+    assert opened_urls == [_TUTORIALS_URL]
 
 
 def test_startup_update_check_prompts_only_when_update_available(

@@ -7,8 +7,8 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from PySide6.QtCore import QEvent, Qt
-from PySide6.QtGui import QAction, QCloseEvent
+from PySide6.QtCore import QEvent, Qt, QUrl
+from PySide6.QtGui import QAction, QCloseEvent, QDesktopServices
 from PySide6.QtWidgets import (
     QFileDialog,
     QMainWindow,
@@ -54,6 +54,7 @@ _WORKSPACE_DEFAULT_SIZE = (1440, 920)
 _UTILITY_MINIMUM_SIZE = (960, 640)
 _UTILITY_DEFAULT_SIZE = (1120, 720)
 _AUTO_WORKSPACE_SIZE_TOLERANCE = 16
+_TUTORIALS_URL = "https://zcm58.github.io/FPVS-Studio-2.0/"
 
 
 class StudioMainWindow(QMainWindow):
@@ -309,6 +310,9 @@ class StudioMainWindow(QMainWindow):
         self.check_updates_action = QAction("Check for Updates", self)
         self.check_updates_action.setObjectName("check_updates_action")
         self.check_updates_action.triggered.connect(self.show_update_dialog)
+        self.tutorials_action = QAction("Tutorials", self)
+        self.tutorials_action.setObjectName("tutorials_action")
+        self.tutorials_action.triggered.connect(self.open_tutorials)
         self.about_action = QAction("About", self)
         self.about_action.setObjectName("about_action")
         self.about_action.triggered.connect(self.show_about_dialog)
@@ -332,12 +336,16 @@ class StudioMainWindow(QMainWindow):
         self.file_menu.addSeparator()
         self.file_menu.addAction(self.settings_action)
         self.file_menu.addAction(self.check_updates_action)
+        self.file_menu.addAction(self.tutorials_action)
         self.file_menu.addAction(self.about_action)
         self.tools_menu.addAction(self.image_resizer_action)
 
     def show_update_dialog(self) -> None:
         dialog = UpdateDialog(parent=self, on_before_install=self.maybe_save_changes)
         dialog.exec()
+
+    def open_tutorials(self) -> None:
+        QDesktopServices.openUrl(QUrl(_TUTORIALS_URL))
 
     def show_about_dialog(self) -> None:
         QMessageBox.information(

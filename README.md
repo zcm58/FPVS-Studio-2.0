@@ -13,6 +13,9 @@ to other data formats.
 
 ## Installation Instructions
 
+Public user documentation is available at
+https://zcm58.github.io/FPVS-Studio-2.0/.
+
 Download the latest FPVS Studio installer from the GitHub Releases page.
 
 Run the installer, then launch FPVS Studio from the Start Menu or Desktop shortcut.

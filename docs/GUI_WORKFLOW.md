@@ -125,8 +125,9 @@ source-folder import path is permissive like guided Conditions import; strict in
 and materialization still surface invalid or inconsistent source details before runtime
 launch.
 
-The `File` menu exposes manage-projects, settings, `Check for Updates`, and `About`
-actions. Settings shows the current app version from `pyproject.toml` during source-tree
+The `File` menu exposes manage-projects, settings, `Check for Updates`, `Tutorials`,
+and `About` actions. `Tutorials` opens the public MkDocs quickstart site in the system
+browser. Settings shows the current app version from `pyproject.toml` during source-tree
 runs and from package metadata in bundled installs.
 Moving a project to the Recycle Bin remains a controller-owned filesystem operation
 guarded by `project.json` validation, confirmation, a post-action path check, and a disk
