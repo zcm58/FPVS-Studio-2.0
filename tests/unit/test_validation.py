@@ -6,6 +6,7 @@ from fpvs_studio.core.enums import DutyCycleMode
 from fpvs_studio.core.models import ImageResolution
 from fpvs_studio.core.validation import (
     condition_fixation_guidance,
+    condition_stimulus_repeat_guidance,
     validate_display_refresh,
     validate_project,
 )
@@ -41,6 +42,69 @@ def test_project_validation_rejects_resolution_mismatch(sample_project) -> None:
 
     assert report.is_valid is False
     assert any("mismatched resolutions" in issue.message for issue in report.issues)
+
+
+def test_stimulus_repeat_guidance_reports_default_v1_presentation_counts(
+    sample_project,
+) -> None:
+    rows = condition_stimulus_repeat_guidance(sample_project)
+    rows_by_role = {row.role: row for row in rows}
+
+    base = rows_by_role["base"]
+    oddball = rows_by_role["oddball"]
+
+    assert base.presentation_count == 584
+    assert base.recommended_minimum_images == 84
+    assert base.min_repeats_per_image == 194
+    assert base.max_repeats_per_image == 195
+    assert base.evenly_distributed is False
+    assert oddball.presentation_count == 146
+    assert oddball.recommended_minimum_images == 21
+    assert oddball.min_repeats_per_image == 48
+    assert oddball.max_repeats_per_image == 49
+    assert oddball.evenly_distributed is False
+
+
+def test_project_validation_warns_for_too_few_stimulus_images_without_blocking(
+    sample_project,
+) -> None:
+    report = validate_project(sample_project)
+
+    assert report.is_valid is True
+    assert any(issue.severity.value == "warning" for issue in report.issues)
+    assert any(
+        "Base stimulus set" in issue.message
+        and "84 are recommended for <= 7 repeats/image"
+        for issue in report.issues
+    )
+    assert any(
+        "Oddball stimulus set" in issue.message
+        and "21 are recommended for <= 7 repeats/image"
+        for issue in report.issues
+    )
+
+
+def test_project_validation_warns_for_uneven_stimulus_repeat_distribution(
+    sample_project,
+) -> None:
+    sample_project.settings.condition_defaults.target_repeats_per_image = 10
+    sample_project.stimulus_sets[0].image_count = 100
+    sample_project.stimulus_sets[1].image_count = 100
+
+    report = validate_project(sample_project)
+
+    assert report.is_valid is True
+    assert not any("are recommended for <=" in issue.message for issue in report.issues)
+    assert any(
+        "Base presentations" in issue.message
+        and "5-6 repeats/image" in issue.message
+        for issue in report.issues
+    )
+    assert any(
+        "Oddball presentations" in issue.message
+        and "1-2 repeats/image" in issue.message
+        for issue in report.issues
+    )
 
 
 def test_project_validation_rejects_condition_repeat_mismatch(multi_condition_project) -> None:

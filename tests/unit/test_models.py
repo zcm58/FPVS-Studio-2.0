@@ -52,3 +52,4 @@ def test_project_model_backfills_condition_profile_defaults_for_legacy_payload(
     assert loaded.settings.condition_defaults.duty_cycle_mode == DutyCycleMode.CONTINUOUS
     assert loaded.settings.condition_defaults.sequence_count == 1
     assert loaded.settings.condition_defaults.oddball_cycle_repeats_per_sequence == 146
+    assert loaded.settings.condition_defaults.target_repeats_per_image == 7

@@ -79,12 +79,16 @@ class ConditionTemplateProfileEditorDialog(QDialog):
         self.oddball_cycles_spin = QSpinBox(self)
         self.oddball_cycles_spin.setObjectName("condition_profile_oddball_cycles_spin")
         self.oddball_cycles_spin.setRange(1, 10000)
+        self.target_repeats_spin = QSpinBox(self)
+        self.target_repeats_spin.setObjectName("condition_profile_target_repeats_per_image_spin")
+        self.target_repeats_spin.setRange(1, 10000)
 
         condition_group = QGroupBox("Condition Defaults", self)
         condition_layout = QFormLayout(condition_group)
         condition_layout.addRow("Duty Cycle", self.duty_cycle_combo)
         condition_layout.addRow("Condition Repeats", self.sequence_count_spin)
         condition_layout.addRow("Cycles / Condition Repeat", self.oddball_cycles_spin)
+        condition_layout.addRow("Target Repeats / Image", self.target_repeats_spin)
 
         self.preferred_refresh_enabled_checkbox = QCheckBox(
             "Set preferred refresh rate",
@@ -232,6 +236,7 @@ class ConditionTemplateProfileEditorDialog(QDialog):
         self.oddball_cycles_spin.setValue(
             profile.defaults.condition.oddball_cycle_repeats_per_sequence
         )
+        self.target_repeats_spin.setValue(profile.defaults.condition.target_repeats_per_image)
         self.duty_cycle_combo.setCurrentIndex(
             self.duty_cycle_combo.findData(profile.defaults.condition.duty_cycle_mode)
         )
@@ -294,6 +299,7 @@ class ConditionTemplateProfileEditorDialog(QDialog):
                     duty_cycle_mode=self.duty_cycle_combo.currentData(),
                     sequence_count=self.sequence_count_spin.value(),
                     oddball_cycle_repeats_per_sequence=self.oddball_cycles_spin.value(),
+                    target_repeats_per_image=self.target_repeats_spin.value(),
                 ),
                 display=ConditionTemplateDisplayDefaults(preferred_refresh_hz=preferred_refresh_hz),
                 fixation_task=FixationTaskSettings(

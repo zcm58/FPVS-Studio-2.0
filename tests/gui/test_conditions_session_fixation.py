@@ -575,6 +575,41 @@ def test_cycle_tooltips_and_fixation_feasibility_render_and_update(
     assert "Recommended maximum cross changes per condition:" in guidance_after
 
 
+def test_condition_page_stimulus_repeat_guidance_updates_with_target(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Repeat Guidance")
+    _prepare_compile_ready_project(window, tmp_path / "repeat-guidance")
+
+    page = window.conditions_page
+    QApplication.processEvents()
+
+    assert page.target_repeats_spin.value() == 7
+    assert (
+        page.base_repeat_guidance_value.text()
+        == "Base: 584 presentations, 84 images recommended for <=7 repeats/image; "
+        "current 3 gives 194-195 repeats/image."
+    )
+    assert (
+        page.oddball_repeat_guidance_value.text()
+        == "Oddball: 146 presentations, 21 images recommended for <=7 repeats/image; "
+        "current 3 gives 48-49 repeats/image."
+    )
+
+    page.target_repeats_spin.setValue(10)
+    QApplication.processEvents()
+
+    assert window.document.project.settings.condition_defaults.target_repeats_per_image == 10
+    assert "59 images recommended for <=10 repeats/image" in (
+        page.base_repeat_guidance_value.text()
+    )
+    assert "15 images recommended for <=10 repeats/image" in (
+        page.oddball_repeat_guidance_value.text()
+    )
+
+
 def test_fixation_feasibility_shows_single_value_for_uniform_condition_lengths(
     qtbot,
     controller: StudioController,
@@ -667,6 +702,8 @@ def test_launch_blocked_when_condition_repeat_cycle_values_differ(
     monkeypatch.setattr(window.run_page, "_prompt_participant_number", _capture_prompt)
     monkeypatch.setattr("fpvs_studio.gui.document.launch_session", _capture_launch)
 
+    window.main_stack.setCurrentWidget(window.run_page)
+    QApplication.processEvents()
     qtbot.mouseClick(window.run_page.launch_button, Qt.MouseButton.LeftButton)
 
     assert prompt_calls == 0

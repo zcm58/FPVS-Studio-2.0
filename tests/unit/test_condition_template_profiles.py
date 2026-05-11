@@ -145,6 +145,8 @@ def test_built_in_templates_share_defaults_except_duty_cycle() -> None:
     assert template_two.defaults.condition.sequence_count == 1
     assert template_one.defaults.condition.oddball_cycle_repeats_per_sequence == 146
     assert template_two.defaults.condition.oddball_cycle_repeats_per_sequence == 146
+    assert template_one.defaults.condition.target_repeats_per_image == 7
+    assert template_two.defaults.condition.target_repeats_per_image == 7
     assert template_one.defaults.display.preferred_refresh_hz is None
     assert template_two.defaults.display.preferred_refresh_hz is None
 

@@ -578,6 +578,7 @@ class SetupSourceCard(QFrame):
         object_name: str = "setup_source_card",
         compact: bool = False,
         show_variants: bool = True,
+        show_folder: bool = True,
         center_title: bool = False,
         center_content: bool = False,
         parent: QWidget | None = None,
@@ -586,6 +587,7 @@ class SetupSourceCard(QFrame):
         self.setObjectName(object_name)
         self.setProperty("setupSourceCard", "true")
         self._show_variants = show_variants
+        self._show_folder = show_folder
         self._layout = QVBoxLayout(self)
         if compact:
             self._layout.setContentsMargins(10, 8, 10, 8)
@@ -617,6 +619,8 @@ class SetupSourceCard(QFrame):
         if center_content:
             folder_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
             self.folder_value.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        folder_label.setVisible(show_folder)
+        self.folder_value.setVisible(show_folder)
         self._layout.addWidget(folder_label)
         self._layout.addWidget(self.folder_value)
 
@@ -627,6 +631,22 @@ class SetupSourceCard(QFrame):
             parent=self,
         )
         self._layout.addWidget(self.metrics)
+
+        self.repeat_summary_label = QLabel("", self)
+        self.repeat_summary_label.setObjectName(f"{object_name}_repeat_summary")
+        self.repeat_summary_label.setProperty("setupMetricValue", "true")
+        self.repeat_summary_label.setWordWrap(True)
+        self.repeat_summary_label.setMinimumWidth(0)
+        self.repeat_summary_label.setSizePolicy(
+            QSizePolicy.Policy.Ignored,
+            QSizePolicy.Policy.Preferred,
+        )
+        if compact:
+            self.repeat_summary_label.setMinimumHeight(30)
+        if center_content:
+            self.repeat_summary_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.repeat_summary_label.setVisible(False)
+        self._layout.addWidget(self.repeat_summary_label)
 
         self.choose_button = QPushButton(button_text, self)
         self.choose_button.setObjectName(f"{object_name}_choose_button")
@@ -642,16 +662,20 @@ class SetupSourceCard(QFrame):
         image_count: str,
         resolution: str,
         variants: str,
+        repeat_balance: str | None = None,
     ) -> None:
         self.status_badge.set_state(
             "ready" if ready else "warning",
             "Ready" if ready else "Missing",
         )
-        self.folder_value.set_path_text(folder or "Not configured", max_length=74)
+        if self._show_folder:
+            self.folder_value.set_path_text(folder or "Not configured", max_length=74)
         rows = [
             ("Image Count", image_count),
             ("Resolution", resolution),
         ]
+        self.repeat_summary_label.setText(repeat_balance or "")
+        self.repeat_summary_label.setVisible(bool(repeat_balance))
         if self._show_variants:
             rows.append(("Variants", variants))
         self.metrics.set_rows(rows)

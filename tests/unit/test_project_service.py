@@ -69,6 +69,7 @@ def test_project_scaffolding_applies_condition_template_profile_snapshot(tmp_pat
     assert project.settings.condition_defaults.duty_cycle_mode.value == "blank_50"
     assert project.settings.condition_defaults.sequence_count == 1
     assert project.settings.condition_defaults.oddball_cycle_repeats_per_sequence == 146
+    assert project.settings.condition_defaults.target_repeats_per_image == 7
     assert project.settings.display.preferred_refresh_hz is None
     assert project.settings.fixation_task.enabled is True
     assert project.settings.fixation_task.accuracy_task_enabled is True

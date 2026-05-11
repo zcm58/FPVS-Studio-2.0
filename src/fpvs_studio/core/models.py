@@ -289,6 +289,7 @@ class ConditionDefaults(FPVSBaseModel):
     duty_cycle_mode: DutyCycleMode = DutyCycleMode.CONTINUOUS
     sequence_count: int = Field(default=1, ge=1)
     oddball_cycle_repeats_per_sequence: int = Field(default=146, ge=1)
+    target_repeats_per_image: int = Field(default=7, ge=1)
 
 
 class TriggerSettings(FPVSBaseModel):

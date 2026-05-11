@@ -28,6 +28,10 @@ from fpvs_studio.core.enums import StimulusVariant
 from fpvs_studio.core.models import Condition
 from fpvs_studio.core.paths import stimuli_dir
 from fpvs_studio.core.template_library import get_template
+from fpvs_studio.core.validation import (
+    StimulusRepeatRoleGuidance,
+    condition_stimulus_repeat_guidance,
+)
 from fpvs_studio.gui.components import (
     PAGE_SECTION_GAP,
     NonHomePageShell,
@@ -47,6 +51,23 @@ from fpvs_studio.gui.window_helpers import (
     _sync_text_editor_contents,
     _variant_label,
 )
+
+
+def _repeat_range_text(row: StimulusRepeatRoleGuidance) -> str:
+    if row.image_count <= 0:
+        return "0"
+    if row.min_repeats_per_image == row.max_repeats_per_image:
+        return str(row.min_repeats_per_image)
+    return f"{row.min_repeats_per_image}-{row.max_repeats_per_image}"
+
+
+def _repeat_guidance_text(row: StimulusRepeatRoleGuidance, *, role_label: str) -> str:
+    return (
+        f"{role_label}: {row.presentation_count} presentations, "
+        f"{row.recommended_minimum_images} images recommended for "
+        f"<={row.target_repeats_per_image} repeats/image; current "
+        f"{row.image_count} gives {_repeat_range_text(row)} repeats/image."
+    )
 
 
 class ConditionsPage(QWidget):
@@ -135,6 +156,14 @@ class ConditionsPage(QWidget):
         self.oddball_cycles_spin.setToolTip(_CYCLE_HELP_TEXT)
         self.oddball_cycles_spin.valueChanged.connect(self._apply_numeric_fields)
 
+        self.target_repeats_spin = QSpinBox(self)
+        self.target_repeats_spin.setObjectName("condition_target_repeats_per_image_spin")
+        self.target_repeats_spin.setRange(1, 10000)
+        self.target_repeats_spin.setToolTip(
+            "Target maximum repetitions for each individual base or oddball image."
+        )
+        self.target_repeats_spin.valueChanged.connect(self._apply_target_repeat_fields)
+
         self.variant_combo = QComboBox(self)
         self.variant_combo.setObjectName("condition_variant_combo")
         for variant in StimulusVariant:
@@ -158,6 +187,9 @@ class ConditionsPage(QWidget):
         self.base_source_state.setObjectName("base_source_state")
         self.base_count_value = QLabel(self)
         self.base_count_value.setObjectName("base_count_value")
+        self.base_repeat_guidance_value = QLabel(self)
+        self.base_repeat_guidance_value.setObjectName("base_repeat_guidance_value")
+        self.base_repeat_guidance_value.setWordWrap(True)
         self.base_resolution_value = QLabel(self)
         self.base_resolution_value.setObjectName("base_resolution_value")
         self.base_variants_value = QLabel(self)
@@ -173,6 +205,9 @@ class ConditionsPage(QWidget):
         self.oddball_source_state.setObjectName("oddball_source_state")
         self.oddball_count_value = QLabel(self)
         self.oddball_count_value.setObjectName("oddball_count_value")
+        self.oddball_repeat_guidance_value = QLabel(self)
+        self.oddball_repeat_guidance_value.setObjectName("oddball_repeat_guidance_value")
+        self.oddball_repeat_guidance_value.setWordWrap(True)
         self.oddball_resolution_value = QLabel(self)
         self.oddball_resolution_value.setObjectName("oddball_resolution_value")
         self.oddball_variants_value = QLabel(self)
@@ -217,6 +252,8 @@ class ConditionsPage(QWidget):
         timing_grid.addWidget(self.oddball_cycles_spin, 1, 1)
         timing_grid.addWidget(QLabel("Stimulus Variant", self.condition_editor_card), 0, 2)
         timing_grid.addWidget(self.variant_combo, 0, 3)
+        timing_grid.addWidget(QLabel("Target Repeats / Image", self.condition_editor_card), 2, 0)
+        timing_grid.addWidget(self.target_repeats_spin, 2, 1)
         timing_grid.setColumnStretch(1, 1)
         timing_grid.setColumnStretch(3, 1)
         basics_header = QLabel("Basics / Identity", self.condition_editor_card)
@@ -259,6 +296,7 @@ class ConditionsPage(QWidget):
         base_layout.addRow("Readiness", self.base_source_state)
         base_layout.addRow("Source Folder", self.base_source_value)
         base_layout.addRow("Image Count", self.base_count_value)
+        base_layout.addRow("Repeat Balance", self.base_repeat_guidance_value)
         base_layout.addRow("Resolution", self.base_resolution_value)
         base_layout.addRow("Variants", self.base_variants_value)
         base_layout.addRow("", self.base_import_button)
@@ -271,6 +309,7 @@ class ConditionsPage(QWidget):
         oddball_layout.addRow("Readiness", self.oddball_source_state)
         oddball_layout.addRow("Source Folder", self.oddball_source_value)
         oddball_layout.addRow("Image Count", self.oddball_count_value)
+        oddball_layout.addRow("Repeat Balance", self.oddball_repeat_guidance_value)
         oddball_layout.addRow("Resolution", self.oddball_resolution_value)
         oddball_layout.addRow("Variants", self.oddball_variants_value)
         oddball_layout.addRow("", self.oddball_import_button)
@@ -388,6 +427,7 @@ class ConditionsPage(QWidget):
             self.trigger_code_spin,
             self.sequence_count_spin,
             self.oddball_cycles_spin,
+            self.target_repeats_spin,
             self.variant_combo,
             self.base_import_button,
             self.oddball_import_button,
@@ -408,16 +448,22 @@ class ConditionsPage(QWidget):
             self.base_source_state.set_state("pending", "Base source not configured")
             self.base_source_value.set_path_text("Not configured", max_length=74)
             self.base_count_value.setText("0")
+            self.base_repeat_guidance_value.setText("No base images imported.")
             self.base_resolution_value.setText("Not imported")
             self.base_variants_value.setText("original")
             self.oddball_source_state.set_state("pending", "Oddball source not configured")
             self.oddball_source_value.set_path_text("Not configured", max_length=74)
             self.oddball_count_value.setText("0")
+            self.oddball_repeat_guidance_value.setText("No oddball images imported.")
             self.oddball_resolution_value.setText("Not imported")
             self.oddball_variants_value.setText("original")
             return
 
         template = get_template(self._document.project.meta.template_id)
+        repeat_guidance = {
+            (row.condition_id, row.role): row
+            for row in condition_stimulus_repeat_guidance(self._document.project)
+        }
         base_set = self._document.get_condition_stimulus_set(condition.condition_id, "base")
         oddball_set = self._document.get_condition_stimulus_set(condition.condition_id, "oddball")
         self.selected_condition_badge.set_state("ready", condition.name)
@@ -435,6 +481,10 @@ class ConditionsPage(QWidget):
             self.sequence_count_spin.setValue(condition.sequence_count)
         with QSignalBlocker(self.oddball_cycles_spin):
             self.oddball_cycles_spin.setValue(condition.oddball_cycle_repeats_per_sequence)
+        with QSignalBlocker(self.target_repeats_spin):
+            self.target_repeats_spin.setValue(
+                self._document.project.settings.condition_defaults.target_repeats_per_image
+            )
         with QSignalBlocker(self.variant_combo):
             self.variant_combo.setCurrentIndex(
                 self.variant_combo.findData(condition.stimulus_variant)
@@ -449,6 +499,12 @@ class ConditionsPage(QWidget):
         )
         self.base_source_value.set_path_text(base_set.source_dir, max_length=74)
         self.base_count_value.setText(str(base_set.image_count))
+        self.base_repeat_guidance_value.setText(
+            _repeat_guidance_text(
+                repeat_guidance[(condition.condition_id, "base")],
+                role_label="Base",
+            )
+        )
         self.base_resolution_value.setText(_resolution_text(base_set.resolution))
         self.base_variants_value.setText(
             ", ".join(item.value for item in base_set.available_variants)
@@ -461,6 +517,12 @@ class ConditionsPage(QWidget):
         )
         self.oddball_source_value.set_path_text(oddball_set.source_dir, max_length=74)
         self.oddball_count_value.setText(str(oddball_set.image_count))
+        self.oddball_repeat_guidance_value.setText(
+            _repeat_guidance_text(
+                repeat_guidance[(condition.condition_id, "oddball")],
+                role_label="Oddball",
+            )
+        )
         self.oddball_resolution_value.setText(_resolution_text(oddball_set.resolution))
         self.oddball_variants_value.setText(
             ", ".join(item.value for item in oddball_set.available_variants)
@@ -548,6 +610,15 @@ class ConditionsPage(QWidget):
             )
         except Exception as error:
             _show_error_dialog(self, "Condition Error", error)
+            self.refresh()
+
+    def _apply_target_repeat_fields(self) -> None:
+        try:
+            self._document.update_condition_defaults(
+                target_repeats_per_image=self.target_repeats_spin.value(),
+            )
+        except Exception as error:
+            _show_error_dialog(self, "Condition Defaults Error", error)
             self.refresh()
 
     def _apply_variant_fields(self) -> None:

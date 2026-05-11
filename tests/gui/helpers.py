@@ -17,14 +17,21 @@ from fpvs_studio.gui.condition_template_manager_dialog import ConditionTemplateM
 from fpvs_studio.gui.controller import StudioController
 
 
-def write_image_directory(target_dir: Path, *, size: tuple[int, int] = (96, 96)) -> Path:
+def write_image_directory(
+    target_dir: Path,
+    *,
+    size: tuple[int, int] = (96, 96),
+    count: int = 3,
+) -> Path:
     """Create a small deterministic source-image directory."""
 
     target_dir.mkdir(parents=True, exist_ok=True)
-    for index in range(1, 4):
-        Image.new("RGB", size, color=(index * 20, index * 10, index * 5)).save(
-            target_dir / f"stimulus-{index:02d}.png"
-        )
+    for index in range(1, count + 1):
+        Image.new(
+            "RGB",
+            size,
+            color=((index * 20) % 255, (index * 10) % 255, (index * 5) % 255),
+        ).save(target_dir / f"stimulus-{index:02d}.png")
     return target_dir
 
 

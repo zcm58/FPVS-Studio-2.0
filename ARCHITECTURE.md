@@ -132,7 +132,8 @@ Current planned seams:
   The wizard uses a six-step compact top-progress flow: Project, Conditions,
   Experiment, Fixation, Response, and Review. Conditions handles condition identity,
   list actions, base/oddball folder assignment, control-condition creation, and image
-  normalization.
+  normalization. Conditions also surfaces project-wide target repeats per image and
+  warning-only base/oddball repeat-balance guidance.
   Setup steps share a compact content surface, with the top progress stepper carrying
   complete-state feedback instead of page-wide completion bars. The setup surface is
   guarded by pytest-qt coverage that checks all six steps at `1120x720` for stable

@@ -387,7 +387,10 @@ class RunPage(QWidget):
 
     def _update_launch_buttons(self) -> None:
         is_busy = self._active_launch_task is not None
-        launch_ready = self._status_report().badge_state == "ready"
+        status_report = self._status_report()
+        launch_ready = status_report.badge_state == "ready" or (
+            status_report.status_label == "Validation Issues"
+        )
         self.compile_button.setEnabled(not is_busy)
         self.launch_button.setEnabled(not is_busy and launch_ready)
 

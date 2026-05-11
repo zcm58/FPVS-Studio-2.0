@@ -6,7 +6,7 @@ time diagnostics, not manifest generation, session execution, or engine timing l
 from __future__ import annotations
 
 from dataclasses import dataclass
-from math import floor
+from math import ceil, floor
 
 from fpvs_studio.core.enums import DutyCycleMode, ValidationSeverity
 from fpvs_studio.core.fixation_planning import (
@@ -39,6 +39,22 @@ class ConditionFixationGuidance:
     condition_duration_seconds: float
     estimated_max_color_changes_per_condition: int
     recommended_max_color_changes_per_condition: int
+
+
+@dataclass(frozen=True)
+class StimulusRepeatRoleGuidance:
+    """Read-only condition-role stimulus repeat balance guidance."""
+
+    condition_id: str
+    condition_name: str
+    role: str
+    presentation_count: int
+    image_count: int
+    target_repeats_per_image: int
+    recommended_minimum_images: int
+    min_repeats_per_image: int
+    max_repeats_per_image: int
+    evenly_distributed: bool
 
 
 def duration_based_fixation_change_cap(condition_duration_seconds: float) -> int:
@@ -201,6 +217,54 @@ def condition_fixation_guidance(
     return guidance_rows
 
 
+def condition_stimulus_repeat_guidance(project: ProjectFile) -> list[StimulusRepeatRoleGuidance]:
+    """Return condition-level base/oddball per-image repeat guidance."""
+
+    template = get_template(project.meta.template_id)
+    stimulus_sets = {item.set_id: item for item in project.stimulus_sets}
+    target_repeats = project.settings.condition_defaults.target_repeats_per_image
+    guidance_rows: list[StimulusRepeatRoleGuidance] = []
+
+    for condition in sorted(project.conditions, key=lambda item: item.order_index):
+        oddball_presentations = (
+            condition.oddball_cycle_repeats_per_sequence * condition.sequence_count
+        )
+        role_presentations = {
+            "base": oddball_presentations * (template.oddball_every_n - 1),
+            "oddball": oddball_presentations,
+        }
+        role_set_ids = {
+            "base": condition.base_stimulus_set_id,
+            "oddball": condition.oddball_stimulus_set_id,
+        }
+        for role, presentation_count in role_presentations.items():
+            stimulus_set = stimulus_sets.get(role_set_ids[role])
+            image_count = stimulus_set.image_count if stimulus_set is not None else 0
+            if image_count <= 0:
+                min_repeats = 0
+                max_repeats = 0
+                evenly_distributed = False
+            else:
+                min_repeats = presentation_count // image_count
+                max_repeats = ceil(presentation_count / image_count)
+                evenly_distributed = presentation_count % image_count == 0
+            guidance_rows.append(
+                StimulusRepeatRoleGuidance(
+                    condition_id=condition.condition_id,
+                    condition_name=condition.name,
+                    role=role,
+                    presentation_count=presentation_count,
+                    image_count=image_count,
+                    target_repeats_per_image=target_repeats,
+                    recommended_minimum_images=ceil(presentation_count / target_repeats),
+                    min_repeats_per_image=min_repeats,
+                    max_repeats_per_image=max_repeats,
+                    evenly_distributed=evenly_distributed,
+                )
+            )
+    return guidance_rows
+
+
 def validate_condition_repeat_cycle_consistency(project: ProjectFile) -> list[ValidationIssue]:
     """Return issues when condition repeat/cycle settings are not uniform."""
 
@@ -249,6 +313,41 @@ def validate_project(
 
     issues.extend(validate_fixation_settings(project.settings.fixation_task))
     issues.extend(validate_condition_repeat_cycle_consistency(project))
+    for row in condition_stimulus_repeat_guidance(project):
+        if row.image_count <= 0:
+            continue
+        role_label = "Base" if row.role == "base" else "Oddball"
+        repeat_range = (
+            f"{row.min_repeats_per_image}"
+            if row.min_repeats_per_image == row.max_repeats_per_image
+            else f"{row.min_repeats_per_image}-{row.max_repeats_per_image}"
+        )
+        if row.image_count < row.recommended_minimum_images:
+            issues.append(
+                ValidationIssue(
+                    location=f"conditions.{row.condition_id}.{row.role}_stimulus_set_id",
+                    message=(
+                        f"{role_label} stimulus set for condition '{row.condition_name}' has "
+                        f"{row.image_count} image(s), but {row.recommended_minimum_images} "
+                        f"are recommended for <= {row.target_repeats_per_image} "
+                        f"repeats/image across {row.presentation_count} presentations. "
+                        f"Current scheduling gives {repeat_range} repeats/image."
+                    ),
+                    severity=ValidationSeverity.WARNING,
+                )
+            )
+        if not row.evenly_distributed:
+            issues.append(
+                ValidationIssue(
+                    location=f"conditions.{row.condition_id}.{row.role}_stimulus_set_id",
+                    message=(
+                        f"{role_label} presentations for condition '{row.condition_name}' "
+                        f"do not divide evenly across {row.image_count} image(s); current "
+                        f"scheduling gives {repeat_range} repeats/image."
+                    ),
+                    severity=ValidationSeverity.WARNING,
+                )
+            )
 
     for condition in project.conditions:
         if not condition.name.strip():

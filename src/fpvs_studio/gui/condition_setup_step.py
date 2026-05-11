@@ -9,10 +9,12 @@ from PySide6.QtCore import QSignalBlocker, QSize, Qt
 from PySide6.QtGui import QResizeEvent
 from PySide6.QtWidgets import (
     QDialog,
+    QDialogButtonBox,
     QFileDialog,
     QFormLayout,
     QFrame,
     QGridLayout,
+    QHBoxLayout,
     QLabel,
     QLineEdit,
     QListWidget,
@@ -27,6 +29,10 @@ from PySide6.QtWidgets import (
 from fpvs_studio.core.enums import StimulusVariant
 from fpvs_studio.core.models import Condition, StimulusSet
 from fpvs_studio.core.paths import stimuli_dir
+from fpvs_studio.core.validation import (
+    StimulusRepeatRoleGuidance,
+    condition_stimulus_repeat_guidance,
+)
 from fpvs_studio.gui.components import (
     PAGE_SECTION_GAP,
     SetupSourceCard,
@@ -46,11 +52,10 @@ from fpvs_studio.gui.workers import ProgressTask
 
 _DEFAULT_CONDITION_NAME_RE = re.compile(r"^Condition \d+$")
 _SOURCE_CARD_MIN_WIDTH = 210
-_SOURCE_CARD_HEIGHT = 232
+_SOURCE_CARD_HEIGHT = 164
 _SOURCE_ROW_MIN_WIDTH = (_SOURCE_CARD_MIN_WIDTH * 2) + PAGE_SECTION_GAP
-_SOURCE_FOLDER_VALUE_HEIGHT = 68
-_SOURCE_METRICS_HEIGHT = 58
-_INSTRUCTIONS_HEIGHT = 92
+_SOURCE_METRICS_HEIGHT = 38
+_INSTRUCTIONS_HEIGHT = 76
 _CONDITION_STEP_MIN_WIDTH = 840
 
 
@@ -105,6 +110,152 @@ def is_guided_trigger_code(value: int) -> bool:
     """Return whether a trigger code is acceptable in guided setup."""
 
     return value > 0
+
+
+def _repeat_range_text(row: StimulusRepeatRoleGuidance) -> str:
+    if row.min_repeats_per_image == row.max_repeats_per_image:
+        return str(row.min_repeats_per_image)
+    return f"{row.min_repeats_per_image}-{row.max_repeats_per_image}"
+
+
+class RepeatCalculatorDialog(QDialog):
+    """Read-only stimulus repeat planning dialog for the guided Conditions step."""
+
+    def __init__(
+        self,
+        *,
+        condition_name: str,
+        base_row: StimulusRepeatRoleGuidance,
+        oddball_row: StimulusRepeatRoleGuidance,
+        parent: QWidget | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self.setObjectName("setup_wizard_repeat_calculator_dialog")
+        self.setWindowTitle("Repeat Calculator")
+        self.setModal(True)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(18, 16, 18, 16)
+        layout.setSpacing(12)
+
+        title_label = QLabel(condition_name, self)
+        title_label.setObjectName("repeat_calculator_condition_name_label")
+        title_label.setProperty("setupSourceTitle", "true")
+        layout.addWidget(title_label)
+
+        summary_label = QLabel(_planning_summary_text(condition_name, base_row, oddball_row), self)
+        summary_label.setObjectName("repeat_calculator_summary_label")
+        summary_label.setProperty("setupMetricValue", "true")
+        summary_label.setWordWrap(True)
+        summary_label.setMinimumWidth(360)
+        layout.addWidget(summary_label)
+
+        form = QFormLayout()
+        form.setContentsMargins(0, 0, 0, 0)
+        form.setHorizontalSpacing(14)
+        form.setVerticalSpacing(8)
+        form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
+        self._add_readonly_row(
+            form,
+            "Condition Length",
+            _condition_length_text(base_row, oddball_row),
+            "repeat_calculator_condition_length_value",
+        )
+        self._add_readonly_row(
+            form,
+            "Base Presentations",
+            str(base_row.presentation_count),
+            "repeat_calculator_base_presentations_value",
+        )
+        self._add_readonly_row(
+            form,
+            "Oddball Presentations",
+            str(oddball_row.presentation_count),
+            "repeat_calculator_oddball_presentations_value",
+        )
+        self._add_readonly_row(
+            form,
+            "Target Repeats / Image",
+            f"{base_row.target_repeats_per_image}x",
+            "repeat_calculator_target_value",
+        )
+        self._add_readonly_row(
+            form,
+            "Required Base Images",
+            f"{base_row.recommended_minimum_images} images",
+            "repeat_calculator_required_base_value",
+        )
+        self._add_readonly_row(
+            form,
+            "Required Oddball Images",
+            f"{oddball_row.recommended_minimum_images} images",
+            "repeat_calculator_required_oddball_value",
+        )
+        self._add_readonly_row(
+            form,
+            "Current Base Images",
+            _current_images_text(base_row),
+            "repeat_calculator_current_base_value",
+        )
+        self._add_readonly_row(
+            form,
+            "Current Oddball Images",
+            _current_images_text(oddball_row),
+            "repeat_calculator_current_oddball_value",
+        )
+        layout.addLayout(form)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close, self)
+        buttons.setObjectName("repeat_calculator_buttons")
+        buttons.rejected.connect(self.reject)
+        buttons.accepted.connect(self.accept)
+        close_button = buttons.button(QDialogButtonBox.StandardButton.Close)
+        if close_button is not None:
+            mark_secondary_action(close_button)
+        layout.addWidget(buttons)
+
+    def _add_readonly_row(
+        self,
+        form: QFormLayout,
+        label: str,
+        value: str,
+        object_name: str,
+    ) -> None:
+        value_label = QLabel(value, self)
+        value_label.setObjectName(object_name)
+        value_label.setProperty("setupMetricValue", "true")
+        value_label.setWordWrap(True)
+        value_label.setMinimumWidth(220)
+        form.addRow(label, value_label)
+
+
+def _condition_length_text(
+    base_row: StimulusRepeatRoleGuidance,
+    oddball_row: StimulusRepeatRoleGuidance,
+) -> str:
+    total_presentations = base_row.presentation_count + oddball_row.presentation_count
+    return f"{oddball_row.presentation_count} oddball cycles, {total_presentations} stimuli"
+
+
+def _planning_summary_text(
+    condition_name: str,
+    base_row: StimulusRepeatRoleGuidance,
+    oddball_row: StimulusRepeatRoleGuidance,
+) -> str:
+    return (
+        f"Your {condition_name} condition is {oddball_row.presentation_count} oddball cycles "
+        f"long. This means you will display {base_row.presentation_count} base images and "
+        f"{oddball_row.presentation_count} oddball images. If you want each image to repeat "
+        f"{base_row.target_repeats_per_image} times, then you will need at least "
+        f"{base_row.recommended_minimum_images} base images and "
+        f"{oddball_row.recommended_minimum_images} oddball images in each folder."
+    )
+
+
+def _current_images_text(row: StimulusRepeatRoleGuidance) -> str:
+    if row.image_count <= 0:
+        return "No images selected"
+    return f"{row.image_count} images, about {_repeat_range_text(row)}x each"
 
 
 class ConditionSetupStep(QWidget):
@@ -181,6 +332,17 @@ class ConditionSetupStep(QWidget):
         self.trigger_code_spin.setObjectName("setup_wizard_condition_trigger_code_spin")
         self.trigger_code_spin.setRange(0, 65535)
         self.trigger_code_spin.valueChanged.connect(self._apply_trigger_code)
+        self.target_repeats_spin = QSpinBox(self)
+        self.target_repeats_spin.setObjectName("setup_wizard_target_repeats_per_image_spin")
+        self.target_repeats_spin.setRange(1, 10000)
+        self.target_repeats_spin.setToolTip(
+            "Target maximum repetitions for each individual base or oddball image."
+        )
+        self.target_repeats_spin.valueChanged.connect(self._apply_target_repeats)
+        self.repeat_calculator_button = QPushButton("Calculate...", self)
+        self.repeat_calculator_button.setObjectName("setup_wizard_repeat_calculator_button")
+        self.repeat_calculator_button.clicked.connect(self._open_repeat_calculator)
+        mark_secondary_action(self.repeat_calculator_button)
         self.instructions_edit = QTextEdit(self)
         self.instructions_edit.setObjectName("setup_wizard_condition_instructions_edit")
         self.instructions_edit.setFixedHeight(_INSTRUCTIONS_HEIGHT)
@@ -201,8 +363,16 @@ class ConditionSetupStep(QWidget):
         form.setContentsMargins(0, 0, 0, 0)
         form.setVerticalSpacing(8)
         form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
+        target_repeats_row = QWidget(self)
+        target_repeats_layout = QHBoxLayout(target_repeats_row)
+        target_repeats_layout.setContentsMargins(0, 0, 0, 0)
+        target_repeats_layout.setSpacing(8)
+        target_repeats_layout.addWidget(self.target_repeats_spin)
+        target_repeats_layout.addWidget(self.repeat_calculator_button)
+        target_repeats_layout.addStretch(1)
         form.addRow("Condition Name", self.condition_name_edit)
         form.addRow("Trigger Code", self.trigger_code_spin)
+        form.addRow("Target Repeats / Image", target_repeats_row)
         form.addRow("Participant Instructions", self.instructions_edit)
         details_section_layout.addLayout(form)
 
@@ -212,6 +382,7 @@ class ConditionSetupStep(QWidget):
             object_name="setup_conditions_base_source_card",
             compact=True,
             show_variants=False,
+            show_folder=False,
             center_title=True,
             center_content=True,
             parent=self,
@@ -220,7 +391,6 @@ class ConditionSetupStep(QWidget):
         self.base_source_card.setMinimumSize(_SOURCE_CARD_MIN_WIDTH, _SOURCE_CARD_HEIGHT)
         self.base_source_value = self.base_source_card.folder_value
         self.base_source_value.setObjectName("setup_wizard_base_source_value")
-        self.base_source_value.setFixedHeight(_SOURCE_FOLDER_VALUE_HEIGHT)
         self.base_count_value = QLabel(self)
         self.base_count_value.setObjectName("setup_wizard_base_count_value")
         self.base_resolution_value = QLabel(self)
@@ -236,6 +406,7 @@ class ConditionSetupStep(QWidget):
             object_name="setup_conditions_oddball_source_card",
             compact=True,
             show_variants=False,
+            show_folder=False,
             center_title=True,
             center_content=True,
             parent=self,
@@ -244,7 +415,6 @@ class ConditionSetupStep(QWidget):
         self.oddball_source_card.setMinimumSize(_SOURCE_CARD_MIN_WIDTH, _SOURCE_CARD_HEIGHT)
         self.oddball_source_value = self.oddball_source_card.folder_value
         self.oddball_source_value.setObjectName("setup_wizard_oddball_source_value")
-        self.oddball_source_value.setFixedHeight(_SOURCE_FOLDER_VALUE_HEIGHT)
         self.oddball_count_value = QLabel(self)
         self.oddball_count_value.setObjectName("setup_wizard_oddball_count_value")
         self.oddball_resolution_value = QLabel(self)
@@ -336,6 +506,8 @@ class ConditionSetupStep(QWidget):
         for widget in (
             self.condition_name_edit,
             self.trigger_code_spin,
+            self.target_repeats_spin,
+            self.repeat_calculator_button,
             self.instructions_edit,
             self.duplicate_condition_button,
             self.remove_condition_button,
@@ -356,6 +528,10 @@ class ConditionSetupStep(QWidget):
                 self.condition_name_edit.clear()
             with QSignalBlocker(self.trigger_code_spin):
                 self.trigger_code_spin.setValue(0)
+            with QSignalBlocker(self.target_repeats_spin):
+                self.target_repeats_spin.setValue(
+                    self._document.project.settings.condition_defaults.target_repeats_per_image
+                )
             with QSignalBlocker(self.instructions_edit):
                 self.instructions_edit.clear()
             self._set_checklist_statuses(False, False, False, False)
@@ -373,6 +549,10 @@ class ConditionSetupStep(QWidget):
             self.condition_name_edit.setText(condition.name)
         with QSignalBlocker(self.trigger_code_spin):
             self.trigger_code_spin.setValue(condition.trigger_code)
+        with QSignalBlocker(self.target_repeats_spin):
+            self.target_repeats_spin.setValue(
+                self._document.project.settings.condition_defaults.target_repeats_per_image
+            )
         if not self._instructions_committer.pending:
             _sync_text_editor_contents(self.instructions_edit, condition.instructions)
         self._set_checklist_statuses(named, trigger_ready, base_ready, oddball_ready)
@@ -514,6 +694,37 @@ class ConditionSetupStep(QWidget):
         except Exception as error:
             _show_error_dialog(self, "Condition Error", error)
             self.refresh()
+
+    def _apply_target_repeats(self) -> None:
+        try:
+            self._document.update_condition_defaults(
+                target_repeats_per_image=self.target_repeats_spin.value(),
+            )
+        except Exception as error:
+            _show_error_dialog(self, "Condition Defaults Error", error)
+            self.refresh()
+
+    def _open_repeat_calculator(self) -> None:
+        condition_id = self.selected_condition_id()
+        condition = self._current_condition()
+        if condition_id is None or condition is None:
+            return
+        rows = [
+            row
+            for row in condition_stimulus_repeat_guidance(self._document.project)
+            if row.condition_id == condition_id
+        ]
+        base_row = next((row for row in rows if row.role == "base"), None)
+        oddball_row = next((row for row in rows if row.role == "oddball"), None)
+        if base_row is None or oddball_row is None:
+            return
+        dialog = RepeatCalculatorDialog(
+            condition_name=condition.name,
+            base_row=base_row,
+            oddball_row=oddball_row,
+            parent=self,
+        )
+        dialog.exec()
 
     def _schedule_instruction_commit(self) -> None:
         self._pending_instruction_condition_id = self.selected_condition_id()

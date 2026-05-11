@@ -1152,6 +1152,105 @@ def test_setup_wizard_conditions_step_requires_descriptive_name_and_positive_tri
     assert next_button.isEnabled()
 
 
+def test_setup_wizard_conditions_step_shows_repeat_target_and_balance(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Wizard Repeat Balance")
+    guide = window.setup_wizard_page
+    step = guide.condition_setup_step
+    guide.open_wizard(step_key="conditions")
+
+    condition_id = guide._document.create_condition()
+    guide._document.update_condition(condition_id, name="Faces", trigger_code=1)
+    guide._document.import_condition_stimulus_folder(
+        condition_id,
+        role="base",
+        source_dir=_write_image_directory(tmp_path / "repeat-base", count=15),
+    )
+    guide._document.import_condition_stimulus_folder(
+        condition_id,
+        role="oddball",
+        source_dir=_write_image_directory(tmp_path / "repeat-oddball", count=18),
+    )
+    step._select_condition(condition_id)
+    QApplication.processEvents()
+
+    assert step.target_repeats_spin.value() == 7
+    assert not step.base_source_card.folder_value.isVisible()
+    assert not step.oddball_source_card.folder_value.isVisible()
+    assert step.base_source_card.repeat_summary_label.text() == ""
+    assert not step.base_source_card.repeat_summary_label.isVisible()
+    assert step.oddball_source_card.repeat_summary_label.text() == ""
+    assert not step.oddball_source_card.repeat_summary_label.isVisible()
+    _assert_visible_children_within_parent(step.base_source_card)
+    _assert_visible_children_within_parent(step.oddball_source_card)
+
+    calculator_snapshots: list[dict[str, str]] = []
+
+    def capture_calculator(dialog: QDialog) -> QDialog.DialogCode:
+        calculator_snapshots.append(
+            {
+                name: dialog.findChild(QLabel, name).text()
+                for name in (
+                    "repeat_calculator_condition_length_value",
+                    "repeat_calculator_summary_label",
+                    "repeat_calculator_base_presentations_value",
+                    "repeat_calculator_oddball_presentations_value",
+                    "repeat_calculator_target_value",
+                    "repeat_calculator_required_base_value",
+                    "repeat_calculator_required_oddball_value",
+                    "repeat_calculator_current_base_value",
+                    "repeat_calculator_current_oddball_value",
+                )
+            }
+        )
+        return QDialog.DialogCode.Accepted
+
+    monkeypatch.setattr(
+        "fpvs_studio.gui.condition_setup_step.RepeatCalculatorDialog.exec",
+        capture_calculator,
+    )
+
+    qtbot.mouseClick(step.repeat_calculator_button, Qt.MouseButton.LeftButton)
+
+    assert calculator_snapshots[-1] == {
+        "repeat_calculator_condition_length_value": "146 oddball cycles, 730 stimuli",
+        "repeat_calculator_summary_label": (
+            "Your Faces condition is 146 oddball cycles long. This means you will display "
+            "584 base images and 146 oddball images. If you want each image to repeat "
+            "7 times, then you will need at least 84 base images and 21 oddball images "
+            "in each folder."
+        ),
+        "repeat_calculator_base_presentations_value": "584",
+        "repeat_calculator_oddball_presentations_value": "146",
+        "repeat_calculator_target_value": "7x",
+        "repeat_calculator_required_base_value": "84 images",
+        "repeat_calculator_required_oddball_value": "21 images",
+        "repeat_calculator_current_base_value": "15 images, about 38-39x each",
+        "repeat_calculator_current_oddball_value": "18 images, about 8-9x each",
+    }
+
+    step.target_repeats_spin.setValue(10)
+    QApplication.processEvents()
+
+    assert guide._document.project.settings.condition_defaults.target_repeats_per_image == 10
+    assert step.base_source_card.repeat_summary_label.text() == ""
+    assert step.oddball_source_card.repeat_summary_label.text() == ""
+
+    qtbot.mouseClick(step.repeat_calculator_button, Qt.MouseButton.LeftButton)
+
+    assert calculator_snapshots[-1]["repeat_calculator_target_value"] == "10x"
+    assert calculator_snapshots[-1]["repeat_calculator_required_base_value"] == "59 images"
+    assert calculator_snapshots[-1]["repeat_calculator_required_oddball_value"] == "15 images"
+    assert (
+        "If you want each image to repeat 10 times, then you will need at least "
+        "59 base images and 15 oddball images in each folder."
+    ) in calculator_snapshots[-1]["repeat_calculator_summary_label"]
+
+
 def test_setup_wizard_conditions_step_keeps_source_geometry_for_incomplete_condition(
     qtbot,
     controller: StudioController,

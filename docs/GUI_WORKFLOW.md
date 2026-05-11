@@ -85,6 +85,9 @@ The authoring window is organized around two user-facing modes:
   - the Conditions step uses compact condition rows and a combined condition
     setup surface for condition list actions, name, trigger code, participant
     instructions, and base/oddball image source cards
+  - Conditions shows project-wide target repeats per image and per-condition base/oddball
+    repeat-balance guidance; repeat-balance issues are warnings and do not block save
+    or launch
   - raw image-folder import is permissive; folders with mixed image sizes are not
     rejected at selection time
   - when users leave Conditions, FPVS Studio checks selected condition images for
@@ -218,6 +221,7 @@ The current GUI supports:
 - checking for app updates from `File > Check for Updates`
 - authoring multiple conditions
 - importing base and oddball image folders
+- reviewing target repeats per image and base/oddball repeat-balance warnings
 - normalizing inconsistent condition image folders to project-local PNG copies
 - using `Tools > Image Resizer` to create standalone FPVS-ready PNG copies
 - creating optional derived-variant control conditions from existing condition stimuli

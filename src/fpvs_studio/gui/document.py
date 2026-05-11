@@ -199,6 +199,13 @@ class ProjectDocument(
         settings = _validated_copy(self._project.settings, session=session)
         self._apply_project_update(settings=settings)
 
+    def update_condition_defaults(self, **updates: object) -> None:
+        """Update project-wide condition defaults through Pydantic validation."""
+
+        condition_defaults = _validated_copy(self._project.settings.condition_defaults, **updates)
+        settings = _validated_copy(self._project.settings, condition_defaults=condition_defaults)
+        self._apply_project_update(settings=settings)
+
     def generate_new_session_seed(self) -> int:
         """Generate and persist a fresh stored random order seed."""
 
