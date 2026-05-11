@@ -25,6 +25,9 @@ BUILD_RELEASE_TEXT = (REPO_ROOT / "scripts" / "build_release.ps1").read_text(
 PACKAGED_SMOKE_TEXT = (REPO_ROOT / "src" / "fpvs_studio" / "app" / "packaged_smoke.py").read_text(
     encoding="utf-8"
 )
+GUI_PACKAGED_SMOKE_TEXT = (
+    REPO_ROOT / "src" / "fpvs_studio" / "gui" / "packaged_smoke.py"
+).read_text(encoding="utf-8")
 INNO_SCRIPT_TEXT = (REPO_ROOT / "packaging" / "inno" / "fpvs_studio.iss").read_text(
     encoding="utf-8"
 )
@@ -107,12 +110,13 @@ def test_installer_build_validates_bundle_and_runs_packaged_smoke() -> None:
 
 
 def test_packaged_smoke_checks_runtime_dependency_imports() -> None:
-    assert "_isolate_psychopy_user_dirs" in PACKAGED_SMOKE_TEXT
-    assert '"APPDATA"' in PACKAGED_SMOKE_TEXT
-    assert '"LOCALAPPDATA"' in PACKAGED_SMOKE_TEXT
-    assert "runtime_dependencies_ok" in PACKAGED_SMOKE_TEXT
-    assert "runtime_dependency_report" in PACKAGED_SMOKE_TEXT
-    assert '"psychopy.visual.backends.pygletbackend"' in PACKAGED_SMOKE_TEXT
-    assert '"psychopy.visual.backends.glfwbackend"' in PACKAGED_SMOKE_TEXT
-    assert '"psychtoolbox"' in PACKAGED_SMOKE_TEXT
-    assert '"sounddevice"' in PACKAGED_SMOKE_TEXT
+    assert "collect_packaged_smoke_report" in PACKAGED_SMOKE_TEXT
+    assert "_isolate_psychopy_user_dirs" in GUI_PACKAGED_SMOKE_TEXT
+    assert '"APPDATA"' in GUI_PACKAGED_SMOKE_TEXT
+    assert '"LOCALAPPDATA"' in GUI_PACKAGED_SMOKE_TEXT
+    assert "runtime_dependencies_ok" in GUI_PACKAGED_SMOKE_TEXT
+    assert "runtime_dependency_report" in GUI_PACKAGED_SMOKE_TEXT
+    assert '"psychopy.visual.backends.pygletbackend"' in GUI_PACKAGED_SMOKE_TEXT
+    assert '"psychopy.visual.backends.glfwbackend"' in GUI_PACKAGED_SMOKE_TEXT
+    assert '"psychtoolbox"' in GUI_PACKAGED_SMOKE_TEXT
+    assert '"sounddevice"' in GUI_PACKAGED_SMOKE_TEXT

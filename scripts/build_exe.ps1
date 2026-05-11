@@ -56,7 +56,7 @@ function Assert-PackageMetadataVersion {
         [string]$ExpectedVersion
     )
 
-    $versionOutput = & $Python -c "import importlib.metadata as m, fpvs_studio; print(fpvs_studio.__version__); print(m.version('fpvs-studio'))"
+    $versionOutput = & $Python -c "import importlib.metadata as m, sys, fpvs_studio; sys.stdout.write(fpvs_studio.__version__ + '\n' + m.version('fpvs-studio') + '\n')"
     if ($LASTEXITCODE -ne 0) {
         throw "Could not verify installed fpvs-studio package metadata."
     }
