@@ -9,22 +9,12 @@ This guide creates a basic FPVS Studio project from launch to saved experiment.
 3. Enter a project name and optional description.
 4. Continue through the Setup Wizard.
 
-## Setup Wizard Steps
-
-The wizard has six steps:
-
-1. **Project**: name, description, and experiment template.
-2. **Conditions**: condition names, trigger codes, instructions, and stimulus folders.
-3. **Experiment**: display refresh rate, background color, and condition repeats.
-4. **Fixation**: fixation cross timing and target schedule.
-5. **Response**: optional fixation response tracking.
-6. **Review**: final checks before saving.
 
 ## Save And Reopen
 
 After review, save the project. FPVS Studio stores the project under your configured
-FPVS Studio Root Folder. Later, use **Open Projects** to reopen it and launch sessions
-without repeating setup.
+FPVS Studio Root Folder. Later, use **Open Projects** to reopen it and launch your experiment quickly.
+
 
 ## Before Running Participants
 

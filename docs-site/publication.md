@@ -29,6 +29,4 @@ configuration details before submission.
 
 ## Current Scope
 
-The current beta release is intended for Windows 11 and BioSemi workflows. Do not imply
-support for other acquisition systems or operating systems unless they were validated for
-the specific study.
+The current beta release is intended for Windows 11 and BioSemi workflows. 
