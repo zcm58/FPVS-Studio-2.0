@@ -115,12 +115,13 @@ relative to the project root during playback.
 
 ## v1 scheduling policy
 
-The compiler currently emits a deterministic schedule:
+The compiler currently emits a seed-deterministic schedule:
 
 - oddball every 5th stimulus
-- sorted image paths
 - manifest-backed variant resolution when available
-- simple round-robin image assignment
+- sorted image paths before scheduling
+- per-role seeded shuffling so every base image and every oddball image is shown once
+  per role cycle before that role's pool is reshuffled
 - deterministic fixation spacing from the configured per-sequence count and gap
   constraints
 - a trigger event at frame 0 when a condition trigger code is present

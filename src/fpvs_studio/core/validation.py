@@ -380,6 +380,20 @@ def validate_project(
 
         base_set = stimulus_sets.get(condition.base_stimulus_set_id)
         oddball_set = stimulus_sets.get(condition.oddball_stimulus_set_id)
+        if (
+            base_set is not None
+            and oddball_set is not None
+            and base_set.source_dir == oddball_set.source_dir
+        ):
+            issues.append(
+                ValidationIssue(
+                    location=f"conditions.{condition.condition_id}",
+                    message=(
+                        f"Condition '{condition.name}' cannot use the same folder for base "
+                        "and oddball images."
+                    ),
+                )
+            )
         if base_set is not None and base_set.image_count <= 0:
             issues.append(
                 ValidationIssue(

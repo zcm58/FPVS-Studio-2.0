@@ -110,6 +110,7 @@ def compile_run_spec(
         base_paths=base_paths,
         oddball_paths=oddball_paths,
         oddball_every_n=template.oddball_every_n,
+        rng=random.Random(random_seed),
     )
 
     fixation_settings = project.settings.fixation_task

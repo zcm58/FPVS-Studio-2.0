@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import random
 from collections import Counter
 
 from fpvs_studio.core.enums import InterConditionMode
@@ -19,17 +20,24 @@ def build_stimulus_sequence(
     base_paths: list[str],
     oddball_paths: list[str],
     oddball_every_n: int,
+    rng: random.Random,
 ) -> list[StimulusEvent]:
-    """Build the deterministic base/oddball schedule."""
+    """Build the base/oddball schedule with seeded per-role image shuffles."""
 
     role_counts: Counter[str] = Counter()
     sequence: list[StimulusEvent] = []
+    shuffled_pools = {
+        "base": _shuffled_pool(base_paths, rng=rng),
+        "oddball": _shuffled_pool(oddball_paths, rng=rng),
+    }
 
     for index in range(total_stimuli):
         role: StimulusRole = "oddball" if (index + 1) % oddball_every_n == 0 else "base"
-        pool = oddball_paths if role == "oddball" else base_paths
+        pool = shuffled_pools[role]
         image_path = pool[role_counts[role] % len(pool)]
         role_counts[role] += 1
+        if role_counts[role] % len(pool) == 0:
+            shuffled_pools[role] = _shuffled_pool(pool, rng=rng)
         sequence.append(
             StimulusEvent(
                 sequence_index=index,
@@ -41,6 +49,14 @@ def build_stimulus_sequence(
             )
         )
     return sequence
+
+
+def _shuffled_pool(paths: list[str], *, rng: random.Random) -> list[str]:
+    """Return a shuffled copy while keeping callers' resolved path lists immutable."""
+
+    shuffled = list(paths)
+    rng.shuffle(shuffled)
+    return shuffled
 
 
 def build_trigger_events(trigger_code: int | None) -> list[TriggerEvent]:

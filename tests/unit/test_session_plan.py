@@ -104,6 +104,41 @@ def test_session_plan_reproducibility_and_seed_variation(
     )
 
 
+def test_session_plan_reshuffles_images_each_time_condition_is_shown(
+    sample_project,
+    sample_project_root,
+) -> None:
+    sample_project.settings.session.block_count = 2
+
+    session_plan = compile_session_plan(
+        sample_project,
+        refresh_hz=60.0,
+        project_root=sample_project_root,
+        random_seed=42,
+    )
+    entries = session_plan.ordered_entries()
+    base_orders = [
+        [
+            event.image_path
+            for event in entry.run_spec.stimulus_sequence
+            if event.role == "base"
+        ][:3]
+        for entry in entries
+    ]
+
+    assert len(entries) == 2
+    assert base_orders[0] != base_orders[1]
+    assert all(
+        set(base_order)
+        == {
+            "stimuli/original-images/base-set/base-set-01.png",
+            "stimuli/original-images/base-set/base-set-02.png",
+            "stimuli/original-images/base-set/base-set-03.png",
+        }
+        for base_order in base_orders
+    )
+
+
 def test_session_plan_randomizes_blocks_even_when_legacy_flag_is_false(
     multi_condition_project,
     multi_condition_project_root,

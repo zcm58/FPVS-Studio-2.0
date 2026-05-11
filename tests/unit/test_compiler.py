@@ -99,33 +99,62 @@ def test_compiler_keeps_base_and_oddball_frame_cadence_locked(
     )
 
 
-def test_compiler_assigns_image_paths_deterministically(
+def test_compiler_assigns_image_paths_with_seeded_full_pool_shuffle(
     sample_project, sample_project_root
 ) -> None:
     run_spec_a = compile_run_spec(
         sample_project,
         refresh_hz=60.0,
         project_root=sample_project_root,
+        random_seed=2026,
         run_id="run-a",
     )
     run_spec_b = compile_run_spec(
         sample_project,
         refresh_hz=60.0,
         project_root=sample_project_root,
+        random_seed=2026,
         run_id="run-b",
     )
-    first_five_paths = [event.image_path for event in run_spec_a.stimulus_sequence[:5]]
+    run_spec_c = compile_run_spec(
+        sample_project,
+        refresh_hz=60.0,
+        project_root=sample_project_root,
+        random_seed=2027,
+        run_id="run-c",
+    )
+    base_paths = [
+        event.image_path for event in run_spec_a.stimulus_sequence if event.role == "base"
+    ]
+    oddball_paths = [
+        event.image_path for event in run_spec_a.stimulus_sequence if event.role == "oddball"
+    ]
 
     assert [event.image_path for event in run_spec_a.stimulus_sequence] == [
         event.image_path for event in run_spec_b.stimulus_sequence
     ]
-    assert first_five_paths == [
+    assert [event.image_path for event in run_spec_a.stimulus_sequence] != [
+        event.image_path for event in run_spec_c.stimulus_sequence
+    ]
+    assert set(base_paths[:3]) == {
         "stimuli/original-images/base-set/base-set-01.png",
         "stimuli/original-images/base-set/base-set-02.png",
         "stimuli/original-images/base-set/base-set-03.png",
-        "stimuli/original-images/base-set/base-set-01.png",
+    }
+    assert set(oddball_paths[:3]) == {
         "stimuli/original-images/oddball-set/oddball-set-01.png",
-    ]
+        "stimuli/original-images/oddball-set/oddball-set-02.png",
+        "stimuli/original-images/oddball-set/oddball-set-03.png",
+    }
+
+
+def test_compiler_rejects_same_base_and_oddball_folder(sample_project) -> None:
+    sample_project.stimulus_sets[1] = sample_project.stimulus_sets[1].model_copy(
+        update={"source_dir": sample_project.stimulus_sets[0].source_dir}
+    )
+
+    with pytest.raises(CompileError, match="same folder for base and oddball images"):
+        compile_run_spec(sample_project, refresh_hz=60.0)
 
 
 def test_compile_run_spec_still_requires_one_condition_when_project_has_many(

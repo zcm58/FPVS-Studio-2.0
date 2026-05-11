@@ -44,6 +44,19 @@ def test_project_validation_rejects_resolution_mismatch(sample_project) -> None:
     assert any("mismatched resolutions" in issue.message for issue in report.issues)
 
 
+def test_project_validation_rejects_same_base_and_oddball_folder(sample_project) -> None:
+    sample_project.stimulus_sets[1] = sample_project.stimulus_sets[1].model_copy(
+        update={"source_dir": sample_project.stimulus_sets[0].source_dir}
+    )
+
+    report = validate_project(sample_project)
+
+    assert report.is_valid is False
+    assert any(
+        "same folder for base and oddball images" in issue.message for issue in report.issues
+    )
+
+
 def test_stimulus_repeat_guidance_reports_default_v1_presentation_counts(
     sample_project,
 ) -> None:

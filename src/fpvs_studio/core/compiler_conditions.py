@@ -99,6 +99,10 @@ def validate_selected_condition(
         raise CompileError(
             f"Stimulus set '{oddball_set.name}' does not contain any imported images."
         )
+    if base_set.source_dir == oddball_set.source_dir:
+        raise CompileError(
+            f"Condition '{condition.name}' cannot use the same folder for base and oddball images."
+        )
     if (
         base_set.resolution is not None
         and oddball_set.resolution is not None
