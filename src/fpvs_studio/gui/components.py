@@ -913,7 +913,7 @@ def studio_theme_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
         border-radius: {CARD_CORNER_RADIUS}px;
         background-color: {color_surface_elevated};
         color: {color_text_primary};
-        padding: 5px 10px;
+        padding: 7px 18px;
         font-size: {FONT_SIZE_META}px;
         font-weight: 700;
     }}

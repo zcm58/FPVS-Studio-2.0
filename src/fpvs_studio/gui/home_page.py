@@ -335,7 +335,8 @@ class HomePage(QWidget):
 
         self.launch_status_label = StatusBadgeLabel("Setup Required", self)
         self.launch_status_label.setObjectName("home_launch_status_indicator")
-        self.launch_status_label.setMinimumHeight(28)
+        self.launch_status_label.setMinimumHeight(34)
+        self.launch_status_label.setMinimumWidth(224)
         self.launch_status_summary = QLabel(self)
         self.launch_status_summary.setObjectName("home_launch_status_summary")
         self.launch_status_summary.setWordWrap(True)

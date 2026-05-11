@@ -2446,6 +2446,8 @@ def test_incomplete_home_launch_state_is_error_and_disabled(
     assert status_label.text() == "Setup Required"
     assert status_label.property("statusState") == "error"
     assert status_label.alignment() == Qt.AlignmentFlag.AlignCenter
+    assert status_label.minimumWidth() == 224
+    assert status_label.minimumHeight() >= 34
     assert home_launch_button.isEnabled() is False
     assert run_launch_button.isEnabled() is False
 

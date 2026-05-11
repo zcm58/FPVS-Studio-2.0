@@ -228,6 +228,7 @@ class RunPage(QWidget):
         self.readiness_badge = StatusBadgeLabel("Setup Required", self)
         self.readiness_badge.setObjectName("run_readiness_badge")
         self.readiness_badge.setMinimumHeight(34)
+        self.readiness_badge.setMinimumWidth(224)
 
         self.readiness_summary_value = QLabel("Not computed yet.", self)
         self.readiness_summary_value.setObjectName("run_readiness_summary_value")
