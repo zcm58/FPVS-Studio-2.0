@@ -315,6 +315,10 @@ class HomePage(QWidget):
         self.launch_button = QPushButton("Launch Experiment", self)
         self.launch_button.setObjectName("home_launch_experiment_button")
         mark_home_launch_action(self.launch_button)
+        self._launch_tooltip_text = (
+            "Launch Experiment on the current beta test-mode runtime path."
+        )
+        self._launch_status_tip_text = self._launch_tooltip_text
         self.new_project_button = QPushButton("Create New Project", self)
         self.new_project_button.setObjectName("home_create_project_button")
         self.edit_setup_button = QPushButton("Edit Setup", self)
@@ -502,6 +506,11 @@ class HomePage(QWidget):
             launch_action,
             "Launch Experiment",
         )
+        if launch_action.toolTip():
+            self._launch_tooltip_text = launch_action.toolTip()
+        if launch_action.statusTip():
+            self._launch_status_tip_text = launch_action.statusTip()
+        self._set_status_indicator(self._status_report())
 
     def bind_navigation_actions(
         self,
@@ -553,14 +562,22 @@ class HomePage(QWidget):
 
     def _set_status_indicator(self, report: LauncherReadinessReport) -> None:
         self.launch_status_label.set_state(report.badge_state, report.status_label)
-        self.launch_button.setEnabled(report.badge_state == "ready")
+        is_ready = report.badge_state == "ready"
+        self.launch_button.setEnabled(is_ready)
         summary_text = (
             ""
-            if report.badge_state == "ready"
+            if is_ready
             else report.status_summary
         )
         self.launch_status_summary.setText(summary_text)
         self.launch_status_summary.setVisible(bool(summary_text))
+        if is_ready:
+            self.launch_button.setToolTip(self._normal_launch_tooltip)
+            self.launch_button.setStatusTip(self._normal_launch_status_tip)
+            return
+        blocker_text = _first_actionable_blocker(report)
+        self.launch_button.setToolTip(blocker_text)
+        self.launch_button.setStatusTip(blocker_text)
 
     def _add_metric(
         self,
@@ -606,4 +623,19 @@ class HomePage(QWidget):
         if action.statusTip():
             button.setStatusTip(action.statusTip())
         button.clicked.connect(lambda _checked=False, target=action: target.trigger())
+
+    @property
+    def _normal_launch_tooltip(self) -> str:
+        return self._launch_tooltip_text
+
+    @property
+    def _normal_launch_status_tip(self) -> str:
+        return self._launch_status_tip_text
+
+
+def _first_actionable_blocker(report: LauncherReadinessReport) -> str:
+    for item in report.readiness_items:
+        if item.startswith(("Needs setup:", "Warning:")):
+            return item
+    return report.status_summary
 

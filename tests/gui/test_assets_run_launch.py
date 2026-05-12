@@ -8,7 +8,9 @@ from pathlib import Path
 from PIL import Image
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
+    QApplication,
     QMessageBox,
+    QPushButton,
 )
 from tests.gui.helpers import (
     _open_created_project,
@@ -134,7 +136,7 @@ def test_launch_invokes_backend_preflight_before_participant_prompt(
     monkeypatch.setattr(window.run_page, "_prompt_participant_number", _fake_prompt)
     monkeypatch.setattr("fpvs_studio.gui.document.launch_session", _fake_launch)
 
-    qtbot.mouseClick(window.run_page.launch_button, Qt.MouseButton.LeftButton)
+    window.run_page.launch_test_session()
 
     assert captures["project_root"] == window.document.project_root
     assert captures["engine"] == {"engine_name": "psychopy"}
@@ -157,6 +159,7 @@ def test_launch_action_wires_runtime_launcher_with_backend_launch_settings(
     prompt_calls = 0
     progress_events: list[str] = []
     progress_dialogs: list[object] = []
+    opened_paths: list[str] = []
 
     class _FakeProgressDialog:
         def __init__(self, label, cancel_text, minimum, maximum, parent) -> None:
@@ -233,6 +236,10 @@ def test_launch_action_wires_runtime_launcher_with_backend_launch_settings(
         "fpvs_studio.gui.main_window.QMessageBox.information",
         lambda *args, **kwargs: QMessageBox.StandardButton.Ok,
     )
+    monkeypatch.setattr(
+        "fpvs_studio.gui.folder_actions.open_folder",
+        lambda path: opened_paths.append(str(path)) or True,
+    )
 
     assert not hasattr(window.run_page, "serial_port_edit")
     assert not hasattr(window.run_page, "display_index_edit")
@@ -240,7 +247,7 @@ def test_launch_action_wires_runtime_launcher_with_backend_launch_settings(
     assert not hasattr(window.run_page, "fullscreen_checkbox")
     window.document.update_trigger_settings(serial_port="COM3", baudrate=57600)
 
-    qtbot.mouseClick(window.run_page.launch_button, Qt.MouseButton.LeftButton)
+    window.run_page.launch_test_session()
 
     qtbot.waitUntil(lambda: "launch_settings" in captures)
     launch_settings = captures["launch_settings"]
@@ -273,6 +280,17 @@ def test_launch_action_wires_runtime_launcher_with_backend_launch_settings(
         in window.run_page.summary_text.toPlainText().lower()
     )
     assert "runtime launch completed" in window.run_page.summary_text.toPlainText().lower()
+    open_folder_button = window.run_page.findChild(QPushButton, "run_open_folder_button")
+    copy_folder_button = window.run_page.findChild(QPushButton, "run_copy_folder_button")
+    expected_output_dir = f"runs/{captures['session_plan'].session_id}"
+    assert open_folder_button is not None
+    assert copy_folder_button is not None
+    assert not open_folder_button.isHidden()
+    assert not copy_folder_button.isHidden()
+    qtbot.mouseClick(copy_folder_button, Qt.MouseButton.LeftButton)
+    qtbot.mouseClick(open_folder_button, Qt.MouseButton.LeftButton)
+    assert QApplication.clipboard().text() == expected_output_dir
+    assert opened_paths == [expected_output_dir]
 
 
 def test_launch_after_preview_reprepares_once_per_click(
@@ -284,7 +302,7 @@ def test_launch_after_preview_reprepares_once_per_click(
     _, window = _open_created_project(controller, qtbot, tmp_path, "Preview Then Launch Project")
     _prepare_compile_ready_project(window, tmp_path / "preview-then-launch")
 
-    qtbot.mouseClick(window.run_page.compile_button, Qt.MouseButton.LeftButton)
+    window.run_page.compile_session()
     assert "session preview refreshed" in window.run_page.summary_text.toPlainText().lower()
 
     original_prepare = window.document.prepare_test_session_launch
@@ -330,7 +348,7 @@ def test_launch_after_preview_reprepares_once_per_click(
         lambda *args, **kwargs: QMessageBox.StandardButton.Ok,
     )
 
-    qtbot.mouseClick(window.run_page.launch_button, Qt.MouseButton.LeftButton)
+    window.run_page.launch_test_session()
 
     assert len(prepare_calls) == 1
     assert len(preflight_session_ids) == 1
@@ -351,6 +369,7 @@ def test_launch_action_surfaces_abort_reason_when_runtime_aborts(
     participant_number = "00043"
     info_calls = 0
     warning_payloads: list[tuple[str, str]] = []
+    opened_paths: list[str] = []
 
     def _fake_launch(project_root, session_plan, participant_number, launch_settings):
         return SessionExecutionSummary(
@@ -402,8 +421,12 @@ def test_launch_action_surfaces_abort_reason_when_runtime_aborts(
         "fpvs_studio.gui.main_window.QMessageBox.warning",
         _capture_warning,
     )
+    monkeypatch.setattr(
+        "fpvs_studio.gui.folder_actions.open_folder",
+        lambda path: opened_paths.append(str(path)) or True,
+    )
 
-    qtbot.mouseClick(window.run_page.launch_button, Qt.MouseButton.LeftButton)
+    window.run_page.launch_test_session()
 
     qtbot.waitUntil(lambda: bool(warning_payloads))
     summary_text = window.run_page.summary_text.toPlainText().lower()
@@ -414,6 +437,16 @@ def test_launch_action_surfaces_abort_reason_when_runtime_aborts(
     assert "runtime launch completed" not in summary_text
     assert "runtime launch aborted" in summary_text
     assert "abort reason:" in summary_text
+    open_folder_button = window.run_page.findChild(QPushButton, "run_open_folder_button")
+    copy_folder_button = window.run_page.findChild(QPushButton, "run_copy_folder_button")
+    assert open_folder_button is not None
+    assert copy_folder_button is not None
+    assert not open_folder_button.isHidden()
+    assert not copy_folder_button.isHidden()
+    qtbot.mouseClick(copy_folder_button, Qt.MouseButton.LeftButton)
+    qtbot.mouseClick(open_folder_button, Qt.MouseButton.LeftButton)
+    assert QApplication.clipboard().text() == "runs/00043"
+    assert opened_paths == ["runs/00043"]
 
 
 def test_launch_action_closes_progress_dialog_when_runtime_launch_raises(
@@ -481,7 +514,7 @@ def test_launch_action_closes_progress_dialog_when_runtime_launch_raises(
     monkeypatch.setattr("fpvs_studio.gui.main_window.QProgressDialog", _FakeProgressDialog)
     monkeypatch.setattr("fpvs_studio.gui.main_window._show_error_dialog", _capture_error_dialog)
 
-    qtbot.mouseClick(window.run_page.launch_button, Qt.MouseButton.LeftButton)
+    window.run_page.launch_test_session()
 
     qtbot.waitUntil(lambda: bool(captured_errors))
     assert captured_errors == [("Launch Error", "Intentional launch failure.")]
@@ -547,7 +580,7 @@ def test_launch_action_duplicate_participant_yes_still_launches(
         lambda *args, **kwargs: QMessageBox.StandardButton.Ok,
     )
 
-    qtbot.mouseClick(window.run_page.launch_button, Qt.MouseButton.LeftButton)
+    window.run_page.launch_test_session()
 
     assert prompt_calls == 1
     qtbot.waitUntil(lambda: "participant_number" in captures)
@@ -613,7 +646,7 @@ def test_launch_action_duplicate_participant_no_reprompts_until_new_value(
         lambda *args, **kwargs: QMessageBox.StandardButton.Ok,
     )
 
-    qtbot.mouseClick(window.run_page.launch_button, Qt.MouseButton.LeftButton)
+    window.run_page.launch_test_session()
 
     assert prompt_calls == 3
     assert len(warning_messages) == 2
@@ -649,7 +682,7 @@ def test_launch_action_cancelled_participant_prompt_aborts_launch(
     monkeypatch.setattr(window.run_page, "_prompt_participant_number", lambda: None)
     monkeypatch.setattr("fpvs_studio.gui.document.launch_session", _fake_launch)
 
-    qtbot.mouseClick(window.run_page.launch_button, Qt.MouseButton.LeftButton)
+    window.run_page.launch_test_session()
 
     assert launch_calls == 0
     assert "runtime launch completed" not in window.run_page.summary_text.toPlainText().lower()

@@ -6,6 +6,7 @@ from collections.abc import Callable
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
+    QApplication,
     QDialog,
     QDialogButtonBox,
     QFormLayout,
@@ -24,6 +25,7 @@ from PySide6.QtWidgets import (
 )
 
 from fpvs_studio.core.session_plan import SessionPlan
+from fpvs_studio.gui import folder_actions
 from fpvs_studio.gui.components import (
     PAGE_SECTION_GAP,
     NonHomePageShell,
@@ -139,6 +141,7 @@ class RunPage(QWidget):
         self._active_launch_task: ProgressTask | None = None
         self._active_launch_session_plan: SessionPlan | None = None
         self._active_launch_participant_number: str | None = None
+        self._last_run_output_dir: str | None = None
 
         self.runtime_settings_editor = DisplaySettingsEditor(
             document,
@@ -224,6 +227,19 @@ class RunPage(QWidget):
         summary_card.card_layout.setSpacing(8)
         summary_card.body_layout.setSpacing(8)
         summary_card.body_layout.addWidget(self.summary_stack)
+        self.open_run_folder_button = QPushButton("Open Run Folder", summary_card)
+        self.open_run_folder_button.setObjectName("run_open_folder_button")
+        self.open_run_folder_button.clicked.connect(self._open_run_folder)
+        mark_secondary_action(self.open_run_folder_button)
+        self.copy_run_folder_button = QPushButton("Copy Run Folder", summary_card)
+        self.copy_run_folder_button.setObjectName("run_copy_folder_button")
+        self.copy_run_folder_button.clicked.connect(self._copy_run_folder)
+        mark_secondary_action(self.copy_run_folder_button)
+        run_action_row = QHBoxLayout()
+        run_action_row.addStretch(1)
+        run_action_row.addWidget(self.open_run_folder_button)
+        run_action_row.addWidget(self.copy_run_folder_button)
+        summary_card.body_layout.addLayout(run_action_row)
 
         self.readiness_badge = StatusBadgeLabel("Setup Required", self)
         self.readiness_badge.setObjectName("run_readiness_badge")
@@ -270,6 +286,7 @@ class RunPage(QWidget):
 
         self._document.project_changed.connect(self.refresh)
         self._document.session_plan_changed.connect(self._refresh_summary)
+        self._refresh_run_output_actions()
         self.refresh()
 
     def current_refresh_hz(self) -> float:
@@ -345,6 +362,8 @@ class RunPage(QWidget):
 
         self._active_launch_session_plan = session_plan
         self._active_launch_participant_number = participant_number
+        self._last_run_output_dir = None
+        self._refresh_run_output_actions()
         task = ProgressTask(
             parent_widget=self,
             label="Launching experiment: Please wait",
@@ -401,6 +420,8 @@ class RunPage(QWidget):
         summary: LaunchSummary,
     ) -> None:
         output_dir = summary.output_dir or "runs/..."
+        self._last_run_output_dir = summary.output_dir
+        self._refresh_run_output_actions()
         participant_value = summary.participant_number or participant_number
         if summary.aborted:
             abort_reason = summary.abort_reason or "No abort reason was provided."
@@ -513,3 +534,18 @@ class RunPage(QWidget):
             lines.extend(["", *extra_lines])
         self.summary_text.setPlainText("\n".join(lines))
         self._refresh_readiness_panel()
+
+    def _refresh_run_output_actions(self) -> None:
+        has_output = bool(self._last_run_output_dir)
+        self.open_run_folder_button.setEnabled(has_output)
+        self.copy_run_folder_button.setEnabled(has_output)
+        self.open_run_folder_button.setVisible(has_output)
+        self.copy_run_folder_button.setVisible(has_output)
+
+    def _open_run_folder(self) -> None:
+        if self._last_run_output_dir:
+            folder_actions.open_folder(self._last_run_output_dir)
+
+    def _copy_run_folder(self) -> None:
+        if self._last_run_output_dir:
+            QApplication.clipboard().setText(self._last_run_output_dir)

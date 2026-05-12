@@ -30,8 +30,9 @@ Creating a project asks for:
 Opening projects reloads the configured FPVS Studio Root Folder and lists current FPVS
 project folders discovered on disk, plus valid recent projects. The dialog can open a
 project or move a project folder to the Windows Recycle Bin after an explicit Yes/No
-confirmation. The currently open project is shown but cannot be deleted from its own
-open window.
+confirmation. The dialog includes a compact project filter and can copy the selected
+project folder path. The currently open project is shown but cannot be deleted from its
+own open window.
 
 Condition-template profiles are app-level metadata for the configured FPVS Studio Root
 Folder. They are stored under `.fpvs-studio/templates/condition_templates.json`, keeping
@@ -53,6 +54,8 @@ The authoring window is organized around two user-facing modes:
   - uses the same shared launch-surface frame as Welcome so the outer window and
     inner card styling stay aligned across the two launch surfaces
   - `Edit Setup` opens the guided setup workflow
+  - when launch is disabled, the launch button tooltip and status tip show the first
+    actionable setup blocker
   - returning from app-expanded Setup restores the compact Home footprint unless
     the user manually resized the larger setup window
 - `Setup Wizard`
@@ -111,6 +114,9 @@ The authoring window is organized around two user-facing modes:
   - outputs center-cropped PNG copies at `512x512` by default, with secondary
     `256x256` and `1024x1024` choices
   - suggests a sibling output folder named `<source-folder>-fpvs-optimized`
+  - explains why optimization is unavailable when required folders are missing or
+    invalid
+  - after a successful batch, exposes `Open Output Folder` and `Copy Output Folder`
   - does not update project conditions, stimulus sets, manifests, compiler
     contracts, runtime contracts, or PsychoPy behavior
 
@@ -119,6 +125,9 @@ is no longer exposed as a wizard advanced step and does not expose duty-cycle ed
 Session controls are directly visible in Experiment Settings, and
 Fixation and Response are guided setup pages. The Run / Runtime page remains a launch, readiness, and session-preview
 surface, not a display-engine configuration step.
+Run / Runtime feedback exposes `Open Run Folder` and `Copy Run Folder` after a launch
+completion or abort when the runtime summary includes an output directory.
+
 The Stimuli Manager remains an internal support page for variant/materialization
 behavior, not a guided setup step or visible top-level tab during normal use. Its raw
 source-folder import path is permissive like guided Conditions import; strict inspection
@@ -271,7 +280,11 @@ When iterating on GUI tests:
 - keep Qt headless with `QT_QPA_PLATFORM=offscreen`
 - disable plugin autoload to avoid unrelated third-party pytest plugins
 - run one GUI test node at a time
-- use `pytest-timeout`
+- use `pytest-timeout`; the suite has a config-level 30-second timeout, and focused
+  GUI iterations may pass a narrower `--timeout` when diagnosing a specific hang
+- `.\scripts\check_gui.ps1` also has a script-level watchdog, configurable with
+  `FPVS_GUI_CHECK_TIMEOUT_SECONDS`, so pytest teardown or child-process stalls are
+  terminated instead of running indefinitely
 - monkeypatch modal dialogs and runtime launch calls
 - do not let tests open real `QFileDialog`, `QMessageBox`, or launch the real
   PsychoPy runtime

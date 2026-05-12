@@ -12,6 +12,10 @@ the current quality posture as the latest result of the standard gates.
 - Unit suite: `python -m pytest -q`
 - Full repo gate: `.\scripts\check_quality.ps1`
 
+Pytest runs use the repo-level `pytest-timeout` configuration in `pyproject.toml` so
+common unit and GUI runs fail boundedly instead of hanging indefinitely. Focused GUI
+diagnostics may still pass an explicit `--timeout` value when a narrower limit is useful.
+
 ## Focused Gates
 
 - GUI: `.\scripts\check_gui.ps1`

@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
     QApplication,
     QDialogButtonBox,
     QLabel,
+    QLineEdit,
     QListWidget,
     QMessageBox,
     QPushButton,
@@ -217,17 +218,56 @@ def test_manage_projects_dialog_lists_projects_from_saved_root(
     qtbot.addWidget(dialog)
 
     project_list = dialog.findChild(QListWidget, "manage_projects_list")
+    filter_edit = dialog.findChild(QLineEdit, "manage_projects_filter_edit")
     open_button = dialog.findChild(QPushButton, "manage_projects_open_button")
+    copy_button = dialog.findChild(QPushButton, "manage_projects_copy_path_button")
     delete_button = dialog.findChild(QPushButton, "manage_projects_delete_button")
 
     assert project_list is not None
+    assert filter_edit is not None
     assert open_button is not None
+    assert copy_button is not None
     assert delete_button is not None
     assert project_list.count() == 1
     assert project_list.item(0).text() == "Managed Root Project"
     assert project_list.item(0).toolTip() == str(scaffold.project_root)
     assert open_button.isEnabled()
+    assert copy_button.isEnabled()
     assert delete_button.isEnabled()
+    qtbot.mouseClick(copy_button, Qt.MouseButton.LeftButton)
+    assert QApplication.clipboard().text() == str(scaffold.project_root)
+
+
+def test_manage_projects_dialog_filters_by_name_and_path(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+) -> None:
+    root_dir = controller.load_fpvs_root_dir()
+    assert root_dir is not None
+    create_project(root_dir, "Alpha Filter Project")
+    nested_parent = root_dir / "nested" / "filter-location"
+    create_project(nested_parent, "Beta Project")
+
+    dialog = ManageProjectsDialog(entries=controller.load_manageable_project_entries())
+    qtbot.addWidget(dialog)
+    project_list = dialog.findChild(QListWidget, "manage_projects_list")
+    filter_edit = dialog.findChild(QLineEdit, "manage_projects_filter_edit")
+
+    assert project_list is not None
+    assert filter_edit is not None
+    assert project_list.count() == 2
+
+    filter_edit.setText("Alpha")
+    assert project_list.count() == 1
+    assert project_list.item(0).text() == "Alpha Filter Project"
+
+    filter_edit.setText("filter-location")
+    assert project_list.count() == 1
+    assert project_list.item(0).text() == "Beta Project"
+
+    filter_edit.clear()
+    assert project_list.count() == 2
 
 
 def test_manage_projects_discovers_nested_project_folders_from_disk(

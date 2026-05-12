@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from fpvs_studio.core.frame_validation import FrameValidationError
 from fpvs_studio.core.models import ConditionTemplateProfile
 from fpvs_studio.core.validation import condition_fixation_guidance
 from fpvs_studio.gui.assets_pages import AssetsPage
@@ -879,10 +880,13 @@ class SetupWizardPage(QWidget):
         if not conditions:
             return ("Estimated run time: unavailable",)
 
-        guidance = condition_fixation_guidance(
-            self._document.project,
-            refresh_hz=self.runtime_settings_editor.current_refresh_hz(),
-        )
+        try:
+            guidance = condition_fixation_guidance(
+                self._document.project,
+                refresh_hz=self.runtime_settings_editor.current_refresh_hz(),
+            )
+        except FrameValidationError:
+            return ("Estimated run time: unavailable for current refresh rate",)
         condition_ids = {condition.condition_id for condition in conditions}
         ordered_guidance = [row for row in guidance if row.condition_id in condition_ids]
         block_count = self._document.project.settings.session.block_count

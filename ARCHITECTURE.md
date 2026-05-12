@@ -123,7 +123,8 @@ Current planned seams:
 - GUI workflow composition is Home-first. `main_window.py` uses a stack with a
   centered Home launch card and `setup_wizard_page.py`; `Tools > Image Resizer`
   adds a standalone in-window utility page for folder-level FPVS image optimization
-  without mutating project conditions.
+  without mutating project conditions, with post-success output-folder open/copy
+  actions kept in GUI-only helpers.
   `root_folder_setup_dialog.py` provides first-run and Settings-accessible guidance
   for choosing the FPVS Studio Root Folder before the native folder picker opens.
   `StudioMainWindow` owns mode-specific sizing: compact `1120x720` launch-surface
@@ -151,7 +152,8 @@ Current planned seams:
   surface while `controller.py` owns disk-backed project discovery, recent-project
   settings, app-level condition-template storage under
   `<FPVSRoot>/.fpvs-studio/templates/`, and Recycle Bin confirmation/deletion side
-  effects.
+  effects. The dialog owns only presentation-level filtering and clipboard copy for
+  selected project paths.
 - Condition-template profile management keeps `condition_template_manager_dialog.py` as
   the manager dialog and compatibility import point. The profile editor dialog lives in
   `condition_template_profile_editor_dialog.py`.
@@ -238,6 +240,7 @@ index.
 
 - GitHub Actions CI: `.github/workflows/ci.yml` runs `.\scripts\check_quality.ps1`
   on Windows for pushes and pull requests.
+- Common pytest runs are bounded by `pytest-timeout` through `pyproject.toml`.
 - Full gate: `.\scripts\check_quality.ps1`
 - Harness garbage collection: `.\scripts\check_gc.ps1`
 - Docs hygiene: `.\scripts\check_docs_hygiene.ps1`

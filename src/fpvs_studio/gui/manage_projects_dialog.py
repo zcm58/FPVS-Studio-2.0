@@ -7,9 +7,11 @@ from pathlib import Path
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
+    QApplication,
     QDialog,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QListWidget,
     QListWidgetItem,
     QPushButton,
@@ -56,6 +58,7 @@ class ManageProjectsDialog(QDialog):
         self.setWindowTitle("Manage Projects")
         self.setMinimumSize(760, 460)
         self.resize(860, 520)
+        self._entries: list[ProjectManagementEntry] = []
         self._entries_by_root: dict[str, ProjectManagementEntry] = {}
 
         layout = QVBoxLayout(self)
@@ -75,11 +78,23 @@ class ManageProjectsDialog(QDialog):
         body.setSpacing(12)
         self.project_card.body_layout.addLayout(body)
 
+        list_panel = QWidget(self.project_card)
+        list_layout = QVBoxLayout(list_panel)
+        list_layout.setContentsMargins(0, 0, 0, 0)
+        list_layout.setSpacing(8)
+        body.addWidget(list_panel, 1)
+
+        self.filter_edit = QLineEdit(list_panel)
+        self.filter_edit.setObjectName("manage_projects_filter_edit")
+        self.filter_edit.setPlaceholderText("Filter projects")
+        self.filter_edit.textChanged.connect(self._apply_filter)
+        list_layout.addWidget(self.filter_edit)
+
         self.project_list = QListWidget(self.project_card)
         self.project_list.setObjectName("manage_projects_list")
         self.project_list.setMinimumWidth(320)
         self.project_list.currentRowChanged.connect(self._sync_selection)
-        body.addWidget(self.project_list, 1)
+        list_layout.addWidget(self.project_list, 1)
 
         detail_panel = QWidget(self.project_card)
         detail_layout = QVBoxLayout(detail_panel)
@@ -122,6 +137,12 @@ class ManageProjectsDialog(QDialog):
         self.open_button.clicked.connect(self._request_open)
         action_row.addWidget(self.open_button)
 
+        self.copy_path_button = QPushButton("Copy Path", self)
+        self.copy_path_button.setObjectName("manage_projects_copy_path_button")
+        mark_secondary_action(self.copy_path_button)
+        self.copy_path_button.clicked.connect(self._copy_selected_path)
+        action_row.addWidget(self.copy_path_button)
+
         self.delete_button = QPushButton("Move to Recycle Bin", self)
         self.delete_button.setObjectName("manage_projects_delete_button")
         mark_destructive_action(self.delete_button)
@@ -141,9 +162,14 @@ class ManageProjectsDialog(QDialog):
     def set_project_entries(self, entries: list[ProjectManagementEntry]) -> None:
         """Replace the project list after controller-owned state changes."""
 
+        self._entries = list(entries)
+        self._apply_filter()
+
+    def _apply_filter(self) -> None:
         self.project_list.clear()
         self._entries_by_root = {}
-        for entry in entries:
+        filter_text = self.filter_edit.text().casefold().strip()
+        for entry in self._filtered_entries(filter_text):
             root_key = str(entry.root)
             self._entries_by_root[root_key] = entry
             item = QListWidgetItem(entry.name)
@@ -155,6 +181,15 @@ class ManageProjectsDialog(QDialog):
             self.project_list.setCurrentRow(0)
         else:
             self._sync_selection(-1)
+
+    def _filtered_entries(self, filter_text: str) -> list[ProjectManagementEntry]:
+        if not filter_text:
+            return self._entries
+        return [
+            entry
+            for entry in self._entries
+            if filter_text in entry.name.casefold() or filter_text in str(entry.root).casefold()
+        ]
 
     def _selected_entry(self) -> ProjectManagementEntry | None:
         item = self.project_list.currentItem()
@@ -171,6 +206,7 @@ class ManageProjectsDialog(QDialog):
         self.empty_label.setVisible(not has_entry)
         self.open_button.setEnabled(has_entry and entry.can_open if entry else False)
         self.delete_button.setEnabled(has_entry and entry.can_delete if entry else False)
+        self.copy_path_button.setEnabled(has_entry)
 
         if entry is None:
             self.status_badge.set_state("pending", "No Selection")
@@ -191,3 +227,8 @@ class ManageProjectsDialog(QDialog):
         entry = self._selected_entry()
         if entry is not None and entry.can_delete:
             self.delete_requested.emit(str(entry.root))
+
+    def _copy_selected_path(self) -> None:
+        entry = self._selected_entry()
+        if entry is not None:
+            QApplication.clipboard().setText(str(entry.root))

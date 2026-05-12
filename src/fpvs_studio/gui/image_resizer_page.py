@@ -7,6 +7,7 @@ from pathlib import Path
 
 from PySide6.QtCore import Slot
 from PySide6.QtWidgets import (
+    QApplication,
     QComboBox,
     QFileDialog,
     QFormLayout,
@@ -16,6 +17,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from fpvs_studio.gui import folder_actions
 from fpvs_studio.gui.components import (
     NonHomePageShell,
     PathValueLabel,
@@ -47,6 +49,7 @@ class ImageResizerPage(QWidget):
         self._source_dir: Path | None = None
         self._output_dir: Path | None = None
         self._output_was_user_selected = False
+        self._successful_output_dir: Path | None = None
         self._active_task: ProgressTask | None = None
 
         self.shell = NonHomePageShell(
@@ -118,6 +121,19 @@ class ImageResizerPage(QWidget):
         self.result_label.setWordWrap(True)
         result_card.body_layout.addWidget(self.status_badge)
         result_card.body_layout.addWidget(self.result_label)
+        self.open_output_button = QPushButton("Open Output Folder", result_card)
+        self.open_output_button.setObjectName("image_resizer_open_output_button")
+        self.open_output_button.clicked.connect(self._open_output_folder)
+        mark_secondary_action(self.open_output_button)
+        self.copy_output_button = QPushButton("Copy Output Folder", result_card)
+        self.copy_output_button.setObjectName("image_resizer_copy_output_button")
+        self.copy_output_button.clicked.connect(self._copy_output_folder)
+        mark_secondary_action(self.copy_output_button)
+        result_action_row = QHBoxLayout()
+        result_action_row.addStretch(1)
+        result_action_row.addWidget(self.open_output_button)
+        result_action_row.addWidget(self.copy_output_button)
+        result_card.body_layout.addLayout(result_action_row)
 
         self.shell.add_content_widget(setup_card)
         self.shell.add_content_widget(result_card)
@@ -126,6 +142,7 @@ class ImageResizerPage(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self.shell)
         self._refresh_paths()
+        self._refresh_output_actions()
         self._refresh_enabled_state()
 
     @Slot()
@@ -158,6 +175,7 @@ class ImageResizerPage(QWidget):
 
     def _set_source_dir(self, source_dir: Path) -> None:
         self._source_dir = source_dir
+        self._successful_output_dir = None
         if not self._output_was_user_selected:
             suggested_output = self._suggested_output_dir()
             if suggested_output is not None:
@@ -167,6 +185,7 @@ class ImageResizerPage(QWidget):
 
     def _set_output_dir(self, output_dir: Path, *, user_selected: bool) -> None:
         self._output_dir = output_dir
+        self._successful_output_dir = None
         if user_selected:
             self._output_was_user_selected = True
         self._refresh_paths()
@@ -187,19 +206,44 @@ class ImageResizerPage(QWidget):
         self.output_value.set_path_text(output_text, max_length=82)
 
     def _refresh_enabled_state(self) -> None:
-        self.optimize_button.setEnabled(self._can_optimize())
+        reason = self._disabled_reason()
+        self.optimize_button.setEnabled(reason is None)
+        if self._active_task is not None or self._successful_output_dir is not None:
+            return
+        if reason is None:
+            self.status_badge.set_state("ready", "Ready to optimize")
+            self.result_label.setText("Ready to optimize the selected source folder.")
+        else:
+            self.status_badge.set_state("pending", "Optimize unavailable")
+            self.result_label.setText(reason)
 
     def _can_optimize(self) -> bool:
+        return self._disabled_reason() is None
+
+    def _disabled_reason(self) -> str | None:
         if self._source_dir is None or self._output_dir is None:
-            return False
-        if not self._source_dir.exists() or not self._source_dir.is_dir():
-            return False
-        return self._source_dir.resolve() != self._output_dir.resolve(strict=False)
+            return "Select a source folder and an output folder to optimize images."
+        if not self._source_dir.exists():
+            return "The selected source folder no longer exists."
+        if not self._source_dir.is_dir():
+            return "The selected source path is not a folder."
+        if self._source_dir.resolve() == self._output_dir.resolve(strict=False):
+            return "The output folder must be different from the source folder."
+        return None
+
+    def _refresh_output_actions(self) -> None:
+        has_output = self._successful_output_dir is not None
+        self.open_output_button.setEnabled(has_output)
+        self.copy_output_button.setEnabled(has_output)
+        self.open_output_button.setVisible(has_output)
+        self.copy_output_button.setVisible(has_output)
 
     @Slot()
     def _start_optimization(self) -> None:
         if self._source_dir is None or self._output_dir is None:
             return
+        self._successful_output_dir = None
+        self._refresh_output_actions()
         target_size = int(self.size_combo.currentData() or 512)
         source_dir = self._source_dir
         output_dir = self._output_dir
@@ -226,24 +270,40 @@ class ImageResizerPage(QWidget):
         if not isinstance(result, ImageFolderOptimizationResult):
             self.status_badge.set_state("error", "Optimization failed")
             self.result_label.setText("Studio received an unexpected optimizer result.")
+            self._successful_output_dir = None
+            self._refresh_output_actions()
             return
+        self._successful_output_dir = result.output_dir
         if result.failed_files:
             self.status_badge.set_state("warning", "Optimization finished with failures")
         else:
             self.status_badge.set_state("ready", "Optimization complete")
         self.result_label.setText(_format_result(result))
+        self._refresh_output_actions()
 
     @Slot(object)
     def _on_optimization_failed(self, error: object) -> None:
         exception = error if isinstance(error, Exception) else RuntimeError(str(error))
         self.status_badge.set_state("error", "Optimization failed")
         self.result_label.setText("No output paths were changed.")
+        self._successful_output_dir = None
+        self._refresh_output_actions()
         _show_error_dialog(self, "Image Resizer Error", exception)
 
     @Slot()
     def _on_optimization_finished(self) -> None:
         self._active_task = None
         self._refresh_enabled_state()
+
+    @Slot()
+    def _open_output_folder(self) -> None:
+        if self._successful_output_dir is not None:
+            folder_actions.open_folder(self._successful_output_dir)
+
+    @Slot()
+    def _copy_output_folder(self) -> None:
+        if self._successful_output_dir is not None:
+            QApplication.clipboard().setText(str(self._successful_output_dir))
 
 
 def _path_picker_row(path_label: PathValueLabel, button: QPushButton) -> QWidget:

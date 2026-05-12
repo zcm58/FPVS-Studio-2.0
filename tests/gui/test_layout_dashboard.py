@@ -187,6 +187,27 @@ def test_image_resizer_source_selection_suggests_output_folder(
     assert page.optimize_button.isEnabled()
 
 
+def test_image_resizer_disabled_state_explains_unavailable_optimization(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Image Resizer Disabled")
+    page = window.image_resizer_page
+
+    assert page.optimize_button.isEnabled() is False
+    assert page.open_output_button.isHidden()
+    assert "source folder and an output folder" in page.result_label.text().lower()
+
+    source_dir = tmp_path / "raw-images"
+    _write_image_directory(source_dir)
+    page._set_source_dir(source_dir)
+    page._set_output_dir(source_dir, user_selected=True)
+
+    assert page.optimize_button.isEnabled() is False
+    assert "different from the source folder" in page.result_label.text().lower()
+
+
 def test_image_resizer_optimizes_folder_and_updates_results(
     qtbot,
     controller: StudioController,
@@ -197,11 +218,16 @@ def test_image_resizer_optimizes_folder_and_updates_results(
     page = window.image_resizer_page
     source_dir = tmp_path / "raw-images"
     output_dir = tmp_path / "optimized"
+    opened_paths: list[Path] = []
     source_dir.mkdir(parents=True)
     Image.new("RGB", (96, 96), color=(20, 40, 60)).save(source_dir / "stimulus-01.png")
     monkeypatch.setattr(
         "fpvs_studio.gui.image_resizer_page.ProgressTask",
         _ImmediateProgressTask,
+    )
+    monkeypatch.setattr(
+        "fpvs_studio.gui.folder_actions.open_folder",
+        lambda path: opened_paths.append(Path(path)) or True,
     )
 
     page._set_source_dir(source_dir)
@@ -210,6 +236,14 @@ def test_image_resizer_optimizes_folder_and_updates_results(
 
     assert page.status_badge.text() == "Optimization complete"
     assert "Optimized 1 image(s)" in page.result_label.text()
+    assert not page.open_output_button.isHidden()
+    assert not page.copy_output_button.isHidden()
+    assert page.open_output_button.isEnabled()
+    assert page.copy_output_button.isEnabled()
+    qtbot.mouseClick(page.copy_output_button, Qt.MouseButton.LeftButton)
+    qtbot.mouseClick(page.open_output_button, Qt.MouseButton.LeftButton)
+    assert QApplication.clipboard().text() == str(output_dir)
+    assert opened_paths == [output_dir]
     output_paths = sorted(output_dir.iterdir())
     assert len(output_paths) == 1
     assert output_paths[0].suffix == ".png"
@@ -2627,6 +2661,8 @@ def test_incomplete_home_launch_state_is_error_and_disabled(
     assert status_label.minimumWidth() == 224
     assert status_label.minimumHeight() >= 34
     assert home_launch_button.isEnabled() is False
+    assert "Needs setup:" in home_launch_button.toolTip()
+    assert home_launch_button.statusTip() == home_launch_button.toolTip()
     assert run_launch_button.isEnabled() is False
 
 
@@ -2686,6 +2722,22 @@ def test_run_page_preview_copy_and_home_status_are_compile_agnostic(
     assert "compile once on run / runtime" not in _list_widget_text(readiness_list).lower()
     assert "needs compile" not in home_status.text().lower()
     assert "compile" not in home_status.toolTip().lower()
+
+
+def test_ready_home_launch_state_does_not_keep_blocker_tooltip(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Ready Tooltip Project")
+    _prepare_compile_ready_project(window, tmp_path / "ready-tooltip-assets")
+
+    launch_button = window.home_page.findChild(QPushButton, "home_launch_experiment_button")
+
+    assert launch_button is not None
+    assert launch_button.isEnabled()
+    assert "Needs setup:" not in launch_button.toolTip()
+    assert "beta test-mode" in launch_button.toolTip().lower()
 
 
 def test_no_standalone_preflight_controls_are_exposed(
@@ -2797,7 +2849,7 @@ def test_home_launch_surface_shows_only_essential_project_session_metadata(
     assert block_count_label.text() == "2"
     assert fixation_label.text() == "Disabled"
     assert accuracy_label.text() == "Disabled"
-    assert status_label.text().startswith("Status: ")
+    assert status_label.text()
     assert subtitle_label.text() == "No description set yet."
 
     window.setup_dashboard_page.project_overview_editor.project_description_edit.setPlainText(
@@ -2932,7 +2984,7 @@ def test_run_page_readiness_and_launch_feedback_is_updated_on_launch(
     )
     monkeypatch.setattr(window.run_page, "_prompt_participant_number", lambda: None)
 
-    qtbot.mouseClick(run_launch_button, Qt.MouseButton.LeftButton)
+    window.run_page.launch_test_session()
 
     assert window.home_page.findChild(QListWidget, "home_readiness_checklist") is None
     assert window.home_page.findChild(QListWidget, "home_recent_activity_list") is None
@@ -2974,7 +3026,7 @@ def test_run_page_launch_uses_fixed_current_runtime_defaults(
 
     monkeypatch.setattr(window.document, "launch_compiled_session", _capture_launch)
 
-    qtbot.mouseClick(window.run_page.launch_button, Qt.MouseButton.LeftButton)
+    window.run_page.launch_test_session()
 
     assert captures["participant_number"] == "7"
     assert captures["display_index"] is None

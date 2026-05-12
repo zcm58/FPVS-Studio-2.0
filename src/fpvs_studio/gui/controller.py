@@ -77,10 +77,11 @@ class _StartupUpdateCheckWorker(QObject):
             self.finished.emit()
 
 
-class StudioController:
+class StudioController(QObject):
     """Own the top-level FPVS Studio windows and project-opening flows."""
 
     def __init__(self, app: QApplication) -> None:
+        super().__init__(app)
         self._app = app
         self.welcome_window: WelcomeWindow | None = None
         self.main_window: StudioMainWindow | None = None
