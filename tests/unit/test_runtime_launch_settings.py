@@ -168,8 +168,6 @@ def test_launch_session_rejects_invalid_serial_baudrate_before_engine_creation(
     assert captures == {}
 
 
-
-
 def test_launch_session_rejects_non_boolean_fullscreen_before_engine_creation(
     sample_project,
     sample_project_root,

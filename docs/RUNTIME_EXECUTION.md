@@ -69,17 +69,31 @@ The PsychoPy implementation:
 
 ## Trigger behavior
 
-Serial trigger I/O is still deferred.
-
-For this phase:
-
 - runtime passes a logged trigger backend through the engine seam
 - engine observes compiled `TriggerEvent` entries during playback
-- trigger attempts are recorded with frame/time metadata
-- default/test execution uses the null backend
+- the PsychoPy engine uses flip-locked scheduling with `window.callOnFlip(...)`, tying
+  marker-write callbacks to the flip that presents the compiled frame
+- trigger attempts are recorded with frame/time metadata, backend name, status, and
+  failure message when applicable
+- default/unconfigured execution uses the null backend
+- explicitly enabled serial-port execution uses the BioSemi-compatible serial backend
+  and writes single-byte marker codes to the configured COM port and baudrate
 
-This leaves a clear place to attach real on-flip serial emission later without
-changing `RunSpec` or `SessionPlan`.
+Serial settings such as COM port, baudrate, pulse width, reset code, and reset delay
+remain runtime-only launch options. They are not stored in `RunSpec` or `SessionPlan`.
+The BioSemi serial backend writes exactly one byte per normal event with
+`bytes([code])`, where event codes are `1` through `255`. Code `0` is reserved for
+manual reset, and manual reset is disabled by default because the BioSemi USB Trigger
+Interface auto-resets markers.
+
+Configured serial failures do not silently fall back to null output. Missing `pyserial`,
+COM open failures, and write failures surface as runtime errors before or during
+playback depending on when they are discovered. A marker is recorded as `sent` only after
+the backend write path succeeds; disabled/null output records `skipped_disabled`, and
+backend send failures record `error` before the exception is raised.
+
+These software checks do not prove physical display onset timing. Lab timing precision
+still needs BioSemi/BDF and photodiode validation on the actual machine and display.
 
 ## Fixation logging
 
@@ -152,7 +166,8 @@ In the current v1 runtime it means:
 - GUI launch currently fixes PsychoPy test-mode playback to fullscreen presentation
 - session order is randomized within each block using the current random order seed
 - every condition waits for the participant to press Space before playback starts
-- trigger output stays on the logged null backend
+- trigger output stays on the logged null backend unless serial triggers are explicitly
+  enabled with a configured serial port in the launch settings
 - completion screens auto-dismiss quickly
 - launch entry points reject `test_mode=False` until the non-test path is
   explicitly hardened
@@ -163,8 +178,20 @@ The rest of the compile, preflight, session flow, and export path still runs.
 
 Still deferred after Phase 4:
 
-- real serial-port trigger I/O
 - GUI project editor
 - advanced response-task variants beyond fixation
 - more sophisticated balancing/counterbalancing beyond compiled `SessionPlan`
 - non-PsychoPy presentation backends
+
+## BioSemi Hardware Checklist
+
+Use this manual checklist when validating a real lab rig:
+
+- connect the BioSemi USB Trigger Interface
+- confirm the COM port in Windows Device Manager
+- start ActiView
+- send test values `1`, `2`, `4`, `8`, `16`, `32`, `64`, and `128`
+- confirm ActiView displays the expected trigger/status values
+- run one FPVS condition
+- confirm `condition_start` and `oddball_onset` markers appear in the BDF/status channel
+- compare trigger timing to a photodiode for at least one run when timing precision matters

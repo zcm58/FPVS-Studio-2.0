@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import Field, field_validator
+from pydantic import Field, StrictInt, field_validator
 
 from fpvs_studio.core.enums import SchemaVersion
 from fpvs_studio.core.models import (
@@ -52,7 +52,7 @@ class ConditionRunSpec(FPVSBaseModel):
     oddball_hz: float = Field(gt=0)
     total_oddball_cycles: int = Field(ge=0)
     total_stimuli: int = Field(ge=0)
-    trigger_code: int | None = None
+    trigger_code: StrictInt | None = Field(default=None, ge=0, le=255)
 
 
 class StimulusEvent(FPVSBaseModel):
@@ -114,7 +114,7 @@ class TriggerEvent(FPVSBaseModel):
     """One trigger pulse scheduled relative to the frame clock."""
 
     frame_index: int = Field(ge=0)
-    code: int
+    code: StrictInt = Field(ge=1, le=255)
     label: str
 
 

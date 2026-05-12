@@ -226,7 +226,11 @@ def compile_run_spec(
         ),
         stimulus_sequence=stimulus_sequence,
         fixation_events=fixation_events,
-        trigger_events=build_trigger_events(condition.trigger_code),
+        trigger_events=build_trigger_events(
+            stimulus_sequence=stimulus_sequence,
+            condition_trigger_code=condition.trigger_code,
+            oddball_trigger_code=project.settings.triggers.oddball_trigger_code,
+        ),
     )
 
 

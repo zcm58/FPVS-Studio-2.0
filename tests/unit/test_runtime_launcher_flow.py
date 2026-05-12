@@ -47,8 +47,6 @@ def test_runtime_launcher_dispatches_runspec_to_registered_engine(
             launch_settings=LaunchSettings(
                 engine_name="stub",
                 test_mode=True,
-                serial_port="COM9",
-                serial_baudrate=57600,
             ),
         )
     finally:
@@ -71,8 +69,12 @@ def test_runtime_launcher_dispatches_runspec_to_registered_engine(
         "test_mode": True,
         "fullscreen": True,
         "display_index": None,
-        "serial_port": "COM9",
-        "serial_baudrate": 57600,
+        "serial_enabled": False,
+        "serial_port": "COM3",
+        "serial_baudrate": 115200,
+        "serial_pulse_width_ms": 10,
+        "serial_reset_code": None,
+        "serial_reset_delay_ms": 5,
         "strict_timing": True,
         "strict_timing_warmup": True,
         "timing_miss_threshold_multiplier": 1.5,
@@ -123,6 +125,7 @@ def test_runtime_launcher_dispatches_runspec_to_registered_engine(
     assert [row["label"] for row in exported_trigger_rows] == [
         trigger_event.label for trigger_event in run_spec.trigger_events
     ]
+    assert all(row["status"] == "skipped_disabled" for row in exported_trigger_rows)
 
 
 

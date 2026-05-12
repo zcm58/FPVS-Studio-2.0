@@ -8,7 +8,9 @@ from pathlib import Path
 import pytest
 
 from fpvs_studio.core.compiler import CompileError, compile_run_spec
+from fpvs_studio.core.compiler_schedules import build_trigger_events
 from fpvs_studio.core.enums import DutyCycleMode, StimulusVariant
+from fpvs_studio.core.run_spec import StimulusEvent, TriggerEvent
 from fpvs_studio.preprocessing.importer import materialize_project_assets
 
 
@@ -27,6 +29,134 @@ def test_runspec_creation_at_60hz_continuous_mode(sample_project, sample_project
     assert run_spec.fixation.target_duration_frames == 15
     assert len(run_spec.fixation_events) == 2
     assert run_spec.trigger_events[0].frame_index == 0
+
+
+def test_compiler_schedules_condition_and_oddball_triggers_from_stimulus_onsets(
+    sample_project,
+    sample_project_root,
+) -> None:
+    sample_project.settings.fixation_task.enabled = False
+    sample_project.conditions[0].oddball_cycle_repeats_per_sequence = 2
+
+    run_spec = compile_run_spec(sample_project, refresh_hz=60.0, project_root=sample_project_root)
+    oddball_start_frames = [
+        event.on_start_frame for event in run_spec.stimulus_sequence if event.role == "oddball"
+    ]
+
+    assert [(event.frame_index, event.code, event.label) for event in run_spec.trigger_events] == [
+        (run_spec.stimulus_sequence[0].on_start_frame, 1, "condition_start"),
+        *[(frame_index, 55, "oddball_onset") for frame_index in oddball_start_frames],
+    ]
+
+
+def test_compiler_uses_configured_oddball_trigger_code(
+    sample_project,
+    sample_project_root,
+) -> None:
+    sample_project.settings.fixation_task.enabled = False
+    sample_project.settings.triggers.oddball_trigger_code = 88
+    sample_project.conditions[0].oddball_cycle_repeats_per_sequence = 1
+
+    run_spec = compile_run_spec(sample_project, refresh_hz=60.0, project_root=sample_project_root)
+
+    assert [event.code for event in run_spec.trigger_events if event.label == "oddball_onset"] == [
+        88
+    ]
+
+
+def test_compiler_trigger_schedule_is_deterministic(sample_project, sample_project_root) -> None:
+    sample_project.settings.fixation_task.enabled = False
+    sample_project.conditions[0].oddball_cycle_repeats_per_sequence = 2
+
+    run_spec_a = compile_run_spec(
+        sample_project,
+        refresh_hz=60.0,
+        project_root=sample_project_root,
+        random_seed=42,
+        run_id="run-a",
+    )
+    run_spec_b = compile_run_spec(
+        sample_project,
+        refresh_hz=60.0,
+        project_root=sample_project_root,
+        random_seed=42,
+        run_id="run-b",
+    )
+
+    assert [event.model_dump() for event in run_spec_a.trigger_events] == [
+        event.model_dump() for event in run_spec_b.trigger_events
+    ]
+
+
+def test_compiler_rejects_same_frame_trigger_collisions() -> None:
+    oddball_first_sequence = [
+        StimulusEvent(
+            sequence_index=0,
+            role="oddball",
+            image_path="stimuli/original-images/oddball-set/oddball-set-01.png",
+            on_start_frame=0,
+            on_frames=1,
+            off_frames=0,
+        )
+    ]
+
+    with pytest.raises(CompileError, match="Frame 0 contains condition_start=12 and"):
+        build_trigger_events(
+            stimulus_sequence=oddball_first_sequence,
+            condition_trigger_code=12,
+            oddball_trigger_code=55,
+        )
+
+    with pytest.raises(CompileError, match="Frame 0 contains condition_start=55 and"):
+        build_trigger_events(
+            stimulus_sequence=oddball_first_sequence,
+            condition_trigger_code=55,
+            oddball_trigger_code=55,
+        )
+
+
+def test_trigger_schedule_rejects_exact_duplicate_events() -> None:
+    from fpvs_studio.core.compiler_schedules import _validate_and_sort_trigger_events
+
+    with pytest.raises(CompileError, match="Frame 12 contains oddball_onset=55 and"):
+        _validate_and_sort_trigger_events(
+            [
+                TriggerEvent(frame_index=12, code=55, label="oddball_onset"),
+                TriggerEvent(frame_index=12, code=55, label="oddball_onset"),
+            ]
+        )
+
+
+def test_compiler_rejects_missing_or_reset_condition_trigger_code() -> None:
+    sequence = [
+        StimulusEvent(
+            sequence_index=0,
+            role="base",
+            image_path="stimuli/original-images/base-set/base-set-01.png",
+            on_start_frame=0,
+            on_frames=1,
+            off_frames=0,
+        )
+    ]
+
+    with pytest.raises(TypeError, match="condition_start trigger code must be an integer"):
+        build_trigger_events(
+            stimulus_sequence=sequence,
+            condition_trigger_code=None,  # type: ignore[arg-type]
+            oddball_trigger_code=55,
+        )
+
+    with pytest.raises(ValueError, match="condition_start trigger code must be an integer"):
+        build_trigger_events(
+            stimulus_sequence=sequence,
+            condition_trigger_code=0,
+            oddball_trigger_code=55,
+        )
+
+
+def test_trigger_event_rejects_reset_code_for_normal_events() -> None:
+    with pytest.raises(ValueError, match="greater than or equal to 1"):
+        TriggerEvent(frame_index=0, code=0, label="condition_start")
 
 
 def test_runspec_creation_at_120hz_blank_50_mode(sample_project, sample_project_root) -> None:

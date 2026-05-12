@@ -13,14 +13,13 @@ Use this page to find planning material before making feature-sized changes.
 
 Current inventory:
 
-- Planned plans: `exec-plans/planned/biosemi-serial-trigger-output.md` and
-  `exec-plans/planned/patch-update-workflow.md`.
+- Planned plans: `exec-plans/planned/patch-update-workflow.md`.
 - Active plans: none.
 - Recently completed GUI/tooling plans include the GUI QOL polish pass, the packaged
   update-checker regression repair, the Inno Setup installer workflow, the beta 4 startup
   update/About polish, the beta 5 setup/update UX polish, the setup wizard shared
-  launch-surface polish, the FPVS Toolbox image preparation tool, and the in-app update
-  checker.
+  launch-surface polish, the FPVS Toolbox image preparation tool, the in-app update
+  checker, and BioSemi serial trigger output.
 
 Draft concrete future work in `planned/`. Move it to `active/` before implementing
 changes that affect user workflows, public contracts, or multiple layers. Keep small bug

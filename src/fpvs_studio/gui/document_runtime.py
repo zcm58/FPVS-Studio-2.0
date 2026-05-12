@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any, cast
 from pydantic import ValidationError
 
 from fpvs_studio.core.compiler import CompileError, compile_session_plan
-from fpvs_studio.core.enums import EngineName
+from fpvs_studio.core.enums import EngineName, TriggerBackendKind
 from fpvs_studio.core.models import ProjectFile, ProjectValidationReport
 from fpvs_studio.core.session_plan import SessionPlan
 from fpvs_studio.core.validation import (
@@ -117,6 +117,7 @@ class DocumentRuntimeMixin:
         """Launch an already-prepared session plan through the runtime boundary."""
 
         try:
+            trigger_settings = self._project.settings.triggers
             summary = _document_dependency("launch_session")(
                 self._project_root,
                 session_plan,
@@ -126,8 +127,15 @@ class DocumentRuntimeMixin:
                     test_mode=test_mode,
                     fullscreen=fullscreen,
                     display_index=display_index,
-                    serial_port=self._project.settings.triggers.serial_port,
-                    serial_baudrate=self._project.settings.triggers.baudrate,
+                    serial_enabled=(
+                        trigger_settings.enabled
+                        and trigger_settings.backend == TriggerBackendKind.SERIAL
+                    ),
+                    serial_port=trigger_settings.serial_port,
+                    serial_baudrate=trigger_settings.baudrate,
+                    serial_pulse_width_ms=trigger_settings.pulse_width_ms,
+                    serial_reset_code=trigger_settings.reset_code,
+                    serial_reset_delay_ms=trigger_settings.reset_delay_ms,
                     strict_timing_warmup=False if test_mode else True,
                     timing_miss_threshold_multiplier=4.0 if test_mode else 1.5,
                 ),

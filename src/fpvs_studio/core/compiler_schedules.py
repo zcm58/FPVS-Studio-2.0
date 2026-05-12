@@ -5,10 +5,12 @@ from __future__ import annotations
 import random
 from collections import Counter
 
+from fpvs_studio.core.compiler_support import CompileError
 from fpvs_studio.core.enums import InterConditionMode
 from fpvs_studio.core.models import ProjectFile
 from fpvs_studio.core.run_spec import StimulusEvent, StimulusRole, TriggerEvent
 from fpvs_studio.core.session_plan import InterConditionTransitionSpec
+from fpvs_studio.core.trigger_codes import validate_event_trigger_code
 
 
 def build_stimulus_sequence(
@@ -59,12 +61,59 @@ def _shuffled_pool(paths: list[str], *, rng: random.Random) -> list[str]:
     return shuffled
 
 
-def build_trigger_events(trigger_code: int | None) -> list[TriggerEvent]:
-    """Generate the first-pass trigger schedule."""
+def build_trigger_events(
+    *,
+    stimulus_sequence: list[StimulusEvent],
+    condition_trigger_code: int,
+    oddball_trigger_code: int,
+) -> list[TriggerEvent]:
+    """Build frame-accurate condition and oddball trigger events."""
 
-    if trigger_code is None:
+    if not stimulus_sequence:
         return []
-    return [TriggerEvent(frame_index=0, code=trigger_code, label="condition_start")]
+
+    trigger_events: list[TriggerEvent] = [
+        TriggerEvent(
+            frame_index=stimulus_sequence[0].on_start_frame,
+            code=validate_event_trigger_code(
+                condition_trigger_code,
+                label="condition_start",
+            ),
+            label="condition_start",
+        )
+    ]
+    trigger_events.extend(
+        TriggerEvent(
+            frame_index=event.on_start_frame,
+            code=validate_event_trigger_code(oddball_trigger_code, label="oddball_onset"),
+            label="oddball_onset",
+        )
+        for event in stimulus_sequence
+        if event.role == "oddball"
+    )
+    return _validate_and_sort_trigger_events(trigger_events)
+
+
+def _validate_and_sort_trigger_events(trigger_events: list[TriggerEvent]) -> list[TriggerEvent]:
+    indexed_events = list(enumerate(trigger_events))
+    events_by_frame: dict[int, list[TriggerEvent]] = {}
+    for _, trigger_event in indexed_events:
+        events_by_frame.setdefault(trigger_event.frame_index, []).append(trigger_event)
+
+    for frame_index, frame_events in events_by_frame.items():
+        if len(frame_events) > 1:
+            details = " and ".join(
+                f"{event.label}={event.code}" for event in frame_events
+            )
+            raise CompileError(
+                f"Frame {frame_index} contains {details}. BioSemi serial output "
+                "cannot emit multiple marker bytes on one flip."
+            )
+
+    return [
+        event
+        for _, event in sorted(indexed_events, key=lambda item: (item[1].frame_index, item[0]))
+    ]
 
 
 def compile_transition_spec(project: ProjectFile) -> InterConditionTransitionSpec:

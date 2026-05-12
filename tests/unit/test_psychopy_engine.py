@@ -8,8 +8,10 @@ from typing import Any
 import pytest
 
 from fpvs_studio.core.compiler import compile_run_spec
+from fpvs_studio.core.run_spec import TriggerEvent
 from fpvs_studio.engines.psychopy_engine import PsychoPyEngine
 from fpvs_studio.engines.psychopy_text_screens import show_text_screen
+from fpvs_studio.triggers.base import TriggerBackend
 
 
 class _FakeWindow:
@@ -53,6 +55,7 @@ class _FakeWindow:
         return self._last_flip_time
 
     def callOnFlip(self, callback: object, *args: object) -> None:
+        self.events.append(("callOnFlip", args))
         self._call_on_flip.append((callback, args))
 
     def close(self) -> None:
@@ -94,6 +97,37 @@ class _FakeStim:
 
     def draw(self) -> None:
         self.draw_count += 1
+        return None
+
+
+class _RecordingTriggerBackend(TriggerBackend):
+    def __init__(self) -> None:
+        self.records: list[dict[str, object]] = []
+
+    def connect(self) -> None:
+        return None
+
+    def send_trigger(
+        self,
+        code: int,
+        *,
+        frame_index: int | None = None,
+        label: str | None = None,
+        time_s: float | None = None,
+    ) -> None:
+        self.records.append(
+            {
+                "code": code,
+                "frame_index": frame_index,
+                "label": label,
+                "time_s": time_s,
+            }
+        )
+
+    def reset(self) -> None:
+        return None
+
+    def close(self) -> None:
         return None
 
 
@@ -342,6 +376,71 @@ def test_psychopy_engine_reuses_prepared_stimulus_within_condition(
     assert len(image_stims) == 1
     assert image_stims[0].draw_count == 2
     assert image_stims[0].clear_textures_count == 1
+
+
+def test_psychopy_engine_emits_compiled_triggers_on_presentation_flip(
+    monkeypatch,
+    sample_project,
+    sample_project_root,
+) -> None:
+    run_spec = _two_event_run_spec(sample_project, sample_project_root, duplicate_image=False)
+    run_spec.trigger_events = [
+        TriggerEvent(frame_index=0, code=1, label="condition_start"),
+        TriggerEvent(frame_index=1, code=55, label="oddball_onset"),
+    ]
+    captures: dict[str, object] = {}
+    fake_psychopy = _build_fake_psychopy(captures, flip_times=[0.1, 0.2])
+    trigger_backend = _RecordingTriggerBackend()
+    engine = PsychoPyEngine()
+    _patch_fake_psychopy(monkeypatch, engine, fake_psychopy)
+
+    try:
+        engine.run_condition(
+            run_spec,
+            sample_project_root,
+            runtime_options={"test_mode": True, "timing_warmup_frames": 0},
+            trigger_backend=trigger_backend,
+        )
+    finally:
+        engine.close_session()
+
+    assert trigger_backend.records == [
+        {"code": 1, "frame_index": 0, "label": "condition_start", "time_s": 0.1},
+        {"code": 55, "frame_index": 1, "label": "oddball_onset", "time_s": 0.2},
+    ]
+    call_on_flip_events = [event for event in _events(captures) if event[0] == "callOnFlip"]
+    assert len(call_on_flip_events) == 2
+
+
+def test_psychopy_engine_uses_compiled_trigger_events_not_stimulus_roles(
+    monkeypatch,
+    sample_project,
+    sample_project_root,
+) -> None:
+    run_spec = _two_event_run_spec(sample_project, sample_project_root, duplicate_image=False)
+    run_spec.stimulus_sequence[1] = run_spec.stimulus_sequence[1].model_copy(
+        update={"role": "oddball"}
+    )
+    run_spec.trigger_events = [TriggerEvent(frame_index=0, code=1, label="condition_start")]
+    captures: dict[str, object] = {}
+    fake_psychopy = _build_fake_psychopy(captures, flip_times=[0.1, 0.2])
+    trigger_backend = _RecordingTriggerBackend()
+    engine = PsychoPyEngine()
+    _patch_fake_psychopy(monkeypatch, engine, fake_psychopy)
+
+    try:
+        engine.run_condition(
+            run_spec,
+            sample_project_root,
+            runtime_options={"test_mode": True, "timing_warmup_frames": 0},
+            trigger_backend=trigger_backend,
+        )
+    finally:
+        engine.close_session()
+
+    assert trigger_backend.records == [
+        {"code": 1, "frame_index": 0, "label": "condition_start", "time_s": 0.1}
+    ]
 
 
 def test_psychopy_engine_releases_condition_stimuli_after_abort(

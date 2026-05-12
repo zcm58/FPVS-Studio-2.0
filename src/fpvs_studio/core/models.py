@@ -11,7 +11,15 @@ from datetime import datetime, timezone
 from pathlib import PurePosixPath
 from typing import Literal
 
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    AliasChoices,
+    BaseModel,
+    ConfigDict,
+    Field,
+    StrictInt,
+    field_validator,
+    model_validator,
+)
 
 from fpvs_studio.core.enums import (
     DutyCycleMode,
@@ -299,8 +307,9 @@ class TriggerSettings(FPVSBaseModel):
     enabled: bool = False
     serial_port: str | None = None
     baudrate: int = Field(default=115200, gt=0)
+    oddball_trigger_code: StrictInt = Field(default=55, ge=1, le=255)
     pulse_width_ms: int = Field(default=10, ge=0)
-    reset_code: int | None = 0
+    reset_code: StrictInt | None = Field(default=None, ge=0, le=0)
     reset_delay_ms: int = Field(default=5, ge=0)
 
 
@@ -389,7 +398,7 @@ class Condition(FPVSBaseModel):
     stimulus_variant: StimulusVariant = StimulusVariant.ORIGINAL
     sequence_count: int = Field(gt=0)
     oddball_cycle_repeats_per_sequence: int = Field(default=146, ge=1)
-    trigger_code: int = Field(default=1, ge=0)
+    trigger_code: StrictInt = Field(default=1, ge=0, le=255)
     duty_cycle_mode: DutyCycleMode = DutyCycleMode.CONTINUOUS
     order_index: int = Field(default=0, ge=0)
 

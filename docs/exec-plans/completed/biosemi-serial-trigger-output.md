@@ -1,6 +1,6 @@
 # BioSemi Serial Trigger Output
 
-Status: Planned
+Status: Completed
 
 ## Summary
 

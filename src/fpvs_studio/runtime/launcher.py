@@ -31,8 +31,12 @@ class LaunchSettings:
     test_mode: bool = True
     fullscreen: bool = True
     display_index: int | None = None
-    serial_port: str | None = None
+    serial_enabled: bool = False
+    serial_port: str | None = "COM3"
     serial_baudrate: int = 115200
+    serial_pulse_width_ms: int = 10
+    serial_reset_code: int | None = None
+    serial_reset_delay_ms: int = 5
     strict_timing: bool = True
     strict_timing_warmup: bool = True
     timing_miss_threshold_multiplier: float = 1.5
@@ -59,6 +63,8 @@ def _validate_launch_settings(settings: LaunchSettings) -> None:
             raise LaunchSettingsError("display_index must be None or a non-negative integer.")
     if not isinstance(settings.fullscreen, bool):
         raise LaunchSettingsError("fullscreen must be a boolean.")
+    if not isinstance(settings.serial_enabled, bool):
+        raise LaunchSettingsError("serial_enabled must be a boolean.")
     if not isinstance(settings.strict_timing, bool):
         raise LaunchSettingsError("strict_timing must be a boolean.")
     if not isinstance(settings.strict_timing_warmup, bool):
@@ -76,6 +82,22 @@ def _validate_launch_settings(settings: LaunchSettings) -> None:
         raise LaunchSettingsError("serial_port may not be blank when provided.")
     if not isinstance(settings.serial_baudrate, int) or settings.serial_baudrate <= 0:
         raise LaunchSettingsError("serial_baudrate must be a positive integer.")
+    if (
+        not isinstance(settings.serial_pulse_width_ms, int)
+        or settings.serial_pulse_width_ms < 0
+    ):
+        raise LaunchSettingsError("serial_pulse_width_ms must be a non-negative integer.")
+    if settings.serial_reset_code is not None:
+        if (
+            not isinstance(settings.serial_reset_code, int)
+            or settings.serial_reset_code != 0
+        ):
+            raise LaunchSettingsError("serial_reset_code must be None or the integer 0.")
+    if (
+        not isinstance(settings.serial_reset_delay_ms, int)
+        or settings.serial_reset_delay_ms < 0
+    ):
+        raise LaunchSettingsError("serial_reset_delay_ms must be a non-negative integer.")
 
 
 def _validate_participant_number(participant_number: str) -> str:

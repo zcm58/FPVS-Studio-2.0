@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "fpvs-studio"
-version = "0.9.0b12"
+version = "0.9.5"
 description = "FPVS Studio in beta release."
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -25,6 +25,7 @@ dependencies = [
   "numpy>=1.26,<3.0",
   "packaging>=24,<26",
   "pillow>=10,<12",
+  "pyserial>=3.5,<4.0",
   "PySide6>=6.7,<7.0",
   "pydantic>=2.8,<3.0",
 ]

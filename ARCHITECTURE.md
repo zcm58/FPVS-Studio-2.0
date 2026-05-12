@@ -31,8 +31,10 @@ code may lazily import PsychoPy.
   history, seed-history lookup, project-level run-log exports, and runtime flow over
   compiled contracts.
 - `src/fpvs_studio/engines/`: presentation engine interface and PsychoPy implementation.
-- `src/fpvs_studio/triggers/`: optional trigger backend interfaces and hardware adapter
-  scaffolding used by runtime while keeping core contracts hardware-neutral.
+- `src/fpvs_studio/triggers/`: optional trigger backend interfaces and hardware adapters
+  used by runtime while keeping core contracts hardware-neutral, including the
+  BioSemi-compatible serial backend. BioSemi serial output writes one byte per marker
+  with normal event codes `1`-`255`; code `0` is reserved for explicit manual reset.
 - `src/fpvs_studio/updates/`: backend-only GitHub Releases update checks, installer
   download helpers, and explicit installer launch support for the GUI update flow.
 - `tests/`: unit, integration, and pytest-qt GUI coverage.

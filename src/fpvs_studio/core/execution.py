@@ -8,14 +8,14 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import Field, StrictInt, field_validator, model_validator
 
 from fpvs_studio.core.enums import RunMode, SchemaVersion
 from fpvs_studio.core.models import FPVSBaseModel, validate_project_relative_path
 
 FixationOutcome = Literal["hit", "miss"]
 ResponseOutcome = Literal["hit", "false_alarm"]
-TriggerStatus = Literal["sent", "failed", "skipped"]
+TriggerStatus = Literal["scheduled", "sent", "error", "skipped_disabled", "failed", "skipped"]
 
 
 def _validate_participant_number(value: str | None) -> str | None:
@@ -137,7 +137,7 @@ class TriggerRecord(FPVSBaseModel):
     trigger_index: int = Field(ge=0)
     frame_index: int = Field(ge=0)
     time_s: float | None = Field(default=None, ge=0)
-    code: int
+    code: StrictInt = Field(ge=1, le=255)
     label: str
     backend_name: str
     status: TriggerStatus = "sent"

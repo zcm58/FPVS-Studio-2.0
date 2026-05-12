@@ -91,9 +91,14 @@ Each fixation event contains a concrete target onset and duration in frames.
 
 ### `TriggerEvent`
 
-Trigger events remain generic and frame-based. Runtime/engine execution observes
-them now, while real serial I/O remains deferred behind the trigger backend
-boundary.
+Trigger events remain generic and frame-based. The compiler emits the condition
+marker on the first stimulus onset frame and oddball markers on each oddball
+stimulus onset frame. Runtime and engines observe these frame markers while
+serial-port details stay behind the trigger backend boundary.
+
+Normal event trigger codes must be integers from `1` through `255`. Code `0` is
+reserved for reset behavior and is not valid for `condition_start` or
+`oddball_onset` events.
 
 ## Export relationship
 
@@ -124,7 +129,14 @@ The compiler currently emits a seed-deterministic schedule:
   per role cycle before that role's pool is reshuffled
 - deterministic fixation spacing from the configured per-sequence count and gap
   constraints
-- a trigger event at frame 0 when a condition trigger code is present
+- a condition-start trigger event at the first stimulus onset when a condition trigger
+  code is present
+- an `oddball_onset` trigger event at each oddball stimulus onset, using the project
+  trigger setting that defaults to code `55`
+- deterministic trigger sorting by frame while preserving generated order for
+  diagnostics
+- a compile-time failure when multiple trigger events land on the same frame, because
+  BioSemi serial output writes one marker byte per flip and does not merge codes
 
 `RunSpec` must remain single-condition even as execution/export behavior gets
 richer around it.
