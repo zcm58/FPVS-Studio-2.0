@@ -390,6 +390,8 @@ def test_psychopy_engine_sizes_images_from_visual_angle_without_changing_aspect_
     run_spec.display.stimulus_width_degrees = 8.0
     run_spec.display.viewing_distance_cm = 80.0
     run_spec.display.screen_width_cm = 53.0
+    run_spec.display.screen_width_px = 1920
+    run_spec.display.use_current_screen_resolution = False
     wide_image_path = sample_project_root / "stimuli" / "original-images" / "base-set" / "wide.png"
     wide_image_path.parent.mkdir(parents=True, exist_ok=True)
     Image.new("RGB", (200, 100), color=(20, 40, 80)).save(wide_image_path)
@@ -421,7 +423,7 @@ def test_psychopy_engine_sizes_images_from_visual_angle_without_changing_aspect_
         degrees=8.0,
         viewing_distance_cm=80.0,
         screen_width_cm=53.0,
-        screen_width_px=1280,
+        screen_width_px=1920,
     )
     assert _image_stims(captures)[0].size == (expected_width, round(expected_width / 2))
 

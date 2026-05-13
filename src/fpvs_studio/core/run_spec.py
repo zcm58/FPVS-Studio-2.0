@@ -28,6 +28,9 @@ class DisplayRunSpec(FPVSBaseModel):
     stimulus_width_degrees: float = Field(gt=0)
     viewing_distance_cm: float = Field(gt=0)
     screen_width_cm: float = Field(gt=0)
+    screen_width_px: int = Field(gt=0)
+    screen_height_px: int = Field(gt=0)
+    use_current_screen_resolution: bool = False
     frames_per_stimulus: int = Field(gt=0)
     on_frames: int = Field(ge=0)
     off_frames: int = Field(ge=0)

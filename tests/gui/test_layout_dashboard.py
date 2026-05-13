@@ -1875,20 +1875,27 @@ def test_setup_wizard_experiment_image_size_controls_update_preview_and_review(
     assert "Image width (deg)" in image_size_labels
     assert "Viewing distance (cm)" in image_size_labels
     assert "Screen width (cm)" in image_size_labels
+    assert "Resolution width (px)" in image_size_labels
+    assert "Resolution height (px)" in image_size_labels
     original_preview_text = editor.preview_value_label.text()
 
     editor.width_degrees_spin.setValue(6.5)
     editor.viewing_distance_spin.setValue(75.0)
     editor.screen_width_spin.setValue(60.0)
+    editor.screen_width_px_spin.setValue(1920)
+    editor.screen_height_px_spin.setValue(1080)
     QApplication.processEvents()
 
     display = window.document.project.settings.display
     assert display.stimulus_width_degrees == pytest.approx(6.5, abs=0.01)
     assert display.viewing_distance_cm == pytest.approx(75.0, abs=0.01)
     assert display.screen_width_cm == pytest.approx(60.0, abs=0.01)
+    assert display.screen_width_px == 1920
+    assert display.screen_height_px == 1080
+    assert display.use_current_screen_resolution is False
     assert editor.preview_value_label.text() != original_preview_text
     assert "cm wide" in editor.preview_value_label.text()
-    assert "primary screen" in editor.preview_value_label.text()
+    assert "1920 px-wide display" in editor.preview_value_label.text()
     editor.full_screen_preview_button.click()
     assert preview_captures["document"] is window.document
     assert preview_captures["parent"] is editor
@@ -1897,7 +1904,7 @@ def test_setup_wizard_experiment_image_size_controls_update_preview_and_review(
 
     guide.open_wizard(step_key="review")
     review_text = "\n".join(label.text() for label in guide.review_card.findChildren(QLabel))
-    assert "Image width: 6.5 deg at 75 cm" in review_text
+    assert "Image width: 6.5 deg at 75 cm on 1920 x 1080" in review_text
     next_bottom = guide.setup_wizard_next_button.mapTo(
         guide,
         QPoint(0, guide.setup_wizard_next_button.height()),
@@ -2076,24 +2083,39 @@ def test_full_screen_image_size_preview_edits_sync_with_experiment_page(
     assert "Image width (deg)" in modal_labels
     assert "Viewing distance (cm)" in modal_labels
     assert "Screen width (cm)" in modal_labels
+    assert "Resolution width (px)" in modal_labels
+    assert "Resolution height (px)" in modal_labels
     assert dialog.exit_button.text() == "Exit Preview"
     original_readout = dialog.preview_value_label.text()
 
     dialog.width_degrees_spin.setValue(10.0)
     dialog.viewing_distance_spin.setValue(100.0)
     dialog.screen_width_spin.setValue(60.0)
+    dialog.screen_width_px_spin.setValue(1920)
+    dialog.screen_height_px_spin.setValue(1080)
     QApplication.processEvents()
 
     display = window.document.project.settings.display
     assert display.stimulus_width_degrees == pytest.approx(10.0, abs=0.01)
     assert display.viewing_distance_cm == pytest.approx(100.0, abs=0.01)
     assert display.screen_width_cm == pytest.approx(60.0, abs=0.01)
+    assert display.screen_width_px == 1920
+    assert display.screen_height_px == 1080
+    assert display.use_current_screen_resolution is False
     assert editor.width_degrees_spin.value() == pytest.approx(10.0, abs=0.01)
     assert editor.viewing_distance_spin.value() == pytest.approx(100.0, abs=0.01)
     assert editor.screen_width_spin.value() == pytest.approx(60.0, abs=0.01)
+    assert editor.screen_width_px_spin.value() == 1920
+    assert editor.screen_height_px_spin.value() == 1080
     assert dialog.preview_value_label.text() != original_readout
     assert "10.0 deg at 100.0 cm" in dialog.preview_value_label.text()
     assert "cm wide" in dialog.preview_value_label.text()
+
+    dialog.use_current_resolution_checkbox.setChecked(True)
+    QApplication.processEvents()
+    assert window.document.project.settings.display.use_current_screen_resolution is True
+    assert not dialog.screen_width_px_spin.isEnabled()
+    assert not editor.screen_width_px_spin.isEnabled()
 
 
 def test_setup_wizard_review_uses_centered_confirmation_checklist(
@@ -2476,6 +2498,8 @@ def test_setup_dashboard_edits_sync_document_and_dedicated_tabs(
     image_size_editor.width_degrees_spin.setValue(7.5)
     image_size_editor.viewing_distance_spin.setValue(82.0)
     image_size_editor.screen_width_spin.setValue(54.0)
+    image_size_editor.screen_width_px_spin.setValue(1920)
+    image_size_editor.screen_height_px_spin.setValue(1080)
     window.flush_pending_edits()
     QApplication.processEvents()
 
@@ -2503,6 +2527,8 @@ def test_setup_dashboard_edits_sync_document_and_dedicated_tabs(
     assert settings.display.stimulus_width_degrees == pytest.approx(7.5, abs=0.01)
     assert settings.display.viewing_distance_cm == pytest.approx(82.0, abs=0.01)
     assert settings.display.screen_width_cm == pytest.approx(54.0, abs=0.01)
+    assert settings.display.screen_width_px == 1920
+    assert settings.display.screen_height_px == 1080
     assert settings.triggers.serial_port is None
     assert settings.triggers.baudrate == 115200
 
@@ -2604,6 +2630,8 @@ def test_setup_dashboard_save_load_smoke_persists_dashboard_edited_settings(
     image_size_editor.width_degrees_spin.setValue(9.0)
     image_size_editor.viewing_distance_spin.setValue(85.0)
     image_size_editor.screen_width_spin.setValue(55.0)
+    image_size_editor.screen_width_px_spin.setValue(1920)
+    image_size_editor.screen_height_px_spin.setValue(1080)
 
     assert window.save_project() is True
     controller.open_project(window.document.project_root)
@@ -2633,6 +2661,8 @@ def test_setup_dashboard_save_load_smoke_persists_dashboard_edited_settings(
     assert display.stimulus_width_degrees == pytest.approx(9.0, abs=0.01)
     assert display.viewing_distance_cm == pytest.approx(85.0, abs=0.01)
     assert display.screen_width_cm == pytest.approx(55.0, abs=0.01)
+    assert display.screen_width_px == 1920
+    assert display.screen_height_px == 1080
     assert triggers.serial_port is None
     assert triggers.baudrate == 115200
 
@@ -2644,6 +2674,8 @@ def test_setup_dashboard_save_load_smoke_persists_dashboard_edited_settings(
     assert reopened_dashboard.image_display_size_editor.width_degrees_spin.value() == pytest.approx(
         9.0, abs=0.01
     )
+    assert reopened_dashboard.image_display_size_editor.screen_width_px_spin.value() == 1920
+    assert reopened_dashboard.image_display_size_editor.screen_height_px_spin.value() == 1080
     reopened_background = (
         reopened_dashboard.runtime_settings_editor.runtime_background_color_combo.currentData()
     )

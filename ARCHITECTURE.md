@@ -146,9 +146,9 @@ Current planned seams:
   seed remains runtime metadata for reproducibility and legacy fixed-order fields stay
   schema-compatible. Image-size settings are project-wide display geometry fields
   compiled into `RunSpec` so source image resolution stays independent from playback
-  size; the guided setup exposes a full-screen modal preview with live side-panel
-  controls for checking apparent size on the test machine. Fixation handles
-  schedule/timing, and
+  size; the guided setup stores the intended test display pixel resolution and exposes a
+  full-screen modal preview with live side-panel controls for checking apparent size on
+  the test machine. Fixation handles schedule/timing, and
   Response handles accuracy tracking, response key/window, appearance, and live preview.
   Display settings include refresh rate, black/dark-gray background choices, and
   project-wide stimulus visual angle geometry. Detailed Conditions no longer exposes a

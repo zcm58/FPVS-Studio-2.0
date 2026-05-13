@@ -86,10 +86,16 @@ def _stimulus_size_px(
         degrees=display.stimulus_width_degrees,
         viewing_distance_cm=display.viewing_distance_cm,
         screen_width_cm=display.screen_width_cm,
-        screen_width_px=_window_width_px(window),
+        screen_width_px=_screen_width_px(window=window, display=display),
     )
     target_height_px = max(1, round(target_width_px * (image_height_px / image_width_px)))
     return (target_width_px, target_height_px)
+
+
+def _screen_width_px(*, window: Any, display: DisplayRunSpec) -> int:
+    if not display.use_current_screen_resolution:
+        return display.screen_width_px
+    return _window_width_px(window)
 
 
 def _window_width_px(window: Any) -> int:

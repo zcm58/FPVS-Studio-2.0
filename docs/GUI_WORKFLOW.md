@@ -84,10 +84,11 @@ The authoring window is organized around two user-facing modes:
     (`Black` or `Dark Gray`); current launches always use PsychoPy, beta test-mode,
     fullscreen playback, and the default display without exposing those as choices
   - the Image Size column exposes project-wide image visual-angle width in degrees,
-    approximate viewing distance in cm, physical screen width in cm, and a full-screen
-    modal preview based on the primary screen; the preview includes a side control panel
-    for live edits to those same values, and source image resolution remains independent
-    from on-screen playback size
+    approximate viewing distance in cm, physical screen width in cm, intended test
+    display resolution in pixels, and an optional current-primary-screen resolution
+    mode; the full-screen preview includes a side control panel for live edits to those
+    same values, and source image resolution remains independent from on-screen playback
+    size
   - the Session column exposes repeats per condition and the fixed Space start key;
     condition order is always randomized automatically for each launch
   - the Conditions step uses compact condition rows and a combined condition

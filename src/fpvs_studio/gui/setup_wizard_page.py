@@ -884,7 +884,8 @@ class SetupWizardPage(QWidget):
             f"Display: {self.runtime_settings_editor.current_refresh_hz():.2f} Hz, "
             f"{background_label}",
             f"Image width: {display.stimulus_width_degrees:.1f} deg at "
-            f"{display.viewing_distance_cm:.0f} cm",
+            f"{display.viewing_distance_cm:.0f} cm on "
+            f"{display.screen_width_px} x {display.screen_height_px}",
             *self._review_timing_estimate_lines(),
         )
         return (

@@ -55,6 +55,9 @@ def test_display_settings_default_and_validate_image_display_geometry() -> None:
     assert display.stimulus_width_degrees == 8.0
     assert display.viewing_distance_cm == 80.0
     assert display.screen_width_cm == 53.0
+    assert display.screen_width_px == 1920
+    assert display.screen_height_px == 1080
+    assert display.use_current_screen_resolution is False
 
     with pytest.raises(ValidationError, match="greater than 0"):
         DisplaySettings(stimulus_width_degrees=0)
@@ -64,6 +67,12 @@ def test_display_settings_default_and_validate_image_display_geometry() -> None:
 
     with pytest.raises(ValidationError, match="greater than 0"):
         DisplaySettings(screen_width_cm=0)
+
+    with pytest.raises(ValidationError, match="greater than 0"):
+        DisplaySettings(screen_width_px=0)
+
+    with pytest.raises(ValidationError, match="greater than 0"):
+        DisplaySettings(screen_height_px=0)
 
 
 def test_visual_angle_geometry_scales_with_degrees_and_viewing_distance() -> None:
