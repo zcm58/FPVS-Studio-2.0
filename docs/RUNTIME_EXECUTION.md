@@ -30,6 +30,7 @@ SessionPlan
   -> preflight every RunSpec
   -> create trigger backend
   -> engine.open_session(...)
+  -> verify active fullscreen resolution against the configured intended display
   -> for each SessionEntry in order:
        -> engine.show_transition_screen(..., continue_key="space")
        -> engine.run_condition(RunSpec, ...)
@@ -57,6 +58,8 @@ The PsychoPy implementation:
 - opens one `visual.Window` per launched session
 - reuses that window across all runs in the `SessionPlan`
 - opens launched playback fullscreen on the default display
+- reports the active window resolution so runtime can block configured visual-angle
+  playback when the current display resolution differs from the intended test resolution
 - shows Space-required condition-start screens and completion text screens
 - shows a dedicated manual inter-block break screen between non-final blocks
 - preloads each condition's unique image stimuli before playback and releases them when

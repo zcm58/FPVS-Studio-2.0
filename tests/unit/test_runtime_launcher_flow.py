@@ -503,6 +503,70 @@ def test_session_launch_preflight_rejects_invalid_timing_before_engine_run(
     assert "run_ids" not in captures
 
 
+def test_session_launch_blocks_when_detected_resolution_differs_from_project_settings(
+    sample_project,
+    sample_project_root,
+) -> None:
+    captures: dict[str, object] = {"current_display_size_px": (3440, 1440)}
+    register_engine("stub-resolution-mismatch", lambda: StubEngine(captures))
+    try:
+        session_plan = compile_session_plan(
+            sample_project,
+            refresh_hz=60.0,
+            project_root=sample_project_root,
+            random_seed=23,
+        )
+        session_plan.blocks[0].entries[0].run_spec.display.screen_width_px = 1920
+        session_plan.blocks[0].entries[0].run_spec.display.screen_height_px = 1080
+        session_plan.blocks[0].entries[0].run_spec.display.use_current_screen_resolution = False
+
+        with pytest.raises(PreflightError, match="3440x1440 resolution"):
+            launch_session(
+                sample_project_root,
+                session_plan,
+                participant_number=PARTICIPANT_NUMBER,
+                launch_settings=LaunchSettings(
+                    engine_name="stub-resolution-mismatch",
+                    test_mode=True,
+                ),
+            )
+    finally:
+        unregister_engine("stub-resolution-mismatch")
+
+    assert captures["open_count"] == 1
+    assert captures["close_count"] == 1
+    assert "run_ids" not in captures
+
+
+def test_session_launch_allows_detected_resolution_when_project_uses_current_screen(
+    sample_project,
+    sample_project_root,
+) -> None:
+    captures: dict[str, object] = {"current_display_size_px": (3440, 1440)}
+    register_engine("stub-current-resolution", lambda: StubEngine(captures))
+    try:
+        session_plan = compile_session_plan(
+            sample_project,
+            refresh_hz=60.0,
+            project_root=sample_project_root,
+            random_seed=24,
+        )
+        for entry in session_plan.ordered_entries():
+            entry.run_spec.display.screen_width_px = 1920
+            entry.run_spec.display.screen_height_px = 1080
+            entry.run_spec.display.use_current_screen_resolution = True
+
+        summary = launch_session(
+            sample_project_root,
+            session_plan,
+            participant_number=PARTICIPANT_NUMBER,
+            launch_settings=LaunchSettings(engine_name="stub-current-resolution", test_mode=True),
+        )
+    finally:
+        unregister_engine("stub-current-resolution")
+
+    assert captures["run_ids"] == [entry.run_id for entry in session_plan.ordered_entries()]
+    assert summary.aborted is False
 
 
 def test_launch_run_rejects_non_test_mode_even_with_registered_engine(

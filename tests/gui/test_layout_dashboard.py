@@ -1506,6 +1506,65 @@ def test_setup_wizard_conditions_next_normalizes_mixed_images_before_advancing(
     )
 
 
+def test_setup_wizard_conditions_next_normalizes_uniform_non_square_images(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Non Square Image Gate")
+    guide = window.setup_wizard_page
+    step = guide.condition_setup_step
+    guide.open_wizard(step_key="conditions")
+    qtbot.mouseClick(step.add_condition_button, Qt.MouseButton.LeftButton)
+    condition_id = step.selected_condition_id()
+    assert isinstance(condition_id, str)
+    base_dir = tmp_path / "non-square-base"
+    oddball_dir = tmp_path / "non-square-oddball"
+    base_dir.mkdir()
+    oddball_dir.mkdir()
+    Image.new("RGB", (128, 96), color=(20, 40, 60)).save(base_dir / "base-01.png")
+    Image.new("RGB", (128, 96), color=(60, 40, 20)).save(base_dir / "base-02.png")
+    Image.new("RGB", (128, 96), color=(80, 20, 40)).save(oddball_dir / "oddball-01.png")
+    Image.new("RGB", (128, 96), color=(40, 80, 20)).save(oddball_dir / "oddball-02.png")
+    guide._document.update_condition(condition_id, name="Faces", trigger_code=1)
+    guide._document.import_condition_stimulus_folder(
+        condition_id,
+        role="base",
+        source_dir=base_dir,
+    )
+    guide._document.import_condition_stimulus_folder(
+        condition_id,
+        role="oddball",
+        source_dir=oddball_dir,
+    )
+    QApplication.processEvents()
+
+    dialog_scans = []
+
+    class _AcceptDialog:
+        def __init__(self, scan, *, parent=None) -> None:
+            dialog_scans.append(scan)
+
+        def exec(self):
+            return QDialog.DialogCode.Accepted
+
+        def target_size(self) -> int:
+            return 512
+
+    monkeypatch.setattr("fpvs_studio.gui.setup_wizard_page.ProgressTask", _ImmediateProgressTask)
+    monkeypatch.setattr("fpvs_studio.gui.setup_wizard_page.ImageNormalizationDialog", _AcceptDialog)
+
+    qtbot.mouseClick(guide.setup_wizard_next_button, Qt.MouseButton.LeftButton)
+    QApplication.processEvents()
+
+    assert dialog_scans[-1].non_square_resolution is True
+    assert guide.step_stack.currentWidget() is guide.experiment_step_surface
+    base_set = window.document.get_condition_stimulus_set(condition_id, "base")
+    assert base_set.resolution is not None
+    assert base_set.resolution.as_tuple() == (512, 512)
+
+
 def test_setup_wizard_conditions_next_stays_put_when_normalization_is_cancelled(
     qtbot,
     controller: StudioController,
@@ -3202,4 +3261,43 @@ def test_run_page_launch_uses_fixed_current_runtime_defaults(
     assert window.run_page.findChild(QWidget, "display_index_edit") is None
     assert window.run_page.findChild(QWidget, "engine_name_value") is None
 
+
+def test_run_page_surfaces_blocking_resolution_mismatch_warning(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Resolution Warning")
+    _prepare_compile_ready_project(window, tmp_path / "resolution-warning")
+    monkeypatch.setattr(
+        "fpvs_studio.gui.document.create_engine",
+        lambda engine_name: {"engine_name": engine_name},
+    )
+    monkeypatch.setattr(
+        "fpvs_studio.gui.document.preflight_session_plan",
+        lambda project_root, session_plan, engine: None,
+    )
+    monkeypatch.setattr("fpvs_studio.gui.run_page.ProgressTask", _ImmediateProgressTask)
+    monkeypatch.setattr(window.run_page, "_prompt_participant_number", lambda: "7")
+    warning_message = (
+        "Warning: this project was configured to be run on a display with "
+        "1920x1080 resolution, but this monitor is currently running at "
+        "3440x1440 resolution."
+    )
+    captured_errors: list[tuple[str, str]] = []
+    monkeypatch.setattr(
+        "fpvs_studio.gui.run_page._show_runtime_error_dialog",
+        lambda parent, title, error: captured_errors.append((title, str(error))),
+    )
+
+    def _raise_resolution_warning(*_args, **_kwargs):
+        raise RuntimeError(warning_message)
+
+    monkeypatch.setattr(window.document, "launch_compiled_session", _raise_resolution_warning)
+
+    window.run_page.launch_test_session()
+
+    assert captured_errors == [("Launch Error", warning_message)]
+    assert window.run_page._active_launch_task is None
 

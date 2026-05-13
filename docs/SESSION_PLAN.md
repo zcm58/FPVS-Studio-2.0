@@ -75,6 +75,11 @@ The current v1 policy is:
 - session compilation stores the random order seed for reproducibility
 - the same project + same seed + same refresh rate produces the same block
   order
+- fixed fixation target-count mode uses the configured count for every run;
+  randomized mode realizes one count per ordered run from the session seed while
+  preserving no-immediate-repeat constraints when enabled
+- each embedded `RunSpec` then distributes the realized fixation targets across
+  the whole condition with balanced seeded jitter and minimum-gap buffers
 
 ## Runtime responsibilities
 

@@ -135,7 +135,7 @@ Current planned seams:
   The wizard uses a six-step compact top-progress flow: Project, Conditions,
   Experiment, Fixation, Response, and Review. Conditions handles condition identity,
   list actions, base/oddball folder assignment, control-condition creation, and image
-  normalization. Conditions also surfaces project-wide target repeats per image and
+  normalization to square PNG assets. Conditions also surfaces project-wide target repeats per image and
   warning-only base/oddball repeat-balance guidance.
   Setup steps share a compact content surface, with the top progress stepper carrying
   complete-state feedback instead of page-wide completion bars. The setup surface is
@@ -145,10 +145,13 @@ Current planned seams:
   card; session order is always randomized automatically at launch while the realized
   seed remains runtime metadata for reproducibility and legacy fixed-order fields stay
   schema-compatible. Image-size settings are project-wide display geometry fields
-  compiled into `RunSpec` so source image resolution stays independent from playback
+  compiled into `RunSpec` so square source image resolution stays independent from playback
   size; the guided setup stores the intended test display pixel resolution and exposes a
   full-screen modal preview with live side-panel controls for checking apparent size on
-  the test machine. Fixation handles schedule/timing, and
+  the test machine. Runtime blocks launch if the active fullscreen resolution differs
+  from the configured intended resolution unless the project explicitly uses the current
+  screen resolution. Fixation handles target counts, minimum-gap timing, and
+  balanced seeded-jitter scheduling across the full condition duration, and
   Response handles accuracy tracking, response key/window, appearance, and live preview.
   Display settings include refresh rate, black/dark-gray background choices, and
   project-wide stimulus visual angle geometry. Detailed Conditions no longer exposes a

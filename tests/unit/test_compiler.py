@@ -58,6 +58,55 @@ def test_compiler_carries_configured_image_display_geometry(
     assert run_spec.display.use_current_screen_resolution is True
 
 
+def test_compiler_accepts_different_square_source_resolutions(
+    sample_project,
+    sample_project_root,
+) -> None:
+    sample_project.stimulus_sets[0].resolution = sample_project.stimulus_sets[
+        0
+    ].resolution.model_copy(update={"width_px": 512, "height_px": 512})
+    sample_project.stimulus_sets[1].resolution = sample_project.stimulus_sets[
+        1
+    ].resolution.model_copy(update={"width_px": 1024, "height_px": 1024})
+
+    run_spec = compile_run_spec(sample_project, refresh_hz=60.0, project_root=sample_project_root)
+
+    assert run_spec.condition.total_stimuli == 730
+
+
+@pytest.mark.parametrize(
+    ("role_index", "width_px", "height_px", "message"),
+    [
+        (0, 512, 384, "Base stimulus set"),
+        (1, 1024, 768, "Oddball stimulus set"),
+    ],
+)
+def test_compiler_rejects_non_square_source_resolutions(
+    sample_project,
+    sample_project_root,
+    role_index: int,
+    width_px: int,
+    height_px: int,
+    message: str,
+) -> None:
+    sample_project.stimulus_sets[role_index].resolution = sample_project.stimulus_sets[
+        role_index
+    ].resolution.model_copy(update={"width_px": width_px, "height_px": height_px})
+
+    with pytest.raises(CompileError, match=message):
+        compile_run_spec(sample_project, refresh_hz=60.0, project_root=sample_project_root)
+
+
+def test_compiler_rejects_unresolved_mixed_source_resolution(
+    sample_project,
+    sample_project_root,
+) -> None:
+    sample_project.stimulus_sets[0].resolution = None
+
+    with pytest.raises(CompileError, match="must be normalized to square images"):
+        compile_run_spec(sample_project, refresh_hz=60.0, project_root=sample_project_root)
+
+
 def test_compiler_schedules_condition_and_oddball_triggers_from_stimulus_onsets(
     sample_project,
     sample_project_root,
@@ -385,12 +434,25 @@ def test_compile_run_spec_randomized_target_count_is_seed_deterministic(
         random_seed=2026,
         run_id="run-b",
     )
+    run_spec_c = compile_run_spec(
+        sample_project,
+        refresh_hz=60.0,
+        project_root=sample_project_root,
+        random_seed=2027,
+        run_id="run-c",
+    )
 
     assert 2 <= run_spec_a.fixation.realized_target_count <= 4
     assert run_spec_a.fixation.realized_target_count == run_spec_b.fixation.realized_target_count
     assert [event.start_frame for event in run_spec_a.fixation_events] == [
         event.start_frame for event in run_spec_b.fixation_events
     ]
+    assert [event.start_frame for event in run_spec_a.fixation_events] != [
+        event.start_frame for event in run_spec_c.fixation_events
+    ]
+    assert [event.start_frame for event in run_spec_a.fixation_events] == sorted(
+        event.start_frame for event in run_spec_a.fixation_events
+    )
 
 
 def test_compile_run_spec_reports_minimum_cycles_when_fixation_settings_do_not_fit(

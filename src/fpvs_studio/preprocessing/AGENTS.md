@@ -13,8 +13,11 @@ For the current phase, the priority is **deterministic derived-asset materializa
   - `.jpeg`
   - `.png`
 - Extension matching should be case-insensitive.
-- All images in a stimulus set must have identical resolution.
-- Base and oddball stimulus sets used together in one condition must match in resolution.
+- Launchable condition images must be square. Raw import may be permissive, but unresolved
+  non-square or mixed-size folders must be normalized to square project-local PNG copies
+  before launch.
+- Base and oddball stimulus sets used together in one condition may differ in square
+  source resolution, because runtime display size is controlled by visual angle.
 - Do not silently resize images.
 - Generated derivatives should be written as PNG in the project folder.
 - Persist enough metadata to make preprocessing reproducible.

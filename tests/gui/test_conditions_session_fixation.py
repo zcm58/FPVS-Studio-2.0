@@ -852,7 +852,6 @@ def test_short_condition_clamps_fixation_count_before_launch(
     page.changes_per_sequence_spin.setValue(4)
     page.target_duration_spin.setValue(230)
     page.min_gap_spin.setValue(1000)
-    page.max_gap_spin.setValue(3000)
     QApplication.processEvents()
 
     assert page.changes_per_sequence_spin.maximum() == 0

@@ -1107,7 +1107,7 @@ def test_manage_condition_templates_dialog_renders_hierarchical_details(
     assert "Total cross color changes in each condition: 7 ± 1" in details_text
     assert "Fixation cross timing: 250 ms" in details_text
     assert "Minimum time between color changes: 1000 ms" in details_text
-    assert "Maximum time between color changes: 3000 ms" in details_text
+    assert "Maximum time between color changes" not in details_text
     assert "Duty Cycle: Continuous" in details_text
     assert "Repeats: 1" in details_text
     assert "Cycles per Repeat: 146" in details_text
@@ -1157,7 +1157,7 @@ def test_manage_condition_templates_add_edit_duplicate_delete_round_trip(
         editor.changes_per_sequence_spin.setValue(5)
         editor.target_duration_spin.setValue(300)
         editor.min_gap_spin.setValue(900)
-        editor.max_gap_spin.setValue(1800)
+        assert editor.max_gap_spin.isHidden()
         editor._saved_profile = editor._build_profile()
         return int(editor.DialogCode.Accepted)
 

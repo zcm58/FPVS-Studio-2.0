@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QLabel
 from tests.gui.helpers import configure_fixation_task
 
 from fpvs_studio.gui.document import ProjectDocument
@@ -53,6 +53,16 @@ def test_fixation_settings_editor_persists_fixed_mode_values(qtbot, tmp_path: Pa
     assert fixation.response_key == "return"
     assert fixation.response_keys == ["return"]
     assert fixation.response_window_seconds == 1.5
+
+
+def test_fixation_settings_editor_does_not_expose_maximum_gap(qtbot, tmp_path: Path) -> None:
+    _, editor = _build_editor(qtbot, tmp_path)
+
+    assert editor.max_gap_spin.isHidden()
+    assert all(
+        "Maximum gap" not in label.text()
+        for label in editor.findChildren(QLabel)
+    )
 
 
 def test_fixation_settings_editor_toggles_fixed_and_randomized_rows(

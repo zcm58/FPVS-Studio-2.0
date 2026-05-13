@@ -35,13 +35,22 @@ def test_refresh_validation_rejects_blank_50_on_odd_frame_cycles() -> None:
     assert any("blank_50" in message for message in report.errors)
 
 
-def test_project_validation_rejects_resolution_mismatch(sample_project) -> None:
+def test_project_validation_accepts_different_square_source_resolutions(sample_project) -> None:
     sample_project.stimulus_sets[1].resolution = ImageResolution(width_px=512, height_px=512)
 
     report = validate_project(sample_project)
 
+    assert report.is_valid is True
+    assert not any("non-square" in issue.message for issue in report.issues)
+
+
+def test_project_validation_rejects_non_square_source_resolution(sample_project) -> None:
+    sample_project.stimulus_sets[1].resolution = ImageResolution(width_px=512, height_px=384)
+
+    report = validate_project(sample_project)
+
     assert report.is_valid is False
-    assert any("mismatched resolutions" in issue.message for issue in report.issues)
+    assert any("non-square 512x384" in issue.message for issue in report.issues)
 
 
 def test_project_validation_rejects_same_base_and_oddball_folder(sample_project) -> None:
@@ -190,3 +199,12 @@ def test_condition_fixation_guidance_reports_duration_and_max_feasible_changes(
     assert row.condition_duration_seconds == 5.0
     assert row.estimated_max_color_changes_per_condition == 3
     assert row.recommended_max_color_changes_per_condition == 1
+
+
+def test_project_validation_ignores_legacy_fixation_max_gap_contract(sample_project) -> None:
+    sample_project.settings.fixation_task.min_gap_ms = 3000
+    sample_project.settings.fixation_task.max_gap_ms = 1000
+
+    report = validate_project(sample_project)
+
+    assert not any("max_gap_ms" in issue.message for issue in report.issues)

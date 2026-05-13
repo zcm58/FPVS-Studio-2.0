@@ -115,13 +115,6 @@ def validate_fixation_settings(settings: FixationTaskSettings) -> list[Validatio
                 ),
             )
         )
-    if settings.min_gap_ms > settings.max_gap_ms:
-        issues.append(
-            ValidationIssue(
-                location="settings.fixation_task",
-                message="Fixation min_gap_ms must be less than or equal to max_gap_ms.",
-            )
-        )
     if settings.accuracy_task_enabled and not settings.enabled:
         issues.append(
             ValidationIssue(
@@ -410,22 +403,33 @@ def validate_project(
                     ),
                 )
             )
-        if (
-            base_set is not None
-            and oddball_set is not None
-            and base_set.resolution is not None
-            and oddball_set.resolution is not None
-            and base_set.resolution != oddball_set.resolution
-        ):
-            issues.append(
-                ValidationIssue(
-                    location=f"conditions.{condition.condition_id}",
-                    message=(
-                        f"Condition '{condition.name}' uses stimulus sets with mismatched "
-                        "resolutions."
-                    ),
+        for role, stimulus_set in (("base", base_set), ("oddball", oddball_set)):
+            if stimulus_set is None:
+                continue
+            role_label = "Base" if role == "base" else "Oddball"
+            if stimulus_set.resolution is None:
+                issues.append(
+                    ValidationIssue(
+                        location=f"conditions.{condition.condition_id}.{role}_stimulus_set_id",
+                        message=(
+                            f"{role_label} stimulus set for condition '{condition.name}' must "
+                            "be normalized to square images before launch."
+                        ),
+                    )
                 )
-            )
+                continue
+            if stimulus_set.resolution.width_px != stimulus_set.resolution.height_px:
+                issues.append(
+                    ValidationIssue(
+                        location=f"conditions.{condition.condition_id}.{role}_stimulus_set_id",
+                        message=(
+                            f"{role_label} stimulus set for condition '{condition.name}' uses "
+                            f"non-square {stimulus_set.resolution.width_px}x"
+                            f"{stimulus_set.resolution.height_px} images. Normalize the selected "
+                            "images to square PNG copies before launch."
+                        ),
+                    )
+                )
 
         if refresh_hz is not None:
             display_report = validate_display_refresh(

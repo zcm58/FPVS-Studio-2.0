@@ -12,6 +12,7 @@ class PsychoPyModules:
     visual: Any
     core: Any
     keyboard: Any
+    logging: Any
 
 
 def load_psychopy_modules() -> PsychoPyModules:
@@ -19,7 +20,7 @@ def load_psychopy_modules() -> PsychoPyModules:
 
     try:
         import psychopy  # type: ignore[import-untyped]
-        from psychopy import core, visual
+        from psychopy import core, logging, visual
         from psychopy.hardware import keyboard  # type: ignore[import-untyped]
     except ImportError as exc:  # pragma: no cover - exercised by import-boundary tests
         raise RuntimeError(
@@ -32,4 +33,5 @@ def load_psychopy_modules() -> PsychoPyModules:
         visual=visual,
         core=core,
         keyboard=keyboard,
+        logging=logging,
     )

@@ -20,6 +20,7 @@ from fpvs_studio.core.run_spec import RunSpec
 from fpvs_studio.core.session_plan import SessionEntry, SessionPlan
 from fpvs_studio.engines.base import PresentationEngine
 from fpvs_studio.runtime.fixation import build_fixation_task_summary, score_fixation_responses
+from fpvs_studio.runtime.preflight import PreflightError
 from fpvs_studio.runtime.session_export import write_run_artifacts, write_session_artifacts
 from fpvs_studio.runtime.triggers import LoggedTriggerBackend, build_trigger_backend
 
@@ -48,6 +49,7 @@ class RuntimeWorker:
         try:
             self._engine.open_session(runtime_options=runtime_options)
             session_open = True
+            _validate_configured_display_resolution(self._engine, run_spec)
             trigger_start_index = len(trigger_backend.records)
             if self._show_run_start(run_spec):
                 run_summary = _build_start_aborted_summary(
@@ -120,6 +122,7 @@ class RuntimeWorker:
             self._engine.open_session(runtime_options=runtime_options)
             session_open = True
             for entry in ordered_entries:
+                _validate_configured_display_resolution(self._engine, entry.run_spec)
                 if self._show_transition(entry, session_plan, runtime_options=runtime_options):
                     abort_reason = (
                         f"Session aborted during the transition screen before run '{entry.run_id}'."
@@ -385,6 +388,29 @@ def _pick_session_runtime_metadata(
 
 def _run_mode(runtime_options: Mapping[str, object] | None) -> RunMode:
     return RunMode.TEST if bool((runtime_options or {}).get("test_mode")) else RunMode.SESSION
+
+
+def _validate_configured_display_resolution(
+    engine: PresentationEngine,
+    run_spec: RunSpec,
+) -> None:
+    display = run_spec.display
+    if display.use_current_screen_resolution:
+        return
+    detected_size = engine.current_display_size_px()
+    if detected_size is None:
+        return
+    detected_width, detected_height = detected_size
+    if detected_width == display.screen_width_px and detected_height == display.screen_height_px:
+        return
+    raise PreflightError(
+        "Warning: this project was configured to be run on a display with "
+        f"{display.screen_width_px}x{display.screen_height_px} resolution, but this monitor "
+        f"is currently running at {detected_width}x{detected_height} resolution. This will "
+        "affect the size of images displayed on screen. It is strongly recommended that you "
+        "either change the monitor resolution to the same resolution that this project was "
+        "configured for, or update your project settings if this is your intended behavior."
+    )
 
 
 def _build_start_aborted_summary(

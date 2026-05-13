@@ -97,11 +97,11 @@ The authoring window is organized around two user-facing modes:
   - Conditions shows project-wide target repeats per image and per-condition base/oddball
     repeat-balance guidance; repeat-balance issues are warnings and do not block save
     or launch
-  - raw image-folder import is permissive; folders with mixed image sizes are not
+  - raw image-folder import is permissive; folders with mixed or non-square image sizes are not
     rejected at selection time
   - when users leave Conditions, FPVS Studio checks selected condition images for
-    mixed sizes or file types; inconsistent folders can be normalized to PNG copies
-    at `512x512` or `256x256` before moving on
+    mixed sizes, non-square sizes, or file types; inconsistent folders can be normalized
+    to square PNG copies at `512x512` or `256x256` before moving on
   - the Conditions step includes a secondary `Create Control Condition...` action for
     optional grayscale, 180 degree rotated, or phase-scrambled control conditions that
     reuse the selected condition's existing base and oddball image folders
@@ -233,7 +233,8 @@ The current GUI supports:
   background
 - configuring fixation settings, including an optional fixation accuracy task
   (Space within 1.0 s of each fixation color change)
-- configuring fixed or randomized fixation target counts per condition run with
+- configuring fixed or randomized fixation target counts per condition run; compiled
+  color changes are balanced across the full condition with seeded jitter and
   deterministic no-immediate-repeat behavior across consecutive compiled runs
 - checking for app updates from `File > Check for Updates`
 - authoring multiple conditions
@@ -258,6 +259,8 @@ Current honest behavior:
 - launched PsychoPy playback opens fullscreen on the default display
 - display-index and fullscreen launch controls are not exposed in the current GUI;
   launch uses the default display and fullscreen playback
+- if the project uses an intended display resolution, launched playback blocks before
+  stimulus presentation when PsychoPy reports a different fullscreen resolution
 - each condition waits for `Space` before playback starts
 - non-final blocks show a separate `Press Space to continue` break screen
 - PsychoPy remains behind the runtime and engine layers

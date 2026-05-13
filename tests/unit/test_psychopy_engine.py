@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from types import SimpleNamespace
 from typing import Any
 
@@ -12,6 +13,7 @@ from fpvs_studio.core.compiler import compile_run_spec
 from fpvs_studio.core.display_geometry import visual_angle_width_px
 from fpvs_studio.core.run_spec import TriggerEvent
 from fpvs_studio.engines.psychopy_engine import PsychoPyEngine
+from fpvs_studio.engines.psychopy_stimuli import release_stimuli
 from fpvs_studio.engines.psychopy_text_screens import show_text_screen
 from fpvs_studio.triggers.base import TriggerBackend
 
@@ -45,10 +47,13 @@ class _FakeWindow:
         self.events.append(("flip", self._flip_index))
         if self._flip_index == self.raise_on_flip_index:
             raise RuntimeError("flip failed")
+        previous_flip_time = self._last_flip_time
         if self._flip_index < len(self._flip_times):
             self._last_flip_time = self._flip_times[self._flip_index]
         else:
             self._last_flip_time += 1.0 / 60.0
+        if self.recordFrameIntervals and self._flip_index > 0:
+            self.frameIntervals.append(self._last_flip_time - previous_flip_time)
         self._flip_index += 1
         pending_callbacks = list(self._call_on_flip)
         self._call_on_flip.clear()
@@ -138,6 +143,7 @@ def _build_fake_psychopy(
     *,
     flip_times: list[float],
     raise_on_flip_index: int | None = None,
+    record_psychopy_warnings: bool = False,
 ) -> object:
     events: list[tuple[str, object]] = []
     image_stims: list[Any] = []
@@ -178,10 +184,16 @@ def _build_fake_psychopy(
         TextStim=_FakeStim,
     )
     fake_core = SimpleNamespace(Clock=lambda: _FakeClock(captures["window"]))
+    fake_logging = (
+        SimpleNamespace(warning=lambda message: events.append(("psychopy_warning", message)))
+        if record_psychopy_warnings
+        else None
+    )
     return SimpleNamespace(
         visual=fake_visual,
         core=fake_core,
         hardware=SimpleNamespace(keyboard=SimpleNamespace(Keyboard=_fake_keyboard)),
+        logging=fake_logging,
         __version__="fake-psychopy",
     )
 
@@ -208,6 +220,7 @@ def _patch_fake_psychopy(monkeypatch, engine: PsychoPyEngine, fake_psychopy: obj
     engine._visual = fake_psychopy.visual
     engine._core = fake_psychopy.core
     engine._keyboard_module = fake_psychopy.hardware.keyboard
+    engine._psychopy_logging = fake_psychopy.logging
     monkeypatch.setattr(engine, "_load_psychopy", lambda: fake_psychopy)
 
 
@@ -426,6 +439,106 @@ def test_psychopy_engine_sizes_images_from_visual_angle_without_changing_aspect_
         screen_width_px=1920,
     )
     assert _image_stims(captures)[0].size == (expected_width, round(expected_width / 2))
+
+
+def test_release_stimuli_discards_texture_ids_and_clears_mapping() -> None:
+    class _Stimulus:
+        def __init__(self) -> None:
+            self._texID = object()
+            self._maskID = object()
+            self._pixBuffID = object()
+            self.clear_textures_count = 0
+
+        def clearTextures(self) -> None:
+            self.clear_textures_count += 1
+
+    stimulus = _Stimulus()
+    stimuli = {"stimulus": stimulus}
+
+    release_stimuli(stimuli)
+
+    assert stimuli == {}
+    assert stimulus.clear_textures_count == 1
+    assert not hasattr(stimulus, "_texID")
+    assert not hasattr(stimulus, "_maskID")
+    assert not hasattr(stimulus, "_pixBuffID")
+
+
+def test_release_stimuli_suppresses_texture_cleanup_errors(caplog) -> None:
+    class _Stimulus:
+        def __init__(self) -> None:
+            self._texID = object()
+            self._maskID = object()
+            self._pixBuffID = object()
+
+        def clearTextures(self) -> None:
+            raise OSError("OpenGL texture cleanup failed")
+
+    stimulus = _Stimulus()
+    stimuli = {"stimulus": stimulus}
+
+    release_stimuli(stimuli)
+
+    assert stimuli == {}
+    assert not hasattr(stimulus, "_texID")
+    assert not hasattr(stimulus, "_maskID")
+    assert not hasattr(stimulus, "_pixBuffID")
+    assert "Ignored 1 PsychoPy stimulus texture cleanup error" in caplog.text
+
+
+def test_psychopy_engine_uses_same_display_size_for_different_square_resolutions(
+    monkeypatch,
+    sample_project,
+    sample_project_root,
+) -> None:
+    run_spec = _two_event_run_spec(sample_project, sample_project_root, duplicate_image=False)
+    run_spec.display.stimulus_width_degrees = 8.0
+    run_spec.display.viewing_distance_cm = 80.0
+    run_spec.display.screen_width_cm = 53.0
+    run_spec.display.screen_width_px = 1920
+    run_spec.display.use_current_screen_resolution = False
+    base_dir = sample_project_root / "stimuli" / "original-images" / "base-set"
+    high_res_path = base_dir / "square-1024.png"
+    low_res_path = base_dir / "square-512.png"
+    Image.new("RGB", (1024, 1024), color=(20, 40, 80)).save(high_res_path)
+    Image.new("RGB", (512, 512), color=(80, 40, 20)).save(low_res_path)
+    run_spec.stimulus_sequence[0] = run_spec.stimulus_sequence[0].model_copy(
+        update={"image_path": "stimuli/original-images/base-set/square-1024.png"}
+    )
+    run_spec.stimulus_sequence[1] = run_spec.stimulus_sequence[1].model_copy(
+        update={"image_path": "stimuli/original-images/base-set/square-512.png"}
+    )
+    run_spec.stimulus_sequence = run_spec.stimulus_sequence[:2]
+    run_spec.display.total_frames = 2
+    captures: dict[str, object] = {}
+    fake_psychopy = _build_fake_psychopy(captures, flip_times=[])
+    engine = PsychoPyEngine()
+    _patch_fake_psychopy(monkeypatch, engine, fake_psychopy)
+
+    try:
+        engine.run_condition(
+            run_spec,
+            sample_project_root,
+            runtime_options={
+                "test_mode": True,
+                "fullscreen": False,
+                "timing_warmup_frames": 0,
+            },
+            trigger_backend=None,
+        )
+    finally:
+        engine.close_session()
+
+    expected_width = visual_angle_width_px(
+        degrees=8.0,
+        viewing_distance_cm=80.0,
+        screen_width_cm=53.0,
+        screen_width_px=1920,
+    )
+    assert [stim.size for stim in _image_stims(captures)] == [
+        (expected_width, expected_width),
+        (expected_width, expected_width),
+    ]
 
 
 def test_psychopy_engine_emits_compiled_triggers_on_presentation_flip(
@@ -806,3 +919,124 @@ def test_psychopy_engine_strict_timing_aborts_on_first_run_phase_miss(
     assert summary.runtime_metadata is not None
     assert summary.runtime_metadata.timing_qc_strict_abort is True
     assert summary.runtime_metadata.timing_qc_first_bad_frame_index is not None
+
+
+def test_psychopy_engine_logs_playback_timing_diagnostic(
+    monkeypatch,
+    caplog,
+    sample_project,
+    sample_project_root,
+) -> None:
+    run_spec = _tiny_run_spec(sample_project, sample_project_root)
+    warmup_frames = 0
+    expected_interval_s = 1.0 / run_spec.display.refresh_hz
+    flip_times = _build_flip_times(
+        total_flips=run_spec.display.total_frames,
+        interval_s=expected_interval_s,
+        long_interval_flip_indices={2},
+        long_interval_s=0.05,
+    )
+    captures: dict[str, object] = {}
+    fake_psychopy = _build_fake_psychopy(captures, flip_times=flip_times)
+    engine = PsychoPyEngine()
+    _patch_fake_psychopy(monkeypatch, engine, fake_psychopy)
+    caplog.set_level(logging.WARNING, logger="fpvs_studio.engines.psychopy_engine")
+
+    try:
+        summary = engine.run_condition(
+            run_spec,
+            sample_project_root,
+            runtime_options={
+                "test_mode": True,
+                "fullscreen": False,
+                "strict_timing": False,
+                "timing_warmup_frames": warmup_frames,
+            },
+            trigger_backend=None,
+        )
+    finally:
+        engine.close_session()
+
+    assert summary.aborted is False
+    assert "PsychoPy timing diagnostic" in caplog.text
+    assert "phase=playback" in caplog.text
+    assert "long_interval_count=1" in caplog.text
+    assert "max_long_interval_ms=50.00" in caplog.text
+
+
+def test_psychopy_engine_uses_psychopy_warning_channel_for_timing_diagnostic(
+    monkeypatch,
+    sample_project,
+    sample_project_root,
+) -> None:
+    run_spec = _tiny_run_spec(sample_project, sample_project_root)
+    expected_interval_s = 1.0 / run_spec.display.refresh_hz
+    flip_times = _build_flip_times(
+        total_flips=run_spec.display.total_frames,
+        interval_s=expected_interval_s,
+        long_interval_flip_indices={2},
+        long_interval_s=0.05,
+    )
+    captures: dict[str, object] = {}
+    fake_psychopy = _build_fake_psychopy(
+        captures,
+        flip_times=flip_times,
+        record_psychopy_warnings=True,
+    )
+    engine = PsychoPyEngine()
+    _patch_fake_psychopy(monkeypatch, engine, fake_psychopy)
+
+    try:
+        engine.run_condition(
+            run_spec,
+            sample_project_root,
+            runtime_options={
+                "test_mode": True,
+                "fullscreen": False,
+                "strict_timing": False,
+                "timing_warmup_frames": 0,
+            },
+            trigger_backend=None,
+        )
+    finally:
+        engine.close_session()
+
+    events = captures["events"]
+    assert any(
+        event_name == "psychopy_warning"
+        and "PsychoPy timing diagnostic" in str(message)
+        and "phase=playback" in str(message)
+        for event_name, message in events
+    )
+
+
+def test_psychopy_engine_disables_frame_interval_recording_for_text_screens(
+    monkeypatch,
+) -> None:
+    captures: dict[str, object] = {}
+    fake_psychopy = _build_fake_psychopy(
+        captures,
+        flip_times=[0.0, 0.04],
+        record_psychopy_warnings=True,
+    )
+    engine = PsychoPyEngine()
+    _patch_fake_psychopy(monkeypatch, engine, fake_psychopy)
+
+    try:
+        engine.open_session(runtime_options={"test_mode": True, "fullscreen": False})
+        window = captures["window"]
+        window.recordFrameIntervals = True
+        engine._show_text_screen(
+            heading="Instruction Screen",
+            body=None,
+            countdown_seconds=0.01,
+            continue_key=None,
+            continue_prompt=None,
+        )
+    finally:
+        engine.close_session()
+
+    events = captures["events"]
+    assert not any(event_name == "psychopy_warning" for event_name, _message in events)
+    assert window.recordFrameIntervals is True
+    assert window.frameIntervals == []

@@ -52,6 +52,7 @@ class ImageNormalizationScan:
 
     sets: tuple[StimulusSetNormalizationScan, ...]
     mixed_resolution: bool = False
+    non_square_resolution: bool = False
     mixed_file_type: bool = False
     unsupported_source_type: bool = False
 
@@ -65,6 +66,7 @@ class ImageNormalizationScan:
             bool(value)
             for value in (
                 self.mixed_resolution,
+                self.non_square_resolution,
                 self.mixed_file_type,
                 self.unsupported_source_type,
                 any(item.unsupported_files for item in self.sets),
@@ -75,7 +77,12 @@ class ImageNormalizationScan:
 
     @property
     def needs_normalization(self) -> bool:
-        return self.mixed_resolution or self.mixed_file_type or self.unsupported_source_type
+        return (
+            self.mixed_resolution
+            or self.non_square_resolution
+            or self.mixed_file_type
+            or self.unsupported_source_type
+        )
 
     @property
     def can_normalize(self) -> bool:
@@ -141,6 +148,11 @@ def scan_stimulus_sets_for_normalization(
     return ImageNormalizationScan(
         sets=scans,
         mixed_resolution=len(all_resolutions) > 1,
+        non_square_resolution=any(
+            resolution.width_px != resolution.height_px
+            for scan in scans
+            for resolution in scan.resolutions
+        ),
         mixed_file_type=len(all_file_types) > 1,
         unsupported_source_type=any(
             any(file_type not in COMPILER_READY_SUFFIXES for file_type in scan.file_types)

@@ -250,6 +250,10 @@ def test_session_plan_randomized_fixation_counts_are_seeded_and_non_repeating(
     assert counts == _realized_fixation_counts(plan_b)
     assert all(1 <= count <= 3 for count in counts)
     assert all(left != right for left, right in zip(counts, counts[1:], strict=False))
+    for entry in plan_a.ordered_entries():
+        starts = [event.start_frame for event in entry.run_spec.fixation_events]
+        assert starts == sorted(starts)
+        assert all(isinstance(start, int) for start in starts)
 
 
 def test_session_plan_fixed_color_changes_per_condition_produce_expected_realized_count(

@@ -75,7 +75,6 @@ Implement friendly, explicit validation for:
 - integer trigger codes
 - `changes_per_sequence >= 0`
 - target duration > 0 when fixation task enabled
-- `min_gap_ms <= max_gap_ms`
 - `oddball_cycle_repeats_per_sequence >= 1`
 - valid duty-cycle mode
 - display compatibility:

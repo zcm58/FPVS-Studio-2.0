@@ -5,6 +5,7 @@ neutral export contracts stay outside the engine."""
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Mapping
 from datetime import datetime, timezone
 from pathlib import Path
@@ -38,6 +39,9 @@ from fpvs_studio.engines.psychopy_triggers import build_trigger_lookup, emit_tri
 from fpvs_studio.engines.psychopy_window import build_window_kwargs, create_fixation_stim
 from fpvs_studio.triggers.base import TriggerBackend
 
+LOGGER = logging.getLogger(__name__)
+TIMING_DIAGNOSTIC_THRESHOLD_MULTIPLIER = 1.5
+
 
 class PsychoPyEngine(PresentationEngine):
     """PsychoPy-backed presentation engine."""
@@ -47,6 +51,7 @@ class PsychoPyEngine(PresentationEngine):
         self._visual: Any | None = None
         self._core: Any | None = None
         self._keyboard_module: Any | None = None
+        self._psychopy_logging: Any | None = None
         self._window: Any | None = None
         self._keyboard: Any | None = None
         self._runtime_options: dict[str, object] = {}
@@ -87,6 +92,15 @@ class PsychoPyEngine(PresentationEngine):
         self._keyboard = keyboard_module.Keyboard()
         self._keyboard.clearEvents()
         self._aborted = False
+
+    def current_display_size_px(self) -> tuple[int, int] | None:
+        window = self._window
+        if window is None:
+            return None
+        size = getattr(window, "size", None)
+        if not isinstance(size, (list, tuple)) or len(size) < 2:
+            return None
+        return (max(1, int(size[0])), max(1, int(size[1])))
 
     def show_transition_screen(
         self,
@@ -358,6 +372,12 @@ class PsychoPyEngine(PresentationEngine):
                 timing_first_bad_frame_index=timing_first_bad_frame_index,
                 timing_strict_abort=timing_strict_abort,
             )
+            self._log_timing_diagnostics(
+                run_spec,
+                timing_config=timing_config,
+                warmup_intervals=warmup_intervals,
+                frame_intervals=frame_intervals,
+            )
             return RunExecutionSummary(
                 project_id=run_spec.project_id,
                 session_id=None,
@@ -509,6 +529,71 @@ class PsychoPyEngine(PresentationEngine):
             timing_config=timing_config,
         )
 
+    def _log_timing_diagnostics(
+        self,
+        run_spec: RunSpec,
+        *,
+        timing_config: TimingConfig,
+        warmup_intervals: list[float],
+        frame_intervals: list[FrameIntervalRecord],
+    ) -> None:
+        diagnostic_threshold_s = (
+            timing_config.expected_interval_s * TIMING_DIAGNOSTIC_THRESHOLD_MULTIPLIER
+        )
+        self._log_timing_phase_diagnostics(
+            run_spec,
+            phase="warmup",
+            intervals=[
+                FrameIntervalRecord(frame_index=index, interval_s=interval_s)
+                for index, interval_s in enumerate(warmup_intervals)
+            ],
+            expected_interval_s=timing_config.expected_interval_s,
+            diagnostic_threshold_s=diagnostic_threshold_s,
+        )
+        self._log_timing_phase_diagnostics(
+            run_spec,
+            phase="playback",
+            intervals=frame_intervals,
+            expected_interval_s=timing_config.expected_interval_s,
+            diagnostic_threshold_s=diagnostic_threshold_s,
+        )
+
+    def _log_timing_phase_diagnostics(
+        self,
+        run_spec: RunSpec,
+        *,
+        phase: str,
+        intervals: list[FrameIntervalRecord],
+        expected_interval_s: float,
+        diagnostic_threshold_s: float,
+    ) -> None:
+        long_intervals = [
+            interval for interval in intervals if interval.interval_s > diagnostic_threshold_s
+        ]
+        if not long_intervals:
+            return
+        max_interval = max(long_intervals, key=lambda interval: interval.interval_s)
+        first_interval = long_intervals[0]
+        message = (
+            f"PsychoPy timing diagnostic: run_id={run_spec.run_id} "
+            f"condition_id={run_spec.condition.condition_id} phase={phase} "
+            f"long_interval_count={len(long_intervals)} "
+            f"first_long_frame={first_interval.frame_index} "
+            f"first_long_interval_ms={first_interval.interval_s * 1000.0:.2f} "
+            f"max_long_frame={max_interval.frame_index} "
+            f"max_long_interval_ms={max_interval.interval_s * 1000.0:.2f} "
+            f"expected_interval_ms={expected_interval_s * 1000.0:.2f} "
+            f"diagnostic_threshold_ms={diagnostic_threshold_s * 1000.0:.2f}."
+        )
+        self._log_psychopy_warning(message)
+
+    def _log_psychopy_warning(self, message: str) -> None:
+        warning = getattr(self._psychopy_logging, "warning", None)
+        if callable(warning):
+            warning(message)
+            return
+        LOGGER.warning(message)
+
     def _show_text_screen(
         self,
         *,
@@ -519,19 +604,29 @@ class PsychoPyEngine(PresentationEngine):
         continue_prompt: str | None,
     ) -> bool:
         self.open_session(runtime_options=self._runtime_options)
-        return show_text_screen(
-            visual=self._require_visual(),
-            core=self._require_core(),
-            window=self._require_window(),
-            keyboard=self._require_keyboard(),
-            is_aborted=lambda: self._aborted,
-            set_aborted=self.abort,
-            heading=heading,
-            body=body,
-            countdown_seconds=countdown_seconds,
-            continue_key=continue_key,
-            continue_prompt=continue_prompt,
-        )
+        window = self._require_window()
+        previous_record_frame_intervals = bool(getattr(window, "recordFrameIntervals", False))
+        window.recordFrameIntervals = False
+        if hasattr(window, "frameIntervals"):
+            window.frameIntervals = []
+        try:
+            return show_text_screen(
+                visual=self._require_visual(),
+                core=self._require_core(),
+                window=window,
+                keyboard=self._require_keyboard(),
+                is_aborted=lambda: self._aborted,
+                set_aborted=self.abort,
+                heading=heading,
+                body=body,
+                countdown_seconds=countdown_seconds,
+                continue_key=continue_key,
+                continue_prompt=continue_prompt,
+            )
+        finally:
+            window.recordFrameIntervals = previous_record_frame_intervals
+            if hasattr(window, "frameIntervals"):
+                window.frameIntervals = []
 
     def _load_psychopy(self) -> Any:
         if self._psychopy is not None:
@@ -542,6 +637,7 @@ class PsychoPyEngine(PresentationEngine):
         self._visual = modules.visual
         self._core = modules.core
         self._keyboard_module = modules.keyboard
+        self._psychopy_logging = modules.logging
         return modules.psychopy
 
     def _require_core(self) -> Any:

@@ -13,6 +13,8 @@ as PsychoPy. Runtime owns flow and calls engines through
   `continue_key="space"` and engines render `Press Space to begin.`
 - Engines may receive runtime options, but runtime-only options must not be
   persisted into `RunSpec`.
+- Engines may report the active session window size so runtime can block launches
+  whose configured display resolution does not match the actual fullscreen display.
 - PsychoPy imports must remain lazy and local to engine implementations.
 - Engines return core-owned execution summaries; exporters stay outside engine
   code.

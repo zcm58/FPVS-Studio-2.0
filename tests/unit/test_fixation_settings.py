@@ -32,6 +32,19 @@ def test_fixation_settings_fixed_mode_remains_valid() -> None:
     assert settings.changes_per_sequence == 3
 
 
+def test_fixation_settings_keeps_legacy_max_gap_without_range_contract() -> None:
+    settings = FixationTaskSettings(
+        enabled=True,
+        target_count_mode="fixed",
+        changes_per_sequence=3,
+        min_gap_ms=2000,
+        max_gap_ms=1000,
+    )
+
+    assert settings.min_gap_ms == 2000
+    assert settings.max_gap_ms == 1000
+
+
 def test_fixation_settings_defaults_match_current_gui_presets() -> None:
     settings = FixationTaskSettings()
 

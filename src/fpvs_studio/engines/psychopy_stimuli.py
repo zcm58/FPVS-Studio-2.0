@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+import logging
+from collections.abc import Mapping, MutableMapping
 from pathlib import Path
 from typing import Any
 
@@ -10,6 +11,9 @@ from PIL import Image
 
 from fpvs_studio.core.display_geometry import visual_angle_width_px
 from fpvs_studio.core.run_spec import DisplayRunSpec, FixationEvent, StimulusEvent
+
+LOGGER = logging.getLogger(__name__)
+_PSYCHOPY_TEXTURE_ID_ATTRIBUTES = ("_texID", "_maskID", "_pixBuffID")
 
 
 def fixation_color_for_frame(
@@ -105,10 +109,35 @@ def _window_width_px(window: Any) -> int:
     return 1920
 
 
-def release_stimuli(stimuli: Mapping[str, Any]) -> None:
+def release_stimuli(stimuli: MutableMapping[str, Any]) -> None:
     """Release PsychoPy stimulus textures for one condition run."""
 
-    for stimulus in stimuli.values():
-        clear_textures = getattr(stimulus, "clearTextures", None)
-        if callable(clear_textures):
-            clear_textures()
+    cleanup_error_count = 0
+    last_cleanup_error: Exception | None = None
+    for stimulus in list(stimuli.values()):
+        try:
+            clear_textures = getattr(stimulus, "clearTextures", None)
+            if callable(clear_textures):
+                clear_textures()
+        except Exception as error:
+            cleanup_error_count += 1
+            last_cleanup_error = error
+        finally:
+            _discard_psychopy_texture_ids(stimulus)
+    stimuli.clear()
+    if cleanup_error_count:
+        LOGGER.warning(
+            "Ignored %d PsychoPy stimulus texture cleanup error(s); "
+            "discarded texture ids to prevent repeated destructor cleanup failures. "
+            "Last error type: %s.",
+            cleanup_error_count,
+            type(last_cleanup_error).__name__,
+        )
+
+
+def _discard_psychopy_texture_ids(stimulus: Any) -> None:
+    for attribute_name in _PSYCHOPY_TEXTURE_ID_ATTRIBUTES:
+        try:
+            delattr(stimulus, attribute_name)
+        except AttributeError:
+            continue

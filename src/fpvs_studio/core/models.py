@@ -276,8 +276,6 @@ class FixationTaskSettings(FPVSBaseModel):
     def validate_ranges(self) -> FixationTaskSettings:
         if self.enabled and self.target_duration_ms <= 0:
             raise ValueError("Fixation target duration must be greater than 0 ms when enabled.")
-        if self.min_gap_ms > self.max_gap_ms:
-            raise ValueError("Fixation min_gap_ms must be less than or equal to max_gap_ms.")
         if self.accuracy_task_enabled and not self.enabled:
             raise ValueError(
                 "Fixation task must be enabled when the fixation accuracy task is enabled."

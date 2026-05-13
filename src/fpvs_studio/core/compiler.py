@@ -123,7 +123,6 @@ def compile_run_spec(
         refresh_hz,
     )
     min_gap_frames = milliseconds_to_frames(fixation_settings.min_gap_ms, refresh_hz)
-    max_gap_frames = milliseconds_to_frames(fixation_settings.max_gap_ms, refresh_hz)
     max_supported_count = max_supported_color_changes(
         total_frames=total_frames,
         target_duration_frames=target_duration_frames,
@@ -177,7 +176,7 @@ def compile_run_spec(
             total_event_count=resolved_target_count,
             target_duration_frames=target_duration_frames,
             min_gap_frames=min_gap_frames,
-            max_gap_frames=max_gap_frames,
+            rng=run_rng,
         )
         if fixation_settings.enabled
         else []

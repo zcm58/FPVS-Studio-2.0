@@ -60,6 +60,21 @@ def test_normalization_scan_detects_mixed_resolution_and_file_types(tmp_path: Pa
     assert scan.mixed_file_type is True
 
 
+def test_normalization_scan_detects_uniform_non_square_images(tmp_path: Path) -> None:
+    source_dir = tmp_path / "stimuli" / "original-images" / "base-set"
+    _write_image(source_dir / "a.png", (128, 96))
+    _write_image(source_dir / "b.png", (128, 96))
+
+    scan = scan_stimulus_sets_for_normalization(
+        project_root=tmp_path,
+        stimulus_sets=[_stimulus_set("base-set", "stimuli/original-images/base-set")],
+    )
+
+    assert scan.needs_normalization is True
+    assert scan.non_square_resolution is True
+    assert scan.mixed_resolution is False
+
+
 def test_normalization_scan_detects_unsupported_and_empty_folders(tmp_path: Path) -> None:
     source_dir = tmp_path / "stimuli" / "original-images" / "base-set"
     source_dir.mkdir(parents=True)

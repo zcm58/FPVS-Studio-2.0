@@ -47,6 +47,12 @@ class StubEngine(PresentationEngine):
         self._captures["open_count"] = int(self._captures.get("open_count", 0)) + 1
         self._captures["runtime_options"] = dict(runtime_options or {})
 
+    def current_display_size_px(self) -> tuple[int, int] | None:
+        size = self._captures.get("current_display_size_px")
+        if not isinstance(size, tuple) or len(size) != 2:
+            return None
+        return (int(size[0]), int(size[1]))
+
     def show_transition_screen(
         self,
         *,

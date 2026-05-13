@@ -394,7 +394,7 @@ class FixationSettingsEditor(QWidget):
         self.max_gap_spin = QSpinBox(self)
         self.max_gap_spin.setObjectName("max_gap_spin")
         self.max_gap_spin.setRange(0, 10000)
-        self.max_gap_spin.valueChanged.connect(self._apply_fixation_settings)
+        self.max_gap_spin.setVisible(False)
 
         self.base_color_combo = _color_combo(
             object_name="fixation_base_color_combo",
@@ -490,7 +490,6 @@ class FixationSettingsEditor(QWidget):
         timing_layout.setVerticalSpacing(form_spacing)
         timing_layout.addRow("Color change duration (ms)", self.target_duration_spin)
         timing_layout.addRow("Minimum gap (ms)", self.min_gap_spin)
-        timing_layout.addRow("Maximum gap (ms)", self.max_gap_spin)
 
         self.fixation_response_group = QWidget(self.fixation_panel)
         response_group_layout = QVBoxLayout(self.fixation_response_group)
@@ -942,7 +941,7 @@ class FixationSettingsEditor(QWidget):
                 no_immediate_repeat_count=no_immediate_repeat,
                 target_duration_ms=self.target_duration_spin.value(),
                 min_gap_ms=self.min_gap_spin.value(),
-                max_gap_ms=self.max_gap_spin.value(),
+                max_gap_ms=self._document.project.settings.fixation_task.max_gap_ms,
                 base_color=str(self.base_color_combo.currentData()),
                 target_color=str(self.target_color_combo.currentData()),
                 response_key=response_key,

@@ -98,7 +98,6 @@ def _format_profile_details(profile: ConditionTemplateProfile) -> str:
                 ),
                 f"Fixation cross timing: {fixation.target_duration_ms} ms",
                 f"Minimum time between color changes: {fixation.min_gap_ms} ms",
-                f"Maximum time between color changes: {fixation.max_gap_ms} ms",
             ],
         ),
         (

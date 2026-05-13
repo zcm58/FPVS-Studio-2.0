@@ -37,6 +37,11 @@ class PresentationEngine(ABC):
             base_hz=run_spec.condition.base_hz,
         )
 
+    def current_display_size_px(self) -> tuple[int, int] | None:
+        """Return the active session window size in pixels when available."""
+
+        return None
+
     @abstractmethod
     def probe_displays(self) -> list[dict[str, object]]:
         """Return discovered display information."""

@@ -91,6 +91,8 @@ def _details_text(scan: ImageNormalizationScan) -> str:
     issues: list[str] = []
     if scan.mixed_resolution:
         issues.append("mixed image sizes")
+    if scan.non_square_resolution:
+        issues.append("non-square image sizes")
     if scan.mixed_file_type:
         issues.append("mixed file types")
     if scan.unsupported_source_type:

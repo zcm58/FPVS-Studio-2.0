@@ -103,14 +103,18 @@ def validate_selected_condition(
         raise CompileError(
             f"Condition '{condition.name}' cannot use the same folder for base and oddball images."
         )
-    if (
-        base_set.resolution is not None
-        and oddball_set.resolution is not None
-        and base_set.resolution != oddball_set.resolution
-    ):
-        raise CompileError(
-            f"Condition '{condition.name}' uses stimulus sets with mismatched resolutions."
-        )
+    for role_label, stimulus_set in (("Base", base_set), ("Oddball", oddball_set)):
+        if stimulus_set.resolution is None:
+            raise CompileError(
+                f"{role_label} stimulus set '{stimulus_set.name}' must be normalized "
+                "to square images before launch."
+            )
+        if stimulus_set.resolution.width_px != stimulus_set.resolution.height_px:
+            raise CompileError(
+                f"{role_label} stimulus set '{stimulus_set.name}' uses non-square "
+                f"{stimulus_set.resolution.width_px}x{stimulus_set.resolution.height_px} "
+                "images. Normalize the selected images to square PNG copies before launch."
+            )
     if condition.duty_cycle_mode == DutyCycleMode.BLANK_50:
         try:
             on_off_frames(

@@ -118,6 +118,10 @@ resolves real source or derived asset paths from the manifest. Runtime preflight
 verifies those files before launch, and the presentation engine resolves them
 relative to the project root during playback.
 
+Launchable condition images must be square. Base and oddball source resolutions may
+differ, such as `512x512` and `1024x1024`, because playback size is controlled by
+compiled display geometry rather than native image pixel dimensions.
+
 ## v1 scheduling policy
 
 The compiler currently emits a seed-deterministic schedule:
@@ -127,8 +131,8 @@ The compiler currently emits a seed-deterministic schedule:
 - sorted image paths before scheduling
 - per-role seeded shuffling so every base image and every oddball image is shown once
   per role cycle before that role's pool is reshuffled
-- deterministic fixation spacing from the configured per-sequence count and gap
-  constraints
+- balanced seeded-jitter fixation target onsets from the realized target count,
+  target duration, and minimum-gap edge/inter-target buffers
 - a condition-start trigger event at the first stimulus onset when a condition trigger
   code is present
 - an `oddball_onset` trigger event at each oddball stimulus onset, using the project
