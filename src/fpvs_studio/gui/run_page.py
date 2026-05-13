@@ -370,6 +370,7 @@ class RunPage(QWidget):
             callback=_launch,
             dialog_factory=_compat_progress_dialog,
             window_title="FPVS Studio",
+            persistent_thread=True,
         )
         self._active_launch_task = task
         self._update_launch_buttons()
