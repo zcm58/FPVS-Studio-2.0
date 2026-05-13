@@ -138,7 +138,12 @@ scripts\build_release.cmd
 ```
 
 The wrapper builds the PyInstaller bundle first, then builds the setup EXE from that
-fresh bundle. When iterating after dependencies are already installed, use:
+fresh bundle. The default release build refreshes editable package dependencies with `pip` before
+PyInstaller runs. In Codex or any sandboxed runner, start `.\scripts\build_release.ps1`
+with elevated network permissions so dependency resolution can fetch build backend
+packages such as `hatchling` instead of failing and needing a second run.
+
+When iterating after dependencies are already installed, use:
 
 ```powershell
 .\scripts\build_release.ps1 -SkipInstall

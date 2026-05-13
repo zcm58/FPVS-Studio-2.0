@@ -25,6 +25,13 @@ function Invoke-RepoScript {
 Push-Location $RepoRoot
 try {
     Write-Output "Building FPVS Studio executable bundle..."
+    if (-not $SkipInstall) {
+        Write-Output (
+            "Network access is required for this release build because the executable " +
+            "stage refreshes editable package dependencies with pip. In Codex or another " +
+            "sandboxed runner, run this script with elevated network permissions."
+        )
+    }
     if ($SkipInstall) {
         & $BuildExeScript -SkipInstall
         if ($LASTEXITCODE -ne 0) {
