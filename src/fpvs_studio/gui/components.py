@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from PySide6.QtCore import QPoint, QSize, Qt, QTimer, Signal
+from PySide6.QtCore import QEvent, QPoint, QSize, Qt, QTimer, Signal
 from PySide6.QtGui import (
     QBrush,
     QColor,
@@ -237,6 +237,8 @@ class SetupChecklistPanel(QFrame):
 class SetupProgressStepper(QWidget):
     """Connected horizontal progress indicator for Setup Wizard steps."""
 
+    step_requested = Signal(int)
+
     _CIRCLE_SIZE = 30
     _CIRCLE_TOP = 0
     _CONNECTOR_GAP = 10
@@ -260,6 +262,7 @@ class SetupProgressStepper(QWidget):
         self.step_circles: list[QLabel] = []
         self.step_labels: list[QLabel] = []
         self.connectors: list[QFrame] = []
+        self._navigation_enabled = False
         self._label_refresh_scheduled = False
 
         self.setMinimumHeight(self._STEPPER_HEIGHT)
@@ -286,6 +289,8 @@ class SetupProgressStepper(QWidget):
             label.setMinimumWidth(0)
             label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
 
+            for widget in (item, circle, label):
+                widget.installEventFilter(self)
             self.step_items.append(item)
             self.step_circles.append(circle)
             self.step_labels.append(label)
@@ -320,6 +325,24 @@ class SetupProgressStepper(QWidget):
         super().showEvent(event)
         self._schedule_elided_label_refresh()
 
+    def eventFilter(self, watched: object, event: QEvent) -> bool:  # noqa: N802
+        if (
+            self._navigation_enabled
+            and event.type() == QEvent.Type.MouseButtonRelease
+            and getattr(event, "button", lambda: None)() == Qt.MouseButton.LeftButton
+        ):
+            step_index = self._step_index_for_watched_widget(watched)
+            if step_index is not None:
+                self.step_requested.emit(step_index)
+                return True
+        return super().eventFilter(watched, event)
+
+    def set_navigation_enabled(self, enabled: bool) -> None:
+        self._navigation_enabled = bool(enabled)
+        cursor = Qt.CursorShape.PointingHandCursor if enabled else Qt.CursorShape.ArrowCursor
+        for widget in (*self.step_items, *self.step_circles, *self.step_labels):
+            widget.setCursor(cursor)
+
     def set_active_index(self, active_index: int) -> None:
         active_index = max(0, min(active_index, len(self._steps) - 1))
         for index, (item, circle, label) in enumerate(
@@ -346,6 +369,14 @@ class SetupProgressStepper(QWidget):
             connector.setProperty("setupProgressState", state)
             refresh_widget_style(connector)
         self._refresh_elided_labels()
+
+    def _step_index_for_watched_widget(self, watched: object) -> int | None:
+        for index, widgets in enumerate(
+            zip(self.step_items, self.step_circles, self.step_labels, strict=True)
+        ):
+            if watched in widgets:
+                return index
+        return None
 
     def _schedule_elided_label_refresh(self) -> None:
         if self._label_refresh_scheduled:

@@ -22,6 +22,7 @@ from fpvs_studio.core.condition_template_profiles import (
     SIXTY_HZ_BLANK_FIXATION_PROFILE_ID,
     STUDIO_DEFAULT_PROFILE_ID,
 )
+from fpvs_studio.core.enums import DutyCycleMode
 from fpvs_studio.core.models import ConditionTemplateProfile
 from fpvs_studio.gui.components import (
     PathValueLabel,
@@ -144,7 +145,7 @@ class ProjectOverviewEditor(QWidget):
         header_title = QLabel("Project Details", header_text)
         header_title.setObjectName("project_overview_title")
         header_subtitle = QLabel(
-            "Name the experiment and choose the default image timing template.",
+            "Name the experiment and choose continuous or 50% blank image timing.",
             header_text,
         )
         header_subtitle.setObjectName("project_overview_subtitle")
@@ -160,7 +161,7 @@ class ProjectOverviewEditor(QWidget):
         metadata_layout.addRow("Project Name", self.project_name_edit)
         metadata_layout.addRow("Description", self.project_description_edit)
         metadata_layout.addRow("Project Folder", self.project_root_value)
-        metadata_layout.addRow("Condition Template", condition_profile_row)
+        metadata_layout.addRow("Image Timing", condition_profile_row)
 
         form_panel = QWidget(self.project_overview_card)
         form_layout = QVBoxLayout(form_panel)
@@ -219,7 +220,12 @@ class ProjectOverviewEditor(QWidget):
     def _refresh_condition_profile_widgets(self) -> None:
         profiles = self._load_condition_template_profiles()
         self._condition_profiles_by_id = {profile.profile_id: profile for profile in profiles}
-        selected_profile_id = self._document.project.settings.condition_profile_id
+        project = self._document.project
+        selected_profile_id = project.settings.condition_profile_id
+        displayed_profile_id = selected_profile_id or self._profile_id_for_duty_cycle(
+            project.settings.condition_defaults.duty_cycle_mode,
+            profiles,
+        )
         with QSignalBlocker(self.condition_profile_combo):
             self.condition_profile_combo.clear()
             for profile in profiles:
@@ -235,10 +241,10 @@ class ProjectOverviewEditor(QWidget):
                         tooltip,
                         Qt.ItemDataRole.ToolTipRole,
                     )
-            if selected_profile_id is None:
+            if displayed_profile_id is None:
                 self.condition_profile_combo.setCurrentIndex(-1)
             else:
-                selected_index = self.condition_profile_combo.findData(selected_profile_id)
+                selected_index = self.condition_profile_combo.findData(displayed_profile_id)
                 self.condition_profile_combo.setCurrentIndex(
                     selected_index if selected_index >= 0 else -1
                 )
@@ -252,6 +258,16 @@ class ProjectOverviewEditor(QWidget):
             selected_profile is not None and bool(self._document.project.conditions)
         )
         self._refresh_checklist()
+
+    def _profile_id_for_duty_cycle(
+        self,
+        duty_cycle_mode: DutyCycleMode,
+        profiles: list[ConditionTemplateProfile],
+    ) -> str | None:
+        for profile in profiles:
+            if profile.defaults.condition.duty_cycle_mode == duty_cycle_mode:
+                return profile.profile_id
+        return None
 
     def _apply_project_name(self) -> None:
         try:

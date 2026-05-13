@@ -156,7 +156,8 @@ Current planned seams:
   Display settings include refresh rate, black/dark-gray background choices, and
   project-wide stimulus visual angle geometry. Detailed Conditions no longer exposes a
   wizard advanced editor; duty-cycle selection is
-  centralized in the Project Details condition template selector. Stimuli Manager
+  centralized in the Project Details image-timing selector, backed by
+  condition-template profiles. Stimuli Manager
   remains an internal support page, not a guided setup step.
 - GUI project management uses `manage_projects_dialog.py` as a themed component-layer
   surface while `controller.py` owns disk-backed project discovery, recent-project

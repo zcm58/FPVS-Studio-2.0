@@ -86,7 +86,7 @@ class ManageProjectsDialog(QDialog):
 
         self.filter_edit = QLineEdit(list_panel)
         self.filter_edit.setObjectName("manage_projects_filter_edit")
-        self.filter_edit.setPlaceholderText("Filter projects")
+        self.filter_edit.setPlaceholderText("Search projects..")
         self.filter_edit.textChanged.connect(self._apply_filter)
         list_layout.addWidget(self.filter_edit)
 

@@ -13,13 +13,11 @@ Use this page to find planning material before making feature-sized changes.
 
 Current inventory:
 
-- Planned plans: `exec-plans/planned/patch-update-workflow.md`.
+- Planned plans include patch updates, protocol configurability, luminance/RMS
+  equalization investigation, sinusoidal contrast modulation, and participant fixation
+  tutorial workflow.
 - Active plans: none.
-- Recently completed GUI/tooling plans include the GUI QOL polish pass, the packaged
-  update-checker regression repair, the Inno Setup installer workflow, the beta 4 startup
-  update/About polish, the beta 5 setup/update UX polish, the setup wizard shared
-  launch-surface polish, the FPVS Toolbox image preparation tool, the in-app update
-  checker, and BioSemi serial trigger output.
+- Completed plans: none retained in-tree.
 
 Draft concrete future work in `planned/`. Move it to `active/` before implementing
 changes that affect user workflows, public contracts, or multiple layers. Keep small bug

@@ -165,6 +165,7 @@ class SetupWizardPage(QWidget):
         self._readiness_cache: tuple[tuple[int, float, bool], LauncherReadinessReport] | None = (
             None
         )
+        self._step_jump_enabled = False
         self._active_normalization_task: ProgressTask | None = None
         self._refresh_timer = QTimer(self)
         self._refresh_timer.setSingleShot(True)
@@ -250,6 +251,7 @@ class SetupWizardPage(QWidget):
             tuple(title for _key, title in _WIZARD_STEPS),
             parent=self,
         )
+        self.progress_steps.step_requested.connect(self._go_to_step_from_progress)
         self.progress_step_labels = self.progress_steps.step_labels
 
         progress_panel = QWidget(self)
@@ -413,8 +415,15 @@ class SetupWizardPage(QWidget):
     def is_launch_ready(self) -> bool:
         return self._readiness_report().badge_state == "ready"
 
-    def open_wizard(self, *, step_key: str | None = None) -> None:
+    def open_wizard(
+        self,
+        *,
+        step_key: str | None = None,
+        allow_step_jumps: bool | None = None,
+    ) -> None:
         self.flush_pending_edits()
+        if allow_step_jumps is not None:
+            self._step_jump_enabled = allow_step_jumps
         if step_key is not None:
             self._active_step_index = self._step_index_for_key(step_key)
         self.refresh()
@@ -644,6 +653,13 @@ class SetupWizardPage(QWidget):
 
     def _advance_to_next_step(self) -> None:
         self._active_step_index += 1
+        self.refresh()
+
+    def _go_to_step_from_progress(self, step_index: int) -> None:
+        if not self._step_jump_enabled or self._active_normalization_task is not None:
+            return
+        self.flush_pending_edits()
+        self._active_step_index = max(0, min(step_index, len(_WIZARD_STEPS) - 1))
         self.refresh()
 
     def _maybe_normalize_condition_images_before_advance(self) -> bool:
@@ -1031,6 +1047,7 @@ class SetupWizardPage(QWidget):
 
     def _refresh_progress_steps(self) -> None:
         current = self._active_step_index
+        self.progress_steps.set_navigation_enabled(self._step_jump_enabled)
         self.progress_steps.set_active_index(current)
 
     def _step_index_for_key(self, step_key: str) -> int:

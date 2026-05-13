@@ -125,7 +125,7 @@ class StudioMainWindow(QMainWindow):
             launch_action=self.launch_action,
         )
         self.home_page.bind_navigation_actions(
-            edit_setup=self.show_setup_wizard,
+            edit_setup=lambda: self.show_setup_wizard(allow_step_jumps=True),
         )
         self._create_menu_and_toolbar()
         self._button_hover_animators: list[ButtonHoverAnimator] = []
@@ -159,11 +159,11 @@ class StudioMainWindow(QMainWindow):
         self._sync_home_chrome_offset()
         self.main_stack.setCurrentWidget(self.home_page)
 
-    def show_setup_wizard(self) -> None:
+    def show_setup_wizard(self, *, allow_step_jumps: bool = False) -> None:
         self._set_home_chrome_visible(True)
         self._apply_setup_window_size()
         self.main_stack.setCurrentWidget(self.setup_wizard_page)
-        self.setup_wizard_page.open_wizard()
+        self.setup_wizard_page.open_wizard(allow_step_jumps=allow_step_jumps)
 
     def show_image_resizer(self) -> None:
         self.flush_pending_edits()
@@ -175,7 +175,7 @@ class StudioMainWindow(QMainWindow):
         if self._current_project_is_ready_to_launch():
             self.show_home()
         else:
-            self.show_setup_wizard()
+            self.show_setup_wizard(allow_step_jumps=False)
 
     def _current_project_is_ready_to_launch(self) -> bool:
         report = _launcher_readiness_report(

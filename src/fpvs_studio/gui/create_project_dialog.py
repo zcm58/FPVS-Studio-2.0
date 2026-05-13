@@ -65,7 +65,7 @@ class CreateProjectDialog(QDialog):
 
         self.condition_profile_combo = QComboBox(self)
         self.condition_profile_combo.setObjectName("condition_profile_combo")
-        self.condition_profile_combo.setPlaceholderText("Select a condition template profile...")
+        self.condition_profile_combo.setPlaceholderText("Select image timing...")
         self.manage_templates_button = QPushButton("Manage Templates...", self)
         self.manage_templates_button.setObjectName("manage_condition_templates_button")
         self.manage_templates_button.clicked.connect(self._manage_templates)
@@ -79,7 +79,7 @@ class CreateProjectDialog(QDialog):
         form_layout.addRow("Project Name", self.project_name_edit)
         form_layout.addRow("", self.project_name_validation_label)
         form_layout.addRow("Project Folder", root_layout)
-        form_layout.addRow("Condition Template", profile_layout)
+        form_layout.addRow("Image Timing", profile_layout)
 
         self.button_box = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel,
@@ -139,7 +139,7 @@ class CreateProjectDialog(QDialog):
                     userData=profile.profile_id,
                 )
             if current_profile_id is None:
-                self.condition_profile_combo.setCurrentIndex(-1)
+                self.condition_profile_combo.setCurrentIndex(0 if profiles else -1)
             else:
                 selected_index = self.condition_profile_combo.findData(current_profile_id)
                 self.condition_profile_combo.setCurrentIndex(
@@ -179,8 +179,8 @@ class CreateProjectDialog(QDialog):
         if self.condition_profile_id is None:
             QMessageBox.warning(
                 self,
-                "Condition Template Required",
-                "Select a condition template profile before creating the project.",
+                "Image Timing Required",
+                "Select Continuous Images or 50% Blank Images before creating the project.",
             )
             self.condition_profile_combo.setFocus()
             return

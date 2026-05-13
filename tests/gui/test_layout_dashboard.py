@@ -952,6 +952,49 @@ def test_setup_wizard_navigation_has_no_conditions_advanced_editor(
     assert window.main_stack.currentWidget() is window.home_page
 
 
+def test_setup_wizard_stepper_is_passive_during_first_time_setup(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Initial Stepper Project")
+    guide = window.setup_wizard_page
+    window.show_setup_wizard()
+    QApplication.processEvents()
+
+    qtbot.mouseClick(guide.progress_steps.step_circles[3], Qt.MouseButton.LeftButton)
+
+    assert guide.step_stack.currentWidget() is guide.project_step_surface
+
+
+def test_edit_setup_stepper_can_jump_to_any_step(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Editable Stepper Project")
+    _prepare_compile_ready_project(window, tmp_path / "editable-stepper-assets")
+    assert window.save_project() is True
+
+    controller.open_project(window.document.project_root)
+    assert controller.main_window is not None
+    qtbot.addWidget(controller.main_window)
+    reopened = controller.main_window
+    assert reopened.main_stack.currentWidget() is reopened.home_page
+
+    edit_setup_button = reopened.home_page.findChild(QPushButton, "home_edit_setup_button")
+    assert edit_setup_button is not None
+    qtbot.mouseClick(edit_setup_button, Qt.MouseButton.LeftButton)
+    QApplication.processEvents()
+
+    guide = reopened.setup_wizard_page
+    qtbot.mouseClick(guide.progress_steps.step_circles[4], Qt.MouseButton.LeftButton)
+    assert guide.step_stack.currentWidget() is guide.response_step_surface
+
+    qtbot.mouseClick(guide.progress_steps.step_circles[1], Qt.MouseButton.LeftButton)
+    assert guide.step_stack.currentWidget() is guide.conditions_step_surface
+
+
 def test_project_details_step_requires_description_before_next(
     qtbot,
     controller: StudioController,
@@ -3300,4 +3343,3 @@ def test_run_page_surfaces_blocking_resolution_mismatch_warning(
 
     assert captured_errors == [("Launch Error", warning_message)]
     assert window.run_page._active_launch_task is None
-

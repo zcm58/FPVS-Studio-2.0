@@ -789,6 +789,38 @@ def test_condition_template_selection_standardizes_existing_rows(
     assert second_after.oddball_cycle_repeats_per_sequence == 146
 
 
+def test_unprofiled_project_shows_continuous_timing_and_can_switch_to_blank(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Legacy Timing Choice")
+
+    qtbot.mouseClick(window.conditions_page.add_condition_button, Qt.MouseButton.LeftButton)
+    condition_id = window.conditions_page.selected_condition_id()
+    assert condition_id is not None
+    condition = window.document.get_condition(condition_id)
+    assert condition is not None
+    assert condition.duty_cycle_mode == DutyCycleMode.CONTINUOUS
+    assert window.document.project.settings.condition_profile_id is None
+
+    project_editor = window.setup_dashboard_page.project_overview_editor
+    assert project_editor.condition_profile_combo.currentData() == STUDIO_DEFAULT_PROFILE_ID
+    blank_index = project_editor.condition_profile_combo.findData(
+        SIXTY_HZ_BLANK_FIXATION_PROFILE_ID
+    )
+    assert blank_index >= 0
+    project_editor.condition_profile_combo.setCurrentIndex(blank_index)
+
+    condition = window.document.get_condition(condition_id)
+    assert condition is not None
+    assert condition.duty_cycle_mode == DutyCycleMode.BLANK_50
+    assert (
+        window.document.project.settings.condition_profile_id
+        == SIXTY_HZ_BLANK_FIXATION_PROFILE_ID
+    )
+
+
 def test_switching_existing_blank_project_to_continuous_compiles_without_blank_frames(
     qtbot,
     controller: StudioController,

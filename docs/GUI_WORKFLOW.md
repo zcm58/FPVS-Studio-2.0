@@ -64,6 +64,9 @@ The authoring window is organized around two user-facing modes:
   - `Next` is disabled until the active step is complete
   - the top progress indicator is a compact connected numbered stepper with
     completed/current/upcoming states, without redundant complete-state status bars
+  - when a user opens setup from a ready project's `Edit Setup` action, the numbered
+    stepper is clickable and can jump directly to any setup step; first-time setup
+    still advances through the gated `Next` flow
   - the wizard uses the compact Welcome/Home-sized default window while keeping
     guided steps free of Advanced buttons and vertical scrolling
   - guided steps use a shared setup step surface for consistent width, margins,
@@ -76,9 +79,10 @@ The authoring window is organized around two user-facing modes:
   - Project uses a focused centered card, keeping the project folder path compact
     and secondary; project name and description are required before continuing to
     Conditions
-  - the Project condition template selector is the user-facing source of
-    truth for condition duty-cycle mode; existing conditions are standardized
-    when the selected template changes
+  - the Project image-timing selector is the user-facing source of
+    truth for condition duty-cycle mode; it is backed by condition-template profiles,
+    defaults to Continuous Images, and existing conditions are standardized when the
+    selected timing changes
   - Experiment combines display, image-size, and session settings in one compact centered card
   - the Display column exposes display refresh rate and presentation background
     (`Black` or `Dark Gray`); current launches always use PsychoPy, beta test-mode,

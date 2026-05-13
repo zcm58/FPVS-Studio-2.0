@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QPalette
 from PySide6.QtWidgets import QLabel, QPushButton
 
@@ -103,6 +104,20 @@ def test_setup_progress_stepper_marks_step_states(qtbot) -> None:
     assert stepper.step_items[2].property("setupProgressState") == "upcoming"
     assert stepper.step_circles[0].text() == "\u2713"
     assert stepper.step_circles[1].text() == "2"
+
+
+def test_setup_progress_stepper_emits_clicks_only_when_navigation_enabled(qtbot) -> None:
+    stepper = SetupProgressStepper(["Project", "Conditions", "Review"])
+    qtbot.addWidget(stepper)
+    requested: list[int] = []
+    stepper.step_requested.connect(requested.append)
+
+    qtbot.mouseClick(stepper.step_circles[2], Qt.MouseButton.LeftButton)
+    assert requested == []
+
+    stepper.set_navigation_enabled(True)
+    qtbot.mouseClick(stepper.step_circles[2], Qt.MouseButton.LeftButton)
+    assert requested == [2]
 
 
 def test_setup_checklist_panel_renders_status_rows(qtbot) -> None:

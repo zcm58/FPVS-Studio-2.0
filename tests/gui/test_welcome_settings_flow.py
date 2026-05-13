@@ -228,6 +228,7 @@ def test_manage_projects_dialog_lists_projects_from_saved_root(
     assert open_button is not None
     assert copy_button is not None
     assert delete_button is not None
+    assert filter_edit.placeholderText() == "Search projects.."
     assert project_list.count() == 1
     assert project_list.item(0).text() == "Managed Root Project"
     assert project_list.item(0).toolTip() == str(scaffold.project_root)
@@ -968,7 +969,7 @@ def test_opening_project_outside_saved_root_is_allowed_and_keeps_saved_root(
     assert controller.load_fpvs_root_dir() == root_dir
 
 
-def test_create_project_dialog_requires_condition_template_selection(
+def test_create_project_dialog_defaults_to_continuous_image_timing(
     qtbot,
     tmp_path: Path,
     monkeypatch,
@@ -977,6 +978,7 @@ def test_create_project_dialog_requires_condition_template_selection(
     qtbot.addWidget(dialog)
     assert dialog.condition_profile_combo.itemText(0) == "Continuous Images"
     assert dialog.condition_profile_combo.itemData(0) == STUDIO_DEFAULT_PROFILE_ID
+    assert dialog.condition_profile_combo.currentData() == STUDIO_DEFAULT_PROFILE_ID
     assert STUDIO_DEFAULT_PROFILE_ID not in dialog.condition_profile_combo.itemText(0)
     blank_index = dialog.condition_profile_combo.findData(SIXTY_HZ_BLANK_FIXATION_PROFILE_ID)
     assert blank_index >= 0
@@ -990,16 +992,35 @@ def test_create_project_dialog_requires_condition_template_selection(
         lambda _parent, _title, message: messages.append(message),
     )
 
-    dialog.project_name_edit.setText("Condition Template Required")
+    dialog.project_name_edit.setText("Image Timing Default")
+    dialog.project_root_edit.setText(str(tmp_path))
+    dialog.accept()
+
+    assert dialog.result() == int(dialog.DialogCode.Accepted)
+    assert messages == []
+
+
+def test_create_project_dialog_requires_available_image_timing(
+    qtbot,
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    dialog = CreateProjectDialog(condition_template_profiles=[])
+    qtbot.addWidget(dialog)
+    messages: list[str] = []
+    monkeypatch.setattr(
+        "fpvs_studio.gui.create_project_dialog.QMessageBox.warning",
+        lambda _parent, _title, message: messages.append(message),
+    )
+
+    dialog.project_name_edit.setText("Image Timing Required")
     dialog.project_root_edit.setText(str(tmp_path))
     dialog.accept()
 
     assert dialog.result() != int(dialog.DialogCode.Accepted)
-    assert any("condition template profile" in message.lower() for message in messages)
-
-    dialog.condition_profile_combo.setCurrentIndex(0)
-    dialog.accept()
-    assert dialog.result() == int(dialog.DialogCode.Accepted)
+    assert any(
+        "continuous images or 50% blank images" in message.lower() for message in messages
+    )
 
 
 def test_create_project_dialog_allows_templates_project_name(
