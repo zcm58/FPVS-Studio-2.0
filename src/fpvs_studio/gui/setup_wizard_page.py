@@ -47,7 +47,7 @@ from fpvs_studio.gui.document import ProjectDocument
 from fpvs_studio.gui.image_normalization_dialog import ImageNormalizationDialog
 from fpvs_studio.gui.project_overview_page import ProjectOverviewEditor
 from fpvs_studio.gui.run_page import RunPage
-from fpvs_studio.gui.runtime_settings_page import DisplaySettingsEditor
+from fpvs_studio.gui.runtime_settings_page import DisplaySettingsEditor, ImageDisplaySizeEditor
 from fpvs_studio.gui.session_pages import FixationSettingsEditor, SessionStructureEditor
 from fpvs_studio.gui.window_helpers import (
     LauncherReadinessReport,
@@ -197,6 +197,7 @@ class SetupWizardPage(QWidget):
             show_scope_label=False,
             parent=self,
         )
+        self.image_display_size_editor = ImageDisplaySizeEditor(document, parent=self)
         self.session_structure_editor = SessionStructureEditor(
             document,
             title="Session",
@@ -508,6 +509,17 @@ class SetupWizardPage(QWidget):
         display_column_layout.addWidget(self.runtime_settings_editor)
         display_column_layout.addStretch(1)
 
+        image_size_column = QFrame(content)
+        image_size_column.setProperty("experimentSettingsSection", "true")
+        image_size_column.setMinimumHeight(224)
+        image_size_column_layout = QVBoxLayout(image_size_column)
+        image_size_column_layout.setContentsMargins(14, 12, 14, 12)
+        image_size_column_layout.setSpacing(12)
+        image_size_title = QLabel("Image Size", image_size_column)
+        image_size_title.setProperty("sectionCardRole", "title")
+        image_size_column_layout.addWidget(image_size_title)
+        image_size_column_layout.addWidget(self.image_display_size_editor)
+
         session_column = QFrame(content)
         session_column.setProperty("experimentSettingsSection", "true")
         session_column.setMinimumHeight(224)
@@ -524,11 +536,16 @@ class SetupWizardPage(QWidget):
             QSizePolicy.Policy.Expanding,
             QSizePolicy.Policy.Preferred,
         )
+        self.image_display_size_editor.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Preferred,
+        )
         self.session_structure_editor.setSizePolicy(
             QSizePolicy.Policy.Expanding,
             QSizePolicy.Policy.Preferred,
         )
         content_layout.addWidget(display_column, 2)
+        content_layout.addWidget(image_size_column, 2)
         content_layout.addWidget(session_column, 3)
         experiment_layout.addWidget(content)
 
@@ -866,6 +883,8 @@ class SetupWizardPage(QWidget):
             "Condition order is randomized automatically at launch",
             f"Display: {self.runtime_settings_editor.current_refresh_hz():.2f} Hz, "
             f"{background_label}",
+            f"Image width: {display.stimulus_width_degrees:.1f} deg at "
+            f"{display.viewing_distance_cm:.0f} cm",
             *self._review_timing_estimate_lines(),
         )
         return (

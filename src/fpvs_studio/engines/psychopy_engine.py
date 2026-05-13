@@ -167,7 +167,7 @@ class PsychoPyEngine(PresentationEngine):
                 event.image_path: project_root / Path(event.image_path)
                 for event in run_spec.stimulus_sequence
             }
-            stimuli = self._prepare_stimuli(absolute_paths)
+            stimuli = self._prepare_stimuli(absolute_paths, run_spec=run_spec)
             fixation_stim = create_fixation_stim(visual=visual, window=window, run_spec=run_spec)
             keyboard.clock.reset()
             keyboard.clearEvents()
@@ -452,11 +452,17 @@ class PsychoPyEngine(PresentationEngine):
             frame_index,
         )
 
-    def _prepare_stimuli(self, absolute_paths: Mapping[str, Path]) -> dict[str, Any]:
+    def _prepare_stimuli(
+        self,
+        absolute_paths: Mapping[str, Path],
+        *,
+        run_spec: RunSpec,
+    ) -> dict[str, Any]:
         return prepare_stimuli(
             visual=self._require_visual(),
             window=self._require_window(),
             absolute_paths=absolute_paths,
+            display=run_spec.display,
         )
 
     def _runtime_metadata_for_run(

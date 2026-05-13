@@ -141,13 +141,18 @@ Current planned seams:
   complete-state feedback instead of page-wide completion bars. The setup surface is
   guarded by pytest-qt coverage that checks all six steps at `1120x720` for stable
   frame positioning, disabled vertical scrolling, and visible child-widget clipping.
-  Experiment combines display and session settings in one compact centered card; session
-  order is always randomized automatically at launch while the realized seed remains
-  runtime metadata for reproducibility and legacy fixed-order fields stay
-  schema-compatible. Fixation handles schedule/timing, and
+  Experiment combines display, image-size, and session settings in one compact centered
+  card; session order is always randomized automatically at launch while the realized
+  seed remains runtime metadata for reproducibility and legacy fixed-order fields stay
+  schema-compatible. Image-size settings are project-wide display geometry fields
+  compiled into `RunSpec` so source image resolution stays independent from playback
+  size; the guided setup exposes a full-screen modal preview with live side-panel
+  controls for checking apparent size on the test machine. Fixation handles
+  schedule/timing, and
   Response handles accuracy tracking, response key/window, appearance, and live preview.
-  Display settings are limited to refresh rate and black/dark-gray background choices. Detailed
-  Conditions no longer exposes a wizard advanced editor; duty-cycle selection is
+  Display settings include refresh rate, black/dark-gray background choices, and
+  project-wide stimulus visual angle geometry. Detailed Conditions no longer exposes a
+  wizard advanced editor; duty-cycle selection is
   centralized in the Project Details condition template selector. Stimuli Manager
   remains an internal support page, not a guided setup step.
 - GUI project management uses `manage_projects_dialog.py` as a themed component-layer

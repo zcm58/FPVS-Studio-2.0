@@ -25,6 +25,9 @@ class DisplayRunSpec(FPVSBaseModel):
 
     refresh_hz: float = Field(gt=0)
     background_color: str
+    stimulus_width_degrees: float = Field(gt=0)
+    viewing_distance_cm: float = Field(gt=0)
+    screen_width_cm: float = Field(gt=0)
     frames_per_stimulus: int = Field(gt=0)
     on_frames: int = Field(ge=0)
     off_frames: int = Field(ge=0)

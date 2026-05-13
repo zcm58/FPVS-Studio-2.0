@@ -6,8 +6,10 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
+from PIL import Image
 
 from fpvs_studio.core.compiler import compile_run_spec
+from fpvs_studio.core.display_geometry import visual_angle_width_px
 from fpvs_studio.core.run_spec import TriggerEvent
 from fpvs_studio.engines.psychopy_engine import PsychoPyEngine
 from fpvs_studio.engines.psychopy_text_screens import show_text_screen
@@ -146,6 +148,7 @@ def _build_fake_psychopy(
         def __init__(self, *args, image: str, **kwargs) -> None:
             super().__init__(*args, **kwargs)
             self.image = image
+            self.size = kwargs.get("size")
             self.clear_textures_count = 0
             image_stims.append(self)
             events.append(("image", image))
@@ -376,6 +379,51 @@ def test_psychopy_engine_reuses_prepared_stimulus_within_condition(
     assert len(image_stims) == 1
     assert image_stims[0].draw_count == 2
     assert image_stims[0].clear_textures_count == 1
+
+
+def test_psychopy_engine_sizes_images_from_visual_angle_without_changing_aspect_ratio(
+    monkeypatch,
+    sample_project,
+    sample_project_root,
+) -> None:
+    run_spec = _two_event_run_spec(sample_project, sample_project_root, duplicate_image=True)
+    run_spec.display.stimulus_width_degrees = 8.0
+    run_spec.display.viewing_distance_cm = 80.0
+    run_spec.display.screen_width_cm = 53.0
+    wide_image_path = sample_project_root / "stimuli" / "original-images" / "base-set" / "wide.png"
+    wide_image_path.parent.mkdir(parents=True, exist_ok=True)
+    Image.new("RGB", (200, 100), color=(20, 40, 80)).save(wide_image_path)
+    run_spec.stimulus_sequence[0] = run_spec.stimulus_sequence[0].model_copy(
+        update={"image_path": "stimuli/original-images/base-set/wide.png"}
+    )
+    run_spec.stimulus_sequence = [run_spec.stimulus_sequence[0]]
+    run_spec.display.total_frames = 1
+    captures: dict[str, object] = {}
+    fake_psychopy = _build_fake_psychopy(captures, flip_times=[])
+    engine = PsychoPyEngine()
+    _patch_fake_psychopy(monkeypatch, engine, fake_psychopy)
+
+    try:
+        engine.run_condition(
+            run_spec,
+            sample_project_root,
+            runtime_options={
+                "test_mode": True,
+                "fullscreen": False,
+                "timing_warmup_frames": 0,
+            },
+            trigger_backend=None,
+        )
+    finally:
+        engine.close_session()
+
+    expected_width = visual_angle_width_px(
+        degrees=8.0,
+        viewing_distance_cm=80.0,
+        screen_width_cm=53.0,
+        screen_width_px=1280,
+    )
+    assert _image_stims(captures)[0].size == (expected_width, round(expected_width / 2))
 
 
 def test_psychopy_engine_emits_compiled_triggers_on_presentation_flip(

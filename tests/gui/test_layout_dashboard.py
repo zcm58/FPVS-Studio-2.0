@@ -1735,6 +1735,7 @@ def test_setup_wizard_experiment_and_fixation_steps_are_width_safe(
     assert guide.findChild(QPushButton, "setup_wizard_advanced_button") is None
     _assert_setup_wizard_vertical_scrolling_disabled(guide)
     assert guide.runtime_settings_editor.refresh_hz_spin is not None
+    assert guide.image_display_size_editor.width_degrees_spin is not None
     assert guide.session_structure_editor.block_count_spin is not None
     assert guide.fixation_settings_editor is not guide.step_stack.currentWidget()
     assert guide.runtime_settings_editor.card is None
@@ -1757,6 +1758,10 @@ def test_setup_wizard_experiment_and_fixation_steps_are_width_safe(
         label.text() for label in guide.experiment_settings_card.findChildren(QLabel)
     )
     assert "Display refresh rate" in experiment_labels
+    assert "Image Size" in experiment_labels
+    assert "Image width" in experiment_labels
+    assert "Viewing distance" in experiment_labels
+    assert "Screen width" in experiment_labels
     assert "Repeats per condition" in experiment_labels
     assert "Condition order" in experiment_labels
     assert "randomized automatically" in experiment_labels
@@ -1771,7 +1776,7 @@ def test_setup_wizard_experiment_and_fixation_steps_are_width_safe(
             for widget in guide.experiment_settings_card.findChildren(QWidget)
             if widget.property("experimentSettingsSection") == "true"
         ]
-    ) == 2
+    ) == 3
     for section in guide.experiment_settings_card.findChildren(QWidget):
         if section.property("experimentSettingsSection") == "true":
             assert section.minimumHeight() == 224
@@ -1784,6 +1789,7 @@ def test_setup_wizard_experiment_and_fixation_steps_are_width_safe(
         experiment_page = guide.experiment_step_surface
         experiment_card = guide.experiment_settings_card
         display_panel = guide.runtime_settings_editor
+        image_size_panel = guide.image_display_size_editor
         session_panel = guide.session_structure_editor
         assert guide.shell.page_container.scroll_area.horizontalScrollBar().maximum() == 0
         _assert_setup_wizard_vertical_scrolling_disabled(guide)
@@ -1797,6 +1803,11 @@ def test_setup_wizard_experiment_and_fixation_steps_are_width_safe(
             experiment_card,
             QPoint(display_panel.width(), 0),
         ).x()
+        image_size_left = image_size_panel.mapTo(experiment_card, QPoint(0, 0)).x()
+        image_size_right = image_size_panel.mapTo(
+            experiment_card,
+            QPoint(image_size_panel.width(), 0),
+        ).x()
         session_left = session_panel.mapTo(experiment_card, QPoint(0, 0)).x()
         session_right = session_panel.mapTo(
             experiment_card,
@@ -1805,7 +1816,8 @@ def test_setup_wizard_experiment_and_fixation_steps_are_width_safe(
         assert card_left >= 0
         assert card_right <= experiment_page.width()
         assert experiment_card.width() <= 880
-        assert display_right <= session_left
+        assert display_right <= image_size_left
+        assert image_size_right <= session_left
         assert session_right <= experiment_card.width()
 
         review_item = guide.progress_steps.step_items[-1]
@@ -1818,6 +1830,74 @@ def test_setup_wizard_experiment_and_fixation_steps_are_width_safe(
     window.resize(1120, 720)
     QApplication.processEvents()
     assert guide.shell.page_container.scroll_area.verticalScrollBar().maximum() == 0
+
+
+def test_setup_wizard_experiment_image_size_controls_update_preview_and_review(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Image Size Guided")
+    guide = window.setup_wizard_page
+    window.main_stack.setCurrentWidget(guide)
+    guide.open_wizard(step_key="experiment")
+    editor = guide.image_display_size_editor
+    preview_captures: dict[str, object] = {}
+
+    class _FakePreviewDialog:
+        def __init__(self, document, parent=None) -> None:
+            preview_captures["document"] = document
+            preview_captures["parent"] = parent
+
+        def setGeometry(self, geometry) -> None:  # noqa: N802
+            preview_captures["geometry"] = geometry
+
+        def windowState(self):  # noqa: N802
+            return Qt.WindowState.WindowNoState
+
+        def setWindowState(self, state) -> None:  # noqa: N802
+            preview_captures["state"] = state
+
+        def exec(self) -> int:
+            preview_captures["exec_count"] = int(preview_captures.get("exec_count", 0)) + 1
+            return 1
+
+    monkeypatch.setattr(
+        "fpvs_studio.gui.runtime_settings_page.ImageSizePreviewDialog",
+        _FakePreviewDialog,
+    )
+
+    assert editor.width_degrees_spin.value() == pytest.approx(8.0, abs=0.01)
+    assert editor.viewing_distance_spin.value() == pytest.approx(80.0, abs=0.01)
+    assert editor.screen_width_spin.value() == pytest.approx(53.0, abs=0.01)
+    image_size_labels = "\n".join(label.text() for label in editor.findChildren(QLabel))
+    assert "Image width (deg)" in image_size_labels
+    assert "Viewing distance (cm)" in image_size_labels
+    assert "Screen width (cm)" in image_size_labels
+    original_preview_text = editor.preview_value_label.text()
+
+    editor.width_degrees_spin.setValue(6.5)
+    editor.viewing_distance_spin.setValue(75.0)
+    editor.screen_width_spin.setValue(60.0)
+    QApplication.processEvents()
+
+    display = window.document.project.settings.display
+    assert display.stimulus_width_degrees == pytest.approx(6.5, abs=0.01)
+    assert display.viewing_distance_cm == pytest.approx(75.0, abs=0.01)
+    assert display.screen_width_cm == pytest.approx(60.0, abs=0.01)
+    assert editor.preview_value_label.text() != original_preview_text
+    assert "cm wide" in editor.preview_value_label.text()
+    assert "primary screen" in editor.preview_value_label.text()
+    editor.full_screen_preview_button.click()
+    assert preview_captures["document"] is window.document
+    assert preview_captures["parent"] is editor
+    assert preview_captures["exec_count"] == 1
+    assert preview_captures["state"] & Qt.WindowState.WindowFullScreen
+
+    guide.open_wizard(step_key="review")
+    review_text = "\n".join(label.text() for label in guide.review_card.findChildren(QLabel))
+    assert "Image width: 6.5 deg at 75 cm" in review_text
     next_bottom = guide.setup_wizard_next_button.mapTo(
         guide,
         QPoint(0, guide.setup_wizard_next_button.height()),
@@ -1978,6 +2058,44 @@ def test_setup_wizard_experiment_and_fixation_steps_are_width_safe(
         assert preview_right <= fixation_panel.width()
 
 
+def test_full_screen_image_size_preview_edits_sync_with_experiment_page(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+) -> None:
+    from fpvs_studio.gui.runtime_settings_page import ImageSizePreviewDialog
+
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Image Size Preview Edit")
+    guide = window.setup_wizard_page
+    guide.open_wizard(step_key="experiment")
+    editor = guide.image_display_size_editor
+    dialog = ImageSizePreviewDialog(window.document, editor)
+    qtbot.addWidget(dialog)
+
+    modal_labels = "\n".join(label.text() for label in dialog.findChildren(QLabel))
+    assert "Image width (deg)" in modal_labels
+    assert "Viewing distance (cm)" in modal_labels
+    assert "Screen width (cm)" in modal_labels
+    assert dialog.exit_button.text() == "Exit Preview"
+    original_readout = dialog.preview_value_label.text()
+
+    dialog.width_degrees_spin.setValue(10.0)
+    dialog.viewing_distance_spin.setValue(100.0)
+    dialog.screen_width_spin.setValue(60.0)
+    QApplication.processEvents()
+
+    display = window.document.project.settings.display
+    assert display.stimulus_width_degrees == pytest.approx(10.0, abs=0.01)
+    assert display.viewing_distance_cm == pytest.approx(100.0, abs=0.01)
+    assert display.screen_width_cm == pytest.approx(60.0, abs=0.01)
+    assert editor.width_degrees_spin.value() == pytest.approx(10.0, abs=0.01)
+    assert editor.viewing_distance_spin.value() == pytest.approx(100.0, abs=0.01)
+    assert editor.screen_width_spin.value() == pytest.approx(60.0, abs=0.01)
+    assert dialog.preview_value_label.text() != original_readout
+    assert "10.0 deg at 100.0 cm" in dialog.preview_value_label.text()
+    assert "cm wide" in dialog.preview_value_label.text()
+
+
 def test_setup_wizard_review_uses_centered_confirmation_checklist(
     qtbot,
     controller: StudioController,
@@ -2070,7 +2188,7 @@ def test_setup_wizard_review_uses_centered_confirmation_checklist(
         if label.property("reviewCheckIcon") == "true"
     ]
     assert len(summary_sections) == 4
-    assert len(checklist_rows) == 7
+    assert len(checklist_rows) == 8
     assert len(check_icons) == len(checklist_rows)
     section_title_tops = [
         next(
@@ -2354,6 +2472,10 @@ def test_setup_dashboard_edits_sync_document_and_dedicated_tabs(
     dark_gray_index = runtime_editor.runtime_background_color_combo.findData("#101010")
     assert dark_gray_index >= 0
     runtime_editor.runtime_background_color_combo.setCurrentIndex(dark_gray_index)
+    image_size_editor = dashboard.image_display_size_editor
+    image_size_editor.width_degrees_spin.setValue(7.5)
+    image_size_editor.viewing_distance_spin.setValue(82.0)
+    image_size_editor.screen_width_spin.setValue(54.0)
     window.flush_pending_edits()
     QApplication.processEvents()
 
@@ -2378,6 +2500,9 @@ def test_setup_dashboard_edits_sync_document_and_dedicated_tabs(
     assert settings.fixation_task.no_immediate_repeat_count is True
     assert settings.display.preferred_refresh_hz == pytest.approx(59.94, abs=0.01)
     assert settings.display.background_color == "#101010"
+    assert settings.display.stimulus_width_degrees == pytest.approx(7.5, abs=0.01)
+    assert settings.display.viewing_distance_cm == pytest.approx(82.0, abs=0.01)
+    assert settings.display.screen_width_cm == pytest.approx(54.0, abs=0.01)
     assert settings.triggers.serial_port is None
     assert settings.triggers.baudrate == 115200
 
@@ -2475,6 +2600,10 @@ def test_setup_dashboard_save_load_smoke_persists_dashboard_edited_settings(
     dark_gray_index = runtime_editor.runtime_background_color_combo.findData("#101010")
     assert dark_gray_index >= 0
     runtime_editor.runtime_background_color_combo.setCurrentIndex(dark_gray_index)
+    image_size_editor = dashboard.image_display_size_editor
+    image_size_editor.width_degrees_spin.setValue(9.0)
+    image_size_editor.viewing_distance_spin.setValue(85.0)
+    image_size_editor.screen_width_spin.setValue(55.0)
 
     assert window.save_project() is True
     controller.open_project(window.document.project_root)
@@ -2501,6 +2630,9 @@ def test_setup_dashboard_save_load_smoke_persists_dashboard_edited_settings(
     assert fixation.response_key == "g"
     assert display.preferred_refresh_hz == pytest.approx(120.0, abs=0.01)
     assert display.background_color == "#101010"
+    assert display.stimulus_width_degrees == pytest.approx(9.0, abs=0.01)
+    assert display.viewing_distance_cm == pytest.approx(85.0, abs=0.01)
+    assert display.screen_width_cm == pytest.approx(55.0, abs=0.01)
     assert triggers.serial_port is None
     assert triggers.baudrate == 115200
 
@@ -2508,6 +2640,9 @@ def test_setup_dashboard_save_load_smoke_persists_dashboard_edited_settings(
     assert reopened_dashboard.fixation_settings_editor.changes_per_sequence_spin.value() == 6
     assert reopened_dashboard.runtime_settings_editor.refresh_hz_spin.value() == pytest.approx(
         120.0, abs=0.01
+    )
+    assert reopened_dashboard.image_display_size_editor.width_degrees_spin.value() == pytest.approx(
+        9.0, abs=0.01
     )
     reopened_background = (
         reopened_dashboard.runtime_settings_editor.runtime_background_color_combo.currentData()

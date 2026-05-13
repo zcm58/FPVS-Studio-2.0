@@ -204,6 +204,9 @@ def compile_run_spec(
         display=DisplayRunSpec(
             refresh_hz=refresh_hz,
             background_color=color_to_string(project.settings.display.background_color),
+            stimulus_width_degrees=project.settings.display.stimulus_width_degrees,
+            viewing_distance_cm=project.settings.display.viewing_distance_cm,
+            screen_width_cm=project.settings.display.screen_width_cm,
             frames_per_stimulus=frames_per_stimulus_value,
             on_frames=on_frames,
             off_frames=off_frames,

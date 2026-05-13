@@ -201,6 +201,9 @@ class DisplaySettings(FPVSBaseModel):
     background_color: str | tuple[int, int, int] = "#000000"
     monitor_name: str | None = None
     preferred_refresh_hz: float | None = Field(default=None, gt=0)
+    stimulus_width_degrees: float = Field(default=8.0, gt=0)
+    viewing_distance_cm: float = Field(default=80.0, gt=0)
+    screen_width_cm: float = Field(default=53.0, gt=0)
 
     @field_validator("background_color")
     @classmethod

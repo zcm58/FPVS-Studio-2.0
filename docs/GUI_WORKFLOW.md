@@ -79,10 +79,15 @@ The authoring window is organized around two user-facing modes:
   - the Project condition template selector is the user-facing source of
     truth for condition duty-cycle mode; existing conditions are standardized
     when the selected template changes
-  - Experiment combines display and session settings in one compact centered card
-  - the Display column exposes only display refresh rate and presentation background
+  - Experiment combines display, image-size, and session settings in one compact centered card
+  - the Display column exposes display refresh rate and presentation background
     (`Black` or `Dark Gray`); current launches always use PsychoPy, beta test-mode,
     fullscreen playback, and the default display without exposing those as choices
+  - the Image Size column exposes project-wide image visual-angle width in degrees,
+    approximate viewing distance in cm, physical screen width in cm, and a full-screen
+    modal preview based on the primary screen; the preview includes a side control panel
+    for live edits to those same values, and source image resolution remains independent
+    from on-screen playback size
   - the Session column exposes repeats per condition and the fixed Space start key;
     condition order is always randomized automatically for each launch
   - the Conditions step uses compact condition rows and a combined condition
@@ -170,8 +175,9 @@ preprocessing services but must not silently mutate the active project.
 - Guided setup composition lives in `src/fpvs_studio/gui/setup_wizard_page.py`; it
   uses existing document services and editor widgets rather than duplicating project
   state.
-- Display settings editing lives in `src/fpvs_studio/gui/runtime_settings_page.py`;
-  it is intentionally limited to refresh rate and background color.
+- Display and image-size settings editing lives in
+  `src/fpvs_studio/gui/runtime_settings_page.py`; refresh/background controls stay
+  separate from visual-angle geometry controls.
 - Feature-sized GUI workflow reworks should create or update an execution plan in
   `docs/exec-plans/active/` before implementation.
 - Condition-template management lives in
