@@ -135,6 +135,9 @@ def test_session_and_fixation_settings_round_trip(
     session_page.block_count_spin.setValue(3)
     assert not hasattr(session_page, "randomize_checkbox")
 
+    project_page = window.setup_dashboard_page.project_overview_editor
+    project_page.participant_tutorial_checkbox.setChecked(False)
+
     fixation_page = window.fixation_cross_settings_page
     fixation_page.fixation_enabled_checkbox.setChecked(True)
     fixation_page.changes_per_sequence_spin.setValue(4)
@@ -179,6 +182,7 @@ def test_session_and_fixation_settings_round_trip(
     assert session.continue_key == "space"
     assert fixation.enabled is True
     assert fixation.accuracy_task_enabled is True
+    assert fixation.participant_tutorial_enabled is False
     assert fixation.target_count_mode == "randomized"
     assert fixation.changes_per_sequence == 4
     assert fixation.target_count_min == 2

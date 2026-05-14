@@ -217,6 +217,10 @@ def compile_run_spec(
         ),
         fixation=FixationStyleSpec(
             accuracy_task_enabled=fixation_settings.accuracy_task_enabled,
+            participant_tutorial_enabled=(
+                fixation_settings.accuracy_task_enabled
+                and fixation_settings.participant_tutorial_enabled
+            ),
             default_color=color_to_string(fixation_settings.base_color),
             target_color=color_to_string(fixation_settings.target_color),
             response_key=fixation_settings.response_key,

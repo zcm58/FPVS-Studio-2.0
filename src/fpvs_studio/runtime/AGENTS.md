@@ -33,6 +33,8 @@ This phase should establish:
 - score fixation responses from raw key logs
 - apply fixation accuracy scoring windows/false-alarm logic and build condition-level accuracy/RT summaries
 - trigger participant-facing end-of-condition feedback via the engine when the fixation accuracy task is enabled
+- run the participant fixation tutorial once before the first condition when the
+  compiled fixation accuracy and tutorial settings are enabled
 - aggregate run results into a session result
 - write run/session export artifacts
 - append project-level reporting indexes under `logs/` while keeping detailed

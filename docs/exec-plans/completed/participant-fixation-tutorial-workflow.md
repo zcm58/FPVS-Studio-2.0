@@ -1,19 +1,20 @@
 # Participant Fixation Tutorial Workflow
 
-Status: Planned
+Status: Completed
 
 ## Summary
 
-Add a required participant tutorial before experiment playback when the fixation
-accuracy task is enabled. The tutorial teaches the participant to press Space when the
+Add an optional participant tutorial before experiment playback when the fixation
+accuracy task and tutorial setting are enabled. The tutorial teaches the participant to press Space when the
 fixation cross changes from the configured base color to the configured target color
 (`blue` to `red` with current defaults). The experiment does not begin until the
 participant completes three successful practice detections.
 
 ## User Workflow
 
-When the participant launches a session with fixation accuracy enabled, the session
-starts with:
+During setup, users can enable or disable the participant tutorial for projects that
+use fixation accuracy tracking. When the participant launches a session with fixation
+accuracy and the tutorial enabled, the session starts with:
 
 ```text
 Thank you for participating in our experiment today! Your task is to press the space bar
@@ -54,13 +55,16 @@ You're now ready to begin the experiment. When you're ready, please press space 
 continue.
 ```
 
-Pressing Space on that final screen starts the normal experiment flow.
+Pressing Space on that final screen starts the normal experiment flow. When the
+tutorial is disabled, launch behavior is exactly as it is today: the session opens
+directly on the first condition-start screen.
 
 ## Implementation Boundary
 
 - Run the tutorial once per launched session, before the first condition-start screen.
-- Only run the tutorial when `RunSpec.fixation.accuracy_task_enabled` is true for the
-  session. If the accuracy task is disabled, preserve the existing launch flow.
+- Only run the tutorial when `RunSpec.fixation.accuracy_task_enabled` and the compiled
+  tutorial-enabled setting are both true for the session. If either is disabled,
+  preserve the existing launch flow.
 - Keep `RunSpec` single-condition and do not add tutorial state to condition schedules.
 - Keep FPVS base/oddball image timing unchanged. Tutorial practice frames are outside
   stimulus playback and must not shift compiled condition frame indexes.
@@ -77,8 +81,8 @@ Pressing Space on that final screen starts the normal experiment flow.
   between tutorial and experiment.
 - Use the project fixation style for cross size, line width, base color, target color,
   and response key. Current defaults already express the requested blue-to-red task.
-- Do not add a GUI toggle in the first implementation. The tutorial is part of the
-  fixation accuracy task behavior.
+- Add a setup UX toggle for the tutorial. Keep it subordinate to fixation accuracy
+  tracking so disabling accuracy tracking also disables tutorial behavior.
 - Do not emit condition triggers during tutorial practice. If a future hardware marker
   is needed for tutorial attempts, that should be a separate trigger plan.
 - Keep tutorial metrics lightweight. Prefer participant-facing summary only; if audit
@@ -99,6 +103,9 @@ Pressing Space on that final screen starts the normal experiment flow.
   - Insert tutorial orchestration after `engine.open_session(...)` and display
     resolution verification, before the first condition transition screen.
   - Abort cleanly if Escape is pressed during tutorial screens or attempts.
+- `src/fpvs_studio/gui/project_overview_page.py`
+  - Add a model-bound setup control for enabling/disabling the participant tutorial.
+  - Place the control on the Project Details setup screen as `Enable participant tutorial?`.
 - `src/fpvs_studio/runtime/fixation.py`
   - Reuse or add small helpers for tutorial accuracy and mean RT formatting if that
     avoids duplicating condition-feedback calculations.
@@ -107,11 +114,11 @@ Pressing Space on that final screen starts the normal experiment flow.
 
 ## Tests
 
-- Runtime unit test: fixation accuracy enabled runs the tutorial before the first
-  condition transition and does not call `run_condition` until three successful
-  attempts have completed.
-- Runtime unit test: fixation accuracy disabled skips tutorial and preserves current
-  launch ordering.
+- Runtime unit test: fixation accuracy and tutorial enabled runs the tutorial before
+  the first condition transition and does not call `run_condition` until three
+  successful attempts have completed.
+- Runtime unit test: fixation accuracy disabled or tutorial disabled skips tutorial and
+  preserves current launch ordering.
 - Runtime unit test: a missed tutorial attempt shows the correction/cooldown path and
   resets the required-success count.
 - Runtime unit test: Escape during tutorial aborts the session before condition
@@ -140,5 +147,5 @@ Pressing Space on that final screen starts the normal experiment flow.
   Space by default.
 - Tutorial attempts are practice only; they are not FPVS stimulus events and are not
   part of the EEG trigger schedule.
-- The first implementation keeps the tutorial mandatory when accuracy scoring is
-  enabled. A future setting can make it optional if lab workflow requires that.
+- The first implementation makes the tutorial optional so labs can preserve the current
+  direct-to-condition launch flow when they do not want participant practice.

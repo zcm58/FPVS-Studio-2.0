@@ -20,7 +20,7 @@ from fpvs_studio.core.execution import (
     TriggerRecord,
 )
 from fpvs_studio.core.run_spec import FixationEvent, RunSpec, TriggerEvent
-from fpvs_studio.engines.base import PresentationEngine
+from fpvs_studio.engines.base import FixationTutorialAttemptResult, PresentationEngine
 from fpvs_studio.engines.psychopy_loader import load_psychopy_modules
 from fpvs_studio.engines.psychopy_metadata import runtime_metadata_for_run
 from fpvs_studio.engines.psychopy_stimuli import (
@@ -150,6 +150,74 @@ class PsychoPyEngine(PresentationEngine):
             continue_key=continue_key,
             continue_prompt=None,
         )
+
+    def run_fixation_tutorial_attempt(
+        self,
+        run_spec: RunSpec,
+        *,
+        target_delay_seconds: float,
+    ) -> FixationTutorialAttemptResult:
+        self.open_session(runtime_options=self._runtime_options)
+        visual = self._require_visual()
+        window = self._require_window()
+        keyboard = self._require_keyboard()
+        fixation_stim = create_fixation_stim(visual=visual, window=window, run_spec=run_spec)
+        target_delay_frames = max(
+            1,
+            round(float(target_delay_seconds) * float(run_spec.display.refresh_hz)),
+        )
+        response_window_frames = max(1, run_spec.fixation.response_window_frames)
+        response_key = run_spec.fixation.response_key
+        key_list = [response_key, "escape"]
+        previous_record_frame_intervals = bool(getattr(window, "recordFrameIntervals", False))
+        window.recordFrameIntervals = False
+        if hasattr(window, "frameIntervals"):
+            window.frameIntervals = []
+        try:
+            keyboard.clearEvents()
+            fixation_stim.lineColor = run_spec.fixation.default_color
+            for _frame_index in range(target_delay_frames):
+                if self._aborted:
+                    return FixationTutorialAttemptResult(hit=False, aborted=True)
+                fixation_stim.draw()
+                window.flip()
+                if self._tutorial_escape_pressed(keyboard, key_list=key_list):
+                    return FixationTutorialAttemptResult(hit=False, aborted=True)
+
+            keyboard.clock.reset()
+            keyboard.clearEvents()
+            fixation_stim.lineColor = run_spec.fixation.target_color
+            for frame_index in range(response_window_frames):
+                if self._aborted:
+                    return FixationTutorialAttemptResult(hit=False, aborted=True)
+                fixation_stim.draw()
+                window.flip()
+                keys = keyboard.getKeys(
+                    keyList=key_list,
+                    waitRelease=False,
+                    clear=True,
+                )
+                for key in keys:
+                    key_name = getattr(key, "name", str(key))
+                    if key_name == "escape":
+                        self._aborted = True
+                        return FixationTutorialAttemptResult(hit=False, aborted=True)
+                    if key_name == response_key:
+                        key_rt = getattr(key, "rt", None)
+                        reaction_time_s = (
+                            float(key_rt)
+                            if key_rt is not None
+                            else frame_index / float(run_spec.display.refresh_hz)
+                        )
+                        return FixationTutorialAttemptResult(
+                            hit=True,
+                            reaction_time_s=reaction_time_s,
+                        )
+            return FixationTutorialAttemptResult(hit=False)
+        finally:
+            window.recordFrameIntervals = previous_record_frame_intervals
+            if hasattr(window, "frameIntervals"):
+                window.frameIntervals = []
 
     def run_condition(
         self,
@@ -627,6 +695,17 @@ class PsychoPyEngine(PresentationEngine):
             window.recordFrameIntervals = previous_record_frame_intervals
             if hasattr(window, "frameIntervals"):
                 window.frameIntervals = []
+
+    def _tutorial_escape_pressed(self, keyboard: Any, *, key_list: list[str]) -> bool:
+        keys = keyboard.getKeys(
+            keyList=key_list,
+            waitRelease=False,
+            clear=True,
+        )
+        if any(getattr(key, "name", str(key)) == "escape" for key in keys):
+            self._aborted = True
+            return True
+        return False
 
     def _load_psychopy(self) -> Any:
         if self._psychopy is not None:

@@ -152,6 +152,7 @@ Current planned seams:
   from the configured intended resolution unless the project explicitly uses the current
   screen resolution. Fixation handles target counts, minimum-gap timing, and
   balanced seeded-jitter scheduling across the full condition duration, and
+  Project handles the optional participant tutorial before the first condition, and
   Response handles accuracy tracking, response key/window, appearance, and live preview.
   Display settings include refresh rate, black/dark-gray background choices, and
   project-wide stimulus visual angle geometry. Detailed Conditions no longer exposes a

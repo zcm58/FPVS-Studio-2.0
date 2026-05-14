@@ -768,7 +768,10 @@ def test_setup_wizard_surfaces_steps_and_keeps_shared_editors_available(
     assert project_editor.manage_templates_button is not None
     assert project_editor.apply_profile_to_conditions_button is not None
     assert project_editor.apply_profile_to_conditions_button.isVisible() is False
-    assert project_editor.project_overview_card.maximumWidth() == 880
+    assert project_editor.participant_tutorial_checkbox is not None
+    assert project_editor.participant_tutorial_checkbox.text() == "Enable participant tutorial?"
+    assert project_editor.participant_tutorial_checkbox.toolTip()
+    assert project_editor.project_overview_card.maximumWidth() == 930
     assert project_editor.project_overview_card.title_label.text() == "Project Details"
     assert project_editor.project_overview_card.title_label.isVisible() is False
     setup_icon = project_editor.findChild(QLabel, "setup_project_icon")

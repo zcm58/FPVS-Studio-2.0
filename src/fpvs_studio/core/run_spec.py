@@ -81,6 +81,7 @@ class FixationStyleSpec(FPVSBaseModel):
     """Fixation rendering and response settings used during a run."""
 
     accuracy_task_enabled: bool = False
+    participant_tutorial_enabled: bool = False
     default_color: str
     target_color: str
     response_key: str = "space"

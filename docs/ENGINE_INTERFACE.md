@@ -9,6 +9,8 @@ as PsychoPy. Runtime owns flow and calls engines through
 - Runtime passes compiled `RunSpec` objects and project roots into engines.
 - Engines render transition, instruction, break, feedback, completion, and
   condition playback screens.
+- Engines render one fixation tutorial practice attempt when runtime asks for it;
+  runtime owns the tutorial state machine and metrics.
 - Condition-start transition screens are manual participant gates: runtime passes
   `continue_key="space"` and engines render `Press Space to begin.`
 - Engines may receive runtime options, but runtime-only options must not be

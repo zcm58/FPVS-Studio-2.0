@@ -31,6 +31,8 @@ SessionPlan
   -> create trigger backend
   -> engine.open_session(...)
   -> verify active fullscreen resolution against the configured intended display
+  -> if fixation accuracy and the participant tutorial are enabled:
+       -> run the tutorial once, before the first condition-start screen
   -> for each SessionEntry in order:
        -> engine.show_transition_screen(..., continue_key="space")
        -> engine.run_condition(RunSpec, ...)
@@ -61,6 +63,7 @@ The PsychoPy implementation:
 - reports the active window resolution so runtime can block configured visual-angle
   playback when the current display resolution differs from the intended test resolution
 - shows Space-required condition-start screens and completion text screens
+- runs fixation-only participant tutorial attempts when runtime asks for practice
 - shows a dedicated manual inter-block break screen between non-final blocks
 - preloads each condition's unique image stimuli before playback and releases them when
   the condition ends
@@ -119,6 +122,8 @@ Scoring semantics for the fixation accuracy task:
 - first valid response in-window counts as the target hit
 - responses outside open windows are false alarms
 - mean RT is computed from hits only
+- the optional participant tutorial runs once before the first condition when enabled
+  in setup, and disabling it preserves the direct-to-condition launch flow
 
 ## Exports
 

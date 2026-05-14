@@ -221,6 +221,7 @@ class FixationTaskSettings(FPVSBaseModel):
 
     enabled: bool = False
     accuracy_task_enabled: bool = False
+    participant_tutorial_enabled: bool = True
     changes_per_sequence: int = Field(
         default=0,
         ge=0,

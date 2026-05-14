@@ -83,6 +83,8 @@ The authoring window is organized around two user-facing modes:
     truth for condition duty-cycle mode; it is backed by condition-template profiles,
     defaults to Continuous Images, and existing conditions are standardized when the
     selected timing changes
+  - Project exposes `Enable participant tutorial?`, which controls whether the
+    participant sees the fixation response tutorial before the first condition
   - Experiment combines display, image-size, and session settings in one compact centered card
   - the Display column exposes display refresh rate and presentation background
     (`Black` or `Dark Gray`); current launches always use PsychoPy, beta test-mode,
@@ -236,7 +238,8 @@ The current GUI supports:
 - configuring display refresh rate and choosing a black or dark-gray presentation
   background
 - configuring fixation settings, including an optional fixation accuracy task
-  (Space within 1.0 s of each fixation color change)
+  (Space within 1.0 s of each fixation color change) and optional participant tutorial
+  before the first condition
 - configuring fixed or randomized fixation target counts per condition run; compiled
   color changes are balanced across the full condition with seeded jitter and
   deterministic no-immediate-repeat behavior across consecutive compiled runs
@@ -279,6 +282,8 @@ When enabled in `Fixation & Session`:
 
 - each fixation color change is treated as a response target
 - the participant responds with `Space` within `1.0` second of target onset
+- the optional participant tutorial teaches the response task once before the first
+  condition and is skipped when disabled
 - runtime shows a participant-facing end-of-condition feedback screen with:
   - accuracy percentage and hits/total
   - mean RT (ms, or N/A when no hits)

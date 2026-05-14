@@ -14,10 +14,9 @@ Use this page to find planning material before making feature-sized changes.
 Current inventory:
 
 - Planned plans include patch updates, protocol configurability, luminance/RMS
-  equalization investigation, sinusoidal contrast modulation, and participant fixation
-  tutorial workflow.
+  equalization investigation, and sinusoidal contrast modulation.
 - Active plans: none.
-- Completed plans: none retained in-tree.
+- Completed plans include participant fixation tutorial workflow.
 
 Draft concrete future work in `planned/`. Move it to `active/` before implementing
 changes that affect user workflows, public contracts, or multiple layers. Keep small bug

@@ -50,6 +50,7 @@ def test_fixation_settings_defaults_match_current_gui_presets() -> None:
 
     assert settings.enabled is False
     assert settings.accuracy_task_enabled is False
+    assert settings.participant_tutorial_enabled is True
     assert settings.changes_per_sequence == 0
     assert settings.target_count_mode == "fixed"
     assert settings.base_color == "#0000FF"

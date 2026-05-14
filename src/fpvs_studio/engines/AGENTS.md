@@ -21,6 +21,8 @@ play compiled runs end to end.
 - Add a real but minimal `PsychoPyEngine`.
 - Render runtime-owned instruction, inter-block break, and completion screens without moving session sequencing into the engine.
 - Render runtime-owned end-of-condition fixation feedback screens without moving scoring/session decisions into the engine.
+- Render single fixation tutorial practice attempts while runtime owns tutorial
+  sequencing, reset rules, and participant-facing summary text.
 - Keep the public surface small and swappable.
 
 ## Hard restrictions
@@ -38,6 +40,7 @@ The engine interface should be able to support, at minimum:
 - display validation
 - session open/close
 - transition/completion text screens
+- single fixation tutorial practice attempts
 - `run_condition(RunSpec, ...)`
 - abort
 

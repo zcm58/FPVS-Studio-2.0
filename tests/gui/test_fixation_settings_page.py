@@ -48,6 +48,7 @@ def test_fixation_settings_editor_persists_fixed_mode_values(qtbot, tmp_path: Pa
     fixation = document.project.settings.fixation_task
     assert fixation.enabled is True
     assert fixation.accuracy_task_enabled is True
+    assert fixation.participant_tutorial_enabled is True
     assert fixation.target_count_mode == "fixed"
     assert fixation.changes_per_sequence == 7
     assert fixation.response_key == "return"

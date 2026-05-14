@@ -81,6 +81,7 @@ fixation task without consulting editable project models:
 
 - default and target colors
 - response keys
+- whether the participant fixation tutorial should run before the first condition
 - cross size in pixels
 - cross line width in pixels
 - target duration in frames

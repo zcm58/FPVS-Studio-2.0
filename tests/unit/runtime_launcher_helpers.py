@@ -15,7 +15,7 @@ from fpvs_studio.core.execution import (
     RuntimeMetadata,
 )
 from fpvs_studio.core.run_spec import RunSpec
-from fpvs_studio.engines.base import PresentationEngine
+from fpvs_studio.engines.base import FixationTutorialAttemptResult, PresentationEngine
 from fpvs_studio.triggers.base import TriggerBackend
 
 PARTICIPANT_NUMBER = "0007"
@@ -104,6 +104,23 @@ class StubEngine(PresentationEngine):
             }
         )
         return False
+
+    def run_fixation_tutorial_attempt(
+        self,
+        run_spec: RunSpec,
+        *,
+        target_delay_seconds: float,
+    ) -> FixationTutorialAttemptResult:
+        self._captures.setdefault("tutorial_attempts", []).append(
+            {
+                "run_id": run_spec.run_id,
+                "target_delay_seconds": target_delay_seconds,
+            }
+        )
+        queued_results = self._captures.get("tutorial_attempt_results")
+        if isinstance(queued_results, list) and queued_results:
+            return queued_results.pop(0)
+        return FixationTutorialAttemptResult(hit=True, reaction_time_s=0.25)
 
     def run_condition(
         self,

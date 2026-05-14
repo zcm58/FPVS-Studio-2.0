@@ -88,6 +88,8 @@ Runtime consumes `SessionPlan` and:
 - preflights all referenced assets before launch
 - validates display timing across every embedded `RunSpec`
 - opens one engine session/window for the whole plan
+- runs the participant fixation tutorial once before the first condition when compiled
+  fixation accuracy and tutorial settings are enabled
 - shows a Space-required start screen before every condition run
 - iterates `SessionEntry.run_spec` in order
 - aggregates run execution results into a `SessionExecutionSummary`

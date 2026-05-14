@@ -16,6 +16,7 @@ from fpvs_studio.core.enums import InterConditionMode
 from fpvs_studio.core.execution import RunExecutionSummary
 from fpvs_studio.core.models import DisplayValidationReport
 from fpvs_studio.core.serialization import read_json_file
+from fpvs_studio.engines.base import FixationTutorialAttemptResult
 from fpvs_studio.engines.registry import register_engine, unregister_engine
 from fpvs_studio.runtime.launcher import (
     LaunchSettings,
@@ -191,6 +192,175 @@ def test_launch_session_runs_all_entries_with_stub_engine_and_reuses_session_win
     first_run_dir = session_output_dir / session_plan.ordered_entries()[0].run_id
     assert (first_run_dir / "runspec.json").is_file()
     assert (first_run_dir / "run_summary.json").is_file()
+
+
+def test_launch_session_runs_participant_tutorial_once_before_first_transition(
+    multi_condition_project,
+    multi_condition_project_root,
+) -> None:
+    multi_condition_project.settings.fixation_task.enabled = True
+    multi_condition_project.settings.fixation_task.accuracy_task_enabled = True
+    multi_condition_project.settings.fixation_task.participant_tutorial_enabled = True
+    captures: dict[str, object] = {
+        "tutorial_attempt_results": [
+            FixationTutorialAttemptResult(hit=True, reaction_time_s=0.31),
+            FixationTutorialAttemptResult(hit=True, reaction_time_s=0.29),
+            FixationTutorialAttemptResult(hit=True, reaction_time_s=0.27),
+        ]
+    }
+    register_engine("stub-tutorial", lambda: StubEngine(captures))
+    try:
+        session_plan = compile_session_plan(
+            multi_condition_project,
+            refresh_hz=60.0,
+            project_root=multi_condition_project_root,
+            random_seed=99,
+        )
+
+        summary = launch_session(
+            multi_condition_project_root,
+            session_plan,
+            participant_number=PARTICIPANT_NUMBER,
+            launch_settings=LaunchSettings(engine_name="stub-tutorial", test_mode=True),
+        )
+    finally:
+        unregister_engine("stub-tutorial")
+
+    ordered_entries = session_plan.ordered_entries()
+    assert summary.aborted is False
+    assert captures["tutorial_attempts"] == [
+        {
+            "run_id": ordered_entries[0].run_id,
+            "target_delay_seconds": 1.0,
+        },
+        {
+            "run_id": ordered_entries[0].run_id,
+            "target_delay_seconds": 1.0,
+        },
+        {
+            "run_id": ordered_entries[0].run_id,
+            "target_delay_seconds": 1.0,
+        },
+    ]
+    assert captures["run_ids"] == [entry.run_id for entry in ordered_entries]
+    transitions = captures["transitions"]
+    assert transitions[0]["heading"] == "Participant tutorial"
+    assert transitions[1]["heading"] == "Great job! Let's try this again."
+    assert transitions[2]["heading"].startswith("Great! Let's practice one more time")
+    assert transitions[3]["heading"] == "Tutorial complete."
+    assert transitions[4]["heading"].startswith("Condition 1 of")
+
+
+def test_launch_session_skips_participant_tutorial_when_disabled(
+    multi_condition_project,
+    multi_condition_project_root,
+) -> None:
+    multi_condition_project.settings.fixation_task.enabled = True
+    multi_condition_project.settings.fixation_task.accuracy_task_enabled = True
+    multi_condition_project.settings.fixation_task.participant_tutorial_enabled = False
+    captures: dict[str, object] = {}
+    register_engine("stub-no-tutorial", lambda: StubEngine(captures))
+    try:
+        session_plan = compile_session_plan(
+            multi_condition_project,
+            refresh_hz=60.0,
+            project_root=multi_condition_project_root,
+            random_seed=99,
+        )
+
+        launch_session(
+            multi_condition_project_root,
+            session_plan,
+            participant_number=PARTICIPANT_NUMBER,
+            launch_settings=LaunchSettings(engine_name="stub-no-tutorial", test_mode=True),
+        )
+    finally:
+        unregister_engine("stub-no-tutorial")
+
+    assert captures.get("tutorial_attempts") is None
+    assert captures["transitions"][0]["heading"].startswith("Condition 1 of")
+
+
+def test_launch_session_tutorial_miss_resets_success_count_before_condition_start(
+    multi_condition_project,
+    multi_condition_project_root,
+) -> None:
+    multi_condition_project.settings.fixation_task.enabled = True
+    multi_condition_project.settings.fixation_task.accuracy_task_enabled = True
+    multi_condition_project.settings.fixation_task.participant_tutorial_enabled = True
+    captures: dict[str, object] = {
+        "tutorial_attempt_results": [
+            FixationTutorialAttemptResult(hit=True, reaction_time_s=0.30),
+            FixationTutorialAttemptResult(hit=False),
+            FixationTutorialAttemptResult(hit=True, reaction_time_s=0.28),
+            FixationTutorialAttemptResult(hit=True, reaction_time_s=0.26),
+            FixationTutorialAttemptResult(hit=True, reaction_time_s=0.24),
+        ]
+    }
+    register_engine("stub-tutorial-miss", lambda: StubEngine(captures))
+    try:
+        session_plan = compile_session_plan(
+            multi_condition_project,
+            refresh_hz=60.0,
+            project_root=multi_condition_project_root,
+            random_seed=99,
+        )
+
+        launch_session(
+            multi_condition_project_root,
+            session_plan,
+            participant_number=PARTICIPANT_NUMBER,
+            launch_settings=LaunchSettings(engine_name="stub-tutorial-miss", test_mode=True),
+        )
+    finally:
+        unregister_engine("stub-tutorial-miss")
+
+    transitions = captures["transitions"]
+    correction = [
+        transition
+        for transition in transitions
+        if transition["heading"].startswith("Please press the response key")
+    ]
+    assert len(correction) == 1
+    assert correction[0]["countdown_seconds"] == 5.0
+    final_screen = next(
+        transition for transition in transitions if transition["heading"] == "Tutorial complete."
+    )
+    assert "Your tutorial accuracy was 80% (4/5)." in final_screen["body"]
+    assert transitions[-session_plan.total_runs]["heading"].startswith("Condition 1 of")
+
+
+def test_launch_session_aborts_before_playback_when_tutorial_attempt_aborts(
+    multi_condition_project,
+    multi_condition_project_root,
+) -> None:
+    multi_condition_project.settings.fixation_task.enabled = True
+    multi_condition_project.settings.fixation_task.accuracy_task_enabled = True
+    multi_condition_project.settings.fixation_task.participant_tutorial_enabled = True
+    captures: dict[str, object] = {
+        "tutorial_attempt_results": [FixationTutorialAttemptResult(hit=False, aborted=True)]
+    }
+    register_engine("stub-tutorial-abort", lambda: StubEngine(captures))
+    try:
+        session_plan = compile_session_plan(
+            multi_condition_project,
+            refresh_hz=60.0,
+            project_root=multi_condition_project_root,
+            random_seed=99,
+        )
+
+        summary = launch_session(
+            multi_condition_project_root,
+            session_plan,
+            participant_number=PARTICIPANT_NUMBER,
+            launch_settings=LaunchSettings(engine_name="stub-tutorial-abort", test_mode=True),
+        )
+    finally:
+        unregister_engine("stub-tutorial-abort")
+
+    assert summary.aborted is True
+    assert summary.abort_reason == "Session aborted during the participant tutorial."
+    assert captures.get("run_ids") is None
 
 
 

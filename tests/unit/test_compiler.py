@@ -411,6 +411,32 @@ def test_compile_run_spec_fixed_color_changes_per_condition_mode_uses_configured
     assert len(run_spec.fixation_events) == 5
 
 
+def test_compile_run_spec_carries_participant_tutorial_flag_only_when_accuracy_enabled(
+    sample_project,
+    sample_project_root,
+) -> None:
+    sample_project.settings.fixation_task.enabled = True
+    sample_project.settings.fixation_task.accuracy_task_enabled = True
+    sample_project.settings.fixation_task.participant_tutorial_enabled = True
+
+    run_spec = compile_run_spec(
+        sample_project,
+        refresh_hz=60.0,
+        project_root=sample_project_root,
+    )
+
+    assert run_spec.fixation.participant_tutorial_enabled is True
+
+    sample_project.settings.fixation_task.accuracy_task_enabled = False
+    run_spec = compile_run_spec(
+        sample_project,
+        refresh_hz=60.0,
+        project_root=sample_project_root,
+    )
+
+    assert run_spec.fixation.participant_tutorial_enabled is False
+
+
 def test_compile_run_spec_randomized_target_count_is_seed_deterministic(
     sample_project,
     sample_project_root,

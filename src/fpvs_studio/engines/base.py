@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
+from dataclasses import dataclass
 from pathlib import Path
 
 from fpvs_studio.core.enums import DutyCycleMode
@@ -15,6 +16,15 @@ from fpvs_studio.core.models import DisplayValidationReport
 from fpvs_studio.core.run_spec import RunSpec
 from fpvs_studio.core.validation import validate_display_refresh
 from fpvs_studio.triggers.base import TriggerBackend
+
+
+@dataclass(frozen=True)
+class FixationTutorialAttemptResult:
+    """Result for one participant fixation tutorial practice attempt."""
+
+    hit: bool
+    reaction_time_s: float | None = None
+    aborted: bool = False
 
 
 class PresentationEngine(ABC):
@@ -85,6 +95,15 @@ class PresentationEngine(ABC):
         continue_key: str,
     ) -> bool:
         """Show end-of-condition feedback and return whether escape aborted."""
+
+    @abstractmethod
+    def run_fixation_tutorial_attempt(
+        self,
+        run_spec: RunSpec,
+        *,
+        target_delay_seconds: float,
+    ) -> FixationTutorialAttemptResult:
+        """Run one fixation tutorial practice attempt and return hit/miss/abort state."""
 
     @abstractmethod
     def run_condition(

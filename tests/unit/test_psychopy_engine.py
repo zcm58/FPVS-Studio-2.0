@@ -81,8 +81,13 @@ class _FakeClock:
 
 
 class _FakeKeyboard:
-    def __init__(self, window: _FakeWindow) -> None:
+    def __init__(
+        self,
+        window: _FakeWindow,
+        key_batches: list[list[object]] | None = None,
+    ) -> None:
         self.clock = _FakeClock(window)
+        self._key_batches = list(key_batches or [])
 
     def clearEvents(self) -> None:
         return None
@@ -94,7 +99,12 @@ class _FakeKeyboard:
         waitRelease: bool = False,
         clear: bool = True,
     ) -> list[object]:
-        return []
+        if not self._key_batches:
+            return []
+        keys = self._key_batches.pop(0)
+        if keyList is None:
+            return keys
+        return [key for key in keys if getattr(key, "name", str(key)) in keyList]
 
 
 class _FakeStim:
@@ -142,6 +152,7 @@ def _build_fake_psychopy(
     captures: dict[str, object],
     *,
     flip_times: list[float],
+    key_batches: list[list[object]] | None = None,
     raise_on_flip_index: int | None = None,
     record_psychopy_warnings: bool = False,
 ) -> object:
@@ -175,7 +186,7 @@ def _build_fake_psychopy(
         return window
 
     def _fake_keyboard():
-        return _FakeKeyboard(captures["window"])
+        return _FakeKeyboard(captures["window"], key_batches=key_batches)
 
     fake_visual = SimpleNamespace(
         Window=_fake_window,
@@ -335,6 +346,80 @@ def test_text_screen_uses_custom_space_begin_prompt() -> None:
 
     assert aborted is False
     assert "Press Space to begin. Press Escape to abort." in captured_text
+
+
+def test_psychopy_engine_fixation_tutorial_attempt_returns_hit_with_rt(
+    monkeypatch,
+    sample_project,
+    sample_project_root,
+) -> None:
+    run_spec = _tiny_run_spec(sample_project, sample_project_root)
+    run_spec = run_spec.model_copy(
+        update={
+            "fixation": run_spec.fixation.model_copy(
+                update={
+                    "accuracy_task_enabled": True,
+                    "participant_tutorial_enabled": True,
+                    "response_key": "space",
+                    "response_window_frames": 60,
+                    "response_keys": ["space"],
+                }
+            )
+        }
+    )
+    captures: dict[str, object] = {}
+    fake_psychopy = _build_fake_psychopy(
+        captures,
+        flip_times=[],
+        key_batches=[[], [SimpleNamespace(name="space", rt=0.22)]],
+    )
+    engine = PsychoPyEngine()
+    _patch_fake_psychopy(monkeypatch, engine, fake_psychopy)
+
+    try:
+        engine.open_session(runtime_options={"test_mode": True, "fullscreen": False})
+        result = engine.run_fixation_tutorial_attempt(run_spec, target_delay_seconds=0.0)
+    finally:
+        engine.close_session()
+
+    assert result.hit is True
+    assert result.reaction_time_s == pytest.approx(0.22)
+    assert result.aborted is False
+
+
+def test_psychopy_engine_fixation_tutorial_attempt_returns_miss(
+    monkeypatch,
+    sample_project,
+    sample_project_root,
+) -> None:
+    run_spec = _tiny_run_spec(sample_project, sample_project_root)
+    run_spec = run_spec.model_copy(
+        update={
+            "fixation": run_spec.fixation.model_copy(
+                update={
+                    "accuracy_task_enabled": True,
+                    "participant_tutorial_enabled": True,
+                    "response_key": "space",
+                    "response_window_frames": 2,
+                    "response_keys": ["space"],
+                }
+            )
+        }
+    )
+    captures: dict[str, object] = {}
+    fake_psychopy = _build_fake_psychopy(captures, flip_times=[], key_batches=[[], [], []])
+    engine = PsychoPyEngine()
+    _patch_fake_psychopy(monkeypatch, engine, fake_psychopy)
+
+    try:
+        engine.open_session(runtime_options={"test_mode": True, "fullscreen": False})
+        result = engine.run_fixation_tutorial_attempt(run_spec, target_delay_seconds=0.0)
+    finally:
+        engine.close_session()
+
+    assert result.hit is False
+    assert result.reaction_time_s is None
+    assert result.aborted is False
 
 
 def test_psychopy_engine_preloads_unique_images_before_playback_flip(

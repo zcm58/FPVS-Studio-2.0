@@ -6,6 +6,7 @@ from collections.abc import Callable
 
 from PySide6.QtCore import QSignalBlocker, Qt
 from PySide6.QtWidgets import (
+    QCheckBox,
     QComboBox,
     QFormLayout,
     QHBoxLayout,
@@ -49,6 +50,10 @@ _CONDITION_PROFILE_TOOLTIPS = {
         "display period being blank before the next image is shown."
     ),
 }
+_PARTICIPANT_TUTORIAL_TOOLTIP = (
+    "Run three practice fixation color changes before the first condition starts when "
+    "fixation accuracy tracking is enabled."
+)
 
 
 class ProjectOverviewEditor(QWidget):
@@ -108,6 +113,12 @@ class ProjectOverviewEditor(QWidget):
         self.apply_profile_to_conditions_button.setObjectName("apply_profile_to_conditions_button")
         self.apply_profile_to_conditions_button.clicked.connect(self._apply_profile_to_conditions)
         self.apply_profile_to_conditions_button.setVisible(False)
+        self.participant_tutorial_checkbox = QCheckBox("Enable participant tutorial?", self)
+        self.participant_tutorial_checkbox.setObjectName("participant_tutorial_checkbox")
+        self.participant_tutorial_checkbox.setToolTip(_PARTICIPANT_TUTORIAL_TOOLTIP)
+        self.participant_tutorial_checkbox.stateChanged.connect(
+            self._apply_participant_tutorial_enabled
+        )
 
         self.setup_checklist = SetupChecklistPanel(
             object_name="project_overview_checklist",
@@ -126,7 +137,7 @@ class ProjectOverviewEditor(QWidget):
             object_name="dashboard_project_overview_card",
             parent=self,
         )
-        self.project_overview_card.setMaximumWidth(880)
+        self.project_overview_card.setMaximumWidth(930)
         self.project_overview_card.setSizePolicy(
             QSizePolicy.Policy.Expanding,
             QSizePolicy.Policy.Maximum,
@@ -162,6 +173,7 @@ class ProjectOverviewEditor(QWidget):
         metadata_layout.addRow("Description", self.project_description_edit)
         metadata_layout.addRow("Project Folder", self.project_root_value)
         metadata_layout.addRow("Image Timing", condition_profile_row)
+        metadata_layout.addRow(self.participant_tutorial_checkbox)
 
         form_panel = QWidget(self.project_overview_card)
         form_layout = QVBoxLayout(form_panel)
@@ -202,6 +214,10 @@ class ProjectOverviewEditor(QWidget):
             _sync_text_editor_contents(self.project_description_edit, project.meta.description)
         self.project_root_value.set_path_text(str(self._document.project_root), max_length=92)
         self._refresh_condition_profile_widgets()
+        with QSignalBlocker(self.participant_tutorial_checkbox):
+            self.participant_tutorial_checkbox.setChecked(
+                project.settings.fixation_task.participant_tutorial_enabled
+            )
         self._refresh_checklist()
 
     def flush_pending_edits(self) -> None:
@@ -300,6 +316,16 @@ class ProjectOverviewEditor(QWidget):
             )
         except Exception as error:
             _show_error_dialog(self, "Condition Template Error", error)
+            self.refresh()
+
+    def _apply_participant_tutorial_enabled(self) -> None:
+        enabled = self.participant_tutorial_checkbox.isChecked()
+        if enabled == self._document.project.settings.fixation_task.participant_tutorial_enabled:
+            return
+        try:
+            self._document.update_fixation_settings(participant_tutorial_enabled=enabled)
+        except Exception as error:
+            _show_error_dialog(self, "Participant Tutorial Error", error)
             self.refresh()
 
     def _open_template_manager(self) -> None:

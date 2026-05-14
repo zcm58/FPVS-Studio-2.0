@@ -24,6 +24,10 @@ from fpvs_studio.runtime.preflight import PreflightError
 from fpvs_studio.runtime.session_export import write_run_artifacts, write_session_artifacts
 from fpvs_studio.runtime.triggers import LoggedTriggerBackend, build_trigger_backend
 
+_TUTORIAL_REQUIRED_SUCCESSES = 3
+_TUTORIAL_TARGET_DELAY_SECONDS = 1.0
+_TUTORIAL_MISS_COOLDOWN_SECONDS = 5.0
+
 
 class RuntimeWorker:
     """Execute neutral run specs through a selected presentation engine."""
@@ -50,46 +54,58 @@ class RuntimeWorker:
             self._engine.open_session(runtime_options=runtime_options)
             session_open = True
             _validate_configured_display_resolution(self._engine, run_spec)
-            trigger_start_index = len(trigger_backend.records)
-            if self._show_run_start(run_spec):
+            if self._show_participant_tutorial(run_spec):
                 run_summary = _build_start_aborted_summary(
                     run_spec,
                     engine_name=self._engine.engine_id,
                     runtime_options=runtime_options,
                     participant_number=participant_number,
                     warnings=trigger_warnings,
+                    abort_reason="Run aborted during the participant tutorial.",
                 )
             else:
-                run_summary = self._engine.run_condition(
-                    run_spec,
-                    project_root,
-                    runtime_options=runtime_options,
-                    trigger_backend=trigger_backend,
-                )
-                run_summary = self._finalize_run_summary(
-                    run_summary,
-                    run_spec,
-                    runtime_options=runtime_options,
-                    relative_output_dir=relative_output_dir,
-                    session_id=run_summary.session_id,
-                    participant_number=participant_number,
-                    trigger_backend=trigger_backend,
-                    trigger_start_index=trigger_start_index,
-                    warnings=trigger_warnings,
-                )
-                if not run_summary.aborted and self._show_condition_feedback(run_spec, run_summary):
-                    run_summary = run_summary.model_copy(
-                        update={
-                            "aborted": True,
-                            "abort_reason": "Run aborted during the condition feedback screen.",
-                        }
+                trigger_start_index = len(trigger_backend.records)
+                if self._show_run_start(run_spec):
+                    run_summary = _build_start_aborted_summary(
+                        run_spec,
+                        engine_name=self._engine.engine_id,
+                        runtime_options=runtime_options,
+                        participant_number=participant_number,
+                        warnings=trigger_warnings,
                     )
-                if not run_summary.aborted:
-                    self._engine.show_completion_screen(
-                        completed_condition_count=1,
-                        total_condition_count=1,
-                        was_aborted=False,
+                else:
+                    run_summary = self._engine.run_condition(
+                        run_spec,
+                        project_root,
+                        runtime_options=runtime_options,
+                        trigger_backend=trigger_backend,
                     )
+                    run_summary = self._finalize_run_summary(
+                        run_summary,
+                        run_spec,
+                        runtime_options=runtime_options,
+                        relative_output_dir=relative_output_dir,
+                        session_id=run_summary.session_id,
+                        participant_number=participant_number,
+                        trigger_backend=trigger_backend,
+                        trigger_start_index=trigger_start_index,
+                        warnings=trigger_warnings,
+                    )
+                    if not run_summary.aborted and self._show_condition_feedback(
+                        run_spec, run_summary
+                    ):
+                        run_summary = run_summary.model_copy(
+                            update={
+                                "aborted": True,
+                                "abort_reason": "Run aborted during the condition feedback screen.",
+                            }
+                        )
+                    if not run_summary.aborted:
+                        self._engine.show_completion_screen(
+                            completed_condition_count=1,
+                            total_condition_count=1,
+                            was_aborted=False,
+                        )
         finally:
             if session_open:
                 self._engine.close_session()
@@ -121,7 +137,13 @@ class RuntimeWorker:
         try:
             self._engine.open_session(runtime_options=runtime_options)
             session_open = True
+            if ordered_entries:
+                _validate_configured_display_resolution(self._engine, ordered_entries[0].run_spec)
+                if self._show_participant_tutorial(ordered_entries[0].run_spec):
+                    abort_reason = "Session aborted during the participant tutorial."
             for entry in ordered_entries:
+                if abort_reason is not None:
+                    break
                 _validate_configured_display_resolution(self._engine, entry.run_spec)
                 if self._show_transition(entry, session_plan, runtime_options=runtime_options):
                     abort_reason = (
@@ -326,6 +348,87 @@ class RuntimeWorker:
             continue_prompt="Press Space to begin.",
         )
 
+    def _show_participant_tutorial(self, run_spec: RunSpec) -> bool:
+        fixation = run_spec.fixation
+        if not fixation.accuracy_task_enabled or not fixation.participant_tutorial_enabled:
+            return False
+
+        response_key_label = _format_key_label(fixation.response_key)
+        aborted = self._engine.show_transition_screen(
+            heading="Participant tutorial",
+            body=(
+                "Thank you for participating in our experiment today! Your task is to "
+                f"press {response_key_label} each time you see the cross change colors "
+                f"from {_format_color_label(fixation.default_color)} to "
+                f"{_format_color_label(fixation.target_color)}. Ready to try it?"
+            ),
+            countdown_seconds=None,
+            continue_key="space",
+            continue_prompt="Press Space to continue.",
+        )
+        if aborted:
+            return True
+
+        attempt_count = 0
+        success_count = 0
+        total_hit_count = 0
+        hit_rts: list[float] = []
+        while success_count < _TUTORIAL_REQUIRED_SUCCESSES:
+            result = self._engine.run_fixation_tutorial_attempt(
+                run_spec,
+                target_delay_seconds=_TUTORIAL_TARGET_DELAY_SECONDS,
+            )
+            attempt_count += 1
+            if result.aborted:
+                return True
+            if result.hit:
+                success_count += 1
+                total_hit_count += 1
+                if result.reaction_time_s is not None:
+                    hit_rts.append(result.reaction_time_s)
+                if success_count < _TUTORIAL_REQUIRED_SUCCESSES:
+                    prompt = (
+                        "Great job! Let's try this again."
+                        if success_count == 1
+                        else "Great! Let's practice one more time, then we'll start the experiment."
+                    )
+                    if self._engine.show_transition_screen(
+                        heading=prompt,
+                        body=None,
+                        countdown_seconds=None,
+                        continue_key="space",
+                        continue_prompt="Press Space to continue.",
+                    ):
+                        return True
+                continue
+
+            success_count = 0
+            if self._engine.show_transition_screen(
+                heading="Please press the response key when you see the cross change colors.",
+                body=None,
+                countdown_seconds=_TUTORIAL_MISS_COOLDOWN_SECONDS,
+                continue_key=None,
+                continue_prompt=None,
+            ):
+                return True
+
+        accuracy_percent = (total_hit_count / attempt_count) * 100.0
+        mean_rt_text = _format_tutorial_mean_rt(hit_rts)
+        body = (
+            f"Your tutorial accuracy was {accuracy_percent:.0f}% "
+            f"({total_hit_count}/{attempt_count}).\n"
+            f"Your average reaction time was {mean_rt_text}.\n\n"
+            "You're now ready to begin the experiment. When you're ready, please press "
+            "Space to continue."
+        )
+        return self._engine.show_transition_screen(
+            heading="Tutorial complete.",
+            body=body,
+            countdown_seconds=None,
+            continue_key="space",
+            continue_prompt=None,
+        )
+
     def _show_block_break(
         self,
         entry: SessionEntry,
@@ -420,6 +523,7 @@ def _build_start_aborted_summary(
     runtime_options: Mapping[str, object] | None,
     participant_number: str,
     warnings: list[str] | tuple[str, ...],
+    abort_reason: str = "Run aborted during the start screen.",
 ) -> RunExecutionSummary:
     return RunExecutionSummary(
         project_id=run_spec.project_id,
@@ -432,7 +536,7 @@ def _build_start_aborted_summary(
         participant_number=participant_number,
         completed_frames=0,
         aborted=True,
-        abort_reason="Run aborted during the start screen.",
+        abort_reason=abort_reason,
         warnings=list(warnings),
         runtime_metadata=RuntimeMetadata(
             engine_name=engine_name,
@@ -451,6 +555,31 @@ def _latest_fixation_task_summary(
         if run_result.fixation_task_summary is not None:
             return run_result.fixation_task_summary
     return None
+
+
+def _format_key_label(key: str) -> str:
+    normalized = key.strip().lower()
+    if normalized == "space":
+        return "Space"
+    return normalized.upper()
+
+
+def _format_color_label(color: str) -> str:
+    color_names = {
+        "#0000ff": "blue",
+        "#ff0000": "red",
+        "#ffffff": "white",
+        "#000000": "black",
+        "#ffff00": "yellow",
+        "#00ff00": "green",
+    }
+    return color_names.get(color.strip().lower(), color)
+
+
+def _format_tutorial_mean_rt(hit_rts: list[float]) -> str:
+    if not hit_rts:
+        return "N/A"
+    return f"{(sum(hit_rts) / len(hit_rts)) * 1000.0:.0f} ms"
 
 
 def _format_condition_feedback(

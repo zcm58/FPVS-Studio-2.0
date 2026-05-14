@@ -10,7 +10,7 @@ import pytest
 from fpvs_studio.core.compiler import compile_run_spec
 from fpvs_studio.core.execution import RunExecutionSummary
 from fpvs_studio.core.run_spec import RunSpec
-from fpvs_studio.engines.base import PresentationEngine
+from fpvs_studio.engines.base import FixationTutorialAttemptResult, PresentationEngine
 from fpvs_studio.runtime.preflight import PreflightError, preflight_run_spec
 from fpvs_studio.triggers.base import TriggerBackend
 
@@ -54,6 +54,16 @@ class _PreflightEngine(PresentationEngine):
         continue_key: str,
     ) -> bool:
         return False
+
+    def run_fixation_tutorial_attempt(
+        self,
+        run_spec: RunSpec,
+        *,
+        target_delay_seconds: float,
+    ) -> FixationTutorialAttemptResult:
+        raise AssertionError(
+            "run_fixation_tutorial_attempt should not be called during preflight tests"
+        )
 
     def run_condition(
         self,
