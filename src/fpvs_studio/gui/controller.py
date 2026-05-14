@@ -25,6 +25,7 @@ from fpvs_studio.core.condition_template_profiles import (
 )
 from fpvs_studio.core.models import ConditionTemplateProfile
 from fpvs_studio.core.paths import project_json_path
+from fpvs_studio.core.project_config import create_project_from_config, read_project_config
 from fpvs_studio.core.serialization import load_project_file
 from fpvs_studio.gui.condition_template_manager_dialog import ConditionTemplateManagerDialog
 from fpvs_studio.gui.create_project_dialog import CreateProjectDialog
@@ -485,6 +486,7 @@ class StudioController(QObject):
             on_request_new_project=self.show_create_project_dialog,
             on_request_open_project=self.show_open_project_dialog,
             on_request_manage_projects=self.show_manage_projects_dialog,
+            on_request_import_project_config=self.show_import_project_config_dialog,
             on_request_settings=self.show_settings_dialog,
             on_load_condition_template_profiles=self._load_condition_template_profiles,
             on_manage_condition_templates=self._show_condition_template_manager,
@@ -532,6 +534,39 @@ class StudioController(QObject):
         if root_dir is None:
             return []
         return list_condition_template_profiles(root_dir)
+
+    def show_import_project_config_dialog(self) -> None:
+        """Import a Studio `.fpvsconfig` file as a new project shell."""
+
+        if not self.ensure_fpvs_root_configured():
+            return
+        if not self._normalize_fpvs_root_layout():
+            return
+        root_dir = self._fpvs_root_dir
+        if root_dir is None:
+            return
+        parent = self.main_window if self.main_window is not None else self.welcome_window
+        selected_path, _selected_filter = QFileDialog.getOpenFileName(
+            parent,
+            "Import FPVS Project Config",
+            str(root_dir),
+            (
+                "FPVS Config Files (*.fpvsconfig);;"
+                "Legacy Config Files (*.config);;"
+                "JSON Files (*.json);;"
+                "All Files (*)"
+            ),
+        )
+        if not selected_path:
+            return
+        try:
+            config = read_project_config(Path(selected_path))
+            scaffold = create_project_from_config(root_dir, config)
+            document = ProjectDocument.open_existing(scaffold.project_root)
+        except Exception as error:
+            _show_error(parent, "Import Project Config Error", error)
+            return
+        self._open_document(document)
 
     def _show_condition_template_manager(self) -> list[ConditionTemplateProfile]:
         if not self.ensure_fpvs_root_configured():

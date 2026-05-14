@@ -20,7 +20,8 @@ code may lazily import PsychoPy.
   surface. The main window also hosts lightweight in-window utilities from the `Tools`
   menu.
 - `src/fpvs_studio/core/`: editable project models, validation, compilation, run/session
-  contracts, project persistence, and engine-neutral domain logic.
+  contracts, project persistence, Studio `.fpvsconfig` interchange export/import, and
+  engine-neutral domain logic.
 - `src/fpvs_studio/preprocessing/`: original image import, inspection, image
   normalization, generated variants, and manifests. This layer must stay independent
   of GUI runtime and PsychoPy.
@@ -194,7 +195,13 @@ Use these first reads before opening broad trees:
   `tests/gui/test_*.py`, and `tests/gui/helpers.py` if workflow setup matters.
 - Display settings GUI task: `src/fpvs_studio/gui/runtime_settings_page.py`,
   `src/fpvs_studio/gui/run_page.py`, `src/fpvs_studio/gui/setup_wizard_page.py`,
-  and `tests/gui/test_layout_dashboard.py`.
+  `tests/gui/test_setup_experiment_display.py`, and `tests/gui/test_run_page_launch.py`.
+- Setup Wizard shell/layout task: `src/fpvs_studio/gui/setup_wizard_page.py`,
+  `src/fpvs_studio/gui/components.py`, and `tests/gui/test_setup_wizard_shell.py`.
+- Setup Wizard condition-import task: `src/fpvs_studio/gui/condition_setup_step.py`,
+  `src/fpvs_studio/preprocessing/`, and `tests/gui/test_setup_conditions.py`.
+- Home launch-surface task: `src/fpvs_studio/gui/home_page.py`,
+  `src/fpvs_studio/gui/run_page.py`, and `tests/gui/test_home_launch_surface.py`.
 - Fixation Cross setup task: `src/fpvs_studio/gui/fixation_settings_page.py`,
   `src/fpvs_studio/gui/setup_wizard_page.py`, `docs/GUI_WORKFLOW.md`, and
   `tests/gui/test_conditions_session_fixation.py`.
@@ -202,6 +209,9 @@ Use these first reads before opening broad trees:
   `src/fpvs_studio/core/compiler.py`,
   `src/fpvs_studio/core/session_plan.py`,
   `docs/RUNSPEC.md`, and `docs/SESSION_PLAN.md`.
+- Project config import/export task: `src/fpvs_studio/core/AGENTS.md`,
+  `src/fpvs_studio/core/project_config.py`, `src/fpvs_studio/gui/main_window.py`,
+  `src/fpvs_studio/gui/controller.py`, and `docs/GUI_WORKFLOW.md`.
 - Runtime task: `docs/RUNTIME_EXECUTION.md`,
   `src/fpvs_studio/runtime/launcher.py`,
   `src/fpvs_studio/runtime/preflight.py`,

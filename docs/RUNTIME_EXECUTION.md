@@ -163,6 +163,13 @@ Per run:
 - `trigger_log.csv`
 - `warnings.log`
 
+Studio `.fpvsconfig` export is a separate summary/interchange file built from the editable
+project, stimulus manifest, and optionally an existing completed session directory. A
+completed `.fpvsconfig` preserves the session seed, realized condition order, per-run image
+shuffle seeds, trigger schedule, display geometry, and stimulus-generation provenance so
+another lab can recreate the setup. It does not replace the authoritative artifacts under
+`runs/`, and runtime does not consume `.fpvsconfig` during playback.
+
 ## Test mode
 
 `test_mode` remains a runtime-only launch setting and is the only supported

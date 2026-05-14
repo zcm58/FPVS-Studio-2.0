@@ -10,21 +10,20 @@ It is intentionally not a backlog for product features.
 | 1 | Harness | Repo-wide | Keep repo-level style/type/boundary/GUI smoke checks quiet so regressions are visible. | `.\scripts\check_quality.ps1` for release-sized changes; narrow gates while iterating | Active |
 | 2 | GUI tests | GUI | Keep pytest-qt tests aligned with the current Home/Setup Wizard workflow and hidden runtime controls. | `.\scripts\check_gui.ps1` | Passing |
 | 3 | GUI workflow docs | Docs/GUI | Keep Welcome/Home, raw import, normalization, and runtime launch docs synchronized with the implemented GUI. | `python -m pytest -q tests\unit\test_harness_docs.py` | Passing |
-| 4 | GUI module size | GUI/tests | Monitor large cohesive GUI modules and split only when responsibilities diverge or focused tests become hard to locate. | `.\scripts\report_line_counts.ps1` | Monitor |
+| 4 | GUI module size | GUI | Monitor large cohesive GUI source modules and split only when responsibilities diverge or focused tests become hard to locate. | `.\scripts\report_line_counts.ps1` | Monitor |
 | 5 | GUI styling | GUI | Continue replacing one-off GUI styling with helpers in `src/fpvs_studio/gui/components.py`. | Focused GUI tests plus Ruff | Monitor |
 
 ## Current Verified State
 
-- GUI gate: `.\scripts\check_gui.ps1` passes after aligning stale asset/import and
-  runtime-launch tests with the current GUI.
-- Focused GUI debt cleanup: `python -m pytest -q tests\gui\test_assets_run_launch.py`
-  passes.
-- Harness docs: `python -m pytest -q tests\unit\test_harness_docs.py` passes.
-- Lint status: Ruff is clean for the touched GUI test files.
-- Full quality gate and broad suite were not rerun during this narrow debt cleanup;
-  use `.\scripts\check_quality.ps1` for release-sized or cross-layer changes.
-- Agent context status: GUI workflow tests and runtime launcher tests are split
-  by task area; use `ARCHITECTURE.md` task recipes before broad source reads.
+- Quality gate: `.\scripts\check_quality.ps1` passes after the current GUI/config
+  import-export work and GUI workflow test split.
+- GUI gate: `.\scripts\check_gui.ps1` passes after splitting the former layout/dashboard
+  coverage into focused workflow files.
+- Harness garbage collection: `.\scripts\check_gc.ps1` passes after moving preview
+  dialog styling into `gui/components.py`.
+- Type/lint status: `python -m mypy src` and `python -m ruff check src tests` pass.
+- Agent context status: the former large GUI layout/dashboard test file is split by
+  workflow; use `ARCHITECTURE.md` task recipes before broad source reads.
 
 ## Notes
 

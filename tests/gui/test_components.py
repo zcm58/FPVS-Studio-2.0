@@ -18,6 +18,7 @@ from fpvs_studio.gui.components import (
     error_text_stylesheet,
     fixation_settings_stylesheet,
     home_page_stylesheet,
+    image_size_preview_dialog_stylesheet,
     mark_error_text,
     mark_launch_action,
     mark_primary_action,
@@ -172,6 +173,7 @@ def test_theme_stylesheet_builders_expose_expected_selectors(qapp) -> None:
     assert 'QFrame[launchSurfaceFrame="true"]' in welcome_window_stylesheet(qapp.palette())
     assert "setupProgressStepper" in studio_theme_stylesheet()
     assert "setup_wizard_status_strip" in studio_theme_stylesheet()
+    assert "QDialog#image_size_preview_dialog" in image_size_preview_dialog_stylesheet()
     assert "#a1332b" in error_text_stylesheet()
     assert "text-decoration: underline" in condition_template_details_header_stylesheet()
 

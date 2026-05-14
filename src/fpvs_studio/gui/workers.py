@@ -160,33 +160,33 @@ class ProgressTask(QObject):
         dialog.show()
 
         if self._persistent_thread:
-            worker = _presentation_worker()
-            worker.succeeded.connect(self._handle_succeeded)
-            worker.failed.connect(self._handle_failed)
-            worker.finished.connect(self._handle_worker_finished)
-            worker.finished.connect(self._handle_persistent_task_finished)
+            persistent_worker = _presentation_worker()
+            persistent_worker.succeeded.connect(self._handle_succeeded)
+            persistent_worker.failed.connect(self._handle_failed)
+            persistent_worker.finished.connect(self._handle_worker_finished)
+            persistent_worker.finished.connect(self._handle_persistent_task_finished)
 
             self._dialog = dialog
-            self._persistent_worker = worker
-            worker.task_requested.emit(self._callback)
+            self._persistent_worker = persistent_worker
+            persistent_worker.task_requested.emit(self._callback)
             return
 
         thread = QThread(self)
-        worker = GuiTaskWorker(self._callback)
-        worker.moveToThread(thread)
+        gui_worker = GuiTaskWorker(self._callback)
+        gui_worker.moveToThread(thread)
 
-        thread.started.connect(worker.run)
-        worker.succeeded.connect(self._handle_succeeded)
-        worker.failed.connect(self._handle_failed)
-        worker.finished.connect(self._handle_worker_finished)
-        worker.finished.connect(thread.quit)
-        worker.finished.connect(worker.deleteLater)
+        thread.started.connect(gui_worker.run)
+        gui_worker.succeeded.connect(self._handle_succeeded)
+        gui_worker.failed.connect(self._handle_failed)
+        gui_worker.finished.connect(self._handle_worker_finished)
+        gui_worker.finished.connect(thread.quit)
+        gui_worker.finished.connect(gui_worker.deleteLater)
         thread.finished.connect(thread.deleteLater)
         thread.finished.connect(self._handle_thread_finished)
 
         self._dialog = dialog
         self._thread = thread
-        self._worker = worker
+        self._worker = gui_worker
         thread.start()
 
     @Slot(object)

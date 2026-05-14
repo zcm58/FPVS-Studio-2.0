@@ -50,7 +50,7 @@ the active app.
 
 - Focused GUI changes need pytest-qt coverage or documented manual smoke steps.
 - Setup Wizard layout changes must run or update the focused compact no-clipping
-  coverage in `tests/gui/test_layout_dashboard.py` and should smoke all six
+  coverage in `tests/gui/test_setup_wizard_shell.py` and should smoke all six
   steps at `1120x720`.
 - Run `.\scripts\check_gui.ps1` for GUI workflow changes.
 - Run `.\scripts\check_quality.ps1` when GUI changes touch multiple layers.

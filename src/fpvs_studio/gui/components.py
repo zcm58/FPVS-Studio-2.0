@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from PySide6.QtCore import QEvent, QPoint, QSize, Qt, QTimer, Signal
+from PySide6.QtCore import QEvent, QObject, QPoint, QSize, Qt, QTimer, Signal
 from PySide6.QtGui import (
     QBrush,
     QColor,
@@ -69,7 +69,9 @@ __all__ = [
     "apply_error_text_style",
     "apply_fixation_settings_theme",
     "apply_home_page_theme",
+    "apply_image_size_preview_dialog_theme",
     "apply_non_home_shell_theme",
+    "apply_project_overview_theme",
     "apply_section_card_theme",
     "apply_setup_wizard_theme",
     "apply_studio_theme",
@@ -80,7 +82,7 @@ __all__ = [
     "error_text_stylesheet",
     "fixation_settings_stylesheet",
     "home_page_stylesheet",
-    "apply_project_overview_theme",
+    "image_size_preview_dialog_stylesheet",
     "project_overview_stylesheet",
     "mark_error_text",
     "mark_launch_action",
@@ -325,7 +327,7 @@ class SetupProgressStepper(QWidget):
         super().showEvent(event)
         self._schedule_elided_label_refresh()
 
-    def eventFilter(self, watched: object, event: QEvent) -> bool:  # noqa: N802
+    def eventFilter(self, watched: QObject, event: QEvent) -> bool:  # noqa: N802
         if (
             self._navigation_enabled
             and event.type() == QEvent.Type.MouseButtonRelease
@@ -1589,6 +1591,18 @@ def welcome_window_stylesheet(theme: StudioTheme | QPalette | None = None) -> st
 
 def apply_welcome_window_theme(widget: QWidget) -> None:
     widget.setStyleSheet(welcome_window_stylesheet(widget.palette()))
+
+
+def image_size_preview_dialog_stylesheet() -> str:
+    return (
+        "QDialog#image_size_preview_dialog { background: #101010; }"
+        "QLabel#image_size_preview_value_label { color: #f8fafc; }"
+        "QWidget#image_size_preview_control_panel { background: #f8fafc; border-radius: 8px; }"
+    )
+
+
+def apply_image_size_preview_dialog_theme(widget: QWidget) -> None:
+    widget.setStyleSheet(image_size_preview_dialog_stylesheet())
 
 
 def error_text_stylesheet() -> str:

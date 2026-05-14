@@ -6,6 +6,7 @@ messaging, not protocol semantics, RunSpec compilation rules, or execution flow.
 from __future__ import annotations
 
 from collections.abc import Callable
+from pathlib import Path
 
 from PySide6.QtCore import QEvent, Qt, QUrl
 from PySide6.QtGui import QAction, QCloseEvent, QDesktopServices
@@ -21,6 +22,7 @@ from PySide6.QtWidgets import (
 
 from fpvs_studio import __version__
 from fpvs_studio.core.models import ConditionTemplateProfile
+from fpvs_studio.core.project_config import PROJECT_CONFIG_SUFFIX, project_config_filename
 from fpvs_studio.gui.animations import ButtonHoverAnimator
 from fpvs_studio.gui.components import apply_studio_theme
 from fpvs_studio.gui.document import ProjectDocument
@@ -57,6 +59,12 @@ _AUTO_WORKSPACE_SIZE_TOLERANCE = 16
 _TUTORIALS_URL = "https://zcm58.github.io/FPVS-Studio-2.0/"
 
 
+def _ensure_config_suffix(path: Path) -> Path:
+    """Return a path with a `.fpvsconfig` suffix when no explicit suffix was selected."""
+
+    return path if path.suffix else path.with_suffix(PROJECT_CONFIG_SUFFIX)
+
+
 class StudioMainWindow(QMainWindow):
     """Main window hosting the Phase 5 authoring tabs."""
 
@@ -67,6 +75,7 @@ class StudioMainWindow(QMainWindow):
         on_request_new_project: Callable[[], None],
         on_request_open_project: Callable[[], None],
         on_request_manage_projects: Callable[[], None],
+        on_request_import_project_config: Callable[[], None],
         on_request_settings: Callable[[], None],
         on_load_condition_template_profiles: Callable[[], list[ConditionTemplateProfile]],
         on_manage_condition_templates: Callable[[], list[ConditionTemplateProfile]],
@@ -77,6 +86,7 @@ class StudioMainWindow(QMainWindow):
         self._on_request_new_project = on_request_new_project
         self._on_request_open_project = on_request_open_project
         self._on_request_manage_projects = on_request_manage_projects
+        self._on_request_import_project_config = on_request_import_project_config
         self._on_request_settings = on_request_settings
         self.setWindowTitle("FPVS Studio Beta")
         self._auto_workspace_sized = False
@@ -302,6 +312,22 @@ class StudioMainWindow(QMainWindow):
         self.manage_projects_action = QAction("Manage Projects...", self)
         self.manage_projects_action.setObjectName("manage_projects_action")
         self.manage_projects_action.triggered.connect(self._request_manage_projects)
+        self.import_project_config_action = QAction("Import Project Config...", self)
+        self.import_project_config_action.setObjectName("import_project_config_action")
+        self.import_project_config_action.triggered.connect(self._request_import_project_config)
+        self.export_project_config_action = QAction("Export Project Config...", self)
+        self.export_project_config_action.setObjectName("export_project_config_action")
+        self.export_project_config_action.triggered.connect(self.export_project_config)
+        self.export_completed_project_config_action = QAction(
+            "Export Completed Project Config...",
+            self,
+        )
+        self.export_completed_project_config_action.setObjectName(
+            "export_completed_project_config_action"
+        )
+        self.export_completed_project_config_action.triggered.connect(
+            self.export_completed_project_config
+        )
         self.save_project_action = QAction("Save", self)
         self.save_project_action.triggered.connect(self.save_project)
         self.settings_action = QAction("Settings...", self)
@@ -334,7 +360,12 @@ class StudioMainWindow(QMainWindow):
         self.menuBar().setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.file_menu.addAction(self.manage_projects_action)
         self.file_menu.addSeparator()
+        self.file_menu.addAction(self.import_project_config_action)
+        self.file_menu.addAction(self.export_project_config_action)
+        self.file_menu.addAction(self.export_completed_project_config_action)
+        self.file_menu.addSeparator()
         self.file_menu.addAction(self.settings_action)
+        self.file_menu.addSeparator()
         self.file_menu.addAction(self.check_updates_action)
         self.file_menu.addAction(self.tutorials_action)
         self.file_menu.addAction(self.about_action)
@@ -364,6 +395,40 @@ class StudioMainWindow(QMainWindow):
         except Exception as error:
             _show_error_dialog(self, "Save Error", error)
             return False
+        return True
+
+    def export_project_config(self) -> bool:
+        return self._export_config(include_completed=False)
+
+    def export_completed_project_config(self) -> bool:
+        return self._export_config(include_completed=True)
+
+    def _export_config(self, *, include_completed: bool) -> bool:
+        self.flush_pending_edits()
+        default_name = project_config_filename(
+            self.document.project.meta.name,
+            completed=include_completed,
+        )
+        selected_path, _selected_filter = QFileDialog.getSaveFileName(
+            self,
+            "Export FPVS Project Config",
+            str(self.document.project_root / default_name),
+            (
+                "FPVS Config Files (*.fpvsconfig);;"
+                "Legacy Config Files (*.config);;"
+                "JSON Files (*.json);;"
+                "All Files (*)"
+            ),
+        )
+        if not selected_path:
+            return False
+        path = _ensure_config_suffix(Path(selected_path))
+        try:
+            self.document.export_config_file(path, include_completed=include_completed)
+        except Exception as error:
+            _show_error_dialog(self, "Export Config Error", error)
+            return False
+        self.statusBar().showMessage(f"Project config exported: {path}", 3000)
         return True
 
     def maybe_save_changes(self) -> bool:
@@ -401,6 +466,10 @@ class StudioMainWindow(QMainWindow):
 
     def _request_manage_projects(self) -> None:
         self._on_request_manage_projects()
+
+    def _request_import_project_config(self) -> None:
+        if self.maybe_save_changes():
+            self._on_request_import_project_config()
 
     def _request_settings(self) -> None:
         self._on_request_settings()

@@ -21,7 +21,11 @@ from PySide6.QtWidgets import (
 )
 
 from fpvs_studio.core.display_geometry import visual_angle_width_cm, visual_angle_width_px
-from fpvs_studio.gui.components import SectionCard, mark_secondary_action
+from fpvs_studio.gui.components import (
+    SectionCard,
+    apply_image_size_preview_dialog_theme,
+    mark_secondary_action,
+)
 from fpvs_studio.gui.document import ProjectDocument
 from fpvs_studio.gui.window_helpers import (
     _RUNTIME_BACKGROUND_COLOR_PRESETS,
@@ -248,11 +252,7 @@ class ImageSizePreviewDialog(QDialog):
         self._document = document
         self.setWindowTitle("Image Size Preview")
         self.setModal(True)
-        self.setStyleSheet(
-            "QDialog#image_size_preview_dialog { background: #101010; }"
-            "QLabel#image_size_preview_value_label { color: #f8fafc; }"
-            "QWidget#image_size_preview_control_panel { background: #f8fafc; border-radius: 8px; }"
-        )
+        apply_image_size_preview_dialog_theme(self)
 
         self.preview = ImageSizePreview(document, self)
         self.preview.setObjectName("image_size_full_screen_preview")

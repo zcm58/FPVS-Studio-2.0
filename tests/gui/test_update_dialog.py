@@ -32,6 +32,33 @@ def _available_update() -> UpdateCheckResult:
     )
 
 
+def test_main_window_file_menu_groups_actions(
+    controller,
+    qtbot,
+    tmp_path: Path,
+) -> None:
+    _document, window = open_created_project(controller, qtbot, tmp_path)
+
+    menu_entries = [
+        "---" if action.isSeparator() else action.text()
+        for action in window.file_menu.actions()
+    ]
+
+    assert menu_entries == [
+        "Manage Projects...",
+        "---",
+        "Import Project Config...",
+        "Export Project Config...",
+        "Export Completed Project Config...",
+        "---",
+        "Settings...",
+        "---",
+        "Check for Updates",
+        "Tutorials",
+        "About",
+    ]
+
+
 def test_main_window_exposes_file_check_for_updates_action(
     controller,
     qtbot,

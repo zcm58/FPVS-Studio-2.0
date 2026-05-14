@@ -7,14 +7,43 @@ from pathlib import Path
 from typing import Any
 
 from PIL import Image
-from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QListWidget
+from PySide6.QtCore import QObject, QPoint, Qt, Signal
+from PySide6.QtWidgets import QListWidget, QWidget
 
 from fpvs_studio.core.enums import RunMode
 from fpvs_studio.core.execution import SessionExecutionSummary
 from fpvs_studio.core.session_plan import SessionPlan
 from fpvs_studio.gui.condition_template_manager_dialog import ConditionTemplateManagerDialog
 from fpvs_studio.gui.controller import StudioController
+
+
+class ImmediateProgressTask(QObject):
+    succeeded = Signal(object)
+    failed = Signal(object)
+    finished = Signal()
+
+    def __init__(
+        self,
+        *,
+        parent_widget: QWidget,
+        label: str,
+        callback,
+        dialog_factory=None,
+        window_title: str | None = None,
+        persistent_thread: bool = False,
+    ) -> None:
+        super().__init__(parent_widget)
+        self._callback = callback
+
+    def start(self) -> None:
+        try:
+            result = self._callback()
+        except Exception as error:
+            self.failed.emit(error)
+        else:
+            self.succeeded.emit(result)
+        finally:
+            self.finished.emit()
 
 
 def write_image_directory(
@@ -35,6 +64,13 @@ def write_image_directory(
     return target_dir
 
 
+def write_mixed_image_directory(target_dir: Path) -> Path:
+    target_dir.mkdir(parents=True, exist_ok=True)
+    Image.new("RGB", (96, 96), color=(20, 40, 60)).save(target_dir / "stimulus-01.png")
+    Image.new("RGB", (128, 96), color=(60, 40, 20)).save(target_dir / "stimulus-02.jpg")
+    return target_dir
+
+
 def open_created_project(
     controller: StudioController, qtbot, tmp_path: Path, name: str = "Demo Project"
 ) -> tuple[object, object]:
@@ -50,6 +86,50 @@ def list_widget_text(list_widget: QListWidget) -> str:
     """Return all visible list-widget text for simple assertions."""
 
     return "\n".join(list_widget.item(index).text() for index in range(list_widget.count()))
+
+
+def assert_balanced_setup_stepper(wizard: Any) -> None:
+    assert wizard.progress_panel.maximumWidth() == 1120
+    assert wizard.progress_panel.width() <= 1120
+    circle_centers: list[int] = []
+    for circle, label in zip(
+        wizard.progress_steps.step_circles,
+        wizard.progress_steps.step_labels,
+        strict=True,
+    ):
+        circle_center = circle.mapTo(
+            wizard.progress_steps,
+            QPoint(circle.width() // 2, 0),
+        ).x()
+        label_center = label.mapTo(
+            wizard.progress_steps,
+            QPoint(label.width() // 2, 0),
+        ).x()
+        circle_centers.append(circle_center)
+        assert abs(label_center - circle_center) <= 2
+    center_gaps = [
+        right - left for left, right in zip(circle_centers, circle_centers[1:], strict=False)
+    ]
+    assert max(center_gaps) - min(center_gaps) <= 2
+
+
+def assert_setup_wizard_vertical_scrolling_disabled(wizard: Any) -> None:
+    scroll_area = wizard.shell.page_container.scroll_area
+    assert scroll_area.verticalScrollBarPolicy() == Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+    assert not scroll_area.verticalScrollBar().isEnabled()
+
+
+def assert_visible_children_within_parent(root: QWidget) -> None:
+    for child in root.findChildren(QWidget):
+        parent = child.parentWidget()
+        if parent is None or not child.isVisible():
+            continue
+        top_left = child.mapTo(parent, child.rect().topLeft())
+        bottom_right = child.mapTo(parent, child.rect().bottomRight())
+        assert top_left.x() >= -1, child.objectName()
+        assert top_left.y() >= -1, child.objectName()
+        assert bottom_right.x() <= parent.width() + 1, child.objectName()
+        assert bottom_right.y() <= parent.height() + 1, child.objectName()
 
 
 def find_profile_row(dialog: ConditionTemplateManagerDialog, profile_id: str) -> int:
@@ -136,7 +216,14 @@ def build_successful_session_summary(
 
 
 _write_image_directory = write_image_directory
+_write_mixed_image_directory = write_mixed_image_directory
 _open_created_project = open_created_project
 _list_widget_text = list_widget_text
+_assert_balanced_setup_stepper = assert_balanced_setup_stepper
+_assert_setup_wizard_vertical_scrolling_disabled = (
+    assert_setup_wizard_vertical_scrolling_disabled
+)
+_assert_visible_children_within_parent = assert_visible_children_within_parent
 _find_profile_row = find_profile_row
 _prepare_compile_ready_project = prepare_compile_ready_project
+_ImmediateProgressTask = ImmediateProgressTask

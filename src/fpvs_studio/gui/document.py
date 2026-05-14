@@ -20,6 +20,12 @@ from fpvs_studio.core.paths import (
     project_json_path,
     stimulus_manifest_path,
 )
+from fpvs_studio.core.project_config import (
+    ProjectConfigError,
+    export_project_config,
+    find_latest_completed_session_dir,
+    write_project_config,
+)
 from fpvs_studio.core.project_service import create_project
 from fpvs_studio.core.serialization import load_project_file, save_project_file
 from fpvs_studio.core.session_plan import SessionPlan
@@ -64,6 +70,7 @@ __all__ = [
     "DocumentError",
     "LaunchSummary",
     "ProjectDocument",
+    "ProjectConfigError",
     "_CONDITION_LENGTH_ERROR_MESSAGE",
     "_CONDITION_REPEAT_CYCLE_MISMATCH_PREFIX",
     "create_engine",
@@ -276,6 +283,22 @@ class ProjectDocument(
         self._set_dirty(False)
         self.saved.emit()
         self.project_changed.emit()
+
+    def export_config_file(self, path: Path, *, include_completed: bool = False) -> None:
+        """Export the current project as a Studio `.fpvsconfig` file."""
+
+        completed_session_dir = None
+        if include_completed:
+            completed_session_dir = find_latest_completed_session_dir(self._project_root)
+            if completed_session_dir is None:
+                raise DocumentError("No completed session exports were found for this project.")
+        config = export_project_config(
+            self._project,
+            self._project_root,
+            manifest=self._manifest,
+            completed_session_dir=completed_session_dir,
+        )
+        write_project_config(path, config)
 
     def _apply_project_update(self, **updates: object) -> None:
         project = _validated_copy(self._project, **updates)

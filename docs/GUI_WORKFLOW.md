@@ -146,10 +146,21 @@ source-folder import path is permissive like guided Conditions import; strict in
 and materialization still surface invalid or inconsistent source details before runtime
 launch.
 
-The `File` menu exposes manage-projects, settings, `Check for Updates`, `Tutorials`,
-and `About` actions. `Tutorials` opens the public MkDocs quickstart site in the system
-browser. Settings shows the current app version from `pyproject.toml` during source-tree
-runs and from package metadata in bundled installs.
+The `File` menu groups manage-projects, project `.fpvsconfig` import/export, settings,
+and help/update actions with native separators. `Export Project Config...` writes
+a JSON-backed `.fpvsconfig` setup handoff with project title, condition trigger mapping,
+display/session settings, and Toolbox-oriented `event_map` metadata. `Export Completed
+Project Config...` writes the same setup handoff plus a summary of the latest completed
+session's order, seeds, trigger schedule, display geometry, and stimulus-manifest
+provenance. The default setup export filename is the compact project title in lowercase
+with spaces and punctuation removed, such as `semanticcategories.fpvsconfig` for
+`Semantic Categories`; completed exports append `-completed`. `Import Project Config...`
+creates a new Studio project shell under the configured FPVS Studio Root Folder; it does
+not merge into the current project and does not copy original stimulus images. The import
+dialog accepts `.fpvsconfig`, legacy `.config`, and `.json` files. `Tutorials` opens the
+public MkDocs quickstart site in the system browser. Settings shows the current app
+version from `pyproject.toml` during source-tree runs and from package metadata in bundled
+installs.
 Moving a project to the Recycle Bin remains a controller-owned filesystem operation
 guarded by `project.json` validation, confirmation, a post-action path check, and a disk
 refresh of the manage list after each attempt. `Check for Updates` queries GitHub
@@ -310,6 +321,13 @@ When iterating on GUI tests:
 - use named helpers in `tests/gui/helpers.py` for common setup such as creating a
   project window, preparing compile-ready stimuli, configuring fixation controls,
   finding condition-template rows, and building fake runtime summaries
+- use the focused GUI workflow files instead of broad reads:
+  `test_setup_wizard_shell.py` for shell/layout, `test_setup_project_details.py` for
+  project details, `test_setup_conditions.py` for condition import/normalization,
+  `test_setup_experiment_display.py` for display/session/image-size settings,
+  `test_setup_review.py` for review/return behavior, `test_home_launch_surface.py`
+  for Home, `test_run_page_launch.py` for launch wiring, and
+  `test_image_resizer_page.py` for the utility page
 
 Recommended invocation:
 
