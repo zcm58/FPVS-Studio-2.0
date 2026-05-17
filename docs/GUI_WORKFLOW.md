@@ -268,8 +268,8 @@ The current GUI supports:
 
 ## Runtime Scope
 
-The run page intentionally exposes `Launch Test Session`, not a generic
-production launch button.
+The run page exposes `Launch Experiment`, with tooltip and status text that keep the
+current beta test-mode runtime path explicit.
 
 Current honest behavior:
 

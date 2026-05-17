@@ -21,7 +21,10 @@ It is intentionally not a backlog for product features.
   coverage into focused workflow files.
 - Harness garbage collection: `.\scripts\check_gc.ps1` passes after moving preview
   dialog styling into `gui/components.py`.
-- Type/lint status: `python -m mypy src` and `python -m ruff check src tests` pass.
+- Lint status: `python -m ruff check src tests` passes.
+- Type status: `python -m mypy src` currently needs the Windows/PsychoPy verification
+  environment; the macOS source environment reports missing optional PsychoPy imports
+  and Windows-only `ctypes.windll`.
 - Agent context status: the former large GUI layout/dashboard test file is split by
   workflow; use `ARCHITECTURE.md` task recipes before broad source reads.
 

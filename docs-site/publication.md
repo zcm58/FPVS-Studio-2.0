@@ -7,7 +7,7 @@ and lab documentation.
 
 - Name: FPVS Studio
 - Package name: `fpvs-studio`
-- Current documented beta version: `0.9.0b11`
+- Current documented beta version: `0.9.7`
 - Repository: <https://github.com/zcm58/FPVS-Studio-2.0>
 - License: GPLv3 or later
 

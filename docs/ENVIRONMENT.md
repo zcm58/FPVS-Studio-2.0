@@ -71,7 +71,7 @@ The currently supported launch path is still the fullscreen PsychoPy test-mode r
 
 That means:
 
-- the GUI exposes `Launch Test Session`
+- the GUI exposes `Launch Experiment` on the beta test-mode runtime path
 - runtime launch still requires `test_mode=True`
 - fullscreen playback is the current default and is not user-configurable in the GUI
 - serial trigger settings remain backend fields, but they are not exposed in the

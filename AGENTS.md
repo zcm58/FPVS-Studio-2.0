@@ -92,7 +92,7 @@ experiments, with PsychoPy isolated behind runtime/engine boundaries.
   planning more module decomposition; split by responsibility, not by line count alone.
 - GUI changes need a focused pytest-qt smoke test, or documented manual smoke steps if
   automation is impractical.
-- Setup Wizard layout changes must keep the compact `1040x680` window free of
+- Setup Wizard layout changes must keep the compact `1120x720` window free of
   required vertical scrolling and visible child-widget clipping on all six steps.
   Update or run the focused pytest-qt clipping coverage when touching setup
   wizard frame, stepper, card, or per-step layout code.
