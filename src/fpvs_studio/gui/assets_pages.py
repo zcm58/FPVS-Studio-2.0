@@ -22,7 +22,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from fpvs_studio.core.enums import StimulusVariant
+from fpvs_studio.core.enums import StimulusModality, StimulusVariant
+from fpvs_studio.core.models import StimulusSet
 from fpvs_studio.gui.components import (
     PAGE_SECTION_GAP,
     NonHomePageShell,
@@ -152,33 +153,41 @@ class AssetsPage(QWidget):
                 self._set_table_item(
                     row_index, 1, row.role.title(), alignment=Qt.AlignmentFlag.AlignCenter
                 )
-                source_item = self._set_table_item(
-                    row_index,
-                    2,
-                    elide_middle(row.stimulus_set.source_dir, 72),
-                )
+                if row.stimulus_set.modality == StimulusModality.IMAGE:
+                    source_text = row.stimulus_set.source_dir or ""
+                    item_count = str(row.stimulus_set.image_count)
+                    resolution_text = _resolution_text(row.stimulus_set.resolution)
+                    variants_text = ", ".join(
+                        _variant_label(item) for item in row.stimulus_set.available_variants
+                    )
+                elif row.stimulus_set.modality == StimulusModality.WORD:
+                    source_text = "Word list"
+                    item_count = str(row.stimulus_set.word_count)
+                    resolution_text = "Text"
+                    variants_text = "words"
+                else:
+                    raise RuntimeError(
+                        f"Unsupported stimulus modality '{row.stimulus_set.modality}'."
+                    )
+                source_item = self._set_table_item(row_index, 2, elide_middle(source_text, 72))
                 source_item.setData(
                     Qt.ItemDataRole.UserRole,
                     (row.condition_id, row.role),
                 )
-                source_item.setToolTip(row.stimulus_set.source_dir)
+                source_item.setToolTip(source_text)
                 self._set_table_item(
                     row_index,
                     3,
-                    str(row.stimulus_set.image_count),
+                    item_count,
                     alignment=Qt.AlignmentFlag.AlignCenter,
                 )
                 self._set_table_item(
                     row_index,
                     4,
-                    _resolution_text(row.stimulus_set.resolution),
+                    resolution_text,
                     alignment=Qt.AlignmentFlag.AlignCenter,
                 )
-                self._set_table_item(
-                    row_index,
-                    5,
-                    ", ".join(_variant_label(item) for item in row.stimulus_set.available_variants),
-                )
+                self._set_table_item(row_index, 5, variants_text)
         self._resize_table_columns()
         self.assets_status_text.setPlainText(self._build_status_text(rows))
         self._update_buttons()
@@ -253,9 +262,21 @@ class AssetsPage(QWidget):
 
     def _update_buttons(self) -> None:
         is_busy = self._active_task is not None
-        self.import_source_button.setEnabled(not is_busy and self._selected_binding() is not None)
+        stimulus_set = self._selected_stimulus_set()
+        self.import_source_button.setEnabled(
+            not is_busy
+            and stimulus_set is not None
+            and stimulus_set.modality == StimulusModality.IMAGE
+        )
         self.refresh_button.setEnabled(not is_busy)
         self.materialize_button.setEnabled(not is_busy)
+
+    def _selected_stimulus_set(self) -> StimulusSet | None:
+        binding = self._selected_binding()
+        if binding is None:
+            return None
+        condition_id, role = binding
+        return self._document.get_condition_stimulus_set(condition_id, role)
 
     def _apply_supported_variants(self) -> None:
         variants = [

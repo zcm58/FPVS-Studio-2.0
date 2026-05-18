@@ -52,6 +52,11 @@ The engine never receives `ProjectFile`. It only receives one compiled
 `RunSpec`, the project root for asset resolution, and runtime-only launch
 options.
 
+Preflight validates the compiled stimulus payload before playback. Image events require
+existing project-relative files. Word events require non-empty text and do not require
+filesystem assets. Unknown modalities, missing payload fields, or reused stimulus ids
+with conflicting payloads fail before launch instead of falling back to image behavior.
+
 ## PsychoPy engine
 
 The PsychoPy implementation:
@@ -65,8 +70,8 @@ The PsychoPy implementation:
 - shows Space-required condition-start screens and completion text screens
 - runs fixation-only participant tutorial attempts when runtime asks for practice
 - shows a dedicated manual inter-block break screen between non-final blocks
-- preloads each condition's unique image stimuli before playback and releases them when
-  the condition ends
+- preloads each condition's unique image or word stimuli before playback and releases
+  condition-local resources when the condition ends
 - executes the compiled frame schedule directly from `RunSpec`
 - draws the fixation cross continuously and switches color on compiled
   `FixationEvent` windows
@@ -163,12 +168,17 @@ Per run:
 - `trigger_log.csv`
 - `warnings.log`
 
+Run and session `events.csv` exports include neutral stimulus columns:
+`stimulus_modality`, `stimulus_id`, `stimulus_value`, `image_path`, and `text`.
+`stimulus_value` is a spreadsheet convenience field derived from `image_path` for image
+events and `text` for word events; role and frame timing columns stay unchanged.
+
 Studio `.fpvsconfig` export is a separate summary/interchange file built from the editable
 project, stimulus manifest, and optionally an existing completed session directory. A
-completed `.fpvsconfig` preserves the session seed, realized condition order, per-run image
-shuffle seeds, trigger schedule, display geometry, and stimulus-generation provenance so
-another lab can recreate the setup. It does not replace the authoritative artifacts under
-`runs/`, and runtime does not consume `.fpvsconfig` during playback.
+completed `.fpvsconfig` preserves the session seed, realized condition order, per-run
+stimulus shuffle seeds, trigger schedule, display geometry, and stimulus-generation
+provenance so another lab can recreate the setup. It does not replace the authoritative
+artifacts under `runs/`, and runtime does not consume `.fpvsconfig` during playback.
 
 ## Test mode
 

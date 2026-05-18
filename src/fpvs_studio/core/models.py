@@ -26,6 +26,7 @@ from fpvs_studio.core.enums import (
     InterConditionMode,
     RunMode,
     SchemaVersion,
+    StimulusModality,
     StimulusVariant,
     TriggerBackendKind,
     ValidationSeverity,
@@ -41,6 +42,7 @@ SUPPORTED_VARIANTS = [
     StimulusVariant.ROT180,
     StimulusVariant.PHASE_SCRAMBLED,
 ]
+MAX_WORD_STIMULUS_CHARS = 64
 
 _BIDI_CONTROL_CODEPOINTS = {
     ord("\u061c"): None,  # Arabic Letter Mark
@@ -366,13 +368,15 @@ class StimulusSet(FPVSBaseModel):
 
     set_id: str
     name: str
-    source_dir: str
+    modality: StimulusModality = StimulusModality.IMAGE
+    source_dir: str | None = None
     resolution: ImageResolution | None = None
     image_count: int = Field(default=0, ge=0)
     available_variants: list[StimulusVariant] = Field(
         default_factory=lambda: [StimulusVariant.ORIGINAL]
     )
     manifest_tag: str | None = None
+    words: list[str] = Field(default_factory=list)
 
     @field_validator("set_id")
     @classmethod
@@ -386,10 +390,54 @@ class StimulusSet(FPVSBaseModel):
             raise ValueError("Stimulus set name may not be empty.")
         return value
 
+    @property
+    def word_count(self) -> int:
+        """Return the number of authored word stimuli."""
+
+        return len(self.words)
+
     @field_validator("source_dir")
     @classmethod
-    def validate_source_dir(cls, value: str) -> str:
+    def validate_source_dir(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
         return validate_project_relative_path(value)
+
+    @field_validator("words")
+    @classmethod
+    def validate_words(cls, value: list[str]) -> list[str]:
+        cleaned_words: list[str] = []
+        for word in value:
+            cleaned = strip_bidi_controls(word.strip())
+            if not cleaned:
+                raise ValueError("Word stimuli may not contain blank entries.")
+            if len(cleaned) > MAX_WORD_STIMULUS_CHARS:
+                raise ValueError(
+                    "Word stimuli may not exceed "
+                    f"{MAX_WORD_STIMULUS_CHARS} characters."
+                )
+            cleaned_words.append(cleaned)
+        return cleaned_words
+
+    @model_validator(mode="after")
+    def validate_modality_payload(self) -> StimulusSet:
+        if self.modality == StimulusModality.IMAGE:
+            if self.source_dir is None:
+                raise ValueError("Image stimulus sets require source_dir.")
+            if self.words:
+                raise ValueError("Image stimulus sets may not store word stimuli.")
+            return self
+        if self.modality == StimulusModality.WORD:
+            if self.source_dir is not None:
+                raise ValueError("Word stimulus sets must persist source_dir=None.")
+            if self.image_count != 0:
+                raise ValueError("Word stimulus sets may not store image_count.")
+            if self.resolution is not None:
+                raise ValueError("Word stimulus sets may not store image resolution.")
+            if self.available_variants != [StimulusVariant.ORIGINAL]:
+                raise ValueError("Word stimulus sets may not store image variants.")
+            return self
+        raise ValueError(f"Unsupported stimulus modality '{self.modality}'.")
 
 
 class Condition(FPVSBaseModel):

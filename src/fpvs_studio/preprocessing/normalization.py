@@ -15,6 +15,7 @@ from pathlib import Path
 
 from PIL import Image, ImageOps
 
+from fpvs_studio.core.enums import StimulusModality
 from fpvs_studio.core.models import ImageResolution, StimulusSet
 from fpvs_studio.core.paths import (
     stimulus_normalized_dir,
@@ -190,7 +191,7 @@ def normalize_stimulus_sets(
         for stimulus_set in selected_sets:
             if cancel():
                 raise ImageNormalizationError("Image normalization was cancelled.")
-            source_dir = project_root / Path(stimulus_set.source_dir)
+            source_dir = project_root / Path(_image_source_dir(stimulus_set))
             temp_dir = output_root / f".tmp-{stimulus_set.set_id}"
             if temp_dir.exists():
                 shutil.rmtree(temp_dir)
@@ -334,11 +335,12 @@ def _scan_stimulus_set(
     project_root: Path,
     stimulus_set: StimulusSet,
 ) -> StimulusSetNormalizationScan:
-    source_dir = project_root / Path(stimulus_set.source_dir)
+    source_dir_text = _image_source_dir(stimulus_set)
+    source_dir = project_root / Path(source_dir_text)
     if not source_dir.exists() or not source_dir.is_dir():
         return StimulusSetNormalizationScan(
             set_id=stimulus_set.set_id,
-            source_dir=stimulus_set.source_dir,
+            source_dir=source_dir_text,
             image_count=0,
             resolutions=(),
             file_types=(),
@@ -364,7 +366,7 @@ def _scan_stimulus_set(
 
     return StimulusSetNormalizationScan(
         set_id=stimulus_set.set_id,
-        source_dir=stimulus_set.source_dir,
+        source_dir=source_dir_text,
         image_count=image_count,
         resolutions=tuple(
             ImageResolution(width_px=width, height_px=height)
@@ -421,6 +423,18 @@ def _unique_stimulus_sets(stimulus_sets: Iterable[StimulusSet]) -> tuple[Stimulu
     for stimulus_set in stimulus_sets:
         unique.setdefault(stimulus_set.set_id, stimulus_set)
     return tuple(unique.values())
+
+
+def _image_source_dir(stimulus_set: StimulusSet) -> str:
+    if stimulus_set.modality != StimulusModality.IMAGE:
+        raise ImageNormalizationError(
+            f"Image normalization only supports image stimulus sets: {stimulus_set.name}."
+        )
+    if stimulus_set.source_dir is None:
+        raise ImageNormalizationError(
+            f"Image stimulus set '{stimulus_set.name}' is missing source_dir."
+        )
+    return stimulus_set.source_dir
 
 
 def _canonical_file_type(suffix: str) -> str:

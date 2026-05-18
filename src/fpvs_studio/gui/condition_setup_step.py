@@ -8,6 +8,7 @@ from pathlib import Path
 from PySide6.QtCore import QSignalBlocker, QSize, Qt
 from PySide6.QtGui import QResizeEvent
 from PySide6.QtWidgets import (
+    QComboBox,
     QDialog,
     QDialogButtonBox,
     QFileDialog,
@@ -26,7 +27,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from fpvs_studio.core.enums import StimulusVariant
+from fpvs_studio.core.enums import StimulusModality, StimulusVariant
 from fpvs_studio.core.models import Condition, StimulusSet
 from fpvs_studio.core.paths import stimuli_dir
 from fpvs_studio.core.validation import (
@@ -155,6 +156,7 @@ class RepeatCalculatorDialog(QDialog):
         form.setHorizontalSpacing(14)
         form.setVerticalSpacing(8)
         form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
+        item_title = "Image" if base_row.modality == StimulusModality.IMAGE else "Word"
         self._add_readonly_row(
             form,
             "Condition Length",
@@ -175,31 +177,31 @@ class RepeatCalculatorDialog(QDialog):
         )
         self._add_readonly_row(
             form,
-            "Target Repeats / Image",
+            "Target Stimulus Repeats",
             f"{base_row.target_repeats_per_image}x",
             "repeat_calculator_target_value",
         )
         self._add_readonly_row(
             form,
-            "Required Base Images",
-            f"{base_row.recommended_minimum_images} images",
+            f"Required Base {item_title}s",
+            f"{base_row.recommended_minimum_images} {item_title.lower()}s",
             "repeat_calculator_required_base_value",
         )
         self._add_readonly_row(
             form,
-            "Required Oddball Images",
-            f"{oddball_row.recommended_minimum_images} images",
+            f"Required Oddball {item_title}s",
+            f"{oddball_row.recommended_minimum_images} {item_title.lower()}s",
             "repeat_calculator_required_oddball_value",
         )
         self._add_readonly_row(
             form,
-            "Current Base Images",
+            f"Current Base {item_title}s",
             _current_images_text(base_row),
             "repeat_calculator_current_base_value",
         )
         self._add_readonly_row(
             form,
-            "Current Oddball Images",
+            f"Current Oddball {item_title}s",
             _current_images_text(oddball_row),
             "repeat_calculator_current_oddball_value",
         )
@@ -242,20 +244,32 @@ def _planning_summary_text(
     base_row: StimulusRepeatRoleGuidance,
     oddball_row: StimulusRepeatRoleGuidance,
 ) -> str:
+    item_label = "image" if base_row.modality == StimulusModality.IMAGE else "word"
+    base_items = "base images" if base_row.modality == StimulusModality.IMAGE else "base words"
+    oddball_items = (
+        "oddball images"
+        if oddball_row.modality == StimulusModality.IMAGE
+        else "oddball words"
+    )
+    location_label = (
+        "in each folder" if base_row.modality == StimulusModality.IMAGE else "in each list"
+    )
     return (
         f"Your {condition_name} condition is {oddball_row.presentation_count} oddball cycles "
-        f"long. This means you will display {base_row.presentation_count} base images and "
-        f"{oddball_row.presentation_count} oddball images. If you want each image to repeat "
+        f"long. This means you will display {base_row.presentation_count} {base_items} and "
+        f"{oddball_row.presentation_count} {oddball_items}. "
+        f"If you want each {item_label} to repeat "
         f"{base_row.target_repeats_per_image} times, then you will need at least "
-        f"{base_row.recommended_minimum_images} base images and "
-        f"{oddball_row.recommended_minimum_images} oddball images in each folder."
+        f"{base_row.recommended_minimum_images} {base_items} and "
+        f"{oddball_row.recommended_minimum_images} {oddball_items} {location_label}."
     )
 
 
 def _current_images_text(row: StimulusRepeatRoleGuidance) -> str:
+    item_label = "images" if row.modality == StimulusModality.IMAGE else "words"
     if row.image_count <= 0:
-        return "No images selected"
-    return f"{row.image_count} images, about {_repeat_range_text(row)}x each"
+        return f"No {item_label} selected"
+    return f"{row.image_count} {item_label}, about {_repeat_range_text(row)}x each"
 
 
 class ConditionSetupStep(QWidget):
@@ -270,6 +284,8 @@ class ConditionSetupStep(QWidget):
         self.setMinimumWidth(_CONDITION_STEP_MIN_WIDTH)
         self._document = document
         self._pending_instruction_condition_id: str | None = None
+        self._pending_base_words_condition_id: str | None = None
+        self._pending_oddball_words_condition_id: str | None = None
         self._active_task: ProgressTask | None = None
 
         self.condition_list = QListWidget(self)
@@ -332,11 +348,16 @@ class ConditionSetupStep(QWidget):
         self.trigger_code_spin.setObjectName("setup_wizard_condition_trigger_code_spin")
         self.trigger_code_spin.setRange(0, 65535)
         self.trigger_code_spin.valueChanged.connect(self._apply_trigger_code)
+        self.modality_combo = QComboBox(self)
+        self.modality_combo.setObjectName("setup_wizard_condition_modality_combo")
+        self.modality_combo.addItem("Images", StimulusModality.IMAGE.value)
+        self.modality_combo.addItem("Words", StimulusModality.WORD.value)
+        self.modality_combo.currentIndexChanged.connect(self._apply_modality)
         self.target_repeats_spin = QSpinBox(self)
         self.target_repeats_spin.setObjectName("setup_wizard_target_repeats_per_image_spin")
         self.target_repeats_spin.setRange(1, 10000)
         self.target_repeats_spin.setToolTip(
-            "Target maximum repetitions for each individual base or oddball image."
+            "Target maximum repetitions for each individual base or oddball stimulus."
         )
         self.target_repeats_spin.valueChanged.connect(self._apply_target_repeats)
         self.repeat_calculator_button = QPushButton("Calculate...", self)
@@ -372,7 +393,8 @@ class ConditionSetupStep(QWidget):
         target_repeats_layout.addStretch(1)
         form.addRow("Condition Name", self.condition_name_edit)
         form.addRow("Trigger Code", self.trigger_code_spin)
-        form.addRow("Target Repeats / Image", target_repeats_row)
+        form.addRow("Stimulus Type", self.modality_combo)
+        form.addRow("Target Stimulus Repeats", target_repeats_row)
         form.addRow("Participant Instructions", self.instructions_edit)
         details_section_layout.addLayout(form)
 
@@ -431,6 +453,47 @@ class ConditionSetupStep(QWidget):
             self.oddball_source_card,
             parent=self,
         )
+        self.sources_row = sources_row
+
+        self.words_panel = QFrame(self)
+        self.words_panel.setObjectName("setup_conditions_words_panel")
+        words_layout = QHBoxLayout(self.words_panel)
+        words_layout.setContentsMargins(0, 0, 0, 0)
+        words_layout.setSpacing(PAGE_SECTION_GAP)
+        self.base_words_edit = QTextEdit(self.words_panel)
+        self.base_words_edit.setObjectName("setup_wizard_base_words_edit")
+        self.base_words_edit.setFixedHeight(124)
+        self.base_words_edit.setPlaceholderText("One base word or short phrase per line")
+        self.base_words_count = QLabel("0 words", self.words_panel)
+        self.base_words_count.setObjectName("setup_wizard_base_words_count")
+        self.oddball_words_edit = QTextEdit(self.words_panel)
+        self.oddball_words_edit.setObjectName("setup_wizard_oddball_words_edit")
+        self.oddball_words_edit.setFixedHeight(124)
+        self.oddball_words_edit.setPlaceholderText("One oddball word or short phrase per line")
+        self.oddball_words_count = QLabel("0 words", self.words_panel)
+        self.oddball_words_count.setObjectName("setup_wizard_oddball_words_count")
+        self._base_words_committer = DebouncedTextCommitter(
+            self.base_words_edit,
+            self._apply_base_words,
+        )
+        self._oddball_words_committer = DebouncedTextCommitter(
+            self.oddball_words_edit,
+            self._apply_oddball_words,
+        )
+        self.base_words_edit.textChanged.connect(self._schedule_base_words_commit)
+        self.oddball_words_edit.textChanged.connect(self._schedule_oddball_words_commit)
+        words_layout.addWidget(
+            self._word_editor_column("Base Words", self.base_words_edit, self.base_words_count),
+            1,
+        )
+        words_layout.addWidget(
+            self._word_editor_column(
+                "Oddball Words",
+                self.oddball_words_edit,
+                self.oddball_words_count,
+            ),
+            1,
+        )
 
         detail_panel = QWidget(self)
         detail_panel.setObjectName("setup_conditions_main_panel")
@@ -441,6 +504,7 @@ class ConditionSetupStep(QWidget):
         detail_layout.addWidget(self.condition_details_section)
         detail_layout.addStretch(1)
         detail_layout.addWidget(sources_row)
+        detail_layout.addWidget(self.words_panel)
 
         workspace = SetupWorkspaceFrame(object_name="setup_conditions_workspace", parent=self)
         workspace.set_regions(left=list_panel, main=detail_panel)
@@ -458,6 +522,24 @@ class ConditionSetupStep(QWidget):
             return None
         value = item.data(Qt.ItemDataRole.UserRole)
         return value if isinstance(value, str) else None
+
+    def _word_editor_column(
+        self,
+        title: str,
+        editor: QTextEdit,
+        count_label: QLabel,
+    ) -> QWidget:
+        column = QWidget(self.words_panel)
+        layout = QVBoxLayout(column)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(4)
+        title_label = QLabel(title, column)
+        title_label.setObjectName(f"{editor.objectName()}_label")
+        title_label.setProperty("setupMetricValue", "true")
+        layout.addWidget(title_label)
+        layout.addWidget(editor)
+        layout.addWidget(count_label)
+        return column
 
     def refresh(self) -> None:
         if self._instructions_committer.pending:
@@ -479,6 +561,8 @@ class ConditionSetupStep(QWidget):
 
     def flush_pending_edits(self) -> None:
         self._instructions_committer.flush()
+        self._base_words_committer.flush()
+        self._oddball_words_committer.flush()
 
     def _handle_current_condition_changed(self, *_args: object) -> None:
         self.flush_pending_edits()
@@ -494,7 +578,7 @@ class ConditionSetupStep(QWidget):
         elif self._stimulus_ready(base_set) and self._stimulus_ready(oddball_set):
             return "Ready"
         else:
-            return "Needs images"
+            return "Needs words" if base_set.modality == StimulusModality.WORD else "Needs images"
 
     def _current_condition(self) -> Condition | None:
         condition_id = self.selected_condition_id()
@@ -506,9 +590,12 @@ class ConditionSetupStep(QWidget):
         for widget in (
             self.condition_name_edit,
             self.trigger_code_spin,
+            self.modality_combo,
             self.target_repeats_spin,
             self.repeat_calculator_button,
             self.instructions_edit,
+            self.base_words_edit,
+            self.oddball_words_edit,
             self.duplicate_condition_button,
             self.remove_condition_button,
             self.base_import_button,
@@ -528,12 +615,22 @@ class ConditionSetupStep(QWidget):
                 self.condition_name_edit.clear()
             with QSignalBlocker(self.trigger_code_spin):
                 self.trigger_code_spin.setValue(0)
+            with QSignalBlocker(self.modality_combo):
+                self.modality_combo.setCurrentIndex(0)
             with QSignalBlocker(self.target_repeats_spin):
                 self.target_repeats_spin.setValue(
                     self._document.project.settings.condition_defaults.target_repeats_per_image
                 )
             with QSignalBlocker(self.instructions_edit):
                 self.instructions_edit.clear()
+            with QSignalBlocker(self.base_words_edit):
+                self.base_words_edit.clear()
+            with QSignalBlocker(self.oddball_words_edit):
+                self.oddball_words_edit.clear()
+            self.base_words_count.setText("0 words")
+            self.oddball_words_count.setText("0 words")
+            self.sources_row.setVisible(True)
+            self.words_panel.setVisible(False)
             self._set_checklist_statuses(False, False, False, False)
             self._set_source_summary(None, role="base")
             self._set_source_summary(None, role="oddball")
@@ -541,6 +638,7 @@ class ConditionSetupStep(QWidget):
 
         base_set = self._document.get_condition_stimulus_set(condition.condition_id, "base")
         oddball_set = self._document.get_condition_stimulus_set(condition.condition_id, "oddball")
+        modality = base_set.modality
         named = is_guided_condition_name(condition.name)
         trigger_ready = is_guided_trigger_code(condition.trigger_code)
         base_ready = self._stimulus_ready(base_set)
@@ -549,12 +647,32 @@ class ConditionSetupStep(QWidget):
             self.condition_name_edit.setText(condition.name)
         with QSignalBlocker(self.trigger_code_spin):
             self.trigger_code_spin.setValue(condition.trigger_code)
+        with QSignalBlocker(self.modality_combo):
+            self.modality_combo.setCurrentIndex(
+                self.modality_combo.findData(modality.value)
+            )
         with QSignalBlocker(self.target_repeats_spin):
             self.target_repeats_spin.setValue(
                 self._document.project.settings.condition_defaults.target_repeats_per_image
             )
         if not self._instructions_committer.pending:
             _sync_text_editor_contents(self.instructions_edit, condition.instructions)
+        if not self._base_words_committer.pending and not self.base_words_edit.hasFocus():
+            _sync_text_editor_contents(self.base_words_edit, "\n".join(base_set.words))
+        if not self._oddball_words_committer.pending and not self.oddball_words_edit.hasFocus():
+            _sync_text_editor_contents(self.oddball_words_edit, "\n".join(oddball_set.words))
+        self.base_words_count.setText(f"{base_set.word_count} words")
+        self.oddball_words_count.setText(f"{oddball_set.word_count} words")
+        word_mode = modality == StimulusModality.WORD
+        self.sources_row.setVisible(not word_mode)
+        self.words_panel.setVisible(word_mode)
+        self.base_import_button.setEnabled(enabled and not word_mode)
+        self.oddball_import_button.setEnabled(enabled and not word_mode)
+        self.create_control_condition_button.setToolTip(
+            "Control conditions are only available for image conditions."
+            if word_mode
+            else self.create_control_condition_button.toolTip()
+        )
         self._set_checklist_statuses(named, trigger_ready, base_ready, oddball_ready)
         self._set_source_summary(base_set, role="base")
         self._set_source_summary(oddball_set, role="oddball")
@@ -568,8 +686,21 @@ class ConditionSetupStep(QWidget):
     ) -> None:
         name_status = "Complete" if named else "Enter a descriptive name"
         trigger_status = "Complete" if trigger_ready else "Use a trigger code of 1 or higher"
-        base_status = "Complete" if base_ready else "Base Images Not Selected"
-        oddball_status = "Complete" if oddball_ready else "Oddball Images Not Selected"
+        condition = self._current_condition()
+        modality = None
+        if condition is not None:
+            modality = self._document.get_condition_stimulus_set(
+                condition.condition_id,
+                "base",
+            ).modality
+        if modality == StimulusModality.WORD:
+            base_missing = "Base Words Not Configured"
+            oddball_missing = "Oddball Words Not Configured"
+        else:
+            base_missing = "Base Images Not Selected"
+            oddball_missing = "Oddball Images Not Selected"
+        base_status = "Complete" if base_ready else base_missing
+        oddball_status = "Complete" if oddball_ready else oddball_missing
         self.name_check_status.setText(name_status)
         self.trigger_check_status.setText(trigger_status)
         self.base_check_status.setText(base_status)
@@ -594,7 +725,22 @@ class ConditionSetupStep(QWidget):
                 variants="original",
             )
             return
-        source_value.set_path_text(stimulus_set.source_dir, max_length=86)
+        if stimulus_set.modality == StimulusModality.WORD:
+            source_value.set_path_text("Word list", max_length=86)
+            count_text = f"{stimulus_set.word_count} words"
+            resolution_text = "Text"
+            count_value.setText(count_text)
+            resolution_value.setText(resolution_text)
+            source_card.set_source_state(
+                ready=self._stimulus_ready(stimulus_set),
+                folder="Word list",
+                image_count=count_text,
+                resolution=resolution_text,
+                variants="word",
+            )
+            return
+        source_dir = stimulus_set.source_dir or "Not configured"
+        source_value.set_path_text(source_dir, max_length=86)
         count_text = f"{stimulus_set.image_count} images"
         resolution_text = _resolution_text(stimulus_set.resolution)
         variants_text = ", ".join(item.value for item in stimulus_set.available_variants)
@@ -602,7 +748,7 @@ class ConditionSetupStep(QWidget):
         resolution_value.setText(resolution_text)
         source_card.set_source_state(
             ready=self._stimulus_ready(stimulus_set),
-            folder=stimulus_set.source_dir,
+            folder=source_dir,
             image_count=count_text,
             resolution=resolution_text,
             variants=variants_text,
@@ -744,6 +890,53 @@ class ConditionSetupStep(QWidget):
             _show_error_dialog(self, "Condition Error", error)
             self.refresh()
 
+    def _apply_modality(self) -> None:
+        condition_id = self.selected_condition_id()
+        if condition_id is None:
+            return
+        modality_value = self.modality_combo.currentData()
+        try:
+            modality = StimulusModality(str(modality_value))
+            self._document.set_condition_stimulus_modality(condition_id, modality=modality)
+        except Exception as error:
+            _show_error_dialog(self, "Condition Error", error)
+            self.refresh()
+
+    def _schedule_base_words_commit(self) -> None:
+        self._pending_base_words_condition_id = self.selected_condition_id()
+        self._base_words_committer.schedule()
+
+    def _schedule_oddball_words_commit(self) -> None:
+        self._pending_oddball_words_condition_id = self.selected_condition_id()
+        self._oddball_words_committer.schedule()
+
+    def _apply_base_words(self) -> None:
+        self._apply_words(role="base")
+
+    def _apply_oddball_words(self) -> None:
+        self._apply_words(role="oddball")
+
+    def _apply_words(self, *, role: str) -> None:
+        condition_id = (
+            self._pending_base_words_condition_id
+            if role == "base"
+            else self._pending_oddball_words_condition_id
+        ) or self.selected_condition_id()
+        if role == "base":
+            self._pending_base_words_condition_id = None
+            text = self.base_words_edit.toPlainText()
+        else:
+            self._pending_oddball_words_condition_id = None
+            text = self.oddball_words_edit.toPlainText()
+        if condition_id is None:
+            return
+        words = [line.strip() for line in text.splitlines() if line.strip()]
+        try:
+            self._document.update_condition_words(condition_id, role=role, words=words)
+        except Exception as error:
+            _show_error_dialog(self, "Word Stimulus Error", error)
+            self.refresh()
+
     def _import_stimulus_folder(self, role: str) -> None:
         condition_id = self.selected_condition_id()
         if condition_id is None:
@@ -773,6 +966,11 @@ class ConditionSetupStep(QWidget):
             return False
         base_set = self._document.get_condition_stimulus_set(condition.condition_id, "base")
         oddball_set = self._document.get_condition_stimulus_set(condition.condition_id, "oddball")
+        if (
+            base_set.modality != StimulusModality.IMAGE
+            or oddball_set.modality != StimulusModality.IMAGE
+        ):
+            return False
         return self._stimulus_ready(base_set) and self._stimulus_ready(oddball_set)
 
     def _control_variant_missing(self, condition_id: str, variant: StimulusVariant) -> bool:
@@ -818,4 +1016,8 @@ class ConditionSetupStep(QWidget):
 
     @staticmethod
     def _stimulus_ready(stimulus_set: StimulusSet) -> bool:
-        return stimulus_set.image_count > 0
+        if stimulus_set.modality == StimulusModality.IMAGE:
+            return stimulus_set.image_count > 0
+        if stimulus_set.modality == StimulusModality.WORD:
+            return stimulus_set.word_count > 0
+        return False

@@ -9,7 +9,7 @@ import pytest
 
 from fpvs_studio.core.compiler import CompileError, compile_run_spec
 from fpvs_studio.core.compiler_schedules import build_trigger_events
-from fpvs_studio.core.enums import DutyCycleMode, StimulusVariant
+from fpvs_studio.core.enums import DutyCycleMode, StimulusModality, StimulusVariant
 from fpvs_studio.core.run_spec import StimulusEvent, TriggerEvent
 from fpvs_studio.preprocessing.importer import materialize_project_assets
 
@@ -169,6 +169,8 @@ def test_compiler_rejects_same_frame_trigger_collisions() -> None:
         StimulusEvent(
             sequence_index=0,
             role="oddball",
+            stimulus_modality=StimulusModality.IMAGE,
+            stimulus_id="oddball-set-original-0001",
             image_path="stimuli/original-images/oddball-set/oddball-set-01.png",
             on_start_frame=0,
             on_frames=1,
@@ -208,6 +210,8 @@ def test_compiler_rejects_missing_or_reset_condition_trigger_code() -> None:
         StimulusEvent(
             sequence_index=0,
             role="base",
+            stimulus_modality=StimulusModality.IMAGE,
+            stimulus_id="base-set-original-0001",
             image_path="stimuli/original-images/base-set/base-set-01.png",
             on_start_frame=0,
             on_frames=1,
@@ -352,6 +356,215 @@ def test_compiler_assigns_image_paths_with_seeded_full_pool_shuffle(
         "stimuli/original-images/oddball-set/oddball-set-02.png",
         "stimuli/original-images/oddball-set/oddball-set-03.png",
     }
+
+
+def test_compiler_preserves_current_image_schedule_contract(
+    sample_project,
+    sample_project_root,
+) -> None:
+    sample_project.settings.fixation_task.enabled = False
+    sample_project.conditions[0].oddball_cycle_repeats_per_sequence = 2
+
+    run_spec = compile_run_spec(
+        sample_project,
+        refresh_hz=60.0,
+        project_root=sample_project_root,
+        random_seed=2026,
+    )
+    first_events = run_spec.stimulus_sequence[:10]
+
+    assert [
+        (
+            event.sequence_index,
+            event.role,
+            event.stimulus_modality,
+            event.stimulus_id,
+            event.image_path,
+            event.text,
+            event.on_start_frame,
+            event.on_frames,
+            event.off_frames,
+        )
+        for event in first_events
+    ] == [
+        (
+            0,
+            "base",
+            StimulusModality.IMAGE,
+            "base-set-original-0003",
+            "stimuli/original-images/base-set/base-set-03.png",
+            None,
+            0,
+            10,
+            0,
+        ),
+        (
+            1,
+            "base",
+            StimulusModality.IMAGE,
+            "base-set-original-0002",
+            "stimuli/original-images/base-set/base-set-02.png",
+            None,
+            10,
+            10,
+            0,
+        ),
+        (
+            2,
+            "base",
+            StimulusModality.IMAGE,
+            "base-set-original-0001",
+            "stimuli/original-images/base-set/base-set-01.png",
+            None,
+            20,
+            10,
+            0,
+        ),
+        (
+            3,
+            "base",
+            StimulusModality.IMAGE,
+            "base-set-original-0001",
+            "stimuli/original-images/base-set/base-set-01.png",
+            None,
+            30,
+            10,
+            0,
+        ),
+        (
+            4,
+            "oddball",
+            StimulusModality.IMAGE,
+            "oddball-set-original-0002",
+            "stimuli/original-images/oddball-set/oddball-set-02.png",
+            None,
+            40,
+            10,
+            0,
+        ),
+        (
+            5,
+            "base",
+            StimulusModality.IMAGE,
+            "base-set-original-0002",
+            "stimuli/original-images/base-set/base-set-02.png",
+            None,
+            50,
+            10,
+            0,
+        ),
+        (
+            6,
+            "base",
+            StimulusModality.IMAGE,
+            "base-set-original-0003",
+            "stimuli/original-images/base-set/base-set-03.png",
+            None,
+            60,
+            10,
+            0,
+        ),
+        (
+            7,
+            "base",
+            StimulusModality.IMAGE,
+            "base-set-original-0001",
+            "stimuli/original-images/base-set/base-set-01.png",
+            None,
+            70,
+            10,
+            0,
+        ),
+        (
+            8,
+            "base",
+            StimulusModality.IMAGE,
+            "base-set-original-0002",
+            "stimuli/original-images/base-set/base-set-02.png",
+            None,
+            80,
+            10,
+            0,
+        ),
+        (
+            9,
+            "oddball",
+            StimulusModality.IMAGE,
+            "oddball-set-original-0001",
+            "stimuli/original-images/oddball-set/oddball-set-01.png",
+            None,
+            90,
+            10,
+            0,
+        ),
+    ]
+
+
+def test_compiler_schedules_word_stimuli_with_identical_timing(
+    sample_project,
+) -> None:
+    sample_project.settings.fixation_task.enabled = False
+    sample_project.conditions[0].oddball_cycle_repeats_per_sequence = 2
+    sample_project.stimulus_sets[0] = sample_project.stimulus_sets[0].model_copy(
+        update={
+            "modality": StimulusModality.WORD,
+            "source_dir": None,
+            "resolution": None,
+            "image_count": 0,
+            "words": ["cat", "dog", "cat"],
+        }
+    )
+    sample_project.stimulus_sets[1] = sample_project.stimulus_sets[1].model_copy(
+        update={
+            "modality": StimulusModality.WORD,
+            "source_dir": None,
+            "resolution": None,
+            "image_count": 0,
+            "words": ["tool", "chair"],
+        }
+    )
+
+    run_spec = compile_run_spec(sample_project, refresh_hz=60.0, random_seed=2026)
+
+    assert run_spec.condition.stimulus_modality == StimulusModality.WORD
+    assert [
+        (event.sequence_index, event.role, event.on_start_frame, event.on_frames, event.off_frames)
+        for event in run_spec.stimulus_sequence[:10]
+    ] == [
+        (0, "base", 0, 10, 0),
+        (1, "base", 10, 10, 0),
+        (2, "base", 20, 10, 0),
+        (3, "base", 30, 10, 0),
+        (4, "oddball", 40, 10, 0),
+        (5, "base", 50, 10, 0),
+        (6, "base", 60, 10, 0),
+        (7, "base", 70, 10, 0),
+        (8, "base", 80, 10, 0),
+        (9, "oddball", 90, 10, 0),
+    ]
+    assert all(
+        event.stimulus_modality == StimulusModality.WORD
+        for event in run_spec.stimulus_sequence
+    )
+    assert all(event.image_path is None for event in run_spec.stimulus_sequence)
+    assert {"base-set-word-0001", "base-set-word-0003"}.issubset(
+        {event.stimulus_id for event in run_spec.stimulus_sequence if event.text == "cat"}
+    )
+
+
+def test_compiler_rejects_mixed_modality_condition(sample_project) -> None:
+    sample_project.stimulus_sets[1] = sample_project.stimulus_sets[1].model_copy(
+        update={
+            "modality": StimulusModality.WORD,
+            "source_dir": None,
+            "resolution": None,
+            "image_count": 0,
+            "words": ["tool"],
+        }
+    )
+
+    with pytest.raises(CompileError, match="cannot mix base image stimuli with oddball word"):
+        compile_run_spec(sample_project, refresh_hz=60.0)
 
 
 def test_compiler_rejects_same_base_and_oddball_folder(sample_project) -> None:

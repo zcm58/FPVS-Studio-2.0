@@ -41,6 +41,13 @@ class StimulusVariant(StrEnum):
     PHASE_SCRAMBLED = "phase_scrambled"
 
 
+class StimulusModality(StrEnum):
+    """Supported authored stimulus payload types."""
+
+    IMAGE = "image"
+    WORD = "word"
+
+
 class TriggerBackendKind(StrEnum):
     """Supported trigger backend kinds."""
 

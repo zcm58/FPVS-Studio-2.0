@@ -70,6 +70,7 @@ def test_session_export_captures_seed_and_runtime_logs(
     )
 
     conditions_rows = _read_csv_rows(session_output_dir / "conditions.csv")
+    event_rows = _read_csv_rows(session_output_dir / "events.csv")
     fixation_rows = _read_csv_rows(session_output_dir / "fixation_events.csv")
     response_rows = _read_csv_rows(session_output_dir / "responses.csv")
     trigger_rows = _read_csv_rows(session_output_dir / "trigger_log.csv")
@@ -83,6 +84,17 @@ def test_session_export_captures_seed_and_runtime_logs(
     assert [row["run_id"] for row in condition_history_rows] == [
         entry.run_id for entry in session_plan.ordered_entries()
     ]
+    assert event_rows
+    assert {
+        "stimulus_modality",
+        "stimulus_id",
+        "stimulus_value",
+        "image_path",
+        "text",
+    }.issubset(event_rows[0])
+    assert event_rows[0]["stimulus_modality"] == "image"
+    assert event_rows[0]["stimulus_value"] == event_rows[0]["image_path"]
+    assert event_rows[0]["text"] == ""
     assert all(row["participant_number"] == PARTICIPANT_NUMBER for row in condition_history_rows)
     assert all(row["session_seed"] == "77" for row in condition_history_rows)
     assert all(row["output_dir"] == summary.output_dir for row in condition_history_rows)

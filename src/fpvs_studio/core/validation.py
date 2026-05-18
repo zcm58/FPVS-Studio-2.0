@@ -8,7 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from math import ceil, floor
 
-from fpvs_studio.core.enums import DutyCycleMode, ValidationSeverity
+from fpvs_studio.core.enums import DutyCycleMode, StimulusModality, ValidationSeverity
 from fpvs_studio.core.fixation_planning import (
     max_supported_color_changes,
     milliseconds_to_frames,
@@ -48,6 +48,7 @@ class StimulusRepeatRoleGuidance:
     condition_id: str
     condition_name: str
     role: str
+    modality: StimulusModality
     presentation_count: int
     image_count: int
     target_repeats_per_image: int
@@ -232,7 +233,14 @@ def condition_stimulus_repeat_guidance(project: ProjectFile) -> list[StimulusRep
         }
         for role, presentation_count in role_presentations.items():
             stimulus_set = stimulus_sets.get(role_set_ids[role])
-            image_count = stimulus_set.image_count if stimulus_set is not None else 0
+            modality = stimulus_set.modality if stimulus_set is not None else StimulusModality.IMAGE
+            image_count = (
+                stimulus_set.image_count
+                if stimulus_set is not None and modality == StimulusModality.IMAGE
+                else stimulus_set.word_count
+                if stimulus_set is not None and modality == StimulusModality.WORD
+                else 0
+            )
             if image_count <= 0:
                 min_repeats = 0
                 max_repeats = 0
@@ -246,6 +254,7 @@ def condition_stimulus_repeat_guidance(project: ProjectFile) -> list[StimulusRep
                     condition_id=condition.condition_id,
                     condition_name=condition.name,
                     role=role,
+                    modality=modality,
                     presentation_count=presentation_count,
                     image_count=image_count,
                     target_repeats_per_image=target_repeats,
@@ -310,6 +319,8 @@ def validate_project(
         if row.image_count <= 0:
             continue
         role_label = "Base" if row.role == "base" else "Oddball"
+        item_label = "images" if row.modality == StimulusModality.IMAGE else "words"
+        repeat_label = "image" if row.modality == StimulusModality.IMAGE else "word"
         repeat_range = (
             f"{row.min_repeats_per_image}"
             if row.min_repeats_per_image == row.max_repeats_per_image
@@ -321,10 +332,11 @@ def validate_project(
                     location=f"conditions.{row.condition_id}.{row.role}_stimulus_set_id",
                     message=(
                         f"{role_label} stimulus set for condition '{row.condition_name}' has "
-                        f"{row.image_count} image(s), but {row.recommended_minimum_images} "
-                        f"are recommended for <= {row.target_repeats_per_image} "
-                        f"repeats/image across {row.presentation_count} presentations. "
-                        f"Current scheduling gives {repeat_range} repeats/image."
+                        f"{row.image_count} {item_label}, but "
+                        f"{row.recommended_minimum_images} are recommended for <= "
+                        f"{row.target_repeats_per_image} repeats/{repeat_label} across "
+                        f"{row.presentation_count} presentations. Current scheduling gives "
+                        f"{repeat_range} repeats/{repeat_label}."
                     ),
                     severity=ValidationSeverity.WARNING,
                 )
@@ -335,8 +347,8 @@ def validate_project(
                     location=f"conditions.{row.condition_id}.{row.role}_stimulus_set_id",
                     message=(
                         f"{role_label} presentations for condition '{row.condition_name}' "
-                        f"do not divide evenly across {row.image_count} image(s); current "
-                        f"scheduling gives {repeat_range} repeats/image."
+                        f"do not divide evenly across {row.image_count} {item_label}; "
+                        f"current scheduling gives {repeat_range} repeats/{repeat_label}."
                     ),
                     severity=ValidationSeverity.WARNING,
                 )
@@ -376,6 +388,23 @@ def validate_project(
         if (
             base_set is not None
             and oddball_set is not None
+            and base_set.modality != oddball_set.modality
+        ):
+            issues.append(
+                ValidationIssue(
+                    location=f"conditions.{condition.condition_id}",
+                    message=(
+                        f"Condition '{condition.name}' cannot mix base "
+                        f"{base_set.modality.value} stimuli with oddball "
+                        f"{oddball_set.modality.value} stimuli."
+                    ),
+                )
+            )
+            continue
+        if (
+            base_set is not None
+            and oddball_set is not None
+            and base_set.modality == StimulusModality.IMAGE
             and base_set.source_dir == oddball_set.source_dir
         ):
             issues.append(
@@ -387,14 +416,22 @@ def validate_project(
                     ),
                 )
             )
-        if base_set is not None and base_set.image_count <= 0:
+        if (
+            base_set is not None
+            and base_set.modality == StimulusModality.IMAGE
+            and base_set.image_count <= 0
+        ):
             issues.append(
                 ValidationIssue(
                     location=f"stimulus_sets.{base_set.set_id}.image_count",
                     message=f"Stimulus set '{base_set.name}' does not contain any imported images.",
                 )
             )
-        if oddball_set is not None and oddball_set.image_count <= 0:
+        if (
+            oddball_set is not None
+            and oddball_set.modality == StimulusModality.IMAGE
+            and oddball_set.image_count <= 0
+        ):
             issues.append(
                 ValidationIssue(
                     location=f"stimulus_sets.{oddball_set.set_id}.image_count",
@@ -403,8 +440,32 @@ def validate_project(
                     ),
                 )
             )
+        if (
+            base_set is not None
+            and base_set.modality == StimulusModality.WORD
+            and base_set.word_count <= 0
+        ):
+            issues.append(
+                ValidationIssue(
+                    location=f"stimulus_sets.{base_set.set_id}.words",
+                    message=f"Stimulus set '{base_set.name}' does not contain any words.",
+                )
+            )
+        if (
+            oddball_set is not None
+            and oddball_set.modality == StimulusModality.WORD
+            and oddball_set.word_count <= 0
+        ):
+            issues.append(
+                ValidationIssue(
+                    location=f"stimulus_sets.{oddball_set.set_id}.words",
+                    message=f"Stimulus set '{oddball_set.name}' does not contain any words.",
+                )
+            )
         for role, stimulus_set in (("base", base_set), ("oddball", oddball_set)):
             if stimulus_set is None:
+                continue
+            if stimulus_set.modality != StimulusModality.IMAGE:
                 continue
             role_label = "Base" if role == "base" else "Oddball"
             if stimulus_set.resolution is None:

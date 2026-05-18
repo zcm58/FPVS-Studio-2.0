@@ -10,7 +10,7 @@ from __future__ import annotations
 import random
 from pathlib import Path
 
-from fpvs_studio.core.compiler_assets import load_manifest, resolve_image_paths
+from fpvs_studio.core.compiler_assets import load_manifest, resolve_stimulus_items
 from fpvs_studio.core.compiler_conditions import (
     select_condition,
     select_conditions,
@@ -90,13 +90,13 @@ def compile_run_spec(
     total_stimuli = total_oddball_cycles * template.oddball_every_n
     total_frames = total_stimuli * frames_per_stimulus_value
 
-    base_paths = resolve_image_paths(
+    base_stimuli = resolve_stimulus_items(
         base_set,
         variant=condition.stimulus_variant,
         project_root=project_root,
         manifest=resolved_manifest,
     )
-    oddball_paths = resolve_image_paths(
+    oddball_stimuli = resolve_stimulus_items(
         oddball_set,
         variant=condition.stimulus_variant,
         project_root=project_root,
@@ -107,8 +107,8 @@ def compile_run_spec(
         frames_per_stimulus_value=frames_per_stimulus_value,
         on_frames=on_frames,
         off_frames=off_frames,
-        base_paths=base_paths,
-        oddball_paths=oddball_paths,
+        base_stimuli=base_stimuli,
+        oddball_stimuli=oddball_stimuli,
         oddball_every_n=template.oddball_every_n,
         rng=random.Random(random_seed),
     )
@@ -198,6 +198,7 @@ def compile_run_spec(
             oddball_hz=template.oddball_hz,
             total_oddball_cycles=total_oddball_cycles,
             total_stimuli=total_stimuli,
+            stimulus_modality=base_set.modality,
             trigger_code=condition.trigger_code,
         ),
         display=DisplayRunSpec(

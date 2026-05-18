@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from fpvs_studio.core.compiler import compile_run_spec
+from fpvs_studio.core.enums import StimulusModality
 from fpvs_studio.core.execution import RunExecutionSummary
 from fpvs_studio.core.run_spec import RunSpec
 from fpvs_studio.engines.base import FixationTutorialAttemptResult, PresentationEngine
@@ -188,4 +189,94 @@ def test_preflight_rejects_blank_50_when_frames_per_stimulus_is_odd(
         event.off_frames = 7
 
     with pytest.raises(PreflightError, match="blank_50"):
+        preflight_run_spec(sample_project_root, run_spec, engine=_PreflightEngine())
+
+
+def test_preflight_accepts_word_stimuli_without_files(sample_project, sample_project_root) -> None:
+    sample_project.stimulus_sets[0] = sample_project.stimulus_sets[0].model_copy(
+        update={
+            "modality": StimulusModality.WORD,
+            "source_dir": None,
+            "resolution": None,
+            "image_count": 0,
+            "words": ["cat", "dog"],
+        }
+    )
+    sample_project.stimulus_sets[1] = sample_project.stimulus_sets[1].model_copy(
+        update={
+            "modality": StimulusModality.WORD,
+            "source_dir": None,
+            "resolution": None,
+            "image_count": 0,
+            "words": ["tool"],
+        }
+    )
+    run_spec = compile_run_spec(
+        sample_project,
+        refresh_hz=60.0,
+        project_root=sample_project_root,
+        run_id="word-run",
+    )
+
+    preflight_run_spec(sample_project_root, run_spec, engine=_PreflightEngine())
+
+
+def test_preflight_rejects_stimulus_id_payload_collision(
+    sample_project,
+    sample_project_root,
+) -> None:
+    run_spec = compile_run_spec(
+        sample_project,
+        refresh_hz=60.0,
+        project_root=sample_project_root,
+        run_id="faces-run",
+    )
+    run_spec.stimulus_sequence[1] = run_spec.stimulus_sequence[1].model_copy(
+        update={
+            "stimulus_id": run_spec.stimulus_sequence[0].stimulus_id,
+            "image_path": run_spec.stimulus_sequence[0].image_path,
+        }
+    )
+    run_spec.stimulus_sequence[2] = run_spec.stimulus_sequence[2].model_copy(
+        update={
+            "stimulus_id": run_spec.stimulus_sequence[0].stimulus_id,
+            "image_path": run_spec.stimulus_sequence[2].image_path,
+        }
+    )
+
+    with pytest.raises(PreflightError, match="maps to multiple payloads"):
+        preflight_run_spec(sample_project_root, run_spec, engine=_PreflightEngine())
+
+
+def test_preflight_rejects_malformed_word_payload(sample_project, sample_project_root) -> None:
+    run_spec = compile_run_spec(
+        sample_project,
+        refresh_hz=60.0,
+        project_root=sample_project_root,
+        run_id="faces-run",
+    )
+    run_spec.stimulus_sequence[0] = run_spec.stimulus_sequence[0].model_copy(
+        update={
+            "stimulus_modality": StimulusModality.WORD,
+            "text": None,
+            "image_path": None,
+        }
+    )
+
+    with pytest.raises(PreflightError, match="word stimulus event has an inconsistent payload"):
+        preflight_run_spec(sample_project_root, run_spec, engine=_PreflightEngine())
+
+
+def test_preflight_rejects_unknown_stimulus_modality(sample_project, sample_project_root) -> None:
+    run_spec = compile_run_spec(
+        sample_project,
+        refresh_hz=60.0,
+        project_root=sample_project_root,
+        run_id="faces-run",
+    )
+    run_spec.stimulus_sequence[0] = run_spec.stimulus_sequence[0].model_copy(
+        update={"stimulus_modality": "audio"}
+    )
+
+    with pytest.raises(PreflightError, match="unknown modality"):
         preflight_run_spec(sample_project_root, run_spec, engine=_PreflightEngine())

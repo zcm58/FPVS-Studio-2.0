@@ -8,13 +8,14 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import Field, StrictInt, field_validator
+from pydantic import Field, StrictInt, field_validator, model_validator
 
-from fpvs_studio.core.enums import SchemaVersion
+from fpvs_studio.core.enums import SchemaVersion, StimulusModality
 from fpvs_studio.core.models import (
     FPVSBaseModel,
     validate_color,
     validate_project_relative_path,
+    validate_slug,
 )
 
 StimulusRole = Literal["base", "oddball"]
@@ -58,6 +59,7 @@ class ConditionRunSpec(FPVSBaseModel):
     oddball_hz: float = Field(gt=0)
     total_oddball_cycles: int = Field(ge=0)
     total_stimuli: int = Field(ge=0)
+    stimulus_modality: StimulusModality
     trigger_code: StrictInt | None = Field(default=None, ge=0, le=255)
 
 
@@ -66,15 +68,51 @@ class StimulusEvent(FPVSBaseModel):
 
     sequence_index: int = Field(ge=0)
     role: StimulusRole
-    image_path: str
+    stimulus_modality: StimulusModality
+    stimulus_id: str
+    image_path: str | None = None
+    text: str | None = None
     on_start_frame: int = Field(ge=0)
     on_frames: int = Field(ge=0)
     off_frames: int = Field(ge=0)
 
+    @field_validator("stimulus_id")
+    @classmethod
+    def validate_stimulus_id(cls, value: str) -> str:
+        return validate_slug(value, field_name="stimulus_id")
+
     @field_validator("image_path")
     @classmethod
-    def validate_image_path(cls, value: str) -> str:
+    def validate_image_path(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
         return validate_project_relative_path(value)
+
+    @field_validator("text")
+    @classmethod
+    def validate_text(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("Word stimulus text may not be blank.")
+        return cleaned
+
+    @model_validator(mode="after")
+    def validate_payload(self) -> StimulusEvent:
+        if self.stimulus_modality == StimulusModality.IMAGE:
+            if self.image_path is None:
+                raise ValueError("Image stimulus events require image_path.")
+            if self.text is not None:
+                raise ValueError("Image stimulus events may not contain text.")
+            return self
+        if self.stimulus_modality == StimulusModality.WORD:
+            if self.text is None:
+                raise ValueError("Word stimulus events require text.")
+            if self.image_path is not None:
+                raise ValueError("Word stimulus events may not contain image_path.")
+            return self
+        raise ValueError(f"Unsupported stimulus modality '{self.stimulus_modality}'.")
 
 
 class FixationStyleSpec(FPVSBaseModel):

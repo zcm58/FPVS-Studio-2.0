@@ -3,17 +3,19 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Mapping, MutableMapping
+from collections.abc import MutableMapping
 from pathlib import Path
 from typing import Any
 
 from PIL import Image
 
 from fpvs_studio.core.display_geometry import visual_angle_width_px
-from fpvs_studio.core.run_spec import DisplayRunSpec, FixationEvent, StimulusEvent
+from fpvs_studio.core.enums import StimulusModality
+from fpvs_studio.core.run_spec import DisplayRunSpec, FixationEvent, RunSpec, StimulusEvent
 
 LOGGER = logging.getLogger(__name__)
 _PSYCHOPY_TEXTURE_ID_ATTRIBUTES = ("_texID", "_maskID", "_pixBuffID")
+WORD_TEXT_HEIGHT_TO_STIMULUS_WIDTH_RATIO = 0.25
 
 
 def fixation_color_for_frame(
@@ -53,25 +55,45 @@ def prepare_stimuli(
     *,
     visual: Any,
     window: Any,
-    absolute_paths: Mapping[str, Path],
-    display: DisplayRunSpec,
+    project_root: Path,
+    run_spec: RunSpec,
 ) -> dict[str, Any]:
-    """Create PsychoPy image stimuli for one condition run."""
+    """Create PsychoPy stimuli for one condition run."""
 
     stimuli: dict[str, Any] = {}
-    for relative_path, absolute_path in absolute_paths.items():
+    for event in run_spec.stimulus_sequence:
+        if event.stimulus_id in stimuli:
+            continue
         try:
-            stimulus_size = _stimulus_size_px(
-                absolute_path=absolute_path,
-                window=window,
-                display=display,
-            )
-            stimuli[relative_path] = visual.ImageStim(
-                window,
-                image=str(absolute_path),
-                size=stimulus_size,
-                autoLog=False,
-            )
+            if event.stimulus_modality == StimulusModality.IMAGE:
+                if event.image_path is None:
+                    raise ValueError("Image stimulus event is missing image_path.")
+                absolute_path = project_root / Path(event.image_path)
+                stimulus_size = _stimulus_size_px(
+                    absolute_path=absolute_path,
+                    window=window,
+                    display=run_spec.display,
+                )
+                stimuli[event.stimulus_id] = visual.ImageStim(
+                    window,
+                    image=str(absolute_path),
+                    size=stimulus_size,
+                    autoLog=False,
+                )
+            elif event.stimulus_modality == StimulusModality.WORD:
+                if event.text is None:
+                    raise ValueError("Word stimulus event is missing text.")
+                text_height = _word_text_height_px(window=window, display=run_spec.display)
+                stimuli[event.stimulus_id] = visual.TextStim(
+                    window,
+                    text=event.text,
+                    pos=(0, 0),
+                    height=text_height,
+                    color="white",
+                    autoLog=False,
+                )
+            else:
+                raise ValueError(f"Unsupported stimulus modality '{event.stimulus_modality}'.")
         except Exception:
             release_stimuli(stimuli)
             raise
@@ -107,6 +129,16 @@ def _window_width_px(window: Any) -> int:
     if isinstance(size, (list, tuple)) and size:
         return max(1, int(size[0]))
     return 1920
+
+
+def _word_text_height_px(*, window: Any, display: DisplayRunSpec) -> int:
+    stimulus_width_px = visual_angle_width_px(
+        degrees=display.stimulus_width_degrees,
+        viewing_distance_cm=display.viewing_distance_cm,
+        screen_width_cm=display.screen_width_cm,
+        screen_width_px=_screen_width_px(window=window, display=display),
+    )
+    return max(1, round(stimulus_width_px * WORD_TEXT_HEIGHT_TO_STIMULUS_WIDTH_RATIO))
 
 
 def release_stimuli(stimuli: MutableMapping[str, Any]) -> None:

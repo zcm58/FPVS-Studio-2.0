@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from fpvs_studio.core.compiler_support import CompileError
-from fpvs_studio.core.enums import DutyCycleMode
+from fpvs_studio.core.enums import DutyCycleMode, StimulusModality
 from fpvs_studio.core.frame_validation import (
     FrameValidationError,
     frames_per_stimulus,
@@ -93,28 +93,47 @@ def validate_selected_condition(
             f"Condition '{condition.name}' references missing oddball stimulus set "
             f"'{condition.oddball_stimulus_set_id}'."
         )
-    if base_set.image_count <= 0:
-        raise CompileError(f"Stimulus set '{base_set.name}' does not contain any imported images.")
-    if oddball_set.image_count <= 0:
+    if base_set.modality != oddball_set.modality:
         raise CompileError(
-            f"Stimulus set '{oddball_set.name}' does not contain any imported images."
+            f"Condition '{condition.name}' cannot mix base {base_set.modality.value} "
+            f"stimuli with oddball {oddball_set.modality.value} stimuli."
         )
-    if base_set.source_dir == oddball_set.source_dir:
+    if base_set.modality == StimulusModality.IMAGE:
+        if base_set.image_count <= 0:
+            raise CompileError(
+                f"Stimulus set '{base_set.name}' does not contain any imported images."
+            )
+        if oddball_set.image_count <= 0:
+            raise CompileError(
+                f"Stimulus set '{oddball_set.name}' does not contain any imported images."
+            )
+        if base_set.source_dir == oddball_set.source_dir:
+            raise CompileError(
+                f"Condition '{condition.name}' cannot use the same folder for base "
+                "and oddball images."
+            )
+        for role_label, stimulus_set in (("Base", base_set), ("Oddball", oddball_set)):
+            if stimulus_set.resolution is None:
+                raise CompileError(
+                    f"{role_label} stimulus set '{stimulus_set.name}' must be normalized "
+                    "to square images before launch."
+                )
+            if stimulus_set.resolution.width_px != stimulus_set.resolution.height_px:
+                raise CompileError(
+                    f"{role_label} stimulus set '{stimulus_set.name}' uses non-square "
+                    f"{stimulus_set.resolution.width_px}x{stimulus_set.resolution.height_px} "
+                    "images. Normalize the selected images to square PNG copies before launch."
+                )
+    elif base_set.modality == StimulusModality.WORD:
+        if not base_set.words:
+            raise CompileError(f"Stimulus set '{base_set.name}' does not contain any words.")
+        if not oddball_set.words:
+            raise CompileError(f"Stimulus set '{oddball_set.name}' does not contain any words.")
+    else:
         raise CompileError(
-            f"Condition '{condition.name}' cannot use the same folder for base and oddball images."
+            f"Condition '{condition.name}' uses unsupported stimulus modality "
+            f"'{base_set.modality}'."
         )
-    for role_label, stimulus_set in (("Base", base_set), ("Oddball", oddball_set)):
-        if stimulus_set.resolution is None:
-            raise CompileError(
-                f"{role_label} stimulus set '{stimulus_set.name}' must be normalized "
-                "to square images before launch."
-            )
-        if stimulus_set.resolution.width_px != stimulus_set.resolution.height_px:
-            raise CompileError(
-                f"{role_label} stimulus set '{stimulus_set.name}' uses non-square "
-                f"{stimulus_set.resolution.width_px}x{stimulus_set.resolution.height_px} "
-                "images. Normalize the selected images to square PNG copies before launch."
-            )
     if condition.duty_cycle_mode == DutyCycleMode.BLANK_50:
         try:
             on_off_frames(

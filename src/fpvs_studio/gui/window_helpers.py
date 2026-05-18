@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
 from fpvs_studio.core.enums import (
     DutyCycleMode,
     InterConditionMode,
+    StimulusModality,
     StimulusVariant,
     ValidationSeverity,
 )
@@ -188,13 +189,19 @@ def _conditions_have_assigned_assets(document: ProjectDocument, ordered_conditio
     if not stimulus_sets_by_id:
         return False
 
-    def has_imported_images(set_id: str) -> bool:
+    def has_ready_stimuli(set_id: str) -> bool:
         stimulus_set = stimulus_sets_by_id.get(set_id)
-        return stimulus_set is not None and stimulus_set.image_count > 0
+        if stimulus_set is None:
+            return False
+        if stimulus_set.modality == StimulusModality.IMAGE:
+            return stimulus_set.image_count > 0
+        if stimulus_set.modality == StimulusModality.WORD:
+            return stimulus_set.word_count > 0
+        return False
 
     return all(
-        has_imported_images(condition.base_stimulus_set_id)
-        and has_imported_images(condition.oddball_stimulus_set_id)
+        has_ready_stimuli(condition.base_stimulus_set_id)
+        and has_ready_stimuli(condition.oddball_stimulus_set_id)
         for condition in ordered_conditions
     )
 

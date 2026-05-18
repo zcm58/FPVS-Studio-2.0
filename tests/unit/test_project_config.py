@@ -7,7 +7,7 @@ import json
 import pytest
 
 from fpvs_studio.core.compiler import compile_session_plan
-from fpvs_studio.core.enums import StimulusVariant
+from fpvs_studio.core.enums import StimulusModality, StimulusVariant
 from fpvs_studio.core.models import ImageResolution
 from fpvs_studio.core.project_config import (
     ProjectConfigError,
@@ -145,6 +145,36 @@ def test_config_import_creates_new_project_shell_without_copying_stimuli(
     assert loaded.stimulus_sets[0].image_count == 0
     assert loaded.stimulus_sets[0].resolution is None
     assert (scaffold.project_root / "stimuli" / "manifest.json").is_file()
+
+
+def test_config_round_trips_word_stimulus_sets(tmp_path, sample_project) -> None:
+    sample_project.stimulus_sets[0] = sample_project.stimulus_sets[0].model_copy(
+        update={
+            "modality": StimulusModality.WORD,
+            "source_dir": None,
+            "resolution": None,
+            "image_count": 0,
+            "words": ["cat", "dog"],
+        }
+    )
+    sample_project.stimulus_sets[1] = sample_project.stimulus_sets[1].model_copy(
+        update={
+            "modality": StimulusModality.WORD,
+            "source_dir": None,
+            "resolution": None,
+            "image_count": 0,
+            "words": ["tool"],
+        }
+    )
+    config = export_project_config(sample_project, tmp_path / "source-project")
+
+    scaffold = create_project_from_config(tmp_path, config)
+    loaded = load_project_file(scaffold.project_root / "project.json")
+
+    assert loaded.stimulus_sets[0].modality == StimulusModality.WORD
+    assert loaded.stimulus_sets[0].source_dir is None
+    assert loaded.stimulus_sets[0].words == ["cat", "dog"]
+    assert not (scaffold.project_root / "stimuli" / "original-images" / "base-set").exists()
 
 
 def test_config_import_never_overwrites_existing_project_folder(

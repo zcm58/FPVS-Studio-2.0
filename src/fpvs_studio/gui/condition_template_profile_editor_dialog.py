@@ -88,7 +88,7 @@ class ConditionTemplateProfileEditorDialog(QDialog):
         condition_layout.addRow("Duty Cycle", self.duty_cycle_combo)
         condition_layout.addRow("Condition Repeats", self.sequence_count_spin)
         condition_layout.addRow("Cycles / Condition Repeat", self.oddball_cycles_spin)
-        condition_layout.addRow("Target Repeats / Image", self.target_repeats_spin)
+        condition_layout.addRow("Target Stimulus Repeats", self.target_repeats_spin)
 
         self.preferred_refresh_enabled_checkbox = QCheckBox(
             "Set preferred refresh rate",

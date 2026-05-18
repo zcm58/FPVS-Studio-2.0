@@ -245,11 +245,7 @@ class PsychoPyEngine(PresentationEngine):
         stimuli: dict[str, Any] = {}
 
         try:
-            absolute_paths = {
-                event.image_path: project_root / Path(event.image_path)
-                for event in run_spec.stimulus_sequence
-            }
-            stimuli = self._prepare_stimuli(absolute_paths, run_spec=run_spec)
+            stimuli = self._prepare_stimuli(project_root, run_spec=run_spec)
             fixation_stim = create_fixation_stim(visual=visual, window=window, run_spec=run_spec)
             keyboard.clock.reset()
             keyboard.clearEvents()
@@ -337,7 +333,13 @@ class PsychoPyEngine(PresentationEngine):
                     stimulus_event,
                     frame_index,
                 ):
-                    stimuli[stimulus_event.image_path].draw()
+                    stimulus = stimuli.get(stimulus_event.stimulus_id)
+                    if stimulus is None:
+                        raise RuntimeError(
+                            "Prepared stimulus is missing for compiled stimulus id "
+                            f"'{stimulus_event.stimulus_id}'."
+                        )
+                    stimulus.draw()
 
                 while (
                     fixation_index + 1 < len(run_spec.fixation_events)
@@ -542,15 +544,15 @@ class PsychoPyEngine(PresentationEngine):
 
     def _prepare_stimuli(
         self,
-        absolute_paths: Mapping[str, Path],
+        project_root: Path,
         *,
         run_spec: RunSpec,
     ) -> dict[str, Any]:
         return prepare_stimuli(
             visual=self._require_visual(),
             window=self._require_window(),
-            absolute_paths=absolute_paths,
-            display=run_spec.display,
+            project_root=project_root,
+            run_spec=run_spec,
         )
 
     def _runtime_metadata_for_run(

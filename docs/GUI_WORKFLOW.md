@@ -99,8 +99,10 @@ The authoring window is organized around two user-facing modes:
     condition order is always randomized automatically for each launch
   - the Conditions step uses compact condition rows and a combined condition
     setup surface for condition list actions, name, trigger code, participant
-    instructions, and base/oddball image source cards
-  - Conditions shows project-wide target repeats per image and per-condition base/oddball
+    instructions, modality, and base/oddball stimulus authoring
+  - image conditions use the existing base/oddball image source cards; word conditions
+    use typed Base Words and Oddball Words editors with one word or short phrase per line
+  - Conditions shows project-wide target repeats per stimulus and per-condition base/oddball
     repeat-balance guidance; repeat-balance issues are warnings and do not block save
     or launch
   - raw image-folder import is permissive; folders with mixed or non-square image sizes are not
@@ -111,9 +113,11 @@ The authoring window is organized around two user-facing modes:
   - the Conditions step includes a secondary `Create Control Condition...` action for
     optional grayscale, 180 degree rotated, or phase-scrambled control conditions that
     reuse the selected condition's existing base and oddball image folders
+  - control-condition creation, image normalization, and image materialization are
+    image-only paths and are disabled or skipped for word conditions
   - raw timing fields such as `Cycles / Repeat` are hidden from the guided workflow
   - Conditions is complete when every condition has a descriptive name, trigger
-    code of 1 or higher, and imported base and oddball image folders
+    code of 1 or higher, and configured base/oddball stimuli for its modality
   - Fixation keeps color changes enabled and exposes schedule, capped target counts,
     and timing
   - Response exposes accuracy tracking, response key/window, appearance, and a live
@@ -144,7 +148,8 @@ The Stimuli Manager remains an internal support page for variant/materialization
 behavior, not a guided setup step or visible top-level tab during normal use. Its raw
 source-folder import path is permissive like guided Conditions import; strict inspection
 and materialization still surface invalid or inconsistent source details before runtime
-launch.
+launch. Word stimulus rows are shown for readiness context but cannot use image-folder
+import, inspection, or materialization actions.
 
 The `File` menu groups manage-projects, project `.fpvsconfig` import/export, settings,
 and help/update actions with native separators. `Export Project Config...` writes
@@ -257,7 +262,9 @@ The current GUI supports:
 - checking for app updates from `File > Check for Updates`
 - authoring multiple conditions
 - importing base and oddball image folders
-- reviewing target repeats per image and base/oddball repeat-balance warnings
+- authoring base and oddball word lists for word-based conditions
+- mixing image-based and word-based conditions in one session
+- reviewing target repeats per stimulus and base/oddball repeat-balance warnings
 - normalizing inconsistent condition image folders to project-local PNG copies
 - using `Tools > Image Resizer` to create standalone FPVS-ready PNG copies
 - creating optional derived-variant control conditions from existing condition stimuli

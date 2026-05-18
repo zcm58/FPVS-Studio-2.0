@@ -21,6 +21,7 @@ from fpvs_studio.core.display_geometry import visual_angle_width_cm, visual_angl
 from fpvs_studio.core.enums import (
     DutyCycleMode,
     InterConditionMode,
+    StimulusModality,
     StimulusVariant,
     TriggerBackendKind,
 )
@@ -115,6 +116,28 @@ class ProjectConfigCondition(FPVSBaseModel):
     @classmethod
     def validate_ids(cls, value: str) -> str:
         return validate_slug(value, field_name="condition or stimulus set id")
+
+
+class ProjectConfigStimulusSet(FPVSBaseModel):
+    """Editable stimulus-set payload preserved for config import/export."""
+
+    set_id: str
+    name: str
+    modality: StimulusModality = StimulusModality.IMAGE
+    source_dir: str | None = None
+    words: list[str] = Field(default_factory=list)
+
+    @field_validator("set_id")
+    @classmethod
+    def validate_set_id(cls, value: str) -> str:
+        return validate_slug(value, field_name="stimulus set id")
+
+    @field_validator("source_dir")
+    @classmethod
+    def validate_source_dir(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        return validate_project_relative_path(value)
 
 
 class ProjectConfigDisplay(FPVSBaseModel):
@@ -218,6 +241,7 @@ class ProjectConfigFile(FPVSBaseModel):
     producer: ProjectConfigProducer = Field(default_factory=ProjectConfigProducer)
     project: ProjectConfigProject
     conditions: list[ProjectConfigCondition] = Field(default_factory=list)
+    stimulus_sets: list[ProjectConfigStimulusSet] = Field(default_factory=list)
     display: ProjectConfigDisplay
     session: ProjectConfigSession
     triggers: ProjectConfigTriggers
@@ -263,6 +287,16 @@ def export_project_config(
                 instructions=condition.instructions,
             )
             for condition in sorted(project.conditions, key=lambda item: item.order_index)
+        ],
+        stimulus_sets=[
+            ProjectConfigStimulusSet(
+                set_id=stimulus_set.set_id,
+                name=stimulus_set.name,
+                modality=stimulus_set.modality,
+                source_dir=stimulus_set.source_dir,
+                words=stimulus_set.words,
+            )
+            for stimulus_set in project.stimulus_sets
         ],
         display=_display_config(project.settings.display),
         session=_session_config(project.settings.session),
@@ -324,7 +358,11 @@ def create_project_from_config(parent_dir: Path, config: ProjectConfigFile) -> P
 
     stimulus_sets = _placeholder_stimulus_sets(config)
     for stimulus_set in stimulus_sets:
-        stimulus_originals_dir(target_dir, stimulus_set.set_id).mkdir(parents=True, exist_ok=True)
+        if stimulus_set.modality == StimulusModality.IMAGE:
+            stimulus_originals_dir(target_dir, stimulus_set.set_id).mkdir(
+                parents=True,
+                exist_ok=True,
+            )
 
     project = ProjectFile(
         meta=ProjectMeta(
@@ -540,6 +578,21 @@ def _unique_import_project_dir(parent_dir: Path, source_project_id: str) -> tupl
 
 
 def _placeholder_stimulus_sets(config: ProjectConfigFile) -> list[StimulusSet]:
+    if config.stimulus_sets:
+        return [
+            StimulusSet(
+                set_id=stimulus_set.set_id,
+                name=stimulus_set.name,
+                modality=stimulus_set.modality,
+                source_dir=stimulus_set.source_dir
+                if stimulus_set.modality == StimulusModality.IMAGE
+                else None,
+                resolution=None,
+                image_count=0,
+                words=stimulus_set.words,
+            )
+            for stimulus_set in config.stimulus_sets
+        ]
     set_ids: list[str] = []
     for condition in config.conditions:
         for set_id in (condition.base_stimulus_set_id, condition.oddball_stimulus_set_id):

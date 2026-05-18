@@ -19,9 +19,9 @@ code may lazily import PsychoPy.
   the Home/Setup Wizard workflow, and the `gui/components.py` public component/theme
   surface. The main window also hosts lightweight in-window utilities from the `Tools`
   menu.
-- `src/fpvs_studio/core/`: editable project models, validation, compilation, run/session
-  contracts, project persistence, Studio `.fpvsconfig` interchange export/import, and
-  engine-neutral domain logic.
+- `src/fpvs_studio/core/`: editable project models, validation, modality-aware stimulus
+  contracts, compilation, run/session contracts, project persistence, Studio
+  `.fpvsconfig` interchange export/import, and engine-neutral domain logic.
 - `src/fpvs_studio/preprocessing/`: original image import, inspection, image
   normalization, generated variants, and manifests. This layer must stay independent
   of GUI runtime and PsychoPy.
@@ -105,7 +105,7 @@ Current planned seams:
 - `src/fpvs_studio/core/compiler.py` keeps the public `compile_run_spec` and
   `compile_session_plan` entry points stable. Focused helper modules own shared compiler
   support/errors/ids (`compiler_support.py`), condition selection and validation
-  (`compiler_conditions.py`), manifest/filesystem image-path resolution
+  (`compiler_conditions.py`), modality-aware stimulus pool resolution
   (`compiler_assets.py`), stimulus/trigger/transition schedules
   (`compiler_schedules.py`), and fixation target/event planning
   (`compiler_fixation.py`).
@@ -135,9 +135,10 @@ Current planned seams:
   lightweight tools, and larger workspace sizing for future dense tool pages.
   The wizard uses a six-step compact top-progress flow: Project, Conditions,
   Experiment, Fixation, Response, and Review. Conditions handles condition identity,
-  list actions, base/oddball folder assignment, control-condition creation, and image
-  normalization to square PNG assets. Conditions also surfaces project-wide target repeats per image and
-  warning-only base/oddball repeat-balance guidance.
+  list actions, image-folder assignment for image conditions, typed word-list authoring
+  for word conditions, image-only control-condition creation, and image normalization to
+  square PNG assets. Conditions also surfaces project-wide target repeats per stimulus
+  and warning-only base/oddball repeat-balance guidance.
   Setup steps share a compact content surface, with the top progress stepper carrying
   complete-state feedback instead of page-wide completion bars. The setup surface is
   guarded by pytest-qt coverage that checks all six steps at `1120x720` for stable
@@ -147,7 +148,8 @@ Current planned seams:
   seed remains runtime metadata for reproducibility and legacy fixed-order fields stay
   schema-compatible. Image-size settings are project-wide display geometry fields
   compiled into `RunSpec` so square source image resolution stays independent from playback
-  size; the guided setup stores the intended test display pixel resolution and exposes a
+  size and word stimuli share the same timing/display geometry contract; the guided setup
+  stores the intended test display pixel resolution and exposes a
   full-screen modal preview with live side-panel controls for checking apparent size on
   the test machine. Runtime blocks launch if the active fullscreen resolution differs
   from the configured intended resolution unless the project explicitly uses the current
@@ -241,13 +243,14 @@ Use these first reads before opening broad trees:
 
 ## Contract Flow
 
-`ProjectFile` models compile into single-condition `RunSpec` entries. Session settings and
-ordered conditions compile into a `SessionPlan` that owns realized fixation target-count
-selection and randomized block order for the current random order seed. Runtime consumes
-`RunSpec` or `SessionPlan` and produces core-owned execution results. Exporters serialize
-those results without moving contracts into engine code; `runs/` remains the detailed
-artifact source, while `logs/session_condition_history.csv` is a runtime-owned reporting
-index.
+`ProjectFile` models compile into single-condition `RunSpec` entries. Stimulus modality is
+explicit in editable stimulus sets, compiled condition specs, and each stimulus event.
+Session settings and ordered conditions compile into a `SessionPlan` that owns realized
+fixation target-count selection and randomized block order for the current random order
+seed. Runtime consumes `RunSpec` or `SessionPlan` and produces core-owned execution
+results. Exporters serialize those results without moving contracts into engine code;
+`runs/` remains the detailed artifact source, while `logs/session_condition_history.csv`
+is a runtime-owned reporting index.
 
 ## Dependency Rules
 

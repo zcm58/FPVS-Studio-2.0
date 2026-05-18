@@ -9,7 +9,7 @@ from fpvs_studio.core.condition_template_profiles import (
     apply_condition_defaults_to_condition,
     apply_condition_template_profile_to_settings,
 )
-from fpvs_studio.core.enums import StimulusVariant
+from fpvs_studio.core.enums import StimulusModality, StimulusVariant
 from fpvs_studio.core.models import (
     Condition,
     ConditionDefaults,
@@ -245,10 +245,30 @@ class DocumentConditionMixin:
                 "order_index": len(ordered_conditions),
             }
         )
-        new_sets = [
-            self._make_empty_stimulus_set(base_set_id, f"{copy_name} Base"),
-            self._make_empty_stimulus_set(oddball_set_id, f"{copy_name} Oddball"),
-        ]
+        source_base_set = self.get_condition_stimulus_set(condition_id, "base")
+        source_oddball_set = self.get_condition_stimulus_set(condition_id, "oddball")
+        if source_base_set.modality == StimulusModality.WORD:
+            new_sets = [
+                StimulusSet(
+                    set_id=base_set_id,
+                    name=f"{copy_name} Base",
+                    modality=StimulusModality.WORD,
+                    source_dir=None,
+                    words=list(source_base_set.words),
+                ),
+                StimulusSet(
+                    set_id=oddball_set_id,
+                    name=f"{copy_name} Oddball",
+                    modality=StimulusModality.WORD,
+                    source_dir=None,
+                    words=list(source_oddball_set.words),
+                ),
+            ]
+        else:
+            new_sets = [
+                self._make_empty_stimulus_set(base_set_id, f"{copy_name} Base"),
+                self._make_empty_stimulus_set(oddball_set_id, f"{copy_name} Oddball"),
+            ]
         project = validated_copy(
             self._project,
             conditions=self._reindex_conditions([*ordered_conditions, duplicated_condition]),
@@ -272,6 +292,9 @@ class DocumentConditionMixin:
         source_condition = self.get_condition(source_condition_id)
         if source_condition is None:
             raise DocumentError(f"Unknown condition '{source_condition_id}'.")
+        source_base_set = self.get_condition_stimulus_set(source_condition_id, "base")
+        if source_base_set.modality != StimulusModality.IMAGE:
+            raise DocumentError("Control conditions are only available for image conditions.")
 
         ordered_conditions = self.ordered_conditions()
         existing_condition_ids = {condition.condition_id for condition in self._project.conditions}
@@ -341,6 +364,67 @@ class DocumentConditionMixin:
         )
         self._replace_project(project)
 
+    def set_condition_stimulus_modality(
+        self,
+        condition_id: str,
+        *,
+        modality: StimulusModality,
+    ) -> None:
+        """Switch an empty condition between image and word authoring modes."""
+
+        condition = self.get_condition(condition_id)
+        if condition is None:
+            raise DocumentError(f"Unknown condition '{condition_id}'.")
+        base_set = self.get_condition_stimulus_set(condition_id, "base")
+        oddball_set = self.get_condition_stimulus_set(condition_id, "oddball")
+        if base_set.modality == modality and oddball_set.modality == modality:
+            return
+        if not self._condition_stimulus_sets_empty(base_set, oddball_set):
+            raise DocumentError(
+                "Condition stimulus type can only be changed before images or words are added."
+            )
+        updated_sets: list[StimulusSet] = []
+        for stimulus_set in self._project.stimulus_sets:
+            if stimulus_set.set_id not in {
+                condition.base_stimulus_set_id,
+                condition.oddball_stimulus_set_id,
+            }:
+                updated_sets.append(stimulus_set)
+                continue
+            if modality == StimulusModality.IMAGE:
+                updated_sets.append(
+                    self._make_empty_stimulus_set(stimulus_set.set_id, stimulus_set.name)
+                )
+            else:
+                updated_sets.append(
+                    StimulusSet(
+                        set_id=stimulus_set.set_id,
+                        name=stimulus_set.name,
+                        modality=StimulusModality.WORD,
+                        source_dir=None,
+                        words=[],
+                    )
+                )
+        project = validated_copy(self._project, stimulus_sets=updated_sets)
+        self._replace_project(project)
+
+    def update_condition_words(self, condition_id: str, *, role: str, words: list[str]) -> None:
+        """Update one word stimulus list for a word-based condition role."""
+
+        condition = self.get_condition(condition_id)
+        if condition is None:
+            raise DocumentError(f"Unknown condition '{condition_id}'.")
+        stimulus_set = self.get_condition_stimulus_set(condition_id, role)
+        if stimulus_set.modality != StimulusModality.WORD:
+            raise DocumentError("Words can only be edited for word-based conditions.")
+        updated_set = stimulus_set.model_copy(update={"words": words})
+        updated_sets = [
+            updated_set if item.set_id == stimulus_set.set_id else item
+            for item in self._project.stimulus_sets
+        ]
+        project = validated_copy(self._project, stimulus_sets=updated_sets)
+        self._replace_project(project)
+
     def _make_empty_stimulus_set(self, set_id: str, name: str) -> StimulusSet:
         source_dir = to_project_relative_posix(
             self._project_root,
@@ -349,8 +433,20 @@ class DocumentConditionMixin:
         return StimulusSet(
             set_id=set_id,
             name=name,
+            modality=StimulusModality.IMAGE,
             source_dir=source_dir,
             image_count=0,
+        )
+
+    @staticmethod
+    def _condition_stimulus_sets_empty(*stimulus_sets: StimulusSet) -> bool:
+        return all(
+            (
+                stimulus_set.image_count <= 0
+                if stimulus_set.modality == StimulusModality.IMAGE
+                else stimulus_set.word_count <= 0
+            )
+            for stimulus_set in stimulus_sets
         )
 
     def _reindex_conditions(self, conditions: list[Condition]) -> list[Condition]:

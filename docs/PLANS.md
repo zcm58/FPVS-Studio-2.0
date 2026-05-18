@@ -16,7 +16,8 @@ Current inventory:
 - Planned plans include patch updates, protocol configurability, luminance/RMS
   equalization investigation, and sinusoidal contrast modulation.
 - Active plans: none.
-- Completed plans include participant fixation tutorial workflow.
+- Completed plans include participant fixation tutorial workflow and word-based FPVS
+  conditions.
 
 Draft concrete future work in `planned/`. Move it to `active/` before implementing
 changes that affect user workflows, public contracts, or multiple layers. Keep small bug

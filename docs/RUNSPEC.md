@@ -56,6 +56,7 @@ not recompute protocol logic from `ProjectFile`.
 ### `ConditionRunSpec`
 
 - condition identity and name
+- stimulus modality: `image` or `word`
 - template id
 - instructions text
 - fixed v1 protocol constants
@@ -69,10 +70,17 @@ Each event contains:
 
 - sequential event index
 - role: `base` or `oddball`
-- project-relative image path
+- stimulus modality: `image` or `word`
+- deterministic stimulus id
+- project-relative image path for image events
+- display text for word events
 - `on_start_frame`
 - `on_frames`
 - `off_frames`
+
+Image events must carry `image_path` and no `text`. Word events must carry `text` and
+no `image_path`. Runtime preflight and playback treat any inconsistent modality/payload
+pair as an error.
 
 ### `FixationStyleSpec`
 
@@ -112,7 +120,7 @@ next to each executed `RunSpec`.
 
 ## Asset resolution
 
-`RunSpec.stimulus_sequence[*].image_path` uses project-relative POSIX paths.
+Image `RunSpec.stimulus_sequence[*].image_path` values use project-relative POSIX paths.
 
 When a project root and preprocessing manifest are available, the compiler
 resolves real source or derived asset paths from the manifest. Runtime preflight
@@ -123,14 +131,18 @@ Launchable condition images must be square. Base and oddball source resolutions 
 differ, such as `512x512` and `1024x1024`, because playback size is controlled by
 compiled display geometry rather than native image pixel dimensions.
 
+Word stimuli are resolved from typed project word lists. They do not create image files,
+do not enter the preprocessing manifest, and use the same base/oddball schedule and
+frame timing as image stimuli.
+
 ## v1 scheduling policy
 
 The compiler currently emits a seed-deterministic schedule:
 
 - oddball every 5th stimulus
 - manifest-backed variant resolution when available
-- sorted image paths before scheduling
-- per-role seeded shuffling so every base image and every oddball image is shown once
+- sorted image paths or authored word-list order before scheduling
+- per-role seeded shuffling so every base stimulus and every oddball stimulus is shown once
   per role cycle before that role's pool is reshuffled
 - balanced seeded-jitter fixation target onsets from the realized target count,
   target duration, and minimum-gap edge/inter-target buffers

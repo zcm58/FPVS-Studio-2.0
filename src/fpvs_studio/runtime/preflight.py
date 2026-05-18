@@ -9,7 +9,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from pathlib import Path
 
-from fpvs_studio.core.enums import DutyCycleMode
+from fpvs_studio.core.enums import DutyCycleMode, StimulusModality
 from fpvs_studio.core.run_spec import RunSpec
 from fpvs_studio.core.session_plan import SessionPlan
 from fpvs_studio.core.validation import validate_display_refresh
@@ -88,6 +88,34 @@ def _validate_stimulus_timing(run_spec: RunSpec) -> None:
         )
 
 
+def _validate_stimulus_payloads(run_spec: RunSpec) -> None:
+    stimulus_payloads: dict[str, tuple[StimulusModality, str | None, str | None]] = {}
+    for event in run_spec.stimulus_sequence:
+        if event.stimulus_modality == StimulusModality.IMAGE:
+            if event.image_path is None or event.text is not None:
+                raise PreflightError(
+                    "Run preflight failed because an image stimulus event has an "
+                    "inconsistent payload."
+                )
+        elif event.stimulus_modality == StimulusModality.WORD:
+            if event.text is None or not event.text.strip() or event.image_path is not None:
+                raise PreflightError(
+                    "Run preflight failed because a word stimulus event has an "
+                    "inconsistent payload."
+                )
+        else:
+            raise PreflightError(
+                "Run preflight failed because a stimulus event has an unknown modality."
+            )
+        payload = (event.stimulus_modality, event.image_path, event.text)
+        previous_payload = stimulus_payloads.setdefault(event.stimulus_id, payload)
+        if previous_payload != payload:
+            raise PreflightError(
+                "Run preflight failed because a compiled stimulus id maps to multiple "
+                "payloads."
+            )
+
+
 def _validate_fixation_timing(run_spec: RunSpec) -> None:
     previous_end_frame = -1
     ordered_events = sorted(run_spec.fixation_events, key=lambda item: item.event_index)
@@ -149,7 +177,9 @@ def preflight_run_spec(
         {
             event.image_path
             for event in run_spec.stimulus_sequence
-            if not (project_root / Path(event.image_path)).is_file()
+            if event.stimulus_modality == StimulusModality.IMAGE
+            and event.image_path is not None
+            and not (project_root / Path(event.image_path)).is_file()
         }
     )
     if missing_assets:
@@ -166,6 +196,7 @@ def preflight_run_spec(
         )
     _validate_display_refresh_timing(run_spec)
     _validate_stimulus_timing(run_spec)
+    _validate_stimulus_payloads(run_spec)
     _validate_fixation_timing(run_spec)
     _validate_trigger_timing(run_spec)
     display_report = engine.validate_run_spec(run_spec)

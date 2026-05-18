@@ -5,8 +5,9 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from fpvs_studio.core.enums import StimulusModality
 from fpvs_studio.core.models import ProjectFile, StimulusSet
-from fpvs_studio.gui.document_support import validated_copy
+from fpvs_studio.gui.document_support import DocumentError, validated_copy
 from fpvs_studio.preprocessing.importer import (
     import_stimulus_source_directory,
     materialize_project_assets,
@@ -54,6 +55,8 @@ class DocumentStimulusMixin:
         """Import one base or oddball source folder directly into the project."""
 
         stimulus_set = self.get_condition_stimulus_set(condition_id, role)
+        if stimulus_set.modality != StimulusModality.IMAGE:
+            raise DocumentError("Image folders can only be imported for image-based conditions.")
         _, imported_set = import_stimulus_source_directory(
             source_dir=Path(source_dir),
             project_root=self._project_root,
@@ -77,6 +80,11 @@ class DocumentStimulusMixin:
         manifest = self._manifest or create_empty_manifest(self._project.meta.project_id)
 
         for stimulus_set in self._project.stimulus_sets:
+            if stimulus_set.modality != StimulusModality.IMAGE:
+                updated_sets.append(stimulus_set)
+                continue
+            if stimulus_set.source_dir is None:
+                raise ValueError(f"Image stimulus set '{stimulus_set.name}' is missing source_dir.")
             source_dir = self._project_root / Path(stimulus_set.source_dir)
             summary = inspect_source_directory(
                 source_dir,
@@ -177,6 +185,10 @@ class DocumentStimulusMixin:
         stimulus_set = self.get_stimulus_set(set_id)
         if stimulus_set is None:
             return
+        if stimulus_set.modality != StimulusModality.IMAGE:
+            return
+        if stimulus_set.source_dir is None:
+            raise ValueError(f"Image stimulus set '{stimulus_set.name}' is missing source_dir.")
         source_dir = self._project_root / Path(stimulus_set.source_dir)
         summary = inspect_source_directory(
             source_dir,
@@ -202,6 +214,9 @@ class DocumentStimulusMixin:
         manifest_sets = {manifest_set.set_id: manifest_set for manifest_set in manifest.sets}
         synced_sets: list[StimulusSet] = []
         for stimulus_set in self._project.stimulus_sets:
+            if stimulus_set.modality != StimulusModality.IMAGE:
+                synced_sets.append(stimulus_set)
+                continue
             manifest_set = manifest_sets.get(stimulus_set.set_id)
             if manifest_set is None:
                 synced_sets.append(stimulus_set)
@@ -231,5 +246,7 @@ class DocumentStimulusMixin:
         return [
             stimulus_set
             for stimulus_set in self._project.stimulus_sets
-            if stimulus_set.set_id in set_ids and stimulus_set.image_count > 0
+            if stimulus_set.set_id in set_ids
+            and stimulus_set.modality == StimulusModality.IMAGE
+            and stimulus_set.image_count > 0
         ]

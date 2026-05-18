@@ -4,13 +4,24 @@ from __future__ import annotations
 
 import random
 from collections import Counter
+from dataclasses import dataclass
 
 from fpvs_studio.core.compiler_support import CompileError
-from fpvs_studio.core.enums import InterConditionMode
+from fpvs_studio.core.enums import InterConditionMode, StimulusModality
 from fpvs_studio.core.models import ProjectFile
 from fpvs_studio.core.run_spec import StimulusEvent, StimulusRole, TriggerEvent
 from fpvs_studio.core.session_plan import InterConditionTransitionSpec
 from fpvs_studio.core.trigger_codes import validate_event_trigger_code
+
+
+@dataclass(frozen=True)
+class StimulusScheduleItem:
+    """One resolved stimulus payload available to the schedule builder."""
+
+    stimulus_modality: StimulusModality
+    stimulus_id: str
+    image_path: str | None = None
+    text: str | None = None
 
 
 def build_stimulus_sequence(
@@ -19,24 +30,24 @@ def build_stimulus_sequence(
     frames_per_stimulus_value: int,
     on_frames: int,
     off_frames: int,
-    base_paths: list[str],
-    oddball_paths: list[str],
+    base_stimuli: list[StimulusScheduleItem],
+    oddball_stimuli: list[StimulusScheduleItem],
     oddball_every_n: int,
     rng: random.Random,
 ) -> list[StimulusEvent]:
-    """Build the base/oddball schedule with seeded per-role image shuffles."""
+    """Build the base/oddball schedule with seeded per-role stimulus shuffles."""
 
     role_counts: Counter[str] = Counter()
     sequence: list[StimulusEvent] = []
     shuffled_pools = {
-        "base": _shuffled_pool(base_paths, rng=rng),
-        "oddball": _shuffled_pool(oddball_paths, rng=rng),
+        "base": _shuffled_pool(base_stimuli, rng=rng),
+        "oddball": _shuffled_pool(oddball_stimuli, rng=rng),
     }
 
     for index in range(total_stimuli):
         role: StimulusRole = "oddball" if (index + 1) % oddball_every_n == 0 else "base"
         pool = shuffled_pools[role]
-        image_path = pool[role_counts[role] % len(pool)]
+        stimulus = pool[role_counts[role] % len(pool)]
         role_counts[role] += 1
         if role_counts[role] % len(pool) == 0:
             shuffled_pools[role] = _shuffled_pool(pool, rng=rng)
@@ -44,7 +55,10 @@ def build_stimulus_sequence(
             StimulusEvent(
                 sequence_index=index,
                 role=role,
-                image_path=image_path,
+                stimulus_modality=stimulus.stimulus_modality,
+                stimulus_id=stimulus.stimulus_id,
+                image_path=stimulus.image_path,
+                text=stimulus.text,
                 on_start_frame=index * frames_per_stimulus_value,
                 on_frames=on_frames,
                 off_frames=off_frames,
@@ -53,10 +67,14 @@ def build_stimulus_sequence(
     return sequence
 
 
-def _shuffled_pool(paths: list[str], *, rng: random.Random) -> list[str]:
-    """Return a shuffled copy while keeping callers' resolved path lists immutable."""
+def _shuffled_pool(
+    stimuli: list[StimulusScheduleItem],
+    *,
+    rng: random.Random,
+) -> list[StimulusScheduleItem]:
+    """Return a shuffled copy while keeping callers' resolved stimulus lists immutable."""
 
-    shuffled = list(paths)
+    shuffled = list(stimuli)
     rng.shuffle(shuffled)
     return shuffled
 

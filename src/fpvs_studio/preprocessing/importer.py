@@ -11,7 +11,7 @@ from collections.abc import Callable
 from hashlib import sha256
 from pathlib import Path
 
-from fpvs_studio.core.enums import StimulusVariant
+from fpvs_studio.core.enums import StimulusModality, StimulusVariant
 from fpvs_studio.core.models import ProjectFile, StimulusSet
 from fpvs_studio.core.paths import (
     stimulus_manifest_path,
@@ -88,6 +88,10 @@ def materialize_project_assets(
     working_manifest = existing_manifest
 
     for stimulus_set in project.stimulus_sets:
+        if stimulus_set.modality != StimulusModality.IMAGE:
+            continue
+        if stimulus_set.source_dir is None:
+            raise ValueError(f"Image stimulus set '{stimulus_set.name}' is missing source_dir.")
         source_dir = project_root / Path(stimulus_set.source_dir)
         inspection_summary = inspect_source_directory(
             source_dir,

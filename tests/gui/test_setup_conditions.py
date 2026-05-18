@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 from PIL import Image
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QTextCursor
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,
@@ -23,7 +24,7 @@ from tests.gui.helpers import (
     _write_mixed_image_directory,
 )
 
-from fpvs_studio.core.enums import StimulusVariant
+from fpvs_studio.core.enums import StimulusModality, StimulusVariant
 from fpvs_studio.gui.controller import StudioController
 from fpvs_studio.gui.design_system import PAGE_SECTION_GAP
 
@@ -62,6 +63,117 @@ def test_setup_wizard_conditions_step_duplicates_metadata_without_images(
     assert oddball_set.image_count == 0
     assert "Needs images" in step.condition_list.currentItem().toolTip()
     assert "\n" not in step.condition_list.currentItem().text()
+
+
+def test_setup_wizard_conditions_step_authors_word_condition(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Word Condition")
+    guide = window.setup_wizard_page
+    step = guide.condition_setup_step
+    guide.open_wizard(step_key="conditions")
+    next_button = guide.findChild(QPushButton, "setup_wizard_next_button")
+    assert next_button is not None
+
+    qtbot.mouseClick(step.add_condition_button, Qt.MouseButton.LeftButton)
+    condition_id = step.selected_condition_id()
+    assert isinstance(condition_id, str)
+    step.condition_name_edit.setText("Animal Words")
+    step.condition_name_edit.editingFinished.emit()
+    step.trigger_code_spin.setValue(10)
+    step.modality_combo.setCurrentIndex(step.modality_combo.findData(StimulusModality.WORD.value))
+    QApplication.processEvents()
+
+    base_set = window.document.get_condition_stimulus_set(condition_id, "base")
+    oddball_set = window.document.get_condition_stimulus_set(condition_id, "oddball")
+    assert base_set.modality == StimulusModality.WORD
+    assert oddball_set.modality == StimulusModality.WORD
+    assert step.words_panel.isVisible()
+    assert not step.sources_row.isVisible()
+    assert step.base_check_status.text() == "Base Words Not Configured"
+    assert not next_button.isEnabled()
+
+    step.base_words_edit.setPlainText("cat\n dog\ncat\n")
+    step.oddball_words_edit.setPlainText("tool\nchair")
+    step.flush_pending_edits()
+    QApplication.processEvents()
+
+    base_set = window.document.get_condition_stimulus_set(condition_id, "base")
+    oddball_set = window.document.get_condition_stimulus_set(condition_id, "oddball")
+    assert base_set.words == ["cat", "dog", "cat"]
+    assert oddball_set.words == ["tool", "chair"]
+    assert step.base_words_count.text() == "3 words"
+    assert step.oddball_words_count.text() == "2 words"
+    assert step.base_check_status.text() == "Complete"
+    assert step.oddball_check_status.text() == "Complete"
+    assert next_button.isEnabled()
+
+
+def test_setup_wizard_word_editor_keeps_blank_line_after_debounce(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Word Editor Debounce")
+    guide = window.setup_wizard_page
+    step = guide.condition_setup_step
+    guide.open_wizard(step_key="conditions")
+
+    qtbot.mouseClick(step.add_condition_button, Qt.MouseButton.LeftButton)
+    condition_id = step.selected_condition_id()
+    assert isinstance(condition_id, str)
+    step.modality_combo.setCurrentIndex(step.modality_combo.findData(StimulusModality.WORD.value))
+    QApplication.processEvents()
+
+    step.base_words_edit.setFocus()
+    qtbot.keyClicks(step.base_words_edit, "cat")
+    cursor = step.base_words_edit.textCursor()
+    cursor.movePosition(QTextCursor.MoveOperation.End)
+    step.base_words_edit.setTextCursor(cursor)
+    qtbot.keyClick(step.base_words_edit, Qt.Key.Key_Return)
+    qtbot.wait(350)
+    QApplication.processEvents()
+
+    assert window.document.get_condition_stimulus_set(condition_id, "base").words == ["cat"]
+    assert step.base_words_edit.toPlainText() == "cat\n"
+    assert step.base_words_edit.textCursor().blockNumber() == 1
+
+
+def test_setup_wizard_blocks_populated_modality_switch(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Word Switch Block")
+    guide = window.setup_wizard_page
+    step = guide.condition_setup_step
+    guide.open_wizard(step_key="conditions")
+    errors: list[str] = []
+    monkeypatch.setattr(
+        "fpvs_studio.gui.condition_setup_step._show_error_dialog",
+        lambda _parent, _title, error: errors.append(str(error)),
+    )
+
+    qtbot.mouseClick(step.add_condition_button, Qt.MouseButton.LeftButton)
+    condition_id = step.selected_condition_id()
+    assert isinstance(condition_id, str)
+    step.modality_combo.setCurrentIndex(step.modality_combo.findData(StimulusModality.WORD.value))
+    step.base_words_edit.setPlainText("cat")
+    step.flush_pending_edits()
+
+    step.modality_combo.setCurrentIndex(step.modality_combo.findData(StimulusModality.IMAGE.value))
+    QApplication.processEvents()
+
+    assert errors == [
+        "Condition stimulus type can only be changed before images or words are added."
+    ]
+    assert (
+        window.document.get_condition_stimulus_set(condition_id, "base").modality
+        == StimulusModality.WORD
+    )
 
 
 def test_setup_wizard_conditions_step_requires_descriptive_name_and_positive_trigger(

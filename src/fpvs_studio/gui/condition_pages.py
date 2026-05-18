@@ -24,8 +24,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from fpvs_studio.core.enums import StimulusVariant
-from fpvs_studio.core.models import Condition
+from fpvs_studio.core.enums import StimulusModality, StimulusVariant
+from fpvs_studio.core.models import Condition, StimulusSet
 from fpvs_studio.core.paths import stimuli_dir
 from fpvs_studio.core.template_library import get_template
 from fpvs_studio.core.validation import (
@@ -62,11 +62,13 @@ def _repeat_range_text(row: StimulusRepeatRoleGuidance) -> str:
 
 
 def _repeat_guidance_text(row: StimulusRepeatRoleGuidance, *, role_label: str) -> str:
+    item_label = "images" if row.modality == StimulusModality.IMAGE else "words"
+    repeat_label = "image" if row.modality == StimulusModality.IMAGE else "word"
     return (
         f"{role_label}: {row.presentation_count} presentations, "
-        f"{row.recommended_minimum_images} images recommended for "
-        f"<={row.target_repeats_per_image} repeats/image; current "
-        f"{row.image_count} gives {_repeat_range_text(row)} repeats/image."
+        f"{row.recommended_minimum_images} {item_label} recommended for "
+        f"<={row.target_repeats_per_image} repeats/{repeat_label}; current "
+        f"{row.image_count} gives {_repeat_range_text(row)} repeats/{repeat_label}."
     )
 
 
@@ -160,7 +162,7 @@ class ConditionsPage(QWidget):
         self.target_repeats_spin.setObjectName("condition_target_repeats_per_image_spin")
         self.target_repeats_spin.setRange(1, 10000)
         self.target_repeats_spin.setToolTip(
-            "Target maximum repetitions for each individual base or oddball image."
+            "Target maximum repetitions for each individual base or oddball stimulus."
         )
         self.target_repeats_spin.valueChanged.connect(self._apply_target_repeat_fields)
 
@@ -252,7 +254,7 @@ class ConditionsPage(QWidget):
         timing_grid.addWidget(self.oddball_cycles_spin, 1, 1)
         timing_grid.addWidget(QLabel("Stimulus Variant", self.condition_editor_card), 0, 2)
         timing_grid.addWidget(self.variant_combo, 0, 3)
-        timing_grid.addWidget(QLabel("Target Repeats / Image", self.condition_editor_card), 2, 0)
+        timing_grid.addWidget(QLabel("Target Stimulus Repeats", self.condition_editor_card), 2, 0)
         timing_grid.addWidget(self.target_repeats_spin, 2, 1)
         timing_grid.setColumnStretch(1, 1)
         timing_grid.setColumnStretch(3, 1)
@@ -295,7 +297,7 @@ class ConditionsPage(QWidget):
         base_layout.setVerticalSpacing(6)
         base_layout.addRow("Readiness", self.base_source_state)
         base_layout.addRow("Source Folder", self.base_source_value)
-        base_layout.addRow("Image Count", self.base_count_value)
+        base_layout.addRow("Items", self.base_count_value)
         base_layout.addRow("Repeat Balance", self.base_repeat_guidance_value)
         base_layout.addRow("Resolution", self.base_resolution_value)
         base_layout.addRow("Variants", self.base_variants_value)
@@ -308,7 +310,7 @@ class ConditionsPage(QWidget):
         oddball_layout.setVerticalSpacing(6)
         oddball_layout.addRow("Readiness", self.oddball_source_state)
         oddball_layout.addRow("Source Folder", self.oddball_source_value)
-        oddball_layout.addRow("Image Count", self.oddball_count_value)
+        oddball_layout.addRow("Items", self.oddball_count_value)
         oddball_layout.addRow("Repeat Balance", self.oddball_repeat_guidance_value)
         oddball_layout.addRow("Resolution", self.oddball_resolution_value)
         oddball_layout.addRow("Variants", self.oddball_variants_value)
@@ -466,6 +468,12 @@ class ConditionsPage(QWidget):
         }
         base_set = self._document.get_condition_stimulus_set(condition.condition_id, "base")
         oddball_set = self._document.get_condition_stimulus_set(condition.condition_id, "oddball")
+        image_mode = (
+            base_set.modality == StimulusModality.IMAGE
+            and oddball_set.modality == StimulusModality.IMAGE
+        )
+        self.base_import_button.setEnabled(enabled and image_mode)
+        self.oddball_import_button.setEnabled(enabled and image_mode)
         self.selected_condition_badge.set_state("ready", condition.name)
         self.selected_condition_note.setText(
             f"Condition ID: {condition.condition_id}   |   Trigger code: {condition.trigger_code}"
@@ -493,40 +501,69 @@ class ConditionsPage(QWidget):
             f"{template.display_name}: base {template.base_hz:.1f} Hz, oddball every "
             f"{template.oddball_every_n}th image, oddball {template.oddball_hz:.1f} Hz."
         )
-        self.base_source_state.set_state(
-            "ready" if base_set.image_count > 0 else "warning",
-            "Base source ready" if base_set.image_count > 0 else "Base source needs attention",
+        self._set_source_panel(
+            stimulus_set=base_set,
+            guidance=repeat_guidance[(condition.condition_id, "base")],
+            role_label="Base",
+            state_label=self.base_source_state,
+            source_value=self.base_source_value,
+            count_value=self.base_count_value,
+            repeat_guidance_value=self.base_repeat_guidance_value,
+            resolution_value=self.base_resolution_value,
+            variants_value=self.base_variants_value,
         )
-        self.base_source_value.set_path_text(base_set.source_dir, max_length=74)
-        self.base_count_value.setText(str(base_set.image_count))
-        self.base_repeat_guidance_value.setText(
-            _repeat_guidance_text(
-                repeat_guidance[(condition.condition_id, "base")],
-                role_label="Base",
-            )
+        self._set_source_panel(
+            stimulus_set=oddball_set,
+            guidance=repeat_guidance[(condition.condition_id, "oddball")],
+            role_label="Oddball",
+            state_label=self.oddball_source_state,
+            source_value=self.oddball_source_value,
+            count_value=self.oddball_count_value,
+            repeat_guidance_value=self.oddball_repeat_guidance_value,
+            resolution_value=self.oddball_resolution_value,
+            variants_value=self.oddball_variants_value,
         )
-        self.base_resolution_value.setText(_resolution_text(base_set.resolution))
-        self.base_variants_value.setText(
-            ", ".join(item.value for item in base_set.available_variants)
+
+    def _set_source_panel(
+        self,
+        *,
+        stimulus_set: StimulusSet,
+        guidance: StimulusRepeatRoleGuidance,
+        role_label: str,
+        state_label: StatusBadgeLabel,
+        source_value: PathValueLabel,
+        count_value: QLabel,
+        repeat_guidance_value: QLabel,
+        resolution_value: QLabel,
+        variants_value: QLabel,
+    ) -> None:
+        if stimulus_set.modality == StimulusModality.IMAGE:
+            ready = stimulus_set.image_count > 0
+            source_label = stimulus_set.source_dir or "Not configured"
+            count_text = str(stimulus_set.image_count)
+            resolution_text = _resolution_text(stimulus_set.resolution)
+            variants_text = ", ".join(item.value for item in stimulus_set.available_variants)
+            ready_text = f"{role_label} source ready"
+            warning_text = f"{role_label} source needs attention"
+        elif stimulus_set.modality == StimulusModality.WORD:
+            ready = stimulus_set.word_count > 0
+            source_label = "Word list"
+            count_text = str(stimulus_set.word_count)
+            resolution_text = "Text"
+            variants_text = "words"
+            ready_text = f"{role_label} words ready"
+            warning_text = f"{role_label} words need attention"
+        else:
+            raise RuntimeError(f"Unsupported stimulus modality '{stimulus_set.modality}'.")
+        state_label.set_state(
+            "ready" if ready else "warning",
+            ready_text if ready else warning_text,
         )
-        self.oddball_source_state.set_state(
-            "ready" if oddball_set.image_count > 0 else "warning",
-            "Oddball source ready"
-            if oddball_set.image_count > 0
-            else "Oddball source needs attention",
-        )
-        self.oddball_source_value.set_path_text(oddball_set.source_dir, max_length=74)
-        self.oddball_count_value.setText(str(oddball_set.image_count))
-        self.oddball_repeat_guidance_value.setText(
-            _repeat_guidance_text(
-                repeat_guidance[(condition.condition_id, "oddball")],
-                role_label="Oddball",
-            )
-        )
-        self.oddball_resolution_value.setText(_resolution_text(oddball_set.resolution))
-        self.oddball_variants_value.setText(
-            ", ".join(item.value for item in oddball_set.available_variants)
-        )
+        source_value.set_path_text(source_label, max_length=74)
+        count_value.setText(count_text)
+        repeat_guidance_value.setText(_repeat_guidance_text(guidance, role_label=role_label))
+        resolution_value.setText(resolution_text)
+        variants_value.setText(variants_text)
 
     def _add_condition(self) -> None:
         self.flush_pending_edits()

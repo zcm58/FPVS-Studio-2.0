@@ -6,12 +6,14 @@ import pytest
 from pydantic import ValidationError
 
 from fpvs_studio.core.display_geometry import visual_angle_width_cm, visual_angle_width_px
-from fpvs_studio.core.enums import DutyCycleMode, InterConditionMode
+from fpvs_studio.core.enums import DutyCycleMode, InterConditionMode, StimulusModality
 from fpvs_studio.core.models import (
+    MAX_WORD_STIMULUS_CHARS,
     Condition,
     DisplaySettings,
     ProjectFile,
     SessionSettings,
+    StimulusSet,
     TriggerSettings,
 )
 from fpvs_studio.core.serialization import load_project_file, save_project_file
@@ -105,6 +107,60 @@ def test_project_model_backfills_condition_profile_defaults_for_legacy_payload(
     assert loaded.settings.condition_defaults.sequence_count == 1
     assert loaded.settings.condition_defaults.oddball_cycle_repeats_per_sequence == 146
     assert loaded.settings.condition_defaults.target_repeats_per_image == 7
+
+
+def test_stimulus_set_defaults_existing_image_payload_to_image_modality(sample_project) -> None:
+    payload = sample_project.stimulus_sets[0].model_dump(mode="python")
+    payload.pop("modality", None)
+
+    stimulus_set = StimulusSet.model_validate(payload)
+
+    assert stimulus_set.modality == StimulusModality.IMAGE
+    assert stimulus_set.source_dir == "stimuli/original-images/base-set"
+
+
+def test_word_stimulus_set_trims_and_preserves_duplicate_words() -> None:
+    stimulus_set = StimulusSet(
+        set_id="word-set",
+        name="Word Set",
+        modality=StimulusModality.WORD,
+        source_dir=None,
+        words=[" cat ", "dog", "cat"],
+    )
+
+    assert stimulus_set.words == ["cat", "dog", "cat"]
+    assert stimulus_set.word_count == 3
+
+
+def test_word_stimulus_set_rejects_blank_and_overlength_words() -> None:
+    with pytest.raises(ValidationError, match="blank entries"):
+        StimulusSet(
+            set_id="word-set",
+            name="Word Set",
+            modality=StimulusModality.WORD,
+            source_dir=None,
+            words=["cat", " "],
+        )
+
+    with pytest.raises(ValidationError, match="may not exceed"):
+        StimulusSet(
+            set_id="word-set",
+            name="Word Set",
+            modality=StimulusModality.WORD,
+            source_dir=None,
+            words=["x" * (MAX_WORD_STIMULUS_CHARS + 1)],
+        )
+
+
+def test_word_stimulus_set_rejects_image_payload_fields() -> None:
+    with pytest.raises(ValidationError, match="source_dir=None"):
+        StimulusSet(
+            set_id="word-set",
+            name="Word Set",
+            modality=StimulusModality.WORD,
+            source_dir="stimuli/original-images/word-set",
+            words=["cat"],
+        )
 
 
 def test_trigger_settings_default_and_validate_oddball_marker_code() -> None:

@@ -11,6 +11,7 @@ from PIL import Image
 
 from fpvs_studio.core.compiler import compile_run_spec
 from fpvs_studio.core.display_geometry import visual_angle_width_px
+from fpvs_studio.core.enums import StimulusModality
 from fpvs_studio.core.run_spec import TriggerEvent
 from fpvs_studio.engines.psychopy_engine import PsychoPyEngine
 from fpvs_studio.engines.psychopy_stimuli import release_stimuli
@@ -158,8 +159,10 @@ def _build_fake_psychopy(
 ) -> object:
     events: list[tuple[str, object]] = []
     image_stims: list[Any] = []
+    text_stims: list[Any] = []
     captures["events"] = events
     captures["image_stims"] = image_stims
+    captures["text_stims"] = text_stims
 
     class _FakeImageStim(_FakeStim):
         def __init__(self, *args, image: str, **kwargs) -> None:
@@ -173,6 +176,15 @@ def _build_fake_psychopy(
         def clearTextures(self) -> None:
             self.clear_textures_count += 1
             events.append(("clear", self.image))
+
+    class _FakeTextStim(_FakeStim):
+        def __init__(self, *args, text: str, **kwargs) -> None:
+            super().__init__(*args, **kwargs)
+            self.text = text
+            self.height = kwargs.get("height")
+            self.color = kwargs.get("color")
+            text_stims.append(self)
+            events.append(("text", text))
 
     def _fake_window(**kwargs):
         captures["window_kwargs"] = kwargs
@@ -192,7 +204,7 @@ def _build_fake_psychopy(
         Window=_fake_window,
         ShapeStim=_FakeStim,
         ImageStim=_FakeImageStim,
-        TextStim=_FakeStim,
+        TextStim=_FakeTextStim,
     )
     fake_core = SimpleNamespace(Clock=lambda: _FakeClock(captures["window"]))
     fake_logging = (
@@ -261,6 +273,9 @@ def _two_event_run_spec(sample_project, sample_project_root, *, duplicate_image:
         update={
             "sequence_index": 1,
             "image_path": first_event.image_path if duplicate_image else second_source.image_path,
+            "stimulus_id": first_event.stimulus_id
+            if duplicate_image
+            else second_source.stimulus_id,
             "on_start_frame": 1,
             "on_frames": 1,
             "off_frames": 0,
@@ -272,10 +287,56 @@ def _two_event_run_spec(sample_project, sample_project_root, *, duplicate_image:
     return run_spec
 
 
+def _two_word_event_run_spec(sample_project):
+    sample_project.settings.fixation_task.enabled = False
+    sample_project.settings.fixation_task.accuracy_task_enabled = False
+    sample_project.conditions[0].oddball_cycle_repeats_per_sequence = 1
+    sample_project.stimulus_sets[0] = sample_project.stimulus_sets[0].model_copy(
+        update={
+            "modality": StimulusModality.WORD,
+            "source_dir": None,
+            "resolution": None,
+            "image_count": 0,
+            "words": ["cat", "dog"],
+        }
+    )
+    sample_project.stimulus_sets[1] = sample_project.stimulus_sets[1].model_copy(
+        update={
+            "modality": StimulusModality.WORD,
+            "source_dir": None,
+            "resolution": None,
+            "image_count": 0,
+            "words": ["tool"],
+        }
+    )
+    run_spec = compile_run_spec(
+        sample_project,
+        refresh_hz=60.0,
+        run_id="word-timing-smoke",
+    )
+    run_spec.stimulus_sequence = [
+        run_spec.stimulus_sequence[0].model_copy(
+            update={"sequence_index": 0, "on_start_frame": 0, "on_frames": 1, "off_frames": 0}
+        ),
+        run_spec.stimulus_sequence[1].model_copy(
+            update={"sequence_index": 1, "on_start_frame": 1, "on_frames": 1, "off_frames": 0}
+        ),
+    ]
+    run_spec.fixation_events = []
+    run_spec.display.total_frames = 2
+    return run_spec
+
+
 def _image_stims(captures: dict[str, object]) -> list[Any]:
     image_stims = captures["image_stims"]
     assert isinstance(image_stims, list)
     return image_stims
+
+
+def _text_stims(captures: dict[str, object]) -> list[Any]:
+    text_stims = captures["text_stims"]
+    assert isinstance(text_stims, list)
+    return text_stims
 
 
 def _events(captures: dict[str, object]) -> list[tuple[str, object]]:
@@ -477,6 +538,62 @@ def test_psychopy_engine_reuses_prepared_stimulus_within_condition(
     assert len(image_stims) == 1
     assert image_stims[0].draw_count == 2
     assert image_stims[0].clear_textures_count == 1
+
+
+def test_psychopy_engine_prepares_and_draws_word_stimuli(
+    monkeypatch,
+    sample_project,
+    sample_project_root,
+) -> None:
+    run_spec = _two_word_event_run_spec(sample_project)
+    captures: dict[str, object] = {}
+    fake_psychopy = _build_fake_psychopy(captures, flip_times=[])
+    engine = PsychoPyEngine()
+    _patch_fake_psychopy(monkeypatch, engine, fake_psychopy)
+
+    try:
+        engine.run_condition(
+            run_spec,
+            sample_project_root,
+            runtime_options={"test_mode": True, "timing_warmup_frames": 0},
+            trigger_backend=None,
+        )
+    finally:
+        engine.close_session()
+
+    text_stims = _text_stims(captures)
+    assert [stim.text for stim in text_stims] == [
+        event.text for event in run_spec.stimulus_sequence
+    ]
+    assert [stim.draw_count for stim in text_stims] == [1, 1]
+    assert all(stim.color == "white" for stim in text_stims)
+    assert not _image_stims(captures)
+
+
+def test_psychopy_engine_releases_word_stimuli_after_playback_error(
+    monkeypatch,
+    sample_project,
+    sample_project_root,
+) -> None:
+    run_spec = _two_word_event_run_spec(sample_project)
+    captures: dict[str, object] = {}
+    fake_psychopy = _build_fake_psychopy(captures, flip_times=[], raise_on_flip_index=0)
+    engine = PsychoPyEngine()
+    _patch_fake_psychopy(monkeypatch, engine, fake_psychopy)
+
+    try:
+        with pytest.raises(RuntimeError, match="flip failed"):
+            engine.run_condition(
+                run_spec,
+                sample_project_root,
+                runtime_options={"test_mode": True, "timing_warmup_frames": 0},
+                trigger_backend=None,
+            )
+    finally:
+        engine.close_session()
+
+    assert len(_text_stims(captures)) == 2
+    assert engine._active_run_clock is None
 
 
 def test_psychopy_engine_sizes_images_from_visual_angle_without_changing_aspect_ratio(

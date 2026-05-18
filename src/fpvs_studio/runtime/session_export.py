@@ -76,6 +76,16 @@ def _display_report_for_run(run_spec: RunSpec) -> DisplayValidationReport:
     )
 
 
+def _stimulus_value(event: object) -> str:
+    image_path = getattr(event, "image_path", None)
+    text = getattr(event, "text", None)
+    if image_path is not None:
+        return str(image_path)
+    if text is not None:
+        return str(text)
+    return ""
+
+
 def write_run_artifacts(output_dir: Path, run_spec: RunSpec, summary: RunExecutionSummary) -> None:
     """Write the per-run artifact set for one executed `RunSpec`."""
 
@@ -88,12 +98,27 @@ def write_run_artifacts(output_dir: Path, run_spec: RunSpec, summary: RunExecuti
 
     _write_csv(
         output_dir / "events.csv",
-        ["sequence_index", "role", "image_path", "on_start_frame", "on_frames", "off_frames"],
+        [
+            "sequence_index",
+            "role",
+            "stimulus_modality",
+            "stimulus_id",
+            "stimulus_value",
+            "image_path",
+            "text",
+            "on_start_frame",
+            "on_frames",
+            "off_frames",
+        ],
         [
             (
                 event.sequence_index,
                 event.role,
+                event.stimulus_modality.value,
+                event.stimulus_id,
+                _stimulus_value(event),
                 event.image_path,
+                event.text,
                 event.on_start_frame,
                 event.on_frames,
                 event.off_frames,
@@ -232,7 +257,11 @@ def write_session_artifacts(
             "run_id",
             "sequence_index",
             "role",
+            "stimulus_modality",
+            "stimulus_id",
+            "stimulus_value",
             "image_path",
+            "text",
             "on_start_frame",
             "on_frames",
             "off_frames",
@@ -242,7 +271,11 @@ def write_session_artifacts(
                 entry.run_id,
                 event.sequence_index,
                 event.role,
+                event.stimulus_modality.value,
+                event.stimulus_id,
+                _stimulus_value(event),
                 event.image_path,
+                event.text,
                 event.on_start_frame,
                 event.on_frames,
                 event.off_frames,

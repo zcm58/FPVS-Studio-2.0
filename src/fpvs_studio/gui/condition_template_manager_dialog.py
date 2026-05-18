@@ -106,7 +106,7 @@ def _format_profile_details(profile: ConditionTemplateProfile) -> str:
                 f"Duty Cycle: {_duty_cycle_label(defaults.condition.duty_cycle_mode)}",
                 f"Repeats: {defaults.condition.sequence_count}",
                 f"Cycles per Repeat: {defaults.condition.oddball_cycle_repeats_per_sequence}",
-                f"Target Repeats per Image: {defaults.condition.target_repeats_per_image}",
+                f"Target Stimulus Repeats: {defaults.condition.target_repeats_per_image}",
             ],
         ),
         (

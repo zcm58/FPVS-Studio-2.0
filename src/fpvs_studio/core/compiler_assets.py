@@ -4,12 +4,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from fpvs_studio.core.compiler_schedules import StimulusScheduleItem
 from fpvs_studio.core.compiler_support import (
     SUPPORTED_DERIVED_SUFFIXES,
     SUPPORTED_SOURCE_SUFFIXES,
     CompileError,
 )
-from fpvs_studio.core.enums import StimulusVariant
+from fpvs_studio.core.enums import StimulusModality, StimulusVariant
 from fpvs_studio.core.models import StimulusSet, validate_project_relative_path
 from fpvs_studio.core.paths import (
     stimulus_derived_dir,
@@ -110,6 +111,8 @@ def _synthetic_image_paths(
     """Create deterministic placeholder image paths when the project root is unavailable."""
 
     if variant == StimulusVariant.ORIGINAL:
+        if stimulus_set.source_dir is None:
+            raise CompileError(f"Image stimulus set '{stimulus_set.name}' is missing source_dir.")
         base_dir = stimulus_set.source_dir
     else:
         variant_dirname = stimulus_variant_dirname(variant.value)
@@ -130,6 +133,8 @@ def _resolve_filesystem_image_paths(
 
     allowed_suffixes: tuple[str, ...]
     if variant == StimulusVariant.ORIGINAL:
+        if stimulus_set.source_dir is None:
+            raise CompileError(f"Image stimulus set '{stimulus_set.name}' is missing source_dir.")
         source_dir = project_root / Path(stimulus_set.source_dir)
         allowed_suffixes = SUPPORTED_SOURCE_SUFFIXES
     else:
@@ -178,3 +183,47 @@ def resolve_image_paths(
     if synthetic_paths:
         return synthetic_paths
     raise CompileError(f"Stimulus set '{stimulus_set.name}' has no resolvable image paths.")
+
+
+def resolve_stimulus_items(
+    stimulus_set: StimulusSet,
+    *,
+    variant: StimulusVariant,
+    project_root: Path | None,
+    manifest: StimulusManifest | None,
+) -> list[StimulusScheduleItem]:
+    """Resolve sorted stimulus payloads for one set."""
+
+    if stimulus_set.modality == StimulusModality.IMAGE:
+        paths = resolve_image_paths(
+            stimulus_set,
+            variant=variant,
+            project_root=project_root,
+            manifest=manifest,
+        )
+        variant_slug = variant.value.replace("_", "-")
+        return [
+            StimulusScheduleItem(
+                stimulus_modality=StimulusModality.IMAGE,
+                stimulus_id=f"{stimulus_set.set_id}-{variant_slug}-{index:04d}",
+                image_path=path,
+            )
+            for index, path in enumerate(paths, start=1)
+        ]
+
+    if stimulus_set.modality == StimulusModality.WORD:
+        if not stimulus_set.words:
+            raise CompileError(f"Stimulus set '{stimulus_set.name}' does not contain any words.")
+        return [
+            StimulusScheduleItem(
+                stimulus_modality=StimulusModality.WORD,
+                stimulus_id=f"{stimulus_set.set_id}-word-{index:04d}",
+                text=word,
+            )
+            for index, word in enumerate(stimulus_set.words, start=1)
+        ]
+
+    raise CompileError(
+        f"Stimulus set '{stimulus_set.name}' has unsupported modality "
+        f"'{stimulus_set.modality}'."
+    )

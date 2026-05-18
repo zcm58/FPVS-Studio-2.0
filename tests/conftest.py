@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 from PIL import Image
 
-from fpvs_studio.core.enums import DutyCycleMode
+from fpvs_studio.core.enums import DutyCycleMode, StimulusModality
 from fpvs_studio.core.models import (
     Condition,
     FixationTaskSettings,
@@ -165,6 +165,9 @@ def _populate_project_root(project_root: Path, project: ProjectFile) -> None:
     """Create deterministic source image files for a project root."""
 
     for stimulus_set in project.stimulus_sets:
+        if stimulus_set.modality != StimulusModality.IMAGE:
+            continue
+        assert stimulus_set.source_dir is not None
         source_dir = project_root / Path(stimulus_set.source_dir)
         source_dir.mkdir(parents=True, exist_ok=True)
         for index in range(1, 4):

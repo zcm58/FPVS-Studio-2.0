@@ -5,7 +5,8 @@ from __future__ import annotations
 import pytest
 
 from fpvs_studio.core.compiler import CompileError, compile_session_plan
-from fpvs_studio.core.enums import InterConditionMode
+from fpvs_studio.core.enums import InterConditionMode, StimulusModality
+from fpvs_studio.core.models import Condition, StimulusSet
 
 
 def _block_orders(session_plan) -> list[list[str]]:
@@ -137,6 +138,61 @@ def test_session_plan_reshuffles_images_each_time_condition_is_shown(
         }
         for base_order in base_orders
     )
+
+
+def test_session_plan_supports_image_and_word_conditions_together(
+    sample_project,
+    sample_project_root,
+) -> None:
+    sample_project.conditions.append(
+        Condition(
+            condition_id="word-condition",
+            name="Word Condition",
+            base_stimulus_set_id="word-base-set",
+            oddball_stimulus_set_id="word-oddball-set",
+            sequence_count=1,
+            trigger_code=2,
+            order_index=1,
+        )
+    )
+    sample_project.stimulus_sets.extend(
+        [
+            StimulusSet(
+                set_id="word-base-set",
+                name="Word Base Set",
+                modality=StimulusModality.WORD,
+                source_dir=None,
+                words=["cat", "dog", "cat"],
+            ),
+            StimulusSet(
+                set_id="word-oddball-set",
+                name="Word Oddball Set",
+                modality=StimulusModality.WORD,
+                source_dir=None,
+                words=["chair", "table"],
+            ),
+        ]
+    )
+
+    session_plan = compile_session_plan(
+        sample_project,
+        refresh_hz=60.0,
+        project_root=sample_project_root,
+        random_seed=42,
+    )
+
+    entries_by_condition = {
+        entry.condition_id: entry.run_spec for entry in session_plan.ordered_entries()
+    }
+    assert entries_by_condition["faces"].condition.stimulus_modality == StimulusModality.IMAGE
+    assert (
+        entries_by_condition["word-condition"].condition.stimulus_modality
+        == StimulusModality.WORD
+    )
+    word_events = entries_by_condition["word-condition"].stimulus_sequence
+    assert all(event.stimulus_modality == StimulusModality.WORD for event in word_events)
+    assert all(event.image_path is None for event in word_events)
+    assert {event.text for event in word_events if event.role == "base"} == {"cat", "dog"}
 
 
 def test_session_plan_randomizes_blocks_even_when_legacy_flag_is_false(
