@@ -137,7 +137,7 @@ Current planned seams:
   Experiment, Fixation, Response, and Review. Conditions handles condition identity,
   list actions, image-folder assignment for image conditions, typed word-list authoring
   for word conditions, image-only control-condition creation, and image normalization to
-  square PNG assets. Conditions also surfaces project-wide target repeats per stimulus
+  square PNG assets. Conditions also surfaces project-wide Target Stimulus Repeats
   and warning-only base/oddball repeat-balance guidance.
   Setup steps share a compact content surface, with the top progress stepper carrying
   complete-state feedback instead of page-wide completion bars. The setup surface is

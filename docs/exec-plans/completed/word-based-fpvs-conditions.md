@@ -37,7 +37,9 @@ two editable word-list inputs:
 The first implementation should use a direct, inspectable authoring model: one word or
 short phrase per line, stored in the project file. The GUI should trim blank lines,
 preserve the authored display text for each non-empty line, show counts for each role,
-and report readiness as missing words when either list is empty.
+and report readiness as missing words when either list is empty. While a word editor has
+focus, debounce refresh preserves an in-progress blank line so pressing Enter does not
+move the cursor back to the previous line.
 
 The user should be able to run sessions containing, for example:
 
@@ -436,7 +438,7 @@ Word mode:
 
 Shared setup:
 
-- condition name, trigger code, target repeats, participant instructions, duty-cycle
+- condition name, trigger code, Target Stimulus Repeats, participant instructions, duty-cycle
   mode, session settings, fixation settings, and launch behavior remain shared
 - update user-facing copy from "images" to "stimuli" only where the workflow truly
   applies to both modalities

@@ -102,7 +102,10 @@ The authoring window is organized around two user-facing modes:
     instructions, modality, and base/oddball stimulus authoring
   - image conditions use the existing base/oddball image source cards; word conditions
     use typed Base Words and Oddball Words editors with one word or short phrase per line
-  - Conditions shows project-wide target repeats per stimulus and per-condition base/oddball
+  - word editors save only non-empty lines while preserving the focused editor's
+    in-progress blank line during debounce/refresh, so pressing Enter keeps the cursor
+    on the new line
+  - Conditions shows project-wide Target Stimulus Repeats and per-condition base/oddball
     repeat-balance guidance; repeat-balance issues are warnings and do not block save
     or launch
   - raw image-folder import is permissive; folders with mixed or non-square image sizes are not
@@ -264,7 +267,7 @@ The current GUI supports:
 - importing base and oddball image folders
 - authoring base and oddball word lists for word-based conditions
 - mixing image-based and word-based conditions in one session
-- reviewing target repeats per stimulus and base/oddball repeat-balance warnings
+- reviewing Target Stimulus Repeats and base/oddball repeat-balance warnings
 - normalizing inconsistent condition image folders to project-local PNG copies
 - using `Tools > Image Resizer` to create standalone FPVS-ready PNG copies
 - creating optional derived-variant control conditions from existing condition stimuli
