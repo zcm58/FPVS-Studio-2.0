@@ -29,7 +29,9 @@ from fpvs_studio.gui.components import (
     apply_home_page_theme,
     create_home_project_icon,
     mark_home_launch_action,
+    mark_primary_action,
     mark_secondary_action,
+    refresh_widget_style,
 )
 from fpvs_studio.gui.document import ProjectDocument
 from fpvs_studio.gui.project_overview_page import ProjectOverviewEditor
@@ -308,6 +310,8 @@ class HomePage(QWidget):
         super().__init__(parent)
         self._document = document
         self._load_condition_template_profiles = load_condition_template_profiles
+        self._edit_setup_action: Callable[[], None] | None = None
+        self._complete_setup_action: Callable[[], None] | None = None
         self.setObjectName("home_page")
 
         self.open_project_button = QPushButton("Open Project", self)
@@ -331,6 +335,7 @@ class HomePage(QWidget):
             self.edit_setup_button,
         ):
             button.setMinimumHeight(38)
+            button.setMaximumHeight(38)
             button.setMinimumWidth(160)
             button.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
@@ -483,6 +488,8 @@ class HomePage(QWidget):
         left, top, right, bottom = self._launch_surface_base_margins
         adjusted_top = max(0, top - max(0, offset))
         self.launch_surface.page_layout.setContentsMargins(left, adjusted_top, right, bottom)
+        self.launch_surface.page_layout.activate()
+        self.launch_surface.content_layout.activate()
 
     def bind_quick_actions(
         self,
@@ -516,8 +523,11 @@ class HomePage(QWidget):
         self,
         *,
         edit_setup: Callable[[], None],
+        complete_setup: Callable[[], None] | None = None,
     ) -> None:
-        self.edit_setup_button.clicked.connect(edit_setup)
+        self._edit_setup_action = edit_setup
+        self._complete_setup_action = complete_setup or edit_setup
+        self.edit_setup_button.clicked.connect(self._open_setup_from_home)
 
     def refresh(self) -> None:
         project = self._document.project
@@ -540,6 +550,7 @@ class HomePage(QWidget):
             "Enabled" if fixation_settings.accuracy_task_enabled else "Disabled"
         )
         self._set_status_indicator(report)
+        self.launch_surface.hero_layout.activate()
 
     def _status_report(self) -> LauncherReadinessReport:
         return _launcher_readiness_report(
@@ -564,13 +575,9 @@ class HomePage(QWidget):
         self.launch_status_label.set_state(report.badge_state, report.status_label)
         is_ready = report.badge_state == "ready"
         self.launch_button.setEnabled(is_ready)
-        summary_text = (
-            ""
-            if is_ready
-            else report.status_summary
-        )
-        self.launch_status_summary.setText(summary_text)
-        self.launch_status_summary.setVisible(bool(summary_text))
+        self._set_setup_action_state(is_ready=is_ready)
+        self.launch_status_summary.setText("")
+        self.launch_status_summary.setVisible(False)
         if is_ready:
             self.launch_button.setToolTip(self._normal_launch_tooltip)
             self.launch_button.setStatusTip(self._normal_launch_status_tip)
@@ -578,6 +585,24 @@ class HomePage(QWidget):
         blocker_text = _first_actionable_blocker(report)
         self.launch_button.setToolTip(blocker_text)
         self.launch_button.setStatusTip(blocker_text)
+
+    def _set_setup_action_state(self, *, is_ready: bool) -> None:
+        if is_ready:
+            self.edit_setup_button.setText("Edit Setup")
+            self.edit_setup_button.setProperty("primaryActionRole", "false")
+            mark_secondary_action(self.edit_setup_button)
+        else:
+            self.edit_setup_button.setText("Complete Setup")
+            self.edit_setup_button.setProperty("secondaryActionRole", "false")
+            mark_primary_action(self.edit_setup_button)
+        refresh_widget_style(self.edit_setup_button)
+
+    def _open_setup_from_home(self) -> None:
+        report = self._status_report()
+        is_ready = report.badge_state == "ready"
+        action = self._edit_setup_action if is_ready else self._complete_setup_action
+        if action is not None:
+            action()
 
     def _add_metric(
         self,

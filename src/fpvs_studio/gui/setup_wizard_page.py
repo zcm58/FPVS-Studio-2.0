@@ -415,6 +415,12 @@ class SetupWizardPage(QWidget):
     def is_launch_ready(self) -> bool:
         return self._readiness_report().badge_state == "ready"
 
+    def first_incomplete_step_key(self) -> str:
+        for index, (step_key, _title) in enumerate(_WIZARD_STEPS):
+            if not self._step_valid(index):
+                return step_key
+        return "review"
+
     def open_wizard(
         self,
         *,

@@ -73,7 +73,7 @@ def test_setup_wizard_conditions_step_authors_word_condition(
     _, window = _open_created_project(controller, qtbot, tmp_path, "Word Condition")
     guide = window.setup_wizard_page
     step = guide.condition_setup_step
-    guide.open_wizard(step_key="conditions")
+    window.show_setup_wizard(step_key="conditions")
     next_button = guide.findChild(QPushButton, "setup_wizard_next_button")
     assert next_button is not None
 
@@ -345,7 +345,7 @@ def test_setup_wizard_conditions_step_keeps_source_geometry_for_incomplete_condi
     _, window = _open_created_project(controller, qtbot, tmp_path, "Condition Geometry")
     guide = window.setup_wizard_page
     step = guide.condition_setup_step
-    guide.open_wizard(step_key="conditions")
+    window.show_setup_wizard(step_key="conditions")
 
     condition_ids = []
     for index, name in enumerate(("Faces", "Objects"), start=1):

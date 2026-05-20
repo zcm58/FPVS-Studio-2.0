@@ -8,8 +8,8 @@ from __future__ import annotations
 from collections.abc import Callable
 from pathlib import Path
 
-from PySide6.QtCore import QEvent, Qt, QUrl
-from PySide6.QtGui import QAction, QCloseEvent, QDesktopServices
+from PySide6.QtCore import QEvent, Qt, QTimer, QUrl
+from PySide6.QtGui import QAction, QCloseEvent, QDesktopServices, QShowEvent
 from PySide6.QtWidgets import (
     QFileDialog,
     QMainWindow,
@@ -33,7 +33,6 @@ from fpvs_studio.gui.setup_wizard_page import SetupWizardPage
 from fpvs_studio.gui.update_dialog import UpdateDialog
 from fpvs_studio.gui.window_helpers import (
     _LAUNCH_INTERSTITIAL_DURATION_MS,
-    _launcher_readiness_report,
     _show_error_dialog,
 )
 
@@ -136,6 +135,7 @@ class StudioMainWindow(QMainWindow):
         )
         self.home_page.bind_navigation_actions(
             edit_setup=lambda: self.show_setup_wizard(allow_step_jumps=True),
+            complete_setup=self.show_incomplete_setup_wizard,
         )
         self._create_menu_and_toolbar()
         self._button_hover_animators: list[ButtonHoverAnimator] = []
@@ -146,6 +146,8 @@ class StudioMainWindow(QMainWindow):
 
     def _wire_document(self) -> None:
         self.document.project_changed.connect(self._update_window_title)
+        self.document.project_changed.connect(self._sync_home_after_document_update)
+        self.document.session_plan_changed.connect(self._sync_home_after_document_update)
         self.document.dirty_changed.connect(self._update_window_title)
         self.document.saved.connect(lambda: self.statusBar().showMessage("Project saved.", 3000))
 
@@ -169,11 +171,25 @@ class StudioMainWindow(QMainWindow):
         self._sync_home_chrome_offset()
         self.main_stack.setCurrentWidget(self.home_page)
 
-    def show_setup_wizard(self, *, allow_step_jumps: bool = False) -> None:
+    def show_setup_wizard(
+        self,
+        *,
+        step_key: str | None = None,
+        allow_step_jumps: bool = False,
+    ) -> None:
         self._set_home_chrome_visible(True)
         self._apply_setup_window_size()
         self.main_stack.setCurrentWidget(self.setup_wizard_page)
-        self.setup_wizard_page.open_wizard(allow_step_jumps=allow_step_jumps)
+        self.setup_wizard_page.open_wizard(
+            step_key=step_key,
+            allow_step_jumps=allow_step_jumps,
+        )
+
+    def show_incomplete_setup_wizard(self) -> None:
+        self.show_setup_wizard(
+            step_key=self.setup_wizard_page.first_incomplete_step_key(),
+            allow_step_jumps=False,
+        )
 
     def show_image_resizer(self) -> None:
         self.flush_pending_edits()
@@ -182,17 +198,7 @@ class StudioMainWindow(QMainWindow):
         self.main_stack.setCurrentWidget(self.image_resizer_page)
 
     def _show_initial_workflow_surface(self) -> None:
-        if self._current_project_is_ready_to_launch():
-            self.show_home()
-        else:
-            self.show_setup_wizard(allow_step_jumps=False)
-
-    def _current_project_is_ready_to_launch(self) -> bool:
-        report = _launcher_readiness_report(
-            self.document,
-            refresh_hz=self.document.project.settings.display.preferred_refresh_hz or 60.0,
-        )
-        return report.badge_state == "ready"
+        self.show_home()
 
     def flush_pending_edits(self) -> None:
         self.setup_wizard_page.flush_pending_edits()
@@ -210,6 +216,10 @@ class StudioMainWindow(QMainWindow):
     def _sync_home_chrome_offset(self) -> None:
         menu_height = self.menuBar().height() or self.menuBar().sizeHint().height()
         self.home_page.set_top_chrome_offset(menu_height if self.menuBar().isVisible() else 0)
+
+    def _sync_home_after_document_update(self) -> None:
+        if self.main_stack.currentWidget() is self.home_page:
+            self._sync_home_chrome_offset()
 
     def _apply_compact_window_size(self) -> None:
         was_below_compact_minimum = (
@@ -296,6 +306,12 @@ class StudioMainWindow(QMainWindow):
                 self._apply_chrome_styles()
             finally:
                 self._theme_refreshing = False
+
+    def showEvent(self, event: QShowEvent) -> None:  # noqa: N802
+        super().showEvent(event)
+        if self.main_stack.currentWidget() is self.home_page:
+            self._sync_home_chrome_offset()
+            QTimer.singleShot(0, self._sync_home_chrome_offset)
 
     def _install_button_hover_animations(self) -> None:
         self._button_hover_animators.clear()

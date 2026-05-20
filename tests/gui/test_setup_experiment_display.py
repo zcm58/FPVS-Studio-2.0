@@ -31,8 +31,7 @@ def test_setup_wizard_experiment_and_fixation_steps_are_width_safe(
 ) -> None:
     _, window = _open_created_project(controller, qtbot, tmp_path, "Experiment Settings Guided")
     guide = window.setup_wizard_page
-    window.main_stack.setCurrentWidget(guide)
-    guide.open_wizard(step_key="experiment")
+    window.show_setup_wizard(step_key="experiment")
 
     assert guide.content_stack.currentWidget() is guide.guided_panel
     assert guide.step_stack.currentWidget() is guide.experiment_step_surface

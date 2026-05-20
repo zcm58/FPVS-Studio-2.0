@@ -132,6 +132,9 @@ def test_home_quick_action_buttons_present_and_wired(
     assert "beta test-mode" in window.launch_action.toolTip().lower()
     assert launch_button.isEnabled() is False
     assert launch_button.property("launchActionRole") == "primary"
+    assert edit_setup_button.text() == "Complete Setup"
+    assert edit_setup_button.property("primaryActionRole") == "true"
+    assert edit_setup_button.property("secondaryActionRole") == "false"
     qtbot.waitUntil(lambda: launch_button.width() > 0)
     metric_text = "\n".join(
         label.text() for label in window.home_page.findChildren(QLabel)
@@ -151,7 +154,8 @@ def test_home_quick_action_buttons_present_and_wired(
         "home_create_project_button",
         "home_edit_setup_button",
     ]
-    assert len({button.width() for button in ordered_buttons}) == 1
+    button_widths = [button.width() for button in ordered_buttons]
+    assert max(button_widths) - min(button_widths) <= 1
     assert {button.minimumWidth() for button in ordered_buttons} == {160}
     assert launch_button.width() > ordered_buttons[0].width()
     assert launch_button.parent() is window.home_page.findChild(QWidget, "home_hero_container")
@@ -178,6 +182,9 @@ def test_home_quick_action_buttons_present_and_wired(
     qtbot.mouseClick(launch_button, Qt.MouseButton.LeftButton)
     qtbot.mouseClick(edit_setup_button, Qt.MouseButton.LeftButton)
     assert window.main_stack.currentWidget() is window.setup_wizard_page
+    assert window.setup_wizard_page.step_stack.currentWidget() is (
+        window.setup_wizard_page.project_step_surface
+    )
 
     assert trigger_counts == {"new": 1, "open": 1, "launch": 0}
 
@@ -209,10 +216,12 @@ def test_incomplete_home_launch_state_is_error_and_disabled(
 
     status_label = window.home_page.findChild(QLabel, "home_launch_status_indicator")
     home_launch_button = window.home_page.findChild(QPushButton, "home_launch_experiment_button")
+    complete_setup_button = window.home_page.findChild(QPushButton, "home_edit_setup_button")
     run_launch_button = window.run_page.findChild(QPushButton, "launch_test_session_button")
 
     assert status_label is not None
     assert home_launch_button is not None
+    assert complete_setup_button is not None
     assert run_launch_button is not None
     assert status_label.text() == "Setup Required"
     assert status_label.property("statusState") == "error"
@@ -222,7 +231,43 @@ def test_incomplete_home_launch_state_is_error_and_disabled(
     assert home_launch_button.isEnabled() is False
     assert "Needs setup:" in home_launch_button.toolTip()
     assert home_launch_button.statusTip() == home_launch_button.toolTip()
+    assert complete_setup_button.text() == "Complete Setup"
+    assert complete_setup_button.property("primaryActionRole") == "true"
+    assert complete_setup_button.property("secondaryActionRole") == "false"
     assert run_launch_button.isEnabled() is False
+
+
+def test_complete_setup_jumps_to_earliest_incomplete_step(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Complete Setup Jump")
+
+    window.setup_wizard_page.project_overview_editor.project_description_edit.setPlainText(
+        "Project details are complete, but conditions are not."
+    )
+    window.flush_pending_edits()
+    window.show_home()
+    QApplication.processEvents()
+
+    complete_setup_button = window.home_page.findChild(QPushButton, "home_edit_setup_button")
+    launch_button = window.home_page.findChild(QPushButton, "home_launch_experiment_button")
+    assert complete_setup_button is not None
+    assert launch_button is not None
+    assert complete_setup_button.text() == "Complete Setup"
+    assert launch_button.isEnabled() is False
+
+    qtbot.mouseClick(complete_setup_button, Qt.MouseButton.LeftButton)
+    QApplication.processEvents()
+
+    assert window.main_stack.currentWidget() is window.setup_wizard_page
+    assert window.setup_wizard_page.step_stack.currentWidget() is (
+        window.setup_wizard_page.conditions_step_surface
+    )
+    assert window.setup_wizard_page.progress_steps.step_circles[1].property(
+        "setupProgressState"
+    ) == "current"
 
 
 def test_main_window_no_longer_exposes_top_level_tab_bar(

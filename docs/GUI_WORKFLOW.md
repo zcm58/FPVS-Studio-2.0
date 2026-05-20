@@ -53,7 +53,11 @@ The authoring window is organized around two user-facing modes:
     actions, setup editing, and a prominent centered `Launch Experiment`
   - uses the same shared launch-surface frame as Welcome so the outer window and
     inner card styling stay aligned across the two launch surfaces
-  - `Edit Setup` opens the guided setup workflow
+  - ready projects show `Edit Setup` as a secondary action for intentional edits
+  - incomplete projects keep the same setup button slot but relabel it `Complete Setup`
+    and style it as the primary enabled action
+  - `Complete Setup` opens the guided setup workflow at the earliest incomplete step
+    using the existing setup-step completion checks
   - when launch is disabled, the launch button tooltip and status tip show the first
     actionable setup blocker
   - returning from app-expanded Setup restores the compact Home footprint unless

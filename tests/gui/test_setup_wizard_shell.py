@@ -43,7 +43,7 @@ def test_main_window_uses_home_and_setup_wizard_stack(
     assert window.main_stack.indexOf(window.conditions_page) == -1
     assert window.main_stack.indexOf(window.assets_page) == -1
     assert window.main_stack.indexOf(window.run_page) == -1
-    assert window.main_stack.currentWidget() is window.setup_wizard_page
+    assert window.main_stack.currentWidget() is window.home_page
     assert window.conditions_page.add_condition_button is not None
     assert window.session_structure_page.block_count_spin is not None
     assert window.fixation_cross_settings_page.fixation_enabled_checkbox is not None
@@ -57,6 +57,8 @@ def test_setup_wizard_exists_and_uses_single_column_shell_with_steps(
     _, window = _open_created_project(controller, qtbot, tmp_path, "Setup Wizard Shell")
 
     wizard = window.setup_wizard_page
+    window.show_setup_wizard()
+    QApplication.processEvents()
     assert window.main_stack.indexOf(wizard) == 1
     _assert_setup_wizard_vertical_scrolling_disabled(wizard)
     assert wizard.shell.layout_mode == "single_column"
@@ -346,11 +348,22 @@ def test_switching_main_workflow_stack_keeps_outer_window_size_stable(
 ) -> None:
     _, window = _open_created_project(controller, qtbot, tmp_path, "Workflow Window Size")
 
-    assert window.main_stack.currentWidget() is window.setup_wizard_page
+    assert window.main_stack.currentWidget() is window.home_page
     assert window.objectName() == "studio_main_window"
     assert "QMainWindow#studio_main_window" in window.styleSheet()
     assert "QStackedWidget#main_stack" in window.styleSheet()
     assert f"background-color: {COLOR_PAGE_BACKGROUND};" in window.styleSheet()
+    assert window.menuBar().isVisible()
+    assert not window.statusBar().isVisible()
+    assert window.minimumWidth() == 760
+    assert window.minimumHeight() == 520
+    assert window.width() == 1120
+    assert window.height() == 720
+
+    window.show_setup_wizard()
+    QApplication.processEvents()
+
+    assert window.main_stack.currentWidget() is window.setup_wizard_page
     assert window.menuBar().isVisible()
     assert window.statusBar().isVisible()
     assert window.minimumWidth() == 960

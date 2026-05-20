@@ -396,8 +396,7 @@ def test_fixation_response_key_picker_updates_model_with_keyboard_buttons(
     _, window = _open_created_project(controller, qtbot, tmp_path, "Response Key Picker")
 
     page = window.setup_dashboard_page.fixation_response_editor
-    window.setup_wizard_page.open_wizard(step_key="response")
-    window.main_stack.setCurrentWidget(window.setup_wizard_page)
+    window.show_setup_wizard(step_key="response")
     page.fixation_enabled_checkbox.setChecked(True)
     page.fixation_accuracy_checkbox.setChecked(True)
     QApplication.processEvents()
@@ -463,8 +462,7 @@ def test_fixation_accuracy_toggle_disables_response_controls_without_reflow(
     _, window = _open_created_project(controller, qtbot, tmp_path, "Fixation Accuracy Visibility")
 
     page = window.setup_dashboard_page.fixation_response_editor
-    window.setup_wizard_page.open_wizard(step_key="response")
-    window.main_stack.setCurrentWidget(window.setup_wizard_page)
+    window.show_setup_wizard(step_key="response")
     page.fixation_enabled_checkbox.setChecked(True)
     page.fixation_accuracy_checkbox.setChecked(True)
     QApplication.processEvents()
@@ -706,9 +704,7 @@ def test_launch_blocked_when_condition_repeat_cycle_values_differ(
     monkeypatch.setattr(window.run_page, "_prompt_participant_number", _capture_prompt)
     monkeypatch.setattr("fpvs_studio.gui.document.launch_session", _capture_launch)
 
-    window.main_stack.setCurrentWidget(window.run_page)
-    QApplication.processEvents()
-    qtbot.mouseClick(window.run_page.launch_button, Qt.MouseButton.LeftButton)
+    window.run_page.launch_test_session()
 
     assert prompt_calls == 0
     assert launch_calls == 0
