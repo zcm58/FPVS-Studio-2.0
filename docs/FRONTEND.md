@@ -11,6 +11,33 @@ the active app.
 - Use `../src/fpvs_studio/gui/design_system.py` for tokens and tiny text helpers.
 - Keep detailed behavior and test guidance in `GUI_WORKFLOW.md`.
 
+## Skill Routing for GUI Work
+
+FPVS Studio's frontend remains PySide6. Global UI skills may help agents reason about
+the product experience, but implementation must keep using PySide6 widgets, the shared
+component layer, Qt worker patterns, and pytest-qt verification.
+
+- Use `.agents/skills/pyside6-gui-cleanup` for widget refactors, dialog polish, shared
+  component usage, status/error UX, worker/threading checks, and QAction import cleanup.
+- Use `.agents/skills/pytest-qt-smoke` when GUI behavior changes need focused smoke
+  coverage.
+- Use `diagnose` before editing when a GUI test hangs, a modal blocks, a worker thread
+  does not finish, or a layout/runtime regression is reported. Start from a single
+  pytest node or focused script with an explicit timeout.
+- Use `impeccable` / `delight`, `frontend-design`, or `ui-ux-pro-max` only for concrete
+  PySide6 product-design questions such as Setup Wizard density, Home launch hierarchy,
+  button role clarity, empty/error state wording, or visual consistency with
+  `gui.components`.
+- If those global UI skills suggest web, React, Tailwind, browser animation, mobile, or
+  deployment patterns, translate only the relevant design intent into existing PySide6
+  components and discard the stack-specific advice.
+- Use `web-design-guidelines` only for `../docs-site/` or MkDocs web documentation UI,
+  not for the desktop authoring app.
+
+GUI verification still follows this repo's gates: focused pytest-qt coverage for changed
+behavior, `.\scripts\check_gui.ps1` for GUI workflow changes, and
+`.\scripts\check_quality.ps1` when GUI work touches multiple layers.
+
 ## GUI Architecture
 
 - First-run startup shows a concise FPVS Studio Root Folder setup guide before the

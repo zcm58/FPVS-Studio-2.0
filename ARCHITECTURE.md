@@ -192,6 +192,32 @@ Refactor priority:
 
 Use these first reads before opening broad trees:
 
+Global Codex skills are workflow aids, not architecture sources. Apply them only after
+the first reads for the task are complete, and keep their output subordinate to the
+package boundaries, persisted formats, and harness commands in this file.
+
+- Bug or regression task: use `diagnose` after reading the relevant recipe below. The
+  success criterion is a focused repo command that fails before the fix and passes after
+  it, or a documented reason that no correct automated seam exists.
+- GUI design task: use repo-local `.agents/skills/pyside6-gui-cleanup` and
+  `.agents/skills/pytest-qt-smoke` first. Use `impeccable` / `delight`,
+  `frontend-design`, or `ui-ux-pro-max` only to refine PySide6 layout, copy, hierarchy,
+  accessibility, or interaction decisions inside the existing component surface.
+- Architecture/refactor review: use `improve-codebase-architecture` only when the user
+  asks for architectural review or deeper refactor candidates. Cross-check candidates
+  against `docs/PLANS.md`, `docs/exec-plans/`, and package-local `AGENTS.md` files
+  before proposing edits.
+- Plan stress-test: use `grill-me` for unresolved feature-sized workflow, contract,
+  safety, or verification decisions, then capture durable decisions in an execution plan
+  when the work affects future tasks.
+- Independent multi-failure investigation: use `dispatching-parallel-agents` only when
+  delegation is available and the failing areas can be assigned without overlapping write
+  sets. Integrate by running the relevant focused and full gates afterward.
+- Skill discovery: use `find-skills` only for a missing specialized workflow. Prefer the
+  repo-local skills in `.agents/skills/` for GUI, path, legacy, and pytest-qt work.
+- Web-only skills: `web-design-guidelines` is limited to `docs-site/` or MkDocs UI work.
+  React, React Native, and Vercel skills are out of scope for the current desktop app.
+
 - GUI task: `src/fpvs_studio/gui/AGENTS.md`,
   `docs/FRONTEND.md`, `docs/GUI_WORKFLOW.md`, the specific page/dialog module, matching
   `tests/gui/test_*.py`, and `tests/gui/helpers.py` if workflow setup matters.

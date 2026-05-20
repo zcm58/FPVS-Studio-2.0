@@ -27,6 +27,42 @@ experiments, with PsychoPy isolated behind runtime/engine boundaries.
 - Use repo skills in `.agents/skills/` for repeatable GUI, path, legacy-boundary,
   and pytest-qt workflows.
 
+## Codex skill routing
+
+Repo-local rules remain the source of truth. Invoke globally installed Codex skills only
+after reading the relevant repo map above and any nested `AGENTS.md` files for touched
+paths. A global skill can shape the workflow, but it must not override FPVS Studio's
+PySide6-only GUI, core/runtime/engine boundaries, execution contracts, verification
+gates, or no-silent-fallback guardrails.
+
+- Use `diagnose` for failing tests, GUI hangs, runtime/update regressions, or reported
+  bugs. Build a bounded reproduction first, then use the repo's focused pytest or script
+  gate as the pass/fail signal before editing.
+- Use `improve-codebase-architecture` only for user-requested architecture or refactor
+  reviews. Start from `ARCHITECTURE.md`, `docs/PLANS.md`, existing execution plans, and
+  nested package rules; propose repo-specific candidates before changing code.
+- Use `grill-me` when the user asks to stress-test a plan or when feature-sized work has
+  unresolved contract, workflow, or verification choices. Record durable outcomes in
+  `docs/exec-plans/` when the decision affects future agents.
+- Use `dispatching-parallel-agents` only when the current harness permits delegation and
+  the work splits into independent investigations with disjoint write scopes. Do not use
+  it for tightly coupled contract changes or shared GUI files.
+- Use `find-skills` only when the current repo-local skills and installed global skills
+  do not cover a requested specialized workflow. Do not turn routine FPVS Studio work
+  into an external skill search.
+- For PySide6 GUI design work, `impeccable` / `delight`, `frontend-design`, and
+  `ui-ux-pro-max` may help critique layout, visual hierarchy, copy, and interaction
+  choices, but `docs/FRONTEND.md`, `docs/GUI_WORKFLOW.md`, `gui.components`, and
+  pytest-qt coverage remain the implementation contract.
+- Use `web-design-guidelines` only for MkDocs or `docs-site/` web documentation UI
+  surfaces. It is not a review gate for the PySide6 desktop application.
+
+Do not use React, React Native, or Vercel skills for this repository unless a future
+change explicitly adds a real web or mobile app surface. `react-best-practices`,
+`composition-patterns`, `react-view-transitions`, `react-native-skills`,
+`deploy-to-vercel`, `vercel-cli-with-tokens`, and `vercel-optimize` are excluded from
+normal FPVS Studio desktop work.
+
 ## Repository guardrails
 
 - Read this file and any nested `AGENTS.md` files in directories you touch before editing.
