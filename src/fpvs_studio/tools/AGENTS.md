@@ -11,8 +11,9 @@ services. The imported FPVS Toolbox reference files were archived under
 
 ## Requirements
 
-- Use `docs/exec-plans/completed/fpvs-toolbox-image-prep-tool.md` for the landed
-  Image Resizer workflow and boundaries.
+- Use `docs/GUI_WORKFLOW.md`, `docs/FRONTEND.md`, and
+  `tests/gui/test_image_resizer_page.py` for the landed Image Resizer workflow,
+  GUI expectations, and smoke coverage.
 - Adapt behavior into FPVS Studio boundaries before exposing it to users.
 - Use `fpvs_studio.preprocessing` for resize, conversion, inspection, derived
   variants, manifests, and deterministic transform metadata.

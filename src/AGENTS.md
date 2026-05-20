@@ -9,7 +9,7 @@ package map.
 ## Stable v1 Invariants
 
 - The only built-in protocol template is `fpvs_6hz_every5_v1`.
-- V1 keeps base rate fixed at 6.0 Hz, oddball every 5th image, and oddball
+- V1 keeps base rate fixed at 6.0 Hz, oddball every 5th stimulus, and oddball
   frequency at 1.2 Hz.
 - Users choose `continuous` or `blank_50` duty cycle; do not expose editable
   base/oddball frequencies in v1 UI.
@@ -20,8 +20,9 @@ package map.
   root in `.fpvs-studio/templates/`, outside the top-level experiment folder list.
 - Persist project-facing paths as project-relative POSIX-style strings in JSON.
 - Supported source image formats are `.jpg`, `.jpeg`, and `.png`.
-- All images inside a stimulus set must share resolution; base and oddball sets
-  in a condition must also match.
+- Launchable image stimulus sets must resolve to square images. A condition's
+  base and oddball sets may use different square source resolutions because
+  playback size is controlled by compiled display geometry.
 - The fixation task is the only behavioral task in v1 and must not alter FPVS
   base/oddball scheduling.
 

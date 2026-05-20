@@ -28,10 +28,12 @@ the active app.
   setup frame, top progress stepper, bottom navigation, and visible child widgets
   must fit at `1120x720` without bottom clipping or required vertical scrolling.
 - Conditions is a combined guided setup area for condition list/actions, names,
-  triggers, instructions, base/oddball folder assignment, control-condition creation,
-  and image normalization. It uses compact list rows and source cards without extra
-  section headers. Raw folder selection is permissive; inconsistent image sizes are
-  handled by the guided normalization flow before leaving Conditions.
+  triggers, instructions, modality selection, image-folder assignment, typed word-list
+  authoring, control-condition creation, and image normalization. It uses compact list
+  rows and source cards without extra section headers. Raw image-folder selection is
+  permissive; inconsistent image sizes are handled by the guided normalization flow
+  before leaving Conditions. Control-condition creation and normalization stay
+  image-only paths.
 - Fixation and Response are split guided setup areas: Fixation handles color-change
   schedule/timing, while Response handles accuracy tracking, response key/window,
   appearance, and preview.

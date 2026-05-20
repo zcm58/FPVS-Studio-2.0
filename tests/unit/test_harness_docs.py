@@ -67,3 +67,22 @@ def test_harness_update_policy_is_documented() -> None:
 
     assert "Update `ARCHITECTURE.md`" in root_agents
     assert "Documentation Freshness" in architecture
+
+
+def test_architecture_task_recipe_paths_exist() -> None:
+    architecture = _read_repo_file("ARCHITECTURE.md")
+    path_pattern = re.compile(
+        r"`((?:AGENTS|ARCHITECTURE|docs|src|tests|packaging)/[^`]+|(?:AGENTS|ARCHITECTURE)\.md)`"
+    )
+    ignored_suffixes = ("/", "/*")
+    referenced_paths = {
+        match.group(1)
+        for match in path_pattern.finditer(architecture.replace("\\", "/"))
+        if "*" not in match.group(1) and not match.group(1).endswith(ignored_suffixes)
+    }
+
+    missing_paths = sorted(
+        path for path in referenced_paths if not (PROJECT_ROOT / path).exists()
+    )
+
+    assert missing_paths == []

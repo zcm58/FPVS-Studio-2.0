@@ -224,11 +224,11 @@ Use these first reads before opening broad trees:
 - Preprocessing task: `src/fpvs_studio/preprocessing/`,
   `src/fpvs_studio/core/models.py`, `tests/unit/test_preprocessing_assets.py`,
   and `tests/unit/test_preprocessing_inspection.py`.
-- Image Resizer utility task: `docs/exec-plans/completed/fpvs-toolbox-image-prep-tool.md`,
+- Image Resizer utility task: `docs/GUI_WORKFLOW.md`, `docs/FRONTEND.md`,
   `docs/references/archive/fpvs-toolbox-image-resizer/`,
   `src/fpvs_studio/preprocessing/`,
   `src/fpvs_studio/gui/components.py`, `src/fpvs_studio/gui/image_resizer_page.py`,
-  and `src/fpvs_studio/gui/AGENTS.md`.
+  `src/fpvs_studio/gui/AGENTS.md`, and `tests/gui/test_image_resizer_page.py`.
 - Docs-only task: `AGENTS.md`, this file, `docs/index.md`, and the doc being edited.
   Avoid source reads unless the doc describes a concrete contract.
 - Packaging task: `docs/PACKAGING.md`, `pyproject.toml`,

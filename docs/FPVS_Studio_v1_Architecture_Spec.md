@@ -1,7 +1,7 @@
 # FPVS Studio v1 Architecture Specification
 
-Version: 0.2
-Status: Approved for repository scaffolding and model implementation
+Version: 0.3
+Status: Current v1 baseline; implementation has progressed beyond scaffolding
 Project: FPVS Studio Development
 License target: GPL-3.0-compatible open source distribution
 
@@ -47,24 +47,26 @@ The true per-sequence duration is derived from the active display's refresh-comp
 - welcome screen with create/open project
 - user-selected project root
 - project JSON persistence
-- condition-based workflow
+- Home and Setup Wizard GUI workflow
+- image-based and word-based conditions
 - project-level fixation cross task
-- preprocessing wizard with grayscale support
+- fixation accuracy tracking and optional participant tutorial
+- preprocessing and guided image normalization
 - control generators for:
   - `rot180` (orientation inversion)
   - `phase_scrambled`
-- test mode
+- test-mode fullscreen PsychoPy launch
 - rich session export
-- settings surface for trigger backend/serial port selection
+- trigger backend contracts and optional BioSemi-compatible serial backend, with
+  end-user GUI exposure limited by the current workflow docs
 
 ## 4. Out of scope for this phase
 
-- full GUI implementation
-- full PsychoPy presentation loop
-- final serial-trigger implementation
 - photodiode patch
+- lab-validated BioSemi/BDF trigger timing
 - additional behavioral tasks
 - user-editable base/oddball frequencies in v1
+- configurable FPVS protocol timing
 
 ## 5. FPVS Studio root and project folder structure
 
@@ -107,8 +109,10 @@ The true per-sequence duration is derived from the active display's refresh-comp
 
 - Supported source image formats are only `.jpg`, `.jpeg`, and `.png`.
 - Extension matching should be case-insensitive.
-- All images in a stimulus set must have the same resolution.
-- A condition's base and oddball stimulus sets must also match in resolution.
+- Raw image-folder import may be permissive, but launchable image stimulus sets must
+  resolve to square images.
+- A condition's base and oddball stimulus sets may use different square source
+  resolutions because playback size is controlled by compiled display geometry.
 - No automatic resizing is allowed as a validation shortcut.
 - Generated variants are saved into the project and then reused from disk.
 
@@ -117,13 +121,14 @@ The true per-sequence duration is derived from the active display's refresh-comp
 - Use a **src layout** for the Python package.
 - Keep core models and validation engine-neutral.
 - Only code in `engines/` may import PsychoPy.
-- GUI communicates with runtime by compiling a neutral `RunSpec`.
-- Runtime writes a neutral `SessionExport`.
+- GUI communicates with runtime by compiling neutral `RunSpec` and `SessionPlan`
+  contracts.
+- Runtime writes neutral run/session execution artifacts.
 - Derived image generation happens before any test/run, never inside the time-critical presentation loop.
 
 ## 8. Core persisted models
 
-The repository scaffolding pass should define stable schemas for:
+The core layer defines stable schemas for:
 
 - `ProjectFile`
 - `ProjectMeta`
@@ -135,7 +140,13 @@ The repository scaffolding pass should define stable schemas for:
 - `Condition`
 - `TemplateSpec`
 - `RunSpec`
-- `SessionSummary`
+- `SessionPlan`
+- `RunExecutionSummary`
+- `SessionExecutionSummary`
+- `RuntimeMetadata`
+- `StimulusEvent`
+- `TriggerEvent`
+- `FixationEvent`
 - `StimulusManifest`
 - validation/report models
 
@@ -159,8 +170,14 @@ Derived values should include:
 
 ## 10. Trigger model
 
-Expose trigger settings in project settings, including a serial port string and backend selection. The actual lab-specific serial implementation may remain a placeholder in this phase, but the interface boundary should be present.
+Trigger settings stay in project/runtime settings while serial-port details remain
+outside `RunSpec` and `SessionPlan`. Runtime wires either the logged null backend or
+the optional BioSemi-compatible serial backend. Normal event codes are `1` through
+`255`; code `0` is reserved for explicit manual reset behavior.
 
-## 11. Repository-scaffolding phase goal
+## 11. Current repository goal
 
-This phase should end with a trustworthy domain layer, a clear repo layout, validation/tests, and enough runtime/engine scaffolding that later GUI and PsychoPy work can plug into stable contracts.
+Keep the GUI, core contracts, preprocessing, runtime/session flow, engine boundary,
+trigger backends, exports, and harness docs aligned so future changes can start from
+the narrow task recipes in `../ARCHITECTURE.md` instead of rediscovering package
+boundaries.
