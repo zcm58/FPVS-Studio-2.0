@@ -1,0 +1,4 @@
+interface:
+  display_name: "FPVS PsychoPy Migration"
+  short_description: "Migrate PsychoPy experiments into FPVS Studio"
+  default_prompt: "Use $fpvs-psychopy-migration to migrate this PsychoPy experiment folder into an FPVS Studio project."
