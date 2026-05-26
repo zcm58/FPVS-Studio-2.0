@@ -6,7 +6,12 @@ import pytest
 from pydantic import ValidationError
 
 from fpvs_studio.core.display_geometry import visual_angle_width_cm, visual_angle_width_px
-from fpvs_studio.core.enums import DutyCycleMode, InterConditionMode, StimulusModality
+from fpvs_studio.core.enums import (
+    DutyCycleMode,
+    InterConditionMode,
+    StimulusModality,
+    TriggerBackendKind,
+)
 from fpvs_studio.core.models import (
     MAX_WORD_STIMULUS_CHARS,
     Condition,
@@ -17,6 +22,7 @@ from fpvs_studio.core.models import (
     TriggerSettings,
 )
 from fpvs_studio.core.serialization import load_project_file, save_project_file
+from fpvs_studio.core.trigger_codes import LOCKED_ODDBALL_TRIGGER_CODE
 
 
 def test_project_model_round_trip(tmp_path, sample_project) -> None:
@@ -166,7 +172,13 @@ def test_word_stimulus_set_rejects_image_payload_fields() -> None:
 def test_trigger_settings_default_and_validate_oddball_marker_code() -> None:
     settings = TriggerSettings()
 
-    assert settings.oddball_trigger_code == 55
+    assert LOCKED_ODDBALL_TRIGGER_CODE == 55
+    assert settings.backend == TriggerBackendKind.SERIAL
+    assert settings.enabled is True
+    assert settings.serial_port == "COM3"
+    assert settings.baudrate == 115200
+    assert settings.oddball_trigger_code == LOCKED_ODDBALL_TRIGGER_CODE
+    assert settings.allow_nonstandard_oddball_trigger_code is False
     assert settings.reset_code is None
 
     with pytest.raises(ValidationError, match="less than or equal to 255"):
@@ -179,20 +191,43 @@ def test_trigger_settings_default_and_validate_oddball_marker_code() -> None:
         TriggerSettings(oddball_trigger_code="55")
 
 
+def test_trigger_settings_reject_nonstandard_oddball_code_without_explicit_override() -> None:
+    with pytest.raises(ValidationError, match="locked to 55"):
+        TriggerSettings(oddball_trigger_code=88)
+
+    settings = TriggerSettings(
+        oddball_trigger_code=88,
+        allow_nonstandard_oddball_trigger_code=True,
+    )
+
+    assert settings.oddball_trigger_code == 88
+    assert settings.allow_nonstandard_oddball_trigger_code is True
+
+
 def test_project_model_backfills_oddball_trigger_for_legacy_payload(sample_project) -> None:
     payload = sample_project.model_dump(mode="python")
-    payload["settings"]["triggers"].pop("oddball_trigger_code", None)
+    triggers = payload["settings"]["triggers"]
+    triggers.pop("backend", None)
+    triggers.pop("enabled", None)
+    triggers.pop("serial_port", None)
+    triggers.pop("oddball_trigger_code", None)
 
     loaded = ProjectFile.model_validate(payload)
 
+    assert loaded.settings.triggers.backend == TriggerBackendKind.SERIAL
+    assert loaded.settings.triggers.enabled is True
+    assert loaded.settings.triggers.serial_port == "COM3"
+    assert loaded.settings.triggers.allow_nonstandard_oddball_trigger_code is False
     assert loaded.settings.triggers.oddball_trigger_code == 55
 
 
 def test_custom_oddball_trigger_code_persists(tmp_path, sample_project) -> None:
     sample_project.settings.triggers.oddball_trigger_code = 88
+    sample_project.settings.triggers.allow_nonstandard_oddball_trigger_code = True
     project_path = tmp_path / "project.json"
 
     save_project_file(sample_project, project_path)
     loaded = load_project_file(project_path)
 
     assert loaded.settings.triggers.oddball_trigger_code == 88
+    assert loaded.settings.triggers.allow_nonstandard_oddball_trigger_code is True

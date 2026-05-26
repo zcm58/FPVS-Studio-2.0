@@ -16,6 +16,7 @@ from fpvs_studio.core.enums import (
     DutyCycleMode,
     InterConditionMode,
     StimulusVariant,
+    TriggerBackendKind,
 )
 from fpvs_studio.core.serialization import load_project_file
 from fpvs_studio.gui.controller import StudioController
@@ -105,7 +106,9 @@ def test_setup_dashboard_edits_sync_document_and_dedicated_tabs(
     assert settings.display.screen_width_cm == pytest.approx(54.0, abs=0.01)
     assert settings.display.screen_width_px == 1920
     assert settings.display.screen_height_px == 1080
-    assert settings.triggers.serial_port is None
+    assert settings.triggers.backend == TriggerBackendKind.SERIAL
+    assert settings.triggers.enabled is True
+    assert settings.triggers.serial_port == "COM3"
     assert settings.triggers.baudrate == 115200
 
     assert window.session_structure_page.block_count_spin.value() == 4
@@ -239,7 +242,9 @@ def test_setup_dashboard_save_load_smoke_persists_dashboard_edited_settings(
     assert display.screen_width_cm == pytest.approx(55.0, abs=0.01)
     assert display.screen_width_px == 1920
     assert display.screen_height_px == 1080
-    assert triggers.serial_port is None
+    assert triggers.backend == TriggerBackendKind.SERIAL
+    assert triggers.enabled is True
+    assert triggers.serial_port == "COM3"
     assert triggers.baudrate == 115200
 
     assert reopened_dashboard.session_structure_editor.block_count_spin.value() == 3

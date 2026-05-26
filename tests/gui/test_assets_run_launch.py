@@ -268,7 +268,7 @@ def test_launch_action_wires_runtime_launcher_with_backend_launch_settings(
     assert progress_dialog.closed is True
     assert progress_events == ["created", "shown", "closed"]
     assert launch_settings.serial_port == "COM3"
-    assert launch_settings.serial_enabled is False
+    assert launch_settings.serial_enabled is True
     assert launch_settings.serial_baudrate == 57600
     assert launch_settings.serial_pulse_width_ms == 10
     assert launch_settings.serial_reset_code is None

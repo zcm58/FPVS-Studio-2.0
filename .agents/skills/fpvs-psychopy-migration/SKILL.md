@@ -65,6 +65,9 @@ For schema details and copy/layout patterns, read
   with an explicit row-level report.
 - Do not render word stimuli into images. Word conditions persist authored text in
   `project.json`.
+- Keep the project-wide `oddball_onset` trigger code locked to `55`. Only set a
+  nonstandard oddball marker when the user explicitly asks for it, and then record
+  `allow_nonstandard_oddball_trigger_code=true` in the project/config audit trail.
 - Keep source workbook/CSV copies in the project for auditability, but do not make
   Studio runtime depend on those copied lists after migration.
 

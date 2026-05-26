@@ -109,6 +109,9 @@ A minimal compiler in this phase should be able to:
   single-condition
 - when randomized fixation target-count mode is enabled, select realized counts during session compilation with session-seed determinism and no immediate repetition across consecutive ordered runs
 - emit trigger events without implementing hardware I/O
+- keep the `oddball_onset` trigger code locked to `55` by default; nonstandard
+  oddball marker codes require explicit user direction and the persisted
+  `allow_nonstandard_oddball_trigger_code` override
 
 If full image-order schedule compilation feels premature, scaffold the interface and keep the compiler deterministic and testable.
 

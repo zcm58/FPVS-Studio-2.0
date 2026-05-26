@@ -173,7 +173,10 @@ Derived values should include:
 Trigger settings stay in project/runtime settings while serial-port details remain
 outside `RunSpec` and `SessionPlan`. Runtime wires either the logged null backend or
 the optional BioSemi-compatible serial backend. Normal event codes are `1` through
-`255`; code `0` is reserved for explicit manual reset behavior.
+`255`; code `0` is reserved for explicit manual reset behavior. FPVS Studio locks
+`oddball_onset` to marker code `55` by default; a nonstandard oddball marker is only
+valid when the project records the user-directed
+`allow_nonstandard_oddball_trigger_code` override.
 
 ## 11. Current repository goal
 

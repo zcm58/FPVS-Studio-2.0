@@ -148,8 +148,9 @@ The compiler currently emits a seed-deterministic schedule:
   target duration, and minimum-gap edge/inter-target buffers
 - a condition-start trigger event at the first stimulus onset when a condition trigger
   code is present
-- an `oddball_onset` trigger event at each oddball stimulus onset, using the project
-  trigger setting that defaults to code `55`
+- an `oddball_onset` trigger event at each oddball stimulus onset, using marker code
+  `55`; this code is locked Studio behavior and nonstandard oddball marker codes require
+  an explicit user-directed `allow_nonstandard_oddball_trigger_code` override
 - deterministic trigger sorting by frame while preserving generated order for
   diagnostics
 - a compile-time failure when multiple trigger events land on the same frame, because

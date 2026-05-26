@@ -131,6 +131,7 @@ def test_compiler_uses_configured_oddball_trigger_code(
 ) -> None:
     sample_project.settings.fixation_task.enabled = False
     sample_project.settings.triggers.oddball_trigger_code = 88
+    sample_project.settings.triggers.allow_nonstandard_oddball_trigger_code = True
     sample_project.conditions[0].oddball_cycle_repeats_per_sequence = 1
 
     run_spec = compile_run_spec(sample_project, refresh_hz=60.0, project_root=sample_project_root)
@@ -138,6 +139,18 @@ def test_compiler_uses_configured_oddball_trigger_code(
     assert [event.code for event in run_spec.trigger_events if event.label == "oddball_onset"] == [
         88
     ]
+
+
+def test_compiler_rejects_nonstandard_oddball_trigger_code_without_explicit_override(
+    sample_project,
+    sample_project_root,
+) -> None:
+    sample_project.settings.fixation_task.enabled = False
+    sample_project.settings.triggers.oddball_trigger_code = 88
+    sample_project.conditions[0].oddball_cycle_repeats_per_sequence = 1
+
+    with pytest.raises(CompileError, match="locked to 55"):
+        compile_run_spec(sample_project, refresh_hz=60.0, project_root=sample_project_root)
 
 
 def test_compiler_trigger_schedule_is_deterministic(sample_project, sample_project_root) -> None:

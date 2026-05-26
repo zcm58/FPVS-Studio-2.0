@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field, StrictInt, ValidationError, field_validator
+from pydantic import Field, StrictInt, ValidationError, field_validator, model_validator
 
 from fpvs_studio import __version__
 from fpvs_studio.core.display_geometry import visual_angle_width_cm, visual_angle_width_px
@@ -53,6 +53,7 @@ from fpvs_studio.core.paths import (
 from fpvs_studio.core.project_service import ProjectScaffold
 from fpvs_studio.core.serialization import read_json_file, save_project_file
 from fpvs_studio.core.session_plan import SessionPlan
+from fpvs_studio.core.trigger_codes import validate_oddball_trigger_code_policy
 from fpvs_studio.preprocessing.manifest import create_empty_manifest, write_stimulus_manifest
 from fpvs_studio.preprocessing.models import StimulusManifest, StimulusSetManifest
 
@@ -176,9 +177,18 @@ class ProjectConfigTriggers(FPVSBaseModel):
     serial_port: str | None = None
     baudrate: int = Field(gt=0)
     oddball_trigger_code: StrictInt = Field(ge=1, le=255)
+    allow_nonstandard_oddball_trigger_code: bool = False
     pulse_width_ms: int = Field(ge=0)
     reset_code: StrictInt | None = Field(default=None, ge=0, le=0)
     reset_delay_ms: int = Field(ge=0)
+
+    @model_validator(mode="after")
+    def validate_locked_oddball_trigger_code(self) -> ProjectConfigTriggers:
+        validate_oddball_trigger_code_policy(
+            self.oddball_trigger_code,
+            allow_nonstandard=self.allow_nonstandard_oddball_trigger_code,
+        )
+        return self
 
 
 class ProjectConfigToolbox(FPVSBaseModel):
@@ -490,12 +500,16 @@ def _session_config(session: SessionSettings) -> ProjectConfigSession:
 
 
 def _trigger_config(triggers: TriggerSettings) -> ProjectConfigTriggers:
+    oddball_trigger_code = _validated_project_oddball_trigger_code(triggers)
     return ProjectConfigTriggers(
         backend=triggers.backend,
         enabled=triggers.enabled,
         serial_port=triggers.serial_port,
         baudrate=triggers.baudrate,
-        oddball_trigger_code=triggers.oddball_trigger_code,
+        oddball_trigger_code=oddball_trigger_code,
+        allow_nonstandard_oddball_trigger_code=(
+            triggers.allow_nonstandard_oddball_trigger_code
+        ),
         pulse_width_ms=triggers.pulse_width_ms,
         reset_code=triggers.reset_code,
         reset_delay_ms=triggers.reset_delay_ms,
@@ -503,11 +517,22 @@ def _trigger_config(triggers: TriggerSettings) -> ProjectConfigTriggers:
 
 
 def _toolbox_config(project: ProjectFile) -> ProjectConfigToolbox:
+    oddball_trigger_code = _validated_project_oddball_trigger_code(project.settings.triggers)
     return ProjectConfigToolbox(
         project_title=project.meta.name,
         event_map={condition.name: condition.trigger_code for condition in project.conditions},
-        oddball_trigger_code=project.settings.triggers.oddball_trigger_code,
+        oddball_trigger_code=oddball_trigger_code,
     )
+
+
+def _validated_project_oddball_trigger_code(triggers: TriggerSettings) -> int:
+    try:
+        return validate_oddball_trigger_code_policy(
+            triggers.oddball_trigger_code,
+            allow_nonstandard=triggers.allow_nonstandard_oddball_trigger_code,
+        )
+    except (TypeError, ValueError) as exc:
+        raise ProjectConfigError(str(exc)) from exc
 
 
 def _stimulus_provenance(
@@ -640,6 +665,7 @@ def _trigger_settings(config: ProjectConfigTriggers) -> TriggerSettings:
         serial_port=config.serial_port,
         baudrate=config.baudrate,
         oddball_trigger_code=config.oddball_trigger_code,
+        allow_nonstandard_oddball_trigger_code=config.allow_nonstandard_oddball_trigger_code,
         pulse_width_ms=config.pulse_width_ms,
         reset_code=config.reset_code,
         reset_delay_ms=config.reset_delay_ms,

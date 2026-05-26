@@ -54,6 +54,7 @@ from fpvs_studio.core.run_spec import (
 )
 from fpvs_studio.core.session_plan import SessionBlock, SessionEntry, SessionPlan
 from fpvs_studio.core.template_library import get_template
+from fpvs_studio.core.trigger_codes import validate_oddball_trigger_code_policy
 from fpvs_studio.preprocessing.models import StimulusManifest
 
 __all__ = ["CompileError", "compile_run_spec", "compile_session_plan"]
@@ -239,9 +240,20 @@ def compile_run_spec(
         trigger_events=build_trigger_events(
             stimulus_sequence=stimulus_sequence,
             condition_trigger_code=condition.trigger_code,
-            oddball_trigger_code=project.settings.triggers.oddball_trigger_code,
+            oddball_trigger_code=_project_oddball_trigger_code(project),
         ),
     )
+
+
+def _project_oddball_trigger_code(project: ProjectFile) -> int:
+    triggers = project.settings.triggers
+    try:
+        return validate_oddball_trigger_code_policy(
+            triggers.oddball_trigger_code,
+            allow_nonstandard=triggers.allow_nonstandard_oddball_trigger_code,
+        )
+    except (TypeError, ValueError) as exc:
+        raise CompileError(str(exc)) from exc
 
 
 def compile_session_plan(

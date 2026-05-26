@@ -31,6 +31,10 @@ from fpvs_studio.core.enums import (
     TriggerBackendKind,
     ValidationSeverity,
 )
+from fpvs_studio.core.trigger_codes import (
+    LOCKED_ODDBALL_TRIGGER_CODE,
+    validate_oddball_trigger_code_policy,
+)
 
 HEX_COLOR_RE = re.compile(r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
 NAMED_COLOR_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_-]*$")
@@ -310,14 +314,23 @@ class ConditionDefaults(FPVSBaseModel):
 class TriggerSettings(FPVSBaseModel):
     """Project-level trigger backend configuration."""
 
-    backend: TriggerBackendKind = TriggerBackendKind.NULL
-    enabled: bool = False
-    serial_port: str | None = None
+    backend: TriggerBackendKind = TriggerBackendKind.SERIAL
+    enabled: bool = True
+    serial_port: str | None = "COM3"
     baudrate: int = Field(default=115200, gt=0)
-    oddball_trigger_code: StrictInt = Field(default=55, ge=1, le=255)
+    oddball_trigger_code: StrictInt = Field(default=LOCKED_ODDBALL_TRIGGER_CODE, ge=1, le=255)
+    allow_nonstandard_oddball_trigger_code: bool = False
     pulse_width_ms: int = Field(default=10, ge=0)
     reset_code: StrictInt | None = Field(default=None, ge=0, le=0)
     reset_delay_ms: int = Field(default=5, ge=0)
+
+    @model_validator(mode="after")
+    def validate_locked_oddball_trigger_code(self) -> TriggerSettings:
+        validate_oddball_trigger_code_policy(
+            self.oddball_trigger_code,
+            allow_nonstandard=self.allow_nonstandard_oddball_trigger_code,
+        )
+        return self
 
 
 class SessionSettings(FPVSBaseModel):

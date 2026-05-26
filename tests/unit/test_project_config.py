@@ -30,6 +30,7 @@ from fpvs_studio.preprocessing.models import (
 def test_setup_config_exports_project_conditions_and_toolbox_event_map(sample_project) -> None:
     sample_project.conditions[0].trigger_code = 7
     sample_project.settings.triggers.oddball_trigger_code = 88
+    sample_project.settings.triggers.allow_nonstandard_oddball_trigger_code = True
     sample_project.settings.display.stimulus_width_degrees = 10.0
 
     config = export_project_config(sample_project, project_root=None)
@@ -40,10 +41,20 @@ def test_setup_config_exports_project_conditions_and_toolbox_event_map(sample_pr
     assert config.toolbox.event_map == {"Faces": 7}
     assert config.toolbox.oddball_trigger_code == 88
     assert config.triggers.oddball_trigger_code == 88
+    assert config.triggers.allow_nonstandard_oddball_trigger_code is True
     assert config.display.stimulus_width_degrees == 10.0
     assert config.display.stimulus_width_cm > 0
     assert config.display.stimulus_width_px > 0
     assert config.completed_session is None
+
+
+def test_config_export_rejects_nonstandard_oddball_without_explicit_override(
+    sample_project,
+) -> None:
+    sample_project.settings.triggers.oddball_trigger_code = 88
+
+    with pytest.raises(ProjectConfigError, match="locked to 55"):
+        export_project_config(sample_project, project_root=None)
 
 
 def test_project_config_filename_uses_compact_project_title() -> None:

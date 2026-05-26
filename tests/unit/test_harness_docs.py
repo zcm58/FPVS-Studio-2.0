@@ -69,6 +69,31 @@ def test_harness_update_policy_is_documented() -> None:
     assert "Documentation Freshness" in architecture
 
 
+def test_locked_oddball_trigger_code_policy_is_documented() -> None:
+    architecture = _read_repo_file("ARCHITECTURE.md")
+    runspec = _read_repo_file("docs/RUNSPEC.md")
+    runtime = _read_repo_file("docs/RUNTIME_EXECUTION.md")
+    spec = _read_repo_file("docs/FPVS_Studio_v1_Architecture_Spec.md")
+    core_agents = _read_repo_file("src/fpvs_studio/core/AGENTS.md")
+    migration_skill = _read_repo_file(".agents/skills/fpvs-psychopy-migration/SKILL.md")
+    migration_guide = _read_repo_file(
+        ".agents/skills/fpvs-psychopy-migration/references/migration-guide.md"
+    )
+
+    for document in [
+        architecture,
+        runspec,
+        runtime,
+        spec,
+        core_agents,
+        migration_skill,
+        migration_guide,
+    ]:
+        assert "oddball" in document
+        assert "`55`" in document
+        assert "allow_nonstandard_oddball_trigger_code" in document
+
+
 def test_architecture_task_recipe_paths_exist() -> None:
     architecture = _read_repo_file("ARCHITECTURE.md")
     path_pattern = re.compile(

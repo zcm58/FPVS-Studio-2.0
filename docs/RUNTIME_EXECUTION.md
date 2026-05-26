@@ -86,13 +86,20 @@ The PsychoPy implementation:
   marker-write callbacks to the flip that presents the compiled frame
 - trigger attempts are recorded with frame/time metadata, backend name, status, and
   failure message when applicable
-- default/unconfigured execution uses the null backend
-- explicitly enabled serial-port execution uses the BioSemi-compatible serial backend
-  and writes single-byte marker codes to the configured COM port and baudrate
+- new FPVS Studio projects default to BioSemi-compatible serial output on `COM3`;
+  condition starts use each condition's configured trigger code and every oddball onset
+  uses project trigger code `55`
+- the `oddball_onset` marker code is locked to `55`; a nonstandard oddball marker code
+  is only valid when the project or `.fpvsconfig` explicitly records
+  `allow_nonstandard_oddball_trigger_code=true` in response to user direction
+- raw runtime launch settings can still disable serial output and use the logged null
+  backend when `serial_enabled` is false
+- serial-port execution writes single-byte marker codes to the configured COM port and
+  baudrate
 
-Serial settings such as COM port, baudrate, pulse width, reset code, and reset delay
-remain runtime-only launch options. They are not stored in `RunSpec` or `SessionPlan`.
-The BioSemi serial backend writes exactly one byte per normal event with
+Project trigger settings such as COM port, baudrate, pulse width, reset code, and reset
+delay are mapped into runtime-only launch options. They are not stored in `RunSpec` or
+`SessionPlan`. The BioSemi serial backend writes exactly one byte per normal event with
 `bytes([code])`, where event codes are `1` through `255`. Code `0` is reserved for
 manual reset, and manual reset is disabled by default because the BioSemi USB Trigger
 Interface auto-resets markers.
@@ -191,8 +198,9 @@ In the current v1 runtime it means:
 - GUI launch currently fixes PsychoPy test-mode playback to fullscreen presentation
 - session order is randomized within each block using the current random order seed
 - every condition waits for the participant to press Space before playback starts
-- trigger output stays on the logged null backend unless serial triggers are explicitly
-  enabled with a configured serial port in the launch settings
+- trigger output follows the project's trigger settings; new projects default to
+  BioSemi-compatible serial output on `COM3`, and oddball onset output is locked to
+  marker code `55` unless the project records an explicit nonstandard-code override
 - completion screens auto-dismiss quickly
 - launch entry points reject `test_mode=False` until the non-test path is
   explicitly hardened

@@ -111,6 +111,12 @@ Set `settings.session.block_count` from the requested condition repeats. Keep
 `settings.session.randomize_conditions_per_block=true` unless the user explicitly asks
 for a legacy fixed order.
 
+Keep `settings.triggers.oddball_trigger_code=55` for every migrated project. FPVS Studio
+locks `oddball_onset` to marker code `55`; only use a nonstandard oddball marker when
+the user explicitly requests it, and then set
+`settings.triggers.allow_nonstandard_oddball_trigger_code=true` in the generated
+project/config audit trail.
+
 ## Image Copy And Manifest
 
 For image sets:

@@ -36,6 +36,9 @@ code may lazily import PsychoPy.
   used by runtime while keeping core contracts hardware-neutral, including the
   BioSemi-compatible serial backend. BioSemi serial output writes one byte per marker
   with normal event codes `1`-`255`; code `0` is reserved for explicit manual reset.
+  New projects default to BioSemi serial output on `COM3`, and the `oddball_onset`
+  marker code is locked to `55` unless a nonstandard value is explicitly requested by
+  the user and recorded with `allow_nonstandard_oddball_trigger_code`.
 - `src/fpvs_studio/updates/`: backend-only GitHub Releases update checks, installer
   download helpers, and explicit installer launch support for the GUI update flow.
 - `tests/`: unit, integration, and pytest-qt GUI coverage.
