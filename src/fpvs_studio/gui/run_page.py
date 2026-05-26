@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import dataclass
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QIntValidator
 from PySide6.QtWidgets import (
     QApplication,
+    QComboBox,
     QDialog,
     QDialogButtonBox,
     QFormLayout,
@@ -24,6 +27,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from fpvs_studio.core.execution import ParticipantMetadata
 from fpvs_studio.core.session_plan import SessionPlan
 from fpvs_studio.gui import folder_actions
 from fpvs_studio.gui.components import (
@@ -63,16 +67,24 @@ def _show_runtime_error_dialog(parent: QWidget, title: str, error: Exception) ->
     main_window._show_error_dialog(parent, title, error)
 
 
+@dataclass(frozen=True)
+class ParticipantLaunchDetails:
+    """Launch-time participant details collected by the GUI."""
+
+    participant_number: str
+    participant_metadata: ParticipantMetadata | None = None
+
+
 class ParticipantNumberDialog(QDialog):
-    """Collect the required launch-time participant number."""
+    """Collect the required launch-time participant details."""
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.setWindowTitle("Participant Number")
+        self.setWindowTitle("Participant Information")
         self.setModal(True)
-        self.resize(420, 120)
+        self.resize(460, 240)
 
-        self.prompt_label = QLabel("Please enter the participant number.", self)
+        self.prompt_label = QLabel("Please enter the participant details.", self)
         self.prompt_label.setObjectName("participant_number_prompt_label")
 
         self.participant_number_edit = QLineEdit(self)
@@ -81,8 +93,29 @@ class ParticipantNumberDialog(QDialog):
         self.participant_number_edit.setLayoutDirection(Qt.LayoutDirection.LeftToRight)
         self.participant_number_edit.setFocus()
 
+        self.age_edit = QLineEdit(self)
+        self.age_edit.setObjectName("participant_age_edit")
+        self.age_edit.setPlaceholderText("Whole number from 1 to 120")
+        self.age_edit.setValidator(QIntValidator(1, 120, self.age_edit))
+        self.age_edit.setLayoutDirection(Qt.LayoutDirection.LeftToRight)
+
+        self.sex_combo = QComboBox(self)
+        self.sex_combo.setObjectName("participant_sex_combo")
+        self.sex_combo.addItem("Select sex...", None)
+        for value in ["Female", "Male", "Intersex", "Prefer not to say"]:
+            self.sex_combo.addItem(value, value)
+
+        self.handedness_combo = QComboBox(self)
+        self.handedness_combo.setObjectName("participant_handedness_combo")
+        self.handedness_combo.addItem("Select handedness...", None)
+        for value in ["Right", "Left", "Ambidextrous", "Prefer not to say"]:
+            self.handedness_combo.addItem(value, value)
+
         form_layout = QFormLayout()
         form_layout.addRow("Participant Number", self.participant_number_edit)
+        form_layout.addRow("Age", self.age_edit)
+        form_layout.addRow("Sex", self.sex_combo)
+        form_layout.addRow("Handedness", self.handedness_combo)
 
         self.button_box = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel,
@@ -103,6 +136,25 @@ class ParticipantNumberDialog(QDialog):
 
         return self.participant_number_edit.text().strip()
 
+    @property
+    def participant_metadata(self) -> ParticipantMetadata:
+        """Return validated launch-time participant metadata."""
+
+        return ParticipantMetadata(
+            age=int(self.age_edit.text().strip()),
+            sex=self.sex_combo.currentData(),
+            handedness=self.handedness_combo.currentData(),
+        )
+
+    @property
+    def participant_details(self) -> ParticipantLaunchDetails:
+        """Return the full participant details captured by the dialog."""
+
+        return ParticipantLaunchDetails(
+            participant_number=self.participant_number,
+            participant_metadata=self.participant_metadata,
+        )
+
     def accept(self) -> None:
         participant_number = self.participant_number
         if not participant_number:
@@ -122,8 +174,67 @@ class ParticipantNumberDialog(QDialog):
             self.participant_number_edit.setFocus()
             self.participant_number_edit.selectAll()
             return
+        age_text = self.age_edit.text().strip()
+        if not age_text:
+            QMessageBox.warning(
+                self,
+                "Age Required",
+                "Enter the participant age to launch the session.",
+            )
+            self.age_edit.setFocus()
+            return
+        if not age_text.isdigit() or int(age_text) < 1 or int(age_text) > 120:
+            QMessageBox.warning(
+                self,
+                "Invalid Age",
+                "Participant age must be a whole number from 1 to 120.",
+            )
+            self.age_edit.setFocus()
+            self.age_edit.selectAll()
+            return
+        if self.sex_combo.currentData() is None:
+            QMessageBox.warning(
+                self,
+                "Sex Required",
+                "Select the participant sex to launch the session.",
+            )
+            self.sex_combo.setFocus()
+            return
+        if self.handedness_combo.currentData() is None:
+            QMessageBox.warning(
+                self,
+                "Handedness Required",
+                "Select the participant handedness to launch the session.",
+            )
+            self.handedness_combo.setFocus()
+            return
         self.participant_number_edit.setText(participant_number)
+        self.age_edit.setText(age_text)
         super().accept()
+
+
+def _coerce_participant_launch_details(
+    value: str | ParticipantLaunchDetails | None,
+) -> ParticipantLaunchDetails | None:
+    if value is None:
+        return None
+    if isinstance(value, ParticipantLaunchDetails):
+        return value
+    return ParticipantLaunchDetails(participant_number=value.strip())
+
+
+def _participant_metadata_summary_lines(metadata: ParticipantMetadata) -> list[str]:
+    if metadata.is_empty:
+        return []
+    lines: list[str] = []
+    if metadata.age is not None:
+        lines.append(f"Participant Age: {metadata.age}")
+    if metadata.sex is not None:
+        lines.append(f"Participant Sex: {metadata.sex}")
+    if metadata.handedness is not None:
+        lines.append(f"Participant Handedness: {metadata.handedness}")
+    return lines
+
 
 class RunPage(QWidget):
     """Session compile and launch page with detailed runtime diagnostics."""
@@ -348,14 +459,16 @@ class RunPage(QWidget):
             extra_lines=["Status: launch checks passed."],
         )
 
-        participant_number = self._collect_launch_participant_number()
-        if participant_number is None:
+        participant_details = self._collect_launch_participant_details()
+        if participant_details is None:
             return
+        participant_number = participant_details.participant_number
 
         def _launch() -> LaunchSummary:
             return self._document.launch_compiled_session(
                 session_plan,
                 participant_number=participant_number,
+                participant_metadata=participant_details.participant_metadata,
                 display_index=None,
                 fullscreen=True,
             )
@@ -424,11 +537,15 @@ class RunPage(QWidget):
         self._last_run_output_dir = summary.output_dir
         self._refresh_run_output_actions()
         participant_value = summary.participant_number or participant_number
+        participant_metadata_lines = _participant_metadata_summary_lines(
+            summary.participant_metadata
+        )
         if summary.aborted:
             abort_reason = summary.abort_reason or "No abort reason was provided."
             extra_lines = [
                 "Status: runtime launch aborted.",
                 f"Participant Number: {participant_value}",
+                *participant_metadata_lines,
                 f"Output Dir: {output_dir}",
                 f"Abort Reason: {abort_reason}",
                 (
@@ -451,6 +568,7 @@ class RunPage(QWidget):
         extra_lines = [
             "Status: runtime launch completed.",
             f"Participant Number: {participant_value}",
+            *participant_metadata_lines,
             f"Output Dir: {output_dir}",
         ]
         self._set_summary(session_plan, extra_lines=extra_lines)
@@ -461,20 +579,23 @@ class RunPage(QWidget):
             "Review run exports in the project runs folder.",
         )
 
-    def _prompt_participant_number(self) -> str | None:
+    def _prompt_participant_number(self) -> str | ParticipantLaunchDetails | None:
         dialog = ParticipantNumberDialog(self)
         if dialog.exec() != int(QDialog.DialogCode.Accepted):
             return None
-        return dialog.participant_number
+        return dialog.participant_details
 
-    def _collect_launch_participant_number(self) -> str | None:
+    def _collect_launch_participant_details(self) -> ParticipantLaunchDetails | None:
         while True:
-            participant_number = self._prompt_participant_number()
-            if participant_number is None:
+            participant_details = _coerce_participant_launch_details(
+                self._prompt_participant_number()
+            )
+            if participant_details is None:
                 return None
+            participant_number = participant_details.participant_number
 
             if not self._document.has_completed_session_for_participant(participant_number):
-                return participant_number
+                return participant_details
 
             warning_text = (
                 f"Warning: logs indicate that {participant_number} has already "
@@ -489,7 +610,7 @@ class RunPage(QWidget):
                 QMessageBox.StandardButton.No,
             )
             if answer == QMessageBox.StandardButton.Yes:
-                return participant_number
+                return participant_details
 
     def _refresh_summary(self) -> None:
         self._refresh_readiness_panel()

@@ -178,7 +178,15 @@ the optional BioSemi-compatible serial backend. Normal event codes are `1` throu
 valid when the project records the user-directed
 `allow_nonstandard_oddball_trigger_code` override.
 
-## 11. Current repository goal
+## 11. Participant metadata
+
+Runtime execution summaries can carry launch-time participant metadata. The default GUI
+launch workflow collects Participant Number, Age, Sex, and Handedness for every project.
+Participant Number stays the required runtime identity and duplicate-history lookup key;
+Age, Sex, and Handedness are optional runtime metadata fields outside `RunSpec` and
+`SessionPlan`.
+
+## 12. Current repository goal
 
 Keep the GUI, core contracts, preprocessing, runtime/session flow, engine boundary,
 trigger backends, exports, and harness docs aligned so future changes can start from

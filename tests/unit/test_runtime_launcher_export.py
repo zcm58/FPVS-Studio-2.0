@@ -11,7 +11,7 @@ from tests.unit.runtime_launcher_helpers import (
 )
 
 from fpvs_studio.core.compiler import compile_session_plan
-from fpvs_studio.core.execution import SessionExecutionSummary
+from fpvs_studio.core.execution import ParticipantMetadata, SessionExecutionSummary
 from fpvs_studio.core.serialization import read_json_file
 from fpvs_studio.engines.registry import register_engine, unregister_engine
 from fpvs_studio.runtime.launcher import (
@@ -39,6 +39,11 @@ def test_session_export_captures_seed_and_runtime_logs(
             multi_condition_project_root,
             session_plan,
             participant_number=PARTICIPANT_NUMBER,
+            participant_metadata=ParticipantMetadata(
+                age=72,
+                sex="Female",
+                handedness="Right",
+            ),
             launch_settings=LaunchSettings(engine_name="stub-export", test_mode=True),
         )
     finally:
@@ -53,6 +58,11 @@ def test_session_export_captures_seed_and_runtime_logs(
 
     assert exported_summary.random_seed == 77
     assert exported_summary.participant_number == PARTICIPANT_NUMBER
+    assert exported_summary.participant_metadata == ParticipantMetadata(
+        age=72,
+        sex="Female",
+        handedness="Right",
+    )
     assert exported_summary.realized_block_orders == [
         block.condition_order for block in session_plan.blocks
     ]
@@ -74,6 +84,7 @@ def test_session_export_captures_seed_and_runtime_logs(
     fixation_rows = _read_csv_rows(session_output_dir / "fixation_events.csv")
     response_rows = _read_csv_rows(session_output_dir / "responses.csv")
     trigger_rows = _read_csv_rows(session_output_dir / "trigger_log.csv")
+    participant_metadata_rows = _read_csv_rows(session_output_dir / "participant_metadata.csv")
     condition_history_rows = _read_csv_rows(
         multi_condition_project_root / "logs" / "session_condition_history.csv"
     )
@@ -96,6 +107,17 @@ def test_session_export_captures_seed_and_runtime_logs(
     assert event_rows[0]["stimulus_value"] == event_rows[0]["image_path"]
     assert event_rows[0]["text"] == ""
     assert all(row["participant_number"] == PARTICIPANT_NUMBER for row in condition_history_rows)
+    assert participant_metadata_rows == [
+        {
+            "participant_number": PARTICIPANT_NUMBER,
+            "participant_age": "72",
+            "participant_sex": "Female",
+            "participant_handedness": "Right",
+        }
+    ]
+    assert all(row["participant_age"] == "72" for row in condition_history_rows)
+    assert all(row["participant_sex"] == "Female" for row in condition_history_rows)
+    assert all(row["participant_handedness"] == "Right" for row in condition_history_rows)
     assert all(row["session_seed"] == "77" for row in condition_history_rows)
     assert all(row["output_dir"] == summary.output_dir for row in condition_history_rows)
     assert all(row["block_accuracy_percent"] for row in condition_history_rows)

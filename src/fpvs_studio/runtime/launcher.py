@@ -5,11 +5,18 @@ options, not compilation of project state or engine rendering internals."""
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
+from pydantic import ValidationError
+
 from fpvs_studio.core.enums import EngineName
-from fpvs_studio.core.execution import RunExecutionSummary, SessionExecutionSummary
+from fpvs_studio.core.execution import (
+    ParticipantMetadata,
+    RunExecutionSummary,
+    SessionExecutionSummary,
+)
 from fpvs_studio.core.paths import runs_dir, to_project_relative_posix
 from fpvs_studio.core.run_spec import RunSpec
 from fpvs_studio.core.session_plan import SessionPlan
@@ -111,11 +118,25 @@ def _validate_participant_number(participant_number: str) -> str:
     return cleaned
 
 
+def _validate_participant_metadata(
+    participant_metadata: ParticipantMetadata | Mapping[str, object] | None,
+) -> ParticipantMetadata:
+    if participant_metadata is None:
+        return ParticipantMetadata()
+    if isinstance(participant_metadata, ParticipantMetadata):
+        return participant_metadata
+    try:
+        return ParticipantMetadata.model_validate(participant_metadata)
+    except ValidationError as exc:
+        raise LaunchSettingsError(str(exc)) from exc
+
+
 def launch_run(
     project_root: Path,
     run_spec: RunSpec,
     *,
     participant_number: str,
+    participant_metadata: ParticipantMetadata | Mapping[str, object] | None = None,
     launch_settings: LaunchSettings | None = None,
 ) -> RunExecutionSummary:
     """Launch one compiled RunSpec into the selected presentation engine."""
@@ -124,6 +145,7 @@ def launch_run(
     _validate_launch_settings(settings)
     runtime_options = settings.as_runtime_options()
     cleaned_participant_number = _validate_participant_number(participant_number)
+    cleaned_participant_metadata = _validate_participant_metadata(participant_metadata)
     output_dir = runs_dir(project_root) / run_spec.run_id
     relative_output_dir = to_project_relative_posix(project_root, output_dir)
     engine = create_engine(settings.engine_name)
@@ -136,6 +158,7 @@ def launch_run(
         runtime_options=runtime_options,
         relative_output_dir=relative_output_dir,
         participant_number=cleaned_participant_number,
+        participant_metadata=cleaned_participant_metadata,
     )
 
 
@@ -144,6 +167,7 @@ def launch_session(
     session_plan: SessionPlan,
     *,
     participant_number: str,
+    participant_metadata: ParticipantMetadata | Mapping[str, object] | None = None,
     launch_settings: LaunchSettings | None = None,
 ) -> SessionExecutionSummary:
     """Launch an ordered session plan into the selected presentation engine."""
@@ -152,6 +176,7 @@ def launch_session(
     _validate_launch_settings(settings)
     runtime_options = settings.as_runtime_options()
     cleaned_participant_number = _validate_participant_number(participant_number)
+    cleaned_participant_metadata = _validate_participant_metadata(participant_metadata)
     output_label = resolve_next_participant_output_label(project_root, cleaned_participant_number)
     output_dir = runs_dir(project_root) / output_label
     relative_output_dir = to_project_relative_posix(project_root, output_dir)
@@ -170,4 +195,5 @@ def launch_session(
         runtime_options=runtime_options,
         relative_output_dir=relative_output_dir,
         participant_number=cleaned_participant_number,
+        participant_metadata=cleaned_participant_metadata,
     )

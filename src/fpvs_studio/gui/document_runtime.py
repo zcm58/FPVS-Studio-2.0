@@ -10,6 +10,7 @@ from pydantic import ValidationError
 
 from fpvs_studio.core.compiler import CompileError, compile_session_plan
 from fpvs_studio.core.enums import EngineName, TriggerBackendKind
+from fpvs_studio.core.execution import ParticipantMetadata
 from fpvs_studio.core.models import ProjectFile, ProjectValidationReport
 from fpvs_studio.core.session_plan import SessionPlan
 from fpvs_studio.core.validation import (
@@ -109,6 +110,7 @@ class DocumentRuntimeMixin:
         session_plan: SessionPlan,
         *,
         participant_number: str,
+        participant_metadata: ParticipantMetadata | None = None,
         display_index: int | None,
         fullscreen: bool = True,
         engine_name: str = EngineName.PSYCHOPY.value,
@@ -118,11 +120,9 @@ class DocumentRuntimeMixin:
 
         try:
             trigger_settings = self._project.settings.triggers
-            summary = _document_dependency("launch_session")(
-                self._project_root,
-                session_plan,
-                participant_number=participant_number,
-                launch_settings=LaunchSettings(
+            launch_kwargs = {
+                "participant_number": participant_number,
+                "launch_settings": LaunchSettings(
                     engine_name=engine_name,
                     test_mode=test_mode,
                     fullscreen=fullscreen,
@@ -139,6 +139,13 @@ class DocumentRuntimeMixin:
                     strict_timing_warmup=False if test_mode else True,
                     timing_miss_threshold_multiplier=4.0 if test_mode else 1.5,
                 ),
+            }
+            if participant_metadata is not None:
+                launch_kwargs["participant_metadata"] = participant_metadata
+            summary = _document_dependency("launch_session")(
+                self._project_root,
+                session_plan,
+                **launch_kwargs,
             )
         except Exception as exc:
             raise DocumentError(str(exc)) from exc
@@ -149,6 +156,7 @@ class DocumentRuntimeMixin:
         *,
         refresh_hz: float,
         participant_number: str,
+        participant_metadata: ParticipantMetadata | None = None,
         display_index: int | None,
         fullscreen: bool = True,
         engine_name: str = EngineName.PSYCHOPY.value,
@@ -163,6 +171,7 @@ class DocumentRuntimeMixin:
         summary = self.launch_compiled_session(
             session_plan,
             participant_number=participant_number,
+            participant_metadata=participant_metadata,
             display_index=display_index,
             fullscreen=fullscreen,
             engine_name=engine_name,

@@ -29,8 +29,8 @@ code may lazily import PsychoPy.
   Historical FPVS Toolbox image-resizer references live under
   `docs/references/archive/fpvs-toolbox-image-resizer/`.
 - `src/fpvs_studio/runtime/`: launch settings, preflight, session execution, participant
-  history, seed-history lookup, project-level run-log exports, and runtime flow over
-  compiled contracts.
+  history, launch-time participant metadata export, seed-history lookup, project-level
+  run-log exports, and runtime flow over compiled contracts.
 - `src/fpvs_studio/engines/`: presentation engine interface and PsychoPy implementation.
 - `src/fpvs_studio/triggers/`: optional trigger backend interfaces and hardware adapters
   used by runtime while keeping core contracts hardware-neutral, including the

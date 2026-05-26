@@ -139,12 +139,21 @@ Scoring semantics for the fixation accuracy task:
 
 ## Exports
 
+Launch-time participant metadata:
+
+- the GUI launch prompt collects Participant Number, Age, Sex, and Handedness by
+  default for every project
+- Participant Number remains the required runtime identity and output-folder key
+- Age, Sex, and Handedness are stored in `SessionExecutionSummary`,
+  each `RunExecutionSummary`, the session-level `participant_metadata.csv`, and
+  project-level `logs/session_condition_history.csv`
+
 Project-level reporting index:
 
 - `logs/session_condition_history.csv`
   - append-only one-row-per-condition-occurrence session history
-  - includes participant number, random order seed, run timing, block/order
-    metadata, abort fields, fixation metrics, and block accuracy
+  - includes participant number, age, sex, handedness, random order seed, run timing,
+    block/order metadata, abort fields, fixation metrics, and block accuracy
   - used for reporting convenience; the detailed audit source remains the
     session/run artifacts under `runs/`
 
@@ -153,6 +162,7 @@ Per session:
 - `session_plan.json`
 - `session_summary.json`
 - `runtime_metadata.json`
+- `participant_metadata.csv`
 - `conditions.csv`
 - `events.csv`
 - `fixation_events.csv`

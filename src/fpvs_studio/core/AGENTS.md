@@ -50,6 +50,7 @@ At minimum, the core layer should define models for:
 - `SessionPlan`
 - `RunExecutionSummary`
 - `SessionExecutionSummary`
+- `ParticipantMetadata`
 - `RuntimeMetadata`
 - `FixationResponseRecord`
 - `ResponseRecord`

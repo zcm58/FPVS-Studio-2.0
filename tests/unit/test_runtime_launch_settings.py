@@ -302,3 +302,34 @@ def test_launch_session_rejects_non_digit_participant_number_before_engine_creat
         unregister_engine("stub-bad-participant")
 
     assert captures == {}
+
+
+def test_launch_session_rejects_invalid_participant_metadata_before_engine_creation(
+    sample_project,
+    sample_project_root,
+) -> None:
+    captures: dict[str, object] = {}
+    register_engine("stub-bad-participant-metadata", lambda: StubEngine(captures))
+    try:
+        session_plan = compile_session_plan(
+            sample_project,
+            refresh_hz=60.0,
+            project_root=sample_project_root,
+            random_seed=39,
+        )
+
+        with pytest.raises(LaunchSettingsError, match="less than or equal to 120"):
+            launch_session(
+                sample_project_root,
+                session_plan,
+                participant_number=PARTICIPANT_NUMBER,
+                participant_metadata={"age": 121, "sex": "Female", "handedness": "Right"},
+                launch_settings=LaunchSettings(
+                    engine_name="stub-bad-participant-metadata",
+                    test_mode=True,
+                ),
+            )
+    finally:
+        unregister_engine("stub-bad-participant-metadata")
+
+    assert captures == {}

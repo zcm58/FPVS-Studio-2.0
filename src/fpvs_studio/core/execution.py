@@ -29,6 +29,30 @@ def _validate_participant_number(value: str | None) -> str | None:
     return cleaned
 
 
+class ParticipantMetadata(FPVSBaseModel):
+    """Launch-time participant fields collected before an experiment starts."""
+
+    age: StrictInt | None = Field(default=None, ge=1, le=120)
+    sex: str | None = Field(default=None, max_length=64)
+    handedness: str | None = Field(default=None, max_length=64)
+
+    @field_validator("sex", "handedness")
+    @classmethod
+    def validate_optional_text(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("Participant metadata fields may not be blank when provided.")
+        return cleaned
+
+    @property
+    def is_empty(self) -> bool:
+        """Return whether no optional participant metadata has been collected."""
+
+        return self.age is None and self.sex is None and self.handedness is None
+
+
 class RuntimeMetadata(FPVSBaseModel):
     """Measured runtime/display metadata captured while executing a session."""
 
@@ -164,6 +188,7 @@ class RunExecutionSummary(FPVSBaseModel):
     engine_name: str
     run_mode: RunMode
     participant_number: str | None = None
+    participant_metadata: ParticipantMetadata = Field(default_factory=ParticipantMetadata)
     started_at: datetime | None = None
     finished_at: datetime | None = None
     completed_frames: int = Field(default=0, ge=0)
@@ -200,6 +225,7 @@ class SessionExecutionSummary(FPVSBaseModel):
     engine_name: str
     run_mode: RunMode
     participant_number: str | None = None
+    participant_metadata: ParticipantMetadata = Field(default_factory=ParticipantMetadata)
     random_seed: int | None = Field(default=None, ge=0)
     started_at: datetime | None = None
     finished_at: datetime | None = None

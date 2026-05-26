@@ -150,6 +150,11 @@ Fixation and Response are guided setup pages. The Run / Runtime page remains a l
 surface, not a display-engine configuration step.
 Run / Runtime feedback exposes `Open Run Folder` and `Copy Run Folder` after a launch
 completion or abort when the runtime summary includes an output directory.
+Launching an experiment opens a modal participant-information prompt. By default every
+project collects Participant Number, Age, Sex, and Handedness before runtime starts.
+Participant Number remains the output-folder identity and duplicate-history lookup key;
+the additional fields are written as runtime participant metadata for the launched
+session.
 
 The Stimuli Manager remains an internal support page for variant/materialization
 behavior, not a guided setup step or visible top-level tab during normal use. Its raw

@@ -20,12 +20,14 @@ from tests.gui.helpers import (
     _prepare_compile_ready_project,
 )
 
+from fpvs_studio.core.execution import ParticipantMetadata
 from fpvs_studio.core.project_service import create_project
 from fpvs_studio.core.serialization import (
     load_project_file,
     save_project_file,
 )
 from fpvs_studio.gui.controller import StudioController
+from fpvs_studio.gui.run_page import ParticipantLaunchDetails
 
 
 def test_background_color_control_is_run_tab_presets_only(
@@ -163,7 +165,14 @@ def test_run_page_launch_uses_fixed_current_runtime_defaults(
         lambda project_root, session_plan, engine: None,
     )
     monkeypatch.setattr("fpvs_studio.gui.run_page.ProgressTask", _ImmediateProgressTask)
-    monkeypatch.setattr(window.run_page, "_prompt_participant_number", lambda: "7")
+    monkeypatch.setattr(
+        window.run_page,
+        "_prompt_participant_number",
+        lambda: ParticipantLaunchDetails(
+            participant_number="7",
+            participant_metadata=ParticipantMetadata(age=71, sex="Female", handedness="Right"),
+        ),
+    )
     monkeypatch.setattr(window.run_page, "_on_launch_succeeded", lambda result: None)
     captures: dict[str, object] = {}
 
@@ -177,6 +186,11 @@ def test_run_page_launch_uses_fixed_current_runtime_defaults(
     window.run_page.launch_test_session()
 
     assert captures["participant_number"] == "7"
+    assert captures["participant_metadata"] == ParticipantMetadata(
+        age=71,
+        sex="Female",
+        handedness="Right",
+    )
     assert captures["display_index"] is None
     assert captures["fullscreen"] is True
     assert window.run_page.findChild(QWidget, "display_index_edit") is None

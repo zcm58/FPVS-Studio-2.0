@@ -12,6 +12,7 @@ from fpvs_studio.core.enums import RunMode
 from fpvs_studio.core.execution import (
     FixationTaskSummary,
     FrameIntervalRecord,
+    ParticipantMetadata,
     RunExecutionSummary,
     RuntimeMetadata,
     SessionExecutionSummary,
@@ -42,6 +43,7 @@ class RuntimeWorker:
         output_dir: Path,
         *,
         participant_number: str,
+        participant_metadata: ParticipantMetadata | None = None,
         runtime_options: Mapping[str, object] | None = None,
         relative_output_dir: str | None = None,
     ) -> RunExecutionSummary:
@@ -60,6 +62,7 @@ class RuntimeWorker:
                     engine_name=self._engine.engine_id,
                     runtime_options=runtime_options,
                     participant_number=participant_number,
+                    participant_metadata=participant_metadata,
                     warnings=trigger_warnings,
                     abort_reason="Run aborted during the participant tutorial.",
                 )
@@ -71,6 +74,7 @@ class RuntimeWorker:
                         engine_name=self._engine.engine_id,
                         runtime_options=runtime_options,
                         participant_number=participant_number,
+                        participant_metadata=participant_metadata,
                         warnings=trigger_warnings,
                     )
                 else:
@@ -87,6 +91,7 @@ class RuntimeWorker:
                         relative_output_dir=relative_output_dir,
                         session_id=run_summary.session_id,
                         participant_number=participant_number,
+                        participant_metadata=participant_metadata,
                         trigger_backend=trigger_backend,
                         trigger_start_index=trigger_start_index,
                         warnings=trigger_warnings,
@@ -121,6 +126,7 @@ class RuntimeWorker:
         output_dir: Path,
         *,
         participant_number: str,
+        participant_metadata: ParticipantMetadata | None = None,
         runtime_options: Mapping[str, object] | None = None,
         relative_output_dir: str | None = None,
     ) -> SessionExecutionSummary:
@@ -171,6 +177,7 @@ class RuntimeWorker:
                     relative_output_dir=run_relative_output_dir,
                     session_id=session_plan.session_id,
                     participant_number=participant_number,
+                    participant_metadata=participant_metadata,
                     trigger_backend=trigger_backend,
                     trigger_start_index=trigger_start_index,
                     warnings=(),
@@ -221,6 +228,7 @@ class RuntimeWorker:
             engine_name=self._engine.engine_id,
             run_mode=_run_mode(runtime_options),
             participant_number=participant_number,
+            participant_metadata=participant_metadata or ParticipantMetadata(),
             random_seed=session_plan.random_seed,
             started_at=run_results[0].started_at if run_results else None,
             finished_at=run_results[-1].finished_at if run_results else None,
@@ -251,6 +259,7 @@ class RuntimeWorker:
         relative_output_dir: str | None,
         session_id: str | None,
         participant_number: str,
+        participant_metadata: ParticipantMetadata | None,
         trigger_backend: LoggedTriggerBackend,
         trigger_start_index: int,
         warnings: list[str] | tuple[str, ...],
@@ -299,6 +308,7 @@ class RuntimeWorker:
                 "engine_name": self._engine.engine_id,
                 "run_mode": _run_mode(runtime_options),
                 "participant_number": participant_number,
+                "participant_metadata": participant_metadata or ParticipantMetadata(),
                 "warnings": combined_warnings,
                 "runtime_metadata": runtime_metadata,
                 "fixation_responses": scored_fixation_responses,
@@ -522,6 +532,7 @@ def _build_start_aborted_summary(
     engine_name: str,
     runtime_options: Mapping[str, object] | None,
     participant_number: str,
+    participant_metadata: ParticipantMetadata | None,
     warnings: list[str] | tuple[str, ...],
     abort_reason: str = "Run aborted during the start screen.",
 ) -> RunExecutionSummary:
@@ -534,6 +545,7 @@ def _build_start_aborted_summary(
         engine_name=engine_name,
         run_mode=_run_mode(runtime_options),
         participant_number=participant_number,
+        participant_metadata=participant_metadata or ParticipantMetadata(),
         completed_frames=0,
         aborted=True,
         abort_reason=abort_reason,

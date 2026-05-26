@@ -25,6 +25,9 @@ SESSION_CONDITION_HISTORY_HEADER = [
     "project_id",
     "project_name",
     "participant_number",
+    "participant_age",
+    "participant_sex",
+    "participant_handedness",
     "session_id",
     "session_seed",
     "session_started_at",
@@ -230,6 +233,26 @@ def write_session_artifacts(
         write_json_file(output_dir / "runtime_metadata.json", summary.runtime_metadata)
 
     _write_csv(
+        output_dir / "participant_metadata.csv",
+        [
+            "participant_number",
+            "participant_age",
+            "participant_sex",
+            "participant_handedness",
+        ],
+        [
+            (
+                summary.participant_number or "",
+                summary.participant_metadata.age
+                if summary.participant_metadata.age is not None
+                else "",
+                summary.participant_metadata.sex or "",
+                summary.participant_metadata.handedness or "",
+            )
+        ],
+    )
+
+    _write_csv(
         output_dir / "conditions.csv",
         [
             "global_order_index",
@@ -400,6 +423,8 @@ def append_session_condition_history(
 
     path = logs_dir(project_root) / SESSION_CONDITION_HISTORY_FILENAME
     path.parent.mkdir(parents=True, exist_ok=True)
+    if path.is_file() and path.stat().st_size > 0:
+        _upgrade_session_condition_history_header(path)
     needs_header = not path.is_file() or path.stat().st_size == 0
     with path.open("a", encoding="utf-8", newline="") as handle:
         writer = csv.writer(handle)
@@ -407,6 +432,19 @@ def append_session_condition_history(
             writer.writerow(SESSION_CONDITION_HISTORY_HEADER)
         writer.writerows(_session_condition_history_rows(session_plan, summary))
     return path
+
+
+def _upgrade_session_condition_history_header(path: Path) -> None:
+    with path.open("r", encoding="utf-8", newline="") as handle:
+        reader = csv.DictReader(handle)
+        if reader.fieldnames == SESSION_CONDITION_HISTORY_HEADER:
+            return
+        rows = list(reader)
+    _write_csv(
+        path,
+        SESSION_CONDITION_HISTORY_HEADER,
+        ([row.get(column, "") for column in SESSION_CONDITION_HISTORY_HEADER] for row in rows),
+    )
 
 
 def _session_condition_history_rows(
@@ -442,6 +480,11 @@ def _session_condition_history_row(
         summary.project_id,
         entry.run_spec.project_name,
         summary.participant_number or "",
+        summary.participant_metadata.age
+        if summary.participant_metadata.age is not None
+        else "",
+        summary.participant_metadata.sex or "",
+        summary.participant_metadata.handedness or "",
         summary.session_id,
         summary.random_seed if summary.random_seed is not None else "",
         _datetime_value(summary.started_at),
