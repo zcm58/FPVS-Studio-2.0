@@ -152,7 +152,8 @@ Current planned seams:
   schema-compatible. Image-size settings are project-wide display geometry fields
   compiled into `RunSpec` so square source image resolution stays independent from playback
   size and word stimuli share the same timing/display geometry contract; the guided setup
-  stores the intended test display pixel resolution and exposes a
+  also stores whether participant start screens show authored condition titles, stores
+  the intended test display pixel resolution, and exposes a
   full-screen modal preview with live side-panel controls for checking apparent size on
   the test machine. Runtime blocks launch if the active fullscreen resolution differs
   from the configured intended resolution unless the project explicitly uses the current

@@ -52,6 +52,7 @@ class ConditionRunSpec(FPVSBaseModel):
 
     condition_id: str
     name: str
+    show_title_on_screen: bool = True
     template_id: str
     instructions_text: str | None = None
     base_hz: float = Field(gt=0)

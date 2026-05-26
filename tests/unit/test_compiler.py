@@ -19,19 +19,20 @@ def test_runspec_creation_at_60hz_continuous_mode(sample_project, sample_project
 
     assert run_spec.display.frames_per_stimulus == 10
     assert run_spec.display.background_color == "#000000"
-    assert run_spec.display.stimulus_width_degrees == 8.0
-    assert run_spec.display.viewing_distance_cm == 80.0
-    assert run_spec.display.screen_width_cm == 53.0
+    assert run_spec.display.stimulus_width_degrees == 5.0
+    assert run_spec.display.viewing_distance_cm == 57.0
+    assert run_spec.display.screen_width_cm == 56.25
     assert run_spec.display.screen_width_px == 1920
     assert run_spec.display.screen_height_px == 1080
     assert run_spec.display.use_current_screen_resolution is False
     assert run_spec.display.on_frames == 10
     assert run_spec.display.off_frames == 0
     assert run_spec.condition.total_stimuli == 730
+    assert run_spec.condition.show_title_on_screen is True
     assert run_spec.display.total_frames == 7300
     assert len(run_spec.stimulus_sequence) == 730
-    assert run_spec.fixation.cross_size_px == 48
-    assert run_spec.fixation.line_width_px == 4
+    assert run_spec.fixation.cross_size_px == 27
+    assert run_spec.fixation.line_width_px == 2
     assert run_spec.fixation.target_duration_frames == 15
     assert len(run_spec.fixation_events) == 2
     assert run_spec.trigger_events[0].frame_index == 0
@@ -139,6 +140,17 @@ def test_compiler_uses_configured_oddball_trigger_code(
     assert [event.code for event in run_spec.trigger_events if event.label == "oddball_onset"] == [
         88
     ]
+
+
+def test_compiler_carries_condition_title_display_setting(
+    sample_project,
+    sample_project_root,
+) -> None:
+    sample_project.settings.session.show_condition_title_on_screen = False
+
+    run_spec = compile_run_spec(sample_project, refresh_hz=60.0, project_root=sample_project_root)
+
+    assert run_spec.condition.show_title_on_screen is False
 
 
 def test_compiler_rejects_nonstandard_oddball_trigger_code_without_explicit_override(

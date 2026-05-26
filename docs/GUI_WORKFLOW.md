@@ -98,9 +98,14 @@ The authoring window is organized around two user-facing modes:
     display resolution in pixels, and an optional current-primary-screen resolution
     mode; the full-screen preview includes a side control panel for live edits to those
     same values, and source image resolution remains independent from on-screen playback
-    size
-  - the Session column exposes repeats per condition and the fixed Space start key;
-    condition order is always randomized automatically for each launch
+    size; new projects default to the ACR-matched display geometry of 5.0 deg image
+    width, 57.0 cm viewing distance, 56.25 cm screen width, and 1920 x 1080 px
+    resolution
+  - new projects default the fixation cross appearance to the ACR-matched 27 px cross
+    size and 2 px line width
+  - the Session column exposes repeats per condition, the fixed Space start key, and
+    whether participant transition screens show authored condition titles; condition
+    order is always randomized automatically for each launch
   - the Conditions step uses compact condition rows and a combined condition
     setup surface for condition list actions, name, trigger code, participant
     instructions, modality, and base/oddball stimulus authoring
@@ -153,8 +158,9 @@ completion or abort when the runtime summary includes an output directory.
 Launching an experiment opens a modal participant-information prompt. By default every
 project collects Participant Number, Age, Sex, and Handedness before runtime starts.
 Participant Number remains the output-folder identity and duplicate-history lookup key;
-the additional fields are written as runtime participant metadata for the launched
-session.
+Sex is limited to `Female` or `Male`, and Handedness is limited to `Right handed`,
+`Left handed`, or `Ambidextrous`. The additional fields are written as runtime
+participant metadata for the launched session.
 
 The Stimuli Manager remains an internal support page for variant/materialization
 behavior, not a guided setup step or visible top-level tab during normal use. Its raw

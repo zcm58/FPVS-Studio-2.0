@@ -11,6 +11,7 @@ from PySide6.QtCore import (
 )
 from PySide6.QtWidgets import (
     QApplication,
+    QCheckBox,
     QLabel,
     QPushButton,
     QWidget,
@@ -54,6 +55,18 @@ def test_setup_wizard_experiment_and_fixation_steps_are_width_safe(
         "setup_wizard_experiment_settings_card_title",
     ) is None
     assert guide.session_structure_editor.block_count_spin.value() == 2
+    show_title_checkbox = guide.session_structure_editor.findChild(
+        QCheckBox,
+        "show_condition_title_checkbox",
+    )
+    assert show_title_checkbox is not None
+    assert show_title_checkbox.text() == "Show condition title on experiment screen"
+    assert show_title_checkbox.isChecked() is True
+    show_title_checkbox.setChecked(False)
+    assert (
+        window.document.project.settings.session.show_condition_title_on_screen
+        is False
+    )
     assert not guide.session_structure_editor.generate_seed_button.isVisible()
     assert not guide.session_structure_editor.session_seed_spin.isVisible()
     assert not guide.session_structure_editor.seed_row_widget.isVisible()
@@ -174,9 +187,9 @@ def test_setup_wizard_experiment_image_size_controls_update_preview_and_review(
         _FakePreviewDialog,
     )
 
-    assert editor.width_degrees_spin.value() == pytest.approx(8.0, abs=0.01)
-    assert editor.viewing_distance_spin.value() == pytest.approx(80.0, abs=0.01)
-    assert editor.screen_width_spin.value() == pytest.approx(53.0, abs=0.01)
+    assert editor.width_degrees_spin.value() == pytest.approx(5.0, abs=0.01)
+    assert editor.viewing_distance_spin.value() == pytest.approx(57.0, abs=0.01)
+    assert editor.screen_width_spin.value() == pytest.approx(56.25, abs=0.01)
     image_size_labels = "\n".join(label.text() for label in editor.findChildren(QLabel))
     assert "Image width (deg)" in image_size_labels
     assert "Viewing distance (cm)" in image_size_labels
@@ -331,6 +344,8 @@ def test_setup_wizard_experiment_image_size_controls_update_preview_and_review(
 
     preview = guide.fixation_response_editor.preview_widget
     fixation = window.document.project.settings.fixation_task
+    assert fixation.cross_size_px == 27
+    assert fixation.line_width_px == 2
     assert preview.preview_state() == (
         "#000000",
         str(fixation.base_color),

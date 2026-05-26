@@ -326,10 +326,9 @@ class RuntimeWorker:
         *,
         runtime_options: Mapping[str, object] | None,
     ) -> bool:
-        heading = (
-            f"Condition {entry.global_order_index + 1} of {session_plan.total_runs}: "
-            f"{entry.condition_name}"
-        )
+        heading = f"Condition {entry.global_order_index + 1} of {session_plan.total_runs}"
+        if entry.run_spec.condition.show_title_on_screen:
+            heading = f"{heading}: {entry.condition_name}"
         body_parts = [
             f"Block {entry.block_index + 1}, item {entry.index_within_block + 1}",
         ]
@@ -349,7 +348,9 @@ class RuntimeWorker:
         self,
         run_spec: RunSpec,
     ) -> bool:
-        heading = f"Condition 1 of 1: {run_spec.condition.name}"
+        heading = "Condition 1 of 1"
+        if run_spec.condition.show_title_on_screen:
+            heading = f"{heading}: {run_spec.condition.name}"
         return self._engine.show_transition_screen(
             heading=heading,
             body=run_spec.condition.instructions_text,

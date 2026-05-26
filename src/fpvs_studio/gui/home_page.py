@@ -54,6 +54,12 @@ _SETUP_GUIDE_STEPS: tuple[tuple[str, str, str], ...] = (
     ("ready", "Validate / Ready", "Review Readiness"),
 )
 
+_HOME_LAUNCH_BUTTON_MIN_HEIGHT = 76
+_HOME_LAUNCH_BUTTON_MIN_WIDTH = 280
+_HOME_LAUNCH_BUTTON_HORIZONTAL_CHROME = 76
+_HOME_LAUNCH_BUTTON_VERTICAL_CHROME = 44
+_HOME_LAUNCH_BUTTON_ICON_GAP = 8
+
 
 class SetupDashboardPage(QWidget):
     """Guided setup page that keeps the existing editors available for compatibility."""
@@ -339,7 +345,6 @@ class HomePage(QWidget):
             button.setMinimumWidth(160)
             button.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
-        self.launch_button.setMinimumWidth(260)
         self.launch_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
 
         self.launch_status_label = StatusBadgeLabel("Setup Required", self)
@@ -466,6 +471,7 @@ class HomePage(QWidget):
         layout.addWidget(self.launch_surface)
 
         apply_home_page_theme(self)
+        self._sync_launch_button_geometry()
 
         self._document.project_changed.connect(self.refresh)
         self._document.session_plan_changed.connect(self.refresh)
@@ -479,8 +485,34 @@ class HomePage(QWidget):
             self._theme_refreshing = True
             try:
                 apply_home_page_theme(self)
+                self._sync_launch_button_geometry()
             finally:
                 self._theme_refreshing = False
+
+    def _sync_launch_button_geometry(self) -> None:
+        """Keep the hero launch action large enough for themed text and icon chrome."""
+
+        metrics = self.launch_button.fontMetrics()
+        icon_width = 0
+        icon_height = 0
+        if not self.launch_button.icon().isNull():
+            icon_size = self.launch_button.iconSize()
+            icon_width = icon_size.width()
+            icon_height = icon_size.height()
+
+        content_width = metrics.horizontalAdvance(self.launch_button.text())
+        if icon_width:
+            content_width += icon_width + _HOME_LAUNCH_BUTTON_ICON_GAP
+        width = max(
+            _HOME_LAUNCH_BUTTON_MIN_WIDTH,
+            content_width + _HOME_LAUNCH_BUTTON_HORIZONTAL_CHROME,
+        )
+        height = max(
+            _HOME_LAUNCH_BUTTON_MIN_HEIGHT,
+            max(metrics.height(), icon_height) + _HOME_LAUNCH_BUTTON_VERTICAL_CHROME,
+        )
+        self.launch_button.setMinimumSize(width, height)
+        self.launch_button.setFixedHeight(height)
 
     def set_top_chrome_offset(self, offset: int) -> None:
         """Keep the launch surface visually stable when main-window chrome is visible."""

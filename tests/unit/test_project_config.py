@@ -31,6 +31,7 @@ def test_setup_config_exports_project_conditions_and_toolbox_event_map(sample_pr
     sample_project.conditions[0].trigger_code = 7
     sample_project.settings.triggers.oddball_trigger_code = 88
     sample_project.settings.triggers.allow_nonstandard_oddball_trigger_code = True
+    sample_project.settings.session.show_condition_title_on_screen = False
     sample_project.settings.display.stimulus_width_degrees = 10.0
 
     config = export_project_config(sample_project, project_root=None)
@@ -42,6 +43,7 @@ def test_setup_config_exports_project_conditions_and_toolbox_event_map(sample_pr
     assert config.toolbox.oddball_trigger_code == 88
     assert config.triggers.oddball_trigger_code == 88
     assert config.triggers.allow_nonstandard_oddball_trigger_code is True
+    assert config.session.show_condition_title_on_screen is False
     assert config.display.stimulus_width_degrees == 10.0
     assert config.display.stimulus_width_cm > 0
     assert config.display.stimulus_width_px > 0
@@ -150,6 +152,7 @@ def test_config_import_creates_new_project_shell_without_copying_stimuli(
     assert loaded.meta.name == sample_project.meta.name
     assert loaded.settings.display.viewing_distance_cm == 90.0
     assert loaded.settings.session.session_seed == 123
+    assert loaded.settings.session.show_condition_title_on_screen is True
     assert loaded.settings.triggers.oddball_trigger_code == 55
     assert loaded.conditions[0].name == "Faces"
     assert loaded.conditions[0].trigger_code == 9

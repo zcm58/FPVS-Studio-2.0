@@ -27,7 +27,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from fpvs_studio.core.execution import ParticipantMetadata
+from fpvs_studio.core.execution import PARTICIPANT_SEX_VALUES, ParticipantMetadata
 from fpvs_studio.core.session_plan import SessionPlan
 from fpvs_studio.gui import folder_actions
 from fpvs_studio.gui.components import (
@@ -102,13 +102,13 @@ class ParticipantNumberDialog(QDialog):
         self.sex_combo = QComboBox(self)
         self.sex_combo.setObjectName("participant_sex_combo")
         self.sex_combo.addItem("Select sex...", None)
-        for value in ["Female", "Male", "Intersex", "Prefer not to say"]:
+        for value in sorted(PARTICIPANT_SEX_VALUES):
             self.sex_combo.addItem(value, value)
 
         self.handedness_combo = QComboBox(self)
         self.handedness_combo.setObjectName("participant_handedness_combo")
         self.handedness_combo.addItem("Select handedness...", None)
-        for value in ["Right", "Left", "Ambidextrous", "Prefer not to say"]:
+        for value in ["Right handed", "Left handed", "Ambidextrous"]:
             self.handedness_combo.addItem(value, value)
 
         form_layout = QFormLayout()

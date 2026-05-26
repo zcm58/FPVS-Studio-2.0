@@ -170,7 +170,11 @@ def test_run_page_launch_uses_fixed_current_runtime_defaults(
         "_prompt_participant_number",
         lambda: ParticipantLaunchDetails(
             participant_number="7",
-            participant_metadata=ParticipantMetadata(age=71, sex="Female", handedness="Right"),
+            participant_metadata=ParticipantMetadata(
+                age=71,
+                sex="Female",
+                handedness="Right handed",
+            ),
         ),
     )
     monkeypatch.setattr(window.run_page, "_on_launch_succeeded", lambda result: None)
@@ -189,7 +193,7 @@ def test_run_page_launch_uses_fixed_current_runtime_defaults(
     assert captures["participant_metadata"] == ParticipantMetadata(
         age=71,
         sex="Female",
-        handedness="Right",
+        handedness="Right handed",
     )
     assert captures["display_index"] is None
     assert captures["fullscreen"] is True

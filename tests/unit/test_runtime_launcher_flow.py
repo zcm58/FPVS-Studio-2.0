@@ -194,6 +194,41 @@ def test_launch_session_runs_all_entries_with_stub_engine_and_reuses_session_win
     assert (first_run_dir / "run_summary.json").is_file()
 
 
+def test_launch_session_can_hide_condition_titles_on_transition_screens(
+    multi_condition_project,
+    multi_condition_project_root,
+) -> None:
+    multi_condition_project.settings.session.show_condition_title_on_screen = False
+    captures: dict[str, object] = {}
+    register_engine("stub-hidden-condition-titles", lambda: StubEngine(captures))
+    try:
+        session_plan = compile_session_plan(
+            multi_condition_project,
+            refresh_hz=60.0,
+            project_root=multi_condition_project_root,
+            random_seed=99,
+        )
+
+        launch_session(
+            multi_condition_project_root,
+            session_plan,
+            participant_number=PARTICIPANT_NUMBER,
+            launch_settings=LaunchSettings(
+                engine_name="stub-hidden-condition-titles",
+                test_mode=True,
+            ),
+        )
+    finally:
+        unregister_engine("stub-hidden-condition-titles")
+
+    headings = [item["heading"] for item in captures["transitions"]]
+    assert headings == [
+        f"Condition {index + 1} of {session_plan.total_runs}"
+        for index in range(session_plan.total_runs)
+    ]
+    assert all(": " not in heading for heading in headings)
+
+
 def test_launch_session_runs_participant_tutorial_once_before_first_transition(
     multi_condition_project,
     multi_condition_project_root,

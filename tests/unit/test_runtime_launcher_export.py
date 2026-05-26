@@ -42,7 +42,7 @@ def test_session_export_captures_seed_and_runtime_logs(
             participant_metadata=ParticipantMetadata(
                 age=72,
                 sex="Female",
-                handedness="Right",
+                handedness="Right handed",
             ),
             launch_settings=LaunchSettings(engine_name="stub-export", test_mode=True),
         )
@@ -61,7 +61,7 @@ def test_session_export_captures_seed_and_runtime_logs(
     assert exported_summary.participant_metadata == ParticipantMetadata(
         age=72,
         sex="Female",
-        handedness="Right",
+        handedness="Right handed",
     )
     assert exported_summary.realized_block_orders == [
         block.condition_order for block in session_plan.blocks
@@ -112,12 +112,15 @@ def test_session_export_captures_seed_and_runtime_logs(
             "participant_number": PARTICIPANT_NUMBER,
             "participant_age": "72",
             "participant_sex": "Female",
-            "participant_handedness": "Right",
+            "participant_handedness": "Right handed",
         }
     ]
     assert all(row["participant_age"] == "72" for row in condition_history_rows)
     assert all(row["participant_sex"] == "Female" for row in condition_history_rows)
-    assert all(row["participant_handedness"] == "Right" for row in condition_history_rows)
+    assert all(
+        row["participant_handedness"] == "Right handed"
+        for row in condition_history_rows
+    )
     assert all(row["session_seed"] == "77" for row in condition_history_rows)
     assert all(row["output_dir"] == summary.output_dir for row in condition_history_rows)
     assert all(row["block_accuracy_percent"] for row in condition_history_rows)

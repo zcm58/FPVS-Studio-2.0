@@ -11,6 +11,8 @@ from PySide6.QtWidgets import (
     QListWidget,
     QPushButton,
     QSizePolicy,
+    QStyle,
+    QStyleOptionButton,
     QToolBar,
     QWidget,
 )
@@ -22,6 +24,30 @@ from tests.gui.helpers import (
 )
 
 from fpvs_studio.gui.controller import StudioController
+
+
+def _assert_button_contents_fit(button: QPushButton) -> None:
+    option = QStyleOptionButton()
+    option.initFrom(button)
+    option.text = button.text()
+    option.icon = button.icon()
+    option.iconSize = button.iconSize()
+
+    contents = button.style().subElementRect(
+        QStyle.SubElement.SE_PushButtonContents,
+        option,
+        button,
+    )
+    text_width = button.fontMetrics().horizontalAdvance(button.text())
+    icon_width = button.iconSize().width() if not button.icon().isNull() else 0
+    icon_height = button.iconSize().height() if not button.icon().isNull() else 0
+    required_width = text_width + icon_width + (8 if icon_width else 0)
+    required_height = max(button.fontMetrics().height(), icon_height)
+
+    assert button.height() >= button.minimumHeight()
+    assert contents.width() >= required_width
+    assert contents.height() >= required_height
+    assert button.rect().contains(contents)
 
 
 def test_ready_project_reopens_to_home_launch_surface(
@@ -205,6 +231,28 @@ def test_launch_buttons_share_primary_visual_role(
     assert home_launch_button.property("homeLaunchHeroAction") == "true"
     assert not home_launch_button.icon().isNull()
     assert run_launch_button.property("launchActionRole") == "primary"
+
+
+def test_home_launch_button_geometry_keeps_label_and_icon_uncropped(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Launch Geometry Project")
+    window.resize(1110, 700)
+    QApplication.processEvents()
+
+    launch_button = window.home_page.findChild(QPushButton, "home_launch_experiment_button")
+    assert launch_button is not None
+    qtbot.waitUntil(lambda: launch_button.isVisible() and launch_button.height() > 0)
+
+    _assert_button_contents_fit(launch_button)
+
+    _prepare_compile_ready_project(window, tmp_path / "launch-geometry-assets")
+    QApplication.processEvents()
+
+    assert launch_button.isEnabled()
+    _assert_button_contents_fit(launch_button)
 
 
 def test_incomplete_home_launch_state_is_error_and_disabled(

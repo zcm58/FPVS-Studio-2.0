@@ -323,7 +323,43 @@ def test_launch_session_rejects_invalid_participant_metadata_before_engine_creat
                 sample_project_root,
                 session_plan,
                 participant_number=PARTICIPANT_NUMBER,
-                participant_metadata={"age": 121, "sex": "Female", "handedness": "Right"},
+                participant_metadata={
+                    "age": 121,
+                    "sex": "Female",
+                    "handedness": "Right handed",
+                },
+                launch_settings=LaunchSettings(
+                    engine_name="stub-bad-participant-metadata",
+                    test_mode=True,
+                ),
+            )
+
+        with pytest.raises(LaunchSettingsError, match="Participant sex must be one of"):
+            launch_session(
+                sample_project_root,
+                session_plan,
+                participant_number=PARTICIPANT_NUMBER,
+                participant_metadata={
+                    "age": 72,
+                    "sex": "Prefer not to say",
+                    "handedness": "Right handed",
+                },
+                launch_settings=LaunchSettings(
+                    engine_name="stub-bad-participant-metadata",
+                    test_mode=True,
+                ),
+            )
+
+        with pytest.raises(LaunchSettingsError, match="Participant handedness must be one of"):
+            launch_session(
+                sample_project_root,
+                session_plan,
+                participant_number=PARTICIPANT_NUMBER,
+                participant_metadata={
+                    "age": 72,
+                    "sex": "Female",
+                    "handedness": "Prefer not to say",
+                },
                 launch_settings=LaunchSettings(
                     engine_name="stub-bad-participant-metadata",
                     test_mode=True,

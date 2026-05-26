@@ -67,7 +67,9 @@ The PsychoPy implementation:
 - opens launched playback fullscreen on the default display
 - reports the active window resolution so runtime can block configured visual-angle
   playback when the current display resolution differs from the intended test resolution
-- shows Space-required condition-start screens and completion text screens
+- shows Space-required condition-start screens and completion text screens; transition
+  headings omit authored condition titles when the project disables participant-facing
+  condition titles
 - runs fixation-only participant tutorial attempts when runtime asks for practice
 - shows a dedicated manual inter-block break screen between non-final blocks
 - preloads each condition's unique image or word stimuli before playback and releases
@@ -143,6 +145,8 @@ Launch-time participant metadata:
 
 - the GUI launch prompt collects Participant Number, Age, Sex, and Handedness by
   default for every project
+- Sex accepts only `Female` or `Male`; Handedness accepts only `Right handed`,
+  `Left handed`, or `Ambidextrous`
 - Participant Number remains the required runtime identity and output-folder key
 - Age, Sex, and Handedness are stored in `SessionExecutionSummary`,
   each `RunExecutionSummary`, the session-level `participant_metadata.csv`, and

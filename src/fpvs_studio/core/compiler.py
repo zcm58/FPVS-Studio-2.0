@@ -192,6 +192,7 @@ def compile_run_spec(
         condition=ConditionRunSpec(
             condition_id=condition.condition_id,
             name=condition.name,
+            show_title_on_screen=project.settings.session.show_condition_title_on_screen,
             template_id=template.template_id,
             instructions_text=condition.instructions or None,
             base_hz=template.base_hz,

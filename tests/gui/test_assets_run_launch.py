@@ -696,6 +696,19 @@ def test_participant_number_dialog_requires_digits_and_trims_whitespace(qtbot, m
     dialog = ParticipantNumberDialog()
     qtbot.addWidget(dialog)
     assert dialog.prompt_label.text() == "Please enter the participant details."
+    assert [
+        dialog.sex_combo.itemText(index)
+        for index in range(dialog.sex_combo.count())
+    ] == ["Select sex...", "Female", "Male"]
+    assert [
+        dialog.handedness_combo.itemText(index)
+        for index in range(dialog.handedness_combo.count())
+    ] == [
+        "Select handedness...",
+        "Right handed",
+        "Left handed",
+        "Ambidextrous",
+    ]
 
     messages: list[str] = []
     monkeypatch.setattr(
@@ -727,13 +740,15 @@ def test_participant_number_dialog_requires_digits_and_trims_whitespace(qtbot, m
     dialog.accept()
     assert dialog.result() != int(dialog.DialogCode.Accepted)
 
-    dialog.handedness_combo.setCurrentIndex(dialog.handedness_combo.findData("Right"))
+    dialog.handedness_combo.setCurrentIndex(
+        dialog.handedness_combo.findData("Right handed")
+    )
     dialog.accept()
     assert dialog.result() == int(dialog.DialogCode.Accepted)
     assert dialog.participant_number == "0012"
     assert dialog.participant_metadata.age == 72
     assert dialog.participant_metadata.sex == "Female"
-    assert dialog.participant_metadata.handedness == "Right"
+    assert dialog.participant_metadata.handedness == "Right handed"
     assert any("Enter a participant number" in message for message in messages)
     assert any("digits only" in message for message in messages)
     assert any("age" in message.lower() for message in messages)

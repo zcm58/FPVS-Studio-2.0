@@ -167,6 +167,7 @@ class ProjectConfigSession(FPVSBaseModel):
     inter_condition_mode: InterConditionMode = InterConditionMode.MANUAL_CONTINUE
     inter_condition_break_seconds: float = Field(ge=0)
     continue_key: str = "space"
+    show_condition_title_on_screen: bool = True
 
 
 class ProjectConfigTriggers(FPVSBaseModel):
@@ -496,6 +497,7 @@ def _session_config(session: SessionSettings) -> ProjectConfigSession:
         inter_condition_mode=session.inter_condition_mode,
         inter_condition_break_seconds=session.inter_condition_break_seconds,
         continue_key=session.continue_key,
+        show_condition_title_on_screen=session.show_condition_title_on_screen,
     )
 
 
@@ -680,4 +682,5 @@ def _session_settings(config: ProjectConfigSession) -> SessionSettings:
         inter_condition_mode=config.inter_condition_mode,
         inter_condition_break_seconds=config.inter_condition_break_seconds,
         continue_key=config.continue_key,
+        show_condition_title_on_screen=config.show_condition_title_on_screen,
     )

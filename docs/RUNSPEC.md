@@ -56,6 +56,7 @@ not recompute protocol logic from `ProjectFile`.
 ### `ConditionRunSpec`
 
 - condition identity and name
+- whether participant-facing transition screens should show the authored condition title
 - stimulus modality: `image` or `word`
 - template id
 - instructions text

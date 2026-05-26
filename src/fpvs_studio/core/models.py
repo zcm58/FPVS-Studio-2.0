@@ -207,9 +207,9 @@ class DisplaySettings(FPVSBaseModel):
     background_color: str | tuple[int, int, int] = "#000000"
     monitor_name: str | None = None
     preferred_refresh_hz: float | None = Field(default=None, gt=0)
-    stimulus_width_degrees: float = Field(default=8.0, gt=0)
-    viewing_distance_cm: float = Field(default=80.0, gt=0)
-    screen_width_cm: float = Field(default=53.0, gt=0)
+    stimulus_width_degrees: float = Field(default=5.0, gt=0)
+    viewing_distance_cm: float = Field(default=57.0, gt=0)
+    screen_width_cm: float = Field(default=56.25, gt=0)
     screen_width_px: int = Field(default=1920, gt=0)
     screen_height_px: int = Field(default=1080, gt=0)
     use_current_screen_resolution: bool = False
@@ -245,8 +245,8 @@ class FixationTaskSettings(FPVSBaseModel):
     response_key: str = "space"
     response_window_seconds: float = Field(default=1.0, gt=0)
     response_keys: list[str] = Field(default_factory=lambda: ["space"])
-    cross_size_px: int = Field(default=48, gt=0)
-    line_width_px: int = Field(default=4, gt=0)
+    cross_size_px: int = Field(default=27, gt=0)
+    line_width_px: int = Field(default=2, gt=0)
 
     @property
     def color_changes_per_condition(self) -> int:
@@ -342,6 +342,7 @@ class SessionSettings(FPVSBaseModel):
     inter_condition_mode: InterConditionMode = InterConditionMode.MANUAL_CONTINUE
     inter_condition_break_seconds: float = Field(default=0.0, ge=0)
     continue_key: str = "space"
+    show_condition_title_on_screen: bool = True
 
     @field_validator("continue_key")
     @classmethod

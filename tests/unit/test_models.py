@@ -55,14 +55,15 @@ def test_session_settings_default_to_space_gated_condition_starts() -> None:
     assert session.inter_condition_mode == InterConditionMode.MANUAL_CONTINUE
     assert session.inter_condition_break_seconds == 0.0
     assert session.continue_key == "space"
+    assert session.show_condition_title_on_screen is True
 
 
 def test_display_settings_default_and_validate_image_display_geometry() -> None:
     display = DisplaySettings()
 
-    assert display.stimulus_width_degrees == 8.0
-    assert display.viewing_distance_cm == 80.0
-    assert display.screen_width_cm == 53.0
+    assert display.stimulus_width_degrees == 5.0
+    assert display.viewing_distance_cm == 57.0
+    assert display.screen_width_cm == 56.25
     assert display.screen_width_px == 1920
     assert display.screen_height_px == 1080
     assert display.use_current_screen_resolution is False

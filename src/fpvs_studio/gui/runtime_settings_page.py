@@ -284,8 +284,8 @@ class ImageSizePreviewDialog(QDialog):
             object_name="preview_screen_width_cm_spin",
             minimum=1.0,
             maximum=500.0,
-            decimals=1,
-            step=1.0,
+            decimals=2,
+            step=0.25,
             suffix=" cm",
         )
         self.use_current_resolution_checkbox = QCheckBox(
@@ -457,8 +457,8 @@ class ImageDisplaySizeEditor(QWidget):
             object_name="screen_width_cm_spin",
             minimum=1.0,
             maximum=500.0,
-            decimals=1,
-            step=1.0,
+            decimals=2,
+            step=0.25,
             suffix=" cm",
         )
         self.screen_width_spin.valueChanged.connect(self._apply_image_display_settings)

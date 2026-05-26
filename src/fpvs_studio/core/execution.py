@@ -17,6 +17,15 @@ FixationOutcome = Literal["hit", "miss"]
 ResponseOutcome = Literal["hit", "false_alarm"]
 TriggerStatus = Literal["scheduled", "sent", "error", "skipped_disabled", "failed", "skipped"]
 
+PARTICIPANT_SEX_VALUES = frozenset({"Female", "Male"})
+PARTICIPANT_HANDEDNESS_VALUES = frozenset(
+    {"Right handed", "Left handed", "Ambidextrous"}
+)
+_LEGACY_HANDEDNESS_VALUES = {
+    "Right": "Right handed",
+    "Left": "Left handed",
+}
+
 
 def _validate_participant_number(value: str | None) -> str | None:
     if value is None:
@@ -36,14 +45,31 @@ class ParticipantMetadata(FPVSBaseModel):
     sex: str | None = Field(default=None, max_length=64)
     handedness: str | None = Field(default=None, max_length=64)
 
-    @field_validator("sex", "handedness")
+    @field_validator("sex")
     @classmethod
-    def validate_optional_text(cls, value: str | None) -> str | None:
+    def validate_sex(cls, value: str | None) -> str | None:
         if value is None:
             return None
         cleaned = value.strip()
         if not cleaned:
             raise ValueError("Participant metadata fields may not be blank when provided.")
+        if cleaned not in PARTICIPANT_SEX_VALUES:
+            allowed = ", ".join(sorted(PARTICIPANT_SEX_VALUES))
+            raise ValueError(f"Participant sex must be one of: {allowed}.")
+        return cleaned
+
+    @field_validator("handedness")
+    @classmethod
+    def validate_handedness(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("Participant metadata fields may not be blank when provided.")
+        cleaned = _LEGACY_HANDEDNESS_VALUES.get(cleaned, cleaned)
+        if cleaned not in PARTICIPANT_HANDEDNESS_VALUES:
+            allowed = ", ".join(sorted(PARTICIPANT_HANDEDNESS_VALUES))
+            raise ValueError(f"Participant handedness must be one of: {allowed}.")
         return cleaned
 
     @property

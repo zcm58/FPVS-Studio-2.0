@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from PySide6.QtCore import QSignalBlocker, Qt
 from PySide6.QtWidgets import (
+    QCheckBox,
     QComboBox,
     QDoubleSpinBox,
     QFormLayout,
@@ -105,6 +106,15 @@ class SessionStructureEditor(QWidget):
         )
         self.continue_key_edit.setEnabled(False)
 
+        self.show_condition_title_checkbox = QCheckBox(
+            "Show condition title on experiment screen",
+            self,
+        )
+        self.show_condition_title_checkbox.setObjectName(
+            _prefixed_object_name(object_name_prefix, "show_condition_title_checkbox")
+        )
+        self.show_condition_title_checkbox.toggled.connect(self._apply_session_settings)
+
         self.session_layout = QFormLayout()
         self.session_layout.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
         self.session_layout.setHorizontalSpacing(12)
@@ -127,6 +137,10 @@ class SessionStructureEditor(QWidget):
         )
         self.session_layout.addRow(self._form_label("Condition order"), self.seed_help_label)
         self.session_layout.addRow(self._form_label("Start key"), self.continue_key_edit)
+        self.session_layout.addRow(
+            self._form_label("Condition title"),
+            self.show_condition_title_checkbox,
+        )
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -171,6 +185,10 @@ class SessionStructureEditor(QWidget):
             self.break_seconds_spin.setValue(session.inter_condition_break_seconds)
         with QSignalBlocker(self.continue_key_edit):
             self.continue_key_edit.setText("space")
+        with QSignalBlocker(self.show_condition_title_checkbox):
+            self.show_condition_title_checkbox.setChecked(
+                session.show_condition_title_on_screen
+            )
         self._update_session_visibility_state()
 
     def _update_session_visibility_state(self) -> None:
@@ -193,6 +211,7 @@ class SessionStructureEditor(QWidget):
                 inter_condition_mode=InterConditionMode.MANUAL_CONTINUE,
                 inter_condition_break_seconds=0.0,
                 continue_key="space",
+                show_condition_title_on_screen=self.show_condition_title_checkbox.isChecked(),
             )
         except Exception as error:
             _show_error_dialog(self, "Session Settings Error", error)
@@ -233,6 +252,7 @@ class SessionStructurePage(QWidget):
         self.inter_condition_mode_combo = self.editor.inter_condition_mode_combo
         self.break_seconds_spin = self.editor.break_seconds_spin
         self.continue_key_edit = self.editor.continue_key_edit
+        self.show_condition_title_checkbox = self.editor.show_condition_title_checkbox
         self.session_layout = self.editor.session_layout
 
     def refresh(self) -> None:

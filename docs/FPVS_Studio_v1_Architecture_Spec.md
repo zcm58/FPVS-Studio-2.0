@@ -183,10 +183,18 @@ valid when the project records the user-directed
 Runtime execution summaries can carry launch-time participant metadata. The default GUI
 launch workflow collects Participant Number, Age, Sex, and Handedness for every project.
 Participant Number stays the required runtime identity and duplicate-history lookup key;
-Age, Sex, and Handedness are optional runtime metadata fields outside `RunSpec` and
-`SessionPlan`.
+Sex is constrained to `Female` or `Male`; Handedness is constrained to `Right handed`,
+`Left handed`, or `Ambidextrous`. Age, Sex, and Handedness remain runtime metadata
+fields outside `RunSpec` and `SessionPlan`.
 
-## 12. Current repository goal
+## 12. Participant-facing condition titles
+
+Project session settings control whether authored condition titles are shown on
+participant transition screens. The compiler stores this choice in each embedded
+`RunSpec`; runtime still preserves condition names in artifacts while rendering generic
+headings such as `Condition 1 of 4` when titles are hidden.
+
+## 13. Current repository goal
 
 Keep the GUI, core contracts, preprocessing, runtime/session flow, engine boundary,
 trigger backends, exports, and harness docs aligned so future changes can start from
