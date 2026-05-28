@@ -4,6 +4,7 @@
 .venv/
 .venv*/
 .venv3.10/
+.python310/
 __pycache__/
 .mypy_cache/
 
