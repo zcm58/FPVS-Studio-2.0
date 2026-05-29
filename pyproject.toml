@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "fpvs-studio"
-version = "0.9.8"
+version = "0.9.9"
 description = "FPVS Studio in beta release."
 readme = "README.md"
 license = { file = "LICENSE" }

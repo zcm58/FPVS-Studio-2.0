@@ -24,6 +24,7 @@ def test_repo_guidance_references_existing_harness_files() -> None:
         "docs/RUNTIME_EXECUTION.md",
         ".agents/skills/legacy-boundary-review/SKILL.md",
         ".agents/skills/project-path-audit/SKILL.md",
+        ".agents/skills/fpvs-psychopy-migration/SKILL.md",
         ".agents/skills/pyside6-gui-cleanup/SKILL.md",
         ".agents/skills/pytest-qt-smoke/SKILL.md",
     ]

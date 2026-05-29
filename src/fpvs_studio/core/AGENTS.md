@@ -77,6 +77,8 @@ Implement friendly, explicit validation for:
 - `changes_per_sequence >= 0`
 - target duration > 0 when fixation task enabled
 - `oddball_cycle_repeats_per_sequence >= 1`
+- image conditions have configured base/oddball image stimulus sources
+- word conditions have non-empty base/oddball word lists
 - valid duty-cycle mode
 - display compatibility:
   - refresh / 6 must resolve to an integer frame count within tolerance
@@ -102,7 +104,8 @@ A minimal compiler in this phase should be able to:
 - keep execution-result/export contracts engine-neutral in `execution.py`
 - derive per-stimulus frames plus on/off frames from duty-cycle mode
 - build the explicit base/oddball role sequence
-- assign deterministic project-relative image paths
+- assign deterministic stimulus payloads: project-relative image paths for image
+  conditions, authored text for word conditions
 - preserve `RunSpec` as a single-condition contract when building `SessionPlan`
 - convert fixation timing fields from ms to frames and emit concrete fixation events
 - compile fixation accuracy-task settings into `RunSpec` (response key/window,
@@ -113,8 +116,6 @@ A minimal compiler in this phase should be able to:
 - keep the `oddball_onset` trigger code locked to `55` by default; nonstandard
   oddball marker codes require explicit user direction and the persisted
   `allow_nonstandard_oddball_trigger_code` override
-
-If full image-order schedule compilation feels premature, scaffold the interface and keep the compiler deterministic and testable.
 
 ## Hard restrictions
 

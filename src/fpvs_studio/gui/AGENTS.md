@@ -17,6 +17,12 @@ backend-driven.
 - Preserve the Home/Setup Wizard workflow: Home is the returning-user launch surface;
   detailed setup widgets should be reached through the guided wizard, not new top-level
   tabs.
+- Preserve Home setup actions: ready projects expose `Edit Setup`, incomplete projects
+  expose `Complete Setup`, and first-time setup opens at the earliest incomplete step
+  without enabling arbitrary step jumps.
+- Keep condition modality authoring in the guided Conditions step. Image conditions use
+  base/oddball image source cards; word conditions use typed base/oddball word-list
+  editors, and image-only actions stay disabled for word conditions.
 - Do not reintroduce Setup Wizard Advanced buttons or generic footer/status copy
   without an explicit workflow plan.
 - Keep fixation accuracy-task and participant-tutorial controls in the Fixation/Session

@@ -19,6 +19,10 @@ play compiled runs end to end.
 - Keep engines consuming one `RunSpec` at a time; runtime owns `SessionPlan` iteration.
 - Add an engine registry/factory.
 - Add a real but minimal `PsychoPyEngine`.
+- Render both image and word stimulus events from `RunSpec` payloads without
+  changing the compiled frame schedule.
+- Keep condition-local stimulus preparation and cleanup inside the engine run
+  boundary; do not retain image or text stimuli across conditions.
 - Render runtime-owned instruction, inter-block break, and completion screens without moving session sequencing into the engine.
 - Render runtime-owned end-of-condition fixation feedback screens without moving scoring/session decisions into the engine.
 - Render single fixation tutorial practice attempts while runtime owns tutorial
@@ -41,7 +45,7 @@ The engine interface should be able to support, at minimum:
 - session open/close
 - transition/completion text screens
 - single fixation tutorial practice attempts
-- `run_condition(RunSpec, ...)`
+- `run_condition(RunSpec, ...)` for image and word conditions
 - abort
 
 It is acceptable for advanced trigger hardware integration or future engine

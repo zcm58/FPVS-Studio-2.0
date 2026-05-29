@@ -25,7 +25,8 @@ This phase should establish:
 - read `RunSpec` and `SessionPlan`
 - keep runtime-only launch options out of `RunSpec`
 - select engine by name
-- preflight all referenced assets before launch
+- preflight compiled stimulus payloads before launch: image events must point to
+  existing project-relative files, while word events must carry non-empty text
 - open/close one engine session per launched session
 - show instruction/transition screens via the engine
 - insert inter-block pause flow via the engine for non-final blocks

@@ -25,7 +25,7 @@ experiments, with PsychoPy isolated behind runtime/engine boundaries.
 - Use `docs/QUALITY_SCORE.md`, `docs/RELIABILITY.md`, and `docs/SECURITY.md` for
   quality, reliability, and local security guardrails.
 - Use repo skills in `.agents/skills/` for repeatable GUI, path, legacy-boundary,
-  and pytest-qt workflows.
+  PsychoPy migration, and pytest-qt workflows.
 
 ## Codex skill routing
 
@@ -50,6 +50,9 @@ gates, or no-silent-fallback guardrails.
 - Use `find-skills` only when the current repo-local skills and installed global skills
   do not cover a requested specialized workflow. Do not turn routine FPVS Studio work
   into an external skill search.
+- Use `.agents/skills/fpvs-psychopy-migration/SKILL.md` when migrating an existing
+  PsychoPy experiment, `.psyexp` file, image folder, CSV/Excel stimulus list, or word-list
+  paradigm into an FPVS Studio project.
 - For PySide6 GUI design work, `impeccable` / `delight`, `frontend-design`, and
   `ui-ux-pro-max` may help critique layout, visual hierarchy, copy, and interaction
   choices, but `docs/FRONTEND.md`, `docs/GUI_WORKFLOW.md`, `gui.components`, and

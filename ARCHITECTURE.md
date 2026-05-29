@@ -218,7 +218,8 @@ package boundaries, persisted formats, and harness commands in this file.
   delegation is available and the failing areas can be assigned without overlapping write
   sets. Integrate by running the relevant focused and full gates afterward.
 - Skill discovery: use `find-skills` only for a missing specialized workflow. Prefer the
-  repo-local skills in `.agents/skills/` for GUI, path, legacy, and pytest-qt work.
+  repo-local skills in `.agents/skills/` for GUI, path, legacy, PsychoPy migration, and
+  pytest-qt work.
 - Web-only skills: `web-design-guidelines` is limited to `docs-site/` or MkDocs UI work.
   React, React Native, and Vercel skills are out of scope for the current desktop app.
 
@@ -254,6 +255,11 @@ package boundaries, persisted formats, and harness commands in this file.
 - Preprocessing task: `src/fpvs_studio/preprocessing/`,
   `src/fpvs_studio/core/models.py`, `tests/unit/test_preprocessing_assets.py`,
   and `tests/unit/test_preprocessing_inspection.py`.
+- PsychoPy migration task: `.agents/skills/fpvs-psychopy-migration/SKILL.md`,
+  `.agents/skills/fpvs-psychopy-migration/references/migration-guide.md`,
+  `src/fpvs_studio/core/AGENTS.md`, `src/fpvs_studio/preprocessing/AGENTS.md`,
+  `docs/FPVS_Studio_v1_Architecture_Spec.md`, `docs/RUNSPEC.md`, and
+  `docs/GUI_WORKFLOW.md`.
 - Image Resizer utility task: `docs/GUI_WORKFLOW.md`, `docs/FRONTEND.md`,
   `docs/references/archive/fpvs-toolbox-image-resizer/`,
   `src/fpvs_studio/preprocessing/`,
