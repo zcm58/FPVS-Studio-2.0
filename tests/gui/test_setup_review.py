@@ -88,6 +88,7 @@ def test_setup_wizard_review_uses_centered_confirmation_checklist(
     assert "Fixation Cross" in label_text
     assert "Project details complete: Review Checklist Project" in label_text
     assert "2 conditions configured" in label_text
+    assert "Timing: Continuous Images" in label_text
     assert "Faces: base 3 images, oddball 3 images" not in label_text
     assert "Objects: base 3 images, oddball 3 images" not in label_text
     assert "Each condition will repeat 2 times in randomized block order" in label_text
@@ -116,7 +117,7 @@ def test_setup_wizard_review_uses_centered_confirmation_checklist(
         if label.property("reviewCheckIcon") == "true"
     ]
     assert len(summary_sections) == 4
-    assert len(checklist_rows) == 8
+    assert len(checklist_rows) == 9
     assert len(check_icons) == len(checklist_rows)
     section_title_tops = [
         next(

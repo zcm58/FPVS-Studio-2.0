@@ -1,6 +1,6 @@
 # Per-Condition Template Overrides
 
-Status: Planned
+Status: Completed
 
 ## Summary
 
@@ -8,6 +8,11 @@ Allow authors to choose the image-timing template for each condition from the Co
 setup page. The project-level image-timing selector remains the default for new
 conditions, but individual conditions can override that default so one project can mix
 Continuous Images and 50% Blank Images conditions.
+
+Implementation outcome: the first pass exposes built-in timing modes only, persists no
+condition-level profile provenance, keeps Target Stimulus Repeats project-wide, and makes
+project-level default changes future-only unless the existing explicit apply-to-all
+button is used.
 
 ## Problem
 

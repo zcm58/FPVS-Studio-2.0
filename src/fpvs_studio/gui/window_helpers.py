@@ -91,6 +91,13 @@ def _duty_cycle_label(mode: DutyCycleMode) -> str:
     }[mode]
 
 
+def _timing_template_label(mode: DutyCycleMode) -> str:
+    return {
+        DutyCycleMode.CONTINUOUS: "Continuous Images",
+        DutyCycleMode.BLANK_50: "50% Blank Between Images",
+    }[mode]
+
+
 def _transition_label(mode: InterConditionMode) -> str:
     return {
         InterConditionMode.FIXED_BREAK: "Fixed Break",

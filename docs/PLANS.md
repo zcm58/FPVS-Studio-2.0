@@ -13,12 +13,11 @@ Use this page to find planning material before making feature-sized changes.
 
 Current inventory:
 
-- Planned plans include patch updates, protocol configurability, per-condition timing
-  template overrides, luminance/RMS equalization investigation, and sinusoidal contrast
-  modulation.
+- Planned plans include patch updates, protocol configurability, luminance/RMS
+  equalization investigation, and sinusoidal contrast modulation.
 - Active plans: none.
-- Completed plans include participant fixation tutorial workflow and word-based FPVS
-  conditions.
+- Completed plans include participant fixation tutorial workflow, word-based FPVS
+  conditions, and per-condition timing template overrides.
 
 Draft concrete future work in `planned/`. Move it to `active/` before implementing
 changes that affect user workflows, public contracts, or multiple layers. Keep small bug

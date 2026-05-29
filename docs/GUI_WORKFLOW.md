@@ -83,10 +83,10 @@ The authoring window is organized around two user-facing modes:
   - Project uses a focused centered card, keeping the project folder path compact
     and secondary; project name and description are required before continuing to
     Conditions
-  - the Project image-timing selector is the user-facing source of
-    truth for condition duty-cycle mode; it is backed by condition-template profiles,
-    defaults to Continuous Images, and existing conditions are standardized when the
-    selected timing changes
+  - the Project image-timing selector is the default timing template for new
+    conditions; it is backed by condition-template profiles, defaults to Continuous
+    Images, and does not rewrite existing conditions unless the user explicitly applies
+    the selected template to all conditions
   - Project exposes `Enable participant tutorial?`, which controls whether the
     participant sees the fixation response tutorial before the first condition
   - Experiment combines display, image-size, and session settings in one compact centered card
@@ -106,9 +106,12 @@ The authoring window is organized around two user-facing modes:
   - the Session column exposes repeats per condition, the fixed Space start key, and
     whether participant transition screens show authored condition titles; condition
     order is always randomized automatically for each launch
-  - the Conditions step uses compact condition rows and a combined condition
+  - the Conditions step uses compact condition rows showing each condition's current
+    timing template and a combined condition
     setup surface for condition list actions, name, trigger code, participant
     instructions, modality, and base/oddball stimulus authoring
+  - each selected condition exposes an advanced timing selector for Continuous Images
+    or 50% Blank Between Images; changing it updates only that condition
   - image conditions use the existing base/oddball image source cards; word conditions
     use typed Base Words and Oddball Words editors with one word or short phrase per line
   - word editors save only non-empty lines while preserving the focused editor's
@@ -128,6 +131,7 @@ The authoring window is organized around two user-facing modes:
   - control-condition creation, image normalization, and image materialization are
     image-only paths and are disabled or skipped for word conditions
   - raw timing fields such as `Cycles / Repeat` are hidden from the guided workflow
+    while the friendly per-condition timing-template choice remains available
   - Conditions is complete when every condition has a descriptive name, trigger
     code of 1 or higher, and configured base/oddball stimuli for its modality
   - Fixation keeps color changes enabled and exposes schedule, capped target counts,

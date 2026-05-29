@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from fpvs_studio.core.compiler import CompileError, compile_session_plan
-from fpvs_studio.core.enums import InterConditionMode, StimulusModality
+from fpvs_studio.core.enums import DutyCycleMode, InterConditionMode, StimulusModality
 from fpvs_studio.core.models import Condition, StimulusSet
 
 
@@ -42,6 +42,34 @@ def test_session_plan_default_block_contains_all_conditions_once(
         "condition-4",
     ]
     assert [entry.global_order_index for entry in session_plan.ordered_entries()] == [0, 1, 2, 3]
+
+
+def test_session_plan_preserves_mixed_condition_timing(
+    multi_condition_project,
+    multi_condition_project_root,
+) -> None:
+    multi_condition_project.settings.session.block_count = 1
+    multi_condition_project.conditions[0].duty_cycle_mode = DutyCycleMode.CONTINUOUS
+    multi_condition_project.conditions[1].duty_cycle_mode = DutyCycleMode.BLANK_50
+
+    session_plan = compile_session_plan(
+        multi_condition_project,
+        refresh_hz=120.0,
+        project_root=multi_condition_project_root,
+        random_seed=123,
+    )
+
+    displays_by_condition = {
+        entry.run_spec.condition.condition_id: entry.run_spec.display
+        for entry in session_plan.ordered_entries()
+    }
+    continuous_display = displays_by_condition[multi_condition_project.conditions[0].condition_id]
+    blank_display = displays_by_condition[multi_condition_project.conditions[1].condition_id]
+
+    assert continuous_display.on_frames == continuous_display.frames_per_stimulus
+    assert continuous_display.off_frames == 0
+    assert blank_display.on_frames == blank_display.frames_per_stimulus // 2
+    assert blank_display.off_frames == blank_display.frames_per_stimulus // 2
 
 
 def test_session_plan_two_block_randomization_is_deterministic_for_fixed_seed(

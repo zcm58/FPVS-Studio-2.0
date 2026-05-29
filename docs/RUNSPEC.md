@@ -42,6 +42,11 @@ For v1:
 Runtime and engines must consume these compiled frame counts directly. They do
 not recompute protocol logic from `ProjectFile`.
 
+The editable project stores duty-cycle mode per condition. Project-level
+condition-template profiles only seed defaults for authoring; mixed Continuous Images
+and 50% Blank Between Images sessions compile into separate `RunSpec` entries with each
+condition's resolved frame counts.
+
 ## Main fields
 
 ### `DisplayRunSpec`

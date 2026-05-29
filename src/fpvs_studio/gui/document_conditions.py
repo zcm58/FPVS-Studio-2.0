@@ -9,7 +9,7 @@ from fpvs_studio.core.condition_template_profiles import (
     apply_condition_defaults_to_condition,
     apply_condition_template_profile_to_settings,
 )
-from fpvs_studio.core.enums import StimulusModality, StimulusVariant
+from fpvs_studio.core.enums import DutyCycleMode, StimulusModality, StimulusVariant
 from fpvs_studio.core.models import (
     Condition,
     ConditionDefaults,
@@ -363,6 +363,15 @@ class DocumentConditionMixin:
             conditions=self._reindex_conditions(conditions),
         )
         self._replace_project(project)
+
+    def update_condition_timing_template(
+        self,
+        condition_id: str,
+        duty_cycle_mode: DutyCycleMode,
+    ) -> None:
+        """Update one condition's timing-template choice only."""
+
+        self.update_condition(condition_id, duty_cycle_mode=duty_cycle_mode)
 
     def set_condition_stimulus_modality(
         self,

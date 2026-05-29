@@ -27,7 +27,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from fpvs_studio.core.enums import StimulusModality, StimulusVariant
+from fpvs_studio.core.enums import DutyCycleMode, StimulusModality, StimulusVariant
 from fpvs_studio.core.models import Condition, StimulusSet
 from fpvs_studio.core.paths import stimuli_dir
 from fpvs_studio.core.validation import (
@@ -48,6 +48,7 @@ from fpvs_studio.gui.window_helpers import (
     _resolution_text,
     _show_error_dialog,
     _sync_text_editor_contents,
+    _timing_template_label,
 )
 from fpvs_studio.gui.workers import ProgressTask
 
@@ -353,6 +354,11 @@ class ConditionSetupStep(QWidget):
         self.modality_combo.addItem("Images", StimulusModality.IMAGE.value)
         self.modality_combo.addItem("Words", StimulusModality.WORD.value)
         self.modality_combo.currentIndexChanged.connect(self._apply_modality)
+        self.timing_template_combo = QComboBox(self)
+        self.timing_template_combo.setObjectName("setup_wizard_condition_timing_template_combo")
+        for mode in (DutyCycleMode.CONTINUOUS, DutyCycleMode.BLANK_50):
+            self.timing_template_combo.addItem(_timing_template_label(mode), mode)
+        self.timing_template_combo.currentIndexChanged.connect(self._apply_timing_template)
         self.target_repeats_spin = QSpinBox(self)
         self.target_repeats_spin.setObjectName("setup_wizard_target_repeats_per_image_spin")
         self.target_repeats_spin.setRange(1, 10000)
@@ -394,6 +400,7 @@ class ConditionSetupStep(QWidget):
         form.addRow("Condition Name", self.condition_name_edit)
         form.addRow("Trigger Code", self.trigger_code_spin)
         form.addRow("Stimulus Type", self.modality_combo)
+        form.addRow("Advanced Timing", self.timing_template_combo)
         form.addRow("Target Stimulus Repeats", target_repeats_row)
         form.addRow("Participant Instructions", self.instructions_edit)
         details_section_layout.addLayout(form)
@@ -548,9 +555,13 @@ class ConditionSetupStep(QWidget):
         with QSignalBlocker(self.condition_list):
             self.condition_list.clear()
             for condition in self._document.ordered_conditions():
-                item = QListWidgetItem(condition.name)
+                item = QListWidgetItem(
+                    f"{condition.name}\n"
+                    f"{_timing_template_label(condition.duty_cycle_mode)} - "
+                    f"{self._condition_status_text(condition)}"
+                )
                 item.setToolTip(self._condition_status_text(condition))
-                item.setSizeHint(QSize(0, 34))
+                item.setSizeHint(QSize(0, 48))
                 item.setData(Qt.ItemDataRole.UserRole, condition.condition_id)
                 self.condition_list.addItem(item)
                 if condition.condition_id == selected_condition_id:
@@ -591,6 +602,7 @@ class ConditionSetupStep(QWidget):
             self.condition_name_edit,
             self.trigger_code_spin,
             self.modality_combo,
+            self.timing_template_combo,
             self.target_repeats_spin,
             self.repeat_calculator_button,
             self.instructions_edit,
@@ -617,6 +629,8 @@ class ConditionSetupStep(QWidget):
                 self.trigger_code_spin.setValue(0)
             with QSignalBlocker(self.modality_combo):
                 self.modality_combo.setCurrentIndex(0)
+            with QSignalBlocker(self.timing_template_combo):
+                self.timing_template_combo.setCurrentIndex(-1)
             with QSignalBlocker(self.target_repeats_spin):
                 self.target_repeats_spin.setValue(
                     self._document.project.settings.condition_defaults.target_repeats_per_image
@@ -650,6 +664,10 @@ class ConditionSetupStep(QWidget):
         with QSignalBlocker(self.modality_combo):
             self.modality_combo.setCurrentIndex(
                 self.modality_combo.findData(modality.value)
+            )
+        with QSignalBlocker(self.timing_template_combo):
+            self.timing_template_combo.setCurrentIndex(
+                self.timing_template_combo.findData(condition.duty_cycle_mode)
             )
         with QSignalBlocker(self.target_repeats_spin):
             self.target_repeats_spin.setValue(
@@ -848,6 +866,17 @@ class ConditionSetupStep(QWidget):
             )
         except Exception as error:
             _show_error_dialog(self, "Condition Defaults Error", error)
+            self.refresh()
+
+    def _apply_timing_template(self) -> None:
+        condition_id = self.selected_condition_id()
+        if condition_id is None:
+            return
+        try:
+            mode = DutyCycleMode(str(self.timing_template_combo.currentData()))
+            self._document.update_condition_timing_template(condition_id, mode)
+        except Exception as error:
+            _show_error_dialog(self, "Condition Timing Error", error)
             self.refresh()
 
     def _open_repeat_calculator(self) -> None:

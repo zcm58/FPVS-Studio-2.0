@@ -43,6 +43,7 @@ from fpvs_studio.gui.window_helpers import (
     _configure_read_only_list,
     _launcher_readiness_report,
     _set_list_items,
+    _timing_template_label,
 )
 
 _SETUP_GUIDE_STEPS: tuple[tuple[str, str, str], ...] = (
@@ -278,6 +279,21 @@ class SetupDashboardPage(QWidget):
         stimuli_label = (
             "assigned for all conditions" if assets_ready else "base and oddball folders needed"
         )
+        timing_labels = tuple(
+            sorted(
+                {
+                    _timing_template_label(condition.duty_cycle_mode)
+                    for condition in ordered_conditions
+                }
+            )
+        )
+        timing_label = (
+            "no timing configured"
+            if not timing_labels
+            else timing_labels[0]
+            if len(timing_labels) == 1
+            else f"Mixed timing: {', '.join(timing_labels)}"
+        )
         return (
             (
                 f"{'Complete' if project_ready else 'Needs setup'}: "
@@ -285,7 +301,7 @@ class SetupDashboardPage(QWidget):
             ),
             (
                 f"{'Complete' if ordered_conditions else 'Needs setup'}: Conditions - "
-                f"{len(ordered_conditions)} configured"
+                f"{len(ordered_conditions)} configured, {timing_label}"
             ),
             (
                 f"{'Complete' if assets_ready else 'Needs setup'}: Stimuli - "

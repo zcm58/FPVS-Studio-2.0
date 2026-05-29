@@ -54,6 +54,7 @@ from fpvs_studio.gui.window_helpers import (
     _conditions_have_assigned_assets,
     _launcher_readiness_report,
     _show_error_dialog,
+    _timing_template_label,
 )
 from fpvs_studio.gui.workers import ProgressTask
 
@@ -892,9 +893,25 @@ class SetupWizardPage(QWidget):
         session = project.settings.session
         display = project.settings.display
 
-        condition_lines = (
-            f"{len(conditions)} condition{'s' if len(conditions) != 1 else ''} configured",
+        condition_count_line = (
+            f"{len(conditions)} condition{'s' if len(conditions) != 1 else ''} configured"
         )
+        condition_lines = (condition_count_line,)
+        if conditions:
+            timing_labels = tuple(
+                sorted(
+                    {
+                        _timing_template_label(condition.duty_cycle_mode)
+                        for condition in conditions
+                    }
+                )
+            )
+            timing_line = (
+                f"Timing: {timing_labels[0]}"
+                if len(timing_labels) == 1
+                else f"Timing: Mixed ({', '.join(timing_labels)})"
+            )
+            condition_lines = (condition_count_line, timing_line)
 
         block_count = session.block_count
         background_label = self._display_background_label(str(display.background_color))

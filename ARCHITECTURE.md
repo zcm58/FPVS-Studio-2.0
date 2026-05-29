@@ -139,9 +139,10 @@ Current planned seams:
   The wizard uses a six-step compact top-progress flow: Project, Conditions,
   Experiment, Fixation, Response, and Review. Conditions handles condition identity,
   list actions, image-folder assignment for image conditions, typed word-list authoring
-  for word conditions, image-only control-condition creation, and image normalization to
-  square PNG assets. Conditions also surfaces project-wide Target Stimulus Repeats
-  and warning-only base/oddball repeat-balance guidance.
+  for word conditions, image-only control-condition creation, image normalization to
+  square PNG assets, and a per-condition advanced timing selector for Continuous Images
+  versus 50% Blank Between Images. Conditions also surfaces project-wide Target Stimulus
+  Repeats and warning-only base/oddball repeat-balance guidance.
   Setup steps share a compact content surface, with the top progress stepper carrying
   complete-state feedback instead of page-wide completion bars. The setup surface is
   guarded by pytest-qt coverage that checks all six steps at `1120x720` for stable
@@ -162,10 +163,9 @@ Current planned seams:
   Project handles the optional participant tutorial before the first condition, and
   Response handles accuracy tracking, response key/window, appearance, and live preview.
   Display settings include refresh rate, black/dark-gray background choices, and
-  project-wide stimulus visual angle geometry. Detailed Conditions no longer exposes a
-  wizard advanced editor; duty-cycle selection is
-  centralized in the Project Details image-timing selector, backed by
-  condition-template profiles. Stimuli Manager
+  project-wide stimulus visual angle geometry. Project Details keeps the default
+  condition-template selector for future conditions and explicit bulk standardization;
+  individual condition duty-cycle choices live on each condition. Stimuli Manager
   remains an internal support page, not a guided setup step.
 - GUI project management uses `manage_projects_dialog.py` as a themed component-layer
   surface while `controller.py` owns disk-backed project discovery, recent-project

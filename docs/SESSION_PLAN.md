@@ -42,6 +42,10 @@ Represents one compiled occurrence of one condition inside the session:
 - deterministic `run_id`
 - embedded single-condition `RunSpec`
 
+Each embedded `RunSpec` carries that condition's resolved timing template. A single
+`SessionPlan` may mix continuous-image and 50% blank conditions without adding
+session-level timing branches.
+
 ### `SessionBlock`
 
 Represents one randomized block in the session:

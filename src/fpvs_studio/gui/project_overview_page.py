@@ -108,9 +108,13 @@ class ProjectOverviewEditor(QWidget):
         self.manage_templates_button.setObjectName("project_manage_templates_button")
         self.manage_templates_button.clicked.connect(self._open_template_manager)
         self.apply_profile_to_conditions_button = QPushButton(
-            "Apply Template To All Conditions", self
+            "Apply Template To All Conditions",
+            self,
         )
         self.apply_profile_to_conditions_button.setObjectName("apply_profile_to_conditions_button")
+        self.apply_profile_to_conditions_button.setToolTip(
+            "Apply the selected default timing template to all existing conditions."
+        )
         self.apply_profile_to_conditions_button.clicked.connect(self._apply_profile_to_conditions)
         self.apply_profile_to_conditions_button.setVisible(False)
         self.participant_tutorial_checkbox = QCheckBox("Enable participant tutorial?", self)
@@ -130,6 +134,7 @@ class ProjectOverviewEditor(QWidget):
         condition_profile_layout.setContentsMargins(0, 0, 0, 0)
         condition_profile_layout.setSpacing(8)
         condition_profile_layout.addWidget(self.condition_profile_combo, 1)
+        condition_profile_layout.addWidget(self.apply_profile_to_conditions_button)
         condition_profile_layout.addWidget(self.manage_templates_button)
 
         self.project_overview_card = SectionCard(
@@ -156,7 +161,7 @@ class ProjectOverviewEditor(QWidget):
         header_title = QLabel("Project Details", header_text)
         header_title.setObjectName("project_overview_title")
         header_subtitle = QLabel(
-            "Name the experiment and choose continuous or 50% blank image timing.",
+            "Name the experiment and choose the default timing for new conditions.",
             header_text,
         )
         header_subtitle.setObjectName("project_overview_subtitle")
@@ -273,6 +278,7 @@ class ProjectOverviewEditor(QWidget):
         self.apply_profile_to_conditions_button.setEnabled(
             selected_profile is not None and bool(self._document.project.conditions)
         )
+        self.apply_profile_to_conditions_button.setVisible(bool(self._document.project.conditions))
         self._refresh_checklist()
 
     def _profile_id_for_duty_cycle(
@@ -312,7 +318,7 @@ class ProjectOverviewEditor(QWidget):
         try:
             self._document.apply_condition_template_profile(
                 profile,
-                apply_to_existing_conditions=bool(self._document.project.conditions),
+                apply_to_existing_conditions=False,
             )
         except Exception as error:
             _show_error_dialog(self, "Condition Template Error", error)

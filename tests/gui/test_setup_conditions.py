@@ -24,7 +24,7 @@ from tests.gui.helpers import (
     _write_mixed_image_directory,
 )
 
-from fpvs_studio.core.enums import StimulusModality, StimulusVariant
+from fpvs_studio.core.enums import DutyCycleMode, StimulusModality, StimulusVariant
 from fpvs_studio.gui.controller import StudioController
 from fpvs_studio.gui.design_system import PAGE_SECTION_GAP
 
@@ -62,7 +62,7 @@ def test_setup_wizard_conditions_step_duplicates_metadata_without_images(
     assert base_set.image_count == 0
     assert oddball_set.image_count == 0
     assert "Needs images" in step.condition_list.currentItem().toolTip()
-    assert "\n" not in step.condition_list.currentItem().text()
+    assert "Continuous Images" in step.condition_list.currentItem().text()
 
 
 def test_setup_wizard_conditions_step_authors_word_condition(
@@ -193,7 +193,7 @@ def test_setup_wizard_conditions_step_requires_descriptive_name_and_positive_tri
     condition_id = step.selected_condition_id()
     assert isinstance(condition_id, str)
     assert "Needs name" in step.condition_list.currentItem().toolTip()
-    assert "\n" not in step.condition_list.currentItem().text()
+    assert "Continuous Images" in step.condition_list.currentItem().text()
     assert not guide.step_status_label.isVisible()
     assert not step.base_source_card.status_badge.isVisible()
     assert not step.oddball_source_card.status_badge.isVisible()
@@ -236,6 +236,37 @@ def test_setup_wizard_conditions_step_requires_descriptive_name_and_positive_tri
     assert step.base_check_status.text() == "Complete"
     assert step.oddball_check_status.text() == "Complete"
     assert next_button.isEnabled()
+
+
+def test_setup_wizard_condition_timing_template_updates_selected_condition_only(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Mixed Timing")
+    guide = window.setup_wizard_page
+    step = guide.condition_setup_step
+    guide.open_wizard(step_key="conditions")
+
+    qtbot.mouseClick(step.add_condition_button, Qt.MouseButton.LeftButton)
+    first_condition_id = step.selected_condition_id()
+    assert isinstance(first_condition_id, str)
+    qtbot.mouseClick(step.add_condition_button, Qt.MouseButton.LeftButton)
+    second_condition_id = step.selected_condition_id()
+    assert isinstance(second_condition_id, str)
+
+    blank_index = step.timing_template_combo.findData(DutyCycleMode.BLANK_50)
+    assert blank_index >= 0
+    step.timing_template_combo.setCurrentIndex(blank_index)
+    QApplication.processEvents()
+
+    first_condition = window.document.get_condition(first_condition_id)
+    second_condition = window.document.get_condition(second_condition_id)
+    assert first_condition is not None
+    assert second_condition is not None
+    assert first_condition.duty_cycle_mode == DutyCycleMode.CONTINUOUS
+    assert second_condition.duty_cycle_mode == DutyCycleMode.BLANK_50
+    assert "50% Blank Between Images" in step.condition_list.currentItem().text()
 
 
 def test_setup_wizard_conditions_step_shows_repeat_target_and_balance(

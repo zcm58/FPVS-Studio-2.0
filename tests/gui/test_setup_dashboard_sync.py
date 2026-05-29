@@ -50,7 +50,7 @@ def test_setup_dashboard_edits_sync_document_and_dedicated_tabs(
     conditions_page.variant_combo.setCurrentIndex(
         conditions_page.variant_combo.findData(StimulusVariant.GRAYSCALE)
     )
-    assert not hasattr(conditions_page, "duty_cycle_combo")
+    assert conditions_page.timing_template_combo.currentData() == DutyCycleMode.BLANK_50
 
     window.main_stack.setCurrentWidget(dashboard)
     session_editor = dashboard.session_structure_editor

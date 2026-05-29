@@ -87,7 +87,7 @@ def test_condition_editor_round_trip(
     window.conditions_page.variant_combo.setCurrentIndex(
         window.conditions_page.variant_combo.findData(StimulusVariant.GRAYSCALE)
     )
-    assert not hasattr(window.conditions_page, "duty_cycle_combo")
+    assert window.conditions_page.timing_template_combo.currentData() == DutyCycleMode.BLANK_50
 
     assert window.save_project() is True
     controller.open_project(window.document.project_root)
@@ -781,6 +781,24 @@ def test_condition_template_selection_standardizes_existing_rows(
     second_after = window.document.get_condition(second_condition_id)
     assert first_after is not None
     assert second_after is not None
+    assert first_after.duty_cycle_mode == DutyCycleMode.CONTINUOUS
+    assert second_after.duty_cycle_mode == DutyCycleMode.CONTINUOUS
+    assert first_after.sequence_count == 2
+    assert second_after.sequence_count == 3
+    assert first_after.oddball_cycle_repeats_per_sequence == 88
+    assert second_after.oddball_cycle_repeats_per_sequence == 90
+
+    apply_button = (
+        window.setup_dashboard_page.project_overview_editor.apply_profile_to_conditions_button
+    )
+    assert not apply_button.isHidden()
+    assert apply_button.isEnabled()
+    qtbot.mouseClick(apply_button, Qt.MouseButton.LeftButton)
+
+    first_after = window.document.get_condition(first_condition_id)
+    second_after = window.document.get_condition(second_condition_id)
+    assert first_after is not None
+    assert second_after is not None
     assert first_after.duty_cycle_mode == DutyCycleMode.BLANK_50
     assert second_after.duty_cycle_mode == DutyCycleMode.BLANK_50
     assert first_after.sequence_count == 1
@@ -814,11 +832,18 @@ def test_unprofiled_project_shows_continuous_timing_and_can_switch_to_blank(
 
     condition = window.document.get_condition(condition_id)
     assert condition is not None
-    assert condition.duty_cycle_mode == DutyCycleMode.BLANK_50
+    assert condition.duty_cycle_mode == DutyCycleMode.CONTINUOUS
     assert (
         window.document.project.settings.condition_profile_id
         == SIXTY_HZ_BLANK_FIXATION_PROFILE_ID
     )
+
+    qtbot.mouseClick(window.conditions_page.add_condition_button, Qt.MouseButton.LeftButton)
+    new_condition_id = window.conditions_page.selected_condition_id()
+    assert new_condition_id is not None
+    new_condition = window.document.get_condition(new_condition_id)
+    assert new_condition is not None
+    assert new_condition.duty_cycle_mode == DutyCycleMode.BLANK_50
 
 
 def test_switching_existing_blank_project_to_continuous_compiles_without_blank_frames(
@@ -854,6 +879,14 @@ def test_switching_existing_blank_project_to_continuous_compiles_without_blank_f
         continuous_index
     )
 
+    condition = window.document.get_condition(condition_id)
+    assert condition is not None
+    assert condition.duty_cycle_mode == DutyCycleMode.BLANK_50
+    continuous_timing_index = window.conditions_page.timing_template_combo.findData(
+        DutyCycleMode.CONTINUOUS
+    )
+    assert continuous_timing_index >= 0
+    window.conditions_page.timing_template_combo.setCurrentIndex(continuous_timing_index)
     condition = window.document.get_condition(condition_id)
     assert condition is not None
     assert condition.duty_cycle_mode == DutyCycleMode.CONTINUOUS
