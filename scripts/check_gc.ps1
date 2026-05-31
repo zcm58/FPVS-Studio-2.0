@@ -5,10 +5,8 @@ param(
 $ErrorActionPreference = "Stop"
 
 $RepoRoot = Split-Path -Parent $PSScriptRoot
-$Python = Join-Path $RepoRoot ".venv3.10\Scripts\python.exe"
-if (-not (Test-Path $Python)) {
-    $Python = "python"
-}
+. (Join-Path $PSScriptRoot "script_helpers.ps1")
+$Python = Resolve-RepoPython -RepoRoot $RepoRoot
 
 function Invoke-GitGrep {
     param(
@@ -71,7 +69,13 @@ try {
     $localPathMatches = Invoke-GitGrep "C:\\Users\\" @("src", "tests", "scripts")
     Add-Failure $failures "Do not commit local machine paths into source, tests, or scripts." $localPathMatches
 
-    & $Python -m pytest -q tests\unit\test_harness_docs.py tests\unit\test_import_boundaries.py
+    Invoke-NativeChecked -File $Python -Arguments @(
+        "-m",
+        "pytest",
+        "-q",
+        "tests\unit\test_harness_docs.py",
+        "tests\unit\test_import_boundaries.py"
+    )
     & (Join-Path $PSScriptRoot "check_docs_hygiene.ps1")
 
     if ($failures.Count -gt 0) {

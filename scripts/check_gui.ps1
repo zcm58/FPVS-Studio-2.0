@@ -1,10 +1,8 @@
 $ErrorActionPreference = "Stop"
 
 $RepoRoot = Split-Path -Parent $PSScriptRoot
-$Python = Join-Path $RepoRoot ".venv3.10\Scripts\python.exe"
-if (-not (Test-Path $Python)) {
-    $Python = "python"
-}
+. (Join-Path $PSScriptRoot "script_helpers.ps1")
+$Python = Resolve-RepoPython -RepoRoot $RepoRoot
 $TotalTimeoutSeconds = 900
 if ($env:FPVS_GUI_CHECK_TIMEOUT_SECONDS) {
     $ParsedTimeout = 0

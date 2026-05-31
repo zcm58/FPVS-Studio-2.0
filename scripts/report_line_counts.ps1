@@ -8,16 +8,48 @@ param(
 $ErrorActionPreference = "Stop"
 
 $RepoRoot = Split-Path -Parent $PSScriptRoot
+. (Join-Path $PSScriptRoot "script_helpers.ps1")
+
+$TextExtensions = @(
+    ".bat",
+    ".cfg",
+    ".cmd",
+    ".css",
+    ".csv",
+    ".html",
+    ".ini",
+    ".iss",
+    ".js",
+    ".json",
+    ".md",
+    ".ps1",
+    ".py",
+    ".spec",
+    ".toml",
+    ".ts",
+    ".tsv",
+    ".txt",
+    ".yaml",
+    ".yml"
+)
 
 Push-Location $RepoRoot
 try {
-    $files = @(& git ls-files)
+    $files = @(Invoke-NativeOutputChecked -File "git" -Arguments @("ls-files"))
     if ($IncludeUntracked) {
-        $files += @(& git ls-files --others --exclude-standard)
+        $files += @(Invoke-NativeOutputChecked -File "git" -Arguments @(
+            "ls-files",
+            "--others",
+            "--exclude-standard"
+        ))
     }
 
     $rows = foreach ($file in $files) {
         if (-not (Test-Path -LiteralPath $file -PathType Leaf)) {
+            continue
+        }
+        $extension = [System.IO.Path]::GetExtension($file).ToLowerInvariant()
+        if ($TextExtensions -notcontains $extension) {
             continue
         }
         try {

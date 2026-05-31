@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from importlib import import_module
 from typing import Any
 
 
@@ -19,9 +20,11 @@ def load_psychopy_modules() -> PsychoPyModules:
     """Import PsychoPy modules lazily for the PsychoPy engine."""
 
     try:
-        import psychopy  # type: ignore[import-untyped]
-        from psychopy import core, logging, visual
-        from psychopy.hardware import keyboard  # type: ignore[import-untyped]
+        psychopy = import_module("psychopy")
+        visual = import_module("psychopy.visual")
+        core = import_module("psychopy.core")
+        keyboard = import_module("psychopy.hardware.keyboard")
+        logging = import_module("psychopy.logging")
     except ImportError as exc:  # pragma: no cover - exercised by import-boundary tests
         raise RuntimeError(
             "PsychoPy is not installed. Install the optional 'engine' "

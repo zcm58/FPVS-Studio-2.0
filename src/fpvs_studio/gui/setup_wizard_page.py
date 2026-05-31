@@ -896,7 +896,7 @@ class SetupWizardPage(QWidget):
         condition_count_line = (
             f"{len(conditions)} condition{'s' if len(conditions) != 1 else ''} configured"
         )
-        condition_lines = (condition_count_line,)
+        condition_lines: tuple[str, ...] = (condition_count_line,)
         if conditions:
             timing_labels = tuple(
                 sorted(

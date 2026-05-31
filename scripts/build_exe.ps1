@@ -5,23 +5,8 @@ param(
 $ErrorActionPreference = "Stop"
 
 $RepoRoot = Split-Path -Parent $PSScriptRoot
-$Python = Join-Path $RepoRoot ".venv3.10\Scripts\python.exe"
-if (-not (Test-Path -LiteralPath $Python)) {
-    $Python = "python"
-}
-
-function Invoke-Native {
-    param(
-        [Parameter(Mandatory = $true)]
-        [string]$File,
-        [string[]]$Arguments
-    )
-
-    & $File @Arguments
-    if ($LASTEXITCODE -ne 0) {
-        throw "Command failed with exit code ${LASTEXITCODE}: $File $($Arguments -join ' ')"
-    }
-}
+. (Join-Path $PSScriptRoot "script_helpers.ps1")
+$Python = Resolve-RepoPython -RepoRoot $RepoRoot
 
 function Remove-RepoOutput {
     param([string]$RelativePath)
@@ -56,10 +41,10 @@ function Assert-PackageMetadataVersion {
         [string]$ExpectedVersion
     )
 
-    $versionOutput = & $Python -c "import importlib.metadata as m, sys, fpvs_studio; sys.stdout.write(fpvs_studio.__version__ + '\n' + m.version('fpvs-studio') + '\n')"
-    if ($LASTEXITCODE -ne 0) {
-        throw "Could not verify installed fpvs-studio package metadata."
-    }
+    $versionOutput = Invoke-NativeOutputChecked -File $Python -Arguments @(
+        "-c",
+        "import importlib.metadata as m, sys, fpvs_studio; sys.stdout.write(fpvs_studio.__version__ + '\n' + m.version('fpvs-studio') + '\n')"
+    )
     $versions = @($versionOutput)
     if ($versions.Count -lt 2) {
         throw "Package metadata verification did not return both source and installed versions."
@@ -105,16 +90,8 @@ function Assert-BundledPackageMetadataVersion {
 
 Push-Location $RepoRoot
 try {
-    $pythonVersion = & $Python -c "import sys; sys.stdout.write(f'{sys.version_info.major}.{sys.version_info.minor}')"
-    if ($LASTEXITCODE -ne 0) {
-        throw "Could not run Python executable: $Python"
-    }
-    if ($pythonVersion.Trim() -ne "3.10") {
-        throw "FPVS Studio packaging requires Python 3.10; found $pythonVersion at $Python"
-    }
-
     if (-not $SkipInstall) {
-        Invoke-Native -File $Python -Arguments @(
+        Invoke-NativeChecked -File $Python -Arguments @(
             "-m",
             "pip",
             "install",
@@ -129,7 +106,7 @@ try {
     Remove-RepoOutput "build\pyinstaller"
     Remove-RepoOutput "dist\FPVS Studio"
 
-    Invoke-Native -File $Python -Arguments @(
+    Invoke-NativeChecked -File $Python -Arguments @(
         "-m",
         "PyInstaller",
         "--noconfirm",
