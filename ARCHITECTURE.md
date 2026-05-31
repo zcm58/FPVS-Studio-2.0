@@ -52,6 +52,13 @@ dependency boundaries, changes task context recipes, or changes supported verifi
 commands, update this map and the relevant nested `AGENTS.md` or deeper `docs/` page in
 the same change.
 
+Keep this file as a compact router, not a monolithic manual. When updating it, put
+detailed workflow, implementation, packaging, or decomposition guidance in the relevant
+package `AGENTS.md`, focused `docs/` page, execution plan, or repo-local skill, then link
+to that source from the package map or task recipe here. If new architecture text only
+matters after an agent has matched a specific task type, it belongs in that task's deeper
+doc, not in this always-read map.
+
 Run `python -m pytest -q tests\unit\test_harness_docs.py` after harness-documentation
 edits. The full quality gate also runs this check.
 
@@ -61,23 +68,11 @@ The current app version is declared once in `pyproject.toml`. The Python distrib
 name is `fpvs-studio`, while the user-facing application name remains FPVS Studio.
 `src/fpvs_studio/__init__.py` reads `__version__` from source-tree `pyproject.toml`
 when present and falls back to installed package metadata for bundled installs.
-`tests/unit/test_package_metadata.py` guards the contract. Use `docs/PACKAGING.md` for
-the developer version-bump and build workflow.
+`tests/unit/test_package_metadata.py` guards the contract.
 
-Local release builds can use `scripts/build_release.ps1`, or double-click
-`scripts/build_release.cmd`, to run the executable and installer stages in order.
-Local executable builds use `scripts/build_exe.ps1`, which runs the checked-in
-PyInstaller spec at `packaging/pyinstaller/fpvs_studio.spec` and writes ignored build
-artifacts under `build/` and `dist/`. Installer builds use `scripts/build_installer.ps1`,
-which wraps the whole PyInstaller onedir folder with the checked-in Inno Setup script at
-`packaging/inno/fpvs_studio.iss` and writes `dist\installer\FPVS-Studio-Setup-*.exe`.
-`scripts/smoke_packaged_app.ps1` runs the packaged executable in a bounded diagnostic
-mode to verify installed metadata and update-dialog behavior before release. GitHub
-release uploads remain a manual release step.
-
-The shared app icon lives in `packaging/assets/fpvs-studio.ico` for release tooling and
-`src/fpvs_studio/assets/fpvs-studio.ico` for GUI window icons. README/GitHub branding
-images live under `docs/assets/`.
+Use `docs/PACKAGING.md` for version bumps, executable/installer builds, bundled smoke
+checks, update release requirements, and branding assets. Use `packaging/AGENTS.md` for
+packaging-local boundaries before editing release tooling.
 
 In-app update checks use `src/fpvs_studio/updates/` to query GitHub Releases, compare
 against `fpvs_studio.__version__`, download the expected `FPVS-Studio-Setup-*.exe`
@@ -98,163 +93,50 @@ The preferred split pattern is a behavior-preserving move behind the current pub
 keep imports stable first, move one responsibility at a time, and run the narrow gate for
 that layer after each move.
 
-Current planned seams:
-
-- `src/fpvs_studio/gui/document.py` remains the GUI-facing `ProjectDocument` facade.
-  Focused helper modules own document support types/defaults
-  (`document_support.py`), condition mutation (`document_conditions.py`), stimulus import
-  and manifest sync (`document_stimuli.py`), and validation/compilation/preflight/launch
-  coordination (`document_runtime.py`).
-- `src/fpvs_studio/core/compiler.py` keeps the public `compile_run_spec` and
-  `compile_session_plan` entry points stable. Focused helper modules own shared compiler
-  support/errors/ids (`compiler_support.py`), condition selection and validation
-  (`compiler_conditions.py`), modality-aware stimulus pool resolution
-  (`compiler_assets.py`), stimulus/trigger/transition schedules
-  (`compiler_schedules.py`), and fixation target/event planning
-  (`compiler_fixation.py`).
-- `src/fpvs_studio/engines/psychopy_engine.py` keeps the `PsychoPyEngine` public
-  surface and main frame loop stable. Focused helper modules own lazy PsychoPy loading
-  (`psychopy_loader.py`), text-screen rendering (`psychopy_text_screens.py`), stimulus
-  preparation/draw decisions (`psychopy_stimuli.py`), timing configuration/QC
-  (`psychopy_timing.py`), runtime metadata (`psychopy_metadata.py`), window/fixation
-  stimulus construction (`psychopy_window.py`), and trigger lookup/emission
-  (`psychopy_triggers.py`).
-- GUI session/fixation authoring uses `session_pages.py` as a compatibility export
-  facade. Session structure editing lives in `session_structure_page.py`; fixation-task
-  controls live in `fixation_settings_page.py` because fixation behavior is expected to
-  evolve independently.
-- GUI component/theme work starts from `src/fpvs_studio/gui/components.py`. It re-exports
-  shared page/card/status/path widgets, owns reusable button roles and stylesheets, and
-  keeps raw design tokens in `design_system.py`.
-- GUI workflow composition is Home-first. `main_window.py` uses a stack with a
-  centered Home launch card and `setup_wizard_page.py`; `Tools > Image Resizer`
-  adds a standalone in-window utility page for folder-level FPVS image optimization
-  without mutating project conditions, with post-success output-folder open/copy
-  actions kept in GUI-only helpers.
-  `root_folder_setup_dialog.py` provides first-run and Settings-accessible guidance
-  for choosing the FPVS Studio Root Folder before the native folder picker opens.
-  `StudioMainWindow` owns mode-specific sizing: compact `1120x720` launch-surface
-  sizing for Welcome/Home handoff, compact Setup sizing, focused utility sizing for
-  lightweight tools, and larger workspace sizing for future dense tool pages.
-  The wizard uses a six-step compact top-progress flow: Project, Conditions,
-  Experiment, Fixation, Response, and Review. Conditions handles condition identity,
-  list actions, image-folder assignment for image conditions, typed word-list authoring
-  for word conditions, image-only control-condition creation, image normalization to
-  square PNG assets, and a per-condition advanced timing selector for Continuous Images
-  versus 50% Blank Between Images. Conditions also surfaces project-wide Target Stimulus
-  Repeats and warning-only base/oddball repeat-balance guidance.
-  Setup steps share a compact content surface, with the top progress stepper carrying
-  complete-state feedback instead of page-wide completion bars. The setup surface is
-  guarded by pytest-qt coverage that checks all six steps at `1120x720` for stable
-  frame positioning, disabled vertical scrolling, and visible child-widget clipping.
-  Experiment combines display, image-size, and session settings in one compact centered
-  card; session order is always randomized automatically at launch while the realized
-  seed remains runtime metadata for reproducibility and legacy fixed-order fields stay
-  schema-compatible. Image-size settings are project-wide display geometry fields
-  compiled into `RunSpec` so square source image resolution stays independent from playback
-  size and word stimuli share the same timing/display geometry contract; the guided setup
-  also stores whether participant start screens show authored condition titles, stores
-  the intended test display pixel resolution, and exposes a
-  full-screen modal preview with live side-panel controls for checking apparent size on
-  the test machine. Runtime blocks launch if the active fullscreen resolution differs
-  from the configured intended resolution unless the project explicitly uses the current
-  screen resolution. Fixation handles target counts, minimum-gap timing, and
-  balanced seeded-jitter scheduling across the full condition duration, and
-  Project handles the optional participant tutorial before the first condition, and
-  Response handles accuracy tracking, response key/window, appearance, and live preview.
-  Display settings include refresh rate, black/dark-gray background choices, and
-  project-wide stimulus visual angle geometry. Project Details keeps the default
-  condition-template selector for future conditions and explicit bulk standardization;
-  individual condition duty-cycle choices live on each condition. Stimuli Manager
-  remains an internal support page, not a guided setup step.
-- GUI project management uses `manage_projects_dialog.py` as a themed component-layer
-  surface while `controller.py` owns disk-backed project discovery, recent-project
-  settings, app-level condition-template storage under
-  `<FPVSRoot>/.fpvs-studio/templates/`, and Recycle Bin confirmation/deletion side
-  effects. The dialog owns only presentation-level filtering and clipboard copy for
-  selected project paths.
-- Condition-template profile management keeps `condition_template_manager_dialog.py` as
-  the manager dialog and compatibility import point. The profile editor dialog lives in
-  `condition_template_profile_editor_dialog.py`.
-- Large GUI page modules are acceptable when they model one cohesive page or editor. Split
-  them only when a subcomponent has an independent lifecycle, test surface, or reusable
-  responsibility.
-- Large GUI tests should be split by workflow when they become hard to run or review
-  narrowly; production-module splits take priority over test-file line-count cleanup.
-
-Refactor priority:
-
-1. Keep the `ProjectDocument` helper split cohesive as GUI document behavior evolves.
-2. Keep compiler helper modules cohesive as compile behavior evolves.
-3. Keep the PsychoPy engine helper split conservative. Move playback-loop code only when
-   a tested seam is clear; frame-accurate behavior is easier to preserve when the loop
-   stays readable and contiguous.
-4. Keep future fixation-task GUI work in `fixation_settings_page.py` unless it changes
-   model compilation or runtime scoring, which remain core/runtime responsibilities.
+Current decomposition candidates and priority notes live in the Module Decomposition
+Watchlist section of `docs/TECH_DEBT.md`. GUI workflow details live in
+`docs/GUI_WORKFLOW.md`; do not duplicate wizard, launch-surface, or utility-page behavior
+here.
 
 ## Task Context Recipes
 
-Use these first reads before opening broad trees:
+Use these first reads before opening broad trees. Match one recipe, open only its
+listed context first, then use search for the specific symbol or behavior under review.
 
-Global Codex skills are workflow aids, not architecture sources. Apply them only after
-the first reads for the task are complete, and keep their output subordinate to the
-package boundaries, persisted formats, and harness commands in this file.
+Global Codex skills are workflow aids, not architecture sources. After the recipe reads,
+use `diagnose` for bugs/regressions, `improve-codebase-architecture` only for requested
+architecture/refactor reviews, `grill-me` for unresolved feature-plan decisions, and
+`dispatching-parallel-agents` only for independent investigations with disjoint write
+sets. Prefer repo-local skills in `.agents/skills/`; React, React Native, Vercel, and
+web-design skills are out of scope for this desktop app unless a new surface adds them.
 
-- Bug or regression task: use `diagnose` after reading the relevant recipe below. The
-  success criterion is a focused repo command that fails before the fix and passes after
-  it, or a documented reason that no correct automated seam exists.
-- GUI design task: use repo-local `.agents/skills/pyside6-gui-cleanup` and
-  `.agents/skills/pytest-qt-smoke` first. Use `impeccable` / `delight`,
-  `frontend-design`, or `ui-ux-pro-max` only to refine PySide6 layout, copy, hierarchy,
-  accessibility, or interaction decisions inside the existing component surface.
-- Architecture/refactor review: use `improve-codebase-architecture` only when the user
-  asks for architectural review or deeper refactor candidates. Cross-check candidates
-  against `docs/PLANS.md`, `docs/exec-plans/`, and package-local `AGENTS.md` files
-  before proposing edits.
-- Plan stress-test: use `grill-me` for unresolved feature-sized workflow, contract,
-  safety, or verification decisions, then capture durable decisions in an execution plan
-  when the work affects future tasks.
-- Independent multi-failure investigation: use `dispatching-parallel-agents` only when
-  delegation is available and the failing areas can be assigned without overlapping write
-  sets. Integrate by running the relevant focused and full gates afterward.
-- Skill discovery: use `find-skills` only for a missing specialized workflow. Prefer the
-  repo-local skills in `.agents/skills/` for GUI, path, legacy, PsychoPy migration, and
-  pytest-qt work.
-- Web-only skills: `web-design-guidelines` is limited to `docs-site/` or MkDocs UI work.
-  React, React Native, and Vercel skills are out of scope for the current desktop app.
-
-- GUI task: `src/fpvs_studio/gui/AGENTS.md`,
-  `docs/FRONTEND.md`, `docs/GUI_WORKFLOW.md`, the specific page/dialog module, matching
-  `tests/gui/test_*.py`, and `tests/gui/helpers.py` if workflow setup matters.
-- Display settings GUI task: `src/fpvs_studio/gui/runtime_settings_page.py`,
+- GUI task: `src/fpvs_studio/gui/AGENTS.md`, `docs/FRONTEND.md`,
+  `docs/GUI_WORKFLOW.md`, the specific page/dialog module, matching
+  `tests/gui/test_*.py`, and `tests/gui/helpers.py` when workflow setup matters.
+- Focused GUI reads: display settings use `src/fpvs_studio/gui/runtime_settings_page.py`,
   `src/fpvs_studio/gui/run_page.py`, `src/fpvs_studio/gui/setup_wizard_page.py`,
-  `tests/gui/test_setup_experiment_display.py`, and `tests/gui/test_run_page_launch.py`.
-- Setup Wizard shell/layout task: `src/fpvs_studio/gui/setup_wizard_page.py`,
-  `src/fpvs_studio/gui/components.py`, and `tests/gui/test_setup_wizard_shell.py`.
-- Setup Wizard condition-import task: `src/fpvs_studio/gui/condition_setup_step.py`,
-  `src/fpvs_studio/preprocessing/`, and `tests/gui/test_setup_conditions.py`.
-- Home launch-surface task: `src/fpvs_studio/gui/home_page.py`,
-  `src/fpvs_studio/gui/run_page.py`, and `tests/gui/test_home_launch_surface.py`.
-- Fixation Cross setup task: `src/fpvs_studio/gui/fixation_settings_page.py`,
-  `src/fpvs_studio/gui/setup_wizard_page.py`, `docs/GUI_WORKFLOW.md`, and
-  `tests/gui/test_conditions_session_fixation.py`.
+  `tests/gui/test_setup_experiment_display.py`, and `tests/gui/test_run_page_launch.py`;
+  setup shell uses `src/fpvs_studio/gui/setup_wizard_page.py`,
+  `src/fpvs_studio/gui/components.py`, and `tests/gui/test_setup_wizard_shell.py`;
+  condition import uses `src/fpvs_studio/gui/condition_setup_step.py`,
+  `src/fpvs_studio/preprocessing/`, and `tests/gui/test_setup_conditions.py`; Home uses
+  `src/fpvs_studio/gui/home_page.py`, `src/fpvs_studio/gui/run_page.py`, and
+  `tests/gui/test_home_launch_surface.py`; fixation setup uses
+  `src/fpvs_studio/gui/fixation_settings_page.py`, `src/fpvs_studio/gui/setup_wizard_page.py`,
+  `docs/GUI_WORKFLOW.md`, and `tests/gui/test_conditions_session_fixation.py`.
 - Compiler/session task: `src/fpvs_studio/core/AGENTS.md`,
-  `src/fpvs_studio/core/compiler.py`,
-  `src/fpvs_studio/core/session_plan.py`,
+  `src/fpvs_studio/core/compiler.py`, `src/fpvs_studio/core/session_plan.py`,
   `docs/RUNSPEC.md`, and `docs/SESSION_PLAN.md`.
 - Project config import/export task: `src/fpvs_studio/core/AGENTS.md`,
   `src/fpvs_studio/core/project_config.py`, `src/fpvs_studio/gui/main_window.py`,
   `src/fpvs_studio/gui/controller.py`, and `docs/GUI_WORKFLOW.md`.
-- Runtime task: `docs/RUNTIME_EXECUTION.md`,
-  `src/fpvs_studio/runtime/launcher.py`,
-  `src/fpvs_studio/runtime/preflight.py`,
-  `src/fpvs_studio/runtime/participant_history.py`,
-  `src/fpvs_studio/runtime/session_export.py`,
-  `src/fpvs_studio/core/execution.py`, and the relevant
-  `tests/unit/test_runtime_*.py` file.
-- Preprocessing task: `src/fpvs_studio/preprocessing/`,
-  `src/fpvs_studio/core/models.py`, `tests/unit/test_preprocessing_assets.py`,
-  and `tests/unit/test_preprocessing_inspection.py`.
+- Runtime task: `docs/RUNTIME_EXECUTION.md`, `src/fpvs_studio/runtime/launcher.py`,
+  `src/fpvs_studio/runtime/preflight.py`, `src/fpvs_studio/runtime/participant_history.py`,
+  `src/fpvs_studio/runtime/session_export.py`, `src/fpvs_studio/core/execution.py`,
+  and the relevant `tests/unit/test_runtime_*.py`.
+- Preprocessing task: `src/fpvs_studio/preprocessing/`, `src/fpvs_studio/core/models.py`,
+  `tests/unit/test_preprocessing_assets.py`, and
+  `tests/unit/test_preprocessing_inspection.py`.
 - PsychoPy migration task: `.agents/skills/fpvs-psychopy-migration/SKILL.md`,
   `.agents/skills/fpvs-psychopy-migration/references/migration-guide.md`,
   `src/fpvs_studio/core/AGENTS.md`, `src/fpvs_studio/preprocessing/AGENTS.md`,
@@ -262,19 +144,21 @@ package boundaries, persisted formats, and harness commands in this file.
   `docs/GUI_WORKFLOW.md`.
 - Image Resizer utility task: `docs/GUI_WORKFLOW.md`, `docs/FRONTEND.md`,
   `docs/references/archive/fpvs-toolbox-image-resizer/`,
-  `src/fpvs_studio/preprocessing/`,
-  `src/fpvs_studio/gui/components.py`, `src/fpvs_studio/gui/image_resizer_page.py`,
-  `src/fpvs_studio/gui/AGENTS.md`, and `tests/gui/test_image_resizer_page.py`.
+  `src/fpvs_studio/preprocessing/`, `src/fpvs_studio/gui/components.py`,
+  `src/fpvs_studio/gui/image_resizer_page.py`, `src/fpvs_studio/gui/AGENTS.md`, and
+  `tests/gui/test_image_resizer_page.py`.
+- Architecture/refactor/decomposition task: `docs/PLANS.md`, `docs/TECH_DEBT.md`,
+  `docs/exec-plans/`, the relevant package `AGENTS.md`, and focused tests for the
+  touched layer.
 - Docs-only task: `AGENTS.md`, this file, `docs/index.md`, and the doc being edited.
   Avoid source reads unless the doc describes a concrete contract.
-- Packaging task: `docs/PACKAGING.md`, `pyproject.toml`,
+- Packaging task: `docs/PACKAGING.md`, `packaging/AGENTS.md`, `pyproject.toml`,
   `packaging/pyinstaller/fpvs_studio.spec`, `packaging/inno/fpvs_studio.iss`,
-  `scripts/build_exe.ps1`, `scripts/build_installer.ps1`,
-  `tests/unit/test_package_metadata.py`, and this file.
-- Feature-sized workflow task: read `docs/PLANS.md` and `docs/exec-plans/README.md`,
-  create or update an active plan under `docs/exec-plans/active/`, then read the
-  related package docs and tests.
-- Docs garbage-collection task: read `docs/exec-plans/plan-review-workflow.md`, run
+  `scripts/build_exe.ps1`, `scripts/build_installer.ps1`, and
+  `tests/unit/test_package_metadata.py`.
+- Feature-sized workflow task: `docs/PLANS.md`, `docs/exec-plans/README.md`, an active
+  plan under `docs/exec-plans/active/`, then related package docs and tests.
+- Docs garbage-collection task: `docs/exec-plans/plan-review-workflow.md`,
   `.\scripts\check_docs_hygiene.ps1`, then update plan status or move stale docs.
 
 ## Contract Flow
@@ -317,16 +201,6 @@ is a runtime-owned reporting index.
 
 ## Deeper Docs
 
-- Docs entry point: `docs/index.md`
-- Product and v1 scope: `docs/PRODUCT_SENSE.md`, `docs/product-specs/`, and
-  `docs/FPVS_Studio_v1_Architecture_Spec.md`
-- Design docs: `docs/DESIGN.md` and `docs/design-docs/`
-- Packaging developer builds: `docs/PACKAGING.md`
-- Feature execution plans: `docs/PLANS.md` and `docs/exec-plans/`
-- GUI behavior and smoke-test guidance: `docs/FRONTEND.md` and `docs/GUI_WORKFLOW.md`
-- Quality, reliability, and security: `docs/QUALITY_SCORE.md`, `docs/RELIABILITY.md`,
-  and `docs/SECURITY.md`
-- Engine boundary: `docs/ENGINE_INTERFACE.md`
-- Run contract: `docs/RUNSPEC.md`
-- Session contract: `docs/SESSION_PLAN.md`
-- Runtime/export flow: `docs/RUNTIME_EXECUTION.md`
+Use `docs/index.md` as the structured entry point for deeper docs. Keep topic-specific
+details there or in the focused docs linked from the task recipes above, not duplicated
+in this architecture map.

@@ -29,42 +29,14 @@ experiments, with PsychoPy isolated behind runtime/engine boundaries.
 
 ## Codex skill routing
 
-Repo-local rules remain the source of truth. Invoke globally installed Codex skills only
-after reading the relevant repo map above and any nested `AGENTS.md` files for touched
-paths. A global skill can shape the workflow, but it must not override FPVS Studio's
-PySide6-only GUI, core/runtime/engine boundaries, execution contracts, verification
-gates, or no-silent-fallback guardrails.
+Repo-local rules remain the source of truth. Use the detailed routing in
+`ARCHITECTURE.md` Task Context Recipes after reading the relevant repo map and nested
+`AGENTS.md` files for touched paths.
 
-- Use `diagnose` for failing tests, GUI hangs, runtime/update regressions, or reported
-  bugs. Build a bounded reproduction first, then use the repo's focused pytest or script
-  gate as the pass/fail signal before editing.
-- Use `improve-codebase-architecture` only for user-requested architecture or refactor
-  reviews. Start from `ARCHITECTURE.md`, `docs/PLANS.md`, existing execution plans, and
-  nested package rules; propose repo-specific candidates before changing code.
-- Use `grill-me` when the user asks to stress-test a plan or when feature-sized work has
-  unresolved contract, workflow, or verification choices. Record durable outcomes in
-  `docs/exec-plans/` when the decision affects future agents.
-- Use `dispatching-parallel-agents` only when the current harness permits delegation and
-  the work splits into independent investigations with disjoint write scopes. Do not use
-  it for tightly coupled contract changes or shared GUI files.
-- Use `find-skills` only when the current repo-local skills and installed global skills
-  do not cover a requested specialized workflow. Do not turn routine FPVS Studio work
-  into an external skill search.
-- Use `.agents/skills/fpvs-psychopy-migration/SKILL.md` when migrating an existing
-  PsychoPy experiment, `.psyexp` file, image folder, CSV/Excel stimulus list, or word-list
-  paradigm into an FPVS Studio project.
-- For PySide6 GUI design work, `impeccable` / `delight`, `frontend-design`, and
-  `ui-ux-pro-max` may help critique layout, visual hierarchy, copy, and interaction
-  choices, but `docs/FRONTEND.md`, `docs/GUI_WORKFLOW.md`, `gui.components`, and
-  pytest-qt coverage remain the implementation contract.
-- Use `web-design-guidelines` only for MkDocs or `docs-site/` web documentation UI
-  surfaces. It is not a review gate for the PySide6 desktop application.
-
-Do not use React, React Native, or Vercel skills for this repository unless a future
-change explicitly adds a real web or mobile app surface. `react-best-practices`,
-`composition-patterns`, `react-view-transitions`, `react-native-skills`,
-`deploy-to-vercel`, `vercel-cli-with-tokens`, and `vercel-optimize` are excluded from
-normal FPVS Studio desktop work.
+Global skills can shape workflow, but must not override FPVS Studio's PySide6-only GUI,
+core/runtime/engine boundaries, execution contracts, verification gates, or
+no-silent-fallback guardrails. React, React Native, and Vercel skills are out of scope
+unless a future change explicitly adds a real web or mobile app surface.
 
 ## Repository guardrails
 
@@ -112,23 +84,14 @@ normal FPVS Studio desktop work.
 
 ## Standard verification
 
-- Run `python -m pytest -q tests\unit\test_harness_docs.py` after changing
-  `AGENTS.md`, `ARCHITECTURE.md`, `.agents/skills/`, docs task recipes, package
-  boundaries, or harness scripts.
-- Run `python -m pytest -q` for broad behavior changes.
-- Run `python -m ruff check .` after Python edits when available.
-- Run `python -m mypy src` after typed contract or boundary changes when available.
-- Use `.\scripts\check_quality.ps1` as the repo gate when touching multiple layers.
-- Use `.\scripts\check_gc.ps1` for harness garbage-collection checks that catch
-  mechanical drift such as forbidden GUI frameworks, source `print(...)`, stylesheet
-  drift, boundary leaks, and committed local paths.
-- Use `.\scripts\check_docs_hygiene.ps1` to review planned/active/completed execution
-  plans and keep stale setup or audit docs out of the docs root.
-- Use `.\scripts\check_gui.ps1`, `.\scripts\check_runtime.ps1`,
-  `.\scripts\check_compiler.ps1`, or `.\scripts\check_preprocessing.ps1` for
-  narrower cleanup passes.
-- Use `.\scripts\report_line_counts.ps1` as an advisory context-size report before
-  planning more module decomposition; split by responsibility, not by line count alone.
+- Harness/docs edits: `python -m pytest -q tests\unit\test_harness_docs.py`.
+- Python edits: `python -m ruff check .`; typed contract or boundary edits:
+  `python -m mypy src`; broad behavior edits: `python -m pytest -q`.
+- Multi-layer gate: `.\scripts\check_quality.ps1`. Focused gates:
+  `.\scripts\check_gui.ps1`, `.\scripts\check_runtime.ps1`,
+  `.\scripts\check_compiler.ps1`, and `.\scripts\check_preprocessing.ps1`.
+- Harness cleanup aids: `.\scripts\check_gc.ps1`, `.\scripts\check_docs_hygiene.ps1`,
+  and `.\scripts\report_line_counts.ps1`.
 - GUI changes need a focused pytest-qt smoke test, or documented manual smoke steps if
   automation is impractical.
 - Setup Wizard layout changes must keep the compact `1120x720` window free of

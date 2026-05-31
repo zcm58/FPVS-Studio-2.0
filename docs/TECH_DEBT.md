@@ -13,6 +13,60 @@ It is intentionally not a backlog for product features.
 | 4 | GUI module size | GUI | Monitor large cohesive GUI source modules and split only when responsibilities diverge or focused tests become hard to locate. | `.\scripts\report_line_counts.ps1` | Monitor |
 | 5 | GUI styling | GUI | Continue replacing one-off GUI styling with helpers in `src/fpvs_studio/gui/components.py`. | Focused GUI tests plus Ruff | Monitor |
 
+## Module Decomposition Watchlist
+
+Use this section after matching an architecture, refactor, or decomposition task in
+`../ARCHITECTURE.md`. File length is a signal, not the rule: split only when a module
+mixes responsibilities, forces broad context reads for narrow work, or makes focused
+tests hard to locate.
+
+Preferred split pattern:
+
+- Preserve the current public API first.
+- Move one responsibility at a time.
+- Run the narrow gate for the touched layer after each move.
+
+Current watchlist:
+
+- `src/fpvs_studio/gui/document.py` remains the GUI-facing `ProjectDocument` facade.
+  Focused helpers own document support/defaults, condition mutation, stimulus import
+  and manifest sync, and validation/compilation/preflight/launch coordination.
+- `src/fpvs_studio/core/compiler.py` keeps the public `compile_run_spec` and
+  `compile_session_plan` entry points stable. Helper modules own shared compiler
+  support, condition selection, asset resolution, schedules, and fixation planning.
+- `src/fpvs_studio/engines/psychopy_engine.py` keeps the `PsychoPyEngine` public
+  surface and main frame loop stable. Helper modules own lazy PsychoPy loading,
+  text-screen rendering, stimulus preparation, timing QC, metadata, window/fixation
+  construction, and trigger emission.
+- GUI session/fixation authoring uses `session_pages.py` as a compatibility export
+  facade. Session structure editing lives in `session_structure_page.py`; fixation-task
+  controls live in `fixation_settings_page.py`.
+- GUI component/theme work starts from `src/fpvs_studio/gui/components.py`, with raw
+  design tokens in `src/fpvs_studio/gui/design_system.py`.
+- GUI workflow details live in `GUI_WORKFLOW.md`. Do not duplicate the Home/Setup
+  Wizard, Image Resizer, root-folder setup, or compact `1120x720` setup behavior in
+  `../ARCHITECTURE.md`.
+- GUI project management keeps `manage_projects_dialog.py` presentation-only while
+  `controller.py` owns disk-backed discovery, recent-project settings, template storage
+  under `<FPVSRoot>/.fpvs-studio/templates/`, and Recycle Bin side effects.
+- Condition-template profile management keeps `condition_template_manager_dialog.py` as
+  the manager dialog and compatibility import point. The profile editor dialog lives in
+  `condition_template_profile_editor_dialog.py`.
+- Large GUI page modules are acceptable when they model one cohesive page or editor.
+  Split only when a subcomponent has an independent lifecycle, test surface, or reusable
+  responsibility.
+- Large GUI tests should be split by workflow when they become hard to run or review
+  narrowly; production-module splits take priority over test-file line-count cleanup.
+
+Refactor priority:
+
+1. Keep the `ProjectDocument` helper split cohesive as GUI document behavior evolves.
+2. Keep compiler helper modules cohesive as compile behavior evolves.
+3. Keep the PsychoPy engine helper split conservative. Move playback-loop code only when
+   a tested seam is clear.
+4. Keep future fixation-task GUI work in `fixation_settings_page.py` unless it changes
+   model compilation or runtime scoring.
+
 ## Current Verified State
 
 - Quality gate: `.\scripts\check_quality.ps1` passes after the current GUI/config
