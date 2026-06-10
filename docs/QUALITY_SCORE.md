@@ -5,11 +5,12 @@ the current quality posture as the latest result of the standard gates.
 
 ## Standard Gates
 
-- Harness docs: `python -m pytest -q tests\unit\test_harness_docs.py`
+- Harness docs: `.\.venv3.10\Scripts\python -m pytest -q tests\unit\test_harness_docs.py`
 - Docs hygiene: `.\scripts\check_docs_hygiene.ps1`
-- Harness garbage collection: `.\scripts\check_gc.ps1`
-- Python lint: `python -m ruff check .`
-- Unit suite: `python -m pytest -q`
+- Harness garbage collection: `.\scripts\check_gc.ps1`; docs-only checks may use
+  `.\scripts\check_gc.ps1 -SkipLineCounts`
+- Python lint: `.\.venv3.10\Scripts\python -m ruff check .`
+- Unit suite: `.\.venv3.10\Scripts\python -m pytest -q`
 - Full repo gate: `.\scripts\check_quality.ps1`
 
 Pytest runs use the repo-level `pytest-timeout` configuration in `pyproject.toml` so

@@ -15,16 +15,16 @@ This is enforced in:
 PowerShell:
 
 ```powershell
-py -3.10 -m venv .venv
-.\.venv\Scripts\python -m pip install -U pip
-.\.venv\Scripts\python -m pip install -e '.[dev]'
+py -3.10 -m venv .venv3.10
+.\.venv3.10\Scripts\python -m pip install -U pip
+.\.venv3.10\Scripts\python -m pip install -e '.[dev]'
 ```
 
 Install the optional PsychoPy engine extra when you want to exercise the launch
 path:
 
 ```powershell
-.\.venv\Scripts\python -m pip install -e '.[dev,engine]'
+.\.venv3.10\Scripts\python -m pip install -e '.[dev,engine]'
 ```
 
 Install the packaging extra when you want to build the Windows executable:
@@ -48,7 +48,7 @@ Notes:
 Run the authoring GUI with:
 
 ```powershell
-.\.venv\Scripts\python -m fpvs_studio.app
+.\.venv3.10\Scripts\python -m fpvs_studio.app
 ```
 
 or the installed script:
@@ -115,7 +115,7 @@ $env:PYTEST_DISABLE_PLUGIN_AUTOLOAD = "1"
 
 New-Item -ItemType Directory -Force build\tmp, build\appdata, build\localappdata, build\userprofile, build\home | Out-Null
 
-.\.venv\Scripts\python -m pytest `
+.\.venv3.10\Scripts\python -m pytest `
   --disable-plugin-autoload `
   -p pytestqt.plugin `
   -p pytest_timeout `

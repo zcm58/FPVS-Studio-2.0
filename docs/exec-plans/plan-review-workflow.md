@@ -25,8 +25,8 @@ feature-sized work.
    - move old prompts, scaffold notes, and historical audits to `docs/references/archive/`
    - update `docs/index.md` after any move
 7. Run verification:
-   - `python -m pytest -q tests\unit\test_harness_docs.py`
-   - `.\scripts\check_gc.ps1`
+   - `.\.venv3.10\Scripts\python -m pytest -q tests\unit\test_harness_docs.py`
+   - `.\scripts\check_gc.ps1 -SkipLineCounts`
 
 ## Active Plan Status Rules
 

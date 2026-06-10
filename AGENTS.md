@@ -7,6 +7,9 @@ experiments, with PsychoPy isolated behind runtime/engine boundaries.
 
 ## Context map
 
+- Fast path before broad reads: check `git status --short --branch`, read this file,
+  then use the matching `ARCHITECTURE.md` task recipe and one focused test path before
+  opening large source or test trees.
 - Start with `ARCHITECTURE.md` for the current package and dependency map.
 - Use the "Task Context Recipes" in `ARCHITECTURE.md` before opening broad
   source or test trees.
@@ -84,14 +87,23 @@ unless a future change explicitly adds a real web or mobile app surface.
 
 ## Standard verification
 
-- Harness/docs edits: `python -m pytest -q tests\unit\test_harness_docs.py`.
-- Python edits: `python -m ruff check .`; typed contract or boundary edits:
-  `python -m mypy src`; broad behavior edits: `python -m pytest -q`.
-- Multi-layer gate: `.\scripts\check_quality.ps1`. Focused gates:
-  `.\scripts\check_gui.ps1`, `.\scripts\check_runtime.ps1`,
-  `.\scripts\check_compiler.ps1`, and `.\scripts\check_preprocessing.ps1`.
-- Harness cleanup aids: `.\scripts\check_gc.ps1`, `.\scripts\check_docs_hygiene.ps1`,
-  and `.\scripts\report_line_counts.ps1`.
+- Run `.\.venv3.10\Scripts\python -m pytest -q tests\unit\test_harness_docs.py` after changing
+  `AGENTS.md`, `ARCHITECTURE.md`, `.agents/skills/`, docs task recipes, package
+  boundaries, or harness scripts.
+- Run `.\.venv3.10\Scripts\python -m pytest -q` for broad behavior changes.
+- Run `.\.venv3.10\Scripts\python -m ruff check .` after Python edits when available.
+- Run `.\.venv3.10\Scripts\python -m mypy src` after typed contract or boundary changes when available.
+- Use `.\scripts\check_quality.ps1` as the repo gate when touching multiple layers.
+- Use `.\scripts\check_gc.ps1` for harness garbage-collection checks that catch
+  mechanical drift such as forbidden GUI frameworks, source `print(...)`, stylesheet
+  drift, boundary leaks, and committed local paths.
+- Use `.\scripts\check_docs_hygiene.ps1` to review planned/active/completed execution
+  plans and keep stale setup or audit docs out of the docs root.
+- Use `.\scripts\check_gui.ps1`, `.\scripts\check_runtime.ps1`,
+  `.\scripts\check_compiler.ps1`, or `.\scripts\check_preprocessing.ps1` for
+  narrower cleanup passes.
+- Use `.\scripts\report_line_counts.ps1` as an advisory context-size report before
+  planning more module decomposition; split by responsibility, not by line count alone.
 - GUI changes need a focused pytest-qt smoke test, or documented manual smoke steps if
   automation is impractical.
 - Setup Wizard layout changes must keep the compact `1120x720` window free of

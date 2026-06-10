@@ -1398,24 +1398,24 @@ Exit criteria:
 Unit tests:
 
 ```powershell
-python -m pytest -q tests\unit\test_patch_manifest.py
-python -m pytest -q tests\unit\test_patch_builder.py
-python -m pytest -q tests\unit\test_patch_apply.py
-python -m pytest -q tests\unit\test_update_check.py
-python -m pytest -q tests\unit\test_update_download.py
+.\.venv3.10\Scripts\python -m pytest -q tests\unit\test_patch_manifest.py
+.\.venv3.10\Scripts\python -m pytest -q tests\unit\test_patch_builder.py
+.\.venv3.10\Scripts\python -m pytest -q tests\unit\test_patch_apply.py
+.\.venv3.10\Scripts\python -m pytest -q tests\unit\test_update_check.py
+.\.venv3.10\Scripts\python -m pytest -q tests\unit\test_update_download.py
 ```
 
 GUI tests:
 
 ```powershell
-python -m pytest -q tests\gui\test_update_dialog.py
+.\.venv3.10\Scripts\python -m pytest -q tests\gui\test_update_dialog.py
 ```
 
 Packaging and metadata checks:
 
 ```powershell
-python -m pytest -q tests\unit\test_package_metadata.py
-python -m pytest -q tests\unit\test_harness_docs.py
+.\.venv3.10\Scripts\python -m pytest -q tests\unit\test_package_metadata.py
+.\.venv3.10\Scripts\python -m pytest -q tests\unit\test_harness_docs.py
 .\scripts\smoke_packaged_app.ps1
 ```
 

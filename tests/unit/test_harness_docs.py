@@ -67,7 +67,36 @@ def test_harness_update_policy_is_documented() -> None:
     architecture = _read_repo_file("ARCHITECTURE.md")
 
     assert "Update `ARCHITECTURE.md`" in root_agents
+    assert "Fast path before broad reads" in root_agents
     assert "Documentation Freshness" in architecture
+    assert "Task Context Recipes" in architecture
+
+
+def test_active_agent_docs_use_repo_python_environment() -> None:
+    active_docs = [
+        "AGENTS.md",
+        "ARCHITECTURE.md",
+        "docs/ENVIRONMENT.md",
+        "docs/GUI_WORKFLOW.md",
+        "docs/QUALITY_SCORE.md",
+        "docs/TECH_DEBT.md",
+        "docs/exec-plans/plan-review-workflow.md",
+        "docs/exec-plans/planned/patch-update-workflow.md",
+    ]
+
+    stale_references: list[str] = []
+    for relative_path in active_docs:
+        text = _read_repo_file(relative_path)
+        if r".\.venv\Scripts\python" in text:
+            stale_references.append(relative_path)
+        for line in text.splitlines():
+            if (
+                re.search(r"python -m (pytest|ruff|mypy)", line)
+                and r".\.venv3.10\Scripts\python" not in line
+            ):
+                stale_references.append(relative_path)
+
+    assert sorted(set(stale_references)) == []
 
 
 def test_locked_oddball_trigger_code_policy_is_documented() -> None:

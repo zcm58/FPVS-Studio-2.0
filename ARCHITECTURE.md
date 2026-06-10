@@ -59,8 +59,8 @@ to that source from the package map or task recipe here. If new architecture tex
 matters after an agent has matched a specific task type, it belongs in that task's deeper
 doc, not in this always-read map.
 
-Run `python -m pytest -q tests\unit\test_harness_docs.py` after harness-documentation
-edits. The full quality gate also runs this check.
+Run `.\.venv3.10\Scripts\python -m pytest -q tests\unit\test_harness_docs.py` after
+harness-documentation edits. The full quality gate also runs this check.
 
 ## Versioning And Packaging
 
@@ -110,10 +110,37 @@ architecture/refactor reviews, `grill-me` for unresolved feature-plan decisions,
 sets. Prefer repo-local skills in `.agents/skills/`; React, React Native, Vercel, and
 web-design skills are out of scope for this desktop app unless a new surface adds them.
 
-- GUI task: `src/fpvs_studio/gui/AGENTS.md`, `docs/FRONTEND.md`,
-  `docs/GUI_WORKFLOW.md`, the specific page/dialog module, matching
-  `tests/gui/test_*.py`, and `tests/gui/helpers.py` when workflow setup matters.
-- Focused GUI reads: display settings use `src/fpvs_studio/gui/runtime_settings_page.py`,
+- Bug or regression task: use `diagnose` after reading the relevant recipe below. The
+  success criterion is a focused repo command that fails before the fix and passes after
+  it, or a documented reason that no correct automated seam exists.
+- GUI design task: use repo-local `.agents/skills/pyside6-gui-cleanup` and
+  `.agents/skills/pytest-qt-smoke` first. Use `impeccable` / `delight`,
+  `frontend-design`, or `ui-ux-pro-max` only to refine PySide6 layout, copy, hierarchy,
+  accessibility, or interaction decisions inside the existing component surface.
+- Architecture/refactor review: use `improve-codebase-architecture` only when the user
+  asks for architectural review or deeper refactor candidates. Cross-check candidates
+  against `docs/PLANS.md`, `docs/exec-plans/`, and package-local `AGENTS.md` files
+  before proposing edits.
+- Plan stress-test: use `grill-me` for unresolved feature-sized workflow, contract,
+  safety, or verification decisions, then capture durable decisions in an execution plan
+  when the work affects future tasks.
+- Independent multi-failure investigation: use `dispatching-parallel-agents` only when
+  delegation is available and the failing areas can be assigned without overlapping write
+  sets. Integrate by running the relevant focused and full gates afterward.
+- Skill discovery: use `find-skills` only for a missing specialized workflow. Prefer the
+  repo-local skills in `.agents/skills/` for GUI, path, legacy, PsychoPy migration, and
+  pytest-qt work.
+- Web-only skills: `web-design-guidelines` is limited to `docs-site/` or MkDocs UI work.
+  React, React Native, and Vercel skills are out of scope for the current desktop app.
+
+- Current-state or release-readiness check: start with `git status --short --branch`,
+  `git log --oneline --decorate -5`, `pyproject.toml`, `docs/PACKAGING.md`, and this
+  file. Use `.\.venv3.10\Scripts\python -m pytest -q tests\unit\test_package_metadata.py`
+  for version metadata drift before running packaging scripts.
+- GUI task: `src/fpvs_studio/gui/AGENTS.md`,
+  `docs/FRONTEND.md`, `docs/GUI_WORKFLOW.md`, the specific page/dialog module, matching
+  `tests/gui/test_*.py`, and `tests/gui/helpers.py` if workflow setup matters.
+- Display settings GUI task: `src/fpvs_studio/gui/runtime_settings_page.py`,
   `src/fpvs_studio/gui/run_page.py`, `src/fpvs_studio/gui/setup_wizard_page.py`,
   `tests/gui/test_setup_experiment_display.py`, and `tests/gui/test_run_page_launch.py`;
   setup shell uses `src/fpvs_studio/gui/setup_wizard_page.py`,
@@ -151,8 +178,11 @@ web-design skills are out of scope for this desktop app unless a new surface add
   `docs/exec-plans/`, the relevant package `AGENTS.md`, and focused tests for the
   touched layer.
 - Docs-only task: `AGENTS.md`, this file, `docs/index.md`, and the doc being edited.
-  Avoid source reads unless the doc describes a concrete contract.
-- Packaging task: `docs/PACKAGING.md`, `packaging/AGENTS.md`, `pyproject.toml`,
+  Avoid source reads unless the doc describes a concrete contract. Verify with
+  `.\scripts\check_docs_hygiene.ps1`,
+  `.\.venv3.10\Scripts\python -m pytest -q tests\unit\test_harness_docs.py`, and
+  `.\scripts\check_gc.ps1 -SkipLineCounts` when the edit changes agent routing.
+- Packaging task: `docs/PACKAGING.md`, `pyproject.toml`,
   `packaging/pyinstaller/fpvs_studio.spec`, `packaging/inno/fpvs_studio.iss`,
   `scripts/build_exe.ps1`, `scripts/build_installer.ps1`, and
   `tests/unit/test_package_metadata.py`.
@@ -187,7 +217,8 @@ is a runtime-owned reporting index.
   on Windows for pushes and pull requests.
 - Common pytest runs are bounded by `pytest-timeout` through `pyproject.toml`.
 - Full gate: `.\scripts\check_quality.ps1`
-- Harness garbage collection: `.\scripts\check_gc.ps1`
+- Harness garbage collection: `.\scripts\check_gc.ps1`; use `.\scripts\check_gc.ps1 -SkipLineCounts`
+  for docs-focused checks when the advisory line-count report is not needed.
 - Docs hygiene: `.\scripts\check_docs_hygiene.ps1`
 - GUI smoke/workflow: `.\scripts\check_gui.ps1`
 - Runtime: `.\scripts\check_runtime.ps1`

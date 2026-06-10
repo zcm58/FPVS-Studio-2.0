@@ -5,7 +5,7 @@
 Run the authoring application with:
 
 ```powershell
-.\.venv\Scripts\python -m fpvs_studio.app
+.\.venv3.10\Scripts\python -m fpvs_studio.app
 ```
 
 The installed script entry point is also available as `fpvs-studio`.
@@ -374,7 +374,7 @@ $env:PYTEST_DISABLE_PLUGIN_AUTOLOAD = "1"
 
 New-Item -ItemType Directory -Force build\tmp, build\appdata, build\localappdata, build\userprofile, build\home | Out-Null
 
-.\.venv\Scripts\python -m pytest `
+.\.venv3.10\Scripts\python -m pytest `
   --disable-plugin-autoload `
   -p pytestqt.plugin `
   -p pytest_timeout `
