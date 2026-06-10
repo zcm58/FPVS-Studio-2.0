@@ -220,7 +220,7 @@ class DisplaySettings(FPVSBaseModel):
     monitor_name: str | None = None
     preferred_refresh_hz: float | None = Field(default=None, gt=0)
     stimulus_width_degrees: float = Field(default=5.0, gt=0)
-    viewing_distance_cm: float = Field(default=57.0, gt=0)
+    viewing_distance_cm: float = Field(default=80.0, gt=0)
     screen_width_cm: float = Field(default=56.25, gt=0)
     screen_width_px: int = Field(default=1920, gt=0)
     screen_height_px: int = Field(default=1080, gt=0)

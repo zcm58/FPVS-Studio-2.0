@@ -58,14 +58,15 @@ The authoring window is organized around two user-facing modes:
     and style it as the primary enabled action
   - `Complete Setup` opens the guided setup workflow at the earliest incomplete step
     using the existing setup-step completion checks
-  - when launch is disabled, the launch button tooltip and status tip show the first
-    actionable setup blocker
+  - when launch is disabled, the Home card, launch button tooltip, and status tip show
+    the first actionable setup blocker
   - returning from app-expanded Setup restores the compact Home footprint unless
     the user manually resized the larger setup window
 - `Setup Wizard`
   - in-window setup flow for new/incomplete projects and intentional edits
   - ordered steps: Project, Conditions, Experiment, Fixation, Response, Review
-  - `Next` is disabled until the active step is complete
+  - `Next` is disabled until the active step is complete, with a compact footer hint
+    naming the current blocker
   - the top progress indicator is a compact connected numbered stepper with
     completed/current/upcoming states, without redundant complete-state status bars
   - when a user opens setup from a ready project's `Edit Setup` action, the numbered
@@ -98,8 +99,8 @@ The authoring window is organized around two user-facing modes:
     display resolution in pixels, and an optional current-primary-screen resolution
     mode; the full-screen preview includes a side control panel for live edits to those
     same values, and source image resolution remains independent from on-screen playback
-    size; new projects default to the ACR-matched display geometry of 5.0 deg image
-    width, 57.0 cm viewing distance, 56.25 cm screen width, and 1920 x 1080 px
+    size; new projects default to the display geometry of 5.0 deg image
+    width, 80.0 cm viewing distance, 56.25 cm screen width, and 1920 x 1080 px
     resolution
   - new projects default the fixation cross appearance to the ACR-matched 27 px cross
     size and 2 px line width

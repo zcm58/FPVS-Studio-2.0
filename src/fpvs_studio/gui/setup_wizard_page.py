@@ -369,13 +369,30 @@ class SetupWizardPage(QWidget):
         self.setup_wizard_return_home_button = QPushButton("Return Home", self)
         self.setup_wizard_return_home_button.setObjectName("setup_wizard_return_home_button")
         self.setup_wizard_return_home_button.clicked.connect(self._return_home)
+        self.setup_wizard_next_hint_label = QLabel(self)
+        self.setup_wizard_next_hint_label.setObjectName("setup_wizard_next_hint_label")
+        self.setup_wizard_next_hint_label.setAlignment(
+            Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+        )
+        self.setup_wizard_next_hint_label.setWordWrap(True)
+        self.setup_wizard_next_hint_label.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Fixed,
+        )
+        self.setup_wizard_next_hint_container = QWidget(self)
+        self.setup_wizard_next_hint_container.setObjectName(
+            "setup_wizard_next_hint_container"
+        )
+        next_hint_layout = QHBoxLayout(self.setup_wizard_next_hint_container)
+        next_hint_layout.setContentsMargins(0, 0, 0, 0)
+        next_hint_layout.addWidget(self.setup_wizard_next_hint_label)
 
         button_row = QWidget(self)
         button_layout = QHBoxLayout(button_row)
         button_layout.setContentsMargins(PAGE_MARGIN_X, 0, PAGE_MARGIN_X, 2)
         button_layout.setSpacing(PAGE_SECTION_GAP)
         button_layout.addWidget(self.setup_wizard_return_home_button)
-        button_layout.addStretch(1)
+        button_layout.addWidget(self.setup_wizard_next_hint_container, 1)
         button_layout.addWidget(self.setup_wizard_back_button)
         button_layout.addWidget(self.setup_wizard_next_button)
 
@@ -785,6 +802,10 @@ class SetupWizardPage(QWidget):
         self.setup_wizard_next_button.setText("Next")
         self.setup_wizard_next_button.setVisible(step_key != "review")
         self.setup_wizard_return_home_button.setVisible(step_key != "review")
+        hint_text = "" if step_valid or step_key == "review" else self._next_step_hint_text()
+        self.setup_wizard_next_hint_label.setText(hint_text)
+        self.setup_wizard_next_hint_label.setToolTip(hint_text)
+        self.setup_wizard_next_hint_label.setVisible(bool(hint_text))
         self._sync_guided_panel_height()
 
     def _sync_guided_panel_height(self) -> None:
@@ -1025,6 +1046,9 @@ class SetupWizardPage(QWidget):
         if step_key == "review":
             return self._readiness_report().status_label
         return "Step needs attention"
+
+    def _next_step_hint_text(self) -> str:
+        return f"To continue: {self._current_step_blocker()}"
 
     def _project_details_ready(self) -> bool:
         project = self._document.project

@@ -183,7 +183,7 @@ def test_setup_wizard_experiment_image_size_controls_update_preview_and_review(
     )
 
     assert editor.width_degrees_spin.value() == pytest.approx(5.0, abs=0.01)
-    assert editor.viewing_distance_spin.value() == pytest.approx(57.0, abs=0.01)
+    assert editor.viewing_distance_spin.value() == pytest.approx(80.0, abs=0.01)
     assert editor.screen_width_spin.value() == pytest.approx(56.25, abs=0.01)
     image_size_labels = "\n".join(label.text() for label in editor.findChildren(QLabel))
     assert "Image width (deg)" in image_size_labels
