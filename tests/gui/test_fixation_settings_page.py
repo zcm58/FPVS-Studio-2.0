@@ -193,3 +193,21 @@ def test_fixation_settings_editor_shows_feasibility_without_conditions(
         editor.fixation_feasibility_label.toolTip()
         == "Derived from each condition's duration and the current fixation timing settings."
     )
+
+    default_cues = {
+        label.objectName(): label.text()
+        for label in editor.findChildren(QLabel)
+        if label.property("setupDefaultCue") == "true"
+    }
+    assert default_cues["fixation_behavior_default_cue_label"] == (
+        "Default: fixed schedule with 0 color changes."
+    )
+    assert default_cues["fixation_timing_default_cue_label"] == (
+        "Default: 250 ms change; 1500 ms minimum gap."
+    )
+    assert default_cues["fixation_response_default_cue_label"] == (
+        "Default: accuracy off; Space within 1.0 s when enabled."
+    )
+    assert default_cues["fixation_appearance_default_cue_label"] == (
+        "ACR default: blue to red, 27 px cross, 2 px line."
+    )

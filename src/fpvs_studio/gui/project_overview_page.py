@@ -161,11 +161,12 @@ class ProjectOverviewEditor(QWidget):
         header_title = QLabel("Project Details", header_text)
         header_title.setObjectName("project_overview_title")
         header_subtitle = QLabel(
-            "Name the experiment and choose the default timing for new conditions.",
+            "Recommended start: Continuous Images; participant tutorial enabled.",
             header_text,
         )
         header_subtitle.setObjectName("project_overview_subtitle")
         header_subtitle.setWordWrap(True)
+        header_subtitle.setProperty("setupDefaultCue", "true")
         header_text_layout.addWidget(header_title)
         header_text_layout.addWidget(header_subtitle)
         header_layout.addWidget(header_icon, 0, Qt.AlignmentFlag.AlignTop)

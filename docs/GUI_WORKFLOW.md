@@ -83,14 +83,16 @@ The authoring window is organized around two user-facing modes:
     only show information needed for the current decision
   - Project uses a focused centered card, keeping the project folder path compact
     and secondary; project name and description are required before continuing to
-    Conditions
+    Conditions. The card shows a compact recommended-default cue for timing and
+    participant tutorial defaults.
   - the Project image-timing selector is the default timing template for new
     conditions; it is backed by condition-template profiles, defaults to Continuous
     Images, and does not rewrite existing conditions unless the user explicitly applies
     the selected template to all conditions
   - Project exposes `Enable participant tutorial?`, which controls whether the
     participant sees the fixation response tutorial before the first condition
-  - Experiment combines display, image-size, and session settings in one compact centered card
+  - Experiment combines display, image-size, and session settings in one compact
+    centered card, with compact recommended-default cues for each section
   - the Display column exposes display refresh rate and presentation background
     (`Black` or `Dark Gray`); current launches always use PsychoPy, beta test-mode,
     fullscreen playback, and the default display without exposing those as choices
@@ -136,9 +138,10 @@ The authoring window is organized around two user-facing modes:
   - Conditions is complete when every condition has a descriptive name, trigger
     code of 1 or higher, and configured base/oddball stimuli for its modality
   - Fixation keeps color changes enabled and exposes schedule, capped target counts,
-    and timing
+    and timing, with default cues for schedule and timing
   - Response exposes accuracy tracking, response key/window, appearance, and a live
-    preview on the current display background
+    preview on the current display background, with default cues for response and
+    appearance
   - Review is a card-only decision point: users can `Save and Return Home` or
     `Return Home Without Saving`; returning without saving always asks for confirmation
 - `Tools > Image Resizer`

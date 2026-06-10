@@ -32,6 +32,7 @@ from fpvs_studio.gui.components import (
     SetupProgressStepper,
     StatusBadgeLabel,
     apply_setup_wizard_theme,
+    create_default_cue_label,
     mark_primary_action,
     mark_secondary_action,
     refresh_widget_style,
@@ -538,7 +539,13 @@ class SetupWizardPage(QWidget):
         display_column_layout.setSpacing(12)
         display_title = QLabel("Display Settings", display_column)
         display_title.setProperty("sectionCardRole", "title")
+        display_default_cue = create_default_cue_label(
+            "Recommended default: 60 Hz, black background.",
+            display_column,
+            object_name="experiment_display_default_cue_label",
+        )
         display_column_layout.addWidget(display_title)
+        display_column_layout.addWidget(display_default_cue)
         display_column_layout.addWidget(self.runtime_settings_editor)
         display_column_layout.addStretch(1)
 
@@ -550,7 +557,13 @@ class SetupWizardPage(QWidget):
         image_size_column_layout.setSpacing(12)
         image_size_title = QLabel("Image Size", image_size_column)
         image_size_title.setProperty("sectionCardRole", "title")
+        image_size_default_cue = create_default_cue_label(
+            "ACR default: 5.0 deg at 57 cm on 1920 x 1080.",
+            image_size_column,
+            object_name="experiment_image_size_default_cue_label",
+        )
         image_size_column_layout.addWidget(image_size_title)
+        image_size_column_layout.addWidget(image_size_default_cue)
         image_size_column_layout.addWidget(self.image_display_size_editor)
 
         session_column = QFrame(content)
@@ -561,7 +574,13 @@ class SetupWizardPage(QWidget):
         session_column_layout.setSpacing(12)
         session_title = QLabel("Session", session_column)
         session_title.setProperty("sectionCardRole", "title")
+        session_default_cue = create_default_cue_label(
+            "Recommended default: 2 repeats; randomized order.",
+            session_column,
+            object_name="experiment_session_default_cue_label",
+        )
         session_column_layout.addWidget(session_title)
+        session_column_layout.addWidget(session_default_cue)
         session_column_layout.addWidget(self.session_structure_editor)
         session_column_layout.addStretch(1)
 
