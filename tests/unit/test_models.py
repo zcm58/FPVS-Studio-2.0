@@ -95,7 +95,7 @@ def test_display_settings_default_and_validate_image_display_geometry() -> None:
     display = DisplaySettings()
 
     assert display.stimulus_width_degrees == 5.0
-    assert display.viewing_distance_cm == 57.0
+    assert display.viewing_distance_cm == 80.0
     assert display.screen_width_cm == 56.25
     assert display.screen_width_px == 1920
     assert display.screen_height_px == 1080
