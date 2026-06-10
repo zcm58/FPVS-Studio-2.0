@@ -189,10 +189,9 @@ fields outside `RunSpec` and `SessionPlan`.
 
 ## 12. Participant-facing condition titles
 
-Project session settings control whether authored condition titles are shown on
-participant transition screens. The compiler stores this choice in each embedded
-`RunSpec`; runtime still preserves condition names in artifacts while rendering generic
-headings such as `Condition 1 of 4` when titles are hidden.
+Authored condition titles are internal experiment metadata. Runtime preserves condition
+names in `RunSpec`, `SessionPlan`, and execution artifacts, but participant transition
+screens always render generic headings such as `Condition 1 of 4`.
 
 ## 13. Current repository goal
 

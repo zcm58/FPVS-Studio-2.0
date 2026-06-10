@@ -11,7 +11,6 @@ from PySide6.QtCore import (
 )
 from PySide6.QtWidgets import (
     QApplication,
-    QCheckBox,
     QLabel,
     QPushButton,
     QWidget,
@@ -55,14 +54,10 @@ def test_setup_wizard_experiment_and_fixation_steps_are_width_safe(
         "setup_wizard_experiment_settings_card_title",
     ) is None
     assert guide.session_structure_editor.block_count_spin.value() == 2
-    show_title_checkbox = guide.session_structure_editor.findChild(
-        QCheckBox,
-        "show_condition_title_checkbox",
-    )
-    assert show_title_checkbox is not None
-    assert show_title_checkbox.text() == "Show condition title on experiment screen"
-    assert show_title_checkbox.isChecked() is True
-    show_title_checkbox.setChecked(False)
+    show_title_checkbox = guide.session_structure_editor.show_condition_title_checkbox
+    assert show_title_checkbox.isVisible() is False
+    assert show_title_checkbox.isEnabled() is False
+    guide.session_structure_editor.block_count_spin.setValue(3)
     assert (
         window.document.project.settings.session.show_condition_title_on_screen
         is False

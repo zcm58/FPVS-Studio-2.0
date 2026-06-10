@@ -95,8 +95,8 @@ Runtime consumes `SessionPlan` and:
 - runs the participant fixation tutorial once before the first condition when compiled
   fixation accuracy and tutorial settings are enabled
 - shows a Space-required start screen before every condition run, using generic
-  headings such as `Condition 1 of 4` when the embedded `RunSpec` disables
-  participant-facing condition titles
+  headings such as `Condition 1 of 4`; authored condition names remain internal
+  metadata for artifacts and review
 - iterates `SessionEntry.run_spec` in order
 - aggregates run execution results into a `SessionExecutionSummary`
 

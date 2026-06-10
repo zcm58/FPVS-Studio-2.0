@@ -103,8 +103,8 @@ The authoring window is organized around two user-facing modes:
     resolution
   - new projects default the fixation cross appearance to the ACR-matched 27 px cross
     size and 2 px line width
-  - the Session column exposes repeats per condition, the fixed Space start key, and
-    whether participant transition screens show authored condition titles; condition
+  - the Session column exposes repeats per condition and the fixed Space start key;
+    condition names remain internal during participant transition screens, and condition
     order is always randomized automatically for each launch
   - the Conditions step uses compact condition rows showing each condition's current
     timing template and a combined condition

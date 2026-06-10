@@ -107,7 +107,7 @@ class SessionStructureEditor(QWidget):
         self.continue_key_edit.setEnabled(False)
 
         self.show_condition_title_checkbox = QCheckBox(
-            "Show condition title on experiment screen",
+            "Keep condition names internal during experiment screens",
             self,
         )
         self.show_condition_title_checkbox.setObjectName(
@@ -186,18 +186,18 @@ class SessionStructureEditor(QWidget):
         with QSignalBlocker(self.continue_key_edit):
             self.continue_key_edit.setText("space")
         with QSignalBlocker(self.show_condition_title_checkbox):
-            self.show_condition_title_checkbox.setChecked(
-                session.show_condition_title_on_screen
-            )
+            self.show_condition_title_checkbox.setChecked(False)
         self._update_session_visibility_state()
 
     def _update_session_visibility_state(self) -> None:
         _set_form_row_visible(self.session_layout, self.inter_condition_mode_combo, False)
         _set_form_row_visible(self.session_layout, self.break_seconds_spin, False)
         _set_form_row_visible(self.session_layout, self.continue_key_edit, True)
+        _set_form_row_visible(self.session_layout, self.show_condition_title_checkbox, False)
         self.inter_condition_mode_combo.setEnabled(False)
         self.break_seconds_spin.setEnabled(False)
         self.continue_key_edit.setEnabled(False)
+        self.show_condition_title_checkbox.setEnabled(False)
 
     def _on_inter_condition_mode_changed(self) -> None:
         self._update_session_visibility_state()
@@ -211,7 +211,7 @@ class SessionStructureEditor(QWidget):
                 inter_condition_mode=InterConditionMode.MANUAL_CONTINUE,
                 inter_condition_break_seconds=0.0,
                 continue_key="space",
-                show_condition_title_on_screen=self.show_condition_title_checkbox.isChecked(),
+                show_condition_title_on_screen=False,
             )
         except Exception as error:
             _show_error_dialog(self, "Session Settings Error", error)

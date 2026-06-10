@@ -342,7 +342,7 @@ class SessionSettings(FPVSBaseModel):
     inter_condition_mode: InterConditionMode = InterConditionMode.MANUAL_CONTINUE
     inter_condition_break_seconds: float = Field(default=0.0, ge=0)
     continue_key: str = "space"
-    show_condition_title_on_screen: bool = True
+    show_condition_title_on_screen: bool = False
 
     @field_validator("continue_key")
     @classmethod

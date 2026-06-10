@@ -55,7 +55,7 @@ def test_session_settings_default_to_space_gated_condition_starts() -> None:
     assert session.inter_condition_mode == InterConditionMode.MANUAL_CONTINUE
     assert session.inter_condition_break_seconds == 0.0
     assert session.continue_key == "space"
-    assert session.show_condition_title_on_screen is True
+    assert session.show_condition_title_on_screen is False
 
 
 def test_display_settings_default_and_validate_image_display_geometry() -> None:

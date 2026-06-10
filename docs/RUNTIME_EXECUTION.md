@@ -68,8 +68,8 @@ The PsychoPy implementation:
 - reports the active window resolution so runtime can block configured visual-angle
   playback when the current display resolution differs from the intended test resolution
 - shows Space-required condition-start screens and completion text screens; transition
-  headings omit authored condition titles when the project disables participant-facing
-  condition titles
+  headings always use generic condition numbers while authored condition names stay in
+  runtime artifacts
 - runs fixation-only participant tutorial attempts when runtime asks for practice
 - shows a dedicated manual inter-block break screen between non-final blocks
 - preloads each condition's unique image or word stimuli before playback and releases

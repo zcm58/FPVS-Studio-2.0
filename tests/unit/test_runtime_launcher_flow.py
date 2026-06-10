@@ -57,7 +57,7 @@ def test_runtime_launcher_dispatches_runspec_to_registered_engine(
     assert captures["close_count"] == 1
     assert captures["transitions"] == [
         {
-            "heading": "Condition 1 of 1: Faces",
+            "heading": "Condition 1 of 1",
             "body": None,
             "countdown_seconds": None,
             "continue_key": "space",
@@ -194,11 +194,11 @@ def test_launch_session_runs_all_entries_with_stub_engine_and_reuses_session_win
     assert (first_run_dir / "run_summary.json").is_file()
 
 
-def test_launch_session_can_hide_condition_titles_on_transition_screens(
+def test_launch_session_keeps_condition_titles_internal_on_transition_screens(
     multi_condition_project,
     multi_condition_project_root,
 ) -> None:
-    multi_condition_project.settings.session.show_condition_title_on_screen = False
+    multi_condition_project.settings.session.show_condition_title_on_screen = True
     captures: dict[str, object] = {}
     register_engine("stub-hidden-condition-titles", lambda: StubEngine(captures))
     try:

@@ -152,7 +152,7 @@ def test_config_import_creates_new_project_shell_without_copying_stimuli(
     assert loaded.meta.name == sample_project.meta.name
     assert loaded.settings.display.viewing_distance_cm == 90.0
     assert loaded.settings.session.session_seed == 123
-    assert loaded.settings.session.show_condition_title_on_screen is True
+    assert loaded.settings.session.show_condition_title_on_screen is False
     assert loaded.settings.triggers.oddball_trigger_code == 55
     assert loaded.conditions[0].name == "Faces"
     assert loaded.conditions[0].trigger_code == 9

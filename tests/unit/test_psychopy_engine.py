@@ -398,7 +398,7 @@ def test_text_screen_uses_custom_space_begin_prompt() -> None:
         keyboard=_PromptKeyboard(),
         is_aborted=lambda: False,
         set_aborted=lambda: None,
-        heading="Condition 1 of 1: Faces",
+        heading="Condition 1 of 1",
         body=None,
         countdown_seconds=None,
         continue_key="space",

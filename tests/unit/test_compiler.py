@@ -28,7 +28,7 @@ def test_runspec_creation_at_60hz_continuous_mode(sample_project, sample_project
     assert run_spec.display.on_frames == 10
     assert run_spec.display.off_frames == 0
     assert run_spec.condition.total_stimuli == 730
-    assert run_spec.condition.show_title_on_screen is True
+    assert run_spec.condition.show_title_on_screen is False
     assert run_spec.display.total_frames == 7300
     assert len(run_spec.stimulus_sequence) == 730
     assert run_spec.fixation.cross_size_px == 27
@@ -146,11 +146,11 @@ def test_compiler_carries_condition_title_display_setting(
     sample_project,
     sample_project_root,
 ) -> None:
-    sample_project.settings.session.show_condition_title_on_screen = False
+    sample_project.settings.session.show_condition_title_on_screen = True
 
     run_spec = compile_run_spec(sample_project, refresh_hz=60.0, project_root=sample_project_root)
 
-    assert run_spec.condition.show_title_on_screen is False
+    assert run_spec.condition.show_title_on_screen is True
 
 
 def test_compiler_rejects_nonstandard_oddball_trigger_code_without_explicit_override(

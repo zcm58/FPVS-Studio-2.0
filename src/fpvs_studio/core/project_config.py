@@ -167,7 +167,7 @@ class ProjectConfigSession(FPVSBaseModel):
     inter_condition_mode: InterConditionMode = InterConditionMode.MANUAL_CONTINUE
     inter_condition_break_seconds: float = Field(ge=0)
     continue_key: str = "space"
-    show_condition_title_on_screen: bool = True
+    show_condition_title_on_screen: bool = False
 
 
 class ProjectConfigTriggers(FPVSBaseModel):

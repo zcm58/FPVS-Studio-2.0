@@ -61,7 +61,8 @@ condition's resolved frame counts.
 ### `ConditionRunSpec`
 
 - condition identity and name
-- whether participant-facing transition screens should show the authored condition title
+- legacy title-display flag retained for compatibility; participant transition screens
+  still use generic condition numbers
 - stimulus modality: `image` or `word`
 - template id
 - instructions text
