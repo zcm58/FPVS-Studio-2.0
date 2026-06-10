@@ -44,6 +44,11 @@ SESSION_CONDITION_HISTORY_HEADER = [
     "completed_frames",
     "run_aborted",
     "abort_reason",
+    "timing_qc_strict_violation",
+    "timing_qc_first_bad_phase",
+    "timing_qc_first_bad_frame_index",
+    "timing_qc_max_interval_s",
+    "timing_qc_strict_violation_reason",
     "total_targets",
     "hit_count",
     "miss_count",
@@ -475,6 +480,7 @@ def _session_condition_history_row(
     block_accuracy_percent: float | None,
 ) -> list[object]:
     fixation = run_result.fixation_task_summary if run_result is not None else None
+    metadata = run_result.runtime_metadata if run_result is not None else None
     return [
         logged_at,
         summary.project_id,
@@ -501,6 +507,15 @@ def _session_condition_history_row(
         run_result.completed_frames if run_result is not None else "",
         run_result.aborted if run_result is not None else "",
         run_result.abort_reason if run_result is not None and run_result.abort_reason else "",
+        metadata.timing_qc_strict_violation if metadata is not None else "",
+        metadata.timing_qc_first_bad_phase if metadata is not None else "",
+        metadata.timing_qc_first_bad_frame_index
+        if metadata is not None and metadata.timing_qc_first_bad_frame_index is not None
+        else "",
+        _float_value(metadata.timing_qc_max_interval_s if metadata is not None else None),
+        metadata.timing_qc_strict_violation_reason
+        if metadata is not None and metadata.timing_qc_strict_violation_reason
+        else "",
         fixation.total_targets if fixation is not None else "",
         fixation.hit_count if fixation is not None else "",
         fixation.miss_count if fixation is not None else "",

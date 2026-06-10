@@ -8,7 +8,6 @@ from dataclasses import dataclass
 from fpvs_studio.core.run_spec import RunSpec
 
 WARMUP_SETTLE_FRAMES = 30
-WARMUP_SEVERE_MISS_MULTIPLIER = 2.0
 
 
 @dataclass(frozen=True)
@@ -20,7 +19,6 @@ class TimingConfig:
     miss_threshold_s: float
     warmup_frames: int
     warmup_settle_frames: int
-    severe_miss_threshold_s: float
 
 
 def timing_config_for_run(
@@ -50,21 +48,20 @@ def timing_config_for_run(
         miss_threshold_s=expected_interval_s * multiplier,
         warmup_frames=warmup_frames,
         warmup_settle_frames=min(WARMUP_SETTLE_FRAMES, warmup_frames),
-        severe_miss_threshold_s=expected_interval_s * WARMUP_SEVERE_MISS_MULTIPLIER,
     )
 
 
-def timing_abort_reason(
+def timing_violation_reason(
     *,
     phase: str,
     frame_index: int,
     interval_s: float,
     timing_config: TimingConfig,
 ) -> str:
-    """Build the strict-timing abort message."""
+    """Build the strict-timing violation message."""
 
     return (
-        "Strict timing aborted run during "
+        "Strict timing QC flagged playback during "
         f"{phase}: frame interval at index {frame_index} was {interval_s:.6f} s, "
         f"exceeding {timing_config.miss_threshold_multiplier:.2f}x expected "
         f"{timing_config.expected_interval_s:.6f} s."

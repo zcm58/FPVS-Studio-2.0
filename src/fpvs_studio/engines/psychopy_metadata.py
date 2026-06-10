@@ -22,8 +22,10 @@ def runtime_metadata_for_run(
     timing_config: TimingConfig,
     warmup_intervals: list[float],
     timing_max_interval_s: float | None,
+    timing_first_bad_phase: str | None,
     timing_first_bad_frame_index: int | None,
-    timing_strict_abort: bool,
+    timing_strict_violation: bool,
+    timing_strict_violation_reason: str | None,
 ) -> RuntimeMetadata:
     """Build neutral runtime metadata for one completed run."""
 
@@ -61,6 +63,9 @@ def runtime_metadata_for_run(
         timing_qc_warmup_frames=timing_config.warmup_frames,
         timing_qc_measured_refresh_hz=measured_refresh_hz,
         timing_qc_max_interval_s=timing_max_interval_s,
+        timing_qc_first_bad_phase=timing_first_bad_phase,
         timing_qc_first_bad_frame_index=timing_first_bad_frame_index,
-        timing_qc_strict_abort=timing_strict_abort,
+        timing_qc_strict_violation=timing_strict_violation,
+        timing_qc_strict_violation_reason=timing_strict_violation_reason,
+        timing_qc_strict_abort=False,
     )

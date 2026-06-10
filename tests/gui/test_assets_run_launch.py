@@ -388,10 +388,7 @@ def test_launch_action_surfaces_abort_reason_when_runtime_aborts(
             total_condition_count=session_plan.total_runs,
             completed_condition_count=0,
             aborted=True,
-            abort_reason=(
-                "Strict timing aborted run during warmup: frame interval at index 18 was "
-                "0.025840 s, exceeding 1.50x expected 0.016667 s."
-            ),
+            abort_reason="Escape pressed during condition playback.",
             output_dir="runs/00043",
         )
 
@@ -437,7 +434,7 @@ def test_launch_action_surfaces_abort_reason_when_runtime_aborts(
     assert info_calls == 0
     assert len(warning_payloads) == 1
     assert warning_payloads[0][0] == "Launch Aborted"
-    assert "strict timing aborted run during warmup" in warning_payloads[0][1].lower()
+    assert "escape pressed during condition playback" in warning_payloads[0][1].lower()
     assert "runtime launch completed" not in summary_text
     assert "runtime launch aborted" in summary_text
     assert "abort reason:" in summary_text

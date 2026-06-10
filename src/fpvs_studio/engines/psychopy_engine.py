@@ -32,8 +32,8 @@ from fpvs_studio.engines.psychopy_stimuli import (
 from fpvs_studio.engines.psychopy_text_screens import show_text_screen
 from fpvs_studio.engines.psychopy_timing import (
     TimingConfig,
-    timing_abort_reason,
     timing_config_for_run,
+    timing_violation_reason,
 )
 from fpvs_studio.engines.psychopy_triggers import build_trigger_lookup, emit_trigger
 from fpvs_studio.engines.psychopy_window import build_window_kwargs, create_fixation_stim
@@ -238,9 +238,11 @@ class PsychoPyEngine(PresentationEngine):
         self._runtime_options = dict(runtime_options or {})
         timing_config = self._timing_config_for_run(run_spec)
         abort_reason: str | None = None
+        timing_first_bad_phase: str | None = None
         timing_first_bad_frame_index: int | None = None
         timing_max_interval_s: float | None = None
-        timing_strict_abort = False
+        timing_strict_violation = False
+        timing_strict_violation_reason: str | None = None
         warmup_intervals: list[float] = []
         stimuli: dict[str, Any] = {}
 
@@ -256,7 +258,6 @@ class PsychoPyEngine(PresentationEngine):
 
             self._active_run_clock = core.Clock()
             warmup_last_flip_time: float | None = None
-            warmup_miss_count = 0
             warmup_strict_timing_enabled = (
                 timing_config.strict_timing and timing_config.strict_timing_warmup
             )
@@ -280,26 +281,23 @@ class PsychoPyEngine(PresentationEngine):
                         timing_first_bad_frame_index is None
                         and interval_s > timing_config.miss_threshold_s
                     ):
+                        timing_first_bad_phase = "warmup"
                         timing_first_bad_frame_index = warmup_interval_index
                     post_settle_window = warmup_frame_index >= timing_config.warmup_settle_frames
                     interval_is_miss = interval_s > timing_config.miss_threshold_s
-                    interval_is_severe = interval_s > timing_config.severe_miss_threshold_s
-                    if warmup_strict_timing_enabled and post_settle_window and interval_is_miss:
-                        warmup_miss_count += 1
                     if (
                         warmup_strict_timing_enabled
                         and post_settle_window
-                        and (interval_is_severe or warmup_miss_count >= 2)
+                        and interval_is_miss
                     ):
-                        timing_strict_abort = True
-                        self._aborted = True
-                        abort_reason = self._timing_abort_reason(
-                            phase="warmup",
-                            frame_index=warmup_interval_index,
-                            interval_s=interval_s,
-                            timing_config=timing_config,
-                        )
-                        break
+                        timing_strict_violation = True
+                        if timing_strict_violation_reason is None:
+                            timing_strict_violation_reason = self._timing_violation_reason(
+                                phase="warmup",
+                                frame_index=warmup_interval_index,
+                                interval_s=interval_s,
+                                timing_config=timing_config,
+                            )
                 warmup_last_flip_time = current_time_s
 
             keyboard.clock.reset()
@@ -388,16 +386,17 @@ class PsychoPyEngine(PresentationEngine):
                         timing_first_bad_frame_index is None
                         and interval_s > timing_config.miss_threshold_s
                     ):
+                        timing_first_bad_phase = "run"
                         timing_first_bad_frame_index = frame_index - 1
                     if timing_config.strict_timing and interval_s > timing_config.miss_threshold_s:
-                        timing_strict_abort = True
-                        self._aborted = True
-                        abort_reason = self._timing_abort_reason(
-                            phase="run",
-                            frame_index=frame_index - 1,
-                            interval_s=interval_s,
-                            timing_config=timing_config,
-                        )
+                        timing_strict_violation = True
+                        if timing_strict_violation_reason is None:
+                            timing_strict_violation_reason = self._timing_violation_reason(
+                                phase="run",
+                                frame_index=frame_index - 1,
+                                interval_s=interval_s,
+                                timing_config=timing_config,
+                            )
                 last_flip_time = current_time_s
                 completed_frames = frame_index + 1
 
@@ -439,8 +438,10 @@ class PsychoPyEngine(PresentationEngine):
                 timing_config=timing_config,
                 warmup_intervals=warmup_intervals,
                 timing_max_interval_s=timing_max_interval_s,
+                timing_first_bad_phase=timing_first_bad_phase,
                 timing_first_bad_frame_index=timing_first_bad_frame_index,
-                timing_strict_abort=timing_strict_abort,
+                timing_strict_violation=timing_strict_violation,
+                timing_strict_violation_reason=timing_strict_violation_reason,
             )
             self._log_timing_diagnostics(
                 run_spec,
@@ -563,8 +564,10 @@ class PsychoPyEngine(PresentationEngine):
         timing_config: TimingConfig,
         warmup_intervals: list[float],
         timing_max_interval_s: float | None,
+        timing_first_bad_phase: str | None,
         timing_first_bad_frame_index: int | None,
-        timing_strict_abort: bool,
+        timing_strict_violation: bool,
+        timing_strict_violation_reason: str | None,
     ) -> RuntimeMetadata:
         psychopy = self._load_psychopy()
         return runtime_metadata_for_run(
@@ -577,14 +580,16 @@ class PsychoPyEngine(PresentationEngine):
             timing_config=timing_config,
             warmup_intervals=warmup_intervals,
             timing_max_interval_s=timing_max_interval_s,
+            timing_first_bad_phase=timing_first_bad_phase,
             timing_first_bad_frame_index=timing_first_bad_frame_index,
-            timing_strict_abort=timing_strict_abort,
+            timing_strict_violation=timing_strict_violation,
+            timing_strict_violation_reason=timing_strict_violation_reason,
         )
 
     def _timing_config_for_run(self, run_spec: RunSpec) -> TimingConfig:
         return timing_config_for_run(run_spec, self._runtime_options)
 
-    def _timing_abort_reason(
+    def _timing_violation_reason(
         self,
         *,
         phase: str,
@@ -592,7 +597,7 @@ class PsychoPyEngine(PresentationEngine):
         interval_s: float,
         timing_config: TimingConfig,
     ) -> str:
-        return timing_abort_reason(
+        return timing_violation_reason(
             phase=phase,
             frame_index=frame_index,
             interval_s=interval_s,

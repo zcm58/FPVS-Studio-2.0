@@ -157,10 +157,10 @@ class StubEngine(PresentationEngine):
                 )
             )
 
-        if bool(self._captures.get("timing_abort_on_first_run", False)) and not bool(
-            self._captures.get("timing_abort_emitted", False)
+        if bool(self._captures.get("timing_violation_on_first_run", False)) and not bool(
+            self._captures.get("timing_violation_emitted", False)
         ):
-            self._captures["timing_abort_emitted"] = True
+            self._captures["timing_violation_emitted"] = True
             return RunExecutionSummary(
                 project_id=run_spec.project_id,
                 session_id=None,
@@ -174,13 +174,9 @@ class StubEngine(PresentationEngine):
                     else RunMode.SESSION
                 ),
                 started_at=datetime(2026, 3, 7, 12, 0, 0, tzinfo=timezone.utc),
-                finished_at=datetime(2026, 3, 7, 12, 0, 1, tzinfo=timezone.utc),
-                completed_frames=3,
-                aborted=True,
-                abort_reason=(
-                    "Strict timing aborted run during run: frame interval at index 1 was "
-                    "0.040000 s, exceeding 1.50x expected 0.016667 s."
-                ),
+                finished_at=datetime(2026, 3, 7, 12, 0, 5, tzinfo=timezone.utc),
+                completed_frames=run_spec.display.total_frames,
+                aborted=False,
                 runtime_metadata=RuntimeMetadata(
                     engine_name="stub",
                     requested_refresh_hz=run_spec.display.refresh_hz,
@@ -192,8 +188,13 @@ class StubEngine(PresentationEngine):
                     timing_qc_warmup_frames=240,
                     timing_qc_measured_refresh_hz=59.0,
                     timing_qc_max_interval_s=0.04,
+                    timing_qc_first_bad_phase="run",
                     timing_qc_first_bad_frame_index=1,
-                    timing_qc_strict_abort=True,
+                    timing_qc_strict_violation=True,
+                    timing_qc_strict_violation_reason=(
+                        "Strict timing QC flagged playback during run: frame interval "
+                        "at index 1 was 0.040000 s, exceeding 1.50x expected 0.016667 s."
+                    ),
                 ),
                 frame_intervals=[
                     FrameIntervalRecord(

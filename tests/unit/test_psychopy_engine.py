@@ -808,7 +808,7 @@ def test_psychopy_engine_uses_compiled_trigger_events_not_stimulus_roles(
     ]
 
 
-def test_psychopy_engine_releases_condition_stimuli_after_abort(
+def test_psychopy_engine_releases_condition_stimuli_after_timing_violation(
     monkeypatch,
     sample_project,
     sample_project_root,
@@ -838,7 +838,9 @@ def test_psychopy_engine_releases_condition_stimuli_after_abort(
     finally:
         engine.close_session()
 
-    assert summary.aborted is True
+    assert summary.aborted is False
+    assert summary.runtime_metadata is not None
+    assert summary.runtime_metadata.timing_qc_strict_violation is True
     assert [stim.clear_textures_count for stim in _image_stims(captures)] == [1, 1]
 
 
@@ -943,6 +945,7 @@ def test_psychopy_engine_strict_timing_keeps_stable_intervals_running(
     assert summary.completed_frames == run_spec.display.total_frames
     assert summary.runtime_metadata is not None
     assert summary.runtime_metadata.timing_qc_strict_abort is False
+    assert summary.runtime_metadata.timing_qc_strict_violation is False
     assert summary.runtime_metadata.timing_qc_first_bad_frame_index is None
 
 
@@ -986,10 +989,12 @@ def test_psychopy_engine_strict_timing_tolerates_single_early_warmup_miss(
     assert summary.completed_frames == run_spec.display.total_frames
     assert summary.runtime_metadata is not None
     assert summary.runtime_metadata.timing_qc_strict_abort is False
+    assert summary.runtime_metadata.timing_qc_strict_violation is False
+    assert summary.runtime_metadata.timing_qc_first_bad_phase == "warmup"
     assert summary.runtime_metadata.timing_qc_first_bad_frame_index == 18
 
 
-def test_psychopy_engine_strict_timing_aborts_after_two_post_settle_warmup_misses(
+def test_psychopy_engine_strict_timing_flags_post_settle_warmup_misses(
     monkeypatch,
     sample_project,
     sample_project_root,
@@ -1024,13 +1029,18 @@ def test_psychopy_engine_strict_timing_aborts_after_two_post_settle_warmup_misse
     finally:
         engine.close_session()
 
-    assert summary.aborted is True
-    assert summary.abort_reason is not None
-    assert "Strict timing aborted run during warmup" in summary.abort_reason
-    assert summary.completed_frames == 0
+    assert summary.aborted is False
+    assert summary.abort_reason is None
+    assert summary.completed_frames == run_spec.display.total_frames
     assert summary.runtime_metadata is not None
-    assert summary.runtime_metadata.timing_qc_strict_abort is True
+    assert summary.runtime_metadata.timing_qc_strict_abort is False
+    assert summary.runtime_metadata.timing_qc_strict_violation is True
+    assert summary.runtime_metadata.timing_qc_first_bad_phase == "warmup"
     assert summary.runtime_metadata.timing_qc_first_bad_frame_index == 34
+    assert summary.runtime_metadata.timing_qc_strict_violation_reason is not None
+    assert "Strict timing QC flagged playback during warmup" in (
+        summary.runtime_metadata.timing_qc_strict_violation_reason
+    )
 
 
 def test_psychopy_engine_softened_warmup_does_not_abort_before_run_phase(
@@ -1074,10 +1084,12 @@ def test_psychopy_engine_softened_warmup_does_not_abort_before_run_phase(
     assert summary.completed_frames == run_spec.display.total_frames
     assert summary.runtime_metadata is not None
     assert summary.runtime_metadata.timing_qc_strict_abort is False
+    assert summary.runtime_metadata.timing_qc_strict_violation is False
+    assert summary.runtime_metadata.timing_qc_first_bad_phase == "warmup"
     assert summary.runtime_metadata.timing_qc_first_bad_frame_index == 34
 
 
-def test_psychopy_engine_strict_timing_aborts_on_first_run_phase_miss(
+def test_psychopy_engine_strict_timing_flags_run_phase_miss_without_aborting(
     monkeypatch,
     sample_project,
     sample_project_root,
@@ -1114,13 +1126,18 @@ def test_psychopy_engine_strict_timing_aborts_on_first_run_phase_miss(
     finally:
         engine.close_session()
 
-    assert summary.aborted is True
-    assert summary.completed_frames < run_spec.display.total_frames
-    assert summary.abort_reason is not None
-    assert "Strict timing aborted run" in summary.abort_reason
+    assert summary.aborted is False
+    assert summary.completed_frames == run_spec.display.total_frames
+    assert summary.abort_reason is None
     assert summary.runtime_metadata is not None
-    assert summary.runtime_metadata.timing_qc_strict_abort is True
+    assert summary.runtime_metadata.timing_qc_strict_abort is False
+    assert summary.runtime_metadata.timing_qc_strict_violation is True
+    assert summary.runtime_metadata.timing_qc_first_bad_phase == "run"
     assert summary.runtime_metadata.timing_qc_first_bad_frame_index is not None
+    assert summary.runtime_metadata.timing_qc_strict_violation_reason is not None
+    assert "Strict timing QC flagged playback during run" in (
+        summary.runtime_metadata.timing_qc_strict_violation_reason
+    )
 
 
 def test_psychopy_engine_logs_playback_timing_diagnostic(

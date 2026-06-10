@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import csv
 from pathlib import Path
 
 from tests.unit.runtime_launcher_helpers import (
@@ -129,12 +130,12 @@ def test_session_launch_aborts_cleanly_when_inter_block_break_is_cancelled(
 
 
 
-def test_session_launch_exports_timing_aborted_status_from_run_result(
+def test_session_launch_exports_timing_violation_status_from_run_result(
     sample_project,
     sample_project_root,
 ) -> None:
-    captures: dict[str, object] = {"timing_abort_on_first_run": True}
-    register_engine("stub-timing-abort", lambda: StubEngine(captures))
+    captures: dict[str, object] = {"timing_violation_on_first_run": True}
+    register_engine("stub-timing-violation", lambda: StubEngine(captures))
     try:
         session_plan = compile_session_plan(
             sample_project,
@@ -147,19 +148,20 @@ def test_session_launch_exports_timing_aborted_status_from_run_result(
             sample_project_root,
             session_plan,
             participant_number=PARTICIPANT_NUMBER,
-            launch_settings=LaunchSettings(engine_name="stub-timing-abort", test_mode=True),
+            launch_settings=LaunchSettings(engine_name="stub-timing-violation", test_mode=True),
         )
     finally:
-        unregister_engine("stub-timing-abort")
+        unregister_engine("stub-timing-violation")
 
-    assert summary.aborted is True
-    assert summary.completed_condition_count == 0
-    assert len(summary.run_results) == 1
-    assert summary.run_results[0].aborted is True
-    assert "Strict timing aborted run" in (summary.abort_reason or "")
+    assert summary.aborted is False
+    assert summary.completed_condition_count == session_plan.total_runs
+    assert len(summary.run_results) == session_plan.total_runs
+    assert summary.run_results[0].aborted is False
+    assert summary.abort_reason is None
     assert summary.run_results[0].runtime_metadata is not None
-    assert summary.run_results[0].runtime_metadata.timing_qc_strict_abort is True
-    assert captures["run_ids"] == [session_plan.ordered_entries()[0].run_id]
+    assert summary.run_results[0].runtime_metadata.timing_qc_strict_abort is False
+    assert summary.run_results[0].runtime_metadata.timing_qc_strict_violation is True
+    assert captures["run_ids"] == [entry.run_id for entry in session_plan.ordered_entries()]
     assert summary.output_dir is not None
     session_output_dir = sample_project_root / Path(summary.output_dir)
     exported_summary = read_json_file(
@@ -170,13 +172,22 @@ def test_session_launch_exports_timing_aborted_status_from_run_result(
         session_output_dir / session_plan.ordered_entries()[0].run_id / "run_summary.json",
         RunExecutionSummary,
     )
+    with (sample_project_root / "logs" / "session_condition_history.csv").open(
+        encoding="utf-8", newline=""
+    ) as handle:
+        condition_history_rows = list(csv.DictReader(handle))
 
-    assert exported_summary.aborted is True
-    assert exported_summary.completed_condition_count == 0
+    assert exported_summary.aborted is False
+    assert exported_summary.completed_condition_count == session_plan.total_runs
     assert exported_summary.run_results[0].runtime_metadata is not None
-    assert exported_summary.run_results[0].runtime_metadata.timing_qc_strict_abort is True
-    assert exported_run_summary.aborted is True
+    assert exported_summary.run_results[0].runtime_metadata.timing_qc_strict_abort is False
+    assert exported_summary.run_results[0].runtime_metadata.timing_qc_strict_violation is True
+    assert exported_run_summary.aborted is False
     assert exported_run_summary.runtime_metadata is not None
+    assert exported_run_summary.runtime_metadata.timing_qc_first_bad_phase == "run"
     assert exported_run_summary.runtime_metadata.timing_qc_first_bad_frame_index == 1
+    assert condition_history_rows[0]["timing_qc_strict_violation"] == "True"
+    assert condition_history_rows[0]["timing_qc_first_bad_phase"] == "run"
+    assert condition_history_rows[0]["timing_qc_first_bad_frame_index"] == "1"
 
 

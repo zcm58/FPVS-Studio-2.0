@@ -79,6 +79,10 @@ The PsychoPy implementation:
   `FixationEvent` windows
 - polls response keys and escape
 - records frame intervals and runtime metadata
+- treats strict timing misses as post-run quality-control flags instead of aborting
+  playback; `RuntimeMetadata` records `timing_qc_strict_violation`,
+  `timing_qc_strict_violation_reason`, `timing_qc_first_bad_phase`,
+  `timing_qc_first_bad_frame_index`, and `timing_qc_max_interval_s` for later review
 
 ## Trigger behavior
 
@@ -157,7 +161,8 @@ Project-level reporting index:
 - `logs/session_condition_history.csv`
   - append-only one-row-per-condition-occurrence session history
   - includes participant number, age, sex, handedness, random order seed, run timing,
-    block/order metadata, abort fields, fixation metrics, and block accuracy
+    block/order metadata, abort fields, timing-QC metadata, fixation metrics, and block
+    accuracy
   - used for reporting convenience; the detailed audit source remains the
     session/run artifacts under `runs/`
 
