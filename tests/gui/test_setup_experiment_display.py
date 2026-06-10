@@ -72,24 +72,13 @@ def test_setup_wizard_experiment_and_fixation_steps_are_width_safe(
         label.text() for label in guide.experiment_settings_card.findChildren(QLabel)
     )
     assert "Display refresh rate" in experiment_labels
-    assert "Recommended default: 60 Hz, black background." in experiment_labels
     assert "Image Size" in experiment_labels
     assert "Image width" in experiment_labels
-    assert "ACR default: 5.0 deg at 57 cm on 1920 x 1080." in experiment_labels
     assert "Viewing distance" in experiment_labels
     assert "Screen width" in experiment_labels
     assert "Repeats per condition" in experiment_labels
-    assert "Recommended default: 2 repeats; randomized order." in experiment_labels
     assert "Condition order" in experiment_labels
     assert "randomized automatically" in experiment_labels
-    for object_name in (
-        "experiment_display_default_cue_label",
-        "experiment_image_size_default_cue_label",
-        "experiment_session_default_cue_label",
-    ):
-        default_cue = guide.experiment_settings_card.findChild(QLabel, object_name)
-        assert default_cue is not None
-        assert default_cue.property("setupDefaultCue") == "true"
     assert "Experiment Settings" not in experiment_labels
     assert "Block count" not in experiment_labels
     assert "Random order seed" not in experiment_labels
@@ -279,9 +268,7 @@ def test_setup_wizard_experiment_image_size_controls_update_preview_and_review(
     )
     assert "Fixation Cross" not in label_text
     assert "Behavior" in label_text
-    assert "Default: fixed schedule with 0 color changes." in label_text
     assert "Timing" in label_text
-    assert "Default: 250 ms change; 1500 ms minimum gap." in label_text
     assert "Response" not in label_text
     assert "Appearance" not in label_text
     assert guide.fixation_schedule_editor.fixation_behavior_panel.minimumHeight() == 210
@@ -322,9 +309,7 @@ def test_setup_wizard_experiment_image_size_controls_update_preview_and_review(
     assert "Behavior" not in label_text
     assert "Timing" not in label_text
     assert "Response" in label_text
-    assert "Default: accuracy off; Space within 1.0 s when enabled." in label_text
     assert "Fixation Cross Appearance" in label_text
-    assert "ACR default: blue to red, 27 px cross, 2 px line." in label_text
     assert "Preview" in label_text
     assert "Response and Appearance" not in label_text
     assert "Color-change task, response, and cross appearance." not in label_text

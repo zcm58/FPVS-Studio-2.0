@@ -82,11 +82,6 @@ def test_setup_wizard_surfaces_steps_and_keeps_shared_editors_available(
     assert setup_icon.width() == 52
     assert setup_icon.height() == 52
     assert project_editor.findChild(QLabel, "project_overview_title").text() == "Project Details"
-    project_default_cue = project_editor.findChild(QLabel, "project_overview_subtitle")
-    assert project_default_cue.property("setupDefaultCue") == "true"
-    assert project_default_cue.text() == (
-        "Recommended start: Continuous Images; participant tutorial enabled."
-    )
     assert project_editor.findChild(QLabel, "project_overview_step_badge") is None
     assert checklist.objectName() == "project_overview_checklist"
     assert checklist.title_label.text() == "Ready for next step"

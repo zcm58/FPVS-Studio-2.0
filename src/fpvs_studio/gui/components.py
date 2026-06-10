@@ -77,7 +77,6 @@ __all__ = [
     "apply_studio_theme",
     "apply_welcome_window_theme",
     "condition_template_details_header_stylesheet",
-    "create_default_cue_label",
     "create_home_project_icon",
     "create_setup_project_icon",
     "error_text_stylesheet",
@@ -858,22 +857,6 @@ def mark_error_text(label: QLabel) -> None:
     apply_error_text_style(label)
 
 
-def create_default_cue_label(
-    text: str,
-    parent: QWidget | None = None,
-    *,
-    object_name: str | None = None,
-) -> QLabel:
-    label = QLabel(text, parent)
-    if object_name is not None:
-        label.setObjectName(object_name)
-    label.setProperty("setupDefaultCue", "true")
-    label.setWordWrap(True)
-    label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
-    label.setMaximumHeight(label.fontMetrics().lineSpacing() * 2 + 8)
-    return label
-
-
 def _resolved_theme(theme: StudioTheme | QPalette | None = None) -> StudioTheme:
     if isinstance(theme, StudioTheme):
         return theme
@@ -1160,15 +1143,6 @@ def studio_theme_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
         color: {color_text_secondary};
         font-size: {FONT_SIZE_META}px;
     }}
-    QLabel[setupDefaultCue="true"] {{
-        border: 1px solid {color_info_border};
-        border-radius: {CARD_CORNER_RADIUS}px;
-        background-color: {color_info_bg};
-        color: {color_info_text};
-        font-size: {FONT_SIZE_META}px;
-        font-weight: 600;
-        padding: 3px 7px;
-    }}
     QLabel[setupMetricValue="true"] {{
         color: {color_text_primary};
         font-weight: 600;
@@ -1409,15 +1383,6 @@ def project_overview_stylesheet(theme: StudioTheme | QPalette | None = None) -> 
     QLabel[setupChecklistItem="true"][setupChecklistState="incomplete"] {{
         color: {theme.error_text};
     }}
-    QLabel[setupDefaultCue="true"] {{
-        border: 1px solid {theme.info_border};
-        border-radius: {CARD_CORNER_RADIUS}px;
-        background-color: {theme.info_bg};
-        color: {theme.info_text};
-        font-size: {FONT_SIZE_META}px;
-        font-weight: 600;
-        padding: 3px 7px;
-    }}
     """
 
 
@@ -1446,15 +1411,6 @@ def fixation_settings_stylesheet(theme: StudioTheme | QPalette | None = None) ->
     QLabel[fixationSettingsSectionTitle="true"] {{
         color: {theme.text_primary};
         font-weight: 700;
-    }}
-    QLabel[setupDefaultCue="true"] {{
-        border: 1px solid {theme.info_border};
-        border-radius: {CARD_CORNER_RADIUS}px;
-        background-color: {theme.info_bg};
-        color: {theme.info_text};
-        font-size: {FONT_SIZE_META}px;
-        font-weight: 600;
-        padding: 3px 7px;
     }}
     """
 

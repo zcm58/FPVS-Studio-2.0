@@ -28,7 +28,6 @@ from fpvs_studio.gui.components import (
     PAGE_SECTION_GAP,
     SectionCard,
     apply_fixation_settings_theme,
-    create_default_cue_label,
     mark_secondary_action,
 )
 from fpvs_studio.gui.document import ProjectDocument
@@ -122,14 +121,7 @@ def _preview_color(color_text: str, *, fallback: str) -> QColor:
     return QColor(fallback)
 
 
-def _settings_section(
-    title: str,
-    body: QWidget,
-    *,
-    parent: QWidget,
-    default_cue: str | None = None,
-    cue_object_name: str | None = None,
-) -> QFrame:
+def _settings_section(title: str, body: QWidget, *, parent: QWidget) -> QFrame:
     section = QFrame(parent)
     section.setObjectName(f"fixation_{title.lower()}_section")
     section.setProperty("fixationSettingsSection", "true")
@@ -141,14 +133,6 @@ def _settings_section(
     title_label.setProperty("fixationSettingsSectionTitle", "true")
     title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
     layout.addWidget(title_label)
-    if default_cue is not None:
-        cue_label = create_default_cue_label(
-            default_cue,
-            section,
-            object_name=cue_object_name,
-        )
-        cue_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(cue_label)
     layout.addStretch(1)
     layout.addWidget(body)
     layout.addStretch(1)
@@ -568,29 +552,21 @@ class FixationSettingsEditor(QWidget):
             "Behavior",
             self.fixation_behavior_group,
             parent=self.fixation_panel,
-            default_cue="Default: fixed schedule with 0 color changes.",
-            cue_object_name="fixation_behavior_default_cue_label",
         )
         self.fixation_timing_panel = _settings_section(
             "Timing",
             self.fixation_timing_group,
             parent=self.fixation_panel,
-            default_cue="Default: 250 ms change; 1500 ms minimum gap.",
-            cue_object_name="fixation_timing_default_cue_label",
         )
         self.fixation_response_panel = _settings_section(
             "Response",
             self.fixation_response_group,
             parent=self.fixation_panel,
-            default_cue="Default: accuracy off; Space within 1.0 s when enabled.",
-            cue_object_name="fixation_response_default_cue_label",
         )
         self.fixation_appearance_panel = _settings_section(
             "Fixation Cross Appearance",
             self.fixation_appearance_group,
             parent=self.fixation_panel,
-            default_cue="ACR default: blue to red, 27 px cross, 2 px line.",
-            cue_object_name="fixation_appearance_default_cue_label",
         )
         if section_mode == "fixation":
             visible_panels: tuple[QFrame, ...] = (
