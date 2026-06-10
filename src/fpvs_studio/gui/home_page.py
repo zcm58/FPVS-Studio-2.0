@@ -370,6 +370,7 @@ class HomePage(QWidget):
         self.launch_status_summary = QLabel(self)
         self.launch_status_summary.setObjectName("home_launch_status_summary")
         self.launch_status_summary.setWordWrap(True)
+        self.launch_status_summary.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.launch_status_summary.setMinimumHeight(28)
         self.launch_status_summary.setVisible(False)
 
@@ -625,12 +626,16 @@ class HomePage(QWidget):
         self.launch_button.setEnabled(is_ready)
         self._set_setup_action_state(is_ready=is_ready)
         self.launch_status_summary.setText("")
+        self.launch_status_summary.setToolTip("")
         self.launch_status_summary.setVisible(False)
         if is_ready:
             self.launch_button.setToolTip(self._normal_launch_tooltip)
             self.launch_button.setStatusTip(self._normal_launch_status_tip)
             return
         blocker_text = _first_actionable_blocker(report)
+        self.launch_status_summary.setText(_home_blocker_summary_text(blocker_text))
+        self.launch_status_summary.setToolTip(blocker_text)
+        self.launch_status_summary.setVisible(True)
         self.launch_button.setToolTip(blocker_text)
         self.launch_button.setStatusTip(blocker_text)
 
@@ -711,4 +716,11 @@ def _first_actionable_blocker(report: LauncherReadinessReport) -> str:
         if item.startswith(("Needs setup:", "Warning:")):
             return item
     return report.status_summary
+
+
+def _home_blocker_summary_text(blocker_text: str) -> str:
+    for prefix in ("Needs setup: ", "Warning: "):
+        if blocker_text.startswith(prefix):
+            return blocker_text.removeprefix(prefix)
+    return blocker_text
 

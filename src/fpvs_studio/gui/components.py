@@ -1533,6 +1533,10 @@ def setup_wizard_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
         color: {theme.text_primary};
         font-size: {FONT_SIZE_BODY}px;
     }}
+    QLabel#setup_wizard_next_hint_label {{
+        color: {theme.text_secondary};
+        font-size: {FONT_SIZE_META}px;
+    }}
     """
     )
 

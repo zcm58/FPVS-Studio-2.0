@@ -104,6 +104,10 @@ def test_setup_wizard_exists_and_uses_single_column_shell_with_steps(
     assert wizard.findChild(QWidget, "setup_wizard_step_5_response") is not None
     assert wizard.findChild(QWidget, "setup_wizard_step_6_review") is not None
     assert wizard.progress_steps.step_circles[0].property("setupProgressState") == "current"
+    next_hint = wizard.findChild(QLabel, "setup_wizard_next_hint_label")
+    assert next_hint is not None
+    assert next_hint.isVisible()
+    assert next_hint.text() == "To continue: Enter a project description"
     initial_progress_labels = [label.text() for label in wizard.progress_step_labels]
     for item in wizard.progress_steps.step_items:
         item_right = item.mapTo(
@@ -117,9 +121,17 @@ def test_setup_wizard_exists_and_uses_single_column_shell_with_steps(
     back_button = wizard.findChild(QPushButton, "setup_wizard_back_button")
     assert next_button is not None
     assert back_button is not None
+    qtbot.waitUntil(lambda: next_button.isEnabled())
+    assert not next_hint.isVisible()
     qtbot.mouseClick(next_button, Qt.MouseButton.LeftButton)
+    QApplication.processEvents()
+    assert wizard.step_stack.currentWidget() is wizard.conditions_step_surface
+    assert not next_button.isEnabled()
+    assert next_hint.isVisible()
+    assert next_hint.text() == "To continue: Add at least one condition"
     qtbot.mouseClick(back_button, Qt.MouseButton.LeftButton)
     QApplication.processEvents()
+    assert not next_hint.isVisible()
     assert [label.text() for label in wizard.progress_step_labels] == initial_progress_labels
     _assert_balanced_setup_stepper(wizard)
     label_text = "\n".join(label.text() for label in wizard.findChildren(QLabel))

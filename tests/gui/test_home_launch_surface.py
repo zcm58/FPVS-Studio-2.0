@@ -263,11 +263,13 @@ def test_incomplete_home_launch_state_is_error_and_disabled(
     _, window = _open_created_project(controller, qtbot, tmp_path, "Incomplete Home State")
 
     status_label = window.home_page.findChild(QLabel, "home_launch_status_indicator")
+    status_summary = window.home_page.findChild(QLabel, "home_launch_status_summary")
     home_launch_button = window.home_page.findChild(QPushButton, "home_launch_experiment_button")
     complete_setup_button = window.home_page.findChild(QPushButton, "home_edit_setup_button")
     run_launch_button = window.run_page.findChild(QPushButton, "launch_test_session_button")
 
     assert status_label is not None
+    assert status_summary is not None
     assert home_launch_button is not None
     assert complete_setup_button is not None
     assert run_launch_button is not None
@@ -276,6 +278,10 @@ def test_incomplete_home_launch_state_is_error_and_disabled(
     assert status_label.alignment() == Qt.AlignmentFlag.AlignCenter
     assert status_label.minimumWidth() == 224
     assert status_label.minimumHeight() >= 34
+    assert status_summary.isVisible()
+    assert status_summary.alignment() == Qt.AlignmentFlag.AlignCenter
+    assert status_summary.text() == "Add at least one condition."
+    assert status_summary.toolTip() == home_launch_button.toolTip()
     assert home_launch_button.isEnabled() is False
     assert "Needs setup:" in home_launch_button.toolTip()
     assert home_launch_button.statusTip() == home_launch_button.toolTip()
