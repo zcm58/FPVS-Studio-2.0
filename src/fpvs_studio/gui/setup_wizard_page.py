@@ -57,6 +57,7 @@ from fpvs_studio.gui.window_helpers import (
     _timing_template_label,
 )
 from fpvs_studio.gui.workers import ProgressTask
+from fpvs_studio.preprocessing.normalization import ImageNormalizationScan
 
 _WIZARD_STEPS: tuple[tuple[str, str], ...] = (
     ("project", "Project"),
@@ -167,6 +168,7 @@ class SetupWizardPage(QWidget):
             None
         )
         self._step_jump_enabled = False
+        self._active_image_readiness_task: ProgressTask | None = None
         self._active_normalization_task: ProgressTask | None = None
         self._refresh_timer = QTimer(self)
         self._refresh_timer.setSingleShot(True)
@@ -657,13 +659,15 @@ class SetupWizardPage(QWidget):
 
     def _go_back(self) -> None:
         self.flush_pending_edits()
+        if self._condition_image_task_active():
+            return
         if self._active_step_index > 0:
             self._active_step_index -= 1
             self.refresh()
 
     def _go_next(self) -> None:
         self.flush_pending_edits()
-        if self._active_normalization_task is not None:
+        if self._condition_image_task_active():
             return
         if not self._current_step_valid():
             return
@@ -671,8 +675,8 @@ class SetupWizardPage(QWidget):
             self._return_home()
             return
         if _WIZARD_STEPS[self._active_step_index][0] == "conditions":
-            if self._maybe_normalize_condition_images_before_advance():
-                return
+            self._start_condition_image_readiness_scan()
+            return
         self._advance_to_next_step()
 
     def _advance_to_next_step(self) -> None:
@@ -680,32 +684,69 @@ class SetupWizardPage(QWidget):
         self.refresh()
 
     def _go_to_step_from_progress(self, step_index: int) -> None:
-        if not self._step_jump_enabled or self._active_normalization_task is not None:
+        if not self._step_jump_enabled or self._condition_image_task_active():
             return
         self.flush_pending_edits()
         self._active_step_index = max(0, min(step_index, len(_WIZARD_STEPS) - 1))
         self.refresh()
 
-    def _maybe_normalize_condition_images_before_advance(self) -> bool:
-        try:
-            scan = self._document.scan_condition_image_normalization()
-        except Exception as error:
-            _show_error_dialog(self, "Image Readiness Error", error)
-            return True
+    def _condition_image_task_active(self) -> bool:
+        return (
+            self._active_image_readiness_task is not None
+            or self._active_normalization_task is not None
+        )
+
+    def _active_condition_image_task_hint(self) -> str:
+        if self._active_image_readiness_task is not None:
+            return "Checking image readiness..."
+        if self._active_normalization_task is not None:
+            return "Normalizing condition images..."
+        return ""
+
+    def _start_condition_image_readiness_scan(self) -> None:
+        if self._active_image_readiness_task is not None:
+            return
+        task = ProgressTask(
+            parent_widget=self,
+            label="Checking condition image readiness...",
+            callback=self._document.scan_condition_image_normalization,
+            window_title="Checking Images",
+        )
+        self._active_image_readiness_task = task
+        self.refresh()
+        task.succeeded.connect(self._on_condition_image_readiness_scan_succeeded)
+        task.failed.connect(self._on_condition_image_readiness_scan_failed)
+        task.finished.connect(self._on_condition_image_readiness_scan_finished)
+        task.start()
+
+    def _on_condition_image_readiness_scan_succeeded(
+        self,
+        scan: ImageNormalizationScan,
+    ) -> None:
         if not scan.needs_normalization:
-            return False
+            self._advance_to_next_step()
+            return
         if not scan.can_normalize:
             _show_error_dialog(
                 self,
                 "Image Readiness Error",
                 RuntimeError("Selected image folders cannot be normalized automatically."),
             )
-            return True
+            return
         dialog = ImageNormalizationDialog(scan, parent=self)
         if dialog.exec() != QDialog.DialogCode.Accepted:
-            return True
+            return
         self._start_condition_image_normalization(dialog.target_size())
-        return True
+
+    def _on_condition_image_readiness_scan_failed(self, error: object) -> None:
+        if isinstance(error, Exception):
+            _show_error_dialog(self, "Image Readiness Error", error)
+        else:
+            _show_error_dialog(self, "Image Readiness Error", RuntimeError(str(error)))
+
+    def _on_condition_image_readiness_scan_finished(self) -> None:
+        self._active_image_readiness_task = None
+        self.refresh()
 
     def _start_condition_image_normalization(self, target_size: int) -> None:
         task = ProgressTask(
@@ -715,7 +756,7 @@ class SetupWizardPage(QWidget):
             window_title="Normalizing Images",
         )
         self._active_normalization_task = task
-        self.setup_wizard_next_button.setEnabled(False)
+        self.refresh()
         task.succeeded.connect(lambda _result: self._advance_to_next_step())
         task.failed.connect(self._on_condition_image_normalization_failed)
         task.finished.connect(self._on_condition_image_normalization_finished)
@@ -733,6 +774,8 @@ class SetupWizardPage(QWidget):
 
     def _return_home(self) -> None:
         self.flush_pending_edits()
+        if self._condition_image_task_active():
+            return
         if self._current_step_key() == "review":
             answer = QMessageBox.question(
                 self,
@@ -788,6 +831,7 @@ class SetupWizardPage(QWidget):
         self._refresh_review_summary()
 
         step_valid = self._current_step_valid()
+        condition_image_task_active = self._condition_image_task_active()
         self.step_title_label.setVisible(False)
         self.step_status_badge.setVisible(False)
         self.step_status_label.setText(self._step_status_text(self._active_step_index))
@@ -797,12 +841,19 @@ class SetupWizardPage(QWidget):
             "false",
         )
         refresh_widget_style(self.step_card)
-        self.setup_wizard_back_button.setEnabled(self._active_step_index > 0)
-        self.setup_wizard_next_button.setEnabled(step_valid)
+        self.setup_wizard_back_button.setEnabled(
+            self._active_step_index > 0 and not condition_image_task_active
+        )
+        self.setup_wizard_next_button.setEnabled(step_valid and not condition_image_task_active)
         self.setup_wizard_next_button.setText("Next")
         self.setup_wizard_next_button.setVisible(step_key != "review")
+        self.setup_wizard_return_home_button.setEnabled(not condition_image_task_active)
         self.setup_wizard_return_home_button.setVisible(step_key != "review")
-        hint_text = "" if step_valid or step_key == "review" else self._next_step_hint_text()
+        hint_text = (
+            self._active_condition_image_task_hint()
+            if condition_image_task_active
+            else "" if step_valid or step_key == "review" else self._next_step_hint_text()
+        )
         self.setup_wizard_next_hint_label.setText(hint_text)
         self.setup_wizard_next_hint_label.setToolTip(hint_text)
         self.setup_wizard_next_hint_label.setVisible(bool(hint_text))
@@ -1094,7 +1145,9 @@ class SetupWizardPage(QWidget):
 
     def _refresh_progress_steps(self) -> None:
         current = self._active_step_index
-        self.progress_steps.set_navigation_enabled(self._step_jump_enabled)
+        self.progress_steps.set_navigation_enabled(
+            self._step_jump_enabled and not self._condition_image_task_active()
+        )
         self.progress_steps.set_active_index(current)
 
     def _step_index_for_key(self, step_key: str) -> int:

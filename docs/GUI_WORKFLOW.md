@@ -124,8 +124,9 @@ The authoring window is organized around two user-facing modes:
   - raw image-folder import is permissive; folders with mixed or non-square image sizes are not
     rejected at selection time
   - when users leave Conditions, FPVS Studio checks selected condition images for
-    mixed sizes, non-square sizes, or file types; inconsistent folders can be normalized
-    to square PNG copies at `512x512` or `256x256` before moving on
+    mixed sizes, non-square sizes, or file types through a progress task; inconsistent
+    folders can be normalized to square PNG copies at `512x512` or `256x256` before
+    moving on
   - the Conditions step includes a secondary `Create Control Condition...` action for
     optional grayscale, 180 degree rotated, or phase-scrambled control conditions that
     reuse the selected condition's existing base and oddball image folders

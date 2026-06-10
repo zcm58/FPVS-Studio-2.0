@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
 from PIL import Image
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QObject, Qt, Signal
 from PySide6.QtGui import QTextCursor
 from PySide6.QtWidgets import (
     QApplication,
@@ -109,6 +110,105 @@ def test_setup_wizard_conditions_step_authors_word_condition(
     assert step.base_check_status.text() == "Complete"
     assert step.oddball_check_status.text() == "Complete"
     assert next_button.isEnabled()
+
+
+def test_setup_wizard_conditions_next_scans_images_without_blocking_gui(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Async Image Check")
+    guide = window.setup_wizard_page
+    step = guide.condition_setup_step
+    guide.open_wizard(step_key="conditions")
+    qtbot.mouseClick(step.add_condition_button, Qt.MouseButton.LeftButton)
+    condition_id = step.selected_condition_id()
+    assert isinstance(condition_id, str)
+    guide._document.update_condition(condition_id, name="Faces", trigger_code=1)
+    guide._document.import_condition_stimulus_folder(
+        condition_id,
+        role="base",
+        source_dir=_write_image_directory(tmp_path / "async-base"),
+    )
+    guide._document.import_condition_stimulus_folder(
+        condition_id,
+        role="oddball",
+        source_dir=_write_image_directory(tmp_path / "async-oddball"),
+    )
+    QApplication.processEvents()
+
+    progress_tasks: list[_DeferredProgressTask] = []
+
+    class _DeferredProgressTask(QObject):
+        succeeded = Signal(object)
+        failed = Signal(object)
+        finished = Signal()
+
+        def __init__(
+            self,
+            *,
+            parent_widget: QWidget,
+            label: str,
+            callback: Callable[[], object],
+            **_kwargs: object,
+        ) -> None:
+            super().__init__(parent_widget)
+            self.label = label
+            self.started = False
+            self._callback = callback
+            progress_tasks.append(self)
+
+        def start(self) -> None:
+            self.started = True
+
+        def finish_success(self) -> None:
+            try:
+                result = self._callback()
+            except Exception as error:
+                self.failed.emit(error)
+            else:
+                self.succeeded.emit(result)
+            finally:
+                self.finished.emit()
+
+    original_scan = guide._document.scan_condition_image_normalization
+    scan_calls = 0
+
+    def _scan_after_worker_start() -> object:
+        nonlocal scan_calls
+        scan_calls += 1
+        return original_scan()
+
+    monkeypatch.setattr(
+        "fpvs_studio.gui.setup_wizard_page.ProgressTask",
+        _DeferredProgressTask,
+    )
+    monkeypatch.setattr(
+        guide._document,
+        "scan_condition_image_normalization",
+        _scan_after_worker_start,
+    )
+
+    guide.open_wizard(step_key="images")
+    assert guide.step_stack.currentWidget() is guide.conditions_step_surface
+    assert guide.setup_wizard_next_button.isEnabled()
+
+    qtbot.mouseClick(guide.setup_wizard_next_button, Qt.MouseButton.LeftButton)
+    QApplication.processEvents()
+
+    assert len(progress_tasks) == 1
+    assert progress_tasks[0].label == "Checking condition image readiness..."
+    assert progress_tasks[0].started is True
+    assert scan_calls == 0
+    assert guide.step_stack.currentWidget() is guide.conditions_step_surface
+    assert not guide.setup_wizard_next_button.isEnabled()
+
+    progress_tasks[0].finish_success()
+    QApplication.processEvents()
+
+    assert scan_calls == 1
+    assert guide.step_stack.currentWidget() is guide.experiment_step_surface
 
 
 def test_setup_wizard_word_editor_keeps_blank_line_after_debounce(
@@ -523,6 +623,7 @@ def test_setup_wizard_conditions_next_silently_advances_when_images_are_uniform(
         "fpvs_studio.gui.setup_wizard_page.ImageNormalizationDialog",
         _unexpected_dialog,
     )
+    monkeypatch.setattr("fpvs_studio.gui.setup_wizard_page.ProgressTask", _ImmediateProgressTask)
 
     guide.open_wizard(step_key="images")
     assert guide.step_stack.currentWidget() is guide.conditions_step_surface
@@ -681,6 +782,7 @@ def test_setup_wizard_conditions_next_stays_put_when_normalization_is_cancelled(
         def exec(self):
             return QDialog.DialogCode.Rejected
 
+    monkeypatch.setattr("fpvs_studio.gui.setup_wizard_page.ProgressTask", _ImmediateProgressTask)
     monkeypatch.setattr("fpvs_studio.gui.setup_wizard_page.ImageNormalizationDialog", _RejectDialog)
 
     before_source_dir = window.document.get_condition_stimulus_set(

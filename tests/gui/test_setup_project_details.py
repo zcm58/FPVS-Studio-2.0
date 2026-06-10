@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 from tests.gui.helpers import (
+    _ImmediateProgressTask,
     _open_created_project,
     _write_image_directory,
 )
@@ -222,6 +223,7 @@ def test_setup_wizard_navigation_has_no_conditions_advanced_editor(
     )
     qtbot.waitUntil(next_button.isEnabled)
 
+    monkeypatch.setattr("fpvs_studio.gui.setup_wizard_page.ProgressTask", _ImmediateProgressTask)
     qtbot.mouseClick(next_button, Qt.MouseButton.LeftButton)
     assert guide.step_stack.currentWidget() is guide.experiment_step_surface
     assert guide.experiment_step_surface.content.objectName() == (
