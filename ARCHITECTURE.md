@@ -60,7 +60,9 @@ matters after an agent has matched a specific task type, it belongs in that task
 doc, not in this always-read map.
 
 Run `.\.venv3.10\Scripts\python -m pytest -q tests\unit\test_harness_docs.py` after
-harness-documentation edits. The full quality gate also runs this check.
+harness-documentation edits. Wrapper scripts resolve `.venv3.10` first and `.venv`
+second; direct documentation examples keep the canonical `.venv3.10` path. The full
+quality gate also runs this check.
 
 ## Versioning And Packaging
 
@@ -157,10 +159,16 @@ web-design skills are out of scope for this desktop app unless a new surface add
 - Project config import/export task: `src/fpvs_studio/core/AGENTS.md`,
   `src/fpvs_studio/core/project_config.py`, `src/fpvs_studio/gui/main_window.py`,
   `src/fpvs_studio/gui/controller.py`, and `docs/GUI_WORKFLOW.md`.
-- Runtime task: `docs/RUNTIME_EXECUTION.md`, `src/fpvs_studio/runtime/launcher.py`,
-  `src/fpvs_studio/runtime/preflight.py`, `src/fpvs_studio/runtime/participant_history.py`,
+- Runtime task: `src/fpvs_studio/runtime/AGENTS.md`, `docs/RUNTIME_EXECUTION.md`,
+  `src/fpvs_studio/runtime/launcher.py`, `src/fpvs_studio/runtime/preflight.py`,
+  `src/fpvs_studio/runtime/run_worker.py`, `src/fpvs_studio/runtime/triggers.py`,
   `src/fpvs_studio/runtime/session_export.py`, `src/fpvs_studio/core/execution.py`,
   and the relevant `tests/unit/test_runtime_*.py`.
+- Trigger or launch-hardware task: read `src/fpvs_studio/triggers/AGENTS.md`,
+  `src/fpvs_studio/triggers/`, `src/fpvs_studio/runtime/triggers.py`,
+  `src/fpvs_studio/runtime/run_worker.py`, `docs/RUNTIME_EXECUTION.md`,
+  `tests/unit/test_runtime_launcher_flow.py`, and
+  `tests/unit/test_runtime_preflight.py` before broad runtime searches.
 - Preprocessing task: `src/fpvs_studio/preprocessing/`, `src/fpvs_studio/core/models.py`,
   `tests/unit/test_preprocessing_assets.py`, and
   `tests/unit/test_preprocessing_inspection.py`.

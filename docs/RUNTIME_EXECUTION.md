@@ -95,7 +95,8 @@ The PsychoPy implementation:
 - the PsychoPy engine uses flip-locked scheduling with `window.callOnFlip(...)`, tying
   marker-write callbacks to the flip that presents the compiled frame
 - trigger attempts are recorded with frame/time metadata, backend name, status, and
-  failure message when applicable
+  failure message when applicable; exported trigger `time_s` values are run-playback
+  times and do not include timing warmup frames
 - new FPVS Studio projects default to BioSemi-compatible serial output on `COM3`;
   condition starts use each condition's configured trigger code and every oddball onset
   uses project trigger code `55`

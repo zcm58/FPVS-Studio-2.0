@@ -27,6 +27,11 @@ play compiled runs end to end.
 - Render runtime-owned end-of-condition fixation feedback screens without moving scoring/session decisions into the engine.
 - Render single fixation tutorial practice attempts while runtime owns tutorial
   sequencing, reset rules, and participant-facing summary text.
+- Keep trigger emission flip-locked through `window.callOnFlip(...)`; exported trigger
+  timestamps should come from the run clock after warmup, not from warmup timing.
+- Record strict timing misses as runtime metadata quality-control fields instead of
+  aborting playback unless runtime policy changes.
+- Poll `escape` only as an abort signal; response-task semantics stay in runtime/core.
 - Keep the public surface small and swappable.
 
 ## Hard restrictions

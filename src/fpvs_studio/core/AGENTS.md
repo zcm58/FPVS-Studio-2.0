@@ -73,7 +73,9 @@ Implement friendly, explicit validation for:
 
 - supported source extensions: `.jpg`, `.jpeg`, `.png`
 - non-empty condition names
-- integer trigger codes
+- integer event trigger codes in the `1`-`255` range; code `0` is reserved for explicit
+  manual reset and must not be accepted as a normal event marker
+- response keys that are non-empty and do not use `escape`, which is reserved for abort
 - `changes_per_sequence >= 0`
 - target duration > 0 when fixation task enabled
 - `oddball_cycle_repeats_per_sequence >= 1`

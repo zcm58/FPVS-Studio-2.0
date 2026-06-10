@@ -37,6 +37,9 @@ Notes:
 
 - the default install includes PySide6 because the GUI is now the primary app
   surface
+- repo wrapper scripts resolve the local Python from `.venv3.10` first and `.venv`
+  second, so agents can use the scripts even when a checkout was prepared with the
+  shorter environment name
 - PsychoPy remains optional at install time and is still confined to
   `src/fpvs_studio/engines/`
 - the dev extra includes `pytest`, `pytest-qt`, and `pytest-timeout` for GUI

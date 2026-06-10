@@ -87,6 +87,10 @@ unless a future change explicitly adds a real web or mobile app surface.
 
 ## Standard verification
 
+Wrapper scripts resolve the repo Python as `.venv3.10` first, then `.venv`; prefer the
+scripts when available. Direct Python examples below use the canonical `.venv3.10`
+path so harness docs stay stable across machines.
+
 - Run `.\.venv3.10\Scripts\python -m pytest -q tests\unit\test_harness_docs.py` after changing
   `AGENTS.md`, `ARCHITECTURE.md`, `.agents/skills/`, docs task recipes, package
   boundaries, or harness scripts.
