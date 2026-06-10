@@ -256,7 +256,7 @@ class PsychoPyEngine(PresentationEngine):
             if hasattr(window, "frameIntervals"):
                 window.frameIntervals = []
 
-            self._active_run_clock = core.Clock()
+            warmup_clock = core.Clock()
             warmup_last_flip_time: float | None = None
             warmup_strict_timing_enabled = (
                 timing_config.strict_timing and timing_config.strict_timing_warmup
@@ -266,7 +266,7 @@ class PsychoPyEngine(PresentationEngine):
                 current_time_s = (
                     float(flip_time)
                     if flip_time is not None
-                    else self._active_run_clock.getTime()
+                    else warmup_clock.getTime()
                 )
                 if warmup_last_flip_time is not None:
                     warmup_interval_index = warmup_frame_index - 1
@@ -302,6 +302,10 @@ class PsychoPyEngine(PresentationEngine):
 
             keyboard.clock.reset()
             keyboard.clearEvents()
+            self._active_run_clock = core.Clock()
+            reset_run_clock = getattr(self._active_run_clock, "reset", None)
+            if callable(reset_run_clock):
+                reset_run_clock()
             stimulus_index = 0
             fixation_index = 0
             completed_frames = 0

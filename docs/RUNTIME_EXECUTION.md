@@ -53,8 +53,9 @@ The engine never receives `ProjectFile`. It only receives one compiled
 options.
 
 Preflight validates the compiled stimulus payload before playback. Image events require
-existing project-relative files. Word events require non-empty text and do not require
-filesystem assets. Unknown modalities, missing payload fields, or reused stimulus ids
+existing project-relative files that can be opened and fully decoded before the engine
+session starts. Word events require non-empty text and do not require filesystem assets.
+Unknown modalities, missing payload fields, corrupt image files, or reused stimulus ids
 with conflicting payloads fail before launch instead of falling back to image behavior.
 
 ## PsychoPy engine
@@ -87,6 +88,9 @@ The PsychoPy implementation:
 ## Trigger behavior
 
 - runtime passes a logged trigger backend through the engine seam
+- when serial output is enabled, runtime opens the configured serial port before the
+  engine session starts so wrong, missing, busy, or unavailable COM ports fail before
+  the participant-facing launch flow begins
 - engine observes compiled `TriggerEvent` entries during playback
 - the PsychoPy engine uses flip-locked scheduling with `window.callOnFlip(...)`, tying
   marker-write callbacks to the flip that presents the compiled frame
@@ -114,7 +118,9 @@ Configured serial failures do not silently fall back to null output. Missing `py
 COM open failures, and write failures surface as runtime errors before or during
 playback depending on when they are discovered. A marker is recorded as `sent` only after
 the backend write path succeeds; disabled/null output records `skipped_disabled`, and
-backend send failures record `error` before the exception is raised.
+backend send failures record `error` before the run/session is aborted and exported.
+The pre-run COM-port open check verifies OS-level serial availability; it does not prove
+that downstream EEG/status-channel cabling is physically correct.
 
 These software checks do not prove physical display onset timing. Lab timing precision
 still needs BioSemi/BDF and photodiode validation on the actual machine and display.
@@ -136,6 +142,7 @@ That keeps the scoring logic testable without requiring PsychoPy.
 Scoring semantics for the fixation accuracy task:
 
 - response key: `space`
+- `escape` is reserved for participant/operator abort and is rejected as a response key
 - response window: `1.0` second from fixation target onset
 - first valid response in-window counts as the target hit
 - responses outside open windows are false alarms

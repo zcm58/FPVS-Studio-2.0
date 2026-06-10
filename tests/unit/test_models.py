@@ -16,11 +16,13 @@ from fpvs_studio.core.models import (
     MAX_WORD_STIMULUS_CHARS,
     Condition,
     DisplaySettings,
+    FixationTaskSettings,
     ProjectFile,
     SessionSettings,
     StimulusSet,
     TriggerSettings,
 )
+from fpvs_studio.core.run_spec import FixationStyleSpec
 from fpvs_studio.core.serialization import load_project_file, save_project_file
 from fpvs_studio.core.trigger_codes import LOCKED_ODDBALL_TRIGGER_CODE
 
@@ -46,6 +48,37 @@ def test_condition_instructions_strip_bidi_control_characters() -> None:
     )
 
     assert condition.instructions == "Read the instructions."
+
+
+def test_condition_trigger_code_rejects_biosemi_reset_code() -> None:
+    with pytest.raises(ValidationError, match="greater than or equal to 1"):
+        Condition(
+            condition_id="faces",
+            name="Faces",
+            base_stimulus_set_id="base-set",
+            oddball_stimulus_set_id="oddball-set",
+            sequence_count=1,
+            trigger_code=0,
+        )
+
+
+def test_fixation_response_key_rejects_escape_abort_key() -> None:
+    with pytest.raises(ValidationError, match="reserved for abort"):
+        FixationTaskSettings(response_key="escape")
+
+    with pytest.raises(ValidationError, match="reserved for abort"):
+        FixationTaskSettings(response_keys=["space", "escape"])
+
+    with pytest.raises(ValidationError, match="reserved for abort"):
+        FixationStyleSpec(
+            default_color="#0000FF",
+            target_color="#FF0000",
+            response_key="escape",
+            response_keys=["escape"],
+            cross_size_px=27,
+            line_width_px=2,
+            target_duration_frames=15,
+        )
 
 
 def test_session_settings_default_to_space_gated_condition_starts() -> None:

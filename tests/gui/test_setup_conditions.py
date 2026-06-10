@@ -212,10 +212,11 @@ def test_setup_wizard_conditions_step_requires_descriptive_name_and_positive_tri
     QApplication.processEvents()
     assert step.name_check_status.text() == "Complete"
 
-    guide._document.update_condition(condition_id, trigger_code=0)
+    assert step.trigger_code_spin.minimum() == 1
+    step.trigger_code_spin.setValue(0)
     QApplication.processEvents()
-    assert step.trigger_check_status.text() == "Use a trigger code of 1 or higher"
-    assert not next_button.isEnabled()
+    assert step.trigger_code_spin.value() == 1
+    assert step.trigger_check_status.text() == "Complete"
 
     guide._document.update_condition(condition_id, trigger_code=1)
     QApplication.processEvents()

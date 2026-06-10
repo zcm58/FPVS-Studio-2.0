@@ -16,6 +16,7 @@ from fpvs_studio.core.execution import (
     RunExecutionSummary,
     RuntimeMetadata,
     SessionExecutionSummary,
+    TriggerRecord,
 )
 from fpvs_studio.core.run_spec import RunSpec
 from fpvs_studio.core.session_plan import SessionEntry, SessionPlan
@@ -23,7 +24,11 @@ from fpvs_studio.engines.base import PresentationEngine
 from fpvs_studio.runtime.fixation import build_fixation_task_summary, score_fixation_responses
 from fpvs_studio.runtime.preflight import PreflightError
 from fpvs_studio.runtime.session_export import write_run_artifacts, write_session_artifacts
-from fpvs_studio.runtime.triggers import LoggedTriggerBackend, build_trigger_backend
+from fpvs_studio.runtime.triggers import (
+    LoggedTriggerBackend,
+    TriggerEmissionError,
+    build_trigger_backend,
+)
 
 _TUTORIAL_REQUIRED_SUCCESSES = 3
 _TUTORIAL_TARGET_DELAY_SECONDS = 1.0
@@ -49,8 +54,7 @@ class RuntimeWorker:
     ) -> RunExecutionSummary:
         """Run one compiled condition and write its neutral artifact set."""
 
-        trigger_backend, trigger_warnings = build_trigger_backend(runtime_options)
-        trigger_backend.connect()
+        trigger_backend, trigger_warnings = _build_and_connect_trigger_backend(runtime_options)
         session_open = False
         try:
             self._engine.open_session(runtime_options=runtime_options)
@@ -78,24 +82,43 @@ class RuntimeWorker:
                         warnings=trigger_warnings,
                     )
                 else:
-                    run_summary = self._engine.run_condition(
-                        run_spec,
-                        project_root,
-                        runtime_options=runtime_options,
-                        trigger_backend=trigger_backend,
-                    )
-                    run_summary = self._finalize_run_summary(
-                        run_summary,
-                        run_spec,
-                        runtime_options=runtime_options,
-                        relative_output_dir=relative_output_dir,
-                        session_id=run_summary.session_id,
-                        participant_number=participant_number,
-                        participant_metadata=participant_metadata,
-                        trigger_backend=trigger_backend,
-                        trigger_start_index=trigger_start_index,
-                        warnings=trigger_warnings,
-                    )
+                    try:
+                        run_summary = self._engine.run_condition(
+                            run_spec,
+                            project_root,
+                            runtime_options=runtime_options,
+                            trigger_backend=trigger_backend,
+                        )
+                    except TriggerEmissionError as exc:
+                        run_summary = _build_trigger_aborted_summary(
+                            run_spec,
+                            engine_name=self._engine.engine_id,
+                            runtime_options=runtime_options,
+                            participant_number=participant_number,
+                            participant_metadata=participant_metadata,
+                            warnings=trigger_warnings,
+                            trigger_backend=trigger_backend,
+                            trigger_start_index=trigger_start_index,
+                            abort_reason=(
+                                "Trigger output failed during condition playback: "
+                                f"{exc}"
+                            ),
+                            relative_output_dir=relative_output_dir,
+                            session_id=None,
+                        )
+                    else:
+                        run_summary = self._finalize_run_summary(
+                            run_summary,
+                            run_spec,
+                            runtime_options=runtime_options,
+                            relative_output_dir=relative_output_dir,
+                            session_id=run_summary.session_id,
+                            participant_number=participant_number,
+                            participant_metadata=participant_metadata,
+                            trigger_backend=trigger_backend,
+                            trigger_start_index=trigger_start_index,
+                            warnings=trigger_warnings,
+                        )
                     if not run_summary.aborted and self._show_condition_feedback(
                         run_spec, run_summary
                     ):
@@ -132,8 +155,7 @@ class RuntimeWorker:
     ) -> SessionExecutionSummary:
         """Run every entry in a session plan and write session-level artifacts."""
 
-        trigger_backend, trigger_warnings = build_trigger_backend(runtime_options)
-        trigger_backend.connect()
+        trigger_backend, trigger_warnings = _build_and_connect_trigger_backend(runtime_options)
         session_open = False
         warnings = list(trigger_warnings)
         run_results: list[RunExecutionSummary] = []
@@ -164,24 +186,43 @@ class RuntimeWorker:
                     else None
                 )
                 trigger_start_index = len(trigger_backend.records)
-                run_summary = self._engine.run_condition(
-                    entry.run_spec,
-                    project_root,
-                    runtime_options=runtime_options,
-                    trigger_backend=trigger_backend,
-                )
-                run_summary = self._finalize_run_summary(
-                    run_summary,
-                    entry.run_spec,
-                    runtime_options=runtime_options,
-                    relative_output_dir=run_relative_output_dir,
-                    session_id=session_plan.session_id,
-                    participant_number=participant_number,
-                    participant_metadata=participant_metadata,
-                    trigger_backend=trigger_backend,
-                    trigger_start_index=trigger_start_index,
-                    warnings=(),
-                )
+                try:
+                    run_summary = self._engine.run_condition(
+                        entry.run_spec,
+                        project_root,
+                        runtime_options=runtime_options,
+                        trigger_backend=trigger_backend,
+                    )
+                except TriggerEmissionError as exc:
+                    run_summary = _build_trigger_aborted_summary(
+                        entry.run_spec,
+                        engine_name=self._engine.engine_id,
+                        runtime_options=runtime_options,
+                        participant_number=participant_number,
+                        participant_metadata=participant_metadata,
+                        warnings=(),
+                        trigger_backend=trigger_backend,
+                        trigger_start_index=trigger_start_index,
+                        abort_reason=(
+                            "Trigger output failed during condition playback: "
+                            f"{exc}"
+                        ),
+                        relative_output_dir=run_relative_output_dir,
+                        session_id=session_plan.session_id,
+                    )
+                else:
+                    run_summary = self._finalize_run_summary(
+                        run_summary,
+                        entry.run_spec,
+                        runtime_options=runtime_options,
+                        relative_output_dir=run_relative_output_dir,
+                        session_id=session_plan.session_id,
+                        participant_number=participant_number,
+                        participant_metadata=participant_metadata,
+                        trigger_backend=trigger_backend,
+                        trigger_start_index=trigger_start_index,
+                        warnings=(),
+                    )
                 previous_feedback_summary = _latest_fixation_task_summary(run_results)
                 warnings.extend(run_summary.warnings)
                 run_results.append(run_summary)
@@ -476,6 +517,26 @@ def _coerce_int(runtime_options: Mapping[str, object] | None, key: str) -> int |
     return value if isinstance(value, int) else None
 
 
+def _build_and_connect_trigger_backend(
+    runtime_options: Mapping[str, object] | None,
+) -> tuple[LoggedTriggerBackend, list[str]]:
+    """Create and open the trigger backend before the engine session starts."""
+
+    trigger_backend: LoggedTriggerBackend | None = None
+    try:
+        trigger_backend, warnings = build_trigger_backend(runtime_options)
+        trigger_backend.connect()
+    except Exception as exc:
+        if trigger_backend is not None:
+            trigger_backend.close()
+        raise PreflightError(
+            "Trigger preflight failed before launch. Confirm the configured serial "
+            "port is available, the trigger interface is connected, and no other "
+            f"program has the port open. Details: {exc}"
+        ) from exc
+    return trigger_backend, warnings
+
+
 def _estimate_refresh_hz(frame_intervals: list[FrameIntervalRecord]) -> float | None:
     intervals = [
         interval.interval_s
@@ -555,6 +616,53 @@ def _build_start_aborted_summary(
             test_mode=bool((runtime_options or {}).get("test_mode")),
         ),
     )
+
+
+def _build_trigger_aborted_summary(
+    run_spec: RunSpec,
+    *,
+    engine_name: str,
+    runtime_options: Mapping[str, object] | None,
+    participant_number: str,
+    participant_metadata: ParticipantMetadata | None,
+    warnings: list[str] | tuple[str, ...],
+    trigger_backend: LoggedTriggerBackend,
+    trigger_start_index: int,
+    abort_reason: str,
+    relative_output_dir: str | None,
+    session_id: str | None,
+) -> RunExecutionSummary:
+    trigger_log = list(trigger_backend.records[trigger_start_index:])
+    return RunExecutionSummary(
+        project_id=run_spec.project_id,
+        session_id=session_id,
+        run_id=run_spec.run_id,
+        condition_id=run_spec.condition.condition_id,
+        condition_name=run_spec.condition.name,
+        engine_name=engine_name,
+        run_mode=_run_mode(runtime_options),
+        participant_number=participant_number,
+        participant_metadata=participant_metadata or ParticipantMetadata(),
+        completed_frames=_completed_frames_from_trigger_log(trigger_log),
+        aborted=True,
+        abort_reason=abort_reason,
+        warnings=list(warnings),
+        runtime_metadata=RuntimeMetadata(
+            engine_name=engine_name,
+            display_index=_coerce_int(runtime_options, "display_index"),
+            fullscreen=bool((runtime_options or {}).get("fullscreen", True)),
+            requested_refresh_hz=run_spec.display.refresh_hz,
+            test_mode=bool((runtime_options or {}).get("test_mode")),
+        ),
+        trigger_log=trigger_log,
+        output_dir=relative_output_dir,
+    )
+
+
+def _completed_frames_from_trigger_log(trigger_log: list[TriggerRecord]) -> int:
+    if not trigger_log:
+        return 0
+    return max(getattr(record, "frame_index", 0) for record in trigger_log) + 1
 
 
 def _latest_fixation_task_summary(

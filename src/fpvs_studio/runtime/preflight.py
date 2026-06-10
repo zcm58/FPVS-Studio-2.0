@@ -9,6 +9,8 @@ from __future__ import annotations
 from collections.abc import Mapping
 from pathlib import Path
 
+from PIL import Image
+
 from fpvs_studio.core.enums import DutyCycleMode, StimulusModality
 from fpvs_studio.core.run_spec import RunSpec
 from fpvs_studio.core.session_plan import SessionPlan
@@ -154,6 +156,60 @@ def _validate_trigger_timing(run_spec: RunSpec) -> None:
             )
 
 
+def _resolve_project_image_path(project_root: Path, image_path: str) -> Path:
+    relative_path = Path(image_path)
+    if relative_path.is_absolute():
+        raise PreflightError(
+            "Run preflight failed because an image stimulus path is not project-relative: "
+            f"{image_path}"
+        )
+    root = project_root.resolve()
+    absolute_path = (project_root / relative_path).resolve()
+    try:
+        absolute_path.relative_to(root)
+    except ValueError as exc:
+        raise PreflightError(
+            "Run preflight failed because an image stimulus path escapes the project root: "
+            f"{image_path}"
+        ) from exc
+    return absolute_path
+
+
+def _validate_and_preload_image_assets(project_root: Path, run_spec: RunSpec) -> None:
+    image_paths = sorted(
+        {
+            event.image_path
+            for event in run_spec.stimulus_sequence
+            if event.stimulus_modality == StimulusModality.IMAGE
+            and event.image_path is not None
+        }
+    )
+    missing_assets: list[str] = []
+    unloadable_assets: list[str] = []
+    for image_path in image_paths:
+        absolute_path = _resolve_project_image_path(project_root, image_path)
+        if not absolute_path.is_file():
+            missing_assets.append(image_path)
+            continue
+        try:
+            with Image.open(absolute_path) as image:
+                image.load()
+        except (OSError, ValueError) as exc:
+            unloadable_assets.append(f"{image_path} ({exc})")
+
+    if missing_assets:
+        raise PreflightError(
+            "Run preflight failed because referenced assets are missing: "
+            + ", ".join(missing_assets[:5])
+        )
+    if unloadable_assets:
+        raise PreflightError(
+            "Run preflight failed because referenced image assets could not be "
+            "preloaded/decoded: "
+            + ", ".join(unloadable_assets[:5])
+        )
+
+
 def preflight_run_spec(
     project_root: Path,
     run_spec: RunSpec,
@@ -173,20 +229,7 @@ def preflight_run_spec(
             "Run preflight failed because strict timing does not support variable-refresh displays."
         )
 
-    missing_assets = sorted(
-        {
-            event.image_path
-            for event in run_spec.stimulus_sequence
-            if event.stimulus_modality == StimulusModality.IMAGE
-            and event.image_path is not None
-            and not (project_root / Path(event.image_path)).is_file()
-        }
-    )
-    if missing_assets:
-        raise PreflightError(
-            "Run preflight failed because referenced assets are missing: "
-            + ", ".join(missing_assets[:5])
-        )
+    _validate_and_preload_image_assets(project_root, run_spec)
     if (
         run_spec.display.on_frames + run_spec.display.off_frames
         != run_spec.display.frames_per_stimulus

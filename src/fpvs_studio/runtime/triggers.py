@@ -17,6 +17,10 @@ from fpvs_studio.triggers.serial_backend import SerialBackend
 LOGGER = logging.getLogger(__name__)
 
 
+class TriggerEmissionError(RuntimeError):
+    """Raised when a connected trigger backend fails during marker emission."""
+
+
 class LoggedTriggerBackend(TriggerBackend):
     """Wrap a trigger backend and retain execution-time trigger records."""
 
@@ -93,7 +97,7 @@ class LoggedTriggerBackend(TriggerBackend):
         )
         self._records.append(record)
         if status == "error":
-            raise RuntimeError(message) from caught_exception
+            raise TriggerEmissionError(message) from caught_exception
 
     def reset(self) -> None:
         try:

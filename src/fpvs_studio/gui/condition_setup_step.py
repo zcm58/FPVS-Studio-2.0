@@ -347,7 +347,7 @@ class ConditionSetupStep(QWidget):
         self.condition_name_edit.editingFinished.connect(self._apply_name)
         self.trigger_code_spin = QSpinBox(self)
         self.trigger_code_spin.setObjectName("setup_wizard_condition_trigger_code_spin")
-        self.trigger_code_spin.setRange(0, 65535)
+        self.trigger_code_spin.setRange(1, 65535)
         self.trigger_code_spin.valueChanged.connect(self._apply_trigger_code)
         self.modality_combo = QComboBox(self)
         self.modality_combo.setObjectName("setup_wizard_condition_modality_combo")
@@ -626,7 +626,7 @@ class ConditionSetupStep(QWidget):
             with QSignalBlocker(self.condition_name_edit):
                 self.condition_name_edit.clear()
             with QSignalBlocker(self.trigger_code_spin):
-                self.trigger_code_spin.setValue(0)
+                self.trigger_code_spin.setValue(1)
             with QSignalBlocker(self.modality_combo):
                 self.modality_combo.setCurrentIndex(0)
             with QSignalBlocker(self.timing_template_combo):

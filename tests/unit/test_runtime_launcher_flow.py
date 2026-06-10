@@ -25,6 +25,7 @@ from fpvs_studio.runtime.launcher import (
     launch_session,
 )
 from fpvs_studio.runtime.preflight import PreflightError
+from fpvs_studio.triggers.base import TriggerBackend
 
 
 def test_runtime_launcher_dispatches_runspec_to_registered_engine(
@@ -741,6 +742,115 @@ def test_session_launch_blocks_when_detected_resolution_differs_from_project_set
     assert captures["open_count"] == 1
     assert captures["close_count"] == 1
     assert "run_ids" not in captures
+
+
+def test_launch_run_checks_serial_port_before_engine_session(
+    monkeypatch,
+    sample_project,
+    sample_project_root,
+) -> None:
+    class _UnavailableSerialBackend(TriggerBackend):
+        def __init__(self, *_args: object, **_kwargs: object) -> None:
+            return None
+
+        def connect(self) -> None:
+            raise RuntimeError("port unavailable")
+
+        def send_trigger(self, code: int, **_kwargs: object) -> None:
+            return None
+
+        def reset(self) -> None:
+            return None
+
+        def close(self) -> None:
+            return None
+
+    captures: dict[str, object] = {}
+    monkeypatch.setattr("fpvs_studio.runtime.triggers.SerialBackend", _UnavailableSerialBackend)
+    register_engine("stub-serial-preflight", lambda: StubEngine(captures))
+    try:
+        run_spec = compile_run_spec(
+            sample_project,
+            refresh_hz=60.0,
+            project_root=sample_project_root,
+            run_id="faces-run",
+        )
+
+        with pytest.raises(PreflightError, match="Trigger preflight failed before launch"):
+            launch_run(
+                sample_project_root,
+                run_spec,
+                participant_number=PARTICIPANT_NUMBER,
+                launch_settings=LaunchSettings(
+                    engine_name="stub-serial-preflight",
+                    test_mode=True,
+                    serial_enabled=True,
+                    serial_port="COM9",
+                ),
+            )
+    finally:
+        unregister_engine("stub-serial-preflight")
+
+    assert "open_count" not in captures
+    assert "run_ids" not in captures
+
+
+def test_launch_run_exports_aborted_summary_when_serial_write_fails(
+    monkeypatch,
+    sample_project,
+    sample_project_root,
+) -> None:
+    class _FailingWriteSerialBackend(TriggerBackend):
+        def __init__(self, *_args: object, **_kwargs: object) -> None:
+            return None
+
+        def connect(self) -> None:
+            return None
+
+        def send_trigger(self, code: int, **_kwargs: object) -> None:
+            raise RuntimeError("write failed")
+
+        def reset(self) -> None:
+            return None
+
+        def close(self) -> None:
+            return None
+
+    captures: dict[str, object] = {}
+    monkeypatch.setattr("fpvs_studio.runtime.triggers.SerialBackend", _FailingWriteSerialBackend)
+    register_engine("stub-serial-write-failure", lambda: StubEngine(captures))
+    try:
+        run_spec = compile_run_spec(
+            sample_project,
+            refresh_hz=60.0,
+            project_root=sample_project_root,
+            run_id="faces-run",
+        )
+
+        summary = launch_run(
+            sample_project_root,
+            run_spec,
+            participant_number=PARTICIPANT_NUMBER,
+            launch_settings=LaunchSettings(
+                engine_name="stub-serial-write-failure",
+                test_mode=True,
+                serial_enabled=True,
+                serial_port="COM3",
+            ),
+        )
+    finally:
+        unregister_engine("stub-serial-write-failure")
+
+    assert summary.aborted is True
+    assert summary.abort_reason == "Trigger output failed during condition playback: write failed"
+    assert summary.trigger_log[0].status == "error"
+    assert summary.trigger_log[0].message == "write failed"
+    assert (sample_project_root / "runs" / "faces-run" / "run_summary.json").is_file()
+    exported_trigger_rows = _read_csv_rows(
+        sample_project_root / "runs" / "faces-run" / "trigger_log.csv"
+    )
+    assert exported_trigger_rows[0]["status"] == "error"
+    assert exported_trigger_rows[0]["message"] == "write failed"
 
 
 def test_session_launch_allows_detected_resolution_when_project_uses_current_screen(

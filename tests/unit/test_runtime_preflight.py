@@ -140,6 +140,26 @@ def test_preflight_rejects_trigger_events_outside_run_duration(
         preflight_run_spec(sample_project_root, run_spec, engine=_PreflightEngine())
 
 
+def test_preflight_rejects_corrupt_image_assets_before_engine_launch(
+    sample_project,
+    sample_project_root,
+) -> None:
+    run_spec = compile_run_spec(
+        sample_project,
+        refresh_hz=60.0,
+        project_root=sample_project_root,
+        run_id="faces-run",
+    )
+    corrupt_path = sample_project_root / "stimuli" / "original-images" / "base-set" / "bad.png"
+    corrupt_path.write_bytes(b"not an image")
+    run_spec.stimulus_sequence[0] = run_spec.stimulus_sequence[0].model_copy(
+        update={"image_path": "stimuli/original-images/base-set/bad.png"}
+    )
+
+    with pytest.raises(PreflightError, match="could not be preloaded/decoded"):
+        preflight_run_spec(sample_project_root, run_spec, engine=_PreflightEngine())
+
+
 @pytest.mark.parametrize("refresh_hz", [60.0, 120.0, 144.0])
 def test_preflight_accepts_refresh_rates_compatible_with_6hz(
     sample_project,

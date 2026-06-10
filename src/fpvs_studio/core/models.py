@@ -47,6 +47,7 @@ SUPPORTED_VARIANTS = [
     StimulusVariant.PHASE_SCRAMBLED,
 ]
 MAX_WORD_STIMULUS_CHARS = 64
+RESERVED_RESPONSE_KEYS = frozenset({"escape"})
 
 _BIDI_CONTROL_CODEPOINTS = {
     ord("\u061c"): None,  # Arabic Letter Mark
@@ -111,6 +112,17 @@ def validate_color(value: str | tuple[int, int, int]) -> str | tuple[int, int, i
     if any(channel < 0 or channel > 255 for channel in value):
         raise ValueError("RGB channel values must be between 0 and 255.")
     return value
+
+
+def validate_response_key_name(value: str) -> str:
+    """Validate a participant response key name against runtime control keys."""
+
+    cleaned = value.strip().lower()
+    if not cleaned:
+        raise ValueError("response_key may not be blank.")
+    if cleaned in RESERVED_RESPONSE_KEYS:
+        raise ValueError(f"'{cleaned}' is reserved for abort and cannot be a response key.")
+    return cleaned
 
 
 def strip_bidi_controls(value: str) -> str:
@@ -266,7 +278,7 @@ class FixationTaskSettings(FPVSBaseModel):
     def validate_response_keys(cls, value: list[str]) -> list[str]:
         if not value:
             raise ValueError("At least one response key must be provided.")
-        cleaned = [item.strip().lower() for item in value if item.strip()]
+        cleaned = [validate_response_key_name(item) for item in value if item.strip()]
         if not cleaned:
             raise ValueError("Response key values may not be blank.")
         return cleaned
@@ -274,10 +286,7 @@ class FixationTaskSettings(FPVSBaseModel):
     @field_validator("response_key")
     @classmethod
     def validate_response_key(cls, value: str) -> str:
-        cleaned = value.strip().lower()
-        if not cleaned:
-            raise ValueError("response_key may not be blank.")
-        return cleaned
+        return validate_response_key_name(value)
 
     @model_validator(mode="after")
     def validate_ranges(self) -> FixationTaskSettings:
@@ -465,7 +474,7 @@ class Condition(FPVSBaseModel):
     stimulus_variant: StimulusVariant = StimulusVariant.ORIGINAL
     sequence_count: int = Field(gt=0)
     oddball_cycle_repeats_per_sequence: int = Field(default=146, ge=1)
-    trigger_code: StrictInt = Field(default=1, ge=0, le=255)
+    trigger_code: StrictInt = Field(default=1, ge=1, le=255)
     duty_cycle_mode: DutyCycleMode = DutyCycleMode.CONTINUOUS
     order_index: int = Field(default=0, ge=0)
 

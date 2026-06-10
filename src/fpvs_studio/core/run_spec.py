@@ -15,6 +15,7 @@ from fpvs_studio.core.models import (
     FPVSBaseModel,
     validate_color,
     validate_project_relative_path,
+    validate_response_key_name,
     validate_slug,
 )
 
@@ -142,9 +143,16 @@ class FixationStyleSpec(FPVSBaseModel):
     @field_validator("response_key")
     @classmethod
     def validate_response_key(cls, value: str) -> str:
-        cleaned = value.strip().lower()
+        return validate_response_key_name(value)
+
+    @field_validator("response_keys")
+    @classmethod
+    def validate_response_keys(cls, value: list[str]) -> list[str]:
+        if not value:
+            return value
+        cleaned = [validate_response_key_name(item) for item in value if item.strip()]
         if not cleaned:
-            raise ValueError("response_key may not be blank.")
+            raise ValueError("Response key values may not be blank.")
         return cleaned
 
 

@@ -73,12 +73,14 @@ class _FakeWindow:
 class _FakeClock:
     def __init__(self, window: _FakeWindow) -> None:
         self._window = window
+        self._offset = window.last_flip_time
 
     def reset(self) -> None:
+        self._offset = self._window.last_flip_time
         return None
 
     def getTime(self) -> float:
-        return self._window.last_flip_time
+        return self._window.last_flip_time - self._offset
 
 
 class _FakeKeyboard:
@@ -775,6 +777,50 @@ def test_psychopy_engine_emits_compiled_triggers_on_presentation_flip(
     ]
     call_on_flip_events = [event for event in _events(captures) if event[0] == "callOnFlip"]
     assert len(call_on_flip_events) == 2
+
+
+def test_psychopy_engine_trigger_timestamps_exclude_warmup_period(
+    monkeypatch,
+    sample_project,
+    sample_project_root,
+) -> None:
+    run_spec = _two_event_run_spec(sample_project, sample_project_root, duplicate_image=False)
+    run_spec.trigger_events = [
+        TriggerEvent(frame_index=0, code=1, label="condition_start"),
+        TriggerEvent(frame_index=1, code=55, label="oddball_onset"),
+    ]
+    captures: dict[str, object] = {}
+    fake_psychopy = _build_fake_psychopy(
+        captures,
+        flip_times=[0.1, 0.2, 0.3, 0.4, 0.5],
+    )
+    trigger_backend = _RecordingTriggerBackend()
+    engine = PsychoPyEngine()
+    _patch_fake_psychopy(monkeypatch, engine, fake_psychopy)
+
+    try:
+        engine.run_condition(
+            run_spec,
+            sample_project_root,
+            runtime_options={
+                "test_mode": True,
+                "timing_warmup_frames": 3,
+                "strict_timing": False,
+            },
+            trigger_backend=trigger_backend,
+        )
+    finally:
+        engine.close_session()
+
+    assert [
+        {key: value for key, value in record.items() if key != "time_s"}
+        for record in trigger_backend.records
+    ] == [
+        {"code": 1, "frame_index": 0, "label": "condition_start"},
+        {"code": 55, "frame_index": 1, "label": "oddball_onset"},
+    ]
+    assert trigger_backend.records[0]["time_s"] == pytest.approx(0.1)
+    assert trigger_backend.records[1]["time_s"] == pytest.approx(0.2)
 
 
 def test_psychopy_engine_uses_compiled_trigger_events_not_stimulus_roles(
