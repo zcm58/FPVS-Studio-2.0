@@ -164,14 +164,14 @@ Use the repo environment when possible:
 
 ```powershell
 $env:PYTHONPATH = "<repo>\src"
-.\.venv\Scripts\python.exe -c "from pathlib import Path; from fpvs_studio.core.serialization import load_project_file; from fpvs_studio.core.validation import validate_project; root=Path(r'<project>'); project=load_project_file(root/'project.json'); report=validate_project(project, refresh_hz=60.0); print(sum(1 for i in report.issues if i.severity.value == 'error')); print(sum(1 for i in report.issues if i.severity.value == 'warning'))"
+.\.venv3.10\Scripts\python.exe -c "from pathlib import Path; from fpvs_studio.core.serialization import load_project_file; from fpvs_studio.core.validation import validate_project; root=Path(r'<project>'); project=load_project_file(root/'project.json'); report=validate_project(project, refresh_hz=60.0); print(sum(1 for i in report.issues if i.severity.value == 'error')); print(sum(1 for i in report.issues if i.severity.value == 'warning'))"
 ```
 
 Compile and preflight a mixed project:
 
 ```powershell
 $env:PYTHONPATH = "<repo>\src"
-.\.venv\Scripts\python.exe -c "from pathlib import Path; from fpvs_studio.core.serialization import load_project_file; from fpvs_studio.core.compiler import compile_session_plan; from fpvs_studio.core.validation import validate_display_refresh; from fpvs_studio.runtime.preflight import preflight_session_plan; root=Path(r'<project>'); project=load_project_file(root/'project.json'); plan=compile_session_plan(project, project_root=root, refresh_hz=60.0); entries=plan.ordered_entries(); class Engine: pass; Engine.validate_run_spec=lambda self, run_spec: validate_display_refresh(run_spec.display.refresh_hz); preflight_session_plan(root, plan, engine=Engine(), runtime_options={'strict_timing': False}); print(len(entries), sorted({entry.run_spec.condition.stimulus_modality.value for entry in entries}))"
+.\.venv3.10\Scripts\python.exe -c "from pathlib import Path; from fpvs_studio.core.serialization import load_project_file; from fpvs_studio.core.compiler import compile_session_plan; from fpvs_studio.core.validation import validate_display_refresh; from fpvs_studio.runtime.preflight import preflight_session_plan; root=Path(r'<project>'); project=load_project_file(root/'project.json'); plan=compile_session_plan(project, project_root=root, refresh_hz=60.0); entries=plan.ordered_entries(); class Engine: pass; Engine.validate_run_spec=lambda self, run_spec: validate_display_refresh(run_spec.display.refresh_hz); preflight_session_plan(root, plan, engine=Engine(), runtime_options={'strict_timing': False}); print(len(entries), sorted({entry.run_spec.condition.stimulus_modality.value for entry in entries}))"
 ```
 
 Verify copied hashes:

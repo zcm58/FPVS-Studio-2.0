@@ -76,6 +76,8 @@ def test_active_agent_docs_use_repo_python_environment() -> None:
     active_docs = [
         "AGENTS.md",
         "ARCHITECTURE.md",
+        ".agents/skills/fpvs-psychopy-migration/references/migration-guide.md",
+        ".agents/skills/pytest-qt-smoke/SKILL.md",
         "docs/ENVIRONMENT.md",
         "docs/GUI_WORKFLOW.md",
         "docs/QUALITY_SCORE.md",

@@ -26,7 +26,7 @@ Prefer the headless pattern from `docs/GUI_WORKFLOW.md`:
 ```powershell
 $env:QT_QPA_PLATFORM = "offscreen"
 $env:PYTEST_DISABLE_PLUGIN_AUTOLOAD = "1"
-python -m pytest --disable-plugin-autoload -p pytestqt.plugin -p pytest_timeout tests\gui
+.\.venv3.10\Scripts\python -m pytest --disable-plugin-autoload -p pytestqt.plugin -p pytest_timeout tests\gui
 ```
 
 ## Output Checklist
