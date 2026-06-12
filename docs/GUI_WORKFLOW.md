@@ -100,7 +100,7 @@ The authoring window is organized around two user-facing modes:
     mode; the full-screen preview includes a side control panel for live edits to those
     same values, and source image resolution remains independent from on-screen playback
     size; new projects default to the display geometry of 5.0 deg image
-    width, 80.0 cm viewing distance, 56.25 cm screen width, and 1920 x 1080 px
+    width, 80.0 cm viewing distance, 52.03 cm screen width, and 1920 x 1080 px
     resolution
   - new projects default the fixation cross appearance to the ACR-matched 27 px cross
     size and 2 px line width

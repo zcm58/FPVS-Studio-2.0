@@ -21,7 +21,7 @@ def test_runspec_creation_at_60hz_continuous_mode(sample_project, sample_project
     assert run_spec.display.background_color == "#000000"
     assert run_spec.display.stimulus_width_degrees == 5.0
     assert run_spec.display.viewing_distance_cm == 80.0
-    assert run_spec.display.screen_width_cm == 56.25
+    assert run_spec.display.screen_width_cm == 52.03
     assert run_spec.display.screen_width_px == 1920
     assert run_spec.display.screen_height_px == 1080
     assert run_spec.display.use_current_screen_resolution is False
