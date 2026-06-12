@@ -100,6 +100,7 @@ def test_installer_build_validates_bundle_and_runs_packaged_smoke() -> None:
     assert "[switch]$SkipSmoke" in BUILD_INSTALLER_TEXT
     assert "Assert-BundleInput" in BUILD_INSTALLER_TEXT
     assert "dist\\FPVS Studio\\_internal" in BUILD_INSTALLER_TEXT
+    assert 'Remove-RepoOutput "dist\\installer"' in BUILD_INSTALLER_TEXT
     assert (
         'Get-ChildItem -Path $BundleInternalPath -Directory -Filter "fpvs_studio-*.dist-info"'
         in BUILD_INSTALLER_TEXT
@@ -107,6 +108,12 @@ def test_installer_build_validates_bundle_and_runs_packaged_smoke() -> None:
     assert "Running packaged app smoke check before installer build" in BUILD_INSTALLER_TEXT
     assert "Invoke-PackagedSmoke" in BUILD_INSTALLER_TEXT
     assert "$SmokePackagedAppScript" not in BUILD_RELEASE_TEXT
+
+
+def test_release_icon_has_one_packaged_source() -> None:
+    assert '"packaging" / "assets" / "fpvs-studio.ico"' not in PYINSTALLER_SPEC_TEXT
+    assert '"fpvs_studio" / "assets" / "fpvs-studio.ico"' in PYINSTALLER_SPEC_TEXT
+    assert r"SetupIconFile=..\..\src\fpvs_studio\assets\fpvs-studio.ico" in INNO_SCRIPT_TEXT
 
 
 def test_packaged_smoke_checks_runtime_dependency_imports() -> None:

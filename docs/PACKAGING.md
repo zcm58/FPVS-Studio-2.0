@@ -175,12 +175,13 @@ dist\installer\FPVS-Studio-Setup-1.0.0.exe
 ```
 
 The installer build validates that the PyInstaller bundle has an `_internal` folder and
-exactly one bundled `fpvs_studio-*.dist-info` metadata directory, then runs the
-packaged-app smoke check unless `-SkipSmoke` is passed. That check launches the bundled
-executable in a bounded diagnostic mode and verifies that the bundled package metadata
-matches `pyproject.toml`, the update dialog has the shared theme applied, `Remind Me
-Later` dismisses an update prompt, update-dialog action buttons fit their labels, and
-PsychoPy/runtime dependency imports needed by packaged launch are present.
+exactly one bundled `fpvs_studio-*.dist-info` metadata directory, removes stale files
+from `dist\installer\`, then runs the packaged-app smoke check unless `-SkipSmoke` is
+passed. That check launches the bundled executable in a bounded diagnostic mode and
+verifies that the bundled package metadata matches `pyproject.toml`, the update dialog
+has the shared theme applied, `Remind Me Later` dismisses an update prompt,
+update-dialog action buttons fit their labels, and PsychoPy/runtime dependency imports
+needed by packaged launch are present.
 
 To run that smoke check against an existing bundle:
 
@@ -254,22 +255,20 @@ launch checkbox on the final page.
 
 ## App Icon And Branding
 
-The build uses a shared FPVS Studio icon for application windows, the PyInstaller EXE,
-and the Inno Setup installer. When replacing the icon later:
+The build uses one generated FPVS Studio icon for application windows, the PyInstaller
+EXE, and the Inno Setup installer. When replacing the icon later:
 
-- add the source icon as `packaging/assets/fpvs-studio.ico`
-- include the standard Windows icon sizes in the `.ico`: `16x16`, `24x24`, `32x32`,
-  `48x48`, `64x64`, `128x128`, and `256x256`; use 32-bit color with alpha transparency
-- wire that `.ico` into `packaging/pyinstaller/fpvs_studio.spec`
-- wire that `.ico` into `packaging/inno/fpvs_studio.iss`
-- update GUI startup to use the same icon for application and window icons
+- update the canonical source PNG at `packaging/assets/fpvs-studio-icon-1024.png`
+- run `.\scripts\sync_branding_assets.ps1`
+- keep `packaging/pyinstaller/fpvs_studio.spec`, `packaging/inno/fpvs_studio.iss`,
+  and GUI startup pointed at `src/fpvs_studio/assets/fpvs-studio.ico`
 - rebuild with `.\scripts\build_exe.ps1` and confirm the icon appears on the EXE,
   taskbar, and app windows
 
 Current branding assets:
 
-- `packaging/assets/fpvs-studio-icon-1024.png`: high-resolution source PNG
-- `packaging/assets/fpvs-studio.ico`: release icon for PyInstaller and Inno Setup
-- `docs/assets/fpvs-studio-icon.png`: README/GitHub icon image
+- `packaging/assets/fpvs-studio-icon-1024.png`: canonical high-resolution source PNG
+- `src/fpvs_studio/assets/fpvs-studio.ico`: generated GUI, PyInstaller, and Inno icon
+- `docs-site/assets/fpvs-studio-icon.png`: generated documentation-site logo/favicon
 - `docs/assets/fpvs-studio-readme-header.png`: README header image
 - `docs/assets/fpvs-studio-social-preview.png`: GitHub social preview image

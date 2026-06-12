@@ -23,7 +23,7 @@ PrivilegesRequired=lowest
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 UninstallDisplayIcon={app}\{#AppExeName}
-SetupIconFile=..\assets\fpvs-studio.ico
+SetupIconFile=..\..\src\fpvs_studio\assets\fpvs-studio.ico
 CloseApplications=yes
 
 [Languages]

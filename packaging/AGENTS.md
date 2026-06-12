@@ -21,9 +21,10 @@ settings, templates, or runtime/session contracts.
   must read `__version__` from source-tree `pyproject.toml` when present and fall back
   to installed package metadata for bundled installs, and `tests/unit/test_package_metadata.py`
   guards this.
-- If adding an app icon, prefer `packaging/assets/fpvs-studio.ico`, wire it through the
-  PyInstaller spec and Inno Setup script, and update GUI application-window icon loading
-  in the same change.
+- If replacing branding, update the canonical high-resolution PNG at
+  `packaging/assets/fpvs-studio-icon-1024.png`, run
+  `scripts/sync_branding_assets.ps1`, and keep PyInstaller, Inno Setup, and GUI
+  application-window icon loading pointed at the generated packaged icon.
 
 ## Restrictions
 

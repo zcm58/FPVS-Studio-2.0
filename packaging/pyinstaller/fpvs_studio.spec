@@ -15,7 +15,7 @@ from PyInstaller.utils.hooks import (
 repo_root = Path(SPECPATH).parents[1]
 src_root = repo_root / "src"
 entrypoint = src_root / "fpvs_studio" / "app" / "main.py"
-app_icon = repo_root / "packaging" / "assets" / "fpvs-studio.ico"
+app_icon = src_root / "fpvs_studio" / "assets" / "fpvs-studio.ico"
 
 
 def _collect_submodules(package_name: str) -> list[str]:

@@ -12,6 +12,23 @@ $BundleInternalPath = Join-Path $RepoRoot "dist\FPVS Studio\_internal"
 $InstallerOutputDir = Join-Path $RepoRoot "dist\installer"
 $SmokePackagedAppScript = Join-Path $PSScriptRoot "smoke_packaged_app.ps1"
 
+function Remove-RepoOutput {
+    param([string]$RelativePath)
+
+    $target = Join-Path $RepoRoot $RelativePath
+    if (-not (Test-Path -LiteralPath $target)) {
+        return
+    }
+
+    $resolvedRepo = (Resolve-Path -LiteralPath $RepoRoot).Path
+    $resolvedTarget = (Resolve-Path -LiteralPath $target).Path
+    if (-not $resolvedTarget.StartsWith($resolvedRepo, [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "Refusing to remove path outside repo: $resolvedTarget"
+    }
+
+    Remove-Item -LiteralPath $resolvedTarget -Recurse -Force
+}
+
 function Invoke-Native {
     param(
         [Parameter(Mandatory = $true)]
@@ -115,6 +132,7 @@ try {
 
     $appVersion = Get-AppVersion
     $isccPath = Resolve-InnoCompiler -ConfiguredPath $InnoCompiler
+    Remove-RepoOutput "dist\installer"
     New-Item -ItemType Directory -Force -Path $InstallerOutputDir | Out-Null
 
     Invoke-Native -File $isccPath -Arguments @(

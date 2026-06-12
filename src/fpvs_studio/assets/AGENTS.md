@@ -11,5 +11,6 @@ the installed GUI at runtime, such as the FPVS Studio window icon.
 - Keep source branding assets and release-tooling icons documented in `docs/PACKAGING.md`.
 - Do not place project data, user templates, generated stimuli, logs, or runtime outputs
   in this package.
-- If replacing the app icon, keep the GUI asset synchronized with
-  `packaging/assets/fpvs-studio.ico`.
+- The packaged `.ico` used by the GUI, PyInstaller, and Inno Setup is generated from
+  `packaging/assets/fpvs-studio-icon-1024.png` by `scripts/sync_branding_assets.ps1`.
+  Do not keep extra copied PNG sources in this package.

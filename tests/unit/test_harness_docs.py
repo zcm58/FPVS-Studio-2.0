@@ -83,7 +83,6 @@ def test_active_agent_docs_use_repo_python_environment() -> None:
         "docs/QUALITY_SCORE.md",
         "docs/TECH_DEBT.md",
         "docs/exec-plans/plan-review-workflow.md",
-        "docs/exec-plans/planned/patch-update-workflow.md",
     ]
 
     stale_references: list[str] = []
