@@ -56,7 +56,7 @@ from fpvs_studio.gui.window_helpers import (
     _show_error_dialog,
     _timing_template_label,
 )
-from fpvs_studio.gui.workers import ProgressTask
+from fpvs_studio.gui.workers import BackgroundTask, ProgressTask
 from fpvs_studio.preprocessing.normalization import ImageNormalizationScan
 
 _WIZARD_STEPS: tuple[tuple[str, str], ...] = (
@@ -169,6 +169,9 @@ class SetupWizardPage(QWidget):
         )
         self._step_jump_enabled = False
         self._active_image_readiness_task: ProgressTask | None = None
+        self._active_image_prescan_task: BackgroundTask | None = None
+        self._active_image_prescan_key: tuple[object, ...] | None = None
+        self._image_prescan_pending_advance = False
         self._active_normalization_task: ProgressTask | None = None
         self._refresh_timer = QTimer(self)
         self._refresh_timer.setSingleShot(True)
@@ -694,10 +697,14 @@ class SetupWizardPage(QWidget):
         return (
             self._active_image_readiness_task is not None
             or self._active_normalization_task is not None
+            or self._image_prescan_pending_advance
         )
 
     def _active_condition_image_task_hint(self) -> str:
-        if self._active_image_readiness_task is not None:
+        if (
+            self._active_image_readiness_task is not None
+            or self._image_prescan_pending_advance
+        ):
             return "Checking image readiness..."
         if self._active_normalization_task is not None:
             return "Normalizing condition images..."
@@ -705,6 +712,20 @@ class SetupWizardPage(QWidget):
 
     def _start_condition_image_readiness_scan(self) -> None:
         if self._active_image_readiness_task is not None:
+            return
+        cache_key = self._document.condition_image_normalization_scan_key()
+        cached_scan = self._document.cached_condition_image_normalization_scan(
+            cache_key=cache_key,
+        )
+        if cached_scan is not None:
+            self._on_condition_image_readiness_scan_succeeded(cached_scan)
+            return
+        if (
+            self._active_image_prescan_task is not None
+            and self._active_image_prescan_key == cache_key
+        ):
+            self._image_prescan_pending_advance = True
+            self.refresh()
             return
         task = ProgressTask(
             parent_widget=self,
@@ -746,6 +767,55 @@ class SetupWizardPage(QWidget):
 
     def _on_condition_image_readiness_scan_finished(self) -> None:
         self._active_image_readiness_task = None
+        self.refresh()
+
+    def _ensure_condition_image_prescan_started(self) -> None:
+        if _WIZARD_STEPS[self._active_step_index][0] != "conditions":
+            return
+        if (
+            self._active_image_readiness_task is not None
+            or self._active_normalization_task is not None
+        ):
+            return
+        if not self._current_step_valid():
+            return
+        cache_key = self._document.condition_image_normalization_scan_key()
+        if (
+            self._document.cached_condition_image_normalization_scan(cache_key=cache_key)
+            is not None
+        ):
+            return
+        if self._active_image_prescan_task is not None:
+            return
+
+        task = BackgroundTask(
+            parent_widget=self,
+            callback=self._document.scan_condition_image_normalization,
+        )
+        self._active_image_prescan_task = task
+        self._active_image_prescan_key = cache_key
+        task.succeeded.connect(self._on_condition_image_prescan_succeeded)
+        task.failed.connect(self._on_condition_image_prescan_failed)
+        task.finished.connect(self._on_condition_image_prescan_finished)
+        task.start()
+
+    def _on_condition_image_prescan_succeeded(self, scan: ImageNormalizationScan) -> None:
+        current_key = self._document.condition_image_normalization_scan_key()
+        if not self._image_prescan_pending_advance:
+            return
+        self._image_prescan_pending_advance = False
+        if self._active_image_prescan_key == current_key:
+            self._on_condition_image_readiness_scan_succeeded(scan)
+
+    def _on_condition_image_prescan_failed(self, error: object) -> None:
+        if not self._image_prescan_pending_advance:
+            return
+        self._image_prescan_pending_advance = False
+        self._on_condition_image_readiness_scan_failed(error)
+
+    def _on_condition_image_prescan_finished(self) -> None:
+        self._active_image_prescan_task = None
+        self._active_image_prescan_key = None
         self.refresh()
 
     def _start_condition_image_normalization(self, target_size: int) -> None:
@@ -858,6 +928,7 @@ class SetupWizardPage(QWidget):
         self.setup_wizard_next_hint_label.setToolTip(hint_text)
         self.setup_wizard_next_hint_label.setVisible(bool(hint_text))
         self._sync_guided_panel_height()
+        self._ensure_condition_image_prescan_started()
 
     def _sync_guided_panel_height(self) -> None:
         viewport_height = self.shell.page_container.scroll_area.viewport().height()

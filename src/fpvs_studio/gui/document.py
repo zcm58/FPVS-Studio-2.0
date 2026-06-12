@@ -56,6 +56,7 @@ from fpvs_studio.preprocessing.manifest import (
     read_stimulus_manifest,
 )
 from fpvs_studio.preprocessing.models import StimulusManifest
+from fpvs_studio.preprocessing.normalization import ImageNormalizationScan
 from fpvs_studio.runtime.launcher import launch_session
 from fpvs_studio.runtime.participant_history import (
     completed_session_seeds,
@@ -110,6 +111,10 @@ class ProjectDocument(
         self._manifest = manifest
         self._dirty = False
         self._last_session_plan: SessionPlan | None = None
+        self._image_normalization_scan_cache: tuple[
+            tuple[object, ...],
+            ImageNormalizationScan,
+        ] | None = None
 
     @classmethod
     def create_new(
@@ -307,6 +312,7 @@ class ProjectDocument(
     def _replace_project(self, project: ProjectFile) -> None:
         self._project = project
         self._last_session_plan = None
+        self._image_normalization_scan_cache = None
         self._set_dirty(True)
         self.project_changed.emit()
 

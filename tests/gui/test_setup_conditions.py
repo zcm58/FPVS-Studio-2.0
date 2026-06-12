@@ -122,25 +122,16 @@ def test_setup_wizard_conditions_next_scans_images_without_blocking_gui(
     guide = window.setup_wizard_page
     step = guide.condition_setup_step
     guide.open_wizard(step_key="conditions")
-    qtbot.mouseClick(step.add_condition_button, Qt.MouseButton.LeftButton)
-    condition_id = step.selected_condition_id()
-    assert isinstance(condition_id, str)
-    guide._document.update_condition(condition_id, name="Faces", trigger_code=1)
-    guide._document.import_condition_stimulus_folder(
-        condition_id,
-        role="base",
-        source_dir=_write_image_directory(tmp_path / "async-base"),
-    )
-    guide._document.import_condition_stimulus_folder(
-        condition_id,
-        role="oddball",
-        source_dir=_write_image_directory(tmp_path / "async-oddball"),
-    )
-    QApplication.processEvents()
+    progress_tasks: list[object] = []
+    background_tasks: list[_DeferredBackgroundTask] = []
 
-    progress_tasks: list[_DeferredProgressTask] = []
+    class _UnexpectedProgressTask(QObject):
+        def __init__(self, **_kwargs: object) -> None:
+            super().__init__()
+            progress_tasks.append(self)
+            raise AssertionError("Next should wait for the active background image check.")
 
-    class _DeferredProgressTask(QObject):
+    class _DeferredBackgroundTask(QObject):
         succeeded = Signal(object)
         failed = Signal(object)
         finished = Signal()
@@ -149,15 +140,12 @@ def test_setup_wizard_conditions_next_scans_images_without_blocking_gui(
             self,
             *,
             parent_widget: QWidget,
-            label: str,
             callback: Callable[[], object],
-            **_kwargs: object,
         ) -> None:
             super().__init__(parent_widget)
-            self.label = label
             self.started = False
             self._callback = callback
-            progress_tasks.append(self)
+            background_tasks.append(self)
 
         def start(self) -> None:
             self.started = True
@@ -181,30 +169,137 @@ def test_setup_wizard_conditions_next_scans_images_without_blocking_gui(
         return original_scan()
 
     monkeypatch.setattr(
+        "fpvs_studio.gui.setup_wizard_page.BackgroundTask",
+        _DeferredBackgroundTask,
+    )
+    monkeypatch.setattr(
         "fpvs_studio.gui.setup_wizard_page.ProgressTask",
-        _DeferredProgressTask,
+        _UnexpectedProgressTask,
     )
     monkeypatch.setattr(
         guide._document,
         "scan_condition_image_normalization",
         _scan_after_worker_start,
     )
+    qtbot.mouseClick(step.add_condition_button, Qt.MouseButton.LeftButton)
+    condition_id = step.selected_condition_id()
+    assert isinstance(condition_id, str)
+    guide._document.update_condition(condition_id, name="Faces", trigger_code=1)
+    guide._document.import_condition_stimulus_folder(
+        condition_id,
+        role="base",
+        source_dir=_write_image_directory(tmp_path / "async-base"),
+    )
+    guide._document.import_condition_stimulus_folder(
+        condition_id,
+        role="oddball",
+        source_dir=_write_image_directory(tmp_path / "async-oddball"),
+    )
+    QApplication.processEvents()
 
-    guide.open_wizard(step_key="images")
+    assert len(background_tasks) == 1
+    assert background_tasks[0].started is True
+    assert scan_calls == 0
     assert guide.step_stack.currentWidget() is guide.conditions_step_surface
     assert guide.setup_wizard_next_button.isEnabled()
 
     qtbot.mouseClick(guide.setup_wizard_next_button, Qt.MouseButton.LeftButton)
     QApplication.processEvents()
 
-    assert len(progress_tasks) == 1
-    assert progress_tasks[0].label == "Checking condition image readiness..."
-    assert progress_tasks[0].started is True
+    assert progress_tasks == []
     assert scan_calls == 0
     assert guide.step_stack.currentWidget() is guide.conditions_step_surface
     assert not guide.setup_wizard_next_button.isEnabled()
+    assert guide.setup_wizard_next_hint_label.text() == "Checking image readiness..."
 
-    progress_tasks[0].finish_success()
+    background_tasks[0].finish_success()
+    QApplication.processEvents()
+
+    assert scan_calls == 1
+    assert guide.step_stack.currentWidget() is guide.experiment_step_surface
+
+
+def test_setup_wizard_conditions_next_uses_cached_background_image_check(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Cached Image Check")
+    guide = window.setup_wizard_page
+    step = guide.condition_setup_step
+    guide.open_wizard(step_key="conditions")
+    background_calls = 0
+    scan_calls = 0
+
+    class _ImmediateBackgroundTask(QObject):
+        succeeded = Signal(object)
+        failed = Signal(object)
+        finished = Signal()
+
+        def __init__(
+            self,
+            *,
+            parent_widget: QWidget,
+            callback: Callable[[], object],
+        ) -> None:
+            super().__init__(parent_widget)
+            self._callback = callback
+
+        def start(self) -> None:
+            nonlocal background_calls
+            background_calls += 1
+            try:
+                result = self._callback()
+            except Exception as error:
+                self.failed.emit(error)
+            else:
+                self.succeeded.emit(result)
+            finally:
+                self.finished.emit()
+
+    class _UnexpectedProgressTask(QObject):
+        def __init__(self, **_kwargs: object) -> None:
+            super().__init__()
+            raise AssertionError("Cached image check should not show progress.")
+
+    original_scan = guide._document.scan_condition_image_normalization
+
+    def _count_scan() -> object:
+        nonlocal scan_calls
+        scan_calls += 1
+        return original_scan()
+
+    monkeypatch.setattr(
+        "fpvs_studio.gui.setup_wizard_page.BackgroundTask",
+        _ImmediateBackgroundTask,
+    )
+    monkeypatch.setattr(
+        "fpvs_studio.gui.setup_wizard_page.ProgressTask",
+        _UnexpectedProgressTask,
+    )
+    monkeypatch.setattr(guide._document, "scan_condition_image_normalization", _count_scan)
+
+    qtbot.mouseClick(step.add_condition_button, Qt.MouseButton.LeftButton)
+    condition_id = step.selected_condition_id()
+    assert isinstance(condition_id, str)
+    guide._document.update_condition(condition_id, name="Faces", trigger_code=1)
+    guide._document.import_condition_stimulus_folder(
+        condition_id,
+        role="base",
+        source_dir=_write_image_directory(tmp_path / "cached-base"),
+    )
+    guide._document.import_condition_stimulus_folder(
+        condition_id,
+        role="oddball",
+        source_dir=_write_image_directory(tmp_path / "cached-oddball"),
+    )
+    QApplication.processEvents()
+
+    assert background_calls == 1
+    assert scan_calls == 1
+
+    qtbot.mouseClick(guide.setup_wizard_next_button, Qt.MouseButton.LeftButton)
     QApplication.processEvents()
 
     assert scan_calls == 1

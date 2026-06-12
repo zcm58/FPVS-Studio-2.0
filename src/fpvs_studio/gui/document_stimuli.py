@@ -35,6 +35,7 @@ class DocumentStimulusMixin:
         _project: ProjectFile
         _project_root: Path
         _manifest: StimulusManifest | None
+        _image_normalization_scan_cache: tuple[tuple[object, ...], ImageNormalizationScan] | None
         manifest_changed: Any
 
         def get_condition_stimulus_set(
@@ -128,10 +129,63 @@ class DocumentStimulusMixin:
     def scan_condition_image_normalization(self) -> ImageNormalizationScan:
         """Scan image sets referenced by conditions for normalization needs."""
 
-        return scan_stimulus_sets_for_normalization(
+        cache_key = self.condition_image_normalization_scan_key()
+        cached_scan = self.cached_condition_image_normalization_scan(cache_key=cache_key)
+        if cached_scan is not None:
+            return cached_scan
+        stimulus_sets = self._condition_stimulus_sets()
+        scan = scan_stimulus_sets_for_normalization(
             project_root=self._project_root,
-            stimulus_sets=self._condition_stimulus_sets(),
+            stimulus_sets=stimulus_sets,
         )
+        self._image_normalization_scan_cache = (cache_key, scan)
+        return scan
+
+    def cached_condition_image_normalization_scan(
+        self,
+        *,
+        cache_key: tuple[object, ...] | None = None,
+    ) -> ImageNormalizationScan | None:
+        """Return the current session's image-readiness scan when still valid."""
+
+        resolved_key = cache_key or self.condition_image_normalization_scan_key()
+        cached = self._image_normalization_scan_cache
+        if cached is not None and cached[0] == resolved_key:
+            return cached[1]
+        return None
+
+    def condition_image_normalization_scan_key(self) -> tuple[object, ...]:
+        """Return a cheap filesystem signature for condition image readiness."""
+
+        return tuple(
+            self._stimulus_set_scan_key(stimulus_set)
+            for stimulus_set in self._condition_stimulus_sets()
+        )
+
+    def _stimulus_set_scan_key(self, stimulus_set: StimulusSet) -> tuple[object, ...]:
+        resolution = (
+            stimulus_set.resolution.as_tuple()
+            if stimulus_set.resolution is not None
+            else None
+        )
+        return (
+            stimulus_set.set_id,
+            stimulus_set.source_dir,
+            stimulus_set.image_count,
+            resolution,
+            self._source_dir_marker(stimulus_set),
+        )
+
+    def _source_dir_marker(self, stimulus_set: StimulusSet) -> tuple[str, int | None]:
+        if stimulus_set.source_dir is None:
+            return ("missing-source-dir", None)
+        source_dir = self._project_root / Path(stimulus_set.source_dir)
+        try:
+            if not source_dir.is_dir():
+                return ("missing-directory", None)
+            return ("directory", source_dir.stat().st_mtime_ns)
+        except OSError:
+            return ("missing-directory", None)
 
     def normalize_condition_images(self, *, target_size: int = 512) -> ImageNormalizationResult:
         """Normalize condition stimulus sets and repoint them to generated PNG folders."""

@@ -222,3 +222,46 @@ class ProgressTask(QObject):
         self._dialog = None
         self.finished.emit()
         self.deleteLater()
+
+
+class BackgroundTask(QObject):
+    """Run one backend callback on a disposable worker thread without UI chrome."""
+
+    succeeded = Signal(object)
+    failed = Signal(object)
+    finished = Signal()
+
+    def __init__(
+        self,
+        *,
+        parent_widget: QWidget,
+        callback: Callable[[], object],
+    ) -> None:
+        super().__init__(parent_widget)
+        self._callback = callback
+        self._thread: QThread | None = None
+        self._worker: GuiTaskWorker | None = None
+
+    def start(self) -> None:
+        thread = QThread(self)
+        gui_worker = GuiTaskWorker(self._callback)
+        gui_worker.moveToThread(thread)
+
+        thread.started.connect(gui_worker.run)
+        gui_worker.succeeded.connect(self.succeeded)
+        gui_worker.failed.connect(self.failed)
+        gui_worker.finished.connect(thread.quit)
+        gui_worker.finished.connect(gui_worker.deleteLater)
+        thread.finished.connect(thread.deleteLater)
+        thread.finished.connect(self._handle_thread_finished)
+
+        self._thread = thread
+        self._worker = gui_worker
+        thread.start()
+
+    @Slot()
+    def _handle_thread_finished(self) -> None:
+        self._thread = None
+        self._worker = None
+        self.finished.emit()
+        self.deleteLater()
