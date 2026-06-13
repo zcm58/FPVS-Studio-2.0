@@ -1,5 +1,5 @@
 site_name: FPVS Studio
-site_description: Quickstart documentation for FPVS Studio users.
+site_description: User guide for FPVS Studio.
 site_url: https://zcm58.github.io/FPVS-Studio-2.0/
 repo_url: https://github.com/zcm58/FPVS-Studio-2.0
 repo_name: zcm58/FPVS-Studio-2.0
@@ -25,10 +25,10 @@ nav:
   - Home: index.md
   - Install: install.md
   - Quickstart: quickstart.md
-  - Prepare Images: prepare-images.md
-  - Run A Session: run-session.md
+  - Prepare Stimuli: prepare-images.md
+  - Run a Session: run-session.md
   - Update FPVS Studio: updates.md
-  - Publication And Citation: publication.md
+  - Publication and Citation: publication.md
   - Troubleshooting: troubleshooting.md
 
 markdown_extensions:
