@@ -27,6 +27,7 @@ from fpvs_studio.core.validation import validate_display_refresh
 SESSION_CONDITION_HISTORY_FILENAME = "session_condition_history.csv"
 PARTICIPANT_SUMMARY_FILENAME = "participant_summary.csv"
 PARTICIPANT_SUMMARY_XLSX_FILENAME = "participant_summary.xlsx"
+GROUP_SUMMARY_XLSX_FILENAME = "group_summary.xlsx"
 SESSION_CONDITION_HISTORY_HEADER = [
     "logged_at_utc",
     "project_id",
@@ -84,6 +85,27 @@ PARTICIPANT_SUMMARY_HEADER = [
     "Mean Reaction Time Across All Conditions (ms)",
 ]
 PARTICIPANT_SUMMARY_XLSX_SHEET_NAME = "Participant Summary"
+GROUP_SUMMARY_XLSX_SHEET_NAME = "Group Summary"
+GROUP_SUMMARY_HEADER = [
+    "Row Type",
+    "PID",
+    "Age",
+    "Sex",
+    "Handedness",
+    "Session ID",
+    "Condition Display Order Seed",
+    "Image Display Order Seeds",
+    "Included Sessions",
+    "Excluded Sessions",
+    "Total Targets",
+    "Hits",
+    "False Alarms",
+    "Aborted Y/N",
+    "Include In Analysis",
+    "Mean Accuracy Across All Conditions (%)",
+    "Mean Reaction Time Across All Conditions (ms)",
+    "Generated At UTC",
+]
 _PARTICIPANT_SUMMARY_INTEGER_COLUMNS = frozenset(
     {
         "Total Targets",
@@ -97,6 +119,14 @@ _PARTICIPANT_SUMMARY_FLOAT_COLUMNS = frozenset(
         "Mean Reaction Time Across All Conditions (ms)",
     }
 )
+_GROUP_SUMMARY_INTEGER_COLUMNS = frozenset(
+    {
+        "Included Sessions",
+        "Excluded Sessions",
+        *_PARTICIPANT_SUMMARY_INTEGER_COLUMNS,
+    }
+)
+_GROUP_SUMMARY_FLOAT_COLUMNS = _PARTICIPANT_SUMMARY_FLOAT_COLUMNS
 
 
 def _write_csv(path: Path, header: Iterable[str], rows: Iterable[Iterable[object]] = ()) -> None:
@@ -501,6 +531,23 @@ def write_participant_summary(project_root: Path) -> Path:
     return path
 
 
+def write_group_summary(project_root: Path, output_path: Path) -> Path:
+    """Write a manual compact group-level summary workbook for the project."""
+
+    participant_summary_path = write_participant_summary(project_root)
+    participant_rows = _read_csv_dict_rows(participant_summary_path)
+    if not participant_rows:
+        raise ValueError(
+            "No participant summary rows are available. Run at least one participant "
+            "session before exporting a group summary."
+        )
+
+    path = _ensure_xlsx_path(output_path)
+    generated_at = datetime.now(timezone.utc).isoformat()
+    _write_group_summary_xlsx(path, participant_rows, generated_at=generated_at)
+    return path
+
+
 def _upgrade_session_condition_history_header(path: Path) -> None:
     with path.open("r", encoding="utf-8", newline="") as handle:
         reader = csv.DictReader(handle)
@@ -681,7 +728,12 @@ def _write_participant_summary_xlsx(path: Path, rows: list[list[object]]) -> Non
     for row in rows:
         worksheet.append(
             [
-                _participant_summary_xlsx_value(header, value)
+                _summary_xlsx_value(
+                    header,
+                    value,
+                    integer_columns=_PARTICIPANT_SUMMARY_INTEGER_COLUMNS,
+                    float_columns=_PARTICIPANT_SUMMARY_FLOAT_COLUMNS,
+                )
                 for header, value in zip(PARTICIPANT_SUMMARY_HEADER, row, strict=True)
             ]
         )
@@ -689,21 +741,127 @@ def _write_participant_summary_xlsx(path: Path, rows: list[list[object]]) -> Non
     if worksheet.max_column > 0:
         worksheet.auto_filter.ref = worksheet.dimensions
     worksheet.freeze_panes = "A2"
-    _format_participant_summary_xlsx(worksheet)
+    _format_summary_xlsx(
+        worksheet,
+        integer_columns=_PARTICIPANT_SUMMARY_INTEGER_COLUMNS,
+        float_columns=_PARTICIPANT_SUMMARY_FLOAT_COLUMNS,
+    )
     workbook.save(path)
 
 
-def _participant_summary_xlsx_value(header: str, value: object) -> object:
-    if header in _PARTICIPANT_SUMMARY_INTEGER_COLUMNS:
+def _write_group_summary_xlsx(
+    path: Path,
+    participant_rows: list[dict[str, str]],
+    *,
+    generated_at: str,
+) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    workbook = Workbook()
+    worksheet = workbook.active
+    worksheet.title = GROUP_SUMMARY_XLSX_SHEET_NAME
+    worksheet.append(GROUP_SUMMARY_HEADER)
+    for row in _group_summary_rows(participant_rows, generated_at=generated_at):
+        worksheet.append(
+            [
+                _summary_xlsx_value(
+                    header,
+                    row.get(header, ""),
+                    integer_columns=_GROUP_SUMMARY_INTEGER_COLUMNS,
+                    float_columns=_GROUP_SUMMARY_FLOAT_COLUMNS,
+                )
+                for header in GROUP_SUMMARY_HEADER
+            ]
+        )
+
+    if worksheet.max_column > 0:
+        worksheet.auto_filter.ref = worksheet.dimensions
+    worksheet.freeze_panes = "A2"
+    _format_summary_xlsx(
+        worksheet,
+        integer_columns=_GROUP_SUMMARY_INTEGER_COLUMNS,
+        float_columns=_GROUP_SUMMARY_FLOAT_COLUMNS,
+    )
+    workbook.save(path)
+
+
+def _group_summary_rows(
+    participant_rows: list[dict[str, str]],
+    *,
+    generated_at: str,
+) -> list[dict[str, object]]:
+    included_rows = [
+        row
+        for row in participant_rows
+        if row.get("Include In Analysis", "").strip().upper() == "Y"
+    ]
+    total_targets = sum(_csv_int(row.get("Total Targets")) or 0 for row in included_rows)
+    hit_count = sum(_csv_int(row.get("Hits")) or 0 for row in included_rows)
+    false_alarm_count = sum(_csv_int(row.get("False Alarms")) or 0 for row in included_rows)
+    mean_accuracy = (hit_count / total_targets) * 100.0 if total_targets > 0 else None
+    mean_rt_ms = _weighted_participant_mean_rt_ms(included_rows)
+    included_aborted = any(
+        row.get("Aborted Y/N", "").strip().upper() == "Y" for row in included_rows
+    )
+    group_row: dict[str, object] = {
+        "Row Type": "Group Summary",
+        "PID": "GROUP_INCLUDED",
+        "Included Sessions": len(included_rows),
+        "Excluded Sessions": len(participant_rows) - len(included_rows),
+        "Total Targets": total_targets,
+        "Hits": hit_count,
+        "False Alarms": false_alarm_count,
+        "Aborted Y/N": "Y" if included_aborted else "N" if included_rows else "",
+        "Include In Analysis": "Y" if included_rows else "",
+        "Mean Accuracy Across All Conditions (%)": _float_value(mean_accuracy),
+        "Mean Reaction Time Across All Conditions (ms)": _float_value(mean_rt_ms),
+        "Generated At UTC": generated_at,
+    }
+    session_rows: list[dict[str, object]] = [
+        {
+            "Row Type": "Participant Session",
+            **{header: row.get(header, "") for header in PARTICIPANT_SUMMARY_HEADER},
+            "Generated At UTC": generated_at,
+        }
+        for row in participant_rows
+    ]
+    return [group_row, *session_rows]
+
+
+def _weighted_participant_mean_rt_ms(rows: list[dict[str, str]]) -> float | None:
+    weighted_rt_sum = 0.0
+    hit_count_for_rt = 0
+    for row in rows:
+        hit_count = _csv_int(row.get("Hits"))
+        mean_rt_ms = _csv_float(row.get("Mean Reaction Time Across All Conditions (ms)"))
+        if hit_count is None or hit_count <= 0 or mean_rt_ms is None:
+            continue
+        weighted_rt_sum += mean_rt_ms * hit_count
+        hit_count_for_rt += hit_count
+    return weighted_rt_sum / hit_count_for_rt if hit_count_for_rt > 0 else None
+
+
+def _summary_xlsx_value(
+    header: str,
+    value: object,
+    *,
+    integer_columns: frozenset[str],
+    float_columns: frozenset[str],
+) -> object:
+    if header in integer_columns:
         parsed_int = _csv_int(str(value))
         return parsed_int if parsed_int is not None else None
-    if header in _PARTICIPANT_SUMMARY_FLOAT_COLUMNS:
+    if header in float_columns:
         parsed_float = _csv_float(str(value))
         return parsed_float if parsed_float is not None else None
     return value
 
 
-def _format_participant_summary_xlsx(worksheet: Any) -> None:
+def _format_summary_xlsx(
+    worksheet: Any,
+    *,
+    integer_columns: frozenset[str],
+    float_columns: frozenset[str],
+) -> None:
     centered = Alignment(horizontal="center", vertical="center", wrap_text=True)
     header_fill = PatternFill(fill_type="solid", fgColor="D9EAF7")
     for row in worksheet.iter_rows():
@@ -715,9 +873,9 @@ def _format_participant_summary_xlsx(worksheet: Any) -> None:
             if cell.value is None:
                 continue
             header = worksheet.cell(row=1, column=cell.column).value
-            if header in _PARTICIPANT_SUMMARY_INTEGER_COLUMNS:
+            if header in integer_columns:
                 cell.number_format = "0"
-            elif header in _PARTICIPANT_SUMMARY_FLOAT_COLUMNS:
+            elif header in float_columns:
                 cell.number_format = "0.00"
 
     for column_index, cells in enumerate(worksheet.iter_cols(), start=1):
@@ -729,6 +887,10 @@ def _format_participant_summary_xlsx(worksheet: Any) -> None:
             max_text_length + 2,
             255,
         )
+
+
+def _ensure_xlsx_path(path: Path) -> Path:
+    return path if path.suffix.lower() == ".xlsx" else path.with_suffix(".xlsx")
 
 
 def _condition_history_order_key(row: dict[str, str]) -> tuple[int, str]:

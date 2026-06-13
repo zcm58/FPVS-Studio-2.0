@@ -63,6 +63,7 @@ from fpvs_studio.runtime.participant_history import (
     generate_unused_session_seed,
 )
 from fpvs_studio.runtime.preflight import preflight_session_plan
+from fpvs_studio.runtime.session_export import write_group_summary
 
 _SESSION_SEED_UPPER_BOUND = 2**31
 
@@ -304,6 +305,14 @@ class ProjectDocument(
             completed_session_dir=completed_session_dir,
         )
         write_project_config(path, config)
+
+    def export_group_summary_file(self, path: Path) -> Path:
+        """Export the project-level group summary workbook to the selected path."""
+
+        try:
+            return write_group_summary(self._project_root, path)
+        except ValueError as exc:
+            raise DocumentError(str(exc)) from exc
 
     def _apply_project_update(self, **updates: object) -> None:
         project = _validated_copy(self._project, **updates)

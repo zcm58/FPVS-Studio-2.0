@@ -193,6 +193,23 @@ Compact participant summary:
 - `logs/participant_summary.csv`
   - companion plain-CSV export with the same columns as the workbook
 
+Manual group summary:
+
+- `group_summary.xlsx`
+  - created only when the user chooses `File > Export Group Summary...`
+  - defaults to the project `logs/` folder when it already exists, but can be saved to
+    any user-selected `.xlsx` path
+  - refreshes the participant summary before export so the workbook is based on the
+    current project-level condition history
+  - writes one `Group Summary` sheet with a first aggregate row and participant/session
+    rows underneath for filtering/audit
+  - aggregate metrics include only rows marked `Include In Analysis = Y`
+  - includes export-time `Generated At UTC`, included/excluded session counts, total
+    targets, hits, false alarms, weighted mean accuracy, and hit-weighted mean reaction
+    time
+  - applies per-column filters, freezes the header row, centers cells, and sizes
+    columns to the exported text width
+
 Per session:
 
 - `session_plan.json`

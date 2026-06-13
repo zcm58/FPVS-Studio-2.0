@@ -186,7 +186,10 @@ with spaces and punctuation removed, such as `semanticcategories.fpvsconfig` for
 `Semantic Categories`; completed exports append `-completed`. `Import Project Config...`
 creates a new Studio project shell under the configured FPVS Studio Root Folder; it does
 not merge into the current project and does not copy original stimulus images. The import
-dialog accepts `.fpvsconfig`, legacy `.config`, and `.json` files. `Tutorials` opens the
+dialog accepts `.fpvsconfig`, legacy `.config`, and `.json` files. `Export Group
+Summary...` manually writes an Excel workbook from the current participant summary rows,
+with a first row aggregating rows marked `Include In Analysis = Y` and participant rows
+remaining visible underneath for filtering/audit. `Tutorials` opens the
 public MkDocs quickstart site in the system browser. Settings shows the current app
 version from `pyproject.toml` during source-tree runs and from package metadata in bundled
 installs.

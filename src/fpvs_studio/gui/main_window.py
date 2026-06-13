@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
 
 from fpvs_studio import __version__
 from fpvs_studio.core.models import ConditionTemplateProfile
+from fpvs_studio.core.paths import logs_dir
 from fpvs_studio.core.project_config import PROJECT_CONFIG_SUFFIX, project_config_filename
 from fpvs_studio.gui.animations import ButtonHoverAnimator
 from fpvs_studio.gui.components import apply_studio_theme
@@ -35,6 +36,7 @@ from fpvs_studio.gui.window_helpers import (
     _LAUNCH_INTERSTITIAL_DURATION_MS,
     _show_error_dialog,
 )
+from fpvs_studio.runtime.session_export import GROUP_SUMMARY_XLSX_FILENAME
 
 __all__ = [
     "ParticipantNumberDialog",
@@ -62,6 +64,12 @@ def _ensure_config_suffix(path: Path) -> Path:
     """Return a path with a `.fpvsconfig` suffix when no explicit suffix was selected."""
 
     return path if path.suffix else path.with_suffix(PROJECT_CONFIG_SUFFIX)
+
+
+def _ensure_xlsx_suffix(path: Path) -> Path:
+    """Return a path with an `.xlsx` suffix for Excel workbook exports."""
+
+    return path if path.suffix.lower() == ".xlsx" else path.with_suffix(".xlsx")
 
 
 class StudioMainWindow(QMainWindow):
@@ -344,6 +352,9 @@ class StudioMainWindow(QMainWindow):
         self.export_completed_project_config_action.triggered.connect(
             self.export_completed_project_config
         )
+        self.export_group_summary_action = QAction("Export Group Summary...", self)
+        self.export_group_summary_action.setObjectName("export_group_summary_action")
+        self.export_group_summary_action.triggered.connect(self.export_group_summary)
         self.save_project_action = QAction("Save", self)
         self.save_project_action.triggered.connect(self.save_project)
         self.settings_action = QAction("Settings...", self)
@@ -379,6 +390,7 @@ class StudioMainWindow(QMainWindow):
         self.file_menu.addAction(self.import_project_config_action)
         self.file_menu.addAction(self.export_project_config_action)
         self.file_menu.addAction(self.export_completed_project_config_action)
+        self.file_menu.addAction(self.export_group_summary_action)
         self.file_menu.addSeparator()
         self.file_menu.addAction(self.settings_action)
         self.file_menu.addSeparator()
@@ -418,6 +430,28 @@ class StudioMainWindow(QMainWindow):
 
     def export_completed_project_config(self) -> bool:
         return self._export_config(include_completed=True)
+
+    def export_group_summary(self) -> bool:
+        self.flush_pending_edits()
+        default_dir = logs_dir(self.document.project_root)
+        if not default_dir.exists():
+            default_dir = self.document.project_root
+        selected_path, _selected_filter = QFileDialog.getSaveFileName(
+            self,
+            "Export Group Summary",
+            str(default_dir / GROUP_SUMMARY_XLSX_FILENAME),
+            "Excel Workbooks (*.xlsx);;All Files (*)",
+        )
+        if not selected_path:
+            return False
+        path = _ensure_xlsx_suffix(Path(selected_path))
+        try:
+            exported_path = self.document.export_group_summary_file(path)
+        except Exception as error:
+            _show_error_dialog(self, "Export Group Summary Error", error)
+            return False
+        self.statusBar().showMessage(f"Group summary exported: {exported_path}", 3000)
+        return True
 
     def _export_config(self, *, include_completed: bool) -> bool:
         self.flush_pending_edits()

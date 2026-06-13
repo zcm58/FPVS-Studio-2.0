@@ -210,7 +210,8 @@ results. Exporters serialize those results without moving contracts into engine 
 `runs/` remains the detailed artifact source, while `logs/session_condition_history.csv`
 is a runtime-owned reporting index. `logs/participant_summary.xlsx` is the compact
 human-facing participant/session summary, with `logs/participant_summary.csv` retained
-as a simple companion export.
+as a simple companion export. The GUI can manually export a compact group summary
+workbook from those participant rows via `File > Export Group Summary...`.
 
 ## Dependency Rules
 

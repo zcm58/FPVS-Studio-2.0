@@ -50,6 +50,7 @@ def test_main_window_file_menu_groups_actions(
         "Import Project Config...",
         "Export Project Config...",
         "Export Completed Project Config...",
+        "Export Group Summary...",
         "---",
         "Settings...",
         "---",

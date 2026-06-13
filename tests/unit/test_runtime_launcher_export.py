@@ -21,7 +21,9 @@ from fpvs_studio.runtime.launcher import (
     launch_session,
 )
 from fpvs_studio.runtime.session_export import (
+    GROUP_SUMMARY_XLSX_SHEET_NAME,
     SESSION_CONDITION_HISTORY_HEADER,
+    write_group_summary,
     write_participant_summary,
 )
 
@@ -295,5 +297,117 @@ def test_participant_summary_backfills_run_seeds_from_session_plan_for_legacy_hi
     assert worksheet["A2"].value == "0040"
     assert worksheet["K2"].value == "N"
     assert worksheet["L2"].value == "Y"
+
+
+def test_group_summary_export_uses_included_sessions_and_weighted_metrics(tmp_path) -> None:
+    history_path = tmp_path / "logs" / "session_condition_history.csv"
+    history_path.parent.mkdir(parents=True, exist_ok=True)
+    with history_path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=SESSION_CONDITION_HISTORY_HEADER)
+        writer.writeheader()
+        for row in (
+            {
+                "participant_number": "0001",
+                "participant_age": "30",
+                "participant_sex": "Female",
+                "participant_handedness": "Right handed",
+                "session_id": "session-included",
+                "session_seed": "11",
+                "session_aborted": "False",
+                "output_dir": "runs/0001",
+                "global_order_index": "1",
+                "run_id": "run-a",
+                "run_seed": "101",
+                "total_targets": "10",
+                "hit_count": "8",
+                "false_alarm_count": "1",
+                "mean_rt_ms": "300.00",
+                "run_aborted": "False",
+            },
+            {
+                "participant_number": "0001",
+                "participant_age": "30",
+                "participant_sex": "Female",
+                "participant_handedness": "Right handed",
+                "session_id": "session-included",
+                "session_seed": "11",
+                "session_aborted": "False",
+                "output_dir": "runs/0001",
+                "global_order_index": "2",
+                "run_id": "run-b",
+                "run_seed": "102",
+                "total_targets": "20",
+                "hit_count": "18",
+                "false_alarm_count": "2",
+                "mean_rt_ms": "500.00",
+                "run_aborted": "False",
+            },
+            {
+                "participant_number": "0002",
+                "participant_age": "40",
+                "participant_sex": "Male",
+                "participant_handedness": "Left handed",
+                "session_id": "session-aborted",
+                "session_seed": "22",
+                "session_aborted": "True",
+                "output_dir": "runs/0002",
+                "global_order_index": "1",
+                "run_id": "run-c",
+                "run_seed": "201",
+                "total_targets": "10",
+                "hit_count": "10",
+                "false_alarm_count": "0",
+                "mean_rt_ms": "200.00",
+                "run_aborted": "True",
+            },
+        ):
+            writer.writerow(row)
+
+    output_path = write_group_summary(tmp_path, tmp_path / "exports" / "final-summary")
+
+    assert output_path == tmp_path / "exports" / "final-summary.xlsx"
+    workbook = load_workbook(output_path)
+    worksheet = workbook[GROUP_SUMMARY_XLSX_SHEET_NAME]
+    header = [cell.value for cell in worksheet[1]]
+    column = {name: index + 1 for index, name in enumerate(header)}
+    assert worksheet.freeze_panes == "A2"
+    assert worksheet.auto_filter.ref == worksheet.dimensions
+
+    group_row = {
+        name: worksheet.cell(row=2, column=index).value
+        for name, index in column.items()
+    }
+    assert group_row["Row Type"] == "Group Summary"
+    assert group_row["PID"] == "GROUP_INCLUDED"
+    assert group_row["Included Sessions"] == 1
+    assert group_row["Excluded Sessions"] == 1
+    assert group_row["Total Targets"] == 30
+    assert group_row["Hits"] == 26
+    assert group_row["False Alarms"] == 3
+    assert group_row["Aborted Y/N"] == "N"
+    assert group_row["Include In Analysis"] == "Y"
+    assert group_row["Mean Accuracy Across All Conditions (%)"] == 86.67
+    assert group_row["Mean Reaction Time Across All Conditions (ms)"] == 438.46
+    assert str(group_row["Generated At UTC"]).endswith("+00:00")
+
+    participant_types = [
+        worksheet.cell(row=row_index, column=column["Row Type"]).value
+        for row_index in range(3, worksheet.max_row + 1)
+    ]
+    participant_pids = [
+        worksheet.cell(row=row_index, column=column["PID"]).value
+        for row_index in range(3, worksheet.max_row + 1)
+    ]
+    included_flags = [
+        worksheet.cell(row=row_index, column=column["Include In Analysis"]).value
+        for row_index in range(3, worksheet.max_row + 1)
+    ]
+    assert participant_types == ["Participant Session", "Participant Session"]
+    assert participant_pids == ["0001", "0002"]
+    assert included_flags == ["Y", "N"]
+    for row in worksheet.iter_rows():
+        for cell in row:
+            assert cell.alignment.horizontal == "center"
+            assert cell.alignment.vertical == "center"
 
 

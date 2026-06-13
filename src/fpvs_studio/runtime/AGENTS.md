@@ -52,6 +52,9 @@ This phase should establish:
 - regenerate the compact project-level `logs/participant_summary.xlsx` and companion
   `logs/participant_summary.csv` after session exports so researchers have one
   spreadsheet-friendly participant/session summary
+- provide a manual group-summary workbook export from the participant summary rows,
+  excluding rows where `Include In Analysis` is `N` from aggregate metrics while
+  keeping those rows visible for filtering/audit
 - preserve clear separation from GUI code
 
 ## Restrictions
@@ -83,5 +86,6 @@ Even if the exporter is skeletal in this phase, define a stable shape for:
 - project-level `logs/session_condition_history.csv`
 - project-level `logs/participant_summary.csv`
 - project-level `logs/participant_summary.xlsx`
+- manual group summary workbook exports, defaulting to `group_summary.xlsx`
 
 Use simple, explicit writer utilities and keep them easy to test.
