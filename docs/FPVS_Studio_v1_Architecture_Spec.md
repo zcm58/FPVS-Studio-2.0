@@ -105,6 +105,7 @@ The true per-sequence duration is derived from the active display's refresh-comp
     logs/
       session_condition_history.csv
       participant_summary.csv
+      participant_summary.xlsx
 ```
 
 ## 6. Image rules

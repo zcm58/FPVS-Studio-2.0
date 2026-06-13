@@ -1,7 +1,7 @@
 """Writers for runtime-owned neutral session artifacts. It serializes RunSpec, SessionPlan
-context, validation reports, and execution summaries into stable JSON and CSV outputs
-after playback completes. This module owns export file emission only; scoring, session
-flow, and engine behavior are provided by other runtime components."""
+context, validation reports, and execution summaries into stable JSON, CSV, and XLSX
+outputs after playback completes. This module owns export file emission only; scoring,
+session flow, and engine behavior are provided by other runtime components."""
 
 from __future__ import annotations
 
@@ -9,6 +9,11 @@ import csv
 from collections.abc import Iterable
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
+
+from openpyxl import Workbook  # type: ignore[import-untyped]
+from openpyxl.styles import Alignment, Font, PatternFill  # type: ignore[import-untyped]
+from openpyxl.utils import get_column_letter  # type: ignore[import-untyped]
 
 from fpvs_studio.core.enums import DutyCycleMode
 from fpvs_studio.core.execution import RunExecutionSummary, SessionExecutionSummary
@@ -21,6 +26,7 @@ from fpvs_studio.core.validation import validate_display_refresh
 
 SESSION_CONDITION_HISTORY_FILENAME = "session_condition_history.csv"
 PARTICIPANT_SUMMARY_FILENAME = "participant_summary.csv"
+PARTICIPANT_SUMMARY_XLSX_FILENAME = "participant_summary.xlsx"
 SESSION_CONDITION_HISTORY_HEADER = [
     "logged_at_utc",
     "project_id",
@@ -73,9 +79,24 @@ PARTICIPANT_SUMMARY_HEADER = [
     "Hits",
     "False Alarms",
     "Aborted Y/N",
+    "Include In Analysis",
     "Mean Accuracy Across All Conditions (%)",
     "Mean Reaction Time Across All Conditions (ms)",
 ]
+PARTICIPANT_SUMMARY_XLSX_SHEET_NAME = "Participant Summary"
+_PARTICIPANT_SUMMARY_INTEGER_COLUMNS = frozenset(
+    {
+        "Total Targets",
+        "Hits",
+        "False Alarms",
+    }
+)
+_PARTICIPANT_SUMMARY_FLOAT_COLUMNS = frozenset(
+    {
+        "Mean Accuracy Across All Conditions (%)",
+        "Mean Reaction Time Across All Conditions (ms)",
+    }
+)
 
 
 def _write_csv(path: Path, header: Iterable[str], rows: Iterable[Iterable[object]] = ()) -> None:
@@ -460,20 +481,23 @@ def append_session_condition_history(
 
 
 def write_participant_summary(project_root: Path) -> Path:
-    """Write one compact project-level participant/session summary CSV."""
+    """Write compact project-level participant/session summary CSV and XLSX files."""
 
     path = logs_dir(project_root) / PARTICIPANT_SUMMARY_FILENAME
+    xlsx_path = logs_dir(project_root) / PARTICIPANT_SUMMARY_XLSX_FILENAME
     history_path = logs_dir(project_root) / SESSION_CONDITION_HISTORY_FILENAME
     if history_path.is_file() and history_path.stat().st_size > 0:
         _upgrade_session_condition_history_header(history_path)
         history_rows = _read_csv_dict_rows(history_path)
     else:
         history_rows = []
+    participant_summary_rows = _participant_summary_rows(project_root, history_rows)
     _write_csv(
         path,
         PARTICIPANT_SUMMARY_HEADER,
-        _participant_summary_rows(project_root, history_rows),
+        participant_summary_rows,
     )
+    _write_participant_summary_xlsx(xlsx_path, participant_summary_rows)
     return path
 
 
@@ -642,9 +666,69 @@ def _participant_summary_row(project_root: Path, rows: list[dict[str, str]]) -> 
         hit_count,
         false_alarm_count,
         "Y" if aborted else "N",
+        "N" if aborted else "Y",
         _float_value(mean_accuracy),
         _float_value(mean_rt_ms),
     ]
+
+
+def _write_participant_summary_xlsx(path: Path, rows: list[list[object]]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    workbook = Workbook()
+    worksheet = workbook.active
+    worksheet.title = PARTICIPANT_SUMMARY_XLSX_SHEET_NAME
+    worksheet.append(PARTICIPANT_SUMMARY_HEADER)
+    for row in rows:
+        worksheet.append(
+            [
+                _participant_summary_xlsx_value(header, value)
+                for header, value in zip(PARTICIPANT_SUMMARY_HEADER, row, strict=True)
+            ]
+        )
+
+    if worksheet.max_column > 0:
+        worksheet.auto_filter.ref = worksheet.dimensions
+    worksheet.freeze_panes = "A2"
+    _format_participant_summary_xlsx(worksheet)
+    workbook.save(path)
+
+
+def _participant_summary_xlsx_value(header: str, value: object) -> object:
+    if header in _PARTICIPANT_SUMMARY_INTEGER_COLUMNS:
+        parsed_int = _csv_int(str(value))
+        return parsed_int if parsed_int is not None else None
+    if header in _PARTICIPANT_SUMMARY_FLOAT_COLUMNS:
+        parsed_float = _csv_float(str(value))
+        return parsed_float if parsed_float is not None else None
+    return value
+
+
+def _format_participant_summary_xlsx(worksheet: Any) -> None:
+    centered = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    header_fill = PatternFill(fill_type="solid", fgColor="D9EAF7")
+    for row in worksheet.iter_rows():
+        for cell in row:
+            cell.alignment = centered
+            if cell.row == 1:
+                cell.font = Font(bold=True)
+                cell.fill = header_fill
+            if cell.value is None:
+                continue
+            header = worksheet.cell(row=1, column=cell.column).value
+            if header in _PARTICIPANT_SUMMARY_INTEGER_COLUMNS:
+                cell.number_format = "0"
+            elif header in _PARTICIPANT_SUMMARY_FLOAT_COLUMNS:
+                cell.number_format = "0.00"
+
+    for column_index, cells in enumerate(worksheet.iter_cols(), start=1):
+        max_text_length = max(
+            (len(str(cell.value)) for cell in cells if cell.value is not None),
+            default=0,
+        )
+        worksheet.column_dimensions[get_column_letter(column_index)].width = min(
+            max_text_length + 2,
+            255,
+        )
 
 
 def _condition_history_order_key(row: dict[str, str]) -> tuple[int, str]:

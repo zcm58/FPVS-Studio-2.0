@@ -46,7 +46,7 @@ SessionPlan
   -> engine.close_session()
   -> runtime writes session artifacts
   -> runtime appends logs/session_condition_history.csv
-  -> runtime regenerates logs/participant_summary.csv
+  -> runtime regenerates logs/participant_summary.xlsx and logs/participant_summary.csv
 ```
 
 The engine never receives `ProjectFile`. It only receives one compiled
@@ -177,16 +177,21 @@ Project-level reporting index:
 
 Compact participant summary:
 
-- `logs/participant_summary.csv`
+- `logs/participant_summary.xlsx`
   - regenerated after each completed session export from the project-level condition
     history
   - one row per participant session
   - includes PID, age, sex, handedness, session ID, condition display-order seed,
     image/stimulus display-order seeds, total targets, hits, false alarms, aborted
-    Y/N, weighted mean accuracy, and weighted mean reaction time
+    Y/N, include-in-analysis Y/N, weighted mean accuracy, and weighted mean reaction
+    time
+  - applies per-column filters, freezes the header row, centers cells, and sizes
+    columns to the exported text width
   - weighted mean accuracy is total hits divided by total targets
   - weighted mean reaction time is the hit-weighted mean of condition-level mean RT,
     using each condition's hit count
+- `logs/participant_summary.csv`
+  - companion plain-CSV export with the same columns as the workbook
 
 Per session:
 

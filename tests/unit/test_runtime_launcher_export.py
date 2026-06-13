@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 from pathlib import Path
 
+from openpyxl import load_workbook
 from tests.unit.runtime_launcher_helpers import (
     PARTICIPANT_NUMBER,
     StubEngine,
@@ -77,6 +78,7 @@ def test_session_export_captures_seed_and_runtime_logs(
     assert (session_output_dir / "trigger_log.csv").is_file()
     assert (multi_condition_project_root / "logs" / "session_condition_history.csv").is_file()
     assert (multi_condition_project_root / "logs" / "participant_summary.csv").is_file()
+    assert (multi_condition_project_root / "logs" / "participant_summary.xlsx").is_file()
     assert [run_result.run_id for run_result in exported_summary.run_results] == [
         entry.run_id for entry in session_plan.ordered_entries()
     ]
@@ -179,6 +181,7 @@ def test_session_export_captures_seed_and_runtime_logs(
     assert participant_summary_row["Hits"] == str(hit_count)
     assert participant_summary_row["False Alarms"] == str(false_alarm_count)
     assert participant_summary_row["Aborted Y/N"] == "N"
+    assert participant_summary_row["Include In Analysis"] == "Y"
     assert participant_summary_row["Mean Accuracy Across All Conditions (%)"] == (
         f"{(hit_count / total_targets) * 100.0:.2f}"
     )
@@ -194,6 +197,42 @@ def test_session_export_captures_seed_and_runtime_logs(
     assert len(trigger_rows) == sum(
         len(run_result.trigger_log) for run_result in exported_summary.run_results
     )
+
+    workbook = load_workbook(multi_condition_project_root / "logs" / "participant_summary.xlsx")
+    worksheet = workbook["Participant Summary"]
+    assert worksheet.freeze_panes == "A2"
+    assert worksheet.auto_filter.ref == worksheet.dimensions
+    workbook_header = [cell.value for cell in worksheet[1]]
+    assert workbook_header == list(participant_summary_row)
+    workbook_values = [cell.value for cell in worksheet[2]]
+    assert workbook_values[0] == PARTICIPANT_NUMBER
+    assert workbook_values[7] == total_targets
+    assert workbook_values[8] == hit_count
+    assert workbook_values[9] == false_alarm_count
+    assert workbook_values[10] == "N"
+    assert workbook_values[11] == "Y"
+    assert workbook_values[12] == float(participant_summary_row[
+        "Mean Accuracy Across All Conditions (%)"
+    ])
+    assert workbook_values[13] == float(participant_summary_row[
+        "Mean Reaction Time Across All Conditions (ms)"
+    ])
+    for row in worksheet.iter_rows():
+        for cell in row:
+            assert cell.alignment.horizontal == "center"
+            assert cell.alignment.vertical == "center"
+    for column_index in range(1, worksheet.max_column + 1):
+        letter = worksheet.cell(row=1, column=column_index).column_letter
+        expected_width = min(
+            max(
+                len(str(worksheet.cell(row=row_index, column=column_index).value))
+                for row_index in range(1, worksheet.max_row + 1)
+                if worksheet.cell(row=row_index, column=column_index).value is not None
+            )
+            + 2,
+            255,
+        )
+        assert worksheet.column_dimensions[letter].width == expected_width
 
 
 def test_participant_summary_backfills_run_seeds_from_session_plan_for_legacy_history(
@@ -248,7 +287,13 @@ def test_participant_summary_backfills_run_seeds_from_session_plan_for_legacy_hi
     assert participant_summary_rows[0]["Hits"] == str(session_plan.total_runs * 9)
     assert participant_summary_rows[0]["False Alarms"] == str(session_plan.total_runs)
     assert participant_summary_rows[0]["Aborted Y/N"] == "N"
+    assert participant_summary_rows[0]["Include In Analysis"] == "Y"
     assert participant_summary_rows[0]["Mean Accuracy Across All Conditions (%)"] == "90.00"
     assert participant_summary_rows[0]["Mean Reaction Time Across All Conditions (ms)"] == "200.00"
+    workbook = load_workbook(summary_path.with_suffix(".xlsx"))
+    worksheet = workbook["Participant Summary"]
+    assert worksheet["A2"].value == "0040"
+    assert worksheet["K2"].value == "N"
+    assert worksheet["L2"].value == "Y"
 
 

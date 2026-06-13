@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 from pathlib import Path
 
+from openpyxl import load_workbook
 from tests.unit.runtime_launcher_helpers import (
     PARTICIPANT_NUMBER,
     StubEngine,
@@ -134,6 +135,11 @@ def test_session_launch_aborts_cleanly_when_inter_block_break_is_cancelled(
     assert participant_summary_rows[0]["PID"] == PARTICIPANT_NUMBER
     assert participant_summary_rows[0]["Session ID"] == session_plan.session_id
     assert participant_summary_rows[0]["Aborted Y/N"] == "Y"
+    assert participant_summary_rows[0]["Include In Analysis"] == "N"
+    workbook = load_workbook(multi_condition_project_root / "logs" / "participant_summary.xlsx")
+    worksheet = workbook["Participant Summary"]
+    assert worksheet["K2"].value == "Y"
+    assert worksheet["L2"].value == "N"
 
 
 
