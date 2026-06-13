@@ -49,6 +49,8 @@ This phase should establish:
   exported trigger `time_s`
 - append project-level reporting indexes under `logs/` while keeping detailed
   execution artifacts under `runs/` as the source of truth
+- regenerate the compact project-level `logs/participant_summary.csv` after session
+  exports so researchers have one spreadsheet-friendly participant/session summary
 - preserve clear separation from GUI code
 
 ## Restrictions
@@ -78,5 +80,6 @@ Even if the exporter is skeletal in this phase, define a stable shape for:
 - `trigger_log.csv`
 - `display_report.json`
 - project-level `logs/session_condition_history.csv`
+- project-level `logs/participant_summary.csv`
 
 Use simple, explicit writer utilities and keep them easy to test.

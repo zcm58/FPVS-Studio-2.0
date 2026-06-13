@@ -126,6 +126,14 @@ def test_session_launch_aborts_cleanly_when_inter_block_break_is_cancelled(
         }
     ]
     assert captures.get("completion_screens") is None
+    with (multi_condition_project_root / "logs" / "participant_summary.csv").open(
+        encoding="utf-8", newline=""
+    ) as handle:
+        participant_summary_rows = list(csv.DictReader(handle))
+
+    assert participant_summary_rows[0]["PID"] == PARTICIPANT_NUMBER
+    assert participant_summary_rows[0]["Session ID"] == session_plan.session_id
+    assert participant_summary_rows[0]["Aborted Y/N"] == "Y"
 
 
 

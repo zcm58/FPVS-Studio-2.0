@@ -208,7 +208,8 @@ fixation target-count selection and randomized block order for the current rando
 seed. Runtime consumes `RunSpec` or `SessionPlan` and produces core-owned execution
 results. Exporters serialize those results without moving contracts into engine code;
 `runs/` remains the detailed artifact source, while `logs/session_condition_history.csv`
-is a runtime-owned reporting index.
+is a runtime-owned reporting index and `logs/participant_summary.csv` is the compact
+human-facing participant/session summary.
 
 ## Dependency Rules
 

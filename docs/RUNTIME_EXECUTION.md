@@ -46,6 +46,7 @@ SessionPlan
   -> engine.close_session()
   -> runtime writes session artifacts
   -> runtime appends logs/session_condition_history.csv
+  -> runtime regenerates logs/participant_summary.csv
 ```
 
 The engine never receives `ProjectFile`. It only receives one compiled
@@ -168,11 +169,24 @@ Project-level reporting index:
 
 - `logs/session_condition_history.csv`
   - append-only one-row-per-condition-occurrence session history
-  - includes participant number, age, sex, handedness, random order seed, run timing,
-    block/order metadata, abort fields, timing-QC metadata, fixation metrics, and block
-    accuracy
+  - includes participant number, age, sex, handedness, random order seed, per-run
+    stimulus shuffle seed, run timing, block/order metadata, abort fields, timing-QC
+    metadata, fixation metrics, and block accuracy
   - used for reporting convenience; the detailed audit source remains the
     session/run artifacts under `runs/`
+
+Compact participant summary:
+
+- `logs/participant_summary.csv`
+  - regenerated after each completed session export from the project-level condition
+    history
+  - one row per participant session
+  - includes PID, age, sex, handedness, session ID, condition display-order seed,
+    image/stimulus display-order seeds, total targets, hits, false alarms, aborted
+    Y/N, weighted mean accuracy, and weighted mean reaction time
+  - weighted mean accuracy is total hits divided by total targets
+  - weighted mean reaction time is the hit-weighted mean of condition-level mean RT,
+    using each condition's hit count
 
 Per session:
 

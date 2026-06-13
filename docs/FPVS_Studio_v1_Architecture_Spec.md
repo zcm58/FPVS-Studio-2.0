@@ -103,6 +103,8 @@ The true per-sequence duration is derived from the active display's refresh-comp
         warnings.log
     cache/
     logs/
+      session_condition_history.csv
+      participant_summary.csv
 ```
 
 ## 6. Image rules

@@ -12,14 +12,15 @@ from pathlib import Path
 
 from fpvs_studio.core.enums import DutyCycleMode
 from fpvs_studio.core.execution import RunExecutionSummary, SessionExecutionSummary
-from fpvs_studio.core.models import DisplayValidationReport
-from fpvs_studio.core.paths import logs_dir
+from fpvs_studio.core.models import DisplayValidationReport, validate_project_relative_path
+from fpvs_studio.core.paths import from_project_relative_posix, logs_dir
 from fpvs_studio.core.run_spec import RunSpec
-from fpvs_studio.core.serialization import write_json_file
+from fpvs_studio.core.serialization import read_json_file, write_json_file
 from fpvs_studio.core.session_plan import SessionEntry, SessionPlan
 from fpvs_studio.core.validation import validate_display_refresh
 
 SESSION_CONDITION_HISTORY_FILENAME = "session_condition_history.csv"
+PARTICIPANT_SUMMARY_FILENAME = "participant_summary.csv"
 SESSION_CONDITION_HISTORY_HEADER = [
     "logged_at_utc",
     "project_id",
@@ -32,6 +33,8 @@ SESSION_CONDITION_HISTORY_HEADER = [
     "session_seed",
     "session_started_at",
     "session_finished_at",
+    "session_aborted",
+    "session_abort_reason",
     "output_dir",
     "block_index",
     "index_within_block",
@@ -39,6 +42,7 @@ SESSION_CONDITION_HISTORY_HEADER = [
     "condition_id",
     "condition_name",
     "run_id",
+    "run_seed",
     "run_started_at",
     "run_finished_at",
     "completed_frames",
@@ -56,6 +60,21 @@ SESSION_CONDITION_HISTORY_HEADER = [
     "accuracy_percent",
     "mean_rt_ms",
     "block_accuracy_percent",
+]
+PARTICIPANT_SUMMARY_HEADER = [
+    "PID",
+    "Age",
+    "Sex",
+    "Handedness",
+    "Session ID",
+    "Condition Display Order Seed",
+    "Image Display Order Seeds",
+    "Total Targets",
+    "Hits",
+    "False Alarms",
+    "Aborted Y/N",
+    "Mean Accuracy Across All Conditions (%)",
+    "Mean Reaction Time Across All Conditions (ms)",
 ]
 
 
@@ -436,6 +455,25 @@ def append_session_condition_history(
         if needs_header:
             writer.writerow(SESSION_CONDITION_HISTORY_HEADER)
         writer.writerows(_session_condition_history_rows(session_plan, summary))
+    write_participant_summary(project_root)
+    return path
+
+
+def write_participant_summary(project_root: Path) -> Path:
+    """Write one compact project-level participant/session summary CSV."""
+
+    path = logs_dir(project_root) / PARTICIPANT_SUMMARY_FILENAME
+    history_path = logs_dir(project_root) / SESSION_CONDITION_HISTORY_FILENAME
+    if history_path.is_file() and history_path.stat().st_size > 0:
+        _upgrade_session_condition_history_header(history_path)
+        history_rows = _read_csv_dict_rows(history_path)
+    else:
+        history_rows = []
+    _write_csv(
+        path,
+        PARTICIPANT_SUMMARY_HEADER,
+        _participant_summary_rows(project_root, history_rows),
+    )
     return path
 
 
@@ -495,6 +533,8 @@ def _session_condition_history_row(
         summary.random_seed if summary.random_seed is not None else "",
         _datetime_value(summary.started_at),
         _datetime_value(summary.finished_at),
+        summary.aborted,
+        summary.abort_reason or "",
         summary.output_dir or "",
         entry.block_index + 1,
         entry.index_within_block + 1,
@@ -502,6 +542,7 @@ def _session_condition_history_row(
         entry.condition_id,
         entry.condition_name,
         entry.run_id,
+        entry.run_spec.random_seed,
         _datetime_value(run_result.started_at if run_result is not None else None),
         _datetime_value(run_result.finished_at if run_result is not None else None),
         run_result.completed_frames if run_result is not None else "",
@@ -545,6 +586,160 @@ def _block_accuracy_percentages(
             (hit_count / total_targets) * 100.0 if total_targets > 0 else None
         )
     return percentages
+
+
+def _read_csv_dict_rows(path: Path) -> list[dict[str, str]]:
+    with path.open("r", encoding="utf-8", newline="") as handle:
+        reader = csv.DictReader(handle)
+        return [
+            {str(key): "" if value is None else value for key, value in row.items() if key}
+            for row in reader
+        ]
+
+
+def _participant_summary_rows(
+    project_root: Path,
+    history_rows: list[dict[str, str]],
+) -> list[list[object]]:
+    grouped_rows: dict[tuple[str, str, str], list[dict[str, str]]] = {}
+    for row in history_rows:
+        key = (
+            row.get("participant_number", ""),
+            row.get("session_id", ""),
+            row.get("output_dir", ""),
+        )
+        if not any(key):
+            continue
+        grouped_rows.setdefault(key, []).append(row)
+    return [
+        _participant_summary_row(project_root, rows)
+        for rows in grouped_rows.values()
+    ]
+
+
+def _participant_summary_row(project_root: Path, rows: list[dict[str, str]]) -> list[object]:
+    ordered_rows = sorted(rows, key=_condition_history_order_key)
+    total_targets = sum(_csv_int(row.get("total_targets")) or 0 for row in ordered_rows)
+    hit_count = sum(_csv_int(row.get("hit_count")) or 0 for row in ordered_rows)
+    false_alarm_count = sum(
+        _csv_int(row.get("false_alarm_count")) or 0 for row in ordered_rows
+    )
+    mean_accuracy = (hit_count / total_targets) * 100.0 if total_targets > 0 else None
+    mean_rt_ms = _weighted_mean_rt_ms(ordered_rows)
+    aborted = any(
+        _csv_bool(row.get("session_aborted")) or _csv_bool(row.get("run_aborted"))
+        for row in ordered_rows
+    )
+    return [
+        _first_non_blank(ordered_rows, "participant_number"),
+        _first_non_blank(ordered_rows, "participant_age"),
+        _first_non_blank(ordered_rows, "participant_sex"),
+        _first_non_blank(ordered_rows, "participant_handedness"),
+        _first_non_blank(ordered_rows, "session_id"),
+        _first_non_blank(ordered_rows, "session_seed"),
+        _image_display_order_seed_text(project_root, ordered_rows),
+        total_targets,
+        hit_count,
+        false_alarm_count,
+        "Y" if aborted else "N",
+        _float_value(mean_accuracy),
+        _float_value(mean_rt_ms),
+    ]
+
+
+def _condition_history_order_key(row: dict[str, str]) -> tuple[int, str]:
+    return (_csv_int(row.get("global_order_index")) or 0, row.get("run_id", ""))
+
+
+def _weighted_mean_rt_ms(rows: list[dict[str, str]]) -> float | None:
+    weighted_rt_sum = 0.0
+    hit_count_for_rt = 0
+    for row in rows:
+        hit_count = _csv_int(row.get("hit_count"))
+        mean_rt_ms = _csv_float(row.get("mean_rt_ms"))
+        if hit_count is None or hit_count <= 0 or mean_rt_ms is None:
+            continue
+        weighted_rt_sum += mean_rt_ms * hit_count
+        hit_count_for_rt += hit_count
+    return weighted_rt_sum / hit_count_for_rt if hit_count_for_rt > 0 else None
+
+
+def _image_display_order_seed_text(
+    project_root: Path,
+    rows: list[dict[str, str]],
+) -> str:
+    plan_seed_lookup = _session_plan_run_seed_lookup(
+        project_root,
+        _first_non_blank(rows, "output_dir"),
+    )
+    parts: list[str] = []
+    seen_run_ids: set[str] = set()
+    for row in rows:
+        run_id = row.get("run_id", "")
+        if not run_id or run_id in seen_run_ids:
+            continue
+        seed = row.get("run_seed", "") or plan_seed_lookup.get(run_id, "")
+        if seed:
+            parts.append(f"{run_id}={seed}")
+        seen_run_ids.add(run_id)
+    return "; ".join(parts)
+
+
+def _session_plan_run_seed_lookup(project_root: Path, output_dir: str) -> dict[str, str]:
+    if not output_dir:
+        return {}
+    try:
+        relative_output_dir = validate_project_relative_path(output_dir)
+    except ValueError:
+        return {}
+
+    session_dir = from_project_relative_posix(project_root, relative_output_dir)
+    try:
+        session_dir.resolve().relative_to(project_root.resolve())
+    except (OSError, ValueError):
+        return {}
+
+    session_plan_path = session_dir / "session_plan.json"
+    if not session_plan_path.is_file():
+        return {}
+    try:
+        session_plan = read_json_file(session_plan_path, SessionPlan)
+    except Exception:
+        return {}
+    return {
+        entry.run_id: str(entry.run_spec.random_seed)
+        for entry in session_plan.ordered_entries()
+    }
+
+
+def _first_non_blank(rows: list[dict[str, str]], column: str) -> str:
+    for row in rows:
+        value = row.get(column, "")
+        if value:
+            return value
+    return ""
+
+
+def _csv_int(value: str | None) -> int | None:
+    if value is None or not value.strip():
+        return None
+    try:
+        return int(value)
+    except ValueError:
+        return None
+
+
+def _csv_float(value: str | None) -> float | None:
+    if value is None or not value.strip():
+        return None
+    try:
+        return float(value)
+    except ValueError:
+        return None
+
+
+def _csv_bool(value: str | None) -> bool:
+    return value is not None and value.strip().lower() in {"1", "true", "yes", "y"}
 
 
 def _datetime_value(value: object | None) -> str:
