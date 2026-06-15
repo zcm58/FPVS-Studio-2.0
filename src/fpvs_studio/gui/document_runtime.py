@@ -37,6 +37,7 @@ class DocumentRuntimeMixin:
     if TYPE_CHECKING:
         _project: ProjectFile
         _project_root: Path
+        _session_export_mode: str
         _last_session_plan: SessionPlan | None
         session_plan_changed: Any
 
@@ -138,6 +139,7 @@ class DocumentRuntimeMixin:
                     serial_reset_delay_ms=trigger_settings.reset_delay_ms,
                     strict_timing_warmup=False if test_mode else True,
                     timing_miss_threshold_multiplier=4.0 if test_mode else 1.5,
+                    export_mode=self._session_export_mode,
                 ),
             }
             if participant_metadata is not None:

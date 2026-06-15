@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import csv
 from pathlib import Path
 
 from fpvs_studio.core.enums import RunMode
@@ -13,6 +14,7 @@ from fpvs_studio.runtime.participant_history import (
     generate_unused_session_seed,
     resolve_next_participant_output_label,
 )
+from fpvs_studio.runtime.session_export import SESSION_CONDITION_HISTORY_HEADER
 
 
 def _write_session_summary(
@@ -38,6 +40,18 @@ def _write_session_summary(
         output_dir=f"runs/{output_label}",
     )
     write_json_file(project_root / "runs" / output_label / "session_summary.json", summary)
+
+
+def _write_condition_history_rows(
+    project_root: Path,
+    rows: list[dict[str, str]],
+) -> None:
+    history_path = project_root / "logs" / "session_condition_history.csv"
+    history_path.parent.mkdir(parents=True, exist_ok=True)
+    with history_path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=SESSION_CONDITION_HISTORY_HEADER)
+        writer.writeheader()
+        writer.writerows(rows)
 
 
 def test_find_completed_sessions_for_participant_ignores_aborted_and_incomplete(
@@ -80,6 +94,69 @@ def test_find_completed_sessions_for_participant_ignores_aborted_and_incomplete(
     assert records[0].summary.participant_number == "0001"
     assert records[0].summary.aborted is False
     assert records[0].summary.completed_condition_count == 4
+
+
+def test_find_completed_sessions_for_participant_reads_compact_history_rows(
+    tmp_path: Path,
+) -> None:
+    project_root = tmp_path / "project"
+    _write_condition_history_rows(
+        project_root,
+        [
+            {
+                "project_id": "project-1",
+                "participant_number": "0001",
+                "participant_age": "28",
+                "participant_sex": "Female",
+                "participant_handedness": "Right handed",
+                "session_id": "session-compact",
+                "session_seed": "404",
+                "session_aborted": "False",
+                "output_dir": "",
+                "run_id": "run-a",
+                "run_finished_at": "2026-01-01T00:00:01+00:00",
+                "run_aborted": "False",
+            },
+            {
+                "project_id": "project-1",
+                "participant_number": "0001",
+                "participant_age": "28",
+                "participant_sex": "Female",
+                "participant_handedness": "Right handed",
+                "session_id": "session-compact",
+                "session_seed": "404",
+                "session_aborted": "False",
+                "output_dir": "",
+                "run_id": "run-b",
+                "run_finished_at": "2026-01-01T00:00:02+00:00",
+                "run_aborted": "False",
+            },
+            {
+                "project_id": "project-1",
+                "participant_number": "0001",
+                "session_id": "session-aborted",
+                "session_seed": "505",
+                "session_aborted": "True",
+                "output_dir": "",
+                "run_id": "run-c",
+                "run_finished_at": "2026-01-01T00:00:03+00:00",
+                "run_aborted": "True",
+            },
+        ],
+    )
+
+    records = find_completed_sessions_for_participant(project_root, "0001")
+
+    assert len(records) == 1
+    assert records[0].output_label == "session-compact"
+    assert records[0].summary.participant_number == "0001"
+    assert records[0].summary.participant_metadata.age == 28
+    assert records[0].summary.participant_metadata.sex == "Female"
+    assert records[0].summary.participant_metadata.handedness == "Right handed"
+    assert records[0].summary.random_seed == 404
+    assert records[0].summary.total_condition_count == 2
+    assert records[0].summary.completed_condition_count == 2
+    assert records[0].summary.output_dir is None
 
 
 def test_resolve_next_participant_output_label_uses_run_suffixes(tmp_path: Path) -> None:
@@ -127,6 +204,39 @@ def test_completed_session_seeds_include_only_completed_non_aborted_sessions(
     )
 
     assert completed_session_seeds(project_root) == {101}
+
+
+def test_completed_session_seeds_include_compact_history_rows(tmp_path: Path) -> None:
+    project_root = tmp_path / "project"
+    _write_condition_history_rows(
+        project_root,
+        [
+            {
+                "project_id": "project-1",
+                "participant_number": "0001",
+                "session_id": "session-compact",
+                "session_seed": "404",
+                "session_aborted": "False",
+                "output_dir": "",
+                "run_id": "run-a",
+                "run_finished_at": "2026-01-01T00:00:01+00:00",
+                "run_aborted": "False",
+            },
+            {
+                "project_id": "project-1",
+                "participant_number": "0002",
+                "session_id": "session-aborted",
+                "session_seed": "505",
+                "session_aborted": "True",
+                "output_dir": "",
+                "run_id": "run-b",
+                "run_finished_at": "2026-01-01T00:00:02+00:00",
+                "run_aborted": "True",
+            },
+        ],
+    )
+
+    assert completed_session_seeds(project_root) == {404}
 
 
 def test_generate_unused_session_seed_skips_consumed_seed(tmp_path: Path) -> None:

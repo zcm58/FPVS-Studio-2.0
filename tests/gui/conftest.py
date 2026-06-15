@@ -42,10 +42,12 @@ def _clear_fpvs_root_setting() -> None:
         "FPVS Studio",
     )
     settings.remove("paths/fpvs_root_dir")
+    settings.remove(controller_module._RUN_EXPORT_MODE_KEY)
     settings.remove(controller_module._RECENT_PROJECT_ROOTS_KEY)
     settings.sync()
     yield
     settings.remove("paths/fpvs_root_dir")
+    settings.remove(controller_module._RUN_EXPORT_MODE_KEY)
     settings.remove(controller_module._RECENT_PROJECT_ROOTS_KEY)
     settings.sync()
 

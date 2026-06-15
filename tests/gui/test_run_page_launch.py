@@ -20,7 +20,8 @@ from tests.gui.helpers import (
     _prepare_compile_ready_project,
 )
 
-from fpvs_studio.core.execution import ParticipantMetadata
+from fpvs_studio.core.enums import RunMode
+from fpvs_studio.core.execution import ParticipantMetadata, SessionExecutionSummary
 from fpvs_studio.core.project_service import create_project
 from fpvs_studio.core.serialization import (
     load_project_file,
@@ -199,6 +200,52 @@ def test_run_page_launch_uses_fixed_current_runtime_defaults(
     assert captures["fullscreen"] is True
     assert window.run_page.findChild(QWidget, "display_index_edit") is None
     assert window.run_page.findChild(QWidget, "engine_name_value") is None
+
+
+def test_run_page_compact_export_completion_points_to_logs(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Compact Export Summary")
+    _prepare_compile_ready_project(window, tmp_path / "compact-export-summary")
+    session_plan = window.document.compile_session(refresh_hz=60.0)
+    messages: list[str] = []
+    monkeypatch.setattr(
+        QMessageBox,
+        "information",
+        lambda _parent, _title, message: messages.append(message),
+    )
+
+    window.run_page._apply_launch_summary(
+        session_plan,
+        "0007",
+        SessionExecutionSummary(
+            project_id=session_plan.project_id,
+            session_id=session_plan.session_id,
+            engine_name="stub",
+            run_mode=RunMode.TEST,
+            participant_number="0007",
+            total_condition_count=session_plan.total_runs,
+            completed_condition_count=session_plan.total_runs,
+            output_dir=None,
+        ),
+    )
+
+    summary_text = window.run_page.summary_text.toPlainText()
+    open_folder_button = window.run_page.findChild(QPushButton, "run_open_folder_button")
+    copy_folder_button = window.run_page.findChild(QPushButton, "run_copy_folder_button")
+
+    assert "Output: Compact summary logs" in summary_text
+    assert open_folder_button is not None
+    assert copy_folder_button is not None
+    assert open_folder_button.isHidden()
+    assert copy_folder_button.isHidden()
+    assert messages == [
+        "The experiment finished on the current beta test-mode path. "
+        "Review participant summary files in the project logs folder."
+    ]
 
 
 def test_run_page_surfaces_blocking_resolution_mismatch_warning(

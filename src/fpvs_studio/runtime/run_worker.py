@@ -21,9 +21,14 @@ from fpvs_studio.core.execution import (
 from fpvs_studio.core.run_spec import RunSpec
 from fpvs_studio.core.session_plan import SessionEntry, SessionPlan
 from fpvs_studio.engines.base import PresentationEngine
+from fpvs_studio.runtime.export_modes import EXPORT_MODE_FULL
 from fpvs_studio.runtime.fixation import build_fixation_task_summary, score_fixation_responses
 from fpvs_studio.runtime.preflight import PreflightError
-from fpvs_studio.runtime.session_export import write_run_artifacts, write_session_artifacts
+from fpvs_studio.runtime.session_export import (
+    append_session_condition_history,
+    write_run_artifacts,
+    write_session_artifacts,
+)
 from fpvs_studio.runtime.triggers import (
     LoggedTriggerBackend,
     TriggerEmissionError,
@@ -54,6 +59,8 @@ class RuntimeWorker:
     ) -> RunExecutionSummary:
         """Run one compiled condition and write its neutral artifact set."""
 
+        write_detailed_exports = _writes_detailed_exports(runtime_options)
+        summary_relative_output_dir = relative_output_dir if write_detailed_exports else None
         trigger_backend, trigger_warnings = _build_and_connect_trigger_backend(runtime_options)
         session_open = False
         try:
@@ -103,7 +110,7 @@ class RuntimeWorker:
                                 "Trigger output failed during condition playback: "
                                 f"{exc}"
                             ),
-                            relative_output_dir=relative_output_dir,
+                            relative_output_dir=summary_relative_output_dir,
                             session_id=None,
                         )
                     else:
@@ -111,7 +118,7 @@ class RuntimeWorker:
                             run_summary,
                             run_spec,
                             runtime_options=runtime_options,
-                            relative_output_dir=relative_output_dir,
+                            relative_output_dir=summary_relative_output_dir,
                             session_id=run_summary.session_id,
                             participant_number=participant_number,
                             participant_metadata=participant_metadata,
@@ -139,7 +146,8 @@ class RuntimeWorker:
                 self._engine.close_session()
             trigger_backend.close()
 
-        write_run_artifacts(output_dir, run_spec, run_summary)
+        if write_detailed_exports:
+            write_run_artifacts(output_dir, run_spec, run_summary)
         return run_summary
 
     def execute_session(
@@ -155,6 +163,7 @@ class RuntimeWorker:
     ) -> SessionExecutionSummary:
         """Run every entry in a session plan and write session-level artifacts."""
 
+        write_detailed_exports = _writes_detailed_exports(runtime_options)
         trigger_backend, trigger_warnings = _build_and_connect_trigger_backend(runtime_options)
         session_open = False
         warnings = list(trigger_warnings)
@@ -182,7 +191,7 @@ class RuntimeWorker:
                 run_output_dir = output_dir / entry.run_id
                 run_relative_output_dir = (
                     f"{relative_output_dir}/{entry.run_id}"
-                    if relative_output_dir is not None
+                    if write_detailed_exports and relative_output_dir is not None
                     else None
                 )
                 trigger_start_index = len(trigger_backend.records)
@@ -226,7 +235,8 @@ class RuntimeWorker:
                 previous_feedback_summary = _latest_fixation_task_summary(run_results)
                 warnings.extend(run_summary.warnings)
                 run_results.append(run_summary)
-                write_run_artifacts(run_output_dir, entry.run_spec, run_summary)
+                if write_detailed_exports:
+                    write_run_artifacts(run_output_dir, entry.run_spec, run_summary)
 
                 if run_summary.aborted:
                     abort_reason = run_summary.abort_reason or f"Run '{entry.run_id}' was aborted."
@@ -281,14 +291,17 @@ class RuntimeWorker:
             runtime_metadata=_pick_session_runtime_metadata(run_results),
             realized_block_orders=[list(block.condition_order) for block in session_plan.blocks],
             run_results=run_results,
-            output_dir=relative_output_dir,
+            output_dir=relative_output_dir if write_detailed_exports else None,
         )
-        write_session_artifacts(
-            output_dir,
-            session_plan,
-            session_summary,
-            project_root=project_root,
-        )
+        if write_detailed_exports:
+            write_session_artifacts(
+                output_dir,
+                session_plan,
+                session_summary,
+                project_root=project_root,
+            )
+        else:
+            append_session_condition_history(project_root, session_plan, session_summary)
         return session_summary
 
     def _finalize_run_summary(
@@ -559,6 +572,10 @@ def _pick_session_runtime_metadata(
 
 def _run_mode(runtime_options: Mapping[str, object] | None) -> RunMode:
     return RunMode.TEST if bool((runtime_options or {}).get("test_mode")) else RunMode.SESSION
+
+
+def _writes_detailed_exports(runtime_options: Mapping[str, object] | None) -> bool:
+    return (runtime_options or {}).get("export_mode", EXPORT_MODE_FULL) == EXPORT_MODE_FULL
 
 
 def _validate_configured_display_resolution(

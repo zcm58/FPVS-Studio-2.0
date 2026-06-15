@@ -8,6 +8,7 @@ from pathlib import Path
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QApplication,
+    QCheckBox,
     QDialogButtonBox,
     QLabel,
     QLineEdit,
@@ -45,6 +46,7 @@ from fpvs_studio.gui.manage_projects_dialog import ManageProjectsDialog
 from fpvs_studio.gui.root_folder_setup_dialog import RootFolderSetupDialog
 from fpvs_studio.gui.settings_dialog import AppSettingsDialog
 from fpvs_studio.gui.welcome_window import WelcomeWindow
+from fpvs_studio.runtime.export_modes import EXPORT_MODE_COMPACT, EXPORT_MODE_FULL
 
 
 def test_welcome_window_smoke(qtbot, controller: StudioController, monkeypatch) -> None:
@@ -890,6 +892,57 @@ def test_settings_dialog_manage_templates_button_triggers_callback(
     assert manage_button is not None
     qtbot.mouseClick(manage_button, Qt.MouseButton.LeftButton)
     assert callback_calls == 1
+
+
+def test_settings_dialog_detailed_run_exports_checkbox_triggers_callback(
+    qtbot,
+    tmp_path: Path,
+) -> None:
+    root_dir = tmp_path / "settings-root"
+    root_dir.mkdir(parents=True, exist_ok=True)
+    captured_values: list[bool] = []
+
+    dialog = AppSettingsDialog(
+        fpvs_root_dir=root_dir,
+        detailed_run_exports_enabled=False,
+        on_detailed_run_exports_changed=captured_values.append,
+    )
+    qtbot.addWidget(dialog)
+
+    checkbox = dialog.findChild(QCheckBox, "detailed_run_exports_checkbox")
+    assert checkbox is not None
+    assert checkbox.text() == "Save detailed runs folder after each participant run"
+    assert checkbox.isChecked() is False
+
+    qtbot.mouseClick(checkbox, Qt.MouseButton.LeftButton)
+
+    assert checkbox.isChecked() is True
+    assert captured_values == [True]
+
+
+def test_file_settings_action_persists_run_export_toggle_to_current_document(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Export Mode Project")
+    assert controller.load_run_export_mode() == EXPORT_MODE_FULL
+    assert window.document.session_export_mode == EXPORT_MODE_FULL
+
+    def _fake_settings_exec(dialog: AppSettingsDialog) -> int:
+        checkbox = dialog.findChild(QCheckBox, "detailed_run_exports_checkbox")
+        assert checkbox is not None
+        assert checkbox.isChecked() is True
+        checkbox.setChecked(False)
+        return int(dialog.DialogCode.Accepted)
+
+    monkeypatch.setattr(AppSettingsDialog, "exec", _fake_settings_exec)
+
+    window.settings_action.trigger()
+
+    assert controller.load_run_export_mode() == EXPORT_MODE_COMPACT
+    assert window.document.session_export_mode == EXPORT_MODE_COMPACT
 
 
 def test_file_settings_action_changes_root_and_updates_open_create_defaults(

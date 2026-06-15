@@ -47,8 +47,8 @@ This phase should establish:
   must be exported as `error` records and abort the current run/session cleanly
 - keep trigger timestamps run-playback-relative; do not include timing warmup frames in
   exported trigger `time_s`
-- append project-level reporting indexes under `logs/` while keeping detailed
-  execution artifacts under `runs/` as the source of truth
+- append project-level reporting indexes under `logs/`; write detailed execution
+  artifacts under `runs/` only when full run export mode is enabled
 - regenerate the compact project-level `logs/participant_summary.xlsx` and companion
   `logs/participant_summary.csv` after session exports so researchers have one
   spreadsheet-friendly participant/session summary
@@ -87,5 +87,7 @@ Even if the exporter is skeletal in this phase, define a stable shape for:
 - project-level `logs/participant_summary.csv`
 - project-level `logs/participant_summary.xlsx`
 - manual group summary workbook exports, defaulting to `group_summary.xlsx`
+- app-selected run export mode: full writes detailed `runs/` artifacts, compact writes
+  only project-level summary logs
 
 Use simple, explicit writer utilities and keep them easy to test.

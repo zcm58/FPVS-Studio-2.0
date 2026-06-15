@@ -533,7 +533,11 @@ class RunPage(QWidget):
         participant_number: str,
         summary: LaunchSummary,
     ) -> None:
-        output_dir = summary.output_dir or "runs/..."
+        output_line = (
+            f"Output Dir: {summary.output_dir}"
+            if summary.output_dir
+            else "Output: Compact summary logs"
+        )
         self._last_run_output_dir = summary.output_dir
         self._refresh_run_output_actions()
         participant_value = summary.participant_number or participant_number
@@ -546,7 +550,7 @@ class RunPage(QWidget):
                 "Status: runtime launch aborted.",
                 f"Participant Number: {participant_value}",
                 *participant_metadata_lines,
-                f"Output Dir: {output_dir}",
+                output_line,
                 f"Abort Reason: {abort_reason}",
                 (
                     "Completed Conditions: "
@@ -561,22 +565,33 @@ class RunPage(QWidget):
                 f"Reason: {abort_reason}\n"
                 "Completed Conditions: "
                 f"{summary.completed_condition_count}/{summary.total_condition_count}\n"
-                f"Output Dir: {output_dir}\n\n"
-                "Review run exports in the project runs folder.",
+                f"{output_line}\n\n"
+                + (
+                    "Review run exports in the project runs folder."
+                    if summary.output_dir
+                    else "Review participant summary files in the project logs folder."
+                ),
             )
             return
         extra_lines = [
             "Status: runtime launch completed.",
             f"Participant Number: {participant_value}",
             *participant_metadata_lines,
-            f"Output Dir: {output_dir}",
+            output_line,
         ]
         self._set_summary(session_plan, extra_lines=extra_lines)
         QMessageBox.information(
             self,
             "Launch Complete",
-            "The experiment finished on the current beta test-mode path. "
-            "Review run exports in the project runs folder.",
+            (
+                "The experiment finished on the current beta test-mode path. "
+                "Review run exports in the project runs folder."
+            )
+            if summary.output_dir
+            else (
+                "The experiment finished on the current beta test-mode path. "
+                "Review participant summary files in the project logs folder."
+            ),
         )
 
     def _prompt_participant_number(self) -> str | ParticipantLaunchDetails | None:

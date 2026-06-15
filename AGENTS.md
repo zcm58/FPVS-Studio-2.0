@@ -67,7 +67,8 @@ unless a future change explicitly adds a real web or mobile app surface.
 - Runtime-only launch or machine options must stay outside `RunSpec`.
 - Runtime owns inter-condition and inter-block session flow; engines render instruction, break, and completion screens.
 - Runtime owns fixation-accuracy scoring and condition-level participant feedback flow; engines render the feedback screen content.
-- Runtime owns project-level run-history indexes under `logs/`; detailed execution artifacts under `runs/` remain the source of truth.
+- Runtime owns project-level run-history indexes under `logs/`; detailed execution
+  artifacts under `runs/` are written only when full run export mode is enabled.
 - Only code under `src/fpvs_studio/engines/` may import PsychoPy, and those imports must stay lazy inside the engine implementation.
 - The PySide6 GUI is a first-class application surface in this phase; do not add end-user dependency fallbacks or alternate non-GUI modes around missing GUI dependencies.
 - PySide6 GUI code must stay PySide6-only; do not introduce CustomTkinter.

@@ -81,6 +81,7 @@ def test_runtime_launcher_dispatches_runspec_to_registered_engine(
         "strict_timing_warmup": True,
         "timing_miss_threshold_multiplier": 1.5,
         "timing_warmup_frames": 240,
+        "export_mode": "full",
     }
     assert summary.output_dir == "runs/faces-run"
     assert summary.participant_number == PARTICIPANT_NUMBER

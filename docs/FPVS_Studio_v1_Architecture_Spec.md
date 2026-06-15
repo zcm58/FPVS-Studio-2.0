@@ -91,6 +91,7 @@ The true per-sequence duration is derived from the active display's refresh-comp
             *.png
       manifest.json
     runs/
+      # written only when full run export mode is enabled
       <SessionId>/
         runspec.json
         session.json

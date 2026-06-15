@@ -16,8 +16,9 @@ Current inventory:
 - Planned plans include protocol configurability, luminance/RMS equalization
   investigation, and sinusoidal contrast modulation.
 - Active plans: none.
-- Completed plans include participant fixation tutorial workflow, word-based FPVS
-  conditions, and per-condition timing template overrides.
+- Completed plans include compact versus full run export mode, participant fixation
+  tutorial workflow, word-based FPVS conditions, and per-condition timing template
+  overrides.
 
 Draft concrete future work in `planned/`. Move it to `active/` before implementing
 changes that affect user workflows, public contracts, or multiple layers. Keep small bug

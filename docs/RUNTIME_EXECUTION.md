@@ -41,10 +41,10 @@ SessionPlan
        -> runtime scores fixation responses
        -> when fixation accuracy task is enabled:
             -> engine.show_condition_feedback_screen(...)
-       -> runtime writes per-run artifacts
+       -> runtime writes per-run artifacts when full export mode is enabled
   -> engine.show_completion_screen(...)
   -> engine.close_session()
-  -> runtime writes session artifacts
+  -> runtime writes session artifacts when full export mode is enabled
   -> runtime appends logs/session_condition_history.csv
   -> runtime regenerates logs/participant_summary.xlsx and logs/participant_summary.csv
 ```
@@ -172,8 +172,8 @@ Project-level reporting index:
   - includes participant number, age, sex, handedness, random order seed, per-run
     stimulus shuffle seed, run timing, block/order metadata, abort fields, timing-QC
     metadata, fixation metrics, and block accuracy
-  - used for reporting convenience; the detailed audit source remains the
-    session/run artifacts under `runs/`
+  - used for compact reporting and for participant/seed-history lookup when detailed
+    run folders are not written
 
 Compact participant summary:
 
@@ -210,7 +210,22 @@ Manual group summary:
   - applies per-column filters, freezes the header row, centers cells, and sizes
     columns to the exported text width
 
-Per session:
+Run export modes:
+
+- `Full runs folder`
+  - default app setting
+  - writes the detailed `runs/<participant>/` session folder and per-condition run
+    folders
+  - keeps the Run page `Open Run Folder` and `Copy Run Folder` actions available after
+    launch
+- `Compact summaries only`
+  - app setting from `File > Settings...`
+  - skips detailed `runs/` session and run artifact folders
+  - still appends `logs/session_condition_history.csv` and regenerates
+    `logs/participant_summary.xlsx` and `logs/participant_summary.csv`
+  - returns no run-folder output path, so Run page folder actions stay hidden
+
+Per session, full export mode:
 
 - `session_plan.json`
 - `session_summary.json`
@@ -224,7 +239,7 @@ Per session:
 - `trigger_log.csv`
 - `warnings.log`
 
-Per run:
+Per run, full export mode:
 
 - `runspec.json`
 - `run_summary.json`

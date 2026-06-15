@@ -36,6 +36,11 @@ from fpvs_studio.gui.root_folder_setup_dialog import RootFolderSetupDialog
 from fpvs_studio.gui.settings_dialog import AppSettingsDialog
 from fpvs_studio.gui.update_dialog import UpdateDialog
 from fpvs_studio.gui.welcome_window import WelcomeWindow
+from fpvs_studio.runtime.export_modes import (
+    EXPORT_MODE_COMPACT,
+    EXPORT_MODE_FULL,
+    VALID_EXPORT_MODES,
+)
 from fpvs_studio.updates.github_releases import check_for_updates
 from fpvs_studio.updates.models import UpdateCheckResult
 
@@ -43,6 +48,7 @@ _SETTINGS_ORGANIZATION = "FPVS Studio"
 _SETTINGS_APPLICATION = "FPVS Studio"
 _FPVS_ROOT_DIR_KEY = "paths/fpvs_root_dir"
 _RECENT_PROJECT_ROOTS_KEY = "projects/recent_project_roots"
+_RUN_EXPORT_MODE_KEY = "exports/run_export_mode"
 _MAX_RECENT_PROJECTS = 8
 
 
@@ -281,6 +287,40 @@ class StudioController(QObject):
         self._projects_parent_dir = root_dir
         self._normalize_fpvs_root_layout()
 
+    def load_run_export_mode(self) -> str:
+        """Load the app-level run export mode, falling back to detailed exports."""
+
+        raw_export_mode = self._settings.value(
+            _RUN_EXPORT_MODE_KEY,
+            EXPORT_MODE_FULL,
+            type=str,
+        )
+        if raw_export_mode in VALID_EXPORT_MODES:
+            return raw_export_mode
+        self.save_run_export_mode(EXPORT_MODE_FULL)
+        return EXPORT_MODE_FULL
+
+    def save_run_export_mode(self, export_mode: str) -> None:
+        """Persist the app-level run export mode."""
+
+        if export_mode not in VALID_EXPORT_MODES:
+            valid_values = "', '".join(sorted(VALID_EXPORT_MODES))
+            raise ValueError(f"Run export mode must be one of '{valid_values}'.")
+        self._settings.setValue(_RUN_EXPORT_MODE_KEY, export_mode)
+        self._settings.sync()
+        if self.main_window is not None:
+            self.main_window.document.set_session_export_mode(export_mode)
+
+    def detailed_run_exports_enabled(self) -> bool:
+        """Return whether launched sessions should write detailed run folders."""
+
+        return self.load_run_export_mode() == EXPORT_MODE_FULL
+
+    def set_detailed_run_exports_enabled(self, enabled: bool) -> None:
+        """Persist the Settings checkbox value for detailed run folders."""
+
+        self.save_run_export_mode(EXPORT_MODE_FULL if enabled else EXPORT_MODE_COMPACT)
+
     def ensure_fpvs_root_configured(self) -> bool:
         """Require a valid FPVS Studio root folder before normal workflows are shown."""
 
@@ -473,11 +513,14 @@ class StudioController(QObject):
             fpvs_root_dir=root_dir,
             on_show_root_folder_setup=self.show_root_folder_setup,
             on_manage_condition_templates=self._show_condition_template_manager,
+            detailed_run_exports_enabled=self.detailed_run_exports_enabled(),
+            on_detailed_run_exports_changed=self.set_detailed_run_exports_enabled,
             parent=parent,
         )
         dialog.exec()
 
     def _open_document(self, document: ProjectDocument) -> None:
+        document.set_session_export_mode(self.load_run_export_mode())
         document.randomize_session_seed_for_app_launch()
         self.record_recent_project_root(document.project_root)
         previous_window = self.main_window

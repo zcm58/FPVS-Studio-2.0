@@ -67,6 +67,9 @@ behavior, `.\scripts\check_gui.ps1` for GUI workflow changes, and
 - Open Projects is the welcome entry point for the Manage Projects surface, which
   opens known projects or moves project folders to the Windows Recycle Bin with
   confirmation. The File menu still exposes the same management surface.
+- Settings exposes app-level preferences for the FPVS Studio Root Folder, condition
+  templates, and run export mode. The run export mode is persisted with `QSettings` and
+  remains outside project files.
 - The current Setup Wizard does not expose Advanced buttons; dense/internal support
   pages should remain behind guided workflows unless a future plan explicitly
   reintroduces them.

@@ -207,8 +207,9 @@ Session settings and ordered conditions compile into a `SessionPlan` that owns r
 fixation target-count selection and randomized block order for the current random order
 seed. Runtime consumes `RunSpec` or `SessionPlan` and produces core-owned execution
 results. Exporters serialize those results without moving contracts into engine code;
-`runs/` remains the detailed artifact source, while `logs/session_condition_history.csv`
-is a runtime-owned reporting index. `logs/participant_summary.xlsx` is the compact
+full export mode writes detailed artifacts under `runs/`, while compact export mode
+skips detailed run folders and keeps project-level reporting under
+`logs/session_condition_history.csv`. `logs/participant_summary.xlsx` is the compact
 human-facing participant/session summary, with `logs/participant_summary.csv` retained
 as a simple companion export. The GUI can manually export a compact group summary
 workbook from those participant rows via `File > Export Group Summary...`.

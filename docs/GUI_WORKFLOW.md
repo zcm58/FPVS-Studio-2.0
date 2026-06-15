@@ -37,8 +37,9 @@ own open window.
 Condition-template profiles are app-level metadata for the configured FPVS Studio Root
 Folder. They are stored under `.fpvs-studio/templates/condition_templates.json`, keeping
 template storage out of the top-level folder list used for experiment projects.
-The Settings dialog can reopen the root-folder setup guide and can still change the
-root folder directly.
+The Settings dialog can reopen the root-folder setup guide, manage condition templates,
+and choose whether launched sessions write full `runs/` folders or compact summary logs
+only.
 
 ## Main Window
 
@@ -160,7 +161,9 @@ Session controls are directly visible in Experiment Settings, and
 Fixation and Response are guided setup pages. The Run / Runtime page remains a launch, readiness, and session-preview
 surface, not a display-engine configuration step.
 Run / Runtime feedback exposes `Open Run Folder` and `Copy Run Folder` after a launch
-completion or abort when the runtime summary includes an output directory.
+completion or abort when the runtime summary includes an output directory. In compact
+summary export mode, the runtime summary has no run-folder output path, so those buttons
+stay hidden and completion text points users to the project `logs/` summary files.
 Launching an experiment opens a modal participant-information prompt. By default every
 project collects Participant Number, Age, Sex, and Handedness before runtime starts.
 Participant Number remains the output-folder identity and duplicate-history lookup key;
@@ -191,8 +194,10 @@ Summary...` manually writes an Excel workbook from the current participant summa
 with a first row aggregating rows marked `Include In Analysis = Y` and participant rows
 remaining visible underneath for filtering/audit. `Tutorials` opens the
 public MkDocs quickstart site in the system browser. Settings shows the current app
-version from `pyproject.toml` during source-tree runs and from package metadata in bundled
-installs.
+version from `pyproject.toml` during source-tree runs and from package metadata in
+bundled installs, and exposes the app-level run export mode. Full run export mode is the
+default and writes detailed `runs/` folders after launch; compact mode skips those
+folders and keeps only project-level summary logs.
 Moving a project to the Recycle Bin remains a controller-owned filesystem operation
 guarded by `project.json` validation, confirmation, a post-action path check, and a disk
 refresh of the manage list after each attempt. `Check for Updates` queries GitHub
@@ -237,6 +242,9 @@ preprocessing services but must not silently mutate the active project.
 - First-run and Settings root-folder onboarding lives in
   `src/fpvs_studio/gui/root_folder_setup_dialog.py`; the controller owns folder
   selection and settings persistence.
+- App-level Settings preferences, including run export mode, live in
+  `src/fpvs_studio/gui/settings_dialog.py`; the controller persists them with
+  `QSettings` and injects runtime-only launch choices into the open document.
 - Project management lives in `src/fpvs_studio/gui/manage_projects_dialog.py`; it uses
   shared component-layer cards, path labels, status badges, and button role helpers while
   leaving project discovery and deletion side effects in the controller.

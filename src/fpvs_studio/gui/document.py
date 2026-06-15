@@ -57,6 +57,7 @@ from fpvs_studio.preprocessing.manifest import (
 )
 from fpvs_studio.preprocessing.models import StimulusManifest
 from fpvs_studio.preprocessing.normalization import ImageNormalizationScan
+from fpvs_studio.runtime.export_modes import EXPORT_MODE_FULL, VALID_EXPORT_MODES
 from fpvs_studio.runtime.launcher import launch_session
 from fpvs_studio.runtime.participant_history import (
     completed_session_seeds,
@@ -111,6 +112,7 @@ class ProjectDocument(
         self._project = project
         self._manifest = manifest
         self._dirty = False
+        self._session_export_mode = EXPORT_MODE_FULL
         self._last_session_plan: SessionPlan | None = None
         self._image_normalization_scan_cache: tuple[
             tuple[object, ...],
@@ -181,6 +183,12 @@ class ProjectDocument(
         return self._dirty
 
     @property
+    def session_export_mode(self) -> str:
+        """Return the runtime export mode used for launches from this document."""
+
+        return self._session_export_mode
+
+    @property
     def last_session_plan(self) -> SessionPlan | None:
         """Return the most recently compiled session plan."""
 
@@ -241,6 +249,14 @@ class ProjectDocument(
             seed = self._generate_unused_session_seed()
             self._replace_session_seed_without_dirty(seed)
         return seed
+
+    def set_session_export_mode(self, export_mode: str) -> None:
+        """Set the app-level run export mode used for future launches."""
+
+        if export_mode not in VALID_EXPORT_MODES:
+            valid_values = "', '".join(sorted(VALID_EXPORT_MODES))
+            raise DocumentError(f"Run export mode must be one of '{valid_values}'.")
+        self._session_export_mode = export_mode
 
     def _generate_unused_session_seed(self) -> int:
         try:

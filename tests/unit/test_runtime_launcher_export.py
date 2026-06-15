@@ -16,6 +16,7 @@ from fpvs_studio.core.compiler import compile_session_plan
 from fpvs_studio.core.execution import ParticipantMetadata, SessionExecutionSummary
 from fpvs_studio.core.serialization import read_json_file, write_json_file
 from fpvs_studio.engines.registry import register_engine, unregister_engine
+from fpvs_studio.runtime.export_modes import EXPORT_MODE_COMPACT
 from fpvs_studio.runtime.launcher import (
     LaunchSettings,
     launch_session,
@@ -235,6 +236,76 @@ def test_session_export_captures_seed_and_runtime_logs(
             255,
         )
         assert worksheet.column_dimensions[letter].width == expected_width
+
+
+def test_compact_session_export_updates_summary_logs_without_runs_folder(
+    multi_condition_project,
+    multi_condition_project_root,
+) -> None:
+    multi_condition_project.settings.fixation_task.accuracy_task_enabled = True
+    captures: dict[str, object] = {}
+    register_engine("stub-compact-export", lambda: StubEngine(captures))
+    try:
+        session_plan = compile_session_plan(
+            multi_condition_project,
+            refresh_hz=60.0,
+            project_root=multi_condition_project_root,
+            random_seed=78,
+        )
+
+        summary = launch_session(
+            multi_condition_project_root,
+            session_plan,
+            participant_number=PARTICIPANT_NUMBER,
+            participant_metadata=ParticipantMetadata(
+                age=73,
+                sex="Male",
+                handedness="Ambidextrous",
+            ),
+            launch_settings=LaunchSettings(
+                engine_name="stub-compact-export",
+                test_mode=True,
+                export_mode=EXPORT_MODE_COMPACT,
+            ),
+        )
+    finally:
+        unregister_engine("stub-compact-export")
+
+    assert summary.aborted is False
+    assert summary.output_dir is None
+    assert all(run_result.output_dir is None for run_result in summary.run_results)
+    assert not (multi_condition_project_root / "runs").exists()
+    assert (multi_condition_project_root / "logs" / "session_condition_history.csv").is_file()
+    assert (multi_condition_project_root / "logs" / "participant_summary.csv").is_file()
+    assert (multi_condition_project_root / "logs" / "participant_summary.xlsx").is_file()
+
+    condition_history_rows = _read_csv_rows(
+        multi_condition_project_root / "logs" / "session_condition_history.csv"
+    )
+    participant_summary_rows = _read_csv_rows(
+        multi_condition_project_root / "logs" / "participant_summary.csv"
+    )
+
+    assert [row["run_id"] for row in condition_history_rows] == [
+        entry.run_id for entry in session_plan.ordered_entries()
+    ]
+    assert all(row["output_dir"] == "" for row in condition_history_rows)
+    assert all(row["participant_number"] == PARTICIPANT_NUMBER for row in condition_history_rows)
+    assert all(row["participant_age"] == "73" for row in condition_history_rows)
+    assert all(row["participant_sex"] == "Male" for row in condition_history_rows)
+    assert all(row["participant_handedness"] == "Ambidextrous" for row in condition_history_rows)
+    assert all(row["session_seed"] == "78" for row in condition_history_rows)
+
+    participant_summary_row = participant_summary_rows[0]
+    assert participant_summary_rows == [participant_summary_row]
+    assert participant_summary_row["PID"] == PARTICIPANT_NUMBER
+    assert participant_summary_row["Age"] == "73"
+    assert participant_summary_row["Sex"] == "Male"
+    assert participant_summary_row["Handedness"] == "Ambidextrous"
+    assert participant_summary_row["Session ID"] == session_plan.session_id
+    assert participant_summary_row["Condition Display Order Seed"] == "78"
+    assert participant_summary_row["Aborted Y/N"] == "N"
+    assert participant_summary_row["Include In Analysis"] == "Y"
 
 
 def test_participant_summary_backfills_run_seeds_from_session_plan_for_legacy_history(

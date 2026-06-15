@@ -22,6 +22,7 @@ from fpvs_studio.core.enums import RunMode, StimulusVariant
 from fpvs_studio.core.execution import SessionExecutionSummary
 from fpvs_studio.gui.controller import StudioController
 from fpvs_studio.gui.main_window import ParticipantNumberDialog
+from fpvs_studio.runtime.export_modes import EXPORT_MODE_COMPACT
 
 
 def test_assets_preprocessing_import_and_materialize_updates_status(
@@ -246,6 +247,7 @@ def test_launch_action_wires_runtime_launcher_with_backend_launch_settings(
     assert not hasattr(window.run_page, "serial_baudrate_spin")
     assert not hasattr(window.run_page, "fullscreen_checkbox")
     window.document.update_trigger_settings(serial_port="COM3", baudrate=57600)
+    window.document.set_session_export_mode(EXPORT_MODE_COMPACT)
 
     window.run_page.launch_test_session()
 
@@ -279,6 +281,7 @@ def test_launch_action_wires_runtime_launcher_with_backend_launch_settings(
     assert launch_settings.strict_timing is True
     assert launch_settings.strict_timing_warmup is False
     assert launch_settings.timing_miss_threshold_multiplier == 4.0
+    assert launch_settings.export_mode == EXPORT_MODE_COMPACT
     assert (
         f"participant number: {participant_number}"
         in window.run_page.summary_text.toPlainText().lower()

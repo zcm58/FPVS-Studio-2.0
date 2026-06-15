@@ -10,6 +10,7 @@ from pathlib import Path
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
+    QCheckBox,
     QDialog,
     QDialogButtonBox,
     QFormLayout,
@@ -32,6 +33,8 @@ class AppSettingsDialog(QDialog):
         fpvs_root_dir: Path,
         on_show_root_folder_setup: Callable[[QWidget], Path | None] | None = None,
         on_manage_condition_templates: Callable[[], object] | None = None,
+        detailed_run_exports_enabled: bool = True,
+        on_detailed_run_exports_changed: Callable[[bool], None] | None = None,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
@@ -43,6 +46,7 @@ class AppSettingsDialog(QDialog):
         self._fpvs_root_dir = fpvs_root_dir
         self._on_show_root_folder_setup = on_show_root_folder_setup
         self._on_manage_condition_templates = on_manage_condition_templates
+        self._on_detailed_run_exports_changed = on_detailed_run_exports_changed
 
         form_layout = QFormLayout()
         self.root_folder_setup_button = QPushButton("Root Folder Setup...", self)
@@ -55,6 +59,16 @@ class AppSettingsDialog(QDialog):
         self.manage_templates_button.setEnabled(self._on_manage_condition_templates is not None)
         self.manage_templates_button.clicked.connect(self._manage_condition_templates)
         form_layout.addRow("Condition Templates", self.manage_templates_button)
+        self.detailed_run_exports_checkbox = QCheckBox(
+            "Save detailed runs folder after each participant run",
+            self,
+        )
+        self.detailed_run_exports_checkbox.setObjectName("detailed_run_exports_checkbox")
+        self.detailed_run_exports_checkbox.setChecked(detailed_run_exports_enabled)
+        self.detailed_run_exports_checkbox.toggled.connect(
+            self._set_detailed_run_exports_enabled
+        )
+        form_layout.addRow("Run Exports", self.detailed_run_exports_checkbox)
 
         self.button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Close, parent=self)
         self.button_box.setObjectName("settings_button_box")
@@ -89,3 +103,8 @@ class AppSettingsDialog(QDialog):
         if self._on_manage_condition_templates is None:
             return
         self._on_manage_condition_templates()
+
+    def _set_detailed_run_exports_enabled(self, checked: bool) -> None:
+        if self._on_detailed_run_exports_changed is None:
+            return
+        self._on_detailed_run_exports_changed(bool(checked))

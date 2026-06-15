@@ -8,11 +8,13 @@ from tests.unit.runtime_launcher_helpers import (
     StubEngine,
 )
 
-from fpvs_studio.core.compiler import compile_session_plan
+from fpvs_studio.core.compiler import compile_run_spec, compile_session_plan
 from fpvs_studio.engines.registry import register_engine, unregister_engine
+from fpvs_studio.runtime.export_modes import EXPORT_MODE_COMPACT, EXPORT_MODE_FULL
 from fpvs_studio.runtime.launcher import (
     LaunchSettings,
     LaunchSettingsError,
+    launch_run,
     launch_session,
 )
 from fpvs_studio.runtime.preflight import PreflightError
@@ -25,6 +27,7 @@ def test_launch_settings_default_to_strict_timing_fail_fast() -> None:
     assert settings.strict_timing_warmup is True
     assert settings.timing_miss_threshold_multiplier == 1.5
     assert settings.timing_warmup_frames == 240
+    assert settings.export_mode == EXPORT_MODE_FULL
 
 
 
@@ -234,6 +237,71 @@ def test_launch_session_rejects_non_boolean_strict_timing_warmup_before_engine_c
             )
     finally:
         unregister_engine("stub-invalid-strict-warmup")
+
+    assert captures == {}
+
+
+def test_launch_session_rejects_invalid_export_mode_before_engine_creation(
+    sample_project,
+    sample_project_root,
+) -> None:
+    captures: dict[str, object] = {}
+    register_engine("stub-invalid-export-mode", lambda: StubEngine(captures))
+    try:
+        session_plan = compile_session_plan(
+            sample_project,
+            refresh_hz=60.0,
+            project_root=sample_project_root,
+            random_seed=40,
+        )
+
+        with pytest.raises(LaunchSettingsError, match="export_mode must be one of"):
+            launch_session(
+                sample_project_root,
+                session_plan,
+                participant_number=PARTICIPANT_NUMBER,
+                launch_settings=LaunchSettings(
+                    engine_name="stub-invalid-export-mode",
+                    test_mode=True,
+                    export_mode="tiny",
+                ),
+            )
+    finally:
+        unregister_engine("stub-invalid-export-mode")
+
+    assert captures == {}
+
+
+def test_launch_run_rejects_compact_export_mode_before_engine_creation(
+    sample_project,
+    sample_project_root,
+) -> None:
+    captures: dict[str, object] = {}
+    register_engine("stub-run-compact-export-mode", lambda: StubEngine(captures))
+    try:
+        run_spec = compile_run_spec(
+            sample_project,
+            refresh_hz=60.0,
+            project_root=sample_project_root,
+            run_id="faces-run",
+        )
+
+        with pytest.raises(
+            LaunchSettingsError,
+            match="launch_run only supports full export mode",
+        ):
+            launch_run(
+                sample_project_root,
+                run_spec,
+                participant_number=PARTICIPANT_NUMBER,
+                launch_settings=LaunchSettings(
+                    engine_name="stub-run-compact-export-mode",
+                    test_mode=True,
+                    export_mode=EXPORT_MODE_COMPACT,
+                ),
+            )
+    finally:
+        unregister_engine("stub-run-compact-export-mode")
 
     assert captures == {}
 

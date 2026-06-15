@@ -21,6 +21,7 @@ from fpvs_studio.core.paths import runs_dir, to_project_relative_posix
 from fpvs_studio.core.run_spec import RunSpec
 from fpvs_studio.core.session_plan import SessionPlan
 from fpvs_studio.engines.registry import create_engine
+from fpvs_studio.runtime.export_modes import EXPORT_MODE_FULL, VALID_EXPORT_MODES
 from fpvs_studio.runtime.participant_history import resolve_next_participant_output_label
 from fpvs_studio.runtime.preflight import preflight_run_spec, preflight_session_plan
 from fpvs_studio.runtime.run_worker import RuntimeWorker
@@ -48,6 +49,7 @@ class LaunchSettings:
     strict_timing_warmup: bool = True
     timing_miss_threshold_multiplier: float = 1.5
     timing_warmup_frames: int = 240
+    export_mode: str = EXPORT_MODE_FULL
 
     def as_runtime_options(self) -> dict[str, object]:
         """Return a generic engine-facing runtime options mapping."""
@@ -85,6 +87,9 @@ def _validate_launch_settings(settings: LaunchSettings) -> None:
         )
     if not isinstance(settings.timing_warmup_frames, int) or settings.timing_warmup_frames < 0:
         raise LaunchSettingsError("timing_warmup_frames must be a non-negative integer.")
+    if settings.export_mode not in VALID_EXPORT_MODES:
+        valid_values = "', '".join(sorted(VALID_EXPORT_MODES))
+        raise LaunchSettingsError(f"export_mode must be one of '{valid_values}'.")
     if settings.serial_port is not None and not settings.serial_port.strip():
         raise LaunchSettingsError("serial_port may not be blank when provided.")
     if not isinstance(settings.serial_baudrate, int) or settings.serial_baudrate <= 0:
@@ -143,6 +148,11 @@ def launch_run(
 
     settings = launch_settings or LaunchSettings()
     _validate_launch_settings(settings)
+    if settings.export_mode != EXPORT_MODE_FULL:
+        raise LaunchSettingsError(
+            "launch_run only supports full export mode; use launch_session for compact "
+            "summary exports."
+        )
     runtime_options = settings.as_runtime_options()
     cleaned_participant_number = _validate_participant_number(participant_number)
     cleaned_participant_metadata = _validate_participant_metadata(participant_metadata)
