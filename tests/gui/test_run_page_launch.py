@@ -6,8 +6,10 @@ from pathlib import Path
 
 from PySide6.QtWidgets import (
     QComboBox,
+    QDialogButtonBox,
     QGroupBox,
     QLabel,
+    QLineEdit,
     QListWidget,
     QMessageBox,
     QPushButton,
@@ -28,7 +30,10 @@ from fpvs_studio.core.serialization import (
     save_project_file,
 )
 from fpvs_studio.gui.controller import StudioController
-from fpvs_studio.gui.run_page import ParticipantLaunchDetails
+from fpvs_studio.gui.run_page import (
+    BioSemiRecordingConfirmationDialog,
+    ParticipantLaunchDetails,
+)
 
 
 def test_background_color_control_is_run_tab_presets_only(
@@ -200,6 +205,75 @@ def test_run_page_launch_uses_fixed_current_runtime_defaults(
     assert captures["fullscreen"] is True
     assert window.run_page.findChild(QWidget, "display_index_edit") is None
     assert window.run_page.findChild(QWidget, "engine_name_value") is None
+
+
+def test_biosemi_recording_confirmation_dialog_blocks_continue_until_confirm(
+    qtbot,
+) -> None:
+    dialog = BioSemiRecordingConfirmationDialog()
+    qtbot.addWidget(dialog)
+
+    prompt = dialog.findChild(QLabel, "biosemi_recording_confirmation_prompt")
+    confirmation_edit = dialog.findChild(QLineEdit, "biosemi_recording_confirmation_edit")
+    button_box = dialog.findChild(
+        QDialogButtonBox,
+        "biosemi_recording_confirmation_button_box",
+    )
+    assert prompt is not None
+    assert confirmation_edit is not None
+    assert button_box is not None
+    continue_button = button_box.button(QDialogButtonBox.StandardButton.Ok)
+    assert continue_button is not None
+    assert continue_button.text() == "Continue"
+    assert continue_button.isEnabled() is False
+    assert "For NERD Lab Experiment Administrators" in prompt.text()
+
+    confirmation_edit.setText("con")
+    assert continue_button.isEnabled() is False
+
+    confirmation_edit.setText(" CONFIRM ")
+    assert continue_button.isEnabled() is True
+
+
+def test_run_page_biosemi_confirmation_cancel_blocks_runtime_launch(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "BioSemi Cancel Project")
+    _prepare_compile_ready_project(window, tmp_path / "biosemi-cancel")
+    monkeypatch.setattr(
+        "fpvs_studio.gui.document.create_engine",
+        lambda engine_name: {"engine_name": engine_name},
+    )
+    monkeypatch.setattr(
+        "fpvs_studio.gui.document.preflight_session_plan",
+        lambda project_root, session_plan, engine: None,
+    )
+    monkeypatch.setattr(
+        window.run_page,
+        "_prompt_participant_number",
+        lambda: ParticipantLaunchDetails(
+            participant_number="7",
+            participant_metadata=ParticipantMetadata(
+                age=71,
+                sex="Female",
+                handedness="Right handed",
+            ),
+        ),
+    )
+    monkeypatch.setattr(window.run_page, "_confirm_biosemi_recording_started", lambda: False)
+
+    def _unexpected_launch(*_args, **_kwargs):
+        raise AssertionError("Runtime launch should not start when BioSemi check is cancelled")
+
+    monkeypatch.setattr(window.document, "launch_compiled_session", _unexpected_launch)
+
+    window.run_page.launch_test_session()
+
+    assert window.run_page._active_launch_task is None
+    assert "status: launch checks passed" in window.run_page.summary_text.toPlainText().lower()
 
 
 def test_run_page_compact_export_completion_points_to_logs(

@@ -49,6 +49,7 @@ _SETTINGS_APPLICATION = "FPVS Studio"
 _FPVS_ROOT_DIR_KEY = "paths/fpvs_root_dir"
 _RECENT_PROJECT_ROOTS_KEY = "projects/recent_project_roots"
 _RUN_EXPORT_MODE_KEY = "exports/run_export_mode"
+_BIOSEMI_RECORDING_CONFIRMATION_KEY = "launch/require_biosemi_recording_confirmation"
 _MAX_RECENT_PROJECTS = 8
 
 
@@ -321,6 +322,25 @@ class StudioController(QObject):
 
         self.save_run_export_mode(EXPORT_MODE_FULL if enabled else EXPORT_MODE_COMPACT)
 
+    def require_biosemi_recording_confirmation(self) -> bool:
+        """Return whether launches require the BioSemi recording safety check."""
+
+        return bool(
+            self._settings.value(
+                _BIOSEMI_RECORDING_CONFIRMATION_KEY,
+                True,
+                type=bool,
+            )
+        )
+
+    def set_require_biosemi_recording_confirmation(self, required: bool) -> None:
+        """Persist the BioSemi recording safety-check preference."""
+
+        self._settings.setValue(_BIOSEMI_RECORDING_CONFIRMATION_KEY, bool(required))
+        self._settings.sync()
+        if self.main_window is not None:
+            self.main_window.document.set_require_biosemi_recording_confirmation(required)
+
     def ensure_fpvs_root_configured(self) -> bool:
         """Require a valid FPVS Studio root folder before normal workflows are shown."""
 
@@ -515,12 +535,21 @@ class StudioController(QObject):
             on_manage_condition_templates=self._show_condition_template_manager,
             detailed_run_exports_enabled=self.detailed_run_exports_enabled(),
             on_detailed_run_exports_changed=self.set_detailed_run_exports_enabled,
+            biosemi_recording_confirmation_required=(
+                self.require_biosemi_recording_confirmation()
+            ),
+            on_biosemi_recording_confirmation_required_changed=(
+                self.set_require_biosemi_recording_confirmation
+            ),
             parent=parent,
         )
         dialog.exec()
 
     def _open_document(self, document: ProjectDocument) -> None:
         document.set_session_export_mode(self.load_run_export_mode())
+        document.set_require_biosemi_recording_confirmation(
+            self.require_biosemi_recording_confirmation()
+        )
         document.randomize_session_seed_for_app_launch()
         self.record_recent_project_root(document.project_root)
         previous_window = self.main_window

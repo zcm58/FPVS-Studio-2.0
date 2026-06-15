@@ -213,6 +213,67 @@ class ParticipantNumberDialog(QDialog):
         super().accept()
 
 
+class BioSemiRecordingConfirmationDialog(QDialog):
+    """Require an explicit administrator confirmation before runtime launch."""
+
+    CONFIRMATION_WORD = "confirm"
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setObjectName("biosemi_recording_confirmation_dialog")
+        self.setWindowTitle("BioSemi Recording Check")
+        self.setModal(True)
+        self.resize(640, 260)
+
+        self.prompt_label = QLabel(
+            "For NERD Lab Experiment Administrators: Please double check to ensure "
+            "you started the recording on the BioSemi PC. Please type 'Confirm' "
+            "to continue.",
+            self,
+        )
+        self.prompt_label.setObjectName("biosemi_recording_confirmation_prompt")
+        self.prompt_label.setWordWrap(True)
+
+        self.confirmation_edit = QLineEdit(self)
+        self.confirmation_edit.setObjectName("biosemi_recording_confirmation_edit")
+        self.confirmation_edit.setPlaceholderText("Type Confirm to continue")
+        self.confirmation_edit.setFocus()
+
+        self.button_box = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel,
+            parent=self,
+        )
+        self.button_box.setObjectName("biosemi_recording_confirmation_button_box")
+        self.continue_button = self.button_box.button(QDialogButtonBox.StandardButton.Ok)
+        self.continue_button.setObjectName("biosemi_recording_confirmation_continue_button")
+        self.continue_button.setText("Continue")
+        self.continue_button.setEnabled(False)
+        self.button_box.accepted.connect(self.accept)
+        self.button_box.rejected.connect(self.reject)
+        self.confirmation_edit.textChanged.connect(self._refresh_continue_enabled)
+
+        layout = QVBoxLayout(self)
+        layout.setSpacing(14)
+        layout.addWidget(self.prompt_label)
+        layout.addWidget(self.confirmation_edit)
+        layout.addWidget(self.button_box)
+
+    def accept(self) -> None:
+        if not self._confirmation_matches():
+            self.confirmation_edit.setFocus()
+            return
+        super().accept()
+
+    def _refresh_continue_enabled(self) -> None:
+        self.continue_button.setEnabled(self._confirmation_matches())
+
+    def _confirmation_matches(self) -> bool:
+        return (
+            self.confirmation_edit.text().strip().casefold()
+            == self.CONFIRMATION_WORD
+        )
+
+
 def _coerce_participant_launch_details(
     value: str | ParticipantLaunchDetails | None,
 ) -> ParticipantLaunchDetails | None:
@@ -463,6 +524,11 @@ class RunPage(QWidget):
         if participant_details is None:
             return
         participant_number = participant_details.participant_number
+        if (
+            self._document.require_biosemi_recording_confirmation
+            and not self._confirm_biosemi_recording_started()
+        ):
+            return
 
         def _launch() -> LaunchSummary:
             return self._document.launch_compiled_session(
@@ -599,6 +665,10 @@ class RunPage(QWidget):
         if dialog.exec() != int(QDialog.DialogCode.Accepted):
             return None
         return dialog.participant_details
+
+    def _confirm_biosemi_recording_started(self) -> bool:
+        dialog = BioSemiRecordingConfirmationDialog(self)
+        return dialog.exec() == int(QDialog.DialogCode.Accepted)
 
     def _collect_launch_participant_details(self) -> ParticipantLaunchDetails | None:
         while True:

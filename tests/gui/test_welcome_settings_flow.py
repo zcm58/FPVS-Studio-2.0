@@ -920,6 +920,32 @@ def test_settings_dialog_detailed_run_exports_checkbox_triggers_callback(
     assert captured_values == [True]
 
 
+def test_settings_dialog_biosemi_confirmation_checkbox_triggers_callback(
+    qtbot,
+    tmp_path: Path,
+) -> None:
+    root_dir = tmp_path / "settings-root"
+    root_dir.mkdir(parents=True, exist_ok=True)
+    captured_values: list[bool] = []
+
+    dialog = AppSettingsDialog(
+        fpvs_root_dir=root_dir,
+        biosemi_recording_confirmation_required=True,
+        on_biosemi_recording_confirmation_required_changed=captured_values.append,
+    )
+    qtbot.addWidget(dialog)
+
+    checkbox = dialog.findChild(QCheckBox, "biosemi_recording_confirmation_checkbox")
+    assert checkbox is not None
+    assert checkbox.text() == "Require BioSemi recording confirmation before launch"
+    assert checkbox.isChecked() is True
+
+    qtbot.mouseClick(checkbox, Qt.MouseButton.LeftButton)
+
+    assert checkbox.isChecked() is False
+    assert captured_values == [False]
+
+
 def test_file_settings_action_persists_run_export_toggle_to_current_document(
     qtbot,
     controller: StudioController,
@@ -943,6 +969,31 @@ def test_file_settings_action_persists_run_export_toggle_to_current_document(
 
     assert controller.load_run_export_mode() == EXPORT_MODE_COMPACT
     assert window.document.session_export_mode == EXPORT_MODE_COMPACT
+
+
+def test_file_settings_action_persists_biosemi_confirmation_toggle_to_current_document(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "BioSemi Safety Project")
+    assert controller.require_biosemi_recording_confirmation() is True
+    assert window.document.require_biosemi_recording_confirmation is True
+
+    def _fake_settings_exec(dialog: AppSettingsDialog) -> int:
+        checkbox = dialog.findChild(QCheckBox, "biosemi_recording_confirmation_checkbox")
+        assert checkbox is not None
+        assert checkbox.isChecked() is True
+        checkbox.setChecked(False)
+        return int(dialog.DialogCode.Accepted)
+
+    monkeypatch.setattr(AppSettingsDialog, "exec", _fake_settings_exec)
+
+    window.settings_action.trigger()
+
+    assert controller.require_biosemi_recording_confirmation() is False
+    assert window.document.require_biosemi_recording_confirmation is False
 
 
 def test_file_settings_action_changes_root_and_updates_open_create_defaults(

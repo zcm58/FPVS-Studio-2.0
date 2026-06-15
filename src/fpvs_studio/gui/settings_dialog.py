@@ -35,18 +35,24 @@ class AppSettingsDialog(QDialog):
         on_manage_condition_templates: Callable[[], object] | None = None,
         detailed_run_exports_enabled: bool = True,
         on_detailed_run_exports_changed: Callable[[bool], None] | None = None,
+        biosemi_recording_confirmation_required: bool = True,
+        on_biosemi_recording_confirmation_required_changed: Callable[[bool], None]
+        | None = None,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self.setObjectName("fpvs_root_settings_dialog")
         self.setWindowTitle("Settings")
         self.setModal(True)
-        self.resize(700, 280)
+        self.resize(700, 320)
 
         self._fpvs_root_dir = fpvs_root_dir
         self._on_show_root_folder_setup = on_show_root_folder_setup
         self._on_manage_condition_templates = on_manage_condition_templates
         self._on_detailed_run_exports_changed = on_detailed_run_exports_changed
+        self._on_biosemi_recording_confirmation_required_changed = (
+            on_biosemi_recording_confirmation_required_changed
+        )
 
         form_layout = QFormLayout()
         self.root_folder_setup_button = QPushButton("Root Folder Setup...", self)
@@ -69,6 +75,20 @@ class AppSettingsDialog(QDialog):
             self._set_detailed_run_exports_enabled
         )
         form_layout.addRow("Run Exports", self.detailed_run_exports_checkbox)
+        self.biosemi_recording_confirmation_checkbox = QCheckBox(
+            "Require BioSemi recording confirmation before launch",
+            self,
+        )
+        self.biosemi_recording_confirmation_checkbox.setObjectName(
+            "biosemi_recording_confirmation_checkbox"
+        )
+        self.biosemi_recording_confirmation_checkbox.setChecked(
+            biosemi_recording_confirmation_required
+        )
+        self.biosemi_recording_confirmation_checkbox.toggled.connect(
+            self._set_biosemi_recording_confirmation_required
+        )
+        form_layout.addRow("Launch Safety", self.biosemi_recording_confirmation_checkbox)
 
         self.button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Close, parent=self)
         self.button_box.setObjectName("settings_button_box")
@@ -108,3 +128,8 @@ class AppSettingsDialog(QDialog):
         if self._on_detailed_run_exports_changed is None:
             return
         self._on_detailed_run_exports_changed(bool(checked))
+
+    def _set_biosemi_recording_confirmation_required(self, checked: bool) -> None:
+        if self._on_biosemi_recording_confirmation_required_changed is None:
+            return
+        self._on_biosemi_recording_confirmation_required_changed(bool(checked))

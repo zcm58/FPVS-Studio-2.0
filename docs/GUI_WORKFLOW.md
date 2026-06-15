@@ -39,7 +39,8 @@ Folder. They are stored under `.fpvs-studio/templates/condition_templates.json`,
 template storage out of the top-level folder list used for experiment projects.
 The Settings dialog can reopen the root-folder setup guide, manage condition templates,
 and choose whether launched sessions write full `runs/` folders or compact summary logs
-only.
+only. It also exposes the default-on BioSemi recording confirmation gate used before
+runtime launch.
 
 ## Main Window
 
@@ -169,7 +170,10 @@ project collects Participant Number, Age, Sex, and Handedness before runtime sta
 Participant Number remains the output-folder identity and duplicate-history lookup key;
 Sex is limited to `Female` or `Male`, and Handedness is limited to `Right handed`,
 `Left handed`, or `Ambidextrous`. The additional fields are written as runtime
-participant metadata for the launched session.
+participant metadata for the launched session. When the app-level BioSemi recording
+confirmation setting is enabled, launch then shows a blocking administrator check that
+requires typing `Confirm` before the runtime task starts; cancelling that check returns
+to FPVS Studio without starting the experiment.
 
 The Stimuli Manager remains an internal support page for variant/materialization
 behavior, not a guided setup step or visible top-level tab during normal use. Its raw
@@ -197,7 +201,9 @@ public MkDocs quickstart site in the system browser. Settings shows the current 
 version from `pyproject.toml` during source-tree runs and from package metadata in
 bundled installs, and exposes the app-level run export mode. Full run export mode is the
 default and writes detailed `runs/` folders after launch; compact mode skips those
-folders and keeps only project-level summary logs.
+folders and keeps only project-level summary logs. Settings also exposes the default-on
+BioSemi recording confirmation gate, which requires administrators to type `Confirm`
+before launch can continue.
 Moving a project to the Recycle Bin remains a controller-owned filesystem operation
 guarded by `project.json` validation, confirmation, a post-action path check, and a disk
 refresh of the manage list after each attempt. `Check for Updates` queries GitHub

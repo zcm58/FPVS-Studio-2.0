@@ -113,6 +113,7 @@ class ProjectDocument(
         self._manifest = manifest
         self._dirty = False
         self._session_export_mode = EXPORT_MODE_FULL
+        self._require_biosemi_recording_confirmation = True
         self._last_session_plan: SessionPlan | None = None
         self._image_normalization_scan_cache: tuple[
             tuple[object, ...],
@@ -189,6 +190,12 @@ class ProjectDocument(
         return self._session_export_mode
 
     @property
+    def require_biosemi_recording_confirmation(self) -> bool:
+        """Return whether GUI launches require the BioSemi recording safety check."""
+
+        return self._require_biosemi_recording_confirmation
+
+    @property
     def last_session_plan(self) -> SessionPlan | None:
         """Return the most recently compiled session plan."""
 
@@ -257,6 +264,11 @@ class ProjectDocument(
             valid_values = "', '".join(sorted(VALID_EXPORT_MODES))
             raise DocumentError(f"Run export mode must be one of '{valid_values}'.")
         self._session_export_mode = export_mode
+
+    def set_require_biosemi_recording_confirmation(self, required: bool) -> None:
+        """Set whether GUI launches require the BioSemi recording safety check."""
+
+        self._require_biosemi_recording_confirmation = bool(required)
 
     def _generate_unused_session_seed(self) -> int:
         try:

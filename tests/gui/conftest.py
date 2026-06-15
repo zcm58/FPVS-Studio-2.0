@@ -11,6 +11,7 @@ from PySide6.QtWidgets import QFileDialog, QMessageBox
 from fpvs_studio.gui import controller as controller_module
 from fpvs_studio.gui.controller import StudioController
 from fpvs_studio.gui.create_project_dialog import CreateProjectDialog
+from fpvs_studio.gui.run_page import RunPage
 
 
 @pytest.fixture
@@ -42,11 +43,13 @@ def _clear_fpvs_root_setting() -> None:
         "FPVS Studio",
     )
     settings.remove("paths/fpvs_root_dir")
+    settings.remove(controller_module._BIOSEMI_RECORDING_CONFIRMATION_KEY)
     settings.remove(controller_module._RUN_EXPORT_MODE_KEY)
     settings.remove(controller_module._RECENT_PROJECT_ROOTS_KEY)
     settings.sync()
     yield
     settings.remove("paths/fpvs_root_dir")
+    settings.remove(controller_module._BIOSEMI_RECORDING_CONFIRMATION_KEY)
     settings.remove(controller_module._RUN_EXPORT_MODE_KEY)
     settings.remove(controller_module._RECENT_PROJECT_ROOTS_KEY)
     settings.sync()
@@ -78,4 +81,9 @@ def _stub_modal_dialogs(monkeypatch) -> None:
         QMessageBox,
         "question",
         lambda *args, **kwargs: QMessageBox.StandardButton.Discard,
+    )
+    monkeypatch.setattr(
+        RunPage,
+        "_confirm_biosemi_recording_started",
+        lambda self: True,
     )
