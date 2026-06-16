@@ -164,14 +164,26 @@ def test_resolve_next_participant_output_label_uses_run_suffixes(tmp_path: Path)
     runs_root = project_root / "runs"
     runs_root.mkdir(parents=True, exist_ok=True)
 
-    assert resolve_next_participant_output_label(project_root, "0001") == "0001"
+    assert resolve_next_participant_output_label(project_root, "0001") == "P0001"
 
+    (runs_root / "P0001").mkdir()
+    assert resolve_next_participant_output_label(project_root, "0001") == "P0001_run2"
+
+    (runs_root / "P0001_run2").mkdir()
+    (runs_root / "P0001_run3").mkdir()
+    assert resolve_next_participant_output_label(project_root, "0001") == "P0001_run4"
+
+
+def test_resolve_next_participant_output_label_counts_legacy_digit_folders(
+    tmp_path: Path,
+) -> None:
+    project_root = tmp_path / "project"
+    runs_root = project_root / "runs"
+    runs_root.mkdir(parents=True, exist_ok=True)
     (runs_root / "0001").mkdir()
-    assert resolve_next_participant_output_label(project_root, "0001") == "0001_run2"
-
     (runs_root / "0001_run2").mkdir()
-    (runs_root / "0001_run3").mkdir()
-    assert resolve_next_participant_output_label(project_root, "0001") == "0001_run4"
+
+    assert resolve_next_participant_output_label(project_root, "0001") == "P0001_run3"
 
 
 def test_completed_session_seeds_include_only_completed_non_aborted_sessions(

@@ -180,7 +180,7 @@ def test_launch_session_runs_all_entries_with_stub_engine_and_reuses_session_win
         }
     ]
     assert summary.completed_condition_count == session_plan.total_runs
-    assert summary.output_dir == f"runs/{PARTICIPANT_NUMBER}"
+    assert summary.output_dir == f"runs/P{PARTICIPANT_NUMBER}"
     assert summary.participant_number == PARTICIPANT_NUMBER
     assert all(
         run_result.participant_number == PARTICIPANT_NUMBER for run_result in summary.run_results
@@ -436,9 +436,9 @@ def test_launch_session_reuses_participant_number_with_incremented_output_labels
     finally:
         unregister_engine("stub-participant-folders")
 
-    assert summary_1.output_dir == f"runs/{PARTICIPANT_NUMBER}"
-    assert summary_2.output_dir == f"runs/{PARTICIPANT_NUMBER}_run2"
-    assert summary_3.output_dir == f"runs/{PARTICIPANT_NUMBER}_run3"
+    assert summary_1.output_dir == f"runs/P{PARTICIPANT_NUMBER}"
+    assert summary_2.output_dir == f"runs/P{PARTICIPANT_NUMBER}_run2"
+    assert summary_3.output_dir == f"runs/P{PARTICIPANT_NUMBER}_run3"
     assert summary_1.output_dir is not None
     assert summary_2.output_dir is not None
     assert summary_3.output_dir is not None

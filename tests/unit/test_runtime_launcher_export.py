@@ -370,6 +370,81 @@ def test_participant_summary_backfills_run_seeds_from_session_plan_for_legacy_hi
     assert worksheet["L2"].value == "Y"
 
 
+def test_participant_summary_excludes_admin_test_participant_ids(tmp_path: Path) -> None:
+    history_path = tmp_path / "logs" / "session_condition_history.csv"
+    history_path.parent.mkdir(parents=True, exist_ok=True)
+    with history_path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=SESSION_CONDITION_HISTORY_HEADER)
+        writer.writeheader()
+        for row in (
+            {
+                "participant_number": "00",
+                "session_id": "session-admin-00",
+                "session_seed": "11",
+                "session_aborted": "False",
+                "output_dir": "runs/P00",
+                "global_order_index": "1",
+                "run_id": "run-admin-00",
+                "run_seed": "101",
+                "total_targets": "10",
+                "hit_count": "9",
+                "false_alarm_count": "0",
+                "mean_rt_ms": "300.00",
+                "run_aborted": "False",
+            },
+            {
+                "participant_number": "0",
+                "session_id": "session-admin-0",
+                "session_seed": "22",
+                "session_aborted": "False",
+                "output_dir": "runs/P0",
+                "global_order_index": "1",
+                "run_id": "run-admin-0",
+                "run_seed": "202",
+                "total_targets": "10",
+                "hit_count": "8",
+                "false_alarm_count": "1",
+                "mean_rt_ms": "400.00",
+                "run_aborted": "False",
+            },
+            {
+                "participant_number": "1",
+                "participant_age": "23",
+                "participant_sex": "Male",
+                "participant_handedness": "Right handed",
+                "session_id": "session-participant-1",
+                "session_seed": "33",
+                "session_aborted": "False",
+                "output_dir": "runs/P1",
+                "global_order_index": "1",
+                "run_id": "run-participant-1",
+                "run_seed": "303",
+                "total_targets": "10",
+                "hit_count": "10",
+                "false_alarm_count": "0",
+                "mean_rt_ms": "350.00",
+                "run_aborted": "False",
+            },
+        ):
+            writer.writerow(row)
+
+    summary_path = write_participant_summary(tmp_path)
+    participant_summary_rows = _read_csv_rows(summary_path)
+
+    assert [row["PID"] for row in participant_summary_rows] == ["1"]
+    assert participant_summary_rows[0]["Session ID"] == "session-participant-1"
+    assert participant_summary_rows[0]["Image Display Order Seeds"] == (
+        "run-participant-1=303"
+    )
+
+    workbook = load_workbook(summary_path.with_suffix(".xlsx"))
+    worksheet = workbook["Participant Summary"]
+    assert worksheet.max_row == 2
+    assert worksheet.freeze_panes == "A2"
+    assert worksheet.auto_filter.ref == "A1:N2"
+    assert worksheet["A2"].value == "1"
+
+
 def test_group_summary_export_uses_included_sessions_and_weighted_metrics(tmp_path) -> None:
     history_path = tmp_path / "logs" / "session_condition_history.csv"
     history_path.parent.mkdir(parents=True, exist_ok=True)

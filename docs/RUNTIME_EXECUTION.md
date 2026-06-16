@@ -181,6 +181,7 @@ Compact participant summary:
   - regenerated after each completed session export from the project-level condition
     history
   - one row per participant session
+  - excludes admin/test participant IDs `0` and `00`
   - includes PID, age, sex, handedness, session ID, condition display-order seed,
     image/stimulus display-order seeds, total targets, hits, false alarms, aborted
     Y/N, include-in-analysis Y/N, weighted mean accuracy, and weighted mean reaction
@@ -214,7 +215,7 @@ Run export modes:
 
 - `Full runs folder`
   - default app setting
-  - writes the detailed `runs/<participant>/` session folder and per-condition run
+  - writes the detailed `runs/P<participant>/` session folder and per-condition run
     folders
   - keeps the Run page `Open Run Folder` and `Copy Run Folder` actions available after
     launch

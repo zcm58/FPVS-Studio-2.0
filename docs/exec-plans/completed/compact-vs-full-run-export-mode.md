@@ -12,7 +12,7 @@ exports.
 
 Users open `File > Settings...` and choose the run export mode:
 
-- full exports, the current default, keep writing the detailed `runs/<participant>/`
+- full exports, the current default, keep writing the detailed `runs/P<participant>/`
   session and per-condition artifacts
 - compact exports skip detailed run/session artifact folders and update the compact
   project-level reporting files under `logs/`

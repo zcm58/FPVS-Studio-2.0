@@ -28,6 +28,7 @@ SESSION_CONDITION_HISTORY_FILENAME = "session_condition_history.csv"
 PARTICIPANT_SUMMARY_FILENAME = "participant_summary.csv"
 PARTICIPANT_SUMMARY_XLSX_FILENAME = "participant_summary.xlsx"
 GROUP_SUMMARY_XLSX_FILENAME = "group_summary.xlsx"
+ADMIN_TEST_PARTICIPANT_IDS = frozenset({"0", "00"})
 SESSION_CONDITION_HISTORY_HEADER = [
     "logged_at_utc",
     "project_id",
@@ -674,6 +675,8 @@ def _participant_summary_rows(
 ) -> list[list[object]]:
     grouped_rows: dict[tuple[str, str, str], list[dict[str, str]]] = {}
     for row in history_rows:
+        if _is_admin_test_participant_id(row.get("participant_number", "")):
+            continue
         key = (
             row.get("participant_number", ""),
             row.get("session_id", ""),
@@ -686,6 +689,10 @@ def _participant_summary_rows(
         _participant_summary_row(project_root, rows)
         for rows in grouped_rows.values()
     ]
+
+
+def _is_admin_test_participant_id(participant_number: str) -> bool:
+    return participant_number.strip() in ADMIN_TEST_PARTICIPANT_IDS
 
 
 def _participant_summary_row(project_root: Path, rows: list[dict[str, str]]) -> list[object]:
