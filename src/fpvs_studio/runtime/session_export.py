@@ -532,6 +532,30 @@ def write_participant_summary(project_root: Path) -> Path:
     return path
 
 
+def refresh_participant_summary_if_stale(project_root: Path) -> Path | None:
+    """Regenerate compact participant summaries when history is newer or outputs are missing."""
+
+    log_root = logs_dir(project_root)
+    history_path = log_root / SESSION_CONDITION_HISTORY_FILENAME
+    if not history_path.is_file() or history_path.stat().st_size == 0:
+        return None
+
+    history_mtime_ns = history_path.stat().st_mtime_ns
+    summary_paths = (
+        log_root / PARTICIPANT_SUMMARY_FILENAME,
+        log_root / PARTICIPANT_SUMMARY_XLSX_FILENAME,
+    )
+    if not any(_summary_output_is_stale(path, history_mtime_ns) for path in summary_paths):
+        return None
+    return write_participant_summary(project_root)
+
+
+def _summary_output_is_stale(path: Path, history_mtime_ns: int) -> bool:
+    if not path.is_file():
+        return True
+    return path.stat().st_mtime_ns < history_mtime_ns
+
+
 def write_group_summary(project_root: Path, output_path: Path) -> Path:
     """Write a manual compact group-level summary workbook for the project."""
 

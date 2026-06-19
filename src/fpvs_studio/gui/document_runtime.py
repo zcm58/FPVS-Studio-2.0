@@ -42,6 +42,7 @@ class DocumentRuntimeMixin:
         session_plan_changed: Any
 
         def ensure_unused_session_seed_for_launch(self) -> int: ...
+        def refresh_participant_summary_if_stale(self) -> Path | None: ...
 
     def validation_report(self, *, refresh_hz: float) -> ProjectValidationReport:
         """Validate the current project at a specific compile refresh rate."""
@@ -149,6 +150,7 @@ class DocumentRuntimeMixin:
                 session_plan,
                 **launch_kwargs,
             )
+            self.refresh_participant_summary_if_stale()
         except Exception as exc:
             raise DocumentError(str(exc)) from exc
         return cast(LaunchSummary, summary)

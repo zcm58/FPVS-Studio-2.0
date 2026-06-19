@@ -64,7 +64,10 @@ from fpvs_studio.runtime.participant_history import (
     generate_unused_session_seed,
 )
 from fpvs_studio.runtime.preflight import preflight_session_plan
-from fpvs_studio.runtime.session_export import write_group_summary
+from fpvs_studio.runtime.session_export import (
+    refresh_participant_summary_if_stale,
+    write_group_summary,
+)
 
 _SESSION_SEED_UPPER_BOUND = 2**31
 
@@ -82,6 +85,7 @@ __all__ = [
     "default_trigger_settings",
     "launch_session",
     "preflight_session_plan",
+    "refresh_participant_summary_if_stale",
     "resolve_project_location",
 ]
 
@@ -151,7 +155,9 @@ class ProjectDocument(
         project_root = project_file_path.parent
         manifest_path = stimulus_manifest_path(project_root)
         manifest = read_stimulus_manifest(project_root) if manifest_path.is_file() else None
-        return cls(project_root=project_root, project=project, manifest=manifest)
+        document = cls(project_root=project_root, project=project, manifest=manifest)
+        document.refresh_participant_summary_if_stale()
+        return document
 
     @property
     def project(self) -> ProjectFile:
@@ -341,6 +347,23 @@ class ProjectDocument(
             return write_group_summary(self._project_root, path)
         except ValueError as exc:
             raise DocumentError(str(exc)) from exc
+
+    def refresh_participant_summary_if_stale(self) -> Path | None:
+        """Refresh compact participant summaries when project logs are newer."""
+
+        try:
+            return refresh_participant_summary_if_stale(self._project_root)
+        except PermissionError as exc:
+            raise DocumentError(
+                "Participant summary logs are out of date, but FPVS Studio could not "
+                "refresh them. Close participant_summary.xlsx if it is open in Excel "
+                "and try again."
+            ) from exc
+        except OSError as exc:
+            raise DocumentError(
+                "Participant summary logs are out of date, but FPVS Studio could not "
+                f"refresh them: {exc}"
+            ) from exc
 
     def _apply_project_update(self, **updates: object) -> None:
         project = _validated_copy(self._project, **updates)

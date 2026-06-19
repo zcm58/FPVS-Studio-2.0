@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import os
 from pathlib import Path
 
 from openpyxl import load_workbook
@@ -24,6 +25,7 @@ from fpvs_studio.runtime.launcher import (
 from fpvs_studio.runtime.session_export import (
     GROUP_SUMMARY_XLSX_SHEET_NAME,
     SESSION_CONDITION_HISTORY_HEADER,
+    refresh_participant_summary_if_stale,
     write_group_summary,
     write_participant_summary,
 )
@@ -443,6 +445,106 @@ def test_participant_summary_excludes_admin_test_participant_ids(tmp_path: Path)
     assert worksheet.freeze_panes == "A2"
     assert worksheet.auto_filter.ref == "A1:N2"
     assert worksheet["A2"].value == "1"
+
+
+def test_refresh_participant_summary_if_stale_rebuilds_missing_xlsx(tmp_path: Path) -> None:
+    history_path = tmp_path / "logs" / "session_condition_history.csv"
+    history_path.parent.mkdir(parents=True, exist_ok=True)
+    with history_path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=SESSION_CONDITION_HISTORY_HEADER)
+        writer.writeheader()
+        writer.writerow(
+            {
+                "participant_number": "1",
+                "session_id": "session-1",
+                "session_seed": "11",
+                "session_aborted": "False",
+                "output_dir": "runs/1",
+                "global_order_index": "1",
+                "run_id": "run-1",
+                "run_seed": "101",
+                "total_targets": "10",
+                "hit_count": "9",
+                "false_alarm_count": "1",
+                "mean_rt_ms": "300.00",
+                "run_aborted": "False",
+            }
+        )
+    summary_path = write_participant_summary(tmp_path)
+    xlsx_path = summary_path.with_suffix(".xlsx")
+    xlsx_path.unlink()
+
+    refreshed_path = refresh_participant_summary_if_stale(tmp_path)
+
+    assert refreshed_path == summary_path
+    assert xlsx_path.is_file()
+    workbook = load_workbook(xlsx_path)
+    assert workbook["Participant Summary"]["A2"].value == "1"
+    assert refresh_participant_summary_if_stale(tmp_path) is None
+
+
+def test_refresh_participant_summary_if_stale_regenerates_newer_history(
+    tmp_path: Path,
+) -> None:
+    history_path = tmp_path / "logs" / "session_condition_history.csv"
+    history_path.parent.mkdir(parents=True, exist_ok=True)
+    with history_path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=SESSION_CONDITION_HISTORY_HEADER)
+        writer.writeheader()
+        writer.writerow(
+            {
+                "participant_number": "1",
+                "session_id": "session-1",
+                "session_seed": "11",
+                "session_aborted": "False",
+                "output_dir": "runs/1",
+                "global_order_index": "1",
+                "run_id": "run-1",
+                "run_seed": "101",
+                "total_targets": "10",
+                "hit_count": "9",
+                "false_alarm_count": "1",
+                "mean_rt_ms": "300.00",
+                "run_aborted": "False",
+            }
+        )
+    summary_path = write_participant_summary(tmp_path)
+    xlsx_path = summary_path.with_suffix(".xlsx")
+    with history_path.open("a", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=SESSION_CONDITION_HISTORY_HEADER)
+        writer.writerow(
+            {
+                "participant_number": "2",
+                "session_id": "session-2",
+                "session_seed": "22",
+                "session_aborted": "False",
+                "output_dir": "runs/2",
+                "global_order_index": "1",
+                "run_id": "run-2",
+                "run_seed": "202",
+                "total_targets": "12",
+                "hit_count": "12",
+                "false_alarm_count": "0",
+                "mean_rt_ms": "250.00",
+                "run_aborted": "False",
+            }
+        )
+    old_summary_mtime_ns = max(history_path.stat().st_mtime_ns - 1_000_000, 0)
+    os.utime(summary_path, ns=(old_summary_mtime_ns, old_summary_mtime_ns))
+    os.utime(xlsx_path, ns=(old_summary_mtime_ns, old_summary_mtime_ns))
+
+    refreshed_path = refresh_participant_summary_if_stale(tmp_path)
+
+    assert refreshed_path == summary_path
+    participant_summary_rows = _read_csv_rows(summary_path)
+    assert [row["PID"] for row in participant_summary_rows] == ["1", "2"]
+    workbook = load_workbook(xlsx_path)
+    worksheet = workbook["Participant Summary"]
+    assert worksheet.max_row == 3
+    assert worksheet["A3"].value == "2"
+    assert worksheet["M3"].value == 100
+    assert worksheet["N3"].value == 250
+    assert refresh_participant_summary_if_stale(tmp_path) is None
 
 
 def test_group_summary_export_uses_included_sessions_and_weighted_metrics(tmp_path) -> None:

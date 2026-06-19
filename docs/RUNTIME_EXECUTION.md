@@ -180,6 +180,8 @@ Compact participant summary:
 - `logs/participant_summary.xlsx`
   - regenerated after each completed session export from the project-level condition
     history
+  - also refreshed on project open or after launch when the condition history is newer
+    than either compact summary output
   - one row per participant session
   - excludes admin/test participant IDs `0` and `00`
   - includes PID, age, sex, handedness, session ID, condition display-order seed,
