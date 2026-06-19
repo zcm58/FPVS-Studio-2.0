@@ -131,8 +131,8 @@ Image `RunSpec.stimulus_sequence[*].image_path` values use project-relative POSI
 
 When a project root and preprocessing manifest are available, the compiler
 resolves real source or derived asset paths from the manifest. Runtime preflight
-verifies those files before launch, and the presentation engine resolves them
-relative to the project root during playback.
+verifies those paths are project-relative and exist before launch, and the presentation
+engine resolves them relative to the project root during playback.
 
 Launchable condition images must be square. Base and oddball source resolutions may
 differ, such as `512x512` and `1024x1024`, because playback size is controlled by

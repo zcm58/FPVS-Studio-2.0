@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
     QPushButton,
 )
 from tests.gui.helpers import (
+    _ImmediateProgressTask,
     _open_created_project,
     _prepare_compile_ready_project,
     _write_image_directory,
@@ -92,7 +93,7 @@ def test_assets_import_allows_mixed_resolution_for_later_normalization(
     assert imported_set.resolution is None
 
 
-def test_launch_invokes_backend_preflight_before_participant_prompt(
+def test_launch_collects_participant_prompt_before_backend_preflight(
     qtbot,
     controller: StudioController,
     tmp_path: Path,
@@ -112,16 +113,25 @@ def test_launch_invokes_backend_preflight_before_participant_prompt(
     )
     phase_trace: list[str] = []
 
-    def _fake_prompt() -> None:
+    def _fake_prompt() -> str:
         phase_trace.append("prompt")
-        return None
+        return "00042"
 
-    launch_calls = 0
-
-    def _fake_launch(*_args, **_kwargs):
-        nonlocal launch_calls
-        launch_calls += 1
-        raise AssertionError("launch_session should not run when prompt returns None")
+    def _fake_launch(project_root, session_plan, participant_number, launch_settings):
+        phase_trace.append("launch")
+        return SessionExecutionSummary(
+            project_id=session_plan.project_id,
+            session_id=session_plan.session_id,
+            engine_name="stub",
+            run_mode=RunMode.TEST,
+            participant_number=participant_number,
+            random_seed=session_plan.random_seed,
+            started_at=datetime(2026, 3, 8, 10, 0, tzinfo=timezone.utc),
+            finished_at=datetime(2026, 3, 8, 10, 1, tzinfo=timezone.utc),
+            total_condition_count=session_plan.total_runs,
+            completed_condition_count=session_plan.total_runs,
+            output_dir=f"runs/{session_plan.session_id}",
+        )
 
     def _capture_preflight(project_root, session_plan, engine):
         phase_trace.append("preflight")
@@ -136,14 +146,15 @@ def test_launch_invokes_backend_preflight_before_participant_prompt(
     monkeypatch.setattr("fpvs_studio.gui.document.preflight_session_plan", _capture_preflight)
     monkeypatch.setattr(window.run_page, "_prompt_participant_number", _fake_prompt)
     monkeypatch.setattr("fpvs_studio.gui.document.launch_session", _fake_launch)
+    monkeypatch.setattr("fpvs_studio.gui.run_page.ProgressTask", _ImmediateProgressTask)
 
     window.run_page.launch_test_session()
 
+    qtbot.waitUntil(lambda: "launch" in phase_trace)
     assert captures["project_root"] == window.document.project_root
     assert captures["engine"] == {"engine_name": "psychopy"}
-    assert phase_trace == ["preflight", "prompt"]
-    assert launch_calls == 0
-    assert "launch checks passed" in window.run_page.summary_text.toPlainText().lower()
+    assert phase_trace == ["prompt", "preflight", "launch"]
+    assert "runtime launch completed" in window.run_page.summary_text.toPlainText().lower()
 
 
 def test_launch_action_wires_runtime_launcher_with_backend_launch_settings(
@@ -300,7 +311,7 @@ def test_launch_action_wires_runtime_launcher_with_backend_launch_settings(
     assert opened_paths == [expected_output_dir]
 
 
-def test_launch_after_preview_reprepares_once_per_click(
+def test_launch_after_preview_recompiles_and_preflights_once_per_click(
     qtbot,
     controller: StudioController,
     tmp_path: Path,
@@ -312,14 +323,19 @@ def test_launch_after_preview_reprepares_once_per_click(
     window.run_page.compile_session()
     assert "session preview refreshed" in window.run_page.summary_text.toPlainText().lower()
 
-    original_prepare = window.document.prepare_test_session_launch
-    prepare_calls: list[float] = []
+    original_compile = window.document.compile_session
+    original_preflight = window.document.preflight_compiled_session
+    compile_calls: list[float] = []
     preflight_session_ids: list[str] = []
     launched_session_ids: list[str] = []
 
-    def _capture_prepare(*, refresh_hz, engine_name="psychopy"):
-        prepare_calls.append(refresh_hz)
-        return original_prepare(refresh_hz=refresh_hz, engine_name=engine_name)
+    def _capture_compile(*, refresh_hz):
+        compile_calls.append(refresh_hz)
+        return original_compile(refresh_hz=refresh_hz)
+
+    def _capture_preflight_compiled(session_plan, **kwargs):
+        preflight_session_ids.append(session_plan.session_id)
+        return original_preflight(session_plan, **kwargs)
 
     def _capture_launch(project_root, session_plan, participant_number, launch_settings):
         launched_session_ids.append(session_plan.session_id)
@@ -337,16 +353,15 @@ def test_launch_after_preview_reprepares_once_per_click(
             output_dir=f"runs/{session_plan.session_id}",
         )
 
-    monkeypatch.setattr(window.document, "prepare_test_session_launch", _capture_prepare)
+    monkeypatch.setattr(window.document, "compile_session", _capture_compile)
+    monkeypatch.setattr(window.document, "preflight_compiled_session", _capture_preflight_compiled)
     monkeypatch.setattr(
         "fpvs_studio.gui.document.create_engine",
         lambda engine_name: {"engine_name": engine_name},
     )
     monkeypatch.setattr(
         "fpvs_studio.gui.document.preflight_session_plan",
-        lambda project_root, session_plan, engine: preflight_session_ids.append(
-            session_plan.session_id
-        ),
+        lambda project_root, session_plan, engine: None,
     )
     monkeypatch.setattr(window.run_page, "_prompt_participant_number", lambda: "00052")
     monkeypatch.setattr("fpvs_studio.gui.document.launch_session", _capture_launch)
@@ -357,7 +372,8 @@ def test_launch_after_preview_reprepares_once_per_click(
 
     window.run_page.launch_test_session()
 
-    assert len(prepare_calls) == 1
+    assert len(compile_calls) == 1
+    qtbot.waitUntil(lambda: bool(preflight_session_ids))
     assert len(preflight_session_ids) == 1
     qtbot.waitUntil(lambda: bool(launched_session_ids))
     assert launched_session_ids == preflight_session_ids

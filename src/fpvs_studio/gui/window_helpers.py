@@ -281,10 +281,13 @@ def _launcher_readiness_report(
         status_summary=status_summary,
         readiness_items=tuple(readiness_items),
         preview_note=(
-            "Session preview available for inspection. Launch will still compile "
-            "and run launch checks automatically."
+            "Session preview available for inspection. Launch will still collect "
+            "participant details, compile, and run launch checks automatically."
             if preview_available
-            else "Launch will compile and run launch checks automatically."
+            else (
+                "Launch will collect participant details, compile, and run launch checks "
+                "automatically."
+            )
         ),
     )
 

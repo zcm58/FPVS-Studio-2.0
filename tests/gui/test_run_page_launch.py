@@ -138,7 +138,23 @@ def test_run_page_readiness_and_launch_feedback_is_updated_on_launch(
         "fpvs_studio.gui.main_window.QMessageBox.information",
         lambda *args, **kwargs: QMessageBox.StandardButton.Ok,
     )
-    monkeypatch.setattr(window.run_page, "_prompt_participant_number", lambda: None)
+    monkeypatch.setattr("fpvs_studio.gui.run_page.ProgressTask", _ImmediateProgressTask)
+    monkeypatch.setattr(window.run_page, "_prompt_participant_number", lambda: "7")
+
+    def _fake_launch(project_root, session_plan, participant_number, launch_settings):
+        captures["participant_number"] = participant_number
+        return SessionExecutionSummary(
+            project_id=session_plan.project_id,
+            session_id=session_plan.session_id,
+            engine_name="stub",
+            run_mode=RunMode.TEST,
+            participant_number=participant_number,
+            total_condition_count=session_plan.total_runs,
+            completed_condition_count=session_plan.total_runs,
+            output_dir=f"runs/{session_plan.session_id}",
+        )
+
+    monkeypatch.setattr("fpvs_studio.gui.document.launch_session", _fake_launch)
 
     window.run_page.launch_test_session()
 
@@ -149,7 +165,8 @@ def test_run_page_readiness_and_launch_feedback_is_updated_on_launch(
     assert captures["project_root"] == window.document.project_root
     qtbot.waitUntil(
         lambda: (
-            "status: launch checks passed" in window.run_page.summary_text.toPlainText().lower()
+            "status: runtime launch completed"
+            in window.run_page.summary_text.toPlainText().lower()
         ),
     )
 
@@ -273,7 +290,7 @@ def test_run_page_biosemi_confirmation_cancel_blocks_runtime_launch(
     window.run_page.launch_test_session()
 
     assert window.run_page._active_launch_task is None
-    assert "status: launch checks passed" in window.run_page.summary_text.toPlainText().lower()
+    assert "status: launch checks queued" in window.run_page.summary_text.toPlainText().lower()
 
 
 def test_run_page_compact_export_completion_points_to_logs(

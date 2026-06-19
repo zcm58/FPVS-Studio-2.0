@@ -89,7 +89,7 @@ The current v1 policy is:
 
 Runtime consumes `SessionPlan` and:
 
-- preflights all referenced assets before launch
+- preflights all referenced image paths for project-relative existence before launch
 - validates display timing across every embedded `RunSpec`
 - opens one engine session/window for the whole plan
 - runs the participant fixation tutorial once before the first condition when compiled

@@ -53,10 +53,11 @@ The engine never receives `ProjectFile`. It only receives one compiled
 `RunSpec`, the project root for asset resolution, and runtime-only launch
 options.
 
-Preflight validates the compiled stimulus payload before playback. Image events require
-existing project-relative files that can be opened and fully decoded before the engine
-session starts. Word events require non-empty text and do not require filesystem assets.
-Unknown modalities, missing payload fields, corrupt image files, or reused stimulus ids
+Preflight validates the compiled stimulus payload before playback. Routine participant
+launches require image events to reference existing project-relative files, while full
+image decoding is reserved for preprocessing/manual deep preflight and engine stimulus
+preparation. Word events require non-empty text and do not require filesystem assets.
+Unknown modalities, missing payload fields, missing image files, or reused stimulus ids
 with conflicting payloads fail before launch instead of falling back to image behavior.
 
 ## PsychoPy engine

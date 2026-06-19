@@ -39,6 +39,7 @@ from fpvs_studio.gui.components import (
     mark_secondary_action,
 )
 from fpvs_studio.gui.document import LaunchSummary, ProjectDocument
+from fpvs_studio.gui.document_support import DocumentError, format_validation_report
 from fpvs_studio.gui.runtime_settings_page import DisplaySettingsEditor
 from fpvs_studio.gui.window_helpers import (
     LauncherReadinessReport,
@@ -73,6 +74,14 @@ class ParticipantLaunchDetails:
 
     participant_number: str
     participant_metadata: ParticipantMetadata | None = None
+
+
+@dataclass(frozen=True)
+class LaunchTaskResult:
+    """Prepared session plan plus the resulting launch summary."""
+
+    session_plan: SessionPlan
+    summary: LaunchSummary
 
 
 class ParticipantNumberDialog(QDialog):
@@ -490,9 +499,7 @@ class RunPage(QWidget):
 
     def preflight_session(self) -> None:
         try:
-            session_plan = self._document.prepare_test_session_launch(
-                refresh_hz=self.current_refresh_hz()
-            )
+            session_plan = self._document.preflight_session(refresh_hz=self.current_refresh_hz())
         except Exception as error:
             _show_runtime_error_dialog(self, "Preflight Error", error)
             return
@@ -511,33 +518,42 @@ class RunPage(QWidget):
             return
         try:
             refresh_hz = self.current_refresh_hz()
-            session_plan = self._document.prepare_test_session_launch(refresh_hz=refresh_hz)
+            validation = self._document.validation_report(refresh_hz=refresh_hz)
+            if not validation.is_valid:
+                raise DocumentError(format_validation_report(validation))
         except Exception as error:
             _show_runtime_error_dialog(self, "Launch Blocked", error)
             return
-        self._set_summary(
-            session_plan,
-            extra_lines=["Status: launch checks passed."],
-        )
 
         participant_details = self._collect_launch_participant_details()
         if participant_details is None:
             return
         participant_number = participant_details.participant_number
+        try:
+            session_plan = self._document.compile_session(refresh_hz=refresh_hz)
+        except Exception as error:
+            _show_runtime_error_dialog(self, "Launch Blocked", error)
+            return
+        self._set_summary(
+            session_plan,
+            extra_lines=["Status: launch checks queued."],
+        )
         if (
             self._document.require_biosemi_recording_confirmation
             and not self._confirm_biosemi_recording_started()
         ):
             return
 
-        def _launch() -> LaunchSummary:
-            return self._document.launch_compiled_session(
+        def _launch() -> LaunchTaskResult:
+            self._document.preflight_compiled_session(session_plan)
+            summary = self._document.launch_compiled_session(
                 session_plan,
                 participant_number=participant_number,
                 participant_metadata=participant_details.participant_metadata,
                 display_index=None,
                 fullscreen=True,
             )
+            return LaunchTaskResult(session_plan=session_plan, summary=summary)
 
         self._active_launch_session_plan = session_plan
         self._active_launch_participant_number = participant_number
@@ -559,18 +575,17 @@ class RunPage(QWidget):
         task.start()
 
     def _on_launch_succeeded(self, result: object) -> None:
-        if not isinstance(result, LaunchSummary):
+        if not isinstance(result, LaunchTaskResult):
             _show_runtime_error_dialog(
                 self,
                 "Launch Error",
                 RuntimeError("Runtime launch returned an unexpected result."),
             )
             return
-        session_plan = self._active_launch_session_plan
         participant_number = self._active_launch_participant_number
-        if session_plan is None or participant_number is None:
+        if participant_number is None:
             return
-        self._apply_launch_summary(session_plan, participant_number, result)
+        self._apply_launch_summary(result.session_plan, participant_number, result.summary)
 
     def _on_launch_failed(self, error: object) -> None:
         if isinstance(error, Exception):

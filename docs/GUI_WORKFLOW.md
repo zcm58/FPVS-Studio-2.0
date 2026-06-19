@@ -170,10 +170,12 @@ project collects Participant Number, Age, Sex, and Handedness before runtime sta
 Participant Number remains the output-folder identity and duplicate-history lookup key;
 Sex is limited to `Female` or `Male`, and Handedness is limited to `Right handed`,
 `Left handed`, or `Ambidextrous`. The additional fields are written as runtime
-participant metadata for the launched session. When the app-level BioSemi recording
-confirmation setting is enabled, launch then shows a blocking administrator check that
-requires typing `Confirm` before the runtime task starts; cancelling that check returns
-to FPVS Studio without starting the experiment.
+participant metadata for the launched session. Launch compiles the session and runs
+routine preflight checks after participant details are collected, so the prompt appears
+before any project image-set scan. When the app-level BioSemi recording confirmation
+setting is enabled, launch then shows a blocking administrator check that requires
+typing `Confirm` before the runtime task starts; cancelling that check returns to FPVS
+Studio without starting the experiment.
 
 The Stimuli Manager remains an internal support page for variant/materialization
 behavior, not a guided setup step or visible top-level tab during normal use. Its raw

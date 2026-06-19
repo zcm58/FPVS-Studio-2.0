@@ -175,7 +175,12 @@ def _resolve_project_image_path(project_root: Path, image_path: str) -> Path:
     return absolute_path
 
 
-def _validate_and_preload_image_assets(project_root: Path, run_spec: RunSpec) -> None:
+def _validate_image_assets(
+    project_root: Path,
+    run_spec: RunSpec,
+    *,
+    decode: bool,
+) -> None:
     image_paths = sorted(
         {
             event.image_path
@@ -191,6 +196,8 @@ def _validate_and_preload_image_assets(project_root: Path, run_spec: RunSpec) ->
         if not absolute_path.is_file():
             missing_assets.append(image_path)
             continue
+        if not decode:
+            continue
         try:
             with Image.open(absolute_path) as image:
                 image.load()
@@ -205,7 +212,7 @@ def _validate_and_preload_image_assets(project_root: Path, run_spec: RunSpec) ->
     if unloadable_assets:
         raise PreflightError(
             "Run preflight failed because referenced image assets could not be "
-            "preloaded/decoded: "
+            "decoded: "
             + ", ".join(unloadable_assets[:5])
         )
 
@@ -216,6 +223,7 @@ def preflight_run_spec(
     *,
     engine: PresentationEngine,
     runtime_options: Mapping[str, object] | None = None,
+    decode_image_assets: bool = False,
 ) -> None:
     """Validate one run spec before execution starts."""
 
@@ -229,7 +237,7 @@ def preflight_run_spec(
             "Run preflight failed because strict timing does not support variable-refresh displays."
         )
 
-    _validate_and_preload_image_assets(project_root, run_spec)
+    _validate_image_assets(project_root, run_spec, decode=decode_image_assets)
     if (
         run_spec.display.on_frames + run_spec.display.off_frames
         != run_spec.display.frames_per_stimulus
@@ -261,6 +269,7 @@ def preflight_session_plan(
     *,
     engine: PresentationEngine,
     runtime_options: Mapping[str, object] | None = None,
+    decode_image_assets: bool = False,
 ) -> None:
     """Validate every run in a session plan before execution starts."""
 
@@ -275,4 +284,5 @@ def preflight_session_plan(
             entry.run_spec,
             engine=engine,
             runtime_options=runtime_options,
+            decode_image_assets=decode_image_assets,
         )

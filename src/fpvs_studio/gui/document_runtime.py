@@ -84,6 +84,7 @@ class DocumentRuntimeMixin:
         session_plan = self.prepare_test_session_launch(
             refresh_hz=refresh_hz,
             engine_name=engine_name,
+            decode_image_assets=True,
         )
         return session_plan
 
@@ -92,20 +93,45 @@ class DocumentRuntimeMixin:
         *,
         refresh_hz: float,
         engine_name: str = EngineName.PSYCHOPY.value,
+        decode_image_assets: bool = False,
     ) -> SessionPlan:
         """Compile and preflight the current test-mode session launch."""
 
         session_plan = self.compile_session(refresh_hz=refresh_hz)
+        self.preflight_compiled_session(
+            session_plan,
+            engine_name=engine_name,
+            decode_image_assets=decode_image_assets,
+        )
+        return session_plan
+
+    def preflight_compiled_session(
+        self,
+        session_plan: SessionPlan,
+        *,
+        engine_name: str = EngineName.PSYCHOPY.value,
+        decode_image_assets: bool = False,
+    ) -> None:
+        """Preflight an already-compiled session plan."""
+
         try:
             engine = _document_dependency("create_engine")(engine_name)
-            _document_dependency("preflight_session_plan")(
-                self._project_root,
-                session_plan,
-                engine=engine,
-            )
+            preflight_session_plan = _document_dependency("preflight_session_plan")
+            if decode_image_assets:
+                preflight_session_plan(
+                    self._project_root,
+                    session_plan,
+                    engine=engine,
+                    decode_image_assets=True,
+                )
+            else:
+                preflight_session_plan(
+                    self._project_root,
+                    session_plan,
+                    engine=engine,
+                )
         except Exception as exc:
             raise DocumentError(str(exc)) from exc
-        return session_plan
 
     def launch_compiled_session(
         self,

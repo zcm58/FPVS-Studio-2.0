@@ -372,7 +372,7 @@ class StudioMainWindow(QMainWindow):
         self.launch_action = QAction("Launch Experiment", self)
         launch_help = (
             "Launch Experiment on the current beta test-mode runtime path. "
-            "Launch checks run automatically before participant entry."
+            "Participant details are collected before launch checks run."
         )
         self.launch_action.setToolTip(launch_help)
         self.launch_action.setStatusTip(launch_help)

@@ -28,7 +28,8 @@ This phase should establish:
 - select engine by name
 - preflight compiled stimulus payloads before launch: image events must point to
   existing project-relative files, while word events must carry non-empty text
-- fail corrupt image files during RAM-cache/preload validation before playback starts
+- leave full image decoding to preprocessing/manual deep preflight or engine stimulus
+  preparation; routine participant launch preflight must not decode the whole image set
 - when serial output is enabled, open the configured port before `engine.open_session`
   so missing, busy, or unavailable ports fail before participant-facing flow begins
 - open/close one engine session per launched session
