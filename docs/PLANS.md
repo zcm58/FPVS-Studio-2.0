@@ -13,8 +13,9 @@ Use this page to find planning material before making feature-sized changes.
 
 Current inventory:
 
-- Planned plans include protocol configurability, luminance/RMS equalization
-  investigation, and sinusoidal contrast modulation.
+- Planned plans include protocol configurability, participant electrode exclusion
+  capture at launch, luminance/RMS equalization investigation, and sinusoidal
+  contrast modulation.
 - Active plans: none.
 - Completed plans include compact versus full run export mode, participant fixation
   tutorial workflow, word-based FPVS conditions, and per-condition timing template
