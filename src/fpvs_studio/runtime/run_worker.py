@@ -6,6 +6,7 @@ above the engine seam, not ProjectFile compilation or PsychoPy-specific renderin
 from __future__ import annotations
 
 from collections.abc import Mapping
+from dataclasses import dataclass
 from pathlib import Path
 
 from fpvs_studio.core.enums import RunMode
@@ -38,8 +39,20 @@ from fpvs_studio.runtime.triggers import (
 _TUTORIAL_REQUIRED_SUCCESSES = 3
 _TUTORIAL_TARGET_DELAY_SECONDS = 1.0
 _TUTORIAL_MISS_COOLDOWN_SECONDS = 5.0
+_TUTORIAL_REMINDER_MISS_THRESHOLD = 5
+_TUTORIAL_RESEARCHER_CHECK_MISS_THRESHOLD = 10
 _ACCESSIBLE_FIXATION_DEFAULT_COLOR = "#FFFFFF"
 _ACCESSIBLE_FIXATION_TARGET_COLOR = "#D55E00"
+_TUTORIAL_INCOMPLETE_WARNING = (
+    "Participant did not complete the fixation tutorial after repeated missed practice "
+    "attempts; researcher continued the experiment without tutorial completion."
+)
+
+
+@dataclass(frozen=True)
+class _TutorialOutcome:
+    aborted: bool = False
+    warnings: tuple[str, ...] = ()
 
 
 class RuntimeWorker:
@@ -70,14 +83,16 @@ class RuntimeWorker:
             self._engine.open_session(runtime_options=runtime_options)
             session_open = True
             _validate_configured_display_resolution(self._engine, run_spec)
-            if self._show_participant_tutorial(run_spec):
+            tutorial_outcome = self._show_participant_tutorial(run_spec)
+            run_warnings = [*trigger_warnings, *tutorial_outcome.warnings]
+            if tutorial_outcome.aborted:
                 run_summary = _build_start_aborted_summary(
                     run_spec,
                     engine_name=self._engine.engine_id,
                     runtime_options=runtime_options,
                     participant_number=participant_number,
                     participant_metadata=participant_metadata,
-                    warnings=trigger_warnings,
+                    warnings=run_warnings,
                     abort_reason="Run aborted during the participant tutorial.",
                 )
             else:
@@ -89,7 +104,7 @@ class RuntimeWorker:
                         runtime_options=runtime_options,
                         participant_number=participant_number,
                         participant_metadata=participant_metadata,
-                        warnings=trigger_warnings,
+                        warnings=run_warnings,
                     )
                 else:
                     try:
@@ -106,7 +121,7 @@ class RuntimeWorker:
                             runtime_options=runtime_options,
                             participant_number=participant_number,
                             participant_metadata=participant_metadata,
-                            warnings=trigger_warnings,
+                            warnings=run_warnings,
                             trigger_backend=trigger_backend,
                             trigger_start_index=trigger_start_index,
                             abort_reason=(
@@ -127,7 +142,7 @@ class RuntimeWorker:
                             participant_metadata=participant_metadata,
                             trigger_backend=trigger_backend,
                             trigger_start_index=trigger_start_index,
-                            warnings=trigger_warnings,
+                            warnings=run_warnings,
                         )
                     if not run_summary.aborted and self._show_condition_feedback(
                         run_spec, run_summary
@@ -180,7 +195,11 @@ class RuntimeWorker:
             session_open = True
             if ordered_entries:
                 _validate_configured_display_resolution(self._engine, ordered_entries[0].run_spec)
-                if self._show_participant_tutorial(ordered_entries[0].run_spec):
+                tutorial_outcome = self._show_participant_tutorial(
+                    ordered_entries[0].run_spec
+                )
+                warnings.extend(tutorial_outcome.warnings)
+                if tutorial_outcome.aborted:
                     abort_reason = "Session aborted during the participant tutorial."
             for entry in ordered_entries:
                 if abort_reason is not None:
@@ -413,10 +432,10 @@ class RuntimeWorker:
             continue_prompt="Press Space to begin.",
         )
 
-    def _show_participant_tutorial(self, run_spec: RunSpec) -> bool:
+    def _show_participant_tutorial(self, run_spec: RunSpec) -> _TutorialOutcome:
         fixation = run_spec.fixation
         if not fixation.accuracy_task_enabled or not fixation.participant_tutorial_enabled:
-            return False
+            return _TutorialOutcome()
 
         response_key_label = _format_key_label(fixation.response_key)
         aborted = self._engine.show_transition_screen(
@@ -431,29 +450,28 @@ class RuntimeWorker:
             continue_prompt="Press Space to continue.",
         )
         if aborted:
-            return True
+            return _TutorialOutcome(aborted=True)
 
         attempt_count = 0
-        success_count = 0
         total_hit_count = 0
+        miss_count = 0
         hit_rts: list[float] = []
-        while success_count < _TUTORIAL_REQUIRED_SUCCESSES:
+        while total_hit_count < _TUTORIAL_REQUIRED_SUCCESSES:
             result = self._engine.run_fixation_tutorial_attempt(
                 run_spec,
                 target_delay_seconds=_TUTORIAL_TARGET_DELAY_SECONDS,
             )
             attempt_count += 1
             if result.aborted:
-                return True
+                return _TutorialOutcome(aborted=True)
             if result.hit:
-                success_count += 1
                 total_hit_count += 1
                 if result.reaction_time_s is not None:
                     hit_rts.append(result.reaction_time_s)
-                if success_count < _TUTORIAL_REQUIRED_SUCCESSES:
+                if total_hit_count < _TUTORIAL_REQUIRED_SUCCESSES:
                     prompt = (
                         "Great job! Let's try this again."
-                        if success_count == 1
+                        if total_hit_count == 1
                         else "Great! Let's practice one more time, then we'll start the experiment."
                     )
                     if self._engine.show_transition_screen(
@@ -463,18 +481,20 @@ class RuntimeWorker:
                         continue_key="space",
                         continue_prompt="Press Space to continue.",
                     ):
-                        return True
+                        return _TutorialOutcome(aborted=True)
                 continue
 
-            success_count = 0
-            if self._engine.show_transition_screen(
-                heading="Please press the response key when you see the cross change colors.",
-                body=None,
-                countdown_seconds=_TUTORIAL_MISS_COOLDOWN_SECONDS,
-                continue_key=None,
-                continue_prompt=None,
-            ):
-                return True
+            miss_count += 1
+            if miss_count == _TUTORIAL_REMINDER_MISS_THRESHOLD:
+                if self._show_tutorial_reminder(response_key_label):
+                    return _TutorialOutcome(aborted=True)
+                continue
+            if miss_count == _TUTORIAL_RESEARCHER_CHECK_MISS_THRESHOLD:
+                if self._show_tutorial_researcher_check():
+                    return _TutorialOutcome(aborted=True)
+                return _TutorialOutcome(warnings=(_TUTORIAL_INCOMPLETE_WARNING,))
+            if self._show_tutorial_miss_cooldown():
+                return _TutorialOutcome(aborted=True)
 
         accuracy_percent = (total_hit_count / attempt_count) * 100.0
         mean_rt_text = _format_tutorial_mean_rt(hit_rts)
@@ -485,12 +505,53 @@ class RuntimeWorker:
             "You're now ready to begin the experiment. When you're ready, please press "
             "Space to continue."
         )
-        return self._engine.show_transition_screen(
+        if self._engine.show_transition_screen(
             heading="Tutorial complete.",
             body=body,
             countdown_seconds=None,
             continue_key="space",
             continue_prompt=None,
+        ):
+            return _TutorialOutcome(aborted=True)
+        return _TutorialOutcome()
+
+    def _show_tutorial_miss_cooldown(self) -> bool:
+        return self._engine.show_transition_screen(
+            heading="Please press the response key when you see the cross change colors.",
+            body=None,
+            countdown_seconds=_TUTORIAL_MISS_COOLDOWN_SECONDS,
+            continue_key=None,
+            continue_prompt=None,
+        )
+
+    def _show_tutorial_reminder(self, response_key_label: str) -> bool:
+        body = (
+            "Please keep your eyes on the cross in the center of the screen.\n\n"
+            f"When the cross changes colors, press {response_key_label} as quickly as you can.\n\n"
+            "Only press when the center cross changes colors.\n\n"
+            "If you are unsure what to do, please ask the researcher now."
+        )
+        return self._engine.show_transition_screen(
+            heading="Let's pause for a quick reminder.",
+            body=body,
+            countdown_seconds=None,
+            continue_key="space",
+            continue_prompt="Press Space to try the practice again.",
+        )
+
+    def _show_tutorial_researcher_check(self) -> bool:
+        body = (
+            "The participant has missed several tutorial practice attempts.\n\n"
+            "Researcher: confirm the participant understands the fixation task before "
+            "continuing. Press Space to continue the experiment without completing the "
+            "tutorial, or press Escape to abort this launch."
+        )
+        return self._engine.show_transition_screen(
+            heading="Researcher check",
+            body=body,
+            countdown_seconds=None,
+            continue_key="space",
+            continue_prompt="Researcher: press Space to continue, or Escape to abort.",
         )
 
     def _show_block_break(

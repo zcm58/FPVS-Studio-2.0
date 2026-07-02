@@ -152,6 +152,13 @@ Scoring semantics for the fixation accuracy task:
 - mean RT is computed from hits only
 - the optional participant tutorial runs once before the first condition when enabled
   in setup, and disabling it preserves the direct-to-condition launch flow
+- tutorial practice requires three total successful detections; missed attempts do not
+  reset prior hits
+- after five missed tutorial attempts, runtime shows a participant reminder to watch
+  the center cross and press Space when the cross changes colors
+- after ten missed tutorial attempts, runtime shows a researcher check screen; the
+  researcher can press Space to continue without tutorial completion or Escape to abort,
+  and continuing records a session warning
 
 ## Exports
 

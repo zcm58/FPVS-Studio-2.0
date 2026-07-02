@@ -349,6 +349,12 @@ When enabled in `Fixation & Session`:
 - the participant responds with `Space` within `1.0` second of target onset
 - the optional participant tutorial teaches the response task once before the first
   condition and is skipped when disabled
+- tutorial practice requires three total successful detections; missed attempts do not
+  reset prior hits
+- after five missed tutorial attempts, the participant sees a reminder to watch the
+  center cross and press Space when the cross changes colors
+- after ten missed tutorial attempts, a researcher check screen can continue without
+  tutorial completion or abort the launch; continuing records a session warning
 - runtime shows a participant-facing end-of-condition feedback screen with:
   - accuracy percentage and hits/total
   - mean RT (ms, or N/A when no hits)

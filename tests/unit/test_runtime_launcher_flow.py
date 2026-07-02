@@ -404,7 +404,7 @@ def test_launch_session_skips_participant_tutorial_when_disabled(
     assert captures["transitions"][0]["heading"].startswith("Condition 1 of")
 
 
-def test_launch_session_tutorial_miss_resets_success_count_before_condition_start(
+def test_launch_session_tutorial_miss_keeps_total_hit_progress_before_condition_start(
     multi_condition_project,
     multi_condition_project_root,
 ) -> None:
@@ -417,7 +417,6 @@ def test_launch_session_tutorial_miss_resets_success_count_before_condition_star
             FixationTutorialAttemptResult(hit=False),
             FixationTutorialAttemptResult(hit=True, reaction_time_s=0.28),
             FixationTutorialAttemptResult(hit=True, reaction_time_s=0.26),
-            FixationTutorialAttemptResult(hit=True, reaction_time_s=0.24),
         ]
     }
     register_engine("stub-tutorial-miss", lambda: StubEngine(captures))
@@ -449,8 +448,108 @@ def test_launch_session_tutorial_miss_resets_success_count_before_condition_star
     final_screen = next(
         transition for transition in transitions if transition["heading"] == "Tutorial complete."
     )
-    assert "Your tutorial accuracy was 80% (4/5)." in final_screen["body"]
+    assert "Your tutorial accuracy was 75% (3/4)." in final_screen["body"]
     assert transitions[-session_plan.total_runs]["heading"].startswith("Condition 1 of")
+
+
+def test_launch_session_tutorial_shows_reminder_after_repeated_misses(
+    multi_condition_project,
+    multi_condition_project_root,
+) -> None:
+    multi_condition_project.settings.fixation_task.enabled = True
+    multi_condition_project.settings.fixation_task.accuracy_task_enabled = True
+    multi_condition_project.settings.fixation_task.participant_tutorial_enabled = True
+    captures: dict[str, object] = {
+        "tutorial_attempt_results": [
+            *[FixationTutorialAttemptResult(hit=False) for _index in range(5)],
+            FixationTutorialAttemptResult(hit=True, reaction_time_s=0.28),
+            FixationTutorialAttemptResult(hit=True, reaction_time_s=0.26),
+            FixationTutorialAttemptResult(hit=True, reaction_time_s=0.24),
+        ]
+    }
+    register_engine("stub-tutorial-reminder", lambda: StubEngine(captures))
+    try:
+        session_plan = compile_session_plan(
+            multi_condition_project,
+            refresh_hz=60.0,
+            project_root=multi_condition_project_root,
+            random_seed=99,
+        )
+
+        summary = launch_session(
+            multi_condition_project_root,
+            session_plan,
+            participant_number=PARTICIPANT_NUMBER,
+            launch_settings=LaunchSettings(engine_name="stub-tutorial-reminder", test_mode=True),
+        )
+    finally:
+        unregister_engine("stub-tutorial-reminder")
+
+    transitions = captures["transitions"]
+    reminder = next(
+        transition
+        for transition in transitions
+        if transition["heading"] == "Let's pause for a quick reminder."
+    )
+    assert reminder["continue_prompt"] == "Press Space to try the practice again."
+    assert "Please keep your eyes on the cross in the center of the screen." in reminder["body"]
+    assert "When the cross changes colors, press Space as quickly as you can." in reminder["body"]
+    assert "Only press when the center cross changes colors." in reminder["body"]
+    assert "please ask the researcher now" in reminder["body"]
+    assert "picture" not in reminder["body"].lower()
+    assert "Researcher check" not in [transition["heading"] for transition in transitions]
+    assert summary.warnings == []
+    assert captures["run_ids"] == [entry.run_id for entry in session_plan.ordered_entries()]
+
+
+def test_launch_session_tutorial_researcher_check_allows_continuing_after_ten_misses(
+    multi_condition_project,
+    multi_condition_project_root,
+) -> None:
+    multi_condition_project.settings.fixation_task.enabled = True
+    multi_condition_project.settings.fixation_task.accuracy_task_enabled = True
+    multi_condition_project.settings.fixation_task.participant_tutorial_enabled = True
+    captures: dict[str, object] = {
+        "tutorial_attempt_results": [
+            FixationTutorialAttemptResult(hit=False) for _index in range(10)
+        ]
+    }
+    register_engine("stub-tutorial-researcher-check", lambda: StubEngine(captures))
+    try:
+        session_plan = compile_session_plan(
+            multi_condition_project,
+            refresh_hz=60.0,
+            project_root=multi_condition_project_root,
+            random_seed=99,
+        )
+
+        summary = launch_session(
+            multi_condition_project_root,
+            session_plan,
+            participant_number=PARTICIPANT_NUMBER,
+            launch_settings=LaunchSettings(
+                engine_name="stub-tutorial-researcher-check",
+                test_mode=True,
+            ),
+        )
+    finally:
+        unregister_engine("stub-tutorial-researcher-check")
+
+    transitions = captures["transitions"]
+    researcher_check = next(
+        transition for transition in transitions if transition["heading"] == "Researcher check"
+    )
+    assert "without completing the tutorial" in researcher_check["body"]
+    assert "press Escape to abort this launch" in researcher_check["body"]
+    assert researcher_check["continue_prompt"] == (
+        "Researcher: press Space to continue, or Escape to abort."
+    )
+    assert all(
+        transition["heading"] != "Tutorial complete." for transition in transitions
+    )
+    assert summary.aborted is False
+    assert any("did not complete the fixation tutorial" in item for item in summary.warnings)
+    assert captures["run_ids"] == [entry.run_id for entry in session_plan.ordered_entries()]
 
 
 def test_launch_session_aborts_before_playback_when_tutorial_attempt_aborts(
