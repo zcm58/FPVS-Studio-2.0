@@ -210,6 +210,9 @@ def _iter_session_condition_history_summaries(
                         age=_csv_int(first_row.get("participant_age")),
                         sex=first_row.get("participant_sex") or None,
                         handedness=first_row.get("participant_handedness") or None,
+                        colorblind=_csv_bool_or_none(
+                            first_row.get("participant_colorblind")
+                        ),
                     ),
                     random_seed=_csv_int(first_row.get("session_seed")),
                     total_condition_count=total_condition_count,
@@ -233,6 +236,19 @@ def _summary_consumes_seed(summary: SessionExecutionSummary) -> bool:
 
 def _csv_bool(value: str | None) -> bool:
     return value is not None and value.strip().lower() in {"1", "true", "yes", "y"}
+
+
+def _csv_bool_or_none(value: str | None) -> bool | None:
+    if value is None:
+        return None
+    cleaned = value.strip().lower()
+    if not cleaned:
+        return None
+    if cleaned in {"1", "true", "yes", "y"}:
+        return True
+    if cleaned in {"0", "false", "no", "n"}:
+        return False
+    return None
 
 
 def _csv_int(value: str | None) -> int | None:

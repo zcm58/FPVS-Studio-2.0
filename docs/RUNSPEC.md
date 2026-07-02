@@ -101,6 +101,10 @@ fixation task without consulting editable project models:
 - cross line width in pixels
 - target duration in frames
 
+Launch-time participant accessibility can derive an execution-only `RunSpec` copy with
+white `#FFFFFF` default and vermillion `#D55E00` target fixation colors when the
+participant reports colorblindness. This does not mutate editable project settings.
+
 ### `FixationEvent`
 
 Each fixation event contains a concrete target onset and duration in frames.

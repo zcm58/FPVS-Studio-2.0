@@ -8,7 +8,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from pydantic import Field, StrictInt, field_validator, model_validator
+from pydantic import Field, StrictBool, StrictInt, field_validator, model_validator
 
 from fpvs_studio.core.enums import RunMode, SchemaVersion
 from fpvs_studio.core.models import FPVSBaseModel, validate_project_relative_path
@@ -44,6 +44,7 @@ class ParticipantMetadata(FPVSBaseModel):
     age: StrictInt | None = Field(default=None, ge=1, le=120)
     sex: str | None = Field(default=None, max_length=64)
     handedness: str | None = Field(default=None, max_length=64)
+    colorblind: StrictBool | None = None
 
     @field_validator("sex")
     @classmethod
@@ -76,7 +77,12 @@ class ParticipantMetadata(FPVSBaseModel):
     def is_empty(self) -> bool:
         """Return whether no optional participant metadata has been collected."""
 
-        return self.age is None and self.sex is None and self.handedness is None
+        return (
+            self.age is None
+            and self.sex is None
+            and self.handedness is None
+            and self.colorblind is None
+        )
 
 
 class RuntimeMetadata(FPVSBaseModel):

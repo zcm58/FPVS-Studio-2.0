@@ -37,6 +37,7 @@ SESSION_CONDITION_HISTORY_HEADER = [
     "participant_age",
     "participant_sex",
     "participant_handedness",
+    "participant_colorblind",
     "session_id",
     "session_seed",
     "session_started_at",
@@ -74,6 +75,7 @@ PARTICIPANT_SUMMARY_HEADER = [
     "Age",
     "Sex",
     "Handedness",
+    "Colorblind",
     "Session ID",
     "Condition Display Order Seed",
     "Image Display Order Seeds",
@@ -93,6 +95,7 @@ GROUP_SUMMARY_HEADER = [
     "Age",
     "Sex",
     "Handedness",
+    "Colorblind",
     "Session ID",
     "Condition Display Order Seed",
     "Image Display Order Seeds",
@@ -315,6 +318,7 @@ def write_session_artifacts(
             "participant_age",
             "participant_sex",
             "participant_handedness",
+            "participant_colorblind",
         ],
         [
             (
@@ -324,6 +328,7 @@ def write_session_artifacts(
                 else "",
                 summary.participant_metadata.sex or "",
                 summary.participant_metadata.handedness or "",
+                _participant_colorblind_value(summary.participant_metadata.colorblind),
             )
         ],
     )
@@ -625,6 +630,7 @@ def _session_condition_history_row(
         else "",
         summary.participant_metadata.sex or "",
         summary.participant_metadata.handedness or "",
+        _participant_colorblind_value(summary.participant_metadata.colorblind),
         summary.session_id,
         summary.random_seed if summary.random_seed is not None else "",
         _datetime_value(summary.started_at),
@@ -737,6 +743,7 @@ def _participant_summary_row(project_root: Path, rows: list[dict[str, str]]) -> 
         _first_non_blank(ordered_rows, "participant_age"),
         _first_non_blank(ordered_rows, "participant_sex"),
         _first_non_blank(ordered_rows, "participant_handedness"),
+        _first_non_blank(ordered_rows, "participant_colorblind"),
         _first_non_blank(ordered_rows, "session_id"),
         _first_non_blank(ordered_rows, "session_seed"),
         _image_display_order_seed_text(project_root, ordered_rows),
@@ -1023,6 +1030,12 @@ def _datetime_value(value: object | None) -> str:
     if value is None:
         return ""
     return value.isoformat() if hasattr(value, "isoformat") else str(value)
+
+
+def _participant_colorblind_value(value: bool | None) -> str:
+    if value is None:
+        return ""
+    return "Yes" if value else "No"
 
 
 def _float_value(value: float | None) -> str:

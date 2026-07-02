@@ -109,6 +109,7 @@ def test_find_completed_sessions_for_participant_reads_compact_history_rows(
                 "participant_age": "28",
                 "participant_sex": "Female",
                 "participant_handedness": "Right handed",
+                "participant_colorblind": "Yes",
                 "session_id": "session-compact",
                 "session_seed": "404",
                 "session_aborted": "False",
@@ -123,6 +124,7 @@ def test_find_completed_sessions_for_participant_reads_compact_history_rows(
                 "participant_age": "28",
                 "participant_sex": "Female",
                 "participant_handedness": "Right handed",
+                "participant_colorblind": "Yes",
                 "session_id": "session-compact",
                 "session_seed": "404",
                 "session_aborted": "False",
@@ -153,6 +155,7 @@ def test_find_completed_sessions_for_participant_reads_compact_history_rows(
     assert records[0].summary.participant_metadata.age == 28
     assert records[0].summary.participant_metadata.sex == "Female"
     assert records[0].summary.participant_metadata.handedness == "Right handed"
+    assert records[0].summary.participant_metadata.colorblind is True
     assert records[0].summary.random_seed == 404
     assert records[0].summary.total_condition_count == 2
     assert records[0].summary.completed_condition_count == 2

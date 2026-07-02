@@ -197,6 +197,7 @@ def test_run_page_launch_uses_fixed_current_runtime_defaults(
                 age=71,
                 sex="Female",
                 handedness="Right handed",
+                colorblind=True,
             ),
         ),
     )
@@ -217,6 +218,7 @@ def test_run_page_launch_uses_fixed_current_runtime_defaults(
         age=71,
         sex="Female",
         handedness="Right handed",
+        colorblind=True,
     )
     assert captures["display_index"] is None
     assert captures["fullscreen"] is True
@@ -277,6 +279,7 @@ def test_run_page_biosemi_confirmation_cancel_blocks_runtime_launch(
                 age=71,
                 sex="Female",
                 handedness="Right handed",
+                colorblind=True,
             ),
         ),
     )

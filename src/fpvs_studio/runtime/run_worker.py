@@ -38,6 +38,8 @@ from fpvs_studio.runtime.triggers import (
 _TUTORIAL_REQUIRED_SUCCESSES = 3
 _TUTORIAL_TARGET_DELAY_SECONDS = 1.0
 _TUTORIAL_MISS_COOLDOWN_SECONDS = 5.0
+_ACCESSIBLE_FIXATION_DEFAULT_COLOR = "#FFFFFF"
+_ACCESSIBLE_FIXATION_TARGET_COLOR = "#D55E00"
 
 
 class RuntimeWorker:
@@ -59,6 +61,7 @@ class RuntimeWorker:
     ) -> RunExecutionSummary:
         """Run one compiled condition and write its neutral artifact set."""
 
+        run_spec = _run_spec_for_participant(run_spec, participant_metadata)
         write_detailed_exports = _writes_detailed_exports(runtime_options)
         summary_relative_output_dir = relative_output_dir if write_detailed_exports else None
         trigger_backend, trigger_warnings = _build_and_connect_trigger_backend(runtime_options)
@@ -163,6 +166,7 @@ class RuntimeWorker:
     ) -> SessionExecutionSummary:
         """Run every entry in a session plan and write session-level artifacts."""
 
+        session_plan = _session_plan_for_participant(session_plan, participant_metadata)
         write_detailed_exports = _writes_detailed_exports(runtime_options)
         trigger_backend, trigger_warnings = _build_and_connect_trigger_backend(runtime_options)
         session_open = False
@@ -419,9 +423,8 @@ class RuntimeWorker:
             heading="Participant tutorial",
             body=(
                 "Thank you for participating in our experiment today! Your task is to "
-                f"press {response_key_label} each time you see the cross change colors "
-                f"from {_format_color_label(fixation.default_color)} to "
-                f"{_format_color_label(fixation.target_color)}. Ready to try it?"
+                f"press {response_key_label} when the cross changes colors. Ready to "
+                "try it?"
             ),
             countdown_seconds=None,
             continue_key="space",
@@ -528,6 +531,60 @@ class RuntimeWorker:
 def _coerce_int(runtime_options: Mapping[str, object] | None, key: str) -> int | None:
     value = (runtime_options or {}).get(key)
     return value if isinstance(value, int) else None
+
+
+def _session_plan_for_participant(
+    session_plan: SessionPlan,
+    participant_metadata: ParticipantMetadata | None,
+) -> SessionPlan:
+    if not _use_accessible_fixation_colors(participant_metadata):
+        return session_plan
+    return session_plan.model_copy(
+        update={
+            "blocks": [
+                block.model_copy(
+                    update={
+                        "entries": [
+                            entry.model_copy(
+                                update={
+                                    "run_spec": _run_spec_with_accessible_fixation_colors(
+                                        entry.run_spec
+                                    )
+                                }
+                            )
+                            for entry in block.entries
+                        ]
+                    }
+                )
+                for block in session_plan.blocks
+            ]
+        }
+    )
+
+
+def _run_spec_for_participant(
+    run_spec: RunSpec,
+    participant_metadata: ParticipantMetadata | None,
+) -> RunSpec:
+    if not _use_accessible_fixation_colors(participant_metadata):
+        return run_spec
+    return _run_spec_with_accessible_fixation_colors(run_spec)
+
+
+def _use_accessible_fixation_colors(
+    participant_metadata: ParticipantMetadata | None,
+) -> bool:
+    return participant_metadata is not None and participant_metadata.colorblind is True
+
+
+def _run_spec_with_accessible_fixation_colors(run_spec: RunSpec) -> RunSpec:
+    fixation = run_spec.fixation.model_copy(
+        update={
+            "default_color": _ACCESSIBLE_FIXATION_DEFAULT_COLOR,
+            "target_color": _ACCESSIBLE_FIXATION_TARGET_COLOR,
+        }
+    )
+    return run_spec.model_copy(update={"fixation": fixation})
 
 
 def _build_and_connect_trigger_backend(
@@ -696,18 +753,6 @@ def _format_key_label(key: str) -> str:
     if normalized == "space":
         return "Space"
     return normalized.upper()
-
-
-def _format_color_label(color: str) -> str:
-    color_names = {
-        "#0000ff": "blue",
-        "#ff0000": "red",
-        "#ffffff": "white",
-        "#000000": "black",
-        "#ffff00": "yellow",
-        "#00ff00": "green",
-    }
-    return color_names.get(color.strip().lower(), color)
 
 
 def _format_tutorial_mean_rt(hit_rts: list[float]) -> str:

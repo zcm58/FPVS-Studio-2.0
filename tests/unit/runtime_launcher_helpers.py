@@ -111,6 +111,9 @@ class StubEngine(PresentationEngine):
         *,
         target_delay_seconds: float,
     ) -> FixationTutorialAttemptResult:
+        self._captures.setdefault("tutorial_fixation_colors", []).append(
+            (run_spec.fixation.default_color, run_spec.fixation.target_color)
+        )
         self._captures.setdefault("tutorial_attempts", []).append(
             {
                 "run_id": run_spec.run_id,
@@ -131,6 +134,9 @@ class StubEngine(PresentationEngine):
         trigger_backend: TriggerBackend | None = None,
     ) -> RunExecutionSummary:
         self._captures.setdefault("run_ids", []).append(run_spec.run_id)
+        self._captures.setdefault("condition_fixation_colors", []).append(
+            (run_spec.fixation.default_color, run_spec.fixation.target_color)
+        )
         self._captures.setdefault("project_roots", []).append(project_root)
         self._captures.setdefault("condition_instructions", []).append(
             run_spec.condition.instructions_text

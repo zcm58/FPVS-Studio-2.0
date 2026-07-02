@@ -189,11 +189,12 @@ valid when the project records the user-directed
 ## 11. Participant metadata
 
 Runtime execution summaries can carry launch-time participant metadata. The default GUI
-launch workflow collects Participant Number, Age, Sex, and Handedness for every project.
-Participant Number stays the required runtime identity and duplicate-history lookup key;
-Sex is constrained to `Female` or `Male`; Handedness is constrained to `Right handed`,
-`Left handed`, or `Ambidextrous`. Age, Sex, and Handedness remain runtime metadata
-fields outside `RunSpec` and `SessionPlan`.
+launch workflow collects Participant Number, Age, Sex, Handedness, and colorblind status
+for every project. Participant Number stays the required runtime identity and
+duplicate-history lookup key; Sex is constrained to `Female` or `Male`; Handedness is
+constrained to `Right handed`, `Left handed`, or `Ambidextrous`; colorblind status is
+constrained to a required `Yes` or `No` answer. Age, Sex, Handedness, and colorblind
+status remain runtime metadata fields outside `RunSpec` and `SessionPlan`.
 
 ## 12. Participant-facing condition titles
 

@@ -725,6 +725,10 @@ def test_participant_number_dialog_requires_digits_and_trims_whitespace(qtbot, m
         "Left handed",
         "Ambidextrous",
     ]
+    assert [
+        dialog.colorblind_combo.itemText(index)
+        for index in range(dialog.colorblind_combo.count())
+    ] == ["Select yes or no...", "No", "Yes"]
 
     messages: list[str] = []
     monkeypatch.setattr(
@@ -760,16 +764,22 @@ def test_participant_number_dialog_requires_digits_and_trims_whitespace(qtbot, m
         dialog.handedness_combo.findData("Right handed")
     )
     dialog.accept()
+    assert dialog.result() != int(dialog.DialogCode.Accepted)
+
+    dialog.colorblind_combo.setCurrentIndex(dialog.colorblind_combo.findData(True))
+    dialog.accept()
     assert dialog.result() == int(dialog.DialogCode.Accepted)
     assert dialog.participant_number == "0012"
     assert dialog.participant_metadata.age == 72
     assert dialog.participant_metadata.sex == "Female"
     assert dialog.participant_metadata.handedness == "Right handed"
+    assert dialog.participant_metadata.colorblind is True
     assert any("Enter a participant number" in message for message in messages)
     assert any("digits only" in message for message in messages)
     assert any("age" in message.lower() for message in messages)
     assert any("sex" in message.lower() for message in messages)
     assert any("handedness" in message.lower() for message in messages)
+    assert any("colorblind" in message.lower() for message in messages)
 
 
 def test_unsaved_changes_state_and_guard(

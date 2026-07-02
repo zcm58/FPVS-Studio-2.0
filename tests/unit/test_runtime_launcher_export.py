@@ -54,6 +54,7 @@ def test_session_export_captures_seed_and_runtime_logs(
                 age=72,
                 sex="Female",
                 handedness="Right handed",
+                colorblind=True,
             ),
             launch_settings=LaunchSettings(engine_name="stub-export", test_mode=True),
         )
@@ -73,6 +74,7 @@ def test_session_export_captures_seed_and_runtime_logs(
         age=72,
         sex="Female",
         handedness="Right handed",
+        colorblind=True,
     )
     assert exported_summary.realized_block_orders == [
         block.condition_order for block in session_plan.blocks
@@ -132,6 +134,7 @@ def test_session_export_captures_seed_and_runtime_logs(
             "participant_age": "72",
             "participant_sex": "Female",
             "participant_handedness": "Right handed",
+            "participant_colorblind": "Yes",
         }
     ]
     assert all(row["participant_age"] == "72" for row in condition_history_rows)
@@ -140,6 +143,7 @@ def test_session_export_captures_seed_and_runtime_logs(
         row["participant_handedness"] == "Right handed"
         for row in condition_history_rows
     )
+    assert all(row["participant_colorblind"] == "Yes" for row in condition_history_rows)
     assert all(row["session_seed"] == "77" for row in condition_history_rows)
     assert all(row["output_dir"] == summary.output_dir for row in condition_history_rows)
     assert all(row["block_accuracy_percent"] for row in condition_history_rows)
@@ -176,6 +180,7 @@ def test_session_export_captures_seed_and_runtime_logs(
     assert participant_summary_row["Age"] == "72"
     assert participant_summary_row["Sex"] == "Female"
     assert participant_summary_row["Handedness"] == "Right handed"
+    assert participant_summary_row["Colorblind"] == "Yes"
     assert participant_summary_row["Session ID"] == session_plan.session_id
     assert participant_summary_row["Condition Display Order Seed"] == "77"
     assert participant_summary_row["Image Display Order Seeds"] == "; ".join(
@@ -211,15 +216,15 @@ def test_session_export_captures_seed_and_runtime_logs(
     assert workbook_header == list(participant_summary_row)
     workbook_values = [cell.value for cell in worksheet[2]]
     assert workbook_values[0] == PARTICIPANT_NUMBER
-    assert workbook_values[7] == total_targets
-    assert workbook_values[8] == hit_count
-    assert workbook_values[9] == false_alarm_count
-    assert workbook_values[10] == "N"
-    assert workbook_values[11] == "Y"
-    assert workbook_values[12] == float(participant_summary_row[
+    assert workbook_values[8] == total_targets
+    assert workbook_values[9] == hit_count
+    assert workbook_values[10] == false_alarm_count
+    assert workbook_values[11] == "N"
+    assert workbook_values[12] == "Y"
+    assert workbook_values[13] == float(participant_summary_row[
         "Mean Accuracy Across All Conditions (%)"
     ])
-    assert workbook_values[13] == float(participant_summary_row[
+    assert workbook_values[14] == float(participant_summary_row[
         "Mean Reaction Time Across All Conditions (ms)"
     ])
     for row in worksheet.iter_rows():
@@ -263,6 +268,7 @@ def test_compact_session_export_updates_summary_logs_without_runs_folder(
                 age=73,
                 sex="Male",
                 handedness="Ambidextrous",
+                colorblind=False,
             ),
             launch_settings=LaunchSettings(
                 engine_name="stub-compact-export",
@@ -296,6 +302,7 @@ def test_compact_session_export_updates_summary_logs_without_runs_folder(
     assert all(row["participant_age"] == "73" for row in condition_history_rows)
     assert all(row["participant_sex"] == "Male" for row in condition_history_rows)
     assert all(row["participant_handedness"] == "Ambidextrous" for row in condition_history_rows)
+    assert all(row["participant_colorblind"] == "No" for row in condition_history_rows)
     assert all(row["session_seed"] == "78" for row in condition_history_rows)
 
     participant_summary_row = participant_summary_rows[0]
@@ -304,6 +311,7 @@ def test_compact_session_export_updates_summary_logs_without_runs_folder(
     assert participant_summary_row["Age"] == "73"
     assert participant_summary_row["Sex"] == "Male"
     assert participant_summary_row["Handedness"] == "Ambidextrous"
+    assert participant_summary_row["Colorblind"] == "No"
     assert participant_summary_row["Session ID"] == session_plan.session_id
     assert participant_summary_row["Condition Display Order Seed"] == "78"
     assert participant_summary_row["Aborted Y/N"] == "N"
@@ -368,8 +376,8 @@ def test_participant_summary_backfills_run_seeds_from_session_plan_for_legacy_hi
     workbook = load_workbook(summary_path.with_suffix(".xlsx"))
     worksheet = workbook["Participant Summary"]
     assert worksheet["A2"].value == "0040"
-    assert worksheet["K2"].value == "N"
-    assert worksheet["L2"].value == "Y"
+    assert worksheet["L2"].value == "N"
+    assert worksheet["M2"].value == "Y"
 
 
 def test_participant_summary_excludes_admin_test_participant_ids(tmp_path: Path) -> None:
@@ -443,7 +451,7 @@ def test_participant_summary_excludes_admin_test_participant_ids(tmp_path: Path)
     worksheet = workbook["Participant Summary"]
     assert worksheet.max_row == 2
     assert worksheet.freeze_panes == "A2"
-    assert worksheet.auto_filter.ref == "A1:N2"
+    assert worksheet.auto_filter.ref == "A1:O2"
     assert worksheet["A2"].value == "1"
 
 
@@ -542,8 +550,8 @@ def test_refresh_participant_summary_if_stale_regenerates_newer_history(
     worksheet = workbook["Participant Summary"]
     assert worksheet.max_row == 3
     assert worksheet["A3"].value == "2"
-    assert worksheet["M3"].value == 100
-    assert worksheet["N3"].value == 250
+    assert worksheet["N3"].value == 100
+    assert worksheet["O3"].value == 250
     assert refresh_participant_summary_if_stale(tmp_path) is None
 
 

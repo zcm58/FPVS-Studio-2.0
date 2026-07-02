@@ -166,16 +166,20 @@ completion or abort when the runtime summary includes an output directory. In co
 summary export mode, the runtime summary has no run-folder output path, so those buttons
 stay hidden and completion text points users to the project `logs/` summary files.
 Launching an experiment opens a modal participant-information prompt. By default every
-project collects Participant Number, Age, Sex, and Handedness before runtime starts.
+project collects Participant Number, Age, Sex, Handedness, and colorblind status before
+runtime starts.
 Participant Number remains the output-folder identity and duplicate-history lookup key;
 Sex is limited to `Female` or `Male`, and Handedness is limited to `Right handed`,
-`Left handed`, or `Ambidextrous`. The additional fields are written as runtime
-participant metadata for the launched session. Launch compiles the session and runs
-routine preflight checks after participant details are collected, so the prompt appears
-before any project image-set scan. When the app-level BioSemi recording confirmation
-setting is enabled, launch then shows a blocking administrator check that requires
-typing `Confirm` before the runtime task starts; cancelling that check returns to FPVS
-Studio without starting the experiment.
+`Left handed`, or `Ambidextrous`; colorblind status is a required `Yes` or `No`
+selection. When colorblind status is `Yes`, runtime uses the accessible fixation preset
+of white `#FFFFFF` to vermillion `#D55E00` for the participant tutorial and condition
+playback without changing the authored project colors. The additional fields are written
+as runtime participant metadata for the launched session. Launch compiles the session
+and runs routine preflight checks after participant details are collected, so the prompt
+appears before any project image-set scan. When the app-level BioSemi recording
+confirmation setting is enabled, launch then shows a blocking administrator check that
+requires typing `Confirm` before the runtime task starts; cancelling that check returns
+to FPVS Studio without starting the experiment.
 
 The Stimuli Manager remains an internal support page for variant/materialization
 behavior, not a guided setup step or visible top-level tab during normal use. Its raw

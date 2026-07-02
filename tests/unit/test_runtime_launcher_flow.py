@@ -13,7 +13,7 @@ from tests.unit.runtime_launcher_helpers import (
 
 from fpvs_studio.core.compiler import compile_run_spec, compile_session_plan
 from fpvs_studio.core.enums import InterConditionMode
-from fpvs_studio.core.execution import RunExecutionSummary
+from fpvs_studio.core.execution import ParticipantMetadata, RunExecutionSummary
 from fpvs_studio.core.models import DisplayValidationReport
 from fpvs_studio.core.serialization import read_json_file
 from fpvs_studio.engines.base import FixationTutorialAttemptResult
@@ -286,6 +286,92 @@ def test_launch_session_runs_participant_tutorial_once_before_first_transition(
     assert transitions[2]["heading"].startswith("Great! Let's practice one more time")
     assert transitions[3]["heading"] == "Tutorial complete."
     assert transitions[4]["heading"].startswith("Condition 1 of")
+
+
+def test_launch_session_uses_accessible_fixation_colors_for_colorblind_participants(
+    multi_condition_project,
+    multi_condition_project_root,
+) -> None:
+    multi_condition_project.settings.fixation_task.enabled = True
+    multi_condition_project.settings.fixation_task.accuracy_task_enabled = True
+    multi_condition_project.settings.fixation_task.participant_tutorial_enabled = True
+    captures: dict[str, object] = {}
+    register_engine("stub-accessible-fixation", lambda: StubEngine(captures))
+    try:
+        session_plan = compile_session_plan(
+            multi_condition_project,
+            refresh_hz=60.0,
+            project_root=multi_condition_project_root,
+            random_seed=99,
+        )
+
+        summary = launch_session(
+            multi_condition_project_root,
+            session_plan,
+            participant_number=PARTICIPANT_NUMBER,
+            participant_metadata=ParticipantMetadata(colorblind=True),
+            launch_settings=LaunchSettings(
+                engine_name="stub-accessible-fixation",
+                test_mode=True,
+            ),
+        )
+    finally:
+        unregister_engine("stub-accessible-fixation")
+
+    accessible_colors = ("#FFFFFF", "#D55E00")
+    assert summary.participant_metadata.colorblind is True
+    assert captures["tutorial_fixation_colors"] == [
+        accessible_colors,
+        accessible_colors,
+        accessible_colors,
+    ]
+    assert captures["condition_fixation_colors"] == [
+        accessible_colors for _entry in session_plan.ordered_entries()
+    ]
+    tutorial_body = captures["transitions"][0]["body"]
+    assert "when the cross changes colors" in tutorial_body
+    assert "white" not in tutorial_body
+    assert "vermillion" not in tutorial_body
+
+
+def test_launch_session_keeps_authored_fixation_colors_when_colorblind_is_no(
+    multi_condition_project,
+    multi_condition_project_root,
+) -> None:
+    multi_condition_project.settings.fixation_task.enabled = True
+    multi_condition_project.settings.fixation_task.accuracy_task_enabled = True
+    captures: dict[str, object] = {}
+    register_engine("stub-standard-fixation", lambda: StubEngine(captures))
+    try:
+        session_plan = compile_session_plan(
+            multi_condition_project,
+            refresh_hz=60.0,
+            project_root=multi_condition_project_root,
+            random_seed=99,
+        )
+
+        summary = launch_session(
+            multi_condition_project_root,
+            session_plan,
+            participant_number=PARTICIPANT_NUMBER,
+            participant_metadata=ParticipantMetadata(colorblind=False),
+            launch_settings=LaunchSettings(
+                engine_name="stub-standard-fixation",
+                test_mode=True,
+            ),
+        )
+    finally:
+        unregister_engine("stub-standard-fixation")
+
+    authored_colors = (
+        session_plan.ordered_entries()[0].run_spec.fixation.default_color,
+        session_plan.ordered_entries()[0].run_spec.fixation.target_color,
+    )
+    assert summary.participant_metadata.colorblind is False
+    assert authored_colors == ("#0000FF", "#FF0000")
+    assert captures["condition_fixation_colors"] == [
+        authored_colors for _entry in session_plan.ordered_entries()
+    ]
 
 
 def test_launch_session_skips_participant_tutorial_when_disabled(

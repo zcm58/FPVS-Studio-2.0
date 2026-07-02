@@ -157,12 +157,16 @@ Scoring semantics for the fixation accuracy task:
 
 Launch-time participant metadata:
 
-- the GUI launch prompt collects Participant Number, Age, Sex, and Handedness by
-  default for every project
+- the GUI launch prompt collects Participant Number, Age, Sex, Handedness, and
+  colorblind status by default for every project
 - Sex accepts only `Female` or `Male`; Handedness accepts only `Right handed`,
-  `Left handed`, or `Ambidextrous`
+  `Left handed`, or `Ambidextrous`; colorblind status is a required `Yes` or `No`
+  participant answer
 - Participant Number remains the required runtime identity and output-folder key
-- Age, Sex, and Handedness are stored in `SessionExecutionSummary`,
+- when colorblind status is `Yes`, runtime uses the accessible fixation color preset
+  of white `#FFFFFF` to vermillion `#D55E00` for both the participant tutorial and
+  condition playback while leaving the authored project settings unchanged
+- Age, Sex, Handedness, and colorblind status are stored in `SessionExecutionSummary`,
   each `RunExecutionSummary`, the session-level `participant_metadata.csv`, and
   project-level `logs/session_condition_history.csv`
 
@@ -170,9 +174,9 @@ Project-level reporting index:
 
 - `logs/session_condition_history.csv`
   - append-only one-row-per-condition-occurrence session history
-  - includes participant number, age, sex, handedness, random order seed, per-run
-    stimulus shuffle seed, run timing, block/order metadata, abort fields, timing-QC
-    metadata, fixation metrics, and block accuracy
+  - includes participant number, age, sex, handedness, colorblind status, random order
+    seed, per-run stimulus shuffle seed, run timing, block/order metadata, abort
+    fields, timing-QC metadata, fixation metrics, and block accuracy
   - used for compact reporting and for participant/seed-history lookup when detailed
     run folders are not written
 
@@ -185,10 +189,10 @@ Compact participant summary:
     than either compact summary output
   - one row per participant session
   - excludes admin/test participant IDs `0` and `00`
-  - includes PID, age, sex, handedness, session ID, condition display-order seed,
-    image/stimulus display-order seeds, total targets, hits, false alarms, aborted
-    Y/N, include-in-analysis Y/N, weighted mean accuracy, and weighted mean reaction
-    time
+  - includes PID, age, sex, handedness, colorblind status, session ID, condition
+    display-order seed, image/stimulus display-order seeds, total targets, hits,
+    false alarms, aborted Y/N, include-in-analysis Y/N, weighted mean accuracy, and
+    weighted mean reaction time
   - applies per-column filters, freezes the header row, centers cells, and sizes
     columns to the exported text width
   - weighted mean accuracy is total hits divided by total targets

@@ -91,7 +91,7 @@ class ParticipantNumberDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Participant Information")
         self.setModal(True)
-        self.resize(460, 240)
+        self.resize(460, 280)
 
         self.prompt_label = QLabel("Please enter the participant details.", self)
         self.prompt_label.setObjectName("participant_number_prompt_label")
@@ -120,11 +120,18 @@ class ParticipantNumberDialog(QDialog):
         for value in ["Right handed", "Left handed", "Ambidextrous"]:
             self.handedness_combo.addItem(value, value)
 
+        self.colorblind_combo = QComboBox(self)
+        self.colorblind_combo.setObjectName("participant_colorblind_combo")
+        self.colorblind_combo.addItem("Select yes or no...", None)
+        self.colorblind_combo.addItem("No", False)
+        self.colorblind_combo.addItem("Yes", True)
+
         form_layout = QFormLayout()
         form_layout.addRow("Participant Number", self.participant_number_edit)
         form_layout.addRow("Age", self.age_edit)
         form_layout.addRow("Sex", self.sex_combo)
         form_layout.addRow("Handedness", self.handedness_combo)
+        form_layout.addRow("Are you colorblind?", self.colorblind_combo)
 
         self.button_box = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel,
@@ -153,6 +160,7 @@ class ParticipantNumberDialog(QDialog):
             age=int(self.age_edit.text().strip()),
             sex=self.sex_combo.currentData(),
             handedness=self.handedness_combo.currentData(),
+            colorblind=self.colorblind_combo.currentData(),
         )
 
     @property
@@ -216,6 +224,14 @@ class ParticipantNumberDialog(QDialog):
                 "Select the participant handedness to launch the session.",
             )
             self.handedness_combo.setFocus()
+            return
+        if self.colorblind_combo.currentData() is None:
+            QMessageBox.warning(
+                self,
+                "Colorblind Status Required",
+                "Select whether the participant is colorblind to launch the session.",
+            )
+            self.colorblind_combo.setFocus()
             return
         self.participant_number_edit.setText(participant_number)
         self.age_edit.setText(age_text)
@@ -303,6 +319,9 @@ def _participant_metadata_summary_lines(metadata: ParticipantMetadata) -> list[s
         lines.append(f"Participant Sex: {metadata.sex}")
     if metadata.handedness is not None:
         lines.append(f"Participant Handedness: {metadata.handedness}")
+    if metadata.colorblind is not None:
+        colorblind_label = "Yes" if metadata.colorblind else "No"
+        lines.append(f"Participant Colorblind: {colorblind_label}")
     return lines
 
 
