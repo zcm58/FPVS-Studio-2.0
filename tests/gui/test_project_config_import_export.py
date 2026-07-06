@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from PySide6.QtWidgets import QDialog
+from PySide6.QtCore import QObject, Signal
+from PySide6.QtWidgets import QDialog, QWidget
 from tests.gui.helpers import open_created_project, prepare_compile_ready_project
 
 from fpvs_studio.core.models import DisplaySettings
@@ -17,6 +18,46 @@ from fpvs_studio.gui.import_display_settings_dialog import (
     DetectedDisplaySettings,
     ImportDisplaySettingsDialog,
 )
+
+
+class _ImmediateBackgroundTask(QObject):
+    succeeded = Signal(object)
+    failed = Signal(object)
+    finished = Signal()
+
+    def __init__(self, *, parent_widget, callback) -> None:
+        super().__init__(parent_widget)
+        self._callback = callback
+
+    def start(self) -> None:
+        try:
+            result = self._callback()
+        except Exception as error:
+            self.failed.emit(error)
+        else:
+            self.succeeded.emit(result)
+        finally:
+            self.finished.emit()
+
+
+class _DeferredBackgroundTask(QObject):
+    succeeded = Signal(object)
+    failed = Signal(object)
+    finished = Signal()
+    instances: list[_DeferredBackgroundTask] = []
+
+    def __init__(self, *, parent_widget, callback) -> None:
+        super().__init__(parent_widget)
+        self._callback = callback
+        self.started = False
+        self.instances.append(self)
+
+    def start(self) -> None:
+        self.started = True
+
+    def complete_successfully(self, result: object) -> None:
+        self.succeeded.emit(result)
+        self.finished.emit()
 
 
 def test_export_project_config_cancel_leaves_no_file(
@@ -112,6 +153,10 @@ def test_export_project_bundle_writes_selected_bundle(
         "fpvs_studio.gui.main_window.QFileDialog.getSaveFileName",
         lambda *args, **kwargs: (str(target_path), ""),
     )
+    monkeypatch.setattr(
+        "fpvs_studio.gui.main_window.BackgroundTask",
+        _ImmediateBackgroundTask,
+    )
 
     assert window.export_project_bundle() is True
 
@@ -119,6 +164,57 @@ def test_export_project_bundle_writes_selected_bundle(
     assert bundle_path.is_file()
     exported = read_project_bundle_manifest(bundle_path)
     assert exported.project.name == "Bundle Export"
+    assert window.main_stack.currentWidget() is window.home_page
+
+
+def test_export_project_bundle_shows_embedded_processing_screen(
+    controller: StudioController,
+    qtbot,
+    tmp_path,
+    monkeypatch,
+) -> None:
+    _document, window = open_created_project(controller, qtbot, tmp_path, "Bundle Wait")
+    target_path = tmp_path / "exported"
+    _DeferredBackgroundTask.instances.clear()
+    monkeypatch.setattr(
+        "fpvs_studio.gui.main_window.QFileDialog.getSaveFileName",
+        lambda *args, **kwargs: (str(target_path), ""),
+    )
+    monkeypatch.setattr(
+        "fpvs_studio.gui.main_window.BackgroundTask",
+        _DeferredBackgroundTask,
+    )
+
+    assert window.export_project_bundle() is True
+
+    assert len(_DeferredBackgroundTask.instances) == 1
+    assert _DeferredBackgroundTask.instances[0].started is True
+    assert window.main_stack.currentWidget() is window.bundle_export_processing_page
+    assert (
+        window.bundle_export_processing_page.findChild(
+            QWidget,
+            "bundle_export_processing_content",
+        )
+        is not None
+    )
+    assert (
+        window.bundle_export_processing_page.findChild(
+            QWidget,
+            "bundle_export_processing_card",
+        )
+        is None
+    )
+    assert "compiling your project into a shareable format" in (
+        window.bundle_export_processing_page.message_label.text()
+    )
+    assert window.export_project_bundle_action.isEnabled() is False
+
+    _DeferredBackgroundTask.instances[0].complete_successfully(
+        target_path.with_suffix(".fpvsbundle")
+    )
+
+    assert window.main_stack.currentWidget() is window.home_page
+    assert window.export_project_bundle_action.isEnabled() is True
 
 
 def test_export_project_bundle_defaults_to_compact_project_title_filename(

@@ -205,7 +205,10 @@ stimulus images. The config import dialog accepts `.fpvsconfig`, legacy `.config
 project-relative stimulus paths, performs a compile dry run at the preferred refresh
 rate or 60 Hz, hashes the payload, and writes one portable `.fpvsbundle` archive
 containing `project.json`, `stimuli/manifest.json`, and the project `stimuli/` files
-while excluding `cache/`, `logs/`, and `runs/`. `Export > FPVS Toolbox Config...`
+while excluding `cache/`, `logs/`, and `runs/`. While the archive is being created, the
+main window switches to an embedded processing screen with an indeterminate spinner and
+wait message, then restores the previous authoring surface when export finishes.
+`Export > FPVS Toolbox Config...`
 writes a JSON-backed `.fpvsconfig` setup handoff with project title, condition trigger
 mapping, display/session settings, and Toolbox-oriented `event_map` metadata.
 `Export > Completed Project Config...` writes the same setup handoff plus a summary of

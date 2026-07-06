@@ -374,7 +374,7 @@ def test_run_page_preview_copy_and_home_status_are_compile_agnostic(
         == "Preview the session plan or launch to populate runtime diagnostics."
     )
     assert (
-        "launch will compile and run launch checks automatically"
+        "launch will collect participant details, compile, and run launch checks automatically"
         in window.run_page.readiness_summary_value.text().lower()
     )
     assert "compile once on run / runtime" not in _list_widget_text(readiness_list).lower()

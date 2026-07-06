@@ -8,7 +8,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from pathlib import Path
 
-from PySide6.QtCore import QEvent, Qt, QTimer, QUrl
+from PySide6.QtCore import QEvent, Qt, QTimer, QUrl, Slot
 from PySide6.QtGui import QAction, QCloseEvent, QDesktopServices, QShowEvent
 from PySide6.QtWidgets import (
     QFileDialog,
@@ -19,18 +19,26 @@ from PySide6.QtWidgets import (
     QPushButton,
     QStackedWidget,
     QStatusBar,
+    QWidget,
 )
 
 from fpvs_studio import __version__
 from fpvs_studio.core.models import ConditionTemplateProfile
 from fpvs_studio.core.paths import logs_dir
-from fpvs_studio.core.project_bundle import PROJECT_BUNDLE_SUFFIX, project_bundle_filename
+from fpvs_studio.core.project_bundle import (
+    PROJECT_BUNDLE_SUFFIX,
+    project_bundle_filename,
+)
+from fpvs_studio.core.project_bundle import (
+    export_project_bundle as write_project_bundle,
+)
 from fpvs_studio.core.project_config import PROJECT_CONFIG_SUFFIX, project_config_filename
 from fpvs_studio.gui.animations import ButtonHoverAnimator
 from fpvs_studio.gui.components import apply_studio_theme
 from fpvs_studio.gui.document import ProjectDocument
 from fpvs_studio.gui.home_page import HomePage
 from fpvs_studio.gui.image_resizer_page import ImageResizerPage
+from fpvs_studio.gui.processing_page import BundleExportProcessingPage
 from fpvs_studio.gui.run_page import ParticipantNumberDialog
 from fpvs_studio.gui.setup_wizard_page import SetupWizardPage
 from fpvs_studio.gui.update_dialog import UpdateDialog
@@ -38,6 +46,7 @@ from fpvs_studio.gui.window_helpers import (
     _LAUNCH_INTERSTITIAL_DURATION_MS,
     _show_error_dialog,
 )
+from fpvs_studio.gui.workers import BackgroundTask
 from fpvs_studio.runtime.session_export import GROUP_SUMMARY_XLSX_FILENAME
 
 __all__ = [
@@ -109,6 +118,9 @@ class StudioMainWindow(QMainWindow):
         self._auto_workspace_sized = False
         self._auto_workspace_return_size: tuple[int, int] | None = None
         self._auto_workspace_size: tuple[int, int] | None = None
+        self._active_bundle_export_task: BackgroundTask | None = None
+        self._bundle_export_previous_widget: QWidget | None = None
+        self._bundle_export_target_path: Path | None = None
         self._apply_compact_window_size()
 
         self._runtime_fullscreen_ui_state = True
@@ -140,6 +152,8 @@ class StudioMainWindow(QMainWindow):
         self.main_stack.addWidget(self.setup_wizard_page)
         self.image_resizer_page = ImageResizerPage(on_return_home=self.show_home, parent=self)
         self.main_stack.addWidget(self.image_resizer_page)
+        self.bundle_export_processing_page = BundleExportProcessingPage(parent=self)
+        self.main_stack.addWidget(self.bundle_export_processing_page)
         self.main_tabs = self.main_stack
         self.setCentralWidget(self.main_stack)
         self._apply_chrome_styles()
@@ -456,6 +470,9 @@ class StudioMainWindow(QMainWindow):
         return self._export_config(include_completed=True)
 
     def export_project_bundle(self) -> bool:
+        if self._active_bundle_export_task is not None:
+            self.statusBar().showMessage("Project bundle export is already running.", 3000)
+            return False
         self.flush_pending_edits()
         default_name = project_bundle_filename(self.document.project.meta.name)
         selected_path, _selected_filter = QFileDialog.getSaveFileName(
@@ -469,12 +486,95 @@ class StudioMainWindow(QMainWindow):
         path = _ensure_bundle_suffix(Path(selected_path))
         try:
             self.document.save()
-            self.document.export_bundle_file(path)
         except Exception as error:
             _show_error_dialog(self, "Export Project Bundle Error", error)
             return False
-        self.statusBar().showMessage(f"Project bundle exported: {path}", 3000)
+        self._start_bundle_export(path)
         return True
+
+    def _start_bundle_export(self, path: Path) -> None:
+        project_root = self.document.project_root
+
+        def _write_bundle() -> Path:
+            write_project_bundle(project_root, path)
+            return path
+
+        self._bundle_export_previous_widget = self.main_stack.currentWidget()
+        self._bundle_export_target_path = path
+        self.bundle_export_processing_page.start()
+        self._set_home_chrome_visible(True, status_visible=True)
+        self.main_stack.setCurrentWidget(self.bundle_export_processing_page)
+        self.statusBar().showMessage("Exporting project bundle...")
+        self._set_bundle_export_busy(True)
+
+        task = BackgroundTask(
+            parent_widget=self,
+            callback=_write_bundle,
+        )
+        self._active_bundle_export_task = task
+        task.succeeded.connect(self._on_bundle_export_succeeded)
+        task.failed.connect(self._on_bundle_export_failed)
+        task.finished.connect(self._on_bundle_export_finished)
+        task.start()
+
+    def _set_bundle_export_busy(self, busy: bool) -> None:
+        actions = (
+            self.new_project_action,
+            self.open_project_action,
+            self.manage_projects_action,
+            self.import_project_bundle_action,
+            self.import_project_config_action,
+            self.export_project_bundle_action,
+            self.export_project_config_action,
+            self.export_completed_project_config_action,
+            self.export_group_summary_action,
+            self.save_project_action,
+            self.settings_action,
+            self.image_resizer_action,
+            self.launch_action,
+        )
+        for action in actions:
+            action.setEnabled(not busy)
+
+    @Slot(object)
+    def _on_bundle_export_succeeded(self, result: object) -> None:
+        exported_path = result if isinstance(result, Path) else self._bundle_export_target_path
+        self.statusBar().showMessage(f"Project bundle exported: {exported_path}", 3000)
+
+    @Slot(object)
+    def _on_bundle_export_failed(self, error: object) -> None:
+        exception = error if isinstance(error, Exception) else RuntimeError(str(error))
+        _show_error_dialog(self, "Export Project Bundle Error", exception)
+
+    @Slot()
+    def _on_bundle_export_finished(self) -> None:
+        self.bundle_export_processing_page.stop()
+        self._active_bundle_export_task = None
+        self._bundle_export_target_path = None
+        self._set_bundle_export_busy(False)
+        self._restore_after_bundle_export()
+
+    def _restore_after_bundle_export(self) -> None:
+        previous_widget = self._bundle_export_previous_widget
+        self._bundle_export_previous_widget = None
+        if previous_widget is self.home_page:
+            self.home_page.refresh()
+            self._set_home_chrome_visible(True, status_visible=False)
+            self._apply_compact_window_size()
+            self._sync_home_chrome_offset()
+            self.main_stack.setCurrentWidget(self.home_page)
+            return
+        if previous_widget is self.setup_wizard_page:
+            self._set_home_chrome_visible(True)
+            self._apply_setup_window_size()
+            self.main_stack.setCurrentWidget(self.setup_wizard_page)
+            return
+        if previous_widget is self.image_resizer_page:
+            self._set_home_chrome_visible(True)
+            self._apply_utility_window_size()
+            self.main_stack.setCurrentWidget(self.image_resizer_page)
+            return
+        self.show_home()
 
     def export_group_summary(self) -> bool:
         self.flush_pending_edits()
@@ -557,6 +657,17 @@ class StudioMainWindow(QMainWindow):
         return True
 
     def closeEvent(self, event: QCloseEvent) -> None:
+        if self._active_bundle_export_task is not None:
+            QMessageBox.information(
+                self,
+                "Export In Progress",
+                (
+                    "FPVS Studio is still compiling your project bundle. "
+                    "Please wait for the export to finish before closing."
+                ),
+            )
+            event.ignore()
+            return
         if self.maybe_save_changes():
             event.accept()
         else:
