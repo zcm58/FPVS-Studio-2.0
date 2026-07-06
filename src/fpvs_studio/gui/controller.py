@@ -25,11 +25,13 @@ from fpvs_studio.core.condition_template_profiles import (
 )
 from fpvs_studio.core.models import ConditionTemplateProfile
 from fpvs_studio.core.paths import project_json_path
+from fpvs_studio.core.project_bundle import import_project_bundle
 from fpvs_studio.core.project_config import create_project_from_config, read_project_config
 from fpvs_studio.core.serialization import load_project_file
 from fpvs_studio.gui.condition_template_manager_dialog import ConditionTemplateManagerDialog
 from fpvs_studio.gui.create_project_dialog import CreateProjectDialog
 from fpvs_studio.gui.document import ProjectDocument
+from fpvs_studio.gui.import_display_settings_dialog import ImportDisplaySettingsDialog
 from fpvs_studio.gui.main_window import StudioMainWindow
 from fpvs_studio.gui.manage_projects_dialog import ManageProjectsDialog, ProjectManagementEntry
 from fpvs_studio.gui.root_folder_setup_dialog import RootFolderSetupDialog
@@ -559,6 +561,7 @@ class StudioController(QObject):
             on_request_open_project=self.show_open_project_dialog,
             on_request_manage_projects=self.show_manage_projects_dialog,
             on_request_import_project_config=self.show_import_project_config_dialog,
+            on_request_import_project_bundle=self.show_import_project_bundle_dialog,
             on_request_settings=self.show_settings_dialog,
             on_load_condition_template_profiles=self._load_condition_template_profiles,
             on_manage_condition_templates=self._show_condition_template_manager,
@@ -620,7 +623,7 @@ class StudioController(QObject):
         parent = self.main_window if self.main_window is not None else self.welcome_window
         selected_path, _selected_filter = QFileDialog.getOpenFileName(
             parent,
-            "Import FPVS Project Config",
+            "Import Project Config",
             str(root_dir),
             (
                 "FPVS Config Files (*.fpvsconfig);;"
@@ -639,6 +642,46 @@ class StudioController(QObject):
             _show_error(parent, "Import Project Config Error", error)
             return
         self._open_document(document)
+
+    def show_import_project_bundle_dialog(self) -> None:
+        """Import a portable Studio `.fpvsbundle` as a complete project."""
+
+        if not self.ensure_fpvs_root_configured():
+            return
+        if not self._normalize_fpvs_root_layout():
+            return
+        root_dir = self._fpvs_root_dir
+        if root_dir is None:
+            return
+        parent = self.main_window if self.main_window is not None else self.welcome_window
+        selected_path, _selected_filter = QFileDialog.getOpenFileName(
+            parent,
+            "Import FPVS Studio Project",
+            str(root_dir),
+            "FPVS Project Bundles (*.fpvsbundle);;All Files (*)",
+        )
+        if not selected_path:
+            return
+        try:
+            scaffold = import_project_bundle(Path(selected_path), root_dir)
+            document = ProjectDocument.open_existing(scaffold.project_root)
+            self._confirm_imported_display_settings(document, parent=parent)
+        except Exception as error:
+            _show_error(parent, "Import FPVS Studio Project Error", error)
+            return
+        self._open_document(document)
+
+    def _confirm_imported_display_settings(
+        self,
+        document: ProjectDocument,
+        *,
+        parent: QWidget | None,
+    ) -> None:
+        dialog = ImportDisplaySettingsDialog(document.project.settings.display, parent=parent)
+        if dialog.exec() != dialog.DialogCode.Accepted:
+            return
+        document.update_display_settings(**dialog.display_updates())
+        document.save()
 
     def _show_condition_template_manager(self) -> list[ConditionTemplateProfile]:
         if not self.ensure_fpvs_root_configured():

@@ -20,6 +20,7 @@ from fpvs_studio.core.paths import (
     project_json_path,
     stimulus_manifest_path,
 )
+from fpvs_studio.core.project_bundle import export_project_bundle
 from fpvs_studio.core.project_config import (
     ProjectConfigError,
     export_project_config,
@@ -339,6 +340,11 @@ class ProjectDocument(
             completed_session_dir=completed_session_dir,
         )
         write_project_config(path, config)
+
+    def export_bundle_file(self, path: Path) -> None:
+        """Export the saved project as a portable Studio `.fpvsbundle` file."""
+
+        export_project_bundle(self._project_root, path)
 
     def export_group_summary_file(self, path: Path) -> Path:
         """Export the project-level group summary workbook to the selected path."""

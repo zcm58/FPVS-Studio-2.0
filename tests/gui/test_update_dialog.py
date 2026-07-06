@@ -47,16 +47,24 @@ def test_main_window_file_menu_groups_actions(
     assert menu_entries == [
         "Manage Projects...",
         "---",
-        "Import Project Config...",
-        "Export Project Config...",
-        "Export Completed Project Config...",
-        "Export Group Summary...",
+        "Import",
+        "Export",
         "---",
         "Settings...",
         "---",
         "Check for Updates",
         "Tutorials",
         "About",
+    ]
+    assert [action.text() for action in window.import_menu.actions()] == [
+        "FPVS Studio Project...",
+        "Project Config...",
+    ]
+    assert [action.text() for action in window.export_menu.actions()] == [
+        "Project Bundle...",
+        "FPVS Toolbox Config...",
+        "Completed Project Config...",
+        "Group Summary...",
     ]
 
 

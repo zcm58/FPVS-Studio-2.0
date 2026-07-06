@@ -188,18 +188,32 @@ and materialization still surface invalid or inconsistent source details before 
 launch. Word stimulus rows are shown for readiness context but cannot use image-folder
 import, inspection, or materialization actions.
 
-The `File` menu groups manage-projects, project `.fpvsconfig` import/export, settings,
-and help/update actions with native separators. `Export Project Config...` writes
-a JSON-backed `.fpvsconfig` setup handoff with project title, condition trigger mapping,
-display/session settings, and Toolbox-oriented `event_map` metadata. `Export Completed
-Project Config...` writes the same setup handoff plus a summary of the latest completed
-session's order, seeds, trigger schedule, display geometry, and stimulus-manifest
-provenance. The default setup export filename is the compact project title in lowercase
-with spaces and punctuation removed, such as `semanticcategories.fpvsconfig` for
-`Semantic Categories`; completed exports append `-completed`. `Import Project Config...`
-creates a new Studio project shell under the configured FPVS Studio Root Folder; it does
-not merge into the current project and does not copy original stimulus images. The import
-dialog accepts `.fpvsconfig`, legacy `.config`, and `.json` files. `Export Group
+The `File` menu groups manage-projects, `Import` and `Export` submenus, settings, and
+help/update actions with native separators. `Import > FPVS Studio Project...` imports a
+`.fpvsbundle` into a new project folder under the configured FPVS Studio Root Folder,
+verifies archive paths and hashes in an app-owned staging folder, resolves
+project-folder collisions, asks the user to confirm local display refresh rate, viewing
+distance, monitor width, and resolution, opens the new project, and deletes staging
+files after success or failure. The display confirmation dialog preserves the imported
+visual-angle target and can fill refresh, resolution, and physical screen width from
+Qt's primary-screen metadata; PsychoPy stays behind the engine boundary and is not
+imported by the GUI for this confirmation. `Import > Project Config...` creates a new
+Studio project shell under the configured FPVS Studio Root Folder from a `.fpvsconfig`
+setup handoff; it does not merge into the current project and does not copy original
+stimulus images. The config import dialog accepts `.fpvsconfig`, legacy `.config`, and
+`.json` files. `Export > Project Bundle...` validates the saved project, checks
+project-relative stimulus paths, performs a compile dry run at the preferred refresh
+rate or 60 Hz, hashes the payload, and writes one portable `.fpvsbundle` archive
+containing `project.json`, `stimuli/manifest.json`, and the project `stimuli/` files
+while excluding `cache/`, `logs/`, and `runs/`. `Export > FPVS Toolbox Config...`
+writes a JSON-backed `.fpvsconfig` setup handoff with project title, condition trigger
+mapping, display/session settings, and Toolbox-oriented `event_map` metadata.
+`Export > Completed Project Config...` writes the same setup handoff plus a summary of
+the latest completed session's order, seeds, trigger schedule, display geometry, and
+stimulus-manifest provenance. The default setup export filename is the compact project
+title in lowercase with spaces and punctuation removed, such as
+`semanticcategories.fpvsconfig` for `Semantic Categories`; completed exports append
+`-completed`. `Export > Group
 Summary...` manually writes an Excel workbook from the current participant summary rows,
 with a first row aggregating rows marked `Include In Analysis = Y` and participant rows
 remaining visible underneath for filtering/audit. `Tutorials` opens the

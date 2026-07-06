@@ -13,6 +13,7 @@ from PySide6.QtGui import QAction, QCloseEvent, QDesktopServices, QShowEvent
 from PySide6.QtWidgets import (
     QFileDialog,
     QMainWindow,
+    QMenu,
     QMessageBox,
     QProgressDialog,
     QPushButton,
@@ -23,6 +24,7 @@ from PySide6.QtWidgets import (
 from fpvs_studio import __version__
 from fpvs_studio.core.models import ConditionTemplateProfile
 from fpvs_studio.core.paths import logs_dir
+from fpvs_studio.core.project_bundle import PROJECT_BUNDLE_SUFFIX, project_bundle_filename
 from fpvs_studio.core.project_config import PROJECT_CONFIG_SUFFIX, project_config_filename
 from fpvs_studio.gui.animations import ButtonHoverAnimator
 from fpvs_studio.gui.components import apply_studio_theme
@@ -66,6 +68,12 @@ def _ensure_config_suffix(path: Path) -> Path:
     return path if path.suffix else path.with_suffix(PROJECT_CONFIG_SUFFIX)
 
 
+def _ensure_bundle_suffix(path: Path) -> Path:
+    """Return a path with a `.fpvsbundle` suffix when no explicit suffix was selected."""
+
+    return path if path.suffix else path.with_suffix(PROJECT_BUNDLE_SUFFIX)
+
+
 def _ensure_xlsx_suffix(path: Path) -> Path:
     """Return a path with an `.xlsx` suffix for Excel workbook exports."""
 
@@ -83,6 +91,7 @@ class StudioMainWindow(QMainWindow):
         on_request_open_project: Callable[[], None],
         on_request_manage_projects: Callable[[], None],
         on_request_import_project_config: Callable[[], None],
+        on_request_import_project_bundle: Callable[[], None],
         on_request_settings: Callable[[], None],
         on_load_condition_template_profiles: Callable[[], list[ConditionTemplateProfile]],
         on_manage_condition_templates: Callable[[], list[ConditionTemplateProfile]],
@@ -94,6 +103,7 @@ class StudioMainWindow(QMainWindow):
         self._on_request_open_project = on_request_open_project
         self._on_request_manage_projects = on_request_manage_projects
         self._on_request_import_project_config = on_request_import_project_config
+        self._on_request_import_project_bundle = on_request_import_project_bundle
         self._on_request_settings = on_request_settings
         self.setWindowTitle("FPVS Studio Beta")
         self._auto_workspace_sized = False
@@ -336,14 +346,20 @@ class StudioMainWindow(QMainWindow):
         self.manage_projects_action = QAction("Manage Projects...", self)
         self.manage_projects_action.setObjectName("manage_projects_action")
         self.manage_projects_action.triggered.connect(self._request_manage_projects)
-        self.import_project_config_action = QAction("Import Project Config...", self)
+        self.import_project_config_action = QAction("Project Config...", self)
         self.import_project_config_action.setObjectName("import_project_config_action")
         self.import_project_config_action.triggered.connect(self._request_import_project_config)
-        self.export_project_config_action = QAction("Export Project Config...", self)
+        self.import_project_bundle_action = QAction("FPVS Studio Project...", self)
+        self.import_project_bundle_action.setObjectName("import_project_bundle_action")
+        self.import_project_bundle_action.triggered.connect(self._request_import_project_bundle)
+        self.export_project_config_action = QAction("FPVS Toolbox Config...", self)
         self.export_project_config_action.setObjectName("export_project_config_action")
         self.export_project_config_action.triggered.connect(self.export_project_config)
+        self.export_project_bundle_action = QAction("Project Bundle...", self)
+        self.export_project_bundle_action.setObjectName("export_project_bundle_action")
+        self.export_project_bundle_action.triggered.connect(self.export_project_bundle)
         self.export_completed_project_config_action = QAction(
-            "Export Completed Project Config...",
+            "Completed Project Config...",
             self,
         )
         self.export_completed_project_config_action.setObjectName(
@@ -352,7 +368,7 @@ class StudioMainWindow(QMainWindow):
         self.export_completed_project_config_action.triggered.connect(
             self.export_completed_project_config
         )
-        self.export_group_summary_action = QAction("Export Group Summary...", self)
+        self.export_group_summary_action = QAction("Group Summary...", self)
         self.export_group_summary_action.setObjectName("export_group_summary_action")
         self.export_group_summary_action.triggered.connect(self.export_group_summary)
         self.save_project_action = QAction("Save", self)
@@ -387,10 +403,18 @@ class StudioMainWindow(QMainWindow):
         self.menuBar().setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.file_menu.addAction(self.manage_projects_action)
         self.file_menu.addSeparator()
-        self.file_menu.addAction(self.import_project_config_action)
-        self.file_menu.addAction(self.export_project_config_action)
-        self.file_menu.addAction(self.export_completed_project_config_action)
-        self.file_menu.addAction(self.export_group_summary_action)
+        self.import_menu = QMenu("Import", self.file_menu)
+        self.import_menu.setObjectName("file_import_menu")
+        self.import_menu.addAction(self.import_project_bundle_action)
+        self.import_menu.addAction(self.import_project_config_action)
+        self.file_menu.addMenu(self.import_menu)
+        self.export_menu = QMenu("Export", self.file_menu)
+        self.export_menu.setObjectName("file_export_menu")
+        self.export_menu.addAction(self.export_project_bundle_action)
+        self.export_menu.addAction(self.export_project_config_action)
+        self.export_menu.addAction(self.export_completed_project_config_action)
+        self.export_menu.addAction(self.export_group_summary_action)
+        self.file_menu.addMenu(self.export_menu)
         self.file_menu.addSeparator()
         self.file_menu.addAction(self.settings_action)
         self.file_menu.addSeparator()
@@ -431,6 +455,27 @@ class StudioMainWindow(QMainWindow):
     def export_completed_project_config(self) -> bool:
         return self._export_config(include_completed=True)
 
+    def export_project_bundle(self) -> bool:
+        self.flush_pending_edits()
+        default_name = project_bundle_filename(self.document.project.meta.name)
+        selected_path, _selected_filter = QFileDialog.getSaveFileName(
+            self,
+            "Export FPVS Project Bundle",
+            str(self.document.project_root / default_name),
+            "FPVS Project Bundles (*.fpvsbundle);;All Files (*)",
+        )
+        if not selected_path:
+            return False
+        path = _ensure_bundle_suffix(Path(selected_path))
+        try:
+            self.document.save()
+            self.document.export_bundle_file(path)
+        except Exception as error:
+            _show_error_dialog(self, "Export Project Bundle Error", error)
+            return False
+        self.statusBar().showMessage(f"Project bundle exported: {path}", 3000)
+        return True
+
     def export_group_summary(self) -> bool:
         self.flush_pending_edits()
         default_dir = logs_dir(self.document.project_root)
@@ -459,9 +504,20 @@ class StudioMainWindow(QMainWindow):
             self.document.project.meta.name,
             completed=include_completed,
         )
+        dialog_title = (
+            "Export Completed Project Config"
+            if include_completed
+            else "Export FPVS Toolbox Config"
+        )
+        error_title = (
+            "Export Completed Project Config Error"
+            if include_completed
+            else "Export FPVS Toolbox Config Error"
+        )
+        status_label = "Completed project config" if include_completed else "FPVS Toolbox config"
         selected_path, _selected_filter = QFileDialog.getSaveFileName(
             self,
-            "Export FPVS Project Config",
+            dialog_title,
             str(self.document.project_root / default_name),
             (
                 "FPVS Config Files (*.fpvsconfig);;"
@@ -476,9 +532,9 @@ class StudioMainWindow(QMainWindow):
         try:
             self.document.export_config_file(path, include_completed=include_completed)
         except Exception as error:
-            _show_error_dialog(self, "Export Config Error", error)
+            _show_error_dialog(self, error_title, error)
             return False
-        self.statusBar().showMessage(f"Project config exported: {path}", 3000)
+        self.statusBar().showMessage(f"{status_label} exported: {path}", 3000)
         return True
 
     def maybe_save_changes(self) -> bool:
@@ -520,6 +576,10 @@ class StudioMainWindow(QMainWindow):
     def _request_import_project_config(self) -> None:
         if self.maybe_save_changes():
             self._on_request_import_project_config()
+
+    def _request_import_project_bundle(self) -> None:
+        if self.maybe_save_changes():
+            self._on_request_import_project_bundle()
 
     def _request_settings(self) -> None:
         self._on_request_settings()

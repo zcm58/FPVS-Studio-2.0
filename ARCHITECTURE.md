@@ -21,7 +21,8 @@ code may lazily import PsychoPy.
   menu.
 - `src/fpvs_studio/core/`: editable project models, validation, modality-aware stimulus
   contracts, compilation, run/session contracts, project persistence, Studio
-  `.fpvsconfig` interchange export/import, and engine-neutral domain logic.
+  `.fpvsconfig` interchange export/import, portable `.fpvsbundle` project
+  import/export, and engine-neutral domain logic.
 - `src/fpvs_studio/preprocessing/`: original image import, inspection, image
   normalization, generated variants, and manifests. This layer must stay independent
   of GUI runtime and PsychoPy.
