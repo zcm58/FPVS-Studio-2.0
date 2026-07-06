@@ -84,6 +84,20 @@ def test_export_project_bundle_hashes_every_payload_file(
             assert len(archive.read(record.path)) == record.size_bytes
 
 
+def test_export_project_bundle_reports_progress_stages(
+    tmp_path,
+    sample_project,
+    sample_project_root,
+) -> None:
+    _save_bundle_ready_project(sample_project_root, sample_project)
+    bundle_path = tmp_path / "sample.fpvsbundle"
+    stages: list[str] = []
+
+    export_project_bundle(sample_project_root, bundle_path, progress_callback=stages.append)
+
+    assert stages == ["validate", "stimuli", "write", "complete"]
+
+
 def test_export_project_bundle_requires_saved_project_json(
     tmp_path,
     sample_project_root,

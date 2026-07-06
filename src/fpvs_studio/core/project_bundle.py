@@ -12,6 +12,7 @@ import re
 import shutil
 import uuid
 import zipfile
+from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 from typing import Literal
@@ -46,6 +47,9 @@ BUNDLE_MANIFEST_FILENAME = "fpvs_bundle.json"
 IMPORT_STAGING_DIRNAME = "import-staging"
 _BUNDLE_FILENAME_RE = re.compile(r"[^a-z0-9]+")
 _DEFAULT_VALIDATION_REFRESH_HZ = 60.0
+
+BundleExportStage = Literal["validate", "stimuli", "write", "complete"]
+BundleExportProgressCallback = Callable[[BundleExportStage], None]
 
 
 class ProjectBundleError(ValueError):
@@ -120,11 +124,13 @@ def export_project_bundle(
     bundle_path: Path,
     *,
     refresh_hz: float | None = None,
+    progress_callback: BundleExportProgressCallback | None = None,
 ) -> ProjectBundleManifest:
     """Validate and write a portable `.fpvsbundle` for one saved project."""
 
     project_root = Path(project_root)
     bundle_path = Path(bundle_path)
+    _notify_export_progress(progress_callback, "validate")
     project = _load_project_for_bundle(project_root)
     manifest = _load_manifest_for_bundle(project_root)
     validation_refresh_hz = refresh_hz or project.settings.display.preferred_refresh_hz
@@ -137,6 +143,7 @@ def export_project_bundle(
         manifest=manifest,
         refresh_hz=validation_refresh_hz,
     )
+    _notify_export_progress(progress_callback, "stimuli")
     relative_paths = _collect_bundle_file_paths(project_root)
     records = [_file_record(project_root, relative_path) for relative_path in relative_paths]
     bundle_manifest = ProjectBundleManifest(
@@ -157,8 +164,18 @@ def export_project_bundle(
         ),
         files=records,
     )
+    _notify_export_progress(progress_callback, "write")
     _write_bundle_archive(project_root, bundle_path, bundle_manifest)
+    _notify_export_progress(progress_callback, "complete")
     return bundle_manifest
+
+
+def _notify_export_progress(
+    progress_callback: BundleExportProgressCallback | None,
+    stage: BundleExportStage,
+) -> None:
+    if progress_callback is not None:
+        progress_callback(stage)
 
 
 def read_project_bundle_manifest(bundle_path: Path) -> ProjectBundleManifest:

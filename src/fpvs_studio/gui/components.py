@@ -941,10 +941,29 @@ def studio_theme_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
         font-size: {FONT_SIZE_BODY}px;
         font-weight: 700;
     }}
+    QLabel[processingStepNumber="true"][processingStepState="active"] {{
+        border-color: {color_success_border};
+        background-color: {color_success_bg};
+        color: {color_success_text};
+    }}
+    QLabel[processingStepNumber="true"][processingStepState="active"][processingStepPulse="on"] {{
+        border-color: {color_success_border};
+        background-color: {color_success_border};
+        color: {theme.selected_text};
+    }}
+    QLabel[processingStepNumber="true"][processingStepState="complete"] {{
+        border-color: {color_success_border};
+        background-color: {color_success_bg};
+        color: {color_success_text};
+    }}
     QLabel[processingStepLabel="true"] {{
         color: {color_text_primary};
         font-size: {FONT_SIZE_BODY + 1}px;
         font-weight: 600;
+    }}
+    QLabel[processingStepLabel="true"][processingStepState="active"],
+    QLabel[processingStepLabel="true"][processingStepState="complete"] {{
+        color: {color_success_text};
     }}
     QLabel#update_dialog_title {{
         color: {color_text_primary};

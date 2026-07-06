@@ -220,6 +220,36 @@ def test_export_project_bundle_shows_embedded_processing_screen(
     assert "compiling your project into a shareable format" in (
         window.bundle_export_processing_page.message_label.text()
     )
+    first_step = window.bundle_export_processing_page.findChild(
+        QWidget,
+        "bundle_export_processing_step_1",
+    )
+    second_step = window.bundle_export_processing_page.findChild(
+        QWidget,
+        "bundle_export_processing_step_2",
+    )
+    third_step = window.bundle_export_processing_page.findChild(
+        QWidget,
+        "bundle_export_processing_step_3",
+    )
+    assert first_step is not None
+    assert second_step is not None
+    assert third_step is not None
+    assert first_step.property("processingStepState") == "active"
+    assert second_step.property("processingStepState") == "pending"
+    assert third_step.property("processingStepState") == "pending"
+    window._on_bundle_export_stage_changed("stimuli")
+    assert first_step.property("processingStepState") == "complete"
+    assert second_step.property("processingStepState") == "active"
+    assert third_step.property("processingStepState") == "pending"
+    window._on_bundle_export_stage_changed("write")
+    assert first_step.property("processingStepState") == "complete"
+    assert second_step.property("processingStepState") == "complete"
+    assert third_step.property("processingStepState") == "active"
+    window._on_bundle_export_stage_changed("complete")
+    assert first_step.property("processingStepState") == "complete"
+    assert second_step.property("processingStepState") == "complete"
+    assert third_step.property("processingStepState") == "complete"
     assert_visible_children_within_parent(window.bundle_export_processing_page)
     for index in range(1, 4):
         step_label = window.bundle_export_processing_page.findChild(

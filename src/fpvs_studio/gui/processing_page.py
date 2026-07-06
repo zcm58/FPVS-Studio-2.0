@@ -2,17 +2,28 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from PySide6.QtCore import QRectF, QSize, Qt, QTimer
 from PySide6.QtGui import QColor, QHideEvent, QPainter, QPaintEvent, QPen, QShowEvent
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QSizePolicy, QVBoxLayout, QWidget
 
-from fpvs_studio.gui.components import StatusBadgeLabel
+from fpvs_studio.core.project_bundle import BundleExportStage
+from fpvs_studio.gui.components import StatusBadgeLabel, refresh_widget_style
 from fpvs_studio.gui.design_system import (
     FONT_SIZE_BODY,
     FONT_SIZE_PAGE_TITLE,
     FONT_SIZE_SECTION_TITLE,
     resolve_studio_theme,
 )
+
+_STEP_STAGE_ORDER: tuple[BundleExportStage, ...] = ("validate", "stimuli", "write")
+_STEP_LABELS: dict[BundleExportStage, tuple[str, str]] = {
+    "validate": ("1", "Validate"),
+    "stimuli": ("2", "Check stimuli"),
+    "write": ("3", "Write bundle"),
+}
+_StepState = Literal["pending", "active", "complete"]
 
 
 class SpinnerWidget(QWidget):
@@ -189,13 +200,11 @@ class BundleExportProcessingPage(QWidget):
         steps_row = QHBoxLayout()
         steps_row.setContentsMargins(0, 24, 0, 8)
         steps_row.setSpacing(14)
-        steps = (
-            ("1", "Validate"),
-            ("2", "Check stimuli"),
-            ("3", "Write bundle"),
-        )
-        for number, text in steps:
+        self._steps: dict[BundleExportStage, _ProcessingStep] = {}
+        for stage in _STEP_STAGE_ORDER:
+            number, text = _STEP_LABELS[stage]
             step = _ProcessingStep(number, text, parent=text_column)
+            self._steps[stage] = step
             steps_row.addWidget(step, 1)
         text_layout.addLayout(steps_row)
         text_layout.addStretch(1)
@@ -210,12 +219,38 @@ class BundleExportProcessingPage(QWidget):
         layout.addStretch(1)
         layout.addWidget(self.content)
         layout.addStretch(1)
+        self.reset_steps()
 
     def start(self) -> None:
         self.spinner.start()
 
     def stop(self) -> None:
         self.spinner.stop()
+        for step in self._steps.values():
+            step.stop_animation()
+
+    def reset_steps(self) -> None:
+        for step in self._steps.values():
+            step.set_state("pending")
+
+    def set_stage(self, stage: BundleExportStage) -> None:
+        if stage == "complete":
+            for step in self._steps.values():
+                step.set_state("complete")
+            self.status_badge.set_state("ready", "Bundle ready")
+            return
+        if stage not in self._steps:
+            return
+        active_index = _STEP_STAGE_ORDER.index(stage)
+        self.status_badge.set_state("info", f"{self._steps[stage].label_text}...")
+        for index, step_stage in enumerate(_STEP_STAGE_ORDER):
+            if index < active_index:
+                state: _StepState = "complete"
+            elif index == active_index:
+                state = "active"
+            else:
+                state = "pending"
+            self._steps[step_stage].set_state(state)
 
     def showEvent(self, event: QShowEvent) -> None:  # noqa: N802
         super().showEvent(event)
@@ -231,29 +266,58 @@ class _ProcessingStep(QWidget):
 
     def __init__(self, number: str, text: str, *, parent: QWidget | None = None) -> None:
         super().__init__(parent)
+        self.label_text = text
         self.setObjectName(f"bundle_export_processing_step_{number}")
         self.setProperty("processingStep", "true")
         self.setMinimumWidth(0)
         self.setMinimumHeight(42)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self._pulse_on = False
+        self._pulse_timer = QTimer(self)
+        self._pulse_timer.setInterval(520)
+        self._pulse_timer.timeout.connect(self._toggle_pulse)
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 4, 0, 4)
         layout.setSpacing(10)
 
-        number_label = QLabel(number, self)
-        number_label.setObjectName(f"bundle_export_processing_step_{number}_number")
-        number_label.setProperty("processingStepNumber", "true")
-        number_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        number_label.setFixedSize(30, 30)
+        self.number_label = QLabel(number, self)
+        self.number_label.setObjectName(f"bundle_export_processing_step_{number}_number")
+        self.number_label.setProperty("processingStepNumber", "true")
+        self.number_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.number_label.setFixedSize(30, 30)
 
-        text_label = QLabel(text, self)
-        text_label.setObjectName(f"bundle_export_processing_step_{number}_label")
-        text_label.setProperty("processingStepLabel", "true")
-        text_label.setWordWrap(False)
-        text_label.setMinimumWidth(0)
-        text_label.setMinimumHeight(30)
-        text_label.setAlignment(Qt.AlignmentFlag.AlignVCenter)
-        text_label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
+        self.text_label = QLabel(text, self)
+        self.text_label.setObjectName(f"bundle_export_processing_step_{number}_label")
+        self.text_label.setProperty("processingStepLabel", "true")
+        self.text_label.setWordWrap(False)
+        self.text_label.setMinimumWidth(0)
+        self.text_label.setMinimumHeight(30)
+        self.text_label.setAlignment(Qt.AlignmentFlag.AlignVCenter)
+        self.text_label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
 
-        layout.addWidget(number_label)
-        layout.addWidget(text_label, 1)
+        layout.addWidget(self.number_label)
+        layout.addWidget(self.text_label, 1)
+        self.set_state("pending")
+
+    def set_state(self, state: _StepState) -> None:
+        self._pulse_on = False
+        if state == "active":
+            self._pulse_timer.start()
+        else:
+            self._pulse_timer.stop()
+        self._set_step_property("processingStepState", state)
+        self._set_step_property("processingStepPulse", "off")
+
+    def stop_animation(self) -> None:
+        self._pulse_timer.stop()
+        self._pulse_on = False
+        self._set_step_property("processingStepPulse", "off")
+
+    def _toggle_pulse(self) -> None:
+        self._pulse_on = not self._pulse_on
+        self._set_step_property("processingStepPulse", "on" if self._pulse_on else "off")
+
+    def _set_step_property(self, name: str, value: str) -> None:
+        for widget in (self, self.number_label, self.text_label):
+            widget.setProperty(name, value)
+            refresh_widget_style(widget)

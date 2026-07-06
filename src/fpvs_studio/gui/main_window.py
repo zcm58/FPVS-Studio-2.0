@@ -7,8 +7,9 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from pathlib import Path
+from typing import cast
 
-from PySide6.QtCore import QEvent, Qt, QTimer, QUrl, Slot
+from PySide6.QtCore import QEvent, QObject, Qt, QTimer, QUrl, Signal, Slot
 from PySide6.QtGui import QAction, QCloseEvent, QDesktopServices, QShowEvent
 from PySide6.QtWidgets import (
     QFileDialog,
@@ -27,6 +28,7 @@ from fpvs_studio.core.models import ConditionTemplateProfile
 from fpvs_studio.core.paths import logs_dir
 from fpvs_studio.core.project_bundle import (
     PROJECT_BUNDLE_SUFFIX,
+    BundleExportStage,
     project_bundle_filename,
 )
 from fpvs_studio.core.project_bundle import (
@@ -69,6 +71,12 @@ _UTILITY_MINIMUM_SIZE = (960, 640)
 _UTILITY_DEFAULT_SIZE = (1120, 720)
 _AUTO_WORKSPACE_SIZE_TOLERANCE = 16
 _TUTORIALS_URL = "https://zcm58.github.io/FPVS-Studio-2.0/"
+
+
+class _BundleExportProgressBridge(QObject):
+    """Carry worker-thread bundle export progress back to the GUI thread."""
+
+    stage_changed = Signal(str)
 
 
 def _ensure_config_suffix(path: Path) -> Path:
@@ -121,6 +129,7 @@ class StudioMainWindow(QMainWindow):
         self._active_bundle_export_task: BackgroundTask | None = None
         self._bundle_export_previous_widget: QWidget | None = None
         self._bundle_export_target_path: Path | None = None
+        self._bundle_export_progress_bridge: _BundleExportProgressBridge | None = None
         self._apply_compact_window_size()
 
         self._runtime_fullscreen_ui_state = True
@@ -494,13 +503,22 @@ class StudioMainWindow(QMainWindow):
 
     def _start_bundle_export(self, path: Path) -> None:
         project_root = self.document.project_root
+        progress_bridge = _BundleExportProgressBridge(self)
+        progress_bridge.stage_changed.connect(self._on_bundle_export_stage_changed)
+        self._bundle_export_progress_bridge = progress_bridge
 
         def _write_bundle() -> Path:
-            write_project_bundle(project_root, path)
+            write_project_bundle(
+                project_root,
+                path,
+                progress_callback=progress_bridge.stage_changed.emit,
+            )
             return path
 
         self._bundle_export_previous_widget = self.main_stack.currentWidget()
         self._bundle_export_target_path = path
+        self.bundle_export_processing_page.reset_steps()
+        self.bundle_export_processing_page.set_stage("validate")
         self.bundle_export_processing_page.start()
         self._set_home_chrome_visible(True, status_visible=True)
         self.main_stack.setCurrentWidget(self.bundle_export_processing_page)
@@ -546,11 +564,22 @@ class StudioMainWindow(QMainWindow):
         exception = error if isinstance(error, Exception) else RuntimeError(str(error))
         _show_error_dialog(self, "Export Project Bundle Error", exception)
 
+    @Slot(str)
+    def _on_bundle_export_stage_changed(self, stage: str) -> None:
+        if stage not in {"validate", "stimuli", "write", "complete"}:
+            return
+        self.bundle_export_processing_page.set_stage(cast(BundleExportStage, stage))
+
     @Slot()
     def _on_bundle_export_finished(self) -> None:
         self.bundle_export_processing_page.stop()
         self._active_bundle_export_task = None
         self._bundle_export_target_path = None
+        progress_bridge = self._bundle_export_progress_bridge
+        if progress_bridge is not None:
+            progress_bridge.stage_changed.disconnect(self._on_bundle_export_stage_changed)
+            progress_bridge.deleteLater()
+        self._bundle_export_progress_bridge = None
         self._set_bundle_export_busy(False)
         self._restore_after_bundle_export()
 
