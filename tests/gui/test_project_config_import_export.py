@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 from PySide6.QtCore import QObject, Signal
-from PySide6.QtWidgets import QDialog, QWidget
-from tests.gui.helpers import open_created_project, prepare_compile_ready_project
+from PySide6.QtWidgets import QApplication, QDialog, QLabel, QWidget
+from tests.gui.helpers import (
+    assert_visible_children_within_parent,
+    open_created_project,
+    prepare_compile_ready_project,
+)
 
 from fpvs_studio.core.models import DisplaySettings
 from fpvs_studio.core.project_bundle import read_project_bundle_manifest
@@ -174,6 +178,7 @@ def test_export_project_bundle_shows_embedded_processing_screen(
     monkeypatch,
 ) -> None:
     _document, window = open_created_project(controller, qtbot, tmp_path, "Bundle Wait")
+    window.resize(1120, 720)
     target_path = tmp_path / "exported"
     _DeferredBackgroundTask.instances.clear()
     monkeypatch.setattr(
@@ -189,6 +194,7 @@ def test_export_project_bundle_shows_embedded_processing_screen(
 
     assert len(_DeferredBackgroundTask.instances) == 1
     assert _DeferredBackgroundTask.instances[0].started is True
+    QApplication.processEvents()
     assert window.main_stack.currentWidget() is window.bundle_export_processing_page
     assert (
         window.bundle_export_processing_page.findChild(
@@ -197,6 +203,13 @@ def test_export_project_bundle_shows_embedded_processing_screen(
         )
         is not None
     )
+    content = window.bundle_export_processing_page.findChild(
+        QWidget,
+        "bundle_export_processing_content",
+    )
+    assert content is not None
+    assert content.geometry().left() >= 0
+    assert content.geometry().right() <= window.bundle_export_processing_page.width()
     assert (
         window.bundle_export_processing_page.findChild(
             QWidget,
@@ -207,6 +220,15 @@ def test_export_project_bundle_shows_embedded_processing_screen(
     assert "compiling your project into a shareable format" in (
         window.bundle_export_processing_page.message_label.text()
     )
+    assert_visible_children_within_parent(window.bundle_export_processing_page)
+    for index in range(1, 4):
+        step_label = window.bundle_export_processing_page.findChild(
+            QLabel,
+            f"bundle_export_processing_step_{index}_label",
+        )
+        assert step_label is not None
+        required_width = step_label.fontMetrics().horizontalAdvance(step_label.text())
+        assert step_label.width() >= required_width
     assert window.export_project_bundle_action.isEnabled() is False
 
     _DeferredBackgroundTask.instances[0].complete_successfully(

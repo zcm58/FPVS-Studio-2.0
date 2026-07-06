@@ -76,23 +76,26 @@ class BundleExportProcessingPage(QWidget):
         super().__init__(parent)
         self.setObjectName("bundle_export_processing_page")
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self.setMinimumWidth(0)
 
         self.content = QWidget(self)
         self.content.setObjectName("bundle_export_processing_content")
-        self.content.setMaximumWidth(1040)
+        self.content.setMaximumWidth(1180)
+        self.content.setMinimumHeight(300)
+        self.content.setMinimumWidth(0)
         self.content.setSizePolicy(
             QSizePolicy.Policy.Expanding,
-            QSizePolicy.Policy.Maximum,
+            QSizePolicy.Policy.Fixed,
         )
 
         content_layout = QHBoxLayout(self.content)
         content_layout.setContentsMargins(0, 0, 0, 0)
-        content_layout.setSpacing(42)
+        content_layout.setSpacing(32)
 
         status_column = QWidget(self.content)
         status_column.setObjectName("bundle_export_processing_status_column")
         status_column.setMinimumWidth(230)
-        status_column.setMaximumWidth(280)
+        status_column.setMaximumWidth(270)
         status_layout = QVBoxLayout(status_column)
         status_layout.setContentsMargins(0, 0, 0, 0)
         status_layout.setSpacing(18)
@@ -113,6 +116,11 @@ class BundleExportProcessingPage(QWidget):
         self.status_hint_label.setObjectName("bundle_export_processing_status_hint_label")
         self.status_hint_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.status_hint_label.setWordWrap(True)
+        self.status_hint_label.setMinimumWidth(0)
+        self.status_hint_label.setSizePolicy(
+            QSizePolicy.Policy.Ignored,
+            QSizePolicy.Policy.Preferred,
+        )
         status_layout.addWidget(self.status_hint_label)
         status_layout.addStretch(1)
 
@@ -123,16 +131,20 @@ class BundleExportProcessingPage(QWidget):
 
         text_column = QWidget(self.content)
         text_column.setObjectName("bundle_export_processing_text_column")
+        text_column.setMinimumWidth(0)
+        text_column.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         text_layout = QVBoxLayout(text_column)
-        text_layout.setContentsMargins(0, 0, 0, 0)
-        text_layout.setSpacing(14)
+        text_layout.setContentsMargins(0, 6, 0, 0)
+        text_layout.setSpacing(16)
 
         self.eyebrow_label = QLabel("FPVS Studio Project Bundle", text_column)
         self.eyebrow_label.setObjectName("bundle_export_processing_eyebrow_label")
+        self.eyebrow_label.setMinimumWidth(0)
         text_layout.addWidget(self.eyebrow_label)
 
         self.title_label = QLabel("Preparing project bundle", text_column)
         self.title_label.setObjectName("bundle_export_processing_title_label")
+        self.title_label.setMinimumWidth(0)
         title_font = self.title_label.font()
         title_font.setPointSize(FONT_SIZE_PAGE_TITLE)
         title_font.setBold(True)
@@ -146,6 +158,11 @@ class BundleExportProcessingPage(QWidget):
         )
         self.message_label.setObjectName("bundle_export_processing_message_label")
         self.message_label.setWordWrap(True)
+        self.message_label.setMinimumWidth(0)
+        self.message_label.setSizePolicy(
+            QSizePolicy.Policy.Ignored,
+            QSizePolicy.Policy.Preferred,
+        )
         message_font = self.message_label.font()
         message_font.setPointSize(FONT_SIZE_SECTION_TITLE)
         message_font.setBold(True)
@@ -159,28 +176,27 @@ class BundleExportProcessingPage(QWidget):
         )
         self.detail_label.setObjectName("bundle_export_processing_detail_label")
         self.detail_label.setWordWrap(True)
+        self.detail_label.setMinimumWidth(0)
+        self.detail_label.setSizePolicy(
+            QSizePolicy.Policy.Ignored,
+            QSizePolicy.Policy.Preferred,
+        )
         detail_font = self.detail_label.font()
         detail_font.setPointSize(FONT_SIZE_BODY)
         self.detail_label.setFont(detail_font)
         text_layout.addWidget(self.detail_label)
 
         steps_row = QHBoxLayout()
-        steps_row.setContentsMargins(0, 16, 0, 0)
-        steps_row.setSpacing(12)
+        steps_row.setContentsMargins(0, 24, 0, 8)
+        steps_row.setSpacing(14)
         steps = (
-            ("1", "Validate setup"),
+            ("1", "Validate"),
             ("2", "Check stimuli"),
             ("3", "Write bundle"),
         )
-        for index, (number, text) in enumerate(steps):
+        for number, text in steps:
             step = _ProcessingStep(number, text, parent=text_column)
             steps_row.addWidget(step, 1)
-            if index < len(steps) - 1:
-                connector = QFrame(text_column)
-                connector.setObjectName(f"bundle_export_processing_connector_{index + 1}")
-                connector.setFrameShape(QFrame.Shape.HLine)
-                connector.setProperty("processingConnector", "true")
-                steps_row.addWidget(connector, 0, Qt.AlignmentFlag.AlignVCenter)
         text_layout.addLayout(steps_row)
         text_layout.addStretch(1)
 
@@ -189,10 +205,10 @@ class BundleExportProcessingPage(QWidget):
         content_layout.addWidget(text_column, 1)
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(56, 44, 56, 44)
+        layout.setContentsMargins(40, 52, 40, 52)
         layout.setSpacing(0)
         layout.addStretch(1)
-        layout.addWidget(self.content, 0, Qt.AlignmentFlag.AlignHCenter)
+        layout.addWidget(self.content)
         layout.addStretch(1)
 
     def start(self) -> None:
@@ -217,20 +233,27 @@ class _ProcessingStep(QWidget):
         super().__init__(parent)
         self.setObjectName(f"bundle_export_processing_step_{number}")
         self.setProperty("processingStep", "true")
+        self.setMinimumWidth(0)
+        self.setMinimumHeight(42)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(8)
+        layout.setContentsMargins(0, 4, 0, 4)
+        layout.setSpacing(10)
 
         number_label = QLabel(number, self)
         number_label.setObjectName(f"bundle_export_processing_step_{number}_number")
         number_label.setProperty("processingStepNumber", "true")
         number_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        number_label.setFixedSize(24, 24)
+        number_label.setFixedSize(30, 30)
 
         text_label = QLabel(text, self)
         text_label.setObjectName(f"bundle_export_processing_step_{number}_label")
         text_label.setProperty("processingStepLabel", "true")
-        text_label.setWordWrap(True)
+        text_label.setWordWrap(False)
+        text_label.setMinimumWidth(0)
+        text_label.setMinimumHeight(30)
+        text_label.setAlignment(Qt.AlignmentFlag.AlignVCenter)
+        text_label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
 
         layout.addWidget(number_label)
         layout.addWidget(text_label, 1)

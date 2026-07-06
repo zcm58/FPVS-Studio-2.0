@@ -897,28 +897,35 @@ def studio_theme_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
         color: {color_text_primary};
         font-size: {FONT_SIZE_BODY}px;
     }}
+    QMainWindow#studio_main_window QWidget {{
+        font-size: {FONT_SIZE_BODY}px;
+    }}
     QWidget#bundle_export_processing_page {{
         background-color: {color_page_background};
         color: {color_text_primary};
     }}
     QLabel#bundle_export_processing_eyebrow_label {{
         color: {color_primary};
-        font-size: {FONT_SIZE_META}px;
+        font-size: {FONT_SIZE_BODY}px;
         font-weight: 700;
     }}
     QLabel#bundle_export_processing_title_label {{
         color: {color_text_primary};
-        font-size: {FONT_SIZE_PAGE_TITLE}px;
+        font-size: {FONT_SIZE_PAGE_TITLE + 2}px;
         font-weight: 700;
     }}
     QLabel#bundle_export_processing_message_label {{
         color: {color_text_primary};
-        font-size: {FONT_SIZE_SECTION_TITLE}px;
+        font-size: {FONT_SIZE_SECTION_TITLE + 1}px;
         font-weight: 700;
     }}
     QLabel#bundle_export_processing_detail_label,
     QLabel#bundle_export_processing_status_hint_label {{
         color: {color_text_secondary};
+        font-size: {FONT_SIZE_BODY + 1}px;
+    }}
+    QLabel#bundle_export_processing_status_badge {{
+        font-size: {FONT_SIZE_CONTROL + 1}px;
     }}
     QFrame#bundle_export_processing_divider {{
         border: none;
@@ -926,28 +933,18 @@ def studio_theme_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
         min-width: 1px;
         max-width: 1px;
     }}
-    QFrame[processingConnector="true"] {{
-        border: none;
-        background-color: {color_border_soft};
-        min-width: 18px;
-        max-width: 42px;
-        min-height: 1px;
-        max-height: 1px;
-    }}
     QLabel[processingStepNumber="true"] {{
         border: 1px solid {color_info_border};
-        border-radius: 12px;
+        border-radius: 15px;
         background-color: {color_info_bg};
         color: {color_info_text};
-        font-size: {FONT_SIZE_META}px;
+        font-size: {FONT_SIZE_BODY}px;
         font-weight: 700;
     }}
     QLabel[processingStepLabel="true"] {{
         color: {color_text_primary};
+        font-size: {FONT_SIZE_BODY + 1}px;
         font-weight: 600;
-    }}
-    QMainWindow#studio_main_window QWidget {{
-        font-size: {FONT_SIZE_BODY}px;
     }}
     QLabel#update_dialog_title {{
         color: {color_text_primary};
