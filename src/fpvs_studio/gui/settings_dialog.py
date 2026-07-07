@@ -75,20 +75,22 @@ class AppSettingsDialog(QDialog):
             self._set_detailed_run_exports_enabled
         )
         form_layout.addRow("Run Exports", self.detailed_run_exports_checkbox)
-        self.biosemi_recording_confirmation_checkbox = QCheckBox(
-            "Require BioSemi recording confirmation before launch",
+        self.sophia_mode_checkbox = QCheckBox(
+            "Enable Sophia Mode",
             self,
         )
-        self.biosemi_recording_confirmation_checkbox.setObjectName(
-            "biosemi_recording_confirmation_checkbox"
+        self.sophia_mode_checkbox.setObjectName("sophia_mode_checkbox")
+        self.sophia_mode_checkbox.setToolTip(
+            "Requires a NERD Lab administrator to type Confirm before each launch."
         )
-        self.biosemi_recording_confirmation_checkbox.setChecked(
+        self.sophia_mode_checkbox.setChecked(
             biosemi_recording_confirmation_required
         )
-        self.biosemi_recording_confirmation_checkbox.toggled.connect(
+        self.sophia_mode_checkbox.toggled.connect(
             self._set_biosemi_recording_confirmation_required
         )
-        form_layout.addRow("Launch Safety", self.biosemi_recording_confirmation_checkbox)
+        self.biosemi_recording_confirmation_checkbox = self.sophia_mode_checkbox
+        form_layout.addRow("Sophia Mode", self.sophia_mode_checkbox)
 
         self.button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Close, parent=self)
         self.button_box.setObjectName("settings_button_box")

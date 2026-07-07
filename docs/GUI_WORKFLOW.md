@@ -39,8 +39,8 @@ Folder. They are stored under `.fpvs-studio/templates/condition_templates.json`,
 template storage out of the top-level folder list used for experiment projects.
 The Settings dialog can reopen the root-folder setup guide, manage condition templates,
 and choose whether launched sessions write full `runs/` folders or compact summary logs
-only. It also exposes the default-on BioSemi recording confirmation gate used before
-runtime launch.
+only. It also exposes the default-on Sophia Mode launch gate used before runtime
+launch.
 
 ## Main Window
 
@@ -62,6 +62,8 @@ The authoring window is organized around two user-facing modes:
     using the existing setup-step completion checks
   - when launch is disabled, the Home card, launch button tooltip, and status tip show
     the first actionable setup blocker
+  - when Sophia Mode is enabled, Home shows a green horizontally scrolling
+    `SOPHIA MODE ENABLED` ticker at the top of the launch panel
   - returning from app-expanded Setup restores the compact Home footprint unless
     the user manually resized the larger setup window
 - `Setup Wizard`
@@ -176,8 +178,8 @@ of white `#FFFFFF` to vermillion `#D55E00` for the participant tutorial and cond
 playback without changing the authored project colors. The additional fields are written
 as runtime participant metadata for the launched session. Launch compiles the session
 and runs routine preflight checks after participant details are collected, so the prompt
-appears before any project image-set scan. When the app-level BioSemi recording
-confirmation setting is enabled, launch then shows a blocking administrator check that
+appears before any project image-set scan. When the app-level Sophia Mode setting is
+enabled, launch then shows a blocking NERD Lab administrator check that
 requires typing `Confirm` before the runtime task starts; cancelling that check returns
 to FPVS Studio without starting the experiment.
 
@@ -226,9 +228,9 @@ public MkDocs quickstart site in the system browser. Settings shows the current 
 version from `pyproject.toml` during source-tree runs and from package metadata in
 bundled installs, and exposes the app-level run export mode. Full run export mode is the
 default and writes detailed `runs/` folders after launch; compact mode skips those
-folders and keeps only project-level summary logs. Settings also exposes the default-on
-BioSemi recording confirmation gate, which requires administrators to type `Confirm`
-before launch can continue.
+folders and keeps only project-level summary logs. Settings also exposes default-on
+Sophia Mode, which requires administrators to confirm that BioSemi recording is active
+by typing `Confirm` before launch can continue.
 Moving a project to the Recycle Bin remains a controller-owned filesystem operation
 guarded by `project.json` validation, confirmation, a post-action path check, and a disk
 refresh of the manage list after each attempt. `Check for Updates` queries GitHub

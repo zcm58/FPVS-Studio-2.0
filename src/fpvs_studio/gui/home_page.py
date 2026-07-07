@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from PySide6.QtCore import QEvent, Qt
-from PySide6.QtGui import QAction
+from PySide6.QtCore import QEvent, Qt, QTimer
+from PySide6.QtGui import QAction, QColor, QPainter, QPaintEvent, QResizeEvent
 from PySide6.QtWidgets import (
     QFrame,
     QGridLayout,
@@ -60,6 +60,95 @@ _HOME_LAUNCH_BUTTON_MIN_WIDTH = 280
 _HOME_LAUNCH_BUTTON_HORIZONTAL_CHROME = 76
 _HOME_LAUNCH_BUTTON_VERTICAL_CHROME = 44
 _HOME_LAUNCH_BUTTON_ICON_GAP = 8
+_SOPHIA_MODE_TICKER_TEXT = (
+    "SOPHIA MODE ENABLED    SOPHIA MODE ENABLED    SOPHIA MODE ENABLED"
+)
+_SOPHIA_MODE_TICKER_HEIGHT = 30
+_SOPHIA_MODE_TICKER_INTERVAL_MS = 24
+_SOPHIA_MODE_TICKER_STEP_PX = 3
+
+
+class SophiaModeTicker(QWidget):
+    """Scrolling launch-surface indicator shown while Sophia Mode is enabled."""
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setObjectName("sophia_mode_ticker")
+        self.setProperty("sophiaModeTickerActive", "false")
+        self.setProperty("sophiaModeTickerText", _SOPHIA_MODE_TICKER_TEXT)
+        self.setFixedHeight(_SOPHIA_MODE_TICKER_HEIGHT)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        ticker_font = self.font()
+        ticker_font.setFamily("Consolas")
+        ticker_font.setBold(True)
+        ticker_font.setPixelSize(13)
+        self.setFont(ticker_font)
+
+        self._offset = 0
+        self._timer = QTimer(self)
+        self._timer.setObjectName("sophia_mode_ticker_timer")
+        self._timer.setInterval(_SOPHIA_MODE_TICKER_INTERVAL_MS)
+        self._timer.timeout.connect(self._advance_ticker)
+        self.setVisible(False)
+
+    def set_sophia_mode_enabled(self, enabled: bool) -> None:
+        if not enabled:
+            self._timer.stop()
+            self.setProperty("sophiaModeTickerActive", "false")
+            self.setVisible(False)
+            return
+
+        self.setVisible(True)
+        self.setProperty("sophiaModeTickerActive", "true")
+        self._sync_scroll_offset()
+        self.update()
+        if not self._timer.isActive():
+            self._timer.start()
+
+    def paintEvent(self, event: QPaintEvent) -> None:  # noqa: N802
+        super().paintEvent(event)
+        if not self.isVisible():
+            return
+        painter = QPainter(self)
+        painter.setClipRect(self.rect())
+        painter.setPen(QColor("#00d46a"))
+        painter.setFont(self.font())
+        metrics = painter.fontMetrics()
+        text = f"{_SOPHIA_MODE_TICKER_TEXT}    "
+        text_width = max(1, metrics.horizontalAdvance(text))
+        baseline = (self.height() + metrics.ascent() - metrics.descent()) // 2
+        x = self._offset
+        while x > 0:
+            x -= text_width
+        while x < self.width():
+            painter.drawText(x, baseline, text)
+            x += text_width
+
+    def resizeEvent(self, event: QResizeEvent) -> None:  # noqa: N802
+        super().resizeEvent(event)
+        self._sync_scroll_offset()
+        if self.isVisible():
+            self.update()
+
+    def _advance_ticker(self) -> None:
+        if not self.isVisible() or self.width() <= 0:
+            return
+        text_width = self._ticker_text_width()
+        next_offset = self._offset - _SOPHIA_MODE_TICKER_STEP_PX
+        if next_offset <= -text_width:
+            next_offset = 0
+        self._offset = next_offset
+        self.update()
+
+    def _sync_scroll_offset(self) -> None:
+        if self._offset <= -self._ticker_text_width():
+            self._offset = 0
+
+    def _ticker_text_width(self) -> int:
+        return max(
+            1,
+            self.fontMetrics().horizontalAdvance(f"{_SOPHIA_MODE_TICKER_TEXT}    "),
+        )
 
 
 class SetupDashboardPage(QWidget):
@@ -387,6 +476,8 @@ class HomePage(QWidget):
             base_margins.bottom(),
         )
         launch_panel = self.launch_surface.content_frame
+        self.sophia_mode_ticker = SophiaModeTicker(launch_panel)
+        self.launch_surface.content_layout.insertWidget(0, self.sophia_mode_ticker)
         launch_panel_layout = self.launch_surface.hero_layout
 
         identity_row = QHBoxLayout()
@@ -598,8 +689,14 @@ class HomePage(QWidget):
         self.accuracy_task_value.setText(
             "Enabled" if fixation_settings.accuracy_task_enabled else "Disabled"
         )
+        self._refresh_sophia_mode_ticker()
         self._set_status_indicator(report)
         self.launch_surface.hero_layout.activate()
+
+    def _refresh_sophia_mode_ticker(self) -> None:
+        self.sophia_mode_ticker.set_sophia_mode_enabled(
+            self._document.require_biosemi_recording_confirmation
+        )
 
     def _status_report(self) -> LauncherReadinessReport:
         return _launcher_readiness_report(

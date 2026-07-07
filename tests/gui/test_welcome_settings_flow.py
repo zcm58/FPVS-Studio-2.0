@@ -920,7 +920,7 @@ def test_settings_dialog_detailed_run_exports_checkbox_triggers_callback(
     assert captured_values == [True]
 
 
-def test_settings_dialog_biosemi_confirmation_checkbox_triggers_callback(
+def test_settings_dialog_sophia_mode_checkbox_triggers_callback(
     qtbot,
     tmp_path: Path,
 ) -> None:
@@ -935,9 +935,10 @@ def test_settings_dialog_biosemi_confirmation_checkbox_triggers_callback(
     )
     qtbot.addWidget(dialog)
 
-    checkbox = dialog.findChild(QCheckBox, "biosemi_recording_confirmation_checkbox")
+    checkbox = dialog.findChild(QCheckBox, "sophia_mode_checkbox")
     assert checkbox is not None
-    assert checkbox.text() == "Require BioSemi recording confirmation before launch"
+    assert checkbox.text() == "Enable Sophia Mode"
+    assert "NERD Lab administrator" in checkbox.toolTip()
     assert checkbox.isChecked() is True
 
     qtbot.mouseClick(checkbox, Qt.MouseButton.LeftButton)
@@ -971,7 +972,7 @@ def test_file_settings_action_persists_run_export_toggle_to_current_document(
     assert window.document.session_export_mode == EXPORT_MODE_COMPACT
 
 
-def test_file_settings_action_persists_biosemi_confirmation_toggle_to_current_document(
+def test_file_settings_action_persists_sophia_mode_toggle_to_current_document(
     qtbot,
     controller: StudioController,
     tmp_path: Path,
@@ -982,7 +983,7 @@ def test_file_settings_action_persists_biosemi_confirmation_toggle_to_current_do
     assert window.document.require_biosemi_recording_confirmation is True
 
     def _fake_settings_exec(dialog: AppSettingsDialog) -> int:
-        checkbox = dialog.findChild(QCheckBox, "biosemi_recording_confirmation_checkbox")
+        checkbox = dialog.findChild(QCheckBox, "sophia_mode_checkbox")
         assert checkbox is not None
         assert checkbox.isChecked() is True
         checkbox.setChecked(False)

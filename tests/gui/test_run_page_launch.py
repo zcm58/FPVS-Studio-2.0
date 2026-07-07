@@ -245,7 +245,9 @@ def test_biosemi_recording_confirmation_dialog_blocks_continue_until_confirm(
     assert continue_button is not None
     assert continue_button.text() == "Continue"
     assert continue_button.isEnabled() is False
-    assert "For NERD Lab Experiment Administrators" in prompt.text()
+    assert dialog.windowTitle() == "Sophia Mode Recording Check"
+    assert "NERD Lab Administrator" in prompt.text()
+    assert "Sophia Mode is enabled" in prompt.text()
 
     confirmation_edit.setText("con")
     assert continue_button.isEnabled() is False

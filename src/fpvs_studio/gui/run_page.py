@@ -239,21 +239,20 @@ class ParticipantNumberDialog(QDialog):
 
 
 class BioSemiRecordingConfirmationDialog(QDialog):
-    """Require an explicit administrator confirmation before runtime launch."""
+    """Require a Sophia Mode administrator confirmation before runtime launch."""
 
     CONFIRMATION_WORD = "confirm"
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setObjectName("biosemi_recording_confirmation_dialog")
-        self.setWindowTitle("BioSemi Recording Check")
+        self.setWindowTitle("Sophia Mode Recording Check")
         self.setModal(True)
         self.resize(640, 260)
 
         self.prompt_label = QLabel(
-            "For NERD Lab Experiment Administrators: Please double check to ensure "
-            "you started the recording on the BioSemi PC. Please type 'Confirm' "
-            "to continue.",
+            "NERD Lab Administrator: Sophia Mode is enabled. Confirm that the BioSemi "
+            "PC is recording data, then type 'Confirm' to continue.",
             self,
         )
         self.prompt_label.setObjectName("biosemi_recording_confirmation_prompt")

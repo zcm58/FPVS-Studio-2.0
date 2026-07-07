@@ -1345,6 +1345,9 @@ def home_page_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
         font-size: 13px;
         color: {theme.text_secondary};
     }}
+    QWidget#sophia_mode_ticker {{
+        background-color: transparent;
+    }}
     QLabel[homeFieldLabel="true"] {{
         color: {theme.text_muted};
         font-size: 13px;

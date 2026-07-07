@@ -275,7 +275,11 @@ class ProjectDocument(
     def set_require_biosemi_recording_confirmation(self, required: bool) -> None:
         """Set whether GUI launches require the BioSemi recording safety check."""
 
-        self._require_biosemi_recording_confirmation = bool(required)
+        required = bool(required)
+        if self._require_biosemi_recording_confirmation == required:
+            return
+        self._require_biosemi_recording_confirmation = required
+        self.project_changed.emit()
 
     def _generate_unused_session_seed(self) -> int:
         try:

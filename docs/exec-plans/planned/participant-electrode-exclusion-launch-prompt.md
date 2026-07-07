@@ -45,8 +45,8 @@ its manual removed-electrode QC list automatically during project import.
 4. The prompt lets the administrator record electrodes that were physically
    removed or unplugged before recording.
 5. The administrator can leave the list blank and continue.
-6. If the BioSemi confirmation gate is enabled, FPVS Studio then shows the existing
-   BioSemi recording confirmation dialog.
+6. If Sophia Mode is enabled, FPVS Studio then shows the existing recording
+   confirmation dialog.
 7. Runtime launch behavior remains unchanged after the confirmation gate.
 8. Later `.fpvsconfig` export includes the participant electrode exclusion map so
    FPVS Toolbox can import it into manual removed-electrode mode.
@@ -63,7 +63,7 @@ its manual removed-electrode QC list automatically during project import.
 - Normalize casing in the saved/exported metadata where possible, while preserving
   unknown labels rather than rejecting them unless validation has a strong reason to
   block launch.
-- Cancellation should abort the launch before BioSemi confirmation and before the
+- Cancellation should abort the launch before Sophia Mode confirmation and before the
   runtime task starts.
 - If the participant already has saved excluded electrodes, the prompt should
   prefill them and allow edits.
@@ -101,7 +101,7 @@ cannot accept the new optional field compatibly.
   not affect stimulus timing or runtime rendering.
 - `.fpvsconfig` export/import should serialize and validate the new optional
   metadata without copying runtime artifacts.
-- The prompt should not alter BioSemi confirmation semantics.
+- The prompt should not alter Sophia Mode confirmation semantics.
 
 ## Suggested Files
 
@@ -125,7 +125,7 @@ cannot accept the new optional field compatibly.
 - GUI test in `tests/gui/test_run_page_launch.py`:
   - launch opens the electrode exclusion prompt after participant details,
   - cancelling it blocks runtime launch,
-  - accepting it proceeds to BioSemi confirmation when that setting is enabled,
+  - accepting it proceeds to Sophia Mode confirmation when that setting is enabled,
   - existing participant entries prefill the dialog.
 - Core/project-config tests in `tests/unit/test_project_config.py`:
   - `.fpvsconfig` export includes participant electrode exclusions,
@@ -149,7 +149,7 @@ cannot accept the new optional field compatibly.
 ## Open Questions
 
 - Should Studio persist the list immediately when launch is cancelled later at the
-  BioSemi confirmation step?
+  Sophia Mode confirmation step?
 - Should exported `.fpvsconfig` include the map at top level, inside `toolbox`, or
   both for maximum downstream compatibility?
 - Should participant summaries include a visible removed-electrodes audit column, or

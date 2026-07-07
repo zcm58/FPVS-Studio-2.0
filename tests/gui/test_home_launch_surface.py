@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
     QApplication,
     QLabel,
@@ -253,6 +253,36 @@ def test_home_launch_button_geometry_keeps_label_and_icon_uncropped(
 
     assert launch_button.isEnabled()
     _assert_button_contents_fit(launch_button)
+
+
+def test_home_sophia_mode_ticker_follows_launch_safety_setting(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Sophia Mode Project")
+
+    ticker = window.home_page.findChild(QWidget, "sophia_mode_ticker")
+    assert ticker is not None
+    ticker_timer = ticker.findChild(QTimer, "sophia_mode_ticker_timer")
+    assert ticker_timer is not None
+
+    assert ticker.isVisible()
+    assert ticker.property("sophiaModeTickerActive") == "true"
+    assert "SOPHIA MODE ENABLED" in str(ticker.property("sophiaModeTickerText"))
+    assert ticker_timer.isActive()
+
+    window.document.set_require_biosemi_recording_confirmation(False)
+    QApplication.processEvents()
+    assert ticker.isVisible() is False
+    assert ticker.property("sophiaModeTickerActive") == "false"
+    assert ticker_timer.isActive() is False
+
+    window.document.set_require_biosemi_recording_confirmation(True)
+    QApplication.processEvents()
+    assert ticker.isVisible()
+    assert ticker.property("sophiaModeTickerActive") == "true"
+    assert ticker_timer.isActive()
 
 
 def test_incomplete_home_launch_state_is_error_and_disabled(
