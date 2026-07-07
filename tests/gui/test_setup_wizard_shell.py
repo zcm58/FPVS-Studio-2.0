@@ -36,11 +36,12 @@ def test_main_window_uses_home_and_setup_wizard_stack(
 ) -> None:
     _, window = _open_created_project(controller, qtbot, tmp_path, "Home Stack Project")
 
-    assert window.main_stack.count() == 4
+    assert window.main_stack.count() == 5
     assert window.main_stack.indexOf(window.home_page) == 0
     assert window.main_stack.indexOf(window.setup_wizard_page) == 1
     assert window.main_stack.indexOf(window.image_resizer_page) == 2
     assert window.main_stack.indexOf(window.bundle_export_processing_page) == 3
+    assert window.main_stack.indexOf(window.bundle_import_processing_page) == 4
     assert window.main_stack.indexOf(window.conditions_page) == -1
     assert window.main_stack.indexOf(window.assets_page) == -1
     assert window.main_stack.indexOf(window.run_page) == -1

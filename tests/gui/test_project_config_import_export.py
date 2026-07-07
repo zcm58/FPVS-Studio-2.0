@@ -63,6 +63,10 @@ class _DeferredBackgroundTask(QObject):
         self.succeeded.emit(result)
         self.finished.emit()
 
+    def fail(self, error: Exception) -> None:
+        self.failed.emit(error)
+        self.finished.emit()
+
 
 def test_export_project_config_cancel_leaves_no_file(
     controller: StudioController,
@@ -432,6 +436,10 @@ def test_import_project_bundle_creates_and_opens_complete_project(
         "fpvs_studio.gui.controller.QFileDialog.getOpenFileName",
         lambda *args, **kwargs: (str(bundle_path), ""),
     )
+    monkeypatch.setattr(
+        "fpvs_studio.gui.controller.BackgroundTask",
+        _ImmediateBackgroundTask,
+    )
 
     class _FakeImportDisplaySettingsDialog:
         DialogCode = QDialog.DialogCode
@@ -478,6 +486,83 @@ def test_import_project_bundle_creates_and_opens_complete_project(
     assert display.screen_width_cm == 60.0
     assert display.screen_width_px == 2560
     assert display.screen_height_px == 1440
+
+
+def test_import_project_bundle_shows_embedded_processing_screen(
+    controller: StudioController,
+    qtbot,
+    tmp_path,
+    monkeypatch,
+) -> None:
+    _document, window = open_created_project(controller, qtbot, tmp_path, "Bundle Import Wait")
+    window.resize(1120, 720)
+    bundle_path = tmp_path / "import.fpvsbundle"
+    _DeferredBackgroundTask.instances.clear()
+    monkeypatch.setattr(
+        "fpvs_studio.gui.controller.QFileDialog.getOpenFileName",
+        lambda *args, **kwargs: (str(bundle_path), ""),
+    )
+    monkeypatch.setattr(
+        "fpvs_studio.gui.controller.BackgroundTask",
+        _DeferredBackgroundTask,
+    )
+
+    window.import_project_bundle_action.trigger()
+
+    assert len(_DeferredBackgroundTask.instances) == 1
+    assert _DeferredBackgroundTask.instances[0].started is True
+    QApplication.processEvents()
+    assert window.main_stack.currentWidget() is window.bundle_import_processing_page
+    assert "currently setting up your project" in (
+        window.bundle_import_processing_page.message_label.text()
+    )
+    assert_visible_children_within_parent(window.bundle_import_processing_page)
+
+    first_step = window.bundle_import_processing_page.findChild(
+        QWidget,
+        "bundle_import_processing_step_1",
+    )
+    second_step = window.bundle_import_processing_page.findChild(
+        QWidget,
+        "bundle_import_processing_step_2",
+    )
+    third_step = window.bundle_import_processing_page.findChild(
+        QWidget,
+        "bundle_import_processing_step_3",
+    )
+    fourth_step = window.bundle_import_processing_page.findChild(
+        QWidget,
+        "bundle_import_processing_step_4",
+    )
+    assert first_step is not None
+    assert second_step is not None
+    assert third_step is not None
+    assert fourth_step is not None
+    assert first_step.property("processingStepState") == "active"
+    assert second_step.property("processingStepState") == "pending"
+    assert third_step.property("processingStepState") == "pending"
+    assert fourth_step.property("processingStepState") == "pending"
+
+    controller._on_import_project_bundle_stage_changed("base")
+    assert first_step.property("processingStepState") == "complete"
+    assert second_step.property("processingStepState") == "active"
+    assert third_step.property("processingStepState") == "pending"
+    assert fourth_step.property("processingStepState") == "pending"
+    controller._on_import_project_bundle_stage_changed("oddball")
+    assert first_step.property("processingStepState") == "complete"
+    assert second_step.property("processingStepState") == "complete"
+    assert third_step.property("processingStepState") == "active"
+    assert fourth_step.property("processingStepState") == "pending"
+    controller._on_import_project_bundle_stage_changed("project")
+    assert first_step.property("processingStepState") == "complete"
+    assert second_step.property("processingStepState") == "complete"
+    assert third_step.property("processingStepState") == "complete"
+    assert fourth_step.property("processingStepState") == "active"
+
+    _DeferredBackgroundTask.instances[0].fail(RuntimeError("cancel test import"))
+
+    assert window.main_stack.currentWidget() is window.home_page
+    assert window.import_project_bundle_action.isEnabled() is True
 
 
 def test_import_display_settings_dialog_detect_button_fills_available_values(

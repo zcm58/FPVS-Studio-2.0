@@ -192,12 +192,14 @@ The `File` menu groups manage-projects, `Import` and `Export` submenus, settings
 help/update actions with native separators. `Import > FPVS Studio Project...` imports a
 `.fpvsbundle` into a new project folder under the configured FPVS Studio Root Folder,
 verifies archive paths and hashes in an app-owned staging folder, resolves
-project-folder collisions, asks the user to confirm local display refresh rate, viewing
-distance, monitor width, and resolution, opens the new project, and deletes staging
-files after success or failure. The display confirmation dialog preserves the imported
-visual-angle target and can fill refresh, resolution, and physical screen width from
-Qt's primary-screen metadata; PsychoPy stays behind the engine boundary and is not
-imported by the GUI for this confirmation. `Import > Project Config...` creates a new
+project-folder collisions, shows an embedded processing screen with staged verify/base
+image/oddball image/project setup progress, asks the user to confirm local display
+refresh rate, viewing distance, monitor width, and resolution, opens the new project,
+and deletes staging files after success or failure. The display confirmation dialog
+preserves the imported visual-angle target and can fill refresh, resolution, and
+physical screen width from Qt's primary-screen metadata; PsychoPy stays behind the
+engine boundary and is not imported by the GUI for this confirmation.
+`Import > Project Config...` creates a new
 Studio project shell under the configured FPVS Studio Root Folder from a `.fpvsconfig`
 setup handoff; it does not merge into the current project and does not copy original
 stimulus images. The config import dialog accepts `.fpvsconfig`, legacy `.config`, and

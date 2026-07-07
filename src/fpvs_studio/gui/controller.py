@@ -14,6 +14,7 @@ from collections.abc import Callable
 from ctypes import wintypes
 from pathlib import Path
 from types import TracebackType
+from typing import cast
 
 from PySide6.QtCore import QObject, QSettings, QThread, QTimer, Signal, Slot
 from PySide6.QtWidgets import QApplication, QFileDialog, QMessageBox, QWidget
@@ -25,8 +26,9 @@ from fpvs_studio.core.condition_template_profiles import (
 )
 from fpvs_studio.core.models import ConditionTemplateProfile
 from fpvs_studio.core.paths import project_json_path
-from fpvs_studio.core.project_bundle import import_project_bundle
+from fpvs_studio.core.project_bundle import BundleImportStage, import_project_bundle
 from fpvs_studio.core.project_config import create_project_from_config, read_project_config
+from fpvs_studio.core.project_service import ProjectScaffold
 from fpvs_studio.core.serialization import load_project_file
 from fpvs_studio.gui.condition_template_manager_dialog import ConditionTemplateManagerDialog
 from fpvs_studio.gui.create_project_dialog import CreateProjectDialog
@@ -38,6 +40,7 @@ from fpvs_studio.gui.root_folder_setup_dialog import RootFolderSetupDialog
 from fpvs_studio.gui.settings_dialog import AppSettingsDialog
 from fpvs_studio.gui.update_dialog import UpdateDialog
 from fpvs_studio.gui.welcome_window import WelcomeWindow
+from fpvs_studio.gui.workers import BackgroundTask
 from fpvs_studio.runtime.export_modes import (
     EXPORT_MODE_COMPACT,
     EXPORT_MODE_FULL,
@@ -87,6 +90,12 @@ class _StartupUpdateCheckWorker(QObject):
             self.finished.emit()
 
 
+class _BundleImportProgressBridge(QObject):
+    """Carry worker-thread bundle import progress back to the GUI thread."""
+
+    stage_changed = Signal(str)
+
+
 class StudioController(QObject):
     """Own the top-level FPVS Studio windows and project-opening flows."""
 
@@ -108,6 +117,9 @@ class StudioController(QObject):
         self._startup_update_thread: QThread | None = None
         self._startup_update_worker: _StartupUpdateCheckWorker | None = None
         self._startup_update_check_callback: Callable[[], UpdateCheckResult] = check_for_updates
+        self._active_import_bundle_task: BackgroundTask | None = None
+        self._import_bundle_progress_bridge: _BundleImportProgressBridge | None = None
+        self._import_bundle_processing_window: StudioMainWindow | None = None
 
     def show_welcome(self) -> None:
         """Show the welcome window."""
@@ -646,6 +658,13 @@ class StudioController(QObject):
     def show_import_project_bundle_dialog(self) -> None:
         """Import a portable Studio `.fpvsbundle` as a complete project."""
 
+        if self._active_import_bundle_task is not None:
+            if self.main_window is not None:
+                self.main_window.statusBar().showMessage(
+                    "Project bundle import is already running.",
+                    3000,
+                )
+            return
         if not self.ensure_fpvs_root_configured():
             return
         if not self._normalize_fpvs_root_layout():
@@ -662,14 +681,98 @@ class StudioController(QObject):
         )
         if not selected_path:
             return
+        bundle_path = Path(selected_path)
+        if self.main_window is None:
+            self._import_project_bundle_synchronously(bundle_path, root_dir, parent)
+            return
+
+        progress_bridge = _BundleImportProgressBridge(self)
+        progress_bridge.stage_changed.connect(self._on_import_project_bundle_stage_changed)
+        self._import_bundle_progress_bridge = progress_bridge
+        self._import_bundle_processing_window = self.main_window
+        self.main_window.start_bundle_import_processing()
+
+        def _import_bundle() -> ProjectScaffold:
+            return import_project_bundle(
+                bundle_path,
+                root_dir,
+                progress_callback=progress_bridge.stage_changed.emit,
+            )
+
+        task = BackgroundTask(parent_widget=self.main_window, callback=_import_bundle)
+        self._active_import_bundle_task = task
+        task.succeeded.connect(self._on_import_project_bundle_succeeded)
+        task.failed.connect(self._on_import_project_bundle_failed)
+        task.finished.connect(self._on_import_project_bundle_finished)
+        task.start()
+
+    def _import_project_bundle_synchronously(
+        self,
+        bundle_path: Path,
+        root_dir: Path,
+        parent: QWidget | None,
+    ) -> None:
         try:
-            scaffold = import_project_bundle(Path(selected_path), root_dir)
+            scaffold = import_project_bundle(bundle_path, root_dir)
             document = ProjectDocument.open_existing(scaffold.project_root)
             self._confirm_imported_display_settings(document, parent=parent)
         except Exception as error:
             _show_error(parent, "Import FPVS Studio Project Error", error)
             return
         self._open_document(document)
+
+    @Slot(str)
+    def _on_import_project_bundle_stage_changed(self, stage: str) -> None:
+        if stage not in {"verify", "base", "oddball", "project", "complete"}:
+            return
+        window = self._import_bundle_processing_window
+        if window is not None:
+            window.set_bundle_import_stage(cast(BundleImportStage, stage))
+
+    @Slot(object)
+    def _on_import_project_bundle_succeeded(self, result: object) -> None:
+        window = self._import_bundle_processing_window
+        try:
+            if not isinstance(result, ProjectScaffold):
+                raise TypeError("FPVS Studio received an unexpected bundle import result.")
+            if window is not None:
+                window.set_bundle_import_stage("complete")
+            document = ProjectDocument.open_existing(result.project_root)
+            self._confirm_imported_display_settings(document, parent=window)
+        except Exception as error:
+            if window is not None:
+                window.finish_bundle_import_processing(restore_previous=True)
+            _show_error(
+                window or self.main_window or self.welcome_window,
+                "Import FPVS Studio Project Error",
+                error,
+            )
+            return
+        if window is not None:
+            window.finish_bundle_import_processing(restore_previous=False)
+        self._open_document(document)
+
+    @Slot(object)
+    def _on_import_project_bundle_failed(self, error: object) -> None:
+        window = self._import_bundle_processing_window
+        if window is not None:
+            window.finish_bundle_import_processing(restore_previous=True)
+        exception = error if isinstance(error, Exception) else RuntimeError(str(error))
+        _show_error(
+            window or self.main_window or self.welcome_window,
+            "Import FPVS Studio Project Error",
+            exception,
+        )
+
+    @Slot()
+    def _on_import_project_bundle_finished(self) -> None:
+        progress_bridge = self._import_bundle_progress_bridge
+        if progress_bridge is not None:
+            progress_bridge.stage_changed.disconnect(self._on_import_project_bundle_stage_changed)
+            progress_bridge.deleteLater()
+        self._active_import_bundle_task = None
+        self._import_bundle_progress_bridge = None
+        self._import_bundle_processing_window = None
 
     def _confirm_imported_display_settings(
         self,

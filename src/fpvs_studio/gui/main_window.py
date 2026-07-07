@@ -29,6 +29,7 @@ from fpvs_studio.core.paths import logs_dir
 from fpvs_studio.core.project_bundle import (
     PROJECT_BUNDLE_SUFFIX,
     BundleExportStage,
+    BundleImportStage,
     project_bundle_filename,
 )
 from fpvs_studio.core.project_bundle import (
@@ -40,7 +41,7 @@ from fpvs_studio.gui.components import apply_studio_theme
 from fpvs_studio.gui.document import ProjectDocument
 from fpvs_studio.gui.home_page import HomePage
 from fpvs_studio.gui.image_resizer_page import ImageResizerPage
-from fpvs_studio.gui.processing_page import BundleExportProcessingPage
+from fpvs_studio.gui.processing_page import BundleExportProcessingPage, BundleImportProcessingPage
 from fpvs_studio.gui.run_page import ParticipantNumberDialog
 from fpvs_studio.gui.setup_wizard_page import SetupWizardPage
 from fpvs_studio.gui.update_dialog import UpdateDialog
@@ -130,6 +131,8 @@ class StudioMainWindow(QMainWindow):
         self._bundle_export_previous_widget: QWidget | None = None
         self._bundle_export_target_path: Path | None = None
         self._bundle_export_progress_bridge: _BundleExportProgressBridge | None = None
+        self._bundle_import_previous_widget: QWidget | None = None
+        self._bundle_import_processing_active = False
         self._apply_compact_window_size()
 
         self._runtime_fullscreen_ui_state = True
@@ -163,6 +166,8 @@ class StudioMainWindow(QMainWindow):
         self.main_stack.addWidget(self.image_resizer_page)
         self.bundle_export_processing_page = BundleExportProcessingPage(parent=self)
         self.main_stack.addWidget(self.bundle_export_processing_page)
+        self.bundle_import_processing_page = BundleImportProcessingPage(parent=self)
+        self.main_stack.addWidget(self.bundle_import_processing_page)
         self.main_tabs = self.main_stack
         self.setCentralWidget(self.main_stack)
         self._apply_chrome_styles()
@@ -523,7 +528,7 @@ class StudioMainWindow(QMainWindow):
         self._set_home_chrome_visible(True, status_visible=True)
         self.main_stack.setCurrentWidget(self.bundle_export_processing_page)
         self.statusBar().showMessage("Exporting project bundle...")
-        self._set_bundle_export_busy(True)
+        self._set_bundle_processing_busy(True)
 
         task = BackgroundTask(
             parent_widget=self,
@@ -535,7 +540,30 @@ class StudioMainWindow(QMainWindow):
         task.finished.connect(self._on_bundle_export_finished)
         task.start()
 
-    def _set_bundle_export_busy(self, busy: bool) -> None:
+    def start_bundle_import_processing(self) -> None:
+        self._bundle_import_previous_widget = self.main_stack.currentWidget()
+        self._bundle_import_processing_active = True
+        self.bundle_import_processing_page.reset_steps()
+        self.bundle_import_processing_page.set_stage("verify")
+        self.bundle_import_processing_page.start()
+        self._set_home_chrome_visible(True, status_visible=True)
+        self.main_stack.setCurrentWidget(self.bundle_import_processing_page)
+        self.statusBar().showMessage("Importing FPVS Studio project bundle...")
+        self._set_bundle_processing_busy(True)
+
+    def set_bundle_import_stage(self, stage: BundleImportStage) -> None:
+        self.bundle_import_processing_page.set_stage(stage)
+
+    def finish_bundle_import_processing(self, *, restore_previous: bool) -> None:
+        self.bundle_import_processing_page.stop()
+        self._bundle_import_processing_active = False
+        self._set_bundle_processing_busy(False)
+        if restore_previous:
+            self._restore_after_bundle_import()
+        else:
+            self._bundle_import_previous_widget = None
+
+    def _set_bundle_processing_busy(self, busy: bool) -> None:
         actions = (
             self.new_project_action,
             self.open_project_action,
@@ -580,12 +608,34 @@ class StudioMainWindow(QMainWindow):
             progress_bridge.stage_changed.disconnect(self._on_bundle_export_stage_changed)
             progress_bridge.deleteLater()
         self._bundle_export_progress_bridge = None
-        self._set_bundle_export_busy(False)
+        self._set_bundle_processing_busy(False)
         self._restore_after_bundle_export()
 
     def _restore_after_bundle_export(self) -> None:
         previous_widget = self._bundle_export_previous_widget
         self._bundle_export_previous_widget = None
+        if previous_widget is self.home_page:
+            self.home_page.refresh()
+            self._set_home_chrome_visible(True, status_visible=False)
+            self._apply_compact_window_size()
+            self._sync_home_chrome_offset()
+            self.main_stack.setCurrentWidget(self.home_page)
+            return
+        if previous_widget is self.setup_wizard_page:
+            self._set_home_chrome_visible(True)
+            self._apply_setup_window_size()
+            self.main_stack.setCurrentWidget(self.setup_wizard_page)
+            return
+        if previous_widget is self.image_resizer_page:
+            self._set_home_chrome_visible(True)
+            self._apply_utility_window_size()
+            self.main_stack.setCurrentWidget(self.image_resizer_page)
+            return
+        self.show_home()
+
+    def _restore_after_bundle_import(self) -> None:
+        previous_widget = self._bundle_import_previous_widget
+        self._bundle_import_previous_widget = None
         if previous_widget is self.home_page:
             self.home_page.refresh()
             self._set_home_chrome_visible(True, status_visible=False)
@@ -693,6 +743,17 @@ class StudioMainWindow(QMainWindow):
                 (
                     "FPVS Studio is still compiling your project bundle. "
                     "Please wait for the export to finish before closing."
+                ),
+            )
+            event.ignore()
+            return
+        if self._bundle_import_processing_active:
+            QMessageBox.information(
+                self,
+                "Import In Progress",
+                (
+                    "FPVS Studio is still setting up the imported project. "
+                    "Please wait for the import to finish before closing."
                 ),
             )
             event.ignore()

@@ -900,34 +900,34 @@ def studio_theme_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
     QMainWindow#studio_main_window QWidget {{
         font-size: {FONT_SIZE_BODY}px;
     }}
-    QWidget#bundle_export_processing_page {{
+    QWidget[bundleProcessingPage="true"] {{
         background-color: {color_page_background};
         color: {color_text_primary};
     }}
-    QLabel#bundle_export_processing_eyebrow_label {{
+    QLabel[bundleProcessingRole="eyebrow"] {{
         color: {color_primary};
         font-size: {FONT_SIZE_BODY}px;
         font-weight: 700;
     }}
-    QLabel#bundle_export_processing_title_label {{
+    QLabel[bundleProcessingRole="title"] {{
         color: {color_text_primary};
         font-size: {FONT_SIZE_PAGE_TITLE + 2}px;
         font-weight: 700;
     }}
-    QLabel#bundle_export_processing_message_label {{
+    QLabel[bundleProcessingRole="message"] {{
         color: {color_text_primary};
         font-size: {FONT_SIZE_SECTION_TITLE + 1}px;
         font-weight: 700;
     }}
-    QLabel#bundle_export_processing_detail_label,
-    QLabel#bundle_export_processing_status_hint_label {{
+    QLabel[bundleProcessingRole="detail"],
+    QLabel[bundleProcessingRole="statusHint"] {{
         color: {color_text_secondary};
         font-size: {FONT_SIZE_BODY + 1}px;
     }}
-    QLabel#bundle_export_processing_status_badge {{
+    QLabel[bundleProcessingStatusBadge="true"] {{
         font-size: {FONT_SIZE_CONTROL + 1}px;
     }}
-    QFrame#bundle_export_processing_divider {{
+    QFrame[processingDivider="true"] {{
         border: none;
         background-color: {color_border_soft};
         min-width: 1px;

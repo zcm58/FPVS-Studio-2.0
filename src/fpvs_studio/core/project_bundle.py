@@ -50,6 +50,8 @@ _DEFAULT_VALIDATION_REFRESH_HZ = 60.0
 
 BundleExportStage = Literal["validate", "stimuli", "write", "complete"]
 BundleExportProgressCallback = Callable[[BundleExportStage], None]
+BundleImportStage = Literal["verify", "base", "oddball", "project", "complete"]
+BundleImportProgressCallback = Callable[[BundleImportStage], None]
 
 
 class ProjectBundleError(ValueError):
@@ -194,7 +196,12 @@ def read_project_bundle_manifest(bundle_path: Path) -> ProjectBundleManifest:
         raise ProjectBundleError(f"Project bundle manifest failed validation: {exc}") from exc
 
 
-def import_project_bundle(bundle_path: Path, fpvs_root_dir: Path) -> ProjectScaffold:
+def import_project_bundle(
+    bundle_path: Path,
+    fpvs_root_dir: Path,
+    *,
+    progress_callback: BundleImportProgressCallback | None = None,
+) -> ProjectScaffold:
     """Import a `.fpvsbundle` into a new project folder under the FPVS Studio root."""
 
     bundle_path = Path(bundle_path)
@@ -203,16 +210,30 @@ def import_project_bundle(bundle_path: Path, fpvs_root_dir: Path) -> ProjectScaf
     stage_dir = staging_parent / f"bundle-{uuid.uuid4().hex}"
     staged_project_root = stage_dir / "project"
     try:
+        _notify_import_progress(progress_callback, "verify")
         staged_project_root.mkdir(parents=True, exist_ok=False)
         bundle_manifest = _extract_bundle_to_staging(bundle_path, staged_project_root)
         project = _load_project_for_bundle(staged_project_root)
         manifest = read_stimulus_manifest(staged_project_root)
+        _notify_import_progress(progress_callback, "base")
+        _validate_condition_role_source_dirs(
+            staged_project_root,
+            project=project,
+            role="base",
+        )
+        _notify_import_progress(progress_callback, "oddball")
+        _validate_condition_role_source_dirs(
+            staged_project_root,
+            project=project,
+            role="oddball",
+        )
         _validate_bundle_source(
             staged_project_root,
             project=project,
             manifest=manifest,
             refresh_hz=bundle_manifest.validation.refresh_hz,
         )
+        _notify_import_progress(progress_callback, "project")
         target_dir, project_id = _unique_import_project_dir(
             fpvs_root_dir,
             project.meta.project_id,
@@ -229,6 +250,7 @@ def import_project_bundle(bundle_path: Path, fpvs_root_dir: Path) -> ProjectScaf
             raise ProjectBundleError(f"Imported project target already exists: {target_dir}")
         target_dir.parent.mkdir(parents=True, exist_ok=True)
         shutil.move(str(staged_project_root), str(target_dir))
+        _notify_import_progress(progress_callback, "complete")
         return ProjectScaffold(project_root=target_dir, project=project)
     except ProjectBundleError:
         raise
@@ -237,6 +259,14 @@ def import_project_bundle(bundle_path: Path, fpvs_root_dir: Path) -> ProjectScaf
     finally:
         if stage_dir.exists():
             shutil.rmtree(stage_dir, ignore_errors=True)
+
+
+def _notify_import_progress(
+    progress_callback: BundleImportProgressCallback | None,
+    stage: BundleImportStage,
+) -> None:
+    if progress_callback is not None:
+        progress_callback(stage)
 
 
 def _load_project_for_bundle(project_root: Path) -> ProjectFile:
@@ -403,6 +433,28 @@ def _validate_bundle_source(
         )
     except CompileError as exc:
         raise ProjectBundleError(f"Project did not pass bundle compile validation: {exc}") from exc
+
+
+def _validate_condition_role_source_dirs(
+    project_root: Path,
+    *,
+    project: ProjectFile,
+    role: Literal["base", "oddball"],
+) -> None:
+    stimulus_sets_by_id = {
+        stimulus_set.set_id: stimulus_set for stimulus_set in project.stimulus_sets
+    }
+    set_ids = {
+        condition.base_stimulus_set_id
+        if role == "base"
+        else condition.oddball_stimulus_set_id
+        for condition in project.conditions
+    }
+    for set_id in sorted(set_ids):
+        stimulus_set = stimulus_sets_by_id.get(set_id)
+        if stimulus_set is None or stimulus_set.source_dir is None:
+            continue
+        _resolve_existing_relative_dir(project_root, stimulus_set.source_dir)
 
 
 def _resolve_existing_relative_dir(project_root: Path, relative_path: str) -> Path:

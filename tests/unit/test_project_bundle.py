@@ -160,6 +160,25 @@ def test_import_project_bundle_creates_project_and_deletes_staging(
     assert list(staging_root.iterdir()) == []
 
 
+def test_import_project_bundle_reports_progress_stages(
+    tmp_path,
+    sample_project,
+    sample_project_root,
+) -> None:
+    _save_bundle_ready_project(sample_project_root, sample_project)
+    bundle_path = tmp_path / "sample.fpvsbundle"
+    export_project_bundle(sample_project_root, bundle_path)
+    stages: list[str] = []
+
+    import_project_bundle(
+        bundle_path,
+        tmp_path / "receiver-root",
+        progress_callback=stages.append,
+    )
+
+    assert stages == ["verify", "base", "oddball", "project", "complete"]
+
+
 def test_import_project_bundle_never_overwrites_existing_project_folder(
     tmp_path,
     sample_project,

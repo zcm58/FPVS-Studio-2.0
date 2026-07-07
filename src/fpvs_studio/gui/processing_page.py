@@ -8,7 +8,7 @@ from PySide6.QtCore import QRectF, QSize, Qt, QTimer
 from PySide6.QtGui import QColor, QHideEvent, QPainter, QPaintEvent, QPen, QShowEvent
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QSizePolicy, QVBoxLayout, QWidget
 
-from fpvs_studio.core.project_bundle import BundleExportStage
+from fpvs_studio.core.project_bundle import BundleExportStage, BundleImportStage
 from fpvs_studio.gui.components import StatusBadgeLabel, refresh_widget_style
 from fpvs_studio.gui.design_system import (
     FONT_SIZE_BODY,
@@ -17,11 +17,28 @@ from fpvs_studio.gui.design_system import (
     resolve_studio_theme,
 )
 
-_STEP_STAGE_ORDER: tuple[BundleExportStage, ...] = ("validate", "stimuli", "write")
-_STEP_LABELS: dict[BundleExportStage, tuple[str, str]] = {
+_ProcessingStage = BundleExportStage | BundleImportStage
+_EXPORT_STEP_STAGE_ORDER: tuple[_ProcessingStage, ...] = (
+    "validate",
+    "stimuli",
+    "write",
+)
+_EXPORT_STEP_LABELS: dict[_ProcessingStage, tuple[str, str]] = {
     "validate": ("1", "Validate"),
     "stimuli": ("2", "Check stimuli"),
     "write": ("3", "Write bundle"),
+}
+_IMPORT_STEP_STAGE_ORDER: tuple[_ProcessingStage, ...] = (
+    "verify",
+    "base",
+    "oddball",
+    "project",
+)
+_IMPORT_STEP_LABELS: dict[_ProcessingStage, tuple[str, str]] = {
+    "verify": ("1", "Verify bundle"),
+    "base": ("2", "Set up base images"),
+    "oddball": ("3", "Set up oddball images"),
+    "project": ("4", "Open project"),
 }
 _StepState = Literal["pending", "active", "complete"]
 
@@ -80,17 +97,34 @@ class SpinnerWidget(QWidget):
         painter.end()
 
 
-class BundleExportProcessingPage(QWidget):
-    """Embedded progress page shown while a `.fpvsbundle` archive is created."""
+class _BundleProcessingPage(QWidget):
+    """Embedded progress page shown during portable bundle work."""
 
-    def __init__(self, *, parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        object_prefix: str,
+        eyebrow: str,
+        title: str,
+        message: str,
+        detail: str,
+        status_badge_text: str,
+        status_hint: str,
+        complete_badge_text: str,
+        stage_order: tuple[_ProcessingStage, ...],
+        step_labels: dict[_ProcessingStage, tuple[str, str]],
+        parent: QWidget | None = None,
+    ) -> None:
         super().__init__(parent)
-        self.setObjectName("bundle_export_processing_page")
+        self._stage_order = stage_order
+        self._complete_badge_text = complete_badge_text
+        self.setObjectName(f"{object_prefix}_page")
+        self.setProperty("bundleProcessingPage", "true")
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.setMinimumWidth(0)
 
         self.content = QWidget(self)
-        self.content.setObjectName("bundle_export_processing_content")
+        self.content.setObjectName(f"{object_prefix}_content")
         self.content.setMaximumWidth(1180)
         self.content.setMinimumHeight(300)
         self.content.setMinimumWidth(0)
@@ -104,7 +138,7 @@ class BundleExportProcessingPage(QWidget):
         content_layout.setSpacing(32)
 
         status_column = QWidget(self.content)
-        status_column.setObjectName("bundle_export_processing_status_column")
+        status_column.setObjectName(f"{object_prefix}_status_column")
         status_column.setMinimumWidth(230)
         status_column.setMaximumWidth(270)
         status_layout = QVBoxLayout(status_column)
@@ -116,15 +150,17 @@ class BundleExportProcessingPage(QWidget):
         status_layout.addWidget(self.spinner, 0, Qt.AlignmentFlag.AlignHCenter)
 
         self.status_badge = StatusBadgeLabel(parent=status_column)
-        self.status_badge.setObjectName("bundle_export_processing_status_badge")
-        self.status_badge.set_state("info", "Export running")
+        self.status_badge.setObjectName(f"{object_prefix}_status_badge")
+        self.status_badge.setProperty("bundleProcessingStatusBadge", "true")
+        self.status_badge.set_state("info", status_badge_text)
         status_layout.addWidget(self.status_badge)
 
         self.status_hint_label = QLabel(
-            "This may take a moment for large image sets.",
+            status_hint,
             status_column,
         )
-        self.status_hint_label.setObjectName("bundle_export_processing_status_hint_label")
+        self.status_hint_label.setObjectName(f"{object_prefix}_status_hint_label")
+        self.status_hint_label.setProperty("bundleProcessingRole", "statusHint")
         self.status_hint_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.status_hint_label.setWordWrap(True)
         self.status_hint_label.setMinimumWidth(0)
@@ -136,25 +172,27 @@ class BundleExportProcessingPage(QWidget):
         status_layout.addStretch(1)
 
         divider = QFrame(self.content)
-        divider.setObjectName("bundle_export_processing_divider")
+        divider.setObjectName(f"{object_prefix}_divider")
         divider.setFrameShape(QFrame.Shape.VLine)
         divider.setProperty("processingDivider", "true")
 
         text_column = QWidget(self.content)
-        text_column.setObjectName("bundle_export_processing_text_column")
+        text_column.setObjectName(f"{object_prefix}_text_column")
         text_column.setMinimumWidth(0)
         text_column.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         text_layout = QVBoxLayout(text_column)
         text_layout.setContentsMargins(0, 6, 0, 0)
         text_layout.setSpacing(16)
 
-        self.eyebrow_label = QLabel("FPVS Studio Project Bundle", text_column)
-        self.eyebrow_label.setObjectName("bundle_export_processing_eyebrow_label")
+        self.eyebrow_label = QLabel(eyebrow, text_column)
+        self.eyebrow_label.setObjectName(f"{object_prefix}_eyebrow_label")
+        self.eyebrow_label.setProperty("bundleProcessingRole", "eyebrow")
         self.eyebrow_label.setMinimumWidth(0)
         text_layout.addWidget(self.eyebrow_label)
 
-        self.title_label = QLabel("Preparing project bundle", text_column)
-        self.title_label.setObjectName("bundle_export_processing_title_label")
+        self.title_label = QLabel(title, text_column)
+        self.title_label.setObjectName(f"{object_prefix}_title_label")
+        self.title_label.setProperty("bundleProcessingRole", "title")
         self.title_label.setMinimumWidth(0)
         title_font = self.title_label.font()
         title_font.setPointSize(FONT_SIZE_PAGE_TITLE)
@@ -163,11 +201,11 @@ class BundleExportProcessingPage(QWidget):
         text_layout.addWidget(self.title_label)
 
         self.message_label = QLabel(
-            "FPVS Studio is currently compiling your project into a shareable format. "
-            "Please wait.",
+            message,
             text_column,
         )
-        self.message_label.setObjectName("bundle_export_processing_message_label")
+        self.message_label.setObjectName(f"{object_prefix}_message_label")
+        self.message_label.setProperty("bundleProcessingRole", "message")
         self.message_label.setWordWrap(True)
         self.message_label.setMinimumWidth(0)
         self.message_label.setSizePolicy(
@@ -181,11 +219,11 @@ class BundleExportProcessingPage(QWidget):
         text_layout.addWidget(self.message_label)
 
         self.detail_label = QLabel(
-            "Validating project settings, checking stimulus files, and writing the "
-            ".fpvsbundle archive.",
+            detail,
             text_column,
         )
-        self.detail_label.setObjectName("bundle_export_processing_detail_label")
+        self.detail_label.setObjectName(f"{object_prefix}_detail_label")
+        self.detail_label.setProperty("bundleProcessingRole", "detail")
         self.detail_label.setWordWrap(True)
         self.detail_label.setMinimumWidth(0)
         self.detail_label.setSizePolicy(
@@ -200,10 +238,10 @@ class BundleExportProcessingPage(QWidget):
         steps_row = QHBoxLayout()
         steps_row.setContentsMargins(0, 24, 0, 8)
         steps_row.setSpacing(14)
-        self._steps: dict[BundleExportStage, _ProcessingStep] = {}
-        for stage in _STEP_STAGE_ORDER:
-            number, text = _STEP_LABELS[stage]
-            step = _ProcessingStep(number, text, parent=text_column)
+        self._steps: dict[_ProcessingStage, _ProcessingStep] = {}
+        for stage in self._stage_order:
+            number, text = step_labels[stage]
+            step = _ProcessingStep(object_prefix, number, text, parent=text_column)
             self._steps[stage] = step
             steps_row.addWidget(step, 1)
         text_layout.addLayout(steps_row)
@@ -233,17 +271,17 @@ class BundleExportProcessingPage(QWidget):
         for step in self._steps.values():
             step.set_state("pending")
 
-    def set_stage(self, stage: BundleExportStage) -> None:
+    def set_stage(self, stage: _ProcessingStage) -> None:
         if stage == "complete":
             for step in self._steps.values():
                 step.set_state("complete")
-            self.status_badge.set_state("ready", "Bundle ready")
+            self.status_badge.set_state("ready", self._complete_badge_text)
             return
         if stage not in self._steps:
             return
-        active_index = _STEP_STAGE_ORDER.index(stage)
+        active_index = self._stage_order.index(stage)
         self.status_badge.set_state("info", f"{self._steps[stage].label_text}...")
-        for index, step_stage in enumerate(_STEP_STAGE_ORDER):
+        for index, step_stage in enumerate(self._stage_order):
             if index < active_index:
                 state: _StepState = "complete"
             elif index == active_index:
@@ -261,13 +299,67 @@ class BundleExportProcessingPage(QWidget):
         super().hideEvent(event)
 
 
-class _ProcessingStep(QWidget):
-    """One compact status step in the bundle-export processing sequence."""
+class BundleExportProcessingPage(_BundleProcessingPage):
+    """Embedded progress page shown while a `.fpvsbundle` archive is created."""
 
-    def __init__(self, number: str, text: str, *, parent: QWidget | None = None) -> None:
+    def __init__(self, *, parent: QWidget | None = None) -> None:
+        super().__init__(
+            object_prefix="bundle_export_processing",
+            eyebrow="FPVS Studio Project Bundle",
+            title="Preparing project bundle",
+            message=(
+                "FPVS Studio is currently compiling your project into a shareable format. "
+                "Please wait."
+            ),
+            detail=(
+                "Validating project settings, checking stimulus files, and writing the "
+                ".fpvsbundle archive."
+            ),
+            status_badge_text="Export running",
+            status_hint="This may take a moment for large image sets.",
+            complete_badge_text="Bundle ready",
+            stage_order=_EXPORT_STEP_STAGE_ORDER,
+            step_labels=_EXPORT_STEP_LABELS,
+            parent=parent,
+        )
+
+
+class BundleImportProcessingPage(_BundleProcessingPage):
+    """Embedded progress page shown while an `.fpvsbundle` project is imported."""
+
+    def __init__(self, *, parent: QWidget | None = None) -> None:
+        super().__init__(
+            object_prefix="bundle_import_processing",
+            eyebrow="FPVS Studio Project Import",
+            title="Setting up imported project",
+            message="FPVS Studio is currently setting up your project. Please wait.",
+            detail=(
+                "Verifying the bundle, setting up base and oddball image filepaths, "
+                "and preparing the imported project."
+            ),
+            status_badge_text="Import running",
+            status_hint="FPVS Studio is creating a local project from the bundle.",
+            complete_badge_text="Project ready",
+            stage_order=_IMPORT_STEP_STAGE_ORDER,
+            step_labels=_IMPORT_STEP_LABELS,
+            parent=parent,
+        )
+
+
+class _ProcessingStep(QWidget):
+    """One compact status step in a bundle processing sequence."""
+
+    def __init__(
+        self,
+        object_prefix: str,
+        number: str,
+        text: str,
+        *,
+        parent: QWidget | None = None,
+    ) -> None:
         super().__init__(parent)
         self.label_text = text
-        self.setObjectName(f"bundle_export_processing_step_{number}")
+        self.setObjectName(f"{object_prefix}_step_{number}")
         self.setProperty("processingStep", "true")
         self.setMinimumWidth(0)
         self.setMinimumHeight(42)
@@ -281,13 +373,13 @@ class _ProcessingStep(QWidget):
         layout.setSpacing(10)
 
         self.number_label = QLabel(number, self)
-        self.number_label.setObjectName(f"bundle_export_processing_step_{number}_number")
+        self.number_label.setObjectName(f"{object_prefix}_step_{number}_number")
         self.number_label.setProperty("processingStepNumber", "true")
         self.number_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.number_label.setFixedSize(30, 30)
 
         self.text_label = QLabel(text, self)
-        self.text_label.setObjectName(f"bundle_export_processing_step_{number}_label")
+        self.text_label.setObjectName(f"{object_prefix}_step_{number}_label")
         self.text_label.setProperty("processingStepLabel", "true")
         self.text_label.setWordWrap(False)
         self.text_label.setMinimumWidth(0)
