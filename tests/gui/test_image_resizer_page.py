@@ -5,8 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 
 from PIL import Image
-from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QApplication
+from PySide6.QtCore import QPoint, Qt
+from PySide6.QtWidgets import QApplication, QWidget
 from tests.gui.helpers import (
     _ImmediateProgressTask,
     _open_created_project,
@@ -38,6 +38,42 @@ def test_tools_menu_exposes_in_window_image_resizer(
         Qt.MouseButton.LeftButton,
     )
     assert window.main_stack.currentWidget() is window.home_page
+
+
+def test_image_resizer_uses_wide_two_column_workbench(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Image Resizer Layout")
+
+    window.image_resizer_action.trigger()
+    QApplication.processEvents()
+    page = window.image_resizer_page
+    workbench = page.findChild(QWidget, "image_resizer_workbench")
+    controls_panel = page.findChild(QWidget, "image_resizer_controls_panel")
+    results_panel = page.findChild(QWidget, "image_resizer_results_panel")
+
+    assert page.shell.page_container.width_preset == "full"
+    assert page.findChild(QWidget, "image_resizer_setup_card") is None
+    assert page.findChild(QWidget, "image_resizer_result_card") is None
+    assert workbench is not None
+    assert controls_panel is not None
+    assert results_panel is not None
+    qtbot.waitUntil(
+        lambda: workbench.width() > 0
+        and controls_panel.width() > 0
+        and results_panel.width() > 0
+    )
+
+    controls_right = controls_panel.mapTo(
+        workbench,
+        QPoint(controls_panel.width(), 0),
+    ).x()
+    results_left = results_panel.mapTo(workbench, QPoint(0, 0)).x()
+    assert results_left > controls_right
+    assert controls_panel.width() > results_panel.width()
+    assert workbench.width() >= int(window.main_stack.width() * 0.9)
 
 
 def test_image_resizer_source_selection_suggests_output_folder(

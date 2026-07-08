@@ -10,10 +10,13 @@ from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
     QFileDialog,
-    QFormLayout,
+    QFrame,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
     QPushButton,
+    QSizePolicy,
+    QVBoxLayout,
     QWidget,
 )
 
@@ -21,8 +24,8 @@ from fpvs_studio.gui import folder_actions
 from fpvs_studio.gui.components import (
     NonHomePageShell,
     PathValueLabel,
-    SectionCard,
     StatusBadgeLabel,
+    apply_image_resizer_theme,
     mark_primary_action,
     mark_secondary_action,
 )
@@ -55,92 +58,157 @@ class ImageResizerPage(QWidget):
         self.shell = NonHomePageShell(
             title="Image Resizer",
             subtitle="Optimize a folder of images into FPVS-ready square PNG copies.",
-            width_preset="wide",
+            width_preset="full",
             parent=self,
         )
 
-        setup_card = SectionCard(
-            title="Optimize Images for FPVS",
-            subtitle="Choose a source folder and Studio will create resized PNG copies.",
-            object_name="image_resizer_setup_card",
-            parent=self,
-        )
-        form = QFormLayout()
-        form.setContentsMargins(0, 0, 0, 0)
-        form.setSpacing(10)
+        workbench = QWidget(self)
+        workbench.setObjectName("image_resizer_workbench")
+        workbench_layout = QHBoxLayout(workbench)
+        workbench_layout.setContentsMargins(16, 8, 16, 8)
+        workbench_layout.setSpacing(22)
 
-        self.source_value = PathValueLabel(setup_card)
+        controls_panel = QWidget(workbench)
+        controls_panel.setObjectName("image_resizer_controls_panel")
+        controls_panel.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Preferred,
+        )
+        controls_layout = QVBoxLayout(controls_panel)
+        controls_layout.setContentsMargins(0, 0, 0, 0)
+        controls_layout.setSpacing(12)
+        controls_heading = QLabel("Optimize Images for FPVS", controls_panel)
+        controls_heading.setObjectName("image_resizer_controls_heading")
+        controls_intro = QLabel(
+            "Choose a source folder and Studio will create resized PNG copies.",
+            controls_panel,
+        )
+        controls_intro.setObjectName("image_resizer_controls_copy")
+        controls_intro.setWordWrap(True)
+        controls_layout.addWidget(controls_heading)
+        controls_layout.addWidget(controls_intro)
+
+        form = QGridLayout()
+        form.setContentsMargins(0, 10, 0, 0)
+        form.setHorizontalSpacing(10)
+        form.setVerticalSpacing(12)
+        form.setColumnStretch(0, 0)
+        form.setColumnStretch(1, 1)
+        form.setColumnStretch(2, 0)
+
+        self.source_value = PathValueLabel(controls_panel)
         self.source_value.setObjectName("image_resizer_source_value")
-        self.source_button = QPushButton("Choose Source Folder", setup_card)
+        self.source_button = QPushButton("Choose Source Folder", controls_panel)
         self.source_button.setObjectName("image_resizer_source_button")
         self.source_button.clicked.connect(self._choose_source_folder)
         mark_secondary_action(self.source_button)
-        form.addRow("Source folder", _path_picker_row(self.source_value, self.source_button))
+        _add_field_row(
+            form,
+            0,
+            "Source folder",
+            self.source_value,
+            self.source_button,
+            controls_panel,
+        )
 
-        self.output_value = PathValueLabel(setup_card)
+        self.output_value = PathValueLabel(controls_panel)
         self.output_value.setObjectName("image_resizer_output_value")
-        self.output_button = QPushButton("Choose Output Folder", setup_card)
+        self.output_button = QPushButton("Choose Output Folder", controls_panel)
         self.output_button.setObjectName("image_resizer_output_button")
         self.output_button.clicked.connect(self._choose_output_folder)
         mark_secondary_action(self.output_button)
-        form.addRow("Output folder", _path_picker_row(self.output_value, self.output_button))
+        _add_field_row(
+            form,
+            1,
+            "Output folder",
+            self.output_value,
+            self.output_button,
+            controls_panel,
+        )
 
-        self.size_combo = QComboBox(setup_card)
+        self.size_combo = QComboBox(controls_panel)
         self.size_combo.setObjectName("image_resizer_size_combo")
         self.size_combo.addItem("512 x 512", userData=512)
         self.size_combo.addItem("256 x 256", userData=256)
         self.size_combo.addItem("1024 x 1024", userData=1024)
-        form.addRow("Output size", self.size_combo)
-        setup_card.body_layout.addLayout(form)
+        size_label = _field_label("Output size", controls_panel)
+        form.addWidget(size_label, 2, 0)
+        form.addWidget(self.size_combo, 2, 1, 1, 2)
+        controls_layout.addLayout(form)
 
-        self.optimize_button = QPushButton("Optimize Images for FPVS", setup_card)
+        self.optimize_button = QPushButton("Optimize Images for FPVS", controls_panel)
         self.optimize_button.setObjectName("image_resizer_optimize_button")
         self.optimize_button.clicked.connect(self._start_optimization)
         mark_primary_action(self.optimize_button)
-        self.return_home_button = QPushButton("Return Home", setup_card)
+        self.return_home_button = QPushButton("Return Home", controls_panel)
         self.return_home_button.setObjectName("image_resizer_return_home_button")
         self.return_home_button.clicked.connect(self._return_home)
         mark_secondary_action(self.return_home_button)
         button_row = QHBoxLayout()
+        button_row.setContentsMargins(0, 8, 0, 0)
         button_row.addWidget(self.return_home_button)
         button_row.addStretch(1)
         button_row.addWidget(self.optimize_button)
-        setup_card.body_layout.addLayout(button_row)
+        controls_layout.addLayout(button_row)
+        controls_layout.addStretch(1)
 
-        result_card = SectionCard(
-            title="Results",
-            subtitle="Optimization results appear here after the batch finishes.",
-            object_name="image_resizer_result_card",
-            parent=self,
+        separator = QFrame(workbench)
+        separator.setObjectName("image_resizer_column_separator")
+        separator.setFrameShape(QFrame.Shape.VLine)
+
+        results_panel = QWidget(workbench)
+        results_panel.setObjectName("image_resizer_results_panel")
+        results_panel.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Preferred,
         )
-        self.status_badge = StatusBadgeLabel(parent=result_card)
+        results_layout = QVBoxLayout(results_panel)
+        results_layout.setContentsMargins(0, 0, 0, 0)
+        results_layout.setSpacing(12)
+        results_heading = QLabel("Results", results_panel)
+        results_heading.setObjectName("image_resizer_results_heading")
+        results_intro = QLabel(
+            "Optimization results appear here after the batch finishes.",
+            results_panel,
+        )
+        results_intro.setObjectName("image_resizer_results_copy")
+        results_intro.setWordWrap(True)
+        results_layout.addWidget(results_heading)
+        results_layout.addWidget(results_intro)
+
+        self.status_badge = StatusBadgeLabel(parent=results_panel)
         self.status_badge.setObjectName("image_resizer_status_badge")
         self.status_badge.set_state("pending", "Choose source and output folders")
-        self.result_label = QLabel("No images optimized yet.", result_card)
+        self.result_label = QLabel("No images optimized yet.", results_panel)
         self.result_label.setObjectName("image_resizer_result_label")
         self.result_label.setWordWrap(True)
-        result_card.body_layout.addWidget(self.status_badge)
-        result_card.body_layout.addWidget(self.result_label)
-        self.open_output_button = QPushButton("Open Output Folder", result_card)
+        results_layout.addWidget(self.status_badge)
+        results_layout.addWidget(self.result_label)
+        results_layout.addStretch(1)
+        self.open_output_button = QPushButton("Open Output Folder", results_panel)
         self.open_output_button.setObjectName("image_resizer_open_output_button")
         self.open_output_button.clicked.connect(self._open_output_folder)
         mark_secondary_action(self.open_output_button)
-        self.copy_output_button = QPushButton("Copy Output Folder", result_card)
+        self.copy_output_button = QPushButton("Copy Output Folder", results_panel)
         self.copy_output_button.setObjectName("image_resizer_copy_output_button")
         self.copy_output_button.clicked.connect(self._copy_output_folder)
         mark_secondary_action(self.copy_output_button)
         result_action_row = QHBoxLayout()
+        result_action_row.setContentsMargins(0, 0, 0, 0)
         result_action_row.addStretch(1)
         result_action_row.addWidget(self.open_output_button)
         result_action_row.addWidget(self.copy_output_button)
-        result_card.body_layout.addLayout(result_action_row)
+        results_layout.addLayout(result_action_row)
 
-        self.shell.add_content_widget(setup_card)
-        self.shell.add_content_widget(result_card)
+        workbench_layout.addWidget(controls_panel, 3)
+        workbench_layout.addWidget(separator)
+        workbench_layout.addWidget(results_panel, 2)
+        self.shell.add_content_widget(workbench, stretch=1)
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self.shell)
+        apply_image_resizer_theme(self)
         self._refresh_paths()
         self._refresh_output_actions()
         self._refresh_enabled_state()
@@ -202,8 +270,8 @@ class ImageResizerPage(QWidget):
     def _refresh_paths(self) -> None:
         source_text = str(self._source_dir) if self._source_dir is not None else "Not selected"
         output_text = str(self._output_dir) if self._output_dir is not None else "Not selected"
-        self.source_value.set_path_text(source_text, max_length=82)
-        self.output_value.set_path_text(output_text, max_length=82)
+        self.source_value.set_path_text(source_text, max_length=118)
+        self.output_value.set_path_text(output_text, max_length=118)
 
     def _refresh_enabled_state(self) -> None:
         reason = self._disabled_reason()
@@ -306,14 +374,23 @@ class ImageResizerPage(QWidget):
             QApplication.clipboard().setText(str(self._successful_output_dir))
 
 
-def _path_picker_row(path_label: PathValueLabel, button: QPushButton) -> QWidget:
-    row = QWidget()
-    layout = QHBoxLayout(row)
-    layout.setContentsMargins(0, 0, 0, 0)
-    layout.setSpacing(8)
-    layout.addWidget(path_label, 1)
-    layout.addWidget(button)
-    return row
+def _field_label(text: str, parent: QWidget) -> QLabel:
+    label = QLabel(text, parent)
+    label.setProperty("imageResizerFieldLabel", "true")
+    return label
+
+
+def _add_field_row(
+    form: QGridLayout,
+    row: int,
+    label_text: str,
+    path_label: PathValueLabel,
+    button: QPushButton,
+    parent: QWidget,
+) -> None:
+    form.addWidget(_field_label(label_text, parent), row, 0)
+    form.addWidget(path_label, row, 1)
+    form.addWidget(button, row, 2)
 
 
 def _format_result(result: ImageFolderOptimizationResult) -> str:

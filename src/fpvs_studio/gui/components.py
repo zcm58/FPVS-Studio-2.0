@@ -69,6 +69,7 @@ __all__ = [
     "apply_error_text_style",
     "apply_fixation_settings_theme",
     "apply_home_page_theme",
+    "apply_image_resizer_theme",
     "apply_image_size_preview_dialog_theme",
     "apply_non_home_shell_theme",
     "apply_project_overview_theme",
@@ -82,6 +83,7 @@ __all__ = [
     "error_text_stylesheet",
     "fixation_settings_stylesheet",
     "home_page_stylesheet",
+    "image_resizer_stylesheet",
     "image_size_preview_dialog_stylesheet",
     "project_overview_stylesheet",
     "mark_error_text",
@@ -1521,6 +1523,47 @@ def non_home_shell_stylesheet(theme: StudioTheme | QPalette | None = None) -> st
 
 def apply_non_home_shell_theme(widget: QWidget) -> None:
     widget.setStyleSheet(non_home_shell_stylesheet(widget.palette()))
+
+
+def image_resizer_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
+    theme = _resolved_theme(theme)
+    return f"""
+    QWidget#image_resizer_page QFrame#page_container_content_frame,
+    QWidget#image_resizer_page QFrame#non_home_shell_content_frame {{
+        border: none;
+        background: transparent;
+    }}
+    QWidget#image_resizer_workbench,
+    QWidget#image_resizer_controls_panel,
+    QWidget#image_resizer_results_panel {{
+        background: transparent;
+    }}
+    QLabel#image_resizer_controls_heading,
+    QLabel#image_resizer_results_heading {{
+        font-size: {FONT_SIZE_SECTION_TITLE}px;
+        font-weight: 700;
+        color: {theme.text_primary};
+    }}
+    QLabel#image_resizer_controls_copy,
+    QLabel#image_resizer_results_copy {{
+        color: {theme.text_secondary};
+        font-size: {FONT_SIZE_BODY}px;
+    }}
+    QLabel[imageResizerFieldLabel="true"] {{
+        color: {theme.text_primary};
+        font-weight: 600;
+    }}
+    QFrame#image_resizer_column_separator {{
+        border: none;
+        background-color: {theme.border_soft};
+        min-width: 1px;
+        max-width: 1px;
+    }}
+    """
+
+
+def apply_image_resizer_theme(widget: QWidget) -> None:
+    widget.setStyleSheet(image_resizer_stylesheet(widget.palette()))
 
 
 def section_card_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
