@@ -1528,15 +1528,19 @@ def apply_non_home_shell_theme(widget: QWidget) -> None:
 def image_resizer_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
     theme = _resolved_theme(theme)
     return f"""
+    QWidget#image_resizer_page QScrollArea#page_container_scroll_area,
+    QWidget#image_resizer_page QScrollArea#page_container_scroll_area
+    QWidget#qt_scrollarea_viewport,
+    QWidget#image_resizer_page QWidget#page_container_scroll_content,
     QWidget#image_resizer_page QFrame#page_container_content_frame,
     QWidget#image_resizer_page QFrame#non_home_shell_content_frame {{
         border: none;
-        background: transparent;
+        background-color: transparent;
     }}
     QWidget#image_resizer_workbench,
     QWidget#image_resizer_controls_panel,
     QWidget#image_resizer_results_panel {{
-        background: transparent;
+        background-color: transparent;
     }}
     QLabel#image_resizer_controls_heading,
     QLabel#image_resizer_results_heading {{

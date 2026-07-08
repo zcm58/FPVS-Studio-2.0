@@ -55,6 +55,8 @@ def test_image_resizer_uses_wide_two_column_workbench(
     results_panel = page.findChild(QWidget, "image_resizer_results_panel")
 
     assert page.shell.page_container.width_preset == "full"
+    assert "QScrollArea#page_container_scroll_area" in page.styleSheet()
+    assert "QWidget#qt_scrollarea_viewport" in page.styleSheet()
     assert page.findChild(QWidget, "image_resizer_setup_card") is None
     assert page.findChild(QWidget, "image_resizer_result_card") is None
     assert workbench is not None
