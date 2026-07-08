@@ -119,6 +119,7 @@ class ProjectDocument(
         self._dirty = False
         self._session_export_mode = EXPORT_MODE_FULL
         self._require_biosemi_recording_confirmation = True
+        self._show_sophia_mode_ticker = True
         self._last_session_plan: SessionPlan | None = None
         self._image_normalization_scan_cache: tuple[
             tuple[object, ...],
@@ -156,9 +157,7 @@ class ProjectDocument(
         project_root = project_file_path.parent
         manifest_path = stimulus_manifest_path(project_root)
         manifest = read_stimulus_manifest(project_root) if manifest_path.is_file() else None
-        document = cls(project_root=project_root, project=project, manifest=manifest)
-        document.refresh_participant_summary_if_stale()
-        return document
+        return cls(project_root=project_root, project=project, manifest=manifest)
 
     @property
     def project(self) -> ProjectFile:
@@ -201,6 +200,12 @@ class ProjectDocument(
         """Return whether GUI launches require the BioSemi recording safety check."""
 
         return self._require_biosemi_recording_confirmation
+
+    @property
+    def show_sophia_mode_ticker(self) -> bool:
+        """Return whether Home should show the Sophia Mode ticker."""
+
+        return self._show_sophia_mode_ticker
 
     @property
     def last_session_plan(self) -> SessionPlan | None:
@@ -251,9 +256,19 @@ class ProjectDocument(
     def randomize_session_seed_for_app_launch(self) -> int:
         """Generate a fresh random order seed for the current app launch without marking dirty."""
 
-        seed = self._generate_unused_session_seed()
-        self._replace_session_seed_without_dirty(seed)
+        seed = self.generate_session_seed_for_app_launch()
+        self.apply_session_seed_for_app_launch(seed)
         return seed
+
+    def generate_session_seed_for_app_launch(self) -> int:
+        """Generate a fresh random order seed without mutating the live document."""
+
+        return self._generate_unused_session_seed()
+
+    def apply_session_seed_for_app_launch(self, seed: int) -> None:
+        """Apply an app-launch random order seed without marking the document dirty."""
+
+        self._replace_session_seed_without_dirty(seed)
 
     def ensure_unused_session_seed_for_launch(self) -> int:
         """Ensure the current launch seed has not been consumed by a prior session."""
@@ -281,6 +296,15 @@ class ProjectDocument(
         self._require_biosemi_recording_confirmation = required
         self.project_changed.emit()
 
+    def set_show_sophia_mode_ticker(self, enabled: bool) -> None:
+        """Set whether Home shows the Sophia Mode ticker when Sophia Mode is enabled."""
+
+        enabled = bool(enabled)
+        if self._show_sophia_mode_ticker == enabled:
+            return
+        self._show_sophia_mode_ticker = enabled
+        self.project_changed.emit()
+
     def _generate_unused_session_seed(self) -> int:
         try:
             return generate_unused_session_seed(
@@ -296,7 +320,6 @@ class ProjectDocument(
         settings = _validated_copy(self._project.settings, session=session)
         self._project = _validated_copy(self._project, settings=settings)
         self._last_session_plan = None
-        self.project_changed.emit()
 
     def update_fixation_settings(self, **updates: object) -> None:
         """Update fixation settings through Pydantic validation."""

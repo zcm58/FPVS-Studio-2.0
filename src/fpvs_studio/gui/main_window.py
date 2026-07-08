@@ -5,6 +5,7 @@ messaging, not protocol semantics, RunSpec compilation rules, or execution flow.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from pathlib import Path
 from typing import cast
@@ -39,17 +40,23 @@ from fpvs_studio.core.project_config import PROJECT_CONFIG_SUFFIX, project_confi
 from fpvs_studio.gui.animations import ButtonHoverAnimator
 from fpvs_studio.gui.components import apply_studio_theme
 from fpvs_studio.gui.document import ProjectDocument
+from fpvs_studio.gui.document_support import DocumentError, format_validation_report
 from fpvs_studio.gui.home_page import HomePage
 from fpvs_studio.gui.image_resizer_page import ImageResizerPage
 from fpvs_studio.gui.processing_page import BundleExportProcessingPage, BundleImportProcessingPage
-from fpvs_studio.gui.run_page import ParticipantNumberDialog
+from fpvs_studio.gui.run_page import (
+    BioSemiRecordingConfirmationDialog,
+    LaunchTaskResult,
+    ParticipantLaunchDetails,
+    ParticipantNumberDialog,
+)
 from fpvs_studio.gui.setup_wizard_page import SetupWizardPage
 from fpvs_studio.gui.update_dialog import UpdateDialog
 from fpvs_studio.gui.window_helpers import (
     _LAUNCH_INTERSTITIAL_DURATION_MS,
     _show_error_dialog,
 )
-from fpvs_studio.gui.workers import BackgroundTask
+from fpvs_studio.gui.workers import BackgroundTask, ProgressTask
 from fpvs_studio.runtime.session_export import GROUP_SUMMARY_XLSX_FILENAME
 
 __all__ = [
@@ -72,6 +79,8 @@ _UTILITY_MINIMUM_SIZE = (960, 640)
 _UTILITY_DEFAULT_SIZE = (1120, 720)
 _AUTO_WORKSPACE_SIZE_TOLERANCE = 16
 _TUTORIALS_URL = "https://zcm58.github.io/FPVS-Studio-2.0/"
+
+LOGGER = logging.getLogger(__name__)
 
 
 class _BundleExportProgressBridge(QObject):
@@ -133,6 +142,19 @@ class StudioMainWindow(QMainWindow):
         self._bundle_export_progress_bridge: _BundleExportProgressBridge | None = None
         self._bundle_import_previous_widget: QWidget | None = None
         self._bundle_import_processing_active = False
+        self._setup_wizard_page: SetupWizardPage | None = None
+        self._image_resizer_page: ImageResizerPage | None = None
+        self._bundle_export_processing_page: BundleExportProcessingPage | None = None
+        self._bundle_import_processing_page: BundleImportProcessingPage | None = None
+        self._on_load_condition_template_profiles = on_load_condition_template_profiles
+        self._on_manage_condition_templates = on_manage_condition_templates
+        self._deferred_open_tasks_started = False
+        self._session_seed_ready = False
+        self._session_seed_task: BackgroundTask | None = None
+        self._launch_after_session_seed_ready = False
+        self._active_launch_task: ProgressTask | None = None
+        self._active_launch_session_plan = None
+        self._active_launch_participant_number: str | None = None
         self._apply_compact_window_size()
 
         self._runtime_fullscreen_ui_state = True
@@ -141,33 +163,10 @@ class StudioMainWindow(QMainWindow):
             load_condition_template_profiles=on_load_condition_template_profiles,
             parent=self,
         )
-        self.setup_wizard_page = SetupWizardPage(
-            document,
-            load_condition_template_profiles=on_load_condition_template_profiles,
-            manage_condition_templates=on_manage_condition_templates,
-            fullscreen_state_getter=self._runtime_fullscreen_state,
-            fullscreen_state_setter=self._set_runtime_fullscreen_state,
-            on_return_home=self.show_home,
-            on_save_project=self.save_project,
-            parent=self,
-        )
-        self.setup_dashboard_page = self.setup_wizard_page
-        self.conditions_page = self.setup_wizard_page.conditions_page
-        self.assets_page = self.setup_wizard_page.assets_page
-        self.run_page = self.setup_wizard_page.run_page
-        self.session_structure_page = self.setup_wizard_page.session_structure_page
-        self.fixation_cross_settings_page = self.setup_wizard_page.fixation_cross_settings_page
 
         self.main_stack = QStackedWidget(self)
         self.main_stack.setObjectName("main_stack")
         self.main_stack.addWidget(self.home_page)
-        self.main_stack.addWidget(self.setup_wizard_page)
-        self.image_resizer_page = ImageResizerPage(on_return_home=self.show_home, parent=self)
-        self.main_stack.addWidget(self.image_resizer_page)
-        self.bundle_export_processing_page = BundleExportProcessingPage(parent=self)
-        self.main_stack.addWidget(self.bundle_export_processing_page)
-        self.bundle_import_processing_page = BundleImportProcessingPage(parent=self)
-        self.main_stack.addWidget(self.bundle_import_processing_page)
         self.main_tabs = self.main_stack
         self.setCentralWidget(self.main_stack)
         self._apply_chrome_styles()
@@ -197,6 +196,73 @@ class StudioMainWindow(QMainWindow):
         self.document.dirty_changed.connect(self._update_window_title)
         self.document.saved.connect(lambda: self.statusBar().showMessage("Project saved.", 3000))
 
+    @property
+    def setup_wizard_page(self) -> SetupWizardPage:
+        if self._setup_wizard_page is None:
+            page = SetupWizardPage(
+                self.document,
+                load_condition_template_profiles=self._on_load_condition_template_profiles,
+                manage_condition_templates=self._on_manage_condition_templates,
+                fullscreen_state_getter=self._runtime_fullscreen_state,
+                fullscreen_state_setter=self._set_runtime_fullscreen_state,
+                on_return_home=self.show_home,
+                on_save_project=self.save_project,
+                parent=self,
+            )
+            self._setup_wizard_page = page
+            self.main_stack.addWidget(page)
+            self._install_button_hover_animations()
+        return self._setup_wizard_page
+
+    @property
+    def setup_dashboard_page(self) -> SetupWizardPage:
+        return self.setup_wizard_page
+
+    @property
+    def conditions_page(self) -> QWidget:
+        return self.setup_wizard_page.conditions_page
+
+    @property
+    def assets_page(self) -> QWidget:
+        return self.setup_wizard_page.assets_page
+
+    @property
+    def run_page(self) -> QWidget:
+        return self.setup_wizard_page.run_page
+
+    @property
+    def session_structure_page(self) -> QWidget:
+        return self.setup_wizard_page.session_structure_page
+
+    @property
+    def fixation_cross_settings_page(self) -> QWidget:
+        return self.setup_wizard_page.fixation_cross_settings_page
+
+    @property
+    def image_resizer_page(self) -> ImageResizerPage:
+        if self._image_resizer_page is None:
+            page = ImageResizerPage(on_return_home=self.show_home, parent=self)
+            self._image_resizer_page = page
+            self.main_stack.addWidget(page)
+            self._install_button_hover_animations()
+        return self._image_resizer_page
+
+    @property
+    def bundle_export_processing_page(self) -> BundleExportProcessingPage:
+        if self._bundle_export_processing_page is None:
+            page = BundleExportProcessingPage(parent=self)
+            self._bundle_export_processing_page = page
+            self.main_stack.addWidget(page)
+        return self._bundle_export_processing_page
+
+    @property
+    def bundle_import_processing_page(self) -> BundleImportProcessingPage:
+        if self._bundle_import_processing_page is None:
+            page = BundleImportProcessingPage(parent=self)
+            self._bundle_import_processing_page = page
+            self.main_stack.addWidget(page)
+        return self._bundle_import_processing_page
+
     def _runtime_fullscreen_state(self) -> bool:
         return self._runtime_fullscreen_ui_state
 
@@ -205,8 +271,9 @@ class StudioMainWindow(QMainWindow):
         if self._runtime_fullscreen_ui_state == checked_bool:
             return
         self._runtime_fullscreen_ui_state = checked_bool
-        self.run_page.sync_fullscreen_checkbox(checked_bool)
-        self.setup_wizard_page.sync_fullscreen_checkbox(checked_bool)
+        if self._setup_wizard_page is not None:
+            self._setup_wizard_page.run_page.sync_fullscreen_checkbox(checked_bool)
+            self._setup_wizard_page.sync_fullscreen_checkbox(checked_bool)
         self.home_page.refresh()
 
     def show_home(self) -> None:
@@ -223,17 +290,19 @@ class StudioMainWindow(QMainWindow):
         step_key: str | None = None,
         allow_step_jumps: bool = False,
     ) -> None:
+        setup_wizard_page = self.setup_wizard_page
         self._set_home_chrome_visible(True)
         self._apply_setup_window_size()
-        self.main_stack.setCurrentWidget(self.setup_wizard_page)
-        self.setup_wizard_page.open_wizard(
+        self.main_stack.setCurrentWidget(setup_wizard_page)
+        setup_wizard_page.open_wizard(
             step_key=step_key,
             allow_step_jumps=allow_step_jumps,
         )
 
     def show_incomplete_setup_wizard(self) -> None:
+        setup_wizard_page = self.setup_wizard_page
         self.show_setup_wizard(
-            step_key=self.setup_wizard_page.first_incomplete_step_key(),
+            step_key=setup_wizard_page.first_incomplete_step_key(),
             allow_step_jumps=False,
         )
 
@@ -247,7 +316,8 @@ class StudioMainWindow(QMainWindow):
         self.show_home()
 
     def flush_pending_edits(self) -> None:
-        self.setup_wizard_page.flush_pending_edits()
+        if self._setup_wizard_page is not None:
+            self._setup_wizard_page.flush_pending_edits()
 
     def _set_home_chrome_visible(
         self,
@@ -358,6 +428,50 @@ class StudioMainWindow(QMainWindow):
         if self.main_stack.currentWidget() is self.home_page:
             self._sync_home_chrome_offset()
             QTimer.singleShot(0, self._sync_home_chrome_offset)
+        QTimer.singleShot(0, self.start_deferred_open_tasks)
+
+    def start_deferred_open_tasks(self) -> None:
+        """Start non-critical project-open work after the Home surface has painted."""
+
+        if self._deferred_open_tasks_started:
+            return
+        self._deferred_open_tasks_started = True
+        self._start_deferred_session_seed_task()
+
+    def _start_deferred_session_seed_task(self) -> None:
+        if self._session_seed_ready or self._session_seed_task is not None:
+            return
+        task = BackgroundTask(
+            parent_widget=self,
+            callback=self.document.generate_session_seed_for_app_launch,
+        )
+        self._session_seed_task = task
+        task.succeeded.connect(self._on_deferred_session_seed_generated)
+        task.failed.connect(self._on_deferred_session_seed_failed)
+        task.finished.connect(self._on_deferred_session_seed_finished)
+        task.start()
+
+    @Slot(object)
+    def _on_deferred_session_seed_generated(self, result: object) -> None:
+        if not isinstance(result, int):
+            LOGGER.warning(
+                "Deferred session seed generation returned unexpected result type: %s",
+                type(result).__name__,
+            )
+            return
+        self.document.apply_session_seed_for_app_launch(result)
+        self._session_seed_ready = True
+
+    @Slot(object)
+    def _on_deferred_session_seed_failed(self, error: object) -> None:
+        LOGGER.warning("Deferred session seed generation failed: %s", error)
+
+    @Slot()
+    def _on_deferred_session_seed_finished(self) -> None:
+        self._session_seed_task = None
+        if self._launch_after_session_seed_ready:
+            self._launch_after_session_seed_ready = False
+            QTimer.singleShot(0, self.launch_test_session)
 
     def _install_button_hover_animations(self) -> None:
         self._button_hover_animators.clear()
@@ -420,7 +534,7 @@ class StudioMainWindow(QMainWindow):
         )
         self.launch_action.setToolTip(launch_help)
         self.launch_action.setStatusTip(launch_help)
-        self.launch_action.triggered.connect(self.run_page.launch_test_session)
+        self.launch_action.triggered.connect(self.launch_test_session)
         self.image_resizer_action = QAction("Image Resizer", self)
         self.image_resizer_action.setObjectName("image_resizer_action")
         self.image_resizer_action.triggered.connect(self.show_image_resizer)
@@ -476,6 +590,195 @@ class StudioMainWindow(QMainWindow):
             _show_error_dialog(self, "Save Error", error)
             return False
         return True
+
+    def launch_test_session(self) -> None:
+        if self._active_launch_task is not None:
+            return
+        if not self._ensure_session_seed_ready_for_launch():
+            return
+        self.flush_pending_edits()
+        try:
+            refresh_hz = self._home_launch_refresh_hz()
+            validation = self.document.validation_report(refresh_hz=refresh_hz)
+            if not validation.is_valid:
+                raise DocumentError(format_validation_report(validation))
+        except Exception as error:
+            _show_error_dialog(self, "Launch Blocked", error)
+            return
+
+        participant_details = self._collect_launch_participant_details()
+        if participant_details is None:
+            return
+        participant_number = participant_details.participant_number
+        try:
+            session_plan = self.document.compile_session(refresh_hz=refresh_hz)
+        except Exception as error:
+            _show_error_dialog(self, "Launch Blocked", error)
+            return
+        if (
+            self.document.require_biosemi_recording_confirmation
+            and not self._confirm_biosemi_recording_started()
+        ):
+            return
+
+        def _launch() -> LaunchTaskResult:
+            self.document.preflight_compiled_session(session_plan)
+            summary = self.document.launch_compiled_session(
+                session_plan,
+                participant_number=participant_number,
+                participant_metadata=participant_details.participant_metadata,
+                display_index=None,
+                fullscreen=True,
+            )
+            return LaunchTaskResult(session_plan=session_plan, summary=summary)
+
+        self._active_launch_session_plan = session_plan
+        self._active_launch_participant_number = participant_number
+        task = ProgressTask(
+            parent_widget=self,
+            label="Launching experiment: Please wait",
+            callback=_launch,
+            window_title="FPVS Studio",
+            persistent_thread=True,
+        )
+        self._active_launch_task = task
+        self.launch_action.setEnabled(False)
+        task.succeeded.connect(self._on_home_launch_succeeded)
+        task.failed.connect(self._on_home_launch_failed)
+        task.finished.connect(self._on_home_launch_finished)
+        task.start()
+
+    def _home_launch_refresh_hz(self) -> float:
+        preferred_refresh = self.document.project.settings.display.preferred_refresh_hz
+        return float(preferred_refresh if preferred_refresh is not None else 60.0)
+
+    def _prompt_participant_number(self) -> ParticipantLaunchDetails | None:
+        dialog = ParticipantNumberDialog(self)
+        if dialog.exec() != int(dialog.DialogCode.Accepted):
+            return None
+        return dialog.participant_details
+
+    def _confirm_biosemi_recording_started(self) -> bool:
+        dialog = BioSemiRecordingConfirmationDialog(self)
+        return dialog.exec() == int(dialog.DialogCode.Accepted)
+
+    def _collect_launch_participant_details(self) -> ParticipantLaunchDetails | None:
+        while True:
+            participant_details = self._prompt_participant_number()
+            if participant_details is None:
+                return None
+            participant_number = participant_details.participant_number
+
+            if not self.document.has_completed_session_for_participant(participant_number):
+                return participant_details
+
+            warning_text = (
+                f"Warning: logs indicate that {participant_number} has already "
+                "completed this study, "
+                f"but you entered {participant_number}. Do you wish to overwrite the existing data?"
+            )
+            answer = QMessageBox.question(
+                self,
+                "Participant Already Completed",
+                warning_text,
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if answer == QMessageBox.StandardButton.Yes:
+                return participant_details
+
+    def _ensure_session_seed_ready_for_launch(self) -> bool:
+        if self._session_seed_ready:
+            return True
+        if self._session_seed_task is not None:
+            self._launch_after_session_seed_ready = True
+            self.statusBar().showMessage("Preparing random order seed for launch...", 3000)
+            return False
+        try:
+            self.document.randomize_session_seed_for_app_launch()
+        except Exception as error:
+            _show_error_dialog(self, "Launch Blocked", error)
+            return False
+        self._session_seed_ready = True
+        return True
+
+    @Slot(object)
+    def _on_home_launch_succeeded(self, result: object) -> None:
+        if not isinstance(result, LaunchTaskResult):
+            _show_error_dialog(
+                self,
+                "Launch Error",
+                RuntimeError("Runtime launch returned an unexpected result."),
+            )
+            return
+        participant_number = self._active_launch_participant_number
+        if participant_number is None:
+            return
+        self._show_home_launch_summary(participant_number, result)
+
+    @Slot(object)
+    def _on_home_launch_failed(self, error: object) -> None:
+        exception = error if isinstance(error, Exception) else RuntimeError(str(error))
+        _show_error_dialog(self, "Launch Error", exception)
+
+    @Slot()
+    def _on_home_launch_finished(self) -> None:
+        self._active_launch_task = None
+        self._active_launch_session_plan = None
+        self._active_launch_participant_number = None
+        self.launch_action.setEnabled(True)
+        self.home_page.refresh()
+
+    def _show_home_launch_summary(
+        self,
+        participant_number: str,
+        result: LaunchTaskResult,
+    ) -> None:
+        summary = result.summary
+        output_line = (
+            f"Output Dir: {summary.output_dir}"
+            if summary.output_dir
+            else "Output: Compact summary logs"
+        )
+        participant_value = summary.participant_number or participant_number
+        if summary.aborted:
+            abort_reason = summary.abort_reason or "No abort reason was provided."
+            QMessageBox.warning(
+                self,
+                "Launch Aborted",
+                "The experiment aborted on the current beta test-mode path.\n\n"
+                f"Reason: {abort_reason}\n"
+                "Completed Conditions: "
+                f"{summary.completed_condition_count}/{summary.total_condition_count}\n"
+                f"{output_line}\n\n"
+                + (
+                    "Review run exports in the project runs folder."
+                    if summary.output_dir
+                    else "Review participant summary files in the project logs folder."
+                ),
+            )
+            self.statusBar().showMessage(
+                f"Runtime launch aborted for participant {participant_value}.",
+                5000,
+            )
+            return
+        QMessageBox.information(
+            self,
+            "Launch Complete",
+            (
+                "The experiment finished on the current beta test-mode path. "
+                "Review run exports in the project runs folder."
+            )
+            if summary.output_dir
+            else (
+                "The experiment finished on the current beta test-mode path. "
+                "Review participant summary files in the project logs folder."
+            ),
+        )
+        self.statusBar().showMessage(
+            f"Runtime launch completed for participant {participant_value}.",
+            5000,
+        )
 
     def export_project_config(self) -> bool:
         return self._export_config(include_completed=False)
@@ -621,15 +924,15 @@ class StudioMainWindow(QMainWindow):
             self._sync_home_chrome_offset()
             self.main_stack.setCurrentWidget(self.home_page)
             return
-        if previous_widget is self.setup_wizard_page:
+        if self._setup_wizard_page is not None and previous_widget is self._setup_wizard_page:
             self._set_home_chrome_visible(True)
             self._apply_setup_window_size()
-            self.main_stack.setCurrentWidget(self.setup_wizard_page)
+            self.main_stack.setCurrentWidget(self._setup_wizard_page)
             return
-        if previous_widget is self.image_resizer_page:
+        if self._image_resizer_page is not None and previous_widget is self._image_resizer_page:
             self._set_home_chrome_visible(True)
             self._apply_utility_window_size()
-            self.main_stack.setCurrentWidget(self.image_resizer_page)
+            self.main_stack.setCurrentWidget(self._image_resizer_page)
             return
         self.show_home()
 
@@ -643,15 +946,15 @@ class StudioMainWindow(QMainWindow):
             self._sync_home_chrome_offset()
             self.main_stack.setCurrentWidget(self.home_page)
             return
-        if previous_widget is self.setup_wizard_page:
+        if self._setup_wizard_page is not None and previous_widget is self._setup_wizard_page:
             self._set_home_chrome_visible(True)
             self._apply_setup_window_size()
-            self.main_stack.setCurrentWidget(self.setup_wizard_page)
+            self.main_stack.setCurrentWidget(self._setup_wizard_page)
             return
-        if previous_widget is self.image_resizer_page:
+        if self._image_resizer_page is not None and previous_widget is self._image_resizer_page:
             self._set_home_chrome_visible(True)
             self._apply_utility_window_size()
-            self.main_stack.setCurrentWidget(self.image_resizer_page)
+            self.main_stack.setCurrentWidget(self._image_resizer_page)
             return
         self.show_home()
 
@@ -736,6 +1039,17 @@ class StudioMainWindow(QMainWindow):
         return True
 
     def closeEvent(self, event: QCloseEvent) -> None:
+        if self._active_launch_task is not None:
+            QMessageBox.information(
+                self,
+                "Launch In Progress",
+                (
+                    "FPVS Studio is still running the experiment launch. "
+                    "Please wait for the launch to finish before closing."
+                ),
+            )
+            event.ignore()
+            return
         if self._active_bundle_export_task is not None:
             QMessageBox.information(
                 self,

@@ -928,6 +928,7 @@ class SetupWizardPage(QWidget):
         self.setup_wizard_next_hint_label.setToolTip(hint_text)
         self.setup_wizard_next_hint_label.setVisible(bool(hint_text))
         self._sync_guided_panel_height()
+        QTimer.singleShot(0, self._sync_guided_panel_height)
         self._ensure_condition_image_prescan_started()
 
     def _sync_guided_panel_height(self) -> None:

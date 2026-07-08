@@ -38,6 +38,8 @@ class AppSettingsDialog(QDialog):
         biosemi_recording_confirmation_required: bool = True,
         on_biosemi_recording_confirmation_required_changed: Callable[[bool], None]
         | None = None,
+        sophia_mode_ticker_enabled: bool = True,
+        on_sophia_mode_ticker_enabled_changed: Callable[[bool], None] | None = None,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
@@ -52,6 +54,9 @@ class AppSettingsDialog(QDialog):
         self._on_detailed_run_exports_changed = on_detailed_run_exports_changed
         self._on_biosemi_recording_confirmation_required_changed = (
             on_biosemi_recording_confirmation_required_changed
+        )
+        self._on_sophia_mode_ticker_enabled_changed = (
+            on_sophia_mode_ticker_enabled_changed
         )
 
         form_layout = QFormLayout()
@@ -91,6 +96,22 @@ class AppSettingsDialog(QDialog):
         )
         self.biosemi_recording_confirmation_checkbox = self.sophia_mode_checkbox
         form_layout.addRow("Sophia Mode", self.sophia_mode_checkbox)
+        self.sophia_mode_ticker_checkbox = QCheckBox(
+            "Show Sophia Mode ticker on Home",
+            self,
+        )
+        self.sophia_mode_ticker_checkbox.setObjectName("sophia_mode_ticker_checkbox")
+        self.sophia_mode_ticker_checkbox.setToolTip(
+            "Controls only the Home screen ticker; launch confirmation remains separate."
+        )
+        self.sophia_mode_ticker_checkbox.setChecked(sophia_mode_ticker_enabled)
+        self.sophia_mode_ticker_checkbox.setEnabled(
+            biosemi_recording_confirmation_required
+        )
+        self.sophia_mode_ticker_checkbox.toggled.connect(
+            self._set_sophia_mode_ticker_enabled
+        )
+        form_layout.addRow("Sophia Ticker", self.sophia_mode_ticker_checkbox)
 
         self.button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Close, parent=self)
         self.button_box.setObjectName("settings_button_box")
@@ -132,6 +153,12 @@ class AppSettingsDialog(QDialog):
         self._on_detailed_run_exports_changed(bool(checked))
 
     def _set_biosemi_recording_confirmation_required(self, checked: bool) -> None:
+        self.sophia_mode_ticker_checkbox.setEnabled(bool(checked))
         if self._on_biosemi_recording_confirmation_required_changed is None:
             return
         self._on_biosemi_recording_confirmation_required_changed(bool(checked))
+
+    def _set_sophia_mode_ticker_enabled(self, checked: bool) -> None:
+        if self._on_sophia_mode_ticker_enabled_changed is None:
+            return
+        self._on_sophia_mode_ticker_enabled_changed(bool(checked))

@@ -55,6 +55,7 @@ _FPVS_ROOT_DIR_KEY = "paths/fpvs_root_dir"
 _RECENT_PROJECT_ROOTS_KEY = "projects/recent_project_roots"
 _RUN_EXPORT_MODE_KEY = "exports/run_export_mode"
 _BIOSEMI_RECORDING_CONFIRMATION_KEY = "launch/require_biosemi_recording_confirmation"
+_SOPHIA_MODE_TICKER_KEY = "launch/show_sophia_mode_ticker"
 _MAX_RECENT_PROJECTS = 8
 
 
@@ -355,6 +356,25 @@ class StudioController(QObject):
         if self.main_window is not None:
             self.main_window.document.set_require_biosemi_recording_confirmation(required)
 
+    def show_sophia_mode_ticker(self) -> bool:
+        """Return whether Home should show the Sophia Mode ticker."""
+
+        return bool(
+            self._settings.value(
+                _SOPHIA_MODE_TICKER_KEY,
+                True,
+                type=bool,
+            )
+        )
+
+    def set_show_sophia_mode_ticker(self, enabled: bool) -> None:
+        """Persist the Sophia Mode ticker display preference."""
+
+        self._settings.setValue(_SOPHIA_MODE_TICKER_KEY, bool(enabled))
+        self._settings.sync()
+        if self.main_window is not None:
+            self.main_window.document.set_show_sophia_mode_ticker(enabled)
+
     def ensure_fpvs_root_configured(self) -> bool:
         """Require a valid FPVS Studio root folder before normal workflows are shown."""
 
@@ -555,6 +575,8 @@ class StudioController(QObject):
             on_biosemi_recording_confirmation_required_changed=(
                 self.set_require_biosemi_recording_confirmation
             ),
+            sophia_mode_ticker_enabled=self.show_sophia_mode_ticker(),
+            on_sophia_mode_ticker_enabled_changed=self.set_show_sophia_mode_ticker,
             parent=parent,
         )
         dialog.exec()
@@ -564,7 +586,7 @@ class StudioController(QObject):
         document.set_require_biosemi_recording_confirmation(
             self.require_biosemi_recording_confirmation()
         )
-        document.randomize_session_seed_for_app_launch()
+        document.set_show_sophia_mode_ticker(self.show_sophia_mode_ticker())
         self.record_recent_project_root(document.project_root)
         previous_window = self.main_window
         self.main_window = StudioMainWindow(

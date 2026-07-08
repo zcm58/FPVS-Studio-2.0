@@ -696,6 +696,7 @@ class HomePage(QWidget):
     def _refresh_sophia_mode_ticker(self) -> None:
         self.sophia_mode_ticker.set_sophia_mode_enabled(
             self._document.require_biosemi_recording_confirmation
+            and self._document.show_sophia_mode_ticker
         )
 
     def _status_report(self) -> LauncherReadinessReport:

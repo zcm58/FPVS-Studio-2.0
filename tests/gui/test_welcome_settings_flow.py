@@ -516,6 +516,9 @@ def test_open_project_randomizes_session_seed_per_open_without_dirtying_document
     project_root = window.document.project_root
     project_file_path = window.document.project_file_path
     persisted_seed = load_project_file(project_file_path).settings.session.session_seed
+    qtbot.waitUntil(
+        lambda: window._deferred_open_tasks_started and window._session_seed_task is None
+    )
 
     seed_values = iter((111_111_111, 222_222_222))
 
@@ -533,6 +536,12 @@ def test_open_project_randomizes_session_seed_per_open_without_dirtying_document
     assert first_opened is not None
     assert controller.main_window is not None
     qtbot.addWidget(controller.main_window)
+    qtbot.waitUntil(
+        lambda: (
+            controller.main_window.document.project.settings.session.session_seed
+            == 111_111_111
+        )
+    )
     assert controller.main_window.document.project.settings.session.session_seed == 111_111_111
     assert controller.main_window.document.dirty is False
 
@@ -540,6 +549,12 @@ def test_open_project_randomizes_session_seed_per_open_without_dirtying_document
     assert second_opened is not None
     assert controller.main_window is not None
     qtbot.addWidget(controller.main_window)
+    qtbot.waitUntil(
+        lambda: (
+            controller.main_window.document.project.settings.session.session_seed
+            == 222_222_222
+        )
+    )
     assert controller.main_window.document.project.settings.session.session_seed == 222_222_222
     assert controller.main_window.document.dirty is False
     assert load_project_file(project_file_path).settings.session.session_seed == persisted_seed
@@ -553,6 +568,9 @@ def test_open_project_session_seed_skips_completed_prior_seed(
 ) -> None:
     _, window = _open_created_project(controller, qtbot, tmp_path, "Seed History Skip")
     project_root = window.document.project_root
+    qtbot.waitUntil(
+        lambda: window._deferred_open_tasks_started and window._session_seed_task is None
+    )
     summary = SessionExecutionSummary(
         project_id=window.document.project.meta.project_id,
         session_id="session-0000111111",
@@ -583,6 +601,12 @@ def test_open_project_session_seed_skips_completed_prior_seed(
     assert opened is not None
     assert controller.main_window is not None
     qtbot.addWidget(controller.main_window)
+    qtbot.waitUntil(
+        lambda: (
+            controller.main_window.document.project.settings.session.session_seed
+            == 222_222_222
+        )
+    )
     assert controller.main_window.document.project.settings.session.session_seed == 222_222_222
     assert controller.main_window.document.dirty is False
 
@@ -936,9 +960,41 @@ def test_settings_dialog_sophia_mode_checkbox_triggers_callback(
     qtbot.addWidget(dialog)
 
     checkbox = dialog.findChild(QCheckBox, "sophia_mode_checkbox")
+    ticker_checkbox = dialog.findChild(QCheckBox, "sophia_mode_ticker_checkbox")
     assert checkbox is not None
+    assert ticker_checkbox is not None
     assert checkbox.text() == "Enable Sophia Mode"
     assert "NERD Lab administrator" in checkbox.toolTip()
+    assert checkbox.isChecked() is True
+    assert ticker_checkbox.isEnabled() is True
+
+    qtbot.mouseClick(checkbox, Qt.MouseButton.LeftButton)
+
+    assert checkbox.isChecked() is False
+    assert ticker_checkbox.isEnabled() is False
+    assert captured_values == [False]
+
+
+def test_settings_dialog_sophia_mode_ticker_checkbox_triggers_callback(
+    qtbot,
+    tmp_path: Path,
+) -> None:
+    root_dir = tmp_path / "settings-root"
+    root_dir.mkdir(parents=True, exist_ok=True)
+    captured_values: list[bool] = []
+
+    dialog = AppSettingsDialog(
+        fpvs_root_dir=root_dir,
+        biosemi_recording_confirmation_required=True,
+        sophia_mode_ticker_enabled=True,
+        on_sophia_mode_ticker_enabled_changed=captured_values.append,
+    )
+    qtbot.addWidget(dialog)
+
+    checkbox = dialog.findChild(QCheckBox, "sophia_mode_ticker_checkbox")
+    assert checkbox is not None
+    assert checkbox.text() == "Show Sophia Mode ticker on Home"
+    assert "launch confirmation remains separate" in checkbox.toolTip()
     assert checkbox.isChecked() is True
 
     qtbot.mouseClick(checkbox, Qt.MouseButton.LeftButton)
@@ -995,6 +1051,39 @@ def test_file_settings_action_persists_sophia_mode_toggle_to_current_document(
 
     assert controller.require_biosemi_recording_confirmation() is False
     assert window.document.require_biosemi_recording_confirmation is False
+
+
+def test_file_settings_action_persists_sophia_ticker_toggle_to_current_document(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Sophia Ticker Project")
+    controller.set_show_sophia_mode_ticker(True)
+    assert controller.require_biosemi_recording_confirmation() is True
+    assert controller.show_sophia_mode_ticker() is True
+    assert window.document.require_biosemi_recording_confirmation is True
+    assert window.document.show_sophia_mode_ticker is True
+
+    def _fake_settings_exec(dialog: AppSettingsDialog) -> int:
+        sophia_checkbox = dialog.findChild(QCheckBox, "sophia_mode_checkbox")
+        ticker_checkbox = dialog.findChild(QCheckBox, "sophia_mode_ticker_checkbox")
+        assert sophia_checkbox is not None
+        assert ticker_checkbox is not None
+        assert sophia_checkbox.isChecked() is True
+        assert ticker_checkbox.isChecked() is True
+        ticker_checkbox.setChecked(False)
+        return int(dialog.DialogCode.Accepted)
+
+    monkeypatch.setattr(AppSettingsDialog, "exec", _fake_settings_exec)
+
+    window.settings_action.trigger()
+
+    assert controller.require_biosemi_recording_confirmation() is True
+    assert controller.show_sophia_mode_ticker() is False
+    assert window.document.require_biosemi_recording_confirmation is True
+    assert window.document.show_sophia_mode_ticker is False
 
 
 def test_file_settings_action_changes_root_and_updates_open_create_defaults(

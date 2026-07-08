@@ -19,7 +19,9 @@ from fpvs_studio.runtime.session_export import (
 )
 
 
-def test_open_existing_project_refreshes_stale_participant_summary(tmp_path: Path) -> None:
+def test_open_existing_project_defers_stale_participant_summary_refresh(
+    tmp_path: Path,
+) -> None:
     scaffold = create_project(tmp_path, "Open Refresh Project")
     history_path = scaffold.project_root / "logs" / "session_condition_history.csv"
     _write_history_rows(
@@ -53,6 +55,11 @@ def test_open_existing_project_refreshes_stale_participant_summary(tmp_path: Pat
     document = ProjectDocument.open_existing(scaffold.project_root)
 
     assert document.project_root == scaffold.project_root
+    rows = _read_summary_rows(summary_path)
+    assert [row["PID"] for row in rows] == ["1"]
+
+    document.refresh_participant_summary_if_stale()
+
     rows = _read_summary_rows(summary_path)
     assert [row["PID"] for row in rows] == ["1", "2"]
     workbook = load_workbook(summary_path.with_suffix(".xlsx"))

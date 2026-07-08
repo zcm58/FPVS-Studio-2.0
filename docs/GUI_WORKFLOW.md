@@ -40,7 +40,8 @@ template storage out of the top-level folder list used for experiment projects.
 The Settings dialog can reopen the root-folder setup guide, manage condition templates,
 and choose whether launched sessions write full `runs/` folders or compact summary logs
 only. It also exposes the default-on Sophia Mode launch gate used before runtime
-launch.
+launch, plus a separate option to hide the Home ticker without disabling the launch
+confirmation.
 
 ## Main Window
 
@@ -62,10 +63,13 @@ The authoring window is organized around two user-facing modes:
     using the existing setup-step completion checks
   - when launch is disabled, the Home card, launch button tooltip, and status tip show
     the first actionable setup blocker
-  - when Sophia Mode is enabled, Home shows a green horizontally scrolling
-    `SOPHIA MODE ENABLED` ticker at the top of the launch panel
+  - when Sophia Mode and its ticker display option are enabled, Home shows a green
+    horizontally scrolling `SOPHIA MODE ENABLED` ticker at the top of the launch panel
   - returning from app-expanded Setup restores the compact Home footprint unless
     the user manually resized the larger setup window
+  - opening a project builds Home first; the Setup Wizard, Run / Runtime page, Image
+    Resizer, and bundle processing pages are created only when the user requests those
+    workflows
 - `Setup Wizard`
   - in-window setup flow for new/incomplete projects and intentional edits
   - ordered steps: Project, Conditions, Experiment, Fixation, Response, Review
@@ -167,6 +171,8 @@ Run / Runtime feedback exposes `Open Run Folder` and `Copy Run Folder` after a l
 completion or abort when the runtime summary includes an output directory. In compact
 summary export mode, the runtime summary has no run-folder output path, so those buttons
 stay hidden and completion text points users to the project `logs/` summary files.
+Participant summary files are refreshed after launch and before manual group-summary
+export, not as a blocking project-open prerequisite.
 Launching an experiment opens a modal participant-information prompt. By default every
 project collects Participant Number, Age, Sex, Handedness, and colorblind status before
 runtime starts.
@@ -230,7 +236,8 @@ bundled installs, and exposes the app-level run export mode. Full run export mod
 default and writes detailed `runs/` folders after launch; compact mode skips those
 folders and keeps only project-level summary logs. Settings also exposes default-on
 Sophia Mode, which requires administrators to confirm that BioSemi recording is active
-by typing `Confirm` before launch can continue.
+by typing `Confirm` before launch can continue. Settings can hide the Sophia Mode Home
+ticker independently, without disabling that confirmation gate.
 Moving a project to the Recycle Bin remains a controller-owned filesystem operation
 guarded by `project.json` validation, confirmation, a post-action path check, and a disk
 refresh of the manage list after each attempt. `Check for Updates` queries GitHub

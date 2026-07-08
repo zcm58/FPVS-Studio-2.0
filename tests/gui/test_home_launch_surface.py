@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (
     QApplication,
     QLabel,
     QListWidget,
+    QMessageBox,
     QPushButton,
     QSizePolicy,
     QStyle,
@@ -18,12 +19,16 @@ from PySide6.QtWidgets import (
 )
 from tests.gui.helpers import (
     _assert_visible_children_within_parent,
+    _ImmediateProgressTask,
     _list_widget_text,
     _open_created_project,
     _prepare_compile_ready_project,
 )
 
+from fpvs_studio.core.enums import RunMode
+from fpvs_studio.core.execution import SessionExecutionSummary
 from fpvs_studio.gui.controller import StudioController
+from fpvs_studio.gui.run_page import ParticipantLaunchDetails
 
 
 def _assert_button_contents_fit(button: QPushButton) -> None:
@@ -124,6 +129,84 @@ def test_home_header_updates_when_project_name_changes(
 
     qtbot.waitUntil(lambda: header_label.text() == "Renamed Header Project")
     assert window.document.project.meta.name == "Renamed Header Project"
+
+
+def test_home_open_defers_setup_and_utility_pages_until_requested(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Lazy Home Project")
+
+    assert window.main_stack.currentWidget() is window.home_page
+    assert window._setup_wizard_page is None
+    assert window._image_resizer_page is None
+    assert window._bundle_export_processing_page is None
+    assert window._bundle_import_processing_page is None
+    assert window.main_stack.count() == 1
+
+    complete_setup_button = window.home_page.findChild(QPushButton, "home_edit_setup_button")
+    assert complete_setup_button is not None
+
+    qtbot.mouseClick(complete_setup_button, Qt.MouseButton.LeftButton)
+
+    assert window._setup_wizard_page is not None
+    assert window.main_stack.currentWidget() is window.setup_wizard_page
+    assert window._image_resizer_page is None
+
+
+def test_ready_home_launch_does_not_construct_setup_wizard(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Lazy Launch Project")
+    _prepare_compile_ready_project(window, tmp_path / "lazy-launch-assets")
+    assert window.save_project() is True
+    project_root = window.document.project_root
+
+    controller.open_project(project_root)
+    assert controller.main_window is not None
+    qtbot.addWidget(controller.main_window)
+    reopened = controller.main_window
+    reopened.document.set_require_biosemi_recording_confirmation(False)
+    assert reopened._setup_wizard_page is None
+    qtbot.waitUntil(lambda: reopened._session_seed_ready)
+
+    captures: dict[str, object] = {}
+    monkeypatch.setattr("fpvs_studio.gui.main_window.ProgressTask", _ImmediateProgressTask)
+    monkeypatch.setattr(
+        reopened,
+        "_prompt_participant_number",
+        lambda: ParticipantLaunchDetails(participant_number="0007"),
+    )
+    monkeypatch.setattr(
+        "fpvs_studio.gui.main_window.QMessageBox.information",
+        lambda *args, **kwargs: QMessageBox.StandardButton.Ok,
+    )
+
+    def _fake_launch(session_plan, **kwargs):
+        captures["session_id"] = session_plan.session_id
+        captures.update(kwargs)
+        return SessionExecutionSummary(
+            project_id=session_plan.project_id,
+            session_id=session_plan.session_id,
+            engine_name="stub",
+            run_mode=RunMode.TEST,
+            participant_number=kwargs["participant_number"],
+            total_condition_count=session_plan.total_runs,
+            completed_condition_count=session_plan.total_runs,
+            output_dir=f"runs/{session_plan.session_id}",
+        )
+
+    monkeypatch.setattr(reopened.document, "preflight_compiled_session", lambda session_plan: None)
+    monkeypatch.setattr(reopened.document, "launch_compiled_session", _fake_launch)
+
+    reopened.launch_action.trigger()
+
+    assert captures["participant_number"] == "0007"
+    assert reopened._setup_wizard_page is None
 
 
 def test_home_quick_action_buttons_present_and_wired(
@@ -267,9 +350,26 @@ def test_home_sophia_mode_ticker_follows_launch_safety_setting(
     ticker_timer = ticker.findChild(QTimer, "sophia_mode_ticker_timer")
     assert ticker_timer is not None
 
+    window.document.set_require_biosemi_recording_confirmation(True)
+    window.document.set_show_sophia_mode_ticker(True)
+    QApplication.processEvents()
+
     assert ticker.isVisible()
     assert ticker.property("sophiaModeTickerActive") == "true"
     assert "SOPHIA MODE ENABLED" in str(ticker.property("sophiaModeTickerText"))
+    assert ticker_timer.isActive()
+
+    window.document.set_show_sophia_mode_ticker(False)
+    QApplication.processEvents()
+    assert window.document.require_biosemi_recording_confirmation is True
+    assert ticker.isVisible() is False
+    assert ticker.property("sophiaModeTickerActive") == "false"
+    assert ticker_timer.isActive() is False
+
+    window.document.set_show_sophia_mode_ticker(True)
+    QApplication.processEvents()
+    assert ticker.isVisible()
+    assert ticker.property("sophiaModeTickerActive") == "true"
     assert ticker_timer.isActive()
 
     window.document.set_require_biosemi_recording_confirmation(False)

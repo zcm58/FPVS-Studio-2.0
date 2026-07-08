@@ -93,9 +93,14 @@ def test_run_page_refresh_normalizes_legacy_background_to_black_and_marks_dirty(
     qtbot.addWidget(controller.main_window)
     window = controller.main_window
 
+    assert window.document.project.settings.display.background_color == "#123456"
+    assert window._setup_wizard_page is None
+
+    run_page = window.run_page
+
     assert window.document.project.settings.display.background_color == "#000000"
     assert window.document.dirty is True
-    assert window.run_page.runtime_background_color_combo.currentText() == "Black"
+    assert run_page.runtime_background_color_combo.currentText() == "Black"
 
 
 def test_run_page_readiness_and_launch_feedback_is_updated_on_launch(

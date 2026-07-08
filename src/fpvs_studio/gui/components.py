@@ -194,6 +194,8 @@ class SetupChecklistPanel(QFrame):
     def set_items(self, items: list[tuple[str, bool] | tuple[str, bool, str]]) -> None:
         for item_label in (*self._item_labels, *self._status_labels):
             self._items_layout.removeWidget(item_label)
+            item_label.hide()
+            item_label.setParent(None)
             item_label.deleteLater()
         self._item_labels = []
         self._status_labels = []
@@ -226,8 +228,15 @@ class SetupChecklistPanel(QFrame):
             refresh_widget_style(status_label)
             self._items_layout.addWidget(item_label, row, 0)
             self._items_layout.addWidget(status_label, row, 1)
+            item_label.show()
+            status_label.show()
             self._item_labels.append(item_label)
             self._status_labels.append(status_label)
+        self._items_layout.invalidate()
+        self._items_widget.setMinimumHeight(self._items_layout.sizeHint().height())
+        self._items_widget.updateGeometry()
+        self._layout.invalidate()
+        self.updateGeometry()
 
     def item_labels(self) -> tuple[QLabel, ...]:
         return tuple(self._item_labels)
