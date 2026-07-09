@@ -349,6 +349,11 @@ def test_home_sophia_mode_ticker_follows_launch_safety_setting(
     assert ticker is not None
     ticker_timer = ticker.findChild(QTimer, "sophia_mode_ticker_timer")
     assert ticker_timer is not None
+    assert window.document.require_biosemi_recording_confirmation is True
+    assert window.document.show_sophia_mode_ticker is False
+    assert ticker.isVisible() is False
+    assert ticker.property("sophiaModeTickerActive") == "false"
+    assert ticker_timer.isActive() is False
 
     window.document.set_require_biosemi_recording_confirmation(True)
     window.document.set_show_sophia_mode_ticker(True)

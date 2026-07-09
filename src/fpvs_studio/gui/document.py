@@ -119,7 +119,7 @@ class ProjectDocument(
         self._dirty = False
         self._session_export_mode = EXPORT_MODE_FULL
         self._require_biosemi_recording_confirmation = True
-        self._show_sophia_mode_ticker = True
+        self._show_sophia_mode_ticker = False
         self._last_session_plan: SessionPlan | None = None
         self._image_normalization_scan_cache: tuple[
             tuple[object, ...],

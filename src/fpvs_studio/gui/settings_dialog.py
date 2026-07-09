@@ -38,7 +38,7 @@ class AppSettingsDialog(QDialog):
         biosemi_recording_confirmation_required: bool = True,
         on_biosemi_recording_confirmation_required_changed: Callable[[bool], None]
         | None = None,
-        sophia_mode_ticker_enabled: bool = True,
+        sophia_mode_ticker_enabled: bool = False,
         on_sophia_mode_ticker_enabled_changed: Callable[[bool], None] | None = None,
         parent: QWidget | None = None,
     ) -> None:

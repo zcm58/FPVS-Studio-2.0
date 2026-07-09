@@ -967,6 +967,7 @@ def test_settings_dialog_sophia_mode_checkbox_triggers_callback(
     assert "NERD Lab administrator" in checkbox.toolTip()
     assert checkbox.isChecked() is True
     assert ticker_checkbox.isEnabled() is True
+    assert ticker_checkbox.isChecked() is False
 
     qtbot.mouseClick(checkbox, Qt.MouseButton.LeftButton)
 
@@ -1060,11 +1061,10 @@ def test_file_settings_action_persists_sophia_ticker_toggle_to_current_document(
     monkeypatch,
 ) -> None:
     _, window = _open_created_project(controller, qtbot, tmp_path, "Sophia Ticker Project")
-    controller.set_show_sophia_mode_ticker(True)
     assert controller.require_biosemi_recording_confirmation() is True
-    assert controller.show_sophia_mode_ticker() is True
+    assert controller.show_sophia_mode_ticker() is False
     assert window.document.require_biosemi_recording_confirmation is True
-    assert window.document.show_sophia_mode_ticker is True
+    assert window.document.show_sophia_mode_ticker is False
 
     def _fake_settings_exec(dialog: AppSettingsDialog) -> int:
         sophia_checkbox = dialog.findChild(QCheckBox, "sophia_mode_checkbox")
@@ -1072,8 +1072,8 @@ def test_file_settings_action_persists_sophia_ticker_toggle_to_current_document(
         assert sophia_checkbox is not None
         assert ticker_checkbox is not None
         assert sophia_checkbox.isChecked() is True
-        assert ticker_checkbox.isChecked() is True
-        ticker_checkbox.setChecked(False)
+        assert ticker_checkbox.isChecked() is False
+        ticker_checkbox.setChecked(True)
         return int(dialog.DialogCode.Accepted)
 
     monkeypatch.setattr(AppSettingsDialog, "exec", _fake_settings_exec)
@@ -1081,9 +1081,9 @@ def test_file_settings_action_persists_sophia_ticker_toggle_to_current_document(
     window.settings_action.trigger()
 
     assert controller.require_biosemi_recording_confirmation() is True
-    assert controller.show_sophia_mode_ticker() is False
+    assert controller.show_sophia_mode_ticker() is True
     assert window.document.require_biosemi_recording_confirmation is True
-    assert window.document.show_sophia_mode_ticker is False
+    assert window.document.show_sophia_mode_ticker is True
 
 
 def test_file_settings_action_changes_root_and_updates_open_create_defaults(

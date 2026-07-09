@@ -362,7 +362,7 @@ class StudioController(QObject):
         return bool(
             self._settings.value(
                 _SOPHIA_MODE_TICKER_KEY,
-                True,
+                False,
                 type=bool,
             )
         )
