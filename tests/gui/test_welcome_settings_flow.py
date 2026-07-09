@@ -5,7 +5,8 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QMimeData, QPoint, QPointF, Qt, QUrl
+from PySide6.QtGui import QDragEnterEvent, QDropEvent
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -53,8 +54,10 @@ def test_welcome_window_smoke(qtbot, controller: StudioController, monkeypatch) 
     welcome = controller.welcome_window
     assert welcome is not None
     create_button = welcome.findChild(QPushButton, "create_project_button")
+    import_project_button = welcome.findChild(QPushButton, "import_project_bundle_button")
     open_projects_button = welcome.findChild(QPushButton, "open_projects_button")
     assert create_button is not None
+    assert import_project_button is not None
     assert open_projects_button is not None
     monkeypatch.setattr(
         ManageProjectsDialog,
@@ -64,6 +67,8 @@ def test_welcome_window_smoke(qtbot, controller: StudioController, monkeypatch) 
 
     with qtbot.waitSignal(welcome.create_requested, timeout=1000):
         qtbot.mouseClick(create_button, Qt.MouseButton.LeftButton)
+    with qtbot.waitSignal(welcome.import_project_bundle_requested, timeout=1000):
+        qtbot.mouseClick(import_project_button, Qt.MouseButton.LeftButton)
     with qtbot.waitSignal(welcome.manage_projects_requested, timeout=1000):
         qtbot.mouseClick(open_projects_button, Qt.MouseButton.LeftButton)
 
@@ -76,6 +81,7 @@ def test_welcome_window_copy_and_primary_hierarchy(controller: StudioController)
     headline = welcome.findChild(QLabel, "welcome_headline_label")
     body = welcome.findChild(QLabel, "welcome_body_label")
     create_button = welcome.findChild(QPushButton, "create_project_button")
+    import_project_button = welcome.findChild(QPushButton, "import_project_bundle_button")
     open_button = welcome.findChild(QPushButton, "open_project_button")
     open_projects_button = welcome.findChild(QPushButton, "open_projects_button")
 
@@ -83,14 +89,17 @@ def test_welcome_window_copy_and_primary_hierarchy(controller: StudioController)
     assert headline is not None
     assert body is not None
     assert create_button is not None
+    assert import_project_button is not None
     assert open_button is None
     assert open_projects_button is not None
 
     assert headline.text() == "Welcome to FPVS Studio"
-    assert body.text() == "Create a new FPVS project or open an existing one."
-    assert create_button.text() == "Create New Project"
-    assert open_projects_button.text() == "Open Projects"
+    assert body.text() == "Create a project, import a project bundle, or open existing work."
+    assert create_button.text() == "Create Project"
+    assert import_project_button.text() == "Import New Project"
+    assert open_projects_button.text() == "Open Existing Project"
     assert create_button.property("welcomeRole") == "primary"
+    assert import_project_button.property("welcomeRole") != "primary"
     assert open_projects_button.property("welcomeRole") != "primary"
 
 
@@ -102,10 +111,12 @@ def test_welcome_window_action_buttons_are_horizontally_centered(
 
     content_frame = welcome.findChild(QWidget, "welcome_content_frame")
     create_button = welcome.findChild(QPushButton, "create_project_button")
+    import_project_button = welcome.findChild(QPushButton, "import_project_bundle_button")
     open_projects_button = welcome.findChild(QPushButton, "open_projects_button")
 
     assert content_frame is not None
     assert create_button is not None
+    assert import_project_button is not None
     assert open_projects_button is not None
 
     welcome.resize(1200, 760)
@@ -113,6 +124,12 @@ def test_welcome_window_action_buttons_are_horizontally_centered(
 
     create_left = create_button.mapTo(content_frame, create_button.rect().topLeft()).x()
     create_right = create_button.mapTo(content_frame, create_button.rect().bottomRight()).x()
+    import_left = import_project_button.mapTo(
+        content_frame, import_project_button.rect().topLeft()
+    ).x()
+    import_right = import_project_button.mapTo(
+        content_frame, import_project_button.rect().bottomRight()
+    ).x()
     open_left = open_projects_button.mapTo(
         content_frame, open_projects_button.rect().topLeft()
     ).x()
@@ -120,12 +137,87 @@ def test_welcome_window_action_buttons_are_horizontally_centered(
         content_frame, open_projects_button.rect().bottomRight()
     ).x()
 
-    group_left = min(create_left, open_left)
-    group_right = max(create_right, open_right)
+    group_left = min(create_left, import_left, open_left)
+    group_right = max(create_right, import_right, open_right)
     button_group_midpoint = (group_left + group_right) / 2.0
     content_midpoint = content_frame.width() / 2.0
 
     assert abs(button_group_midpoint - content_midpoint) <= 6.0
+
+
+def test_welcome_window_accepts_fpvsbundle_drop(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+) -> None:
+    welcome = controller.welcome_window
+    assert welcome is not None
+
+    bundle_path = tmp_path / "dropped.fpvsbundle"
+    bundle_path.write_bytes(b"placeholder")
+    mime_data = QMimeData()
+    mime_data.setUrls([QUrl.fromLocalFile(str(bundle_path))])
+
+    drag_event = QDragEnterEvent(
+        QPoint(12, 12),
+        Qt.DropAction.CopyAction,
+        mime_data,
+        Qt.MouseButton.LeftButton,
+        Qt.KeyboardModifier.NoModifier,
+    )
+    QApplication.sendEvent(welcome, drag_event)
+
+    assert drag_event.isAccepted()
+
+    drop_event = QDropEvent(
+        QPointF(12, 12),
+        Qt.DropAction.CopyAction,
+        mime_data,
+        Qt.MouseButton.LeftButton,
+        Qt.KeyboardModifier.NoModifier,
+    )
+    with qtbot.waitSignal(welcome.project_bundle_dropped, timeout=1000) as blocker:
+        QApplication.sendEvent(welcome, drop_event)
+
+    assert Path(blocker.args[0]) == bundle_path
+
+
+def test_welcome_bundle_drop_starts_project_bundle_import(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    root_dir = controller.load_fpvs_root_dir()
+    assert root_dir is not None
+    bundle_path = tmp_path / "incoming.fpvsbundle"
+    bundle_path.write_bytes(b"placeholder")
+    captured: dict[str, Path] = {}
+
+    def _fake_import_project_bundle(
+        selected_bundle_path: Path,
+        selected_root_dir: Path,
+    ):
+        captured["bundle_path"] = selected_bundle_path
+        captured["root_dir"] = selected_root_dir
+        return create_project(selected_root_dir, "Dropped Bundle Project")
+
+    monkeypatch.setattr(
+        "fpvs_studio.gui.controller.import_project_bundle",
+        _fake_import_project_bundle,
+    )
+    monkeypatch.setattr(
+        controller,
+        "_confirm_imported_display_settings",
+        lambda document, parent: None,
+    )
+
+    controller.import_project_bundle_file(bundle_path)
+
+    assert captured == {"bundle_path": bundle_path, "root_dir": root_dir}
+    assert controller.main_window is not None
+    qtbot.addWidget(controller.main_window)
+    assert controller.main_window.document.project.meta.name == "Dropped Bundle Project"
 
 
 def test_welcome_window_hero_stack_is_centered_in_panel(controller: StudioController) -> None:

@@ -222,6 +222,7 @@ def test_home_quick_action_buttons_present_and_wired(
     )
 
     new_button = window.home_page.findChild(QPushButton, "home_create_project_button")
+    import_button = window.home_page.findChild(QPushButton, "home_import_project_button")
     open_button = window.home_page.findChild(QPushButton, "home_open_project_button")
     save_button = window.home_page.findChild(QPushButton, "home_save_project_button")
     launch_button = window.home_page.findChild(QPushButton, "home_launch_experiment_button")
@@ -229,6 +230,7 @@ def test_home_quick_action_buttons_present_and_wired(
     stimuli_button = window.home_page.findChild(QPushButton, "home_stimuli_manager_button")
     runtime_button = window.home_page.findChild(QPushButton, "home_runtime_settings_button")
     assert new_button is not None
+    assert import_button is not None
     assert open_button is not None
     assert save_button is None
     assert launch_button is not None
@@ -241,6 +243,9 @@ def test_home_quick_action_buttons_present_and_wired(
     assert "beta test-mode" in window.launch_action.toolTip().lower()
     assert launch_button.isEnabled() is False
     assert launch_button.property("launchActionRole") == "primary"
+    assert new_button.text() == "Create Project"
+    assert import_button.text() == "Import New Project"
+    assert open_button.text() == "Open Existing Project"
     assert edit_setup_button.text() == "Complete Setup"
     assert edit_setup_button.property("primaryActionRole") == "true"
     assert edit_setup_button.property("secondaryActionRole") == "false"
@@ -253,14 +258,15 @@ def test_home_quick_action_buttons_present_and_wired(
     assert "Fixation Task" not in metric_text
     assert "Accuracy Task" not in metric_text
 
-    utility_buttons = (open_button, new_button, edit_setup_button)
+    utility_buttons = (new_button, import_button, open_button, edit_setup_button)
     ordered_buttons = sorted(
         utility_buttons,
         key=lambda button: button.geometry().x(),
     )
     assert [button.objectName() for button in ordered_buttons] == [
-        "home_open_project_button",
         "home_create_project_button",
+        "home_import_project_button",
+        "home_open_project_button",
         "home_edit_setup_button",
     ]
     button_widths = [button.width() for button in ordered_buttons]
@@ -275,9 +281,14 @@ def test_home_quick_action_buttons_present_and_wired(
     assert home_hero_container.maximumWidth() == 760
     assert launch_button.sizePolicy().horizontalPolicy() == QSizePolicy.Policy.Fixed
 
-    trigger_counts = {"new": 0, "open": 0, "launch": 0}
+    trigger_counts = {"new": 0, "import": 0, "open": 0, "launch": 0}
     window.new_project_action.triggered.connect(
         lambda _checked=False: trigger_counts.__setitem__("new", trigger_counts["new"] + 1)
+    )
+    window.import_project_bundle_action.triggered.connect(
+        lambda _checked=False: trigger_counts.__setitem__(
+            "import", trigger_counts["import"] + 1
+        )
     )
     window.open_project_action.triggered.connect(
         lambda _checked=False: trigger_counts.__setitem__("open", trigger_counts["open"] + 1)
@@ -287,6 +298,7 @@ def test_home_quick_action_buttons_present_and_wired(
     )
 
     qtbot.mouseClick(new_button, Qt.MouseButton.LeftButton)
+    qtbot.mouseClick(import_button, Qt.MouseButton.LeftButton)
     qtbot.mouseClick(open_button, Qt.MouseButton.LeftButton)
     qtbot.mouseClick(launch_button, Qt.MouseButton.LeftButton)
     qtbot.mouseClick(edit_setup_button, Qt.MouseButton.LeftButton)
@@ -295,7 +307,7 @@ def test_home_quick_action_buttons_present_and_wired(
         window.setup_wizard_page.project_step_surface
     )
 
-    assert trigger_counts == {"new": 1, "open": 1, "launch": 0}
+    assert trigger_counts == {"new": 1, "import": 1, "open": 1, "launch": 0}
 
 
 def test_launch_buttons_share_primary_visual_role(

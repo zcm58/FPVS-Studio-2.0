@@ -1374,6 +1374,7 @@ def home_page_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
         font-size: 13px;
     }}
     QPushButton#home_create_project_button,
+    QPushButton#home_import_project_button,
     QPushButton#home_open_project_button,
     QPushButton#home_edit_setup_button {{
         font-size: 14px;
@@ -1402,7 +1403,7 @@ def home_page_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
     }}
     QPushButton#home_launch_experiment_button {{
         font-size: 18px;
-        min-height: 54px;
+        min-height: 50px;
         padding: 10px 24px;
     }}
     QPushButton[launchActionRole="primary"],

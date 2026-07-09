@@ -43,8 +43,8 @@ behavior, `.\scripts\check_gui.ps1` for GUI workflow changes, and
 - First-run startup shows a concise FPVS Studio Root Folder setup guide before the
   native folder picker when no valid root is configured.
 - Home is the daily launch surface for ready projects, centered around one launch
-  card with project actions, readiness, summary metrics, and the primary launch
-  action.
+  card with create, import, open, setup, readiness, summary metrics, and the primary
+  launch action.
 - Welcome and Home share the same launch-surface frame/styling so opening a ready
   project keeps a stable outer window and card treatment.
 - Setup Wizard is the guided setup/editing surface. Setup uses the compact
@@ -64,9 +64,10 @@ behavior, `.\scripts\check_gui.ps1` for GUI workflow changes, and
 - Fixation and Response are split guided setup areas: Fixation handles color-change
   schedule/timing, while Response handles accuracy tracking, response key/window,
   appearance, and preview.
-- Open Projects is the welcome entry point for the Manage Projects surface, which
-  opens known projects or moves project folders to the Windows Recycle Bin with
-  confirmation. The File menu still exposes the same management surface.
+- Open Existing Project is the welcome entry point for the Manage Projects surface,
+  which opens known projects or moves project folders to the Windows Recycle Bin with
+  confirmation. Import New Project uses the same `.fpvsbundle` import workflow exposed
+  in the File menu, and Welcome accepts dropped local `.fpvsbundle` files.
 - Settings exposes app-level preferences for the FPVS Studio Root Folder, condition
   templates, run export mode, and Sophia Mode. These preferences are persisted with
   `QSettings` and remain outside project files.

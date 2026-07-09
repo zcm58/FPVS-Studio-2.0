@@ -55,11 +55,12 @@ _SETUP_GUIDE_STEPS: tuple[tuple[str, str, str], ...] = (
     ("ready", "Validate / Ready", "Review Readiness"),
 )
 
-_HOME_LAUNCH_BUTTON_MIN_HEIGHT = 76
+_HOME_LAUNCH_BUTTON_MIN_HEIGHT = 72
 _HOME_LAUNCH_BUTTON_MIN_WIDTH = 280
 _HOME_LAUNCH_BUTTON_HORIZONTAL_CHROME = 76
-_HOME_LAUNCH_BUTTON_VERTICAL_CHROME = 44
+_HOME_LAUNCH_BUTTON_VERTICAL_CHROME = 40
 _HOME_LAUNCH_BUTTON_ICON_GAP = 8
+_HOME_HERO_MIN_HEIGHT = 328
 _SOPHIA_MODE_TICKER_TEXT = (
     "SOPHIA MODE ENABLED    SOPHIA MODE ENABLED    SOPHIA MODE ENABLED"
 )
@@ -425,7 +426,11 @@ class HomePage(QWidget):
         self._complete_setup_action: Callable[[], None] | None = None
         self.setObjectName("home_page")
 
-        self.open_project_button = QPushButton("Open Project", self)
+        self.new_project_button = QPushButton("Create Project", self)
+        self.new_project_button.setObjectName("home_create_project_button")
+        self.import_project_button = QPushButton("Import New Project", self)
+        self.import_project_button.setObjectName("home_import_project_button")
+        self.open_project_button = QPushButton("Open Existing Project", self)
         self.open_project_button.setObjectName("home_open_project_button")
         self.launch_button = QPushButton("Launch Experiment", self)
         self.launch_button.setObjectName("home_launch_experiment_button")
@@ -434,15 +439,14 @@ class HomePage(QWidget):
             "Launch Experiment on the current beta test-mode runtime path."
         )
         self._launch_status_tip_text = self._launch_tooltip_text
-        self.new_project_button = QPushButton("Create New Project", self)
-        self.new_project_button.setObjectName("home_create_project_button")
         self.edit_setup_button = QPushButton("Edit Setup", self)
         self.edit_setup_button.setObjectName("home_edit_setup_button")
         mark_secondary_action(self.edit_setup_button)
 
         for button in (
-            self.open_project_button,
             self.new_project_button,
+            self.import_project_button,
+            self.open_project_button,
             self.edit_setup_button,
         ):
             button.setMinimumHeight(38)
@@ -479,6 +483,8 @@ class HomePage(QWidget):
         self.sophia_mode_ticker = SophiaModeTicker(launch_panel)
         self.launch_surface.content_layout.insertWidget(0, self.sophia_mode_ticker)
         launch_panel_layout = self.launch_surface.hero_layout
+        launch_panel_layout.setSpacing(PAGE_SECTION_GAP)
+        self.launch_surface.hero_container.setMinimumHeight(_HOME_HERO_MIN_HEIGHT)
 
         identity_row = QHBoxLayout()
         identity_row.setContentsMargins(0, 0, 0, 0)
@@ -537,8 +543,9 @@ class HomePage(QWidget):
         action_layout.setVerticalSpacing(PAGE_SECTION_GAP)
         for column, button in enumerate(
             (
-                self.open_project_button,
                 self.new_project_button,
+                self.import_project_button,
+                self.open_project_button,
                 self.edit_setup_button,
             )
         ):
@@ -635,18 +642,24 @@ class HomePage(QWidget):
         self,
         *,
         new_project_action: QAction,
+        import_project_bundle_action: QAction,
         open_project_action: QAction,
         launch_action: QAction,
     ) -> None:
         self._bind_button_to_action(
             self.new_project_button,
             new_project_action,
-            "Create New Project",
+            "Create Project",
+        )
+        self._bind_button_to_action(
+            self.import_project_button,
+            import_project_bundle_action,
+            "Import New Project",
         )
         self._bind_button_to_action(
             self.open_project_button,
             open_project_action,
-            "Open Project",
+            "Open Existing Project",
         )
         self._bind_button_to_action(
             self.launch_button,

@@ -175,6 +175,7 @@ class StudioMainWindow(QMainWindow):
         self._create_actions()
         self.home_page.bind_quick_actions(
             new_project_action=self.new_project_action,
+            import_project_bundle_action=self.import_project_bundle_action,
             open_project_action=self.open_project_action,
             launch_action=self.launch_action,
         )

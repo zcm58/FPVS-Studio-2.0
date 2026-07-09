@@ -26,7 +26,11 @@ from fpvs_studio.core.condition_template_profiles import (
 )
 from fpvs_studio.core.models import ConditionTemplateProfile
 from fpvs_studio.core.paths import project_json_path
-from fpvs_studio.core.project_bundle import BundleImportStage, import_project_bundle
+from fpvs_studio.core.project_bundle import (
+    PROJECT_BUNDLE_SUFFIX,
+    BundleImportStage,
+    import_project_bundle,
+)
 from fpvs_studio.core.project_config import create_project_from_config, read_project_config
 from fpvs_studio.core.project_service import ProjectScaffold
 from fpvs_studio.core.serialization import load_project_file
@@ -131,6 +135,12 @@ class StudioController(QObject):
         if self.welcome_window is None:
             self.welcome_window = WelcomeWindow()
             self.welcome_window.create_requested.connect(self.show_create_project_dialog)
+            self.welcome_window.import_project_bundle_requested.connect(
+                self.show_import_project_bundle_dialog
+            )
+            self.welcome_window.project_bundle_dropped.connect(
+                self.import_project_bundle_file
+            )
             self.welcome_window.manage_projects_requested.connect(
                 self.show_manage_projects_dialog
             )
@@ -680,21 +690,9 @@ class StudioController(QObject):
     def show_import_project_bundle_dialog(self) -> None:
         """Import a portable Studio `.fpvsbundle` as a complete project."""
 
-        if self._active_import_bundle_task is not None:
-            if self.main_window is not None:
-                self.main_window.statusBar().showMessage(
-                    "Project bundle import is already running.",
-                    3000,
-                )
-            return
-        if not self.ensure_fpvs_root_configured():
-            return
-        if not self._normalize_fpvs_root_layout():
-            return
-        root_dir = self._fpvs_root_dir
+        root_dir, parent = self._prepare_project_bundle_import()
         if root_dir is None:
             return
-        parent = self.main_window if self.main_window is not None else self.welcome_window
         selected_path, _selected_filter = QFileDialog.getOpenFileName(
             parent,
             "Import FPVS Studio Project",
@@ -704,6 +702,48 @@ class StudioController(QObject):
         if not selected_path:
             return
         bundle_path = Path(selected_path)
+        self._start_project_bundle_import(bundle_path, root_dir, parent)
+
+    def import_project_bundle_file(self, bundle_path: object) -> None:
+        """Import a known `.fpvsbundle` path without opening the file picker."""
+
+        root_dir, parent = self._prepare_project_bundle_import()
+        if root_dir is None:
+            return
+        resolved_bundle_path = Path(bundle_path)
+        if resolved_bundle_path.suffix.lower() != PROJECT_BUNDLE_SUFFIX:
+            QMessageBox.warning(
+                parent,
+                "Import FPVS Studio Project",
+                "Choose an FPVS Studio project bundle with a .fpvsbundle extension.",
+            )
+            return
+        self._start_project_bundle_import(resolved_bundle_path, root_dir, parent)
+
+    def _prepare_project_bundle_import(self) -> tuple[Path | None, QWidget | None]:
+        if self._active_import_bundle_task is not None:
+            if self.main_window is not None:
+                self.main_window.statusBar().showMessage(
+                    "Project bundle import is already running.",
+                    3000,
+                )
+            return None, None
+        if not self.ensure_fpvs_root_configured():
+            return None, None
+        if not self._normalize_fpvs_root_layout():
+            return None, None
+        root_dir = self._fpvs_root_dir
+        if root_dir is None:
+            return None, None
+        parent = self.main_window if self.main_window is not None else self.welcome_window
+        return root_dir, parent
+
+    def _start_project_bundle_import(
+        self,
+        bundle_path: Path,
+        root_dir: Path,
+        parent: QWidget | None,
+    ) -> None:
         if self.main_window is None:
             self._import_project_bundle_synchronously(bundle_path, root_dir, parent)
             return

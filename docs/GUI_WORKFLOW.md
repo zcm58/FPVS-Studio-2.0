@@ -19,8 +19,9 @@ folder picker. Canceling the picker returns to the setup dialog; choosing
 
 The welcome window provides:
 
-- `Create New Project`
-- `Open Projects`
+- `Create Project`
+- `Import New Project`
+- `Open Existing Project`
 
 Creating a project asks for:
 
@@ -33,6 +34,10 @@ project or move a project folder to the Windows Recycle Bin after an explicit Ye
 confirmation. The dialog includes a compact project filter and can copy the selected
 project folder path. The currently open project is shown but cannot be deleted from its
 own open window.
+
+Importing a new project from Welcome uses the same `.fpvsbundle` import workflow as
+`File > Import > FPVS Studio Project...`. Dropping a local `.fpvsbundle` file onto the
+Welcome window starts that project-import workflow for the dropped bundle.
 
 Condition-template profiles are app-level metadata for the configured FPVS Studio Root
 Folder. They are stored under `.fpvs-studio/templates/condition_templates.json`, keeping
@@ -53,7 +58,8 @@ The authoring window is organized around two user-facing modes:
     launch-card placement used by the menu-free home surface
   - a centered project card with project title, description, launch readiness badge, condition count, block
     count, fixation cross status, accuracy tracking status, project open/create
-    actions, setup editing, and a prominent centered `Launch Experiment`
+    actions, including create, import, and open, setup editing, and a prominent centered
+    `Launch Experiment`
   - uses the same shared launch-surface frame as Welcome so the outer window and
     inner card styling stay aligned across the two launch surfaces
   - ready projects show `Edit Setup` as a secondary action for intentional edits
@@ -319,7 +325,9 @@ The current GUI supports:
 
 - creating a new project scaffold
 - opening and editing an existing project
-- opening known or recent projects from `Open Projects`
+- importing a complete project from an `.fpvsbundle` file from Welcome, Home, or the
+  File menu
+- opening known or recent projects from `Open Existing Project`
 - managing known projects and moving project folders to the Recycle Bin after confirmation
 - saving and reopening project state
 - launching ready projects from Home without exposing setup tabs
