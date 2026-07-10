@@ -37,6 +37,10 @@ backend-driven.
   styles.
 - Avoid ad hoc `setStyleSheet(...)` in page or dialog modules for shared concepts;
   add or reuse a named helper in `gui.components` instead.
+- Treat no clipping as a baseline design requirement. Establish the surface's
+  minimum/default size and budget layouts for realistic longest content before coding.
+  Prefer responsive sizing, wrapping, or intentional elision with a tooltip/copy path;
+  never depend on the user enlarging a window to reveal required controls or text.
 
 ## Hard restrictions
 
@@ -51,4 +55,7 @@ backend-driven.
 - Keep GUI tests headless and deterministic.
 - Stub `QFileDialog`, `QMessageBox`, and runtime-launch calls in tests.
 - Prefer direct state assertions over window-exposure assumptions.
+- Show changed surfaces at their documented minimum/default size, process Qt events,
+  and assert both visible child bounds and non-elided label widths. Exercise realistic
+  long paths, names, status messages, and validation text, not only short fixtures.
 - Run one GUI test node at a time when iterating on failures.

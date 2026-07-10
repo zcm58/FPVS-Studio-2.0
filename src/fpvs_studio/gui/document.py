@@ -368,10 +368,10 @@ class ProjectDocument(
         )
         write_project_config(path, config)
 
-    def export_bundle_file(self, path: Path) -> None:
+    def export_bundle_file(self, path: Path, *, project_name: str | None = None) -> None:
         """Export the saved project as a portable Studio `.fpvsbundle` file."""
 
-        export_project_bundle(self._project_root, path)
+        export_project_bundle(self._project_root, path, project_name=project_name)
 
     def export_group_summary_file(self, path: Path) -> Path:
         """Export the project-level group summary workbook to the selected path."""

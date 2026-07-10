@@ -72,6 +72,20 @@ def test_harness_update_policy_is_documented() -> None:
     assert "Task Context Recipes" in architecture
 
 
+def test_gui_no_clipping_policy_is_documented() -> None:
+    documents = [
+        _read_repo_file("AGENTS.md"),
+        _read_repo_file("src/fpvs_studio/gui/AGENTS.md"),
+        _read_repo_file(".agents/skills/pyside6-gui-cleanup/SKILL.md"),
+        _read_repo_file(".agents/skills/pytest-qt-smoke/SKILL.md"),
+        _read_repo_file("docs/FRONTEND.md"),
+    ]
+
+    for document in documents:
+        assert "clipping" in document.casefold()
+        assert "minimum/default size" in document.casefold()
+
+
 def test_active_agent_docs_use_repo_python_environment() -> None:
     active_docs = [
         "AGENTS.md",

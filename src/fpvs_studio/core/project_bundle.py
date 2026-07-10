@@ -23,21 +23,30 @@ from fpvs_studio import __version__
 from fpvs_studio.core.compiler import CompileError, compile_session_plan
 from fpvs_studio.core.models import FPVSBaseModel, ProjectFile, validate_project_relative_path
 from fpvs_studio.core.paths import (
+    MANIFEST_FILENAME,
     PROJECT_FILENAME,
+    STIMULI_DIRNAME,
     app_data_dir,
     cache_dir,
     logs_dir,
     project_dir,
     project_json_path,
     runs_dir,
+    slugify_project_name,
     stimuli_dir,
     stimulus_generated_variants_root,
     stimulus_manifest_path,
     stimulus_original_images_root,
     to_project_relative_posix,
+    validate_project_id,
 )
 from fpvs_studio.core.project_service import ProjectScaffold
-from fpvs_studio.core.serialization import load_project_file, read_json_file, save_project_file
+from fpvs_studio.core.serialization import (
+    load_project_file,
+    model_to_json,
+    read_json_file,
+    save_project_file,
+)
 from fpvs_studio.preprocessing.manifest import read_stimulus_manifest, write_stimulus_manifest
 from fpvs_studio.preprocessing.models import StimulusManifest
 
@@ -125,6 +134,7 @@ def export_project_bundle(
     project_root: Path,
     bundle_path: Path,
     *,
+    project_name: str | None = None,
     refresh_hz: float | None = None,
     progress_callback: BundleExportProgressCallback | None = None,
 ) -> ProjectBundleManifest:
@@ -135,6 +145,14 @@ def export_project_bundle(
     _notify_export_progress(progress_callback, "validate")
     project = _load_project_for_bundle(project_root)
     manifest = _load_manifest_for_bundle(project_root)
+    payload_overrides: dict[str, bytes] = {}
+    if project_name is not None:
+        project, manifest = _bundle_identity_override(
+            project,
+            manifest,
+            project_name=project_name,
+        )
+        payload_overrides = _bundle_contract_payloads(project, manifest)
     validation_refresh_hz = refresh_hz or project.settings.display.preferred_refresh_hz
     if validation_refresh_hz is None:
         validation_refresh_hz = _DEFAULT_VALIDATION_REFRESH_HZ
@@ -147,7 +165,14 @@ def export_project_bundle(
     )
     _notify_export_progress(progress_callback, "stimuli")
     relative_paths = _collect_bundle_file_paths(project_root)
-    records = [_file_record(project_root, relative_path) for relative_path in relative_paths]
+    records = [
+        _file_record(
+            project_root,
+            relative_path,
+            payload_override=payload_overrides.get(relative_path),
+        )
+        for relative_path in relative_paths
+    ]
     bundle_manifest = ProjectBundleManifest(
         project=ProjectBundleProject(
             project_id=project.meta.project_id,
@@ -167,7 +192,12 @@ def export_project_bundle(
         files=records,
     )
     _notify_export_progress(progress_callback, "write")
-    _write_bundle_archive(project_root, bundle_path, bundle_manifest)
+    _write_bundle_archive(
+        project_root,
+        bundle_path,
+        bundle_manifest,
+        payload_overrides=payload_overrides,
+    )
     _notify_export_progress(progress_callback, "complete")
     return bundle_manifest
 
@@ -178,6 +208,38 @@ def _notify_export_progress(
 ) -> None:
     if progress_callback is not None:
         progress_callback(stage)
+
+
+def _bundle_identity_override(
+    project: ProjectFile,
+    manifest: StimulusManifest,
+    *,
+    project_name: str,
+) -> tuple[ProjectFile, StimulusManifest]:
+    normalized_name = project_name.strip()
+    if not normalized_name:
+        raise ProjectBundleError("Export project name may not be empty.")
+    project_id = slugify_project_name(normalized_name)
+    try:
+        validate_project_id(project_id)
+    except ValueError as exc:
+        raise ProjectBundleError(str(exc)) from exc
+    updated_meta = project.meta.model_copy(
+        update={"name": normalized_name, "project_id": project_id}
+    )
+    updated_project = project.model_copy(update={"meta": updated_meta})
+    updated_manifest = manifest.model_copy(update={"project_id": project_id})
+    return updated_project, updated_manifest
+
+
+def _bundle_contract_payloads(
+    project: ProjectFile,
+    manifest: StimulusManifest,
+) -> dict[str, bytes]:
+    return {
+        PROJECT_FILENAME: model_to_json(project).encode("utf-8"),
+        f"{STIMULI_DIRNAME}/{MANIFEST_FILENAME}": model_to_json(manifest).encode("utf-8"),
+    }
 
 
 def read_project_bundle_manifest(bundle_path: Path) -> ProjectBundleManifest:
@@ -495,7 +557,18 @@ def _collect_bundle_file_paths(project_root: Path) -> list[str]:
     return sorted(set(paths), key=str.lower)
 
 
-def _file_record(project_root: Path, relative_path: str) -> ProjectBundleFileRecord:
+def _file_record(
+    project_root: Path,
+    relative_path: str,
+    *,
+    payload_override: bytes | None = None,
+) -> ProjectBundleFileRecord:
+    if payload_override is not None:
+        return ProjectBundleFileRecord(
+            path=relative_path,
+            size_bytes=len(payload_override),
+            sha256=hashlib.sha256(payload_override).hexdigest(),
+        )
     path = _resolve_existing_relative_file(project_root, relative_path)
     return ProjectBundleFileRecord(
         path=relative_path,
@@ -508,6 +581,8 @@ def _write_bundle_archive(
     project_root: Path,
     bundle_path: Path,
     bundle_manifest: ProjectBundleManifest,
+    *,
+    payload_overrides: dict[str, bytes],
 ) -> None:
     bundle_path.parent.mkdir(parents=True, exist_ok=True)
     temp_path = bundle_path.with_name(f".{bundle_path.name}.tmp")
@@ -520,7 +595,11 @@ def _write_bundle_archive(
                 bundle_manifest.model_dump_json(indent=2, exclude_none=True),
             )
             for record in bundle_manifest.files:
-                archive.write(project_root / Path(record.path), arcname=record.path)
+                payload_override = payload_overrides.get(record.path)
+                if payload_override is None:
+                    archive.write(project_root / Path(record.path), arcname=record.path)
+                else:
+                    archive.writestr(record.path, payload_override)
         temp_path.replace(bundle_path)
     except Exception:
         if temp_path.exists():

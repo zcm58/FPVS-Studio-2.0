@@ -7,12 +7,14 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
 from PySide6.QtCore import QEvent, QObject, Qt, QTimer, QUrl, Signal, Slot
 from PySide6.QtGui import QAction, QCloseEvent, QDesktopServices, QShowEvent
 from PySide6.QtWidgets import (
+    QApplication,
     QFileDialog,
     QMainWindow,
     QMenu,
@@ -31,19 +33,27 @@ from fpvs_studio.core.project_bundle import (
     PROJECT_BUNDLE_SUFFIX,
     BundleExportStage,
     BundleImportStage,
+    ProjectBundleManifest,
     project_bundle_filename,
 )
 from fpvs_studio.core.project_bundle import (
     export_project_bundle as write_project_bundle,
 )
 from fpvs_studio.core.project_config import PROJECT_CONFIG_SUFFIX, project_config_filename
+from fpvs_studio.core.session_plan import SessionPlan
+from fpvs_studio.gui import folder_actions
 from fpvs_studio.gui.animations import ButtonHoverAnimator
+from fpvs_studio.gui.bundle_export_dialog import BundleExportOptionsDialog
 from fpvs_studio.gui.components import apply_studio_theme
 from fpvs_studio.gui.document import ProjectDocument
 from fpvs_studio.gui.document_support import DocumentError, format_validation_report
 from fpvs_studio.gui.home_page import HomePage
 from fpvs_studio.gui.image_resizer_page import ImageResizerPage
-from fpvs_studio.gui.processing_page import BundleExportProcessingPage, BundleImportProcessingPage
+from fpvs_studio.gui.processing_page import (
+    BundleExportProcessingPage,
+    BundleExportResultPage,
+    BundleImportProcessingPage,
+)
 from fpvs_studio.gui.run_page import (
     BioSemiRecordingConfirmationDialog,
     LaunchTaskResult,
@@ -87,6 +97,12 @@ class _BundleExportProgressBridge(QObject):
     """Carry worker-thread bundle export progress back to the GUI thread."""
 
     stage_changed = Signal(str)
+
+
+@dataclass(frozen=True)
+class _BundleExportTaskResult:
+    path: Path
+    manifest: ProjectBundleManifest
 
 
 def _ensure_config_suffix(path: Path) -> Path:
@@ -140,11 +156,13 @@ class StudioMainWindow(QMainWindow):
         self._bundle_export_previous_widget: QWidget | None = None
         self._bundle_export_target_path: Path | None = None
         self._bundle_export_progress_bridge: _BundleExportProgressBridge | None = None
+        self._bundle_export_completed_result: _BundleExportTaskResult | None = None
         self._bundle_import_previous_widget: QWidget | None = None
         self._bundle_import_processing_active = False
         self._setup_wizard_page: SetupWizardPage | None = None
         self._image_resizer_page: ImageResizerPage | None = None
         self._bundle_export_processing_page: BundleExportProcessingPage | None = None
+        self._bundle_export_result_page: BundleExportResultPage | None = None
         self._bundle_import_processing_page: BundleImportProcessingPage | None = None
         self._on_load_condition_template_profiles = on_load_condition_template_profiles
         self._on_manage_condition_templates = on_manage_condition_templates
@@ -153,7 +171,7 @@ class StudioMainWindow(QMainWindow):
         self._session_seed_task: BackgroundTask | None = None
         self._launch_after_session_seed_ready = False
         self._active_launch_task: ProgressTask | None = None
-        self._active_launch_session_plan = None
+        self._active_launch_session_plan: SessionPlan | None = None
         self._active_launch_participant_number: str | None = None
         self._apply_compact_window_size()
 
@@ -255,6 +273,18 @@ class StudioMainWindow(QMainWindow):
             self._bundle_export_processing_page = page
             self.main_stack.addWidget(page)
         return self._bundle_export_processing_page
+
+    @property
+    def bundle_export_result_page(self) -> BundleExportResultPage:
+        if self._bundle_export_result_page is None:
+            page = BundleExportResultPage(parent=self)
+            page.done_requested.connect(self._restore_after_bundle_export)
+            page.copy_path_requested.connect(self._copy_bundle_export_path)
+            page.open_folder_requested.connect(self._open_bundle_export_folder)
+            self._bundle_export_result_page = page
+            self.main_stack.addWidget(page)
+            self._install_button_hover_animations()
+        return self._bundle_export_result_page
 
     @property
     def bundle_import_processing_page(self) -> BundleImportProcessingPage:
@@ -492,7 +522,7 @@ class StudioMainWindow(QMainWindow):
         self.import_project_config_action = QAction("Project Config...", self)
         self.import_project_config_action.setObjectName("import_project_config_action")
         self.import_project_config_action.triggered.connect(self._request_import_project_config)
-        self.import_project_bundle_action = QAction("FPVS Studio Project...", self)
+        self.import_project_bundle_action = QAction("Project Bundle...", self)
         self.import_project_bundle_action.setObjectName("import_project_bundle_action")
         self.import_project_bundle_action.triggered.connect(self._request_import_project_bundle)
         self.export_project_config_action = QAction("FPVS Toolbox Config...", self)
@@ -787,12 +817,20 @@ class StudioMainWindow(QMainWindow):
     def export_completed_project_config(self) -> bool:
         return self._export_config(include_completed=True)
 
-    def export_project_bundle(self) -> bool:
+    def export_project_bundle(self, *, bundle_project_name: str | None = None) -> bool:
         if self._active_bundle_export_task is not None:
             self.statusBar().showMessage("Project bundle export is already running.", 3000)
             return False
         self.flush_pending_edits()
-        default_name = project_bundle_filename(self.document.project.meta.name)
+        if bundle_project_name is None:
+            options_dialog = BundleExportOptionsDialog(
+                current_project_name=self.document.project.meta.name,
+                parent=self,
+            )
+            if options_dialog.exec() != int(options_dialog.DialogCode.Accepted):
+                return False
+            bundle_project_name = options_dialog.export_project_name
+        default_name = project_bundle_filename(bundle_project_name)
         selected_path, _selected_filter = QFileDialog.getSaveFileName(
             self,
             "Export FPVS Project Bundle",
@@ -807,26 +845,35 @@ class StudioMainWindow(QMainWindow):
         except Exception as error:
             _show_error_dialog(self, "Export Project Bundle Error", error)
             return False
-        self._start_bundle_export(path)
+        self._start_bundle_export(path, project_name=bundle_project_name)
         return True
 
-    def _start_bundle_export(self, path: Path) -> None:
+    def _start_bundle_export(self, path: Path, *, project_name: str) -> None:
         project_root = self.document.project_root
         progress_bridge = _BundleExportProgressBridge(self)
         progress_bridge.stage_changed.connect(self._on_bundle_export_stage_changed)
         self._bundle_export_progress_bridge = progress_bridge
 
-        def _write_bundle() -> Path:
-            write_project_bundle(
+        def _write_bundle() -> _BundleExportTaskResult:
+            manifest = write_project_bundle(
                 project_root,
                 path,
+                project_name=project_name,
                 progress_callback=progress_bridge.stage_changed.emit,
             )
-            return path
+            return _BundleExportTaskResult(path=path, manifest=manifest)
 
         self._bundle_export_previous_widget = self.main_stack.currentWidget()
         self._bundle_export_target_path = path
+        self._bundle_export_completed_result = None
         self.bundle_export_processing_page.reset_steps()
+        self.bundle_export_processing_page.set_transfer_context(
+            title=f"Exporting {project_name}",
+            source_label="Project folder",
+            source_path=project_root,
+            destination_label="Bundle file",
+            destination_path=path,
+        )
         self.bundle_export_processing_page.set_stage("validate")
         self.bundle_export_processing_page.start()
         self._set_home_chrome_visible(True, status_visible=True)
@@ -844,10 +891,23 @@ class StudioMainWindow(QMainWindow):
         task.finished.connect(self._on_bundle_export_finished)
         task.start()
 
-    def start_bundle_import_processing(self) -> None:
+    def start_bundle_import_processing(
+        self,
+        *,
+        project_name: str,
+        bundle_path: Path,
+        root_dir: Path,
+    ) -> None:
         self._bundle_import_previous_widget = self.main_stack.currentWidget()
         self._bundle_import_processing_active = True
         self.bundle_import_processing_page.reset_steps()
+        self.bundle_import_processing_page.set_transfer_context(
+            title=f"Importing {project_name}",
+            source_label="Source",
+            source_path=bundle_path,
+            destination_label="Destination root",
+            destination_path=root_dir,
+        )
         self.bundle_import_processing_page.set_stage("verify")
         self.bundle_import_processing_page.start()
         self._set_home_chrome_visible(True, status_visible=True)
@@ -888,8 +948,15 @@ class StudioMainWindow(QMainWindow):
 
     @Slot(object)
     def _on_bundle_export_succeeded(self, result: object) -> None:
-        exported_path = result if isinstance(result, Path) else self._bundle_export_target_path
-        self.statusBar().showMessage(f"Project bundle exported: {exported_path}", 3000)
+        if not isinstance(result, _BundleExportTaskResult):
+            _show_error_dialog(
+                self,
+                "Export Project Bundle Error",
+                RuntimeError("FPVS Studio received an unexpected bundle export result."),
+            )
+            return
+        self._bundle_export_completed_result = result
+        self.statusBar().showMessage(f"Project bundle exported: {result.path}")
 
     @Slot(object)
     def _on_bundle_export_failed(self, error: object) -> None:
@@ -913,11 +980,33 @@ class StudioMainWindow(QMainWindow):
             progress_bridge.deleteLater()
         self._bundle_export_progress_bridge = None
         self._set_bundle_processing_busy(False)
+        completed_result = self._bundle_export_completed_result
+        if completed_result is not None:
+            self.bundle_export_result_page.set_result(
+                project_name=completed_result.manifest.project.name,
+                bundle_path=completed_result.path,
+                packaged_file_count=len(completed_result.manifest.files),
+            )
+            self._set_home_chrome_visible(True, status_visible=True)
+            self._apply_compact_window_size()
+            self.main_stack.setCurrentWidget(self.bundle_export_result_page)
+            return
         self._restore_after_bundle_export()
+
+    @Slot(str)
+    def _copy_bundle_export_path(self, path: str) -> None:
+        QApplication.clipboard().setText(path)
+        self.statusBar().showMessage("Project bundle path copied.", 3000)
+
+    @Slot(object)
+    def _open_bundle_export_folder(self, path: object) -> None:
+        if isinstance(path, (str, Path)):
+            folder_actions.open_folder(Path(path))
 
     def _restore_after_bundle_export(self) -> None:
         previous_widget = self._bundle_export_previous_widget
         self._bundle_export_previous_widget = None
+        self._bundle_export_completed_result = None
         if previous_widget is self.home_page:
             self.home_page.refresh()
             self._set_home_chrome_visible(True, status_visible=False)

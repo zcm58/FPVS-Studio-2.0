@@ -16,7 +16,8 @@ Current inventory:
 - Planned plans include protocol configurability, participant electrode exclusion
   capture at launch, luminance/RMS equalization investigation, and sinusoidal
   contrast modulation.
-- Active plans: none.
+- Active plans include the FPVS project-bundle import/export workflow and its GUI
+  review, progress, display-localization, and completion surfaces.
 - Completed plans include compact versus full run export mode, participant fixation
   tutorial workflow, word-based FPVS conditions, and per-condition timing template
   overrides.

@@ -111,6 +111,13 @@ path so harness docs stay stable across machines.
   planning more module decomposition; split by responsibility, not by line count alone.
 - GUI changes need a focused pytest-qt smoke test, or documented manual smoke steps if
   automation is impractical.
+- No clipping is the default GUI acceptance criterion. Every new or changed window,
+  dialog, page, card, and state must fit at its documented minimum/default size without
+  visible child-widget clipping or unintended text truncation. Design with realistic
+  longest labels, paths, validation messages, and status text before implementation;
+  do not rely on user resizing. GUI tests must check widget bounds and full text width
+  after showing the surface and processing layout events. Intentional elision requires
+  an accessible full-value path such as a tooltip or copy action and an explicit test.
 - Setup Wizard layout changes must keep the compact `1120x720` window free of
   required vertical scrolling and visible child-widget clipping on all six steps.
   Update or run the focused pytest-qt clipping coverage when touching setup

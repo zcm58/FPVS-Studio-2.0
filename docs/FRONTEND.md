@@ -38,6 +38,18 @@ GUI verification still follows this repo's gates: focused pytest-qt coverage for
 behavior, `.\scripts\check_gui.ps1` for GUI workflow changes, and
 `.\scripts\check_quality.ps1` when GUI work touches multiple layers.
 
+## No-Clipping Baseline
+
+No clipping is an initial GUI design constraint, not a later polish task. Before building
+or revising a surface, define its minimum/default size and budget for realistic longest
+project names, filesystem paths, button labels, validation messages, status copy, and all
+dynamic states. Required controls and text must be visible without user resizing.
+
+Focused pytest-qt coverage must show the surface at that size, process layout events, and
+check both child-widget geometry and full text width. Wrapping must have enough vertical
+space. Elision is allowed only when deliberate and when the complete value remains
+available through a tested tooltip, copy action, or equivalent accessible interaction.
+
 ## GUI Architecture
 
 - First-run startup shows a concise FPVS Studio Root Folder setup guide before the
@@ -66,8 +78,12 @@ behavior, `.\scripts\check_gui.ps1` for GUI workflow changes, and
   appearance, and preview.
 - Open Existing Project is the welcome entry point for the Manage Projects surface,
   which opens known projects or moves project folders to the Windows Recycle Bin with
-  confirmation. Import New Project uses the same `.fpvsbundle` import workflow exposed
-  in the File menu, and Welcome accepts dropped local `.fpvsbundle` files.
+  confirmation. Import New Project uses the same reviewed `.fpvsbundle` import workflow
+  exposed in the File menu, and Welcome accepts dropped local `.fpvsbundle` files while
+  keeping modal staged progress visible. Successful bundle exports remain on a persistent
+  result page until the user opens/copies the destination or selects Done. Bundle export
+  can assign a distinct project name to the portable copy without changing the open
+  project, and imports always target the configured absolute FPVS Studio Root Folder.
 - Settings exposes app-level preferences for the FPVS Studio Root Folder, condition
   templates, run export mode, and Sophia Mode. These preferences are persisted with
   `QSettings` and remain outside project files.
@@ -82,6 +98,8 @@ behavior, `.\scripts\check_gui.ps1` for GUI workflow changes, and
 ## Verification
 
 - Focused GUI changes need pytest-qt coverage or documented manual smoke steps.
+- All new or changed surfaces need no-clipping coverage at their documented
+  minimum/default size, including realistic long content and relevant dynamic states.
 - Setup Wizard layout changes must run or update the focused compact no-clipping
   coverage in `tests/gui/test_setup_wizard_shell.py` and should smoke all six
   steps at `1120x720`.

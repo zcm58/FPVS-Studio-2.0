@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from fpvs_studio.core.models import ProjectFile
 from fpvs_studio.core.paths import app_data_dir
 from fpvs_studio.core.project_bundle import (
     BUNDLE_MANIFEST_FILENAME,
@@ -20,6 +21,7 @@ from fpvs_studio.core.project_bundle import (
 )
 from fpvs_studio.core.serialization import load_project_file, save_project_file
 from fpvs_studio.preprocessing.manifest import create_empty_manifest, write_stimulus_manifest
+from fpvs_studio.preprocessing.models import StimulusManifest
 
 
 def _save_bundle_ready_project(project_root: Path, project) -> None:
@@ -66,6 +68,57 @@ def test_export_project_bundle_writes_project_stimuli_and_manifest(
     reloaded = read_project_bundle_manifest(bundle_path)
     assert reloaded == manifest
     assert {record.path for record in reloaded.files} == names - {BUNDLE_MANIFEST_FILENAME}
+
+
+def test_export_project_bundle_can_rename_portable_copy_without_mutating_source(
+    tmp_path,
+    sample_project,
+    sample_project_root,
+) -> None:
+    _save_bundle_ready_project(sample_project_root, sample_project)
+    original_name = sample_project.meta.name
+    original_id = sample_project.meta.project_id
+    bundle_path = tmp_path / "renamed.fpvsbundle"
+
+    bundle_manifest = export_project_bundle(
+        sample_project_root,
+        bundle_path,
+        project_name="Semantic Categories Import Test",
+    )
+
+    assert bundle_manifest.project.name == "Semantic Categories Import Test"
+    assert bundle_manifest.project.project_id == "semantic-categories-import-test"
+    with zipfile.ZipFile(bundle_path) as archive:
+        archived_project = ProjectFile.model_validate_json(archive.read("project.json"))
+        archived_manifest = StimulusManifest.model_validate_json(
+            archive.read("stimuli/manifest.json")
+        )
+    assert archived_project.meta.name == "Semantic Categories Import Test"
+    assert archived_project.meta.project_id == "semantic-categories-import-test"
+    assert archived_manifest.project_id == "semantic-categories-import-test"
+
+    source_project = load_project_file(sample_project_root / "project.json")
+    assert source_project.meta.name == original_name
+    assert source_project.meta.project_id == original_id
+
+    configured_root = tmp_path / "configured-fpvs-root"
+    imported = import_project_bundle(bundle_path, configured_root)
+    assert imported.project_root == configured_root / "semantic-categories-import-test"
+    assert imported.project.meta.name == "Semantic Categories Import Test"
+
+
+def test_export_project_bundle_rejects_empty_copy_name(
+    tmp_path,
+    sample_project,
+    sample_project_root,
+) -> None:
+    _save_bundle_ready_project(sample_project_root, sample_project)
+    bundle_path = tmp_path / "empty-name.fpvsbundle"
+
+    with pytest.raises(ProjectBundleError, match="name may not be empty"):
+        export_project_bundle(sample_project_root, bundle_path, project_name="   ")
+
+    assert not bundle_path.exists()
 
 
 def test_export_project_bundle_hashes_every_payload_file(

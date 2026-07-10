@@ -29,15 +29,17 @@ Creating a project asks for:
 - parent folder where the project root will be scaffolded
 
 Opening projects reloads the configured FPVS Studio Root Folder and lists current FPVS
-project folders discovered on disk, plus valid recent projects. The dialog can open a
-project or move a project folder to the Windows Recycle Bin after an explicit Yes/No
-confirmation. The dialog includes a compact project filter and can copy the selected
-project folder path. The currently open project is shown but cannot be deleted from its
-own open window.
+project folders discovered beneath that root. Recent projects outside the configured
+root are not included. The dialog can open a project or move a project folder to the
+Windows Recycle Bin after an explicit Yes/No confirmation. The dialog includes a
+compact project filter and can copy the selected project folder path. The currently
+open project is shown but cannot be deleted from its own open window.
 
 Importing a new project from Welcome uses the same `.fpvsbundle` import workflow as
-`File > Import > FPVS Studio Project...`. Dropping a local `.fpvsbundle` file onto the
-Welcome window starts that project-import workflow for the dropped bundle.
+`File > Import > Project Bundle...`. Dropping a local `.fpvsbundle` file onto the
+Welcome window starts that project-import workflow for the dropped bundle. The Welcome
+surface includes a visible drop hint, shows a modal staged progress surface during the
+background import, and disables its project actions until the operation finishes.
 
 Condition-template profiles are app-level metadata for the configured FPVS Studio Root
 Folder. They are stored under `.fpvs-studio/templates/condition_templates.json`, keeping
@@ -203,27 +205,40 @@ launch. Word stimulus rows are shown for readiness context but cannot use image-
 import, inspection, or materialization actions.
 
 The `File` menu groups manage-projects, `Import` and `Export` submenus, settings, and
-help/update actions with native separators. `Import > FPVS Studio Project...` imports a
+help/update actions with native separators. `Import > Project Bundle...` first shows a
+review dialog with bundle identity, manifest file count/size, the receiving project path,
+collision-safe naming guidance, and included/excluded content. Confirming the review imports a
 `.fpvsbundle` into a new project folder under the configured FPVS Studio Root Folder,
 verifies archive paths and hashes in an app-owned staging folder, resolves
-project-folder collisions, shows an embedded processing screen with staged verify/base
-image/oddball image/project setup progress, asks the user to confirm local display
-refresh rate, viewing distance, monitor width, and resolution, opens the new project,
-and deletes staging files after success or failure. The display confirmation dialog
-preserves the imported visual-angle target and can fill refresh, resolution, and
-physical screen width from Qt's primary-screen metadata; PsychoPy stays behind the
-engine boundary and is not imported by the GUI for this confirmation.
+project-folder collisions, and shows staged verify/base-stimuli/oddball-stimuli/project
+setup progress. Imports started from an open project use the embedded processing page;
+imports started from Welcome use the same page inside a modal progress dialog. The
+progress surface uses a wide, single-card layout with flat source/destination and
+activity sections so paths, status copy, and all four stage labels remain visible. The
+configured Studio root is persisted and loaded as an absolute path; import destinations
+never fall back to the application working directory. Legacy relative root settings are
+discarded so the root-folder setup flow can collect an explicit location again. The
+display confirmation dialog compares imported settings with Qt-detected refresh,
+resolution, and physical screen width, preserves editable local values, and exposes
+explicit `Open with Imported Values` and `Apply & Open Project` actions. The visual-angle
+target remains imported, and PsychoPy stays behind the engine boundary.
 `Import > Project Config...` creates a new
 Studio project shell under the configured FPVS Studio Root Folder from a `.fpvsconfig`
 setup handoff; it does not merge into the current project and does not copy original
 stimulus images. The config import dialog accepts `.fpvsconfig`, legacy `.config`, and
-`.json` files. `Export > Project Bundle...` validates the saved project, checks
-project-relative stimulus paths, performs a compile dry run at the preferred refresh
-rate or 60 Hz, hashes the payload, and writes one portable `.fpvsbundle` archive
-containing `project.json`, `stimuli/manifest.json`, and the project `stimuli/` files
-while excluding `cache/`, `logs/`, and `runs/`. While the archive is being created, the
-main window switches to an embedded processing screen with an indeterminate spinner and
-wait message, then restores the previous authoring surface when export finishes.
+`.json` files. `Export > Project Bundle...` first asks for the project name embedded in
+the portable copy and shows the resulting import-folder slug and suggested bundle
+filename. Changing that name rewrites only the archived project and stimulus-manifest
+identity; the open project and its folder remain unchanged. Export then validates the
+saved project, checks project-relative stimulus paths, performs a compile dry run at the
+preferred refresh rate or 60 Hz, hashes the final archived payload, and writes one
+portable `.fpvsbundle` archive containing `project.json`, `stimuli/manifest.json`, and
+the project `stimuli/` files while excluding `cache/`, `logs/`, and `runs/`. While the archive is being created, the
+main window switches to an embedded processing screen with source/destination context,
+an indeterminate activity spinner, and staged validation/stimulus/write status. A
+successful export stays on a persistent completion page showing the bundle path,
+packaged-file count, exclusions, and `Copy Path`, `Open Folder`, and `Done` actions;
+`Done` restores the previous authoring surface.
 `Export > FPVS Toolbox Config...`
 writes a JSON-backed `.fpvsconfig` setup handoff with project title, condition trigger
 mapping, display/session settings, and Toolbox-oriented `event_map` metadata.
@@ -301,6 +316,9 @@ preprocessing services but must not silently mutate the active project.
   should stay silent unless a newer release is available.
 - Standalone image resizing lives in `src/fpvs_studio/gui/image_resizer_page.py`; it uses
   the shared component layer and delegates batch work to preprocessing through Qt workers.
+- Bundle review and Welcome-hosted progress dialogs live in
+  `src/fpvs_studio/gui/bundle_import_dialog.py`; shared embedded progress and persistent
+  export-result pages live in `src/fpvs_studio/gui/processing_page.py`.
 
 ## GUI Theme and Components
 

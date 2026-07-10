@@ -41,6 +41,7 @@ class WelcomeWindow(QWidget):
         self.setMinimumSize(760, 520)
         self.resize(1120, 720)
         self.setAcceptDrops(True)
+        self._import_busy = False
         self._adopt_app_icon()
 
         self.launch_surface = LaunchSurfaceFrame(
@@ -68,6 +69,15 @@ class WelcomeWindow(QWidget):
         self.body_label.setWordWrap(True)
         self.body_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         hero_layout.addWidget(self.body_label)
+
+        self.bundle_drop_hint_label = QLabel(
+            "Tip: Drop a .fpvsbundle file anywhere on this window.",
+            self.hero_container,
+        )
+        self.bundle_drop_hint_label.setObjectName("welcome_bundle_drop_hint")
+        self.bundle_drop_hint_label.setProperty("bundleWorkflowRole", "meta")
+        self.bundle_drop_hint_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        hero_layout.addWidget(self.bundle_drop_hint_label)
 
         action_layout = QHBoxLayout()
         action_layout.setSpacing(12)
@@ -104,6 +114,9 @@ class WelcomeWindow(QWidget):
         self._apply_theme_styles()
 
     def dragEnterEvent(self, event: QDragEnterEvent) -> None:  # noqa: N802
+        if self._import_busy:
+            event.ignore()
+            return
         bundle_path = self._bundle_path_from_mime_data(event.mimeData())
         if bundle_path is None:
             event.ignore()
@@ -111,12 +124,31 @@ class WelcomeWindow(QWidget):
         event.acceptProposedAction()
 
     def dropEvent(self, event: QDropEvent) -> None:  # noqa: N802
+        if self._import_busy:
+            event.ignore()
+            return
         bundle_path = self._bundle_path_from_mime_data(event.mimeData())
         if bundle_path is None:
             event.ignore()
             return
         event.acceptProposedAction()
         self.project_bundle_dropped.emit(bundle_path)
+
+    def set_import_busy(self, busy: bool) -> None:
+        """Prevent conflicting Welcome actions while a bundle import is active."""
+
+        self._import_busy = bool(busy)
+        for button in (
+            self.create_button,
+            self.import_project_button,
+            self.manage_projects_button,
+        ):
+            button.setEnabled(not self._import_busy)
+        self.bundle_drop_hint_label.setText(
+            "Import in progress… Keep FPVS Studio open."
+            if self._import_busy
+            else "Tip: Drop a .fpvsbundle file anywhere on this window."
+        )
 
     def changeEvent(self, event: QEvent) -> None:  # noqa: N802
         super().changeEvent(event)

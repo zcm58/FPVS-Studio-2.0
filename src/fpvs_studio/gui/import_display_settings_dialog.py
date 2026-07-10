@@ -4,12 +4,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,
-    QDialogButtonBox,
     QDoubleSpinBox,
-    QFormLayout,
+    QFrame,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
     QPushButton,
@@ -19,7 +20,12 @@ from PySide6.QtWidgets import (
 )
 
 from fpvs_studio.core.models import DisplaySettings
-from fpvs_studio.gui.components import mark_secondary_action
+from fpvs_studio.gui.components import (
+    StatusBadgeLabel,
+    apply_studio_theme,
+    mark_primary_action,
+    mark_secondary_action,
+)
 
 
 @dataclass(frozen=True)
@@ -38,21 +44,83 @@ class ImportDisplaySettingsDialog(QDialog):
     def __init__(self, display: DisplaySettings, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setObjectName("import_display_settings_dialog")
-        self.setWindowTitle("Confirm Imported Display Settings")
+        self.setWindowTitle("Match Project Display — FPVS Studio")
         self.setModal(True)
+        self.setMinimumSize(720, 590)
+        self.resize(780, 660)
+        self._apply_updates = False
+
+        self.eyebrow_label = QLabel("DISPLAY SETUP", self)
+        self.eyebrow_label.setObjectName("import_display_eyebrow")
+        self.eyebrow_label.setProperty("importDisplayRole", "eyebrow")
+
+        self.title_label = QLabel("Match this project's display", self)
+        self.title_label.setObjectName("import_display_title")
+        self.title_label.setProperty("importDisplayRole", "title")
 
         self.intro_label = QLabel(
-            "Confirm this computer's display details before opening the imported project.",
+            (
+                f"The imported project targets a {display.stimulus_width_degrees:.1f}° image "
+                "width. Confirm this computer's physical display details before opening it."
+            ),
             self,
         )
+        self.intro_label.setProperty("importDisplayRole", "lead")
         self.intro_label.setWordWrap(True)
 
         self.image_width_label = QLabel(
-            f"Imported image width: {display.stimulus_width_degrees:.1f} deg",
+            f"Visual-angle target: {display.stimulus_width_degrees:.1f}°",
             self,
         )
         self.image_width_label.setObjectName("import_display_image_width_label")
-        self.image_width_label.setWordWrap(True)
+        self.image_width_label.setProperty("bundleWorkflowRole", "meta")
+
+        imported_refresh = display.preferred_refresh_hz or 60.0
+        comparison_card = QFrame(self)
+        comparison_card.setObjectName("import_display_comparison_card")
+        comparison_card.setProperty("bundleWorkflowCard", "true")
+        comparison_layout = QGridLayout(comparison_card)
+        comparison_layout.setContentsMargins(16, 14, 16, 14)
+        comparison_layout.setHorizontalSpacing(20)
+        comparison_layout.setVerticalSpacing(10)
+        imported_header = QLabel("Imported settings", comparison_card)
+        imported_header.setProperty("importDisplayRole", "columnHeader")
+        detected_header = QLabel("Detected on this computer", comparison_card)
+        detected_header.setProperty("importDisplayRole", "columnHeader")
+        self.detected_badge = StatusBadgeLabel(parent=comparison_card)
+        self.detected_badge.setObjectName("import_display_detected_badge")
+        self.detected_badge.set_state("info", "Not detected")
+        comparison_layout.addWidget(imported_header, 0, 1)
+        comparison_layout.addWidget(detected_header, 0, 2)
+        comparison_layout.addWidget(self.detected_badge, 0, 3)
+
+        imported_values = (
+            ("Refresh rate", f"{imported_refresh:.2f} Hz"),
+            ("Resolution", f"{display.screen_width_px} × {display.screen_height_px} px"),
+            ("Screen width", f"{display.screen_width_cm:.2f} cm"),
+        )
+        self.detected_refresh_label = QLabel("—", comparison_card)
+        self.detected_resolution_label = QLabel("—", comparison_card)
+        self.detected_width_label = QLabel("—", comparison_card)
+        detected_labels = (
+            self.detected_refresh_label,
+            self.detected_resolution_label,
+            self.detected_width_label,
+        )
+        for row, ((label_text, imported_text), detected_label) in enumerate(
+            zip(imported_values, detected_labels, strict=True),
+            start=1,
+        ):
+            row_label = QLabel(label_text, comparison_card)
+            row_label.setProperty("importDisplayRole", "columnHeader")
+            imported_label = QLabel(imported_text, comparison_card)
+            imported_label.setProperty("importDisplayRole", "lead")
+            detected_label.setProperty("importDisplayRole", "lead")
+            comparison_layout.addWidget(row_label, row, 0)
+            comparison_layout.addWidget(imported_label, row, 1)
+            comparison_layout.addWidget(detected_label, row, 2, 1, 2)
+        comparison_layout.setColumnStretch(1, 1)
+        comparison_layout.setColumnStretch(2, 1)
 
         self.refresh_hz_spin = _display_double_spin_box(
             parent=self,
@@ -104,41 +172,95 @@ class ImportDisplaySettingsDialog(QDialog):
         self.detect_button.clicked.connect(self.apply_detected_primary_display)
         mark_secondary_action(self.detect_button)
 
-        form_layout = QFormLayout()
-        form_layout.setContentsMargins(0, 0, 0, 0)
-        form_layout.setHorizontalSpacing(12)
-        form_layout.setVerticalSpacing(8)
-        form_layout.addRow("Refresh rate", self.refresh_hz_spin)
-        form_layout.addRow("Viewing distance", self.viewing_distance_spin)
-        form_layout.addRow("Screen width", self.screen_width_cm_spin)
-        form_layout.addRow("Resolution width", self.screen_width_px_spin)
-        form_layout.addRow("Resolution height", self.screen_height_px_spin)
+        comparison_layout.addWidget(self.detect_button, 4, 2, 1, 2, Qt.AlignmentFlag.AlignRight)
 
-        detect_row = QHBoxLayout()
-        detect_row.setContentsMargins(0, 0, 0, 0)
-        detect_row.addWidget(self.detect_button)
-        detect_row.addStretch(1)
+        values_card = QFrame(self)
+        values_card.setObjectName("import_display_values_card")
+        values_card.setProperty("bundleWorkflowCard", "true")
+        values_layout = QGridLayout(values_card)
+        values_layout.setContentsMargins(16, 12, 16, 12)
+        values_layout.setHorizontalSpacing(12)
+        values_layout.setVerticalSpacing(8)
+        values_heading = QLabel("Values to apply", values_card)
+        values_heading.setProperty("bundleWorkflowRole", "sectionTitle")
+        values_layout.addWidget(values_heading, 0, 0, 1, 4)
+        values_layout.addWidget(QLabel("Refresh rate", values_card), 1, 0)
+        values_layout.addWidget(self.refresh_hz_spin, 1, 1)
+        values_layout.addWidget(QLabel("Viewing distance", values_card), 1, 2)
+        values_layout.addWidget(self.viewing_distance_spin, 1, 3)
+        values_layout.addWidget(QLabel("Screen width", values_card), 2, 0)
+        values_layout.addWidget(self.screen_width_cm_spin, 2, 1)
+        values_layout.addWidget(QLabel("Resolution", values_card), 2, 2)
+        resolution_row = QHBoxLayout()
+        resolution_row.setContentsMargins(0, 0, 0, 0)
+        resolution_row.setSpacing(6)
+        resolution_row.addWidget(self.screen_width_px_spin)
+        resolution_separator = QLabel("×", values_card)
+        resolution_separator.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        resolution_row.addWidget(resolution_separator)
+        resolution_row.addWidget(self.screen_height_px_spin)
+        values_layout.addLayout(resolution_row, 2, 3)
+        helper = QLabel(
+            "Measure viewing distance from the participant's eyes to the screen.",
+            values_card,
+        )
+        helper.setProperty("importDisplayRole", "helper")
+        helper.setWordWrap(True)
+        values_layout.addWidget(helper, 3, 0, 1, 4)
 
-        self.button_box = QDialogButtonBox(self)
-        self.apply_button = self.button_box.addButton(
-            "Apply and Open",
-            QDialogButtonBox.ButtonRole.AcceptRole,
+        info_label = QLabel(
+            (
+                f"Applying local display values preserves the "
+                f"{display.stimulus_width_degrees:.1f}° visual-angle target. "
+                "Stimulus files and protocol settings are unchanged."
+            ),
+            self,
         )
-        self.keep_button = self.button_box.addButton(
-            "Keep Imported Settings",
-            QDialogButtonBox.ButtonRole.RejectRole,
-        )
-        self.button_box.accepted.connect(self.accept)
-        self.button_box.rejected.connect(self.reject)
+        info_label.setObjectName("import_display_info")
+        info_label.setProperty("importDisplayRole", "info")
+        info_label.setWordWrap(True)
+
+        self.keep_button = QPushButton("Open with Imported Values", self)
+        self.keep_button.setObjectName("import_display_keep_button")
+        mark_secondary_action(self.keep_button)
+        self.keep_button.clicked.connect(self._accept_imported_settings)
+        self.apply_button = QPushButton("Apply && Open Project", self)
+        self.apply_button.setObjectName("import_display_apply_button")
+        mark_primary_action(self.apply_button)
+        self.apply_button.clicked.connect(self._accept_display_updates)
+        self.apply_button.setDefault(True)
+
+        button_row = QHBoxLayout()
+        button_row.setContentsMargins(0, 2, 0, 0)
+        button_row.setSpacing(10)
+        button_row.addStretch(1)
+        button_row.addWidget(self.keep_button)
+        button_row.addWidget(self.apply_button)
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(18, 18, 18, 18)
-        layout.setSpacing(12)
+        layout.setContentsMargins(24, 22, 24, 22)
+        layout.setSpacing(10)
+        layout.addWidget(self.eyebrow_label)
+        layout.addWidget(self.title_label)
         layout.addWidget(self.intro_label)
         layout.addWidget(self.image_width_label)
-        layout.addLayout(form_layout)
-        layout.addLayout(detect_row)
-        layout.addWidget(self.button_box)
+        layout.addWidget(comparison_card)
+        layout.addWidget(values_card)
+        layout.addWidget(info_label)
+        layout.addLayout(button_row)
+        apply_studio_theme(self)
+
+    @property
+    def should_apply_updates(self) -> bool:
+        return self._apply_updates
+
+    def _accept_imported_settings(self) -> None:
+        self._apply_updates = False
+        self.accept()
+
+    def _accept_display_updates(self) -> None:
+        self._apply_updates = True
+        self.accept()
 
     def display_updates(self) -> dict[str, object]:
         """Return display updates selected by the user."""
@@ -158,12 +280,25 @@ class ImportDisplaySettingsDialog(QDialog):
         detected = detect_primary_display_settings()
         if detected.refresh_hz is not None:
             self.refresh_hz_spin.setValue(detected.refresh_hz)
+            self.detected_refresh_label.setText(f"{detected.refresh_hz:.2f} Hz")
+        else:
+            self.detected_refresh_label.setText("Unavailable")
         if detected.screen_width_cm is not None:
             self.screen_width_cm_spin.setValue(detected.screen_width_cm)
+            self.detected_width_label.setText(f"{detected.screen_width_cm:.2f} cm")
+        else:
+            self.detected_width_label.setText("Unavailable")
         if detected.screen_width_px is not None:
             self.screen_width_px_spin.setValue(detected.screen_width_px)
         if detected.screen_height_px is not None:
             self.screen_height_px_spin.setValue(detected.screen_height_px)
+        if detected.screen_width_px is not None and detected.screen_height_px is not None:
+            self.detected_resolution_label.setText(
+                f"{detected.screen_width_px} × {detected.screen_height_px} px"
+            )
+        else:
+            self.detected_resolution_label.setText("Unavailable")
+        self.detected_badge.set_state("ready", "Detected")
 
 
 def detect_primary_display_settings() -> DetectedDisplaySettings:

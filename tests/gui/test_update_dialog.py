@@ -57,7 +57,7 @@ def test_main_window_file_menu_groups_actions(
         "About",
     ]
     assert [action.text() for action in window.import_menu.actions()] == [
-        "FPVS Studio Project...",
+        "Project Bundle...",
         "Project Config...",
     ]
     assert [action.text() for action in window.export_menu.actions()] == [

@@ -903,7 +903,11 @@ def studio_theme_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
     return f"""
     QMainWindow#studio_main_window,
     QStackedWidget#main_stack,
-    QDialog#update_dialog {{
+    QDialog#update_dialog,
+    QDialog#bundle_export_options_dialog,
+    QDialog#bundle_import_review_dialog,
+    QDialog#bundle_import_progress_dialog,
+    QDialog#import_display_settings_dialog {{
         background-color: {color_page_background};
         color: {color_text_primary};
         font-size: {FONT_SIZE_BODY}px;
@@ -914,6 +918,81 @@ def studio_theme_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
     QWidget[bundleProcessingPage="true"] {{
         background-color: {color_page_background};
         color: {color_text_primary};
+    }}
+    QWidget[bundleResultPage="true"] {{
+        background-color: {color_page_background};
+        color: {color_text_primary};
+    }}
+    QFrame[bundleProcessingCard="true"],
+    QFrame[bundleResultCard="true"] {{
+        background-color: {color_surface_elevated};
+        border: 1px solid {color_border_soft};
+        border-radius: {CARD_CORNER_RADIUS + 2}px;
+    }}
+    QFrame[bundleProcessingContext="true"],
+    QFrame[bundleProcessingActivity="true"],
+    QFrame[bundleWorkflowCard="true"] {{
+        background-color: {color_surface};
+        border: 1px solid {color_border_soft};
+        border-radius: {CARD_CORNER_RADIUS}px;
+    }}
+    QFrame[bundleProcessingContext="flat"],
+    QFrame[bundleProcessingActivity="flat"] {{
+        background-color: transparent;
+        border: none;
+        border-radius: 0;
+    }}
+    QLabel[bundleWorkflowRole="eyebrow"],
+    QLabel[bundleResultRole="eyebrow"] {{
+        color: {color_primary};
+        font-size: {FONT_SIZE_BODY}px;
+        font-weight: 700;
+    }}
+    QLabel[bundleWorkflowRole="title"],
+    QLabel[bundleResultRole="title"] {{
+        color: {color_text_primary};
+        font-size: {FONT_SIZE_PAGE_TITLE + 2}px;
+        font-weight: 700;
+    }}
+    QLabel[bundleWorkflowRole="lead"],
+    QLabel[bundleResultRole="lead"] {{
+        color: {color_text_secondary};
+        font-size: {FONT_SIZE_BODY + 1}px;
+    }}
+    QLabel[bundleWorkflowRole="sectionTitle"] {{
+        color: {color_text_primary};
+        font-size: {FONT_SIZE_SECTION_TITLE}px;
+        font-weight: 700;
+    }}
+    QLabel[bundleWorkflowRole="fileName"] {{
+        color: {color_text_primary};
+        font-size: {FONT_SIZE_BODY + 1}px;
+        font-weight: 700;
+    }}
+    QLabel[bundleWorkflowRole="fileMark"] {{
+        background-color: {color_info_bg};
+        border: 1px solid {color_info_border};
+        border-radius: {CARD_CORNER_RADIUS}px;
+        color: {color_info_text};
+        font-size: {FONT_SIZE_META}px;
+        font-weight: 700;
+    }}
+    QLabel[bundleWorkflowRole="meta"],
+    QLabel[bundleWorkflowRole="note"] {{
+        color: {color_text_secondary};
+        font-size: {FONT_SIZE_BODY}px;
+    }}
+    QLabel[bundleWorkflowRole="checkItem"] {{
+        color: {color_success_text};
+        font-size: {FONT_SIZE_BODY + 1}px;
+    }}
+    QLabel[bundleResultRole="successIcon"] {{
+        background-color: {color_success_bg};
+        border: 2px solid {color_success_border};
+        border-radius: 34px;
+        color: {color_success_text};
+        font-size: {FONT_SIZE_PAGE_TITLE + 8}px;
+        font-weight: 700;
     }}
     QLabel[bundleProcessingRole="eyebrow"] {{
         color: {color_primary};
@@ -934,6 +1013,43 @@ def studio_theme_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
     QLabel[bundleProcessingRole="statusHint"] {{
         color: {color_text_secondary};
         font-size: {FONT_SIZE_BODY + 1}px;
+    }}
+    QLabel[bundleProcessingRole="contextLabel"] {{
+        color: {theme.text_muted};
+        font-size: {FONT_SIZE_META}px;
+        font-weight: 700;
+    }}
+    QLabel[bundleProcessingRole="activity"] {{
+        color: {color_text_primary};
+        font-size: {FONT_SIZE_BODY + 1}px;
+        font-weight: 700;
+    }}
+    QLabel[importDisplayRole="eyebrow"] {{
+        color: {color_primary};
+        font-size: {FONT_SIZE_BODY}px;
+        font-weight: 700;
+    }}
+    QLabel[importDisplayRole="title"] {{
+        color: {color_text_primary};
+        font-size: {FONT_SIZE_PAGE_TITLE + 2}px;
+        font-weight: 700;
+    }}
+    QLabel[importDisplayRole="lead"],
+    QLabel[importDisplayRole="helper"] {{
+        color: {color_text_secondary};
+        font-size: {FONT_SIZE_BODY}px;
+    }}
+    QLabel[importDisplayRole="columnHeader"] {{
+        color: {color_text_primary};
+        font-size: {FONT_SIZE_BODY}px;
+        font-weight: 700;
+    }}
+    QLabel[importDisplayRole="info"] {{
+        background-color: {color_info_bg};
+        border: 1px solid {color_info_border};
+        border-radius: {CARD_CORNER_RADIUS}px;
+        color: {color_info_text};
+        padding: 10px 12px;
     }}
     QLabel[bundleProcessingStatusBadge="true"] {{
         font-size: {FONT_SIZE_CONTROL + 1}px;
@@ -1684,6 +1800,10 @@ def welcome_window_stylesheet(theme: StudioTheme | QPalette | None = None) -> st
     QLabel#welcome_body_label {{
         color: {theme.text_secondary};
         font-size: 17px;
+    }}
+    QLabel#welcome_bundle_drop_hint {{
+        color: {theme.text_hint};
+        font-size: {FONT_SIZE_BODY}px;
     }}
     QPushButton {{
         border: 1px solid {theme.border};

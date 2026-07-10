@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import shutil
 from pathlib import Path
+from types import SimpleNamespace
 
 from PySide6.QtCore import QMimeData, QObject, QPoint, QPointF, Qt, QUrl, Signal
 from PySide6.QtGui import QDragEnterEvent, QDropEvent
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
+    QDialog,
     QDialogButtonBox,
     QLabel,
     QLineEdit,
@@ -202,6 +204,16 @@ def test_welcome_window_accepts_fpvsbundle_drop(
     assert Path(blocker.args[0]) == bundle_path
 
 
+def test_controller_rejects_relative_legacy_root_setting(
+    controller: StudioController,
+) -> None:
+    controller._settings.setValue("paths/fpvs_root_dir", ".")
+    controller._settings.sync()
+
+    assert controller.load_fpvs_root_dir() is None
+    assert controller._settings.value("paths/fpvs_root_dir", "", type=str) == ""
+
+
 def test_welcome_bundle_drop_starts_project_bundle_import(
     qtbot,
     controller: StudioController,
@@ -238,6 +250,14 @@ def test_welcome_bundle_drop_starts_project_bundle_import(
         "_confirm_imported_display_settings",
         lambda document, parent: None,
     )
+    monkeypatch.setattr(
+        controller,
+        "_show_project_bundle_import_review",
+        lambda *args, **kwargs: (
+            int(QDialog.DialogCode.Accepted),
+            SimpleNamespace(project=SimpleNamespace(name="Dropped Bundle Project")),
+        ),
+    )
 
     controller.import_project_bundle_file(bundle_path)
 
@@ -246,6 +266,10 @@ def test_welcome_bundle_drop_starts_project_bundle_import(
     assert task.started is True
     assert captured == {}
     assert controller.main_window is None
+    assert controller._import_bundle_processing_dialog is not None
+    assert controller._import_bundle_processing_dialog.isVisible()
+    assert controller.welcome_window is not None
+    assert controller.welcome_window.import_project_button.isEnabled() is False
 
     task.run_successfully()
 
@@ -253,6 +277,7 @@ def test_welcome_bundle_drop_starts_project_bundle_import(
     assert controller.main_window is not None
     qtbot.addWidget(controller.main_window)
     assert controller.main_window.document.project.meta.name == "Dropped Bundle Project"
+    assert controller.welcome_window.import_project_button.isEnabled() is True
 
 
 def test_welcome_window_hero_stack_is_centered_in_panel(controller: StudioController) -> None:
@@ -291,7 +316,7 @@ def test_welcome_window_does_not_render_recent_projects_panel(
     assert recent_list is None
 
 
-def test_recent_projects_feed_open_projects_dialog_entries(
+def test_manage_projects_uses_projects_discovered_under_configured_root(
     qtbot,
     qapp,
     tmp_path: Path,
@@ -317,6 +342,50 @@ def test_recent_projects_feed_open_projects_dialog_entries(
 
     assert [(entry.name, entry.root) for entry in entries] == [
         ("Recent Launch Project", scaffold.project_root)
+    ]
+
+
+def test_manage_projects_excludes_recent_projects_outside_configured_root(
+    qapp,
+    tmp_path: Path,
+) -> None:
+    controller = StudioController(qapp)
+    root_dir = tmp_path / "fpvs-root"
+    root_dir.mkdir(parents=True, exist_ok=True)
+    controller.save_fpvs_root_dir(root_dir)
+    inside = create_project(root_dir, "Inside Root Project")
+    outside = create_project(tmp_path / "external-projects", "Outside Root Project")
+    controller.record_recent_project_root(outside.project_root)
+
+    entries = controller.load_manageable_project_entries()
+
+    assert [(entry.name, entry.root) for entry in entries] == [
+        ("Inside Root Project", inside.project_root)
+    ]
+    assert controller.load_recent_project_roots() == [outside.project_root]
+
+
+def test_manage_projects_rejects_discovered_paths_resolving_outside_root(
+    qapp,
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    controller = StudioController(qapp)
+    root_dir = tmp_path / "fpvs-root"
+    root_dir.mkdir(parents=True, exist_ok=True)
+    controller.save_fpvs_root_dir(root_dir)
+    inside = create_project(root_dir, "Inside Boundary Project")
+    outside = create_project(tmp_path / "external-projects", "Escaped Project")
+    monkeypatch.setattr(
+        controller,
+        "_discover_project_roots",
+        lambda: [inside.project_root, outside.project_root],
+    )
+
+    entries = controller.load_manageable_project_entries()
+
+    assert [(entry.name, entry.root) for entry in entries] == [
+        ("Inside Boundary Project", inside.project_root)
     ]
 
 
