@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import logging
 from pathlib import Path
 
 from PIL import Image, ImageOps
@@ -13,6 +14,7 @@ RUNTIME_ICON = REPO_ROOT / "src" / "fpvs_studio" / "assets" / "fpvs-studio.ico"
 DOCS_SITE_ICON = REPO_ROOT / "docs-site" / "assets" / "fpvs-studio-icon.png"
 ICO_SIZES = ((16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256))
 DOCS_SITE_ICON_SIZE = (512, 512)
+LOGGER = logging.getLogger(__name__)
 
 
 def _resolve_repo_path(path: Path) -> Path:
@@ -40,11 +42,12 @@ def sync_branding_assets(source: Path) -> None:
         site_icon = ImageOps.contain(icon_source, DOCS_SITE_ICON_SIZE)
         site_icon.save(docs_site_icon, format="PNG")
 
-    print(f"Updated {runtime_icon.relative_to(REPO_ROOT)}")
-    print(f"Updated {docs_site_icon.relative_to(REPO_ROOT)}")
+    LOGGER.info("Updated %s", runtime_icon.relative_to(REPO_ROOT))
+    LOGGER.info("Updated %s", docs_site_icon.relative_to(REPO_ROOT))
 
 
 def main() -> None:
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--source",

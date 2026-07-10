@@ -15,5 +15,5 @@
 
 ## Verification
 
-- Run `python -m pytest -q tests\unit\test_app_main.py` after changing startup behavior.
-- Run `python -m pytest -q tests\unit\test_import_boundaries.py` after changing imports.
+- Run `./scripts/verify.ps1 -Scope repo -Tier focused`. The configured
+  route owns startup and import-boundary selection.

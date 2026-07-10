@@ -16,9 +16,15 @@ Before implementing a new feature or substantial GUI rework:
 
 Small bug fixes and narrow refactors do not need an execution plan.
 
-Completed plans are implementation history. Use `ARCHITECTURE.md`, `docs/index.md`,
-and the current workflow docs as the source of truth before treating a completed plan's
-older problem statement or phase notes as current behavior.
+Completed plans are implementation history. Do not load them during ordinary task
+routing. Use `ARCHITECTURE.md`, `docs/agent/agent-index.md`, and current workflow docs
+as the source of truth; consult a completed plan only for missing historical rationale.
 
-Run `.\scripts\check_docs_hygiene.ps1` during garbage-collection passes to review plan
-status, root-doc clutter, and archived historical docs.
+Verify plan changes with:
+
+```powershell
+./scripts/verify.ps1 -Scope docs -Tier focused
+```
+
+The docs scope checks plan status/location consistency, root-doc hygiene, and agent
+routing without requiring agents to rediscover the individual scripts.

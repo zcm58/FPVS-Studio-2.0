@@ -1,45 +1,42 @@
-# Quality Score
+# Quality Gates
 
-This repo uses executable checks instead of a manually maintained numeric score. Treat
-the current quality posture as the latest result of the standard gates.
+FPVS Studio uses executable evidence instead of a manually maintained numeric score.
+The scope-aware driver is the agent entry point; its configuration owns the underlying
+test, audit, lint, type, and compilation commands.
 
-## Standard Gates
+## Standard Route
 
-- Harness docs: `.\.venv3.10\Scripts\python -m pytest -q tests\unit\test_harness_docs.py`
-- Docs hygiene: `.\scripts\check_docs_hygiene.ps1`
-- Harness garbage collection: `.\scripts\check_gc.ps1`; docs-only checks may use
-  `.\scripts\check_gc.ps1 -SkipLineCounts`
-- Python lint: `.\.venv3.10\Scripts\python -m ruff check .`
-- Unit suite: `.\.venv3.10\Scripts\python -m pytest -q`
-- Full repo gate: `.\scripts\check_quality.ps1`
+```powershell
+./scripts/verify.ps1 -Scope <scope> -Tier focused
+./scripts/verify.ps1 -Scope repo -Tier precommit
+```
 
-Pytest runs use the repo-level `pytest-timeout` configuration in `pyproject.toml` so
-common unit and GUI runs fail boundedly instead of hanging indefinitely. Focused GUI
-diagnostics may still pass an explicit `--timeout` value when a narrower limit is useful.
+- `focused` runs the selected scope plus changed-file Ruff and compilation.
+- `precommit` adds mechanical/docs audits, mypy, and the safe non-Qt pytest suite.
+- `full-ci` runs full Ruff, mypy, and pytest with registered Qt tests explicitly
+  enabled under CI's offscreen configuration.
 
-## Focused Gates
+Use `docs/agent/agent-index.md` to choose among `repo`, `docs`, `gui`, `core`,
+`compiler`, `project-io`, `preprocessing`, `runtime`, `engine`, `triggers`, `updates`,
+and `packaging`. Add `-List` to a scoped command to inspect resolved steps and use
+`./scripts/verify.ps1 -CheckConfig` after harness changes.
 
-- GUI: `.\scripts\check_gui.ps1`
-- Runtime: `.\scripts\check_runtime.ps1`
-- Compiler/session: `.\scripts\check_compiler.ps1`
-- Preprocessing: `.\scripts\check_preprocessing.ps1`
-- Context-size report: `.\scripts\report_line_counts.ps1`
+## Safety and Garbage Collection
 
-## Garbage Collection
+The configured audits enforce repository invariants such as:
 
-`.\scripts\check_gc.ps1` enforces mechanical repository principles that should not drift:
+- production diagnostics use structured logging rather than `print`
+- PySide6, PsychoPy, and hardware imports remain behind their package boundaries
+- shared GUI styling stays in the component surface
+- machine-local paths stay out of committed source, tests, and scripts
+- plan state matches its planned/active/completed directory
+- historical setup and audit docs remain outside the active docs root
+- registered Qt tests cannot enter the default local suite before import
 
-- no source/script `print(...)`; use structured logging
-- no CustomTkinter return path
-- shared GUI styles stay in `gui/components.py`, except the documented native menu reset
-- PsychoPy imports stay behind the engines boundary
-- PySide6 imports stay behind the GUI package boundary
-- local machine paths stay out of source, tests, and scripts
-- docs root stays focused on current hubs/contracts while historical setup and audit
-  docs live under `docs/references/archive/`
+GUI-focused local verification does not run Qt. It reports the required visible/manual
+smoke path, while registered pytest-qt coverage runs in the explicit CI tier. Any skipped
+or failing check must be reported with its command, reason, and residual risk.
 
-The standalone script also prints an advisory line-count report. The full quality gate
-runs the hard garbage-collection checks without the advisory report.
-
-When a check is skipped or fails, record the command and reason in the final work note or
-the relevant execution plan.
+PowerShell wrappers remain available for developer-specific workflows, release builds,
+and CI compatibility. Do not duplicate their individual commands in agent guidance;
+route ordinary work through the driver.

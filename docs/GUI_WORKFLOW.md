@@ -419,23 +419,28 @@ base/oddball scheduling.
 
 ## GUI Test Guidance
 
-When iterating on GUI tests:
+Add or update registered pytest-qt coverage for changed GUI behavior, but leave its
+execution to CI by default. Ordinary local verification excludes registered Qt modules
+before import and runs backend, boundary, lint, and compilation checks:
 
-- keep Qt headless with `QT_QPA_PLATFORM=offscreen`
-- disable plugin autoload to avoid unrelated third-party pytest plugins
-- run one GUI test node at a time
-- use `pytest-timeout`; the suite has a config-level 30-second timeout, and focused
-  GUI iterations may pass a narrower `--timeout` when diagnosing a specific hang
-- `.\scripts\check_gui.ps1` also has a script-level watchdog, configurable with
-  `FPVS_GUI_CHECK_TIMEOUT_SECONDS`, so pytest teardown or child-process stalls are
-  terminated instead of running indefinitely
+```powershell
+./scripts/verify.ps1 -Scope gui -Tier focused
+```
+
+Do not set `QT_QPA_PLATFORM=offscreen` locally. CI owns offscreen configuration and
+explicit Qt opt-in through the `full-ci` tier. Local Qt execution requires user approval
+and a safe visible environment.
+
+For GUI coverage:
+
+- register every Qt module in `tests/qt_test_files.txt`
 - monkeypatch modal dialogs and runtime launch calls
-- do not let tests open real `QFileDialog`, `QMessageBox`, or launch the real
-  PsychoPy runtime
-- use named helpers in `tests/gui/helpers.py` for common setup such as creating a
-  project window, preparing compile-ready stimuli, configuring fixation controls,
-  finding condition-template rows, and building fake runtime summaries
-- use the focused GUI workflow files instead of broad reads:
+- do not let tests open real `QFileDialog`, `QMessageBox`, or the PsychoPy runtime
+- use `tests/gui/helpers.py` for project windows, compile-ready stimuli, fixation
+  controls, condition-template rows, and fake runtime summaries
+- show changed surfaces at their minimum/default size and cover realistic longest text
+  plus important success, empty, busy, validation, and error states
+- keep tests organized by focused workflow instead of reading broad files:
   `test_setup_wizard_shell.py` for shell/layout, `test_setup_project_details.py` for
   project details, `test_setup_conditions.py` for condition import/normalization,
   `test_setup_experiment_display.py` for display/session/image-size settings,
@@ -443,29 +448,6 @@ When iterating on GUI tests:
   for Home, `test_run_page_launch.py` for launch wiring, and
   `test_image_resizer_page.py` for the utility page
 
-Recommended invocation:
-
-```powershell
-$env:PYTHONPATH = "src"
-$env:TMP = "$PWD\build\tmp"
-$env:TEMP = "$PWD\build\tmp"
-$env:TMPDIR = "$PWD\build\tmp"
-$env:APPDATA = "$PWD\build\appdata"
-$env:LOCALAPPDATA = "$PWD\build\localappdata"
-$env:USERPROFILE = "$PWD\build\userprofile"
-$env:HOME = "$PWD\build\home"
-$env:QT_QPA_PLATFORM = "offscreen"
-$env:PYTEST_DISABLE_PLUGIN_AUTOLOAD = "1"
-
-New-Item -ItemType Directory -Force build\tmp, build\appdata, build\localappdata, build\userprofile, build\home | Out-Null
-
-.\.venv3.10\Scripts\python -m pytest `
-  --disable-plugin-autoload `
-  -p pytestqt.plugin `
-  -p pytest_timeout `
-  --basetemp=build\pytest_tmp `
-  --maxfail=1 `
-  --timeout=45 `
-  -vv -s `
-  tests\gui\test_welcome_settings_flow.py::test_welcome_window_smoke
-```
+Local handoff must document a visible manual smoke path for the changed workflow and
+report registered Qt coverage as CI-pending unless it ran in an explicitly approved
+visible environment.

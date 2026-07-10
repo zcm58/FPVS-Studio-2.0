@@ -1,4 +1,4 @@
-"""GUI-test fixtures that keep Qt runs headless and non-blocking."""
+"""GUI-test fixtures that keep explicitly enabled Qt runs isolated and non-blocking."""
 
 from __future__ import annotations
 

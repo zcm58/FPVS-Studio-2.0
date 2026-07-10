@@ -34,3 +34,8 @@ settings, templates, or runtime/session contracts.
 - Do not vendor Inno Setup binaries into the repository.
 - Do not turn packaging scripts into GitHub release automation without updating
   `docs/PACKAGING.md` and the architecture task recipe.
+
+## Verification
+
+- Run `./scripts/verify.ps1 -Scope packaging -Tier focused` before a
+  release build. Build or installer execution remains an explicit packaging task.

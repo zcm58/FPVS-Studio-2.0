@@ -56,9 +56,12 @@ docs = [
 fpvs-studio = "fpvs_studio.app.main:main"
 
 [tool.pytest.ini_options]
-addopts = "-ra --import-mode=importlib --timeout=30 --timeout-method=thread"
+addopts = "-ra --import-mode=importlib --timeout=30 --timeout-method=thread -p no:cacheprovider -p no:pytest-qt"
 pythonpath = ["src"]
 testpaths = ["tests"]
+markers = [
+  "qt: requires an explicitly approved visible or CI Qt environment",
+]
 
 [tool.ruff]
 line-length = 100

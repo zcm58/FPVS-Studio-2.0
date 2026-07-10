@@ -52,10 +52,13 @@ backend-driven.
 
 ## Testing guidance
 
-- Keep GUI tests headless and deterministic.
+- Keep registered CI GUI tests deterministic.
 - Stub `QFileDialog`, `QMessageBox`, and runtime-launch calls in tests.
 - Prefer direct state assertions over window-exposure assumptions.
 - Show changed surfaces at their documented minimum/default size, process Qt events,
   and assert both visible child bounds and non-elided label widths. Exercise realistic
   long paths, names, status messages, and validation text, not only short fixtures.
-- Run one GUI test node at a time when iterating on failures.
+- Register Qt modules in `tests/qt_test_files.txt`. Run
+  `./scripts/verify.ps1 -Scope gui -Tier focused` plus a visible manual
+  smoke path locally; leave Qt execution to CI unless the user approves a safe visible
+  environment.

@@ -17,7 +17,11 @@ def test_repo_guidance_references_existing_harness_files() -> None:
     required_paths = [
         "AGENTS.md",
         "ARCHITECTURE.md",
+        ".agents/scripts/verify.py",
+        ".agents/verification.toml",
+        "scripts/verify.ps1",
         "docs/FPVS_Studio_v1_Architecture_Spec.md",
+        "docs/agent/agent-index.md",
         "docs/GUI_WORKFLOW.md",
         "docs/RUNSPEC.md",
         "docs/SESSION_PLAN.md",

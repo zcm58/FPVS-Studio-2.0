@@ -19,6 +19,5 @@ and installer-launch helpers for the end-user application update flow.
 
 ## Verification
 
-- Run `python -m pytest -q tests\unit\test_update_check.py tests\unit\test_update_download.py`
-  after changing release parsing, asset selection, download, or installer-launch logic.
-- Run `python -m pytest -q tests\unit\test_import_boundaries.py` after changing imports.
+- Run `./scripts/verify.ps1 -Scope updates -Tier focused`. The configured
+  route owns update behavior and import-boundary checks.

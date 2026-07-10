@@ -11,16 +11,19 @@ Use this page to find planning material before making feature-sized changes.
 - Completed plans: `exec-plans/completed/`
 - Technical debt tracker: `exec-plans/tech-debt-tracker.md`
 
-Current inventory:
+Current implementation:
 
-- Planned plans include protocol configurability, participant electrode exclusion
-  capture at launch, luminance/RMS equalization investigation, and sinusoidal
-  contrast modulation.
-- Active plans include the FPVS project-bundle import/export workflow and its GUI
-  review, progress, display-localization, and completion surfaces.
-- Completed plans include compact versus full run export mode, participant fixation
-  tutorial workflow, word-based FPVS conditions, and per-condition timing template
-  overrides.
+- `exec-plans/active/project-bundle-import-export.md`
+
+Concrete planned work:
+
+- `exec-plans/planned/configurable-fpvs-protocol.md`
+- `exec-plans/planned/participant-electrode-exclusion-launch-prompt.md`
+- `exec-plans/planned/luminance-rms-equalization-investigation.md`
+- `exec-plans/planned/sinusoidal-contrast-modulation.md`
+
+Completed plans are historical implementation notes. Read their directory only when
+the current contracts do not explain why a landed decision exists.
 
 Draft concrete future work in `planned/`. Move it to `active/` before implementing
 changes that affect user workflows, public contracts, or multiple layers. Keep small bug
@@ -31,4 +34,4 @@ cross-cutting.
 
 - Product direction: `PRODUCT_SENSE.md`
 - Architecture map: `../ARCHITECTURE.md`
-- Current technical debt notes: `TECH_DEBT.md`
+- Current technical debt: `exec-plans/tech-debt-tracker.md`

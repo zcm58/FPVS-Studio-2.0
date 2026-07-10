@@ -45,7 +45,7 @@ The package metadata test fails if the importable app version and `pyproject.tom
 
 ```powershell
 .\.venv3.10\Scripts\python -m pip install -e ".[dev,engine,packaging]"
-.\.venv3.10\Scripts\python -m pytest -q tests\unit\test_package_metadata.py
+./scripts/verify.ps1 -Scope packaging -Tier focused
 ```
 
 Refreshing the editable install is required after a version change because installed

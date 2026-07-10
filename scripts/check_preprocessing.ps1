@@ -7,11 +7,11 @@ $Python = Resolve-RepoPython -RepoRoot $RepoRoot
 Push-Location $RepoRoot
 try {
     Invoke-NativeChecked -File $Python -Arguments @(
-        "-m",
-        "pytest",
-        "-q",
-        "tests\unit\test_preprocessing_assets.py",
-        "tests\unit\test_preprocessing_inspection.py"
+        ".agents\scripts\verify.py",
+        "--scope",
+        "preprocessing",
+        "--tier",
+        "focused"
     )
 }
 finally {

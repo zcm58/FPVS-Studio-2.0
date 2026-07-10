@@ -1,0 +1,17 @@
+tests/gui/test_assets_run_launch.py
+tests/gui/test_components.py
+tests/gui/test_conditions_session_fixation.py
+tests/gui/test_fixation_settings_page.py
+tests/gui/test_home_launch_surface.py
+tests/gui/test_image_resizer_page.py
+tests/gui/test_project_config_import_export.py
+tests/gui/test_run_page_launch.py
+tests/gui/test_setup_conditions.py
+tests/gui/test_setup_dashboard_sync.py
+tests/gui/test_setup_experiment_display.py
+tests/gui/test_setup_project_details.py
+tests/gui/test_setup_review.py
+tests/gui/test_setup_wizard_shell.py
+tests/gui/test_update_dialog.py
+tests/gui/test_welcome_settings_flow.py
+tests/gui/test_workers.py

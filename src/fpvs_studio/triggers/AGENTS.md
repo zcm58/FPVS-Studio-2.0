@@ -26,5 +26,5 @@ adapter scaffolding.
 
 ## Verification
 
-- Run `python -m pytest -q tests\unit\test_import_boundaries.py` after changing imports.
-- Run runtime checks when trigger behavior changes: `.\scripts\check_runtime.ps1`.
+- Run `./scripts/verify.ps1 -Scope triggers -Tier focused`. Use the repo
+  precommit tier when trigger changes cross runtime or core contracts.

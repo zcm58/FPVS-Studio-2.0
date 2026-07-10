@@ -1,5 +1,7 @@
 param(
-    [switch]$SkipLineCounts
+    [switch]$SkipLineCounts,
+    [switch]$SkipHarnessTests,
+    [switch]$SkipDocsHygiene
 )
 
 $ErrorActionPreference = "Stop"
@@ -14,7 +16,7 @@ function Invoke-GitGrep {
         [string[]]$Paths
     )
 
-    $output = @(& git grep -n $Pattern -- @Paths 2>$null)
+    $output = @(& git grep --untracked -n $Pattern -- @Paths 2>$null)
     if ($LASTEXITCODE -eq 1) {
         return @()
     }
@@ -69,14 +71,21 @@ try {
     $localPathMatches = Invoke-GitGrep "C:\\Users\\" @("src", "tests", "scripts")
     Add-Failure $failures "Do not commit local machine paths into source, tests, or scripts." $localPathMatches
 
-    Invoke-NativeChecked -File $Python -Arguments @(
-        "-m",
-        "pytest",
-        "-q",
-        "tests\unit\test_harness_docs.py",
-        "tests\unit\test_import_boundaries.py"
-    )
-    & (Join-Path $PSScriptRoot "check_docs_hygiene.ps1")
+    if (-not $SkipHarnessTests) {
+        Invoke-NativeChecked -File $Python -Arguments @(
+            "-m",
+            "pytest",
+            "--disable-plugin-autoload",
+            "-p",
+            "pytest_timeout",
+            "-q",
+            "tests\unit\test_harness_docs.py",
+            "tests\unit\test_import_boundaries.py"
+        )
+    }
+    if (-not $SkipDocsHygiene) {
+        & (Join-Path $PSScriptRoot "check_docs_hygiene.ps1")
+    }
 
     if ($failures.Count -gt 0) {
         Write-Error ($failures -join [Environment]::NewLine)

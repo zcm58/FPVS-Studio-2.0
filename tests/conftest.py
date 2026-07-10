@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import os
+import shutil
+import sys
 import tempfile
+import uuid
 from pathlib import Path
 
 import pytest
@@ -19,8 +22,24 @@ from fpvs_studio.core.models import (
     ProjectSettings,
     StimulusSet,
 )
+from tests.qt_test_registry import (
+    QT_TESTS_ENV_VAR,
+    load_qt_test_registry,
+    qt_tests_requested,
+    registry_mismatches,
+    repo_relative_path,
+    requested_registered_qt_files,
+)
 
-TEST_ENV_ROOT = Path(__file__).resolve().parents[1] / "build" / "test_env"
+ROOT = Path(__file__).resolve().parents[1]
+TEST_ENV_ROOT = (
+    ROOT / "build" / "test_env" / f"pytest-{os.getpid()}-{uuid.uuid4().hex[:10]}"
+)
+
+if qt_tests_requested(cli_opt_in="--allow-qt-tests" in sys.argv, environ=os.environ):
+    # pytest-qt is blocked from entry-point autoload in pyproject.toml so an
+    # ordinary unit run never imports PySide6. Load it only after explicit opt-in.
+    pytest_plugins = ("pytestqt.plugin",)
 
 
 def _apply_workspace_test_env() -> Path:
@@ -42,7 +61,6 @@ def _apply_workspace_test_env() -> Path:
     os.environ["LOCALAPPDATA"] = str(directories["localappdata"])
     os.environ["HOME"] = str(directories["home"])
     os.environ["USERPROFILE"] = str(directories["userprofile"])
-    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     tempfile.tempdir = str(directories["tmp"])
     return root
 
@@ -50,18 +68,101 @@ def _apply_workspace_test_env() -> Path:
 _apply_workspace_test_env()
 
 
+def pytest_addoption(parser) -> None:
+    group = parser.getgroup("fpvs-studio")
+    group.addoption(
+        "--allow-qt-tests",
+        action="store_true",
+        default=False,
+        help=(
+            "Collect registered Qt tests. These tests require an explicitly "
+            "approved visible or CI Qt environment."
+        ),
+    )
+
+
+def _qt_tests_allowed(config: pytest.Config) -> bool:
+    return qt_tests_requested(
+        cli_opt_in=bool(config.getoption("--allow-qt-tests")),
+        environ=os.environ,
+    )
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    try:
+        registry = load_qt_test_registry(ROOT)
+    except (OSError, ValueError) as exc:
+        raise pytest.UsageError(str(exc)) from exc
+
+    missing, stale = registry_mismatches(ROOT, registry)
+    if missing or stale:
+        details: list[str] = []
+        if missing:
+            details.append("Qt tests missing from tests/qt_test_files.txt:")
+            details.extend(f"  - {path}" for path in sorted(missing))
+        if stale:
+            details.append("Stale entries in tests/qt_test_files.txt:")
+            details.extend(f"  - {path}" for path in sorted(stale))
+        raise pytest.UsageError("\n".join(details))
+
+    config._fpvs_studio_qt_test_registry = registry
+    if _qt_tests_allowed(config):
+        return
+
+    explicitly_requested = requested_registered_qt_files(
+        config.invocation_params.args,
+        repo_root=ROOT,
+        registry=registry,
+    )
+    if explicitly_requested:
+        formatted = "\n".join(f"  - {path}" for path in sorted(explicitly_requested))
+        raise pytest.UsageError(
+            "Registered Qt tests require an explicit opt-in before collection:\n"
+            f"{formatted}\nSet {QT_TESTS_ENV_VAR}=1 or pass --allow-qt-tests."
+        )
+
+
+def pytest_ignore_collect(collection_path: Path, config: pytest.Config) -> bool | None:
+    """Keep Qt test modules and their nested conftest from importing by default."""
+
+    if _qt_tests_allowed(config):
+        return None
+    relative_path = repo_relative_path(Path(collection_path), ROOT)
+    registry = config._fpvs_studio_qt_test_registry
+    if relative_path == "tests/gui" or relative_path in registry:
+        return True
+    return None
+
+
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    registry = config._fpvs_studio_qt_test_registry
+    for item in items:
+        relative_path = repo_relative_path(Path(item.path), ROOT)
+        if relative_path in registry:
+            item.add_marker(pytest.mark.qt)
+
+
+def pytest_report_header(config: pytest.Config) -> str:
+    registry = config._fpvs_studio_qt_test_registry
+    if _qt_tests_allowed(config):
+        return f"FPVS Studio Qt guard: explicit opt-in enabled ({len(registry)} files)"
+    return (
+        f"FPVS Studio Qt guard: {len(registry)} files excluded before import; "
+        f"set {QT_TESTS_ENV_VAR}=1 or pass --allow-qt-tests to opt in"
+    )
+
+
+def pytest_unconfigure(config: pytest.Config) -> None:  # noqa: ARG001
+    """Remove this process's namespaced workspace test environment."""
+
+    shutil.rmtree(TEST_ENV_ROOT, ignore_errors=True)
+
+
 @pytest.fixture(scope="session", autouse=True)
 def _workspace_env() -> Path:
     """Keep temp/profile writes inside the workspace for deterministic test runs."""
 
     return _apply_workspace_test_env()
-
-
-@pytest.fixture(scope="session")
-def qapp_args() -> list[str]:
-    """Force pytest-qt to construct the application in offscreen mode."""
-
-    return ["pytest", "-platform", os.environ.get("QT_QPA_PLATFORM", "offscreen")]
 
 
 def _build_project(project_id: str, project_name: str, *, condition_count: int) -> ProjectFile:

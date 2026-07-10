@@ -26,10 +26,11 @@ description: Use for Windows-focused PySide6 GUI cleanup, widget refactors, dial
 12. Prefer responsive sizing and wrapping. Use elision only intentionally, preserve the
     complete value through a tooltip or copy action, and test that access path.
 13. Add or update focused pytest-qt coverage for geometry and text clipping at the
-    documented minimum/default size; do this during the initial implementation, not as
-    a later visual-polish pass.
-14. Run the narrowest useful verification, then broader gates when the change affects
-    shared behavior.
+    documented minimum/default size and register its module for CI; do this during the
+    initial implementation, not as a later visual-polish pass.
+14. Run `./scripts/verify.ps1 -Scope gui -Tier focused`, document a visible
+    manual smoke path, then use the repo precommit tier when shared behavior changed.
+    Do not run Qt locally unless the user approves a safe visible environment.
 
 ## Output Checklist
 
@@ -37,4 +38,5 @@ description: Use for Windows-focused PySide6 GUI cleanup, widget refactors, dial
 - State the preserved behavior or user flow.
 - Confirm the tested minimum/default size and no-clipping coverage.
 - Report verification commands and results.
-- Include manual smoke steps only when an automated pytest-qt test is not practical.
+- Include the visible/manual smoke path and report registered pytest-qt coverage as
+  CI-pending unless it ran in an explicitly approved visible environment.

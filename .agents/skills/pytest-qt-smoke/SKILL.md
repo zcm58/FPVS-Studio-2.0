@@ -1,6 +1,6 @@
 ---
 name: pytest-qt-smoke
-description: Use when adding or updating pytest-qt smoke tests for changed PySide6 widgets, dialogs, windows, layout or text clipping, signals, controller bindings, enabled states, status text, or non-blocking GUI behavior.
+description: Use when adding or updating registered CI pytest-qt smoke coverage for changed PySide6 widgets, dialogs, windows, layout or text clipping, signals, controller bindings, enabled states, status text, or non-blocking GUI behavior. Do not run Qt locally unless the user approves a safe visible environment.
 ---
 
 # pytest-qt Smoke
@@ -26,20 +26,26 @@ description: Use when adding or updating pytest-qt smoke tests for changed PySid
 11. Exercise important alternate states that change copy or controls, including busy,
     validation, error, empty, and completion states when the surface supports them.
 12. Keep the smoke test focused on the changed behavior, not the full application.
+13. Register every Qt test module in `tests/qt_test_files.txt`; the registry audit must
+    reject unregistered Qt tests and stale entries.
 
 ## Environment
 
-Prefer the headless pattern from `docs/GUI_WORKFLOW.md`:
+Ordinary local verification excludes registered Qt modules before import. Run the safe
+GUI scope and document a visible manual smoke path:
 
 ```powershell
-$env:QT_QPA_PLATFORM = "offscreen"
-$env:PYTEST_DISABLE_PLUGIN_AUTOLOAD = "1"
-.\.venv3.10\Scripts\python -m pytest --disable-plugin-autoload -p pytestqt.plugin -p pytest_timeout tests\gui
+./scripts/verify.ps1 -Scope gui -Tier focused
 ```
+
+Do not set `QT_QPA_PLATFORM=offscreen` locally. CI owns offscreen configuration and the
+explicit Qt opt-in in the `full-ci` tier. Run Qt locally only when the user explicitly
+approves a safe visible GUI environment.
 
 ## Output Checklist
 
 - Name the changed GUI behavior covered by the smoke test.
 - Report the minimum/default size and clipping states covered.
 - List monkeypatched dialogs, runtime calls, or controllers.
-- Report the exact pytest command and result.
+- Report the safe focused command, manual visible smoke path, and whether registered Qt
+  coverage was left for CI or run in an approved visible environment.

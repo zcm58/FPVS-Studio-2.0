@@ -10,6 +10,7 @@ public quickstart site lives in `../docs-site/` and is built with MkDocs.
 ## Start Here
 
 - Agent and architecture context: `../AGENTS.md` and `../ARCHITECTURE.md`
+- Task scopes, skills, and verification routes: `agent/agent-index.md`
 - Product direction: `PRODUCT_SENSE.md` and `product-specs/index.md`
 - Design and GUI workflow: `DESIGN.md`, `FRONTEND.md`, and `GUI_WORKFLOW.md`
 - Packaging developer builds: `PACKAGING.md`
@@ -30,5 +31,6 @@ public quickstart site lives in `../docs-site/` and is built with MkDocs.
 - Design docs: `design-docs/index.md`
 - Generated references: `generated/README.md`
 - External/reference material and archived setup/audit docs: `references/index.md`
-- Technical debt: `TECH_DEBT.md` and `exec-plans/tech-debt-tracker.md`
+- Technical debt: `exec-plans/tech-debt-tracker.md` (`TECH_DEBT.md` is a compatibility
+  pointer)
 - Completed execution plans: `exec-plans/completed/`

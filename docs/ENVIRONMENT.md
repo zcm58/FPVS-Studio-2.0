@@ -82,62 +82,30 @@ That means:
 
 ## GUI Test Environment
 
-Qt and PsychoPy-adjacent tests should keep writes inside the workspace. The
-shared pytest configuration now redirects these variables into `build/test_env`:
+Qt and PsychoPy-adjacent tests keep writes inside the workspace. Shared pytest
+configuration redirects local test environment paths into `build/test_env` and creates
+isolated per-run temporary roots.
 
-- `TMP`
-- `TEMP`
-- `TMPDIR`
-- `APPDATA`
-- `LOCALAPPDATA`
-- `HOME`
-- `USERPROFILE`
-
-GUI tests should also run with:
-
-- `QT_QPA_PLATFORM=offscreen`
-- `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1`
-- explicit `pytestqt.plugin`
-- explicit `pytest_timeout`
-- `--basetemp` inside `build/`
-- single-node invocation while iterating
-
-Example:
+Registered Qt modules are excluded before import during ordinary local verification.
+Use the safe GUI route for non-Qt checks:
 
 ```powershell
-$env:PYTHONPATH = "src"
-$env:TMP = "$PWD\build\tmp"
-$env:TEMP = "$PWD\build\tmp"
-$env:TMPDIR = "$PWD\build\tmp"
-$env:APPDATA = "$PWD\build\appdata"
-$env:LOCALAPPDATA = "$PWD\build\localappdata"
-$env:USERPROFILE = "$PWD\build\userprofile"
-$env:HOME = "$PWD\build\home"
-$env:QT_QPA_PLATFORM = "offscreen"
-$env:PYTEST_DISABLE_PLUGIN_AUTOLOAD = "1"
-
-New-Item -ItemType Directory -Force build\tmp, build\appdata, build\localappdata, build\userprofile, build\home | Out-Null
-
-.\.venv3.10\Scripts\python -m pytest `
-  --disable-plugin-autoload `
-  -p pytestqt.plugin `
-  -p pytest_timeout `
-  --basetemp=build\pytest_tmp `
-  --maxfail=1 `
-  --timeout=45 `
-  -vv -s `
-  tests\gui\test_welcome_settings_flow.py::test_welcome_window_smoke
+./scripts/verify.ps1 -Scope gui -Tier focused
 ```
+
+Do not set `QT_QPA_PLATFORM=offscreen` for local work. CI owns offscreen configuration,
+plugin opt-in, and registered Qt execution through the `full-ci` tier. Run Qt locally
+only after explicit user approval in a safe visible GUI environment.
 
 ## Manual Verification
 
-If you are iterating on the GUI and do not want the full GUI suite to gate
-progress, it is reasonable to:
+For local GUI work:
 
-1. run backend/unit tests
-2. launch `python -m fpvs_studio.app`
-3. manually verify create/open, save/reopen, asset import/materialization,
-   preflight, and test-mode launch wiring
+1. Run the focused `gui` scope.
+2. Launch `.\.venv3.10\Scripts\python -m fpvs_studio.app` visibly.
+3. Exercise only the changed surface and its important success, empty, busy, and error
+   states at the documented minimum/default size.
+4. Record the manual path and leave registered pytest-qt execution to CI.
 
-That is preferable to letting a GUI run hang on a real modal dialog or runtime
-launch path during development.
+Do not enter a real PsychoPy participant session, hardware workflow, or destructive
+dialog unless the task explicitly requires and authorizes it.

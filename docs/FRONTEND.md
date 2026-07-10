@@ -15,7 +15,7 @@ the active app.
 
 FPVS Studio's frontend remains PySide6. Global UI skills may help agents reason about
 the product experience, but implementation must keep using PySide6 widgets, the shared
-component layer, Qt worker patterns, and pytest-qt verification.
+component layer, Qt worker patterns, and registered pytest-qt coverage.
 
 - Use `.agents/skills/pyside6-gui-cleanup` for widget refactors, dialog polish, shared
   component usage, status/error UX, worker/threading checks, and QAction import cleanup.
@@ -34,9 +34,9 @@ component layer, Qt worker patterns, and pytest-qt verification.
 - Use `web-design-guidelines` only for `../docs-site/` or MkDocs web documentation UI,
   not for the desktop authoring app.
 
-GUI verification still follows this repo's gates: focused pytest-qt coverage for changed
-behavior, `.\scripts\check_gui.ps1` for GUI workflow changes, and
-`.\scripts\check_quality.ps1` when GUI work touches multiple layers.
+GUI verification uses `./scripts/verify.ps1 -Scope gui -Tier focused`
+plus a documented visible manual smoke path. Registered pytest-qt coverage runs in CI by
+default; use the repo precommit tier when GUI work touches multiple layers.
 
 ## No-Clipping Baseline
 
@@ -45,10 +45,11 @@ or revising a surface, define its minimum/default size and budget for realistic 
 project names, filesystem paths, button labels, validation messages, status copy, and all
 dynamic states. Required controls and text must be visible without user resizing.
 
-Focused pytest-qt coverage must show the surface at that size, process layout events, and
-check both child-widget geometry and full text width. Wrapping must have enough vertical
-space. Elision is allowed only when deliberate and when the complete value remains
-available through a tested tooltip, copy action, or equivalent accessible interaction.
+Registered pytest-qt coverage must show the surface at that size, process layout events,
+and check both child-widget geometry and full text width. Wrapping must have enough
+vertical space. Elision is allowed only when deliberate and when the complete value
+remains available through a tested tooltip, copy action, or equivalent accessible
+interaction.
 
 ## GUI Architecture
 
@@ -97,11 +98,13 @@ available through a tested tooltip, copy action, or equivalent accessible intera
 
 ## Verification
 
-- Focused GUI changes need pytest-qt coverage or documented manual smoke steps.
-- All new or changed surfaces need no-clipping coverage at their documented
-  minimum/default size, including realistic long content and relevant dynamic states.
-- Setup Wizard layout changes must run or update the focused compact no-clipping
-  coverage in `tests/gui/test_setup_wizard_shell.py` and should smoke all six
-  steps at `1120x720`.
-- Run `.\scripts\check_gui.ps1` for GUI workflow changes.
-- Run `.\scripts\check_quality.ps1` when GUI changes touch multiple layers.
+- Run `./scripts/verify.ps1 -Scope gui -Tier focused` locally.
+- Document a visible/manual smoke path for the changed surface.
+- Add or update registered pytest-qt no-clipping coverage at the documented
+  minimum/default size, with realistic long content and relevant dynamic states.
+- Setup Wizard layout changes must update compact no-clipping coverage in
+  `tests/gui/test_setup_wizard_shell.py` for all six steps at `1120x720`.
+- Do not run Qt locally unless the user approves a safe visible environment. CI owns
+  explicit Qt opt-in and offscreen execution.
+- Run `./scripts/verify.ps1 -Scope repo -Tier precommit` when GUI changes
+  touch multiple layers.

@@ -397,7 +397,7 @@ class BundleImportProcessingPage(_BundleProcessingPage):
         self.context_card.setProperty("bundleProcessingContext", "flat")
         self.activity_card.setProperty("bundleProcessingActivity", "flat")
         context_layout = self.context_card.layout()
-        if context_layout is not None:
+        if isinstance(context_layout, QGridLayout):
             context_layout.setContentsMargins(0, 6, 0, 6)
             context_layout.setVerticalSpacing(8)
         activity_layout = self.activity_card.layout()
