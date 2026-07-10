@@ -744,15 +744,16 @@ class StudioController(QObject):
         root_dir: Path,
         parent: QWidget | None,
     ) -> None:
-        if self.main_window is None:
-            self._import_project_bundle_synchronously(bundle_path, root_dir, parent)
-            return
+        task_parent = parent or self.main_window or self.welcome_window
+        if task_parent is None:
+            raise RuntimeError("Project bundle import requires an active Studio window.")
 
         progress_bridge = _BundleImportProgressBridge(self)
         progress_bridge.stage_changed.connect(self._on_import_project_bundle_stage_changed)
         self._import_bundle_progress_bridge = progress_bridge
         self._import_bundle_processing_window = self.main_window
-        self.main_window.start_bundle_import_processing()
+        if self.main_window is not None:
+            self.main_window.start_bundle_import_processing()
 
         def _import_bundle() -> ProjectScaffold:
             return import_project_bundle(
@@ -761,27 +762,12 @@ class StudioController(QObject):
                 progress_callback=progress_bridge.stage_changed.emit,
             )
 
-        task = BackgroundTask(parent_widget=self.main_window, callback=_import_bundle)
+        task = BackgroundTask(parent_widget=task_parent, callback=_import_bundle)
         self._active_import_bundle_task = task
         task.succeeded.connect(self._on_import_project_bundle_succeeded)
         task.failed.connect(self._on_import_project_bundle_failed)
         task.finished.connect(self._on_import_project_bundle_finished)
         task.start()
-
-    def _import_project_bundle_synchronously(
-        self,
-        bundle_path: Path,
-        root_dir: Path,
-        parent: QWidget | None,
-    ) -> None:
-        try:
-            scaffold = import_project_bundle(bundle_path, root_dir)
-            document = ProjectDocument.open_existing(scaffold.project_root)
-            self._confirm_imported_display_settings(document, parent=parent)
-        except Exception as error:
-            _show_error(parent, "Import FPVS Studio Project Error", error)
-            return
-        self._open_document(document)
 
     @Slot(str)
     def _on_import_project_bundle_stage_changed(self, stage: str) -> None:

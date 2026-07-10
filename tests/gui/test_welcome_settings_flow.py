@@ -5,7 +5,7 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
-from PySide6.QtCore import QMimeData, QPoint, QPointF, Qt, QUrl
+from PySide6.QtCore import QMimeData, QObject, QPoint, QPointF, Qt, QUrl, Signal
 from PySide6.QtGui import QDragEnterEvent, QDropEvent
 from PySide6.QtWidgets import (
     QApplication,
@@ -48,6 +48,26 @@ from fpvs_studio.gui.root_folder_setup_dialog import RootFolderSetupDialog
 from fpvs_studio.gui.settings_dialog import AppSettingsDialog
 from fpvs_studio.gui.welcome_window import WelcomeWindow
 from fpvs_studio.runtime.export_modes import EXPORT_MODE_COMPACT, EXPORT_MODE_FULL
+
+
+class _DeferredBackgroundTask(QObject):
+    succeeded = Signal(object)
+    failed = Signal(object)
+    finished = Signal()
+    instance: _DeferredBackgroundTask | None = None
+
+    def __init__(self, *, parent_widget, callback) -> None:
+        super().__init__(parent_widget)
+        self._callback = callback
+        self.started = False
+        type(self).instance = self
+
+    def start(self) -> None:
+        self.started = True
+
+    def run_successfully(self) -> None:
+        self.succeeded.emit(self._callback())
+        self.finished.emit()
 
 
 def test_welcome_window_smoke(qtbot, controller: StudioController, monkeypatch) -> None:
@@ -197,6 +217,8 @@ def test_welcome_bundle_drop_starts_project_bundle_import(
     def _fake_import_project_bundle(
         selected_bundle_path: Path,
         selected_root_dir: Path,
+        *,
+        progress_callback=None,
     ):
         captured["bundle_path"] = selected_bundle_path
         captured["root_dir"] = selected_root_dir
@@ -206,6 +228,11 @@ def test_welcome_bundle_drop_starts_project_bundle_import(
         "fpvs_studio.gui.controller.import_project_bundle",
         _fake_import_project_bundle,
     )
+    _DeferredBackgroundTask.instance = None
+    monkeypatch.setattr(
+        "fpvs_studio.gui.controller.BackgroundTask",
+        _DeferredBackgroundTask,
+    )
     monkeypatch.setattr(
         controller,
         "_confirm_imported_display_settings",
@@ -213,6 +240,14 @@ def test_welcome_bundle_drop_starts_project_bundle_import(
     )
 
     controller.import_project_bundle_file(bundle_path)
+
+    task = _DeferredBackgroundTask.instance
+    assert task is not None
+    assert task.started is True
+    assert captured == {}
+    assert controller.main_window is None
+
+    task.run_successfully()
 
     assert captured == {"bundle_path": bundle_path, "root_dir": root_dir}
     assert controller.main_window is not None
