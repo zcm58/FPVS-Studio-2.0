@@ -4,10 +4,39 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+from math import isfinite
+from typing import Any
 
 from fpvs_studio.core.run_spec import RunSpec
 
 WARMUP_SETTLE_FRAMES = 30
+
+
+def measure_window_refresh_hz(window: Any) -> float:
+    """Measure a PsychoPy window's stable actual frame rate."""
+
+    get_actual_frame_rate = getattr(window, "getActualFrameRate", None)
+    if not callable(get_actual_frame_rate):
+        raise RuntimeError("PsychoPy cannot measure the connected display refresh rate.")
+    measured = get_actual_frame_rate(
+        nIdentical=20,
+        nMaxFrames=240,
+        nWarmUpFrames=60,
+        threshold=0.5,
+        infoMsg="FPVS Studio is measuring this display's refresh rate...",
+    )
+    if measured is None:
+        raise RuntimeError(
+            "PsychoPy could not obtain a stable display refresh measurement. "
+            "Close other graphics-intensive applications and try again."
+        )
+    try:
+        measured_hz = float(measured)
+    except (TypeError, ValueError) as exc:
+        raise RuntimeError("PsychoPy returned an invalid display refresh measurement.") from exc
+    if not isfinite(measured_hz) or measured_hz <= 0:
+        raise RuntimeError("PsychoPy returned an invalid display refresh measurement.")
+    return measured_hz
 
 
 @dataclass(frozen=True)

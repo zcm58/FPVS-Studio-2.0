@@ -17,6 +17,9 @@ as PsychoPy. Runtime owns flow and calls engines through
   persisted into `RunSpec`.
 - Engines may report the active session window size so runtime can block launches
   whose configured display resolution does not match the actual fullscreen display.
+- Engines expose a neutral refresh-measurement method. PsychoPy implements it with a
+  temporary fullscreen probe window; measured values do not leak PsychoPy types across
+  the engine boundary.
 - PsychoPy imports must remain lazy and local to engine implementations.
 - Engines return core-owned execution summaries; exporters stay outside engine
   code.

@@ -7,22 +7,40 @@ from pathlib import Path
 
 import pytest
 
-from fpvs_studio.core.compiler import compile_run_spec
+from fpvs_studio.core.compiler import compile_run_spec, compile_session_plan
 from fpvs_studio.core.enums import StimulusModality
 from fpvs_studio.core.execution import RunExecutionSummary
 from fpvs_studio.core.run_spec import RunSpec
 from fpvs_studio.engines.base import FixationTutorialAttemptResult, PresentationEngine
-from fpvs_studio.runtime.preflight import PreflightError, preflight_run_spec
+from fpvs_studio.runtime.preflight import (
+    PreflightError,
+    preflight_run_spec,
+    preflight_session_plan,
+)
 from fpvs_studio.triggers.base import TriggerBackend
 
 
 class _PreflightEngine(PresentationEngine):
+    def __init__(self, measured_refresh_hz: float | Exception = 60.0) -> None:
+        self.measured_refresh_hz = measured_refresh_hz
+        self.refresh_measurement_count = 0
+
     @property
     def engine_id(self) -> str:
         return "preflight"
 
     def probe_displays(self) -> list[dict[str, object]]:
         return []
+
+    def measure_refresh_hz(
+        self,
+        *,
+        runtime_options: Mapping[str, object] | None = None,
+    ) -> float:
+        self.refresh_measurement_count += 1
+        if isinstance(self.measured_refresh_hz, Exception):
+            raise self.measured_refresh_hz
+        return self.measured_refresh_hz
 
     def open_session(self, *, runtime_options: Mapping[str, object] | None = None) -> None:
         return None
@@ -190,7 +208,7 @@ def test_full_preflight_rejects_corrupt_image_assets_before_engine_launch(
         )
 
 
-@pytest.mark.parametrize("refresh_hz", [60.0, 120.0, 144.0])
+@pytest.mark.parametrize("refresh_hz", [59.94, 60.0, 120.0, 144.0, 240.0])
 def test_preflight_accepts_refresh_rates_compatible_with_6hz(
     sample_project,
     sample_project_root,
@@ -206,7 +224,7 @@ def test_preflight_accepts_refresh_rates_compatible_with_6hz(
     preflight_run_spec(sample_project_root, run_spec, engine=_PreflightEngine())
 
 
-def test_preflight_rejects_refresh_rate_incompatible_with_6hz(
+def test_preflight_rejects_refresh_rate_inconsistent_with_compiled_frames(
     sample_project,
     sample_project_root,
 ) -> None:
@@ -216,9 +234,9 @@ def test_preflight_rejects_refresh_rate_incompatible_with_6hz(
         project_root=sample_project_root,
         run_id="faces-run",
     )
-    run_spec.display.refresh_hz = 75.0
+    run_spec.display.refresh_hz = 120.0
 
-    with pytest.raises(PreflightError, match="display timing is incompatible"):
+    with pytest.raises(PreflightError, match="compiled frames_per_stimulus"):
         preflight_run_spec(sample_project_root, run_spec, engine=_PreflightEngine())
 
 
@@ -226,9 +244,10 @@ def test_preflight_rejects_blank_50_when_frames_per_stimulus_is_odd(
     sample_project,
     sample_project_root,
 ) -> None:
+    sample_project.settings.protocol.base_hz = 4.0
     run_spec = compile_run_spec(
         sample_project,
-        refresh_hz=90.0,
+        refresh_hz=60.0,
         project_root=sample_project_root,
         run_id="faces-run",
     )
@@ -240,6 +259,90 @@ def test_preflight_rejects_blank_50_when_frames_per_stimulus_is_odd(
 
     with pytest.raises(PreflightError, match="blank_50"):
         preflight_run_spec(sample_project_root, run_spec, engine=_PreflightEngine())
+
+
+def test_preflight_accepts_measured_refresh_within_tolerance(
+    sample_project,
+    sample_project_root,
+) -> None:
+    run_spec = compile_run_spec(
+        sample_project,
+        refresh_hz=144.0,
+        project_root=sample_project_root,
+        run_id="faces-run",
+    )
+    engine = _PreflightEngine(143.8)
+
+    preflight_run_spec(
+        sample_project_root,
+        run_spec,
+        engine=engine,
+        runtime_options={"verify_refresh_rate": True},
+    )
+
+    assert engine.refresh_measurement_count == 1
+
+
+def test_preflight_rejects_measured_refresh_mismatch(
+    sample_project,
+    sample_project_root,
+) -> None:
+    run_spec = compile_run_spec(
+        sample_project,
+        refresh_hz=240.0,
+        project_root=sample_project_root,
+        run_id="faces-run",
+    )
+
+    with pytest.raises(PreflightError, match="measured 60.000 Hz.*expects 240 Hz"):
+        preflight_run_spec(
+            sample_project_root,
+            run_spec,
+            engine=_PreflightEngine(60.0),
+            runtime_options={"verify_refresh_rate": True},
+        )
+
+
+def test_preflight_rejects_unavailable_refresh_measurement(
+    sample_project,
+    sample_project_root,
+) -> None:
+    run_spec = compile_run_spec(
+        sample_project,
+        refresh_hz=60.0,
+        project_root=sample_project_root,
+        run_id="faces-run",
+    )
+
+    with pytest.raises(PreflightError, match="could not be measured"):
+        preflight_run_spec(
+            sample_project_root,
+            run_spec,
+            engine=_PreflightEngine(RuntimeError("unstable")),
+            runtime_options={"verify_refresh_rate": True},
+        )
+
+
+def test_session_preflight_measures_connected_refresh_once(
+    sample_project,
+    sample_project_root,
+) -> None:
+    session_plan = compile_session_plan(
+        sample_project,
+        refresh_hz=60.0,
+        project_root=sample_project_root,
+        random_seed=2026,
+    )
+    engine = _PreflightEngine(59.98)
+
+    preflight_session_plan(
+        sample_project_root,
+        session_plan,
+        engine=engine,
+        runtime_options={"verify_refresh_rate": True},
+    )
+
+    assert engine.refresh_measurement_count == 1
 
 
 def test_preflight_accepts_word_stimuli_without_files(sample_project, sample_project_root) -> None:

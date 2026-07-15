@@ -28,9 +28,10 @@ SessionPlan -> runtime session flow -> engine.run_condition(RunSpec, ...)
 
 All execution timing in `RunSpec` is represented in frames.
 
-For v1:
+For a project-selected base rate:
 
-- `frames_per_stimulus = refresh_hz / 6.0`
+- `frames_per_stimulus` is the nearest positive whole frame count to
+  `refresh_hz / requested_base_hz`
 - `continuous`
   - `on_frames = frames_per_stimulus`
   - `off_frames = 0`
@@ -39,10 +40,21 @@ For v1:
   - `off_frames = frames_per_stimulus / 2`
   - `frames_per_stimulus` must be even
 
+Exact ratios such as 144 Hz / 6 Hz compile without a warning. Non-integral ratios
+such as 59.94 Hz / 6 Hz compile to the nearest whole-frame cadence and produce a
+display warning with realized base and oddball rates. Runtime timing QC reports actual
+dropped or late flips separately from this protocol approximation.
+
+Authored monitor refresh rates are limited to the core-owned approved list: 59.94, 60,
+120, 144, and 240 Hz. Connected-display measurement is machine-specific runtime state
+and is not persisted in `RunSpec`; runtime preflight compares an engine measurement to
+the compiled refresh target before playback.
+
 Runtime and engines must consume these compiled frame counts directly. They do
 not recompute protocol logic from `ProjectFile`.
 
-The editable project stores duty-cycle mode per condition. Project-level
+The editable project stores project-wide `base_hz` and integer `oddball_every_n`
+settings plus duty-cycle mode per condition. Project-level
 condition-template profiles only seed defaults for authoring; mixed Continuous Images
 and 50% Blank Between Images sessions compile into separate `RunSpec` entries with each
 condition's resolved frame counts.

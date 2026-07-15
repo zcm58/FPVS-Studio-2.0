@@ -221,6 +221,12 @@ def _launcher_readiness_report(
     blocking_issues = [
         issue for issue in validation.issues if issue.severity == ValidationSeverity.ERROR
     ]
+    timing_warnings = [
+        issue
+        for issue in validation.issues
+        if issue.severity == ValidationSeverity.WARNING
+        and issue.location == "settings.protocol.base_hz"
+    ]
     blocking_issue_count = len(blocking_issues)
 
     conditions_ready = bool(ordered_conditions)
@@ -236,6 +242,9 @@ def _launcher_readiness_report(
     elif blocking_issue_count > 0:
         status_label = "Validation Issues"
         badge_state = "warning"
+    elif timing_warnings:
+        status_label = "Ready with Timing Warning"
+        badge_state = "warning"
     else:
         status_label = "Ready to Launch"
         badge_state = "ready"
@@ -247,6 +256,11 @@ def _launcher_readiness_report(
     elif blocking_issue_count > 0:
         status_summary = (
             f"Validation at {refresh_hz:.2f} Hz reports {blocking_issue_count} blocking issue(s)."
+        )
+    elif timing_warnings:
+        status_summary = (
+            "Launch is allowed with approximate whole-frame timing. "
+            f"{_truncate_line(timing_warnings[0].message, 180)}"
         )
     else:
         status_summary = f"Launch requirements are satisfied at {refresh_hz:.2f} Hz."
@@ -270,6 +284,10 @@ def _launcher_readiness_report(
         )
         readiness_items.append(
             f"Warning: First blocker: {_truncate_line(blocking_issues[0].message, 120)}"
+        )
+    elif timing_warnings:
+        readiness_items.append(
+            f"Warning: {_truncate_line(timing_warnings[0].message, 160)}"
         )
     else:
         readiness_items.append(f"Complete: Validation ({refresh_hz:.2f} Hz) clear.")

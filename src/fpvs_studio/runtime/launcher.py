@@ -58,6 +58,7 @@ class LaunchSettings:
         engine_name = options["engine_name"]
         if isinstance(engine_name, EngineName):
             options["engine_name"] = engine_name.value
+        options["verify_refresh_rate"] = True
         return options
 
 

@@ -515,9 +515,10 @@ class ConditionsPage(QWidget):
             self.timing_template_combo.setCurrentIndex(
                 self.timing_template_combo.findData(condition.duty_cycle_mode)
             )
+        protocol = self._document.project.settings.protocol
         self.template_info_label.setText(
-            f"{template.display_name}: base {template.base_hz:.1f} Hz, oddball every "
-            f"{template.oddball_every_n}th image, oddball {template.oddball_hz:.1f} Hz."
+            f"{template.display_name}: base {protocol.base_hz:g} Hz, oddball every "
+            f"{protocol.oddball_every_n} stimuli ({protocol.oddball_hz:g} Hz)."
         )
         self._set_source_panel(
             stimulus_set=base_set,

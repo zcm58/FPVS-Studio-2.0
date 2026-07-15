@@ -39,6 +39,19 @@ class StubEngine(PresentationEngine):
     def probe_displays(self) -> list[dict[str, object]]:
         return []
 
+    def measure_refresh_hz(
+        self,
+        *,
+        runtime_options: Mapping[str, object] | None = None,
+    ) -> float:
+        self._captures["refresh_measurement_count"] = (
+            int(self._captures.get("refresh_measurement_count", 0)) + 1
+        )
+        measured_hz = self._captures.get("measured_refresh_hz", 60.0)
+        if isinstance(measured_hz, Exception):
+            raise measured_hz
+        return float(measured_hz)
+
     def open_session(
         self,
         *,

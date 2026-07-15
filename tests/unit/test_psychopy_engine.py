@@ -26,6 +26,7 @@ class _FakeWindow:
         flip_times: list[float] | None = None,
         events: list[tuple[str, object]] | None = None,
         raise_on_flip_index: int | None = None,
+        actual_frame_rate: float | None = 60.0,
         **kwargs,
     ) -> None:
         self.kwargs = kwargs
@@ -39,6 +40,9 @@ class _FakeWindow:
         self._flip_index = 0
         self._last_flip_time = 0.0
         self._call_on_flip: list[tuple[object, tuple[object, ...]]] = []
+        self.actual_frame_rate = actual_frame_rate
+        self.actual_frame_rate_kwargs: dict[str, object] | None = None
+        self.closed = False
 
     @property
     def last_flip_time(self) -> float:
@@ -67,7 +71,11 @@ class _FakeWindow:
         self._call_on_flip.append((callback, args))
 
     def close(self) -> None:
-        return None
+        self.closed = True
+
+    def getActualFrameRate(self, **kwargs) -> float | None:  # noqa: N802
+        self.actual_frame_rate_kwargs = kwargs
+        return self.actual_frame_rate
 
 
 class _FakeClock:
@@ -158,6 +166,7 @@ def _build_fake_psychopy(
     key_batches: list[list[object]] | None = None,
     raise_on_flip_index: int | None = None,
     record_psychopy_warnings: bool = False,
+    actual_frame_rate: float | None = 60.0,
 ) -> object:
     events: list[tuple[str, object]] = []
     image_stims: list[Any] = []
@@ -194,6 +203,7 @@ def _build_fake_psychopy(
             flip_times=flip_times,
             events=events,
             raise_on_flip_index=raise_on_flip_index,
+            actual_frame_rate=actual_frame_rate,
             **kwargs,
         )
         captures["window"] = window
@@ -247,6 +257,58 @@ def _patch_fake_psychopy(monkeypatch, engine: PsychoPyEngine, fake_psychopy: obj
     engine._keyboard_module = fake_psychopy.hardware.keyboard
     engine._psychopy_logging = fake_psychopy.logging
     monkeypatch.setattr(engine, "_load_psychopy", lambda: fake_psychopy)
+
+
+def test_measure_refresh_hz_uses_fullscreen_psychopy_probe_and_closes_window(monkeypatch) -> None:
+    captures: dict[str, object] = {}
+    fake_psychopy = _build_fake_psychopy(
+        captures,
+        flip_times=[],
+        actual_frame_rate=143.92,
+    )
+    engine = PsychoPyEngine()
+    _patch_fake_psychopy(monkeypatch, engine, fake_psychopy)
+
+    measured_hz = engine.measure_refresh_hz(runtime_options={"display_index": 1})
+
+    assert measured_hz == pytest.approx(143.92)
+    assert captures["window_kwargs"] == {
+        "fullscr": True,
+        "screen": 1,
+        "allowGUI": False,
+        "waitBlanking": True,
+        "color": "black",
+        "units": "pix",
+        "checkTiming": False,
+    }
+    window = captures["window"]
+    assert isinstance(window, _FakeWindow)
+    assert window.actual_frame_rate_kwargs == {
+        "nIdentical": 20,
+        "nMaxFrames": 240,
+        "nWarmUpFrames": 60,
+        "threshold": 0.5,
+        "infoMsg": "FPVS Studio is measuring this display's refresh rate...",
+    }
+    assert window.closed is True
+
+
+def test_measure_refresh_hz_rejects_unstable_measurement_and_closes_window(monkeypatch) -> None:
+    captures: dict[str, object] = {}
+    fake_psychopy = _build_fake_psychopy(
+        captures,
+        flip_times=[],
+        actual_frame_rate=None,
+    )
+    engine = PsychoPyEngine()
+    _patch_fake_psychopy(monkeypatch, engine, fake_psychopy)
+
+    with pytest.raises(RuntimeError, match="could not obtain a stable"):
+        engine.measure_refresh_hz()
+
+    window = captures["window"]
+    assert isinstance(window, _FakeWindow)
+    assert window.closed is True
 
 
 def _tiny_run_spec(sample_project, sample_project_root):

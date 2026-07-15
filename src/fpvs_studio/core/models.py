@@ -170,13 +170,18 @@ class ProjectValidationReport(FPVSBaseModel):
 
 
 class DisplayValidationReport(FPVSBaseModel):
-    """Display refresh compatibility result for the fixed v1 protocol."""
+    """Display refresh compatibility and realized frame timing."""
 
     refresh_hz: float = Field(gt=0)
     base_hz: float = Field(gt=0)
     duty_cycle_mode: DutyCycleMode | None = None
     frames_per_cycle_raw: float = Field(gt=0)
     frames_per_cycle: int | None = Field(default=None, ge=1)
+    timing_is_exact: bool = True
+    realized_base_hz: float | None = Field(default=None, gt=0)
+    oddball_every_n: int | None = Field(default=None, ge=1)
+    requested_oddball_hz: float | None = Field(default=None, gt=0)
+    realized_oddball_hz: float | None = Field(default=None, gt=0)
     compatible: bool
     errors: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
@@ -232,6 +237,19 @@ class DisplaySettings(FPVSBaseModel):
         cls, value: str | tuple[int, int, int]
     ) -> str | tuple[int, int, int]:
         return validate_color(value)
+
+
+class ProtocolSettings(FPVSBaseModel):
+    """Project-wide editable FPVS presentation cadence."""
+
+    base_hz: float = Field(default=6.0, gt=0)
+    oddball_every_n: int = Field(default=5, ge=1)
+
+    @property
+    def oddball_hz(self) -> float:
+        """Return the oddball rate derived from the integer stimulus cadence."""
+
+        return self.base_hz / self.oddball_every_n
 
 
 class FixationTaskSettings(FPVSBaseModel):
@@ -368,6 +386,7 @@ class ProjectSettings(FPVSBaseModel):
     condition_profile_id: str | None = None
     condition_defaults: ConditionDefaults = Field(default_factory=ConditionDefaults)
     display: DisplaySettings = Field(default_factory=DisplaySettings)
+    protocol: ProtocolSettings = Field(default_factory=ProtocolSettings)
     fixation_task: FixationTaskSettings = Field(default_factory=FixationTaskSettings)
     triggers: TriggerSettings = Field(default_factory=TriggerSettings)
     session: SessionSettings = Field(default_factory=SessionSettings)

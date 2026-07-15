@@ -17,7 +17,6 @@ Current implementation:
 
 Concrete planned work:
 
-- `exec-plans/planned/configurable-fpvs-protocol.md`
 - `exec-plans/planned/participant-electrode-exclusion-launch-prompt.md`
 - `exec-plans/planned/luminance-rms-equalization-investigation.md`
 - `exec-plans/planned/sinusoidal-contrast-modulation.md`

@@ -274,16 +274,27 @@ def test_runspec_creation_at_120hz_blank_50_mode(sample_project, sample_project_
     assert run_spec.display.off_frames == 10
 
 
-def test_compiler_rejects_unsupported_refresh_rates(sample_project) -> None:
-    with pytest.raises(CompileError, match="incompatible"):
-        compile_run_spec(sample_project, refresh_hz=75.0)
+def test_compiler_accepts_approximate_refresh_with_whole_frame_timing(
+    sample_project,
+    sample_project_root,
+) -> None:
+    run_spec = compile_run_spec(
+        sample_project,
+        refresh_hz=59.94,
+        project_root=sample_project_root,
+    )
+
+    assert run_spec.display.frames_per_stimulus == 10
+    assert run_spec.condition.base_hz == 6.0
+    assert all(event.on_frames == 10 for event in run_spec.stimulus_sequence)
 
 
 def test_compiler_rejects_blank_mode_odd_frame_cycles(sample_project) -> None:
     sample_project.conditions[0].duty_cycle_mode = DutyCycleMode.BLANK_50
+    sample_project.settings.protocol.base_hz = 4.0
 
     with pytest.raises(CompileError, match="blank_50"):
-        compile_run_spec(sample_project, refresh_hz=90.0)
+        compile_run_spec(sample_project, refresh_hz=60.0)
 
 
 def test_compiler_generates_deterministic_role_schedule(
@@ -328,6 +339,44 @@ def test_compiler_keeps_base_and_oddball_frame_cadence_locked(
         b - a == expected_base_frame_step
         for a, b in zip(stimulus_start_frames, stimulus_start_frames[1:], strict=False)
     )
+    assert all(
+        b - a == expected_oddball_frame_step
+        for a, b in zip(oddball_start_frames, oddball_start_frames[1:], strict=False)
+    )
+
+
+@pytest.mark.parametrize(
+    ("refresh_hz", "expected_base_frame_step", "expected_oddball_frame_step"),
+    [
+        (60.0, 10, 60),
+        (120.0, 20, 120),
+        (144.0, 24, 144),
+        (240.0, 40, 240),
+    ],
+)
+def test_compiler_supports_configured_6hz_base_with_1hz_oddball(
+    sample_project,
+    sample_project_root,
+    refresh_hz: float,
+    expected_base_frame_step: int,
+    expected_oddball_frame_step: int,
+) -> None:
+    sample_project.settings.protocol.oddball_every_n = 6
+
+    run_spec = compile_run_spec(
+        sample_project,
+        refresh_hz=refresh_hz,
+        project_root=sample_project_root,
+    )
+    oddball_start_frames = [
+        event.on_start_frame for event in run_spec.stimulus_sequence if event.role == "oddball"
+    ]
+
+    assert run_spec.condition.base_hz == 6.0
+    assert run_spec.condition.oddball_every_n == 6
+    assert run_spec.condition.oddball_hz == 1.0
+    assert run_spec.condition.total_stimuli == 876
+    assert run_spec.display.frames_per_stimulus == expected_base_frame_step
     assert all(
         b - a == expected_oddball_frame_step
         for a, b in zip(oddball_start_frames, oddball_start_frames[1:], strict=False)

@@ -25,6 +25,7 @@ def test_launch_settings_default_to_strict_timing_fail_fast() -> None:
 
     assert settings.strict_timing is True
     assert settings.strict_timing_warmup is True
+    assert settings.as_runtime_options()["verify_refresh_rate"] is True
     assert settings.timing_miss_threshold_multiplier == 1.5
     assert settings.timing_warmup_frames == 240
     assert settings.export_mode == EXPORT_MODE_FULL

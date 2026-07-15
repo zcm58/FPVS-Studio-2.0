@@ -232,6 +232,13 @@ class ProjectDocument(
         settings = _validated_copy(self._project.settings, display=display)
         self._apply_project_update(settings=settings)
 
+    def update_protocol_settings(self, **updates: object) -> None:
+        """Update project-wide FPVS timing through Pydantic validation."""
+
+        protocol = _validated_copy(self._project.settings.protocol, **updates)
+        settings = _validated_copy(self._project.settings, protocol=protocol)
+        self._apply_project_update(settings=settings)
+
     def update_session_settings(self, **updates: object) -> None:
         """Update session settings through Pydantic validation."""
 

@@ -40,6 +40,7 @@ At minimum, the core layer should define models for:
 - `ProjectFile`
 - `ProjectMeta`
 - `ProjectSettings`
+- `ProtocolSettings`
 - `DisplaySettings`
 - `FixationTaskSettings`
 - `TriggerSettings`
@@ -83,12 +84,17 @@ Implement friendly, explicit validation for:
 - word conditions have non-empty base/oddball word lists
 - valid duty-cycle mode
 - display compatibility:
-  - refresh / 6 must resolve to an integer frame count within tolerance
-  - `blank_50` also requires an even frame count per cycle
+  - accept authored monitor refresh targets only from the core-owned approved list
+    (`59.94`, `60`, `120`, `144`, and `240 Hz`)
+  - keep measured-versus-configured tolerance arithmetic engine-neutral while leaving
+    the hardware measurement itself behind the engine boundary
+  - resolve `refresh_hz / base_hz` to the nearest positive whole frame count
+  - report non-integral ratios as approximate timing with requested and realized rates
+  - `blank_50` also requires an even resolved frame count per cycle
 
 ## Timing representation
 
-For v1, keep protocol constants explicit:
+For v1, keep protocol defaults explicit while allowing project-level edits:
 
 - `base_hz = 6.0`
 - `oddball_every_n = 5`

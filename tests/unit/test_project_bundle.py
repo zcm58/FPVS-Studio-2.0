@@ -187,6 +187,7 @@ def test_import_project_bundle_creates_project_and_deletes_staging(
     sample_project_root,
 ) -> None:
     sample_project.settings.fixation_task.base_color = "#00FF00"
+    sample_project.settings.protocol.oddball_every_n = 6
     _save_bundle_ready_project(sample_project_root, sample_project)
     bundle_path = tmp_path / "sample.fpvsbundle"
     export_project_bundle(sample_project_root, bundle_path)
@@ -198,6 +199,8 @@ def test_import_project_bundle_creates_project_and_deletes_staging(
     loaded = load_project_file(scaffold.project_root / "project.json")
     assert loaded.meta.name == sample_project.meta.name
     assert loaded.settings.fixation_task.base_color == "#00FF00"
+    assert loaded.settings.protocol.base_hz == 6.0
+    assert loaded.settings.protocol.oddball_every_n == 6
     assert (
         scaffold.project_root
         / "stimuli"

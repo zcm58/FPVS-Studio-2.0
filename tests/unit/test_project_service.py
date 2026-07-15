@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from fpvs_studio.core.condition_template_profiles import get_condition_template_profile
+from fpvs_studio.core.models import ProjectFile
 from fpvs_studio.core.paths import (
     APP_DATA_DIRNAME,
     TEMPLATES_DIRNAME,
@@ -51,8 +52,23 @@ def test_project_scaffolding_creates_expected_directories_and_files(tmp_path) ->
 
     assert project.meta.template_id == "fpvs_6hz_every5_v1"
     assert project.conditions == []
+    assert project.settings.protocol.base_hz == 6.0
+    assert project.settings.protocol.oddball_every_n == 5
+    assert project.settings.protocol.oddball_hz == 1.2
     assert project.settings.supported_variants[0].value == "original"
     assert manifest.project_id == project.meta.project_id
+
+
+def test_project_without_protocol_fields_loads_current_timing_defaults(tmp_path) -> None:
+    scaffold = create_project(tmp_path, "Legacy Timing Project")
+    payload = scaffold.project.model_dump(mode="json")
+    del payload["settings"]["protocol"]
+
+    loaded = ProjectFile.model_validate(payload)
+
+    assert loaded.settings.protocol.base_hz == 6.0
+    assert loaded.settings.protocol.oddball_every_n == 5
+    assert loaded.settings.protocol.oddball_hz == 1.2
 
 
 def test_project_scaffolding_applies_condition_template_profile_snapshot(tmp_path) -> None:

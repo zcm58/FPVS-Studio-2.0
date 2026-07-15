@@ -155,6 +155,7 @@ def _display_report_for_run(run_spec: RunSpec) -> DisplayValidationReport:
         run_spec.display.refresh_hz,
         duty_cycle_mode=duty_cycle_mode,
         base_hz=run_spec.condition.base_hz,
+        oddball_every_n=run_spec.condition.oddball_every_n,
     )
 
 

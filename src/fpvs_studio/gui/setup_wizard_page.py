@@ -202,7 +202,11 @@ class SetupWizardPage(QWidget):
             document,
             framed=False,
             show_scope_label=False,
+            require_refresh_verification=True,
             parent=self,
+        )
+        self.runtime_settings_editor.refresh_verification_changed.connect(
+            self.schedule_refresh
         )
         self.image_display_size_editor = ImageDisplaySizeEditor(document, parent=self)
         self.session_structure_editor = SessionStructureEditor(
@@ -1058,14 +1062,17 @@ class SetupWizardPage(QWidget):
             condition_lines = (condition_count_line, timing_line)
 
         block_count = session.block_count
+        protocol = project.settings.protocol
         background_label = self._display_background_label(str(display.background_color))
         repeat_word = "time" if block_count == 1 else "times"
         experiment_lines = (
             f"Each condition will repeat {block_count} {repeat_word} "
             f"in randomized block order",
             "Condition order is randomized automatically at launch",
-            f"Display: {self.runtime_settings_editor.current_refresh_hz():.2f} Hz, "
+            f"Monitor: {self.runtime_settings_editor.current_refresh_hz():.2f} Hz, "
             f"{background_label}",
+            f"FPVS timing: {protocol.base_hz:g} Hz base, oddball every "
+            f"{protocol.oddball_every_n} stimuli ({protocol.oddball_hz:g} Hz)",
             f"Image width: {display.stimulus_width_degrees:.1f} deg at "
             f"{display.viewing_distance_cm:.0f} cm on "
             f"{display.screen_width_px} x {display.screen_height_px}",
@@ -1142,7 +1149,7 @@ class SetupWizardPage(QWidget):
         if step_key == "conditions":
             return self._conditions_images_ready(ordered_conditions)
         if step_key == "experiment":
-            return self.runtime_settings_editor.current_refresh_hz() > 0.0
+            return self.runtime_settings_editor.timing_is_compatible()
         if step_key == "fixation":
             return True
         if step_key == "response":
@@ -1165,7 +1172,7 @@ class SetupWizardPage(QWidget):
                 return "Set trigger codes above 0"
             return "Assign base and oddball folders"
         if step_key == "experiment":
-            return "Set a valid refresh rate"
+            return self.runtime_settings_editor.timing_blocker()
         if step_key == "review":
             return self._readiness_report().status_label
         return "Step needs attention"

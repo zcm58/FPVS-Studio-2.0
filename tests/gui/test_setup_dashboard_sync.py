@@ -67,7 +67,11 @@ def test_setup_dashboard_edits_sync_document_and_dedicated_tabs(
     fixation_editor.no_repeat_count_checkbox.setChecked(True)
 
     runtime_editor = dashboard.runtime_settings_editor
-    runtime_editor.refresh_hz_spin.setValue(59.94)
+    runtime_editor.refresh_hz_combo.setCurrentIndex(
+        runtime_editor.refresh_hz_combo.findData(59.94)
+    )
+    runtime_editor.base_hz_spin.setValue(6.0)
+    runtime_editor.oddball_every_n_spin.setValue(6)
     dark_gray_index = runtime_editor.runtime_background_color_combo.findData("#101010")
     assert dark_gray_index >= 0
     runtime_editor.runtime_background_color_combo.setCurrentIndex(dark_gray_index)
@@ -100,6 +104,8 @@ def test_setup_dashboard_edits_sync_document_and_dedicated_tabs(
     assert settings.fixation_task.target_count_max == 5
     assert settings.fixation_task.no_immediate_repeat_count is True
     assert settings.display.preferred_refresh_hz == pytest.approx(59.94, abs=0.01)
+    assert settings.protocol.base_hz == 6.0
+    assert settings.protocol.oddball_every_n == 6
     assert settings.display.background_color == "#101010"
     assert settings.display.stimulus_width_degrees == pytest.approx(7.5, abs=0.01)
     assert settings.display.viewing_distance_cm == pytest.approx(82.0, abs=0.01)
@@ -123,7 +129,7 @@ def test_setup_dashboard_edits_sync_document_and_dedicated_tabs(
     assert window.fixation_cross_settings_page.target_count_mode_combo.currentData() == "randomized"
     assert window.fixation_cross_settings_page.target_count_min_spin.value() == 2
     assert window.fixation_cross_settings_page.target_count_max_spin.value() == 5
-    assert window.run_page.refresh_hz_spin.value() == pytest.approx(59.94, abs=0.01)
+    assert window.run_page.refresh_hz_combo.currentData() == pytest.approx(59.94, abs=0.01)
     assert window.run_page.runtime_background_color_combo.currentData() == "#101010"
     assert window.run_page.findChild(QWidget, "serial_port_edit") is None
     assert window.run_page.findChild(QWidget, "serial_baudrate_spin") is None
@@ -151,7 +157,7 @@ def test_dedicated_tab_edits_refresh_setup_dashboard_controls(
     fixation_page.changes_per_sequence_spin.setValue(7)
 
     run_page = window.run_page
-    run_page.refresh_hz_spin.setValue(75.0)
+    window.document.update_display_settings(preferred_refresh_hz=75.0)
     QApplication.processEvents()
 
     dashboard = window.setup_dashboard_page
@@ -165,9 +171,10 @@ def test_dedicated_tab_edits_refresh_setup_dashboard_controls(
     assert dashboard.session_structure_editor.continue_key_edit.text() == "space"
     assert dashboard.fixation_settings_editor.target_count_mode_combo.currentData() == "fixed"
     assert dashboard.fixation_settings_editor.changes_per_sequence_spin.value() == 7
-    assert dashboard.runtime_settings_editor.refresh_hz_spin.value() == pytest.approx(
+    assert dashboard.runtime_settings_editor.refresh_hz_combo.currentData() == pytest.approx(
         75.0, abs=0.01
     )
+    assert "not approved" in dashboard.runtime_settings_editor.refresh_hz_combo.currentText()
     assert not hasattr(dashboard.runtime_settings_editor, "serial_port_edit")
     assert not hasattr(dashboard.runtime_settings_editor, "serial_baudrate_spin")
     assert not hasattr(dashboard.runtime_settings_editor, "fullscreen_checkbox")
@@ -201,7 +208,9 @@ def test_setup_dashboard_save_load_smoke_persists_dashboard_edited_settings(
     fixation_editor._set_response_key("g")
 
     runtime_editor = dashboard.runtime_settings_editor
-    runtime_editor.refresh_hz_spin.setValue(120.0)
+    runtime_editor.refresh_hz_combo.setCurrentIndex(
+        runtime_editor.refresh_hz_combo.findData(120.0)
+    )
     dark_gray_index = runtime_editor.runtime_background_color_combo.findData("#101010")
     assert dark_gray_index >= 0
     runtime_editor.runtime_background_color_combo.setCurrentIndex(dark_gray_index)
@@ -249,9 +258,10 @@ def test_setup_dashboard_save_load_smoke_persists_dashboard_edited_settings(
 
     assert reopened_dashboard.session_structure_editor.block_count_spin.value() == 3
     assert reopened_dashboard.fixation_settings_editor.changes_per_sequence_spin.value() == 6
-    assert reopened_dashboard.runtime_settings_editor.refresh_hz_spin.value() == pytest.approx(
-        120.0, abs=0.01
+    reopened_refresh_hz = (
+        reopened_dashboard.runtime_settings_editor.refresh_hz_combo.currentData()
     )
+    assert reopened_refresh_hz == pytest.approx(120.0, abs=0.01)
     assert reopened_dashboard.image_display_size_editor.width_degrees_spin.value() == pytest.approx(
         9.0, abs=0.01
     )

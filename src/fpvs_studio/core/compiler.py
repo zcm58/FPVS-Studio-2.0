@@ -82,13 +82,14 @@ def compile_run_spec(
 
     resolved_manifest = load_manifest(project_root, manifest)
     template = get_template(project.meta.template_id)
-    frames_per_stimulus_value = frames_per_stimulus(refresh_hz, template.base_hz)
+    protocol = project.settings.protocol
+    frames_per_stimulus_value = frames_per_stimulus(refresh_hz, protocol.base_hz)
     on_frames, off_frames = on_off_frames(
         frames_per_stimulus_value,
         condition.duty_cycle_mode,
     )
     total_oddball_cycles = condition.oddball_cycle_repeats_per_sequence * condition.sequence_count
-    total_stimuli = total_oddball_cycles * template.oddball_every_n
+    total_stimuli = total_oddball_cycles * protocol.oddball_every_n
     total_frames = total_stimuli * frames_per_stimulus_value
 
     base_stimuli = resolve_stimulus_items(
@@ -110,7 +111,7 @@ def compile_run_spec(
         off_frames=off_frames,
         base_stimuli=base_stimuli,
         oddball_stimuli=oddball_stimuli,
-        oddball_every_n=template.oddball_every_n,
+        oddball_every_n=protocol.oddball_every_n,
         rng=random.Random(random_seed),
     )
 
@@ -149,7 +150,7 @@ def compile_run_spec(
         minimum_total_cycles, minimum_cycles_per_repeat = minimum_cycles_required(
             required_frames=required_frames,
             frames_per_stimulus=frames_per_stimulus_value,
-            oddball_every_n=template.oddball_every_n,
+            oddball_every_n=protocol.oddball_every_n,
             condition_repeat_count=condition.sequence_count,
         )
         raise CompileError(
@@ -195,9 +196,9 @@ def compile_run_spec(
             show_title_on_screen=project.settings.session.show_condition_title_on_screen,
             template_id=template.template_id,
             instructions_text=condition.instructions or None,
-            base_hz=template.base_hz,
-            oddball_every_n=template.oddball_every_n,
-            oddball_hz=template.oddball_hz,
+            base_hz=protocol.base_hz,
+            oddball_every_n=protocol.oddball_every_n,
+            oddball_hz=protocol.oddball_hz,
             total_oddball_cycles=total_oddball_cycles,
             total_stimuli=total_stimuli,
             stimulus_modality=base_set.modality,
@@ -276,9 +277,9 @@ def compile_session_plan(
     resolved_manifest = load_manifest(project_root, manifest)
     session_rng = random.Random(random_seed)
     fixation_settings = project.settings.fixation_task
-    template = get_template(project.meta.template_id)
+    protocol = project.settings.protocol
     try:
-        frames_per_stimulus_value = frames_per_stimulus(refresh_hz, template.base_hz)
+        frames_per_stimulus_value = frames_per_stimulus(refresh_hz, protocol.base_hz)
     except FrameValidationError as exc:
         raise CompileError(str(exc)) from exc
     target_duration_frames = milliseconds_to_frames(
@@ -304,7 +305,9 @@ def compile_session_plan(
             condition_total_oddball_cycles = (
                 condition.oddball_cycle_repeats_per_sequence * condition.sequence_count
             )
-            condition_total_stimuli = condition_total_oddball_cycles * template.oddball_every_n
+            condition_total_stimuli = (
+                condition_total_oddball_cycles * protocol.oddball_every_n
+            )
             condition_total_frames = condition_total_stimuli * frames_per_stimulus_value
             max_supported_count = max_supported_color_changes(
                 total_frames=condition_total_frames,

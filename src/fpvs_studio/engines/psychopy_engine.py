@@ -32,11 +32,16 @@ from fpvs_studio.engines.psychopy_stimuli import (
 from fpvs_studio.engines.psychopy_text_screens import show_text_screen
 from fpvs_studio.engines.psychopy_timing import (
     TimingConfig,
+    measure_window_refresh_hz,
     timing_config_for_run,
     timing_violation_reason,
 )
 from fpvs_studio.engines.psychopy_triggers import build_trigger_lookup, emit_trigger
-from fpvs_studio.engines.psychopy_window import build_window_kwargs, create_fixation_stim
+from fpvs_studio.engines.psychopy_window import (
+    build_refresh_probe_window_kwargs,
+    build_window_kwargs,
+    create_fixation_stim,
+)
 from fpvs_studio.triggers.base import TriggerBackend
 
 LOGGER = logging.getLogger(__name__)
@@ -72,6 +77,20 @@ class PsychoPyEngine(PresentationEngine):
         if monitors is None or not hasattr(monitors, "getAllMonitors"):
             return []
         return [{"monitor_name": name} for name in monitors.getAllMonitors()]
+
+    def measure_refresh_hz(
+        self,
+        *,
+        runtime_options: Mapping[str, object] | None = None,
+    ) -> float:
+        """Measure the current display with a temporary fullscreen PsychoPy window."""
+
+        visual = self._require_visual()
+        probe_window = visual.Window(**build_refresh_probe_window_kwargs(runtime_options))
+        try:
+            return measure_window_refresh_hz(probe_window)
+        finally:
+            probe_window.close()
 
     def open_session(
         self,

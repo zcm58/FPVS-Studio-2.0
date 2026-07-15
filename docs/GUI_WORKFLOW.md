@@ -107,8 +107,13 @@ The authoring window is organized around two user-facing modes:
   - Project exposes `Enable participant tutorial?`, which controls whether the
     participant sees the fixation response tutorial before the first condition
   - Experiment combines display, image-size, and session settings in one compact centered card
-  - the Display column exposes display refresh rate and presentation background
-    (`Black` or `Dark Gray`); current launches always use PsychoPy, beta test-mode,
+  - the Display column exposes an approved monitor-refresh dropdown (`59.94`, `60`,
+    `120`, `144`, or `240 Hz`), `Detect My Refresh Rate`, project-wide base rate,
+    integer oddball cadence, derived oddball rate/frame counts/condition duration, and
+    presentation background (`Black` or `Dark Gray`); setup requires a successful
+    PsychoPy fullscreen measurement before `Next`, changing the dropdown clears the
+    prior verification, and 59.94 Hz retains its visible requested-versus-realized
+    whole-frame timing warning; current launches always use PsychoPy, beta test-mode,
     fullscreen playback, and the default display without exposing those as choices
   - the Image Size column exposes project-wide image visual-angle width in degrees,
     approximate viewing distance in cm, physical screen width in cm, intended test

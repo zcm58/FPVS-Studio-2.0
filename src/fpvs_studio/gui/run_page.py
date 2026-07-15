@@ -347,7 +347,7 @@ class RunPage(QWidget):
             framed=True,
             parent=self,
         )
-        self.refresh_hz_spin = self.runtime_settings_editor.refresh_hz_spin
+        self.refresh_hz_combo = self.runtime_settings_editor.refresh_hz_combo
         self.runtime_background_color_combo = (
             self.runtime_settings_editor.runtime_background_color_combo
         )

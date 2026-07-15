@@ -14,7 +14,10 @@ from PIL import Image
 from fpvs_studio.core.enums import DutyCycleMode, StimulusModality
 from fpvs_studio.core.run_spec import RunSpec
 from fpvs_studio.core.session_plan import SessionPlan
-from fpvs_studio.core.validation import validate_display_refresh
+from fpvs_studio.core.validation import (
+    measured_refresh_matches_configured,
+    validate_display_refresh,
+)
 from fpvs_studio.engines.base import PresentationEngine
 
 
@@ -26,6 +29,45 @@ def _strict_timing_enabled(runtime_options: Mapping[str, object] | None) -> bool
     return bool((runtime_options or {}).get("strict_timing", True))
 
 
+def _refresh_verification_enabled(runtime_options: Mapping[str, object] | None) -> bool:
+    return bool((runtime_options or {}).get("verify_refresh_rate", False))
+
+
+def _verify_connected_refresh_rate(
+    run_specs: list[RunSpec],
+    *,
+    engine: PresentationEngine,
+    runtime_options: Mapping[str, object] | None,
+) -> None:
+    if not run_specs or not _refresh_verification_enabled(runtime_options):
+        return
+    try:
+        measured_hz = engine.measure_refresh_hz(runtime_options=runtime_options)
+    except Exception as exc:
+        raise PreflightError(
+            "Run preflight failed because the connected display refresh rate could not "
+            f"be measured: {exc}"
+        ) from exc
+
+    mismatched_rates = sorted(
+        {
+            run_spec.display.refresh_hz
+            for run_spec in run_specs
+            if not measured_refresh_matches_configured(
+                run_spec.display.refresh_hz,
+                measured_hz,
+            )
+        }
+    )
+    if mismatched_rates:
+        configured_text = ", ".join(f"{refresh_hz:g} Hz" for refresh_hz in mismatched_rates)
+        raise PreflightError(
+            "Run preflight failed because the connected display measured "
+            f"{measured_hz:.3f} Hz but the compiled session expects {configured_text}. "
+            "Return to Experiment settings and detect the display refresh rate again."
+        )
+
+
 def _validate_display_refresh_timing(run_spec: RunSpec) -> None:
     duty_cycle_mode = (
         DutyCycleMode.BLANK_50 if run_spec.display.off_frames > 0 else DutyCycleMode.CONTINUOUS
@@ -34,6 +76,7 @@ def _validate_display_refresh_timing(run_spec: RunSpec) -> None:
         run_spec.display.refresh_hz,
         duty_cycle_mode=duty_cycle_mode,
         base_hz=run_spec.condition.base_hz,
+        oddball_every_n=run_spec.condition.oddball_every_n,
     )
     if not display_report.compatible:
         raise PreflightError(
@@ -224,6 +267,7 @@ def preflight_run_spec(
     engine: PresentationEngine,
     runtime_options: Mapping[str, object] | None = None,
     decode_image_assets: bool = False,
+    verify_connected_refresh: bool = True,
 ) -> None:
     """Validate one run spec before execution starts."""
 
@@ -256,10 +300,24 @@ def preflight_run_spec(
             "Run preflight failed because display timing is incompatible: "
             f"{'; '.join(display_report.errors)}"
         )
-    if strict_timing and display_report.warnings:
+    blocking_display_warnings = [
+        warning
+        for warning in display_report.warnings
+        if not (
+            not display_report.timing_is_exact
+            and warning.startswith("Approximate frame timing:")
+        )
+    ]
+    if strict_timing and blocking_display_warnings:
         raise PreflightError(
             "Run preflight failed because strict timing does not allow display warnings: "
-            f"{'; '.join(display_report.warnings)}"
+            f"{'; '.join(blocking_display_warnings)}"
+        )
+    if verify_connected_refresh:
+        _verify_connected_refresh_rate(
+            [run_spec],
+            engine=engine,
+            runtime_options=runtime_options,
         )
 
 
@@ -285,4 +343,10 @@ def preflight_session_plan(
             engine=engine,
             runtime_options=runtime_options,
             decode_image_assets=decode_image_assets,
+            verify_connected_refresh=False,
         )
+    _verify_connected_refresh_rate(
+        [entry.run_spec for entry in ordered_entries],
+        engine=engine,
+        runtime_options=runtime_options,
+    )

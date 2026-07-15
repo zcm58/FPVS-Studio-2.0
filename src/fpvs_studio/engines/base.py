@@ -45,12 +45,22 @@ class PresentationEngine(ABC):
             run_spec.display.refresh_hz,
             duty_cycle_mode=duty_cycle_mode,
             base_hz=run_spec.condition.base_hz,
+            oddball_every_n=run_spec.condition.oddball_every_n,
         )
 
     def current_display_size_px(self) -> tuple[int, int] | None:
         """Return the active session window size in pixels when available."""
 
         return None
+
+    def measure_refresh_hz(
+        self,
+        *,
+        runtime_options: Mapping[str, object] | None = None,
+    ) -> float:
+        """Measure the connected presentation display refresh rate."""
+
+        raise RuntimeError(f"Presentation engine '{self.engine_id}' cannot measure refresh rate.")
 
     @abstractmethod
     def probe_displays(self) -> list[dict[str, object]]:

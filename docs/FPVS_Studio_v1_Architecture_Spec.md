@@ -9,34 +9,34 @@ License target: GPL-3.0-compatible open source distribution
 
 FPVS Studio is a standalone desktop application for building and running fast periodic visual stimulation (FPVS) experiments without requiring end users to write code. The desktop shell will use **PySide6**. The timing-critical stimulus presentation runtime will use **PsychoPy** behind an engine abstraction so it can be swapped later if needed.
 
-## 2. Locked v1 protocol decisions
+## 2. v1 protocol decisions
 
 ### 2.1 Built-in template
 
-v1 includes exactly one built-in protocol template:
+v1 includes one built-in protocol template whose values seed editable project timing:
 
 - `template_id = "fpvs_6hz_every5_v1"`
 - `base_hz = 6.0`
 - `oddball_every_n = 5`
 - `oddball_hz = 1.2`
 
-These are fixed in the v1 GUI.
+Projects may edit `base_hz` and integer `oddball_every_n`; `oddball_hz` is derived.
 
 ### 2.2 Duty-cycle modes
 
 Each condition may choose one of two duty-cycle modes:
 
-- `continuous`: image visible for the full 6 Hz cycle
-- `blank_50`: image visible for half the 6 Hz cycle, followed by an equal blank interval
+- `continuous`: stimulus visible for the full resolved frame cycle
+- `blank_50`: stimulus visible for half the resolved cycle, followed by an equal blank interval
 
 ### 2.3 Sequence repeat default
 
 Each sequence defaults to **146 oddball cycles**.
 
-Because oddballs occur every 5th image:
+With the default oddball every 5th stimulus:
 
 - `oddball_cycle_repeats_per_sequence = 146`
-- `base_cycles_per_sequence = 146 * 5 = 730`
+- `stimuli_per_sequence = 146 * 5 = 730`
 - `oddball_presentations_per_sequence = 146`
 
 The true per-sequence duration is derived from the active display's refresh-compatible frame timing.
@@ -162,11 +162,16 @@ The core layer defines stable schemas for:
 
 After a display is selected, all timing becomes frame-based.
 
-For v1:
+For v1 project timing:
 
-- `frames_per_cycle = refresh_hz / 6.0`
-- `continuous` requires integer `frames_per_cycle`
-- `blank_50` requires integer and even `frames_per_cycle`
+- `frames_per_cycle` is the nearest positive whole frame count to
+  `refresh_hz / requested_base_hz`
+- authored `refresh_hz` is one of `59.94`, `60`, `120`, `144`, or `240 Hz`
+- exact ratios are reported as exact timing
+- non-integral ratios are accepted with requested-versus-realized rate warnings
+- `blank_50` requires an even resolved `frames_per_cycle`
+- setup and runtime compare the configured rate to an explicit engine measurement of
+  the connected presentation display; measurement state remains machine-local
 
 Derived values should include:
 

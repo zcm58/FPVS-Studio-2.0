@@ -6,8 +6,10 @@ from pathlib import Path
 
 import pytest
 from PySide6.QtCore import (
+    QObject,
     QPoint,
     Qt,
+    Signal,
 )
 from PySide6.QtWidgets import (
     QApplication,
@@ -18,6 +20,8 @@ from PySide6.QtWidgets import (
 from tests.gui.helpers import (
     _assert_balanced_setup_stepper,
     _assert_setup_wizard_vertical_scrolling_disabled,
+    _assert_visible_children_within_parent,
+    _ImmediateProgressTask,
     _open_created_project,
 )
 
@@ -40,7 +44,10 @@ def test_setup_wizard_experiment_and_fixation_steps_are_width_safe(
     )
     assert guide.findChild(QPushButton, "setup_wizard_advanced_button") is None
     _assert_setup_wizard_vertical_scrolling_disabled(guide)
-    assert guide.runtime_settings_editor.refresh_hz_spin is not None
+    assert guide.runtime_settings_editor.refresh_hz_combo is not None
+    assert guide.runtime_settings_editor.detect_refresh_button is not None
+    assert guide.runtime_settings_editor.base_hz_spin is not None
+    assert guide.runtime_settings_editor.oddball_every_n_spin is not None
     assert guide.image_display_size_editor.width_degrees_spin is not None
     assert guide.session_structure_editor.block_count_spin is not None
     assert guide.fixation_settings_editor is not guide.step_stack.currentWidget()
@@ -71,7 +78,9 @@ def test_setup_wizard_experiment_and_fixation_steps_are_width_safe(
     experiment_labels = "\n".join(
         label.text() for label in guide.experiment_settings_card.findChildren(QLabel)
     )
-    assert "Display refresh rate" in experiment_labels
+    assert "Monitor refresh" in experiment_labels
+    assert "Base rate" in experiment_labels
+    assert "Oddball every" in experiment_labels
     assert "Image Size" in experiment_labels
     assert "Image width" in experiment_labels
     assert "Viewing distance" in experiment_labels
@@ -96,6 +105,12 @@ def test_setup_wizard_experiment_and_fixation_steps_are_width_safe(
             assert section.minimumHeight() == 224
     assert window.minimumWidth() == 960
     assert window.minimumHeight() == 640
+
+    refresh_combo = guide.runtime_settings_editor.refresh_hz_combo
+    refresh_combo.setCurrentIndex(refresh_combo.findData(59.94))
+    guide.runtime_settings_editor._on_refresh_detection_succeeded(59.94)
+    assert guide.runtime_settings_editor.timing_status_label.isVisible()
+    assert "Approximate timing" in guide.runtime_settings_editor.timing_status_label.text()
 
     for width, height in ((1120, 720), (1180, 760)):
         window.resize(width, height)
@@ -144,6 +159,186 @@ def test_setup_wizard_experiment_and_fixation_steps_are_width_safe(
     window.resize(1120, 720)
     QApplication.processEvents()
     assert guide.shell.page_container.scroll_area.verticalScrollBar().maximum() == 0
+
+
+def test_setup_wizard_fpvs_rates_persist_and_report_exact_or_approximate_timing(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    measured_refresh = {"value": 143.92}
+
+    class _FakeEngine:
+        def measure_refresh_hz(self, *, runtime_options=None) -> float:
+            assert runtime_options == {"fullscreen": True, "display_index": None}
+            return measured_refresh["value"]
+
+    monkeypatch.setattr(
+        "fpvs_studio.gui.runtime_settings_page.create_engine",
+        lambda _engine_name: _FakeEngine(),
+    )
+    monkeypatch.setattr(
+        "fpvs_studio.gui.runtime_settings_page.ProgressTask",
+        _ImmediateProgressTask,
+    )
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Configurable FPVS Timing")
+    guide = window.setup_wizard_page
+    window.show_setup_wizard(step_key="experiment")
+    editor = guide.runtime_settings_editor
+
+    editor.base_hz_spin.setValue(6.0)
+    editor.oddball_every_n_spin.setValue(6)
+    assert [
+        editor.refresh_hz_combo.itemData(index)
+        for index in range(editor.refresh_hz_combo.count())
+    ] == [59.94, 60.0, 120.0, 144.0, 240.0]
+    assert editor.refresh_is_verified() is False
+    assert "Verification required" in editor.timing_status_label.text()
+    assert guide.setup_wizard_next_button.isEnabled() is False
+
+    editor.detect_refresh_button.click()
+    QApplication.processEvents()
+
+    protocol = window.document.project.settings.protocol
+    assert protocol.base_hz == 6.0
+    assert protocol.oddball_every_n == 6
+    assert protocol.oddball_hz == 1.0
+    assert editor.current_refresh_hz() == 144.0
+    assert editor.refresh_is_verified() is True
+    assert editor.timing_report().timing_is_exact is True
+    assert "measured 143.920 Hz" in editor.timing_status_label.text()
+    assert "applied 144 Hz" in editor.timing_status_label.text()
+    assert "24 frames/stimulus" in editor.timing_summary_label.text()
+    assert "144 frames/oddball" in editor.timing_summary_label.text()
+    assert "condition 146.0 s" in editor.timing_summary_label.text()
+    assert guide.setup_wizard_next_button.isEnabled()
+
+    editor.refresh_hz_combo.setCurrentIndex(editor.refresh_hz_combo.findData(59.94))
+    QApplication.processEvents()
+    assert editor.refresh_is_verified() is False
+    assert guide.setup_wizard_next_button.isEnabled() is False
+
+    measured_refresh["value"] = 59.94
+    editor.detect_refresh_button.click()
+    QApplication.processEvents()
+
+    report = editor.timing_report()
+    assert report.compatible is True
+    assert report.timing_is_exact is False
+    assert report.realized_base_hz == pytest.approx(5.994)
+    assert report.realized_oddball_hz == pytest.approx(0.999)
+    assert editor.timing_status_label.isVisible()
+    assert "measured 59.940 Hz" in editor.timing_status_label.text()
+    assert "whole-frame scheduling" in editor.timing_status_label.text()
+    assert "dropped or late frames" in editor.timing_status_label.text()
+    assert guide.setup_wizard_next_button.isEnabled()
+
+    window.resize(1120, 720)
+    QApplication.processEvents()
+    assert guide.shell.page_container.scroll_area.verticalScrollBar().maximum() == 0
+    _assert_visible_children_within_parent(editor)
+
+
+def test_setup_wizard_blocks_impossible_sub_frame_base_rate(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Invalid FPVS Timing")
+    guide = window.setup_wizard_page
+    window.show_setup_wizard(step_key="experiment")
+    editor = guide.runtime_settings_editor
+
+    editor.refresh_hz_combo.setCurrentIndex(editor.refresh_hz_combo.findData(60.0))
+    editor.base_hz_spin.setValue(120.0)
+    QApplication.processEvents()
+
+    assert editor.timing_is_compatible() is False
+    assert "at least one display frame" in editor.timing_status_label.text()
+    assert guide.setup_wizard_next_button.isEnabled() is False
+
+
+def test_setup_wizard_refresh_detection_failure_is_actionable(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    class _FailingEngine:
+        def measure_refresh_hz(self, *, runtime_options=None) -> float:
+            raise RuntimeError("stable measurement unavailable")
+
+    monkeypatch.setattr(
+        "fpvs_studio.gui.runtime_settings_page.create_engine",
+        lambda _engine_name: _FailingEngine(),
+    )
+    monkeypatch.setattr(
+        "fpvs_studio.gui.runtime_settings_page.ProgressTask",
+        _ImmediateProgressTask,
+    )
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Refresh Detection Error")
+    guide = window.setup_wizard_page
+    window.show_setup_wizard(step_key="experiment")
+    editor = guide.runtime_settings_editor
+
+    editor.detect_refresh_button.click()
+    QApplication.processEvents()
+
+    assert editor.refresh_is_verified() is False
+    assert "stable measurement unavailable" in editor.timing_status_label.text()
+    assert guide.setup_wizard_next_button.isEnabled() is False
+    window.resize(1120, 720)
+    QApplication.processEvents()
+    assert guide.shell.page_container.scroll_area.verticalScrollBar().maximum() == 0
+    _assert_visible_children_within_parent(editor)
+
+
+def test_setup_wizard_refresh_detection_busy_state_disables_controls(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    class _DeferredProgressTask(QObject):
+        succeeded = Signal(object)
+        failed = Signal(object)
+        finished = Signal()
+        active: _DeferredProgressTask | None = None
+
+        def __init__(self, *, parent_widget, label, callback, **_kwargs) -> None:
+            super().__init__(parent_widget)
+            self.callback = callback
+            self.label = label
+
+        def start(self) -> None:
+            _DeferredProgressTask.active = self
+
+    monkeypatch.setattr(
+        "fpvs_studio.gui.runtime_settings_page.ProgressTask",
+        _DeferredProgressTask,
+    )
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Refresh Detection Busy")
+    guide = window.setup_wizard_page
+    window.show_setup_wizard(step_key="experiment")
+    editor = guide.runtime_settings_editor
+
+    editor.detect_refresh_button.click()
+    QApplication.processEvents()
+
+    assert _DeferredProgressTask.active is not None
+    assert editor.detect_refresh_button.isEnabled() is False
+    assert editor.refresh_hz_combo.isEnabled() is False
+    assert "Measuring refresh rate" in editor.timing_status_label.text()
+    assert guide.setup_wizard_next_button.isEnabled() is False
+
+    _DeferredProgressTask.active.succeeded.emit(60.0)
+    _DeferredProgressTask.active.finished.emit()
+    QApplication.processEvents()
+
+    assert editor.refresh_is_verified() is True
+    assert editor.detect_refresh_button.isEnabled()
+    assert editor.refresh_hz_combo.isEnabled()
 
 
 def test_setup_wizard_experiment_image_size_controls_update_preview_and_review(

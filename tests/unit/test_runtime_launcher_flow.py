@@ -77,9 +77,10 @@ def test_runtime_launcher_dispatches_runspec_to_registered_engine(
         "serial_pulse_width_ms": 10,
         "serial_reset_code": None,
         "serial_reset_delay_ms": 5,
-        "strict_timing": True,
-        "strict_timing_warmup": True,
-        "timing_miss_threshold_multiplier": 1.5,
+            "strict_timing": True,
+            "strict_timing_warmup": True,
+            "verify_refresh_rate": True,
+            "timing_miss_threshold_multiplier": 1.5,
         "timing_warmup_frames": 240,
         "export_mode": "full",
     }
@@ -880,9 +881,9 @@ def test_session_launch_preflight_rejects_invalid_timing_before_engine_run(
             project_root=sample_project_root,
             random_seed=22,
         )
-        session_plan.blocks[0].entries[0].run_spec.display.refresh_hz = 75.0
+        session_plan.blocks[0].entries[0].run_spec.display.refresh_hz = 120.0
 
-        with pytest.raises(PreflightError, match="display timing is incompatible"):
+        with pytest.raises(PreflightError, match="compiled frames_per_stimulus"):
             launch_session(
                 sample_project_root,
                 session_plan,

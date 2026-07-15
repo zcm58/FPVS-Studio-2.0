@@ -49,6 +49,12 @@ ProjectFile
 
 - Compilation owns protocol scheduling, asset resolution, randomized session order,
   and realized fixation target selection.
+- Editable project protocol settings own requested base Hz and integer oddball cadence;
+  compilation resolves them to whole-frame timing and records requested rates in each
+  `RunSpec`.
+- Core validation owns the approved monitor-rate list and measured-versus-configured
+  tolerance. The GUI requests explicit detection through the engine boundary, and
+  runtime preflight independently measures the connected display once per session.
 - Runtime owns machine launch options, session transitions, participant flow, fixation
   scoring, trigger I/O coordination, and result assembly.
 - Engines render compiled events and participant-facing screens; they do not own

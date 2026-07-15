@@ -6,7 +6,7 @@ time diagnostics, not manifest generation, session execution, or engine timing l
 from __future__ import annotations
 
 from dataclasses import dataclass
-from math import ceil, floor
+from math import ceil, floor, isclose, isfinite
 
 from fpvs_studio.core.enums import DutyCycleMode, StimulusModality, ValidationSeverity
 from fpvs_studio.core.fixation_planning import (
@@ -25,7 +25,68 @@ from fpvs_studio.core.models import (
     ProjectValidationReport,
     ValidationIssue,
 )
-from fpvs_studio.core.template_library import default_template, get_template
+from fpvs_studio.core.template_library import default_template
+
+APPROVED_MONITOR_REFRESH_RATES_HZ: tuple[float, ...] = (
+    59.94,
+    60.0,
+    120.0,
+    144.0,
+    240.0,
+)
+REFRESH_MEASUREMENT_RELATIVE_TOLERANCE = 0.01
+
+
+def approved_monitor_refresh_rate(refresh_hz: float) -> float | None:
+    """Return the canonical approved rate for an authored value, if any."""
+
+    if not isfinite(refresh_hz) or refresh_hz <= 0:
+        return None
+    return next(
+        (
+            candidate
+            for candidate in APPROVED_MONITOR_REFRESH_RATES_HZ
+            if isclose(refresh_hz, candidate, rel_tol=0.0, abs_tol=1e-6)
+        ),
+        None,
+    )
+
+
+def measured_refresh_matches_configured(
+    configured_hz: float,
+    measured_hz: float,
+) -> bool:
+    """Return whether a measured rate is close enough to the configured target."""
+
+    if approved_monitor_refresh_rate(configured_hz) is None:
+        return False
+    if not isfinite(measured_hz) or measured_hz <= 0:
+        return False
+    return isclose(
+        configured_hz,
+        measured_hz,
+        rel_tol=REFRESH_MEASUREMENT_RELATIVE_TOLERANCE,
+        abs_tol=0.0,
+    )
+
+
+def nearest_approved_monitor_refresh_rate(measured_hz: float) -> float | None:
+    """Return the nearest approved rate when a display measurement is within tolerance."""
+
+    if not isfinite(measured_hz) or measured_hz <= 0:
+        return None
+    nearest = min(
+        APPROVED_MONITOR_REFRESH_RATES_HZ,
+        key=lambda candidate: abs(candidate - measured_hz),
+    )
+    return nearest if measured_refresh_matches_configured(nearest, measured_hz) else None
+
+
+def approved_monitor_refresh_rates_text() -> str:
+    """Return the approved rates as compact user-facing text."""
+
+    values = [f"{rate:g}" for rate in APPROVED_MONITOR_REFRESH_RATES_HZ]
+    return f"{', '.join(values[:-1])}, or {values[-1]} Hz"
 
 
 @dataclass(frozen=True)
@@ -69,21 +130,59 @@ def validate_display_refresh(
     *,
     duty_cycle_mode: DutyCycleMode | None = None,
     base_hz: float | None = None,
+    oddball_every_n: int | None = None,
 ) -> DisplayValidationReport:
-    """Validate whether a refresh rate supports the fixed v1 protocol."""
+    """Resolve requested FPVS timing and report exact or approximate compatibility."""
 
     template = default_template()
     base_rate = base_hz if base_hz is not None else template.base_hz
     frames_per_cycle_raw = refresh_hz / base_rate
     errors: list[str] = []
+    warnings: list[str] = []
     frames_per_cycle: int | None = None
+    timing_is_exact = False
+    realized_base_hz: float | None = None
+    requested_oddball_hz = (
+        base_rate / oddball_every_n if oddball_every_n is not None else None
+    )
+    realized_oddball_hz: float | None = None
     compatible = True
+
+    if approved_monitor_refresh_rate(refresh_hz) is None:
+        compatible = False
+        errors.append(
+            "Monitor refresh rate must be an approved value: "
+            f"{approved_monitor_refresh_rates_text()}."
+        )
 
     try:
         frames_per_cycle = frames_per_stimulus(refresh_hz, base_rate)
     except FrameValidationError as exc:
         compatible = False
         errors.append(str(exc))
+
+    if frames_per_cycle is not None:
+        timing_is_exact = isclose(
+            frames_per_cycle_raw,
+            frames_per_cycle,
+            abs_tol=1e-6,
+        )
+        realized_base_hz = refresh_hz / frames_per_cycle
+        if oddball_every_n is not None:
+            realized_oddball_hz = realized_base_hz / oddball_every_n
+        if not timing_is_exact:
+            oddball_detail = (
+                f" and {realized_oddball_hz:.6g} Hz oddball timing"
+                if realized_oddball_hz is not None
+                else ""
+            )
+            warnings.append(
+                "Approximate frame timing: "
+                f"{refresh_hz:g} Hz / {base_rate:g} Hz = {frames_per_cycle_raw:.6g} "
+                f"frames. Using {frames_per_cycle} whole frames realizes "
+                f"{realized_base_hz:.6g} Hz base timing{oddball_detail}. "
+                "Dropped or late frames are reported separately by runtime timing QC."
+            )
 
     if compatible and duty_cycle_mode == DutyCycleMode.BLANK_50 and frames_per_cycle is not None:
         try:
@@ -98,8 +197,14 @@ def validate_display_refresh(
         duty_cycle_mode=duty_cycle_mode,
         frames_per_cycle_raw=frames_per_cycle_raw,
         frames_per_cycle=frames_per_cycle,
+        timing_is_exact=timing_is_exact,
+        realized_base_hz=realized_base_hz,
+        oddball_every_n=oddball_every_n,
+        requested_oddball_hz=requested_oddball_hz,
+        realized_oddball_hz=realized_oddball_hz,
         compatible=compatible,
         errors=errors,
+        warnings=warnings,
     )
 
 
@@ -177,8 +282,8 @@ def condition_fixation_guidance(
 ) -> list[ConditionFixationGuidance]:
     """Return condition-level duration and max-feasible fixation guidance."""
 
-    template = get_template(project.meta.template_id)
-    frames_per_stimulus_value = frames_per_stimulus(refresh_hz, template.base_hz)
+    protocol = project.settings.protocol
+    frames_per_stimulus_value = frames_per_stimulus(refresh_hz, protocol.base_hz)
     fixation = project.settings.fixation_task
     target_duration_frames = milliseconds_to_frames(
         fixation.target_duration_ms,
@@ -189,7 +294,7 @@ def condition_fixation_guidance(
     guidance_rows: list[ConditionFixationGuidance] = []
     for condition in sorted(project.conditions, key=lambda item: item.order_index):
         total_cycles = condition.oddball_cycle_repeats_per_sequence * condition.sequence_count
-        total_stimuli = total_cycles * template.oddball_every_n
+        total_stimuli = total_cycles * protocol.oddball_every_n
         total_frames = total_stimuli * frames_per_stimulus_value
         physical_max = max_supported_color_changes(
             total_frames=total_frames,
@@ -214,7 +319,7 @@ def condition_fixation_guidance(
 def condition_stimulus_repeat_guidance(project: ProjectFile) -> list[StimulusRepeatRoleGuidance]:
     """Return condition-level base/oddball per-image repeat guidance."""
 
-    template = get_template(project.meta.template_id)
+    oddball_every_n = project.settings.protocol.oddball_every_n
     stimulus_sets = {item.set_id: item for item in project.stimulus_sets}
     target_repeats = project.settings.condition_defaults.target_repeats_per_image
     guidance_rows: list[StimulusRepeatRoleGuidance] = []
@@ -224,7 +329,7 @@ def condition_stimulus_repeat_guidance(project: ProjectFile) -> list[StimulusRep
             condition.oddball_cycle_repeats_per_sequence * condition.sequence_count
         )
         role_presentations = {
-            "base": oddball_presentations * (template.oddball_every_n - 1),
+            "base": oddball_presentations * (oddball_every_n - 1),
             "oddball": oddball_presentations,
         }
         role_set_ids = {
@@ -310,8 +415,30 @@ def validate_project(
     """Validate cross-field project rules with user-friendly issues."""
 
     issues: list[ValidationIssue] = []
-    template = get_template(project.meta.template_id)
     stimulus_sets = {item.set_id: item for item in project.stimulus_sets}
+
+    if refresh_hz is not None:
+        protocol = project.settings.protocol
+        protocol_report = validate_display_refresh(
+            refresh_hz,
+            base_hz=protocol.base_hz,
+            oddball_every_n=protocol.oddball_every_n,
+        )
+        for error in protocol_report.errors:
+            issues.append(
+                ValidationIssue(
+                    location="settings.protocol.base_hz",
+                    message=error,
+                )
+            )
+        for warning in protocol_report.warnings:
+            issues.append(
+                ValidationIssue(
+                    location="settings.protocol.base_hz",
+                    message=warning,
+                    severity=ValidationSeverity.WARNING,
+                )
+            )
 
     issues.extend(validate_fixation_settings(project.settings.fixation_task))
     issues.extend(validate_condition_repeat_cycle_consistency(project))
@@ -496,9 +623,12 @@ def validate_project(
             display_report = validate_display_refresh(
                 refresh_hz,
                 duty_cycle_mode=condition.duty_cycle_mode,
-                base_hz=template.base_hz,
+                base_hz=project.settings.protocol.base_hz,
+                oddball_every_n=project.settings.protocol.oddball_every_n,
             )
             for error in display_report.errors:
+                if error in protocol_report.errors:
+                    continue
                 issues.append(
                     ValidationIssue(
                         location=f"conditions.{condition.condition_id}.duty_cycle_mode",

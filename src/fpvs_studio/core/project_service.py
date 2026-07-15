@@ -16,6 +16,7 @@ from fpvs_studio.core.models import (
     ProjectFile,
     ProjectMeta,
     ProjectSettings,
+    ProtocolSettings,
 )
 from fpvs_studio.core.paths import (
     cache_dir,
@@ -53,7 +54,12 @@ def build_starter_project(
     template = get_template(template_id)
     project_id = slugify_project_name(project_name)
     validate_project_id(project_id)
-    settings = ProjectSettings()
+    settings = ProjectSettings(
+        protocol=ProtocolSettings(
+            base_hz=template.base_hz,
+            oddball_every_n=template.oddball_every_n,
+        )
+    )
     if condition_template_profile is not None:
         settings = apply_condition_template_profile_to_settings(
             settings,

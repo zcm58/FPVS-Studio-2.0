@@ -28,6 +28,7 @@ The runtime worker now drives sessions like this:
 ```text
 SessionPlan
   -> preflight every RunSpec
+  -> measure connected refresh once and compare it to every compiled refresh target
   -> create trigger backend
   -> engine.open_session(...)
   -> verify active fullscreen resolution against the configured intended display
@@ -53,6 +54,12 @@ The engine never receives `ProjectFile`. It only receives one compiled
 `RunSpec`, the project root for asset resolution, and runtime-only launch
 options.
 
+Default launch settings require connected-display refresh verification. Preflight asks
+the engine for one fullscreen measurement per session and rejects unavailable/unstable
+measurements or a material measured-versus-compiled mismatch. This is independent of
+the Setup Wizard's one-click detection, so Home and Run launch paths cannot bypass the
+hardware check. Measurement does not modify the compiled frame schedule.
+
 Preflight validates the compiled stimulus payload before playback. Routine participant
 launches require image events to reference existing project-relative files, while full
 image decoding is reserved for preprocessing/manual deep preflight and engine stimulus
@@ -65,6 +72,8 @@ with conflicting payloads fail before launch instead of falling back to image be
 The PsychoPy implementation:
 
 - keeps imports lazy inside `psychopy_engine.py`
+- measures actual refresh with a temporary fullscreen `visual.Window` and
+  `getActualFrameRate(...)`, then closes that probe window before session playback opens
 - opens one `visual.Window` per launched session
 - reuses that window across all runs in the `SessionPlan`
 - opens launched playback fullscreen on the default display
@@ -260,7 +269,9 @@ Per run, full export mode:
 - `run_summary.json`
 - `runtime_metadata.json`
 - `display_report.json`
-  - a display-compatibility report derived from the compiled run timing
+  - a display-compatibility report derived from the compiled run timing, including
+    exact/approximate status and realized base/oddball rates when the requested cadence
+    does not divide evenly into the monitor refresh
 - `events.csv`
 - `fixation_events.csv`
 - `responses.csv`

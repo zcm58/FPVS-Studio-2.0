@@ -3,14 +3,9 @@
 from __future__ import annotations
 
 from fpvs_studio.core.compiler_support import CompileError
-from fpvs_studio.core.enums import DutyCycleMode, StimulusModality
-from fpvs_studio.core.frame_validation import (
-    FrameValidationError,
-    frames_per_stimulus,
-    on_off_frames,
-)
+from fpvs_studio.core.enums import StimulusModality
 from fpvs_studio.core.models import Condition, ProjectFile, StimulusSet
-from fpvs_studio.core.template_library import get_template
+from fpvs_studio.core.validation import validate_display_refresh
 
 
 def ordered_conditions(project: ProjectFile) -> list[Condition]:
@@ -73,13 +68,17 @@ def validate_selected_condition(
 ) -> tuple[StimulusSet, StimulusSet]:
     """Validate the specific condition being compiled."""
 
-    template = get_template(project.meta.template_id)
     stimulus_sets = {item.set_id: item for item in project.stimulus_sets}
 
-    try:
-        frames_per_stimulus(refresh_hz, template.base_hz)
-    except FrameValidationError as exc:
-        raise CompileError(str(exc)) from exc
+    protocol = project.settings.protocol
+    timing_report = validate_display_refresh(
+        refresh_hz,
+        duty_cycle_mode=condition.duty_cycle_mode,
+        base_hz=protocol.base_hz,
+        oddball_every_n=protocol.oddball_every_n,
+    )
+    if not timing_report.compatible:
+        raise CompileError("; ".join(timing_report.errors))
 
     base_set = stimulus_sets.get(condition.base_stimulus_set_id)
     oddball_set = stimulus_sets.get(condition.oddball_stimulus_set_id)
@@ -134,11 +133,4 @@ def validate_selected_condition(
             f"Condition '{condition.name}' uses unsupported stimulus modality "
             f"'{base_set.modality}'."
         )
-    if condition.duty_cycle_mode == DutyCycleMode.BLANK_50:
-        try:
-            on_off_frames(
-                frames_per_stimulus(refresh_hz, template.base_hz), condition.duty_cycle_mode
-            )
-        except FrameValidationError as exc:
-            raise CompileError(str(exc)) from exc
     return base_set, oddball_set

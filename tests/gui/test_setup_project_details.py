@@ -115,7 +115,8 @@ def test_setup_wizard_surfaces_steps_and_keeps_shared_editors_available(
         fixation_editor.fixation_feasibility_label.text()
     )
 
-    assert runtime_editor.refresh_hz_spin is not None
+    assert runtime_editor.refresh_hz_combo is not None
+    assert runtime_editor.detect_refresh_button is not None
     assert runtime_editor.runtime_background_color_combo is not None
     assert not hasattr(runtime_editor, "serial_port_edit")
     assert not hasattr(runtime_editor, "serial_baudrate_spin")

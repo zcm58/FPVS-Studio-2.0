@@ -33,6 +33,7 @@ def test_setup_config_exports_project_conditions_and_toolbox_event_map(sample_pr
     sample_project.settings.triggers.allow_nonstandard_oddball_trigger_code = True
     sample_project.settings.session.show_condition_title_on_screen = False
     sample_project.settings.display.stimulus_width_degrees = 10.0
+    sample_project.settings.protocol.oddball_every_n = 6
 
     config = export_project_config(sample_project, project_root=None)
 
@@ -45,6 +46,8 @@ def test_setup_config_exports_project_conditions_and_toolbox_event_map(sample_pr
     assert config.triggers.allow_nonstandard_oddball_trigger_code is True
     assert config.session.show_condition_title_on_screen is False
     assert config.display.stimulus_width_degrees == 10.0
+    assert config.protocol.base_hz == 6.0
+    assert config.protocol.oddball_every_n == 6
     assert config.display.stimulus_width_cm > 0
     assert config.display.stimulus_width_px > 0
     assert config.completed_session is None
@@ -143,6 +146,8 @@ def test_config_import_creates_new_project_shell_without_copying_stimuli(
 ) -> None:
     sample_project.conditions[0].trigger_code = 9
     sample_project.settings.display.viewing_distance_cm = 90.0
+    sample_project.settings.protocol.base_hz = 7.5
+    sample_project.settings.protocol.oddball_every_n = 6
     sample_project.settings.session.session_seed = 123
     config = export_project_config(sample_project, tmp_path / "source-project")
 
@@ -151,6 +156,8 @@ def test_config_import_creates_new_project_shell_without_copying_stimuli(
 
     assert loaded.meta.name == sample_project.meta.name
     assert loaded.settings.display.viewing_distance_cm == 90.0
+    assert loaded.settings.protocol.base_hz == 7.5
+    assert loaded.settings.protocol.oddball_every_n == 6
     assert loaded.settings.session.session_seed == 123
     assert loaded.settings.session.show_condition_title_on_screen is False
     assert loaded.settings.triggers.oddball_trigger_code == 55
@@ -234,3 +241,16 @@ def test_project_config_round_trips_as_config_json(tmp_path, sample_project) -> 
     loaded = read_project_config(path)
 
     assert loaded == config
+
+
+def test_project_config_without_protocol_loads_current_defaults(tmp_path, sample_project) -> None:
+    path = tmp_path / "legacy.fpvsconfig"
+    config = export_project_config(sample_project, tmp_path)
+    payload = config.model_dump(mode="json")
+    del payload["protocol"]
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+    loaded = read_project_config(path)
+
+    assert loaded.protocol.base_hz == 6.0
+    assert loaded.protocol.oddball_every_n == 5

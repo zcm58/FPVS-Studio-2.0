@@ -22,15 +22,16 @@ def frames_per_stimulus(
     *,
     tolerance: float = FRAME_TOLERANCE,
 ) -> int:
-    """Return the integer frames per 6 Hz stimulus or raise on incompatibility."""
+    """Resolve a positive requested cadence to the nearest whole-frame duration."""
 
     raw_frames = refresh_hz / base_hz
-    nearest = round(raw_frames)
-    if not math.isclose(raw_frames, nearest, abs_tol=tolerance):
+    if raw_frames < 1.0 and not math.isclose(raw_frames, 1.0, abs_tol=tolerance):
         raise FrameValidationError(
-            f"Refresh rate {refresh_hz:g} Hz is incompatible with {base_hz:g} Hz FPVS timing."
+            f"Base rate {base_hz:g} Hz is faster than the {refresh_hz:g} Hz display; "
+            "each stimulus requires at least one display frame."
         )
-    return int(nearest)
+    nearest = math.floor(raw_frames + 0.5)
+    return max(1, nearest)
 
 
 def validate_blank_mode_frames(frames_per_stimulus_value: int) -> None:
@@ -38,7 +39,7 @@ def validate_blank_mode_frames(frames_per_stimulus_value: int) -> None:
 
     if frames_per_stimulus_value % 2 != 0:
         raise FrameValidationError(
-            "Duty cycle 'blank_50' requires an even number of frames per 6 Hz cycle."
+            "Duty cycle 'blank_50' requires an even number of frames per stimulus cycle."
         )
 
 

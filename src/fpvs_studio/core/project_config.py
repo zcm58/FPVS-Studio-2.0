@@ -32,6 +32,7 @@ from fpvs_studio.core.models import (
     ProjectFile,
     ProjectMeta,
     ProjectSettings,
+    ProtocolSettings,
     SessionSettings,
     StimulusSet,
     TriggerSettings,
@@ -158,6 +159,13 @@ class ProjectConfigDisplay(FPVSBaseModel):
     stimulus_width_px: int = Field(gt=0)
 
 
+class ProjectConfigProtocol(FPVSBaseModel):
+    """Project-wide FPVS base and oddball cadence."""
+
+    base_hz: float = Field(default=6.0, gt=0)
+    oddball_every_n: int = Field(default=5, ge=1)
+
+
 class ProjectConfigSession(FPVSBaseModel):
     """Editable session settings exported with the config."""
 
@@ -254,6 +262,7 @@ class ProjectConfigFile(FPVSBaseModel):
     conditions: list[ProjectConfigCondition] = Field(default_factory=list)
     stimulus_sets: list[ProjectConfigStimulusSet] = Field(default_factory=list)
     display: ProjectConfigDisplay
+    protocol: ProjectConfigProtocol = Field(default_factory=ProjectConfigProtocol)
     session: ProjectConfigSession
     triggers: ProjectConfigTriggers
     toolbox: ProjectConfigToolbox
@@ -310,6 +319,10 @@ def export_project_config(
             for stimulus_set in project.stimulus_sets
         ],
         display=_display_config(project.settings.display),
+        protocol=ProjectConfigProtocol(
+            base_hz=project.settings.protocol.base_hz,
+            oddball_every_n=project.settings.protocol.oddball_every_n,
+        ),
         session=_session_config(project.settings.session),
         triggers=_trigger_config(project.settings.triggers),
         toolbox=_toolbox_config(project),
@@ -384,6 +397,7 @@ def create_project_from_config(parent_dir: Path, config: ProjectConfigFile) -> P
         ),
         settings=ProjectSettings(
             display=_display_settings(config.display),
+            protocol=_protocol_settings(config.protocol),
             triggers=_trigger_settings(config.triggers),
             session=_session_settings(config.session),
         ),
@@ -657,6 +671,13 @@ def _display_settings(config: ProjectConfigDisplay) -> DisplaySettings:
         screen_width_px=config.screen_width_px,
         screen_height_px=config.screen_height_px,
         use_current_screen_resolution=config.use_current_screen_resolution,
+    )
+
+
+def _protocol_settings(config: ProjectConfigProtocol) -> ProtocolSettings:
+    return ProtocolSettings(
+        base_hz=config.base_hz,
+        oddball_every_n=config.oddball_every_n,
     )
 
 

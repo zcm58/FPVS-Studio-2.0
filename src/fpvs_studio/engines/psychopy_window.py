@@ -27,6 +27,22 @@ def build_window_kwargs(runtime_options: Mapping[str, object]) -> dict[str, obje
     return window_kwargs
 
 
+def build_refresh_probe_window_kwargs(
+    runtime_options: Mapping[str, object] | None = None,
+) -> dict[str, object]:
+    """Build a fullscreen PsychoPy window for an explicit refresh measurement."""
+
+    window_kwargs = build_window_kwargs(runtime_options or {})
+    window_kwargs.update(
+        {
+            "fullscr": True,
+            "allowGUI": False,
+            "checkTiming": False,
+        }
+    )
+    return window_kwargs
+
+
 def create_fixation_stim(*, visual: Any, window: Any, run_spec: RunSpec) -> Any:
     """Create the fixation cross stimulus for one run."""
 
