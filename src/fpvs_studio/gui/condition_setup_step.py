@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QPushButton,
+    QSizePolicy,
     QSpinBox,
     QTextEdit,
     QVBoxLayout,
@@ -133,12 +134,15 @@ def _configure_guided_source_card(card: SetupSourceCard) -> None:
     card.metrics.setFixedHeight(_SOURCE_METRICS_HEIGHT)
 
 
-def _match_detail_field_widths(reference: QWidget, *fields: QWidget) -> None:
-    """Use one content-sized control as the width standard for detail fields."""
+def _configure_detail_field_widths(reference: QWidget, *fields: QWidget) -> None:
+    """Give detail fields one expanding column with a content-safe minimum."""
 
-    field_width = reference.sizeHint().width()
+    minimum_field_width = reference.sizeHint().width()
     for field in (reference, *fields):
-        field.setFixedWidth(field_width)
+        field.setMinimumWidth(minimum_field_width)
+        size_policy = field.sizePolicy()
+        size_policy.setHorizontalPolicy(QSizePolicy.Policy.Expanding)
+        field.setSizePolicy(size_policy)
 
 
 class RepeatCalculatorDialog(QDialog):
@@ -399,7 +403,7 @@ class ConditionSetupStep(QWidget):
         self.instructions_edit = QTextEdit(self)
         self.instructions_edit.setObjectName("setup_wizard_condition_instructions_edit")
         self.instructions_edit.setFixedHeight(_INSTRUCTIONS_HEIGHT)
-        _match_detail_field_widths(
+        _configure_detail_field_widths(
             self.timing_template_combo,
             self.condition_name_edit,
             self.trigger_code_spin,

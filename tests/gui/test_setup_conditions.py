@@ -642,6 +642,13 @@ def test_setup_wizard_conditions_step_keeps_source_geometry_for_incomplete_condi
         for index in range(step.timing_template_combo.count())
     )
     assert standard_field_width >= max(timing_option_widths)
+    assert standard_field_width > step.timing_template_combo.sizeHint().width()
+    assert standard_field_width > step.condition_details_section.width() // 2
+    field_right = step.timing_template_combo.mapTo(
+        step.condition_details_section,
+        step.timing_template_combo.rect().topRight(),
+    ).x()
+    assert step.condition_details_section.width() - field_right <= 12
     assert step.base_source_card.metrics.height() == 56
     assert step.oddball_source_card.metrics.height() == 56
     _assert_visible_children_within_parent(step.condition_details_section)
