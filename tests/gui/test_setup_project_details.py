@@ -17,6 +17,8 @@ from tests.gui.helpers import (
     _ImmediateProgressTask,
     _open_created_project,
     _write_image_directory,
+    assert_setup_wizard_vertical_scrolling_disabled,
+    assert_visible_children_within_parent,
 )
 
 from fpvs_studio.core.condition_template_profiles import (
@@ -78,24 +80,14 @@ def test_setup_wizard_surfaces_steps_and_keeps_shared_editors_available(
     assert project_editor.project_overview_card.title_label.text() == "Project Details"
     assert project_editor.project_overview_card.title_label.isVisible() is False
     setup_icon = project_editor.findChild(QLabel, "setup_project_icon")
-    checklist = project_editor.setup_checklist
     assert setup_icon is not None
     assert setup_icon.width() == 52
     assert setup_icon.height() == 52
     assert project_editor.findChild(QLabel, "project_overview_title").text() == "Project Details"
     assert project_editor.findChild(QLabel, "project_overview_step_badge") is None
-    assert checklist.objectName() == "project_overview_checklist"
-    assert checklist.title_label.text() == "Ready for next step"
-    assert 210 <= checklist.minimumWidth() <= checklist.maximumWidth()
-    checklist_items = checklist.item_labels()
-    assert [label.text() for label in checklist_items] == [
-        "✓ Name",
-        "✕ Description",
-        "✓ Template",
-    ]
-    assert checklist_items[0].property("setupChecklistState") == "complete"
-    assert checklist_items[1].property("setupChecklistState") == "incomplete"
-    assert checklist_items[2].property("setupChecklistState") == "complete"
+    assert project_editor.findChild(QWidget, "project_overview_checklist") is None
+    assert project_editor.findChild(QWidget, "project_condition_profile_group") is not None
+    assert project_editor.findChild(QWidget, "project_condition_profile_actions") is not None
     assert dashboard.step_title_label.isVisible() is False
     assert dashboard.step_status_badge.isVisible() is False
     assert project_editor.project_root_value.wordWrap() is False
@@ -142,6 +134,46 @@ def test_setup_wizard_surfaces_steps_and_keeps_shared_editors_available(
     assert "Fixation" in step_metadata_text
     assert "Response" in step_metadata_text
     assert "Review" in step_metadata_text
+
+
+def test_project_details_template_actions_fit_at_setup_default_size(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+) -> None:
+    _, window = _open_created_project(
+        controller,
+        qtbot,
+        tmp_path,
+        "Long Project Name For Template Layout Verification",
+    )
+    guide = window.setup_wizard_page
+    editor = guide.project_overview_editor
+    window.document.create_condition()
+    editor.project_description_edit.setPlainText(
+        "A realistic project description that confirms the Project step remains "
+        "readable while all template actions are visible."
+    )
+
+    window.resize(1120, 720)
+    window.main_stack.setCurrentWidget(guide)
+    guide.open_wizard(step_key="project")
+    window.show()
+    QApplication.processEvents()
+
+    apply_button = editor.apply_profile_to_conditions_button
+    manage_button = editor.manage_templates_button
+    qtbot.waitUntil(apply_button.isVisible)
+
+    assert apply_button.isEnabled()
+    assert editor.findChild(QWidget, "project_overview_checklist") is None
+    assert editor.project_overview_card.width() <= 930
+    for button in (apply_button, manage_button):
+        text_width = button.fontMetrics().horizontalAdvance(button.text())
+        assert button.width() >= text_width + 24
+        assert button.minimumWidth() >= text_width + 24
+    assert_visible_children_within_parent(editor.project_overview_card)
+    assert_setup_wizard_vertical_scrolling_disabled(guide)
 
 
 def test_setup_wizard_navigation_has_no_conditions_advanced_editor(
@@ -280,19 +312,11 @@ def test_project_details_step_requires_description_before_next(
     assert guide.step_stack.currentIndex() == 0
     assert not next_button.isEnabled()
     assert "project description" in guide.step_status_label.text().lower()
-    assert "✕ Description" in {
-        label.text()
-        for label in guide.project_overview_editor.setup_checklist.item_labels()
-    }
 
     description_edit.setPlainText("This experiment measures FPVS responses.")
     guide.flush_pending_edits()
     guide.refresh()
     qtbot.waitUntil(next_button.isEnabled)
-    assert "✓ Description" in {
-        label.text()
-        for label in guide.project_overview_editor.setup_checklist.item_labels()
-    }
 
     qtbot.mouseClick(next_button, Qt.MouseButton.LeftButton)
     assert guide.step_stack.currentIndex() == 1

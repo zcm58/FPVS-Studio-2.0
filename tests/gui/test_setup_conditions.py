@@ -572,6 +572,7 @@ def test_setup_wizard_conditions_step_keeps_source_geometry_for_incomplete_condi
     _, window = _open_created_project(controller, qtbot, tmp_path, "Condition Geometry")
     guide = window.setup_wizard_page
     step = guide.condition_setup_step
+    window.resize(1120, 720)
     window.show_setup_wizard(step_key="conditions")
 
     condition_ids = []
@@ -618,6 +619,10 @@ def test_setup_wizard_conditions_step_keeps_source_geometry_for_incomplete_condi
     assert step.base_source_card.metrics.size() == before_geometry["base_metrics"]
     assert step.oddball_source_card.metrics.size() == before_geometry["oddball_metrics"]
     assert step.instructions_edit.size() == before_geometry["instructions"]
+    assert step.instructions_edit.height() == 80
+    assert step.base_source_card.metrics.height() == 56
+    assert step.oddball_source_card.metrics.height() == 56
+    _assert_visible_children_within_parent(step.condition_details_section)
     sources_row = step.findChild(QWidget, "setup_conditions_sources_row")
     assert sources_row is not None
     main_panel = step.findChild(QWidget, "setup_conditions_main_panel")
@@ -653,6 +658,17 @@ def test_setup_wizard_conditions_step_keeps_source_geometry_for_incomplete_condi
     assert step.oddball_source_card.width() > 210
     assert step.base_source_card.title_label.alignment() & Qt.AlignmentFlag.AlignHCenter
     assert step.oddball_source_card.title_label.alignment() & Qt.AlignmentFlag.AlignHCenter
+    for source_card in (step.base_source_card, step.oddball_source_card):
+        header = source_card.title_label.parentWidget()
+        assert header is not None
+        assert header.height() == 24
+        title_top = source_card.title_label.mapTo(
+            source_card,
+            source_card.title_label.rect().topLeft(),
+        ).y()
+        assert title_top <= 16
+        for _label, value in source_card.metrics._rows:
+            assert value.width() >= value.fontMetrics().horizontalAdvance(value.text())
     assert step.base_source_value.alignment() & Qt.AlignmentFlag.AlignHCenter
     assert step.oddball_source_value.alignment() & Qt.AlignmentFlag.AlignHCenter
     assert step.base_source_card.metrics._rows[0][1].alignment() & Qt.AlignmentFlag.AlignHCenter
@@ -660,6 +676,27 @@ def test_setup_wizard_conditions_step_keeps_source_geometry_for_incomplete_condi
         step.oddball_source_card.metrics._rows[0][1].alignment()
         & Qt.AlignmentFlag.AlignHCenter
     )
+    target_repeats_row = step.findChild(QWidget, "setup_conditions_target_repeats_row")
+    assert target_repeats_row is not None
+    target_label_top = step.target_repeats_label.mapTo(
+        step.condition_details_section,
+        step.target_repeats_label.rect().topLeft(),
+    ).y()
+    target_controls_top = target_repeats_row.mapTo(
+        step.condition_details_section,
+        target_repeats_row.rect().topLeft(),
+    ).y()
+    instructions_label_top = step.instructions_label.mapTo(
+        step.condition_details_section,
+        step.instructions_label.rect().topLeft(),
+    ).y()
+    instructions_editor_top = step.instructions_edit.mapTo(
+        step.condition_details_section,
+        step.instructions_edit.rect().topLeft(),
+    ).y()
+    assert abs(target_label_top - target_controls_top) <= 1
+    assert abs(instructions_label_top - instructions_editor_top) <= 1
+    assert instructions_editor_top > target_controls_top
 
     base_bottom = step.base_source_card.mapTo(
         workspace,

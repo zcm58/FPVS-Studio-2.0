@@ -28,7 +28,6 @@ from fpvs_studio.core.models import ConditionTemplateProfile
 from fpvs_studio.gui.components import (
     PathValueLabel,
     SectionCard,
-    SetupChecklistPanel,
     apply_project_overview_theme,
     create_setup_project_icon,
 )
@@ -116,7 +115,19 @@ class ProjectOverviewEditor(QWidget):
             "Apply the selected default timing template to all existing conditions."
         )
         self.apply_profile_to_conditions_button.clicked.connect(self._apply_profile_to_conditions)
+        self.apply_profile_to_conditions_button.setMinimumWidth(
+            self.apply_profile_to_conditions_button.fontMetrics().horizontalAdvance(
+                self.apply_profile_to_conditions_button.text()
+            )
+            + 32
+        )
         self.apply_profile_to_conditions_button.setVisible(False)
+        self.manage_templates_button.setMinimumWidth(
+            self.manage_templates_button.fontMetrics().horizontalAdvance(
+                self.manage_templates_button.text()
+            )
+            + 32
+        )
         self.participant_tutorial_checkbox = QCheckBox("Enable participant tutorial?", self)
         self.participant_tutorial_checkbox.setObjectName("participant_tutorial_checkbox")
         self.participant_tutorial_checkbox.setToolTip(_PARTICIPANT_TUTORIAL_TOOLTIP)
@@ -124,18 +135,22 @@ class ProjectOverviewEditor(QWidget):
             self._apply_participant_tutorial_enabled
         )
 
-        self.setup_checklist = SetupChecklistPanel(
-            object_name="project_overview_checklist",
-            parent=self,
-        )
-
-        condition_profile_row = QWidget(self)
-        condition_profile_layout = QHBoxLayout(condition_profile_row)
+        condition_profile_group = QWidget(self)
+        condition_profile_group.setObjectName("project_condition_profile_group")
+        condition_profile_layout = QVBoxLayout(condition_profile_group)
         condition_profile_layout.setContentsMargins(0, 0, 0, 0)
         condition_profile_layout.setSpacing(8)
-        condition_profile_layout.addWidget(self.condition_profile_combo, 1)
-        condition_profile_layout.addWidget(self.apply_profile_to_conditions_button)
-        condition_profile_layout.addWidget(self.manage_templates_button)
+        condition_profile_layout.addWidget(self.condition_profile_combo)
+
+        condition_profile_actions = QWidget(condition_profile_group)
+        condition_profile_actions.setObjectName("project_condition_profile_actions")
+        condition_profile_actions_layout = QHBoxLayout(condition_profile_actions)
+        condition_profile_actions_layout.setContentsMargins(0, 0, 0, 0)
+        condition_profile_actions_layout.setSpacing(8)
+        condition_profile_actions_layout.addStretch(1)
+        condition_profile_actions_layout.addWidget(self.apply_profile_to_conditions_button)
+        condition_profile_actions_layout.addWidget(self.manage_templates_button)
+        condition_profile_layout.addWidget(condition_profile_actions)
 
         self.project_overview_card = SectionCard(
             title="Project Details",
@@ -177,7 +192,7 @@ class ProjectOverviewEditor(QWidget):
         metadata_layout.addRow("Project Name", self.project_name_edit)
         metadata_layout.addRow("Description", self.project_description_edit)
         metadata_layout.addRow("Project Folder", self.project_root_value)
-        metadata_layout.addRow("Image Timing", condition_profile_row)
+        metadata_layout.addRow("Image Timing", condition_profile_group)
         metadata_layout.addRow(self.participant_tutorial_checkbox)
 
         form_panel = QWidget(self.project_overview_card)
@@ -185,21 +200,11 @@ class ProjectOverviewEditor(QWidget):
         form_layout.setContentsMargins(0, 0, 0, 0)
         form_layout.addLayout(metadata_layout)
 
-        self.setup_checklist.setMinimumWidth(210)
-        self.setup_checklist.setMaximumWidth(240)
-
-        content_row = QWidget(self.project_overview_card)
-        content_layout = QHBoxLayout(content_row)
-        content_layout.setContentsMargins(0, 0, 0, 0)
-        content_layout.setSpacing(14)
-        content_layout.addWidget(form_panel, 1)
-        content_layout.addWidget(self.setup_checklist, 0)
-
         self.project_overview_card.card_layout.setContentsMargins(20, 18, 20, 18)
         self.project_overview_card.card_layout.setSpacing(12)
         self.project_overview_card.body_layout.setSpacing(12)
         self.project_overview_card.body_layout.addWidget(header_row)
-        self.project_overview_card.body_layout.addWidget(content_row)
+        self.project_overview_card.body_layout.addWidget(form_panel)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -223,20 +228,9 @@ class ProjectOverviewEditor(QWidget):
             self.participant_tutorial_checkbox.setChecked(
                 project.settings.fixation_task.participant_tutorial_enabled
             )
-        self._refresh_checklist()
 
     def flush_pending_edits(self) -> None:
         self._description_committer.flush()
-
-    def _refresh_checklist(self) -> None:
-        project = self._document.project
-        self.setup_checklist.set_items(
-            [
-                ("Name", bool(project.meta.name.strip())),
-                ("Description", bool(self.project_description_edit.toPlainText().strip())),
-                ("Template", bool(self.condition_profile_combo.currentData())),
-            ]
-        )
 
     def _refresh_condition_profile_widgets(self) -> None:
         profiles = self._load_condition_template_profiles()
@@ -279,7 +273,6 @@ class ProjectOverviewEditor(QWidget):
             selected_profile is not None and bool(self._document.project.conditions)
         )
         self.apply_profile_to_conditions_button.setVisible(bool(self._document.project.conditions))
-        self._refresh_checklist()
 
     def _profile_id_for_duty_cycle(
         self,

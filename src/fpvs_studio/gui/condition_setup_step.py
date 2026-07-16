@@ -56,8 +56,9 @@ _DEFAULT_CONDITION_NAME_RE = re.compile(r"^Condition \d+$")
 _SOURCE_CARD_MIN_WIDTH = 210
 _SOURCE_CARD_HEIGHT = 164
 _SOURCE_ROW_MIN_WIDTH = (_SOURCE_CARD_MIN_WIDTH * 2) + PAGE_SECTION_GAP
-_SOURCE_METRICS_HEIGHT = 38
-_INSTRUCTIONS_HEIGHT = 76
+_SOURCE_HEADER_HEIGHT = 24
+_SOURCE_METRICS_HEIGHT = 56
+_INSTRUCTIONS_HEIGHT = 80
 _CONDITION_STEP_MIN_WIDTH = 840
 
 
@@ -118,6 +119,18 @@ def _repeat_range_text(row: StimulusRepeatRoleGuidance) -> str:
     if row.min_repeats_per_image == row.max_repeats_per_image:
         return str(row.min_repeats_per_image)
     return f"{row.min_repeats_per_image}-{row.max_repeats_per_image}"
+
+
+def _configure_guided_source_card(card: SetupSourceCard) -> None:
+    """Pin compact source headings high and reserve legible metric-row height."""
+
+    header = card.title_label.parentWidget()
+    if header is not None:
+        header.setFixedHeight(_SOURCE_HEADER_HEIGHT)
+    card.title_label.setAlignment(
+        Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter
+    )
+    card.metrics.setFixedHeight(_SOURCE_METRICS_HEIGHT)
 
 
 class RepeatCalculatorDialog(QDialog):
@@ -383,26 +396,33 @@ class ConditionSetupStep(QWidget):
         self.condition_details_section.setObjectName("setup_conditions_details_section")
         self.condition_details_section.setProperty("conditionDetailsSection", "true")
         details_section_layout = QVBoxLayout(self.condition_details_section)
-        details_section_layout.setContentsMargins(10, 8, 10, 8)
+        details_section_layout.setContentsMargins(10, 5, 10, 5)
         details_section_layout.setSpacing(0)
 
         form = QFormLayout()
         form.setContentsMargins(0, 0, 0, 0)
-        form.setVerticalSpacing(8)
+        form.setHorizontalSpacing(14)
+        form.setVerticalSpacing(4)
+        form.setLabelAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
         form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
         target_repeats_row = QWidget(self)
+        target_repeats_row.setObjectName("setup_conditions_target_repeats_row")
         target_repeats_layout = QHBoxLayout(target_repeats_row)
         target_repeats_layout.setContentsMargins(0, 0, 0, 0)
-        target_repeats_layout.setSpacing(8)
+        target_repeats_layout.setSpacing(10)
         target_repeats_layout.addWidget(self.target_repeats_spin)
         target_repeats_layout.addWidget(self.repeat_calculator_button)
         target_repeats_layout.addStretch(1)
+        self.target_repeats_label = QLabel("Target Stimulus Repeats", self)
+        self.target_repeats_label.setObjectName("setup_conditions_target_repeats_label")
+        self.instructions_label = QLabel("Participant Instructions", self)
+        self.instructions_label.setObjectName("setup_conditions_instructions_label")
         form.addRow("Condition Name", self.condition_name_edit)
         form.addRow("Trigger Code", self.trigger_code_spin)
         form.addRow("Stimulus Type", self.modality_combo)
         form.addRow("Advanced Timing", self.timing_template_combo)
-        form.addRow("Target Stimulus Repeats", target_repeats_row)
-        form.addRow("Participant Instructions", self.instructions_edit)
+        form.addRow(self.target_repeats_label, target_repeats_row)
+        form.addRow(self.instructions_label, self.instructions_edit)
         details_section_layout.addLayout(form)
 
         self.base_source_card = SetupSourceCard(
@@ -424,7 +444,7 @@ class ConditionSetupStep(QWidget):
         self.base_count_value.setObjectName("setup_wizard_base_count_value")
         self.base_resolution_value = QLabel(self)
         self.base_resolution_value.setObjectName("setup_wizard_base_resolution_value")
-        self.base_source_card.metrics.setFixedHeight(_SOURCE_METRICS_HEIGHT)
+        _configure_guided_source_card(self.base_source_card)
         self.base_import_button = self.base_source_card.choose_button
         self.base_import_button.setObjectName("setup_wizard_import_base_folder_button")
         self.base_source_card.choose_requested.connect(lambda: self._import_stimulus_folder("base"))
@@ -448,7 +468,7 @@ class ConditionSetupStep(QWidget):
         self.oddball_count_value.setObjectName("setup_wizard_oddball_count_value")
         self.oddball_resolution_value = QLabel(self)
         self.oddball_resolution_value.setObjectName("setup_wizard_oddball_resolution_value")
-        self.oddball_source_card.metrics.setFixedHeight(_SOURCE_METRICS_HEIGHT)
+        _configure_guided_source_card(self.oddball_source_card)
         self.oddball_import_button = self.oddball_source_card.choose_button
         self.oddball_import_button.setObjectName("setup_wizard_import_oddball_folder_button")
         self.oddball_source_card.choose_requested.connect(

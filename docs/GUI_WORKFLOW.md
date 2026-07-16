@@ -99,7 +99,9 @@ The authoring window is organized around two user-facing modes:
     only show information needed for the current decision
   - Project uses a focused centered card, keeping the project folder path compact
     and secondary; project name and description are required before continuing to
-    Conditions
+    Conditions; the card uses a single-column form without a redundant readiness
+    subsection, and template actions sit below the full-width image-timing selector so
+    their labels remain visible at the compact setup size
   - the Project image-timing selector is the default timing template for new
     conditions; it is backed by condition-template profiles, defaults to Continuous
     Images, and does not rewrite existing conditions unless the user explicitly applies
@@ -131,7 +133,9 @@ The authoring window is organized around two user-facing modes:
   - the Conditions step uses compact condition rows showing each condition's current
     timing template and a combined condition
     setup surface for condition list actions, name, trigger code, participant
-    instructions, modality, and base/oddball stimulus authoring
+    instructions, modality, and base/oddball stimulus authoring; the metadata form keeps
+    repeat controls and participant instructions fully visible, while image source-card
+    headings stay top-anchored above enlarged count/resolution summaries
   - each selected condition exposes an advanced timing selector for Continuous Images
     or 50% Blank Between Images; changing it updates only that condition
   - image conditions use the existing base/oddball image source cards; word conditions
