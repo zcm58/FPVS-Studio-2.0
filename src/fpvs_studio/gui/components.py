@@ -87,6 +87,7 @@ __all__ = [
     "image_size_preview_dialog_stylesheet",
     "project_overview_stylesheet",
     "mark_error_text",
+    "mark_compact_info_action",
     "mark_launch_action",
     "mark_home_launch_action",
     "mark_primary_action",
@@ -759,6 +760,14 @@ def mark_secondary_action(button: QPushButton) -> None:
     _set_widget_property(button, "secondaryActionRole", "true")
 
 
+def mark_compact_info_action(button: QPushButton) -> None:
+    """Style a compact, accessible secondary information action."""
+
+    mark_secondary_action(button)
+    _set_widget_property(button, "compactInfoAction", "true")
+    button.setFixedSize(QSize(30, 30))
+
+
 def mark_destructive_action(button: QPushButton) -> None:
     _set_widget_property(button, "destructiveActionRole", "true")
 
@@ -1172,6 +1181,11 @@ def studio_theme_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
     }}
     QPushButton[secondaryActionRole="true"] {{
         font-weight: 600;
+    }}
+    QPushButton[compactInfoAction="true"] {{
+        border-radius: 15px;
+        padding: 0;
+        font-weight: 700;
     }}
     QPushButton[destructiveActionRole="true"] {{
         color: {theme.destructive_text};

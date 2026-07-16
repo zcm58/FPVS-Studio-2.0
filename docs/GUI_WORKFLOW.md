@@ -133,9 +133,10 @@ The authoring window is organized around two user-facing modes:
   - the Conditions step uses compact condition rows showing each condition's current
     timing template and a combined condition
     setup surface for condition list actions, name, trigger code, participant
-    instructions, modality, and base/oddball stimulus authoring; the metadata form keeps
-    repeat controls and participant instructions fully visible, uses the Advanced Timing
-    selector width consistently for its editable fields, and keeps image source-card
+    instructions, modality, and base/oddball stimulus authoring; its frameless two-column
+    workspace keeps repeat controls and participant instructions fully visible, uses the
+    Advanced Timing selector width consistently for editable fields, places repeat
+    guidance behind a compact lower-right information action, and keeps image source-card
     headings top-anchored above enlarged count/resolution summaries
   - each selected condition exposes an advanced timing selector for Continuous Images
     or 50% Blank Between Images; changing it updates only that condition

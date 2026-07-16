@@ -37,7 +37,7 @@ from fpvs_studio.core.validation import (
 from fpvs_studio.gui.components import (
     PAGE_SECTION_GAP,
     SetupSourceCard,
-    SetupWorkspaceFrame,
+    mark_compact_info_action,
     mark_primary_action,
     mark_secondary_action,
 )
@@ -387,10 +387,15 @@ class ConditionSetupStep(QWidget):
             "Target maximum repetitions for each individual base or oddball stimulus."
         )
         self.target_repeats_spin.valueChanged.connect(self._apply_target_repeats)
-        self.repeat_calculator_button = QPushButton("Calculate...", self)
+        self.repeat_calculator_button = QPushButton("i", self)
         self.repeat_calculator_button.setObjectName("setup_wizard_repeat_calculator_button")
+        self.repeat_calculator_button.setToolTip("Show target repeat calculations")
+        self.repeat_calculator_button.setAccessibleName("Target repeat information")
+        self.repeat_calculator_button.setAccessibleDescription(
+            "Open the calculator explaining target stimulus repeat requirements."
+        )
         self.repeat_calculator_button.clicked.connect(self._open_repeat_calculator)
-        mark_secondary_action(self.repeat_calculator_button)
+        mark_compact_info_action(self.repeat_calculator_button)
         self.instructions_edit = QTextEdit(self)
         self.instructions_edit.setObjectName("setup_wizard_condition_instructions_edit")
         self.instructions_edit.setFixedHeight(_INSTRUCTIONS_HEIGHT)
@@ -413,7 +418,7 @@ class ConditionSetupStep(QWidget):
         self.condition_details_section.setProperty("conditionDetailsSection", "true")
         details_section_layout = QVBoxLayout(self.condition_details_section)
         details_section_layout.setContentsMargins(10, 5, 10, 5)
-        details_section_layout.setSpacing(0)
+        details_section_layout.setSpacing(4)
 
         form = QFormLayout()
         form.setContentsMargins(0, 0, 0, 0)
@@ -421,14 +426,6 @@ class ConditionSetupStep(QWidget):
         form.setVerticalSpacing(4)
         form.setLabelAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
         form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
-        target_repeats_row = QWidget(self)
-        target_repeats_row.setObjectName("setup_conditions_target_repeats_row")
-        target_repeats_layout = QHBoxLayout(target_repeats_row)
-        target_repeats_layout.setContentsMargins(0, 0, 0, 0)
-        target_repeats_layout.setSpacing(10)
-        target_repeats_layout.addWidget(self.target_repeats_spin)
-        target_repeats_layout.addWidget(self.repeat_calculator_button)
-        target_repeats_layout.addStretch(1)
         self.target_repeats_label = QLabel("Target Stimulus Repeats", self)
         self.target_repeats_label.setObjectName("setup_conditions_target_repeats_label")
         self.instructions_label = QLabel("Participant Instructions", self)
@@ -437,9 +434,14 @@ class ConditionSetupStep(QWidget):
         form.addRow("Trigger Code", self.trigger_code_spin)
         form.addRow("Stimulus Type", self.modality_combo)
         form.addRow("Advanced Timing", self.timing_template_combo)
-        form.addRow(self.target_repeats_label, target_repeats_row)
+        form.addRow(self.target_repeats_label, self.target_repeats_spin)
         form.addRow(self.instructions_label, self.instructions_edit)
         details_section_layout.addLayout(form)
+        details_section_layout.addWidget(
+            self.repeat_calculator_button,
+            0,
+            Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom,
+        )
 
         self.base_source_card = SetupSourceCard(
             "Base Images",
@@ -549,8 +551,14 @@ class ConditionSetupStep(QWidget):
         detail_layout.addWidget(sources_row)
         detail_layout.addWidget(self.words_panel)
 
-        workspace = SetupWorkspaceFrame(object_name="setup_conditions_workspace", parent=self)
-        workspace.set_regions(left=list_panel, main=detail_panel)
+        workspace = QWidget(self)
+        workspace.setObjectName("setup_conditions_workspace")
+        workspace_layout = QHBoxLayout(workspace)
+        workspace_layout.setContentsMargins(0, 0, 0, 0)
+        workspace_layout.setSpacing(PAGE_SECTION_GAP)
+        list_panel.setMinimumWidth(300)
+        workspace_layout.addWidget(list_panel, 0)
+        workspace_layout.addWidget(detail_panel, 1)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(workspace, 1)

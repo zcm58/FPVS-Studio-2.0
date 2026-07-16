@@ -595,6 +595,7 @@ def test_setup_wizard_conditions_step_keeps_source_geometry_for_incomplete_condi
     QApplication.processEvents()
     workspace = step.findChild(QWidget, "setup_conditions_workspace")
     assert workspace is not None
+    assert workspace.property("setupWorkspaceFrame") is None
     before_geometry = {
         "workspace": workspace.size(),
         "details_section": step.condition_details_section.size(),
@@ -620,6 +621,11 @@ def test_setup_wizard_conditions_step_keeps_source_geometry_for_incomplete_condi
     assert step.oddball_source_card.metrics.size() == before_geometry["oddball_metrics"]
     assert step.instructions_edit.size() == before_geometry["instructions"]
     assert step.instructions_edit.height() == 80
+    assert step.repeat_calculator_button.text() == "i"
+    assert step.repeat_calculator_button.size().width() == 30
+    assert step.repeat_calculator_button.size().height() == 30
+    assert step.repeat_calculator_button.accessibleName() == "Target repeat information"
+    assert step.repeat_calculator_button.toolTip() == "Show target repeat calculations"
     standard_field_width = step.timing_template_combo.width()
     for field in (
         step.condition_name_edit,
@@ -692,15 +698,13 @@ def test_setup_wizard_conditions_step_keeps_source_geometry_for_incomplete_condi
         step.oddball_source_card.metrics._rows[0][1].alignment()
         & Qt.AlignmentFlag.AlignHCenter
     )
-    target_repeats_row = step.findChild(QWidget, "setup_conditions_target_repeats_row")
-    assert target_repeats_row is not None
     target_label_top = step.target_repeats_label.mapTo(
         step.condition_details_section,
         step.target_repeats_label.rect().topLeft(),
     ).y()
-    target_controls_top = target_repeats_row.mapTo(
+    target_controls_top = step.target_repeats_spin.mapTo(
         step.condition_details_section,
-        target_repeats_row.rect().topLeft(),
+        step.target_repeats_spin.rect().topLeft(),
     ).y()
     instructions_label_top = step.instructions_label.mapTo(
         step.condition_details_section,
@@ -713,6 +717,13 @@ def test_setup_wizard_conditions_step_keeps_source_geometry_for_incomplete_condi
     assert abs(target_label_top - target_controls_top) <= 1
     assert abs(instructions_label_top - instructions_editor_top) <= 1
     assert instructions_editor_top > target_controls_top
+    info_bottom_right = step.repeat_calculator_button.mapTo(
+        step.condition_details_section,
+        step.repeat_calculator_button.rect().bottomRight(),
+    )
+    assert step.condition_details_section.width() - info_bottom_right.x() <= 12
+    assert step.condition_details_section.height() - info_bottom_right.y() <= 7
+    _assert_visible_children_within_parent(workspace)
 
     base_bottom = step.base_source_card.mapTo(
         workspace,
