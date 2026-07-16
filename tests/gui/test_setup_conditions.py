@@ -620,6 +620,22 @@ def test_setup_wizard_conditions_step_keeps_source_geometry_for_incomplete_condi
     assert step.oddball_source_card.metrics.size() == before_geometry["oddball_metrics"]
     assert step.instructions_edit.size() == before_geometry["instructions"]
     assert step.instructions_edit.height() == 80
+    standard_field_width = step.timing_template_combo.width()
+    for field in (
+        step.condition_name_edit,
+        step.trigger_code_spin,
+        step.modality_combo,
+        step.target_repeats_spin,
+        step.instructions_edit,
+    ):
+        assert field.width() == standard_field_width
+    timing_option_widths = (
+        step.timing_template_combo.fontMetrics().horizontalAdvance(
+            step.timing_template_combo.itemText(index)
+        )
+        for index in range(step.timing_template_combo.count())
+    )
+    assert standard_field_width >= max(timing_option_widths)
     assert step.base_source_card.metrics.height() == 56
     assert step.oddball_source_card.metrics.height() == 56
     _assert_visible_children_within_parent(step.condition_details_section)
