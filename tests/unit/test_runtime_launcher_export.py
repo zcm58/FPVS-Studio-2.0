@@ -6,6 +6,7 @@ import csv
 import os
 from pathlib import Path
 
+import pytest
 from openpyxl import load_workbook
 from tests.unit.runtime_launcher_helpers import (
     PARTICIPANT_NUMBER,
@@ -29,6 +30,15 @@ from fpvs_studio.runtime.session_export import (
     write_group_summary,
     write_participant_summary,
 )
+from fpvs_studio.runtime.windows_display import WindowsDisplayMode
+
+
+@pytest.fixture(autouse=True)
+def _stable_windows_display_mode(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "fpvs_studio.runtime.display_refresh.query_primary_windows_display_mode",
+        lambda: WindowsDisplayMode(r"\\.\DISPLAY1", 60, 1),
+    )
 
 
 def test_session_export_captures_seed_and_runtime_logs(

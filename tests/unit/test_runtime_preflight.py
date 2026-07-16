@@ -17,6 +17,7 @@ from fpvs_studio.runtime.preflight import (
     preflight_run_spec,
     preflight_session_plan,
 )
+from fpvs_studio.runtime.windows_display import WindowsDisplayMode
 from fpvs_studio.triggers.base import TriggerBackend
 
 
@@ -108,6 +109,17 @@ class _PreflightEngine(PresentationEngine):
 
     def abort(self) -> None:
         return None
+
+
+def _patch_windows_mode(
+    monkeypatch: pytest.MonkeyPatch,
+    numerator: int,
+    denominator: int = 1,
+) -> None:
+    monkeypatch.setattr(
+        "fpvs_studio.runtime.display_refresh.query_primary_windows_display_mode",
+        lambda: WindowsDisplayMode(r"\\.\DISPLAY1", numerator, denominator),
+    )
 
 
 def test_preflight_rejects_non_contiguous_stimulus_timing(
@@ -264,7 +276,9 @@ def test_preflight_rejects_blank_50_when_frames_per_stimulus_is_odd(
 def test_preflight_accepts_measured_refresh_within_tolerance(
     sample_project,
     sample_project_root,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    _patch_windows_mode(monkeypatch, 144)
     run_spec = compile_run_spec(
         sample_project,
         refresh_hz=144.0,
@@ -286,7 +300,9 @@ def test_preflight_accepts_measured_refresh_within_tolerance(
 def test_preflight_rejects_measured_refresh_mismatch(
     sample_project,
     sample_project_root,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    _patch_windows_mode(monkeypatch, 60)
     run_spec = compile_run_spec(
         sample_project,
         refresh_hz=240.0,
@@ -294,7 +310,7 @@ def test_preflight_rejects_measured_refresh_mismatch(
         run_id="faces-run",
     )
 
-    with pytest.raises(PreflightError, match="measured 60.000 Hz.*expects 240 Hz"):
+    with pytest.raises(PreflightError, match="Windows reports display mode.*expects 240 Hz"):
         preflight_run_spec(
             sample_project_root,
             run_spec,
@@ -306,7 +322,9 @@ def test_preflight_rejects_measured_refresh_mismatch(
 def test_preflight_rejects_unavailable_refresh_measurement(
     sample_project,
     sample_project_root,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    _patch_windows_mode(monkeypatch, 60)
     run_spec = compile_run_spec(
         sample_project,
         refresh_hz=60.0,
@@ -314,7 +332,7 @@ def test_preflight_rejects_unavailable_refresh_measurement(
         run_id="faces-run",
     )
 
-    with pytest.raises(PreflightError, match="could not be measured"):
+    with pytest.raises(PreflightError, match="PsychoPy could not confirm.*unstable"):
         preflight_run_spec(
             sample_project_root,
             run_spec,
@@ -326,7 +344,9 @@ def test_preflight_rejects_unavailable_refresh_measurement(
 def test_session_preflight_measures_connected_refresh_once(
     sample_project,
     sample_project_root,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    _patch_windows_mode(monkeypatch, 60)
     session_plan = compile_session_plan(
         sample_project,
         refresh_hz=60.0,
@@ -343,6 +363,31 @@ def test_session_preflight_measures_connected_refresh_once(
     )
 
     assert engine.refresh_measurement_count == 1
+
+
+def test_preflight_distinguishes_windows_5994_mode_from_compiled_60_hz(
+    sample_project,
+    sample_project_root,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _patch_windows_mode(monkeypatch, 60_000, 1_001)
+    run_spec = compile_run_spec(
+        sample_project,
+        refresh_hz=60.0,
+        project_root=sample_project_root,
+        run_id="faces-run",
+    )
+
+    with pytest.raises(
+        PreflightError,
+        match=r"59\.940060 Hz \(60000/1001\).*expects 60 Hz",
+    ):
+        preflight_run_spec(
+            sample_project_root,
+            run_spec,
+            engine=_PreflightEngine(59.998),
+            runtime_options={"verify_refresh_rate": True},
+        )
 
 
 def test_preflight_accepts_word_stimuli_without_files(sample_project, sample_project_root) -> None:

@@ -26,6 +26,25 @@ from tests.gui.helpers import (
 )
 
 from fpvs_studio.gui.controller import StudioController
+from fpvs_studio.runtime.display_refresh import DisplayRefreshVerification
+from fpvs_studio.runtime.windows_display import WindowsDisplayMode
+
+
+def _refresh_verification(
+    numerator: int,
+    denominator: int,
+    psychopy_measured_hz: float,
+    approved_hz: float,
+) -> DisplayRefreshVerification:
+    return DisplayRefreshVerification(
+        windows_mode=WindowsDisplayMode(
+            r"\\.\DISPLAY1",
+            numerator,
+            denominator,
+        ),
+        psychopy_measured_hz=psychopy_measured_hz,
+        approved_hz=approved_hz,
+    )
 
 
 def test_setup_wizard_experiment_and_fixation_steps_are_width_safe(
@@ -108,7 +127,9 @@ def test_setup_wizard_experiment_and_fixation_steps_are_width_safe(
 
     refresh_combo = guide.runtime_settings_editor.refresh_hz_combo
     refresh_combo.setCurrentIndex(refresh_combo.findData(59.94))
-    guide.runtime_settings_editor._on_refresh_detection_succeeded(59.94)
+    guide.runtime_settings_editor._on_refresh_detection_succeeded(
+        _refresh_verification(60_000, 1_001, 59.94, 59.94)
+    )
     assert guide.runtime_settings_editor.timing_status_label.isVisible()
     assert "Approximate timing" in guide.runtime_settings_editor.timing_status_label.text()
 
@@ -168,6 +189,7 @@ def test_setup_wizard_fpvs_rates_persist_and_report_exact_or_approximate_timing(
     monkeypatch,
 ) -> None:
     measured_refresh = {"value": 143.92}
+    windows_mode = {"numerator": 144, "denominator": 1}
 
     class _FakeEngine:
         def measure_refresh_hz(self, *, runtime_options=None) -> float:
@@ -181,6 +203,14 @@ def test_setup_wizard_fpvs_rates_persist_and_report_exact_or_approximate_timing(
     monkeypatch.setattr(
         "fpvs_studio.gui.runtime_settings_page.ProgressTask",
         _ImmediateProgressTask,
+    )
+    monkeypatch.setattr(
+        "fpvs_studio.runtime.display_refresh.query_primary_windows_display_mode",
+        lambda: WindowsDisplayMode(
+            r"\\.\DISPLAY1",
+            windows_mode["numerator"],
+            windows_mode["denominator"],
+        ),
     )
     _, window = _open_created_project(controller, qtbot, tmp_path, "Configurable FPVS Timing")
     guide = window.setup_wizard_page
@@ -207,7 +237,8 @@ def test_setup_wizard_fpvs_rates_persist_and_report_exact_or_approximate_timing(
     assert editor.current_refresh_hz() == 144.0
     assert editor.refresh_is_verified() is True
     assert editor.timing_report().timing_is_exact is True
-    assert "measured 143.920 Hz" in editor.timing_status_label.text()
+    assert "Windows mode 144.000 Hz (144/1)" in editor.timing_status_label.text()
+    assert "PsychoPy observed 143.920 Hz" in editor.timing_status_label.text()
     assert "applied 144 Hz" in editor.timing_status_label.text()
     assert "24 frames/stimulus" in editor.timing_summary_label.text()
     assert "144 frames/oddball" in editor.timing_summary_label.text()
@@ -219,7 +250,8 @@ def test_setup_wizard_fpvs_rates_persist_and_report_exact_or_approximate_timing(
     assert editor.refresh_is_verified() is False
     assert guide.setup_wizard_next_button.isEnabled() is False
 
-    measured_refresh["value"] = 59.94
+    windows_mode.update({"numerator": 60_000, "denominator": 1_001})
+    measured_refresh["value"] = 59.998
     editor.detect_refresh_button.click()
     QApplication.processEvents()
 
@@ -229,7 +261,8 @@ def test_setup_wizard_fpvs_rates_persist_and_report_exact_or_approximate_timing(
     assert report.realized_base_hz == pytest.approx(5.994)
     assert report.realized_oddball_hz == pytest.approx(0.999)
     assert editor.timing_status_label.isVisible()
-    assert "measured 59.940 Hz" in editor.timing_status_label.text()
+    assert "Windows mode 59.940 Hz (60000/1001)" in editor.timing_status_label.text()
+    assert "PsychoPy observed 59.998 Hz" in editor.timing_status_label.text()
     assert "whole-frame scheduling" in editor.timing_status_label.text()
     assert "dropped or late frames" in editor.timing_status_label.text()
     assert guide.setup_wizard_next_button.isEnabled()
@@ -276,6 +309,10 @@ def test_setup_wizard_refresh_detection_failure_is_actionable(
     monkeypatch.setattr(
         "fpvs_studio.gui.runtime_settings_page.ProgressTask",
         _ImmediateProgressTask,
+    )
+    monkeypatch.setattr(
+        "fpvs_studio.runtime.display_refresh.query_primary_windows_display_mode",
+        lambda: WindowsDisplayMode(r"\\.\DISPLAY1", 60, 1),
     )
     _, window = _open_created_project(controller, qtbot, tmp_path, "Refresh Detection Error")
     guide = window.setup_wizard_page
@@ -329,10 +366,12 @@ def test_setup_wizard_refresh_detection_busy_state_disables_controls(
     assert _DeferredProgressTask.active is not None
     assert editor.detect_refresh_button.isEnabled() is False
     assert editor.refresh_hz_combo.isEnabled() is False
-    assert "Measuring refresh rate" in editor.timing_status_label.text()
+    assert "checking PsychoPy frame stability" in editor.timing_status_label.text()
     assert guide.setup_wizard_next_button.isEnabled() is False
 
-    _DeferredProgressTask.active.succeeded.emit(60.0)
+    _DeferredProgressTask.active.succeeded.emit(
+        _refresh_verification(60, 1, 60.0, 60.0)
+    )
     _DeferredProgressTask.active.finished.emit()
     QApplication.processEvents()
 

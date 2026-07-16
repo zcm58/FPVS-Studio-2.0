@@ -19,7 +19,8 @@ as PsychoPy. Runtime owns flow and calls engines through
   whose configured display resolution does not match the actual fullscreen display.
 - Engines expose a neutral refresh-measurement method. PsychoPy implements it with a
   temporary fullscreen probe window; measured values do not leak PsychoPy types across
-  the engine boundary.
+  the engine boundary. Runtime combines that stability observation with the exact
+  Windows rational display mode; engines do not classify `59.94` versus `60`.
 - PsychoPy imports must remain lazy and local to engine implementations.
 - Engines return core-owned execution summaries; exporters stay outside engine
   code.

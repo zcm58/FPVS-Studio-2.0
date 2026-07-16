@@ -52,9 +52,10 @@ ProjectFile
 - Editable project protocol settings own requested base Hz and integer oddball cadence;
   compilation resolves them to whole-frame timing and records requested rates in each
   `RunSpec`.
-- Core validation owns the approved monitor-rate list and measured-versus-configured
-  tolerance. The GUI requests explicit detection through the engine boundary, and
-  runtime preflight independently measures the connected display once per session.
+- Core validation owns the approved monitor-rate list. Runtime reads the primary
+  Windows display path's exact rational mode and combines it with the engine's neutral
+  fullscreen refresh observation. The GUI requests this combined verification, and
+  runtime preflight repeats it once per session without changing compiled schedules.
 - Runtime owns machine launch options, session transitions, participant flow, fixation
   scoring, trigger I/O coordination, and result assembly.
 - Engines render compiled events and participant-facing screens; they do not own

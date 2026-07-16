@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 from pathlib import Path
 
+import pytest
 from openpyxl import load_workbook
 from tests.unit.runtime_launcher_helpers import (
     PARTICIPANT_NUMBER,
@@ -19,6 +20,15 @@ from fpvs_studio.runtime.launcher import (
     LaunchSettings,
     launch_session,
 )
+from fpvs_studio.runtime.windows_display import WindowsDisplayMode
+
+
+@pytest.fixture(autouse=True)
+def _stable_windows_display_mode(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "fpvs_studio.runtime.display_refresh.query_primary_windows_display_mode",
+        lambda: WindowsDisplayMode(r"\\.\DISPLAY1", 60, 1),
+    )
 
 
 def test_session_launch_shows_condition_feedback_with_accuracy_and_mean_rt_when_enabled(

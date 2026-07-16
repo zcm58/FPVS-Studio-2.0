@@ -15,10 +15,14 @@ from fpvs_studio.core.enums import DutyCycleMode, StimulusModality
 from fpvs_studio.core.run_spec import RunSpec
 from fpvs_studio.core.session_plan import SessionPlan
 from fpvs_studio.core.validation import (
-    measured_refresh_matches_configured,
+    approved_monitor_refresh_rate,
     validate_display_refresh,
 )
 from fpvs_studio.engines.base import PresentationEngine
+from fpvs_studio.runtime.display_refresh import (
+    DisplayRefreshVerificationError,
+    verify_primary_display_refresh,
+)
 
 
 class PreflightError(ValueError):
@@ -42,28 +46,32 @@ def _verify_connected_refresh_rate(
     if not run_specs or not _refresh_verification_enabled(runtime_options):
         return
     try:
-        measured_hz = engine.measure_refresh_hz(runtime_options=runtime_options)
-    except Exception as exc:
+        verification = verify_primary_display_refresh(
+            engine,
+            runtime_options=runtime_options,
+        )
+    except DisplayRefreshVerificationError as exc:
         raise PreflightError(
-            "Run preflight failed because the connected display refresh rate could not "
-            f"be measured: {exc}"
+            "Run preflight failed because display refresh verification did not pass: "
+            f"{exc}"
         ) from exc
 
     mismatched_rates = sorted(
         {
             run_spec.display.refresh_hz
             for run_spec in run_specs
-            if not measured_refresh_matches_configured(
-                run_spec.display.refresh_hz,
-                measured_hz,
-            )
+            if approved_monitor_refresh_rate(run_spec.display.refresh_hz)
+            != verification.approved_hz
         }
     )
     if mismatched_rates:
         configured_text = ", ".join(f"{refresh_hz:g} Hz" for refresh_hz in mismatched_rates)
+        windows_mode = verification.windows_mode
         raise PreflightError(
-            "Run preflight failed because the connected display measured "
-            f"{measured_hz:.3f} Hz but the compiled session expects {configured_text}. "
+            "Run preflight failed because Windows reports display mode "
+            f"{windows_mode.hz:.6f} Hz ({windows_mode.fraction_text}), verified by "
+            f"PsychoPy at {verification.psychopy_measured_hz:.3f} Hz, but the compiled "
+            f"session expects {configured_text}. "
             "Return to Experiment settings and detect the display refresh rate again."
         )
 

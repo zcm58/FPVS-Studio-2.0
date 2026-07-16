@@ -24,7 +24,16 @@ from fpvs_studio.runtime.launcher import (
     launch_session,
 )
 from fpvs_studio.runtime.preflight import PreflightError
+from fpvs_studio.runtime.windows_display import WindowsDisplayMode
 from fpvs_studio.triggers.base import TriggerBackend
+
+
+@pytest.fixture(autouse=True)
+def _stable_windows_display_mode(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "fpvs_studio.runtime.display_refresh.query_primary_windows_display_mode",
+        lambda: WindowsDisplayMode(r"\\.\DISPLAY1", 60, 1),
+    )
 
 
 def test_runtime_launcher_dispatches_runspec_to_registered_engine(
