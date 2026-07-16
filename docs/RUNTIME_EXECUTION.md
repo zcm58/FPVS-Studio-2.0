@@ -291,25 +291,28 @@ stimulus shuffle seeds, trigger schedule, display geometry, and stimulus-generat
 provenance so another lab can recreate the setup. It does not replace the authoritative
 artifacts under `runs/`, and runtime does not consume `.fpvsconfig` during playback.
 
-## Test mode
+## Session mode
 
-`test_mode` remains a runtime-only launch setting and is the only supported
-launch mode in the current Phase 4 backend.
+The supported runtime uses normal session mode. `LaunchSettings` has no production/test
+Boolean gate; presentation and timing-QC behavior use explicit runtime settings.
 
-In the current v1 runtime it means:
+In the current v1 runtime:
 
-- runtime launch still flows through the test-mode seam and test-mode metadata
-- GUI launch currently fixes PsychoPy test-mode playback to fullscreen presentation
+- runtime summaries use `run_mode="session"`
+- the backward-compatible `RuntimeMetadata.test_mode` export field remains present and
+  is always `false`; runtime control flow does not read it
+- GUI launch fixes PsychoPy playback to fullscreen presentation
 - session order is randomized within each block using the current random order seed
 - every condition waits for the participant to press Space before playback starts
 - trigger output follows the project's trigger settings; new projects default to
   BioSemi-compatible serial output on `COM3`, and oddball onset output is locked to
   marker code `55` unless the project records an explicit nonstandard-code override
-- completion screens auto-dismiss quickly
-- launch entry points reject `test_mode=False` until the non-test path is
-  explicitly hardened
+- completion screens retain the explicit 0.5-second auto-dismiss duration
+- GUI launches explicitly retain report-only warmup timing misses, a four-frame-interval
+  miss threshold, and a 240-frame timing warmup
 
-The rest of the compile, preflight, session flow, and export path still runs.
+Compilation, preflight, session flow, triggering, scoring, and export behavior are
+independent of the retired mode gate.
 
 ## Current deferrals
 

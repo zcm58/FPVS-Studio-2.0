@@ -419,7 +419,6 @@ def test_psychopy_engine_opens_fullscreen_window_for_launched_session(monkeypatc
     try:
         engine.open_session(
             runtime_options={
-                "test_mode": True,
                 "fullscreen": True,
                 "display_index": 2,
             }
@@ -435,6 +434,55 @@ def test_psychopy_engine_opens_fullscreen_window_for_launched_session(monkeypatc
         "color": "black",
         "units": "pix",
     }
+
+
+def test_psychopy_engine_preserves_windowed_session_size(monkeypatch) -> None:
+    captures: dict[str, object] = {}
+    fake_psychopy = _build_fake_psychopy(captures, flip_times=[])
+
+    engine = PsychoPyEngine()
+    _patch_fake_psychopy(monkeypatch, engine, fake_psychopy)
+
+    try:
+        engine.open_session(
+            runtime_options={
+                "fullscreen": False,
+                "windowed_size_px": (1280, 720),
+            }
+        )
+    finally:
+        engine.close_session()
+
+    assert captures["window_kwargs"] == {
+        "fullscr": False,
+        "screen": 0,
+        "allowGUI": True,
+        "waitBlanking": True,
+        "color": "black",
+        "units": "pix",
+        "size": [1280, 720],
+    }
+
+
+def test_psychopy_engine_preserves_completion_screen_duration(monkeypatch) -> None:
+    captures: dict[str, object] = {}
+    engine = PsychoPyEngine()
+
+    def _capture_text_screen(**kwargs) -> bool:
+        captures.update(kwargs)
+        return False
+
+    monkeypatch.setattr(engine, "_show_text_screen", _capture_text_screen)
+    engine._runtime_options = {"completion_screen_seconds": 0.5}
+
+    aborted = engine.show_completion_screen(
+        completed_condition_count=2,
+        total_condition_count=2,
+        was_aborted=False,
+    )
+
+    assert aborted is False
+    assert captures["countdown_seconds"] == 0.5
 
 
 def test_text_screen_uses_custom_space_begin_prompt() -> None:
@@ -502,7 +550,7 @@ def test_psychopy_engine_fixation_tutorial_attempt_returns_hit_with_rt(
     _patch_fake_psychopy(monkeypatch, engine, fake_psychopy)
 
     try:
-        engine.open_session(runtime_options={"test_mode": True, "fullscreen": False})
+        engine.open_session(runtime_options={"fullscreen": False})
         result = engine.run_fixation_tutorial_attempt(run_spec, target_delay_seconds=0.0)
     finally:
         engine.close_session()
@@ -537,7 +585,7 @@ def test_psychopy_engine_fixation_tutorial_attempt_returns_miss(
     _patch_fake_psychopy(monkeypatch, engine, fake_psychopy)
 
     try:
-        engine.open_session(runtime_options={"test_mode": True, "fullscreen": False})
+        engine.open_session(runtime_options={"fullscreen": False})
         result = engine.run_fixation_tutorial_attempt(run_spec, target_delay_seconds=0.0)
     finally:
         engine.close_session()
@@ -562,7 +610,7 @@ def test_psychopy_engine_preloads_unique_images_before_playback_flip(
         engine.run_condition(
             run_spec,
             sample_project_root,
-            runtime_options={"test_mode": True, "timing_warmup_frames": 0},
+            runtime_options={"timing_warmup_frames": 0},
             trigger_backend=None,
         )
     finally:
@@ -592,7 +640,7 @@ def test_psychopy_engine_reuses_prepared_stimulus_within_condition(
         engine.run_condition(
             run_spec,
             sample_project_root,
-            runtime_options={"test_mode": True, "timing_warmup_frames": 0},
+            runtime_options={"timing_warmup_frames": 0},
             trigger_backend=None,
         )
     finally:
@@ -619,7 +667,7 @@ def test_psychopy_engine_prepares_and_draws_word_stimuli(
         engine.run_condition(
             run_spec,
             sample_project_root,
-            runtime_options={"test_mode": True, "timing_warmup_frames": 0},
+            runtime_options={"timing_warmup_frames": 0},
             trigger_backend=None,
         )
     finally:
@@ -650,7 +698,7 @@ def test_psychopy_engine_releases_word_stimuli_after_playback_error(
             engine.run_condition(
                 run_spec,
                 sample_project_root,
-                runtime_options={"test_mode": True, "timing_warmup_frames": 0},
+                runtime_options={"timing_warmup_frames": 0},
                 trigger_backend=None,
             )
     finally:
@@ -689,7 +737,6 @@ def test_psychopy_engine_sizes_images_from_visual_angle_without_changing_aspect_
             run_spec,
             sample_project_root,
             runtime_options={
-                "test_mode": True,
                 "fullscreen": False,
                 "timing_warmup_frames": 0,
             },
@@ -786,7 +833,6 @@ def test_psychopy_engine_uses_same_display_size_for_different_square_resolutions
             run_spec,
             sample_project_root,
             runtime_options={
-                "test_mode": True,
                 "fullscreen": False,
                 "timing_warmup_frames": 0,
             },
@@ -827,7 +873,7 @@ def test_psychopy_engine_emits_compiled_triggers_on_presentation_flip(
         engine.run_condition(
             run_spec,
             sample_project_root,
-            runtime_options={"test_mode": True, "timing_warmup_frames": 0},
+            runtime_options={"timing_warmup_frames": 0},
             trigger_backend=trigger_backend,
         )
     finally:
@@ -865,7 +911,6 @@ def test_psychopy_engine_trigger_timestamps_exclude_warmup_period(
             run_spec,
             sample_project_root,
             runtime_options={
-                "test_mode": True,
                 "timing_warmup_frames": 3,
                 "strict_timing": False,
             },
@@ -905,7 +950,7 @@ def test_psychopy_engine_uses_compiled_trigger_events_not_stimulus_roles(
         engine.run_condition(
             run_spec,
             sample_project_root,
-            runtime_options={"test_mode": True, "timing_warmup_frames": 0},
+            runtime_options={"timing_warmup_frames": 0},
             trigger_backend=trigger_backend,
         )
     finally:
@@ -936,7 +981,6 @@ def test_psychopy_engine_releases_condition_stimuli_after_timing_violation(
             run_spec,
             sample_project_root,
             runtime_options={
-                "test_mode": True,
                 "strict_timing": True,
                 "timing_warmup_frames": 0,
                 "timing_miss_threshold_multiplier": 1.5,
@@ -968,7 +1012,7 @@ def test_psychopy_engine_releases_condition_stimuli_after_playback_error(
             engine.run_condition(
                 run_spec,
                 sample_project_root,
-                runtime_options={"test_mode": True, "timing_warmup_frames": 0},
+                runtime_options={"timing_warmup_frames": 0},
                 trigger_backend=None,
             )
     finally:
@@ -990,18 +1034,18 @@ def test_psychopy_engine_does_not_reuse_stimuli_between_condition_runs(
     _patch_fake_psychopy(monkeypatch, engine, fake_psychopy)
 
     try:
-        engine.open_session(runtime_options={"test_mode": True})
+        engine.open_session(runtime_options={})
         engine.run_condition(
             run_spec,
             sample_project_root,
-            runtime_options={"test_mode": True, "timing_warmup_frames": 0},
+            runtime_options={"timing_warmup_frames": 0},
             trigger_backend=None,
         )
         first_condition_stim = _image_stims(captures)[0]
         engine.run_condition(
             run_spec,
             sample_project_root,
-            runtime_options={"test_mode": True, "timing_warmup_frames": 0},
+            runtime_options={"timing_warmup_frames": 0},
             trigger_backend=None,
         )
         second_condition_stim = _image_stims(captures)[1]
@@ -1036,7 +1080,6 @@ def test_psychopy_engine_strict_timing_keeps_stable_intervals_running(
             run_spec,
             sample_project_root,
             runtime_options={
-                "test_mode": True,
                 "fullscreen": True,
                 "strict_timing": True,
                 "strict_timing_warmup": True,
@@ -1081,7 +1124,6 @@ def test_psychopy_engine_strict_timing_tolerates_single_early_warmup_miss(
             run_spec,
             sample_project_root,
             runtime_options={
-                "test_mode": True,
                 "fullscreen": True,
                 "strict_timing": True,
                 "strict_timing_warmup": True,
@@ -1126,7 +1168,6 @@ def test_psychopy_engine_strict_timing_flags_post_settle_warmup_misses(
             run_spec,
             sample_project_root,
             runtime_options={
-                "test_mode": True,
                 "fullscreen": True,
                 "strict_timing": True,
                 "timing_warmup_frames": warmup_frames,
@@ -1175,7 +1216,6 @@ def test_psychopy_engine_softened_warmup_does_not_abort_before_run_phase(
             run_spec,
             sample_project_root,
             runtime_options={
-                "test_mode": True,
                 "fullscreen": True,
                 "strict_timing": True,
                 "strict_timing_warmup": False,
@@ -1222,7 +1262,6 @@ def test_psychopy_engine_strict_timing_flags_run_phase_miss_without_aborting(
             run_spec,
             sample_project_root,
             runtime_options={
-                "test_mode": True,
                 "fullscreen": True,
                 "strict_timing": True,
                 "strict_timing_warmup": False,
@@ -1274,7 +1313,6 @@ def test_psychopy_engine_logs_playback_timing_diagnostic(
             run_spec,
             sample_project_root,
             runtime_options={
-                "test_mode": True,
                 "fullscreen": False,
                 "strict_timing": False,
                 "timing_warmup_frames": warmup_frames,
@@ -1318,7 +1356,6 @@ def test_psychopy_engine_uses_psychopy_warning_channel_for_timing_diagnostic(
             run_spec,
             sample_project_root,
             runtime_options={
-                "test_mode": True,
                 "fullscreen": False,
                 "strict_timing": False,
                 "timing_warmup_frames": 0,
@@ -1350,7 +1387,7 @@ def test_psychopy_engine_disables_frame_interval_recording_for_text_screens(
     _patch_fake_psychopy(monkeypatch, engine, fake_psychopy)
 
     try:
-        engine.open_session(runtime_options={"test_mode": True, "fullscreen": False})
+        engine.open_session(runtime_options={"fullscreen": False})
         window = captures["window"]
         window.recordFrameIntervals = True
         engine._show_text_screen(

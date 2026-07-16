@@ -39,7 +39,7 @@ def test_session_launch_shows_condition_feedback_with_accuracy_and_mean_rt_when_
             multi_condition_project_root,
             session_plan,
             participant_number=PARTICIPANT_NUMBER,
-            launch_settings=LaunchSettings(engine_name="stub-feedback", test_mode=True),
+            launch_settings=LaunchSettings(engine_name="stub-feedback"),
         )
     finally:
         unregister_engine("stub-feedback")
@@ -79,7 +79,7 @@ def test_session_launch_skips_condition_feedback_when_accuracy_task_disabled(
             multi_condition_project_root,
             session_plan,
             participant_number=PARTICIPANT_NUMBER,
-            launch_settings=LaunchSettings(engine_name="stub-no-feedback", test_mode=True),
+            launch_settings=LaunchSettings(engine_name="stub-no-feedback"),
         )
     finally:
         unregister_engine("stub-no-feedback")
@@ -110,7 +110,6 @@ def test_session_launch_aborts_cleanly_when_inter_block_break_is_cancelled(
             participant_number=PARTICIPANT_NUMBER,
             launch_settings=LaunchSettings(
                 engine_name="stub-block-break-abort",
-                test_mode=True,
             ),
         )
     finally:
@@ -163,7 +162,7 @@ def test_session_launch_exports_timing_violation_status_from_run_result(
             sample_project_root,
             session_plan,
             participant_number=PARTICIPANT_NUMBER,
-            launch_settings=LaunchSettings(engine_name="stub-timing-violation", test_mode=True),
+            launch_settings=LaunchSettings(engine_name="stub-timing-violation"),
         )
     finally:
         unregister_engine("stub-timing-violation")

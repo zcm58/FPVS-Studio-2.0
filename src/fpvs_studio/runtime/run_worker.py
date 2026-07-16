@@ -300,7 +300,7 @@ class RuntimeWorker:
             project_id=session_plan.project_id,
             session_id=session_plan.session_id,
             engine_name=self._engine.engine_id,
-            run_mode=_run_mode(runtime_options),
+            run_mode=_run_mode(),
             participant_number=participant_number,
             participant_metadata=participant_metadata or ParticipantMetadata(),
             random_seed=session_plan.random_seed,
@@ -365,7 +365,6 @@ class RuntimeWorker:
             display_index=_coerce_int(runtime_options, "display_index"),
             fullscreen=bool((runtime_options or {}).get("fullscreen", True)),
             requested_refresh_hz=run_spec.display.refresh_hz,
-            test_mode=bool((runtime_options or {}).get("test_mode")),
         )
         if runtime_metadata.actual_refresh_hz is None:
             estimated_refresh_hz = _estimate_refresh_hz(run_summary.frame_intervals)
@@ -383,7 +382,7 @@ class RuntimeWorker:
             update={
                 "session_id": session_id,
                 "engine_name": self._engine.engine_id,
-                "run_mode": _run_mode(runtime_options),
+                "run_mode": _run_mode(),
                 "participant_number": participant_number,
                 "participant_metadata": participant_metadata or ParticipantMetadata(),
                 "warnings": combined_warnings,
@@ -688,8 +687,8 @@ def _pick_session_runtime_metadata(
     return None
 
 
-def _run_mode(runtime_options: Mapping[str, object] | None) -> RunMode:
-    return RunMode.TEST if bool((runtime_options or {}).get("test_mode")) else RunMode.SESSION
+def _run_mode() -> RunMode:
+    return RunMode.SESSION
 
 
 def _writes_detailed_exports(runtime_options: Mapping[str, object] | None) -> bool:
@@ -736,7 +735,7 @@ def _build_start_aborted_summary(
         condition_id=run_spec.condition.condition_id,
         condition_name=run_spec.condition.name,
         engine_name=engine_name,
-        run_mode=_run_mode(runtime_options),
+        run_mode=_run_mode(),
         participant_number=participant_number,
         participant_metadata=participant_metadata or ParticipantMetadata(),
         completed_frames=0,
@@ -748,7 +747,6 @@ def _build_start_aborted_summary(
             display_index=_coerce_int(runtime_options, "display_index"),
             fullscreen=bool((runtime_options or {}).get("fullscreen", True)),
             requested_refresh_hz=run_spec.display.refresh_hz,
-            test_mode=bool((runtime_options or {}).get("test_mode")),
         ),
     )
 
@@ -775,7 +773,7 @@ def _build_trigger_aborted_summary(
         condition_id=run_spec.condition.condition_id,
         condition_name=run_spec.condition.name,
         engine_name=engine_name,
-        run_mode=_run_mode(runtime_options),
+        run_mode=_run_mode(),
         participant_number=participant_number,
         participant_metadata=participant_metadata or ParticipantMetadata(),
         completed_frames=_completed_frames_from_trigger_log(trigger_log),
@@ -787,7 +785,6 @@ def _build_trigger_aborted_summary(
             display_index=_coerce_int(runtime_options, "display_index"),
             fullscreen=bool((runtime_options or {}).get("fullscreen", True)),
             requested_refresh_hz=run_spec.display.refresh_hz,
-            test_mode=bool((runtime_options or {}).get("test_mode")),
         ),
         trigger_log=trigger_log,
         output_dir=relative_output_dir,

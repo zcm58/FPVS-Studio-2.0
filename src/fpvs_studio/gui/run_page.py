@@ -360,13 +360,13 @@ class RunPage(QWidget):
         self.compile_button.clicked.connect(self.compile_session)
         mark_secondary_action(self.compile_button)
         self.launch_button = QPushButton("Launch Experiment", self)
-        self.launch_button.setObjectName("launch_test_session_button")
+        self.launch_button.setObjectName("launch_session_button")
         mark_launch_action(self.launch_button)
         self.launch_button.setToolTip(
-            "Launch Experiment on the current beta test-mode runtime path."
+            "Launch Experiment with fullscreen display verification and timing checks."
         )
         self.launch_button.setMinimumHeight(42)
-        self.launch_button.clicked.connect(self.launch_test_session)
+        self.launch_button.clicked.connect(self.launch_session)
 
         button_row = QWidget(self)
         button_layout = QHBoxLayout(button_row)
@@ -528,10 +528,10 @@ class RunPage(QWidget):
         QMessageBox.information(
             self,
             "Preflight Passed",
-            "Preflight succeeded for the current test-mode session launch.",
+            "Preflight succeeded for the current session launch.",
         )
 
-    def launch_test_session(self) -> None:
+    def launch_session(self) -> None:
         if self._active_launch_task is not None:
             return
         try:
@@ -660,7 +660,7 @@ class RunPage(QWidget):
             QMessageBox.warning(
                 self,
                 "Launch Aborted",
-                "The experiment aborted on the current beta test-mode path.\n\n"
+                "The experiment aborted.\n\n"
                 f"Reason: {abort_reason}\n"
                 "Completed Conditions: "
                 f"{summary.completed_condition_count}/{summary.total_condition_count}\n"
@@ -683,12 +683,12 @@ class RunPage(QWidget):
             self,
             "Launch Complete",
             (
-                "The experiment finished on the current beta test-mode path. "
+                "The experiment finished. "
                 "Review run exports in the project runs folder."
             )
             if summary.output_dir
             else (
-                "The experiment finished on the current beta test-mode path. "
+                "The experiment finished. "
                 "Review participant summary files in the project logs folder."
             ),
         )

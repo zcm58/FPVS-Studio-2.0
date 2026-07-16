@@ -99,6 +99,8 @@ class RuntimeMetadata(FPVSBaseModel):
     requested_refresh_hz: float | None = Field(default=None, gt=0)
     actual_refresh_hz: float | None = Field(default=None, gt=0)
     frame_interval_recording: bool = False
+    # Retained in the v1 export schema for compatibility with existing artifacts.
+    # Runtime control flow must not depend on this historical field.
     test_mode: bool = False
     timing_qc_expected_interval_s: float | None = Field(default=None, gt=0)
     timing_qc_threshold_interval_s: float | None = Field(default=None, gt=0)

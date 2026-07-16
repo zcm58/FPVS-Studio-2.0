@@ -57,7 +57,6 @@ def runtime_metadata_for_run(
         requested_refresh_hz=run_spec.display.refresh_hz,
         actual_refresh_hz=measured_refresh_hz,
         frame_interval_recording=True,
-        test_mode=bool(runtime_options.get("test_mode")),
         timing_qc_expected_interval_s=timing_config.expected_interval_s,
         timing_qc_threshold_interval_s=timing_config.miss_threshold_s,
         timing_qc_warmup_frames=timing_config.warmup_frames,

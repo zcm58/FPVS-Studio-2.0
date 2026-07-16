@@ -13,7 +13,7 @@ This phase should establish:
 - launcher/worker module structure
 - session-plan iteration and transition flow above the engine seam
 - runtime-side fail-fast preflight for assets, timing, and launch hardware
-- run/test mode handling
+- normal session-mode result assembly with explicit presentation and timing-QC options
 - trigger backend wiring/logging with serial availability checked before participant
   launch screens
 - session export writers

@@ -56,7 +56,7 @@ def test_session_export_captures_seed_and_runtime_logs(
                 handedness="Right handed",
                 colorblind=True,
             ),
-            launch_settings=LaunchSettings(engine_name="stub-export", test_mode=True),
+            launch_settings=LaunchSettings(engine_name="stub-export"),
         )
     finally:
         unregister_engine("stub-export")
@@ -272,7 +272,6 @@ def test_compact_session_export_updates_summary_logs_without_runs_folder(
             ),
             launch_settings=LaunchSettings(
                 engine_name="stub-compact-export",
-                test_mode=True,
                 export_mode=EXPORT_MODE_COMPACT,
             ),
         )

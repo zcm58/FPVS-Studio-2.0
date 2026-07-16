@@ -12,7 +12,7 @@ from tests.unit.runtime_launcher_helpers import (
 )
 
 from fpvs_studio.core.compiler import compile_run_spec, compile_session_plan
-from fpvs_studio.core.enums import InterConditionMode
+from fpvs_studio.core.enums import InterConditionMode, RunMode
 from fpvs_studio.core.execution import ParticipantMetadata, RunExecutionSummary
 from fpvs_studio.core.models import DisplayValidationReport
 from fpvs_studio.core.serialization import read_json_file
@@ -20,7 +20,6 @@ from fpvs_studio.engines.base import FixationTutorialAttemptResult
 from fpvs_studio.engines.registry import register_engine, unregister_engine
 from fpvs_studio.runtime.launcher import (
     LaunchSettings,
-    LaunchSettingsError,
     launch_run,
     launch_session,
 )
@@ -48,7 +47,6 @@ def test_runtime_launcher_dispatches_runspec_to_registered_engine(
             participant_number=PARTICIPANT_NUMBER,
             launch_settings=LaunchSettings(
                 engine_name="stub",
-                test_mode=True,
             ),
         )
     finally:
@@ -68,7 +66,6 @@ def test_runtime_launcher_dispatches_runspec_to_registered_engine(
     assert captures["run_ids"] == ["faces-run"]
     assert captures["runtime_options"] == {
         "engine_name": "stub",
-        "test_mode": True,
         "fullscreen": True,
         "display_index": None,
         "serial_enabled": False,
@@ -80,15 +77,18 @@ def test_runtime_launcher_dispatches_runspec_to_registered_engine(
             "strict_timing": True,
             "strict_timing_warmup": True,
             "verify_refresh_rate": True,
-            "timing_miss_threshold_multiplier": 1.5,
+        "timing_miss_threshold_multiplier": 1.5,
         "timing_warmup_frames": 240,
+        "completion_screen_seconds": 0.5,
+        "windowed_size_px": (1280, 720),
         "export_mode": "full",
     }
     assert summary.output_dir == "runs/faces-run"
     assert summary.participant_number == PARTICIPANT_NUMBER
     assert summary.warnings == []
     assert summary.runtime_metadata is not None
-    assert summary.runtime_metadata.test_mode is True
+    assert summary.run_mode is RunMode.SESSION
+    assert summary.runtime_metadata.test_mode is False
     assert summary.trigger_log[0].label == "condition_start"
     assert (sample_project_root / "runs" / "faces-run" / "runspec.json").is_file()
     assert (sample_project_root / "runs" / "faces-run" / "run_summary.json").is_file()
@@ -152,7 +152,7 @@ def test_launch_session_runs_all_entries_with_stub_engine_and_reuses_session_win
             multi_condition_project_root,
             session_plan,
             participant_number=PARTICIPANT_NUMBER,
-            launch_settings=LaunchSettings(engine_name="stub-session", test_mode=True),
+            launch_settings=LaunchSettings(engine_name="stub-session"),
         )
     finally:
         unregister_engine("stub-session")
@@ -218,7 +218,6 @@ def test_launch_session_keeps_condition_titles_internal_on_transition_screens(
             participant_number=PARTICIPANT_NUMBER,
             launch_settings=LaunchSettings(
                 engine_name="stub-hidden-condition-titles",
-                test_mode=True,
             ),
         )
     finally:
@@ -259,7 +258,7 @@ def test_launch_session_runs_participant_tutorial_once_before_first_transition(
             multi_condition_project_root,
             session_plan,
             participant_number=PARTICIPANT_NUMBER,
-            launch_settings=LaunchSettings(engine_name="stub-tutorial", test_mode=True),
+            launch_settings=LaunchSettings(engine_name="stub-tutorial"),
         )
     finally:
         unregister_engine("stub-tutorial")
@@ -313,7 +312,6 @@ def test_launch_session_uses_accessible_fixation_colors_for_colorblind_participa
             participant_metadata=ParticipantMetadata(colorblind=True),
             launch_settings=LaunchSettings(
                 engine_name="stub-accessible-fixation",
-                test_mode=True,
             ),
         )
     finally:
@@ -358,7 +356,6 @@ def test_launch_session_keeps_authored_fixation_colors_when_colorblind_is_no(
             participant_metadata=ParticipantMetadata(colorblind=False),
             launch_settings=LaunchSettings(
                 engine_name="stub-standard-fixation",
-                test_mode=True,
             ),
         )
     finally:
@@ -396,7 +393,7 @@ def test_launch_session_skips_participant_tutorial_when_disabled(
             multi_condition_project_root,
             session_plan,
             participant_number=PARTICIPANT_NUMBER,
-            launch_settings=LaunchSettings(engine_name="stub-no-tutorial", test_mode=True),
+            launch_settings=LaunchSettings(engine_name="stub-no-tutorial"),
         )
     finally:
         unregister_engine("stub-no-tutorial")
@@ -433,7 +430,7 @@ def test_launch_session_tutorial_miss_keeps_total_hit_progress_before_condition_
             multi_condition_project_root,
             session_plan,
             participant_number=PARTICIPANT_NUMBER,
-            launch_settings=LaunchSettings(engine_name="stub-tutorial-miss", test_mode=True),
+            launch_settings=LaunchSettings(engine_name="stub-tutorial-miss"),
         )
     finally:
         unregister_engine("stub-tutorial-miss")
@@ -481,7 +478,7 @@ def test_launch_session_tutorial_shows_reminder_after_repeated_misses(
             multi_condition_project_root,
             session_plan,
             participant_number=PARTICIPANT_NUMBER,
-            launch_settings=LaunchSettings(engine_name="stub-tutorial-reminder", test_mode=True),
+            launch_settings=LaunchSettings(engine_name="stub-tutorial-reminder"),
         )
     finally:
         unregister_engine("stub-tutorial-reminder")
@@ -530,7 +527,6 @@ def test_launch_session_tutorial_researcher_check_allows_continuing_after_ten_mi
             participant_number=PARTICIPANT_NUMBER,
             launch_settings=LaunchSettings(
                 engine_name="stub-tutorial-researcher-check",
-                test_mode=True,
             ),
         )
     finally:
@@ -576,7 +572,7 @@ def test_launch_session_aborts_before_playback_when_tutorial_attempt_aborts(
             multi_condition_project_root,
             session_plan,
             participant_number=PARTICIPANT_NUMBER,
-            launch_settings=LaunchSettings(engine_name="stub-tutorial-abort", test_mode=True),
+            launch_settings=LaunchSettings(engine_name="stub-tutorial-abort"),
         )
     finally:
         unregister_engine("stub-tutorial-abort")
@@ -605,19 +601,19 @@ def test_launch_session_reuses_participant_number_with_incremented_output_labels
             multi_condition_project_root,
             session_plan,
             participant_number=PARTICIPANT_NUMBER,
-            launch_settings=LaunchSettings(engine_name="stub-participant-folders", test_mode=True),
+            launch_settings=LaunchSettings(engine_name="stub-participant-folders"),
         )
         summary_2 = launch_session(
             multi_condition_project_root,
             session_plan,
             participant_number=PARTICIPANT_NUMBER,
-            launch_settings=LaunchSettings(engine_name="stub-participant-folders", test_mode=True),
+            launch_settings=LaunchSettings(engine_name="stub-participant-folders"),
         )
         summary_3 = launch_session(
             multi_condition_project_root,
             session_plan,
             participant_number=PARTICIPANT_NUMBER,
-            launch_settings=LaunchSettings(engine_name="stub-participant-folders", test_mode=True),
+            launch_settings=LaunchSettings(engine_name="stub-participant-folders"),
         )
     finally:
         unregister_engine("stub-participant-folders")
@@ -661,7 +657,7 @@ def test_session_launch_ignores_legacy_fixed_break_transition_path(
             multi_condition_project_root,
             session_plan,
             participant_number=PARTICIPANT_NUMBER,
-            launch_settings=LaunchSettings(engine_name="stub-fixed-break", test_mode=True),
+            launch_settings=LaunchSettings(engine_name="stub-fixed-break"),
         )
     finally:
         unregister_engine("stub-fixed-break")
@@ -697,7 +693,7 @@ def test_session_launch_forces_space_transition_key(
             multi_condition_project_root,
             session_plan,
             participant_number=PARTICIPANT_NUMBER,
-            launch_settings=LaunchSettings(engine_name="stub-manual", test_mode=True),
+            launch_settings=LaunchSettings(engine_name="stub-manual"),
         )
     finally:
         unregister_engine("stub-manual")
@@ -727,7 +723,7 @@ def test_single_run_launch_aborts_before_playback_when_start_screen_is_cancelled
             sample_project_root,
             run_spec,
             participant_number=PARTICIPANT_NUMBER,
-            launch_settings=LaunchSettings(engine_name="stub-start-abort", test_mode=True),
+            launch_settings=LaunchSettings(engine_name="stub-start-abort"),
         )
     finally:
         unregister_engine("stub-start-abort")
@@ -759,7 +755,7 @@ def test_session_launch_inserts_manual_inter_block_break_between_non_final_block
             multi_condition_project_root,
             session_plan,
             participant_number=PARTICIPANT_NUMBER,
-            launch_settings=LaunchSettings(engine_name="stub-block-break", test_mode=True),
+            launch_settings=LaunchSettings(engine_name="stub-block-break"),
         )
     finally:
         unregister_engine("stub-block-break")
@@ -793,7 +789,7 @@ def test_session_launch_passes_condition_instructions_to_transition_screens(
             multi_condition_project_root,
             session_plan,
             participant_number=PARTICIPANT_NUMBER,
-            launch_settings=LaunchSettings(engine_name="stub-instructions", test_mode=True),
+            launch_settings=LaunchSettings(engine_name="stub-instructions"),
         )
     finally:
         unregister_engine("stub-instructions")
@@ -824,7 +820,7 @@ def test_session_launch_preserves_instruction_text_verbatim(
             multi_condition_project_root,
             session_plan,
             participant_number=PARTICIPANT_NUMBER,
-            launch_settings=LaunchSettings(engine_name="stub-verbatim", test_mode=True),
+            launch_settings=LaunchSettings(engine_name="stub-verbatim"),
         )
     finally:
         unregister_engine("stub-verbatim")
@@ -858,7 +854,7 @@ def test_session_launch_preflight_rejects_missing_assets_before_engine_run(
                 sample_project_root,
                 session_plan,
                 participant_number=PARTICIPANT_NUMBER,
-                launch_settings=LaunchSettings(engine_name="stub-preflight", test_mode=True),
+                launch_settings=LaunchSettings(engine_name="stub-preflight"),
             )
     finally:
         unregister_engine("stub-preflight")
@@ -888,7 +884,7 @@ def test_session_launch_preflight_rejects_invalid_timing_before_engine_run(
                 sample_project_root,
                 session_plan,
                 participant_number=PARTICIPANT_NUMBER,
-                launch_settings=LaunchSettings(engine_name="stub-invalid", test_mode=True),
+                launch_settings=LaunchSettings(engine_name="stub-invalid"),
             )
     finally:
         unregister_engine("stub-invalid")
@@ -920,7 +916,6 @@ def test_session_launch_blocks_when_detected_resolution_differs_from_project_set
                 participant_number=PARTICIPANT_NUMBER,
                 launch_settings=LaunchSettings(
                     engine_name="stub-resolution-mismatch",
-                    test_mode=True,
                 ),
             )
     finally:
@@ -970,7 +965,6 @@ def test_launch_run_checks_serial_port_before_engine_session(
                 participant_number=PARTICIPANT_NUMBER,
                 launch_settings=LaunchSettings(
                     engine_name="stub-serial-preflight",
-                    test_mode=True,
                     serial_enabled=True,
                     serial_port="COM9",
                 ),
@@ -1020,7 +1014,6 @@ def test_launch_run_exports_aborted_summary_when_serial_write_fails(
             participant_number=PARTICIPANT_NUMBER,
             launch_settings=LaunchSettings(
                 engine_name="stub-serial-write-failure",
-                test_mode=True,
                 serial_enabled=True,
                 serial_port="COM3",
             ),
@@ -1062,7 +1055,7 @@ def test_session_launch_allows_detected_resolution_when_project_uses_current_scr
             sample_project_root,
             session_plan,
             participant_number=PARTICIPANT_NUMBER,
-            launch_settings=LaunchSettings(engine_name="stub-current-resolution", test_mode=True),
+            launch_settings=LaunchSettings(engine_name="stub-current-resolution"),
         )
     finally:
         unregister_engine("stub-current-resolution")
@@ -1071,12 +1064,12 @@ def test_session_launch_allows_detected_resolution_when_project_uses_current_scr
     assert summary.aborted is False
 
 
-def test_launch_run_rejects_non_test_mode_even_with_registered_engine(
+def test_launch_run_uses_session_mode_without_mode_gate(
     sample_project,
     sample_project_root,
 ) -> None:
     captures: dict[str, object] = {}
-    register_engine("stub-non-test", lambda: StubEngine(captures))
+    register_engine("stub-session-mode", lambda: StubEngine(captures))
     try:
         run_spec = compile_run_spec(
             sample_project,
@@ -1085,16 +1078,18 @@ def test_launch_run_rejects_non_test_mode_even_with_registered_engine(
             run_id="faces-run",
         )
 
-        with pytest.raises(LaunchSettingsError, match="requires test_mode=True"):
-            launch_run(
-                sample_project_root,
-                run_spec,
-                participant_number=PARTICIPANT_NUMBER,
-                launch_settings=LaunchSettings(engine_name="stub-non-test", test_mode=False),
-            )
+        summary = launch_run(
+            sample_project_root,
+            run_spec,
+            participant_number=PARTICIPANT_NUMBER,
+            launch_settings=LaunchSettings(engine_name="stub-session-mode"),
+        )
     finally:
-        unregister_engine("stub-non-test")
+        unregister_engine("stub-session-mode")
 
-    assert captures == {}
+    assert captures["run_ids"] == ["faces-run"]
+    assert summary.run_mode is RunMode.SESSION
+    assert summary.runtime_metadata is not None
+    assert summary.runtime_metadata.test_mode is False
 
 

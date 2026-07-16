@@ -502,7 +502,7 @@ class StudioMainWindow(QMainWindow):
         self._session_seed_task = None
         if self._launch_after_session_seed_ready:
             self._launch_after_session_seed_ready = False
-            QTimer.singleShot(0, self.launch_test_session)
+            QTimer.singleShot(0, self.launch_session)
 
     def _install_button_hover_animations(self) -> None:
         self._button_hover_animators.clear()
@@ -560,12 +560,12 @@ class StudioMainWindow(QMainWindow):
         self.about_action.triggered.connect(self.show_about_dialog)
         self.launch_action = QAction("Launch Experiment", self)
         launch_help = (
-            "Launch Experiment on the current beta test-mode runtime path. "
+            "Launch Experiment with fullscreen display verification and timing checks. "
             "Participant details are collected before launch checks run."
         )
         self.launch_action.setToolTip(launch_help)
         self.launch_action.setStatusTip(launch_help)
-        self.launch_action.triggered.connect(self.launch_test_session)
+        self.launch_action.triggered.connect(self.launch_session)
         self.image_resizer_action = QAction("Image Resizer", self)
         self.image_resizer_action.setObjectName("image_resizer_action")
         self.image_resizer_action.triggered.connect(self.show_image_resizer)
@@ -622,7 +622,7 @@ class StudioMainWindow(QMainWindow):
             return False
         return True
 
-    def launch_test_session(self) -> None:
+    def launch_session(self) -> None:
         if self._active_launch_task is not None:
             return
         if not self._ensure_session_seed_ready_for_launch():
@@ -777,7 +777,7 @@ class StudioMainWindow(QMainWindow):
             QMessageBox.warning(
                 self,
                 "Launch Aborted",
-                "The experiment aborted on the current beta test-mode path.\n\n"
+                "The experiment aborted.\n\n"
                 f"Reason: {abort_reason}\n"
                 "Completed Conditions: "
                 f"{summary.completed_condition_count}/{summary.total_condition_count}\n"
@@ -797,12 +797,12 @@ class StudioMainWindow(QMainWindow):
             self,
             "Launch Complete",
             (
-                "The experiment finished on the current beta test-mode path. "
+                "The experiment finished. "
                 "Review run exports in the project runs folder."
             )
             if summary.output_dir
             else (
-                "The experiment finished on the current beta test-mode path. "
+                "The experiment finished. "
                 "Review participant summary files in the project logs folder."
             ),
         )

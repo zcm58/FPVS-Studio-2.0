@@ -111,7 +111,7 @@ def test_run_page_readiness_and_launch_feedback_is_updated_on_launch(
 ) -> None:
     _, window = _open_created_project(controller, qtbot, tmp_path, "Home Status Project")
     run_readiness_list = window.run_page.findChild(QListWidget, "run_readiness_checklist")
-    run_launch_button = window.run_page.findChild(QPushButton, "launch_test_session_button")
+    run_launch_button = window.run_page.findChild(QPushButton, "launch_session_button")
     run_status_label = window.run_page.findChild(QLabel, "run_readiness_badge")
     assert run_readiness_list is not None
     assert run_launch_button is not None
@@ -119,7 +119,7 @@ def test_run_page_readiness_and_launch_feedback_is_updated_on_launch(
     readiness_text = _list_widget_text(run_readiness_list)
     assert "[OK]" not in readiness_text
     assert "[TODO]" not in readiness_text
-    assert "runtime path: beta test-mode only" in readiness_text.lower()
+    assert "fullscreen session with display and timing checks" in readiness_text.lower()
     assert run_status_label.text()
 
     _prepare_compile_ready_project(window, tmp_path / "home-status-preflight")
@@ -152,7 +152,7 @@ def test_run_page_readiness_and_launch_feedback_is_updated_on_launch(
             project_id=session_plan.project_id,
             session_id=session_plan.session_id,
             engine_name="stub",
-            run_mode=RunMode.TEST,
+            run_mode=RunMode.SESSION,
             participant_number=participant_number,
             total_condition_count=session_plan.total_runs,
             completed_condition_count=session_plan.total_runs,
@@ -161,7 +161,7 @@ def test_run_page_readiness_and_launch_feedback_is_updated_on_launch(
 
     monkeypatch.setattr("fpvs_studio.gui.document.launch_session", _fake_launch)
 
-    window.run_page.launch_test_session()
+    window.run_page.launch_session()
 
     assert window.home_page.findChild(QListWidget, "home_readiness_checklist") is None
     assert window.home_page.findChild(QListWidget, "home_recent_activity_list") is None
@@ -216,7 +216,7 @@ def test_run_page_launch_uses_fixed_current_runtime_defaults(
 
     monkeypatch.setattr(window.document, "launch_compiled_session", _capture_launch)
 
-    window.run_page.launch_test_session()
+    window.run_page.launch_session()
 
     assert captures["participant_number"] == "7"
     assert captures["participant_metadata"] == ParticipantMetadata(
@@ -297,7 +297,7 @@ def test_run_page_biosemi_confirmation_cancel_blocks_runtime_launch(
 
     monkeypatch.setattr(window.document, "launch_compiled_session", _unexpected_launch)
 
-    window.run_page.launch_test_session()
+    window.run_page.launch_session()
 
     assert window.run_page._active_launch_task is None
     assert "status: launch checks queued" in window.run_page.summary_text.toPlainText().lower()
@@ -326,7 +326,7 @@ def test_run_page_compact_export_completion_points_to_logs(
             project_id=session_plan.project_id,
             session_id=session_plan.session_id,
             engine_name="stub",
-            run_mode=RunMode.TEST,
+            run_mode=RunMode.SESSION,
             participant_number="0007",
             total_condition_count=session_plan.total_runs,
             completed_condition_count=session_plan.total_runs,
@@ -344,8 +344,8 @@ def test_run_page_compact_export_completion_points_to_logs(
     assert open_folder_button.isHidden()
     assert copy_folder_button.isHidden()
     assert messages == [
-        "The experiment finished on the current beta test-mode path. "
-        "Review participant summary files in the project logs folder."
+        "The experiment finished. Review participant summary files in the project "
+        "logs folder."
     ]
 
 
@@ -383,7 +383,7 @@ def test_run_page_surfaces_blocking_resolution_mismatch_warning(
 
     monkeypatch.setattr(window.document, "launch_compiled_session", _raise_resolution_warning)
 
-    window.run_page.launch_test_session()
+    window.run_page.launch_session()
 
     assert captured_errors == [("Launch Error", warning_message)]
     assert window.run_page._active_launch_task is None

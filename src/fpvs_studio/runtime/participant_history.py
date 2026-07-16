@@ -204,7 +204,7 @@ def _iter_session_condition_history_summaries(
                     project_id=first_row.get("project_id", ""),
                     session_id=session_id,
                     engine_name="history",
-                    run_mode=RunMode.TEST,
+                    run_mode=RunMode.SESSION,
                     participant_number=participant_number or None,
                     participant_metadata=ParticipantMetadata(
                         age=_csv_int(first_row.get("participant_age")),

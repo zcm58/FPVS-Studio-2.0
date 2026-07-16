@@ -22,12 +22,16 @@ from fpvs_studio.runtime.preflight import PreflightError
 
 def test_launch_settings_default_to_strict_timing_fail_fast() -> None:
     settings = LaunchSettings()
+    runtime_options = settings.as_runtime_options()
 
     assert settings.strict_timing is True
     assert settings.strict_timing_warmup is True
-    assert settings.as_runtime_options()["verify_refresh_rate"] is True
+    assert runtime_options["verify_refresh_rate"] is True
+    assert "test_mode" not in runtime_options
     assert settings.timing_miss_threshold_multiplier == 1.5
     assert settings.timing_warmup_frames == 240
+    assert settings.completion_screen_seconds == 0.5
+    assert settings.windowed_size_px == (1280, 720)
     assert settings.export_mode == EXPORT_MODE_FULL
 
 
@@ -54,7 +58,6 @@ def test_launch_session_preflight_rejects_windowed_mode_when_strict_timing_enabl
                 participant_number=PARTICIPANT_NUMBER,
                 launch_settings=LaunchSettings(
                     engine_name="stub-strict-fullscreen",
-                    test_mode=True,
                     fullscreen=False,
                     strict_timing=True,
                 ),
@@ -87,7 +90,6 @@ def test_launch_session_allows_windowed_mode_when_strict_timing_disabled(
             participant_number=PARTICIPANT_NUMBER,
             launch_settings=LaunchSettings(
                 engine_name="stub-windowed-allowed",
-                test_mode=True,
                 fullscreen=False,
                 strict_timing=False,
             ),
@@ -126,7 +128,6 @@ def test_launch_session_rejects_invalid_display_index_before_engine_creation(
                 participant_number=PARTICIPANT_NUMBER,
                 launch_settings=LaunchSettings(
                     engine_name="stub-invalid-display",
-                    test_mode=True,
                     display_index=-1,
                 ),
             )
@@ -162,7 +163,6 @@ def test_launch_session_rejects_invalid_serial_baudrate_before_engine_creation(
                 participant_number=PARTICIPANT_NUMBER,
                 launch_settings=LaunchSettings(
                     engine_name="stub-invalid-baud",
-                    test_mode=True,
                     serial_baudrate=0,
                 ),
             )
@@ -196,7 +196,6 @@ def test_launch_session_rejects_non_boolean_fullscreen_before_engine_creation(
                 participant_number=PARTICIPANT_NUMBER,
                 launch_settings=LaunchSettings(
                     engine_name="stub-invalid-fullscreen",
-                    test_mode=True,
                     fullscreen="yes",  # type: ignore[arg-type]
                 ),
             )
@@ -232,7 +231,6 @@ def test_launch_session_rejects_non_boolean_strict_timing_warmup_before_engine_c
                 participant_number=PARTICIPANT_NUMBER,
                 launch_settings=LaunchSettings(
                     engine_name="stub-invalid-strict-warmup",
-                    test_mode=True,
                     strict_timing_warmup="yes",  # type: ignore[arg-type]
                 ),
             )
@@ -263,7 +261,6 @@ def test_launch_session_rejects_invalid_export_mode_before_engine_creation(
                 participant_number=PARTICIPANT_NUMBER,
                 launch_settings=LaunchSettings(
                     engine_name="stub-invalid-export-mode",
-                    test_mode=True,
                     export_mode="tiny",
                 ),
             )
@@ -297,7 +294,6 @@ def test_launch_run_rejects_compact_export_mode_before_engine_creation(
                 participant_number=PARTICIPANT_NUMBER,
                 launch_settings=LaunchSettings(
                     engine_name="stub-run-compact-export-mode",
-                    test_mode=True,
                     export_mode=EXPORT_MODE_COMPACT,
                 ),
             )
@@ -330,7 +326,6 @@ def test_launch_session_rejects_blank_participant_number_before_engine_creation(
                 participant_number="   ",
                 launch_settings=LaunchSettings(
                     engine_name="stub-empty-participant",
-                    test_mode=True,
                 ),
             )
     finally:
@@ -364,7 +359,6 @@ def test_launch_session_rejects_non_digit_participant_number_before_engine_creat
                 participant_number="AB12",
                 launch_settings=LaunchSettings(
                     engine_name="stub-bad-participant",
-                    test_mode=True,
                 ),
             )
     finally:
@@ -399,7 +393,6 @@ def test_launch_session_rejects_invalid_participant_metadata_before_engine_creat
                 },
                 launch_settings=LaunchSettings(
                     engine_name="stub-bad-participant-metadata",
-                    test_mode=True,
                 ),
             )
 
@@ -415,7 +408,6 @@ def test_launch_session_rejects_invalid_participant_metadata_before_engine_creat
                 },
                 launch_settings=LaunchSettings(
                     engine_name="stub-bad-participant-metadata",
-                    test_mode=True,
                 ),
             )
 
@@ -431,7 +423,6 @@ def test_launch_session_rejects_invalid_participant_metadata_before_engine_creat
                 },
                 launch_settings=LaunchSettings(
                     engine_name="stub-bad-participant-metadata",
-                    test_mode=True,
                 ),
             )
     finally:

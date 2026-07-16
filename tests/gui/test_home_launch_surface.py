@@ -193,7 +193,7 @@ def test_ready_home_launch_does_not_construct_setup_wizard(
             project_id=session_plan.project_id,
             session_id=session_plan.session_id,
             engine_name="stub",
-            run_mode=RunMode.TEST,
+            run_mode=RunMode.SESSION,
             participant_number=kwargs["participant_number"],
             total_condition_count=session_plan.total_runs,
             completed_condition_count=session_plan.total_runs,
@@ -240,7 +240,10 @@ def test_home_quick_action_buttons_present_and_wired(
     assert launch_button.text() == "Launch Experiment"
     assert window.run_page.launch_button.text() == "Launch Experiment"
     assert window.launch_action.text() == "Launch Experiment"
-    assert "beta test-mode" in window.launch_action.toolTip().lower()
+    assert (
+        "fullscreen display verification and timing checks"
+        in window.launch_action.toolTip().lower()
+    )
     assert launch_button.isEnabled() is False
     assert launch_button.property("launchActionRole") == "primary"
     assert new_button.text() == "Create Project"
@@ -317,7 +320,7 @@ def test_launch_buttons_share_primary_visual_role(
 ) -> None:
     _, window = _open_created_project(controller, qtbot, tmp_path, "Launch Role Project")
     home_launch_button = window.home_page.findChild(QPushButton, "home_launch_experiment_button")
-    run_launch_button = window.run_page.findChild(QPushButton, "launch_test_session_button")
+    run_launch_button = window.run_page.findChild(QPushButton, "launch_session_button")
     assert home_launch_button is not None
     assert run_launch_button is not None
     assert home_launch_button.text() == "Launch Experiment"
@@ -413,7 +416,7 @@ def test_incomplete_home_launch_state_is_error_and_disabled(
     status_summary = window.home_page.findChild(QLabel, "home_launch_status_summary")
     home_launch_button = window.home_page.findChild(QPushButton, "home_launch_experiment_button")
     complete_setup_button = window.home_page.findChild(QPushButton, "home_edit_setup_button")
-    run_launch_button = window.run_page.findChild(QPushButton, "launch_test_session_button")
+    run_launch_button = window.run_page.findChild(QPushButton, "launch_session_button")
 
     assert status_label is not None
     assert status_summary is not None
@@ -490,7 +493,7 @@ def test_main_window_buttons_are_hover_animation_enabled(
     _, window = _open_created_project(controller, qtbot, tmp_path, "Hover Buttons Project")
     create_button = window.home_page.findChild(QPushButton, "home_create_project_button")
     run_compile_button = window.run_page.findChild(QPushButton, "compile_session_button")
-    run_launch_button = window.run_page.findChild(QPushButton, "launch_test_session_button")
+    run_launch_button = window.run_page.findChild(QPushButton, "launch_session_button")
     assert create_button is not None
     assert run_compile_button is not None
     assert run_launch_button is not None
@@ -542,7 +545,7 @@ def test_ready_home_launch_state_does_not_keep_blocker_tooltip(
     assert launch_button is not None
     assert launch_button.isEnabled()
     assert "Needs setup:" not in launch_button.toolTip()
-    assert "beta test-mode" in launch_button.toolTip().lower()
+    assert "fullscreen display verification and timing checks" in launch_button.toolTip().lower()
 
 
 def test_no_standalone_preflight_controls_are_exposed(

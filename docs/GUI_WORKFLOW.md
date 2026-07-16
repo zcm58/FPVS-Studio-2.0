@@ -113,8 +113,8 @@ The authoring window is organized around two user-facing modes:
     presentation background (`Black` or `Dark Gray`); setup requires a successful
     PsychoPy fullscreen measurement before `Next`, changing the dropdown clears the
     prior verification, and 59.94 Hz retains its visible requested-versus-realized
-    whole-frame timing warning; current launches always use PsychoPy, beta test-mode,
-    fullscreen playback, and the default display without exposing those as choices
+    whole-frame timing warning; current launches always use PsychoPy, fullscreen
+    session playback, and the default display without exposing those as choices
   - the Image Size column exposes project-wide image visual-angle width in degrees,
     approximate viewing distance in cm, physical screen width in cm, intended test
     display resolution in pixels, and an optional current-primary-screen resolution
@@ -376,17 +376,17 @@ The current GUI supports:
 - creating optional derived-variant control conditions from existing condition stimuli
 - materializing original, grayscale, rot180, and phase-scrambled variants
 - validating and compiling the multi-condition session plan
-- running the current test-mode launch path with fullscreen PsychoPy playback
+- running the supported session launch path with fullscreen PsychoPy playback
   and manual inter-block continue screens
 
 ## Runtime Scope
 
-The run page exposes `Launch Experiment`, with tooltip and status text that keep the
-current beta test-mode runtime path explicit.
+The run page exposes `Launch Experiment`, with tooltip and status text that describe
+fullscreen display verification and timing checks.
 
 Current honest behavior:
 
-- runtime launch still requires `test_mode=True`
+- runtime launch uses normal session mode without a production/test Boolean gate
 - launched PsychoPy playback opens fullscreen on the default display
 - display-index and fullscreen launch controls are not exposed in the current GUI;
   launch uses the default display and fullscreen playback
@@ -398,7 +398,7 @@ Current honest behavior:
 - serial trigger model fields remain in backend contracts, but serial trigger settings
   are not exposed in the current GUI
 - GUI startup itself still does not initialize PsychoPy
-- non-test validation remains deferred
+- runtime launch settings keep presentation and timing-QC policies explicit
 
 ## Fixation Accuracy Task
 

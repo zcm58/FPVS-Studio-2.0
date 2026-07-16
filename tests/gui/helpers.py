@@ -204,7 +204,7 @@ def build_successful_session_summary(
         project_id=session_plan.project_id,
         session_id=session_plan.session_id,
         engine_name=engine_name,
-        run_mode=RunMode.TEST,
+        run_mode=RunMode.SESSION,
         participant_number=participant_number,
         random_seed=session_plan.random_seed,
         started_at=datetime(2026, 3, 8, 10, 0, tzinfo=timezone.utc),

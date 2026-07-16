@@ -111,7 +111,7 @@ checks = []
 tests = ["tests/unit/test_psychopy_engine.py"]
 ci_tests = ["tests/integration/test_psychopy_engine.py"]
 include = ["src/fpvs_studio/engines/**", "tests/unit/test_psychopy_engine.py", "tests/integration/test_psychopy_engine.py"]
-manual_smoke = ["Run a short test-mode experiment on the intended presentation machine when engine playback changes."]
+manual_smoke = ["Run a short experiment on the intended presentation machine when engine playback changes."]
 
 [scopes.triggers]
 checks = []

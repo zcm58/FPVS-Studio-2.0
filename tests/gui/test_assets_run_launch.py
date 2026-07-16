@@ -123,7 +123,7 @@ def test_launch_collects_participant_prompt_before_backend_preflight(
             project_id=session_plan.project_id,
             session_id=session_plan.session_id,
             engine_name="stub",
-            run_mode=RunMode.TEST,
+            run_mode=RunMode.SESSION,
             participant_number=participant_number,
             random_seed=session_plan.random_seed,
             started_at=datetime(2026, 3, 8, 10, 0, tzinfo=timezone.utc),
@@ -148,7 +148,7 @@ def test_launch_collects_participant_prompt_before_backend_preflight(
     monkeypatch.setattr("fpvs_studio.gui.document.launch_session", _fake_launch)
     monkeypatch.setattr("fpvs_studio.gui.run_page.ProgressTask", _ImmediateProgressTask)
 
-    window.run_page.launch_test_session()
+    window.run_page.launch_session()
 
     qtbot.waitUntil(lambda: "launch" in phase_trace)
     assert captures["project_root"] == window.document.project_root
@@ -219,7 +219,7 @@ def test_launch_action_wires_runtime_launcher_with_backend_launch_settings(
             project_id=session_plan.project_id,
             session_id=session_plan.session_id,
             engine_name="stub",
-            run_mode=RunMode.TEST,
+            run_mode=RunMode.SESSION,
             participant_number=participant_number,
             random_seed=session_plan.random_seed,
             started_at=datetime(2026, 3, 8, 10, 0, tzinfo=timezone.utc),
@@ -236,7 +236,7 @@ def test_launch_action_wires_runtime_launcher_with_backend_launch_settings(
 
     monkeypatch.setattr(
         window.document,
-        "prepare_test_session_launch",
+        "prepare_session_launch",
         lambda refresh_hz, engine_name="psychopy": window.document.compile_session(
             refresh_hz=refresh_hz
         ),
@@ -260,7 +260,7 @@ def test_launch_action_wires_runtime_launcher_with_backend_launch_settings(
     window.document.update_trigger_settings(serial_port="COM3", baudrate=57600)
     window.document.set_session_export_mode(EXPORT_MODE_COMPACT)
 
-    window.run_page.launch_test_session()
+    window.run_page.launch_session()
 
     qtbot.waitUntil(lambda: "launch_settings" in captures)
     launch_settings = captures["launch_settings"]
@@ -287,11 +287,13 @@ def test_launch_action_wires_runtime_launcher_with_backend_launch_settings(
     assert launch_settings.serial_reset_code is None
     assert launch_settings.serial_reset_delay_ms == 5
     assert launch_settings.display_index is None
-    assert launch_settings.test_mode is True
+    assert not hasattr(launch_settings, "test_mode")
     assert launch_settings.fullscreen is True
     assert launch_settings.strict_timing is True
     assert launch_settings.strict_timing_warmup is False
     assert launch_settings.timing_miss_threshold_multiplier == 4.0
+    assert launch_settings.timing_warmup_frames == 240
+    assert launch_settings.completion_screen_seconds == 0.5
     assert launch_settings.export_mode == EXPORT_MODE_COMPACT
     assert (
         f"participant number: {participant_number}"
@@ -343,7 +345,7 @@ def test_launch_after_preview_recompiles_and_preflights_once_per_click(
             project_id=session_plan.project_id,
             session_id=session_plan.session_id,
             engine_name="stub",
-            run_mode=RunMode.TEST,
+            run_mode=RunMode.SESSION,
             participant_number=participant_number,
             random_seed=session_plan.random_seed,
             started_at=datetime(2026, 3, 8, 10, 0, tzinfo=timezone.utc),
@@ -370,7 +372,7 @@ def test_launch_after_preview_recompiles_and_preflights_once_per_click(
         lambda *args, **kwargs: QMessageBox.StandardButton.Ok,
     )
 
-    window.run_page.launch_test_session()
+    window.run_page.launch_session()
 
     assert len(compile_calls) == 1
     qtbot.waitUntil(lambda: bool(preflight_session_ids))
@@ -399,7 +401,7 @@ def test_launch_action_surfaces_abort_reason_when_runtime_aborts(
             project_id=session_plan.project_id,
             session_id=session_plan.session_id,
             engine_name="stub",
-            run_mode=RunMode.TEST,
+            run_mode=RunMode.SESSION,
             participant_number=participant_number,
             random_seed=session_plan.random_seed,
             started_at=datetime(2026, 3, 8, 10, 0, tzinfo=timezone.utc),
@@ -422,7 +424,7 @@ def test_launch_action_surfaces_abort_reason_when_runtime_aborts(
 
     monkeypatch.setattr(
         window.document,
-        "prepare_test_session_launch",
+        "prepare_session_launch",
         lambda refresh_hz, engine_name="psychopy": window.document.compile_session(
             refresh_hz=refresh_hz
         ),
@@ -446,7 +448,7 @@ def test_launch_action_surfaces_abort_reason_when_runtime_aborts(
         lambda path: opened_paths.append(str(path)) or True,
     )
 
-    window.run_page.launch_test_session()
+    window.run_page.launch_session()
 
     qtbot.waitUntil(lambda: bool(warning_payloads))
     summary_text = window.run_page.summary_text.toPlainText().lower()
@@ -524,7 +526,7 @@ def test_launch_action_closes_progress_dialog_when_runtime_launch_raises(
 
     monkeypatch.setattr(
         window.document,
-        "prepare_test_session_launch",
+        "prepare_session_launch",
         lambda refresh_hz, engine_name="psychopy": window.document.compile_session(
             refresh_hz=refresh_hz
         ),
@@ -534,7 +536,7 @@ def test_launch_action_closes_progress_dialog_when_runtime_launch_raises(
     monkeypatch.setattr("fpvs_studio.gui.main_window.QProgressDialog", _FakeProgressDialog)
     monkeypatch.setattr("fpvs_studio.gui.main_window._show_error_dialog", _capture_error_dialog)
 
-    window.run_page.launch_test_session()
+    window.run_page.launch_session()
 
     qtbot.waitUntil(lambda: bool(captured_errors))
     assert captured_errors == [("Launch Error", "Intentional launch failure.")]
@@ -563,7 +565,7 @@ def test_launch_action_duplicate_participant_yes_still_launches(
             project_id=session_plan.project_id,
             session_id=session_plan.session_id,
             engine_name="stub",
-            run_mode=RunMode.TEST,
+            run_mode=RunMode.SESSION,
             participant_number=participant_number,
             random_seed=session_plan.random_seed,
             started_at=datetime(2026, 3, 8, 10, 0, tzinfo=timezone.utc),
@@ -584,7 +586,7 @@ def test_launch_action_duplicate_participant_yes_still_launches(
 
     monkeypatch.setattr(
         window.document,
-        "prepare_test_session_launch",
+        "prepare_session_launch",
         lambda refresh_hz, engine_name="psychopy": window.document.compile_session(
             refresh_hz=refresh_hz
         ),
@@ -600,7 +602,7 @@ def test_launch_action_duplicate_participant_yes_still_launches(
         lambda *args, **kwargs: QMessageBox.StandardButton.Ok,
     )
 
-    window.run_page.launch_test_session()
+    window.run_page.launch_session()
 
     assert prompt_calls == 1
     qtbot.waitUntil(lambda: "participant_number" in captures)
@@ -629,7 +631,7 @@ def test_launch_action_duplicate_participant_no_reprompts_until_new_value(
             project_id=session_plan.project_id,
             session_id=session_plan.session_id,
             engine_name="stub",
-            run_mode=RunMode.TEST,
+            run_mode=RunMode.SESSION,
             participant_number=participant_number,
             random_seed=session_plan.random_seed,
             started_at=datetime(2026, 3, 8, 10, 0, tzinfo=timezone.utc),
@@ -650,7 +652,7 @@ def test_launch_action_duplicate_participant_no_reprompts_until_new_value(
 
     monkeypatch.setattr(
         window.document,
-        "prepare_test_session_launch",
+        "prepare_session_launch",
         lambda refresh_hz, engine_name="psychopy": window.document.compile_session(
             refresh_hz=refresh_hz
         ),
@@ -666,7 +668,7 @@ def test_launch_action_duplicate_participant_no_reprompts_until_new_value(
         lambda *args, **kwargs: QMessageBox.StandardButton.Ok,
     )
 
-    window.run_page.launch_test_session()
+    window.run_page.launch_session()
 
     assert prompt_calls == 3
     assert len(warning_messages) == 2
@@ -694,7 +696,7 @@ def test_launch_action_cancelled_participant_prompt_aborts_launch(
 
     monkeypatch.setattr(
         window.document,
-        "prepare_test_session_launch",
+        "prepare_session_launch",
         lambda refresh_hz, engine_name="psychopy": window.document.compile_session(
             refresh_hz=refresh_hz
         ),
@@ -702,7 +704,7 @@ def test_launch_action_cancelled_participant_prompt_aborts_launch(
     monkeypatch.setattr(window.run_page, "_prompt_participant_number", lambda: None)
     monkeypatch.setattr("fpvs_studio.gui.document.launch_session", _fake_launch)
 
-    window.run_page.launch_test_session()
+    window.run_page.launch_session()
 
     assert launch_calls == 0
     assert "runtime launch completed" not in window.run_page.summary_text.toPlainText().lower()

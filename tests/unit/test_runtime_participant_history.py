@@ -31,7 +31,7 @@ def _write_session_summary(
         project_id="project-1",
         session_id=f"{output_label}-session",
         engine_name="stub",
-        run_mode=RunMode.TEST,
+        run_mode=RunMode.SESSION,
         participant_number=participant_number,
         random_seed=random_seed,
         total_condition_count=total_condition_count,

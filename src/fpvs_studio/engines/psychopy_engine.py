@@ -479,11 +479,7 @@ class PsychoPyEngine(PresentationEngine):
                 condition_id=run_spec.condition.condition_id,
                 condition_name=run_spec.condition.name,
                 engine_name=self.engine_id,
-                run_mode=(
-                    RunMode.TEST
-                    if bool((runtime_options or {}).get("test_mode"))
-                    else RunMode.SESSION
-                ),
+                run_mode=RunMode.SESSION,
                 started_at=started_at,
                 finished_at=finished_at,
                 completed_frames=completed_frames,
@@ -512,7 +508,17 @@ class PsychoPyEngine(PresentationEngine):
             if was_aborted
             else f"Completed all {total_condition_count} conditions."
         )
-        countdown_seconds = 0.5 if bool(self._runtime_options.get("test_mode")) else 2.0
+        raw_countdown_seconds = self._runtime_options.get(
+            "completion_screen_seconds",
+            0.5,
+        )
+        countdown_seconds = (
+            float(raw_countdown_seconds)
+            if isinstance(raw_countdown_seconds, (int, float))
+            and not isinstance(raw_countdown_seconds, bool)
+            and raw_countdown_seconds >= 0
+            else 0.5
+        )
         return self._show_text_screen(
             heading=heading,
             body=body,

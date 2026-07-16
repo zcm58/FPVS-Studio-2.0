@@ -16,7 +16,7 @@ its manual removed-electrode QC list automatically during project import.
 ## Current Context
 
 - Launch UI lives in `src/fpvs_studio/gui/run_page.py`.
-- `RunPage.launch_test_session()` currently:
+- `RunPage.launch_session()` currently:
   - validates launch readiness,
   - collects `ParticipantLaunchDetails` through `ParticipantNumberDialog`,
   - compiles the session,

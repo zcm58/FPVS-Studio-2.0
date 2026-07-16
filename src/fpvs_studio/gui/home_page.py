@@ -436,7 +436,7 @@ class HomePage(QWidget):
         self.launch_button.setObjectName("home_launch_experiment_button")
         mark_home_launch_action(self.launch_button)
         self._launch_tooltip_text = (
-            "Launch Experiment on the current beta test-mode runtime path."
+            "Launch Experiment with fullscreen display verification and timing checks."
         )
         self._launch_status_tip_text = self._launch_tooltip_text
         self.edit_setup_button = QPushButton("Edit Setup", self)

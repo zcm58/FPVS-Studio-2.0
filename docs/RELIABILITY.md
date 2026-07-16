@@ -8,7 +8,7 @@ clear launch-readiness feedback.
 - Core models and compiled contracts remain the source of truth.
 - Runtime consumes `RunSpec` and `SessionPlan`; GUI widgets do not own session flow.
 - PsychoPy imports stay lazy and isolated under `../src/fpvs_studio/engines/`.
-- GUI launch labels must stay honest about supported runtime paths and test-mode limits.
+- GUI launch labels must stay honest about fullscreen, display, and timing-QC behavior.
 - Long GUI work belongs in Qt worker patterns, not the UI thread.
 
 ## References

@@ -29,8 +29,8 @@ backend-driven.
   UI as model-bound settings only; compile-time realization, runtime scoring, and
   participant feedback flow must remain outside widget code.
 - Keep PsychoPy startup lazy; opening the GUI alone must not create a PsychoPy window.
-- Keep runtime launch messaging honest about the currently supported test-mode
-  path.
+- Keep runtime launch messaging honest about fullscreen display verification and
+  timing-QC behavior.
 - Surface user-facing errors clearly, but keep the application recoverable.
 - Use `fpvs_studio.gui.components` as the public component/theme surface for shared
   page shells, section cards, status/path labels, button role helpers, and reusable

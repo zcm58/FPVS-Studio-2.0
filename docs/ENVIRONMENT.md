@@ -70,12 +70,13 @@ See `docs/PACKAGING.md` for the full developer packaging workflow.
 
 ## Runtime Honesty
 
-The currently supported launch path is still the fullscreen PsychoPy test-mode runtime.
+The supported launch path is the fullscreen PsychoPy session runtime.
 
 That means:
 
-- the GUI exposes `Launch Experiment` on the beta test-mode runtime path
-- runtime launch still requires `test_mode=True`
+- the GUI exposes `Launch Experiment` through the normal session runtime
+- launch settings use explicit presentation and timing-QC options; there is no
+  production/test mode gate
 - fullscreen playback is the current default and is not user-configurable in the GUI
 - serial trigger settings remain backend fields, but they are not exposed in the
   current GUI until the hardware workflow is ready

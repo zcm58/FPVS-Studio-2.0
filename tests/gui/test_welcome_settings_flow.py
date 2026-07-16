@@ -771,7 +771,7 @@ def test_open_project_session_seed_skips_completed_prior_seed(
         project_id=window.document.project.meta.project_id,
         session_id="session-0000111111",
         engine_name="stub",
-        run_mode=RunMode.TEST,
+        run_mode=RunMode.SESSION,
         participant_number="0001",
         random_seed=111_111_111,
         total_condition_count=2,

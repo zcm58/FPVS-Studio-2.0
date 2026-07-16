@@ -36,7 +36,6 @@ class LaunchSettings:
     """Runtime-only machine/launch options that do not belong in core models."""
 
     engine_name: str | EngineName = EngineName.PSYCHOPY
-    test_mode: bool = True
     fullscreen: bool = True
     display_index: int | None = None
     serial_enabled: bool = False
@@ -49,6 +48,8 @@ class LaunchSettings:
     strict_timing_warmup: bool = True
     timing_miss_threshold_multiplier: float = 1.5
     timing_warmup_frames: int = 240
+    completion_screen_seconds: float = 0.5
+    windowed_size_px: tuple[int, int] = (1280, 720)
     export_mode: str = EXPORT_MODE_FULL
 
     def as_runtime_options(self) -> dict[str, object]:
@@ -63,11 +64,6 @@ class LaunchSettings:
 
 
 def _validate_launch_settings(settings: LaunchSettings) -> None:
-    if not settings.test_mode:
-        raise LaunchSettingsError(
-            "FPVS Studio Phase 4 currently requires test_mode=True. "
-            "Non-test launch validation remains deferred."
-        )
     if settings.display_index is not None:
         if not isinstance(settings.display_index, int) or settings.display_index < 0:
             raise LaunchSettingsError("display_index must be None or a non-negative integer.")
@@ -88,6 +84,25 @@ def _validate_launch_settings(settings: LaunchSettings) -> None:
         )
     if not isinstance(settings.timing_warmup_frames, int) or settings.timing_warmup_frames < 0:
         raise LaunchSettingsError("timing_warmup_frames must be a non-negative integer.")
+    if (
+        isinstance(settings.completion_screen_seconds, bool)
+        or not isinstance(settings.completion_screen_seconds, (int, float))
+        or settings.completion_screen_seconds < 0
+    ):
+        raise LaunchSettingsError(
+            "completion_screen_seconds must be a non-negative number."
+        )
+    if (
+        not isinstance(settings.windowed_size_px, tuple)
+        or len(settings.windowed_size_px) != 2
+        or any(
+            isinstance(value, bool) or not isinstance(value, int) or value <= 0
+            for value in settings.windowed_size_px
+        )
+    ):
+        raise LaunchSettingsError(
+            "windowed_size_px must contain two positive integer dimensions."
+        )
     if settings.export_mode not in VALID_EXPORT_MODES:
         valid_values = "', '".join(sorted(VALID_EXPORT_MODES))
         raise LaunchSettingsError(f"export_mode must be one of '{valid_values}'.")

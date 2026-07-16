@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from fpvs_studio.core.compiler import compile_run_spec
+from fpvs_studio.core.enums import RunMode
 from fpvs_studio.engines.psychopy_engine import PsychoPyEngine
 from fpvs_studio.triggers.null_backend import NullBackend
 
@@ -33,15 +34,15 @@ def psychopy_user_dirs(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setenv("USERPROFILE", str(userprofile_dir))
 
 
-def test_psychopy_engine_can_open_and_close_session_in_test_mode() -> None:
+def test_psychopy_engine_can_open_and_close_session() -> None:
     engine = PsychoPyEngine()
     engine.open_session(
-        runtime_options={"test_mode": True, "fullscreen": False, "display_index": 0}
+        runtime_options={"fullscreen": False, "display_index": 0}
     )
     engine.close_session()
 
 
-def test_psychopy_engine_can_execute_tiny_runspec_in_test_mode(
+def test_psychopy_engine_can_execute_tiny_runspec(
     sample_project,
     sample_project_root,
 ) -> None:
@@ -61,7 +62,6 @@ def test_psychopy_engine_can_execute_tiny_runspec_in_test_mode(
             run_spec,
             sample_project_root,
             runtime_options={
-                "test_mode": True,
                 "fullscreen": False,
                 "display_index": 0,
                 "strict_timing": False,
@@ -75,4 +75,5 @@ def test_psychopy_engine_can_execute_tiny_runspec_in_test_mode(
     assert summary.aborted is False
     assert summary.completed_frames == run_spec.display.total_frames
     assert summary.runtime_metadata is not None
-    assert summary.runtime_metadata.test_mode is True
+    assert summary.run_mode is RunMode.SESSION
+    assert summary.runtime_metadata.test_mode is False

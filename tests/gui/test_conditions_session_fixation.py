@@ -292,7 +292,7 @@ def test_document_new_seed_skips_completed_prior_seed(
         project_id=window.document.project.meta.project_id,
         session_id="session-0000000101",
         engine_name="stub",
-        run_mode=RunMode.TEST,
+        run_mode=RunMode.SESSION,
         participant_number="0001",
         random_seed=101,
         total_condition_count=2,
@@ -332,7 +332,7 @@ def test_compile_session_replaces_completed_prior_seed_before_launch(
         project_id=window.document.project.meta.project_id,
         session_id="session-0000000101",
         engine_name="stub",
-        run_mode=RunMode.TEST,
+        run_mode=RunMode.SESSION,
         participant_number="0001",
         random_seed=101,
         total_condition_count=1,
@@ -704,7 +704,7 @@ def test_launch_blocked_when_condition_repeat_cycle_values_differ(
     monkeypatch.setattr(window.run_page, "_prompt_participant_number", _capture_prompt)
     monkeypatch.setattr("fpvs_studio.gui.document.launch_session", _capture_launch)
 
-    window.run_page.launch_test_session()
+    window.run_page.launch_session()
 
     assert prompt_calls == 0
     assert launch_calls == 0

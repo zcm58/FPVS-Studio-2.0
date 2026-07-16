@@ -81,21 +81,21 @@ class DocumentRuntimeMixin:
     ) -> SessionPlan:
         """Compile and preflight the current session plan."""
 
-        session_plan = self.prepare_test_session_launch(
+        session_plan = self.prepare_session_launch(
             refresh_hz=refresh_hz,
             engine_name=engine_name,
             decode_image_assets=True,
         )
         return session_plan
 
-    def prepare_test_session_launch(
+    def prepare_session_launch(
         self,
         *,
         refresh_hz: float,
         engine_name: str = EngineName.PSYCHOPY.value,
         decode_image_assets: bool = False,
     ) -> SessionPlan:
-        """Compile and preflight the current test-mode session launch."""
+        """Compile and preflight the current session launch."""
 
         session_plan = self.compile_session(refresh_hz=refresh_hz)
         self.preflight_compiled_session(
@@ -142,7 +142,6 @@ class DocumentRuntimeMixin:
         display_index: int | None,
         fullscreen: bool = True,
         engine_name: str = EngineName.PSYCHOPY.value,
-        test_mode: bool = True,
     ) -> LaunchSummary:
         """Launch an already-prepared session plan through the runtime boundary."""
 
@@ -152,7 +151,6 @@ class DocumentRuntimeMixin:
                 "participant_number": participant_number,
                 "launch_settings": LaunchSettings(
                     engine_name=engine_name,
-                    test_mode=test_mode,
                     fullscreen=fullscreen,
                     display_index=display_index,
                     serial_enabled=(
@@ -164,8 +162,9 @@ class DocumentRuntimeMixin:
                     serial_pulse_width_ms=trigger_settings.pulse_width_ms,
                     serial_reset_code=trigger_settings.reset_code,
                     serial_reset_delay_ms=trigger_settings.reset_delay_ms,
-                    strict_timing_warmup=False if test_mode else True,
-                    timing_miss_threshold_multiplier=4.0 if test_mode else 1.5,
+                    strict_timing_warmup=False,
+                    timing_miss_threshold_multiplier=4.0,
+                    completion_screen_seconds=0.5,
                     export_mode=self._session_export_mode,
                 ),
             }
@@ -181,7 +180,7 @@ class DocumentRuntimeMixin:
             raise DocumentError(str(exc)) from exc
         return cast(LaunchSummary, summary)
 
-    def launch_test_session(
+    def launch_session(
         self,
         *,
         refresh_hz: float,
@@ -190,11 +189,10 @@ class DocumentRuntimeMixin:
         display_index: int | None,
         fullscreen: bool = True,
         engine_name: str = EngineName.PSYCHOPY.value,
-        test_mode: bool = True,
     ) -> tuple[SessionPlan, LaunchSummary]:
         """Compile and launch the current session through the runtime boundary."""
 
-        session_plan = self.prepare_test_session_launch(
+        session_plan = self.prepare_session_launch(
             refresh_hz=refresh_hz,
             engine_name=engine_name,
         )
@@ -205,7 +203,6 @@ class DocumentRuntimeMixin:
             display_index=display_index,
             fullscreen=fullscreen,
             engine_name=engine_name,
-            test_mode=test_mode,
         )
         return session_plan, summary
 

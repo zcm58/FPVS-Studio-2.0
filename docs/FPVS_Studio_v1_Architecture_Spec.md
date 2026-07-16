@@ -55,7 +55,7 @@ The true per-sequence duration is derived from the active display's refresh-comp
 - control generators for:
   - `rot180` (orientation inversion)
   - `phase_scrambled`
-- test-mode fullscreen PsychoPy launch
+- fullscreen PsychoPy session launch with display and timing-QC checks
 - rich session export
 - trigger backend contracts and optional BioSemi-compatible serial backend, with
   end-user GUI exposure limited by the current workflow docs

@@ -187,11 +187,7 @@ class StubEngine(PresentationEngine):
                 condition_id=run_spec.condition.condition_id,
                 condition_name=run_spec.condition.name,
                 engine_name="stub",
-                run_mode=(
-                    RunMode.TEST
-                    if bool((runtime_options or {}).get("test_mode"))
-                    else RunMode.SESSION
-                ),
+                run_mode=RunMode.SESSION,
                 started_at=datetime(2026, 3, 7, 12, 0, 0, tzinfo=timezone.utc),
                 finished_at=datetime(2026, 3, 7, 12, 0, 5, tzinfo=timezone.utc),
                 completed_frames=run_spec.display.total_frames,
@@ -201,7 +197,6 @@ class StubEngine(PresentationEngine):
                     requested_refresh_hz=run_spec.display.refresh_hz,
                     actual_refresh_hz=59.0,
                     frame_interval_recording=True,
-                    test_mode=bool((runtime_options or {}).get("test_mode")),
                     timing_qc_expected_interval_s=1.0 / run_spec.display.refresh_hz,
                     timing_qc_threshold_interval_s=1.5 / run_spec.display.refresh_hz,
                     timing_qc_warmup_frames=240,
@@ -231,9 +226,7 @@ class StubEngine(PresentationEngine):
             condition_id=run_spec.condition.condition_id,
             condition_name=run_spec.condition.name,
             engine_name="stub",
-            run_mode=(
-                RunMode.TEST if bool((runtime_options or {}).get("test_mode")) else RunMode.SESSION
-            ),
+            run_mode=RunMode.SESSION,
             started_at=datetime(2026, 3, 7, 12, 0, 0, tzinfo=timezone.utc),
             finished_at=datetime(2026, 3, 7, 12, 0, 5, tzinfo=timezone.utc),
             completed_frames=run_spec.display.total_frames,
@@ -243,7 +236,6 @@ class StubEngine(PresentationEngine):
                 requested_refresh_hz=run_spec.display.refresh_hz,
                 actual_refresh_hz=run_spec.display.refresh_hz,
                 frame_interval_recording=True,
-                test_mode=bool((runtime_options or {}).get("test_mode")),
             ),
             frame_intervals=[
                 FrameIntervalRecord(

@@ -11,7 +11,6 @@ from fpvs_studio.core.run_spec import RunSpec
 def build_window_kwargs(runtime_options: Mapping[str, object]) -> dict[str, object]:
     """Build PsychoPy window keyword arguments from runtime options."""
 
-    test_mode = bool(runtime_options.get("test_mode"))
     fullscreen = bool(runtime_options.get("fullscreen", True))
     display_index = runtime_options.get("display_index")
     window_kwargs: dict[str, object] = {
@@ -22,8 +21,19 @@ def build_window_kwargs(runtime_options: Mapping[str, object]) -> dict[str, obje
         "color": "black",
         "units": "pix",
     }
-    if test_mode and not fullscreen:
-        window_kwargs["size"] = [1280, 720]
+    if not fullscreen:
+        windowed_size = runtime_options.get("windowed_size_px", (1280, 720))
+        if (
+            isinstance(windowed_size, (tuple, list))
+            and len(windowed_size) == 2
+            and all(
+                isinstance(value, int) and not isinstance(value, bool) and value > 0
+                for value in windowed_size
+            )
+        ):
+            window_kwargs["size"] = list(windowed_size)
+        else:
+            window_kwargs["size"] = [1280, 720]
     return window_kwargs
 
 

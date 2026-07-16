@@ -115,7 +115,7 @@ def test_launch_compiled_session_refreshes_stale_participant_summary(
             project_id=session_plan.project_id,
             session_id=session_plan.session_id,
             engine_name="stub",
-            run_mode=RunMode.TEST,
+            run_mode=RunMode.SESSION,
             participant_number="2",
             total_condition_count=session_plan.total_runs,
             completed_condition_count=session_plan.total_runs,
