@@ -33,7 +33,10 @@ project folders discovered beneath that root. Recent projects outside the config
 root are not included. The dialog can open a project or move a project folder to the
 Windows Recycle Bin after an explicit Yes/No confirmation. The dialog includes a
 compact project filter and can copy the selected project folder path. The currently
-open project is shown but cannot be deleted from its own open window.
+open project is shown but cannot be deleted from its own open window. When a discovered
+folder contains an unreadable or incompatible `project.json`, the dialog keeps Open and
+Delete disabled and asks the user to verify the configured FPVS Studio Root Folder and
+the project's FPVS Studio version.
 
 Importing a new project from Welcome uses the same `.fpvsbundle` import workflow as
 `File > Import > Project Bundle...`. Dropping a local `.fpvsbundle` file onto the

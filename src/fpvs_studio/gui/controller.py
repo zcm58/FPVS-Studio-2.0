@@ -1007,6 +1007,12 @@ class StudioController(QObject):
                 status_state="warning",
                 can_open=False,
                 can_delete=False,
+                guidance_text=(
+                    "FPVS Studio could not read this folder as a valid FPVS Studio "
+                    "project. Double-check that you selected the correct FPVS Studio "
+                    "Root Folder. If the root is correct, verify that this project was "
+                    "created or imported by a compatible version of FPVS Studio."
+                ),
             )
         return ProjectManagementEntry(
             name=project.meta.name,

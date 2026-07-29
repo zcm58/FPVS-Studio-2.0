@@ -6,7 +6,7 @@ import shutil
 from pathlib import Path
 from types import SimpleNamespace
 
-from PySide6.QtCore import QMimeData, QObject, QPoint, QPointF, Qt, QUrl, Signal
+from PySide6.QtCore import QMimeData, QObject, QPoint, QPointF, QRect, Qt, QUrl, Signal
 from PySide6.QtGui import QDragEnterEvent, QDropEvent
 from PySide6.QtWidgets import (
     QApplication,
@@ -24,6 +24,7 @@ from tests.gui.helpers import (
     _find_profile_row,
     _list_widget_text,
     _open_created_project,
+    assert_visible_children_within_parent,
 )
 
 from fpvs_studio import __version__
@@ -435,6 +436,53 @@ def test_manage_projects_dialog_lists_projects_from_saved_root(
     assert delete_button.isEnabled()
     qtbot.mouseClick(copy_button, Qt.MouseButton.LeftButton)
     assert QApplication.clipboard().text() == str(scaffold.project_root)
+
+
+def test_manage_projects_dialog_explains_invalid_project_root_selection(
+    qtbot,
+    qapp,
+    controller: StudioController,
+) -> None:
+    root_dir = controller.load_fpvs_root_dir()
+    assert root_dir is not None
+    invalid_root = root_dir / "unrelated-tool-project-with-a-very-long-laboratory-folder-name"
+    invalid_root.mkdir()
+    (invalid_root / "project.json").write_text(
+        '{"schema_version":"2.1.0","tools":{}}',
+        encoding="utf-8",
+    )
+
+    entries = controller.load_manageable_project_entries()
+    invalid_entry = next(entry for entry in entries if entry.root == invalid_root)
+    assert invalid_entry.status_text == "Invalid Project"
+    assert "correct FPVS Studio Root Folder" in invalid_entry.guidance_text
+
+    dialog = ManageProjectsDialog(entries=entries)
+    qtbot.addWidget(dialog)
+    dialog.resize(dialog.minimumSize())
+    dialog.show()
+    qapp.processEvents()
+
+    guidance_label = dialog.findChild(QLabel, "manage_projects_guidance_label")
+    open_button = dialog.findChild(QPushButton, "manage_projects_open_button")
+    delete_button = dialog.findChild(QPushButton, "manage_projects_delete_button")
+
+    assert guidance_label is not None
+    assert open_button is not None
+    assert delete_button is not None
+    assert guidance_label.isVisible()
+    assert guidance_label.wordWrap()
+    assert "correct FPVS Studio Root Folder" in guidance_label.text()
+    assert "compatible version of FPVS Studio" in guidance_label.text()
+    wrapped_bounds = guidance_label.fontMetrics().boundingRect(
+        QRect(0, 0, guidance_label.width(), 10_000),
+        Qt.TextFlag.TextWordWrap,
+        guidance_label.text(),
+    )
+    assert guidance_label.height() >= wrapped_bounds.height()
+    assert not open_button.isEnabled()
+    assert not delete_button.isEnabled()
+    assert_visible_children_within_parent(dialog)
 
 
 def test_manage_projects_dialog_filters_by_name_and_path(

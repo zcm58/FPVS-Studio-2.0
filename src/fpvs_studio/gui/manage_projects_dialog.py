@@ -25,6 +25,7 @@ from fpvs_studio.gui.components import (
     StatusBadgeLabel,
     apply_studio_theme,
     mark_destructive_action,
+    mark_error_text,
     mark_primary_action,
     mark_secondary_action,
 )
@@ -40,6 +41,7 @@ class ProjectManagementEntry:
     status_state: str
     can_open: bool
     can_delete: bool
+    guidance_text: str = ""
 
 
 class ManageProjectsDialog(QDialog):
@@ -119,6 +121,12 @@ class ManageProjectsDialog(QDialog):
         self.path_label = PathValueLabel(detail_panel)
         self.path_label.setObjectName("manage_projects_path_label")
         detail_layout.addWidget(self.path_label)
+
+        self.guidance_label = QLabel(detail_panel)
+        self.guidance_label.setObjectName("manage_projects_guidance_label")
+        self.guidance_label.setWordWrap(True)
+        mark_error_text(self.guidance_label)
+        detail_layout.addWidget(self.guidance_label)
 
         self.empty_label = QLabel("No projects are available to manage.", detail_panel)
         self.empty_label.setObjectName("manage_projects_empty_label")
@@ -204,6 +212,9 @@ class ManageProjectsDialog(QDialog):
         entry = self._selected_entry()
         has_entry = entry is not None
         self.empty_label.setVisible(not has_entry)
+        guidance_text = entry.guidance_text if entry is not None else ""
+        self.guidance_label.setText(guidance_text)
+        self.guidance_label.setVisible(bool(guidance_text))
         self.open_button.setEnabled(has_entry and entry.can_open if entry else False)
         self.delete_button.setEnabled(has_entry and entry.can_delete if entry else False)
         self.copy_path_button.setEnabled(has_entry)
