@@ -8,10 +8,10 @@ from __future__ import annotations
 from pathlib import Path
 
 from PySide6.QtCore import QEvent, Qt, Signal
-from PySide6.QtGui import QDragEnterEvent, QDropEvent
+from PySide6.QtGui import QCloseEvent, QDragEnterEvent, QDropEvent
 from PySide6.QtWidgets import (
     QApplication,
-    QHBoxLayout,
+    QGridLayout,
     QLabel,
     QPushButton,
     QStyle,
@@ -34,6 +34,7 @@ class WelcomeWindow(QWidget):
     import_project_bundle_requested = Signal()
     project_bundle_dropped = Signal(object)
     manage_projects_requested = Signal()
+    root_folder_setup_requested = Signal()
 
     def __init__(self) -> None:
         super().__init__()
@@ -79,10 +80,13 @@ class WelcomeWindow(QWidget):
         self.bundle_drop_hint_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         hero_layout.addWidget(self.bundle_drop_hint_label)
 
-        action_layout = QHBoxLayout()
-        action_layout.setSpacing(12)
+        self.action_container = QWidget(self.hero_container)
+        self.action_container.setObjectName("welcome_action_container")
+        self.action_container.setFixedWidth(452)
+        action_layout = QGridLayout(self.action_container)
+        action_layout.setHorizontalSpacing(12)
+        action_layout.setVerticalSpacing(12)
         action_layout.setContentsMargins(0, 10, 0, 0)
-        action_layout.setAlignment(Qt.AlignmentFlag.AlignHCenter)
 
         self.create_button = QPushButton("Create Project", self.hero_container)
         self.create_button.setObjectName("create_project_button")
@@ -90,7 +94,7 @@ class WelcomeWindow(QWidget):
         self.create_button.setMinimumHeight(52)
         self.create_button.setFixedWidth(220)
         self.create_button.clicked.connect(self.create_requested.emit)
-        action_layout.addWidget(self.create_button)
+        action_layout.addWidget(self.create_button, 0, 0)
 
         self.import_project_button = QPushButton("Import New Project", self.hero_container)
         self.import_project_button.setObjectName("import_project_bundle_button")
@@ -100,7 +104,7 @@ class WelcomeWindow(QWidget):
         self.import_project_button.clicked.connect(
             self.import_project_bundle_requested.emit
         )
-        action_layout.addWidget(self.import_project_button)
+        action_layout.addWidget(self.import_project_button, 0, 1)
 
         self.manage_projects_button = QPushButton("Open Existing Project", self.hero_container)
         self.manage_projects_button.setObjectName("open_projects_button")
@@ -108,8 +112,25 @@ class WelcomeWindow(QWidget):
         self.manage_projects_button.setMinimumHeight(52)
         self.manage_projects_button.setFixedWidth(220)
         self.manage_projects_button.clicked.connect(self.manage_projects_requested.emit)
-        action_layout.addWidget(self.manage_projects_button)
-        hero_layout.addLayout(action_layout)
+        action_layout.addWidget(self.manage_projects_button, 1, 0)
+
+        self.root_folder_setup_button = QPushButton(
+            "Change Root Folder...",
+            self.hero_container,
+        )
+        self.root_folder_setup_button.setObjectName("welcome_root_folder_setup_button")
+        mark_welcome_action(self.root_folder_setup_button, "secondary")
+        self.root_folder_setup_button.setMinimumHeight(52)
+        self.root_folder_setup_button.setFixedWidth(220)
+        self.root_folder_setup_button.clicked.connect(
+            self.root_folder_setup_requested.emit
+        )
+        action_layout.addWidget(self.root_folder_setup_button, 1, 1)
+        hero_layout.addWidget(
+            self.action_container,
+            0,
+            Qt.AlignmentFlag.AlignHCenter,
+        )
 
         self._apply_theme_styles()
 
@@ -142,6 +163,7 @@ class WelcomeWindow(QWidget):
             self.create_button,
             self.import_project_button,
             self.manage_projects_button,
+            self.root_folder_setup_button,
         ):
             button.setEnabled(not self._import_busy)
         self.bundle_drop_hint_label.setText(
@@ -149,6 +171,12 @@ class WelcomeWindow(QWidget):
             if self._import_busy
             else "Tip: Drop a .fpvsbundle file anywhere on this window."
         )
+
+    def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802
+        if self._import_busy:
+            event.ignore()
+            return
+        super().closeEvent(event)
 
     def changeEvent(self, event: QEvent) -> None:  # noqa: N802
         super().changeEvent(event)

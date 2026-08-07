@@ -62,8 +62,8 @@ ProjectFile
   compilation, session decisions, project persistence, or exports.
 - Full export mode writes detailed artifacts under `runs/`. Compact mode keeps
   project-level reporting under `logs/` without detailed run folders.
-- GUI project-bundle import/export is current active work; its approved boundaries and
-  verification remain in `docs/exec-plans/active/project-bundle-import-export.md`.
+- GUI project-bundle import/export is implemented; its current workflow and contracts
+  live in `docs/GUI_WORKFLOW.md` and `src/fpvs_studio/core/project_bundle.py`.
 
 ## Dependency Rules
 

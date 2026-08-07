@@ -151,6 +151,9 @@ class StudioController(QObject):
             self.welcome_window.manage_projects_requested.connect(
                 self.show_manage_projects_dialog
             )
+            self.welcome_window.root_folder_setup_requested.connect(
+                self.show_root_folder_setup
+            )
         self.welcome_window.show()
         self.welcome_window.raise_()
         self.welcome_window.activateWindow()
@@ -882,10 +885,13 @@ class StudioController(QObject):
                 if self.welcome_window is not None:
                     self.welcome_window.set_import_busy(False)
             document = ProjectDocument.open_existing(result.project_root)
-            self._confirm_imported_display_settings(
+            display_confirmed = self._confirm_imported_display_settings(
                 document,
                 parent=window or self.welcome_window,
             )
+            if not display_confirmed:
+                self._finish_project_bundle_import_processing(restore_previous=True)
+                return
         except Exception as error:
             self._finish_project_bundle_import_processing(restore_previous=True)
             _show_error(
@@ -935,14 +941,15 @@ class StudioController(QObject):
         document: ProjectDocument,
         *,
         parent: QWidget | None,
-    ) -> None:
+    ) -> bool:
         dialog = ImportDisplaySettingsDialog(document.project.settings.display, parent=parent)
         if dialog.exec() != dialog.DialogCode.Accepted:
-            return
+            return False
         if not dialog.should_apply_updates:
-            return
+            return True
         document.update_display_settings(**dialog.display_updates())
         document.save()
+        return True
 
     def _show_condition_template_manager(self) -> list[ConditionTemplateProfile]:
         if not self.ensure_fpvs_root_configured():

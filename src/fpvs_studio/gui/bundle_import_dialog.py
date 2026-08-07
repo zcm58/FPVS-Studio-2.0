@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import cast
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QCloseEvent
 from PySide6.QtWidgets import (
     QDialog,
     QFrame,
@@ -211,8 +212,10 @@ class BundleImportProgressDialog(QDialog):
         self.setObjectName("bundle_import_progress_dialog")
         self.setWindowTitle("Importing FPVS Studio Project")
         self.setModal(True)
+        self.setWindowFlag(Qt.WindowType.WindowCloseButtonHint, False)
         self.setMinimumSize(940, 600)
         self.resize(1040, 680)
+        self._import_active = False
 
         self.page = BundleImportProcessingPage(parent=self)
         layout = QVBoxLayout(self)
@@ -236,6 +239,7 @@ class BundleImportProgressDialog(QDialog):
         )
 
     def start(self) -> None:
+        self._import_active = True
         self.page.reset_steps()
         self.page.set_stage("verify")
         self.page.start()
@@ -247,5 +251,12 @@ class BundleImportProgressDialog(QDialog):
             self.page.set_stage(cast(BundleImportStage, stage))
 
     def finish(self) -> None:
+        self._import_active = False
         self.page.stop()
         self.close()
+
+    def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802
+        if self._import_active:
+            event.ignore()
+            return
+        super().closeEvent(event)

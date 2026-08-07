@@ -79,13 +79,23 @@ def test_welcome_window_smoke(qtbot, controller: StudioController, monkeypatch) 
     create_button = welcome.findChild(QPushButton, "create_project_button")
     import_project_button = welcome.findChild(QPushButton, "import_project_bundle_button")
     open_projects_button = welcome.findChild(QPushButton, "open_projects_button")
+    root_folder_button = welcome.findChild(
+        QPushButton,
+        "welcome_root_folder_setup_button",
+    )
     assert create_button is not None
     assert import_project_button is not None
     assert open_projects_button is not None
+    assert root_folder_button is not None
     monkeypatch.setattr(
         ManageProjectsDialog,
         "exec",
         lambda self: int(ManageProjectsDialog.DialogCode.Rejected),
+    )
+    monkeypatch.setattr(
+        RootFolderSetupDialog,
+        "exec",
+        lambda self: int(RootFolderSetupDialog.DialogCode.Rejected),
     )
 
     with qtbot.waitSignal(welcome.create_requested, timeout=1000):
@@ -94,6 +104,8 @@ def test_welcome_window_smoke(qtbot, controller: StudioController, monkeypatch) 
         qtbot.mouseClick(import_project_button, Qt.MouseButton.LeftButton)
     with qtbot.waitSignal(welcome.manage_projects_requested, timeout=1000):
         qtbot.mouseClick(open_projects_button, Qt.MouseButton.LeftButton)
+    with qtbot.waitSignal(welcome.root_folder_setup_requested, timeout=1000):
+        qtbot.mouseClick(root_folder_button, Qt.MouseButton.LeftButton)
 
 
 def test_welcome_window_copy_and_primary_hierarchy(controller: StudioController) -> None:
@@ -107,6 +119,10 @@ def test_welcome_window_copy_and_primary_hierarchy(controller: StudioController)
     import_project_button = welcome.findChild(QPushButton, "import_project_bundle_button")
     open_button = welcome.findChild(QPushButton, "open_project_button")
     open_projects_button = welcome.findChild(QPushButton, "open_projects_button")
+    root_folder_button = welcome.findChild(
+        QPushButton,
+        "welcome_root_folder_setup_button",
+    )
 
     assert brand is None
     assert headline is not None
@@ -115,18 +131,21 @@ def test_welcome_window_copy_and_primary_hierarchy(controller: StudioController)
     assert import_project_button is not None
     assert open_button is None
     assert open_projects_button is not None
+    assert root_folder_button is not None
 
     assert headline.text() == "Welcome to FPVS Studio"
     assert body.text() == "Create a project, import a project bundle, or open existing work."
     assert create_button.text() == "Create Project"
     assert import_project_button.text() == "Import New Project"
     assert open_projects_button.text() == "Open Existing Project"
+    assert root_folder_button.text() == "Change Root Folder..."
     assert create_button.property("welcomeRole") == "primary"
     assert import_project_button.property("welcomeRole") != "primary"
     assert open_projects_button.property("welcomeRole") != "primary"
+    assert root_folder_button.property("welcomeRole") != "primary"
 
 
-def test_welcome_window_action_buttons_are_horizontally_centered(
+def test_welcome_window_action_buttons_are_centered(
     controller: StudioController,
 ) -> None:
     welcome = controller.welcome_window
@@ -136,36 +155,58 @@ def test_welcome_window_action_buttons_are_horizontally_centered(
     create_button = welcome.findChild(QPushButton, "create_project_button")
     import_project_button = welcome.findChild(QPushButton, "import_project_bundle_button")
     open_projects_button = welcome.findChild(QPushButton, "open_projects_button")
+    root_folder_button = welcome.findChild(
+        QPushButton,
+        "welcome_root_folder_setup_button",
+    )
 
     assert content_frame is not None
     assert create_button is not None
     assert import_project_button is not None
     assert open_projects_button is not None
+    assert root_folder_button is not None
 
     welcome.resize(1200, 760)
     QApplication.processEvents()
 
-    create_left = create_button.mapTo(content_frame, create_button.rect().topLeft()).x()
-    create_right = create_button.mapTo(content_frame, create_button.rect().bottomRight()).x()
-    import_left = import_project_button.mapTo(
-        content_frame, import_project_button.rect().topLeft()
-    ).x()
-    import_right = import_project_button.mapTo(
-        content_frame, import_project_button.rect().bottomRight()
-    ).x()
-    open_left = open_projects_button.mapTo(
-        content_frame, open_projects_button.rect().topLeft()
-    ).x()
-    open_right = open_projects_button.mapTo(
-        content_frame, open_projects_button.rect().bottomRight()
-    ).x()
-
-    group_left = min(create_left, import_left, open_left)
-    group_right = max(create_right, import_right, open_right)
+    buttons = (
+        create_button,
+        import_project_button,
+        open_projects_button,
+        root_folder_button,
+    )
+    group_left = min(
+        button.mapTo(content_frame, button.rect().topLeft()).x() for button in buttons
+    )
+    group_right = max(
+        button.mapTo(content_frame, button.rect().bottomRight()).x() for button in buttons
+    )
     button_group_midpoint = (group_left + group_right) / 2.0
     content_midpoint = content_frame.width() / 2.0
 
     assert abs(button_group_midpoint - content_midpoint) <= 6.0
+
+
+def test_welcome_window_actions_fit_minimum_and_default_sizes(
+    controller: StudioController,
+) -> None:
+    welcome = controller.welcome_window
+    assert welcome is not None
+    action_buttons = (
+        welcome.create_button,
+        welcome.import_project_button,
+        welcome.manage_projects_button,
+        welcome.root_folder_setup_button,
+    )
+
+    for width, height in ((760, 520), (1120, 720)):
+        welcome.resize(width, height)
+        QApplication.processEvents()
+
+        assert_visible_children_within_parent(welcome)
+        for button in action_buttons:
+            text_width = button.fontMetrics().horizontalAdvance(button.text())
+            assert button.contentsRect().width() >= text_width
 
 
 def test_welcome_window_accepts_fpvsbundle_drop(
@@ -271,6 +312,7 @@ def test_welcome_bundle_drop_starts_project_bundle_import(
     assert controller._import_bundle_processing_dialog.isVisible()
     assert controller.welcome_window is not None
     assert controller.welcome_window.import_project_button.isEnabled() is False
+    assert controller.welcome_window.root_folder_setup_button.isEnabled() is False
 
     task.run_successfully()
 
@@ -279,6 +321,21 @@ def test_welcome_bundle_drop_starts_project_bundle_import(
     qtbot.addWidget(controller.main_window)
     assert controller.main_window.document.project.meta.name == "Dropped Bundle Project"
     assert controller.welcome_window.import_project_button.isEnabled() is True
+    assert controller.welcome_window.root_folder_setup_button.isEnabled() is True
+
+
+def test_welcome_window_cannot_close_during_bundle_import(
+    controller: StudioController,
+) -> None:
+    welcome = controller.welcome_window
+    assert welcome is not None
+    welcome.set_import_busy(True)
+
+    try:
+        assert welcome.close() is False
+        assert welcome.isVisible() is True
+    finally:
+        welcome.set_import_busy(False)
 
 
 def test_welcome_window_hero_stack_is_centered_in_panel(controller: StudioController) -> None:
@@ -1136,6 +1193,67 @@ def test_controller_root_folder_setup_changes_saved_root(
     assert setup_dialogs[0].current_root_value.toolTip() != ""
     assert setup_dialogs[0].choose_button.text() == "Choose Different Root Folder..."
     assert setup_dialogs[0].secondary_button.text() == "Close"
+
+
+def test_welcome_root_folder_button_changes_saved_root(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    original_root = controller.load_fpvs_root_dir()
+    assert original_root is not None
+    selected_root = tmp_path / "welcome-selected-root"
+    selected_root.mkdir(parents=True, exist_ok=True)
+
+    monkeypatch.setattr(
+        RootFolderSetupDialog,
+        "exec",
+        lambda self: int(RootFolderSetupDialog.DialogCode.Accepted),
+    )
+    monkeypatch.setattr(
+        "fpvs_studio.gui.controller.QFileDialog.getExistingDirectory",
+        lambda *_args, **_kwargs: str(selected_root),
+    )
+
+    welcome = controller.welcome_window
+    assert welcome is not None
+    qtbot.mouseClick(
+        welcome.root_folder_setup_button,
+        Qt.MouseButton.LeftButton,
+    )
+
+    assert controller.main_window is None
+    assert controller.load_fpvs_root_dir() == selected_root
+    assert controller.load_fpvs_root_dir() != original_root
+
+
+def test_canceling_welcome_root_folder_picker_keeps_saved_root(
+    qtbot,
+    controller: StudioController,
+    monkeypatch,
+) -> None:
+    original_root = controller.load_fpvs_root_dir()
+    assert original_root is not None
+
+    monkeypatch.setattr(
+        RootFolderSetupDialog,
+        "exec",
+        lambda self: int(RootFolderSetupDialog.DialogCode.Accepted),
+    )
+    monkeypatch.setattr(
+        "fpvs_studio.gui.controller.QFileDialog.getExistingDirectory",
+        lambda *_args, **_kwargs: "",
+    )
+
+    welcome = controller.welcome_window
+    assert welcome is not None
+    qtbot.mouseClick(
+        welcome.root_folder_setup_button,
+        Qt.MouseButton.LeftButton,
+    )
+
+    assert controller.load_fpvs_root_dir() == original_root
 
 
 def test_settings_dialog_manage_templates_button_triggers_callback(

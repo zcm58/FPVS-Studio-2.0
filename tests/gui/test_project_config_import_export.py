@@ -26,6 +26,7 @@ from fpvs_studio.core.project_config import (
     read_project_config,
     write_project_config,
 )
+from fpvs_studio.core.project_service import create_project
 from fpvs_studio.gui.bundle_export_dialog import BundleExportOptionsDialog
 from fpvs_studio.gui.bundle_import_dialog import (
     BundleImportProgressDialog,
@@ -734,6 +735,48 @@ def test_import_project_bundle_creates_and_opens_complete_project(
     assert display.screen_height_px == 1440
 
 
+def test_import_project_bundle_does_not_open_after_display_dialog_rejection(
+    controller: StudioController,
+    qtbot,
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _document, window = open_created_project(
+        controller,
+        qtbot,
+        tmp_path,
+        "Current Bundle Project",
+    )
+    import_root = tmp_path / "import-root"
+    scaffold = create_project(import_root, "Rejected Display Project")
+
+    class _RejectedImportDisplaySettingsDialog:
+        DialogCode = QDialog.DialogCode
+
+        def __init__(self, display, parent=None):
+            self.display = display
+
+        def exec(self):
+            return QDialog.DialogCode.Rejected
+
+    monkeypatch.setattr(
+        "fpvs_studio.gui.controller.ImportDisplaySettingsDialog",
+        _RejectedImportDisplaySettingsDialog,
+    )
+    controller._import_bundle_processing_window = window
+    window.start_bundle_import_processing(
+        project_name="Rejected Display Project",
+        bundle_path=tmp_path / "rejected-display.fpvsbundle",
+        root_dir=import_root,
+    )
+
+    controller._on_import_project_bundle_succeeded(scaffold)
+
+    assert controller.main_window is window
+    assert window.document.project.meta.name == "Current Bundle Project"
+    assert window.main_stack.currentWidget() is window.home_page
+
+
 def test_import_project_bundle_shows_embedded_processing_screen(
     controller: StudioController,
     qtbot,
@@ -868,6 +911,9 @@ def test_bundle_import_progress_dialog_is_expanded_without_clipping(qtbot, tmp_p
         required_width = step_label.fontMetrics().horizontalAdvance(step_label.text())
         assert step_label.width() >= required_width
 
+    assert dialog.close() is False
+    assert dialog.isVisible() is True
+
     dialog.finish()
 
 
@@ -891,17 +937,60 @@ def test_import_display_settings_dialog_detect_button_fills_available_values(
 
     dialog.apply_detected_primary_display()
 
-    assert dialog.refresh_hz_spin.value() == 119.88
+    assert dialog.refresh_hz_spin.value() == 120.0
     assert dialog.screen_width_cm_spin.value() == 61.2
     assert dialog.screen_width_px_spin.value() == 2560
     assert dialog.screen_height_px_spin.value() == 1440
-    assert dialog.detected_refresh_label.text() == "119.88 Hz"
+    assert dialog.detected_refresh_label.text() == "119.88 Hz (use 120 Hz)"
     assert dialog.detected_resolution_label.text() == "2560 × 1440 px"
     assert dialog.detected_badge.text() == "Detected"
     assert_visible_children_within_parent(dialog)
 
 
+def test_import_display_settings_dialog_keeps_approved_value_for_unsupported_refresh(
+    qtbot,
+    monkeypatch,
+) -> None:
+    dialog = ImportDisplaySettingsDialog(DisplaySettings(preferred_refresh_hz=60.0))
+    qtbot.addWidget(dialog)
+    dialog.show()
+    QApplication.processEvents()
+    monkeypatch.setattr(
+        "fpvs_studio.gui.import_display_settings_dialog.detect_primary_display_settings",
+        lambda: DetectedDisplaySettings(
+            refresh_hz=75.0,
+            screen_width_cm=61.2,
+            screen_width_px=2560,
+            screen_height_px=1440,
+        ),
+    )
+
+    dialog.apply_detected_primary_display()
+
+    assert dialog.refresh_hz_spin.value() == 60.0
+    assert dialog.detected_refresh_label.text() == (
+        "75.00 Hz (not an approved FPVS rate)"
+    )
+    assert dialog.detected_badge.text() == "Review refresh"
+    for width, height in ((720, 590), (780, 660)):
+        dialog.resize(width, height)
+        QApplication.processEvents()
+        assert_visible_children_within_parent(dialog)
+        required_width = dialog.detected_refresh_label.fontMetrics().horizontalAdvance(
+            dialog.detected_refresh_label.text()
+        )
+        assert dialog.detected_refresh_label.width() >= required_width
+
+
 def test_import_display_settings_dialog_actions_are_explicit(qtbot) -> None:
+    unresolved_dialog = ImportDisplaySettingsDialog(DisplaySettings())
+    qtbot.addWidget(unresolved_dialog)
+    unresolved_dialog.show()
+    QApplication.processEvents()
+
+    assert unresolved_dialog.close() is True
+    assert unresolved_dialog.result() == int(QDialog.DialogCode.Rejected)
+
     keep_dialog = ImportDisplaySettingsDialog(DisplaySettings())
     qtbot.addWidget(keep_dialog)
 

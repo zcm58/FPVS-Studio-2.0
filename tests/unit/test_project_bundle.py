@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+import fpvs_studio.core.project_bundle as project_bundle_module
 from fpvs_studio.core.models import ProjectFile
 from fpvs_studio.core.paths import app_data_dir
 from fpvs_studio.core.project_bundle import (
@@ -297,3 +298,112 @@ def test_import_project_bundle_rejects_unsafe_archive_member(
 
     with pytest.raises(ProjectBundleError, match="unsafe member path"):
         import_project_bundle(malicious_path, tmp_path / "receiver-root")
+
+
+def test_read_project_bundle_manifest_rejects_oversized_manifest(
+    tmp_path,
+    sample_project,
+    sample_project_root,
+    monkeypatch,
+) -> None:
+    _save_bundle_ready_project(sample_project_root, sample_project)
+    bundle_path = tmp_path / "sample.fpvsbundle"
+    export_project_bundle(sample_project_root, bundle_path)
+    monkeypatch.setattr(project_bundle_module, "MAX_BUNDLE_MANIFEST_BYTES", 1)
+
+    with pytest.raises(ProjectBundleError, match="file exceeds the 1-byte limit"):
+        read_project_bundle_manifest(bundle_path)
+
+
+def test_export_project_bundle_rejects_resource_limit_without_replacing_destination(
+    tmp_path,
+    sample_project,
+    sample_project_root,
+    monkeypatch,
+) -> None:
+    _save_bundle_ready_project(sample_project_root, sample_project)
+    bundle_path = tmp_path / "existing.fpvsbundle"
+    bundle_path.write_bytes(b"existing bundle")
+    monkeypatch.setattr(
+        project_bundle_module,
+        "MAX_BUNDLE_TOTAL_UNCOMPRESSED_BYTES",
+        1,
+    )
+
+    with pytest.raises(ProjectBundleError, match="total uncompressed-size limit"):
+        export_project_bundle(sample_project_root, bundle_path)
+
+    assert bundle_path.read_bytes() == b"existing bundle"
+    assert not (tmp_path / ".existing.fpvsbundle.tmp").exists()
+
+
+def test_export_project_bundle_rejects_unsafe_compression_ratio(
+    tmp_path,
+    sample_project,
+    sample_project_root,
+    monkeypatch,
+) -> None:
+    _save_bundle_ready_project(sample_project_root, sample_project)
+    bundle_path = tmp_path / "sample.fpvsbundle"
+    monkeypatch.setattr(project_bundle_module, "MIN_BUNDLE_COMPRESSION_CHECK_BYTES", 0)
+    monkeypatch.setattr(project_bundle_module, "MAX_BUNDLE_COMPRESSION_RATIO", 0.01)
+
+    with pytest.raises(ProjectBundleError, match="unsafe compression ratio"):
+        export_project_bundle(sample_project_root, bundle_path)
+
+    assert not bundle_path.exists()
+    assert not (tmp_path / ".sample.fpvsbundle.tmp").exists()
+
+
+@pytest.mark.parametrize(
+    ("limit_name", "error_match"),
+    (
+        ("MAX_BUNDLE_PAYLOAD_FILES", "too many payload files"),
+        ("MAX_BUNDLE_FILE_BYTES", "file exceeds the 1-byte limit"),
+        (
+            "MAX_BUNDLE_TOTAL_UNCOMPRESSED_BYTES",
+            "total uncompressed-size limit",
+        ),
+    ),
+)
+def test_import_project_bundle_rejects_resource_limits_and_deletes_staging(
+    tmp_path,
+    sample_project,
+    sample_project_root,
+    monkeypatch,
+    limit_name: str,
+    error_match: str,
+) -> None:
+    _save_bundle_ready_project(sample_project_root, sample_project)
+    bundle_path = tmp_path / "sample.fpvsbundle"
+    export_project_bundle(sample_project_root, bundle_path)
+    target_root = tmp_path / "receiver-root"
+    monkeypatch.setattr(project_bundle_module, limit_name, 1)
+
+    with pytest.raises(ProjectBundleError, match=error_match):
+        import_project_bundle(bundle_path, target_root)
+
+    staging_root = app_data_dir(target_root) / IMPORT_STAGING_DIRNAME
+    assert staging_root.is_dir()
+    assert list(staging_root.iterdir()) == []
+
+
+def test_import_project_bundle_rejects_unsafe_compression_ratio(
+    tmp_path,
+    sample_project,
+    sample_project_root,
+    monkeypatch,
+) -> None:
+    _save_bundle_ready_project(sample_project_root, sample_project)
+    bundle_path = tmp_path / "sample.fpvsbundle"
+    export_project_bundle(sample_project_root, bundle_path)
+    target_root = tmp_path / "receiver-root"
+    monkeypatch.setattr(project_bundle_module, "MIN_BUNDLE_COMPRESSION_CHECK_BYTES", 0)
+    monkeypatch.setattr(project_bundle_module, "MAX_BUNDLE_COMPRESSION_RATIO", 0.01)
+
+    with pytest.raises(ProjectBundleError, match="unsafe compression ratio"):
+        import_project_bundle(bundle_path, target_root)
+
+    staging_root = app_data_dir(target_root) / IMPORT_STAGING_DIRNAME
+    assert staging_root.is_dir()
+    assert list(staging_root.iterdir()) == []

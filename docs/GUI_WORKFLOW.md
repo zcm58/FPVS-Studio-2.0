@@ -22,6 +22,11 @@ The welcome window provides:
 - `Create Project`
 - `Import New Project`
 - `Open Existing Project`
+- `Change Root Folder...`
+
+`Change Root Folder...` reopens the guided root-folder setup and native folder picker
+without requiring a project to be open. Canceling either step leaves the configured
+root unchanged.
 
 Creating a project asks for:
 
@@ -42,7 +47,8 @@ Importing a new project from Welcome uses the same `.fpvsbundle` import workflow
 `File > Import > Project Bundle...`. Dropping a local `.fpvsbundle` file onto the
 Welcome window starts that project-import workflow for the dropped bundle. The Welcome
 surface includes a visible drop hint, shows a modal staged progress surface during the
-background import, and disables its project actions until the operation finishes.
+background import, disables all Welcome actions until the operation finishes, and does
+not allow the Welcome window or progress surface to close while the import is active.
 
 Condition-template profiles are app-level metadata for the configured FPVS Studio Root
 Folder. They are stored under `.fpvs-studio/templates/condition_templates.json`, keeping
@@ -235,7 +241,12 @@ discarded so the root-folder setup flow can collect an explicit location again. 
 display confirmation dialog compares imported settings with Qt-detected refresh,
 resolution, and physical screen width, preserves editable local values, and exposes
 explicit `Open with Imported Values` and `Apply & Open Project` actions. The visual-angle
-target remains imported, and PsychoPy stays behind the engine boundary.
+target remains imported, and PsychoPy stays behind the engine boundary. Detected refresh
+measurements are mapped to the nearest approved FPVS refresh rate when they are within
+tolerance; unsupported measurements are shown for review without writing an invalid
+refresh target. Closing or pressing Escape cannot bypass the two explicit open actions.
+It leaves the imported project available under the configured Studio root without
+opening it, so the user can reopen it later through `Open Existing Project`.
 `Import > Project Config...` creates a new
 Studio project shell under the configured FPVS Studio Root Folder from a `.fpvsconfig`
 setup handoff; it does not merge into the current project and does not copy original
@@ -314,7 +325,7 @@ preprocessing services but must not silently mutate the active project.
   `src/fpvs_studio/gui/condition_template_manager_dialog.py`.
 - The condition-template profile editor lives in
   `src/fpvs_studio/gui/condition_template_profile_editor_dialog.py`.
-- First-run and Settings root-folder onboarding lives in
+- First-run, Welcome, and Settings root-folder onboarding lives in
   `src/fpvs_studio/gui/root_folder_setup_dialog.py`; the controller owns folder
   selection and settings persistence.
 - App-level Settings preferences, including run export mode, live in

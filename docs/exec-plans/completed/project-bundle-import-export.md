@@ -1,6 +1,6 @@
 # FPVS Project Bundle Import/Export
 
-Status: Active
+Status: Completed
 
 ## User Workflow
 
@@ -31,8 +31,13 @@ makes same-machine export/import testing produce an intentionally distinct proje
 - Use GUI actions only as orchestration around the core bundle service.
 - Stage imports under the FPVS Studio root and delete staging paths after success or
   failure.
+- Bound archive member count, manifest size, per-file size, total uncompressed size,
+  and suspicious compression ratios before extracting payloads.
 - Use Qt primary-screen metadata for quick display detection in the import confirmation
-  dialog; keep PsychoPy imports behind the engine boundary.
+  dialog, map measurements to core-approved refresh targets, and keep PsychoPy imports
+  behind the engine boundary.
+- Require one of the explicit imported/local display actions before opening the project,
+  and keep active Welcome import progress visible until the worker finishes.
 - Keep file selection and destination paths user-visible without persisting new absolute
   paths into project data.
 - Keep the existing stage-only progress callbacks for this polish pass; determinate file
@@ -49,7 +54,7 @@ makes same-machine export/import testing produce an intentionally distinct proje
 ## Verification
 
 - Unit tests for export validation, archive contents, checksums, import staging cleanup,
-  project-id collisions, and path traversal rejection.
+  project-id collisions, path traversal rejection, and archive resource limits.
 - GUI smoke tests for save/open dialogs, Cancel behavior, export action, and import
   action opening the imported project.
 - GUI smoke tests for import review choices, Welcome progress visibility, explicit

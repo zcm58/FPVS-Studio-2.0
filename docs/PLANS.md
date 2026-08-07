@@ -13,7 +13,7 @@ Use this page to find planning material before making feature-sized changes.
 
 Current implementation:
 
-- `exec-plans/active/project-bundle-import-export.md`
+- No active execution plans.
 
 Concrete planned work:
 

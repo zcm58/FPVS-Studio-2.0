@@ -56,6 +56,13 @@ BUNDLE_MANIFEST_FILENAME = "fpvs_bundle.json"
 IMPORT_STAGING_DIRNAME = "import-staging"
 _BUNDLE_FILENAME_RE = re.compile(r"[^a-z0-9]+")
 _DEFAULT_VALIDATION_REFRESH_HZ = 60.0
+MAX_BUNDLE_PAYLOAD_FILES = 50_000
+MAX_BUNDLE_ARCHIVE_MEMBERS = MAX_BUNDLE_PAYLOAD_FILES + 256
+MAX_BUNDLE_MANIFEST_BYTES = 16 * 1024 * 1024
+MAX_BUNDLE_FILE_BYTES = 4 * 1024 * 1024 * 1024
+MAX_BUNDLE_TOTAL_UNCOMPRESSED_BYTES = 20 * 1024 * 1024 * 1024
+MAX_BUNDLE_COMPRESSION_RATIO = 200.0
+MIN_BUNDLE_COMPRESSION_CHECK_BYTES = 1024 * 1024
 
 BundleExportStage = Literal["validate", "stimuli", "write", "complete"]
 BundleExportProgressCallback = Callable[[BundleExportStage], None]
@@ -247,15 +254,14 @@ def read_project_bundle_manifest(bundle_path: Path) -> ProjectBundleManifest:
 
     try:
         with zipfile.ZipFile(bundle_path, mode="r") as archive:
-            raw_payload = archive.read(BUNDLE_MANIFEST_FILENAME)
-    except KeyError as exc:
-        raise ProjectBundleError("Project bundle is missing fpvs_bundle.json.") from exc
-    except (OSError, zipfile.BadZipFile) as exc:
+            _validate_archive_member_count(archive)
+            bundle_manifest = _read_bundle_manifest_from_archive(archive)
+            _validate_bundle_resource_limits(archive, bundle_manifest)
+            return bundle_manifest
+    except ProjectBundleError:
+        raise
+    except (OSError, zipfile.BadZipFile, RuntimeError, NotImplementedError) as exc:
         raise ProjectBundleError(f"Unable to read project bundle: {bundle_path}") from exc
-    try:
-        return ProjectBundleManifest.model_validate_json(raw_payload)
-    except ValidationError as exc:
-        raise ProjectBundleError(f"Project bundle manifest failed validation: {exc}") from exc
 
 
 def import_project_bundle(
@@ -375,6 +381,7 @@ def _extract_bundle_to_staging(
                     "Project bundle contents do not match fpvs_bundle.json"
                     + (f" ({'; '.join(details)})" if details else ".")
                 )
+            _validate_bundle_resource_limits(archive, bundle_manifest)
             for record in bundle_manifest.files:
                 _extract_verified_record(archive, record, staged_project_root)
             return bundle_manifest
@@ -387,10 +394,25 @@ def _extract_bundle_to_staging(
 def _read_bundle_manifest_from_archive(
     archive: zipfile.ZipFile,
 ) -> ProjectBundleManifest:
+    matching_infos = [
+        info
+        for info in archive.infolist()
+        if info.filename == BUNDLE_MANIFEST_FILENAME and not info.is_dir()
+    ]
+    if not matching_infos:
+        raise ProjectBundleError("Project bundle is missing fpvs_bundle.json.")
+    if len(matching_infos) != 1:
+        raise ProjectBundleError("Project bundle contains duplicate fpvs_bundle.json files.")
+    manifest_info = matching_infos[0]
+    _validate_archive_entry_resource_limits(
+        manifest_info,
+        label=BUNDLE_MANIFEST_FILENAME,
+        maximum_size=MAX_BUNDLE_MANIFEST_BYTES,
+    )
     try:
-        raw_payload = archive.read(BUNDLE_MANIFEST_FILENAME)
-    except KeyError as exc:
-        raise ProjectBundleError("Project bundle is missing fpvs_bundle.json.") from exc
+        raw_payload = archive.read(manifest_info)
+    except (OSError, RuntimeError, NotImplementedError, zipfile.BadZipFile) as exc:
+        raise ProjectBundleError("Unable to read fpvs_bundle.json.") from exc
     try:
         return ProjectBundleManifest.model_validate_json(raw_payload)
     except ValidationError as exc:
@@ -398,6 +420,7 @@ def _read_bundle_manifest_from_archive(
 
 
 def _validated_archive_file_paths(archive: zipfile.ZipFile) -> set[str]:
+    _validate_archive_member_count(archive)
     paths: set[str] = set()
     for info in archive.infolist():
         normalized = _validate_archive_member_name(info.filename)
@@ -407,6 +430,94 @@ def _validated_archive_file_paths(archive: zipfile.ZipFile) -> set[str]:
             raise ProjectBundleError(f"Project bundle contains duplicate file: {normalized}")
         paths.add(normalized)
     return paths
+
+
+def _validate_archive_member_count(archive: zipfile.ZipFile) -> None:
+    member_count = len(archive.infolist())
+    if member_count > MAX_BUNDLE_ARCHIVE_MEMBERS:
+        raise ProjectBundleError(
+            "Project bundle contains too many archive members "
+            f"({member_count:,}; limit {MAX_BUNDLE_ARCHIVE_MEMBERS:,})."
+        )
+
+
+def _validate_bundle_resource_limits(
+    archive: zipfile.ZipFile,
+    bundle_manifest: ProjectBundleManifest,
+) -> None:
+    _validate_bundle_manifest_resource_limits(bundle_manifest)
+    for record in bundle_manifest.files:
+        try:
+            info = archive.getinfo(record.path)
+        except KeyError as exc:
+            raise ProjectBundleError(
+                f"Project bundle is missing payload file: {record.path}"
+            ) from exc
+        if info.file_size != record.size_bytes:
+            raise ProjectBundleError(f"Project bundle file size mismatch: {record.path}")
+        _validate_archive_entry_resource_limits(
+            info,
+            label=record.path,
+            maximum_size=MAX_BUNDLE_FILE_BYTES,
+        )
+
+
+def _validate_bundle_manifest_resource_limits(
+    bundle_manifest: ProjectBundleManifest,
+) -> None:
+    records = bundle_manifest.files
+    if len(records) > MAX_BUNDLE_PAYLOAD_FILES:
+        raise ProjectBundleError(
+            "Project bundle contains too many payload files "
+            f"({len(records):,}; limit {MAX_BUNDLE_PAYLOAD_FILES:,})."
+        )
+
+    record_paths = [record.path for record in records]
+    if len(record_paths) != len(set(record_paths)):
+        raise ProjectBundleError("Project bundle manifest contains duplicate payload paths.")
+    if BUNDLE_MANIFEST_FILENAME in record_paths:
+        raise ProjectBundleError(
+            "Project bundle manifest may not list fpvs_bundle.json as a payload file."
+        )
+
+    total_size = 0
+    for record in records:
+        if record.size_bytes > MAX_BUNDLE_FILE_BYTES:
+            raise ProjectBundleError(
+                "Project bundle file exceeds the "
+                f"{MAX_BUNDLE_FILE_BYTES:,}-byte limit: {record.path}"
+            )
+        total_size += record.size_bytes
+        if total_size > MAX_BUNDLE_TOTAL_UNCOMPRESSED_BYTES:
+            raise ProjectBundleError(
+                "Project bundle expands beyond the total uncompressed-size limit "
+                f"of {MAX_BUNDLE_TOTAL_UNCOMPRESSED_BYTES:,} bytes."
+            )
+
+
+def _validate_archive_entry_resource_limits(
+    info: zipfile.ZipInfo,
+    *,
+    label: str,
+    maximum_size: int,
+) -> None:
+    if info.file_size > maximum_size:
+        raise ProjectBundleError(
+            f"Project bundle file exceeds the {maximum_size:,}-byte limit: {label}"
+        )
+    if info.file_size < MIN_BUNDLE_COMPRESSION_CHECK_BYTES:
+        return
+    if info.compress_size <= 0:
+        raise ProjectBundleError(
+            f"Project bundle file has an unsafe compression ratio: {label}"
+        )
+    compression_ratio = info.file_size / info.compress_size
+    if compression_ratio > MAX_BUNDLE_COMPRESSION_RATIO:
+        raise ProjectBundleError(
+            "Project bundle file has an unsafe compression ratio "
+            f"({compression_ratio:.1f}:1; limit {MAX_BUNDLE_COMPRESSION_RATIO:.1f}:1): "
+            f"{label}"
+        )
 
 
 def _validate_archive_member_name(name: str) -> str:
@@ -441,6 +552,8 @@ def _extract_verified_record(
     with archive.open(record.path, mode="r") as source, destination_path.open("wb") as target:
         for chunk in iter(lambda: source.read(65536), b""):
             size += len(chunk)
+            if size > record.size_bytes or size > MAX_BUNDLE_FILE_BYTES:
+                raise ProjectBundleError(f"Project bundle file size mismatch: {record.path}")
             digest.update(chunk)
             target.write(chunk)
     if size != record.size_bytes:
@@ -584,22 +697,33 @@ def _write_bundle_archive(
     *,
     payload_overrides: dict[str, bytes],
 ) -> None:
+    _validate_bundle_manifest_resource_limits(bundle_manifest)
+    manifest_payload = bundle_manifest.model_dump_json(
+        indent=2,
+        exclude_none=True,
+    ).encode("utf-8")
+    if len(manifest_payload) > MAX_BUNDLE_MANIFEST_BYTES:
+        raise ProjectBundleError(
+            "Project bundle file exceeds the "
+            f"{MAX_BUNDLE_MANIFEST_BYTES:,}-byte limit: {BUNDLE_MANIFEST_FILENAME}"
+        )
     bundle_path.parent.mkdir(parents=True, exist_ok=True)
     temp_path = bundle_path.with_name(f".{bundle_path.name}.tmp")
     if temp_path.exists():
         temp_path.unlink()
     try:
         with zipfile.ZipFile(temp_path, mode="w", compression=zipfile.ZIP_DEFLATED) as archive:
-            archive.writestr(
-                BUNDLE_MANIFEST_FILENAME,
-                bundle_manifest.model_dump_json(indent=2, exclude_none=True),
-            )
+            archive.writestr(BUNDLE_MANIFEST_FILENAME, manifest_payload)
             for record in bundle_manifest.files:
                 payload_override = payload_overrides.get(record.path)
                 if payload_override is None:
                     archive.write(project_root / Path(record.path), arcname=record.path)
                 else:
                     archive.writestr(record.path, payload_override)
+        with zipfile.ZipFile(temp_path, mode="r") as archive:
+            _validate_archive_member_count(archive)
+            written_manifest = _read_bundle_manifest_from_archive(archive)
+            _validate_bundle_resource_limits(archive, written_manifest)
         temp_path.replace(bundle_path)
     except Exception:
         if temp_path.exists():

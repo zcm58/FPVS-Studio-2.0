@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
 )
 
 from fpvs_studio.core.models import DisplaySettings
+from fpvs_studio.core.validation import nearest_approved_monitor_refresh_rate
 from fpvs_studio.gui.components import (
     StatusBadgeLabel,
     apply_studio_theme,
@@ -278,9 +279,21 @@ class ImportDisplaySettingsDialog(QDialog):
         """Fill available fields from Qt's primary screen metadata."""
 
         detected = detect_primary_display_settings()
+        refresh_supported = True
         if detected.refresh_hz is not None:
-            self.refresh_hz_spin.setValue(detected.refresh_hz)
-            self.detected_refresh_label.setText(f"{detected.refresh_hz:.2f} Hz")
+            approved_refresh_hz = nearest_approved_monitor_refresh_rate(
+                detected.refresh_hz
+            )
+            if approved_refresh_hz is None:
+                refresh_supported = False
+                self.detected_refresh_label.setText(
+                    f"{detected.refresh_hz:.2f} Hz (not an approved FPVS rate)"
+                )
+            else:
+                self.refresh_hz_spin.setValue(approved_refresh_hz)
+                self.detected_refresh_label.setText(
+                    f"{detected.refresh_hz:.2f} Hz (use {approved_refresh_hz:g} Hz)"
+                )
         else:
             self.detected_refresh_label.setText("Unavailable")
         if detected.screen_width_cm is not None:
@@ -298,7 +311,10 @@ class ImportDisplaySettingsDialog(QDialog):
             )
         else:
             self.detected_resolution_label.setText("Unavailable")
-        self.detected_badge.set_state("ready", "Detected")
+        if refresh_supported:
+            self.detected_badge.set_state("ready", "Detected")
+        else:
+            self.detected_badge.set_state("warning", "Review refresh")
 
 
 def detect_primary_display_settings() -> DetectedDisplaySettings:
