@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import random
 import re
+from collections.abc import Iterable
 from datetime import datetime, timezone
 from pathlib import PurePosixPath
 from typing import Literal
@@ -48,6 +49,7 @@ SUPPORTED_VARIANTS = [
 ]
 MAX_WORD_STIMULUS_CHARS = 64
 RESERVED_RESPONSE_KEYS = frozenset({"escape"})
+_MANUAL_REMOVED_ELECTRODE_SPLIT_RE = re.compile(r"[,;\r\n]+")
 
 _BIDI_CONTROL_CODEPOINTS = {
     ord("\u061c"): None,  # Arabic Letter Mark
@@ -129,6 +131,23 @@ def strip_bidi_controls(value: str) -> str:
     """Remove invisible bidirectional control characters from persisted text."""
 
     return value.translate(_BIDI_CONTROL_CODEPOINTS)
+
+
+def normalize_manual_removed_electrodes(value: str | Iterable[str]) -> list[str]:
+    """Return stable uppercase electrode labels from launch-time administrator input."""
+
+    raw_values = [value] if isinstance(value, str) else value
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for raw_value in raw_values:
+        if not isinstance(raw_value, str):
+            raise ValueError("Manually removed electrode labels must be text values.")
+        for candidate in _MANUAL_REMOVED_ELECTRODE_SPLIT_RE.split(raw_value):
+            label = strip_bidi_controls(candidate).strip().upper()
+            if label and label not in seen:
+                normalized.append(label)
+                seen.add(label)
+    return normalized
 
 
 class FPVSBaseModel(BaseModel):
@@ -528,6 +547,38 @@ class ProjectFile(FPVSBaseModel):
     settings: ProjectSettings = Field(default_factory=ProjectSettings)
     stimulus_sets: list[StimulusSet] = Field(default_factory=list)
     conditions: list[Condition] = Field(default_factory=list)
+    manual_removed_electrodes: dict[str, list[str]] = Field(default_factory=dict)
+
+    @field_validator("manual_removed_electrodes", mode="before")
+    @classmethod
+    def normalize_manual_removed_electrode_map(
+        cls,
+        value: object,
+    ) -> dict[str, list[str]]:
+        if value is None:
+            return {}
+        if not isinstance(value, dict):
+            raise ValueError("manual_removed_electrodes must be a participant map.")
+
+        normalized: dict[str, list[str]] = {}
+        for participant_number, electrodes in value.items():
+            if not isinstance(participant_number, str):
+                raise ValueError("Manual electrode participant numbers must be text values.")
+            participant_number = participant_number.strip()
+            if not participant_number or not participant_number.isdigit():
+                raise ValueError(
+                    "Manual electrode participant numbers must contain digits only."
+                )
+            if participant_number in normalized:
+                raise ValueError(
+                    "Manual electrode participant numbers must be unique after trimming."
+                )
+            if not isinstance(electrodes, (str, list, tuple)):
+                raise ValueError(
+                    "Manual electrode entries must be text or a list of text values."
+                )
+            normalized[participant_number] = normalize_manual_removed_electrodes(electrodes)
+        return normalized
 
     @model_validator(mode="after")
     def validate_unique_ids(self) -> ProjectFile:

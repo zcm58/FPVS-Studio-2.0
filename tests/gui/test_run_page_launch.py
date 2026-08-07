@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 from tests.gui.helpers import (
+    _assert_visible_children_within_parent,
     _ImmediateProgressTask,
     _list_widget_text,
     _open_created_project,
@@ -33,7 +34,54 @@ from fpvs_studio.gui.controller import StudioController
 from fpvs_studio.gui.run_page import (
     BioSemiRecordingConfirmationDialog,
     ParticipantLaunchDetails,
+    ParticipantNumberDialog,
 )
+
+
+def test_participant_dialog_collects_and_prefills_manual_removed_electrodes(
+    qtbot,
+) -> None:
+    dialog = ParticipantNumberDialog(
+        manual_removed_electrodes={"0007": ["FT7", "P9"]}
+    )
+    qtbot.addWidget(dialog)
+    dialog.show()
+    qtbot.waitUntil(dialog.isVisible)
+
+    participant_number_edit = dialog.findChild(QLineEdit, "participant_number_edit")
+    manual_removed_edit = dialog.findChild(
+        QLineEdit,
+        "participant_manual_removed_electrodes_edit",
+    )
+    assert participant_number_edit is not None
+    assert manual_removed_edit is not None
+    assert dialog.minimumSize().width() == 600
+    assert dialog.minimumSize().height() == 330
+    assert manual_removed_edit.placeholderText() == (
+        "Input manually removed electrodes (optional)"
+    )
+    assert manual_removed_edit.fontMetrics().horizontalAdvance(
+        manual_removed_edit.placeholderText()
+    ) <= manual_removed_edit.contentsRect().width() - 16
+
+    participant_number_edit.setText("0007")
+    assert manual_removed_edit.text() == "FT7, P9"
+
+    participant_number_edit.setText(" 0007 ")
+    manual_removed_edit.setText(" ft7, P9; Oz\nFT7 ")
+    assert dialog.manual_removed_electrodes == ("FT7", "P9", "OZ")
+    _assert_visible_children_within_parent(dialog)
+
+    dialog.age_edit.setText("30")
+    dialog.sex_combo.setCurrentIndex(dialog.sex_combo.findData("Female"))
+    dialog.handedness_combo.setCurrentIndex(
+        dialog.handedness_combo.findData("Right handed")
+    )
+    dialog.colorblind_combo.setCurrentIndex(dialog.colorblind_combo.findData(False))
+    dialog.accept()
+
+    assert dialog.participant_number == "0007"
+    assert dialog.manual_removed_electrodes == ("FT7", "P9", "OZ")
 
 
 def test_background_color_control_is_run_tab_presets_only(
@@ -288,6 +336,7 @@ def test_run_page_biosemi_confirmation_cancel_blocks_runtime_launch(
                 handedness="Right handed",
                 colorblind=True,
             ),
+            manual_removed_electrodes=(" ft7 ", "P9", "FT7"),
         ),
     )
     monkeypatch.setattr(window.run_page, "_confirm_biosemi_recording_started", lambda: False)
@@ -301,6 +350,27 @@ def test_run_page_biosemi_confirmation_cancel_blocks_runtime_launch(
 
     assert window.run_page._active_launch_task is None
     assert "status: launch checks queued" in window.run_page.summary_text.toPlainText().lower()
+    assert load_project_file(
+        window.document.project_file_path
+    ).manual_removed_electrodes == {"7": ["FT7", "P9"]}
+
+
+def test_run_page_participant_prompt_cancel_does_not_add_electrode_entry(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Participant Cancel")
+    _prepare_compile_ready_project(window, tmp_path / "participant-cancel")
+    monkeypatch.setattr(window.run_page, "_prompt_participant_number", lambda: None)
+
+    window.run_page.launch_session()
+
+    assert window.run_page._active_launch_task is None
+    assert load_project_file(
+        window.document.project_file_path
+    ).manual_removed_electrodes == {}
 
 
 def test_run_page_compact_export_completion_points_to_logs(

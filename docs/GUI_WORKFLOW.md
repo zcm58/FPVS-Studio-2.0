@@ -203,17 +203,27 @@ Participant summary files are refreshed after launch and before manual group-sum
 export, not as a blocking project-open prerequisite.
 Launching an experiment opens a modal participant-information prompt. By default every
 project collects Participant Number, Age, Sex, Handedness, and colorblind status before
-runtime starts.
+runtime starts. The same dialog includes the optional
+`Input manually removed electrodes (optional)` text box for electrodes physically
+removed or unplugged before recording. Comma-, semicolon-, or line-separated entries
+are normalized to stable uppercase labels and saved under that participant number in
+the project's top-level `manual_removed_electrodes` map in `project.json`; an empty list
+records that the administrator reviewed the field and reported none removed. Returning
+participants prefill the saved list for review and correction.
 Participant Number remains the output-folder identity and duplicate-history lookup key;
 Sex is limited to `Female` or `Male`, and Handedness is limited to `Right handed`,
 `Left handed`, or `Ambidextrous`; colorblind status is a required `Yes` or `No`
 selection. When colorblind status is `Yes`, runtime uses the accessible fixation preset
 of white `#FFFFFF` to vermillion `#D55E00` for the participant tutorial and condition
-playback without changing the authored project colors. The additional fields are written
-as runtime participant metadata for the launched session. Launch compiles the session
-and runs routine preflight checks after participant details are collected, so the prompt
-appears before any project image-set scan. When the app-level Sophia Mode setting is
-enabled, launch then shows a blocking NERD Lab administrator check that
+playback without changing the authored project colors. The age, sex, handedness, and
+colorblind fields are written as runtime participant metadata for the launched session.
+The manually removed electrode list remains editable project metadata and does not alter
+`RunSpec`, `SessionPlan`, or playback behavior. Accepting the participant dialog persists
+its participant entry before compilation and before the Sophia Mode gate. Launch then
+compiles the session and runs routine preflight checks after participant details are
+collected, so the prompt appears before any project image-set scan. When the app-level
+Sophia Mode setting is enabled, launch then shows a blocking NERD Lab administrator
+check that
 requires typing `Confirm` before the runtime task starts; cancelling that check returns
 to FPVS Studio without starting the experiment.
 

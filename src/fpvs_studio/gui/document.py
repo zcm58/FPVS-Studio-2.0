@@ -14,6 +14,7 @@ from fpvs_studio.core.models import (
     ConditionTemplateProfile,
     ProjectFile,
     ProjectValidationReport,
+    normalize_manual_removed_electrodes,
     utc_now,
 )
 from fpvs_studio.core.paths import (
@@ -224,6 +225,23 @@ class ProjectDocument(
 
         meta = _validated_copy(self._project.meta, description=description)
         self._apply_project_update(meta=meta)
+
+    def update_manual_removed_electrodes(
+        self,
+        participant_number: str,
+        electrodes: str | list[str] | tuple[str, ...],
+    ) -> None:
+        """Update the participant-specific manually removed electrode list."""
+
+        participant_number = participant_number.strip()
+        if not participant_number or not participant_number.isdigit():
+            raise DocumentError("Participant number must contain digits only.")
+        entries = {
+            key: list(value)
+            for key, value in self._project.manual_removed_electrodes.items()
+        }
+        entries[participant_number] = normalize_manual_removed_electrodes(electrodes)
+        self._apply_project_update(manual_removed_electrodes=entries)
 
     def update_display_settings(self, **updates: object) -> None:
         """Update project display settings through Pydantic validation."""

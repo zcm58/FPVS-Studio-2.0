@@ -6,11 +6,28 @@ import pytest
 
 from fpvs_studio.core.enums import StimulusModality, StimulusVariant
 from fpvs_studio.core.models import ProjectFile
+from fpvs_studio.core.serialization import load_project_file
 from fpvs_studio.gui.document import DocumentError, ProjectDocument
 
 
 def _document_for_project(tmp_path, project: ProjectFile) -> ProjectDocument:
     return ProjectDocument(project_root=tmp_path, project=project.model_copy(deep=True))
+
+
+def test_manual_removed_electrodes_update_saves_participant_map(
+    tmp_path,
+    sample_project: ProjectFile,
+) -> None:
+    document = _document_for_project(tmp_path, sample_project)
+
+    document.update_manual_removed_electrodes("0007", " ft7, P9; FT7 ")
+    document.update_manual_removed_electrodes("0008", "")
+    document.save()
+
+    assert load_project_file(document.project_file_path).manual_removed_electrodes == {
+        "0007": ["FT7", "P9"],
+        "0008": [],
+    }
 
 
 def test_create_control_condition_reuses_stimulus_sets_and_sets_variant(

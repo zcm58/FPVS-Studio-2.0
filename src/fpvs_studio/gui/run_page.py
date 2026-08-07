@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 
 from PySide6.QtCore import Qt
@@ -28,6 +28,7 @@ from PySide6.QtWidgets import (
 )
 
 from fpvs_studio.core.execution import PARTICIPANT_SEX_VALUES, ParticipantMetadata
+from fpvs_studio.core.models import normalize_manual_removed_electrodes
 from fpvs_studio.core.session_plan import SessionPlan
 from fpvs_studio.gui import folder_actions
 from fpvs_studio.gui.components import (
@@ -74,6 +75,7 @@ class ParticipantLaunchDetails:
 
     participant_number: str
     participant_metadata: ParticipantMetadata | None = None
+    manual_removed_electrodes: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -87,11 +89,21 @@ class LaunchTaskResult:
 class ParticipantNumberDialog(QDialog):
     """Collect the required launch-time participant details."""
 
-    def __init__(self, parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        parent: QWidget | None = None,
+        *,
+        manual_removed_electrodes: Mapping[str, Sequence[str]] | None = None,
+    ) -> None:
         super().__init__(parent)
+        self._saved_manual_removed_electrodes = {
+            key: tuple(value)
+            for key, value in (manual_removed_electrodes or {}).items()
+        }
         self.setWindowTitle("Participant Information")
         self.setModal(True)
-        self.resize(460, 280)
+        self.setMinimumSize(600, 330)
+        self.resize(600, 330)
 
         self.prompt_label = QLabel("Please enter the participant details.", self)
         self.prompt_label.setObjectName("participant_number_prompt_label")
@@ -126,12 +138,32 @@ class ParticipantNumberDialog(QDialog):
         self.colorblind_combo.addItem("No", False)
         self.colorblind_combo.addItem("Yes", True)
 
+        self.manual_removed_electrodes_edit = QLineEdit(self)
+        self.manual_removed_electrodes_edit.setObjectName(
+            "participant_manual_removed_electrodes_edit"
+        )
+        self.manual_removed_electrodes_edit.setPlaceholderText(
+            "Input manually removed electrodes (optional)"
+        )
+        self.manual_removed_electrodes_edit.setToolTip(
+            "Enter electrodes physically removed or unplugged before recording. "
+            "Separate labels with commas (for example, FT7, P9, Oz)."
+        )
+        self.manual_removed_electrodes_edit.setClearButtonEnabled(True)
+        self.manual_removed_electrodes_edit.setLayoutDirection(
+            Qt.LayoutDirection.LeftToRight
+        )
+
         form_layout = QFormLayout()
         form_layout.addRow("Participant Number", self.participant_number_edit)
         form_layout.addRow("Age", self.age_edit)
         form_layout.addRow("Sex", self.sex_combo)
         form_layout.addRow("Handedness", self.handedness_combo)
         form_layout.addRow("Are you colorblind?", self.colorblind_combo)
+        form_layout.addRow(
+            "Manually Removed Electrodes",
+            self.manual_removed_electrodes_edit,
+        )
 
         self.button_box = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel,
@@ -145,6 +177,10 @@ class ParticipantNumberDialog(QDialog):
         layout.addWidget(self.prompt_label)
         layout.addLayout(form_layout)
         layout.addWidget(self.button_box)
+
+        self.participant_number_edit.textChanged.connect(
+            self._prefill_manual_removed_electrodes
+        )
 
     @property
     def participant_number(self) -> str:
@@ -164,13 +200,28 @@ class ParticipantNumberDialog(QDialog):
         )
 
     @property
+    def manual_removed_electrodes(self) -> tuple[str, ...]:
+        """Return normalized manually removed electrode labels."""
+
+        return tuple(
+            normalize_manual_removed_electrodes(
+                self.manual_removed_electrodes_edit.text()
+            )
+        )
+
+    @property
     def participant_details(self) -> ParticipantLaunchDetails:
         """Return the full participant details captured by the dialog."""
 
         return ParticipantLaunchDetails(
             participant_number=self.participant_number,
             participant_metadata=self.participant_metadata,
+            manual_removed_electrodes=self.manual_removed_electrodes,
         )
+
+    def _prefill_manual_removed_electrodes(self, participant_number: str) -> None:
+        saved = self._saved_manual_removed_electrodes.get(participant_number.strip(), ())
+        self.manual_removed_electrodes_edit.setText(", ".join(saved))
 
     def accept(self) -> None:
         participant_number = self.participant_number
@@ -233,7 +284,11 @@ class ParticipantNumberDialog(QDialog):
             )
             self.colorblind_combo.setFocus()
             return
-        self.participant_number_edit.setText(participant_number)
+        signals_were_blocked = self.participant_number_edit.blockSignals(True)
+        try:
+            self.participant_number_edit.setText(participant_number)
+        finally:
+            self.participant_number_edit.blockSignals(signals_were_blocked)
         self.age_edit.setText(age_text)
         super().accept()
 
@@ -548,6 +603,15 @@ class RunPage(QWidget):
             return
         participant_number = participant_details.participant_number
         try:
+            self._document.update_manual_removed_electrodes(
+                participant_number,
+                participant_details.manual_removed_electrodes,
+            )
+            self._document.save()
+        except Exception as error:
+            _show_runtime_error_dialog(self, "Launch Blocked", error)
+            return
+        try:
             session_plan = self._document.compile_session(refresh_hz=refresh_hz)
         except Exception as error:
             _show_runtime_error_dialog(self, "Launch Blocked", error)
@@ -694,7 +758,10 @@ class RunPage(QWidget):
         )
 
     def _prompt_participant_number(self) -> str | ParticipantLaunchDetails | None:
-        dialog = ParticipantNumberDialog(self)
+        dialog = ParticipantNumberDialog(
+            self,
+            manual_removed_electrodes=self._document.project.manual_removed_electrodes,
+        )
         if dialog.exec() != int(QDialog.DialogCode.Accepted):
             return None
         return dialog.participant_details

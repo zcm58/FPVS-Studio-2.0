@@ -21,6 +21,7 @@ from fpvs_studio.core.models import (
     SessionSettings,
     StimulusSet,
     TriggerSettings,
+    normalize_manual_removed_electrodes,
 )
 from fpvs_studio.core.run_spec import FixationStyleSpec
 from fpvs_studio.core.serialization import load_project_file, save_project_file
@@ -35,6 +36,45 @@ def test_project_model_round_trip(tmp_path, sample_project) -> None:
 
     assert loaded == sample_project
     assert loaded.schema_version.value == "1.0.0"
+
+
+def test_manual_removed_electrodes_normalize_and_round_trip(
+    tmp_path,
+    sample_project,
+) -> None:
+    payload = sample_project.model_dump(mode="python")
+    payload["manual_removed_electrodes"] = {
+        "0007": " ft7, P9; oz\nFT7 ",
+        "0008": [],
+    }
+    project = ProjectFile.model_validate(payload)
+    project_path = tmp_path / "project.json"
+
+    save_project_file(project, project_path)
+    loaded = load_project_file(project_path)
+
+    assert loaded.manual_removed_electrodes == {
+        "0007": ["FT7", "P9", "OZ"],
+        "0008": [],
+    }
+    assert '"manual_removed_electrodes"' in project_path.read_text(encoding="utf-8")
+
+
+def test_manual_removed_electrodes_default_for_existing_project_payload(
+    sample_project,
+) -> None:
+    payload = sample_project.model_dump(mode="python")
+    payload.pop("manual_removed_electrodes", None)
+
+    loaded = ProjectFile.model_validate(payload)
+
+    assert loaded.manual_removed_electrodes == {}
+
+
+def test_manual_removed_electrode_parser_preserves_unknown_labels() -> None:
+    assert normalize_manual_removed_electrodes(
+        " ft7, custom-ref; Oz\nCUSTOM-REF "
+    ) == ["FT7", "CUSTOM-REF", "OZ"]
 
 
 def test_condition_instructions_strip_bidi_control_characters() -> None:

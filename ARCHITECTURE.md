@@ -58,6 +58,8 @@ ProjectFile
   runtime preflight repeats it once per session without changing compiled schedules.
 - Runtime owns machine launch options, session transitions, participant flow, fixation
   scoring, trigger I/O coordination, and result assembly.
+- `ProjectFile` owns the per-participant `manual_removed_electrodes` authoring map saved
+  from the launch dialog; it remains outside compiled and runtime playback contracts.
 - Engines render compiled events and participant-facing screens; they do not own
   compilation, session decisions, project persistence, or exports.
 - Full export mode writes detailed artifacts under `runs/`. Compact mode keeps
