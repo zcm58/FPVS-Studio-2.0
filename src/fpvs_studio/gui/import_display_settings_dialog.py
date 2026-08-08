@@ -47,7 +47,7 @@ class ImportDisplaySettingsDialog(QDialog):
         self.setObjectName("import_display_settings_dialog")
         self.setWindowTitle("Match Project Display — FPVS Studio")
         self.setModal(True)
-        self.setMinimumSize(720, 590)
+        self.setMinimumSize(720, 640)
         self.resize(780, 660)
         self._apply_updates = False
 
@@ -101,6 +101,7 @@ class ImportDisplaySettingsDialog(QDialog):
             ("Screen width", f"{display.screen_width_cm:.2f} cm"),
         )
         self.detected_refresh_label = QLabel("—", comparison_card)
+        self.detected_refresh_label.setWordWrap(True)
         self.detected_resolution_label = QLabel("—", comparison_card)
         self.detected_width_label = QLabel("—", comparison_card)
         detected_labels = (

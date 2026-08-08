@@ -102,8 +102,8 @@ class ParticipantNumberDialog(QDialog):
         }
         self.setWindowTitle("Participant Information")
         self.setModal(True)
-        self.setMinimumSize(600, 330)
-        self.resize(600, 330)
+        self.setMinimumSize(600, 360)
+        self.resize(600, 360)
 
         self.prompt_label = QLabel("Please enter the participant details.", self)
         self.prompt_label.setObjectName("participant_number_prompt_label")
@@ -145,6 +145,12 @@ class ParticipantNumberDialog(QDialog):
         self.manual_removed_electrodes_edit.setPlaceholderText(
             "Input manually removed electrodes (optional)"
         )
+        placeholder_width = (
+            self.manual_removed_electrodes_edit.fontMetrics().horizontalAdvance(
+                self.manual_removed_electrodes_edit.placeholderText()
+            )
+        )
+        self.manual_removed_electrodes_edit.setMinimumWidth(placeholder_width + 32)
         self.manual_removed_electrodes_edit.setToolTip(
             "Enter electrodes physically removed or unplugged before recording. "
             "Separate labels with commas (for example, FT7, P9, Oz)."
@@ -160,10 +166,18 @@ class ParticipantNumberDialog(QDialog):
         form_layout.addRow("Sex", self.sex_combo)
         form_layout.addRow("Handedness", self.handedness_combo)
         form_layout.addRow("Are you colorblind?", self.colorblind_combo)
-        form_layout.addRow(
+        self.manual_removed_electrodes_label = QLabel(
             "Manually Removed Electrodes",
-            self.manual_removed_electrodes_edit,
+            self,
         )
+        self.manual_removed_electrodes_label.setObjectName(
+            "participant_manual_removed_electrodes_label"
+        )
+        self.manual_removed_electrodes_label.setBuddy(
+            self.manual_removed_electrodes_edit
+        )
+        form_layout.addRow(self.manual_removed_electrodes_label)
+        form_layout.addRow(self.manual_removed_electrodes_edit)
 
         self.button_box = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel,

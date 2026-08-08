@@ -622,8 +622,13 @@ def test_setup_wizard_conditions_step_keeps_source_geometry_for_incomplete_condi
     assert step.instructions_edit.size() == before_geometry["instructions"]
     assert step.instructions_edit.height() == 80
     assert step.repeat_calculator_button.text() == "i"
-    assert step.repeat_calculator_button.size().width() == 30
-    assert step.repeat_calculator_button.size().height() == 30
+    assert step.repeat_calculator_button.minimumSize().width() == 30
+    assert step.repeat_calculator_button.minimumSize().height() == 30
+    assert step.repeat_calculator_button.maximumSize().width() == 30
+    assert step.repeat_calculator_button.maximumSize().height() == 30
+    assert abs(
+        step.repeat_calculator_button.width() - step.repeat_calculator_button.height()
+    ) <= 2
     assert step.repeat_calculator_button.accessibleName() == "Target repeat information"
     assert step.repeat_calculator_button.toolTip() == "Show target repeat calculations"
     standard_field_width = step.timing_template_combo.width()

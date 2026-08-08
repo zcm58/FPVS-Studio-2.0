@@ -18,6 +18,7 @@ from fpvs_studio.runtime.launcher import (
     launch_session,
 )
 from fpvs_studio.runtime.preflight import PreflightError
+from fpvs_studio.runtime.windows_display import WindowsDisplayMode
 
 
 def test_launch_settings_default_to_strict_timing_fail_fast() -> None:
@@ -71,10 +72,15 @@ def test_launch_session_preflight_rejects_windowed_mode_when_strict_timing_enabl
 
 
 def test_launch_session_allows_windowed_mode_when_strict_timing_disabled(
+    monkeypatch: pytest.MonkeyPatch,
     sample_project,
     sample_project_root,
 ) -> None:
     captures: dict[str, object] = {}
+    monkeypatch.setattr(
+        "fpvs_studio.runtime.display_refresh.query_primary_windows_display_mode",
+        lambda: WindowsDisplayMode(r"\\.\DISPLAY1", 60, 1),
+    )
     register_engine("stub-windowed-allowed", lambda: StubEngine(captures))
     try:
         session_plan = compile_session_plan(
@@ -98,6 +104,7 @@ def test_launch_session_allows_windowed_mode_when_strict_timing_disabled(
         unregister_engine("stub-windowed-allowed")
 
     assert summary.aborted is False
+    assert captures["refresh_measurement_count"] == 1
     assert captures["runtime_options"]["fullscreen"] is False
     assert captures["runtime_options"]["strict_timing"] is False
 

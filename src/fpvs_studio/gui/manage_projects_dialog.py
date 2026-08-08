@@ -5,7 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QRect, Qt, QTimer, Signal
+from PySide6.QtGui import QResizeEvent
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,
@@ -215,6 +216,7 @@ class ManageProjectsDialog(QDialog):
         guidance_text = entry.guidance_text if entry is not None else ""
         self.guidance_label.setText(guidance_text)
         self.guidance_label.setVisible(bool(guidance_text))
+        QTimer.singleShot(0, self._sync_guidance_label_height)
         self.open_button.setEnabled(has_entry and entry.can_open if entry else False)
         self.delete_button.setEnabled(has_entry and entry.can_delete if entry else False)
         self.copy_path_button.setEnabled(has_entry)
@@ -228,6 +230,22 @@ class ManageProjectsDialog(QDialog):
         self.status_badge.set_state(entry.status_state, entry.status_text)
         self.name_label.setText(entry.name)
         self.path_label.set_path_text(str(entry.root), max_length=84)
+
+    def resizeEvent(self, event: QResizeEvent) -> None:  # noqa: N802
+        super().resizeEvent(event)
+        QTimer.singleShot(0, self._sync_guidance_label_height)
+
+    def _sync_guidance_label_height(self) -> None:
+        if not self.guidance_label.isVisible() or not self.guidance_label.text():
+            self.guidance_label.setMinimumHeight(0)
+            return
+        available_width = max(1, self.guidance_label.contentsRect().width())
+        wrapped_bounds = self.guidance_label.fontMetrics().boundingRect(
+            QRect(0, 0, available_width, 10_000),
+            Qt.TextFlag.TextWordWrap,
+            self.guidance_label.text(),
+        )
+        self.guidance_label.setMinimumHeight(wrapped_bounds.height())
 
     def _request_open(self) -> None:
         entry = self._selected_entry()

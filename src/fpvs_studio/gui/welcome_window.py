@@ -82,7 +82,6 @@ class WelcomeWindow(QWidget):
 
         self.action_container = QWidget(self.hero_container)
         self.action_container.setObjectName("welcome_action_container")
-        self.action_container.setFixedWidth(452)
         action_layout = QGridLayout(self.action_container)
         action_layout.setHorizontalSpacing(12)
         action_layout.setVerticalSpacing(12)
@@ -92,7 +91,6 @@ class WelcomeWindow(QWidget):
         self.create_button.setObjectName("create_project_button")
         mark_welcome_action(self.create_button, "primary")
         self.create_button.setMinimumHeight(52)
-        self.create_button.setFixedWidth(220)
         self.create_button.clicked.connect(self.create_requested.emit)
         action_layout.addWidget(self.create_button, 0, 0)
 
@@ -100,7 +98,6 @@ class WelcomeWindow(QWidget):
         self.import_project_button.setObjectName("import_project_bundle_button")
         mark_welcome_action(self.import_project_button, "secondary")
         self.import_project_button.setMinimumHeight(52)
-        self.import_project_button.setFixedWidth(220)
         self.import_project_button.clicked.connect(
             self.import_project_bundle_requested.emit
         )
@@ -110,7 +107,6 @@ class WelcomeWindow(QWidget):
         self.manage_projects_button.setObjectName("open_projects_button")
         mark_welcome_action(self.manage_projects_button, "secondary")
         self.manage_projects_button.setMinimumHeight(52)
-        self.manage_projects_button.setFixedWidth(220)
         self.manage_projects_button.clicked.connect(self.manage_projects_requested.emit)
         action_layout.addWidget(self.manage_projects_button, 1, 0)
 
@@ -121,7 +117,6 @@ class WelcomeWindow(QWidget):
         self.root_folder_setup_button.setObjectName("welcome_root_folder_setup_button")
         mark_welcome_action(self.root_folder_setup_button, "secondary")
         self.root_folder_setup_button.setMinimumHeight(52)
-        self.root_folder_setup_button.setFixedWidth(220)
         self.root_folder_setup_button.clicked.connect(
             self.root_folder_setup_requested.emit
         )
@@ -191,6 +186,23 @@ class WelcomeWindow(QWidget):
 
     def _apply_theme_styles(self) -> None:
         apply_welcome_window_theme(self)
+        action_buttons = (
+            self.create_button,
+            self.import_project_button,
+            self.manage_projects_button,
+            self.root_folder_setup_button,
+        )
+        horizontal_padding = 56
+        button_width = max(
+            220,
+            *(
+                button.fontMetrics().horizontalAdvance(button.text()) + horizontal_padding
+                for button in action_buttons
+            ),
+        )
+        for button in action_buttons:
+            button.setFixedWidth(button_width)
+        self.action_container.setFixedWidth((button_width * 2) + 12)
 
     def _adopt_app_icon(self) -> None:
         app = QApplication.instance()

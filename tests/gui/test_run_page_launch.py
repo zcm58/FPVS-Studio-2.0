@@ -56,7 +56,7 @@ def test_participant_dialog_collects_and_prefills_manual_removed_electrodes(
     assert participant_number_edit is not None
     assert manual_removed_edit is not None
     assert dialog.minimumSize().width() == 600
-    assert dialog.minimumSize().height() == 330
+    assert dialog.minimumSize().height() == 360
     assert manual_removed_edit.placeholderText() == (
         "Input manually removed electrodes (optional)"
     )

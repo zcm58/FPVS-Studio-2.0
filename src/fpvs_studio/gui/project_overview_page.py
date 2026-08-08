@@ -139,7 +139,7 @@ class ProjectOverviewEditor(QWidget):
         condition_profile_group.setObjectName("project_condition_profile_group")
         condition_profile_layout = QVBoxLayout(condition_profile_group)
         condition_profile_layout.setContentsMargins(0, 0, 0, 0)
-        condition_profile_layout.setSpacing(8)
+        condition_profile_layout.setSpacing(4)
         condition_profile_layout.addWidget(self.condition_profile_combo)
 
         condition_profile_actions = QWidget(condition_profile_group)
@@ -150,6 +150,10 @@ class ProjectOverviewEditor(QWidget):
         condition_profile_actions_layout.addStretch(1)
         condition_profile_actions_layout.addWidget(self.apply_profile_to_conditions_button)
         condition_profile_actions_layout.addWidget(self.manage_templates_button)
+        condition_profile_actions.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Minimum,
+        )
         condition_profile_layout.addWidget(condition_profile_actions)
 
         self.project_overview_card = SectionCard(
@@ -187,7 +191,7 @@ class ProjectOverviewEditor(QWidget):
         header_layout.addWidget(header_text, 1)
 
         metadata_layout = QFormLayout()
-        metadata_layout.setVerticalSpacing(10)
+        metadata_layout.setVerticalSpacing(6)
         metadata_layout.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
         metadata_layout.addRow("Project Name", self.project_name_edit)
         metadata_layout.addRow("Description", self.project_description_edit)
@@ -200,9 +204,9 @@ class ProjectOverviewEditor(QWidget):
         form_layout.setContentsMargins(0, 0, 0, 0)
         form_layout.addLayout(metadata_layout)
 
-        self.project_overview_card.card_layout.setContentsMargins(20, 18, 20, 18)
-        self.project_overview_card.card_layout.setSpacing(12)
-        self.project_overview_card.body_layout.setSpacing(12)
+        self.project_overview_card.card_layout.setContentsMargins(20, 14, 20, 14)
+        self.project_overview_card.card_layout.setSpacing(8)
+        self.project_overview_card.body_layout.setSpacing(8)
         self.project_overview_card.body_layout.addWidget(header_row)
         self.project_overview_card.body_layout.addWidget(form_panel)
 

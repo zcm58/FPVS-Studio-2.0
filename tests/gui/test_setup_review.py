@@ -100,6 +100,7 @@ def test_setup_wizard_review_uses_centered_confirmation_checklist(
     assert "Random order seed:" not in label_text
     assert "Monitor: 60.00 Hz, Black background" in label_text
     assert "FPVS timing: 6 Hz base, oddball every 5 stimuli (1.2 Hz)" in label_text
+    assert "Image width:" in label_text
     assert "Fixation cross has been configured" in label_text
     assert "Launch requirements are satisfied" not in label_text
     summary_sections = [
@@ -118,7 +119,7 @@ def test_setup_wizard_review_uses_centered_confirmation_checklist(
         if label.property("reviewCheckIcon") == "true"
     ]
     assert len(summary_sections) == 4
-    assert len(checklist_rows) == 9
+    assert len(checklist_rows) == 10
     assert len(check_icons) == len(checklist_rows)
     section_title_tops = [
         next(

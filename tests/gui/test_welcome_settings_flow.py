@@ -290,7 +290,7 @@ def test_welcome_bundle_drop_starts_project_bundle_import(
     monkeypatch.setattr(
         controller,
         "_confirm_imported_display_settings",
-        lambda document, parent: None,
+        lambda document, parent: True,
     )
     monkeypatch.setattr(
         controller,

@@ -26,6 +26,8 @@ from fpvs_studio.core.condition_template_profiles import (
     STUDIO_DEFAULT_PROFILE_ID,
 )
 from fpvs_studio.gui.controller import StudioController
+from fpvs_studio.runtime.display_refresh import DisplayRefreshVerification
+from fpvs_studio.runtime.windows_display import WindowsDisplayMode
 
 
 def test_setup_wizard_surfaces_steps_and_keeps_shared_editors_available(
@@ -165,6 +167,13 @@ def test_project_details_template_actions_fit_at_setup_default_size(
     manage_button = editor.manage_templates_button
     qtbot.waitUntil(apply_button.isVisible)
 
+    blank_profile_index = editor.condition_profile_combo.findData(
+        SIXTY_HZ_BLANK_FIXATION_PROFILE_ID
+    )
+    assert blank_profile_index >= 0
+    editor.condition_profile_combo.setCurrentIndex(blank_profile_index)
+    QApplication.processEvents()
+
     assert apply_button.isEnabled()
     assert editor.findChild(QWidget, "project_overview_checklist") is None
     assert editor.project_overview_card.width() <= 930
@@ -267,6 +276,15 @@ def test_setup_wizard_navigation_has_no_conditions_advanced_editor(
     assert guide.experiment_settings_card.isAncestorOf(guide.session_structure_editor)
     assert guide.content_stack.currentWidget() is guide.guided_panel
 
+    guide.runtime_settings_editor._on_refresh_detection_succeeded(
+        DisplayRefreshVerification(
+            windows_mode=WindowsDisplayMode(r"\\.\DISPLAY1", 60, 1),
+            psychopy_measured_hz=60.0,
+            approved_hz=60.0,
+        )
+    )
+    QApplication.processEvents()
+    assert next_button.isEnabled()
     qtbot.mouseClick(next_button, Qt.MouseButton.LeftButton)
     assert guide.step_stack.currentWidget() is guide.fixation_step_surface
     assert guide.fixation_step_surface.content is guide.fixation_schedule_editor

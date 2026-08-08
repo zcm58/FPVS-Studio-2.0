@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from PySide6.QtCore import QObject, Signal
+from PySide6.QtCore import QObject, QRect, Qt, Signal
 from PySide6.QtWidgets import QApplication, QDialog, QLabel, QWidget
 from tests.gui.helpers import (
     assert_visible_children_within_parent,
@@ -972,14 +972,19 @@ def test_import_display_settings_dialog_keeps_approved_value_for_unsupported_ref
         "75.00 Hz (not an approved FPVS rate)"
     )
     assert dialog.detected_badge.text() == "Review refresh"
-    for width, height in ((720, 590), (780, 660)):
+    assert dialog.minimumSize().width() == 720
+    assert dialog.minimumSize().height() == 640
+    assert dialog.detected_refresh_label.wordWrap() is True
+    for width, height in ((720, 640), (780, 660)):
         dialog.resize(width, height)
         QApplication.processEvents()
         assert_visible_children_within_parent(dialog)
-        required_width = dialog.detected_refresh_label.fontMetrics().horizontalAdvance(
-            dialog.detected_refresh_label.text()
-        )
-        assert dialog.detected_refresh_label.width() >= required_width
+        required_height = dialog.detected_refresh_label.fontMetrics().boundingRect(
+            QRect(0, 0, dialog.detected_refresh_label.width(), 1000),
+            Qt.TextFlag.TextWordWrap,
+            dialog.detected_refresh_label.text(),
+        ).height()
+        assert dialog.detected_refresh_label.height() >= required_height
 
 
 def test_import_display_settings_dialog_actions_are_explicit(qtbot) -> None:
