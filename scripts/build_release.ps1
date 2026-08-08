@@ -42,14 +42,17 @@ try {
         Invoke-RepoScript -ScriptPath $BuildExeScript
     }
 
-    $installerArguments = @()
-    if ($InnoCompiler) {
-        $installerArguments += @("-InnoCompiler", $InnoCompiler)
-    }
-
     Write-Output ""
     Write-Output "Building FPVS Studio installer..."
-    Invoke-RepoScript -ScriptPath $BuildInstallerScript -ScriptArguments $installerArguments
+    if ($InnoCompiler) {
+        & $BuildInstallerScript -InnoCompiler $InnoCompiler
+    }
+    else {
+        & $BuildInstallerScript
+    }
+    if ($LASTEXITCODE -ne 0) {
+        throw "Command failed with exit code ${LASTEXITCODE}: $BuildInstallerScript"
+    }
 
     Write-Output ""
     Write-Output "FPVS Studio release build completed successfully."

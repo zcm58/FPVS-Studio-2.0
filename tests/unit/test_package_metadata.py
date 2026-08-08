@@ -110,6 +110,10 @@ def test_installer_build_validates_bundle_and_runs_packaged_smoke() -> None:
     assert "$SmokePackagedAppScript" not in BUILD_RELEASE_TEXT
 
 
+def test_release_wrapper_forwards_explicit_inno_compiler_path() -> None:
+    assert "& $BuildInstallerScript -InnoCompiler $InnoCompiler" in BUILD_RELEASE_TEXT
+
+
 def test_release_icon_has_one_packaged_source() -> None:
     assert '"packaging" / "assets" / "fpvs-studio.ico"' not in PYINSTALLER_SPEC_TEXT
     assert '"fpvs_studio" / "assets" / "fpvs-studio.ico"' in PYINSTALLER_SPEC_TEXT
