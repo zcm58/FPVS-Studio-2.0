@@ -26,8 +26,8 @@ from tests.gui.helpers import (
 )
 
 from fpvs_studio.gui.controller import StudioController
+from fpvs_studio.runtime.display_mode import NativeDisplayMode
 from fpvs_studio.runtime.display_refresh import DisplayRefreshVerification
-from fpvs_studio.runtime.windows_display import WindowsDisplayMode
 
 
 def _refresh_verification(
@@ -37,10 +37,13 @@ def _refresh_verification(
     approved_hz: float,
 ) -> DisplayRefreshVerification:
     return DisplayRefreshVerification(
-        windows_mode=WindowsDisplayMode(
-            r"\\.\DISPLAY1",
-            numerator,
-            denominator,
+        display_mode=NativeDisplayMode(
+            platform_name="Windows",
+            display_name=r"\\.\DISPLAY1",
+            refresh_hz=numerator / denominator,
+            source_name="QueryDisplayConfig",
+            exact_refresh=True,
+            mode_reference=f"{numerator}/{denominator}",
         ),
         psychopy_measured_hz=psychopy_measured_hz,
         approved_hz=approved_hz,
@@ -205,11 +208,16 @@ def test_setup_wizard_fpvs_rates_persist_and_report_exact_or_approximate_timing(
         _ImmediateProgressTask,
     )
     monkeypatch.setattr(
-        "fpvs_studio.runtime.display_refresh.query_primary_windows_display_mode",
-        lambda: WindowsDisplayMode(
-            r"\\.\DISPLAY1",
-            windows_mode["numerator"],
-            windows_mode["denominator"],
+        "fpvs_studio.runtime.display_refresh.query_primary_native_display_mode",
+        lambda: NativeDisplayMode(
+            platform_name="Windows",
+            display_name=r"\\.\DISPLAY1",
+            refresh_hz=windows_mode["numerator"] / windows_mode["denominator"],
+            source_name="QueryDisplayConfig",
+            exact_refresh=True,
+            mode_reference=(
+                f"{windows_mode['numerator']}/{windows_mode['denominator']}"
+            ),
         ),
     )
     _, window = _open_created_project(controller, qtbot, tmp_path, "Configurable FPVS Timing")
@@ -243,6 +251,23 @@ def test_setup_wizard_fpvs_rates_persist_and_report_exact_or_approximate_timing(
     assert "24 frames/stimulus" in editor.timing_summary_label.text()
     assert "144 frames/oddball" in editor.timing_summary_label.text()
     assert "condition 146.0 s" in editor.timing_summary_label.text()
+    assert guide.setup_wizard_next_button.isEnabled()
+
+    editor._on_refresh_detection_succeeded(
+        DisplayRefreshVerification(
+            display_mode=NativeDisplayMode(
+                platform_name="Linux",
+                display_name="DP-2",
+                refresh_hz=143.98,
+                source_name="KScreen",
+                exact_refresh=False,
+            ),
+            psychopy_measured_hz=143.92,
+            approved_hz=144.0,
+        )
+    )
+    QApplication.processEvents()
+    assert "Linux mode 143.980 Hz (KScreen, DP-2)" in editor.timing_status_label.text()
     assert guide.setup_wizard_next_button.isEnabled()
 
     editor.refresh_hz_combo.setCurrentIndex(editor.refresh_hz_combo.findData(59.94))
@@ -311,8 +336,15 @@ def test_setup_wizard_refresh_detection_failure_is_actionable(
         _ImmediateProgressTask,
     )
     monkeypatch.setattr(
-        "fpvs_studio.runtime.display_refresh.query_primary_windows_display_mode",
-        lambda: WindowsDisplayMode(r"\\.\DISPLAY1", 60, 1),
+        "fpvs_studio.runtime.display_refresh.query_primary_native_display_mode",
+        lambda: NativeDisplayMode(
+            platform_name="Windows",
+            display_name=r"\\.\DISPLAY1",
+            refresh_hz=60.0,
+            source_name="QueryDisplayConfig",
+            exact_refresh=True,
+            mode_reference="60/1",
+        ),
     )
     _, window = _open_created_project(controller, qtbot, tmp_path, "Refresh Detection Error")
     guide = window.setup_wizard_page

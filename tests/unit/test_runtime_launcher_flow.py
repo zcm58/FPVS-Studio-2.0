@@ -18,21 +18,28 @@ from fpvs_studio.core.models import DisplayValidationReport
 from fpvs_studio.core.serialization import read_json_file
 from fpvs_studio.engines.base import FixationTutorialAttemptResult
 from fpvs_studio.engines.registry import register_engine, unregister_engine
+from fpvs_studio.runtime.display_mode import NativeDisplayMode
 from fpvs_studio.runtime.launcher import (
     LaunchSettings,
     launch_run,
     launch_session,
 )
 from fpvs_studio.runtime.preflight import PreflightError
-from fpvs_studio.runtime.windows_display import WindowsDisplayMode
 from fpvs_studio.triggers.base import TriggerBackend
 
 
 @pytest.fixture(autouse=True)
-def _stable_windows_display_mode(monkeypatch: pytest.MonkeyPatch) -> None:
+def _stable_native_display_mode(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
-        "fpvs_studio.runtime.display_refresh.query_primary_windows_display_mode",
-        lambda: WindowsDisplayMode(r"\\.\DISPLAY1", 60, 1),
+        "fpvs_studio.runtime.display_refresh.query_primary_native_display_mode",
+        lambda: NativeDisplayMode(
+            platform_name="Windows",
+            display_name=r"\\.\DISPLAY1",
+            refresh_hz=60.0,
+            source_name="QueryDisplayConfig",
+            exact_refresh=True,
+            mode_reference="60/1",
+        ),
     )
 
 
@@ -1100,5 +1107,4 @@ def test_launch_run_uses_session_mode_without_mode_gate(
     assert summary.run_mode is RunMode.SESSION
     assert summary.runtime_metadata is not None
     assert summary.runtime_metadata.test_mode is False
-
 

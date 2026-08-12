@@ -86,7 +86,7 @@ class DisplaySettingsEditor(QWidget):
             self.refresh_hz_combo.addItem(f"{refresh_hz:g} Hz", userData=refresh_hz)
         self.refresh_hz_combo.setToolTip(
             "Approved presentation-display rates. Use Detect My Refresh Rate to verify "
-            "the exact Windows mode and apply its approved value."
+            "the active native display mode and apply its approved value."
         )
         self.refresh_hz_combo.currentIndexChanged.connect(self._apply_refresh_hz)
 
@@ -95,8 +95,8 @@ class DisplaySettingsEditor(QWidget):
             _prefixed_object_name(object_name_prefix, "detect_refresh_button")
         )
         self.detect_refresh_button.setToolTip(
-            "Reads the exact Windows rational refresh mode, then temporarily opens "
-            "PsychoPy fullscreen to verify stable frame delivery."
+            "Reads the active native display mode, then temporarily opens PsychoPy "
+            "fullscreen to verify stable frame delivery."
         )
         self.detect_refresh_button.clicked.connect(self._start_refresh_detection)
         mark_secondary_action(self.detect_refresh_button)
@@ -249,7 +249,7 @@ class DisplaySettingsEditor(QWidget):
         )
 
     def refresh_is_verified(self) -> bool:
-        """Return whether the current selection matches the exact Windows mode."""
+        """Return whether the current selection matches the verified native mode."""
 
         if self._refresh_verification is None:
             return False
@@ -327,7 +327,7 @@ class DisplaySettingsEditor(QWidget):
         if self._refresh_probe_task is not None:
             self.timing_status_label.setProperty("statusState", "info")
             self.timing_status_label.setText(
-                "Reading the exact Windows mode and checking PsychoPy frame stability..."
+                "Reading the active display mode and checking PsychoPy frame stability..."
             )
             self.timing_status_label.setVisible(True)
         elif report.errors:
@@ -368,10 +368,10 @@ class DisplaySettingsEditor(QWidget):
         if not self.refresh_is_verified() or self._refresh_verification is None:
             return ""
         verification = self._refresh_verification
-        windows_mode = verification.windows_mode
+        display_mode = verification.display_mode
         return (
-            f"Verified: Windows mode {windows_mode.hz:.3f} Hz "
-            f"({windows_mode.fraction_text}); PsychoPy observed "
+            f"Verified: {display_mode.platform_name} mode {display_mode.status_text}; "
+            "PsychoPy observed "
             f"{verification.psychopy_measured_hz:.3f} Hz; applied "
             f"{verification.approved_hz:g} Hz. "
         )

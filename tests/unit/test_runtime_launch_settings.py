@@ -10,6 +10,7 @@ from tests.unit.runtime_launcher_helpers import (
 
 from fpvs_studio.core.compiler import compile_run_spec, compile_session_plan
 from fpvs_studio.engines.registry import register_engine, unregister_engine
+from fpvs_studio.runtime.display_mode import NativeDisplayMode
 from fpvs_studio.runtime.export_modes import EXPORT_MODE_COMPACT, EXPORT_MODE_FULL
 from fpvs_studio.runtime.launcher import (
     LaunchSettings,
@@ -18,7 +19,6 @@ from fpvs_studio.runtime.launcher import (
     launch_session,
 )
 from fpvs_studio.runtime.preflight import PreflightError
-from fpvs_studio.runtime.windows_display import WindowsDisplayMode
 
 
 def test_launch_settings_default_to_strict_timing_fail_fast() -> None:
@@ -78,8 +78,15 @@ def test_launch_session_allows_windowed_mode_when_strict_timing_disabled(
 ) -> None:
     captures: dict[str, object] = {}
     monkeypatch.setattr(
-        "fpvs_studio.runtime.display_refresh.query_primary_windows_display_mode",
-        lambda: WindowsDisplayMode(r"\\.\DISPLAY1", 60, 1),
+        "fpvs_studio.runtime.display_refresh.query_primary_native_display_mode",
+        lambda: NativeDisplayMode(
+            platform_name="Windows",
+            display_name=r"\\.\DISPLAY1",
+            refresh_hz=60.0,
+            source_name="QueryDisplayConfig",
+            exact_refresh=True,
+            mode_reference="60/1",
+        ),
     )
     register_engine("stub-windowed-allowed", lambda: StubEngine(captures))
     try:

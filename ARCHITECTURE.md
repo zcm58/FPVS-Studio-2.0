@@ -52,10 +52,12 @@ ProjectFile
 - Editable project protocol settings own requested base Hz and integer oddball cadence;
   compilation resolves them to whole-frame timing and records requested rates in each
   `RunSpec`.
-- Core validation owns the approved monitor-rate list. Runtime reads the primary
-  Windows display path's exact rational mode and combines it with the engine's neutral
-  fullscreen refresh observation. The GUI requests this combined verification, and
-  runtime preflight repeats it once per session without changing compiled schedules.
+- Core validation owns the approved monitor-rate list. Runtime reads the primary/default
+  display's native configured mode through a platform adapter and combines it with the
+  engine's neutral fullscreen refresh observation. Windows keeps its exact rational
+  `QueryDisplayConfig` path; KDE Linux uses structured KScreen mode and VRR metadata,
+  with XRandR used for X11. The GUI requests this combined verification, and runtime
+  preflight repeats it once per session without changing compiled schedules.
 - Runtime owns machine launch options, session transitions, participant flow, fixation
   scoring, trigger I/O coordination, and result assembly.
 - `ProjectFile` owns the per-participant `manual_removed_electrodes` authoring map saved

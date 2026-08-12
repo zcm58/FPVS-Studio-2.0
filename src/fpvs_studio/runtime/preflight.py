@@ -66,10 +66,10 @@ def _verify_connected_refresh_rate(
     )
     if mismatched_rates:
         configured_text = ", ".join(f"{refresh_hz:g} Hz" for refresh_hz in mismatched_rates)
-        windows_mode = verification.windows_mode
+        display_mode = verification.display_mode
         raise PreflightError(
-            "Run preflight failed because Windows reports display mode "
-            f"{windows_mode.hz:.6f} Hz ({windows_mode.fraction_text}), verified by "
+            f"Run preflight failed because {display_mode.platform_name} reports display mode "
+            f"{display_mode.mode_text}, verified by "
             f"PsychoPy at {verification.psychopy_measured_hz:.3f} Hz, but the compiled "
             f"session expects {configured_text}. "
             "Return to Experiment settings and detect the display refresh rate again."

@@ -10,6 +10,12 @@ Run the authoring application with:
 
 The installed script entry point is also available as `fpvs-studio`.
 
+Setup's `Detect My Refresh Rate` action and launch preflight use the native configured
+mode for the primary/default display plus a temporary fullscreen PsychoPy stability
+observation. Windows uses its exact rational display path; KDE Linux uses KScreen's
+structured current-mode and VRR data, while Linux X11 uses XRandR. Variable-refresh
+configurations remain blocking for timing-sensitive playback.
+
 ## Welcome Flow
 
 If no valid FPVS Studio Root Folder is configured, FPVS Studio first shows a

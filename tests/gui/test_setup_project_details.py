@@ -26,8 +26,8 @@ from fpvs_studio.core.condition_template_profiles import (
     STUDIO_DEFAULT_PROFILE_ID,
 )
 from fpvs_studio.gui.controller import StudioController
+from fpvs_studio.runtime.display_mode import NativeDisplayMode
 from fpvs_studio.runtime.display_refresh import DisplayRefreshVerification
-from fpvs_studio.runtime.windows_display import WindowsDisplayMode
 
 
 def test_setup_wizard_surfaces_steps_and_keeps_shared_editors_available(
@@ -278,7 +278,14 @@ def test_setup_wizard_navigation_has_no_conditions_advanced_editor(
 
     guide.runtime_settings_editor._on_refresh_detection_succeeded(
         DisplayRefreshVerification(
-            windows_mode=WindowsDisplayMode(r"\\.\DISPLAY1", 60, 1),
+            display_mode=NativeDisplayMode(
+                platform_name="Windows",
+                display_name=r"\\.\DISPLAY1",
+                refresh_hz=60.0,
+                source_name="QueryDisplayConfig",
+                exact_refresh=True,
+                mode_reference="60/1",
+            ),
             psychopy_measured_hz=60.0,
             approved_hz=60.0,
         )

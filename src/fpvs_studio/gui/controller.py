@@ -1165,7 +1165,10 @@ def _move_project_tree_to_recycle_bin(project_root: Path) -> None:
     file_operation.pFrom = f"{project_root.resolve()}\0\0"
     file_operation.pTo = None
     file_operation.fFlags = 0x0040 | 0x0010 | 0x0400 | 0x0004
-    result = ctypes.windll.shell32.SHFileOperationW(ctypes.byref(file_operation))
+    windll = getattr(ctypes, "windll", None)
+    if windll is None:
+        raise OSError("Windows shell APIs are unavailable.")
+    result = windll.shell32.SHFileOperationW(ctypes.byref(file_operation))
     if result != 0:
         raise OSError(
             result,
