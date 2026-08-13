@@ -32,7 +32,7 @@ def test_session_plan_default_block_contains_all_conditions_once(
         random_seed=123,
     )
 
-    assert session_plan.schema_version == "1.1.0"
+    assert session_plan.schema_version == "1.2.0"
     assert all(entry.run_spec.schema_version == "1.1.0" for entry in session_plan.ordered_entries())
     assert session_plan.block_count == 1
     assert session_plan.total_runs == 4

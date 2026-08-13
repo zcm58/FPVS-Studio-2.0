@@ -21,14 +21,21 @@ from fpvs_studio.core.execution import (
 )
 from fpvs_studio.core.run_spec import RunSpec
 from fpvs_studio.core.session_plan import SessionEntry, SessionPlan
+from fpvs_studio.core.task_models import TaskResponseRecord
 from fpvs_studio.engines.base import PresentationEngine
 from fpvs_studio.runtime.export_modes import EXPORT_MODE_FULL
 from fpvs_studio.runtime.fixation import build_fixation_task_summary, score_fixation_responses
 from fpvs_studio.runtime.preflight import PreflightError
 from fpvs_studio.runtime.session_export import (
+    append_compact_task_responses,
     append_session_condition_history,
+    compact_task_checkpoint_path,
     write_run_artifacts,
     write_session_artifacts,
+)
+from fpvs_studio.runtime.task_runner import (
+    TaskResponseCheckpoint,
+    run_task_modules,
 )
 from fpvs_studio.runtime.triggers import (
     LoggedTriggerBackend,
@@ -189,6 +196,17 @@ class RuntimeWorker:
         run_results: list[RunExecutionSummary] = []
         abort_reason: str | None = None
         ordered_entries = session_plan.ordered_entries()
+        compact_task_checkpoint = (
+            None
+            if write_detailed_exports
+            else TaskResponseCheckpoint(
+                compact_task_checkpoint_path(
+                    project_root,
+                    participant_number=participant_number,
+                    session_id=session_plan.session_id,
+                )
+            )
+        )
 
         try:
             self._engine.open_session(runtime_options=runtime_options)
@@ -205,10 +223,91 @@ class RuntimeWorker:
                 if abort_reason is not None:
                     break
                 _validate_configured_display_resolution(self._engine, entry.run_spec)
-                if self._show_transition(entry, session_plan, runtime_options=runtime_options):
+                task_checkpoint = compact_task_checkpoint or TaskResponseCheckpoint(
+                    output_dir / entry.run_id / "task_responses.jsonl"
+                )
+                pre_task_outcome = run_task_modules(
+                    self._engine,
+                    entry.pre_tasks,
+                    project_root=project_root,
+                    run_spec=entry.run_spec,
+                    block_index=entry.block_index,
+                    global_order_index=entry.global_order_index,
+                    checkpoint=task_checkpoint,
+                )
+                if pre_task_outcome.aborted:
+                    run_summary = _build_start_aborted_summary(
+                        entry.run_spec,
+                        engine_name=self._engine.engine_id,
+                        runtime_options=runtime_options,
+                        participant_number=participant_number,
+                        participant_metadata=participant_metadata,
+                        warnings=(),
+                        abort_reason=pre_task_outcome.abort_reason
+                        or "Session aborted during pre-condition tasks.",
+                    ).model_copy(
+                        update={
+                            "session_id": session_plan.session_id,
+                            "task_responses": list(pre_task_outcome.responses),
+                            "task_flow_completed": False,
+                            "task_flow_aborted": True,
+                            "task_abort_stage": "pre_condition",
+                            "task_abort_id": _last_task_id(pre_task_outcome.responses),
+                            "task_abort_reason": pre_task_outcome.abort_reason
+                            or "Session aborted during pre-condition tasks.",
+                            "output_dir": (
+                                f"{relative_output_dir}/{entry.run_id}"
+                                if write_detailed_exports and relative_output_dir is not None
+                                else None
+                            ),
+                        }
+                    )
+                    run_results.append(run_summary)
+                    abort_reason = run_summary.abort_reason
+                    if write_detailed_exports:
+                        write_run_artifacts(
+                            output_dir / entry.run_id,
+                            entry.run_spec,
+                            run_summary,
+                        )
+                    break
+                if entry.show_condition_start_gate and self._show_transition(
+                    entry,
+                    session_plan,
+                    runtime_options=runtime_options,
+                ):
                     abort_reason = (
                         f"Session aborted during the transition screen before run '{entry.run_id}'."
                     )
+                    if not pre_task_outcome.responses:
+                        break
+                    run_summary = _build_start_aborted_summary(
+                        entry.run_spec,
+                        engine_name=self._engine.engine_id,
+                        runtime_options=runtime_options,
+                        participant_number=participant_number,
+                        participant_metadata=participant_metadata,
+                        warnings=(),
+                        abort_reason=abort_reason,
+                    ).model_copy(
+                        update={
+                            "session_id": session_plan.session_id,
+                            "task_responses": list(pre_task_outcome.responses),
+                            "task_flow_completed": False,
+                            "output_dir": (
+                                f"{relative_output_dir}/{entry.run_id}"
+                                if write_detailed_exports and relative_output_dir is not None
+                                else None
+                            ),
+                        }
+                    )
+                    run_results.append(run_summary)
+                    if write_detailed_exports:
+                        write_run_artifacts(
+                            output_dir / entry.run_id,
+                            entry.run_spec,
+                            run_summary,
+                        )
                     break
 
                 run_output_dir = output_dir / entry.run_id
@@ -255,12 +354,56 @@ class RuntimeWorker:
                         trigger_start_index=trigger_start_index,
                         warnings=(),
                     )
+                task_summary_update: dict[str, object] = {
+                    "task_responses": list(pre_task_outcome.responses)
+                }
+                if run_summary.aborted and entry.post_tasks:
+                    task_summary_update["task_flow_completed"] = False
+                run_summary = run_summary.model_copy(update=task_summary_update)
+                if not run_summary.aborted:
+                    post_task_outcome = run_task_modules(
+                        self._engine,
+                        entry.post_tasks,
+                        project_root=project_root,
+                        run_spec=entry.run_spec,
+                        block_index=entry.block_index,
+                        global_order_index=entry.global_order_index,
+                        response_start_index=len(run_summary.task_responses),
+                        checkpoint=task_checkpoint,
+                    )
+                    update: dict[str, object] = {
+                        "task_responses": [
+                            *run_summary.task_responses,
+                            *post_task_outcome.responses,
+                        ],
+                    }
+                    if post_task_outcome.aborted:
+                        post_abort_reason = post_task_outcome.abort_reason or (
+                            f"Session aborted during post-condition tasks after run "
+                            f"'{entry.run_id}'."
+                        )
+                        update.update(
+                            {
+                                "task_flow_completed": False,
+                                "task_flow_aborted": True,
+                                "task_abort_stage": "post_condition",
+                                "task_abort_id": _last_task_id(
+                                    post_task_outcome.responses
+                                ),
+                                "task_abort_reason": post_abort_reason,
+                            }
+                        )
+                    run_summary = run_summary.model_copy(update=update)
+                    if post_task_outcome.aborted:
+                        abort_reason = post_abort_reason
                 previous_feedback_summary = _latest_fixation_task_summary(run_results)
                 warnings.extend(run_summary.warnings)
                 run_results.append(run_summary)
                 if write_detailed_exports:
                     write_run_artifacts(run_output_dir, entry.run_spec, run_summary)
 
+                if abort_reason is not None:
+                    break
                 if run_summary.aborted:
                     abort_reason = run_summary.abort_reason or f"Run '{entry.run_id}' was aborted."
                     break
@@ -325,6 +468,9 @@ class RuntimeWorker:
             )
         else:
             append_session_condition_history(project_root, session_plan, session_summary)
+            append_compact_task_responses(project_root, session_plan, session_summary)
+            if compact_task_checkpoint is not None:
+                compact_task_checkpoint.discard()
         return session_summary
 
     def _finalize_run_summary(
@@ -804,6 +950,10 @@ def _latest_fixation_task_summary(
         if run_result.fixation_task_summary is not None:
             return run_result.fixation_task_summary
     return None
+
+
+def _last_task_id(responses: tuple[TaskResponseRecord, ...]) -> str | None:
+    return responses[-1].task_id if responses else None
 
 
 def _format_key_label(key: str) -> str:

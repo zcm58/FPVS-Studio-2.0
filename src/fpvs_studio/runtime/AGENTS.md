@@ -34,6 +34,9 @@ This phase should establish:
   so missing, busy, or unavailable ports fail before participant-facing flow begins
 - open/close one engine session per launched session
 - show instruction/transition screens via the engine
+- sequence compiled pre-condition and post-condition task modules around each
+  `RunSpec`; validate responses, repeats, retries, and branches in runtime while the
+  engine renders only one neutral task step at a time
 - insert inter-block pause flow via the engine for non-final blocks
 - call `engine.run_condition(RunSpec, ...)`
 - score fixation responses from raw key logs
@@ -50,6 +53,8 @@ This phase should establish:
   exported trigger `time_s`
 - append project-level reporting indexes under `logs/`; write detailed execution
   artifacts under `runs/` only when full run export mode is enabled
+- checkpoint experimental task responses incrementally, preserve partial responses on
+  abort, and keep raw task answers out of application logs and summary workbooks
 - regenerate the compact project-level `logs/participant_summary.xlsx` and companion
   `logs/participant_summary.csv` after session exports so researchers have one
   spreadsheet-friendly participant/session summary
@@ -84,11 +89,16 @@ Even if the exporter is skeletal in this phase, define a stable shape for:
 - `frame_intervals.csv`
 - `trigger_log.csv`
 - `display_report.json`
+- detailed `task_responses.csv` and structured task results in full export mode
+- project-level `logs/task_responses.csv` in compact export mode
 - project-level `logs/session_condition_history.csv`
 - project-level `logs/participant_summary.csv`
 - project-level `logs/participant_summary.xlsx`
 - manual group summary workbook exports, defaulting to `group_summary.xlsx`
 - app-selected run export mode: full writes detailed `runs/` artifacts, compact writes
   only project-level summary logs
+- full task sessions write `task_responses.csv` and per-run append-only
+  `task_responses.jsonl`; compact task sessions persist raw responses beneath `logs/`
+  without creating a `runs/` folder
 
 Use simple, explicit writer utilities and keep them easy to test.

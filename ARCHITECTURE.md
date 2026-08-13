@@ -17,8 +17,9 @@ inside the engine package.
 - `src/fpvs_studio/gui/`: PySide6 windows, dialogs, controllers, document binding,
   Home/Setup workflows, and shared components/theme helpers.
 - `src/fpvs_studio/core/`: editable models, validation, compilation, `RunSpec`,
-  `SessionPlan`, execution results, persistence, `.fpvsconfig` interchange, portable
-  `.fpvsbundle` services, and other engine-neutral domain logic.
+  `SessionPlan`, reusable condition-task definitions, execution results, persistence,
+  `.fpvsconfig` interchange, portable `.fpvsbundle` services, and other engine-neutral
+  domain logic.
 - `src/fpvs_studio/preprocessing/`: image intake, inspection, normalization, derived
   variants, and manifest provenance; independent of GUI, runtime, and PsychoPy.
 - `src/fpvs_studio/tools/`: reserved for Studio-native utilities. Current Image Resizer
@@ -42,16 +43,17 @@ Every source package has a nested `AGENTS.md`; read the one governing files you 
 ```text
 ProjectFile
   -> compiler -> RunSpec (one condition)
-  -> session compiler -> SessionPlan (ordered RunSpec entries)
-  -> runtime -> engine playback + core execution results
+  -> session compiler -> SessionPlan (ordered RunSpec entries + pre/post task specs)
+  -> runtime -> task flow + engine playback + core execution results
   -> exporters -> project logs and optional detailed run artifacts
 ```
 
-The current editable and compiled presentation contracts use schema `1.1.0`. Loaders
-migrate schema `1.0.0` projects, condition-template libraries, and `.fpvsconfig` files
-in memory; reading or launching a legacy project does not rewrite it. Compatibility
-preserves a zero-second lead-in and the legacy word-size pixel rounding until those
-settings are explicitly authored in the new presentation editor.
+`ProjectFile`, `SessionPlan`, execution-result, and `.fpvsconfig` contracts use schema
+`1.2.0`; the single-condition timed `RunSpec` remains schema `1.1.0`. Loaders migrate
+schema `1.0.0` and `1.1.0` projects, condition-template libraries, and configuration
+files in memory; reading or launching a legacy project does not rewrite it.
+Compatibility preserves a zero-second lead-in, empty condition-task bindings, and the
+legacy word-size pixel rounding until those settings are explicitly authored.
 
 - Compilation owns protocol scheduling, asset resolution, randomized session order,
   realized fixation target selection, presentation-setting inheritance, and balanced
@@ -63,14 +65,16 @@ settings are explicitly authored in the new presentation editor.
   Windows display path's exact rational mode and combines it with the engine's neutral
   fullscreen refresh observation. The GUI requests this combined verification, and
   runtime preflight repeats it once per session without changing compiled schedules.
-- Runtime owns machine launch options, session transitions, participant flow, fixation
-  scoring, trigger I/O coordination, and result assembly.
+- Runtime owns machine launch options, session transitions, declarative pre/post task
+  sequencing and validation, participant flow, fixation scoring, trigger I/O
+  coordination, and result assembly. Task clocks remain outside `RunSpec` and cannot
+  change FPVS frame or trigger schedules.
 - `ProjectFile` owns the per-participant `manual_removed_electrodes` authoring map saved
   from the launch dialog; it remains outside compiled and runtime playback contracts.
-- Engines render compiled events and participant-facing screens; they do not own
-  compilation, session decisions, project persistence, or exports. Runtime image/word
-  transforms and native geometry are compiled presentation properties and never create
-  project assets.
+- Engines render compiled events and one neutral task step at a time; they do not own
+  task sequencing, validation, compilation, session decisions, project persistence,
+  or exports. Runtime image/word transforms and native geometry are compiled
+  presentation properties and never create project assets.
 - Full export mode writes detailed artifacts under `runs/`. Compact mode keeps
   project-level reporting under `logs/` without detailed run folders.
 - GUI project-bundle import/export is implemented; its current workflow and contracts

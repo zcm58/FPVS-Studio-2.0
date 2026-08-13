@@ -42,6 +42,10 @@ from fpvs_studio.gui.components import (
     mark_primary_action,
     mark_secondary_action,
 )
+from fpvs_studio.gui.condition_task_dialog import (
+    ConditionTaskDialog,
+    condition_task_summary,
+)
 from fpvs_studio.gui.control_condition_dialog import ControlConditionDialog
 from fpvs_studio.gui.document import ProjectDocument
 from fpvs_studio.gui.presentation_settings_dialog import (
@@ -132,9 +136,7 @@ def _configure_guided_source_card(card: SetupSourceCard) -> None:
     header = card.title_label.parentWidget()
     if header is not None:
         header.setFixedHeight(_SOURCE_HEADER_HEIGHT)
-    card.title_label.setAlignment(
-        Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter
-    )
+    card.title_label.setAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter)
     card.metrics.setFixedHeight(_SOURCE_METRICS_HEIGHT)
 
 
@@ -277,9 +279,7 @@ def _planning_summary_text(
     item_label = "image" if base_row.modality == StimulusModality.IMAGE else "word"
     base_items = "base images" if base_row.modality == StimulusModality.IMAGE else "base words"
     oddball_items = (
-        "oddball images"
-        if oddball_row.modality == StimulusModality.IMAGE
-        else "oddball words"
+        "oddball images" if oddball_row.modality == StimulusModality.IMAGE else "oddball words"
     )
     location_label = (
         "in each folder" if base_row.modality == StimulusModality.IMAGE else "in each list"
@@ -384,15 +384,11 @@ class ConditionSetupStep(QWidget):
         self.modality_combo.addItem("Words", StimulusModality.WORD.value)
         self.modality_combo.currentIndexChanged.connect(self._apply_modality)
         self.presentation_summary_label = QLabel(self)
-        self.presentation_summary_label.setObjectName(
-            "setup_wizard_condition_presentation_summary"
-        )
+        self.presentation_summary_label.setObjectName("setup_wizard_condition_presentation_summary")
         self.presentation_summary_label.setWordWrap(True)
         self.presentation_summary_label.setMinimumWidth(0)
         self.presentation_button = QPushButton("Presentation...", self)
-        self.presentation_button.setObjectName(
-            "setup_wizard_condition_presentation_button"
-        )
+        self.presentation_button.setObjectName("setup_wizard_condition_presentation_button")
         self.presentation_button.setToolTip(
             "Configure condition, Base, and Oddball presentation overrides."
         )
@@ -404,6 +400,23 @@ class ConditionSetupStep(QWidget):
         presentation_row_layout.setSpacing(8)
         presentation_row_layout.addWidget(self.presentation_summary_label, 1)
         presentation_row_layout.addWidget(self.presentation_button)
+        self.task_summary_label = QLabel(self)
+        self.task_summary_label.setObjectName("setup_wizard_condition_task_summary")
+        self.task_summary_label.setWordWrap(True)
+        self.task_summary_label.setMinimumWidth(0)
+        self.task_button = QPushButton("Pre/Post Tasks...", self)
+        self.task_button.setObjectName("setup_wizard_condition_task_button")
+        self.task_button.setToolTip(
+            "Configure reusable participant tasks before or after this condition."
+        )
+        self.task_button.clicked.connect(self._open_task_settings)
+        mark_secondary_action(self.task_button)
+        task_row = QWidget(self)
+        task_row_layout = QHBoxLayout(task_row)
+        task_row_layout.setContentsMargins(0, 0, 0, 0)
+        task_row_layout.setSpacing(8)
+        task_row_layout.addWidget(self.task_summary_label, 1)
+        task_row_layout.addWidget(self.task_button)
         self.timing_template_combo = QComboBox(self)
         self.timing_template_combo.setObjectName("setup_wizard_condition_timing_template_combo")
         for mode in (DutyCycleMode.CONTINUOUS, DutyCycleMode.BLANK_50):
@@ -463,6 +476,7 @@ class ConditionSetupStep(QWidget):
         form.addRow("Trigger Code", self.trigger_code_spin)
         form.addRow("Stimulus Type", self.modality_combo)
         form.addRow("Presentation", presentation_row)
+        form.addRow("Participant Tasks", task_row)
         form.addRow("Advanced Timing", self.timing_template_combo)
         form.addRow(self.target_repeats_label, self.target_repeats_spin)
         form.addRow(self.instructions_label, self.instructions_edit)
@@ -677,6 +691,7 @@ class ConditionSetupStep(QWidget):
             self.trigger_code_spin,
             self.modality_combo,
             self.presentation_button,
+            self.task_button,
             self.timing_template_combo,
             self.target_repeats_spin,
             self.repeat_calculator_button,
@@ -721,6 +736,7 @@ class ConditionSetupStep(QWidget):
             self.sources_row.setVisible(True)
             self.words_panel.setVisible(False)
             self.presentation_summary_label.setText("Select a condition")
+            self.task_summary_label.setText("Select a condition")
             self._set_checklist_statuses(False, False, False, False)
             self._set_source_summary(None, role="base")
             self._set_source_summary(None, role="oddball")
@@ -738,9 +754,7 @@ class ConditionSetupStep(QWidget):
         with QSignalBlocker(self.trigger_code_spin):
             self.trigger_code_spin.setValue(condition.trigger_code)
         with QSignalBlocker(self.modality_combo):
-            self.modality_combo.setCurrentIndex(
-                self.modality_combo.findData(modality.value)
-            )
+            self.modality_combo.setCurrentIndex(self.modality_combo.findData(modality.value))
         with QSignalBlocker(self.timing_template_combo):
             self.timing_template_combo.setCurrentIndex(
                 self.timing_template_combo.findData(condition.duty_cycle_mode)
@@ -769,6 +783,9 @@ class ConditionSetupStep(QWidget):
         )
         self.presentation_summary_label.setText(
             condition_presentation_summary(self._document, condition.condition_id)
+        )
+        self.task_summary_label.setText(
+            condition_task_summary(self._document, condition.condition_id)
         )
         self._set_checklist_statuses(named, trigger_ready, base_ready, oddball_ready)
         self._set_source_summary(base_set, role="base")
@@ -886,8 +903,8 @@ class ConditionSetupStep(QWidget):
             return
         variant = dialog.selected_variant()
         transform = dialog.selected_transform()
-        should_materialize = (
-            transform is None and self._control_variant_missing(condition_id, variant)
+        should_materialize = transform is None and self._control_variant_missing(
+            condition_id, variant
         )
         try:
             new_condition_id = self._document.create_control_condition(
@@ -1010,6 +1027,18 @@ class ConditionSetupStep(QWidget):
         if condition_id is None:
             return
         dialog = PresentationSettingsDialog(
+            self._document,
+            condition_id=condition_id,
+            parent=self,
+        )
+        dialog.exec()
+        self.refresh()
+
+    def _open_task_settings(self) -> None:
+        condition_id = self.selected_condition_id()
+        if condition_id is None:
+            return
+        dialog = ConditionTaskDialog(
             self._document,
             condition_id=condition_id,
             parent=self,

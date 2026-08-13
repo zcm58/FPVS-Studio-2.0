@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING
 
 from fpvs_studio.core.condition_template_profiles import (
@@ -28,6 +28,8 @@ from fpvs_studio.core.paths import (
     stimulus_originals_dir,
     to_project_relative_posix,
 )
+from fpvs_studio.core.task_assets import copy_task_asset
+from fpvs_studio.core.task_models import TaskBinding, TaskModule
 from fpvs_studio.gui.document_support import (
     ConditionStimulusRow,
     DocumentError,
@@ -400,6 +402,118 @@ class DocumentConditionMixin:
             conditions=self._reindex_conditions(conditions),
         )
         self._replace_project(project)
+
+    def set_condition_task_flow(
+        self,
+        condition_id: str,
+        *,
+        modules: list[TaskModule],
+        pre_bindings: list[TaskBinding],
+        post_bindings: list[TaskBinding],
+        asset_copies: list[tuple[Path, str]] | None = None,
+    ) -> None:
+        """Apply one condition's task flow and deferred media intake atomically.
+
+        The dialog validates a complete draft before calling this method. Media is
+        copied only during Apply; if an intake fails, newly created files are removed
+        and the live project model remains unchanged.
+        """
+
+        condition = self.get_condition(condition_id)
+        if condition is None:
+            raise DocumentError(f"Unknown condition '{condition_id}'.")
+        module_by_id = {module.task_id: module for module in modules}
+        if len(module_by_id) != len(modules):
+            raise DocumentError("Task module ids must be unique.")
+        bound_ids = {binding.task_id for binding in [*pre_bindings, *post_bindings]}
+        if not bound_ids.issubset(module_by_id):
+            missing = ", ".join(sorted(bound_ids - set(module_by_id)))
+            raise DocumentError(f"Task bindings reference missing modules: {missing}")
+
+        old_bound_ids = {
+            binding.task_id
+            for binding in [
+                *condition.pre_task_bindings,
+                *condition.post_task_bindings,
+            ]
+        }
+        other_bound_ids = {
+            binding.task_id
+            for other in self._project.conditions
+            if other.condition_id != condition_id
+            for binding in [*other.pre_task_bindings, *other.post_task_bindings]
+        }
+        existing_by_id = {existing.task_id: existing for existing in self._project.task_modules}
+        conflicting_shared_ids = sorted(
+            task_id
+            for task_id in other_bound_ids
+            if task_id in module_by_id
+            and task_id in existing_by_id
+            and module_by_id[task_id] != existing_by_id[task_id]
+        )
+        if conflicting_shared_ids:
+            shared = ", ".join(conflicting_shared_ids)
+            raise DocumentError(
+                "These reusable task module IDs are also bound to another condition "
+                f"and cannot be changed here: {shared}. Use a new module ID to make "
+                "a condition-specific copy."
+            )
+        updated_modules: list[TaskModule] = []
+        consumed: set[str] = set()
+        for existing in self._project.task_modules:
+            replacement = module_by_id.get(existing.task_id)
+            if replacement is not None:
+                updated_modules.append(replacement)
+                consumed.add(existing.task_id)
+            elif existing.task_id not in old_bound_ids or existing.task_id in other_bound_ids:
+                updated_modules.append(existing)
+        updated_modules.extend(module for module in modules if module.task_id not in consumed)
+        updated_conditions = [
+            validated_copy(
+                item,
+                pre_task_bindings=pre_bindings,
+                post_task_bindings=post_bindings,
+            )
+            if item.condition_id == condition_id
+            else item
+            for item in self.ordered_conditions()
+        ]
+        updated_project = validated_copy(
+            self._project,
+            conditions=self._reindex_conditions(updated_conditions),
+            task_modules=updated_modules,
+        )
+
+        created_paths: list[Path] = []
+        try:
+            for source_path, relative_target in asset_copies or []:
+                parts = PurePosixPath(relative_target).parts
+                if len(parts) != 4 or parts[:2] != ("stimuli", "task-assets"):
+                    raise DocumentError(
+                        "Task assets must target stimuli/task-assets/<task-id>/<file>."
+                    )
+                target_path = self._project_root.joinpath(*parts)
+                existed = target_path.exists()
+                copied_relative = copy_task_asset(
+                    self._project_root,
+                    parts[2],
+                    source_path,
+                    filename=parts[3],
+                )
+                if copied_relative != relative_target:
+                    raise DocumentError("Task asset intake returned an unexpected project path.")
+                if not existed:
+                    created_paths.append(target_path)
+            self._replace_project(updated_project)
+        except Exception:
+            for created_path in reversed(created_paths):
+                created_path.unlink(missing_ok=True)
+                parent = created_path.parent
+                try:
+                    parent.rmdir()
+                except OSError:
+                    pass
+            raise
 
     def set_condition_presentation(
         self,

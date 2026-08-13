@@ -14,6 +14,11 @@ from PIL import Image
 from fpvs_studio.core.enums import DutyCycleMode, StimulusModality
 from fpvs_studio.core.run_spec import RunSpec
 from fpvs_studio.core.session_plan import SessionPlan
+from fpvs_studio.core.task_models import (
+    TaskItemModality,
+    TaskModuleSpec,
+    validate_task_module_repeat_capacity,
+)
 from fpvs_studio.core.validation import (
     approved_monitor_refresh_rate,
     validate_display_refresh,
@@ -267,7 +272,6 @@ def _validate_image_assets(
         expected_resolutions.add(
             (event.role, source_resolution.width_px, source_resolution.height_px)
         )
-
     missing_assets: list[str] = []
     unloadable_assets: list[str] = []
     resolution_mismatches: list[str] = []
@@ -312,6 +316,75 @@ def _validate_image_assets(
         raise PreflightError(
             "Run preflight failed because decoded image dimensions do not match "
             "compiled role source resolutions: " + ", ".join(resolution_mismatches[:5])
+        )
+
+
+def _task_image_paths(modules: list[TaskModuleSpec]) -> set[str]:
+    paths: set[str] = set()
+    for module in modules:
+        for step in module.steps:
+            paths.update(
+                item.image_path
+                for item in step.items
+                if item.modality == TaskItemModality.IMAGE and item.image_path is not None
+            )
+            paths.update(
+                option.image_path
+                for question in step.questions
+                for option in question.options
+                if option.image_path is not None
+            )
+    return paths
+
+
+def _validate_task_assets(
+    project_root: Path,
+    modules: list[TaskModuleSpec],
+    *,
+    decode: bool,
+) -> None:
+    missing_assets: list[str] = []
+    unloadable_assets: list[str] = []
+    for module in modules:
+        try:
+            validate_task_module_repeat_capacity(module)
+        except ValueError as exc:
+            raise PreflightError(
+                "Session preflight failed because task repeat capacity is invalid: "
+                f"{exc}"
+            ) from exc
+    for image_path in sorted(_task_image_paths(modules)):
+        absolute_path = _resolve_project_image_path(project_root, image_path)
+        if not absolute_path.is_file():
+            missing_assets.append(image_path)
+            continue
+        if not decode:
+            continue
+        try:
+            with Image.open(absolute_path) as image:
+                image.load()
+        except (OSError, ValueError) as exc:
+            unloadable_assets.append(f"{image_path} ({exc})")
+    if missing_assets:
+        raise PreflightError(
+            "Session preflight failed because referenced task assets are missing: "
+            + ", ".join(missing_assets[:5])
+        )
+    if unloadable_assets:
+        raise PreflightError(
+            "Session preflight failed because referenced task image assets could not be "
+            "decoded: " + ", ".join(unloadable_assets[:5])
+        )
+
+
+def _validate_task_engine_support(
+    engine: PresentationEngine,
+    modules: list[TaskModuleSpec],
+) -> None:
+    if modules and type(engine).render_task_step is PresentationEngine.render_task_step:
+        raise PreflightError(
+            f"Session preflight failed because presentation engine '{engine.engine_id}' "
+            "does not support modular condition tasks."
         )
 
 
@@ -399,6 +472,13 @@ def preflight_session_plan(
             decode_image_assets=decode_image_assets,
             verify_connected_refresh=False,
         )
+        task_modules = [*entry.pre_tasks, *entry.post_tasks]
+        _validate_task_assets(
+            project_root,
+            task_modules,
+            decode=decode_image_assets,
+        )
+        _validate_task_engine_support(engine, task_modules)
     _verify_connected_refresh_rate(
         [entry.run_spec for entry in ordered_entries],
         engine=engine,

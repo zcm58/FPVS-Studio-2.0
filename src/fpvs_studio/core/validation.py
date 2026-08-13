@@ -552,6 +552,30 @@ def validate_project(
 
     issues: list[ValidationIssue] = []
     stimulus_sets = {item.set_id: item for item in project.stimulus_sets}
+    task_modules = {item.task_id: item for item in project.task_modules}
+
+    for task in project.task_modules:
+        required_prefix = f"stimuli/task-assets/{task.task_id}/"
+        for step in task.steps:
+            asset_paths = [
+                item.image_path for item in step.items if item.image_path is not None
+            ] + [
+                option.image_path
+                for question in step.questions
+                for option in question.options
+                if option.image_path is not None
+            ]
+            for image_path in asset_paths:
+                if not image_path.startswith(required_prefix):
+                    issues.append(
+                        ValidationIssue(
+                            location=f"task_modules.{task.task_id}.{step.step_id}",
+                            message=(
+                                f"Task image assets must live beneath '{required_prefix}': "
+                                f"{image_path}"
+                            ),
+                        )
+                    )
 
     if refresh_hz is not None:
         protocol = project.settings.protocol
@@ -619,6 +643,24 @@ def validate_project(
             )
 
     for condition in project.conditions:
+        for phase_name, bindings in (
+            ("pre_task_bindings", condition.pre_task_bindings),
+            ("post_task_bindings", condition.post_task_bindings),
+        ):
+            for binding in bindings:
+                if binding.task_id not in task_modules:
+                    issues.append(
+                        ValidationIssue(
+                            location=(
+                                f"conditions.{condition.condition_id}.{phase_name}."
+                                f"{binding.task_id}"
+                            ),
+                            message=(
+                                f"Condition '{condition.name}' references missing task module "
+                                f"'{binding.task_id}'."
+                            ),
+                        )
+                    )
         if not condition.name.strip():
             issues.append(
                 ValidationIssue(

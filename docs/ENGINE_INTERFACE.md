@@ -24,6 +24,9 @@ as PsychoPy. Runtime owns flow and calls engines through
 - PsychoPy imports must remain lazy and local to engine implementations.
 - Engines return core-owned execution summaries; exporters stay outside engine
   code.
+- Runtime may pass one `ResolvedTaskStep` at a time to `render_task_step(...)`.
+  Engines return `TaskEngineInput`; they do not own module ordering, repeats, retries,
+  branching, validation, scoring, abort policy, or response export.
 - Engines apply compiled image/word transforms and geometry at presentation time. They
   must not write transformed stimulus assets or infer authoring inheritance.
 - A compiled pre-stream fixation phase is rendered after the participant gate and
@@ -37,6 +40,7 @@ as PsychoPy. Runtime owns flow and calls engines through
 - PsychoPy implementation facade: `src/fpvs_studio/engines/psychopy_engine.py`
 - PsychoPy helpers:
   - `src/fpvs_studio/engines/psychopy_loader.py`
+  - `src/fpvs_studio/engines/psychopy_tasks.py`
   - `src/fpvs_studio/engines/psychopy_text_screens.py`
   - `src/fpvs_studio/engines/psychopy_stimuli.py`
   - `src/fpvs_studio/engines/psychopy_timing.py`
@@ -57,3 +61,17 @@ word height, so the frame loop only selects and draws prepared objects. Horizont
 vertical mirrors use PsychoPy's native flip properties; 180-degree rotation uses native
 orientation. Cover geometry is cropped centrally in memory during preparation and never
 writes a project file.
+
+## Modular task rendering
+
+Runtime converts authored degrees or window-height fractions into calibrated pixel
+positions and sizes before calling the engine. Exact layouts preserve authored
+coordinates; responsive layouts arrive as already-positioned grids. The PsychoPy task
+renderer supports instructions, study displays, single/multiple image or text choices,
+short/long text, numeric input, rating scales, raw keys, and unskippable timed feedback.
+It uses Arial consistently, prepares task images through contained project-relative
+path resolution, and returns stable selected ids plus raw key/text/numeric and mouse/RT
+details. It uses native editable text controls for shifted characters, Unicode, and
+multiline long text; long text submits through the visible Submit control. Task clocks
+and keyboard clocks reset and carried events clear on the first task flip, without
+altering the FPVS run clock, compiled frame sequence, or flip-locked trigger schedule.

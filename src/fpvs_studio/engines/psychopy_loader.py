@@ -12,6 +12,7 @@ class PsychoPyModules:
     psychopy: Any
     visual: Any
     core: Any
+    event: Any
     keyboard: Any
     logging: Any
 
@@ -23,6 +24,7 @@ def load_psychopy_modules() -> PsychoPyModules:
         psychopy = import_module("psychopy")
         visual = import_module("psychopy.visual")
         core = import_module("psychopy.core")
+        event = import_module("psychopy.event")
         keyboard = import_module("psychopy.hardware.keyboard")
         logging = import_module("psychopy.logging")
     except ImportError as exc:  # pragma: no cover - exercised by import-boundary tests
@@ -35,6 +37,7 @@ def load_psychopy_modules() -> PsychoPyModules:
         psychopy=psychopy,
         visual=visual,
         core=core,
+        event=event,
         keyboard=keyboard,
         logging=logging,
     )

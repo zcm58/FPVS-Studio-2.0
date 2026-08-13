@@ -51,9 +51,10 @@ tests = [
   "tests/unit/test_fixation_settings.py",
   "tests/unit/test_document_conditions.py",
   "tests/unit/test_document_summary_refresh.py",
+  "tests/unit/test_condition_tasks.py",
 ]
 ci_tests = []
-include = ["src/fpvs_studio/core/**", "tests/unit/test_models.py", "tests/unit/test_validation.py", "tests/unit/test_fixation_settings.py", "tests/unit/test_document_*.py"]
+include = ["src/fpvs_studio/core/**", "tests/unit/test_models.py", "tests/unit/test_validation.py", "tests/unit/test_fixation_settings.py", "tests/unit/test_condition_tasks.py", "tests/unit/test_document_*.py"]
 manual_smoke = []
 
 [scopes.compiler]
@@ -64,7 +65,7 @@ tests = [
   "tests/unit/test_session_plan.py",
 ]
 ci_tests = []
-include = ["src/fpvs_studio/core/compiler.py", "src/fpvs_studio/core/run_spec.py", "src/fpvs_studio/core/session_plan.py", "tests/unit/test_compiler*.py", "tests/unit/test_session_plan.py"]
+include = ["src/fpvs_studio/core/compiler.py", "src/fpvs_studio/core/compiler_tasks.py", "src/fpvs_studio/core/run_spec.py", "src/fpvs_studio/core/session_plan.py", "tests/unit/test_compiler*.py", "tests/unit/test_session_plan.py"]
 manual_smoke = []
 
 [scopes."project-io"]
@@ -77,7 +78,7 @@ tests = [
   "tests/unit/test_template_library.py",
 ]
 ci_tests = []
-include = ["src/fpvs_studio/core/project*.py", "src/fpvs_studio/core/template_library.py", "src/fpvs_studio/core/condition_template_profiles.py", "tests/unit/test_project*.py", "tests/unit/test_template_library.py", "tests/unit/test_condition_template_profiles.py"]
+include = ["src/fpvs_studio/core/project*.py", "src/fpvs_studio/core/task_assets.py", "src/fpvs_studio/core/template_library.py", "src/fpvs_studio/core/condition_template_profiles.py", "tests/unit/test_project*.py", "tests/unit/test_template_library.py", "tests/unit/test_condition_template_profiles.py"]
 manual_smoke = []
 
 [scopes.preprocessing]
@@ -102,6 +103,7 @@ tests = [
   "tests/unit/test_runtime_launch_settings.py",
   "tests/unit/test_runtime_participant_history.py",
   "tests/unit/test_runtime_preflight.py",
+  "tests/unit/test_runtime_tasks.py",
 ]
 ci_tests = []
 include = ["src/fpvs_studio/runtime/**", "src/fpvs_studio/core/execution.py", "tests/unit/test_runtime_*.py"]
@@ -109,9 +111,9 @@ manual_smoke = []
 
 [scopes.engine]
 checks = []
-tests = ["tests/unit/test_psychopy_engine.py"]
+tests = ["tests/unit/test_psychopy_engine.py", "tests/unit/test_runtime_tasks.py"]
 ci_tests = ["tests/integration/test_psychopy_engine.py"]
-include = ["src/fpvs_studio/engines/**", "tests/unit/test_psychopy_engine.py", "tests/integration/test_psychopy_engine.py"]
+include = ["src/fpvs_studio/engines/**", "tests/unit/test_psychopy_engine.py", "tests/unit/test_runtime_tasks.py", "tests/integration/test_psychopy_engine.py"]
 manual_smoke = ["Run a short experiment on the intended presentation machine when engine playback changes."]
 
 [scopes.triggers]

@@ -37,6 +37,10 @@ from fpvs_studio.core.compiler_support import (
     make_session_id,
     make_session_run_id,
 )
+from fpvs_studio.core.compiler_tasks import (
+    compile_condition_tasks,
+    condition_tasks_replace_start_gate,
+)
 from fpvs_studio.core.fixation_planning import (
     max_supported_color_changes,
     milliseconds_to_frames,
@@ -58,6 +62,7 @@ from fpvs_studio.core.run_spec import (
     RunSpec,
 )
 from fpvs_studio.core.session_plan import SessionBlock, SessionEntry, SessionPlan
+from fpvs_studio.core.task_models import TaskPhase
 from fpvs_studio.core.template_library import get_template
 from fpvs_studio.core.trigger_codes import validate_oddball_trigger_code_policy
 from fpvs_studio.preprocessing.models import StimulusManifest
@@ -360,6 +365,26 @@ def compile_session_plan(
                     realized_target_count=realized_target_count,
                     manifest=resolved_manifest,
                 )
+                pre_tasks = compile_condition_tasks(
+                    project,
+                    condition,
+                    phase=TaskPhase.PRE_CONDITION,
+                    block_index=block_index,
+                    block_count=project.settings.session.block_count,
+                    session_seed=random_seed,
+                    run_id=run_id,
+                    project_root=project_root,
+                )
+                post_tasks = compile_condition_tasks(
+                    project,
+                    condition,
+                    phase=TaskPhase.POST_CONDITION,
+                    block_index=block_index,
+                    block_count=project.settings.session.block_count,
+                    session_seed=random_seed,
+                    run_id=run_id,
+                    project_root=project_root,
+                )
             except CompileError as exc:
                 raise CompileError(
                     f"Condition '{condition.name}' (id '{condition.condition_id}') "
@@ -374,6 +399,13 @@ def compile_session_plan(
                     condition_name=condition.name,
                     run_id=run_id,
                     run_spec=run_spec,
+                    pre_tasks=pre_tasks,
+                    post_tasks=post_tasks,
+                    show_condition_start_gate=not condition_tasks_replace_start_gate(
+                        condition,
+                        block_index=block_index,
+                        block_count=project.settings.session.block_count,
+                    ),
                 )
             )
             if fixation_settings.enabled and fixation_settings.target_count_mode == "randomized":

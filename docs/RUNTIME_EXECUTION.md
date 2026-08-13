@@ -36,6 +36,7 @@ SessionPlan
   -> if fixation accuracy and the participant tutorial are enabled:
        -> run the tutorial once, before the first condition-start screen
   -> for each SessionEntry in order:
+       -> execute compiled pre-condition task modules, if any
        -> engine.show_transition_screen(..., continue_key="space")
        -> engine.run_condition(RunSpec, ...)
             -> preload resolved presentation objects
@@ -43,6 +44,7 @@ SessionPlan
                fixation-only lead-in
             -> reset input and run-relative timing
             -> present stream frame zero and its condition trigger together
+       -> execute compiled post-condition task modules, if any
        -> if this completed a non-final block:
             -> engine.show_block_break_screen(...)
        -> runtime scores fixation responses
@@ -59,6 +61,24 @@ SessionPlan
 The engine never receives `ProjectFile`. It only receives one compiled
 `RunSpec`, the project root for asset resolution, and runtime-only launch
 options.
+
+Modular task clocks are separate from the FPVS clock. Runtime expands module repeats
+outside step repeats, renders questionnaire questions one at a time, evaluates bounded
+branch rules, validates raw engine input, applies authored retry policies, and records
+module repetition, step repetition, and attempt indices separately. A required timeout
+or invalid response ends the task flow after its configured attempts. Model validation
+and session preflight reject no-duplicate repeat plans unless their fixed required
+selection count can be satisfied from distinct choice-grid, questionnaire-option, or
+rating-tick pools across every module and step repetition; runtime repeats this check
+before rendering as a defense against unvalidated compiled copies. A pre-task or
+post-pre-task transition abort creates a start-aborted run result containing every
+response collected so far. A post-task abort leaves a successfully completed FPVS run
+marked complete while recording the separate task-flow abort stage and ending the
+session.
+
+Task assets are preflighted as contained project-relative paths before participant
+screens open. Routine preflight checks existence; deep preflight also decodes task
+images. The selected engine must advertise the neutral modular-task rendering seam.
 
 Default launch settings require connected-display refresh verification. Preflight asks
 Windows `QueryDisplayConfig` for the primary active path's rational configured mode,
@@ -94,6 +114,15 @@ The PsychoPy implementation:
   runtime artifacts
 - runs fixation-only participant tutorial attempts when runtime asks for practice
 - shows a dedicated manual inter-block break screen between non-final blocks
+- renders runtime-resolved modular instruction, study, image/text choice-grid,
+  questionnaire, raw-key, and fixed-duration feedback screens outside FPVS timing
+- uses one stable Arial font for modular task text, honors exact calibrated geometry or
+  runtime-created responsive grids, and resolves task images through the contained
+  project-path helper before creating stimuli
+- starts each task response clock and clears carried keyboard events on the first task
+  flip; mouse responses return stable item ids, coordinates, button, and reaction time
+- ignores all non-Escape keys on fixed-duration feedback screens so authored durations
+  cannot be skipped
 - preloads each condition's unique image or word stimuli before playback and releases
   condition-local resources when the condition ends
 - prepares every unique resolved render identity before playback, including runtime
@@ -264,6 +293,10 @@ Run export modes:
   - skips detailed `runs/` session and run artifact folders
   - still appends `logs/session_condition_history.csv` and regenerates
     `logs/participant_summary.xlsx` and `logs/participant_summary.csv`
+  - when modular tasks collect responses, appends raw participant/session-keyed rows to
+    `logs/task_responses.csv`; an opaque journal under
+    `logs/.task-response-checkpoints/` protects partial responses during execution and
+    is removed only after the compact CSV is finalized
   - returns no run-folder output path, so Run page folder actions stay hidden
 
 Per session, full export mode:
@@ -278,6 +311,7 @@ Per session, full export mode:
 - `responses.csv`
 - `frame_intervals.csv`
 - `trigger_log.csv`
+- `task_responses.csv`
 - `warnings.log`
 
 Per run, full export mode:
@@ -294,7 +328,17 @@ Per run, full export mode:
 - `responses.csv`
 - `frame_intervals.csv`
 - `trigger_log.csv`
+- `task_responses.csv`
+- `task_responses.jsonl` (append-only partial-response checkpoint)
 - `warnings.log`
+
+Task response exports contain stable task/step/question ids, realized option order,
+module and step repetition, retry attempt, raw value, RT, mouse details, validity,
+timeout/abort state, and optional correctness/score. Participant-entered text that
+could be interpreted as a spreadsheet formula is apostrophe-prefixed in CSV while the
+JSON/JSONL research record retains the raw value. Raw task responses are deliberately
+absent from participant/group summaries, condition-history rows, project files,
+templates, configs, and portable project bundles.
 
 Run and session `events.csv` exports include neutral stimulus columns:
 `stimulus_modality`, `stimulus_id`, `stimulus_value`, `image_path`, and `text`.
@@ -307,8 +351,11 @@ Studio `.fpvsconfig` export is a separate summary/interchange file built from th
 project, stimulus manifest, and optionally an existing completed session directory. A
 completed `.fpvsconfig` preserves the session seed, realized condition order, per-run
 stimulus shuffle seeds, trigger schedule, display geometry, and stimulus-generation
-provenance so another lab can recreate the setup. It does not replace the authoritative
-artifacts under `runs/`, and runtime does not consume `.fpvsconfig` during playback.
+provenance so another lab can recreate the setup. Configs omit FPVS stimulus libraries
+but embed hashed modular-task media together with task definitions so those workflows
+remain portable. They never contain participant task responses. A config does not
+replace the authoritative artifacts under `runs/`, and runtime does not consume
+`.fpvsconfig` during playback.
 
 ## Session mode
 
@@ -338,7 +385,8 @@ independent of the retired mode gate.
 Still deferred after Phase 4:
 
 - GUI project editor
-- advanced response-task variants beyond fixation
+- arbitrary executable/scripted task code and task controls beyond the declarative
+  modular primitives
 - more sophisticated balancing/counterbalancing beyond compiled `SessionPlan`
 - non-PsychoPy presentation backends
 

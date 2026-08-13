@@ -73,7 +73,11 @@ interaction.
   rows and source cards without extra section headers. Raw image-folder selection is
   permissive; uniform rectangular sets are valid native inputs, while inconsistent
   dimensions within a set are handled by the guided normalization flow before leaving
-  Conditions. Control-condition creation and normalization stay image-only paths.
+  Conditions. Control-condition creation and normalization stay image-only paths. A
+  condition-level `Pre/Post Tasks...` dialog authors reusable ordered participant-task
+  modules and neutral questionnaire workflows while preserving the six-step wizard;
+  task media is staged until Apply and then stored under the active project's
+  `stimuli/task-assets/<task-id>/` folder.
 - Fixation and Response are split guided setup areas: Fixation handles color-change
   schedule/timing, while Response handles accuracy tracking, response key/window,
   appearance, and preview.

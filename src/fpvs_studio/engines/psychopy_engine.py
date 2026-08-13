@@ -20,7 +20,12 @@ from fpvs_studio.core.execution import (
     TriggerRecord,
 )
 from fpvs_studio.core.run_spec import FixationEvent, RunSpec, TriggerEvent
-from fpvs_studio.engines.base import FixationTutorialAttemptResult, PresentationEngine
+from fpvs_studio.engines.base import (
+    FixationTutorialAttemptResult,
+    PresentationEngine,
+    ResolvedTaskStep,
+    TaskEngineInput,
+)
 from fpvs_studio.engines.psychopy_loader import load_psychopy_modules
 from fpvs_studio.engines.psychopy_metadata import runtime_metadata_for_run
 from fpvs_studio.engines.psychopy_stimuli import (
@@ -30,6 +35,7 @@ from fpvs_studio.engines.psychopy_stimuli import (
     should_draw_stimulus,
     stimulus_render_key,
 )
+from fpvs_studio.engines.psychopy_tasks import render_task_step
 from fpvs_studio.engines.psychopy_text_screens import show_text_screen
 from fpvs_studio.engines.psychopy_timing import (
     TimingConfig,
@@ -56,6 +62,7 @@ class PsychoPyEngine(PresentationEngine):
         self._psychopy: Any | None = None
         self._visual: Any | None = None
         self._core: Any | None = None
+        self._event: Any | None = None
         self._keyboard_module: Any | None = None
         self._psychopy_logging: Any | None = None
         self._window: Any | None = None
@@ -105,6 +112,7 @@ class PsychoPyEngine(PresentationEngine):
         psychopy = self._load_psychopy()
         visual = psychopy.visual
         keyboard_module = psychopy.hardware.keyboard
+        self._event = getattr(psychopy, "event", self._event)
 
         self._runtime_options = dict(runtime_options or {})
         self._window = visual.Window(**build_window_kwargs(self._runtime_options))
@@ -510,6 +518,36 @@ class PsychoPyEngine(PresentationEngine):
             release_stimuli(stimuli)
             self._active_run_clock = None
 
+    def render_task_step(
+        self,
+        step: ResolvedTaskStep,
+        project_root: Path,
+    ) -> TaskEngineInput:
+        """Render one runtime-owned modular task screen outside FPVS timing."""
+
+        self.open_session(runtime_options=self._runtime_options)
+        window = self._require_window()
+        previous_record_frame_intervals = bool(getattr(window, "recordFrameIntervals", False))
+        window.recordFrameIntervals = False
+        if hasattr(window, "frameIntervals"):
+            window.frameIntervals = []
+        try:
+            return render_task_step(
+                visual=self._require_visual(),
+                core=self._require_core(),
+                event=self._require_event(),
+                window=window,
+                keyboard=self._require_keyboard(),
+                project_root=project_root,
+                step=step,
+                is_aborted=lambda: self._aborted,
+                set_aborted=self.abort,
+            )
+        finally:
+            window.recordFrameIntervals = previous_record_frame_intervals
+            if hasattr(window, "frameIntervals"):
+                window.frameIntervals = []
+
     def show_completion_screen(
         self,
         *,
@@ -768,6 +806,7 @@ class PsychoPyEngine(PresentationEngine):
         self._psychopy = modules.psychopy
         self._visual = modules.visual
         self._core = modules.core
+        self._event = modules.event
         self._keyboard_module = modules.keyboard
         self._psychopy_logging = modules.logging
         return modules.psychopy
@@ -779,6 +818,15 @@ class PsychoPyEngine(PresentationEngine):
     def _require_visual(self) -> Any:
         self._load_psychopy()
         return self._visual
+
+    def _require_event(self) -> Any:
+        self._load_psychopy()
+        if self._event is None:
+            event_module = getattr(self._psychopy, "event", None)
+            if event_module is None:
+                raise RuntimeError("PsychoPy mouse support is unavailable.")
+            self._event = event_module
+        return self._event
 
     def _require_window(self) -> Any:
         if self._window is None:

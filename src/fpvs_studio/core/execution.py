@@ -12,10 +12,12 @@ from pydantic import Field, StrictBool, StrictInt, field_validator, model_valida
 
 from fpvs_studio.core.enums import RunMode, SchemaVersion
 from fpvs_studio.core.models import FPVSBaseModel, validate_project_relative_path
+from fpvs_studio.core.task_models import TaskResponseRecord
 
 FixationOutcome = Literal["hit", "miss"]
 ResponseOutcome = Literal["hit", "false_alarm"]
 TriggerStatus = Literal["scheduled", "sent", "error", "skipped_disabled", "failed", "skipped"]
+TaskAbortStage = Literal["pre_condition", "post_condition"]
 
 PARTICIPANT_SEX_VALUES = frozenset({"Female", "Male"})
 PARTICIPANT_HANDEDNESS_VALUES = frozenset(
@@ -216,7 +218,7 @@ class TriggerRecord(FPVSBaseModel):
 class RunExecutionSummary(FPVSBaseModel):
     """Execution result for one `RunSpec` playback."""
 
-    schema_version: str = SchemaVersion.V1.value
+    schema_version: str = SchemaVersion.V1_2.value
     project_id: str
     session_id: str | None = None
     run_id: str
@@ -231,6 +233,11 @@ class RunExecutionSummary(FPVSBaseModel):
     completed_frames: int = Field(default=0, ge=0)
     aborted: bool = False
     abort_reason: str | None = None
+    task_flow_completed: bool = True
+    task_flow_aborted: bool = False
+    task_abort_stage: TaskAbortStage | None = None
+    task_abort_id: str | None = None
+    task_abort_reason: str | None = None
     warnings: list[str] = Field(default_factory=list)
     runtime_metadata: RuntimeMetadata | None = None
     frame_intervals: list[FrameIntervalRecord] = Field(default_factory=list)
@@ -238,6 +245,7 @@ class RunExecutionSummary(FPVSBaseModel):
     fixation_task_summary: FixationTaskSummary | None = None
     response_log: list[ResponseRecord] = Field(default_factory=list)
     trigger_log: list[TriggerRecord] = Field(default_factory=list)
+    task_responses: list[TaskResponseRecord] = Field(default_factory=list)
     output_dir: str | None = None
 
     @field_validator("participant_number")
@@ -252,11 +260,27 @@ class RunExecutionSummary(FPVSBaseModel):
             return value
         return validate_project_relative_path(value)
 
+    @model_validator(mode="after")
+    def validate_task_abort_metadata(self) -> RunExecutionSummary:
+        abort_details = (
+            self.task_abort_stage,
+            self.task_abort_id,
+            self.task_abort_reason,
+        )
+        if self.task_flow_aborted:
+            if self.task_flow_completed:
+                raise ValueError("An aborted task flow may not be marked completed.")
+            if self.task_abort_stage is None or not self.task_abort_reason:
+                raise ValueError("Task-flow aborts require stage and reason metadata.")
+        elif any(value is not None for value in abort_details):
+            raise ValueError("Task abort metadata requires task_flow_aborted=true.")
+        return self
+
 
 class SessionExecutionSummary(FPVSBaseModel):
     """Session-level aggregate result built by the runtime."""
 
-    schema_version: str = SchemaVersion.V1.value
+    schema_version: str = SchemaVersion.V1_2.value
     project_id: str
     session_id: str
     engine_name: str

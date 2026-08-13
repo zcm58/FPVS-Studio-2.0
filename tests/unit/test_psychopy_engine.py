@@ -1483,6 +1483,38 @@ def test_psychopy_engine_uses_final_warmup_frames_for_fixation_lead_in(
     assert trigger_backend.records[1]["time_s"] == pytest.approx(0.2)
 
 
+def test_two_second_lead_in_uses_final_half_of_default_warmup_at_sixty_hz(
+    monkeypatch,
+    sample_project,
+    sample_project_root,
+) -> None:
+    run_spec = _two_event_run_spec(sample_project, sample_project_root, duplicate_image=False)
+    run_spec = run_spec.model_copy(update={"pre_stream_fixation_frames": 120})
+    captures: dict[str, object] = {}
+    fake_psychopy = _build_fake_psychopy(captures, flip_times=[])
+    engine = PsychoPyEngine()
+    _patch_fake_psychopy(monkeypatch, engine, fake_psychopy)
+
+    try:
+        summary = engine.run_condition(
+            run_spec,
+            sample_project_root,
+            runtime_options={"timing_warmup_frames": 240, "strict_timing": False},
+            trigger_backend=None,
+        )
+    finally:
+        engine.close_session()
+
+    window = captures["window"]
+    assert isinstance(window, _FakeWindow)
+    assert window._flip_index == 240 + run_spec.display.total_frames
+    shape_stims = captures["shape_stims"]
+    assert isinstance(shape_stims, list)
+    assert shape_stims[0].draw_count == 120 + run_spec.display.total_frames
+    assert summary.runtime_metadata is not None
+    assert summary.runtime_metadata.timing_qc_warmup_frames == 240
+
+
 def test_psychopy_engine_reports_long_lead_in_as_actual_pre_stream_qc_frames(
     monkeypatch,
     sample_project,

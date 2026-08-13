@@ -1,9 +1,10 @@
 # SessionPlan Contract
 
 `SessionPlan` is the compiled multi-condition session contract for FPVS Studio.
-The current persisted contract is schema `1.1.0`; each embedded `RunSpec` uses the
-matching `1.1.0` presentation contract. Schema `1.0.0` projects are migrated in memory
-before compilation and are not rewritten merely by loading or launching them.
+The current persisted contract is schema `1.2.0`; each embedded `RunSpec` retains its
+independent `1.1.0` timed-presentation contract. Schema `1.0.0` and `1.1.0` projects
+are migrated in memory before compilation and are not rewritten merely by loading or
+launching them.
 
 It sits above `RunSpec`:
 
@@ -44,12 +45,24 @@ Represents one compiled occurrence of one condition inside the session:
 - condition id and name
 - deterministic `run_id`
 - embedded single-condition `RunSpec`
+- compiled `pre_tasks` and `post_tasks`
+- whether the ordinary condition start gate remains visible
 
 Each embedded `RunSpec` carries that condition's resolved timing template. A single
 `SessionPlan` may mix continuous-image and 50% blank conditions without adding
 session-level timing branches. It also carries the condition's fully resolved Base and
 Oddball presentation rules and its pre-stream fixation frame count, so session runtime
 does not inspect editable project presentation settings.
+
+Task modules are project-owned, ordered declarative workflows. Conditions bind them
+to pre- or post-condition phases with one of three occurrence scopes: every session
+entry, the first occurrence of that condition, or its last occurrence. Compilation
+resolves each applicable binding into `TaskModuleSpec` and records deterministic item
+and questionnaire-option order without changing the embedded `RunSpec`.
+
+Each module contains ordered task steps and may repeat as a group. This group repeat
+keeps workflows such as Creatine's choice-grid then timed-feedback pair interleaved.
+Steps may independently repeat when a single screen itself requires repetition.
 
 ### `SessionBlock`
 
@@ -89,6 +102,8 @@ The current v1 policy is:
   preserving no-immediate-repeat constraints when enabled
 - each embedded `RunSpec` then distributes the realized fixation targets across
   the whole condition with balanced seeded jitter and minimum-gap buffers
+- task option randomization uses a task-specific deterministic seed namespace and
+  records stable item/option ids in the compiled task spec
 
 ## Runtime responsibilities
 
@@ -99,16 +114,25 @@ Runtime consumes `SessionPlan` and:
 - opens one engine session/window for the whole plan
 - runs the participant fixation tutorial once before the first condition when compiled
   fixation accuracy and tutorial settings are enabled
-- shows a Space-required start screen before every condition run, using generic
-  headings such as `Condition 1 of 4`; authored condition names remain internal
-  metadata for artifacts and review
+- normally shows a Space-required start screen before a condition run, using generic
+  headings such as `Condition 1 of 4`; a pre-task binding may explicitly replace this
+  gate when the authored workflow already contains its own reminder/acknowledgement
 - iterates `SessionEntry.run_spec` in order
+- executes compiled pre-tasks before the optional condition start gate and post-tasks
+  immediately after the timed stream, before fixation feedback or block/session
+  transitions
 - lets the engine render the compiled fixation-only lead-in after the Space gate and
   before stream frame zero; the condition trigger and first stimulus remain aligned on
   frame zero
 - aggregates run execution results into a `SessionExecutionSummary`
 
 Engines still consume one `RunSpec` at a time.
+
+Task clocks and responses stay outside the stream frame clock. A task cannot schedule
+an FPVS trigger, fixation target, or stimulus event. The engine renders one neutral
+compiled task step and returns neutral participant input; runtime owns repetition,
+validation, retries, bounded forward branching, aborts, and incremental response
+checkpointing.
 
 ## Relationship to execution results
 
@@ -123,6 +147,7 @@ It stores:
 - ordered run results
 - abort/completion state
 - warnings
+- per-run task response records and task-flow completion/abort metadata
 
 That split keeps planning and execution artifacts distinct.
 

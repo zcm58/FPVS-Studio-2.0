@@ -21,6 +21,14 @@ from fpvs_studio.core.project_bundle import (
     read_project_bundle_manifest,
 )
 from fpvs_studio.core.serialization import load_project_file, save_project_file
+from fpvs_studio.core.task_models import (
+    TaskBinding,
+    TaskDisplayItem,
+    TaskItemModality,
+    TaskModule,
+    TaskStep,
+    TaskStepKind,
+)
 from fpvs_studio.preprocessing.manifest import create_empty_manifest, write_stimulus_manifest
 from fpvs_studio.preprocessing.models import StimulusManifest
 
@@ -69,6 +77,52 @@ def test_export_project_bundle_writes_project_stimuli_and_manifest(
     reloaded = read_project_bundle_manifest(bundle_path)
     assert reloaded == manifest
     assert {record.path for record in reloaded.files} == names - {BUNDLE_MANIFEST_FILENAME}
+
+
+def test_project_bundle_preserves_task_definitions_and_assets(
+    tmp_path,
+    sample_project,
+    sample_project_root,
+) -> None:
+    task_path = sample_project_root / "stimuli" / "task-assets" / "memory" / "apple.png"
+    task_path.parent.mkdir(parents=True)
+    task_path.write_bytes(
+        (sample_project_root / "stimuli" / "original-images" / "base-set" / "base-set-01.png")
+        .read_bytes()
+    )
+    sample_project.task_modules = [
+        TaskModule(
+            task_id="memory",
+            name="Memory",
+            steps=[
+                TaskStep(
+                    step_id="study",
+                    kind=TaskStepKind.STUDY,
+                    continue_key="space",
+                    items=[
+                        TaskDisplayItem(
+                            item_id="apple",
+                            modality=TaskItemModality.IMAGE,
+                            image_path="stimuli/task-assets/memory/apple.png",
+                        )
+                    ],
+                )
+            ],
+        )
+    ]
+    sample_project.conditions[0].pre_task_bindings = [TaskBinding(task_id="memory")]
+    _save_bundle_ready_project(sample_project_root, sample_project)
+    bundle_path = tmp_path / "tasks.fpvsbundle"
+
+    export_project_bundle(sample_project_root, bundle_path)
+
+    with zipfile.ZipFile(bundle_path) as archive:
+        assert "stimuli/task-assets/memory/apple.png" in archive.namelist()
+    imported = import_project_bundle(bundle_path, tmp_path / "import-root")
+    assert imported.project.task_modules[0].task_id == "memory"
+    assert (
+        imported.project_root / "stimuli" / "task-assets" / "memory" / "apple.png"
+    ).is_file()
 
 
 def test_export_project_bundle_can_rename_portable_copy_without_mutating_source(

@@ -38,6 +38,7 @@ from fpvs_studio.core.paths import (
     stimulus_generated_variants_root,
     stimulus_manifest_path,
     stimulus_original_images_root,
+    task_assets_root,
     to_project_relative_posix,
     validate_project_id,
 )
@@ -595,6 +596,24 @@ def _validate_bundle_source(
             _resolve_existing_relative_file(project_root, asset.source.relative_path)
             for derivative in asset.derivatives:
                 _resolve_existing_relative_file(project_root, derivative.relative_path)
+    for task in project.task_modules:
+        prefix = f"stimuli/task-assets/{task.task_id}/"
+        for step in task.steps:
+            task_paths = [
+                item.image_path for item in step.items if item.image_path is not None
+            ] + [
+                option.image_path
+                for question in step.questions
+                for option in question.options
+                if option.image_path is not None
+            ]
+            for task_path in task_paths:
+                if not task_path.startswith(prefix):
+                    raise ProjectBundleError(
+                        f"Task '{task.task_id}' asset must live beneath '{prefix}': "
+                        f"{task_path}"
+                    )
+                _resolve_existing_relative_file(project_root, task_path)
     try:
         compile_session_plan(
             project,
@@ -770,6 +789,7 @@ def _ensure_import_project_structure(project_root: Path) -> None:
         stimuli_dir(project_root),
         stimulus_original_images_root(project_root),
         stimulus_generated_variants_root(project_root),
+        task_assets_root(project_root),
         runs_dir(project_root),
         cache_dir(project_root),
         logs_dir(project_root),

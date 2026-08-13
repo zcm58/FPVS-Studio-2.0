@@ -20,6 +20,7 @@ GRAYSCALE_VARIANTS_DIRNAME = "grayscale-variants"
 ROTATED_180_VARIANTS_DIRNAME = "rotated-180-variants"
 SCRAMBLED_VARIANTS_DIRNAME = "scrambled-variants"
 MANIFEST_FILENAME = "manifest.json"
+TASK_ASSETS_DIRNAME = "task-assets"
 APP_DATA_DIRNAME = ".fpvs-studio"
 TEMPLATES_DIRNAME = "templates"
 CONDITION_TEMPLATE_LIBRARY_FILENAME = "condition_templates.json"
@@ -163,6 +164,18 @@ def stimulus_manifest_path(project_root: Path) -> Path:
     """Return the preprocessing manifest path."""
 
     return stimuli_dir(project_root) / MANIFEST_FILENAME
+
+
+def task_assets_root(project_root: Path) -> Path:
+    """Return the project-local root for task media."""
+
+    return stimuli_dir(project_root) / TASK_ASSETS_DIRNAME
+
+
+def task_asset_dir(project_root: Path, task_id: str) -> Path:
+    """Return one task module's media directory."""
+
+    return task_assets_root(project_root) / task_id
 
 
 def runs_dir(project_root: Path) -> Path:

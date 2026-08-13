@@ -28,6 +28,9 @@ backend-driven.
 - Keep fixation accuracy-task and participant-tutorial controls in the Fixation/Session
   UI as model-bound settings only; compile-time realization, runtime scoring, and
   participant feedback flow must remain outside widget code.
+- Keep reusable pre/post-condition task authoring in the Conditions workflow as a thin
+  editor over core task models. Import task media through the core task-asset service;
+  do not copy assets until the user applies a valid dialog draft.
 - Keep PsychoPy startup lazy; opening the GUI alone must not create a PsychoPy window.
 - Keep runtime launch messaging honest about fullscreen display verification and
   timing-QC behavior.

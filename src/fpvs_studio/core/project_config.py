@@ -8,10 +8,13 @@ reproducibility metadata.
 
 from __future__ import annotations
 
+import base64
+import binascii
+import hashlib
 import json
 import re
 from datetime import datetime, timezone
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Literal
 
 from pydantic import Field, StrictInt, ValidationError, field_validator, model_validator
@@ -37,6 +40,8 @@ from fpvs_studio.core.models import (
     ProtocolSettings,
     SessionSettings,
     StimulusSet,
+    TaskBinding,
+    TaskModule,
     TriggerSettings,
     validate_project_relative_path,
     validate_slug,
@@ -46,12 +51,14 @@ from fpvs_studio.core.paths import (
     logs_dir,
     project_dir,
     project_json_path,
+    resolve_project_relative_path,
     runs_dir,
     stimuli_dir,
     stimulus_generated_variants_root,
     stimulus_manifest_path,
     stimulus_original_images_root,
     stimulus_originals_dir,
+    task_assets_root,
 )
 from fpvs_studio.core.presentation import legacy_project_presentation_settings
 from fpvs_studio.core.project_service import ProjectScaffold
@@ -61,9 +68,11 @@ from fpvs_studio.core.trigger_codes import validate_oddball_trigger_code_policy
 from fpvs_studio.preprocessing.manifest import create_empty_manifest, write_stimulus_manifest
 from fpvs_studio.preprocessing.models import StimulusManifest, StimulusSetManifest
 
-CONFIG_SCHEMA_VERSION = "1.1.0"
+CONFIG_SCHEMA_VERSION = "1.2.0"
 PROJECT_CONFIG_SUFFIX = ".fpvsconfig"
 _CONFIG_FILENAME_RE = re.compile(r"[^a-z0-9]+")
+_SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
+_TASK_ASSET_SUFFIXES = frozenset({".jpg", ".jpeg", ".png"})
 
 
 class ProjectConfigError(ValueError):
@@ -119,6 +128,8 @@ class ProjectConfigCondition(FPVSBaseModel):
     presentation: ConditionPresentationSettings = Field(
         default_factory=ConditionPresentationSettings
     )
+    pre_task_bindings: list[TaskBinding] = Field(default_factory=list)
+    post_task_bindings: list[TaskBinding] = Field(default_factory=list)
 
     @field_validator("condition_id", "base_stimulus_set_id", "oddball_stimulus_set_id")
     @classmethod
@@ -259,14 +270,61 @@ class ProjectConfigStimulusProvenance(FPVSBaseModel):
     sets: list[StimulusSetManifest] = Field(default_factory=list)
 
 
+class ProjectConfigTaskAsset(FPVSBaseModel):
+    """One self-contained task image carried by a portable config."""
+
+    task_id: str
+    relative_path: str
+    sha256: str
+    data_base64: str
+
+    @field_validator("task_id")
+    @classmethod
+    def validate_task_id(cls, value: str) -> str:
+        return validate_slug(value, field_name="task_id")
+
+    @field_validator("relative_path")
+    @classmethod
+    def validate_relative_path(cls, value: str) -> str:
+        return validate_project_relative_path(value)
+
+    @field_validator("sha256")
+    @classmethod
+    def validate_sha256(cls, value: str) -> str:
+        normalized = value.lower()
+        if not _SHA256_RE.fullmatch(normalized):
+            raise ValueError("Task asset sha256 must contain 64 lowercase hex characters.")
+        return normalized
+
+    @model_validator(mode="after")
+    def validate_payload(self) -> ProjectConfigTaskAsset:
+        path = PurePosixPath(self.relative_path)
+        required_prefix = ("stimuli", "task-assets", self.task_id)
+        if path.parts[:3] != required_prefix or len(path.parts) < 4:
+            raise ValueError(
+                f"Task asset must live beneath stimuli/task-assets/{self.task_id}/."
+            )
+        if path.suffix.lower() not in _TASK_ASSET_SUFFIXES:
+            raise ValueError(f"Unsupported task asset extension: {path.suffix}")
+        try:
+            decoded = base64.b64decode(self.data_base64, validate=True)
+        except (binascii.Error, ValueError) as exc:
+            raise ValueError("Task asset data_base64 is not valid base64 data.") from exc
+        if hashlib.sha256(decoded).hexdigest() != self.sha256:
+            raise ValueError("Task asset data does not match its sha256 digest.")
+        return self
+
+
 class ProjectConfigFile(FPVSBaseModel):
     """Top-level Studio `.fpvsconfig` interchange file."""
 
-    schema_version: Literal["1.1.0"] = "1.1.0"
+    schema_version: Literal["1.2.0"] = "1.2.0"
     producer: ProjectConfigProducer = Field(default_factory=ProjectConfigProducer)
     project: ProjectConfigProject
     conditions: list[ProjectConfigCondition] = Field(default_factory=list)
     stimulus_sets: list[ProjectConfigStimulusSet] = Field(default_factory=list)
+    task_modules: list[TaskModule] = Field(default_factory=list)
+    task_assets: list[ProjectConfigTaskAsset] = Field(default_factory=list)
     display: ProjectConfigDisplay
     presentation: ProjectPresentationSettings = Field(default_factory=ProjectPresentationSettings)
     protocol: ProjectConfigProtocol = Field(default_factory=ProjectConfigProtocol)
@@ -275,6 +333,42 @@ class ProjectConfigFile(FPVSBaseModel):
     toolbox: ProjectConfigToolbox
     stimulus_provenance: ProjectConfigStimulusProvenance | None = None
     completed_session: ProjectConfigCompletedSession | None = None
+
+    @model_validator(mode="after")
+    def validate_task_asset_inventory(self) -> ProjectConfigFile:
+        referenced = {
+            (task.task_id, path)
+            for task in self.task_modules
+            for step in task.steps
+            for path in [
+                *(item.image_path for item in step.items if item.image_path is not None),
+                *(
+                    option.image_path
+                    for question in step.questions
+                    for option in question.options
+                    if option.image_path is not None
+                ),
+            ]
+        }
+        embedded = [(asset.task_id, asset.relative_path) for asset in self.task_assets]
+        if len(embedded) != len(set(embedded)):
+            raise ValueError("Portable task asset ownership/path pairs must be unique.")
+        if referenced != set(embedded):
+            missing = sorted(referenced - set(embedded))
+            extra = sorted(set(embedded) - referenced)
+            details = []
+            if missing:
+                details.append(
+                    "missing embedded assets: "
+                    + ", ".join(f"{task_id}:{path}" for task_id, path in missing[:5])
+                )
+            if extra:
+                details.append(
+                    "unreferenced embedded assets: "
+                    + ", ".join(f"{task_id}:{path}" for task_id, path in extra[:5])
+                )
+            raise ValueError("Task asset inventory mismatch (" + "; ".join(details) + ").")
+        return self
 
 
 def export_project_config(
@@ -311,6 +405,14 @@ def export_project_config(
                 order_index=condition.order_index,
                 instructions=condition.instructions,
                 presentation=condition.presentation.model_copy(deep=True),
+                pre_task_bindings=[
+                    binding.model_copy(deep=True)
+                    for binding in condition.pre_task_bindings
+                ],
+                post_task_bindings=[
+                    binding.model_copy(deep=True)
+                    for binding in condition.post_task_bindings
+                ],
             )
             for condition in sorted(project.conditions, key=lambda item: item.order_index)
         ],
@@ -324,6 +426,8 @@ def export_project_config(
             )
             for stimulus_set in project.stimulus_sets
         ],
+        task_modules=[task.model_copy(deep=True) for task in project.task_modules],
+        task_assets=_portable_task_assets(project, project_root),
         display=_display_config(project.settings.display),
         presentation=project.settings.presentation.model_copy(deep=True),
         protocol=ProjectConfigProtocol(
@@ -375,6 +479,15 @@ def read_project_config(path: Path) -> ProjectConfigFile:
             for condition_payload in conditions_payload:
                 if isinstance(condition_payload, dict):
                     condition_payload.setdefault("presentation", {})
+    if raw_version in {"1.0.0", "1.1.0"}:
+        conditions_payload = raw_payload.get("conditions", [])
+        if isinstance(conditions_payload, list):
+            for condition_payload in conditions_payload:
+                if isinstance(condition_payload, dict):
+                    condition_payload.setdefault("pre_task_bindings", [])
+                    condition_payload.setdefault("post_task_bindings", [])
+        raw_payload.setdefault("task_modules", [])
+        raw_payload.setdefault("task_assets", [])
         raw_payload["schema_version"] = CONFIG_SCHEMA_VERSION
         raw_version = CONFIG_SCHEMA_VERSION
     if raw_version != CONFIG_SCHEMA_VERSION:
@@ -391,12 +504,14 @@ def read_project_config(path: Path) -> ProjectConfigFile:
 def create_project_from_config(parent_dir: Path, config: ProjectConfigFile) -> ProjectScaffold:
     """Create a new Studio project shell from a `.fpvsconfig` file."""
 
+    decoded_task_assets = _decoded_task_assets(config)
     target_dir, project_id = _unique_import_project_dir(parent_dir, config.project.project_id)
     for folder in (
         target_dir,
         stimuli_dir(target_dir),
         stimulus_original_images_root(target_dir),
         stimulus_generated_variants_root(target_dir),
+        task_assets_root(target_dir),
         runs_dir(target_dir),
         cache_dir(target_dir),
         logs_dir(target_dir),
@@ -410,6 +525,11 @@ def create_project_from_config(parent_dir: Path, config: ProjectConfigFile) -> P
                 parents=True,
                 exist_ok=True,
             )
+
+    for relative_path, payload in decoded_task_assets:
+        destination = resolve_project_relative_path(target_dir, relative_path)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(payload)
 
     project = ProjectFile(
         meta=ProjectMeta(
@@ -440,13 +560,94 @@ def create_project_from_config(parent_dir: Path, config: ProjectConfigFile) -> P
                 duty_cycle_mode=condition.duty_cycle_mode,
                 order_index=index,
                 presentation=condition.presentation.model_copy(deep=True),
+                pre_task_bindings=[
+                    binding.model_copy(deep=True)
+                    for binding in condition.pre_task_bindings
+                ],
+                post_task_bindings=[
+                    binding.model_copy(deep=True)
+                    for binding in condition.post_task_bindings
+                ],
             )
             for index, condition in enumerate(config.conditions)
         ],
+        task_modules=[task.model_copy(deep=True) for task in config.task_modules],
     )
     save_project_file(project, project_json_path(target_dir))
     write_stimulus_manifest(target_dir, create_empty_manifest(project.meta.project_id))
     return ProjectScaffold(project_root=target_dir, project=project)
+
+
+def _task_image_references(project: ProjectFile) -> list[tuple[str, str]]:
+    references: list[tuple[str, str]] = []
+    for task in project.task_modules:
+        for step in task.steps:
+            references.extend(
+                (task.task_id, item.image_path)
+                for item in step.items
+                if item.image_path is not None
+            )
+            references.extend(
+                (task.task_id, option.image_path)
+                for question in step.questions
+                for option in question.options
+                if option.image_path is not None
+            )
+    return references
+
+
+def _portable_task_assets(
+    project: ProjectFile,
+    project_root: Path | None,
+) -> list[ProjectConfigTaskAsset]:
+    references = _task_image_references(project)
+    if references and project_root is None:
+        raise ProjectConfigError(
+            "A project root is required to export image-backed task modules."
+        )
+    assets: list[ProjectConfigTaskAsset] = []
+    seen: set[str] = set()
+    for task_id, relative_path in references:
+        if relative_path in seen:
+            continue
+        seen.add(relative_path)
+        assert project_root is not None
+        try:
+            source = resolve_project_relative_path(project_root, relative_path)
+        except ValueError as exc:
+            raise ProjectConfigError(f"Unsafe task asset path: {relative_path}") from exc
+        if not source.is_file():
+            raise ProjectConfigError(f"Task asset is missing or is not a file: {relative_path}")
+        try:
+            payload = source.read_bytes()
+        except OSError as exc:
+            raise ProjectConfigError(f"Unable to read task asset: {relative_path}") from exc
+        assets.append(
+            ProjectConfigTaskAsset(
+                task_id=task_id,
+                relative_path=relative_path,
+                sha256=hashlib.sha256(payload).hexdigest(),
+                data_base64=base64.b64encode(payload).decode("ascii"),
+            )
+        )
+    return assets
+
+
+def _decoded_task_assets(config: ProjectConfigFile) -> list[tuple[str, bytes]]:
+    decoded: list[tuple[str, bytes]] = []
+    for asset in config.task_assets:
+        try:
+            payload = base64.b64decode(asset.data_base64, validate=True)
+        except (binascii.Error, ValueError) as exc:
+            raise ProjectConfigError(
+                f"Unable to decode task asset: {asset.relative_path}"
+            ) from exc
+        if hashlib.sha256(payload).hexdigest() != asset.sha256:
+            raise ProjectConfigError(
+                f"Task asset hash does not match config: {asset.relative_path}"
+            )
+        decoded.append((asset.relative_path, payload))
+    return decoded
 
 
 def find_latest_completed_session_dir(project_root: Path) -> Path | None:

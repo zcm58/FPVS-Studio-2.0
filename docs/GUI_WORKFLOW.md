@@ -153,6 +153,28 @@ The authoring window is organized around two user-facing modes:
   - each selected condition exposes a compact `Presentation...` action for inherited
     condition, Base-role, and Oddball-role settings; the draft-based dialog supports
     reset-to-inherited controls and a live representative-stimulus preview
+  - each selected condition also exposes `Pre/Post Tasks...` with a compact saved-flow
+    summary; its reusable dialog keeps separate ordered pre-condition and post-condition
+    module lists without adding a seventh wizard step
+  - task modules can contain ordered instruction/content, study display, choice grid,
+    questionnaire, raw-key response, and timed-feedback steps; whole modules and
+    individual choice steps can repeat, and bindings can run on every, first, or last
+    occurrence of a condition; a pre-condition binding can explicitly replace the
+    standard condition start screen when its authored reminder already serves that role
+  - study and choice displays default to responsive grids and can opt into exact
+    center-origin PsychoPy geometry; exact items support degrees of visual angle or
+    fractions of window height, per-item position and size, selectable/scored targets,
+    one-valid-choice completion, duplicate choices across repeats, explicit submission,
+    retries, and randomized display order
+  - questionnaires support ordered single choice, multiple choice, short text, long
+    text, numeric, and rating items, including required/optional responses, selection
+    and numeric bounds, option randomization, stable IDs, scores/correctness, and bounded
+    forward conditional routes; participant-facing previews remain authoring aids rather
+    than runtime substitutes
+  - task images are staged in the dialog and copied into
+    `stimuli/task-assets/<task-id>/` only when `Apply Tasks` succeeds; Cancel leaves both
+    the project model and task-asset tree unchanged, and editing a shared reusable module
+    cannot silently alter another condition
   - runtime presentation transforms are none, horizontal mirror, vertical mirror, and
     180-degree rotation for both images and words; these write no stimulus files and
     stay distinct from file-backed grayscale/phase-scrambled variants
@@ -272,9 +294,12 @@ It leaves the imported project available under the configured Studio root withou
 opening it, so the user can reopen it later through `Open Existing Project`.
 `Import > Project Config...` creates a new
 Studio project shell under the configured FPVS Studio Root Folder from a `.fpvsconfig`
-setup handoff; it does not merge into the current project and does not copy original
-stimulus images. The config import dialog accepts `.fpvsconfig`, legacy `.config`, and
-`.json` files. `Export > Project Bundle...` first asks for the project name embedded in
+setup handoff; it does not merge into the current project or carry the FPVS base and
+oddball stimulus image libraries. Modular-task definitions are included, and their
+comparatively small task media are embedded with hashes so import can reconstruct the
+project-contained `stimuli/task-assets/` tree without machine-local paths. The config
+import dialog accepts `.fpvsconfig`, legacy `.config`, and `.json` files.
+`Export > Project Bundle...` first asks for the project name embedded in
 the portable copy and shows the resulting import-folder slug and suggested bundle
 filename. Changing that name rewrites only the archived project and stimulus-manifest
 identity; the open project and its folder remain unchanged. Export then validates the
@@ -289,7 +314,8 @@ packaged-file count, exclusions, and `Copy Path`, `Open Folder`, and `Done` acti
 `Done` restores the previous authoring surface.
 `Export > FPVS Toolbox Config...`
 writes a JSON-backed `.fpvsconfig` setup handoff with project title, condition trigger
-mapping, display/session settings, and Toolbox-oriented `event_map` metadata.
+mapping, display/session settings, modular-task definitions and media, and
+Toolbox-oriented `event_map` metadata.
 `Export > Completed Project Config...` writes the same setup handoff plus a summary of
 the latest completed session's order, seeds, trigger schedule, display geometry, and
 stimulus-manifest provenance. The default setup export filename is the compact project

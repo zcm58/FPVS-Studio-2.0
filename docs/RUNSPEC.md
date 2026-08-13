@@ -2,6 +2,11 @@
 
 `RunSpec` is the compiled execution plan for one FPVS condition run.
 
+Modular pre/post condition tasks are deliberately excluded. They compile onto the
+containing `SessionEntry`, so questionnaire clocks, retries, response collection, and
+branching cannot mutate FPVS frame or trigger schedules. `compile_run_spec(...)`
+therefore remains a compatible stream-only API.
+
 It stays intentionally separate from:
 
 - editable project models in `ProjectFile`

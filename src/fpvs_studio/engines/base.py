@@ -9,6 +9,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
 
 from fpvs_studio.core.enums import DutyCycleMode
 from fpvs_studio.core.execution import RunExecutionSummary
@@ -25,6 +26,92 @@ class FixationTutorialAttemptResult:
     hit: bool
     reaction_time_s: float | None = None
     aborted: bool = False
+
+
+ResolvedTaskStepKind = Literal[
+    "instruction",
+    "study",
+    "choice_grid",
+    "questionnaire",
+    "raw_key",
+    "timed_feedback",
+]
+ResolvedTaskResponseKind = Literal[
+    "none",
+    "continue",
+    "raw_key",
+    "single_choice",
+    "multiple_choice",
+    "short_text",
+    "long_text",
+    "numeric",
+    "rating",
+]
+ResolvedTaskSubmissionMode = Literal["immediate", "explicit"]
+
+
+@dataclass(frozen=True)
+class ResolvedTaskItem:
+    """One task item after runtime has resolved its calibrated layout to pixels."""
+
+    item_id: str
+    text: str | None = None
+    image_path: str | None = None
+    position_px: tuple[float, float] = (0.0, 0.0)
+    size_px: tuple[float, float] | None = None
+    text_height_px: float = 32.0
+    color: str = "white"
+    selectable: bool = False
+
+
+@dataclass(frozen=True)
+class ResolvedTaskStep:
+    """Engine-facing representation of one declarative task screen."""
+
+    task_id: str
+    step_id: str
+    kind: ResolvedTaskStepKind
+    response_kind: ResolvedTaskResponseKind = "none"
+    heading: str | None = None
+    body: str | None = None
+    items: tuple[ResolvedTaskItem, ...] = ()
+    allowed_keys: tuple[str, ...] = ()
+    continue_key: str = "space"
+    submit_key: str = "return"
+    duration_s: float | None = None
+    timeout_s: float | None = None
+    required: bool = True
+    minimum_selections: int = 1
+    maximum_selections: int | None = 1
+    numeric_minimum: float | None = None
+    numeric_maximum: float | None = None
+    maximum_text_length: int = 2000
+    numeric_step: float | None = None
+    submission_mode: ResolvedTaskSubmissionMode = "immediate"
+    prompt: str | None = None
+    prompt_position_px: tuple[float, float] | None = None
+    prompt_height_px: float | None = None
+    show_footer: bool = True
+    repeat_index: int = 0
+    question_id: str | None = None
+
+
+@dataclass(frozen=True)
+class TaskEngineInput:
+    """Raw input returned by an engine for one task screen."""
+
+    aborted: bool = False
+    timed_out: bool = False
+    key: str | None = None
+    selected_item_ids: tuple[str, ...] = ()
+    text_value: str | None = None
+    numeric_value: float | None = None
+    mouse_position_px: tuple[float, float] | None = None
+    mouse_button: int | None = None
+    reaction_time_s: float | None = None
+    key_reaction_time_s: float | None = None
+    key_duration_s: float | None = None
+    displayed_item_ids: tuple[str, ...] = ()
 
 
 class PresentationEngine(ABC):
@@ -114,6 +201,22 @@ class PresentationEngine(ABC):
         target_delay_seconds: float,
     ) -> FixationTutorialAttemptResult:
         """Run one fixation tutorial practice attempt and return hit/miss/abort state."""
+
+    def render_task_step(
+        self,
+        step: ResolvedTaskStep,
+        project_root: Path,
+    ) -> TaskEngineInput:
+        """Render a resolved modular task screen and return neutral raw input.
+
+        This is non-abstract for compatibility with existing external engines. Runtime
+        only calls it for a session entry that contains task modules and surfaces this
+        error before participant input if the selected engine lacks task support.
+        """
+
+        raise RuntimeError(
+            f"Presentation engine '{self.engine_id}' does not support modular tasks."
+        )
 
     @abstractmethod
     def run_condition(

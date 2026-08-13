@@ -48,7 +48,7 @@ def test_project_model_round_trip(tmp_path, sample_project) -> None:
     loaded = load_project_file(project_path)
 
     assert loaded == sample_project
-    assert loaded.schema_version.value == "1.1.0"
+    assert loaded.schema_version.value == "1.2.0"
 
 
 @pytest.mark.parametrize(
@@ -170,7 +170,7 @@ def test_load_project_file_migrates_v1_presentation_without_rewriting_assets(
 
     loaded = load_project_file(project_path)
 
-    assert loaded.schema_version.value == "1.1.0"
+    assert loaded.schema_version.value == "1.2.0"
     assert loaded.settings.presentation.pre_stream_fixation_seconds == 0.0
     geometry = loaded.settings.presentation.defaults.image_geometry
     assert geometry.mode == ImageGeometryMode.NATURAL_ASPECT

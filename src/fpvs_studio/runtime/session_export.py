@@ -6,6 +6,8 @@ session flow, and engine behavior are provided by other runtime components."""
 from __future__ import annotations
 
 import csv
+import hashlib
+import json
 from collections.abc import Iterable
 from datetime import datetime, timezone
 from pathlib import Path
@@ -22,12 +24,15 @@ from fpvs_studio.core.paths import from_project_relative_posix, logs_dir
 from fpvs_studio.core.run_spec import RunSpec
 from fpvs_studio.core.serialization import read_json_file, write_json_file
 from fpvs_studio.core.session_plan import SessionEntry, SessionPlan
+from fpvs_studio.core.task_models import TaskResponseRecord
 from fpvs_studio.core.validation import validate_display_refresh
 
 SESSION_CONDITION_HISTORY_FILENAME = "session_condition_history.csv"
 PARTICIPANT_SUMMARY_FILENAME = "participant_summary.csv"
 PARTICIPANT_SUMMARY_XLSX_FILENAME = "participant_summary.xlsx"
 GROUP_SUMMARY_XLSX_FILENAME = "group_summary.xlsx"
+TASK_RESPONSES_FILENAME = "task_responses.csv"
+TASK_CHECKPOINT_DIRNAME = ".task-response-checkpoints"
 ADMIN_TEST_PARTICIPANT_IDS = frozenset({"0", "00"})
 SESSION_CONDITION_HISTORY_HEADER = [
     "logged_at_utc",
@@ -147,6 +152,49 @@ def _write_warnings(path: Path, warnings: list[str]) -> None:
     path.write_text("\n".join(warnings) + ("\n" if warnings else ""), encoding="utf-8")
 
 
+def _write_execution_summary(path: Path, summary: object) -> None:
+    """Write summary metadata while keeping raw task answers in research artifacts."""
+
+    model_dump = getattr(summary, "model_dump", None)
+    if not callable(model_dump):
+        raise TypeError("Execution summaries must provide model_dump().")
+    payload = model_dump(mode="json", exclude_none=True)
+    payload.pop("task_responses", None)
+    for run_result in payload.get("run_results", []):
+        if isinstance(run_result, dict):
+            run_result.pop("task_responses", None)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(payload, indent=2, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+
+def append_task_response_checkpoint(path: Path, response: object) -> None:
+    """Append one raw task response to a crash-safe participant research journal."""
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    model_dump = getattr(response, "model_dump", None)
+    payload = model_dump(mode="json") if callable(model_dump) else response
+    with path.open("a", encoding="utf-8", newline="\n") as handle:
+        handle.write(json.dumps(payload, ensure_ascii=False))
+        handle.write("\n")
+        handle.flush()
+
+
+def compact_task_checkpoint_path(
+    project_root: Path,
+    *,
+    participant_number: str,
+    session_id: str,
+) -> Path:
+    """Return a contained, opaque checkpoint path for one compact-mode session."""
+
+    identity = f"{participant_number}\0{session_id}".encode()
+    filename = f"{hashlib.sha256(identity).hexdigest()[:24]}.jsonl"
+    return logs_dir(project_root) / TASK_CHECKPOINT_DIRNAME / filename
+
+
 def _display_report_for_run(run_spec: RunSpec) -> DisplayValidationReport:
     duty_cycle_mode = (
         DutyCycleMode.BLANK_50 if run_spec.display.off_frames > 0 else DutyCycleMode.CONTINUOUS
@@ -169,12 +217,146 @@ def _stimulus_value(event: object) -> str:
     return ""
 
 
+def _task_csv_value(value: object) -> object:
+    """Protect raw task text from spreadsheet formula interpretation."""
+
+    if not isinstance(value, str):
+        return value
+    visible_prefix = value.lstrip(" \t\r\n")
+    return f"'{value}" if visible_prefix.startswith(("=", "+", "-", "@")) else value
+
+
+TASK_RESPONSES_HEADER = [
+    "response_index",
+    "task_id",
+    "step_id",
+    "phase",
+    "condition_id",
+    "run_id",
+    "block_index",
+    "global_order_index",
+    "repetition_index",
+    "step_repetition_index",
+    "attempt_index",
+    "question_id",
+    "response_kind",
+    "key",
+    "selected_option_ids",
+    "text_value",
+    "numeric_value",
+    "mouse_x",
+    "mouse_y",
+    "mouse_button",
+    "reaction_time_s",
+    "key_reaction_time_s",
+    "key_duration_s",
+    "realized_option_order",
+    "valid",
+    "correct",
+    "score",
+    "timed_out",
+    "aborted",
+]
+
+
+def _task_response_row(response: TaskResponseRecord) -> tuple[object, ...]:
+    selected_ids = response.selected_option_ids
+    option_order = response.realized_option_order
+    phase = response.phase
+    response_kind = response.response_kind
+    return (
+        response.response_index,
+        response.task_id,
+        response.step_id,
+        getattr(phase, "value", phase),
+        response.condition_id,
+        response.run_id,
+        response.block_index,
+        response.global_order_index,
+        response.repetition_index,
+        response.step_repetition_index,
+        response.attempt_index,
+        response.question_id or "",
+        getattr(response_kind, "value", response_kind),
+        response.key or "",
+        ";".join(selected_ids),
+        _task_csv_value(response.text_value or ""),
+        response.numeric_value if response.numeric_value is not None else "",
+        response.mouse_x if response.mouse_x is not None else "",
+        response.mouse_y if response.mouse_y is not None else "",
+        response.mouse_button if response.mouse_button is not None else "",
+        response.reaction_time_s if response.reaction_time_s is not None else "",
+        response.key_reaction_time_s
+        if response.key_reaction_time_s is not None
+        else "",
+        response.key_duration_s if response.key_duration_s is not None else "",
+        ";".join(option_order),
+        response.valid,
+        response.correct if response.correct is not None else "",
+        response.score if response.score is not None else "",
+        response.timed_out,
+        response.aborted,
+    )
+
+
+COMPACT_TASK_RESPONSES_HEADER = [
+    "logged_at_utc",
+    "project_id",
+    "participant_number",
+    "session_id",
+    "session_seed",
+    "session_aborted",
+    "session_abort_reason",
+    *TASK_RESPONSES_HEADER,
+]
+
+
+def append_compact_task_responses(
+    project_root: Path,
+    session_plan: SessionPlan,
+    summary: SessionExecutionSummary,
+) -> Path | None:
+    """Append raw task answers to the compact, session-keyed research log."""
+
+    responses = [
+        response
+        for run_result in summary.run_results
+        for response in run_result.task_responses
+    ]
+    if not responses:
+        return None
+
+    path = logs_dir(project_root) / TASK_RESPONSES_FILENAME
+    path.parent.mkdir(parents=True, exist_ok=True)
+    write_header = not path.is_file() or path.stat().st_size == 0
+    logged_at = datetime.now(timezone.utc).isoformat()
+    prefix = (
+        logged_at,
+        session_plan.project_id,
+        summary.participant_number or "",
+        summary.session_id,
+        summary.random_seed if summary.random_seed is not None else "",
+        summary.aborted,
+        summary.abort_reason or "",
+    )
+    with path.open("a", encoding="utf-8", newline="") as handle:
+        writer = csv.writer(handle)
+        if write_header:
+            writer.writerow(COMPACT_TASK_RESPONSES_HEADER)
+        for response in responses:
+            writer.writerow(
+                [_task_csv_value(value) for value in (*prefix, *_task_response_row(response))]
+            )
+        handle.flush()
+    return path
+
+
 def write_run_artifacts(output_dir: Path, run_spec: RunSpec, summary: RunExecutionSummary) -> None:
     """Write the per-run artifact set for one executed `RunSpec`."""
 
     output_dir.mkdir(parents=True, exist_ok=True)
     write_json_file(output_dir / "runspec.json", run_spec)
-    write_json_file(output_dir / "run_summary.json", summary)
+    _write_execution_summary(output_dir / "run_summary.json", summary)
     if summary.runtime_metadata is not None:
         write_json_file(output_dir / "runtime_metadata.json", summary.runtime_metadata)
     write_json_file(output_dir / "display_report.json", _display_report_for_run(run_spec))
@@ -294,6 +476,11 @@ def write_run_artifacts(output_dir: Path, run_spec: RunSpec, summary: RunExecuti
             for trigger in summary.trigger_log
         ],
     )
+    _write_csv(
+        output_dir / "task_responses.csv",
+        TASK_RESPONSES_HEADER,
+        [_task_response_row(response) for response in summary.task_responses],
+    )
     _write_warnings(output_dir / "warnings.log", summary.warnings)
 
 
@@ -308,7 +495,7 @@ def write_session_artifacts(
 
     output_dir.mkdir(parents=True, exist_ok=True)
     write_json_file(output_dir / "session_plan.json", session_plan)
-    write_json_file(output_dir / "session_summary.json", summary)
+    _write_execution_summary(output_dir / "session_summary.json", summary)
     if summary.runtime_metadata is not None:
         write_json_file(output_dir / "runtime_metadata.json", summary.runtime_metadata)
 
@@ -489,6 +676,15 @@ def write_session_artifacts(
             )
             for run_result in summary.run_results
             for trigger in run_result.trigger_log
+        ],
+    )
+    _write_csv(
+        output_dir / "task_responses.csv",
+        ["session_run_id", *TASK_RESPONSES_HEADER],
+        [
+            (run_result.run_id, *_task_response_row(response))
+            for run_result in summary.run_results
+            for response in run_result.task_responses
         ],
     )
     _write_warnings(output_dir / "warnings.log", summary.warnings)

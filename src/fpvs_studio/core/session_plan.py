@@ -11,6 +11,7 @@ from pydantic import Field, model_validator
 from fpvs_studio.core.enums import InterConditionMode, SchemaVersion
 from fpvs_studio.core.models import FPVSBaseModel
 from fpvs_studio.core.run_spec import RunSpec
+from fpvs_studio.core.task_models import TaskModuleSpec
 
 
 class InterConditionTransitionSpec(FPVSBaseModel):
@@ -40,6 +41,9 @@ class SessionEntry(FPVSBaseModel):
     condition_name: str
     run_id: str
     run_spec: RunSpec
+    pre_tasks: list[TaskModuleSpec] = Field(default_factory=list)
+    post_tasks: list[TaskModuleSpec] = Field(default_factory=list)
+    show_condition_start_gate: bool = True
 
     @model_validator(mode="after")
     def validate_consistency(self) -> SessionEntry:
@@ -74,7 +78,7 @@ class SessionBlock(FPVSBaseModel):
 class SessionPlan(FPVSBaseModel):
     """Executable multi-condition session plan compiled from one project."""
 
-    schema_version: str = SchemaVersion.V1_1.value
+    schema_version: str = SchemaVersion.V1_2.value
     session_id: str
     project_id: str
     project_name: str

@@ -297,7 +297,7 @@ def test_read_project_config_migrates_v1_presentation_defaults(tmp_path, sample_
 
     loaded = read_project_config(path)
 
-    assert loaded.schema_version == "1.1.0"
+    assert loaded.schema_version == "1.2.0"
     assert loaded.presentation.pre_stream_fixation_seconds == 0.0
     assert loaded.presentation.defaults.image_geometry.width_degrees == 6.25
 

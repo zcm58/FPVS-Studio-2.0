@@ -38,6 +38,7 @@ from fpvs_studio.core.enums import (
     ValidationSeverity,
 )
 from fpvs_studio.core.paths import validate_project_relative_path
+from fpvs_studio.core.task_models import TaskBinding, TaskModule
 from fpvs_studio.core.trigger_codes import (
     LOCKED_ODDBALL_TRIGGER_CODE,
     validate_oddball_trigger_code_policy,
@@ -682,6 +683,8 @@ class Condition(FPVSBaseModel):
     presentation: ConditionPresentationSettings = Field(
         default_factory=ConditionPresentationSettings
     )
+    pre_task_bindings: list[TaskBinding] = Field(default_factory=list)
+    post_task_bindings: list[TaskBinding] = Field(default_factory=list)
 
     @field_validator("condition_id")
     @classmethod
@@ -705,15 +708,37 @@ class Condition(FPVSBaseModel):
     def validate_set_reference(cls, value: str) -> str:
         return validate_slug(value, field_name="stimulus set reference")
 
+    @model_validator(mode="after")
+    def validate_unique_task_bindings(self) -> Condition:
+        for label, bindings in (
+            ("pre", self.pre_task_bindings),
+            ("post", self.post_task_bindings),
+        ):
+            task_ids = [binding.task_id for binding in bindings]
+            if len(task_ids) != len(set(task_ids)):
+                raise ValueError(f"Condition {label}-task bindings must be unique.")
+        if any(binding.replaces_condition_start_gate for binding in self.post_task_bindings):
+            raise ValueError(
+                "Only a pre-condition task binding may replace the standard start gate."
+            )
+        if sum(
+            binding.replaces_condition_start_gate for binding in self.pre_task_bindings
+        ) > 1:
+            raise ValueError(
+                "At most one pre-condition task binding may replace the standard start gate."
+            )
+        return self
+
 
 class ProjectFile(FPVSBaseModel):
     """Canonical editable project file."""
 
-    schema_version: SchemaVersion = SchemaVersion.V1_1
+    schema_version: SchemaVersion = SchemaVersion.V1_2
     meta: ProjectMeta
     settings: ProjectSettings = Field(default_factory=ProjectSettings)
     stimulus_sets: list[StimulusSet] = Field(default_factory=list)
     conditions: list[Condition] = Field(default_factory=list)
+    task_modules: list[TaskModule] = Field(default_factory=list)
     manual_removed_electrodes: dict[str, list[str]] = Field(default_factory=dict)
 
     @field_validator("manual_removed_electrodes", mode="before")
@@ -751,6 +776,9 @@ class ProjectFile(FPVSBaseModel):
         condition_ids = [item.condition_id for item in self.conditions]
         if len(condition_ids) != len(set(condition_ids)):
             raise ValueError("Condition ids must be unique.")
+        task_ids = [item.task_id for item in self.task_modules]
+        if len(task_ids) != len(set(task_ids)):
+            raise ValueError("Task module ids must be unique.")
         return self
 
 

@@ -12,6 +12,9 @@ This directory is the most important foundation in the repo. It should remain im
 - dedicated `RunSpec` schemas in `run_spec.py`
 - dedicated `SessionPlan` schemas in `session_plan.py`
 - dedicated execution-result schemas in `execution.py`
+- reusable declarative condition-task schemas in `task_models.py`
+- compilation of condition-task bindings into `SessionEntry` task specs
+- project-contained task-media services in `task_assets.py`
 - enums and type aliases
 - template metadata
 - app-level condition-template profile storage under the configured FPVS Studio root
@@ -30,6 +33,8 @@ This directory is the most important foundation in the repo. It should remain im
 - Keep model names explicit and stable.
 - Use enums instead of loose strings when possible.
 - Store persisted paths as project-relative strings, not absolute machine-local paths.
+- Store task media beneath `stimuli/task-assets/<task-id>/`; validate lexical and
+  resolved containment before copying, compiling, bundling, or importing it.
 - Keep editable project schemas in `models.py`, single-run execution schemas in `run_spec.py`, and multi-run session schemas in `session_plan.py`.
 - Derived/read-only values can be exposed as computed properties, but do not duplicate state unless it is needed for export compatibility.
 
@@ -67,6 +72,8 @@ At minimum, the core layer should define models for:
 - `TriggerEvent`
 - `DisplayValidationReport`
 - `ProjectManifest` / `StimulusManifest`-related models as appropriate
+- `TaskModule`, `TaskStep`, `TaskQuestion`, `TaskBinding`, and their compiled/result
+  counterparts
 
 ## Validation expectations
 
@@ -115,6 +122,9 @@ A minimal compiler in this phase should be able to:
 - assign deterministic stimulus payloads: project-relative image paths for image
   conditions, authored text for word conditions
 - preserve `RunSpec` as a single-condition contract when building `SessionPlan`
+- compile resolved pre/post condition tasks onto `SessionEntry`, never into `RunSpec`
+- keep task clocks, answers, repetition, branching, and response validation outside
+  FPVS frame and trigger scheduling
 - convert fixation timing fields from ms to frames and emit concrete fixation events
 - compile fixation accuracy-task settings into `RunSpec` (response key/window,
   participant tutorial flag, and realized target count), while keeping `RunSpec`
@@ -129,5 +139,6 @@ A minimal compiler in this phase should be able to:
 
 - No PySide6 imports here.
 - No PsychoPy imports here.
-- No direct filesystem writes except in explicit serializer/project-service modules.
+- No direct filesystem writes except in explicit serializer, project-service,
+  task-asset, config, and bundle modules.
 - No image manipulation code here.
