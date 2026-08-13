@@ -7,6 +7,9 @@ this layer.
 
 from __future__ import annotations
 
+import re
+import sys
+from math import isfinite
 from typing import Any
 
 from PySide6.QtCore import QEvent, QObject, QPoint, QSize, Qt, QTimer, Signal
@@ -21,8 +24,10 @@ from PySide6.QtGui import (
     QPolygon,
     QResizeEvent,
     QShowEvent,
+    QValidator,
 )
 from PySide6.QtWidgets import (
+    QDoubleSpinBox,
     QFrame,
     QGridLayout,
     QHBoxLayout,
@@ -53,6 +58,7 @@ SectionCard: Any
 
 __all__ = [
     "LaunchSurfaceFrame",
+    "FiniteDoubleSpinBox",
     "NonHomePageShell",
     "PAGE_SECTION_GAP",
     "PageContainer",
@@ -100,6 +106,73 @@ __all__ = [
     "studio_theme_stylesheet",
     "welcome_window_stylesheet",
 ]
+
+
+class FiniteDoubleSpinBox(QDoubleSpinBox):
+    """Compact scientific-notation spin box spanning finite schema floats.
+
+    QDoubleSpinBox's usual small fixed range and decimal count can silently clamp
+    otherwise-valid persisted presentation values. This variant retains the full
+    finite-double range while keeping a compact round-trip representation.
+    """
+
+    _PARTIAL_FLOAT_RE = re.compile(r"^[+-]?(?:(?:\d+(?:\.\d*)?|\.\d+)?(?:[eE][+-]?\d*)?)?$")
+
+    def __init__(
+        self,
+        *,
+        minimum: float = -sys.float_info.max,
+        maximum: float = sys.float_info.max,
+        parent: QWidget | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self.setDecimals(323)
+        self.setRange(minimum, maximum)
+
+    def textFromValue(self, value: float) -> str:  # noqa: N802
+        return repr(float(value))
+
+    def valueFromText(self, text: str) -> float:  # noqa: N802
+        return float(self._number_text(text))
+
+    def validate(
+        self,
+        text: str,
+        position: int,
+    ) -> tuple[QValidator.State, str, int]:
+        number_text = self._number_text(text)
+        try:
+            value = float(number_text)
+        except ValueError:
+            state = (
+                QValidator.State.Intermediate
+                if self._PARTIAL_FLOAT_RE.fullmatch(number_text)
+                else QValidator.State.Invalid
+            )
+            return state, text, position
+        if not isfinite(value) or value < self.minimum() or value > self.maximum():
+            return QValidator.State.Invalid, text, position
+        return QValidator.State.Acceptable, text, position
+
+    def sizeHint(self) -> QSize:  # noqa: N802
+        hint = super().sizeHint()
+        hint.setWidth(min(hint.width(), 180))
+        return hint
+
+    def minimumSizeHint(self) -> QSize:  # noqa: N802
+        hint = super().minimumSizeHint()
+        hint.setWidth(min(hint.width(), 110))
+        return hint
+
+    def _number_text(self, text: str) -> str:
+        cleaned = text.strip()
+        suffix = self.suffix()
+        if suffix and cleaned.endswith(suffix.strip()):
+            cleaned = cleaned[: -len(suffix.strip())].strip()
+        prefix = self.prefix()
+        if prefix and cleaned.startswith(prefix.strip()):
+            cleaned = cleaned[len(prefix.strip()) :].strip()
+        return cleaned
 
 
 class LaunchSurfaceFrame(QWidget):
@@ -218,9 +291,7 @@ class SetupChecklistPanel(QFrame):
             mark = "\u2713" if complete else "\u2715"
             item_label.setText(f"{mark} {label_text}")
             status_label = QLabel(status_text, self)
-            status_label.setObjectName(
-                f"setup_checklist_status_{_object_suffix(label_text)}"
-            )
+            status_label.setObjectName(f"setup_checklist_status_{_object_suffix(label_text)}")
             status_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
             status_label.setProperty("setupChecklistStatus", "true")
             status_label.setProperty(
@@ -1802,7 +1873,9 @@ def apply_setup_wizard_theme(widget: QWidget) -> None:
 
 def welcome_window_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
     theme = _resolved_theme(theme)
-    return launch_surface_frame_stylesheet(theme) + f"""
+    return (
+        launch_surface_frame_stylesheet(theme)
+        + f"""
     QWidget#welcome_hero_container {{
         background: transparent;
     }}
@@ -1850,6 +1923,7 @@ def welcome_window_stylesheet(theme: StudioTheme | QPalette | None = None) -> st
         border: 2px solid {theme.focus_ring};
     }}
     """
+    )
 
 
 def apply_welcome_window_theme(widget: QWidget) -> None:

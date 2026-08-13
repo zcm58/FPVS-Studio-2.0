@@ -196,7 +196,7 @@ class ProjectOverviewEditor(QWidget):
         metadata_layout.addRow("Project Name", self.project_name_edit)
         metadata_layout.addRow("Description", self.project_description_edit)
         metadata_layout.addRow("Project Folder", self.project_root_value)
-        metadata_layout.addRow("Image Timing", condition_profile_group)
+        metadata_layout.addRow("Experiment Template", condition_profile_group)
         metadata_layout.addRow(self.participant_tutorial_checkbox)
 
         form_panel = QWidget(self.project_overview_card)

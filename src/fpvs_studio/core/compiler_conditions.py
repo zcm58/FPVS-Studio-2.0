@@ -114,14 +114,8 @@ def validate_selected_condition(
         for role_label, stimulus_set in (("Base", base_set), ("Oddball", oddball_set)):
             if stimulus_set.resolution is None:
                 raise CompileError(
-                    f"{role_label} stimulus set '{stimulus_set.name}' must be normalized "
-                    "to square images before launch."
-                )
-            if stimulus_set.resolution.width_px != stimulus_set.resolution.height_px:
-                raise CompileError(
-                    f"{role_label} stimulus set '{stimulus_set.name}' uses non-square "
-                    f"{stimulus_set.resolution.width_px}x{stimulus_set.resolution.height_px} "
-                    "images. Normalize the selected images to square PNG copies before launch."
+                    f"{role_label} stimulus set '{stimulus_set.name}' requires a known "
+                    "uniform image resolution before launch."
                 )
     elif base_set.modality == StimulusModality.WORD:
         if not base_set.words:

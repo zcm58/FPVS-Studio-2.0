@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -11,9 +12,12 @@ from PySide6.QtWidgets import (
     QFormLayout,
     QGridLayout,
     QGroupBox,
+    QLabel,
     QLineEdit,
     QMessageBox,
+    QScrollArea,
     QSpinBox,
+    QTabWidget,
     QVBoxLayout,
     QWidget,
 )
@@ -25,7 +29,10 @@ from fpvs_studio.core.models import (
     ConditionTemplateDisplayDefaults,
     ConditionTemplateProfile,
     FixationTaskSettings,
+    ProjectPresentationSettings,
 )
+from fpvs_studio.gui.components import FiniteDoubleSpinBox
+from fpvs_studio.gui.presentation_settings_dialog import PresentationDefaultsEditor
 
 
 def _duty_cycle_label(mode: DutyCycleMode) -> str:
@@ -55,6 +62,7 @@ class ConditionTemplateProfileEditorDialog(QDialog):
         self.setWindowTitle("Condition Template Profile")
         self.setModal(True)
         self.resize(760, 760)
+        profile = initial_profile or self._default_profile()
 
         self.profile_id_edit = QLineEdit(self)
         self.profile_id_edit.setObjectName("condition_profile_id_edit")
@@ -194,6 +202,60 @@ class ConditionTemplateProfileEditorDialog(QDialog):
         fixation_form.addRow("Line width (px)", self.line_width_spin)
         fixation_layout.addLayout(fixation_form, 1, 0, 1, 2)
 
+        self.presentation_editor = PresentationDefaultsEditor(
+            inherited=profile.defaults.presentation.defaults,
+            override=None,
+            object_prefix="condition_profile_presentation",
+            parent=self,
+        )
+        self.pre_stream_fixation_spin = FiniteDoubleSpinBox(minimum=0.0, parent=self)
+        self.pre_stream_fixation_spin.setObjectName(
+            "condition_profile_pre_stream_fixation_seconds_spin"
+        )
+        self.pre_stream_fixation_spin.setSingleStep(0.25)
+        self.pre_stream_fixation_spin.setSuffix(" s")
+
+        general_tab = QWidget(self)
+        general_layout = QVBoxLayout(general_tab)
+        general_layout.setContentsMargins(8, 8, 8, 8)
+        general_layout.setSpacing(10)
+        general_layout.addWidget(profile_group)
+        general_layout.addWidget(condition_group)
+        general_layout.addWidget(display_group)
+        general_layout.addStretch(1)
+
+        presentation_tab = QWidget(self)
+        presentation_layout = QVBoxLayout(presentation_tab)
+        presentation_layout.setContentsMargins(8, 8, 8, 8)
+        presentation_layout.setSpacing(8)
+        presentation_note = QLabel(
+            "These project defaults are inherited by each condition. The experiment "
+            "font is fixed to Arial.",
+            presentation_tab,
+        )
+        presentation_note.setWordWrap(True)
+        presentation_layout.addWidget(presentation_note)
+        lead_in_form = QFormLayout()
+        lead_in_form.addRow("Pre-stream fixation", self.pre_stream_fixation_spin)
+        presentation_layout.addLayout(lead_in_form)
+        presentation_scroll = QScrollArea(presentation_tab)
+        presentation_scroll.setObjectName("condition_profile_presentation_scroll")
+        presentation_scroll.setWidgetResizable(True)
+        presentation_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        presentation_scroll.setWidget(self.presentation_editor)
+        presentation_layout.addWidget(presentation_scroll, 1)
+
+        fixation_tab = QWidget(self)
+        fixation_tab_layout = QVBoxLayout(fixation_tab)
+        fixation_tab_layout.setContentsMargins(8, 8, 8, 8)
+        fixation_tab_layout.addWidget(fixation_group)
+
+        self.tabs = QTabWidget(self)
+        self.tabs.setObjectName("condition_profile_editor_tabs")
+        self.tabs.addTab(general_tab, "General")
+        self.tabs.addTab(presentation_tab, "Presentation")
+        self.tabs.addTab(fixation_tab, "Fixation")
+
         self.button_box = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel,
             parent=self,
@@ -202,13 +264,10 @@ class ConditionTemplateProfileEditorDialog(QDialog):
         self.button_box.rejected.connect(self.reject)
 
         layout = QVBoxLayout(self)
-        layout.addWidget(profile_group)
-        layout.addWidget(condition_group)
-        layout.addWidget(display_group)
-        layout.addWidget(fixation_group, 1)
+        layout.addWidget(self.tabs, 1)
         layout.addWidget(self.button_box)
 
-        self._apply_profile(initial_profile or self._default_profile())
+        self._apply_profile(profile)
 
     @property
     def saved_profile(self) -> ConditionTemplateProfile | None:
@@ -267,6 +326,9 @@ class ConditionTemplateProfileEditorDialog(QDialog):
         self.response_window_spin.setValue(fixation.response_window_seconds)
         self.cross_size_spin.setValue(fixation.cross_size_px)
         self.line_width_spin.setValue(fixation.line_width_px)
+        self.pre_stream_fixation_spin.setValue(
+            profile.defaults.presentation.pre_stream_fixation_seconds
+        )
         self._update_target_count_mode_state()
 
     def _update_target_count_mode_state(self) -> None:
@@ -302,6 +364,10 @@ class ConditionTemplateProfileEditorDialog(QDialog):
                     target_repeats_per_image=self.target_repeats_spin.value(),
                 ),
                 display=ConditionTemplateDisplayDefaults(preferred_refresh_hz=preferred_refresh_hz),
+                presentation=ProjectPresentationSettings(
+                    pre_stream_fixation_seconds=self.pre_stream_fixation_spin.value(),
+                    defaults=self.presentation_editor.build_defaults(),
+                ),
                 fixation_task=FixationTaskSettings(
                     enabled=True,
                     accuracy_task_enabled=self.accuracy_enabled_checkbox.isChecked(),

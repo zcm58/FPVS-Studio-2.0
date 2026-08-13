@@ -75,19 +75,19 @@ def test_setup_wizard_experiment_and_fixation_steps_are_width_safe(
     assert guide.experiment_settings_card.objectName() == "setup_wizard_experiment_settings_card"
     assert guide.experiment_settings_card.maximumWidth() == 880
     assert guide.experiment_settings_card.minimumHeight() == 280
-    assert guide.experiment_settings_card.findChild(
-        QLabel,
-        "setup_wizard_experiment_settings_card_title",
-    ) is None
+    assert (
+        guide.experiment_settings_card.findChild(
+            QLabel,
+            "setup_wizard_experiment_settings_card_title",
+        )
+        is None
+    )
     assert guide.session_structure_editor.block_count_spin.value() == 2
     show_title_checkbox = guide.session_structure_editor.show_condition_title_checkbox
     assert show_title_checkbox.isVisible() is False
     assert show_title_checkbox.isEnabled() is False
     guide.session_structure_editor.block_count_spin.setValue(3)
-    assert (
-        window.document.project.settings.session.show_condition_title_on_screen
-        is False
-    )
+    assert window.document.project.settings.session.show_condition_title_on_screen is False
     assert not guide.session_structure_editor.generate_seed_button.isVisible()
     assert not guide.session_structure_editor.session_seed_spin.isVisible()
     assert not guide.session_structure_editor.seed_row_widget.isVisible()
@@ -112,13 +112,16 @@ def test_setup_wizard_experiment_and_fixation_steps_are_width_safe(
     assert "Random order seed" not in experiment_labels
     assert "New Seed" not in experiment_labels
     assert "Used during FPVS image presentation." not in experiment_labels
-    assert len(
-        [
-            widget
-            for widget in guide.experiment_settings_card.findChildren(QWidget)
-            if widget.property("experimentSettingsSection") == "true"
-        ]
-    ) == 3
+    assert (
+        len(
+            [
+                widget
+                for widget in guide.experiment_settings_card.findChildren(QWidget)
+                if widget.property("experimentSettingsSection") == "true"
+            ]
+        )
+        == 3
+    )
     for section in guide.experiment_settings_card.findChildren(QWidget):
         if section.property("experimentSettingsSection") == "true":
             assert section.minimumHeight() == 224
@@ -220,8 +223,7 @@ def test_setup_wizard_fpvs_rates_persist_and_report_exact_or_approximate_timing(
     editor.base_hz_spin.setValue(6.0)
     editor.oddball_every_n_spin.setValue(6)
     assert [
-        editor.refresh_hz_combo.itemData(index)
-        for index in range(editor.refresh_hz_combo.count())
+        editor.refresh_hz_combo.itemData(index) for index in range(editor.refresh_hz_combo.count())
     ] == [59.94, 60.0, 120.0, 144.0, 240.0]
     assert editor.refresh_is_verified() is False
     assert "Verification required" in editor.timing_status_label.text()
@@ -369,9 +371,7 @@ def test_setup_wizard_refresh_detection_busy_state_disables_controls(
     assert "checking PsychoPy frame stability" in editor.timing_status_label.text()
     assert guide.setup_wizard_next_button.isEnabled() is False
 
-    _DeferredProgressTask.active.succeeded.emit(
-        _refresh_verification(60, 1, 60.0, 60.0)
-    )
+    _DeferredProgressTask.active.succeeded.emit(_refresh_verification(60, 1, 60.0, 60.0))
     _DeferredProgressTask.active.finished.emit()
     QApplication.processEvents()
 
@@ -452,7 +452,7 @@ def test_setup_wizard_experiment_image_size_controls_update_preview_and_review(
 
     guide.open_wizard(step_key="review")
     review_text = "\n".join(label.text() for label in guide.review_card.findChildren(QLabel))
-    assert "Image width: 6.5 deg at 75 cm on 1920 x 1080" in review_text
+    assert "Presentation: Natural aspect, 6.5 deg wide; none at 75 cm" in review_text
     next_bottom = guide.setup_wizard_next_button.mapTo(
         guide,
         QPoint(0, guide.setup_wizard_next_button.height()),
@@ -487,14 +487,16 @@ def test_setup_wizard_experiment_image_size_controls_update_preview_and_review(
     )
     assert feasibility_card is not None
     assert feasibility_card.maximumHeight() == 42
-    assert len(
-        [
-            widget
-            for widget in guide.fixation_schedule_editor.findChildren(QWidget)
-            if widget.property("fixationSettingsSection") == "true"
-            and widget.isVisible()
-        ]
-    ) == 2
+    assert (
+        len(
+            [
+                widget
+                for widget in guide.fixation_schedule_editor.findChildren(QWidget)
+                if widget.property("fixationSettingsSection") == "true" and widget.isVisible()
+            ]
+        )
+        == 2
+    )
     label_text = "\n".join(
         label.text()
         for label in guide.fixation_schedule_editor.findChildren(QLabel)
@@ -523,18 +525,17 @@ def test_setup_wizard_experiment_image_size_controls_update_preview_and_review(
     assert guide.fixation_response_editor.preview_panel.maximumHeight() == 220
     assert guide.fixation_response_editor.preview_widget.maximumHeight() == 170
     assert guide.findChild(QWidget, "fixation_cross_preview_card") is None
+    assert guide.fixation_response_editor.preview_panel.property("fixationPreviewPanel") == "true"
     assert (
-        guide.fixation_response_editor.preview_panel.property("fixationPreviewPanel")
-        == "true"
+        len(
+            [
+                widget
+                for widget in guide.fixation_response_editor.findChildren(QWidget)
+                if widget.property("fixationSettingsSection") == "true" and widget.isVisible()
+            ]
+        )
+        == 2
     )
-    assert len(
-        [
-            widget
-            for widget in guide.fixation_response_editor.findChildren(QWidget)
-            if widget.property("fixationSettingsSection") == "true"
-            and widget.isVisible()
-        ]
-    ) == 2
     label_text = "\n".join(
         label.text()
         for label in guide.fixation_response_editor.findChildren(QLabel)
@@ -553,8 +554,7 @@ def test_setup_wizard_experiment_image_size_controls_update_preview_and_review(
         guide.fixation_response_editor.fixation_response_group
     )
     assert (
-        guide.fixation_response_editor.findChild(QWidget, "fixation_response_key_row")
-        is not None
+        guide.fixation_response_editor.findChild(QWidget, "fixation_response_key_row") is not None
     )
     section_titles = [
         label

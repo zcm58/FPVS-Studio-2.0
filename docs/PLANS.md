@@ -11,9 +11,7 @@ Use this page to find planning material before making feature-sized changes.
 - Completed plans: `exec-plans/completed/`
 - Technical debt tracker: `exec-plans/tech-debt-tracker.md`
 
-Current implementation:
-
-- No active execution plans.
+Current implementation: no active feature execution plan.
 
 Concrete planned work:
 

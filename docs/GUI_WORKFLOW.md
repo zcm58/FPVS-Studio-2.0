@@ -117,7 +117,9 @@ The authoring window is organized around two user-facing modes:
     the selected template to all conditions
   - Project exposes `Enable participant tutorial?`, which controls whether the
     participant sees the fixation response tutorial before the first condition
-  - Experiment combines display, image-size, and session settings in one compact centered card
+  - Experiment combines display, presentation-default, image-size, and session settings
+    in one compact centered card; a compact `Configure Presentation...` action opens the
+    reusable presentation editor instead of expanding the wizard card
   - the Display column exposes an approved monitor-refresh dropdown (`59.94`, `60`,
     `120`, `144`, or `240 Hz`), `Detect My Refresh Rate`, project-wide base rate,
     integer oddball cadence, derived oddball rate/frame counts/condition duration, and
@@ -126,7 +128,8 @@ The authoring window is organized around two user-facing modes:
     prior verification, and 59.94 Hz retains its visible requested-versus-realized
     whole-frame timing warning; current launches always use PsychoPy, fullscreen
     session playback, and the default display without exposing those as choices
-  - the Image Size column exposes project-wide image visual-angle width in degrees,
+  - the Image Size column exposes calibrated display geometry and a concise summary of
+    the project presentation defaults,
     approximate viewing distance in cm, physical screen width in cm, intended test
     display resolution in pixels, and an optional current-primary-screen resolution
     mode; the full-screen preview includes a side control panel for live edits to those
@@ -147,6 +150,15 @@ The authoring window is organized around two user-facing modes:
     responsive field column whose minimum width is set by the Advanced Timing selector,
     places repeat guidance behind a compact lower-right information action, and keeps
     image source-card headings top-anchored above enlarged count/resolution summaries
+  - each selected condition exposes a compact `Presentation...` action for inherited
+    condition, Base-role, and Oddball-role settings; the draft-based dialog supports
+    reset-to-inherited controls and a live representative-stimulus preview
+  - runtime presentation transforms are none, horizontal mirror, vertical mirror, and
+    180-degree rotation for both images and words; these write no stimulus files and
+    stay distinct from file-backed grayscale/phase-scrambled variants
+  - image geometry supports Exact Box, Contain, Cover, and Natural Aspect; word
+    presentation supports fixed or balanced-randomized height in degrees or window
+    height, fixed Arial rendering, opaque color, and authored position
   - each selected condition exposes an advanced timing selector for Continuous Images
     or 50% Blank Between Images; changing it updates only that condition
   - image conditions use the existing base/oddball image source cards; word conditions
@@ -157,15 +169,15 @@ The authoring window is organized around two user-facing modes:
   - Conditions shows project-wide Target Stimulus Repeats and per-condition base/oddball
     repeat-balance guidance; repeat-balance issues are warnings and do not block save
     or launch
-  - raw image-folder import is permissive; folders with mixed or non-square image sizes are not
-    rejected at selection time
-  - when users leave Conditions, FPVS Studio checks selected condition images for
-    mixed sizes, non-square sizes, or file types through a progress task; inconsistent
-    folders can be normalized to square PNG copies at `512x512` or `256x256` before
-    moving on
-  - the Conditions step includes a secondary `Create Control Condition...` action for
-    optional grayscale, 180 degree rotated, or phase-scrambled control conditions that
-    reuse the selected condition's existing base and oddball image folders
+  - raw image-folder import is permissive; folders with mixed or rectangular image
+    sizes are not rejected at selection time
+  - when users leave Conditions, FPVS Studio checks selected condition images for mixed
+    sizes or unsupported runtime formats through a progress task; uniform rectangular
+    sets are valid native inputs, while inconsistent folders can still be normalized to
+    project-local PNG copies before moving on
+  - the Conditions step includes a secondary `Create Control Condition...` action;
+    mirrored/rotated controls use runtime transforms with the original folders, while
+    grayscale and phase-scrambled controls retain file-backed derived variants
   - control-condition creation, image normalization, and image materialization are
     image-only paths and are disabled or skipped for word conditions
   - raw timing fields such as `Cycles / Repeat` are hidden from the guided workflow
@@ -173,7 +185,8 @@ The authoring window is organized around two user-facing modes:
   - Conditions is complete when every condition has a descriptive name, trigger
     code of 1 or higher, and configured base/oddball stimuli for its modality
   - Fixation keeps color changes enabled and exposes schedule, capped target counts,
-    and timing
+    timing, and the fixation-only lead-in shown after Space but before condition onset;
+    new projects default to two seconds and migrated legacy projects retain zero
   - Response exposes accuracy tracking, response key/window, appearance, and a live
     preview on the current display background
   - Review is a card-only decision point: users can `Save and Return Home` or
@@ -399,6 +412,9 @@ The current GUI supports:
 - authoring multiple conditions
 - importing base and oddball image folders
 - authoring base and oddball word lists for word-based conditions
+- configuring inherited image/word presentation rules separately for Base and Oddball,
+  including runtime transforms, word-size schedules, position/color, and native image
+  geometry
 - mixing image-based and word-based conditions in one session
 - reviewing Target Stimulus Repeats and base/oddball repeat-balance warnings
 - normalizing inconsistent condition image folders to project-local PNG copies

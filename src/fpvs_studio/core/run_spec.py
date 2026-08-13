@@ -6,20 +6,107 @@ outside RunSpec."""
 
 from __future__ import annotations
 
+from math import isfinite
 from typing import Literal
 
 from pydantic import Field, StrictInt, field_validator, model_validator
 
-from fpvs_studio.core.enums import SchemaVersion, StimulusModality
+from fpvs_studio.core.enums import (
+    ImageGeometryMode,
+    PresentationUnit,
+    SchemaVersion,
+    StimulusModality,
+    StimulusTransform,
+)
 from fpvs_studio.core.models import (
     FPVSBaseModel,
+    ImageGeometrySettings,
+    ImageResolution,
     validate_color,
+    validate_presentation_text_color,
     validate_project_relative_path,
     validate_response_key_name,
     validate_slug,
 )
 
 StimulusRole = Literal["base", "oddball"]
+STUDIO_WORD_FONT_NAME: Literal["Arial"] = "Arial"
+
+
+class ImageGeometrySpec(FPVSBaseModel):
+    """Resolved image fit geometry for one condition role."""
+
+    mode: ImageGeometryMode
+    width_degrees: float | None = None
+    height_degrees: float | None = None
+    source_resolution: ImageResolution
+
+    @model_validator(mode="after")
+    def validate_geometry(self) -> ImageGeometrySpec:
+        ImageGeometrySettings(
+            mode=self.mode,
+            width_degrees=self.width_degrees,
+            height_degrees=self.height_degrees,
+        )
+        return self
+
+
+class TextPresentationSpec(FPVSBaseModel):
+    """Resolved typography shared by all events in one condition role."""
+
+    font_name: Literal["Arial"] = STUDIO_WORD_FONT_NAME
+    color: str = "#FFFFFF"
+    position_unit: PresentationUnit = PresentationUnit.DEGREES
+    position_x: float = 0.0
+    position_y: float = 0.0
+    height_unit: PresentationUnit = PresentationUnit.DEGREES
+    legacy_stimulus_width_fraction: float | None = None
+
+    @field_validator("color")
+    @classmethod
+    def validate_text_color(cls, value: str) -> str:
+        return validate_presentation_text_color(value)
+
+    @field_validator("position_x", "position_y")
+    @classmethod
+    def validate_position(cls, value: float) -> float:
+        normalized = float(value)
+        if not isfinite(normalized):
+            raise ValueError("Compiled text positions must be finite.")
+        return normalized
+
+    @field_validator("legacy_stimulus_width_fraction")
+    @classmethod
+    def validate_legacy_height_fraction(cls, value: float | None) -> float | None:
+        if value is None:
+            return None
+        normalized = float(value)
+        if not isfinite(normalized) or normalized <= 0:
+            raise ValueError(
+                "Legacy stimulus-width text-height fraction must be finite and greater than zero."
+            )
+        return normalized
+
+
+class RolePresentationSpec(FPVSBaseModel):
+    """Resolved runtime presentation for one base or oddball role."""
+
+    transform: StimulusTransform = StimulusTransform.NONE
+    image_geometry: ImageGeometrySpec | None = None
+    text: TextPresentationSpec | None = None
+
+    @model_validator(mode="after")
+    def validate_payload(self) -> RolePresentationSpec:
+        if (self.image_geometry is None) == (self.text is None):
+            raise ValueError("A role presentation requires exactly one of image_geometry or text.")
+        return self
+
+
+class ConditionPresentationSpec(FPVSBaseModel):
+    """Resolved base and oddball presentation contract for one run."""
+
+    base: RolePresentationSpec
+    oddball: RolePresentationSpec
 
 
 class DisplayRunSpec(FPVSBaseModel):
@@ -74,6 +161,7 @@ class StimulusEvent(FPVSBaseModel):
     stimulus_id: str
     image_path: str | None = None
     text: str | None = None
+    text_height_value: float | None = None
     on_start_frame: int = Field(ge=0)
     on_frames: int = Field(ge=0)
     off_frames: int = Field(ge=0)
@@ -100,6 +188,16 @@ class StimulusEvent(FPVSBaseModel):
             raise ValueError("Word stimulus text may not be blank.")
         return cleaned
 
+    @field_validator("text_height_value")
+    @classmethod
+    def validate_text_height_value(cls, value: float | None) -> float | None:
+        if value is None:
+            return None
+        normalized = float(value)
+        if not isfinite(normalized) or normalized <= 0:
+            raise ValueError("Compiled text height must be finite and greater than zero.")
+        return normalized
+
     @model_validator(mode="after")
     def validate_payload(self) -> StimulusEvent:
         if self.stimulus_modality == StimulusModality.IMAGE:
@@ -107,6 +205,8 @@ class StimulusEvent(FPVSBaseModel):
                 raise ValueError("Image stimulus events require image_path.")
             if self.text is not None:
                 raise ValueError("Image stimulus events may not contain text.")
+            if self.text_height_value is not None:
+                raise ValueError("Image stimulus events may not contain text_height_value.")
             return self
         if self.stimulus_modality == StimulusModality.WORD:
             if self.text is None:
@@ -175,7 +275,7 @@ class TriggerEvent(FPVSBaseModel):
 class RunSpec(FPVSBaseModel):
     """Compiled execution plan for one condition run."""
 
-    schema_version: str = SchemaVersion.V1.value
+    schema_version: str = SchemaVersion.V1_1.value
     run_id: str
     project_id: str
     project_name: str
@@ -184,6 +284,8 @@ class RunSpec(FPVSBaseModel):
     condition: ConditionRunSpec
     display: DisplayRunSpec
     fixation: FixationStyleSpec
+    presentation: ConditionPresentationSpec | None = None
+    pre_stream_fixation_frames: int = Field(default=0, ge=0)
     stimulus_sequence: list[StimulusEvent] = Field(default_factory=list)
     fixation_events: list[FixationEvent] = Field(default_factory=list)
     trigger_events: list[TriggerEvent] = Field(default_factory=list)

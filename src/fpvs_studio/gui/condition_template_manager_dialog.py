@@ -31,6 +31,7 @@ from fpvs_studio.gui.components import apply_condition_template_details_header_s
 from fpvs_studio.gui.condition_template_profile_editor_dialog import (
     ConditionTemplateProfileEditorDialog,
 )
+from fpvs_studio.gui.presentation_settings_dialog import presentation_defaults_summary
 
 
 def _duty_cycle_label(mode: DutyCycleMode) -> str:
@@ -85,6 +86,15 @@ def _format_profile_details(profile: ConditionTemplateProfile) -> str:
                 "Display Refresh Rate: "
                 f"{_format_refresh_rate(defaults.display.preferred_refresh_hz)}",
                 f"Display Resolution: {_DISPLAY_RESOLUTION_TEXT}",
+            ],
+        ),
+        (
+            "Presentation",
+            [
+                presentation_defaults_summary(defaults.presentation.defaults),
+                "Experiment Font: Arial",
+                "Pre-stream fixation: "
+                f"{defaults.presentation.pre_stream_fixation_seconds:g} seconds",
             ],
         ),
         (

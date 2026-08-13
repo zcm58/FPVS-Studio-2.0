@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from fpvs_studio.core.condition_template_profiles import (
     SIXTY_HZ_BLANK_FIXATION_PROFILE_ID,
     STUDIO_DEFAULT_PROFILE_ID,
+    apply_condition_template_profile_to_settings,
     built_in_condition_template_profiles,
     delete_condition_template_profile,
     get_condition_template_profile,
@@ -15,7 +18,7 @@ from fpvs_studio.core.condition_template_profiles import (
     save_condition_template_profile_library,
     upsert_condition_template_profile,
 )
-from fpvs_studio.core.enums import DutyCycleMode
+from fpvs_studio.core.enums import DutyCycleMode, ImageGeometryMode, StimulusTransform
 from fpvs_studio.core.models import (
     ConditionDefaults,
     ConditionTemplateDefaults,
@@ -23,6 +26,9 @@ from fpvs_studio.core.models import (
     ConditionTemplateProfile,
     ConditionTemplateProfileLibrary,
     FixationTaskSettings,
+    ProjectPresentationSettings,
+    ProjectSettings,
+    StimulusPresentationDefaults,
 )
 from fpvs_studio.core.paths import (
     APP_DATA_DIRNAME,
@@ -40,10 +46,7 @@ def test_condition_template_library_is_seeded_with_built_ins(tmp_path) -> None:
 
     assert STUDIO_DEFAULT_PROFILE_ID in profile_ids
     assert SIXTY_HZ_BLANK_FIXATION_PROFILE_ID in profile_ids
-    assert (
-        profiles_by_id[STUDIO_DEFAULT_PROFILE_ID].display_name
-        == "Continuous Images"
-    )
+    assert profiles_by_id[STUDIO_DEFAULT_PROFILE_ID].display_name == "Continuous Images"
     assert (
         profiles_by_id[SIXTY_HZ_BLANK_FIXATION_PROFILE_ID].display_name
         == "50% Blank Between Images"
@@ -88,6 +91,39 @@ def test_condition_template_library_migrates_legacy_top_level_templates_dir(
     migrated_ids = {profile.profile_id for profile in migrated.profiles}
     assert STUDIO_DEFAULT_PROFILE_ID in migrated_ids
     assert SIXTY_HZ_BLANK_FIXATION_PROFILE_ID in migrated_ids
+
+
+def test_condition_template_library_migrates_legacy_user_presentation_defaults(
+    tmp_path,
+) -> None:
+    user_profile = ConditionTemplateProfile(
+        profile_id="legacy-user-profile",
+        display_name="Legacy User Profile",
+        built_in=False,
+    )
+    payload = ConditionTemplateProfileLibrary(profiles=[user_profile]).model_dump(mode="json")
+    payload["schema_version"] = "1.0.0"
+    payload["profiles"][0]["defaults"].pop("presentation")
+    library_path = condition_template_library_path(tmp_path)
+    library_path.parent.mkdir(parents=True)
+    library_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    loaded = load_condition_template_profile_library(tmp_path)
+
+    legacy = next(
+        profile for profile in loaded.profiles if profile.profile_id == "legacy-user-profile"
+    )
+    presentation = legacy.defaults.presentation
+    assert loaded.schema_version.value == "1.1.0"
+    assert presentation.pre_stream_fixation_seconds == 0.0
+    assert presentation.defaults.image_geometry.mode == ImageGeometryMode.NATURAL_ASPECT
+    assert presentation.defaults.image_geometry.width_degrees == 5.0
+    assert presentation.defaults.text_height.legacy_stimulus_width_fraction == 0.25
+    rewritten = json.loads(library_path.read_text(encoding="utf-8"))
+    assert rewritten["schema_version"] == "1.1.0"
+    assert (
+        rewritten["profiles"][-1]["defaults"]["presentation"]["pre_stream_fixation_seconds"] == 0.0
+    )
 
 
 def test_condition_template_library_save_load_stays_under_app_templates_dir(
@@ -163,6 +199,28 @@ def test_built_in_templates_share_defaults_except_duty_cycle() -> None:
     assert fixation_one.target_duration_ms == 250
     assert fixation_one.min_gap_ms == 1000
     assert fixation_one.max_gap_ms == 3000
+    assert template_one.defaults.presentation.pre_stream_fixation_seconds == 2.0
+    assert template_two.defaults.presentation == template_one.defaults.presentation
+
+
+def test_condition_template_profile_applies_presentation_snapshot() -> None:
+    profile = ConditionTemplateProfile(
+        profile_id="presentation-profile",
+        display_name="Presentation Profile",
+        defaults=ConditionTemplateDefaults(
+            presentation=ProjectPresentationSettings(
+                pre_stream_fixation_seconds=1.25,
+                defaults=StimulusPresentationDefaults(
+                    transform=StimulusTransform.MIRROR_VERTICAL,
+                ),
+            )
+        ),
+    )
+
+    applied = apply_condition_template_profile_to_settings(ProjectSettings(), profile)
+
+    assert applied.presentation == profile.defaults.presentation
+    assert applied.presentation is not profile.defaults.presentation
 
 
 def test_condition_template_profile_upsert_and_delete_round_trip(tmp_path) -> None:

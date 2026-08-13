@@ -13,8 +13,10 @@ from fpvs_studio.core.compiler_support import (
 from fpvs_studio.core.enums import StimulusModality, StimulusVariant
 from fpvs_studio.core.models import StimulusSet, validate_project_relative_path
 from fpvs_studio.core.paths import (
-    stimulus_derived_dir,
-    stimulus_manifest_path,
+    GENERATED_VARIANTS_DIRNAME,
+    MANIFEST_FILENAME,
+    STIMULI_DIRNAME,
+    resolve_project_relative_path,
     stimulus_variant_dirname,
     to_project_relative_posix,
 )
@@ -36,7 +38,13 @@ def load_manifest(
         return manifest
     if project_root is None:
         return None
-    manifest_path = stimulus_manifest_path(project_root)
+    try:
+        manifest_path = resolve_project_relative_path(
+            project_root,
+            f"{STIMULI_DIRNAME}/{MANIFEST_FILENAME}",
+        )
+    except ValueError as exc:
+        raise CompileError("Stimulus manifest path escapes the project root.") from exc
     if not manifest_path.is_file():
         return None
     return read_json_file(manifest_path, StimulusManifest)
@@ -93,7 +101,13 @@ def _resolve_manifest_image_paths(
                 f"Stimulus variant '{variant.value}' is missing from the manifest for set "
                 f"'{stimulus_set.name}'."
             )
-        candidate_path = project_root / Path(relative_path)
+        try:
+            candidate_path = resolve_project_relative_path(project_root, relative_path)
+        except ValueError as exc:
+            raise CompileError(
+                f"Manifest path '{relative_path}' for set '{stimulus_set.name}' "
+                "escapes the project root."
+            ) from exc
         if not candidate_path.is_file():
             raise CompileError(
                 f"Manifest path '{relative_path}' for set '{stimulus_set.name}' does not exist."
@@ -135,13 +149,28 @@ def _resolve_filesystem_image_paths(
     if variant == StimulusVariant.ORIGINAL:
         if stimulus_set.source_dir is None:
             raise CompileError(f"Image stimulus set '{stimulus_set.name}' is missing source_dir.")
-        source_dir = project_root / Path(stimulus_set.source_dir)
+        try:
+            source_dir = resolve_project_relative_path(project_root, stimulus_set.source_dir)
+        except ValueError as exc:
+            raise CompileError(
+                f"Stimulus set '{stimulus_set.name}' source folder escapes the project root."
+            ) from exc
         allowed_suffixes = SUPPORTED_SOURCE_SUFFIXES
     else:
-        source_dir = (
-            stimulus_derived_dir(project_root, stimulus_set.set_id)
-            / stimulus_variant_dirname(variant.value)
+        derived_dir = "/".join(
+            (
+                STIMULI_DIRNAME,
+                GENERATED_VARIANTS_DIRNAME,
+                stimulus_set.set_id,
+                stimulus_variant_dirname(variant.value),
+            )
         )
+        try:
+            source_dir = resolve_project_relative_path(project_root, derived_dir)
+        except ValueError as exc:
+            raise CompileError(
+                f"Stimulus set '{stimulus_set.name}' derived folder escapes the project root."
+            ) from exc
         allowed_suffixes = SUPPORTED_DERIVED_SUFFIXES
 
     if source_dir.exists() and source_dir.is_dir():
@@ -224,6 +253,5 @@ def resolve_stimulus_items(
         ]
 
     raise CompileError(
-        f"Stimulus set '{stimulus_set.name}' has unsupported modality "
-        f"'{stimulus_set.modality}'."
+        f"Stimulus set '{stimulus_set.name}' has unsupported modality '{stimulus_set.modality}'."
     )

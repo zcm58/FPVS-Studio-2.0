@@ -3,15 +3,22 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
+import numpy as np
 import pytest
 from PIL import Image
 
 from fpvs_studio.core.compiler import compile_run_spec
 from fpvs_studio.core.display_geometry import visual_angle_width_px
-from fpvs_studio.core.enums import StimulusModality
+from fpvs_studio.core.enums import (
+    ImageGeometryMode,
+    PresentationUnit,
+    StimulusModality,
+    StimulusTransform,
+)
 from fpvs_studio.core.run_spec import TriggerEvent
 from fpvs_studio.engines.psychopy_engine import PsychoPyEngine
 from fpvs_studio.engines.psychopy_stimuli import release_stimuli
@@ -69,6 +76,9 @@ class _FakeWindow:
     def callOnFlip(self, callback: object, *args: object) -> None:
         self.events.append(("callOnFlip", args))
         self._call_on_flip.append((callback, args))
+
+    def clearBuffer(self) -> None:
+        self.events.append(("clearBuffer", self._flip_index))
 
     def close(self) -> None:
         self.closed = True
@@ -171,15 +181,25 @@ def _build_fake_psychopy(
     events: list[tuple[str, object]] = []
     image_stims: list[Any] = []
     text_stims: list[Any] = []
+    shape_stims: list[Any] = []
     captures["events"] = events
     captures["image_stims"] = image_stims
     captures["text_stims"] = text_stims
+    captures["shape_stims"] = shape_stims
+
+    class _FakeShapeStim(_FakeStim):
+        def __init__(self, *args, **kwargs) -> None:
+            super().__init__(*args, **kwargs)
+            shape_stims.append(self)
 
     class _FakeImageStim(_FakeStim):
         def __init__(self, *args, image: str, **kwargs) -> None:
             super().__init__(*args, **kwargs)
             self.image = image
             self.size = kwargs.get("size")
+            self.flipHoriz = kwargs.get("flipHoriz")
+            self.flipVert = kwargs.get("flipVert")
+            self.ori = kwargs.get("ori")
             self.clear_textures_count = 0
             image_stims.append(self)
             events.append(("image", image))
@@ -192,8 +212,13 @@ def _build_fake_psychopy(
         def __init__(self, *args, text: str, **kwargs) -> None:
             super().__init__(*args, **kwargs)
             self.text = text
+            self.font = kwargs.get("font")
+            self.pos = kwargs.get("pos")
             self.height = kwargs.get("height")
             self.color = kwargs.get("color")
+            self.flipHoriz = kwargs.get("flipHoriz")
+            self.flipVert = kwargs.get("flipVert")
+            self.ori = kwargs.get("ori")
             text_stims.append(self)
             events.append(("text", text))
 
@@ -214,7 +239,7 @@ def _build_fake_psychopy(
 
     fake_visual = SimpleNamespace(
         Window=_fake_window,
-        ShapeStim=_FakeStim,
+        ShapeStim=_FakeShapeStim,
         ImageStim=_FakeImageStim,
         TextStim=_FakeTextStim,
     )
@@ -315,12 +340,13 @@ def _tiny_run_spec(sample_project, sample_project_root):
     sample_project.settings.fixation_task.enabled = False
     sample_project.settings.fixation_task.accuracy_task_enabled = False
     sample_project.conditions[0].oddball_cycle_repeats_per_sequence = 1
-    return compile_run_spec(
+    run_spec = compile_run_spec(
         sample_project,
         refresh_hz=60.0,
         project_root=sample_project_root,
         run_id="timing-smoke",
     )
+    return run_spec.model_copy(update={"pre_stream_fixation_frames": 0})
 
 
 def _two_event_run_spec(sample_project, sample_project_root, *, duplicate_image: bool):
@@ -623,6 +649,10 @@ def test_psychopy_engine_preloads_unique_images_before_playback_flip(
     assert len(_image_stims(captures)) == 2
     assert image_indices
     assert max(image_indices) < first_flip_index
+    window = captures["window"]
+    assert isinstance(window, _FakeWindow)
+    assert window._flip_index == run_spec.display.total_frames
+    assert ("clearBuffer", 0) in events
 
 
 def test_psychopy_engine_reuses_prepared_stimulus_within_condition(
@@ -648,7 +678,7 @@ def test_psychopy_engine_reuses_prepared_stimulus_within_condition(
 
     image_stims = _image_stims(captures)
     assert len(image_stims) == 1
-    assert image_stims[0].draw_count == 2
+    assert image_stims[0].draw_count == 3
     assert image_stims[0].clear_textures_count == 1
 
 
@@ -677,8 +707,9 @@ def test_psychopy_engine_prepares_and_draws_word_stimuli(
     assert [stim.text for stim in text_stims] == [
         event.text for event in run_spec.stimulus_sequence
     ]
-    assert [stim.draw_count for stim in text_stims] == [1, 1]
-    assert all(stim.color == "white" for stim in text_stims)
+    assert [stim.draw_count for stim in text_stims] == [2, 2]
+    assert all(stim.color == "#FFFFFF" for stim in text_stims)
+    assert all(stim.font == "Arial" for stim in text_stims)
     assert not _image_stims(captures)
 
 
@@ -708,6 +739,40 @@ def test_psychopy_engine_releases_word_stimuli_after_playback_error(
     assert engine._active_run_clock is None
 
 
+def test_psychopy_engine_releases_prepared_stimuli_when_priming_fails(
+    monkeypatch,
+    sample_project,
+    sample_project_root,
+) -> None:
+    run_spec = _two_event_run_spec(sample_project, sample_project_root, duplicate_image=False)
+    captures: dict[str, object] = {}
+    fake_psychopy = _build_fake_psychopy(captures, flip_times=[])
+    engine = PsychoPyEngine()
+    _patch_fake_psychopy(monkeypatch, engine, fake_psychopy)
+    engine.open_session(runtime_options={"fullscreen": False})
+    window = captures["window"]
+    assert isinstance(window, _FakeWindow)
+
+    def _fail_clear_buffer() -> None:
+        raise RuntimeError("clear buffer failed")
+
+    monkeypatch.setattr(window, "clearBuffer", _fail_clear_buffer)
+
+    try:
+        with pytest.raises(RuntimeError, match="clear buffer failed"):
+            engine.run_condition(
+                run_spec,
+                sample_project_root,
+                runtime_options={"timing_warmup_frames": 0},
+                trigger_backend=None,
+            )
+    finally:
+        engine.close_session()
+
+    assert len(_image_stims(captures)) == 2
+    assert all(stimulus.clear_textures_count == 1 for stimulus in _image_stims(captures))
+
+
 def test_psychopy_engine_sizes_images_from_visual_angle_without_changing_aspect_ratio(
     monkeypatch,
     sample_project,
@@ -719,6 +784,7 @@ def test_psychopy_engine_sizes_images_from_visual_angle_without_changing_aspect_
     run_spec.display.screen_width_cm = 53.0
     run_spec.display.screen_width_px = 1920
     run_spec.display.use_current_screen_resolution = False
+    run_spec = run_spec.model_copy(update={"presentation": None})
     wide_image_path = sample_project_root / "stimuli" / "original-images" / "base-set" / "wide.png"
     wide_image_path.parent.mkdir(parents=True, exist_ok=True)
     Image.new("RGB", (200, 100), color=(20, 40, 80)).save(wide_image_path)
@@ -752,6 +818,262 @@ def test_psychopy_engine_sizes_images_from_visual_angle_without_changing_aspect_
         screen_width_px=1920,
     )
     assert _image_stims(captures)[0].size == (expected_width, round(expected_width / 2))
+
+
+@pytest.mark.parametrize(
+    ("transform", "expected_flip_horiz", "expected_flip_vert", "expected_orientation"),
+    [
+        (StimulusTransform.NONE, False, False, 0.0),
+        (StimulusTransform.MIRROR_HORIZONTAL, True, False, 0.0),
+        (StimulusTransform.MIRROR_VERTICAL, False, True, 0.0),
+        (StimulusTransform.ROT180, False, False, 180.0),
+    ],
+)
+def test_psychopy_engine_applies_runtime_image_transforms_at_preload(
+    monkeypatch,
+    sample_project,
+    sample_project_root,
+    transform,
+    expected_flip_horiz,
+    expected_flip_vert,
+    expected_orientation,
+) -> None:
+    run_spec = _two_event_run_spec(sample_project, sample_project_root, duplicate_image=True)
+    assert run_spec.presentation is not None
+    base_presentation = run_spec.presentation.base.model_copy(update={"transform": transform})
+    run_spec.presentation = run_spec.presentation.model_copy(update={"base": base_presentation})
+    captures: dict[str, object] = {}
+    fake_psychopy = _build_fake_psychopy(captures, flip_times=[])
+    engine = PsychoPyEngine()
+    _patch_fake_psychopy(monkeypatch, engine, fake_psychopy)
+
+    try:
+        engine.run_condition(
+            run_spec,
+            sample_project_root,
+            runtime_options={"timing_warmup_frames": 0},
+            trigger_backend=None,
+        )
+    finally:
+        engine.close_session()
+
+    stimulus = _image_stims(captures)[0]
+    assert stimulus.flipHoriz is expected_flip_horiz
+    assert stimulus.flipVert is expected_flip_vert
+    assert stimulus.ori == expected_orientation
+    events = _events(captures)
+    assert events.index(("clearBuffer", 0)) < next(
+        index for index, event in enumerate(events) if event[0] == "flip"
+    )
+
+
+@pytest.mark.parametrize(
+    ("transform", "expected_flip_horiz", "expected_flip_vert", "expected_orientation"),
+    [
+        (StimulusTransform.NONE, False, False, 0.0),
+        (StimulusTransform.MIRROR_HORIZONTAL, True, False, 0.0),
+        (StimulusTransform.MIRROR_VERTICAL, False, True, 0.0),
+        (StimulusTransform.ROT180, False, False, 180.0),
+    ],
+)
+def test_psychopy_engine_applies_word_transform_and_resolves_height_fraction(
+    monkeypatch,
+    sample_project,
+    transform,
+    expected_flip_horiz,
+    expected_flip_vert,
+    expected_orientation,
+) -> None:
+    run_spec = _two_word_event_run_spec(sample_project)
+    assert run_spec.presentation is not None
+    text_spec = run_spec.presentation.base.text
+    assert text_spec is not None
+    text_spec = text_spec.model_copy(
+        update={
+            "color": "#12AB34",
+            "position_unit": PresentationUnit.WINDOW_HEIGHT_FRACTION,
+            "position_x": 0.1,
+            "position_y": 0.02,
+            "height_unit": PresentationUnit.WINDOW_HEIGHT_FRACTION,
+        }
+    )
+    base_presentation = run_spec.presentation.base.model_copy(
+        update={
+            "transform": transform,
+            "text": text_spec,
+        }
+    )
+    run_spec.presentation = run_spec.presentation.model_copy(update={"base": base_presentation})
+    run_spec.stimulus_sequence = [
+        event.model_copy(update={"text_height_value": 0.05}) for event in run_spec.stimulus_sequence
+    ]
+    captures: dict[str, object] = {}
+    fake_psychopy = _build_fake_psychopy(captures, flip_times=[])
+    engine = PsychoPyEngine()
+    _patch_fake_psychopy(monkeypatch, engine, fake_psychopy)
+
+    try:
+        engine.run_condition(
+            run_spec,
+            Path.cwd(),
+            runtime_options={"timing_warmup_frames": 0},
+            trigger_backend=None,
+        )
+    finally:
+        engine.close_session()
+
+    stimuli = _text_stims(captures)
+    assert [stimulus.text for stimulus in stimuli] == [
+        event.text for event in run_spec.stimulus_sequence
+    ]
+    assert all(stimulus.flipHoriz is expected_flip_horiz for stimulus in stimuli)
+    assert all(stimulus.flipVert is expected_flip_vert for stimulus in stimuli)
+    assert all(stimulus.ori == expected_orientation for stimulus in stimuli)
+    assert all(stimulus.font == "Arial" for stimulus in stimuli)
+    assert all(stimulus.color == "#12AB34" for stimulus in stimuli)
+    assert all(stimulus.height == 54 for stimulus in stimuli)
+    assert all(stimulus.pos == (108, 22) for stimulus in stimuli)
+
+
+def test_psychopy_engine_preloads_distinct_text_height_render_variants(
+    monkeypatch,
+    sample_project,
+) -> None:
+    run_spec = _two_word_event_run_spec(sample_project)
+    first_event = run_spec.stimulus_sequence[0]
+    run_spec.stimulus_sequence = [
+        first_event.model_copy(update={"sequence_index": 0, "text_height_value": 1.0}),
+        first_event.model_copy(
+            update={
+                "sequence_index": 1,
+                "on_start_frame": 1,
+                "text_height_value": 2.0,
+            }
+        ),
+    ]
+    captures: dict[str, object] = {}
+    fake_psychopy = _build_fake_psychopy(captures, flip_times=[])
+    engine = PsychoPyEngine()
+    _patch_fake_psychopy(monkeypatch, engine, fake_psychopy)
+
+    try:
+        engine.run_condition(
+            run_spec,
+            Path.cwd(),
+            runtime_options={"timing_warmup_frames": 0},
+            trigger_backend=None,
+        )
+    finally:
+        engine.close_session()
+
+    stimuli = _text_stims(captures)
+    assert len(stimuli) == 2
+    assert [stimulus.height for stimulus in stimuli] == [
+        visual_angle_width_px(
+            degrees=value,
+            viewing_distance_cm=run_spec.display.viewing_distance_cm,
+            screen_width_cm=run_spec.display.screen_width_cm,
+            screen_width_px=run_spec.display.screen_width_px,
+        )
+        for value in (1.0, 2.0)
+    ]
+    assert [stimulus.draw_count for stimulus in stimuli] == [2, 2]
+
+
+def test_psychopy_engine_prioritizes_legacy_width_fraction_for_word_height(
+    monkeypatch,
+    sample_project,
+) -> None:
+    run_spec = _two_word_event_run_spec(sample_project)
+    assert run_spec.presentation is not None
+    text_spec = run_spec.presentation.base.text
+    assert text_spec is not None
+    text_spec = text_spec.model_copy(update={"legacy_stimulus_width_fraction": 0.25})
+    run_spec.presentation = run_spec.presentation.model_copy(
+        update={"base": run_spec.presentation.base.model_copy(update={"text": text_spec})}
+    )
+    run_spec.stimulus_sequence = [
+        run_spec.stimulus_sequence[0].model_copy(
+            update={"on_frames": 1, "off_frames": 0, "text_height_value": 99.0}
+        )
+    ]
+    run_spec.display.total_frames = 1
+    captures: dict[str, object] = {}
+    fake_psychopy = _build_fake_psychopy(captures, flip_times=[])
+    engine = PsychoPyEngine()
+    _patch_fake_psychopy(monkeypatch, engine, fake_psychopy)
+
+    try:
+        engine.run_condition(
+            run_spec,
+            Path.cwd(),
+            runtime_options={"timing_warmup_frames": 0},
+            trigger_backend=None,
+        )
+    finally:
+        engine.close_session()
+
+    stimulus_width_px = visual_angle_width_px(
+        degrees=run_spec.display.stimulus_width_degrees,
+        viewing_distance_cm=run_spec.display.viewing_distance_cm,
+        screen_width_cm=run_spec.display.screen_width_cm,
+        screen_width_px=run_spec.display.screen_width_px,
+    )
+    assert _text_stims(captures)[0].height == max(1, round(stimulus_width_px * 0.25))
+
+
+def test_psychopy_engine_resolves_text_degrees_for_height_and_signed_position(
+    monkeypatch,
+    sample_project,
+) -> None:
+    run_spec = _two_word_event_run_spec(sample_project)
+    assert run_spec.presentation is not None
+    text_spec = run_spec.presentation.base.text
+    assert text_spec is not None
+    text_spec = text_spec.model_copy(
+        update={
+            "position_unit": PresentationUnit.DEGREES,
+            "position_x": 1.0,
+            "position_y": -2.0,
+            "height_unit": PresentationUnit.DEGREES,
+        }
+    )
+    run_spec.presentation = run_spec.presentation.model_copy(
+        update={"base": run_spec.presentation.base.model_copy(update={"text": text_spec})}
+    )
+    run_spec.stimulus_sequence = [
+        run_spec.stimulus_sequence[0].model_copy(
+            update={"on_frames": 1, "off_frames": 0, "text_height_value": 1.5}
+        )
+    ]
+    run_spec.display.total_frames = 1
+    captures: dict[str, object] = {}
+    fake_psychopy = _build_fake_psychopy(captures, flip_times=[])
+    engine = PsychoPyEngine()
+    _patch_fake_psychopy(monkeypatch, engine, fake_psychopy)
+
+    try:
+        engine.run_condition(
+            run_spec,
+            Path.cwd(),
+            runtime_options={"timing_warmup_frames": 0},
+            trigger_backend=None,
+        )
+    finally:
+        engine.close_session()
+
+    stimulus = _text_stims(captures)[0]
+
+    def convert(degrees: float) -> int:
+        return visual_angle_width_px(
+            degrees=degrees,
+            viewing_distance_cm=run_spec.display.viewing_distance_cm,
+            screen_width_cm=run_spec.display.screen_width_cm,
+            screen_width_px=run_spec.display.screen_width_px,
+        )
+
+    assert stimulus.height == convert(1.5)
+    assert stimulus.pos == (convert(1.0), -convert(2.0))
 
 
 def test_release_stimuli_discards_texture_ids_and_clears_mapping() -> None:
@@ -810,6 +1132,7 @@ def test_psychopy_engine_uses_same_display_size_for_different_square_resolutions
     run_spec.display.screen_width_cm = 53.0
     run_spec.display.screen_width_px = 1920
     run_spec.display.use_current_screen_resolution = False
+    run_spec = run_spec.model_copy(update={"presentation": None})
     base_dir = sample_project_root / "stimuli" / "original-images" / "base-set"
     high_res_path = base_dir / "square-1024.png"
     low_res_path = base_dir / "square-512.png"
@@ -851,6 +1174,193 @@ def test_psychopy_engine_uses_same_display_size_for_different_square_resolutions
         (expected_width, expected_width),
         (expected_width, expected_width),
     ]
+
+
+@pytest.mark.parametrize(
+    ("mode", "height_degrees", "expected_height_from_width"),
+    [
+        (ImageGeometryMode.EXACT_BOX, 6.0, False),
+        (ImageGeometryMode.CONTAIN, 6.0, True),
+        (ImageGeometryMode.NATURAL_ASPECT, None, True),
+    ],
+)
+def test_psychopy_engine_resolves_native_image_geometry_modes(
+    monkeypatch,
+    sample_project,
+    sample_project_root,
+    mode,
+    height_degrees,
+    expected_height_from_width,
+) -> None:
+    run_spec = _two_event_run_spec(sample_project, sample_project_root, duplicate_image=True)
+    run_spec.display.viewing_distance_cm = 80.0
+    run_spec.display.screen_width_cm = 53.0
+    run_spec.display.screen_width_px = 1920
+    run_spec.display.use_current_screen_resolution = False
+    wide_image_path = sample_project_root / "stimuli" / "original-images" / "base-set" / "wide.png"
+    wide_image_path.parent.mkdir(parents=True, exist_ok=True)
+    Image.new("RGB", (200, 100), color=(20, 40, 80)).save(wide_image_path)
+    run_spec.stimulus_sequence = [
+        run_spec.stimulus_sequence[0].model_copy(
+            update={
+                "image_path": "stimuli/original-images/base-set/wide.png",
+                "on_frames": 1,
+                "off_frames": 0,
+            }
+        )
+    ]
+    run_spec.display.total_frames = 1
+    assert run_spec.presentation is not None
+    geometry = run_spec.presentation.base.image_geometry
+    assert geometry is not None
+    geometry = geometry.model_copy(
+        update={
+            "mode": mode,
+            "width_degrees": 8.0,
+            "height_degrees": height_degrees,
+            "source_resolution": geometry.source_resolution.model_copy(
+                update={"width_px": 200, "height_px": 100}
+            ),
+        }
+    )
+    run_spec.presentation = run_spec.presentation.model_copy(
+        update={"base": run_spec.presentation.base.model_copy(update={"image_geometry": geometry})}
+    )
+    captures: dict[str, object] = {}
+    fake_psychopy = _build_fake_psychopy(captures, flip_times=[])
+    engine = PsychoPyEngine()
+    _patch_fake_psychopy(monkeypatch, engine, fake_psychopy)
+
+    try:
+        engine.run_condition(
+            run_spec,
+            sample_project_root,
+            runtime_options={"timing_warmup_frames": 0},
+            trigger_backend=None,
+        )
+    finally:
+        engine.close_session()
+
+    expected_width = visual_angle_width_px(
+        degrees=8.0,
+        viewing_distance_cm=80.0,
+        screen_width_cm=53.0,
+        screen_width_px=1920,
+    )
+    expected_height = (
+        round(expected_width / 2)
+        if expected_height_from_width
+        else visual_angle_width_px(
+            degrees=6.0,
+            viewing_distance_cm=80.0,
+            screen_width_cm=53.0,
+            screen_width_px=1920,
+        )
+    )
+    assert _image_stims(captures)[0].size == (expected_width, expected_height)
+
+
+def test_psychopy_engine_rejects_compiled_source_resolution_drift(
+    monkeypatch,
+    sample_project,
+    sample_project_root,
+) -> None:
+    run_spec = _two_event_run_spec(sample_project, sample_project_root, duplicate_image=True)
+    source_path = sample_project_root / "stimuli" / "original-images" / "base-set" / "wide.png"
+    source_path.parent.mkdir(parents=True, exist_ok=True)
+    Image.new("RGB", (200, 100), color=(20, 40, 80)).save(source_path)
+    run_spec.stimulus_sequence = [
+        run_spec.stimulus_sequence[0].model_copy(
+            update={"image_path": "stimuli/original-images/base-set/wide.png"}
+        )
+    ]
+    captures: dict[str, object] = {}
+    fake_psychopy = _build_fake_psychopy(captures, flip_times=[])
+    engine = PsychoPyEngine()
+    _patch_fake_psychopy(monkeypatch, engine, fake_psychopy)
+
+    try:
+        with pytest.raises(
+            ValueError,
+            match="decoded as 200x100, but its compiled source resolution is 256x256",
+        ):
+            engine.run_condition(
+                run_spec,
+                sample_project_root,
+                runtime_options={"timing_warmup_frames": 0},
+                trigger_backend=None,
+            )
+    finally:
+        engine.close_session()
+
+
+def test_psychopy_engine_cover_crops_centrally_in_memory_and_preserves_alpha(
+    monkeypatch,
+    sample_project,
+    sample_project_root,
+) -> None:
+    run_spec = _two_event_run_spec(sample_project, sample_project_root, duplicate_image=True)
+    source_path = sample_project_root / "stimuli" / "original-images" / "base-set" / "rgba.png"
+    source_path.parent.mkdir(parents=True, exist_ok=True)
+    source = np.zeros((100, 200, 4), dtype=np.uint8)
+    source[:, :, 0] = np.arange(200, dtype=np.uint8)
+    source[:, :, 1] = np.arange(100, dtype=np.uint8)[:, np.newaxis]
+    source[:, :, 3] = 127
+    Image.fromarray(source).save(source_path)
+    files_before = sorted(path.name for path in source_path.parent.iterdir())
+    run_spec.stimulus_sequence = [
+        run_spec.stimulus_sequence[0].model_copy(
+            update={
+                "image_path": "stimuli/original-images/base-set/rgba.png",
+                "on_frames": 1,
+                "off_frames": 0,
+            }
+        )
+    ]
+    run_spec.display.total_frames = 1
+    assert run_spec.presentation is not None
+    geometry = run_spec.presentation.base.image_geometry
+    assert geometry is not None
+    geometry = geometry.model_copy(
+        update={
+            "mode": ImageGeometryMode.COVER,
+            "width_degrees": 6.0,
+            "height_degrees": 6.0,
+            "source_resolution": geometry.source_resolution.model_copy(
+                update={"width_px": 200, "height_px": 100}
+            ),
+        }
+    )
+    run_spec.presentation = run_spec.presentation.model_copy(
+        update={"base": run_spec.presentation.base.model_copy(update={"image_geometry": geometry})}
+    )
+    captures: dict[str, object] = {}
+    fake_psychopy = _build_fake_psychopy(captures, flip_times=[])
+    engine = PsychoPyEngine()
+    _patch_fake_psychopy(monkeypatch, engine, fake_psychopy)
+
+    try:
+        engine.run_condition(
+            run_spec,
+            sample_project_root,
+            runtime_options={"timing_warmup_frames": 0},
+            trigger_backend=None,
+        )
+    finally:
+        engine.close_session()
+
+    rendered_source = _image_stims(captures)[0].image
+    assert isinstance(rendered_source, np.ndarray)
+    assert rendered_source.shape == (100, 100, 4)
+    assert rendered_source.flags.c_contiguous is True
+    assert rendered_source[0, 0].tolist() == pytest.approx(
+        [50 / 127.5 - 1.0, 99 / 127.5 - 1.0, -1.0, 127 / 255.0]
+    )
+    assert rendered_source[0, -1].tolist() == pytest.approx(
+        [149 / 127.5 - 1.0, 99 / 127.5 - 1.0, -1.0, 127 / 255.0]
+    )
+    assert rendered_source[-1, 0, 1] == pytest.approx(-1.0)
+    assert sorted(path.name for path in source_path.parent.iterdir()) == files_before
 
 
 def test_psychopy_engine_emits_compiled_triggers_on_presentation_flip(
@@ -928,6 +1438,120 @@ def test_psychopy_engine_trigger_timestamps_exclude_warmup_period(
     ]
     assert trigger_backend.records[0]["time_s"] == pytest.approx(0.1)
     assert trigger_backend.records[1]["time_s"] == pytest.approx(0.2)
+
+
+def test_psychopy_engine_uses_final_warmup_frames_for_fixation_lead_in(
+    monkeypatch,
+    sample_project,
+    sample_project_root,
+) -> None:
+    run_spec = _two_event_run_spec(sample_project, sample_project_root, duplicate_image=False)
+    run_spec = run_spec.model_copy(update={"pre_stream_fixation_frames": 2})
+    run_spec.trigger_events = [
+        TriggerEvent(frame_index=0, code=1, label="condition_start"),
+        TriggerEvent(frame_index=1, code=55, label="oddball_onset"),
+    ]
+    captures: dict[str, object] = {}
+    fake_psychopy = _build_fake_psychopy(
+        captures,
+        flip_times=[0.1, 0.2, 0.3, 0.4, 0.5, 0.6],
+    )
+    trigger_backend = _RecordingTriggerBackend()
+    engine = PsychoPyEngine()
+    _patch_fake_psychopy(monkeypatch, engine, fake_psychopy)
+
+    try:
+        summary = engine.run_condition(
+            run_spec,
+            sample_project_root,
+            runtime_options={"timing_warmup_frames": 4, "strict_timing": False},
+            trigger_backend=trigger_backend,
+        )
+    finally:
+        engine.close_session()
+
+    window = captures["window"]
+    assert isinstance(window, _FakeWindow)
+    assert window._flip_index == 6
+    shape_stims = captures["shape_stims"]
+    assert isinstance(shape_stims, list)
+    assert len(shape_stims) == 1
+    assert shape_stims[0].draw_count == 4
+    assert summary.completed_frames == 2
+    assert [record["frame_index"] for record in trigger_backend.records] == [0, 1]
+    assert trigger_backend.records[0]["time_s"] == pytest.approx(0.1)
+    assert trigger_backend.records[1]["time_s"] == pytest.approx(0.2)
+
+
+def test_psychopy_engine_reports_long_lead_in_as_actual_pre_stream_qc_frames(
+    monkeypatch,
+    sample_project,
+    sample_project_root,
+) -> None:
+    run_spec = _two_event_run_spec(sample_project, sample_project_root, duplicate_image=False)
+    run_spec.display.refresh_hz = 240.0
+    run_spec = run_spec.model_copy(update={"pre_stream_fixation_frames": 480})
+    captures: dict[str, object] = {}
+    fake_psychopy = _build_fake_psychopy(captures, flip_times=[])
+    engine = PsychoPyEngine()
+    _patch_fake_psychopy(monkeypatch, engine, fake_psychopy)
+
+    try:
+        summary = engine.run_condition(
+            run_spec,
+            sample_project_root,
+            runtime_options={"timing_warmup_frames": 240, "strict_timing": False},
+            trigger_backend=None,
+        )
+    finally:
+        engine.close_session()
+
+    assert summary.runtime_metadata is not None
+    assert summary.runtime_metadata.timing_qc_warmup_frames == 480
+    window = captures["window"]
+    assert isinstance(window, _FakeWindow)
+    assert window._flip_index == 482
+
+
+def test_psychopy_engine_blank_warmup_escape_aborts_before_stream_and_triggers(
+    monkeypatch,
+    sample_project,
+    sample_project_root,
+) -> None:
+    run_spec = _two_event_run_spec(sample_project, sample_project_root, duplicate_image=False)
+    run_spec = run_spec.model_copy(update={"pre_stream_fixation_frames": 2})
+    run_spec.trigger_events = [
+        TriggerEvent(frame_index=0, code=1, label="condition_start"),
+    ]
+    captures: dict[str, object] = {}
+    fake_psychopy = _build_fake_psychopy(
+        captures,
+        flip_times=[0.1],
+        key_batches=[[SimpleNamespace(name="escape")]],
+    )
+    trigger_backend = _RecordingTriggerBackend()
+    engine = PsychoPyEngine()
+    _patch_fake_psychopy(monkeypatch, engine, fake_psychopy)
+
+    try:
+        summary = engine.run_condition(
+            run_spec,
+            sample_project_root,
+            runtime_options={"timing_warmup_frames": 4, "strict_timing": False},
+            trigger_backend=trigger_backend,
+        )
+    finally:
+        engine.close_session()
+
+    assert summary.aborted is True
+    assert summary.abort_reason == "Escape pressed before condition playback."
+    assert summary.completed_frames == 0
+    assert trigger_backend.records == []
+    assert summary.runtime_metadata is not None
+    assert summary.runtime_metadata.timing_qc_warmup_frames == 1
+    shape_stims = captures["shape_stims"]
+    assert isinstance(shape_stims, list)
+    assert shape_stims[0].draw_count == 0
 
 
 def test_psychopy_engine_uses_compiled_trigger_events_not_stimulus_roles(

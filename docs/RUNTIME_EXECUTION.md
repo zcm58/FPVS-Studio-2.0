@@ -38,6 +38,11 @@ SessionPlan
   -> for each SessionEntry in order:
        -> engine.show_transition_screen(..., continue_key="space")
        -> engine.run_condition(RunSpec, ...)
+            -> preload resolved presentation objects
+            -> complete technical warmup, using its final configured frames for the
+               fixation-only lead-in
+            -> reset input and run-relative timing
+            -> present stream frame zero and its condition trigger together
        -> if this completed a non-final block:
             -> engine.show_block_break_screen(...)
        -> runtime scores fixation responses
@@ -91,6 +96,13 @@ The PsychoPy implementation:
 - shows a dedicated manual inter-block break screen between non-final blocks
 - preloads each condition's unique image or word stimuli before playback and releases
   condition-local resources when the condition ends
+- prepares every unique resolved render identity before playback, including runtime
+  mirrors/rotation, word height/color/position, and native rectangular image geometry
+- performs `cover` cropping centrally in memory during preparation without creating
+  derived files
+- renders the compiled default-color fixation cross for the exact pre-stream lead-in
+  frame count, emits no trigger or task response during that phase, then resets the run
+  clock before stream frame zero
 - executes the compiled frame schedule directly from `RunSpec`
 - draws the fixation cross continuously and switches color on compiled
   `FixationEvent` windows
@@ -288,6 +300,8 @@ Run and session `events.csv` exports include neutral stimulus columns:
 `stimulus_modality`, `stimulus_id`, `stimulus_value`, `image_path`, and `text`.
 `stimulus_value` is a spreadsheet convenience field derived from `image_path` for image
 events and `text` for word events; role and frame timing columns stay unchanged.
+Resolved presentation details remain available in `runspec.json`, the authoritative
+engine input, without adding per-event styling columns or a separate replay artifact.
 
 Studio `.fpvsconfig` export is a separate summary/interchange file built from the editable
 project, stimulus manifest, and optionally an existing completed session directory. A

@@ -1,6 +1,9 @@
 # SessionPlan Contract
 
 `SessionPlan` is the compiled multi-condition session contract for FPVS Studio.
+The current persisted contract is schema `1.1.0`; each embedded `RunSpec` uses the
+matching `1.1.0` presentation contract. Schema `1.0.0` projects are migrated in memory
+before compilation and are not rewritten merely by loading or launching them.
 
 It sits above `RunSpec`:
 
@@ -44,7 +47,9 @@ Represents one compiled occurrence of one condition inside the session:
 
 Each embedded `RunSpec` carries that condition's resolved timing template. A single
 `SessionPlan` may mix continuous-image and 50% blank conditions without adding
-session-level timing branches.
+session-level timing branches. It also carries the condition's fully resolved Base and
+Oddball presentation rules and its pre-stream fixation frame count, so session runtime
+does not inspect editable project presentation settings.
 
 ### `SessionBlock`
 
@@ -98,6 +103,9 @@ Runtime consumes `SessionPlan` and:
   headings such as `Condition 1 of 4`; authored condition names remain internal
   metadata for artifacts and review
 - iterates `SessionEntry.run_spec` in order
+- lets the engine render the compiled fixation-only lead-in after the Space gate and
+  before stream frame zero; the condition trigger and first stimulus remain aligned on
+  frame zero
 - aggregates run execution results into a `SessionExecutionSummary`
 
 Engines still consume one `RunSpec` at a time.

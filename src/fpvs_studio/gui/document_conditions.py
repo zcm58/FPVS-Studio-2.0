@@ -9,10 +9,16 @@ from fpvs_studio.core.condition_template_profiles import (
     apply_condition_defaults_to_condition,
     apply_condition_template_profile_to_settings,
 )
-from fpvs_studio.core.enums import DutyCycleMode, StimulusModality, StimulusVariant
+from fpvs_studio.core.enums import (
+    DutyCycleMode,
+    StimulusModality,
+    StimulusTransform,
+    StimulusVariant,
+)
 from fpvs_studio.core.models import (
     Condition,
     ConditionDefaults,
+    ConditionPresentationSettings,
     ConditionTemplateProfile,
     ProjectFile,
     StimulusSet,
@@ -282,12 +288,18 @@ class DocumentConditionMixin:
         source_condition_id: str,
         *,
         variant: StimulusVariant,
+        transform: StimulusTransform | None = None,
         name: str | None = None,
     ) -> str:
-        """Create a derived-variant control condition from an existing condition."""
+        """Create a file-backed or runtime-transformed control condition."""
 
-        if variant == StimulusVariant.ORIGINAL:
-            raise DocumentError("Control conditions must use a derived stimulus variant.")
+        if variant == StimulusVariant.ORIGINAL and transform in {
+            None,
+            StimulusTransform.NONE,
+        }:
+            raise DocumentError(
+                "Control conditions must use a derived stimulus variant or runtime transform."
+            )
 
         source_condition = self.get_condition(source_condition_id)
         if source_condition is None:
@@ -299,15 +311,40 @@ class DocumentConditionMixin:
         ordered_conditions = self.ordered_conditions()
         existing_condition_ids = {condition.condition_id for condition in self._project.conditions}
         control_name = self._unique_condition_name(
-            name or self._default_control_condition_name(source_condition.name, variant),
+            name
+            or self._default_control_condition_name(
+                source_condition.name,
+                variant,
+                transform=transform,
+            ),
             {condition.name for condition in ordered_conditions},
         )
         new_condition_id = self._unique_slug(control_name, existing_condition_ids)
+        presentation = source_condition.presentation
+        if transform is not None:
+            presentation = presentation.model_copy(
+                update={
+                    "common": presentation.common.model_copy(
+                        update={"transform": transform},
+                        deep=True,
+                    ),
+                    "base": presentation.base.model_copy(
+                        update={"transform": None},
+                        deep=True,
+                    ),
+                    "oddball": presentation.oddball.model_copy(
+                        update={"transform": None},
+                        deep=True,
+                    ),
+                },
+                deep=True,
+            )
         control_condition = source_condition.model_copy(
             update={
                 "condition_id": new_condition_id,
                 "name": control_name,
                 "stimulus_variant": variant,
+                "presentation": presentation,
                 "trigger_code": len(ordered_conditions) + 1,
                 "order_index": len(ordered_conditions),
             }
@@ -363,6 +400,15 @@ class DocumentConditionMixin:
             conditions=self._reindex_conditions(conditions),
         )
         self._replace_project(project)
+
+    def set_condition_presentation(
+        self,
+        condition_id: str,
+        presentation: ConditionPresentationSettings,
+    ) -> None:
+        """Replace one condition's presentation overrides atomically."""
+
+        self.update_condition(condition_id, presentation=presentation)
 
     def update_condition_timing_template(
         self,
@@ -482,10 +528,24 @@ class DocumentConditionMixin:
             suffix += 1
         return candidate
 
-    def _default_control_condition_name(self, source_name: str, variant: StimulusVariant) -> str:
+    def _default_control_condition_name(
+        self,
+        source_name: str,
+        variant: StimulusVariant,
+        *,
+        transform: StimulusTransform | None = None,
+    ) -> str:
         variant_label = {
             StimulusVariant.GRAYSCALE: "Grayscale",
             StimulusVariant.ROT180: "180 Degree Rotated",
             StimulusVariant.PHASE_SCRAMBLED: "Phase-Scrambled",
+            StimulusVariant.ORIGINAL: "Original",
         }[variant]
+        if transform is not None:
+            variant_label = {
+                StimulusTransform.NONE: "Original",
+                StimulusTransform.MIRROR_HORIZONTAL: "Horizontally Mirrored",
+                StimulusTransform.MIRROR_VERTICAL: "Vertically Mirrored",
+                StimulusTransform.ROT180: "180 Degree Rotated",
+            }[transform]
         return f"{source_name} {variant_label} Control"

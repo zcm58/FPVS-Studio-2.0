@@ -16,6 +16,7 @@ class SchemaVersion(StrEnum):
     """Supported persisted schema versions."""
 
     V1 = "1.0.0"
+    V1_1 = "1.1.0"
 
 
 class DutyCycleMode(StrEnum):
@@ -46,6 +47,38 @@ class StimulusModality(StrEnum):
 
     IMAGE = "image"
     WORD = "word"
+
+
+class StimulusTransform(StrEnum):
+    """Runtime-only visual transforms applied without creating derived files."""
+
+    NONE = "none"
+    MIRROR_HORIZONTAL = "mirror_horizontal"
+    MIRROR_VERTICAL = "mirror_vertical"
+    ROT180 = "rot180"
+
+
+class PresentationUnit(StrEnum):
+    """Authoring units supported by text presentation settings."""
+
+    DEGREES = "degrees"
+    WINDOW_HEIGHT_FRACTION = "window_height_fraction"
+
+
+class TextHeightMode(StrEnum):
+    """How word height values are selected for a condition role."""
+
+    FIXED = "fixed"
+    BALANCED_RANDOMIZED = "balanced_randomized"
+
+
+class ImageGeometryMode(StrEnum):
+    """How an image is fitted to its authored visual-angle geometry."""
+
+    EXACT_BOX = "exact_box"
+    CONTAIN = "contain"
+    COVER = "cover"
+    NATURAL_ASPECT = "natural_aspect"
 
 
 class TriggerBackendKind(StrEnum):

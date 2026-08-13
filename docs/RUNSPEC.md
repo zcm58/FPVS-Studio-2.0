@@ -70,6 +70,11 @@ condition's resolved frame counts.
 - duty cycle
 - total frame count
 
+The display contract also carries the calibrated screen geometry used to resolve
+degrees of visual angle. Role-specific image boxes and word presentation rules live in
+the condition presentation spec described below rather than being inferred by the
+engine from a project-wide square size.
+
 ### `ConditionRunSpec`
 
 - condition identity and name
@@ -93,6 +98,7 @@ Each event contains:
 - deterministic stimulus id
 - project-relative image path for image events
 - display text for word events
+- a compiled text-height value for word events
 - `on_start_frame`
 - `on_frames`
 - `off_frames`
@@ -100,6 +106,39 @@ Each event contains:
 Image events must carry `image_path` and no `text`. Word events must carry `text` and
 no `image_path`. Runtime preflight and playback treat any inconsistent modality/payload
 pair as an error.
+
+### Presentation specs
+
+`RunSpec.presentation` contains resolved Base and Oddball presentation rules. The
+compiler has already applied project-default, condition, and role-level inheritance, so
+runtime and engines never inspect editable project settings.
+
+Each role specifies one runtime transform: none, horizontal mirror, vertical mirror, or
+180-degree rotation. These transforms are presentation properties and do not create or
+select generated image files. They remain separate from preprocessing variants such as
+grayscale and phase scrambling.
+
+Image roles compile one of four geometry modes:
+
+- `exact_box`: use the authored width and height, including intentional stretching
+- `contain`: preserve source aspect ratio inside the authored box
+- `cover`: preserve source aspect ratio and crop centrally to fill the box
+- `natural_aspect`: author one dimension and derive the other from the source image
+
+Word roles compile the fixed Studio experiment font, an opaque color, x/y position,
+and the unit used by text height and position. A fixed or balanced-randomized authored
+height rule is resolved before playback; each word event carries its resolved height.
+The engine never changes font geometry in the timed frame loop.
+
+Projects loaded from schema 1.0 retain an internal compatibility marker for the old
+word-height calculation's intermediate pixel rounding. It is not an authoring unit and
+is cleared when the user authors a native text-height rule.
+
+`RunSpec.pre_stream_fixation_frames` is a separate fixation-only phase after the
+participant's Space gate and before stream frame zero. It is not part of
+`DisplayRunSpec.total_frames`, and no stimulus, response target, or trigger is scheduled
+inside it. The first image/word and condition-start trigger still begin together at
+stream frame zero.
 
 ### `FixationStyleSpec`
 
@@ -150,9 +189,11 @@ resolves real source or derived asset paths from the manifest. Runtime preflight
 verifies those paths are project-relative and exist before launch, and the presentation
 engine resolves them relative to the project root during playback.
 
-Launchable condition images must be square. Base and oddball source resolutions may
-differ, such as `512x512` and `1024x1024`, because playback size is controlled by
-compiled display geometry rather than native image pixel dimensions.
+Launchable image sets must have known, uniform source resolution, but that resolution
+may be rectangular. Base and oddball source resolutions may differ because playback
+size is controlled by compiled role geometry rather than native image dimensions.
+Existing padded-square migrations remain valid and resolve through Natural Aspect until
+an explicit audited conversion changes their presentation settings.
 
 Word stimuli are resolved from typed project word lists. They do not create image files,
 do not enter the preprocessing manifest, and use the same base/oddball schedule and
@@ -165,8 +206,14 @@ The compiler currently emits a seed-deterministic schedule:
 - oddball every 5th stimulus
 - manifest-backed variant resolution when available
 - sorted image paths or authored word-list order before scheduling
-- per-role seeded shuffling so every base stimulus and every oddball stimulus is shown once
-  per role cycle before that role's pool is reshuffled
+- independently seeded role bags so every authored base entry and every authored
+  oddball entry is shown once per role cycle before that role's pool is reshuffled;
+  immediate repeated display values are avoided within bags, across bag refills, and
+  across Base/Oddball boundaries whenever the remaining authored multiplicities make
+  an alternative possible
+- independently seeded balanced word-height bags for Base and Oddball roles, also with
+  no immediate repeat across bag boundaries; style randomization does not perturb
+  stimulus selection order
 - balanced seeded-jitter fixation target onsets from the realized target count,
   target duration, and minimum-gap edge/inter-target buffers
 - a condition-start trigger event at the first stimulus onset when a condition trigger

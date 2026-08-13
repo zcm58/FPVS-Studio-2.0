@@ -6,6 +6,7 @@ from collections.abc import Mapping
 from pathlib import Path
 
 import pytest
+from PIL import Image
 
 from fpvs_studio.core.compiler import compile_run_spec, compile_session_plan
 from fpvs_studio.core.enums import StimulusModality
@@ -220,6 +221,37 @@ def test_full_preflight_rejects_corrupt_image_assets_before_engine_launch(
         )
 
 
+def test_full_preflight_rejects_role_source_resolution_mismatch(
+    sample_project,
+    sample_project_root,
+) -> None:
+    run_spec = compile_run_spec(
+        sample_project,
+        refresh_hz=60.0,
+        project_root=sample_project_root,
+        run_id="faces-run",
+    )
+    oddball_event = next(
+        event for event in run_spec.stimulus_sequence if event.role == "oddball"
+    )
+    assert oddball_event.image_path is not None
+    Image.new("RGB", (128, 256)).save(sample_project_root / oddball_event.image_path)
+
+    with pytest.raises(
+        PreflightError,
+        match=(
+            "decoded image dimensions do not match compiled role source resolutions: "
+            ".*oddball: decoded 128x256, compiled 256x256"
+        ),
+    ):
+        preflight_run_spec(
+            sample_project_root,
+            run_spec,
+            engine=_PreflightEngine(),
+            decode_image_assets=True,
+        )
+
+
 @pytest.mark.parametrize("refresh_hz", [59.94, 60.0, 120.0, 144.0, 240.0])
 def test_preflight_accepts_refresh_rates_compatible_with_6hz(
     sample_project,
@@ -417,6 +449,42 @@ def test_preflight_accepts_word_stimuli_without_files(sample_project, sample_pro
     )
 
     preflight_run_spec(sample_project_root, run_spec, engine=_PreflightEngine())
+
+
+def test_preflight_rejects_word_event_without_resolved_presentation_height(
+    sample_project,
+    sample_project_root,
+) -> None:
+    sample_project.stimulus_sets[0] = sample_project.stimulus_sets[0].model_copy(
+        update={
+            "modality": StimulusModality.WORD,
+            "source_dir": None,
+            "resolution": None,
+            "image_count": 0,
+            "words": ["cat", "dog"],
+        }
+    )
+    sample_project.stimulus_sets[1] = sample_project.stimulus_sets[1].model_copy(
+        update={
+            "modality": StimulusModality.WORD,
+            "source_dir": None,
+            "resolution": None,
+            "image_count": 0,
+            "words": ["tool"],
+        }
+    )
+    run_spec = compile_run_spec(
+        sample_project,
+        refresh_hz=60.0,
+        project_root=sample_project_root,
+        run_id="word-run",
+    )
+    run_spec.stimulus_sequence[0] = run_spec.stimulus_sequence[0].model_copy(
+        update={"text_height_value": None}
+    )
+
+    with pytest.raises(PreflightError, match="missing resolved text presentation"):
+        preflight_run_spec(sample_project_root, run_spec, engine=_PreflightEngine())
 
 
 def test_preflight_rejects_stimulus_id_payload_collision(

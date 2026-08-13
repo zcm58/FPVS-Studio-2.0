@@ -21,11 +21,25 @@ from fpvs_studio.preprocessing.manifest import (
 )
 from fpvs_studio.preprocessing.models import StimulusManifest
 from fpvs_studio.preprocessing.normalization import (
+    COMPILER_READY_SUFFIXES,
     ImageNormalizationResult,
     ImageNormalizationScan,
+    StimulusSetNormalizationScan,
     normalize_stimulus_sets,
     scan_stimulus_sets_for_normalization,
 )
+
+
+def condition_image_set_requires_normalization(
+    scan: StimulusSetNormalizationScan,
+) -> bool:
+    """Return whether one condition image set needs the Setup rewrite path."""
+
+    return (
+        len(scan.resolutions) > 1
+        or bool(scan.unsupported_files)
+        or any(file_type not in COMPILER_READY_SUFFIXES for file_type in scan.file_types)
+    )
 
 
 class DocumentStimulusMixin:
@@ -164,9 +178,7 @@ class DocumentStimulusMixin:
 
     def _stimulus_set_scan_key(self, stimulus_set: StimulusSet) -> tuple[object, ...]:
         resolution = (
-            stimulus_set.resolution.as_tuple()
-            if stimulus_set.resolution is not None
-            else None
+            stimulus_set.resolution.as_tuple() if stimulus_set.resolution is not None else None
         )
         return (
             stimulus_set.set_id,
@@ -188,11 +200,29 @@ class DocumentStimulusMixin:
             return ("missing-directory", None)
 
     def normalize_condition_images(self, *, target_size: int = 512) -> ImageNormalizationResult:
-        """Normalize condition stimulus sets and repoint them to generated PNG folders."""
+        """Normalize only condition sets that cannot remain compiler-ready as authored."""
+
+        stimulus_sets = self._condition_stimulus_sets()
+        scan = self.cached_condition_image_normalization_scan()
+        if scan is None:
+            scan = scan_stimulus_sets_for_normalization(
+                project_root=self._project_root,
+                stimulus_sets=stimulus_sets,
+            )
+        normalization_set_ids = {
+            item.set_id for item in scan.sets if condition_image_set_requires_normalization(item)
+        }
+        selected_sets = [
+            stimulus_set
+            for stimulus_set in stimulus_sets
+            if stimulus_set.set_id in normalization_set_ids
+        ]
+        if not selected_sets:
+            return ImageNormalizationResult(sets=(), processed_count=0)
 
         result = normalize_stimulus_sets(
             project_root=self._project_root,
-            stimulus_sets=self._condition_stimulus_sets(),
+            stimulus_sets=selected_sets,
             target_size=target_size,
         )
         result_by_set_id = {item.set_id: item for item in result.sets}

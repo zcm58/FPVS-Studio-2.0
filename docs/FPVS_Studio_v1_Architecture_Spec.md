@@ -118,9 +118,13 @@ The true per-sequence duration is derived from the active display's refresh-comp
 - Supported source image formats are only `.jpg`, `.jpeg`, and `.png`.
 - Extension matching should be case-insensitive.
 - Raw image-folder import may be permissive, but launchable image stimulus sets must
-  resolve to square images.
-- A condition's base and oddball stimulus sets may use different square source
-  resolutions because playback size is controlled by compiled display geometry.
+  resolve to supported images with known, uniform resolution. Uniform rectangular
+  images are valid native inputs.
+- A condition's base and oddball stimulus sets may use different source resolutions
+  because playback size and geometry are compiled independently from native pixels.
+- Project presentation defaults may be overridden by a condition and then by Base or
+  Oddball role. Runtime mirrors/rotation do not create files; native geometry supports
+  Exact Box, Contain, Cover, and Natural Aspect.
 - No automatic resizing is allowed as a validation shortcut.
 - Generated variants are saved into the project and then reused from disk.
 

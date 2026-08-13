@@ -44,7 +44,9 @@ from fpvs_studio.gui.condition_setup_step import (
 )
 from fpvs_studio.gui.design_system import PAGE_MARGIN_X
 from fpvs_studio.gui.document import ProjectDocument
+from fpvs_studio.gui.document_stimuli import condition_image_set_requires_normalization
 from fpvs_studio.gui.image_normalization_dialog import ImageNormalizationDialog
+from fpvs_studio.gui.presentation_settings_dialog import presentation_defaults_summary
 from fpvs_studio.gui.project_overview_page import ProjectOverviewEditor
 from fpvs_studio.gui.run_page import RunPage
 from fpvs_studio.gui.runtime_settings_page import DisplaySettingsEditor, ImageDisplaySizeEditor
@@ -73,6 +75,17 @@ _SETUP_STEP_SURFACE_MAX_WIDTH = 880
 _SETUP_STEP_WORKBENCH_SURFACE_MAX_WIDTH = 1040
 _SETUP_STEP_SURFACE_MIN_HEIGHT = 360
 _SETUP_STEP_CARD_MAX_HEIGHT = 552
+
+
+def _scan_requires_setup_normalization(scan: ImageNormalizationScan) -> bool:
+    """Return whether Setup must rewrite images before compilation.
+
+    Uniform rectangular inputs are valid presentation sources now that geometry is
+    explicit. Within-set mixed dimensions and genuinely unsupported files still use
+    the existing normalization path; supported file types may remain mixed.
+    """
+
+    return any(condition_image_set_requires_normalization(item) for item in scan.sets)
 
 
 class _CurrentWidgetStack(QStackedWidget):
@@ -164,9 +177,7 @@ class SetupWizardPage(QWidget):
         self._on_return_home = on_return_home
         self._on_save_project = on_save_project
         self._active_step_index = 0
-        self._readiness_cache: tuple[tuple[int, float, bool], LauncherReadinessReport] | None = (
-            None
-        )
+        self._readiness_cache: tuple[tuple[int, float, bool], LauncherReadinessReport] | None = None
         self._step_jump_enabled = False
         self._active_image_readiness_task: ProgressTask | None = None
         self._active_image_prescan_task: BackgroundTask | None = None
@@ -205,9 +216,7 @@ class SetupWizardPage(QWidget):
             require_refresh_verification=True,
             parent=self,
         )
-        self.runtime_settings_editor.refresh_verification_changed.connect(
-            self.schedule_refresh
-        )
+        self.runtime_settings_editor.refresh_verification_changed.connect(self.schedule_refresh)
         self.image_display_size_editor = ImageDisplaySizeEditor(document, parent=self)
         self.session_structure_editor = SessionStructureEditor(
             document,
@@ -389,9 +398,7 @@ class SetupWizardPage(QWidget):
             QSizePolicy.Policy.Fixed,
         )
         self.setup_wizard_next_hint_container = QWidget(self)
-        self.setup_wizard_next_hint_container.setObjectName(
-            "setup_wizard_next_hint_container"
-        )
+        self.setup_wizard_next_hint_container.setObjectName("setup_wizard_next_hint_container")
         next_hint_layout = QHBoxLayout(self.setup_wizard_next_hint_container)
         next_hint_layout.setContentsMargins(0, 0, 0, 0)
         next_hint_layout.addWidget(self.setup_wizard_next_hint_label)
@@ -705,10 +712,7 @@ class SetupWizardPage(QWidget):
         )
 
     def _active_condition_image_task_hint(self) -> str:
-        if (
-            self._active_image_readiness_task is not None
-            or self._image_prescan_pending_advance
-        ):
+        if self._active_image_readiness_task is not None or self._image_prescan_pending_advance:
             return "Checking image readiness..."
         if self._active_normalization_task is not None:
             return "Normalizing condition images..."
@@ -748,7 +752,7 @@ class SetupWizardPage(QWidget):
         self,
         scan: ImageNormalizationScan,
     ) -> None:
-        if not scan.needs_normalization:
+        if not _scan_requires_setup_normalization(scan):
             self._advance_to_next_step()
             return
         if not scan.can_normalize:
@@ -926,7 +930,9 @@ class SetupWizardPage(QWidget):
         hint_text = (
             self._active_condition_image_task_hint()
             if condition_image_task_active
-            else "" if step_valid or step_key == "review" else self._next_step_hint_text()
+            else ""
+            if step_valid or step_key == "review"
+            else self._next_step_hint_text()
         )
         self.setup_wizard_next_hint_label.setText(hint_text)
         self.setup_wizard_next_hint_label.setToolTip(hint_text)
@@ -1048,10 +1054,7 @@ class SetupWizardPage(QWidget):
         if conditions:
             timing_labels = tuple(
                 sorted(
-                    {
-                        _timing_template_label(condition.duty_cycle_mode)
-                        for condition in conditions
-                    }
+                    {_timing_template_label(condition.duty_cycle_mode) for condition in conditions}
                 )
             )
             timing_line = (
@@ -1066,14 +1069,14 @@ class SetupWizardPage(QWidget):
         background_label = self._display_background_label(str(display.background_color))
         repeat_word = "time" if block_count == 1 else "times"
         experiment_lines = (
-            f"Each condition will repeat {block_count} {repeat_word} "
-            f"in randomized block order",
+            f"Each condition will repeat {block_count} {repeat_word} in randomized block order",
             "Condition order is randomized automatically at launch",
             f"Monitor: {self.runtime_settings_editor.current_refresh_hz():.2f} Hz, "
             f"{background_label}",
             f"FPVS timing: {protocol.base_hz:g} Hz base, oddball every "
             f"{protocol.oddball_every_n} stimuli ({protocol.oddball_hz:g} Hz)",
-            f"Image width: {display.stimulus_width_degrees:.1f} deg at "
+            "Presentation: "
+            f"{presentation_defaults_summary(project.settings.presentation.defaults)} at "
             f"{display.viewing_distance_cm:.0f} cm on "
             f"{display.screen_width_px} x {display.screen_height_px}",
             *self._review_timing_estimate_lines(),
@@ -1117,7 +1120,8 @@ class SetupWizardPage(QWidget):
         }.get(background_color, background_color)
 
     def _fixation_review_line(self) -> str:
-        return "Fixation cross has been configured"
+        lead_in = self._document.project.settings.presentation.pre_stream_fixation_seconds
+        return f"Fixation cross configured; {lead_in:g} s pre-stream gaze lead-in"
 
     def _step_status_text(self, index: int) -> str:
         step_key = _WIZARD_STEPS[index][0]
@@ -1205,8 +1209,7 @@ class SetupWizardPage(QWidget):
     @staticmethod
     def _conditions_have_required_trigger_codes(ordered_conditions: list) -> bool:
         return all(
-            is_guided_trigger_code(condition.trigger_code)
-            for condition in ordered_conditions
+            is_guided_trigger_code(condition.trigger_code) for condition in ordered_conditions
         )
 
     def _conditions_identity_ready(self, ordered_conditions: list) -> bool:
@@ -1217,10 +1220,9 @@ class SetupWizardPage(QWidget):
         )
 
     def _conditions_images_ready(self, ordered_conditions: list) -> bool:
-        return (
-            self._conditions_identity_ready(ordered_conditions)
-            and _conditions_have_assigned_assets(self._document, ordered_conditions)
-        )
+        return self._conditions_identity_ready(
+            ordered_conditions
+        ) and _conditions_have_assigned_assets(self._document, ordered_conditions)
 
     def _refresh_progress_steps(self) -> None:
         current = self._active_step_index

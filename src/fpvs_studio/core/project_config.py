@@ -27,10 +27,12 @@ from fpvs_studio.core.enums import (
 )
 from fpvs_studio.core.models import (
     Condition,
+    ConditionPresentationSettings,
     DisplaySettings,
     FPVSBaseModel,
     ProjectFile,
     ProjectMeta,
+    ProjectPresentationSettings,
     ProjectSettings,
     ProtocolSettings,
     SessionSettings,
@@ -51,6 +53,7 @@ from fpvs_studio.core.paths import (
     stimulus_original_images_root,
     stimulus_originals_dir,
 )
+from fpvs_studio.core.presentation import legacy_project_presentation_settings
 from fpvs_studio.core.project_service import ProjectScaffold
 from fpvs_studio.core.serialization import read_json_file, save_project_file
 from fpvs_studio.core.session_plan import SessionPlan
@@ -58,7 +61,7 @@ from fpvs_studio.core.trigger_codes import validate_oddball_trigger_code_policy
 from fpvs_studio.preprocessing.manifest import create_empty_manifest, write_stimulus_manifest
 from fpvs_studio.preprocessing.models import StimulusManifest, StimulusSetManifest
 
-CONFIG_SCHEMA_VERSION = "1.0.0"
+CONFIG_SCHEMA_VERSION = "1.1.0"
 PROJECT_CONFIG_SUFFIX = ".fpvsconfig"
 _CONFIG_FILENAME_RE = re.compile(r"[^a-z0-9]+")
 
@@ -113,6 +116,9 @@ class ProjectConfigCondition(FPVSBaseModel):
     duty_cycle_mode: DutyCycleMode = DutyCycleMode.CONTINUOUS
     order_index: int = Field(ge=0)
     instructions: str = ""
+    presentation: ConditionPresentationSettings = Field(
+        default_factory=ConditionPresentationSettings
+    )
 
     @field_validator("condition_id", "base_stimulus_set_id", "oddball_stimulus_set_id")
     @classmethod
@@ -256,12 +262,13 @@ class ProjectConfigStimulusProvenance(FPVSBaseModel):
 class ProjectConfigFile(FPVSBaseModel):
     """Top-level Studio `.fpvsconfig` interchange file."""
 
-    schema_version: Literal["1.0.0"] = "1.0.0"
+    schema_version: Literal["1.1.0"] = "1.1.0"
     producer: ProjectConfigProducer = Field(default_factory=ProjectConfigProducer)
     project: ProjectConfigProject
     conditions: list[ProjectConfigCondition] = Field(default_factory=list)
     stimulus_sets: list[ProjectConfigStimulusSet] = Field(default_factory=list)
     display: ProjectConfigDisplay
+    presentation: ProjectPresentationSettings = Field(default_factory=ProjectPresentationSettings)
     protocol: ProjectConfigProtocol = Field(default_factory=ProjectConfigProtocol)
     session: ProjectConfigSession
     triggers: ProjectConfigTriggers
@@ -299,12 +306,11 @@ def export_project_config(
                 oddball_stimulus_set_id=condition.oddball_stimulus_set_id,
                 stimulus_variant=condition.stimulus_variant,
                 sequence_count=condition.sequence_count,
-                oddball_cycle_repeats_per_sequence=(
-                    condition.oddball_cycle_repeats_per_sequence
-                ),
+                oddball_cycle_repeats_per_sequence=(condition.oddball_cycle_repeats_per_sequence),
                 duty_cycle_mode=condition.duty_cycle_mode,
                 order_index=condition.order_index,
                 instructions=condition.instructions,
+                presentation=condition.presentation.model_copy(deep=True),
             )
             for condition in sorted(project.conditions, key=lambda item: item.order_index)
         ],
@@ -319,6 +325,7 @@ def export_project_config(
             for stimulus_set in project.stimulus_sets
         ],
         display=_display_config(project.settings.display),
+        presentation=project.settings.presentation.model_copy(deep=True),
         protocol=ProjectConfigProtocol(
             base_hz=project.settings.protocol.base_hz,
             oddball_every_n=project.settings.protocol.oddball_every_n,
@@ -354,6 +361,22 @@ def read_project_config(path: Path) -> ProjectConfigFile:
     if not isinstance(raw_payload, dict):
         raise ProjectConfigError("Project config must contain a JSON object.")
     raw_version = raw_payload.get("schema_version")
+    if raw_version == "1.0.0":
+        display_payload = raw_payload.get("display", {})
+        if not isinstance(display_payload, dict):
+            raise ProjectConfigError("Legacy project config display must be an object.")
+        width_degrees = float(display_payload.get("stimulus_width_degrees", 5.0))
+        raw_payload["presentation"] = legacy_project_presentation_settings(
+            width_degrees,
+            pre_stream_fixation_seconds=0.0,
+        ).model_dump(mode="json")
+        conditions_payload = raw_payload.get("conditions", [])
+        if isinstance(conditions_payload, list):
+            for condition_payload in conditions_payload:
+                if isinstance(condition_payload, dict):
+                    condition_payload.setdefault("presentation", {})
+        raw_payload["schema_version"] = CONFIG_SCHEMA_VERSION
+        raw_version = CONFIG_SCHEMA_VERSION
     if raw_version != CONFIG_SCHEMA_VERSION:
         raise ProjectConfigError(
             "Unsupported project config schema version: "
@@ -397,6 +420,7 @@ def create_project_from_config(parent_dir: Path, config: ProjectConfigFile) -> P
         ),
         settings=ProjectSettings(
             display=_display_settings(config.display),
+            presentation=config.presentation.model_copy(deep=True),
             protocol=_protocol_settings(config.protocol),
             triggers=_trigger_settings(config.triggers),
             session=_session_settings(config.session),
@@ -411,12 +435,11 @@ def create_project_from_config(parent_dir: Path, config: ProjectConfigFile) -> P
                 oddball_stimulus_set_id=condition.oddball_stimulus_set_id,
                 stimulus_variant=condition.stimulus_variant,
                 sequence_count=condition.sequence_count,
-                oddball_cycle_repeats_per_sequence=(
-                    condition.oddball_cycle_repeats_per_sequence
-                ),
+                oddball_cycle_repeats_per_sequence=(condition.oddball_cycle_repeats_per_sequence),
                 trigger_code=condition.trigger_code,
                 duty_cycle_mode=condition.duty_cycle_mode,
                 order_index=index,
+                presentation=condition.presentation.model_copy(deep=True),
             )
             for index, condition in enumerate(config.conditions)
         ],
@@ -523,9 +546,7 @@ def _trigger_config(triggers: TriggerSettings) -> ProjectConfigTriggers:
         serial_port=triggers.serial_port,
         baudrate=triggers.baudrate,
         oddball_trigger_code=oddball_trigger_code,
-        allow_nonstandard_oddball_trigger_code=(
-            triggers.allow_nonstandard_oddball_trigger_code
-        ),
+        allow_nonstandard_oddball_trigger_code=(triggers.allow_nonstandard_oddball_trigger_code),
         pulse_width_ms=triggers.pulse_width_ms,
         reset_code=triggers.reset_code,
         reset_delay_ms=triggers.reset_delay_ms,

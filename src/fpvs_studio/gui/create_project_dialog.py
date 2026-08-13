@@ -65,7 +65,7 @@ class CreateProjectDialog(QDialog):
 
         self.condition_profile_combo = QComboBox(self)
         self.condition_profile_combo.setObjectName("condition_profile_combo")
-        self.condition_profile_combo.setPlaceholderText("Select image timing...")
+        self.condition_profile_combo.setPlaceholderText("Select an experiment template...")
         self.manage_templates_button = QPushButton("Manage Templates...", self)
         self.manage_templates_button.setObjectName("manage_condition_templates_button")
         self.manage_templates_button.clicked.connect(self._manage_templates)
@@ -79,7 +79,7 @@ class CreateProjectDialog(QDialog):
         form_layout.addRow("Project Name", self.project_name_edit)
         form_layout.addRow("", self.project_name_validation_label)
         form_layout.addRow("Project Folder", root_layout)
-        form_layout.addRow("Image Timing", profile_layout)
+        form_layout.addRow("Experiment Template", profile_layout)
 
         self.button_box = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel,
@@ -179,8 +179,8 @@ class CreateProjectDialog(QDialog):
         if self.condition_profile_id is None:
             QMessageBox.warning(
                 self,
-                "Image Timing Required",
-                "Select Continuous Images or 50% Blank Images before creating the project.",
+                "Experiment Template Required",
+                "Select an experiment template before creating the project.",
             )
             self.condition_profile_combo.setFocus()
             return

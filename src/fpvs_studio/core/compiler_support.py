@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 from datetime import datetime, timezone
 
 SUPPORTED_SOURCE_SUFFIXES = (".jpg", ".jpeg", ".png")
@@ -42,3 +43,10 @@ def color_to_string(value: str | tuple[int, int, int]) -> str:
     if isinstance(value, str):
         return value
     return f"rgb({value[0]},{value[1]},{value[2]})"
+
+
+def namespaced_random_seed(random_seed: int, namespace: str) -> int:
+    """Derive a stable independent seed without relying on process hash state."""
+
+    payload = f"fpvs-studio:{random_seed}:{namespace}".encode()
+    return int.from_bytes(hashlib.sha256(payload).digest()[:8], "big")

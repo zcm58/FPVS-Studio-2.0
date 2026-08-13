@@ -227,6 +227,16 @@ def test_setup_wizard_compact_steps_do_not_clip_visible_content(
         _assert_setup_wizard_vertical_scrolling_disabled(wizard)
         assert wizard.shell.page_container.scroll_area.verticalScrollBar().maximum() == 0
         _assert_visible_children_within_parent(wizard.step_stack.currentWidget())
+        if step_key == "conditions":
+            assert wizard.condition_setup_step.presentation_button.isVisible()
+        elif step_key == "experiment":
+            assert (
+                wizard.image_display_size_editor.configure_presentation_button.isVisible()
+            )
+            assert wizard.image_display_size_editor.presentation_summary_label.isVisible()
+        elif step_key == "fixation":
+            assert wizard.fixation_schedule_editor.pre_stream_fixation_spin.isVisible()
+            assert wizard.fixation_schedule_editor.pre_stream_fixation_note.isVisible()
 
         frame_heights.append(wizard.step_card.height())
         frame_tops.append(wizard.step_card.mapTo(wizard, wizard.step_card.rect().topLeft()).y())

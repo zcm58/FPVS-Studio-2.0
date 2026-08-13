@@ -47,8 +47,15 @@ ProjectFile
   -> exporters -> project logs and optional detailed run artifacts
 ```
 
+The current editable and compiled presentation contracts use schema `1.1.0`. Loaders
+migrate schema `1.0.0` projects, condition-template libraries, and `.fpvsconfig` files
+in memory; reading or launching a legacy project does not rewrite it. Compatibility
+preserves a zero-second lead-in and the legacy word-size pixel rounding until those
+settings are explicitly authored in the new presentation editor.
+
 - Compilation owns protocol scheduling, asset resolution, randomized session order,
-  and realized fixation target selection.
+  realized fixation target selection, presentation-setting inheritance, and balanced
+  word-height realization.
 - Editable project protocol settings own requested base Hz and integer oddball cadence;
   compilation resolves them to whole-frame timing and records requested rates in each
   `RunSpec`.
@@ -61,7 +68,9 @@ ProjectFile
 - `ProjectFile` owns the per-participant `manual_removed_electrodes` authoring map saved
   from the launch dialog; it remains outside compiled and runtime playback contracts.
 - Engines render compiled events and participant-facing screens; they do not own
-  compilation, session decisions, project persistence, or exports.
+  compilation, session decisions, project persistence, or exports. Runtime image/word
+  transforms and native geometry are compiled presentation properties and never create
+  project assets.
 - Full export mode writes detailed artifacts under `runs/`. Compact mode keeps
   project-level reporting under `logs/` without detailed run folders.
 - GUI project-bundle import/export is implemented; its current workflow and contracts

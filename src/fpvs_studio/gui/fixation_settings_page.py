@@ -26,6 +26,7 @@ from fpvs_studio.core.validation import ConditionFixationGuidance
 from fpvs_studio.gui.animations import ButtonHoverAnimator
 from fpvs_studio.gui.components import (
     PAGE_SECTION_GAP,
+    FiniteDoubleSpinBox,
     SectionCard,
     apply_fixation_settings_theme,
     mark_secondary_action,
@@ -108,9 +109,7 @@ _KEYBOARD_ROWS = (
         (".", "."),
         ("/", "/"),
     ),
-    (
-        ("Space", "space"),
-    ),
+    (("Space", "space"),),
 )
 
 
@@ -391,6 +390,15 @@ class FixationSettingsEditor(QWidget):
         self.min_gap_spin.setRange(0, 10000)
         self.min_gap_spin.valueChanged.connect(self._apply_fixation_settings)
 
+        self.pre_stream_fixation_spin = FiniteDoubleSpinBox(minimum=0.0, parent=self)
+        self.pre_stream_fixation_spin.setObjectName("pre_stream_fixation_seconds_spin")
+        self.pre_stream_fixation_spin.setSingleStep(0.25)
+        self.pre_stream_fixation_spin.setSuffix(" s")
+        self.pre_stream_fixation_spin.setToolTip(
+            "Fixation-only time after Space is pressed and before condition frame zero."
+        )
+        self.pre_stream_fixation_spin.valueChanged.connect(self._apply_pre_stream_fixation)
+
         self.max_gap_spin = QSpinBox(self)
         self.max_gap_spin.setObjectName("max_gap_spin")
         self.max_gap_spin.setRange(0, 10000)
@@ -490,6 +498,15 @@ class FixationSettingsEditor(QWidget):
         timing_layout.setVerticalSpacing(form_spacing)
         timing_layout.addRow("Color change duration (ms)", self.target_duration_spin)
         timing_layout.addRow("Minimum gap (ms)", self.min_gap_spin)
+        timing_layout.addRow("Before condition starts", self.pre_stream_fixation_spin)
+        self.pre_stream_fixation_note = QLabel(
+            "The fixation cross stays visible so participants can settle their gaze. "
+            "The first stimulus and condition trigger still begin together at frame zero.",
+            self.fixation_timing_group,
+        )
+        self.pre_stream_fixation_note.setObjectName("pre_stream_fixation_note")
+        self.pre_stream_fixation_note.setWordWrap(True)
+        timing_layout.addRow(self.pre_stream_fixation_note)
 
         self.fixation_response_group = QWidget(self.fixation_panel)
         response_group_layout = QVBoxLayout(self.fixation_response_group)
@@ -690,6 +707,10 @@ class FixationSettingsEditor(QWidget):
             self.target_duration_spin.setValue(fixation.target_duration_ms)
         with QSignalBlocker(self.min_gap_spin):
             self.min_gap_spin.setValue(fixation.min_gap_ms)
+        with QSignalBlocker(self.pre_stream_fixation_spin):
+            self.pre_stream_fixation_spin.setValue(
+                self._document.project.settings.presentation.pre_stream_fixation_seconds
+            )
         with QSignalBlocker(self.max_gap_spin):
             self.max_gap_spin.setValue(fixation.max_gap_ms)
         with QSignalBlocker(self.base_color_combo):
@@ -960,6 +981,15 @@ class FixationSettingsEditor(QWidget):
                 "Fixation Settings Error",
                 display_error,
             )
+            self.refresh()
+
+    def _apply_pre_stream_fixation(self) -> None:
+        try:
+            self._document.update_presentation_settings(
+                pre_stream_fixation_seconds=self.pre_stream_fixation_spin.value()
+            )
+        except Exception as error:
+            _show_error_dialog(self, "Pre-stream Fixation Error", error)
             self.refresh()
 
 

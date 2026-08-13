@@ -32,6 +32,8 @@ def test_session_plan_default_block_contains_all_conditions_once(
         random_seed=123,
     )
 
+    assert session_plan.schema_version == "1.1.0"
+    assert all(entry.run_spec.schema_version == "1.1.0" for entry in session_plan.ordered_entries())
     assert session_plan.block_count == 1
     assert session_plan.total_runs == 4
     assert len(session_plan.blocks) == 1
@@ -147,11 +149,7 @@ def test_session_plan_reshuffles_images_each_time_condition_is_shown(
     )
     entries = session_plan.ordered_entries()
     base_orders = [
-        [
-            event.image_path
-            for event in entry.run_spec.stimulus_sequence
-            if event.role == "base"
-        ][:3]
+        [event.image_path for event in entry.run_spec.stimulus_sequence if event.role == "base"][:3]
         for entry in entries
     ]
 
@@ -214,8 +212,7 @@ def test_session_plan_supports_image_and_word_conditions_together(
     }
     assert entries_by_condition["faces"].condition.stimulus_modality == StimulusModality.IMAGE
     assert (
-        entries_by_condition["word-condition"].condition.stimulus_modality
-        == StimulusModality.WORD
+        entries_by_condition["word-condition"].condition.stimulus_modality == StimulusModality.WORD
     )
     word_events = entries_by_condition["word-condition"].stimulus_sequence
     assert all(event.stimulus_modality == StimulusModality.WORD for event in word_events)

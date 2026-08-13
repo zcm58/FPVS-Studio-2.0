@@ -24,6 +24,11 @@ as PsychoPy. Runtime owns flow and calls engines through
 - PsychoPy imports must remain lazy and local to engine implementations.
 - Engines return core-owned execution summaries; exporters stay outside engine
   code.
+- Engines apply compiled image/word transforms and geometry at presentation time. They
+  must not write transformed stimulus assets or infer authoring inheritance.
+- A compiled pre-stream fixation phase is rendered after the participant gate and
+  before the stream clock starts. Frame-zero stimuli and condition triggers retain
+  their existing alignment.
 
 ## First Files
 
@@ -45,3 +50,10 @@ Keep `PsychoPyEngine` as the public implementation surface. Prefer adding or edi
 focused helper modules for lazy loading, text screens, stimuli, timing, metadata, window
 construction, or trigger behavior before expanding the facade. Avoid splitting the frame
 loop unless the new seam has focused tests and preserves frame-accurate behavior.
+
+PsychoPy stimulus preparation occurs before timed playback. Image and text objects are
+keyed by their complete resolved render identity, including role transform and resolved
+word height, so the frame loop only selects and draws prepared objects. Horizontal and
+vertical mirrors use PsychoPy's native flip properties; 180-degree rotation uses native
+orientation. Cover geometry is cropped centrally in memory during preparation and never
+writes a project file.

@@ -253,9 +253,7 @@ def test_home_quick_action_buttons_present_and_wired(
     assert edit_setup_button.property("primaryActionRole") == "true"
     assert edit_setup_button.property("secondaryActionRole") == "false"
     qtbot.waitUntil(lambda: launch_button.width() > 0)
-    metric_text = "\n".join(
-        label.text() for label in window.home_page.findChildren(QLabel)
-    )
+    metric_text = "\n".join(label.text() for label in window.home_page.findChildren(QLabel))
     assert "Fixation Cross" in metric_text
     assert "Accuracy Tracking" in metric_text
     assert "Fixation Task" not in metric_text
@@ -289,9 +287,7 @@ def test_home_quick_action_buttons_present_and_wired(
         lambda _checked=False: trigger_counts.__setitem__("new", trigger_counts["new"] + 1)
     )
     window.import_project_bundle_action.triggered.connect(
-        lambda _checked=False: trigger_counts.__setitem__(
-            "import", trigger_counts["import"] + 1
-        )
+        lambda _checked=False: trigger_counts.__setitem__("import", trigger_counts["import"] + 1)
     )
     window.open_project_action.triggered.connect(
         lambda _checked=False: trigger_counts.__setitem__("open", trigger_counts["open"] + 1)
@@ -469,9 +465,10 @@ def test_complete_setup_jumps_to_earliest_incomplete_step(
     assert window.setup_wizard_page.step_stack.currentWidget() is (
         window.setup_wizard_page.conditions_step_surface
     )
-    assert window.setup_wizard_page.progress_steps.step_circles[1].property(
-        "setupProgressState"
-    ) == "current"
+    assert (
+        window.setup_wizard_page.progress_steps.step_circles[1].property("setupProgressState")
+        == "current"
+    )
 
 
 def test_main_window_no_longer_exposes_top_level_tab_bar(
@@ -645,7 +642,7 @@ def test_home_launch_surface_shows_only_essential_project_session_metadata(
     }
     assert "Protocol Template" not in project_labels
     assert "Template Status" not in project_labels
-    assert "Image Timing" in project_labels
+    assert "Experiment Template" in project_labels
     assert window.setup_dashboard_page.project_overview_editor.condition_profile_combo is not None
     assert window.setup_dashboard_page.project_overview_editor.manage_templates_button is not None
     assert (

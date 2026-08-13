@@ -1,4 +1,4 @@
-"""Dialog for creating derived-variant control conditions."""
+"""Dialog for creating file-backed or runtime-transformed control conditions."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from fpvs_studio.core.enums import StimulusVariant
+from fpvs_studio.core.enums import StimulusTransform, StimulusVariant
 from fpvs_studio.gui.components import (
     SectionCard,
     apply_studio_theme,
@@ -21,26 +21,52 @@ from fpvs_studio.gui.components import (
     mark_secondary_action,
 )
 
-_CONTROL_VARIANTS: tuple[tuple[StimulusVariant, str], ...] = (
-    (StimulusVariant.GRAYSCALE, "Grayscale"),
-    (StimulusVariant.ROT180, "180 degree rotated"),
-    (StimulusVariant.PHASE_SCRAMBLED, "Phase-scrambled"),
+_CONTROL_OPTIONS: tuple[tuple[StimulusVariant, StimulusTransform | None, str], ...] = (
+    (StimulusVariant.GRAYSCALE, None, "Grayscale (create derived assets)"),
+    (
+        StimulusVariant.ORIGINAL,
+        StimulusTransform.MIRROR_HORIZONTAL,
+        "Original assets + horizontal mirror (runtime; no new files)",
+    ),
+    (
+        StimulusVariant.ORIGINAL,
+        StimulusTransform.MIRROR_VERTICAL,
+        "Original assets + vertical mirror (runtime; no new files)",
+    ),
+    (
+        StimulusVariant.ORIGINAL,
+        StimulusTransform.ROT180,
+        "Original assets + 180 degree rotation (runtime; no new files)",
+    ),
+    (StimulusVariant.PHASE_SCRAMBLED, None, "Phase-scrambled (create derived assets)"),
 )
 
 
-def control_condition_default_name(source_name: str, variant: StimulusVariant) -> str:
-    """Return the default display name for a derived control condition."""
+def control_condition_default_name(
+    source_name: str,
+    variant: StimulusVariant,
+    transform: StimulusTransform | None = None,
+) -> str:
+    """Return the default display name for a control condition."""
 
     variant_label = {
         StimulusVariant.GRAYSCALE: "Grayscale",
         StimulusVariant.ROT180: "180 Degree Rotated",
         StimulusVariant.PHASE_SCRAMBLED: "Phase-Scrambled",
+        StimulusVariant.ORIGINAL: "Original",
     }[variant]
+    if transform is not None:
+        variant_label = {
+            StimulusTransform.NONE: "Original",
+            StimulusTransform.MIRROR_HORIZONTAL: "Horizontally Mirrored",
+            StimulusTransform.MIRROR_VERTICAL: "Vertically Mirrored",
+            StimulusTransform.ROT180: "180 Degree Rotated",
+        }[transform]
     return f"{source_name} {variant_label} Control"
 
 
 class ControlConditionDialog(QDialog):
-    """Collect the variant and name for a control condition."""
+    """Collect the file-backed variant or runtime transform and control name."""
 
     def __init__(
         self,
@@ -53,7 +79,7 @@ class ControlConditionDialog(QDialog):
         self._auto_name = True
         self.setWindowTitle("Create Control Condition")
         self.setModal(True)
-        self.resize(520, 260)
+        self.resize(640, 285)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(18, 18, 18, 18)
@@ -61,7 +87,10 @@ class ControlConditionDialog(QDialog):
 
         card = SectionCard(
             title="Create Control Condition",
-            subtitle="Use the selected condition's image folders with a derived image version.",
+            subtitle=(
+                "Runtime transforms reuse the Original assets without creating files. "
+                "Grayscale and phase-scrambled controls create derived assets."
+            ),
             object_name="control_condition_card",
             parent=self,
         )
@@ -72,8 +101,8 @@ class ControlConditionDialog(QDialog):
 
         self.variant_combo = QComboBox(card)
         self.variant_combo.setObjectName("control_condition_variant_combo")
-        for variant, label in _CONTROL_VARIANTS:
-            self.variant_combo.addItem(label, userData=variant)
+        for variant, transform, label in _CONTROL_OPTIONS:
+            self.variant_combo.addItem(label, userData=(variant, transform))
         self.variant_combo.currentIndexChanged.connect(self._sync_default_name)
 
         self.name_edit = QLineEdit(card)
@@ -84,7 +113,7 @@ class ControlConditionDialog(QDialog):
         form = QFormLayout()
         form.setVerticalSpacing(8)
         form.addRow("Source Condition", source_label)
-        form.addRow("Image Version", self.variant_combo)
+        form.addRow("Control Method", self.variant_combo)
         form.addRow("New Condition Name", self.name_edit)
         card.body_layout.addLayout(form)
 
@@ -104,10 +133,17 @@ class ControlConditionDialog(QDialog):
         apply_studio_theme(self)
 
     def selected_variant(self) -> StimulusVariant:
-        variant = self.variant_combo.currentData()
+        selection = self.variant_combo.currentData()
+        variant = selection[0] if isinstance(selection, tuple) else selection
         if isinstance(variant, StimulusVariant):
             return variant
         return StimulusVariant.GRAYSCALE
+
+    def selected_transform(self) -> StimulusTransform | None:
+        selection = self.variant_combo.currentData()
+        if isinstance(selection, tuple) and isinstance(selection[1], StimulusTransform):
+            return selection[1]
+        return None
 
     def condition_name(self) -> str:
         return self.name_edit.text().strip()
@@ -122,5 +158,6 @@ class ControlConditionDialog(QDialog):
             control_condition_default_name(
                 self._source_condition_name,
                 self.selected_variant(),
+                self.selected_transform(),
             )
         )

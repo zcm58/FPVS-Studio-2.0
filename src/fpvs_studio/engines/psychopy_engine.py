@@ -28,6 +28,7 @@ from fpvs_studio.engines.psychopy_stimuli import (
     prepare_stimuli,
     release_stimuli,
     should_draw_stimulus,
+    stimulus_render_key,
 )
 from fpvs_studio.engines.psychopy_text_screens import show_text_screen
 from fpvs_studio.engines.psychopy_timing import (
@@ -263,14 +264,20 @@ class PsychoPyEngine(PresentationEngine):
         timing_strict_violation = False
         timing_strict_violation_reason: str | None = None
         warmup_intervals: list[float] = []
-        stimuli: dict[str, Any] = {}
+        pre_stream_qc_frames = 0
+        stimuli: dict[tuple[object, ...], Any] = {}
+        prepared_sequence: list[Any] = []
 
         try:
+            window.color = run_spec.display.background_color
             stimuli = self._prepare_stimuli(project_root, run_spec=run_spec)
+            prepared_sequence = [
+                stimuli[stimulus_render_key(event, run_spec=run_spec)]
+                for event in run_spec.stimulus_sequence
+            ]
             fixation_stim = create_fixation_stim(visual=visual, window=window, run_spec=run_spec)
             keyboard.clock.reset()
             keyboard.clearEvents()
-            window.color = run_spec.display.background_color
             window.recordFrameIntervals = True
             if hasattr(window, "frameIntervals"):
                 window.frameIntervals = []
@@ -280,12 +287,20 @@ class PsychoPyEngine(PresentationEngine):
             warmup_strict_timing_enabled = (
                 timing_config.strict_timing and timing_config.strict_timing_warmup
             )
-            for warmup_frame_index in range(timing_config.warmup_frames):
+            lead_in_frames = max(
+                0,
+                int(getattr(run_spec, "pre_stream_fixation_frames", 0)),
+            )
+            blank_warmup_frames = max(0, timing_config.warmup_frames - lead_in_frames)
+            pre_stream_frame_count = max(timing_config.warmup_frames, lead_in_frames)
+            for warmup_frame_index in range(pre_stream_frame_count):
+                if warmup_frame_index >= blank_warmup_frames:
+                    fixation_stim.lineColor = run_spec.fixation.default_color
+                    fixation_stim.draw()
                 flip_time = window.flip()
+                pre_stream_qc_frames += 1
                 current_time_s = (
-                    float(flip_time)
-                    if flip_time is not None
-                    else warmup_clock.getTime()
+                    float(flip_time) if flip_time is not None else warmup_clock.getTime()
                 )
                 if warmup_last_flip_time is not None:
                     warmup_interval_index = warmup_frame_index - 1
@@ -304,11 +319,7 @@ class PsychoPyEngine(PresentationEngine):
                         timing_first_bad_frame_index = warmup_interval_index
                     post_settle_window = warmup_frame_index >= timing_config.warmup_settle_frames
                     interval_is_miss = interval_s > timing_config.miss_threshold_s
-                    if (
-                        warmup_strict_timing_enabled
-                        and post_settle_window
-                        and interval_is_miss
-                    ):
+                    if warmup_strict_timing_enabled and post_settle_window and interval_is_miss:
                         timing_strict_violation = True
                         if timing_strict_violation_reason is None:
                             timing_strict_violation_reason = self._timing_violation_reason(
@@ -318,6 +329,17 @@ class PsychoPyEngine(PresentationEngine):
                                 timing_config=timing_config,
                             )
                 warmup_last_flip_time = current_time_s
+
+                if lead_in_frames > 0:
+                    keys = keyboard.getKeys(
+                        keyList=["escape"],
+                        waitRelease=False,
+                        clear=True,
+                    )
+                    if any(getattr(key, "name", str(key)) == "escape" for key in keys):
+                        self._aborted = True
+                        abort_reason = "Escape pressed before condition playback."
+                        break
 
             keyboard.clock.reset()
             keyboard.clearEvents()
@@ -340,8 +362,7 @@ class PsychoPyEngine(PresentationEngine):
 
                 while (
                     stimulus_index + 1 < len(run_spec.stimulus_sequence)
-                    and run_spec.stimulus_sequence[stimulus_index + 1].on_start_frame
-                    <= frame_index
+                    and run_spec.stimulus_sequence[stimulus_index + 1].on_start_frame <= frame_index
                 ):
                     stimulus_index += 1
 
@@ -354,12 +375,7 @@ class PsychoPyEngine(PresentationEngine):
                     stimulus_event,
                     frame_index,
                 ):
-                    stimulus = stimuli.get(stimulus_event.stimulus_id)
-                    if stimulus is None:
-                        raise RuntimeError(
-                            "Prepared stimulus is missing for compiled stimulus id "
-                            f"'{stimulus_event.stimulus_id}'."
-                        )
+                    stimulus = prepared_sequence[stimulus_index]
                     stimulus.draw()
 
                 while (
@@ -388,9 +404,7 @@ class PsychoPyEngine(PresentationEngine):
 
                 flip_time = window.flip()
                 current_time_s = (
-                    float(flip_time)
-                    if flip_time is not None
-                    else self._active_run_clock.getTime()
+                    float(flip_time) if flip_time is not None else self._active_run_clock.getTime()
                 )
                 if last_flip_time is not None:
                     interval_s = current_time_s - last_flip_time
@@ -460,6 +474,7 @@ class PsychoPyEngine(PresentationEngine):
                 frame_intervals,
                 timing_config=timing_config,
                 warmup_intervals=warmup_intervals,
+                pre_stream_qc_frames=pre_stream_qc_frames,
                 timing_max_interval_s=timing_max_interval_s,
                 timing_first_bad_phase=timing_first_bad_phase,
                 timing_first_bad_frame_index=timing_first_bad_frame_index,
@@ -577,7 +592,7 @@ class PsychoPyEngine(PresentationEngine):
         project_root: Path,
         *,
         run_spec: RunSpec,
-    ) -> dict[str, Any]:
+    ) -> dict[tuple[object, ...], Any]:
         return prepare_stimuli(
             visual=self._require_visual(),
             window=self._require_window(),
@@ -592,6 +607,7 @@ class PsychoPyEngine(PresentationEngine):
         *,
         timing_config: TimingConfig,
         warmup_intervals: list[float],
+        pre_stream_qc_frames: int,
         timing_max_interval_s: float | None,
         timing_first_bad_phase: str | None,
         timing_first_bad_frame_index: int | None,
@@ -608,6 +624,7 @@ class PsychoPyEngine(PresentationEngine):
             frame_intervals=frame_intervals,
             timing_config=timing_config,
             warmup_intervals=warmup_intervals,
+            pre_stream_qc_frames=pre_stream_qc_frames,
             timing_max_interval_s=timing_max_interval_s,
             timing_first_bad_phase=timing_first_bad_phase,
             timing_first_bad_frame_index=timing_first_bad_frame_index,

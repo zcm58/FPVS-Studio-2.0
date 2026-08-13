@@ -65,8 +65,8 @@ Image stimulus set:
   "set_id": "condition-2-base",
   "name": "Condition 2 Base Images",
   "modality": "image",
-  "source_dir": "stimuli/normalized-images/condition-2-base",
-  "resolution": {"width_px": 512, "height_px": 512},
+  "source_dir": "stimuli/original-images/condition-2-base",
+  "resolution": {"width_px": 500, "height_px": 400},
   "image_count": 2228,
   "available_variants": ["original"],
   "words": []
@@ -103,9 +103,29 @@ Condition:
   "oddball_cycle_repeats_per_sequence": 146,
   "trigger_code": 15,
   "duty_cycle_mode": "blank_50",
-  "order_index": 0
+  "order_index": 0,
+  "presentation": {
+    "common": {},
+    "base": {},
+    "oddball": {
+      "transform": "mirror_horizontal",
+      "image_geometry": {
+        "mode": "exact_box",
+        "width_degrees": 6.25,
+        "height_degrees": 5.0
+      }
+    },
+    "pre_stream_fixation_seconds": 2.0
+  }
 }
 ```
+
+Project presentation defaults live under `settings.presentation`; condition common,
+Base, and Oddball groups override them atomically. New projects default to a two-second
+fixation-only lead-in, while schema `1.0.0` projects loaded through Studio retain zero
+until deliberately updated. Compile-time values use project/condition inheritance; do
+not bake mirrors, rotations, or rectangular padding into assets merely to express a
+presentation rule.
 
 Set `settings.session.block_count` from the requested condition repeats. Keep
 `settings.session.randomize_conditions_per_block=true` unless the user explicitly asks
@@ -129,9 +149,18 @@ For image sets:
 - write `stimuli/manifest.json` only for image-backed sets
 - sort manifest assets by relative path for stable compilation
 
-If validation reports non-square or mixed-size images, run Studio normalization helpers
-or reproduce their center-crop PNG behavior. Keep `original-images` untouched and point
-the active image sets at `normalized-images`.
+Uniform rectangular image sets are launchable and should keep their original pixels.
+Author the audited PsychoPy box in degrees with `exact_box` when intentional stretching
+must be replicated, `contain` or `cover` for the corresponding fit policy, or
+`natural_aspect` when only one visual-angle dimension was authored. Normalize when one
+set contains mixed decoded dimensions or when active files use `.bmp`, `.tif`, or
+`.tiff`; keep `original-images` untouched and point only those active sets at
+`normalized-images`.
+
+PsychoPy `flipHoriz`, `flipVert`, and 180-degree orientation map to runtime transforms
+`mirror_horizontal`, `mirror_vertical`, and `rot180`. Record these per role. Do not
+generate transformed copies unless an external scientific requirement specifically
+demands materialized assets.
 
 ## Word Lists
 
@@ -196,8 +225,9 @@ print(len(bad), bad[:5])
 
 - A PsychoPy source list may contain non-image rows such as `run.bat`; skip and report
   those rows, do not copy them as stimuli.
-- Legacy image dimensions often differ by condition. Studio launch readiness may require
-  normalized square active copies even when the exact original images were copied.
+- Legacy image dimensions often differ by condition. Preserve each uniform set's native
+  rectangular resolution and compile its role-specific visual-angle geometry; only
+  mixed dimensions within a single set require normalization.
 - Word-list conditions may produce repeat-balance warnings because the authored list is
   small relative to 146 oddball cycles. These are warnings unless the user wants list
   expansion or timing changes.

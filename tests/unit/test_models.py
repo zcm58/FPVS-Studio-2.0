@@ -2,14 +2,19 @@
 
 from __future__ import annotations
 
+import json
+
 import pytest
 from pydantic import ValidationError
 
 from fpvs_studio.core.display_geometry import visual_angle_width_cm, visual_angle_width_px
 from fpvs_studio.core.enums import (
     DutyCycleMode,
+    ImageGeometryMode,
     InterConditionMode,
+    PresentationUnit,
     StimulusModality,
+    TextHeightMode,
     TriggerBackendKind,
 )
 from fpvs_studio.core.models import (
@@ -17,11 +22,19 @@ from fpvs_studio.core.models import (
     Condition,
     DisplaySettings,
     FixationTaskSettings,
+    ImageGeometrySettings,
     ProjectFile,
+    ProjectPresentationSettings,
     SessionSettings,
     StimulusSet,
+    TextHeightScheduleSettings,
     TriggerSettings,
     normalize_manual_removed_electrodes,
+    validate_project_relative_path,
+)
+from fpvs_studio.core.paths import (
+    from_project_relative_posix,
+    resolve_project_relative_path,
 )
 from fpvs_studio.core.run_spec import FixationStyleSpec
 from fpvs_studio.core.serialization import load_project_file, save_project_file
@@ -35,7 +48,139 @@ def test_project_model_round_trip(tmp_path, sample_project) -> None:
     loaded = load_project_file(project_path)
 
     assert loaded == sample_project
-    assert loaded.schema_version.value == "1.0.0"
+    assert loaded.schema_version.value == "1.1.0"
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "/outside.png",
+        "C:/outside.png",
+        "C:outside.png",
+        "//server/share/outside.png",
+        "\\\\server\\share\\outside.png",
+        "\\rooted\\outside.png",
+        "stimuli\\outside.png",
+        "../outside.png",
+        "stimuli/../outside.png",
+        "stimuli/file.png:alternate-stream",
+    ],
+)
+def test_project_relative_path_rejects_cross_platform_escape_forms(value: str) -> None:
+    with pytest.raises(ValueError):
+        validate_project_relative_path(value)
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        (
+            "stimuli/original-images/base set/image 01.png",
+            "stimuli/original-images/base set/image 01.png",
+        ),
+        ("./stimuli/.hidden/image.png", "stimuli/.hidden/image.png"),
+        ("runs/P0001/session_summary.json", "runs/P0001/session_summary.json"),
+    ],
+)
+def test_project_relative_path_preserves_legitimate_posix_paths(
+    value: str,
+    expected: str,
+) -> None:
+    assert validate_project_relative_path(value) == expected
+
+
+def test_project_relative_resolver_allows_missing_target_under_root(tmp_path) -> None:
+    project_root = tmp_path / "project"
+    project_root.mkdir()
+
+    resolved = resolve_project_relative_path(
+        project_root,
+        "stimuli/future/image.png",
+    )
+
+    assert resolved == (project_root / "stimuli" / "future" / "image.png").resolve()
+    assert not resolved.exists()
+    assert (
+        from_project_relative_posix(project_root, "runs/P0001")
+        == (project_root / "runs" / "P0001").resolve()
+    )
+
+
+def test_project_relative_resolver_rejects_symlink_escape(tmp_path) -> None:
+    project_root = tmp_path / "project"
+    outside_root = tmp_path / "outside"
+    project_root.mkdir()
+    outside_root.mkdir()
+    linked_dir = project_root / "linked"
+    try:
+        linked_dir.symlink_to(outside_root, target_is_directory=True)
+    except OSError as exc:
+        pytest.skip(f"Directory symlinks are unavailable in this environment: {exc}")
+
+    with pytest.raises(ValueError, match="escapes the project root"):
+        resolve_project_relative_path(project_root, "linked/future.png")
+
+
+def test_presentation_settings_validate_geometry_and_balanced_text_heights() -> None:
+    settings = ProjectPresentationSettings()
+
+    assert settings.pre_stream_fixation_seconds == 2.0
+    assert settings.defaults.image_geometry.mode == ImageGeometryMode.NATURAL_ASPECT
+    assert settings.defaults.text_height.mode == TextHeightMode.FIXED
+
+    with pytest.raises(ValidationError, match="exactly one authored dimension"):
+        ImageGeometrySettings(
+            mode=ImageGeometryMode.NATURAL_ASPECT,
+            width_degrees=5.0,
+            height_degrees=5.0,
+        )
+    with pytest.raises(ValidationError, match="requires both"):
+        ImageGeometrySettings(
+            mode=ImageGeometryMode.EXACT_BOX,
+            width_degrees=5.0,
+            height_degrees=None,
+        )
+    with pytest.raises(ValidationError, match="must not contain duplicates"):
+        TextHeightScheduleSettings(
+            mode=TextHeightMode.BALANCED_RANDOMIZED,
+            unit=PresentationUnit.DEGREES,
+            values=[1.0, 1.0],
+        )
+    with pytest.raises(ValidationError, match="at least two"):
+        TextHeightScheduleSettings(
+            mode=TextHeightMode.BALANCED_RANDOMIZED,
+            unit=PresentationUnit.WINDOW_HEIGHT_FRACTION,
+            values=[0.05],
+        )
+
+
+def test_load_project_file_migrates_v1_presentation_without_rewriting_assets(
+    tmp_path,
+    sample_project,
+) -> None:
+    project_path = tmp_path / "project.json"
+    payload = sample_project.model_dump(mode="json")
+    payload["schema_version"] = "1.0.0"
+    payload["settings"].pop("presentation")
+    payload["settings"]["display"]["stimulus_width_degrees"] = 8.0
+    for condition in payload["conditions"]:
+        condition.pop("presentation")
+    original_payload = json.dumps(payload, indent=2)
+    project_path.write_text(original_payload, encoding="utf-8")
+
+    loaded = load_project_file(project_path)
+
+    assert loaded.schema_version.value == "1.1.0"
+    assert loaded.settings.presentation.pre_stream_fixation_seconds == 0.0
+    geometry = loaded.settings.presentation.defaults.image_geometry
+    assert geometry.mode == ImageGeometryMode.NATURAL_ASPECT
+    assert geometry.width_degrees == 8.0
+    assert geometry.height_degrees is None
+    assert loaded.settings.presentation.defaults.text_height.values[0] == pytest.approx(
+        2.0030515654
+    )
+    assert loaded.settings.presentation.defaults.text_height.legacy_stimulus_width_fraction == 0.25
+    assert project_path.read_text(encoding="utf-8") == original_payload
 
 
 def test_manual_removed_electrodes_normalize_and_round_trip(
@@ -72,9 +217,11 @@ def test_manual_removed_electrodes_default_for_existing_project_payload(
 
 
 def test_manual_removed_electrode_parser_preserves_unknown_labels() -> None:
-    assert normalize_manual_removed_electrodes(
-        " ft7, custom-ref; Oz\nCUSTOM-REF "
-    ) == ["FT7", "CUSTOM-REF", "OZ"]
+    assert normalize_manual_removed_electrodes(" ft7, custom-ref; Oz\nCUSTOM-REF ") == [
+        "FT7",
+        "CUSTOM-REF",
+        "OZ",
+    ]
 
 
 def test_condition_instructions_strip_bidi_control_characters() -> None:

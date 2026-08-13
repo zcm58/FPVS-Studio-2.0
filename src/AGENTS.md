@@ -20,9 +20,10 @@ package map.
   root in `.fpvs-studio/templates/`, outside the top-level experiment folder list.
 - Persist project-facing paths as project-relative POSIX-style strings in JSON.
 - Supported source image formats are `.jpg`, `.jpeg`, and `.png`.
-- Launchable image stimulus sets must resolve to square images. A condition's
-  base and oddball sets may use different square source resolutions because
-  playback size is controlled by compiled display geometry.
+- Launchable image stimulus sets must each resolve to a known, uniform resolution.
+  Uniform rectangles are supported, and a condition's base and oddball sets may use
+  different source resolutions because playback size is controlled by compiled role
+  geometry.
 - The fixation task is the only behavioral task in v1 and must not alter FPVS
   base/oddball scheduling.
 

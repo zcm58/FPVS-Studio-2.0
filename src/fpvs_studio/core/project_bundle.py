@@ -31,6 +31,7 @@ from fpvs_studio.core.paths import (
     logs_dir,
     project_dir,
     project_json_path,
+    resolve_project_relative_path,
     runs_dir,
     slugify_project_name,
     stimuli_dir,
@@ -508,9 +509,7 @@ def _validate_archive_entry_resource_limits(
     if info.file_size < MIN_BUNDLE_COMPRESSION_CHECK_BYTES:
         return
     if info.compress_size <= 0:
-        raise ProjectBundleError(
-            f"Project bundle file has an unsafe compression ratio: {label}"
-        )
+        raise ProjectBundleError(f"Project bundle file has an unsafe compression ratio: {label}")
     compression_ratio = info.file_size / info.compress_size
     if compression_ratio > MAX_BUNDLE_COMPRESSION_RATIO:
         raise ProjectBundleError(
@@ -563,13 +562,10 @@ def _extract_verified_record(
 
 
 def _staged_destination_path(staged_project_root: Path, relative_path: str) -> Path:
-    normalized = validate_project_relative_path(relative_path)
-    destination_path = (staged_project_root / Path(normalized)).resolve()
     try:
-        destination_path.relative_to(staged_project_root.resolve())
+        return resolve_project_relative_path(staged_project_root, relative_path)
     except ValueError as exc:
         raise ProjectBundleError(f"Project bundle path escapes staging: {relative_path}") from exc
-    return destination_path
 
 
 def _validate_bundle_source(
@@ -620,9 +616,7 @@ def _validate_condition_role_source_dirs(
         stimulus_set.set_id: stimulus_set for stimulus_set in project.stimulus_sets
     }
     set_ids = {
-        condition.base_stimulus_set_id
-        if role == "base"
-        else condition.oddball_stimulus_set_id
+        condition.base_stimulus_set_id if role == "base" else condition.oddball_stimulus_set_id
         for condition in project.conditions
     }
     for set_id in sorted(set_ids):
@@ -634,8 +628,10 @@ def _validate_condition_role_source_dirs(
 
 def _resolve_existing_relative_dir(project_root: Path, relative_path: str) -> Path:
     normalized = validate_project_relative_path(relative_path)
-    resolved = (project_root / Path(normalized)).resolve()
-    _require_path_under_project(project_root, resolved, normalized)
+    try:
+        resolved = resolve_project_relative_path(project_root, normalized)
+    except ValueError as exc:
+        raise ProjectBundleError(f"Project path escapes the project root: {normalized}") from exc
     if not resolved.is_dir():
         raise ProjectBundleError(f"Required project folder is missing: {normalized}")
     return resolved
@@ -643,18 +639,13 @@ def _resolve_existing_relative_dir(project_root: Path, relative_path: str) -> Pa
 
 def _resolve_existing_relative_file(project_root: Path, relative_path: str) -> Path:
     normalized = validate_project_relative_path(relative_path)
-    resolved = (project_root / Path(normalized)).resolve()
-    _require_path_under_project(project_root, resolved, normalized)
+    try:
+        resolved = resolve_project_relative_path(project_root, normalized)
+    except ValueError as exc:
+        raise ProjectBundleError(f"Project path escapes the project root: {normalized}") from exc
     if not resolved.is_file():
         raise ProjectBundleError(f"Required project file is missing: {normalized}")
     return resolved
-
-
-def _require_path_under_project(project_root: Path, resolved_path: Path, label: str) -> None:
-    try:
-        resolved_path.relative_to(project_root.resolve())
-    except ValueError as exc:
-        raise ProjectBundleError(f"Project path escapes the project root: {label}") from exc
 
 
 def _collect_bundle_file_paths(project_root: Path) -> list[str]:
@@ -717,7 +708,10 @@ def _write_bundle_archive(
             for record in bundle_manifest.files:
                 payload_override = payload_overrides.get(record.path)
                 if payload_override is None:
-                    archive.write(project_root / Path(record.path), arcname=record.path)
+                    archive.write(
+                        _resolve_existing_relative_file(project_root, record.path),
+                        arcname=record.path,
+                    )
                 else:
                     archive.writestr(record.path, payload_override)
         with zipfile.ZipFile(temp_path, mode="r") as archive:

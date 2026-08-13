@@ -7,8 +7,20 @@ import json
 import pytest
 
 from fpvs_studio.core.compiler import compile_session_plan
-from fpvs_studio.core.enums import StimulusModality, StimulusVariant
-from fpvs_studio.core.models import ImageResolution
+from fpvs_studio.core.enums import (
+    ImageGeometryMode,
+    PresentationUnit,
+    StimulusModality,
+    StimulusTransform,
+    StimulusVariant,
+    TextHeightMode,
+)
+from fpvs_studio.core.models import (
+    ImageGeometrySettings,
+    ImageResolution,
+    StimulusPresentationOverride,
+    TextHeightScheduleSettings,
+)
 from fpvs_studio.core.project_config import (
     ProjectConfigError,
     create_project_from_config,
@@ -241,6 +253,53 @@ def test_project_config_round_trips_as_config_json(tmp_path, sample_project) -> 
     loaded = read_project_config(path)
 
     assert loaded == config
+
+
+def test_project_config_round_trips_presentation_defaults_and_condition_overrides(
+    tmp_path,
+    sample_project,
+) -> None:
+    sample_project.settings.presentation.pre_stream_fixation_seconds = 2.5
+    sample_project.settings.presentation.defaults.image_geometry = ImageGeometrySettings(
+        mode=ImageGeometryMode.CONTAIN,
+        width_degrees=6.25,
+        height_degrees=5.0,
+    )
+    sample_project.settings.presentation.defaults.text_height = TextHeightScheduleSettings(
+        mode=TextHeightMode.BALANCED_RANDOMIZED,
+        unit=PresentationUnit.WINDOW_HEIGHT_FRACTION,
+        values=[0.03, 0.05, 0.07],
+    )
+    sample_project.conditions[0].presentation.oddball = StimulusPresentationOverride(
+        transform=StimulusTransform.MIRROR_HORIZONTAL,
+    )
+
+    config = export_project_config(sample_project, tmp_path / "source")
+    scaffold = create_project_from_config(tmp_path, config)
+    loaded = load_project_file(scaffold.project_root / "project.json")
+
+    assert loaded.settings.presentation == sample_project.settings.presentation
+    assert (
+        loaded.conditions[0].presentation.oddball
+        == sample_project.conditions[0].presentation.oddball
+    )
+
+
+def test_read_project_config_migrates_v1_presentation_defaults(tmp_path, sample_project) -> None:
+    path = tmp_path / "legacy.fpvsconfig"
+    payload = export_project_config(sample_project, tmp_path).model_dump(mode="json")
+    payload["schema_version"] = "1.0.0"
+    payload.pop("presentation")
+    payload["display"]["stimulus_width_degrees"] = 6.25
+    for condition in payload["conditions"]:
+        condition.pop("presentation")
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+    loaded = read_project_config(path)
+
+    assert loaded.schema_version == "1.1.0"
+    assert loaded.presentation.pre_stream_fixation_seconds == 0.0
+    assert loaded.presentation.defaults.image_geometry.width_degrees == 6.25
 
 
 def test_project_config_without_protocol_loads_current_defaults(tmp_path, sample_project) -> None:

@@ -44,6 +44,10 @@ from fpvs_studio.gui.components import (
 )
 from fpvs_studio.gui.control_condition_dialog import ControlConditionDialog
 from fpvs_studio.gui.document import ProjectDocument
+from fpvs_studio.gui.presentation_settings_dialog import (
+    PresentationSettingsDialog,
+    condition_presentation_summary,
+)
 from fpvs_studio.gui.window_helpers import (
     DebouncedTextCommitter,
     _resolution_text,
@@ -379,6 +383,27 @@ class ConditionSetupStep(QWidget):
         self.modality_combo.addItem("Images", StimulusModality.IMAGE.value)
         self.modality_combo.addItem("Words", StimulusModality.WORD.value)
         self.modality_combo.currentIndexChanged.connect(self._apply_modality)
+        self.presentation_summary_label = QLabel(self)
+        self.presentation_summary_label.setObjectName(
+            "setup_wizard_condition_presentation_summary"
+        )
+        self.presentation_summary_label.setWordWrap(True)
+        self.presentation_summary_label.setMinimumWidth(0)
+        self.presentation_button = QPushButton("Presentation...", self)
+        self.presentation_button.setObjectName(
+            "setup_wizard_condition_presentation_button"
+        )
+        self.presentation_button.setToolTip(
+            "Configure condition, Base, and Oddball presentation overrides."
+        )
+        self.presentation_button.clicked.connect(self._open_presentation_settings)
+        mark_secondary_action(self.presentation_button)
+        presentation_row = QWidget(self)
+        presentation_row_layout = QHBoxLayout(presentation_row)
+        presentation_row_layout.setContentsMargins(0, 0, 0, 0)
+        presentation_row_layout.setSpacing(8)
+        presentation_row_layout.addWidget(self.presentation_summary_label, 1)
+        presentation_row_layout.addWidget(self.presentation_button)
         self.timing_template_combo = QComboBox(self)
         self.timing_template_combo.setObjectName("setup_wizard_condition_timing_template_combo")
         for mode in (DutyCycleMode.CONTINUOUS, DutyCycleMode.BLANK_50):
@@ -437,6 +462,7 @@ class ConditionSetupStep(QWidget):
         form.addRow("Condition Name", self.condition_name_edit)
         form.addRow("Trigger Code", self.trigger_code_spin)
         form.addRow("Stimulus Type", self.modality_combo)
+        form.addRow("Presentation", presentation_row)
         form.addRow("Advanced Timing", self.timing_template_combo)
         form.addRow(self.target_repeats_label, self.target_repeats_spin)
         form.addRow(self.instructions_label, self.instructions_edit)
@@ -650,6 +676,7 @@ class ConditionSetupStep(QWidget):
             self.condition_name_edit,
             self.trigger_code_spin,
             self.modality_combo,
+            self.presentation_button,
             self.timing_template_combo,
             self.target_repeats_spin,
             self.repeat_calculator_button,
@@ -693,6 +720,7 @@ class ConditionSetupStep(QWidget):
             self.oddball_words_count.setText("0 words")
             self.sources_row.setVisible(True)
             self.words_panel.setVisible(False)
+            self.presentation_summary_label.setText("Select a condition")
             self._set_checklist_statuses(False, False, False, False)
             self._set_source_summary(None, role="base")
             self._set_source_summary(None, role="oddball")
@@ -738,6 +766,9 @@ class ConditionSetupStep(QWidget):
             "Control conditions are only available for image conditions."
             if word_mode
             else self.create_control_condition_button.toolTip()
+        )
+        self.presentation_summary_label.setText(
+            condition_presentation_summary(self._document, condition.condition_id)
         )
         self._set_checklist_statuses(named, trigger_ready, base_ready, oddball_ready)
         self._set_source_summary(base_set, role="base")
@@ -854,14 +885,21 @@ class ConditionSetupStep(QWidget):
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
         variant = dialog.selected_variant()
-        should_materialize = self._control_variant_missing(condition_id, variant)
+        transform = dialog.selected_transform()
+        should_materialize = (
+            transform is None and self._control_variant_missing(condition_id, variant)
+        )
         try:
             new_condition_id = self._document.create_control_condition(
                 condition_id,
                 variant=variant,
+                transform=transform,
                 name=dialog.condition_name(),
             )
-            if variant not in self._document.project.settings.supported_variants:
+            if (
+                transform is None
+                and variant not in self._document.project.settings.supported_variants
+            ):
                 self._document.set_supported_variants(
                     [*self._document.project.settings.supported_variants, variant]
                 )
@@ -966,6 +1004,18 @@ class ConditionSetupStep(QWidget):
         except Exception as error:
             _show_error_dialog(self, "Condition Error", error)
             self.refresh()
+
+    def _open_presentation_settings(self) -> None:
+        condition_id = self.selected_condition_id()
+        if condition_id is None:
+            return
+        dialog = PresentationSettingsDialog(
+            self._document,
+            condition_id=condition_id,
+            parent=self,
+        )
+        dialog.exec()
+        self.refresh()
 
     def _apply_modality(self) -> None:
         condition_id = self.selected_condition_id()

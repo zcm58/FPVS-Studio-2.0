@@ -74,7 +74,7 @@ class SessionBlock(FPVSBaseModel):
 class SessionPlan(FPVSBaseModel):
     """Executable multi-condition session plan compiled from one project."""
 
-    schema_version: str = SchemaVersion.V1.value
+    schema_version: str = SchemaVersion.V1_1.value
     session_id: str
     project_id: str
     project_name: str

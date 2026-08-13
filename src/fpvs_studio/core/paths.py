@@ -6,7 +6,7 @@ validate domain rules or perform runtime scheduling."""
 from __future__ import annotations
 
 import re
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 
 PROJECT_FILENAME = "project.json"
 STIMULI_DIRNAME = "stimuli"
@@ -26,6 +26,47 @@ CONDITION_TEMPLATE_LIBRARY_FILENAME = "condition_templates.json"
 RESERVED_ROOT_ENTRY_NAMES = frozenset({APP_DATA_DIRNAME})
 
 _NON_ALNUM_RE = re.compile(r"[^a-z0-9]+")
+
+
+def validate_project_relative_path(value: str) -> str:
+    """Validate and normalize one persisted project-relative POSIX path.
+
+    Persisted paths are interpreted consistently on every host. Windows drive,
+    rooted, UNC, and alternate-data-stream syntax is rejected even when validation
+    runs on a non-Windows system.
+    """
+
+    if not value:
+        raise ValueError("Path may not be empty.")
+    if "\\" in value:
+        raise ValueError("Persisted paths must use POSIX separators ('/').")
+    if ":" in value:
+        raise ValueError("Persisted paths may not contain Windows drive or stream syntax.")
+
+    posix_path = PurePosixPath(value)
+    windows_path = PureWindowsPath(value)
+    if posix_path.is_absolute() or posix_path.anchor or windows_path.anchor:
+        raise ValueError("Persisted paths must be project-relative, not rooted or absolute.")
+    if any(part == ".." for part in posix_path.parts):
+        raise ValueError("Persisted paths may not escape the project directory.")
+    return posix_path.as_posix()
+
+
+def resolve_project_relative_path(project_root: Path, relative_path: str) -> Path:
+    """Resolve a persisted path under ``project_root`` without requiring existence.
+
+    Resolution follows any existing symlink or junction prefixes. A target whose
+    resolved location leaves the resolved project root is rejected.
+    """
+
+    normalized = validate_project_relative_path(relative_path)
+    resolved_root = project_root.resolve(strict=False)
+    resolved_target = (resolved_root / Path(normalized)).resolve(strict=False)
+    try:
+        resolved_target.relative_to(resolved_root)
+    except ValueError as exc:
+        raise ValueError(f"Project-relative path escapes the project root: {normalized}") from exc
+    return resolved_target
 
 
 def slugify_project_name(name: str) -> str:
@@ -170,4 +211,4 @@ def to_project_relative_posix(project_root: Path, target_path: Path) -> str:
 def from_project_relative_posix(project_root: Path, relative_path: str) -> Path:
     """Resolve a persisted POSIX relative path under a project root."""
 
-    return project_root / Path(relative_path)
+    return resolve_project_relative_path(project_root, relative_path)

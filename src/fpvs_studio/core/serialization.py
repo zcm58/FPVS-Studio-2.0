@@ -5,11 +5,13 @@ runtime export policy."""
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import TypeVar
 
 from pydantic import BaseModel
 
+from fpvs_studio.core.migrations import migrate_project_payload
 from fpvs_studio.core.models import ProjectFile
 
 ModelT = TypeVar("ModelT", bound=BaseModel)
@@ -43,4 +45,7 @@ def save_project_file(project: ProjectFile, path: Path) -> None:
 def load_project_file(path: Path) -> ProjectFile:
     """Load a project JSON file."""
 
-    return read_json_file(path, ProjectFile)
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError("Project file must contain a JSON object.")
+    return migrate_project_payload(payload)

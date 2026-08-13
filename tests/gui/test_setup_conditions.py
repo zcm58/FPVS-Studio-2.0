@@ -25,7 +25,16 @@ from tests.gui.helpers import (
     _write_mixed_image_directory,
 )
 
-from fpvs_studio.core.enums import DutyCycleMode, StimulusModality, StimulusVariant
+from fpvs_studio.core.enums import (
+    DutyCycleMode,
+    StimulusModality,
+    StimulusTransform,
+    StimulusVariant,
+)
+from fpvs_studio.core.models import (
+    ConditionPresentationSettings,
+    StimulusPresentationOverride,
+)
 from fpvs_studio.gui.controller import StudioController
 from fpvs_studio.gui.design_system import PAGE_SECTION_GAP
 
@@ -626,9 +635,7 @@ def test_setup_wizard_conditions_step_keeps_source_geometry_for_incomplete_condi
     assert step.repeat_calculator_button.minimumSize().height() == 30
     assert step.repeat_calculator_button.maximumSize().width() == 30
     assert step.repeat_calculator_button.maximumSize().height() == 30
-    assert abs(
-        step.repeat_calculator_button.width() - step.repeat_calculator_button.height()
-    ) <= 2
+    assert abs(step.repeat_calculator_button.width() - step.repeat_calculator_button.height()) <= 2
     assert step.repeat_calculator_button.accessibleName() == "Target repeat information"
     assert step.repeat_calculator_button.toolTip() == "Show target repeat calculations"
     standard_field_width = step.timing_template_combo.width()
@@ -706,10 +713,7 @@ def test_setup_wizard_conditions_step_keeps_source_geometry_for_incomplete_condi
     assert step.base_source_value.alignment() & Qt.AlignmentFlag.AlignHCenter
     assert step.oddball_source_value.alignment() & Qt.AlignmentFlag.AlignHCenter
     assert step.base_source_card.metrics._rows[0][1].alignment() & Qt.AlignmentFlag.AlignHCenter
-    assert (
-        step.oddball_source_card.metrics._rows[0][1].alignment()
-        & Qt.AlignmentFlag.AlignHCenter
-    )
+    assert step.oddball_source_card.metrics._rows[0][1].alignment() & Qt.AlignmentFlag.AlignHCenter
     target_label_top = step.target_repeats_label.mapTo(
         step.condition_details_section,
         step.target_repeats_label.rect().topLeft(),
@@ -826,7 +830,10 @@ def test_setup_wizard_conditions_next_normalizes_mixed_images_before_advancing(
     guide._document.import_condition_stimulus_folder(
         condition_id,
         role="oddball",
-        source_dir=_write_image_directory(tmp_path / "mixed-oddball"),
+        source_dir=_write_image_directory(
+            tmp_path / "mixed-oddball",
+            size=(160, 120),
+        ),
     )
     QApplication.processEvents()
 
@@ -852,16 +859,21 @@ def test_setup_wizard_conditions_next_normalizes_mixed_images_before_advancing(
     base_set = window.document.get_condition_stimulus_set(condition_id, "base")
     oddball_set = window.document.get_condition_stimulus_set(condition_id, "oddball")
     assert base_set.source_dir == "stimuli/normalized-images/condition-1-base"
-    assert oddball_set.source_dir == "stimuli/normalized-images/condition-1-oddball"
+    assert oddball_set.source_dir == "stimuli/original-images/condition-1-oddball"
     assert base_set.resolution is not None
     assert base_set.resolution.as_tuple() == (512, 512)
+    assert oddball_set.resolution is not None
+    assert oddball_set.resolution.as_tuple() == (160, 120)
+    assert not (
+        window.document.project_root / "stimuli" / "normalized-images" / "condition-1-oddball"
+    ).exists()
     assert all(
         path.suffix == ".png"
         for path in (window.document.project_root / Path(base_set.source_dir)).iterdir()
     )
 
 
-def test_setup_wizard_conditions_next_normalizes_uniform_non_square_images(
+def test_setup_wizard_conditions_next_preserves_uniform_non_square_images(
     qtbot,
     controller: StudioController,
     tmp_path: Path,
@@ -895,29 +907,75 @@ def test_setup_wizard_conditions_next_normalizes_uniform_non_square_images(
     )
     QApplication.processEvents()
 
-    dialog_scans = []
-
-    class _AcceptDialog:
-        def __init__(self, scan, *, parent=None) -> None:
-            dialog_scans.append(scan)
-
-        def exec(self):
-            return QDialog.DialogCode.Accepted
-
-        def target_size(self) -> int:
-            return 512
+    def _unexpected_dialog(*_args, **_kwargs):
+        raise AssertionError("Uniform rectangular images should not require square normalization.")
 
     monkeypatch.setattr("fpvs_studio.gui.setup_wizard_page.ProgressTask", _ImmediateProgressTask)
-    monkeypatch.setattr("fpvs_studio.gui.setup_wizard_page.ImageNormalizationDialog", _AcceptDialog)
+    monkeypatch.setattr(
+        "fpvs_studio.gui.setup_wizard_page.ImageNormalizationDialog",
+        _unexpected_dialog,
+    )
 
     qtbot.mouseClick(guide.setup_wizard_next_button, Qt.MouseButton.LeftButton)
     QApplication.processEvents()
 
-    assert dialog_scans[-1].non_square_resolution is True
     assert guide.step_stack.currentWidget() is guide.experiment_step_surface
     base_set = window.document.get_condition_stimulus_set(condition_id, "base")
     assert base_set.resolution is not None
-    assert base_set.resolution.as_tuple() == (512, 512)
+    assert base_set.resolution.as_tuple() == (128, 96)
+    assert base_set.source_dir != "stimuli/normalized-images/condition-1-base"
+
+
+def test_setup_wizard_preserves_different_uniform_base_and_oddball_rectangles(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Role Rectangles")
+    guide = window.setup_wizard_page
+    step = guide.condition_setup_step
+    guide.open_wizard(step_key="conditions")
+    qtbot.mouseClick(step.add_condition_button, Qt.MouseButton.LeftButton)
+    condition_id = step.selected_condition_id()
+    assert condition_id is not None
+    guide._document.update_condition(condition_id, name="Faces and Objects", trigger_code=1)
+    guide._document.import_condition_stimulus_folder(
+        condition_id,
+        role="base",
+        source_dir=_write_image_directory(
+            tmp_path / "role-rectangle-base",
+            size=(500, 400),
+        ),
+    )
+    guide._document.import_condition_stimulus_folder(
+        condition_id,
+        role="oddball",
+        source_dir=_write_image_directory(
+            tmp_path / "role-rectangle-oddball",
+            size=(158, 197),
+        ),
+    )
+
+    def _unexpected_dialog(*_args, **_kwargs):
+        raise AssertionError("Uniform role-specific rectangles must remain native.")
+
+    monkeypatch.setattr(
+        "fpvs_studio.gui.setup_wizard_page.ImageNormalizationDialog",
+        _unexpected_dialog,
+    )
+    monkeypatch.setattr(
+        "fpvs_studio.gui.setup_wizard_page.ProgressTask",
+        _ImmediateProgressTask,
+    )
+    qtbot.mouseClick(guide.setup_wizard_next_button, Qt.MouseButton.LeftButton)
+    QApplication.processEvents()
+
+    assert guide.step_stack.currentWidget() is guide.experiment_step_surface
+    base = window.document.get_condition_stimulus_set(condition_id, "base")
+    oddball = window.document.get_condition_stimulus_set(condition_id, "oddball")
+    assert base.resolution is not None and base.resolution.as_tuple() == (500, 400)
+    assert oddball.resolution is not None and oddball.resolution.as_tuple() == (158, 197)
 
 
 def test_setup_wizard_conditions_next_stays_put_when_normalization_is_cancelled(
@@ -1102,6 +1160,79 @@ def test_setup_wizard_creates_control_condition_from_existing_stimuli(
     assert control.stimulus_variant == variant
     assert control.trigger_code == 2
     assert materialize_calls == 1
+
+
+def test_setup_wizard_rotated_runtime_control_reuses_originals_without_materializing(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Runtime Rotated Control")
+    guide = window.setup_wizard_page
+    step = guide.condition_setup_step
+    guide.open_wizard(step_key="conditions")
+    qtbot.mouseClick(step.add_condition_button, Qt.MouseButton.LeftButton)
+    source_id = step.selected_condition_id()
+    assert source_id is not None
+    window.document.update_condition(source_id, name="Faces")
+    window.document.update_condition(
+        source_id,
+        presentation=ConditionPresentationSettings(
+            base=StimulusPresentationOverride(transform=StimulusTransform.MIRROR_VERTICAL),
+            oddball=StimulusPresentationOverride(transform=StimulusTransform.MIRROR_HORIZONTAL),
+        ),
+    )
+    window.document.import_condition_stimulus_folder(
+        source_id,
+        role="base",
+        source_dir=_write_image_directory(tmp_path / "runtime-rotated-base"),
+    )
+    window.document.import_condition_stimulus_folder(
+        source_id,
+        role="oddball",
+        source_dir=_write_image_directory(tmp_path / "runtime-rotated-oddball"),
+    )
+    qtbot.waitUntil(step.create_control_condition_button.isEnabled)
+    materialize_calls = 0
+
+    def _count_materialization() -> None:
+        nonlocal materialize_calls
+        materialize_calls += 1
+
+    monkeypatch.setattr(
+        "fpvs_studio.gui.condition_setup_step.ControlConditionDialog.exec",
+        lambda self: QDialog.DialogCode.Accepted,
+    )
+    monkeypatch.setattr(
+        "fpvs_studio.gui.condition_setup_step.ControlConditionDialog.selected_variant",
+        lambda self: StimulusVariant.ORIGINAL,
+    )
+    monkeypatch.setattr(
+        "fpvs_studio.gui.condition_setup_step.ControlConditionDialog.selected_transform",
+        lambda self: StimulusTransform.ROT180,
+    )
+    monkeypatch.setattr(
+        "fpvs_studio.gui.condition_setup_step.ControlConditionDialog.condition_name",
+        lambda self: "Faces 180 Degree Rotated Control",
+    )
+    monkeypatch.setattr(step, "_materialize_control_variant", _count_materialization)
+
+    qtbot.mouseClick(step.create_control_condition_button, Qt.MouseButton.LeftButton)
+
+    control_id = step.selected_condition_id()
+    assert control_id is not None and control_id != source_id
+    source = window.document.get_condition(source_id)
+    control = window.document.get_condition(control_id)
+    assert source is not None
+    assert control is not None
+    assert control.stimulus_variant == StimulusVariant.ORIGINAL
+    assert control.presentation.common.transform == StimulusTransform.ROT180
+    assert control.presentation.base.transform is None
+    assert control.presentation.oddball.transform is None
+    assert control.base_stimulus_set_id == source.base_stimulus_set_id
+    assert control.oddball_stimulus_set_id == source.oddball_stimulus_set_id
+    assert materialize_calls == 0
 
 
 def test_advanced_conditions_image_picker_starts_in_project_stimuli_folder(

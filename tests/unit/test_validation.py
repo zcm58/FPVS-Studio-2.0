@@ -2,8 +2,19 @@
 
 from __future__ import annotations
 
-from fpvs_studio.core.enums import DutyCycleMode
-from fpvs_studio.core.models import ImageResolution
+from fpvs_studio.core.enums import (
+    DutyCycleMode,
+    ImageGeometryMode,
+    PresentationUnit,
+    StimulusModality,
+)
+from fpvs_studio.core.models import (
+    ImageGeometrySettings,
+    ImageResolution,
+    StimulusPresentationOverride,
+    TextHeightScheduleSettings,
+    TextPositionSettings,
+)
 from fpvs_studio.core.validation import (
     APPROVED_MONITOR_REFRESH_RATES_HZ,
     approved_monitor_refresh_rate,
@@ -113,13 +124,65 @@ def test_project_validation_accepts_different_square_source_resolutions(sample_p
     assert not any("non-square" in issue.message for issue in report.issues)
 
 
-def test_project_validation_rejects_non_square_source_resolution(sample_project) -> None:
+def test_project_validation_accepts_uniform_rectangular_source_resolution(sample_project) -> None:
     sample_project.stimulus_sets[1].resolution = ImageResolution(width_px=512, height_px=384)
 
     report = validate_project(sample_project)
 
-    assert report.is_valid is False
-    assert any("non-square 512x384" in issue.message for issue in report.issues)
+    assert report.is_valid is True
+    assert not any("non-square" in issue.message for issue in report.issues)
+
+
+def test_project_validation_warns_when_image_box_exceeds_display(sample_project) -> None:
+    sample_project.conditions[0].presentation.common = StimulusPresentationOverride(
+        image_geometry=ImageGeometrySettings(
+            mode=ImageGeometryMode.EXACT_BOX,
+            width_degrees=100.0,
+            height_degrees=100.0,
+        )
+    )
+
+    report = validate_project(sample_project)
+
+    assert report.is_valid is True
+    assert any(
+        issue.location == "conditions.faces.presentation.base"
+        and "Image presentation box may extend" in issue.message
+        for issue in report.issues
+    )
+
+
+def test_project_validation_warns_when_positioned_text_exceeds_display(sample_project) -> None:
+    for index, stimulus_set in enumerate(sample_project.stimulus_sets):
+        sample_project.stimulus_sets[index] = stimulus_set.model_copy(
+            update={
+                "modality": StimulusModality.WORD,
+                "source_dir": None,
+                "resolution": None,
+                "image_count": 0,
+                "words": ["word"],
+            }
+        )
+    sample_project.conditions[0].presentation.common = StimulusPresentationOverride(
+        text_height=TextHeightScheduleSettings(
+            unit=PresentationUnit.WINDOW_HEIGHT_FRACTION,
+            values=[0.2],
+        ),
+        text_position=TextPositionSettings(
+            unit=PresentationUnit.WINDOW_HEIGHT_FRACTION,
+            x=0.0,
+            y=0.49,
+        ),
+    )
+
+    report = validate_project(sample_project)
+
+    assert report.is_valid is True
+    assert any(
+        issue.location == "conditions.faces.presentation.oddball"
+        and "Text height and vertical position may extend" in issue.message
+        for issue in report.issues
+    )
 
 
 def test_project_validation_rejects_same_base_and_oddball_folder(sample_project) -> None:
@@ -164,13 +227,11 @@ def test_project_validation_warns_for_too_few_stimulus_images_without_blocking(
     assert report.is_valid is True
     assert any(issue.severity.value == "warning" for issue in report.issues)
     assert any(
-        "Base stimulus set" in issue.message
-        and "84 are recommended for <= 7 repeats/image"
+        "Base stimulus set" in issue.message and "84 are recommended for <= 7 repeats/image"
         for issue in report.issues
     )
     assert any(
-        "Oddball stimulus set" in issue.message
-        and "21 are recommended for <= 7 repeats/image"
+        "Oddball stimulus set" in issue.message and "21 are recommended for <= 7 repeats/image"
         for issue in report.issues
     )
 
@@ -187,13 +248,11 @@ def test_project_validation_warns_for_uneven_stimulus_repeat_distribution(
     assert report.is_valid is True
     assert not any("are recommended for <=" in issue.message for issue in report.issues)
     assert any(
-        "Base presentations" in issue.message
-        and "5-6 repeats/image" in issue.message
+        "Base presentations" in issue.message and "5-6 repeats/image" in issue.message
         for issue in report.issues
     )
     assert any(
-        "Oddball presentations" in issue.message
-        and "1-2 repeats/image" in issue.message
+        "Oddball presentations" in issue.message and "1-2 repeats/image" in issue.message
         for issue in report.issues
     )
 

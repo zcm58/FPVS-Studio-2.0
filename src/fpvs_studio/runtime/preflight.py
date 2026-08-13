@@ -52,8 +52,7 @@ def _verify_connected_refresh_rate(
         )
     except DisplayRefreshVerificationError as exc:
         raise PreflightError(
-            "Run preflight failed because display refresh verification did not pass: "
-            f"{exc}"
+            f"Run preflight failed because display refresh verification did not pass: {exc}"
         ) from exc
 
     mismatched_rates = sorted(
@@ -164,8 +163,30 @@ def _validate_stimulus_payloads(run_spec: RunSpec) -> None:
         previous_payload = stimulus_payloads.setdefault(event.stimulus_id, payload)
         if previous_payload != payload:
             raise PreflightError(
-                "Run preflight failed because a compiled stimulus id maps to multiple "
-                "payloads."
+                "Run preflight failed because a compiled stimulus id maps to multiple payloads."
+            )
+
+        if run_spec.presentation is None:
+            continue
+        role_presentation = getattr(run_spec.presentation, event.role)
+        if event.stimulus_modality == StimulusModality.IMAGE:
+            if role_presentation.image_geometry is None or role_presentation.text is not None:
+                raise PreflightError(
+                    "Run preflight failed because an image event has non-image "
+                    "presentation settings."
+                )
+            if event.text_height_value is not None:
+                raise PreflightError(
+                    "Run preflight failed because an image event contains a word height."
+                )
+        elif (
+            role_presentation.text is None
+            or role_presentation.image_geometry is not None
+            or event.text_height_value is None
+        ):
+            raise PreflightError(
+                "Run preflight failed because a word event is missing resolved text "
+                "presentation settings or height."
             )
 
 
@@ -232,17 +253,25 @@ def _validate_image_assets(
     *,
     decode: bool,
 ) -> None:
-    image_paths = sorted(
-        {
-            event.image_path
-            for event in run_spec.stimulus_sequence
-            if event.stimulus_modality == StimulusModality.IMAGE
-            and event.image_path is not None
-        }
-    )
+    image_references: dict[str, set[tuple[str, int, int]]] = {}
+    for event in run_spec.stimulus_sequence:
+        if event.stimulus_modality != StimulusModality.IMAGE or event.image_path is None:
+            continue
+        expected_resolutions = image_references.setdefault(event.image_path, set())
+        if run_spec.presentation is None:
+            continue
+        role_presentation = getattr(run_spec.presentation, event.role)
+        if role_presentation.image_geometry is None:
+            continue
+        source_resolution = role_presentation.image_geometry.source_resolution
+        expected_resolutions.add(
+            (event.role, source_resolution.width_px, source_resolution.height_px)
+        )
+
     missing_assets: list[str] = []
     unloadable_assets: list[str] = []
-    for image_path in image_paths:
+    resolution_mismatches: list[str] = []
+    for image_path in sorted(image_references):
         absolute_path = _resolve_project_image_path(project_root, image_path)
         if not absolute_path.is_file():
             missing_assets.append(image_path)
@@ -252,8 +281,22 @@ def _validate_image_assets(
         try:
             with Image.open(absolute_path) as image:
                 image.load()
+                decoded_width_px, decoded_height_px = image.size
         except (OSError, ValueError) as exc:
             unloadable_assets.append(f"{image_path} ({exc})")
+            continue
+        for role, expected_width_px, expected_height_px in sorted(
+            image_references[image_path]
+        ):
+            if (decoded_width_px, decoded_height_px) == (
+                expected_width_px,
+                expected_height_px,
+            ):
+                continue
+            resolution_mismatches.append(
+                f"{image_path} ({role}: decoded {decoded_width_px}x{decoded_height_px}, "
+                f"compiled {expected_width_px}x{expected_height_px})"
+            )
 
     if missing_assets:
         raise PreflightError(
@@ -263,8 +306,12 @@ def _validate_image_assets(
     if unloadable_assets:
         raise PreflightError(
             "Run preflight failed because referenced image assets could not be "
-            "decoded: "
-            + ", ".join(unloadable_assets[:5])
+            "decoded: " + ", ".join(unloadable_assets[:5])
+        )
+    if resolution_mismatches:
+        raise PreflightError(
+            "Run preflight failed because decoded image dimensions do not match "
+            "compiled role source resolutions: " + ", ".join(resolution_mismatches[:5])
         )
 
 
@@ -312,8 +359,7 @@ def preflight_run_spec(
         warning
         for warning in display_report.warnings
         if not (
-            not display_report.timing_is_exact
-            and warning.startswith("Approximate frame timing:")
+            not display_report.timing_is_exact and warning.startswith("Approximate frame timing:")
         )
     ]
     if strict_timing and blocking_display_warnings:

@@ -1,6 +1,6 @@
 ---
 name: fpvs-psychopy-migration
-description: Use when migrating an existing PsychoPy-based FPVS experiment folder, .psyexp file, shortcut-linked PsychoPy experiment, Excel/CSV stimulus list, image folder, or word-list paradigm into an FPVS Studio-compatible project under an FPVS Studio Root Folder, including copying source stimuli, creating image or word conditions, preserving provenance, normalizing active image assets, and verifying project.json/manifest readiness.
+description: Use when migrating an existing PsychoPy-based FPVS experiment folder, .psyexp file, shortcut-linked PsychoPy experiment, Excel/CSV stimulus list, image folder, or word-list paradigm into an FPVS Studio-compatible project under an FPVS Studio Root Folder, including copying source stimuli, creating image or word conditions, preserving presentation geometry and provenance, normalizing active image assets only when required, and verifying project.json/manifest readiness.
 ---
 
 # FPVS PsychoPy Migration
@@ -39,11 +39,16 @@ For schema details and copy/layout patterns, read
    - store word stimuli directly in `project.json` as `StimulusSet.modality="word"`
    - write `migration/` CSV/JSON reports for mapping, skipped rows, source lists, and
      linked PsychoPy experiments
-6. Normalize active image conditions when required:
+6. Preserve audited presentation behavior and normalize only when required:
    - keep originals unchanged in `stimuli/original-images/`
-   - create square PNG active copies under `stimuli/normalized-images/<set_id>/`
-   - point image stimulus sets at normalized folders if validation requires square
-     assets
+   - retain uniform rectangular sets as native active inputs and author their PsychoPy
+     width/height with Exact Box, Contain, Cover, or Natural Aspect as appropriate
+   - represent horizontal/vertical mirror and 180-degree rotation as condition/role
+     runtime transforms, not duplicated transformed files
+   - create normalized PNG active copies only for mixed dimensions within one set or
+     source formats that are not compiler-ready
+   - record presentation geometry, transforms, and any unavoidable approximation in
+     the migration audit
 7. Verify before finalizing:
    - copied-file hashes match source files
    - `project.json` loads with `load_project_file`

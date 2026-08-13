@@ -13,6 +13,7 @@ from PySide6.QtCore import QObject, Signal
 from fpvs_studio.core.models import (
     ConditionTemplateProfile,
     ProjectFile,
+    ProjectPresentationSettings,
     ProjectValidationReport,
     normalize_manual_removed_electrodes,
     utc_now,
@@ -122,10 +123,13 @@ class ProjectDocument(
         self._require_biosemi_recording_confirmation = True
         self._show_sophia_mode_ticker = False
         self._last_session_plan: SessionPlan | None = None
-        self._image_normalization_scan_cache: tuple[
-            tuple[object, ...],
-            ImageNormalizationScan,
-        ] | None = None
+        self._image_normalization_scan_cache: (
+            tuple[
+                tuple[object, ...],
+                ImageNormalizationScan,
+            ]
+            | None
+        ) = None
 
     @classmethod
     def create_new(
@@ -237,8 +241,7 @@ class ProjectDocument(
         if not participant_number or not participant_number.isdigit():
             raise DocumentError("Participant number must contain digits only.")
         entries = {
-            key: list(value)
-            for key, value in self._project.manual_removed_electrodes.items()
+            key: list(value) for key, value in self._project.manual_removed_electrodes.items()
         }
         entries[participant_number] = normalize_manual_removed_electrodes(electrodes)
         self._apply_project_update(manual_removed_electrodes=entries)
@@ -247,7 +250,23 @@ class ProjectDocument(
         """Update project display settings through Pydantic validation."""
 
         display = _validated_copy(self._project.settings.display, **updates)
-        settings = _validated_copy(self._project.settings, display=display)
+        presentation = self._project.settings.presentation
+        if "stimulus_width_degrees" in updates:
+            geometry = presentation.defaults.image_geometry
+            if geometry.width_degrees is not None:
+                defaults = _validated_copy(
+                    presentation.defaults,
+                    image_geometry=_validated_copy(
+                        geometry,
+                        width_degrees=display.stimulus_width_degrees,
+                    ),
+                )
+                presentation = _validated_copy(presentation, defaults=defaults)
+        settings = _validated_copy(
+            self._project.settings,
+            display=display,
+            presentation=presentation,
+        )
         self._apply_project_update(settings=settings)
 
     def update_protocol_settings(self, **updates: object) -> None:
@@ -262,6 +281,30 @@ class ProjectDocument(
 
         session = _validated_copy(self._project.settings.session, **updates)
         settings = _validated_copy(self._project.settings, session=session)
+        self._apply_project_update(settings=settings)
+
+    def update_presentation_settings(self, **updates: object) -> None:
+        """Update project-wide presentation defaults through Pydantic validation."""
+
+        presentation = _validated_copy(self._project.settings.presentation, **updates)
+        settings = _validated_copy(self._project.settings, presentation=presentation)
+        self._apply_project_update(settings=settings)
+
+    def set_project_presentation(self, presentation: ProjectPresentationSettings) -> None:
+        """Replace the complete project presentation settings atomically."""
+
+        display = self._project.settings.display
+        geometry = presentation.defaults.image_geometry
+        if geometry.width_degrees is not None:
+            display = _validated_copy(
+                display,
+                stimulus_width_degrees=geometry.width_degrees,
+            )
+        settings = _validated_copy(
+            self._project.settings,
+            presentation=presentation,
+            display=display,
+        )
         self._apply_project_update(settings=settings)
 
     def update_condition_defaults(self, **updates: object) -> None:
@@ -439,4 +482,3 @@ class ProjectDocument(
             return
         self._dirty = dirty
         self.dirty_changed.emit(dirty)
-

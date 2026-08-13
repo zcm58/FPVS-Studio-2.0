@@ -20,6 +20,10 @@ from fpvs_studio.core.compiler_fixation import (
     build_fixation_events,
     resolve_realized_target_count,
 )
+from fpvs_studio.core.compiler_presentation import (
+    build_interleaved_text_height_values,
+    compile_condition_presentation,
+)
 from fpvs_studio.core.compiler_schedules import (
     build_stimulus_sequence,
     build_trigger_events,
@@ -46,6 +50,7 @@ from fpvs_studio.core.frame_validation import (
     on_off_frames,
 )
 from fpvs_studio.core.models import ProjectFile
+from fpvs_studio.core.presentation import resolve_pre_stream_fixation_seconds
 from fpvs_studio.core.run_spec import (
     ConditionRunSpec,
     DisplayRunSpec,
@@ -91,6 +96,23 @@ def compile_run_spec(
     total_oddball_cycles = condition.oddball_cycle_repeats_per_sequence * condition.sequence_count
     total_stimuli = total_oddball_cycles * protocol.oddball_every_n
     total_frames = total_stimuli * frames_per_stimulus_value
+    presentation, resolved_role_presentations = compile_condition_presentation(
+        project_presentation=project.settings.presentation,
+        condition=condition,
+        base_set=base_set,
+        oddball_set=oddball_set,
+    )
+    text_height_values_by_role = None
+    if base_set.modality.value == "word":
+        text_height_values_by_role = build_interleaved_text_height_values(
+            {
+                "base": resolved_role_presentations["base"].text_height,
+                "oddball": resolved_role_presentations["oddball"].text_height,
+            },
+            total_stimuli=total_stimuli,
+            oddball_every_n=protocol.oddball_every_n,
+            random_seed=random_seed,
+        )
 
     base_stimuli = resolve_stimulus_items(
         base_set,
@@ -112,7 +134,8 @@ def compile_run_spec(
         base_stimuli=base_stimuli,
         oddball_stimuli=oddball_stimuli,
         oddball_every_n=protocol.oddball_every_n,
-        rng=random.Random(random_seed),
+        random_seed=random_seed,
+        text_height_values_by_role=text_height_values_by_role,
     )
 
     fixation_settings = project.settings.fixation_task
@@ -237,6 +260,14 @@ def compile_run_spec(
             target_duration_frames=target_duration_frames,
             realized_target_count=resolved_target_count if fixation_settings.enabled else 0,
         ),
+        presentation=presentation,
+        pre_stream_fixation_frames=seconds_to_frames(
+            resolve_pre_stream_fixation_seconds(
+                project.settings.presentation,
+                condition.presentation,
+            ),
+            refresh_hz,
+        ),
         stimulus_sequence=stimulus_sequence,
         fixation_events=fixation_events,
         trigger_events=build_trigger_events(
@@ -305,9 +336,7 @@ def compile_session_plan(
             condition_total_oddball_cycles = (
                 condition.oddball_cycle_repeats_per_sequence * condition.sequence_count
             )
-            condition_total_stimuli = (
-                condition_total_oddball_cycles * protocol.oddball_every_n
-            )
+            condition_total_stimuli = condition_total_oddball_cycles * protocol.oddball_every_n
             condition_total_frames = condition_total_stimuli * frames_per_stimulus_value
             max_supported_count = max_supported_color_changes(
                 total_frames=condition_total_frames,

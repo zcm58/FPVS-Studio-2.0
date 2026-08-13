@@ -15,6 +15,7 @@ from fpvs_studio.core.models import (
     ConditionTemplateProfile,
     ProjectFile,
     ProjectMeta,
+    ProjectPresentationSettings,
     ProjectSettings,
     ProtocolSettings,
 )
@@ -55,10 +56,11 @@ def build_starter_project(
     project_id = slugify_project_name(project_name)
     validate_project_id(project_id)
     settings = ProjectSettings(
+        presentation=ProjectPresentationSettings(pre_stream_fixation_seconds=2.0),
         protocol=ProtocolSettings(
             base_hz=template.base_hz,
             oddball_every_n=template.oddball_every_n,
-        )
+        ),
     )
     if condition_template_profile is not None:
         settings = apply_condition_template_profile_to_settings(

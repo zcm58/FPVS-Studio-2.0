@@ -6,9 +6,13 @@ behavior."""
 
 from __future__ import annotations
 
+import json
+from collections.abc import Mapping
+from copy import deepcopy
 from pathlib import Path
+from typing import Any
 
-from fpvs_studio.core.enums import DutyCycleMode
+from fpvs_studio.core.enums import DutyCycleMode, SchemaVersion
 from fpvs_studio.core.models import (
     Condition,
     ConditionDefaults,
@@ -25,10 +29,12 @@ from fpvs_studio.core.paths import (
     condition_template_library_path,
     templates_dir,
 )
-from fpvs_studio.core.serialization import read_json_file, write_json_file
+from fpvs_studio.core.presentation import legacy_project_presentation_settings
+from fpvs_studio.core.serialization import write_json_file
 
 STUDIO_DEFAULT_PROFILE_ID = "studio-default-v1"
 SIXTY_HZ_BLANK_FIXATION_PROFILE_ID = "sixty-hz-blank50-fixation-v1"
+CONDITION_TEMPLATE_LIBRARY_SCHEMA_VERSION = SchemaVersion.V1_1
 
 
 def _shared_fixation_defaults() -> FixationTaskSettings:
@@ -113,6 +119,37 @@ def _normalize_library(
     return ConditionTemplateProfileLibrary(profiles=ordered_profiles)
 
 
+def _migrate_library_payload(
+    payload: Mapping[str, Any],
+) -> ConditionTemplateProfileLibrary:
+    """Migrate stored template snapshots without changing legacy playback defaults."""
+
+    schema_version = payload.get("schema_version", SchemaVersion.V1.value)
+    if isinstance(schema_version, SchemaVersion):
+        schema_version = schema_version.value
+    if schema_version == CONDITION_TEMPLATE_LIBRARY_SCHEMA_VERSION.value:
+        return ConditionTemplateProfileLibrary.model_validate(payload)
+    if schema_version != SchemaVersion.V1.value:
+        raise NotImplementedError(
+            "Condition-template library migration from schema_version "
+            f"'{schema_version}' is not implemented."
+        )
+
+    migrated = deepcopy(dict(payload))
+    legacy_presentation = legacy_project_presentation_settings(
+        5.0,
+        pre_stream_fixation_seconds=0.0,
+    ).model_dump(mode="json")
+    for profile in migrated.get("profiles", []):
+        if not isinstance(profile, dict):
+            continue
+        defaults = profile.setdefault("defaults", {})
+        if isinstance(defaults, dict):
+            defaults.setdefault("presentation", deepcopy(legacy_presentation))
+    migrated["schema_version"] = CONDITION_TEMPLATE_LIBRARY_SCHEMA_VERSION.value
+    return ConditionTemplateProfileLibrary.model_validate(migrated)
+
+
 def normalize_condition_template_profile_root(root_dir: Path) -> Path:
     """Ensure app template storage exists and migrate legacy library files."""
 
@@ -122,9 +159,7 @@ def normalize_condition_template_profile_root(root_dir: Path) -> Path:
 
     canonical_library_path = condition_template_library_path(root_dir)
     legacy_templates_dir = root_dir / TEMPLATES_DIRNAME
-    legacy_templates_library_path = (
-        legacy_templates_dir / CONDITION_TEMPLATE_LIBRARY_FILENAME
-    )
+    legacy_templates_library_path = legacy_templates_dir / CONDITION_TEMPLATE_LIBRARY_FILENAME
     legacy_library_path = root_dir / CONDITION_TEMPLATE_LIBRARY_FILENAME
     if not canonical_library_path.is_file():
         for legacy_path in (legacy_templates_library_path, legacy_library_path):
@@ -145,7 +180,10 @@ def load_condition_template_profile_library(root_dir: Path) -> ConditionTemplate
 
     library_path = normalize_condition_template_profile_root(Path(root_dir))
     if library_path.is_file():
-        library = read_json_file(library_path, ConditionTemplateProfileLibrary)
+        payload = json.loads(library_path.read_text(encoding="utf-8"))
+        if not isinstance(payload, dict):
+            raise ValueError("Condition-template library must contain a JSON object.")
+        library = _migrate_library_payload(payload)
     else:
         library = ConditionTemplateProfileLibrary()
     normalized = _normalize_library(library)
@@ -246,6 +284,7 @@ def apply_condition_template_profile_to_settings(
             "condition_defaults": profile.defaults.condition.model_copy(deep=True),
             "display": display,
             "fixation_task": profile.defaults.fixation_task.model_copy(deep=True),
+            "presentation": profile.defaults.presentation.model_copy(deep=True),
         }
     )
 

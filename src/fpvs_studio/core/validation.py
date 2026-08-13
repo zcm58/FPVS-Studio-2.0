@@ -6,9 +6,15 @@ time diagnostics, not manifest generation, session execution, or engine timing l
 from __future__ import annotations
 
 from dataclasses import dataclass
-from math import ceil, floor, isclose, isfinite
+from math import ceil, copysign, floor, isclose, isfinite
 
-from fpvs_studio.core.enums import DutyCycleMode, StimulusModality, ValidationSeverity
+from fpvs_studio.core.display_geometry import visual_angle_width_cm
+from fpvs_studio.core.enums import (
+    DutyCycleMode,
+    PresentationUnit,
+    StimulusModality,
+    ValidationSeverity,
+)
 from fpvs_studio.core.fixation_planning import (
     max_supported_color_changes,
     milliseconds_to_frames,
@@ -19,12 +25,15 @@ from fpvs_studio.core.frame_validation import (
     validate_blank_mode_frames,
 )
 from fpvs_studio.core.models import (
+    Condition,
     DisplayValidationReport,
     FixationTaskSettings,
     ProjectFile,
     ProjectValidationReport,
+    StimulusSet,
     ValidationIssue,
 )
+from fpvs_studio.core.presentation import PresentationRole, resolve_role_presentation
 from fpvs_studio.core.template_library import default_template
 
 APPROVED_MONITOR_REFRESH_RATES_HZ: tuple[float, ...] = (
@@ -142,9 +151,7 @@ def validate_display_refresh(
     frames_per_cycle: int | None = None
     timing_is_exact = False
     realized_base_hz: float | None = None
-    requested_oddball_hz = (
-        base_rate / oddball_every_n if oddball_every_n is not None else None
-    )
+    requested_oddball_hz = base_rate / oddball_every_n if oddball_every_n is not None else None
     realized_oddball_hz: float | None = None
     compatible = True
 
@@ -273,6 +280,135 @@ def validate_fixation_settings(settings: FixationTaskSettings) -> list[Validatio
             )
         )
     return issues
+
+
+def presentation_clipping_warnings(project: ProjectFile) -> list[ValidationIssue]:
+    """Warn for image boxes and text bounds resolvable without renderer font metrics."""
+
+    issues: list[ValidationIssue] = []
+    stimulus_sets = {item.set_id: item for item in project.stimulus_sets}
+    for condition in project.conditions:
+        role_sets: dict[PresentationRole, StimulusSet | None] = {
+            "base": stimulus_sets.get(condition.base_stimulus_set_id),
+            "oddball": stimulus_sets.get(condition.oddball_stimulus_set_id),
+        }
+        for role, stimulus_set in role_sets.items():
+            if stimulus_set is None:
+                continue
+            settings = resolve_role_presentation(
+                project.settings.presentation,
+                condition.presentation,
+                role,
+            )
+            if stimulus_set.modality == StimulusModality.IMAGE:
+                if stimulus_set.resolution is None:
+                    continue
+                width_px, height_px = _image_box_size_px(
+                    project,
+                    settings.image_geometry.width_degrees,
+                    settings.image_geometry.height_degrees,
+                    stimulus_set,
+                )
+                if (
+                    width_px > project.settings.display.screen_width_px
+                    or height_px > project.settings.display.screen_height_px
+                ):
+                    issues.append(
+                        _presentation_clipping_warning(
+                            condition,
+                            role,
+                            "Image presentation box may extend beyond the configured display.",
+                        )
+                    )
+                continue
+
+            maximum_height = max(settings.text_height.values)
+            height_px = _presentation_value_px(
+                project,
+                maximum_height,
+                settings.text_height.unit,
+            )
+            position = settings.text_position
+            x_px = _presentation_value_px(project, position.x, position.unit)
+            y_px = _presentation_value_px(project, position.y, position.unit)
+            if abs(y_px) + (height_px / 2.0) > (project.settings.display.screen_height_px / 2.0):
+                issues.append(
+                    _presentation_clipping_warning(
+                        condition,
+                        role,
+                        "Text height and vertical position may extend beyond the configured "
+                        "display.",
+                    )
+                )
+            if abs(x_px) > project.settings.display.screen_width_px / 2.0:
+                issues.append(
+                    _presentation_clipping_warning(
+                        condition,
+                        role,
+                        "Text center is outside the configured horizontal display bounds. "
+                        "Full glyph-width clipping is evaluated by the renderer.",
+                    )
+                )
+    return issues
+
+
+def _presentation_clipping_warning(
+    condition: Condition,
+    role: str,
+    message: str,
+) -> ValidationIssue:
+    return ValidationIssue(
+        location=f"conditions.{condition.condition_id}.presentation.{role}",
+        message=message,
+        severity=ValidationSeverity.WARNING,
+    )
+
+
+def _image_box_size_px(
+    project: ProjectFile,
+    width_degrees: float | None,
+    height_degrees: float | None,
+    stimulus_set: StimulusSet,
+) -> tuple[float, float]:
+    resolution = stimulus_set.resolution
+    if resolution is None:
+        return (0.0, 0.0)
+    width_px = (
+        _presentation_value_px(project, width_degrees, PresentationUnit.DEGREES)
+        if width_degrees is not None
+        else None
+    )
+    height_px = (
+        _presentation_value_px(project, height_degrees, PresentationUnit.DEGREES)
+        if height_degrees is not None
+        else None
+    )
+    if width_px is None:
+        assert height_px is not None
+        width_px = height_px * resolution.width_px / resolution.height_px
+    if height_px is None:
+        height_px = width_px * resolution.height_px / resolution.width_px
+    return (width_px, height_px)
+
+
+def _presentation_value_px(
+    project: ProjectFile,
+    value: float,
+    unit: PresentationUnit,
+) -> float:
+    display = project.settings.display
+    if unit == PresentationUnit.WINDOW_HEIGHT_FRACTION:
+        return value * display.screen_height_px
+    if value == 0:
+        return 0.0
+    physical_cm = visual_angle_width_cm(
+        degrees=abs(value),
+        viewing_distance_cm=display.viewing_distance_cm,
+    )
+    return copysign(
+        physical_cm * display.screen_width_px / display.screen_width_cm,
+        value,
+    )
 
 
 def condition_fixation_guidance(
@@ -442,6 +578,7 @@ def validate_project(
 
     issues.extend(validate_fixation_settings(project.settings.fixation_task))
     issues.extend(validate_condition_repeat_cycle_consistency(project))
+    issues.extend(presentation_clipping_warnings(project))
     for row in condition_stimulus_repeat_guidance(project):
         if row.image_count <= 0:
             continue
@@ -600,21 +737,8 @@ def validate_project(
                     ValidationIssue(
                         location=f"conditions.{condition.condition_id}.{role}_stimulus_set_id",
                         message=(
-                            f"{role_label} stimulus set for condition '{condition.name}' must "
-                            "be normalized to square images before launch."
-                        ),
-                    )
-                )
-                continue
-            if stimulus_set.resolution.width_px != stimulus_set.resolution.height_px:
-                issues.append(
-                    ValidationIssue(
-                        location=f"conditions.{condition.condition_id}.{role}_stimulus_set_id",
-                        message=(
-                            f"{role_label} stimulus set for condition '{condition.name}' uses "
-                            f"non-square {stimulus_set.resolution.width_px}x"
-                            f"{stimulus_set.resolution.height_px} images. Normalize the selected "
-                            "images to square PNG copies before launch."
+                            f"{role_label} stimulus set for condition '{condition.name}' "
+                            "requires a known uniform image resolution before launch."
                         ),
                     )
                 )
