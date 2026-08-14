@@ -1574,9 +1574,7 @@ def test_create_project_dialog_requires_available_image_timing(
     dialog.accept()
 
     assert dialog.result() != int(dialog.DialogCode.Accepted)
-    assert any(
-        "continuous images or 50% blank images" in message.lower() for message in messages
-    )
+    assert any("experiment template" in message.lower() for message in messages)
 
 
 def test_create_project_dialog_allows_templates_project_name(

@@ -216,6 +216,7 @@ class ManageProjectsDialog(QDialog):
         guidance_text = entry.guidance_text if entry is not None else ""
         self.guidance_label.setText(guidance_text)
         self.guidance_label.setVisible(bool(guidance_text))
+        self._sync_guidance_label_height()
         QTimer.singleShot(0, self._sync_guidance_label_height)
         self.open_button.setEnabled(has_entry and entry.can_open if entry else False)
         self.delete_button.setEnabled(has_entry and entry.can_delete if entry else False)

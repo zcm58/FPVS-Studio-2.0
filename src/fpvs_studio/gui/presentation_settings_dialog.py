@@ -1160,6 +1160,7 @@ class PresentationSettingsDialog(QDialog):
         except Exception as error:
             self.validation_label.setText(str(error))
             self.validation_label.setVisible(True)
+            self.validation_label.show()
             return
         self.validation_label.setVisible(False)
         super().accept()

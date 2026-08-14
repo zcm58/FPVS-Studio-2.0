@@ -202,7 +202,14 @@ class WelcomeWindow(QWidget):
         )
         for button in action_buttons:
             button.setFixedWidth(button_width)
-        self.action_container.setFixedWidth((button_width * 2) + 12)
+        action_layout = self.action_container.layout()
+        margins = action_layout.contentsMargins()
+        self.action_container.setFixedWidth(
+            (button_width * 2)
+            + action_layout.horizontalSpacing()
+            + margins.left()
+            + margins.right()
+        )
 
     def _adopt_app_icon(self) -> None:
         app = QApplication.instance()
