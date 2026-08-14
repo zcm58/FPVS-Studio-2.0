@@ -1866,7 +1866,9 @@ def setup_wizard_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
         font-size: {FONT_SIZE_META}px;
     }}
     QPushButton#setup_wizard_condition_presentation_button,
-    QPushButton#setup_wizard_condition_task_button {{
+    QPushButton#setup_wizard_condition_task_button,
+    QPushButton#apply_profile_to_conditions_button,
+    QPushButton#project_manage_templates_button {{
         min-height: 24px;
         max-height: 24px;
         padding-top: 3px;

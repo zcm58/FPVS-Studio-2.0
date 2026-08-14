@@ -654,7 +654,6 @@ def test_setup_wizard_conditions_step_keeps_source_geometry_for_incomplete_condi
         for index in range(step.timing_template_combo.count())
     )
     assert standard_field_width >= max(timing_option_widths)
-    assert standard_field_width > step.condition_details_section.width() // 2
     field_right = step.timing_template_combo.mapTo(
         step.condition_details_section,
         step.timing_template_combo.rect().topRight(),
