@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from PySide6.QtWidgets import (
+    QCheckBox,
     QComboBox,
     QDialogButtonBox,
     QGroupBox,
@@ -32,9 +33,11 @@ from fpvs_studio.core.serialization import (
 )
 from fpvs_studio.gui.controller import StudioController
 from fpvs_studio.gui.run_page import (
+    TEST_MODE_PARTICIPANT_NUMBER,
     BioSemiRecordingConfirmationDialog,
     ParticipantLaunchDetails,
     ParticipantNumberDialog,
+    TestModeLaunchConfirmationDialog,
 )
 
 
@@ -307,6 +310,99 @@ def test_biosemi_recording_confirmation_dialog_blocks_continue_until_confirm(
 
     confirmation_edit.setText(" CONFIRM ")
     assert continue_button.isEnabled() is True
+
+
+def test_test_mode_launch_confirmation_requires_explicit_acknowledgement(
+    qtbot,
+) -> None:
+    dialog = TestModeLaunchConfirmationDialog()
+    qtbot.addWidget(dialog)
+    dialog.show()
+    qtbot.waitUntil(dialog.isVisible)
+
+    prompt = dialog.findChild(QLabel, "test_mode_launch_confirmation_prompt")
+    acknowledgement = dialog.findChild(
+        QCheckBox,
+        "test_mode_launch_acknowledgement_checkbox",
+    )
+    button_box = dialog.findChild(
+        QDialogButtonBox,
+        "test_mode_launch_confirmation_button_box",
+    )
+    assert prompt is not None
+    assert acknowledgement is not None
+    assert button_box is not None
+    launch_button = button_box.button(QDialogButtonBox.StandardButton.Ok)
+    assert launch_button is not None
+    assert dialog.size().width() == 700
+    assert dialog.size().height() == 320
+    assert dialog.windowTitle() == "Confirm Experiment Test Launch"
+    assert "Serial-port validation" in prompt.text()
+    assert "participant information collection" in prompt.text()
+    assert "reserved test ID 0" in prompt.text()
+    assert "runtime timing QC" in prompt.text()
+    assert launch_button.text() == "Launch Test"
+    assert launch_button.isEnabled() is False
+    assert acknowledgement.width() >= acknowledgement.fontMetrics().horizontalAdvance(
+        acknowledgement.text()
+    )
+    _assert_visible_children_within_parent(dialog)
+
+    acknowledgement.setChecked(True)
+
+    assert launch_button.isEnabled() is True
+
+
+def test_run_page_test_mode_skips_participant_collection_and_uses_reserved_id(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Test Mode Launch")
+    _prepare_compile_ready_project(window, tmp_path / "test-mode-launch")
+    window.document.set_experiment_test_mode_enabled(True)
+    monkeypatch.setattr("fpvs_studio.gui.run_page.ProgressTask", _ImmediateProgressTask)
+    monkeypatch.setattr(window.run_page, "_confirm_test_mode_launch", lambda: True)
+    monkeypatch.setattr(
+        window.run_page,
+        "_prompt_participant_number",
+        lambda: (_ for _ in ()).throw(
+            AssertionError("Participant dialog must not open in Experiment Test Mode")
+        ),
+    )
+    monkeypatch.setattr(
+        window.run_page,
+        "_confirm_biosemi_recording_started",
+        lambda: (_ for _ in ()).throw(
+            AssertionError("BioSemi confirmation must not open in Experiment Test Mode")
+        ),
+    )
+    monkeypatch.setattr(window.document, "preflight_compiled_session", lambda _plan: None)
+    captures: dict[str, object] = {}
+
+    def _capture_launch(session_plan, **kwargs):
+        captures.update(kwargs)
+        return SessionExecutionSummary(
+            project_id=session_plan.project_id,
+            session_id=session_plan.session_id,
+            engine_name="stub",
+            run_mode=RunMode.SESSION,
+            participant_number=kwargs["participant_number"],
+            total_condition_count=session_plan.total_runs,
+            completed_condition_count=session_plan.total_runs,
+        )
+
+    monkeypatch.setattr(window.document, "launch_compiled_session", _capture_launch)
+
+    window.run_page.launch_session()
+
+    assert captures["participant_number"] == TEST_MODE_PARTICIPANT_NUMBER
+    assert captures["participant_metadata"] is None
+    assert window.document.project.manual_removed_electrodes == {}
+    assert (
+        "Launch Mode: Experiment Test (reserved ID 0)" in window.run_page.summary_text.toPlainText()
+    )
 
 
 def test_run_page_biosemi_confirmation_cancel_blocks_runtime_launch(

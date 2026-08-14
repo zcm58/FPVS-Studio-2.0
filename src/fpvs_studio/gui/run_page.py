@@ -9,6 +9,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QIntValidator
 from PySide6.QtWidgets import (
     QApplication,
+    QCheckBox,
     QComboBox,
     QDialog,
     QDialogButtonBox,
@@ -49,6 +50,8 @@ from fpvs_studio.gui.window_helpers import (
     _set_list_items,
 )
 from fpvs_studio.gui.workers import ProgressTask
+
+TEST_MODE_PARTICIPANT_NUMBER = "0"
 
 
 def _compat_progress_dialog(
@@ -367,6 +370,60 @@ class BioSemiRecordingConfirmationDialog(QDialog):
         )
 
 
+class TestModeLaunchConfirmationDialog(QDialog):
+    """Require explicit acknowledgement of experiment test-mode limitations."""
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setObjectName("test_mode_launch_confirmation_dialog")
+        self.setWindowTitle("Confirm Experiment Test Launch")
+        self.setModal(True)
+        self.resize(700, 320)
+
+        self.prompt_label = QLabel(
+            "Experiment Test Mode is enabled. This launch verifies experiment setup "
+            "and behavior without lab hardware. Serial-port validation and output, the "
+            "Sophia Mode recording check, connected-display refresh verification, and "
+            "participant information collection are disabled. The run uses reserved "
+            "test ID 0. Fullscreen presentation, compiled timing and asset validation, "
+            "runtime timing QC, condition tasks, and normal test outputs remain enabled.",
+            self,
+        )
+        self.prompt_label.setObjectName("test_mode_launch_confirmation_prompt")
+        self.prompt_label.setWordWrap(True)
+
+        self.acknowledgement_checkbox = QCheckBox(
+            "I understand this is a non-participant test launch.",
+            self,
+        )
+        self.acknowledgement_checkbox.setObjectName("test_mode_launch_acknowledgement_checkbox")
+
+        self.button_box = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel,
+            parent=self,
+        )
+        self.button_box.setObjectName("test_mode_launch_confirmation_button_box")
+        self.launch_button = self.button_box.button(QDialogButtonBox.StandardButton.Ok)
+        self.launch_button.setObjectName("test_mode_launch_confirmation_continue_button")
+        self.launch_button.setText("Launch Test")
+        self.launch_button.setEnabled(False)
+        self.button_box.accepted.connect(self.accept)
+        self.button_box.rejected.connect(self.reject)
+        self.acknowledgement_checkbox.toggled.connect(self.launch_button.setEnabled)
+
+        layout = QVBoxLayout(self)
+        layout.setSpacing(14)
+        layout.addWidget(self.prompt_label)
+        layout.addWidget(self.acknowledgement_checkbox)
+        layout.addWidget(self.button_box)
+
+    def accept(self) -> None:
+        if not self.acknowledgement_checkbox.isChecked():
+            self.acknowledgement_checkbox.setFocus()
+            return
+        super().accept()
+
+
 def _coerce_participant_launch_details(
     value: str | ParticipantLaunchDetails | None,
 ) -> ParticipantLaunchDetails | None:
@@ -616,15 +673,16 @@ class RunPage(QWidget):
         if participant_details is None:
             return
         participant_number = participant_details.participant_number
-        try:
-            self._document.update_manual_removed_electrodes(
-                participant_number,
-                participant_details.manual_removed_electrodes,
-            )
-            self._document.save()
-        except Exception as error:
-            _show_runtime_error_dialog(self, "Launch Blocked", error)
-            return
+        if not self._document.experiment_test_mode_enabled:
+            try:
+                self._document.update_manual_removed_electrodes(
+                    participant_number,
+                    participant_details.manual_removed_electrodes,
+                )
+                self._document.save()
+            except Exception as error:
+                _show_runtime_error_dialog(self, "Launch Blocked", error)
+                return
         try:
             session_plan = self._document.compile_session(refresh_hz=refresh_hz)
         except Exception as error:
@@ -721,11 +779,16 @@ class RunPage(QWidget):
         participant_metadata_lines = _participant_metadata_summary_lines(
             summary.participant_metadata
         )
+        identity_line = (
+            f"Launch Mode: Experiment Test (reserved ID {participant_value})"
+            if self._document.experiment_test_mode_enabled
+            else f"Participant Number: {participant_value}"
+        )
         if summary.aborted:
             abort_reason = summary.abort_reason or "No abort reason was provided."
             extra_lines = [
                 "Status: runtime launch aborted.",
-                f"Participant Number: {participant_value}",
+                identity_line,
                 *participant_metadata_lines,
                 output_line,
                 f"Abort Reason: {abort_reason}",
@@ -752,7 +815,7 @@ class RunPage(QWidget):
             return
         extra_lines = [
             "Status: runtime launch completed.",
-            f"Participant Number: {participant_value}",
+            identity_line,
             *participant_metadata_lines,
             output_line,
         ]
@@ -784,7 +847,15 @@ class RunPage(QWidget):
         dialog = BioSemiRecordingConfirmationDialog(self)
         return dialog.exec() == int(QDialog.DialogCode.Accepted)
 
+    def _confirm_test_mode_launch(self) -> bool:
+        dialog = TestModeLaunchConfirmationDialog(self)
+        return dialog.exec() == int(QDialog.DialogCode.Accepted)
+
     def _collect_launch_participant_details(self) -> ParticipantLaunchDetails | None:
+        if self._document.experiment_test_mode_enabled:
+            if not self._confirm_test_mode_launch():
+                return None
+            return ParticipantLaunchDetails(participant_number=TEST_MODE_PARTICIPANT_NUMBER)
         while True:
             participant_details = _coerce_participant_launch_details(
                 self._prompt_participant_number()

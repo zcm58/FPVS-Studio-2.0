@@ -358,6 +358,30 @@ def test_preflight_rejects_measured_refresh_mismatch(
         )
 
 
+def test_preflight_skips_connected_refresh_measurement_when_explicitly_disabled(
+    sample_project,
+    sample_project_root,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _patch_native_windows_mode(monkeypatch, 60)
+    run_spec = compile_run_spec(
+        sample_project,
+        refresh_hz=240.0,
+        project_root=sample_project_root,
+        run_id="faces-run",
+    )
+    engine = _PreflightEngine(60.0)
+
+    preflight_run_spec(
+        sample_project_root,
+        run_spec,
+        engine=engine,
+        runtime_options={"verify_refresh_rate": False},
+    )
+
+    assert engine.refresh_measurement_count == 0
+
+
 def test_preflight_reports_linux_native_mode_mismatch(
     sample_project,
     sample_project_root,

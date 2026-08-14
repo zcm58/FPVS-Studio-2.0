@@ -366,7 +366,8 @@ replace the authoritative artifacts under `runs/`, and runtime does not consume
 ## Session mode
 
 The supported runtime uses normal session mode. `LaunchSettings` has no production/test
-Boolean gate; presentation and timing-QC behavior use explicit runtime settings.
+Boolean gate; presentation, trigger, connected-refresh verification, and timing-QC
+behavior use explicit runtime settings.
 
 In the current v1 runtime:
 
@@ -383,8 +384,17 @@ In the current v1 runtime:
 - GUI launches explicitly retain report-only warmup timing misses, a four-frame-interval
   miss threshold, and a 240-frame timing warmup
 
-Compilation, preflight, session flow, triggering, scoring, and export behavior are
-independent of the retired mode gate.
+Source-tree Windows and Linux runs can enable the app-level Experiment Test Mode. The
+GUI supplies reserved participant ID `0`, omits participant metadata and manual-electrode
+updates, and skips the Sophia/BioSemi recording gate. The document launch adapter keeps
+the authored trigger settings unchanged while creating `LaunchSettings` with
+`serial_enabled=false` and `verify_refresh_rate=false`. Fullscreen playback, compilation,
+asset preflight, condition/task flow, frame timing, timing warmup/QC, and normal test
+exports remain active. The preference is unavailable in packaged builds and is not
+persisted in ProjectFile, RunSpec, or SessionPlan.
+
+Compilation, session flow, scoring, and export behavior remain independent of the
+retired runtime mode gate; test behavior is composed only from explicit launch options.
 
 ## Current deferrals
 

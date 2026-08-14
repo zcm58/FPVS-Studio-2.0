@@ -63,7 +63,8 @@ The Settings dialog can reopen the root-folder setup guide, manage condition tem
 and choose whether launched sessions write full `runs/` folders or compact summary logs
 only. It also exposes the default-on Sophia Mode launch gate used before runtime
 launch, plus a separate option to hide the Home ticker without disabling the launch
-confirmation.
+confirmation. Source-tree Windows and Linux runs additionally expose Experiment Test
+Mode for explicit no-hardware verification launches; packaged builds hide it.
 
 ## Main Window
 
@@ -268,6 +269,14 @@ check that
 requires typing `Confirm` before the runtime task starts; cancelling that check returns
 to FPVS Studio without starting the experiment.
 
+When Experiment Test Mode is enabled, launch replaces participant collection with an
+explicit acknowledgement and reserved participant ID `0`, skips manual-electrode
+project updates, suppresses the Sophia/BioSemi gate, uses logged null-trigger output,
+and disables connected-display refresh verification. Compilation, routine asset
+preflight, fullscreen playback, frame schedules, task flow, timing warmup/QC, and test
+exports remain unchanged. Participant summaries already exclude reserved IDs `0` and
+`00`.
+
 The Stimuli Manager remains an internal support page for variant/materialization
 behavior, not a guided setup step or visible top-level tab during normal use. Its raw
 source-folder import path is permissive like guided Conditions import; strict inspection
@@ -338,7 +347,9 @@ default and writes detailed `runs/` folders after launch; compact mode skips tho
 folders and keeps only project-level summary logs. Settings also exposes default-on
 Sophia Mode, which requires administrators to confirm that BioSemi recording is active
 by typing `Confirm` before launch can continue. Settings can hide the Sophia Mode Home
-ticker independently, without disabling that confirmation gate.
+ticker independently, without disabling that confirmation gate. In source-tree Windows
+and Linux runs, Settings also exposes Experiment Test Mode with a detailed tooltip that
+names every skipped hardware/participant check and every timing behavior that remains.
 Moving a project to the Recycle Bin remains a controller-owned filesystem operation
 guarded by `project.json` validation, confirmation, a post-action path check, and a disk
 refresh of the manage list after each attempt. `Check for Updates` queries GitHub
@@ -464,7 +475,8 @@ fullscreen display verification and timing checks.
 
 Current honest behavior:
 
-- runtime launch uses normal session mode without a production/test Boolean gate
+- runtime launch uses normal session mode without restoring the retired runtime
+  production/test Boolean gate
 - launched PsychoPy playback opens fullscreen on the default display
 - display-index and fullscreen launch controls are not exposed in the current GUI;
   launch uses the default display and fullscreen playback
@@ -477,6 +489,9 @@ Current honest behavior:
   are not exposed in the current GUI
 - GUI startup itself still does not initialize PsychoPy
 - runtime launch settings keep presentation and timing-QC policies explicit
+- source-only Experiment Test Mode on Windows and Linux composes those explicit settings
+  to disable serial and connected-refresh checks while preserving fullscreen playback,
+  compilation, asset checks, timing QC, task flow, and exports
 
 ## Fixation Accuracy Task
 

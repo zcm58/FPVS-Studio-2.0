@@ -40,13 +40,16 @@ class AppSettingsDialog(QDialog):
         | None = None,
         sophia_mode_ticker_enabled: bool = False,
         on_sophia_mode_ticker_enabled_changed: Callable[[bool], None] | None = None,
+        experiment_test_mode_available: bool = False,
+        experiment_test_mode_enabled: bool = False,
+        on_experiment_test_mode_changed: Callable[[bool], None] | None = None,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self.setObjectName("fpvs_root_settings_dialog")
         self.setWindowTitle("Settings")
         self.setModal(True)
-        self.resize(700, 320)
+        self.resize(700, 360 if experiment_test_mode_available else 320)
 
         self._fpvs_root_dir = fpvs_root_dir
         self._on_show_root_folder_setup = on_show_root_folder_setup
@@ -58,6 +61,7 @@ class AppSettingsDialog(QDialog):
         self._on_sophia_mode_ticker_enabled_changed = (
             on_sophia_mode_ticker_enabled_changed
         )
+        self._on_experiment_test_mode_changed = on_experiment_test_mode_changed
 
         form_layout = QFormLayout()
         self.root_folder_setup_button = QPushButton("Root Folder Setup...", self)
@@ -113,6 +117,29 @@ class AppSettingsDialog(QDialog):
         )
         form_layout.addRow("Sophia Ticker", self.sophia_mode_ticker_checkbox)
 
+        self.experiment_test_mode_checkbox: QCheckBox | None = None
+        if experiment_test_mode_available:
+            self.experiment_test_mode_checkbox = QCheckBox(
+                "Enable experiment test mode",
+                self,
+            )
+            self.experiment_test_mode_checkbox.setObjectName("experiment_test_mode_checkbox")
+            self.experiment_test_mode_checkbox.setToolTip(
+                "Uses logged null-trigger output, skips the Sophia Mode recording check, "
+                "bypasses connected-display refresh verification, and replaces participant "
+                "collection with an explicit test-launch acknowledgement. Fullscreen "
+                "presentation remains enabled, along with compiled timing validation and "
+                "runtime timing QC. Available only in source-tree Windows and Linux runs."
+            )
+            self.experiment_test_mode_checkbox.setChecked(experiment_test_mode_enabled)
+            self.experiment_test_mode_checkbox.toggled.connect(
+                self._set_experiment_test_mode_enabled
+            )
+            form_layout.addRow(
+                "Experiment Test Mode",
+                self.experiment_test_mode_checkbox,
+            )
+
         self.button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Close, parent=self)
         self.button_box.setObjectName("settings_button_box")
         self.button_box.rejected.connect(self.reject)
@@ -162,3 +189,8 @@ class AppSettingsDialog(QDialog):
         if self._on_sophia_mode_ticker_enabled_changed is None:
             return
         self._on_sophia_mode_ticker_enabled_changed(bool(checked))
+
+    def _set_experiment_test_mode_enabled(self, checked: bool) -> None:
+        if self._on_experiment_test_mode_changed is None:
+            return
+        self._on_experiment_test_mode_changed(bool(checked))

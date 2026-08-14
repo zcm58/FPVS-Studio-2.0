@@ -39,6 +39,7 @@ from fpvs_studio.core.execution import SessionExecutionSummary
 from fpvs_studio.core.paths import condition_template_library_path
 from fpvs_studio.core.project_service import create_project
 from fpvs_studio.core.serialization import load_project_file, write_json_file
+from fpvs_studio.gui import controller as controller_module
 from fpvs_studio.gui.application import create_application
 from fpvs_studio.gui.condition_template_manager_dialog import (
     ConditionTemplateManagerDialog,
@@ -1367,6 +1368,77 @@ def test_settings_dialog_sophia_mode_ticker_checkbox_triggers_callback(
     assert captured_values == [False]
 
 
+def test_experiment_test_mode_availability_is_cross_platform_and_source_only(
+    monkeypatch,
+) -> None:
+    monkeypatch.delattr(controller_module.sys, "frozen", raising=False)
+    monkeypatch.setattr(controller_module.sys, "platform", "win32")
+    assert controller_module.experiment_test_mode_available() is True
+
+    monkeypatch.setattr(controller_module.sys, "platform", "linux")
+    assert controller_module.experiment_test_mode_available() is True
+
+    monkeypatch.setattr(controller_module.sys, "platform", "darwin")
+    assert controller_module.experiment_test_mode_available() is False
+
+    monkeypatch.setattr(controller_module.sys, "platform", "win32")
+    monkeypatch.setattr(controller_module.sys, "frozen", True, raising=False)
+    assert controller_module.experiment_test_mode_available() is False
+
+
+def test_settings_dialog_experiment_test_mode_is_explicit_and_fits(
+    qtbot,
+    tmp_path: Path,
+) -> None:
+    root_dir = tmp_path / "settings-root"
+    root_dir.mkdir(parents=True, exist_ok=True)
+    captured_values: list[bool] = []
+
+    dialog = AppSettingsDialog(
+        fpvs_root_dir=root_dir,
+        experiment_test_mode_available=True,
+        experiment_test_mode_enabled=False,
+        on_experiment_test_mode_changed=captured_values.append,
+    )
+    qtbot.addWidget(dialog)
+    dialog.resize(700, 360)
+    dialog.show()
+    QApplication.processEvents()
+
+    checkbox = dialog.findChild(QCheckBox, "experiment_test_mode_checkbox")
+    assert checkbox is not None
+    assert checkbox.text() == "Enable experiment test mode"
+    assert "logged null-trigger output" in checkbox.toolTip()
+    assert "bypasses connected-display refresh verification" in checkbox.toolTip()
+    assert "replaces participant collection" in checkbox.toolTip()
+    assert "runtime timing QC" in checkbox.toolTip()
+    assert "source-tree Windows and Linux" in checkbox.toolTip()
+    assert checkbox.isChecked() is False
+    assert checkbox.width() >= checkbox.fontMetrics().horizontalAdvance(checkbox.text())
+    assert_visible_children_within_parent(dialog)
+
+    qtbot.mouseClick(checkbox, Qt.MouseButton.LeftButton)
+
+    assert checkbox.isChecked() is True
+    assert captured_values == [True]
+
+
+def test_settings_dialog_hides_experiment_test_mode_when_unavailable(
+    qtbot,
+    tmp_path: Path,
+) -> None:
+    root_dir = tmp_path / "settings-root"
+    root_dir.mkdir(parents=True, exist_ok=True)
+
+    dialog = AppSettingsDialog(
+        fpvs_root_dir=root_dir,
+        experiment_test_mode_available=False,
+    )
+    qtbot.addWidget(dialog)
+
+    assert dialog.findChild(QCheckBox, "experiment_test_mode_checkbox") is None
+
+
 def test_file_settings_action_persists_run_export_toggle_to_current_document(
     qtbot,
     controller: StudioController,
@@ -1447,6 +1519,78 @@ def test_file_settings_action_persists_sophia_ticker_toggle_to_current_document(
     assert controller.show_sophia_mode_ticker() is True
     assert window.document.require_biosemi_recording_confirmation is True
     assert window.document.show_sophia_mode_ticker is True
+
+
+def test_file_settings_action_persists_experiment_test_mode(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        controller_module,
+        "experiment_test_mode_available",
+        lambda: True,
+    )
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Test Mode Project")
+    assert controller.experiment_test_mode_enabled() is False
+    assert window.document.experiment_test_mode_enabled is False
+    assert window.document.require_biosemi_recording_confirmation is True
+
+    def _fake_settings_exec(dialog: AppSettingsDialog) -> int:
+        checkbox = dialog.findChild(QCheckBox, "experiment_test_mode_checkbox")
+        assert checkbox is not None
+        assert checkbox.isChecked() is False
+        checkbox.setChecked(True)
+        return int(dialog.DialogCode.Accepted)
+
+    monkeypatch.setattr(AppSettingsDialog, "exec", _fake_settings_exec)
+
+    window.settings_action.trigger()
+
+    assert controller.experiment_test_mode_enabled() is True
+    assert window.document.experiment_test_mode_enabled is True
+    assert window.document.require_biosemi_recording_confirmation is False
+
+
+def test_experiment_test_mode_migrates_legacy_preference_and_is_ignored_when_unavailable(
+    controller: StudioController,
+    monkeypatch,
+) -> None:
+    controller._settings.setValue(
+        controller_module._LEGACY_LINUX_DEVELOPMENT_TEST_MODE_KEY,
+        True,
+    )
+    controller._settings.remove(controller_module._EXPERIMENT_TEST_MODE_KEY)
+    controller._settings.sync()
+    monkeypatch.setattr(
+        controller_module,
+        "experiment_test_mode_available",
+        lambda: True,
+    )
+
+    assert controller.experiment_test_mode_enabled() is True
+
+    controller.set_experiment_test_mode_enabled(False)
+    assert controller.experiment_test_mode_enabled() is False
+    assert not controller._settings.contains(
+        controller_module._LEGACY_LINUX_DEVELOPMENT_TEST_MODE_KEY
+    )
+
+    controller._settings.setValue(controller_module._EXPERIMENT_TEST_MODE_KEY, True)
+    controller._settings.sync()
+    monkeypatch.setattr(
+        controller_module,
+        "experiment_test_mode_available",
+        lambda: False,
+    )
+    assert controller.experiment_test_mode_enabled() is False
+    try:
+        controller.set_experiment_test_mode_enabled(True)
+    except ValueError as error:
+        assert "source-tree Windows and Linux runs" in str(error)
+    else:
+        raise AssertionError("Unavailable experiment test mode was enabled")
 
 
 def test_file_settings_action_changes_root_and_updates_open_create_defaults(
@@ -1829,10 +1973,7 @@ def test_open_existing_project_populates_gui_correctly(
         controller.main_window.setup_dashboard_page.project_overview_editor.project_name_edit.text()
         == "Opened Project"
     )
-    assert (
-        controller.main_window.setup_dashboard_page.project_overview_editor.project_root_value.text().endswith(
-            "opened-project"
-        )
+    project_root_value = (
+        controller.main_window.setup_dashboard_page.project_overview_editor.project_root_value
     )
-
-
+    assert project_root_value.text().endswith("opened-project")

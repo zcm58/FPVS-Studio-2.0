@@ -13,6 +13,7 @@ from fpvs_studio.core.enums import RunMode
 from fpvs_studio.core.execution import SessionExecutionSummary
 from fpvs_studio.core.project_service import create_project
 from fpvs_studio.gui.document import ProjectDocument
+from fpvs_studio.runtime.launcher import LaunchSettings
 from fpvs_studio.runtime.session_export import (
     SESSION_CONDITION_HISTORY_HEADER,
     write_participant_summary,
@@ -134,6 +135,59 @@ def test_launch_compiled_session_refreshes_stale_participant_summary(
     assert [row["PID"] for row in rows] == ["1", "2"]
     workbook = load_workbook(summary_path.with_suffix(".xlsx"))
     assert workbook["Participant Summary"]["A3"].value == "2"
+
+
+def test_experiment_test_mode_uses_null_trigger_launch_settings(
+    multi_condition_project,
+    multi_condition_project_root: Path,
+    monkeypatch,
+) -> None:
+    document = ProjectDocument(
+        project_root=multi_condition_project_root,
+        project=multi_condition_project.model_copy(deep=True),
+    )
+    session_plan = compile_session_plan(
+        multi_condition_project,
+        refresh_hz=60.0,
+        project_root=multi_condition_project_root,
+        random_seed=55,
+    )
+    captured_launch_settings: list[LaunchSettings] = []
+
+    def _launch_session(_project_root, _session_plan, **kwargs):
+        captured_launch_settings.append(kwargs["launch_settings"])
+        return SessionExecutionSummary(
+            project_id=session_plan.project_id,
+            session_id=session_plan.session_id,
+            engine_name="stub",
+            run_mode=RunMode.SESSION,
+            participant_number="2",
+            total_condition_count=session_plan.total_runs,
+            completed_condition_count=session_plan.total_runs,
+        )
+
+    monkeypatch.setattr("fpvs_studio.gui.document.launch_session", _launch_session)
+
+    document.launch_compiled_session(
+        session_plan,
+        participant_number="2",
+        display_index=None,
+    )
+    document.set_experiment_test_mode_enabled(True)
+    document.launch_compiled_session(
+        session_plan,
+        participant_number="2",
+        display_index=None,
+    )
+
+    assert document.project.settings.triggers.enabled is True
+    assert document.project.settings.triggers.serial_port == "COM3"
+    assert captured_launch_settings[0].serial_enabled is True
+    assert captured_launch_settings[0].verify_refresh_rate is True
+    assert captured_launch_settings[1].serial_enabled is False
+    assert captured_launch_settings[1].verify_refresh_rate is False
+    assert captured_launch_settings[1].serial_port == "COM3"
+    assert not hasattr(captured_launch_settings[1], "test_mode")
 
 
 def _write_history_rows(path: Path, rows: list[dict[str, str]]) -> None:

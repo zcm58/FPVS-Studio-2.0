@@ -122,6 +122,7 @@ class ProjectDocument(
         self._session_export_mode = EXPORT_MODE_FULL
         self._require_biosemi_recording_confirmation = True
         self._show_sophia_mode_ticker = False
+        self._experiment_test_mode_enabled = False
         self._last_session_plan: SessionPlan | None = None
         self._image_normalization_scan_cache: (
             tuple[
@@ -204,13 +205,21 @@ class ProjectDocument(
     def require_biosemi_recording_confirmation(self) -> bool:
         """Return whether GUI launches require the BioSemi recording safety check."""
 
-        return self._require_biosemi_recording_confirmation
+        return (
+            self._require_biosemi_recording_confirmation and not self._experiment_test_mode_enabled
+        )
 
     @property
     def show_sophia_mode_ticker(self) -> bool:
         """Return whether Home should show the Sophia Mode ticker."""
 
         return self._show_sophia_mode_ticker
+
+    @property
+    def experiment_test_mode_enabled(self) -> bool:
+        """Return whether launches use the explicit no-hardware verification mode."""
+
+        return self._experiment_test_mode_enabled
 
     @property
     def last_session_plan(self) -> SessionPlan | None:
@@ -371,6 +380,15 @@ class ProjectDocument(
         if self._show_sophia_mode_ticker == enabled:
             return
         self._show_sophia_mode_ticker = enabled
+        self.project_changed.emit()
+
+    def set_experiment_test_mode_enabled(self, enabled: bool) -> None:
+        """Set the app-level experiment verification launch preference."""
+
+        enabled = bool(enabled)
+        if self._experiment_test_mode_enabled == enabled:
+            return
+        self._experiment_test_mode_enabled = enabled
         self.project_changed.emit()
 
     def _generate_unused_session_seed(self) -> int:

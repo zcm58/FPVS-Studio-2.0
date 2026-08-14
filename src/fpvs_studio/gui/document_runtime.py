@@ -38,6 +38,7 @@ class DocumentRuntimeMixin:
         _project: ProjectFile
         _project_root: Path
         _session_export_mode: str
+        _experiment_test_mode_enabled: bool
         _last_session_plan: SessionPlan | None
         session_plan_changed: Any
 
@@ -154,7 +155,8 @@ class DocumentRuntimeMixin:
                     fullscreen=fullscreen,
                     display_index=display_index,
                     serial_enabled=(
-                        trigger_settings.enabled
+                        not self._experiment_test_mode_enabled
+                        and trigger_settings.enabled
                         and trigger_settings.backend == TriggerBackendKind.SERIAL
                     ),
                     serial_port=trigger_settings.serial_port,
@@ -163,6 +165,7 @@ class DocumentRuntimeMixin:
                     serial_reset_code=trigger_settings.reset_code,
                     serial_reset_delay_ms=trigger_settings.reset_delay_ms,
                     strict_timing_warmup=False,
+                    verify_refresh_rate=not self._experiment_test_mode_enabled,
                     timing_miss_threshold_multiplier=4.0,
                     completion_screen_seconds=0.5,
                     export_mode=self._session_export_mode,

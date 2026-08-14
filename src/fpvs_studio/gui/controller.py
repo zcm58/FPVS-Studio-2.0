@@ -9,6 +9,7 @@ import ctypes
 import os
 import shutil
 import stat
+import sys
 import traceback
 from collections.abc import Callable
 from ctypes import wintypes
@@ -66,7 +67,16 @@ _RECENT_PROJECT_ROOTS_KEY = "projects/recent_project_roots"
 _RUN_EXPORT_MODE_KEY = "exports/run_export_mode"
 _BIOSEMI_RECORDING_CONFIRMATION_KEY = "launch/require_biosemi_recording_confirmation"
 _SOPHIA_MODE_TICKER_KEY = "launch/show_sophia_mode_ticker"
+_EXPERIMENT_TEST_MODE_KEY = "launch/experiment_test_mode"
+_LEGACY_LINUX_DEVELOPMENT_TEST_MODE_KEY = "launch/linux_development_test_mode"
 _MAX_RECENT_PROJECTS = 8
+
+
+def experiment_test_mode_available() -> bool:
+    """Return whether source-mode experiment verification is supported on this host."""
+
+    supported_platform = sys.platform.startswith("linux") or sys.platform.startswith("win")
+    return supported_platform and not bool(getattr(sys, "frozen", False))
 
 
 def _show_error(parent: QWidget | None, title: str, error: Exception) -> None:
@@ -401,6 +411,41 @@ class StudioController(QObject):
         if self.main_window is not None:
             self.main_window.document.set_show_sophia_mode_ticker(enabled)
 
+    def experiment_test_mode_enabled(self) -> bool:
+        """Return the explicit no-hardware launch preference for development testing."""
+
+        if not experiment_test_mode_available():
+            return False
+        if self._settings.contains(_EXPERIMENT_TEST_MODE_KEY):
+            return bool(
+                self._settings.value(
+                    _EXPERIMENT_TEST_MODE_KEY,
+                    False,
+                    type=bool,
+                )
+            )
+        return bool(
+            self._settings.value(
+                _LEGACY_LINUX_DEVELOPMENT_TEST_MODE_KEY,
+                False,
+                type=bool,
+            )
+        )
+
+    def set_experiment_test_mode_enabled(self, enabled: bool) -> None:
+        """Persist the cross-platform source-mode launch preference."""
+
+        enabled = bool(enabled)
+        if enabled and not experiment_test_mode_available():
+            raise ValueError(
+                "Experiment test mode is available only in source-tree Windows and Linux runs."
+            )
+        self._settings.setValue(_EXPERIMENT_TEST_MODE_KEY, enabled)
+        self._settings.remove(_LEGACY_LINUX_DEVELOPMENT_TEST_MODE_KEY)
+        self._settings.sync()
+        if self.main_window is not None:
+            self.main_window.document.set_experiment_test_mode_enabled(enabled)
+
     def ensure_fpvs_root_configured(self) -> bool:
         """Require a valid FPVS Studio root folder before normal workflows are shown."""
 
@@ -603,6 +648,9 @@ class StudioController(QObject):
             ),
             sophia_mode_ticker_enabled=self.show_sophia_mode_ticker(),
             on_sophia_mode_ticker_enabled_changed=self.set_show_sophia_mode_ticker,
+            experiment_test_mode_available=experiment_test_mode_available(),
+            experiment_test_mode_enabled=self.experiment_test_mode_enabled(),
+            on_experiment_test_mode_changed=self.set_experiment_test_mode_enabled,
             parent=parent,
         )
         dialog.exec()
@@ -613,6 +661,7 @@ class StudioController(QObject):
             self.require_biosemi_recording_confirmation()
         )
         document.set_show_sophia_mode_ticker(self.show_sophia_mode_ticker())
+        document.set_experiment_test_mode_enabled(self.experiment_test_mode_enabled())
         self.record_recent_project_root(document.project_root)
         previous_window = self.main_window
         self.main_window = StudioMainWindow(

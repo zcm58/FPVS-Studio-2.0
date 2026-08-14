@@ -55,10 +55,12 @@ from fpvs_studio.gui.processing_page import (
     BundleImportProcessingPage,
 )
 from fpvs_studio.gui.run_page import (
+    TEST_MODE_PARTICIPANT_NUMBER,
     BioSemiRecordingConfirmationDialog,
     LaunchTaskResult,
     ParticipantLaunchDetails,
     ParticipantNumberDialog,
+    TestModeLaunchConfirmationDialog,
 )
 from fpvs_studio.gui.setup_wizard_page import SetupWizardPage
 from fpvs_studio.gui.update_dialog import UpdateDialog
@@ -693,7 +695,15 @@ class StudioMainWindow(QMainWindow):
         dialog = BioSemiRecordingConfirmationDialog(self)
         return dialog.exec() == int(dialog.DialogCode.Accepted)
 
+    def _confirm_test_mode_launch(self) -> bool:
+        dialog = TestModeLaunchConfirmationDialog(self)
+        return dialog.exec() == int(dialog.DialogCode.Accepted)
+
     def _collect_launch_participant_details(self) -> ParticipantLaunchDetails | None:
+        if self.document.experiment_test_mode_enabled:
+            if not self._confirm_test_mode_launch():
+                return None
+            return ParticipantLaunchDetails(participant_number=TEST_MODE_PARTICIPANT_NUMBER)
         while True:
             participant_details = self._prompt_participant_number()
             if participant_details is None:
@@ -789,7 +799,11 @@ class StudioMainWindow(QMainWindow):
                 ),
             )
             self.statusBar().showMessage(
-                f"Runtime launch aborted for participant {participant_value}.",
+                (
+                    "Experiment test launch aborted."
+                    if self.document.experiment_test_mode_enabled
+                    else f"Runtime launch aborted for participant {participant_value}."
+                ),
                 5000,
             )
             return
@@ -807,7 +821,11 @@ class StudioMainWindow(QMainWindow):
             ),
         )
         self.statusBar().showMessage(
-            f"Runtime launch completed for participant {participant_value}.",
+            (
+                "Experiment test launch completed."
+                if self.document.experiment_test_mode_enabled
+                else f"Runtime launch completed for participant {participant_value}."
+            ),
             5000,
         )
 

@@ -27,6 +27,7 @@ def test_launch_settings_default_to_strict_timing_fail_fast() -> None:
 
     assert settings.strict_timing is True
     assert settings.strict_timing_warmup is True
+    assert settings.verify_refresh_rate is True
     assert runtime_options["verify_refresh_rate"] is True
     assert "test_mode" not in runtime_options
     assert settings.timing_miss_threshold_multiplier == 1.5
@@ -36,6 +37,10 @@ def test_launch_settings_default_to_strict_timing_fail_fast() -> None:
     assert settings.export_mode == EXPORT_MODE_FULL
 
 
+def test_launch_settings_can_explicitly_disable_connected_refresh_verification() -> None:
+    settings = LaunchSettings(verify_refresh_rate=False)
+
+    assert settings.as_runtime_options()["verify_refresh_rate"] is False
 
 
 def test_launch_session_preflight_rejects_windowed_mode_when_strict_timing_enabled(
@@ -67,8 +72,6 @@ def test_launch_session_preflight_rejects_windowed_mode_when_strict_timing_enabl
         unregister_engine("stub-strict-fullscreen")
 
     assert captures == {}
-
-
 
 
 def test_launch_session_allows_windowed_mode_when_strict_timing_disabled(
@@ -116,8 +119,6 @@ def test_launch_session_allows_windowed_mode_when_strict_timing_disabled(
     assert captures["runtime_options"]["strict_timing"] is False
 
 
-
-
 def test_launch_session_rejects_invalid_display_index_before_engine_creation(
     sample_project,
     sample_project_root,
@@ -149,8 +150,6 @@ def test_launch_session_rejects_invalid_display_index_before_engine_creation(
         unregister_engine("stub-invalid-display")
 
     assert captures == {}
-
-
 
 
 def test_launch_session_rejects_invalid_serial_baudrate_before_engine_creation(
@@ -219,8 +218,6 @@ def test_launch_session_rejects_non_boolean_fullscreen_before_engine_creation(
     assert captures == {}
 
 
-
-
 def test_launch_session_rejects_non_boolean_strict_timing_warmup_before_engine_creation(
     sample_project,
     sample_project_root,
@@ -250,6 +247,39 @@ def test_launch_session_rejects_non_boolean_strict_timing_warmup_before_engine_c
             )
     finally:
         unregister_engine("stub-invalid-strict-warmup")
+
+    assert captures == {}
+
+
+def test_launch_session_rejects_non_boolean_refresh_verification_before_engine_creation(
+    sample_project,
+    sample_project_root,
+) -> None:
+    captures: dict[str, object] = {}
+    register_engine("stub-invalid-refresh-verification", lambda: StubEngine(captures))
+    try:
+        session_plan = compile_session_plan(
+            sample_project,
+            refresh_hz=60.0,
+            project_root=sample_project_root,
+            random_seed=39,
+        )
+
+        with pytest.raises(
+            LaunchSettingsError,
+            match="verify_refresh_rate must be a boolean",
+        ):
+            launch_session(
+                sample_project_root,
+                session_plan,
+                participant_number=PARTICIPANT_NUMBER,
+                launch_settings=LaunchSettings(
+                    engine_name="stub-invalid-refresh-verification",
+                    verify_refresh_rate="no",  # type: ignore[arg-type]
+                ),
+            )
+    finally:
+        unregister_engine("stub-invalid-refresh-verification")
 
     assert captures == {}
 
@@ -317,8 +347,6 @@ def test_launch_run_rejects_compact_export_mode_before_engine_creation(
     assert captures == {}
 
 
-
-
 def test_launch_session_rejects_blank_participant_number_before_engine_creation(
     sample_project,
     sample_project_root,
@@ -346,8 +374,6 @@ def test_launch_session_rejects_blank_participant_number_before_engine_creation(
         unregister_engine("stub-empty-participant")
 
     assert captures == {}
-
-
 
 
 def test_launch_session_rejects_non_digit_participant_number_before_engine_creation(

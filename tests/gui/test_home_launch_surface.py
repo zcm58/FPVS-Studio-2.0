@@ -28,7 +28,10 @@ from tests.gui.helpers import (
 from fpvs_studio.core.enums import RunMode
 from fpvs_studio.core.execution import SessionExecutionSummary
 from fpvs_studio.gui.controller import StudioController
-from fpvs_studio.gui.run_page import ParticipantLaunchDetails
+from fpvs_studio.gui.run_page import (
+    TEST_MODE_PARTICIPANT_NUMBER,
+    ParticipantLaunchDetails,
+)
 
 
 def _assert_button_contents_fit(button: QPushButton) -> None:
@@ -207,6 +210,54 @@ def test_ready_home_launch_does_not_construct_setup_wizard(
 
     assert captures["participant_number"] == "0007"
     assert reopened._setup_wizard_page is None
+
+
+def test_home_test_mode_acknowledgement_replaces_participant_prompt(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Home Test Mode")
+    window.document.set_experiment_test_mode_enabled(True)
+    acknowledgements: list[bool] = []
+    monkeypatch.setattr(
+        window,
+        "_confirm_test_mode_launch",
+        lambda: acknowledgements.append(True) or True,
+    )
+    monkeypatch.setattr(
+        window,
+        "_prompt_participant_number",
+        lambda: (_ for _ in ()).throw(
+            AssertionError("Participant dialog must not open in Experiment Test Mode")
+        ),
+    )
+
+    details = window._collect_launch_participant_details()
+
+    assert acknowledgements == [True]
+    assert details == ParticipantLaunchDetails(participant_number=TEST_MODE_PARTICIPANT_NUMBER)
+
+
+def test_home_test_mode_cancel_stops_before_participant_prompt(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Cancelled Test Mode")
+    window.document.set_experiment_test_mode_enabled(True)
+    monkeypatch.setattr(window, "_confirm_test_mode_launch", lambda: False)
+    monkeypatch.setattr(
+        window,
+        "_prompt_participant_number",
+        lambda: (_ for _ in ()).throw(
+            AssertionError("Participant dialog must not open in Experiment Test Mode")
+        ),
+    )
+
+    assert window._collect_launch_participant_details() is None
 
 
 def test_home_quick_action_buttons_present_and_wired(

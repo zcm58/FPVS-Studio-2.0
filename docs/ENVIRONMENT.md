@@ -75,11 +75,16 @@ The supported launch path is the fullscreen PsychoPy session runtime.
 That means:
 
 - the GUI exposes `Launch Experiment` through the normal session runtime
-- launch settings use explicit presentation and timing-QC options; there is no
-  production/test mode gate
+- launch settings use explicit presentation, trigger, refresh-verification, and
+  timing-QC options; there is no runtime production/test Boolean gate
 - fullscreen playback is the current default and is not user-configurable in the GUI
 - serial trigger settings remain backend fields, but they are not exposed in the
   current GUI until the hardware workflow is ready
+
+Source-tree runs on Windows and Linux expose an app-level `Experiment Test Mode`. It
+uses the same fullscreen compiled session and timing QC while explicitly disabling
+serial output, the Sophia/BioSemi gate, connected-display refresh verification, and
+participant collection. Packaged builds do not expose or honor this development mode.
 
 ## GUI Test Environment
 

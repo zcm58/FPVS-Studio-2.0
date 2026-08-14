@@ -90,8 +90,9 @@ interaction.
   can assign a distinct project name to the portable copy without changing the open
   project, and imports always target the configured absolute FPVS Studio Root Folder.
 - Settings exposes app-level preferences for the FPVS Studio Root Folder, condition
-  templates, run export mode, and Sophia Mode. These preferences are persisted with
-  `QSettings` and remain outside project files.
+  templates, run export mode, Sophia Mode, and source-only Experiment Test Mode on
+  Windows and Linux development hosts. These preferences are persisted with `QSettings`
+  and remain outside project files.
 - The current Setup Wizard does not expose Advanced buttons; dense/internal support
   pages should remain behind guided workflows unless a future plan explicitly
   reintroduces them.

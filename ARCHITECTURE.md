@@ -5,10 +5,11 @@ belong in the focused documents routed by `docs/agent/agent-index.md`.
 
 ## Application Shape
 
-FPVS Studio is a Windows-focused PySide6 authoring application. The GUI edits project
-models and compiles engine-neutral execution contracts. Runtime coordinates sessions;
-presentation is isolated behind an engine interface, with PsychoPy loaded lazily only
-inside the engine package.
+FPVS Studio is a Windows-focused PySide6 authoring application with a source-only
+experiment test mode supported on Windows and Linux development hosts. The GUI edits
+project models and compiles engine-neutral execution contracts. Runtime coordinates
+sessions; presentation is isolated behind an engine interface, with PsychoPy loaded
+lazily only inside the engine package.
 
 ## Package Map
 
@@ -71,6 +72,10 @@ legacy word-size pixel rounding until those settings are explicitly authored.
   sequencing and validation, participant flow, fixation scoring, trigger I/O
   coordination, and result assembly. Task clocks remain outside `RunSpec` and cannot
   change FPVS frame or trigger schedules.
+- The app-level experiment test mode remains outside persisted project and compiled
+  contracts. It explicitly selects null-trigger output and disables connected-display
+  refresh verification while preserving fullscreen playback, compiled schedules, asset
+  checks, timing QC, task flow, and test exports.
 - `ProjectFile` owns the per-participant `manual_removed_electrodes` authoring map saved
   from the launch dialog; it remains outside compiled and runtime playback contracts.
 - Engines render compiled events and one neutral task step at a time; they do not own
