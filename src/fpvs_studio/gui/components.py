@@ -1865,6 +1865,13 @@ def setup_wizard_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
         color: {theme.text_secondary};
         font-size: {FONT_SIZE_META}px;
     }}
+    QPushButton#setup_wizard_condition_presentation_button,
+    QPushButton#setup_wizard_condition_task_button {{
+        min-height: 24px;
+        max-height: 24px;
+        padding-top: 3px;
+        padding-bottom: 3px;
+    }}
     """
     )
 
@@ -1897,7 +1904,7 @@ def welcome_window_stylesheet(theme: StudioTheme | QPalette | None = None) -> st
     QPushButton {{
         border: 1px solid {theme.border};
         border-radius: 10px;
-        padding: 12px 26px;
+        padding: 12px 10px;
         background-color: {theme.surface_elevated};
         color: {theme.text_primary};
         font-size: 16px;

@@ -60,7 +60,7 @@ class ManageProjectsDialog(QDialog):
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle("Manage Projects")
-        self.setMinimumSize(760, 520)
+        self.setMinimumSize(860, 520)
         self.resize(860, 520)
         self._entries: list[ProjectManagementEntry] = []
         self._entries_by_root: dict[str, ProjectManagementEntry] = {}
@@ -170,8 +170,9 @@ class ManageProjectsDialog(QDialog):
         action_row.addWidget(self.close_button)
         layout.addLayout(action_row)
 
-        self.set_project_entries(entries)
         apply_studio_theme(self)
+        self.ensurePolished()
+        self.set_project_entries(entries)
 
     def set_project_entries(self, entries: list[ProjectManagementEntry]) -> None:
         """Replace the project list after controller-owned state changes."""
@@ -221,7 +222,6 @@ class ManageProjectsDialog(QDialog):
         guidance_text = entry.guidance_text if entry is not None else ""
         self.guidance_label.setText(guidance_text)
         self.guidance_label.setVisible(bool(guidance_text))
-        self._sync_guidance_label_height()
         QTimer.singleShot(0, self._sync_guidance_label_height)
         self.open_button.setEnabled(has_entry and entry.can_open if entry else False)
         self.delete_button.setEnabled(has_entry and entry.can_delete if entry else False)

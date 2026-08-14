@@ -150,8 +150,12 @@ def test_project_presentation_dialog_cancel_discards_draft_and_validates_lists(
     editor.text_height_values_edit.setText("0.03, 0.03")
 
     dialog.accept()
-    assert dialog.validation_label.isVisible()
+    # The dialog is intentionally not shown in this state-focused test. Check
+    # whether validation explicitly unhides the label rather than inherited
+    # top-level window visibility.
+    assert not dialog.validation_label.isHidden()
     assert "duplicates" in dialog.validation_label.text().lower()
+    assert dialog.result() != QDialog.DialogCode.Accepted
     assert document.project.settings.presentation == original
 
     dialog.reject()

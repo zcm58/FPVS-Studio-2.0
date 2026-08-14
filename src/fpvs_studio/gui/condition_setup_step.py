@@ -639,6 +639,17 @@ class ConditionSetupStep(QWidget):
     def refresh(self) -> None:
         if self._instructions_committer.pending:
             self._instructions_committer.flush()
+        detail_fields = (
+            self.timing_template_combo,
+            self.condition_name_edit,
+            self.trigger_code_spin,
+            self.modality_combo,
+            self.target_repeats_spin,
+            self.instructions_edit,
+        )
+        for field in detail_fields:
+            field.ensurePolished()
+        _configure_detail_field_widths(detail_fields[0], *detail_fields[1:])
         selected_condition_id = self.selected_condition_id()
         with QSignalBlocker(self.condition_list):
             self.condition_list.clear()

@@ -8,7 +8,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from PySide6.QtCore import QEvent, Qt, Signal
-from PySide6.QtGui import QCloseEvent, QDragEnterEvent, QDropEvent
+from PySide6.QtGui import QCloseEvent, QDragEnterEvent, QDropEvent, QResizeEvent
 from PySide6.QtWidgets import (
     QApplication,
     QGridLayout,
@@ -24,6 +24,7 @@ from fpvs_studio.gui.components import (
     LaunchSurfaceFrame,
     apply_welcome_window_theme,
     mark_welcome_action,
+    refresh_widget_style,
 )
 
 
@@ -82,17 +83,17 @@ class WelcomeWindow(QWidget):
 
         self.action_container = QWidget(self.hero_container)
         self.action_container.setObjectName("welcome_action_container")
-        action_layout = QGridLayout(self.action_container)
-        action_layout.setHorizontalSpacing(12)
-        action_layout.setVerticalSpacing(12)
-        action_layout.setContentsMargins(0, 10, 0, 0)
+        self.action_layout = QGridLayout(self.action_container)
+        self.action_layout.setHorizontalSpacing(12)
+        self.action_layout.setVerticalSpacing(12)
+        self.action_layout.setContentsMargins(0, 10, 0, 0)
 
         self.create_button = QPushButton("Create Project", self.hero_container)
         self.create_button.setObjectName("create_project_button")
         mark_welcome_action(self.create_button, "primary")
         self.create_button.setMinimumHeight(52)
         self.create_button.clicked.connect(self.create_requested.emit)
-        action_layout.addWidget(self.create_button, 0, 0)
+        self.action_layout.addWidget(self.create_button, 0, 0)
 
         self.import_project_button = QPushButton("Import New Project", self.hero_container)
         self.import_project_button.setObjectName("import_project_bundle_button")
@@ -101,14 +102,14 @@ class WelcomeWindow(QWidget):
         self.import_project_button.clicked.connect(
             self.import_project_bundle_requested.emit
         )
-        action_layout.addWidget(self.import_project_button, 0, 1)
+        self.action_layout.addWidget(self.import_project_button, 0, 1)
 
         self.manage_projects_button = QPushButton("Open Existing Project", self.hero_container)
         self.manage_projects_button.setObjectName("open_projects_button")
         mark_welcome_action(self.manage_projects_button, "secondary")
         self.manage_projects_button.setMinimumHeight(52)
         self.manage_projects_button.clicked.connect(self.manage_projects_requested.emit)
-        action_layout.addWidget(self.manage_projects_button, 1, 0)
+        self.action_layout.addWidget(self.manage_projects_button, 1, 0)
 
         self.root_folder_setup_button = QPushButton(
             "Change Root Folder...",
@@ -120,7 +121,7 @@ class WelcomeWindow(QWidget):
         self.root_folder_setup_button.clicked.connect(
             self.root_folder_setup_requested.emit
         )
-        action_layout.addWidget(self.root_folder_setup_button, 1, 1)
+        self.action_layout.addWidget(self.root_folder_setup_button, 1, 1)
         hero_layout.addWidget(
             self.action_container,
             0,
@@ -184,6 +185,11 @@ class WelcomeWindow(QWidget):
             finally:
                 self._theme_refreshing = False
 
+    def resizeEvent(self, event: QResizeEvent) -> None:  # noqa: N802
+        super().resizeEvent(event)
+        if hasattr(self, "action_container"):
+            self._sync_action_layout()
+
     def _apply_theme_styles(self) -> None:
         apply_welcome_window_theme(self)
         action_buttons = (
@@ -192,26 +198,73 @@ class WelcomeWindow(QWidget):
             self.manage_projects_button,
             self.root_folder_setup_button,
         )
-        horizontal_padding = 56
+        for button in action_buttons:
+            refresh_widget_style(button)
+        # The Welcome stylesheet contributes ten pixels of padding and one pixel
+        # of border on each side of the text.
+        horizontal_chrome = 22
         button_width = max(
             220,
             *(
-                button.fontMetrics().horizontalAdvance(button.text()) + horizontal_padding
+                button.fontMetrics().horizontalAdvance(button.text()) + horizontal_chrome
                 for button in action_buttons
             ),
         )
         for button in action_buttons:
             button.setFixedWidth(button_width)
-        action_layout = self.action_container.layout()
-        assert isinstance(action_layout, QGridLayout)
-        margins = action_layout.contentsMargins()
+        self._welcome_button_width = button_width
+        self._sync_action_layout()
+
+    def _sync_action_layout(self) -> None:
+        if not hasattr(self, "_welcome_button_width"):
+            return
+        page_margins = self.launch_surface.page_layout.contentsMargins()
+        content_margins = self.launch_surface.content_layout.contentsMargins()
+        available_width = max(
+            0,
+            min(
+                self.hero_container.maximumWidth(),
+                self.width()
+                - page_margins.left()
+                - page_margins.right()
+                - content_margins.left()
+                - content_margins.right(),
+            ),
+        )
+        two_column_width = (self._welcome_button_width * 2) + 12
+        columns = 2 if two_column_width <= available_width else 1
+        if getattr(self, "_action_columns", None) != columns:
+            buttons = (
+                self.create_button,
+                self.import_project_button,
+                self.manage_projects_button,
+                self.root_folder_setup_button,
+            )
+            for button in buttons:
+                self.action_layout.removeWidget(button)
+            if columns == 2:
+                positions = ((0, 0), (0, 1), (1, 0), (1, 1))
+                self.action_layout.setVerticalSpacing(12)
+                self.action_layout.setContentsMargins(0, 10, 0, 0)
+            else:
+                positions = ((0, 0), (1, 0), (2, 0), (3, 0))
+                self.action_layout.setVerticalSpacing(4)
+                self.action_layout.setContentsMargins(0, 4, 0, 0)
+            for button, (row, column) in zip(buttons, positions, strict=True):
+                self.action_layout.addWidget(button, row, column)
+            self._action_columns = columns
+
+        margins = self.action_layout.contentsMargins()
         self.action_container.setFixedWidth(
-            (button_width * 2)
-            + action_layout.horizontalSpacing()
+            (self._welcome_button_width * columns)
+            + (self.action_layout.horizontalSpacing() if columns == 2 else 0)
             + margins.left()
             + margins.right()
         )
+        self.action_layout.invalidate()
+        self.action_container.updateGeometry()
         self.hero_container.setMinimumWidth(self.action_container.width())
+        self.hero_container.updateGeometry()
 
     def _adopt_app_icon(self) -> None:
         app = QApplication.instance()

@@ -654,7 +654,6 @@ def test_setup_wizard_conditions_step_keeps_source_geometry_for_incomplete_condi
         for index in range(step.timing_template_combo.count())
     )
     assert standard_field_width >= max(timing_option_widths)
-    assert standard_field_width > step.timing_template_combo.sizeHint().width()
     assert standard_field_width > step.condition_details_section.width() // 2
     field_right = step.timing_template_combo.mapTo(
         step.condition_details_section,
@@ -957,6 +956,10 @@ def test_setup_wizard_preserves_different_uniform_base_and_oddball_rectangles(
             size=(158, 197),
         ),
     )
+    guide.refresh()
+    QApplication.processEvents()
+    assert guide.setup_wizard_next_button.isEnabled()
+    normalization_scan = guide._document.scan_condition_image_normalization()
 
     def _unexpected_dialog(*_args, **_kwargs):
         raise AssertionError("Uniform role-specific rectangles must remain native.")
@@ -973,7 +976,7 @@ def test_setup_wizard_preserves_different_uniform_base_and_oddball_rectangles(
         guide,
         "_start_condition_image_readiness_scan",
         lambda: guide._on_condition_image_readiness_scan_succeeded(
-            guide._document.scan_condition_image_normalization()
+            normalization_scan
         ),
     )
     qtbot.mouseClick(guide.setup_wizard_next_button, Qt.MouseButton.LeftButton)

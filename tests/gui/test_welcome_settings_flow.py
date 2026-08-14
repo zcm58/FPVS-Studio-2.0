@@ -203,6 +203,7 @@ def test_welcome_window_actions_fit_minimum_and_default_sizes(
         welcome.resize(width, height)
         QApplication.processEvents()
 
+        assert welcome._action_columns == (1 if width == 760 else 2)
         assert_visible_children_within_parent(welcome)
         for button in action_buttons:
             text_width = button.fontMetrics().horizontalAdvance(button.text())
