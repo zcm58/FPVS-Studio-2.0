@@ -935,6 +935,7 @@ def test_setup_wizard_preserves_different_uniform_base_and_oddball_rectangles(
     _, window = _open_created_project(controller, qtbot, tmp_path, "Role Rectangles")
     guide = window.setup_wizard_page
     step = guide.condition_setup_step
+    monkeypatch.setattr(guide, "_ensure_condition_image_prescan_started", lambda: None)
     guide.open_wizard(step_key="conditions")
     qtbot.mouseClick(step.add_condition_button, Qt.MouseButton.LeftButton)
     condition_id = step.selected_condition_id()

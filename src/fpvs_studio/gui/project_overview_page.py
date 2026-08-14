@@ -144,6 +144,7 @@ class ProjectOverviewEditor(QWidget):
 
         condition_profile_actions = QWidget(condition_profile_group)
         condition_profile_actions.setObjectName("project_condition_profile_actions")
+        self.condition_profile_actions = condition_profile_actions
         condition_profile_actions_layout = QHBoxLayout(condition_profile_actions)
         condition_profile_actions_layout.setContentsMargins(0, 0, 0, 0)
         condition_profile_actions_layout.setSpacing(8)
@@ -232,6 +233,22 @@ class ProjectOverviewEditor(QWidget):
             self.participant_tutorial_checkbox.setChecked(
                 project.settings.fixation_task.participant_tutorial_enabled
             )
+        self._sync_template_action_sizes()
+
+    def _sync_template_action_sizes(self) -> None:
+        """Keep action text and padding visible after the application theme is applied."""
+
+        for button in (
+            self.apply_profile_to_conditions_button,
+            self.manage_templates_button,
+        ):
+            button.setMinimumWidth(button.fontMetrics().horizontalAdvance(button.text()) + 32)
+        self.condition_profile_actions.setMinimumHeight(
+            max(
+                self.apply_profile_to_conditions_button.sizeHint().height(),
+                self.manage_templates_button.sizeHint().height(),
+            )
+        )
 
     def flush_pending_edits(self) -> None:
         self._description_committer.flush()

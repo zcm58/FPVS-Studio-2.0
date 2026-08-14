@@ -690,7 +690,7 @@ def test_full_screen_image_size_preview_edits_sync_with_experiment_page(
     assert editor.screen_width_px_spin.value() == 1920
     assert editor.screen_height_px_spin.value() == 1080
     assert dialog.preview_value_label.text() != original_readout
-    assert "10.0 deg at 100.0 cm" in dialog.preview_value_label.text()
+    assert "10 deg at 100.0 cm" in dialog.preview_value_label.text()
     assert "cm wide" in dialog.preview_value_label.text()
 
     dialog.use_current_resolution_checkbox.setChecked(True)

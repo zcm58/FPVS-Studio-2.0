@@ -100,8 +100,8 @@ def test_setup_wizard_review_uses_centered_confirmation_checklist(
     assert "Random order seed:" not in label_text
     assert "Monitor: 60.00 Hz, Black background" in label_text
     assert "FPVS timing: 6 Hz base, oddball every 5 stimuli (1.2 Hz)" in label_text
-    assert "Image width:" in label_text
-    assert "Fixation cross has been configured" in label_text
+    assert "Presentation: Natural aspect, 5 deg wide; none at 80 cm" in label_text
+    assert "Fixation cross configured; 2 s pre-stream gaze lead-in" in label_text
     assert "Launch requirements are satisfied" not in label_text
     summary_sections = [
         section
