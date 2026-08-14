@@ -1,6 +1,6 @@
 # Cross-Platform Experiment Test Mode
 
-Status: Active
+Status: Completed
 
 ## Goal
 
@@ -44,3 +44,14 @@ hardware, participant data entry, or connected-display refresh verification.
 - "Cross-platform" means the two supported development hosts: Windows and Linux.
 - The source-only guard remains a safety boundary so an installed lab build cannot
   silently bypass hardware and display checks.
+
+## Result
+
+- Windows and Linux source runs expose the same Experiment Test Mode preference.
+- The launch path uses reserved participant ID `0`, null-trigger output, and disabled
+  connected-refresh verification without changing authored project settings.
+- Fullscreen playback, compilation, asset checks, condition/task flow, timing QC, and
+  test exports remain enabled.
+- Local precommit verification passed with 504 unit tests and one expected Windows
+  symlink-privilege skip.
+- GitHub Actions full CI passed on feature commit `347093b`.
