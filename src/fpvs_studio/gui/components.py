@@ -667,16 +667,25 @@ class SetupMetricStrip(QFrame):
         for row, (label_text, value_text) in enumerate(rows):
             label = QLabel(label_text, self)
             label.setProperty("setupMetricLabel", "true")
-            label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
-            label.setMinimumWidth(0)
             value = QLabel(value_text, self)
             value.setProperty("setupMetricValue", "true")
-            value.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
-            value.setMinimumWidth(0)
             if self._center_content:
+                for metric in (label, value):
+                    metric.ensurePolished()
+                    metric.setSizePolicy(
+                        QSizePolicy.Policy.MinimumExpanding,
+                        QSizePolicy.Policy.Preferred,
+                    )
+                    metric.setMinimumWidth(
+                        metric.fontMetrics().horizontalAdvance(metric.text())
+                    )
                 label.setAlignment(Qt.AlignmentFlag.AlignCenter)
                 value.setAlignment(Qt.AlignmentFlag.AlignCenter)
             else:
+                label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+                label.setMinimumWidth(0)
+                value.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+                value.setMinimumWidth(0)
                 value.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
             self._layout.addWidget(label, row, 0)
             self._layout.addWidget(value, row, 1)
