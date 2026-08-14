@@ -13,12 +13,12 @@ from fpvs_studio.core.enums import StimulusModality
 from fpvs_studio.core.execution import RunExecutionSummary
 from fpvs_studio.core.run_spec import RunSpec
 from fpvs_studio.engines.base import FixationTutorialAttemptResult, PresentationEngine
+from fpvs_studio.runtime.display_mode import NativeDisplayMode
 from fpvs_studio.runtime.preflight import (
     PreflightError,
     preflight_run_spec,
     preflight_session_plan,
 )
-from fpvs_studio.runtime.windows_display import WindowsDisplayMode
 from fpvs_studio.triggers.base import TriggerBackend
 
 
@@ -112,14 +112,21 @@ class _PreflightEngine(PresentationEngine):
         return None
 
 
-def _patch_windows_mode(
+def _patch_native_windows_mode(
     monkeypatch: pytest.MonkeyPatch,
     numerator: int,
     denominator: int = 1,
 ) -> None:
     monkeypatch.setattr(
-        "fpvs_studio.runtime.display_refresh.query_primary_windows_display_mode",
-        lambda: WindowsDisplayMode(r"\\.\DISPLAY1", numerator, denominator),
+        "fpvs_studio.runtime.display_refresh.query_primary_native_display_mode",
+        lambda: NativeDisplayMode(
+            platform_name="Windows",
+            display_name=r"\\.\DISPLAY1",
+            refresh_hz=numerator / denominator,
+            source_name="QueryDisplayConfig",
+            exact_refresh=True,
+            mode_reference=f"{numerator}/{denominator}",
+        ),
     )
 
 
@@ -310,7 +317,7 @@ def test_preflight_accepts_measured_refresh_within_tolerance(
     sample_project_root,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    _patch_windows_mode(monkeypatch, 144)
+    _patch_native_windows_mode(monkeypatch, 144)
     run_spec = compile_run_spec(
         sample_project,
         refresh_hz=144.0,
@@ -334,7 +341,7 @@ def test_preflight_rejects_measured_refresh_mismatch(
     sample_project_root,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    _patch_windows_mode(monkeypatch, 60)
+    _patch_native_windows_mode(monkeypatch, 60)
     run_spec = compile_run_spec(
         sample_project,
         refresh_hz=240.0,
@@ -351,12 +358,46 @@ def test_preflight_rejects_measured_refresh_mismatch(
         )
 
 
+def test_preflight_reports_linux_native_mode_mismatch(
+    sample_project,
+    sample_project_root,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "fpvs_studio.runtime.display_refresh.query_primary_native_display_mode",
+        lambda: NativeDisplayMode(
+            platform_name="Linux",
+            display_name="DP-2",
+            refresh_hz=239.914,
+            source_name="KScreen",
+            exact_refresh=False,
+        ),
+    )
+    run_spec = compile_run_spec(
+        sample_project,
+        refresh_hz=120.0,
+        project_root=sample_project_root,
+        run_id="faces-run",
+    )
+
+    with pytest.raises(
+        PreflightError,
+        match=r"Linux reports display mode 239\.914 Hz \(KScreen, DP-2\).*expects 120 Hz",
+    ):
+        preflight_run_spec(
+            sample_project_root,
+            run_spec,
+            engine=_PreflightEngine(239.91),
+            runtime_options={"verify_refresh_rate": True},
+        )
+
+
 def test_preflight_rejects_unavailable_refresh_measurement(
     sample_project,
     sample_project_root,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    _patch_windows_mode(monkeypatch, 60)
+    _patch_native_windows_mode(monkeypatch, 60)
     run_spec = compile_run_spec(
         sample_project,
         refresh_hz=60.0,
@@ -378,7 +419,7 @@ def test_session_preflight_measures_connected_refresh_once(
     sample_project_root,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    _patch_windows_mode(monkeypatch, 60)
+    _patch_native_windows_mode(monkeypatch, 60)
     session_plan = compile_session_plan(
         sample_project,
         refresh_hz=60.0,
@@ -402,7 +443,7 @@ def test_preflight_distinguishes_windows_5994_mode_from_compiled_60_hz(
     sample_project_root,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    _patch_windows_mode(monkeypatch, 60_000, 1_001)
+    _patch_native_windows_mode(monkeypatch, 60_000, 1_001)
     run_spec = compile_run_spec(
         sample_project,
         refresh_hz=60.0,

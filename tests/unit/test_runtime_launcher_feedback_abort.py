@@ -16,18 +16,25 @@ from fpvs_studio.core.compiler import compile_session_plan
 from fpvs_studio.core.execution import RunExecutionSummary, SessionExecutionSummary
 from fpvs_studio.core.serialization import read_json_file
 from fpvs_studio.engines.registry import register_engine, unregister_engine
+from fpvs_studio.runtime.display_mode import NativeDisplayMode
 from fpvs_studio.runtime.launcher import (
     LaunchSettings,
     launch_session,
 )
-from fpvs_studio.runtime.windows_display import WindowsDisplayMode
 
 
 @pytest.fixture(autouse=True)
-def _stable_windows_display_mode(monkeypatch: pytest.MonkeyPatch) -> None:
+def _stable_native_display_mode(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
-        "fpvs_studio.runtime.display_refresh.query_primary_windows_display_mode",
-        lambda: WindowsDisplayMode(r"\\.\DISPLAY1", 60, 1),
+        "fpvs_studio.runtime.display_refresh.query_primary_native_display_mode",
+        lambda: NativeDisplayMode(
+            platform_name="Windows",
+            display_name=r"\\.\DISPLAY1",
+            refresh_hz=60.0,
+            source_name="QueryDisplayConfig",
+            exact_refresh=True,
+            mode_reference="60/1",
+        ),
     )
 
 
@@ -213,5 +220,4 @@ def test_session_launch_exports_timing_violation_status_from_run_result(
     assert condition_history_rows[0]["timing_qc_strict_violation"] == "True"
     assert condition_history_rows[0]["timing_qc_first_bad_phase"] == "run"
     assert condition_history_rows[0]["timing_qc_first_bad_frame_index"] == "1"
-
 

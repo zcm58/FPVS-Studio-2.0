@@ -28,7 +28,7 @@ The runtime worker now drives sessions like this:
 ```text
 SessionPlan
   -> preflight every RunSpec
-  -> read the exact Windows rational mode and verify PsychoPy frame stability once
+  -> read the platform-native primary/default mode and verify PsychoPy frame stability once
   -> compare the approved exact mode to every compiled refresh target
   -> create trigger backend
   -> engine.open_session(...)
@@ -80,15 +80,21 @@ Task assets are preflighted as contained project-relative paths before participa
 screens open. Routine preflight checks existence; deep preflight also decodes task
 images. The selected engine must advertise the neutral modular-task rendering seam.
 
-Default launch settings require connected-display refresh verification. Preflight asks
-Windows `QueryDisplayConfig` for the primary active path's rational configured mode,
-then asks the engine for one fullscreen observation per session. The Windows fraction
-is authoritative for approved-rate selection, so `60000/1001` maps to `59.94 Hz` while
-`60/1` maps to `60 Hz`; PsychoPy validates stable delivery and material agreement but
-does not choose between those modes. Missing/ambiguous native modes, Windows Dynamic
-Refresh Rate, unstable observation, or a mode-versus-compiled mismatch block launch.
-This is independent of the Setup Wizard's one-click detection, so Home and Run cannot
-bypass the hardware check. Verification does not modify the compiled frame schedule.
+Default launch settings require connected-display refresh verification. Preflight first
+asks a runtime-owned platform adapter for the primary/default display's configured
+native mode, then asks the engine for one fullscreen observation per session. Windows
+continues to use `QueryDisplayConfig`; its exact fraction is authoritative for approved-
+rate selection, so `60000/1001` maps to `59.94 Hz` while `60/1` maps to `60 Hz`.
+KDE Linux uses `kscreen-doctor --json` to select the enabled priority output, resolve
+its current mode, and read its VRR policy. Linux X11 uses the active primary XRandR
+mode. Floating Linux mode metadata maps to the nearest approved FPVS rate only within
+the existing measurement tolerance. PsychoPy validates stable delivery and material
+agreement on both platforms; it does not replace the native query. Missing or ambiguous
+native modes, unsupported Wayland compositors, Windows Dynamic Refresh Rate, KDE
+Adaptive Sync/VRR, unstable observation, or a mode-versus-compiled mismatch block
+launch. Native queries are read-only and do not alter display settings. This check is
+independent of the Setup Wizard's one-click detection, so Home and Run cannot bypass
+it, and verification does not modify the compiled frame schedule.
 
 Preflight validates the compiled stimulus payload before playback. Routine participant
 launches require image events to reference existing project-relative files, while full
