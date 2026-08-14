@@ -142,20 +142,13 @@ class ProjectOverviewEditor(QWidget):
         condition_profile_layout.setSpacing(4)
         condition_profile_layout.addWidget(self.condition_profile_combo)
 
-        condition_profile_actions = QWidget(condition_profile_group)
-        condition_profile_actions.setObjectName("project_condition_profile_actions")
-        self.condition_profile_actions = condition_profile_actions
-        condition_profile_actions_layout = QHBoxLayout(condition_profile_actions)
+        condition_profile_actions_layout = QHBoxLayout()
         condition_profile_actions_layout.setContentsMargins(0, 0, 0, 0)
         condition_profile_actions_layout.setSpacing(8)
         condition_profile_actions_layout.addStretch(1)
         condition_profile_actions_layout.addWidget(self.apply_profile_to_conditions_button)
         condition_profile_actions_layout.addWidget(self.manage_templates_button)
-        condition_profile_actions.setSizePolicy(
-            QSizePolicy.Policy.Expanding,
-            QSizePolicy.Policy.Minimum,
-        )
-        condition_profile_layout.addWidget(condition_profile_actions)
+        condition_profile_layout.addLayout(condition_profile_actions_layout)
 
         self.project_overview_card = SectionCard(
             title="Project Details",
@@ -243,12 +236,6 @@ class ProjectOverviewEditor(QWidget):
             self.manage_templates_button,
         ):
             button.setMinimumWidth(button.fontMetrics().horizontalAdvance(button.text()) + 32)
-        self.condition_profile_actions.setMinimumHeight(
-            max(
-                self.apply_profile_to_conditions_button.sizeHint().height(),
-                self.manage_templates_button.sizeHint().height(),
-            )
-        )
 
     def flush_pending_edits(self) -> None:
         self._description_committer.flush()

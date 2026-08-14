@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QPushButton,
+    QSizePolicy,
     QVBoxLayout,
     QWidget,
 )
@@ -59,7 +60,7 @@ class ManageProjectsDialog(QDialog):
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle("Manage Projects")
-        self.setMinimumSize(760, 460)
+        self.setMinimumSize(760, 520)
         self.resize(860, 520)
         self._entries: list[ProjectManagementEntry] = []
         self._entries_by_root: dict[str, ProjectManagementEntry] = {}
@@ -126,6 +127,10 @@ class ManageProjectsDialog(QDialog):
         self.guidance_label = QLabel(detail_panel)
         self.guidance_label.setObjectName("manage_projects_guidance_label")
         self.guidance_label.setWordWrap(True)
+        self.guidance_label.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Minimum,
+        )
         mark_error_text(self.guidance_label)
         detail_layout.addWidget(self.guidance_label)
 

@@ -141,7 +141,7 @@ def test_setup_wizard_review_uses_centered_confirmation_checklist(
         row
         for row in checklist_rows
         if any(
-            label.text() == "Fixation cross has been configured"
+            label.text() == "Fixation cross configured; 2 s pre-stream gaze lead-in"
             for label in row.findChildren(QLabel)
         )
     )

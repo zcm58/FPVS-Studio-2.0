@@ -969,6 +969,13 @@ def test_setup_wizard_preserves_different_uniform_base_and_oddball_rectangles(
         "fpvs_studio.gui.setup_wizard_page.ProgressTask",
         _ImmediateProgressTask,
     )
+    monkeypatch.setattr(
+        guide,
+        "_start_condition_image_readiness_scan",
+        lambda: guide._on_condition_image_readiness_scan_succeeded(
+            guide._document.scan_condition_image_normalization()
+        ),
+    )
     qtbot.mouseClick(guide.setup_wizard_next_button, Qt.MouseButton.LeftButton)
     QApplication.processEvents()
 

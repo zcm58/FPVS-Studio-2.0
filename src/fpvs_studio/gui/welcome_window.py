@@ -211,6 +211,7 @@ class WelcomeWindow(QWidget):
             + margins.left()
             + margins.right()
         )
+        self.hero_container.setMinimumWidth(self.action_container.width())
 
     def _adopt_app_icon(self) -> None:
         app = QApplication.instance()

@@ -89,7 +89,7 @@ def test_setup_wizard_surfaces_steps_and_keeps_shared_editors_available(
     assert project_editor.findChild(QLabel, "project_overview_step_badge") is None
     assert project_editor.findChild(QWidget, "project_overview_checklist") is None
     assert project_editor.findChild(QWidget, "project_condition_profile_group") is not None
-    assert project_editor.findChild(QWidget, "project_condition_profile_actions") is not None
+    assert project_editor.findChild(QWidget, "project_condition_profile_actions") is None
     assert dashboard.step_title_label.isVisible() is False
     assert dashboard.step_status_badge.isVisible() is False
     assert project_editor.project_root_value.wordWrap() is False

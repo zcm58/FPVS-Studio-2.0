@@ -1256,8 +1256,8 @@ def studio_theme_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
     QPushButton[compactInfoAction="true"] {{
         border-radius: 15px;
         padding: 0;
-        min-height: 30px;
-        max-height: 30px;
+        min-height: 28px;
+        max-height: 28px;
         font-weight: 700;
     }}
     QPushButton[destructiveActionRole="true"] {{
