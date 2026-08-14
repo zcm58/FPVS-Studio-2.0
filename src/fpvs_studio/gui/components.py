@@ -651,6 +651,8 @@ class SetupMetricStrip(QFrame):
             self._layout.setContentsMargins(12, 10, 12, 10)
         self._layout.setHorizontalSpacing(10 if compact else 14)
         self._layout.setVerticalSpacing(4 if compact else 8)
+        if center_content:
+            self._layout.setColumnStretch(0, 1)
         self._layout.setColumnStretch(1, 1)
 
     def set_rows(self, rows: list[tuple[str, str]]) -> None:
@@ -1868,7 +1870,9 @@ def setup_wizard_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
     QPushButton#setup_wizard_condition_presentation_button,
     QPushButton#setup_wizard_condition_task_button,
     QPushButton#apply_profile_to_conditions_button,
-    QPushButton#project_manage_templates_button {{
+    QPushButton#project_manage_templates_button,
+    QPushButton#image_size_full_screen_preview_button,
+    QPushButton#configure_project_presentation_button {{
         min-height: 24px;
         max-height: 24px;
         padding-top: 3px;
