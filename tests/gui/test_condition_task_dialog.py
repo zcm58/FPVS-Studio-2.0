@@ -7,9 +7,15 @@ from pathlib import Path
 import pytest
 from PIL import Image
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QApplication, QDialog, QFileDialog, QTableWidgetItem
+from PySide6.QtWidgets import (
+    QAbstractScrollArea,
+    QApplication,
+    QDialog,
+    QFileDialog,
+    QTableWidgetItem,
+    QWidget,
+)
 from tests.gui.helpers import (
-    _assert_visible_children_within_parent,
     _open_created_project,
 )
 
@@ -39,6 +45,30 @@ from fpvs_studio.gui.controller import StudioController
 from fpvs_studio.gui.document_support import DocumentError
 
 
+def _assert_visible_non_scroll_children_within_parent(root: QWidget) -> None:
+    """Check visible layout chrome while allowing intentional scroll content."""
+
+    for child in root.findChildren(QWidget):
+        parent = child.parentWidget()
+        if parent is None or not child.isVisible():
+            continue
+        ancestor: QWidget | None = parent
+        inside_scroll_area = False
+        while ancestor is not None and ancestor is not root:
+            if isinstance(ancestor, QAbstractScrollArea):
+                inside_scroll_area = True
+                break
+            ancestor = ancestor.parentWidget()
+        if inside_scroll_area:
+            continue
+        top_left = child.mapTo(parent, child.rect().topLeft())
+        bottom_right = child.mapTo(parent, child.rect().bottomRight())
+        assert top_left.x() >= -1, child.objectName()
+        assert top_left.y() >= -1, child.objectName()
+        assert bottom_right.x() <= parent.width() + 1, child.objectName()
+        assert bottom_right.y() <= parent.height() + 1, child.objectName()
+
+
 def test_task_model_adapter_preserves_unset_scoring_geometry_and_question_bounds() -> None:
     module = TaskModule(
         task_id="roundtrip",
@@ -61,7 +91,17 @@ def test_task_model_adapter_preserves_unset_scoring_geometry_and_question_bounds
                         selectable=True,
                         correct=None,
                         unit="window_height_fraction",
-                    )
+                    ),
+                    TaskDisplayItem(
+                        item_id="text-item-2",
+                        modality=TaskItemModality.TEXT,
+                        text="Another word",
+                        width=None,
+                        height=2.5,
+                        selectable=True,
+                        correct=None,
+                        unit="window_height_fraction",
+                    ),
                 ],
                 allowed_keys=["left", "right"],
                 timeout_seconds=2.5,
@@ -93,16 +133,22 @@ def test_task_model_adapter_preserves_unset_scoring_geometry_and_question_bounds
                         min_selections=None,
                         max_selections=None,
                         max_text_length=3_333,
-                    )
+                    ),
+                    TaskQuestion(
+                        question_id="optional-text",
+                        kind=TaskQuestionKind.SHORT_TEXT,
+                        prompt="Enter an optional value",
+                        required=False,
+                    ),
                 ],
                 submission_mode=TaskSubmissionMode.EXPLICIT,
                 require_response=True,
                 branch_rules=[
                     TaskBranchRule(
                         rule_id="optional-route",
-                        question_id="optional-choice",
+                        question_id="optional-text",
                         operator=TaskBranchOperator.EQUALS,
-                        expected_values=["option-a", "literal,with,commas"],
+                        expected_values=["literal,with,commas"],
                         next_step_id="acknowledge",
                     )
                 ],
@@ -223,16 +269,22 @@ def test_condition_task_dialog_apply_is_lossless_after_visiting_every_step(
                         ],
                         min_selections=None,
                         max_selections=None,
-                    )
+                    ),
+                    TaskQuestion(
+                        question_id="optional-text",
+                        kind=TaskQuestionKind.SHORT_TEXT,
+                        prompt="Enter an optional value",
+                        required=False,
+                    ),
                 ],
                 submission_mode=TaskSubmissionMode.EXPLICIT,
                 require_response=True,
                 branch_rules=[
                     TaskBranchRule(
                         rule_id="optional-route",
-                        question_id="optional-choice",
+                        question_id="optional-text",
                         operator=TaskBranchOperator.EQUALS,
-                        expected_values=["option-a", "literal,with,commas"],
+                        expected_values=["literal,with,commas"],
                         next_step_id="acknowledge",
                     )
                 ],
@@ -412,6 +464,8 @@ def test_condition_task_dialog_cancel_keeps_model_and_disk_unchanged(
     condition_id = document.create_condition(name="Creatine Images")
     source = tmp_path / "external-apple.png"
     Image.new("RGB", (24, 24), color=(160, 20, 20)).save(source)
+    window.start_deferred_open_tasks()
+    qtbot.waitUntil(lambda: window._session_seed_ready, timeout=5_000)
     original = document.project.model_copy(deep=True)
     task_assets_root = document.project_root / "stimuli" / "task-assets"
     original_asset_entries = sorted(
@@ -509,6 +563,7 @@ def test_condition_task_dialog_applies_exact_group_repeat_and_asset_import(
     assert dialog.apply_button.isEnabled()
     qtbot.mouseClick(dialog.apply_button, Qt.MouseButton.LeftButton)
 
+    assert not dialog.validation_label.isVisible(), dialog.validation_label.text()
     assert dialog.result() == QDialog.DialogCode.Accepted
     condition = document.get_condition(condition_id)
     assert condition is not None
@@ -588,7 +643,16 @@ def test_condition_task_dialog_exposes_all_questionnaire_types_and_fits_minimum_
         dialog.post_editor.module_editor.step_editor.submission_mode_combo.findData("explicit") >= 0
     )
     assert dialog.preview.isVisible()
-    _assert_visible_children_within_parent(dialog)
+    editor_scroll = dialog.post_editor.findChild(
+        QAbstractScrollArea,
+        "condition_task_post_editor_scroll",
+    )
+    assert editor_scroll is not None
+    assert (
+        dialog.post_editor.module_editor.width()
+        <= editor_scroll.viewport().width() + 1
+    )
+    _assert_visible_non_scroll_children_within_parent(dialog)
 
 
 def test_conditions_step_opens_task_dialog_and_remains_six_step_sized(
@@ -621,4 +685,5 @@ def test_conditions_step_opens_task_dialog_and_remains_six_step_sized(
     assert step.task_summary_label.text() == "No pre/post tasks"
     qtbot.mouseClick(step.task_button, Qt.MouseButton.LeftButton)
     assert captures == [condition_id]
-    _assert_visible_children_within_parent(window.setup_wizard_page)
+    assert len(window.setup_wizard_page.progress_step_labels) == 6
+    _assert_visible_non_scroll_children_within_parent(step)

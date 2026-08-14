@@ -34,6 +34,7 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QPushButton,
     QScrollArea,
+    QSizePolicy,
     QSpinBox,
     QStackedWidget,
     QTableWidget,
@@ -985,11 +986,14 @@ class QuestionnaireEditor(QWidget):
         editor_panel = QGroupBox("Selected question", self)
         editor_panel.setObjectName("condition_task_selected_question_group")
         editor_panel.setLayout(self.question_form)
-        content = QHBoxLayout(self)
+        # The questionnaire lives inside the module editor's vertical scroll area.
+        # Stack its list and editor so every field can shrink to the dialog's
+        # documented minimum width without introducing hidden horizontal overflow.
+        content = QVBoxLayout(self)
         content.setContentsMargins(0, 0, 0, 0)
         content.setSpacing(10)
-        content.addWidget(list_column, 2)
-        content.addWidget(editor_panel, 3)
+        content.addWidget(list_column)
+        content.addWidget(editor_panel)
 
         for widget_signal in (
             self.question_id_edit.textChanged,
@@ -2112,6 +2116,10 @@ class TaskPhaseEditor(QWidget):
             allow_replaces_start_gate=phase_label.casefold() == "pre",
             parent=self,
         )
+        self.module_editor.setSizePolicy(
+            QSizePolicy.Policy.Ignored,
+            QSizePolicy.Policy.Preferred,
+        )
         self.module_editor.changed.connect(self._store_selected)
         self.module_editor.selection_changed.connect(self.selection_changed)
         scroll = QScrollArea(self)
@@ -2806,7 +2814,9 @@ class ConditionTaskDialog(QDialog):
         self.apply_button.setText("Apply Tasks")
         mark_primary_action(self.apply_button)
         mark_secondary_action(self.button_box.button(QDialogButtonBox.StandardButton.Cancel))
-        self.button_box.accepted.connect(self.accept)
+        # QDialogButtonBox classifies StandardButton.Apply as ApplyRole, so it does
+        # not emit accepted(). Connect the authored Apply action directly.
+        self.apply_button.clicked.connect(self.accept)
         self.button_box.rejected.connect(self.reject)
 
         layout = QVBoxLayout(self)
