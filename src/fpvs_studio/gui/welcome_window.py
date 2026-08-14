@@ -262,6 +262,7 @@ class WelcomeWindow(QWidget):
             + margins.right()
         )
         self.action_layout.invalidate()
+        self.action_container.setFixedHeight(self.action_layout.sizeHint().height())
         self.action_container.updateGeometry()
         self.hero_container.setMinimumWidth(self.action_container.width())
         self.hero_container.updateGeometry()
