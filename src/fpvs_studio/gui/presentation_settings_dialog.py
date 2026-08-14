@@ -318,16 +318,16 @@ class PresentationDefaultsEditor(QWidget):
             self.text_height_unit_combo,
             self.position_unit_combo,
         ):
-            combo.currentIndexChanged.connect(self.changed.emit)
+            combo.currentIndexChanged.connect(self._emit_changed)
         for spin in (
             self.geometry_width_spin,
             self.geometry_height_spin,
             self.position_x_spin,
             self.position_y_spin,
         ):
-            spin.valueChanged.connect(self.changed.emit)
+            spin.valueChanged.connect(self._emit_changed)
         for edit in (self.text_height_values_edit, self.text_color_edit):
-            edit.textChanged.connect(self.changed.emit)
+            edit.textChanged.connect(self._emit_changed)
 
         self._load(initial)
 
@@ -355,13 +355,18 @@ class PresentationDefaultsEditor(QWidget):
             check.toggled.connect(self._update_group_enablement)
             if name == "image_geometry":
                 check.toggled.connect(self._update_geometry_state)
-            check.toggled.connect(self.changed.emit)
+            check.toggled.connect(self._emit_changed)
             check.setToolTip("Clear this option to reset the entire group to its inherited value.")
             group_layout.addWidget(check)
             self._override_checks[name] = check
         group_layout.addWidget(content)
         content.setProperty("presentationGroupContent", name)
         return group
+
+    def _emit_changed(self, *_args: object) -> None:
+        """Normalize value-bearing widget signals to the editor's no-argument signal."""
+
+        self.changed.emit()
 
     def _load(self, value: StimulusPresentationOverride) -> None:
         self._loading = True
