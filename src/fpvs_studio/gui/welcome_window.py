@@ -202,6 +202,8 @@ class WelcomeWindow(QWidget):
         )
         for button in action_buttons:
             button.setFixedWidth(button_width)
+        action_layout = self.action_container.layout()
+        assert isinstance(action_layout, QGridLayout)
         margins = action_layout.contentsMargins()
         self.action_container.setFixedWidth(
             (button_width * 2)
