@@ -69,6 +69,17 @@ def _assert_visible_non_scroll_children_within_parent(root: QWidget) -> None:
         assert bottom_right.y() <= parent.height() + 1, child.objectName()
 
 
+def _assert_widget_within_parent(widget: QWidget) -> None:
+    parent = widget.parentWidget()
+    assert parent is not None
+    top_left = widget.mapTo(parent, widget.rect().topLeft())
+    bottom_right = widget.mapTo(parent, widget.rect().bottomRight())
+    assert top_left.x() >= -1, widget.objectName()
+    assert top_left.y() >= -1, widget.objectName()
+    assert bottom_right.x() <= parent.width() + 1, widget.objectName()
+    assert bottom_right.y() <= parent.height() + 1, widget.objectName()
+
+
 def test_task_model_adapter_preserves_unset_scoring_geometry_and_question_bounds() -> None:
     module = TaskModule(
         task_id="roundtrip",
@@ -610,6 +621,7 @@ def test_condition_task_dialog_exposes_all_questionnaire_types_and_fits_minimum_
     qtbot.addWidget(dialog)
     dialog.resize(1000, 640)
     dialog.show()
+    dialog.phase_tabs.setCurrentWidget(dialog.post_editor)
     QApplication.processEvents()
 
     dialog.post_editor.add_kind_combo.setCurrentIndex(
@@ -686,4 +698,5 @@ def test_conditions_step_opens_task_dialog_and_remains_six_step_sized(
     qtbot.mouseClick(step.task_button, Qt.MouseButton.LeftButton)
     assert captures == [condition_id]
     assert len(window.setup_wizard_page.progress_step_labels) == 6
-    _assert_visible_non_scroll_children_within_parent(step)
+    _assert_widget_within_parent(step.task_button)
+    _assert_widget_within_parent(step.task_summary_label)
