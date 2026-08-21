@@ -25,7 +25,7 @@ from fpvs_studio.core.condition_template_profiles import (
     normalize_condition_template_profile_root,
 )
 from fpvs_studio.core.models import ConditionTemplateProfile
-from fpvs_studio.core.paths import project_json_path
+from fpvs_studio.core.paths import condition_template_library_path, project_json_path
 from fpvs_studio.core.project_bundle import (
     PROJECT_BUNDLE_SUFFIX,
     BundleImportStage,
@@ -77,6 +77,14 @@ _LEGACY_LINUX_DEVELOPMENT_TEST_MODE_KEY = "launch/linux_development_test_mode"
 _MAX_RECENT_PROJECTS = 8
 
 
+def _condition_template_library_signature(root_dir: Path) -> tuple[int, int, int] | None:
+    try:
+        file_stat = condition_template_library_path(root_dir).stat()
+    except OSError:
+        return None
+    return file_stat.st_mtime_ns, file_stat.st_ctime_ns, file_stat.st_size
+
+
 def experiment_test_mode_available() -> bool:
     """Return whether source-mode experiment verification is supported on this host."""
 
@@ -109,6 +117,14 @@ class StudioController(QObject):
         self._import_bundle_progress_bridge: ProgressSignalBridge | None = None
         self._import_bundle_processing_window: StudioMainWindow | None = None
         self._import_bundle_processing_dialog: BundleImportProgressDialog | None = None
+        self._condition_template_profiles_cache: (
+            tuple[
+                Path,
+                tuple[int, int, int] | None,
+                tuple[ConditionTemplateProfile, ...],
+            ]
+            | None
+        ) = None
 
     def show_welcome(self) -> None:
         """Show the welcome window."""
@@ -683,8 +699,22 @@ class StudioController(QObject):
     def _load_condition_template_profiles(self) -> list[ConditionTemplateProfile]:
         root_dir = self._fpvs_root_dir
         if root_dir is None:
+            self._condition_template_profiles_cache = None
             return []
-        return list_condition_template_profiles(root_dir)
+        cached = self._condition_template_profiles_cache
+        signature = _condition_template_library_signature(root_dir)
+        if cached is None or cached[0] != root_dir or cached[1] != signature:
+            profiles = tuple(list_condition_template_profiles(root_dir))
+            refreshed_signature = _condition_template_library_signature(root_dir)
+            if refreshed_signature != signature:
+                profiles = tuple(list_condition_template_profiles(root_dir))
+            self._condition_template_profiles_cache = (
+                root_dir,
+                refreshed_signature,
+                profiles,
+            )
+            return list(profiles)
+        return list(cached[2])
 
     def show_import_project_config_dialog(self) -> None:
         """Import a Studio `.fpvsconfig` file as a new project shell."""
@@ -975,6 +1005,7 @@ class StudioController(QObject):
         parent = self.main_window if self.main_window is not None else self.welcome_window
         dialog = ConditionTemplateManagerDialog(root_dir=root_dir, parent=parent)
         dialog.exec()
+        self._condition_template_profiles_cache = None
         return self._load_condition_template_profiles()
 
     def load_manageable_project_entries(self) -> list[ProjectManagementEntry]:

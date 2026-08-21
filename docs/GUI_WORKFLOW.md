@@ -370,8 +370,8 @@ preprocessing services but must not silently mutate the active project.
 - Welcome and Home use the shared `LaunchSurfaceFrame` helper for the full-window
   launch card, border styling, and first-paint background.
 - Shared Setup Wizard presentation components include the connected progress stepper,
-  shared setup step surface, workspace frame, side panels, metric strips, source
-  cards, and reusable setup checklist panel used by compact guided pages.
+  shared setup step surface, metric strips, and source cards used by compact guided
+  pages.
 - Raw color, spacing, width, and text-elision tokens live in
   `src/fpvs_studio/gui/design_system.py`; page modules should prefer component
   helpers instead of local stylesheets for shared UI concepts.

@@ -25,6 +25,7 @@ from fpvs_studio.core.condition_template_profiles import (
     SIXTY_HZ_BLANK_FIXATION_PROFILE_ID,
     STUDIO_DEFAULT_PROFILE_ID,
 )
+from fpvs_studio.gui import controller as controller_module
 from fpvs_studio.gui.controller import StudioController
 from fpvs_studio.runtime.display_mode import NativeDisplayMode
 from fpvs_studio.runtime.display_refresh import DisplayRefreshVerification
@@ -183,6 +184,46 @@ def test_project_details_template_actions_fit_at_setup_default_size(
         assert button.minimumWidth() >= text_width + 24
     assert_visible_children_within_parent(editor.project_overview_card)
     assert_setup_wizard_vertical_scrolling_disabled(guide)
+
+
+def test_project_template_profiles_are_cached_without_rebuilding_combo(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    original_loader = controller_module.list_condition_template_profiles
+    disk_reads: list[Path] = []
+
+    def _counting_loader(root_dir: Path):
+        disk_reads.append(root_dir)
+        return original_loader(root_dir)
+
+    monkeypatch.setattr(
+        controller_module,
+        "list_condition_template_profiles",
+        _counting_loader,
+    )
+    controller._condition_template_profiles_cache = None
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Cached Templates")
+    guide = window.setup_wizard_page
+    editor = guide.project_overview_editor
+    rows_removed: list[object] = []
+    rows_inserted: list[object] = []
+    editor.condition_profile_combo.model().rowsRemoved.connect(
+        lambda *args: rows_removed.append(args)
+    )
+    editor.condition_profile_combo.model().rowsInserted.connect(
+        lambda *args: rows_inserted.append(args)
+    )
+
+    window.document.update_project_description("Refresh without changing template profiles.")
+    guide.refresh()
+    QApplication.processEvents()
+
+    assert len(disk_reads) == 1
+    assert rows_removed == []
+    assert rows_inserted == []
 
 
 def test_setup_wizard_navigation_has_no_conditions_advanced_editor(

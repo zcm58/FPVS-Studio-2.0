@@ -604,7 +604,6 @@ def test_setup_wizard_conditions_step_keeps_source_geometry_for_incomplete_condi
     QApplication.processEvents()
     workspace = step.findChild(QWidget, "setup_conditions_workspace")
     assert workspace is not None
-    assert workspace.property("setupWorkspaceFrame") is None
     before_geometry = {
         "workspace": workspace.size(),
         "details_section": step.condition_details_section.size(),

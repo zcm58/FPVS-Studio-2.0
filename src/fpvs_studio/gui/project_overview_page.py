@@ -71,6 +71,7 @@ class ProjectOverviewEditor(QWidget):
         self._load_condition_template_profiles = load_condition_template_profiles
         self._manage_condition_templates = manage_condition_templates
         self._condition_profiles_by_id: dict[str, ConditionTemplateProfile] = {}
+        self._displayed_condition_profiles: tuple[ConditionTemplateProfile, ...] | None = None
 
         self.project_name_edit = QLineEdit(self)
         self.project_name_edit.setObjectName("project_name_edit")
@@ -248,21 +249,24 @@ class ProjectOverviewEditor(QWidget):
             project.settings.condition_defaults.duty_cycle_mode,
             profiles,
         )
+        profile_snapshot = tuple(profiles)
         with QSignalBlocker(self.condition_profile_combo):
-            self.condition_profile_combo.clear()
-            for profile in profiles:
-                self.condition_profile_combo.addItem(
-                    profile.display_name,
-                    userData=profile.profile_id,
-                )
-                item_index = self.condition_profile_combo.count() - 1
-                tooltip = _CONDITION_PROFILE_TOOLTIPS.get(profile.profile_id)
-                if tooltip is not None:
-                    self.condition_profile_combo.setItemData(
-                        item_index,
-                        tooltip,
-                        Qt.ItemDataRole.ToolTipRole,
+            if profile_snapshot != self._displayed_condition_profiles:
+                self.condition_profile_combo.clear()
+                for profile in profiles:
+                    self.condition_profile_combo.addItem(
+                        profile.display_name,
+                        userData=profile.profile_id,
                     )
+                    item_index = self.condition_profile_combo.count() - 1
+                    tooltip = _CONDITION_PROFILE_TOOLTIPS.get(profile.profile_id)
+                    if tooltip is not None:
+                        self.condition_profile_combo.setItemData(
+                            item_index,
+                            tooltip,
+                            Qt.ItemDataRole.ToolTipRole,
+                        )
+                self._displayed_condition_profiles = profile_snapshot
             if displayed_profile_id is None:
                 self.condition_profile_combo.setCurrentIndex(-1)
             else:

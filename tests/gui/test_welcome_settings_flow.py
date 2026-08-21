@@ -563,17 +563,27 @@ def test_manage_projects_dialog_filters_by_name_and_path(
     assert project_list is not None
     assert filter_edit is not None
     assert project_list.count() == 2
+    original_items = {
+        project_list.item(index).text(): project_list.item(index)
+        for index in range(project_list.count())
+    }
 
     filter_edit.setText("Alpha")
     assert project_list.count() == 1
     assert project_list.item(0).text() == "Alpha Filter Project"
+    assert project_list.item(0) is original_items["Alpha Filter Project"]
 
     filter_edit.setText("filter-location")
     assert project_list.count() == 1
     assert project_list.item(0).text() == "Beta Project"
+    assert project_list.item(0) is original_items["Beta Project"]
 
     filter_edit.clear()
     assert project_list.count() == 2
+    assert {
+        project_list.item(index).text(): project_list.item(index)
+        for index in range(project_list.count())
+    } == original_items
 
 
 def test_manage_projects_discovers_nested_project_folders_from_disk(
@@ -1765,6 +1775,54 @@ def test_create_project_dialog_manage_templates_refreshes_profile_options(qtbot)
     qtbot.mouseClick(manage_button, Qt.MouseButton.LeftButton)
 
     assert dialog.condition_profile_combo.count() == 2
+
+
+def test_condition_template_cache_reloads_after_file_change_and_manager_close(
+    controller: StudioController,
+    monkeypatch,
+) -> None:
+    original_loader = controller_module.list_condition_template_profiles
+    disk_reads: list[Path] = []
+
+    def _counting_loader(root_dir: Path):
+        disk_reads.append(root_dir)
+        return original_loader(root_dir)
+
+    class _FakeTemplateManager:
+        def __init__(self, *, root_dir: Path, parent: QWidget | None) -> None:
+            self.root_dir = root_dir
+            self.parent = parent
+
+        def exec(self) -> int:
+            return 0
+
+    monkeypatch.setattr(
+        controller_module,
+        "list_condition_template_profiles",
+        _counting_loader,
+    )
+    monkeypatch.setattr(
+        controller_module,
+        "ConditionTemplateManagerDialog",
+        _FakeTemplateManager,
+    )
+    controller._condition_template_profiles_cache = None
+
+    controller._load_condition_template_profiles()
+    initial_disk_reads = len(disk_reads)
+    controller._load_condition_template_profiles()
+    assert len(disk_reads) == initial_disk_reads
+
+    library_path = condition_template_library_path(disk_reads[0])
+    library_path.write_text(
+        library_path.read_text(encoding="utf-8") + "\n",
+        encoding="utf-8",
+    )
+    controller._load_condition_template_profiles()
+    assert len(disk_reads) == initial_disk_reads + 1
+
+    controller._show_condition_template_manager()
+    assert len(disk_reads) == initial_disk_reads + 2
 
 
 def test_manage_condition_templates_dialog_renders_hierarchical_details(

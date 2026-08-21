@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
 from PySide6.QtCore import Qt
@@ -458,8 +458,6 @@ class RunPage(QWidget):
         self,
         document: ProjectDocument,
         *,
-        fullscreen_state_getter: Callable[[], bool] | None = None,
-        fullscreen_state_setter: Callable[[bool], None] | None = None,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
@@ -616,9 +614,6 @@ class RunPage(QWidget):
 
     def current_refresh_hz(self) -> float:
         return self.runtime_settings_editor.current_refresh_hz()
-
-    def sync_fullscreen_checkbox(self, _checked: bool) -> None:
-        return
 
     def _status_report(self) -> LauncherReadinessReport:
         return _launcher_readiness_report(

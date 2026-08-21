@@ -65,12 +65,9 @@ __all__ = [
     "PageContainer",
     "PathValueLabel",
     "SectionCard",
-    "SetupChecklistPanel",
     "SetupMetricStrip",
     "SetupProgressStepper",
-    "SetupSidePanel",
     "SetupSourceCard",
-    "SetupWorkspaceFrame",
     "StatusBadgeLabel",
     "apply_condition_template_details_header_style",
     "apply_error_text_style",
@@ -261,96 +258,6 @@ class LaunchSurfaceFrame(QWidget):
         self.hero_layout.setSpacing(18)
 
         self.content_layout.addStretch(1)
-
-
-class SetupChecklistPanel(QFrame):
-    """Reusable read-only checklist for guided setup steps."""
-
-    def __init__(
-        self,
-        title: str = "Ready for next step",
-        *,
-        object_name: str = "setup_checklist_panel",
-        parent: QWidget | None = None,
-    ) -> None:
-        super().__init__(parent)
-        self.setObjectName(object_name)
-        self.setProperty("setupChecklistPanel", "true")
-        self._item_labels: list[QLabel] = []
-        self._status_labels: list[QLabel] = []
-
-        self._layout = QVBoxLayout(self)
-        self._layout.setContentsMargins(12, 12, 12, 12)
-        self._layout.setSpacing(10)
-
-        self.title_label = QLabel(title, self)
-        self.title_label.setObjectName(f"{object_name}_title")
-        self.title_label.setProperty("setupChecklistTitle", "true")
-        self._layout.addWidget(self.title_label)
-        self._divider = QFrame(self)
-        self._divider.setObjectName(f"{object_name}_divider")
-        self._divider.setFrameShape(QFrame.Shape.HLine)
-        self._divider.setProperty("setupChecklistDivider", "true")
-        self._layout.addWidget(self._divider)
-
-        self._items_widget = QWidget(self)
-        self._items_layout = QGridLayout(self._items_widget)
-        self._items_layout.setContentsMargins(0, 0, 0, 0)
-        self._items_layout.setHorizontalSpacing(12)
-        self._items_layout.setVerticalSpacing(9)
-        self._items_layout.setColumnStretch(0, 1)
-        self._layout.addWidget(self._items_widget)
-        self._layout.addStretch(1)
-
-    def set_items(self, items: list[tuple[str, bool] | tuple[str, bool, str]]) -> None:
-        for item_label in (*self._item_labels, *self._status_labels):
-            self._items_layout.removeWidget(item_label)
-            item_label.hide()
-            item_label.setParent(None)
-            item_label.deleteLater()
-        self._item_labels = []
-        self._status_labels = []
-
-        for row, item in enumerate(items):
-            label_text = item[0]
-            complete = item[1]
-            status_text = item[2] if len(item) > 2 else ("Complete" if complete else "Missing")
-            item_label = QLabel(self)
-            item_label.setObjectName(f"setup_checklist_item_{_object_suffix(label_text)}")
-            item_label.setProperty("setupChecklistItem", "true")
-            item_label.setProperty(
-                "setupChecklistState",
-                "complete" if complete else "incomplete",
-            )
-            mark = "\u2713" if complete else "\u2715"
-            item_label.setText(f"{mark} {label_text}")
-            status_label = QLabel(status_text, self)
-            status_label.setObjectName(f"setup_checklist_status_{_object_suffix(label_text)}")
-            status_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-            status_label.setProperty("setupChecklistStatus", "true")
-            status_label.setProperty(
-                "setupChecklistState",
-                "complete" if complete else "incomplete",
-            )
-            refresh_widget_style(item_label)
-            refresh_widget_style(status_label)
-            self._items_layout.addWidget(item_label, row, 0)
-            self._items_layout.addWidget(status_label, row, 1)
-            item_label.show()
-            status_label.show()
-            self._item_labels.append(item_label)
-            self._status_labels.append(status_label)
-        self._items_layout.invalidate()
-        self._items_widget.setMinimumHeight(self._items_layout.sizeHint().height())
-        self._items_widget.updateGeometry()
-        self._layout.invalidate()
-        self.updateGeometry()
-
-    def item_labels(self) -> tuple[QLabel, ...]:
-        return tuple(self._item_labels)
-
-    def status_labels(self) -> tuple[QLabel, ...]:
-        return tuple(self._status_labels)
 
 
 class SetupProgressStepper(QWidget):
@@ -566,100 +473,6 @@ class SetupProgressStepper(QWidget):
             )
             label.setText(display_text)
             label.setToolTip(title if display_text != title else "")
-
-
-class SetupWorkspaceFrame(QFrame):
-    """Standard left/main/right workspace frame for setup wizard pages."""
-
-    def __init__(
-        self,
-        *,
-        object_name: str = "setup_workspace_frame",
-        parent: QWidget | None = None,
-    ) -> None:
-        super().__init__(parent)
-        self.setObjectName(object_name)
-        self.setProperty("setupWorkspaceFrame", "true")
-        self._layout = QHBoxLayout(self)
-        self._layout.setContentsMargins(18, 18, 18, 18)
-        self._layout.setSpacing(PAGE_SECTION_GAP)
-
-    def set_regions(
-        self,
-        *,
-        left: QWidget | None = None,
-        main: QWidget,
-        right: QWidget | None = None,
-    ) -> None:
-        while self._layout.count():
-            item = self._layout.takeAt(0)
-            if item is None:
-                continue
-            widget = item.widget()
-            if widget is not None:
-                widget.setParent(None)
-        if left is not None:
-            left.setMinimumWidth(300)
-            self._layout.addWidget(left, 0)
-        self._layout.addWidget(main, 1)
-        if right is not None:
-            right.setMinimumWidth(320)
-            self._layout.addWidget(right, 0)
-
-
-class SetupSidePanel(QFrame):
-    """Reusable right-rail panel for setup summaries and actions."""
-
-    def __init__(
-        self,
-        title: str,
-        *,
-        object_name: str = "setup_side_panel",
-        parent: QWidget | None = None,
-    ) -> None:
-        super().__init__(parent)
-        self.setObjectName(object_name)
-        self.setProperty("setupSidePanel", "true")
-        self._rows: list[tuple[QLabel, QLabel]] = []
-        self._layout = QVBoxLayout(self)
-        self._layout.setContentsMargins(18, 18, 18, 18)
-        self._layout.setSpacing(12)
-        self.title_label = QLabel(title, self)
-        self.title_label.setProperty("setupSidePanelTitle", "true")
-        self._layout.addWidget(self.title_label)
-        self.row_grid = QGridLayout()
-        self.row_grid.setContentsMargins(0, 0, 0, 0)
-        self.row_grid.setHorizontalSpacing(16)
-        self.row_grid.setVerticalSpacing(10)
-        self.row_grid.setColumnStretch(1, 1)
-        self._layout.addLayout(self.row_grid)
-
-    def set_rows(self, rows: list[tuple[str, str]]) -> None:
-        for label, value in self._rows:
-            self.row_grid.removeWidget(label)
-            self.row_grid.removeWidget(value)
-            label.deleteLater()
-            value.deleteLater()
-        self._rows = []
-        for row, (label_text, value_text) in enumerate(rows):
-            label = QLabel(label_text, self)
-            label.setProperty("setupMetricLabel", "true")
-            value = QLabel(value_text, self)
-            value.setProperty("setupMetricValue", "true")
-            value.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-            self.row_grid.addWidget(label, row, 0)
-            self.row_grid.addWidget(value, row, 1)
-            self._rows.append((label, value))
-
-    def add_action_button(self, button: QPushButton) -> None:
-        self._layout.addWidget(button)
-
-    def add_helper_text(self, text: str) -> QLabel:
-        label = QLabel(text, self)
-        label.setWordWrap(True)
-        label.setProperty("setupPanelHelper", "true")
-        self._layout.addWidget(label)
-        return label
 
 
 class SetupMetricStrip(QFrame):
@@ -1428,42 +1241,25 @@ def studio_theme_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
         border-top: 2px solid {color_primary};
         max-height: 2px;
     }}
-    QFrame[setupWorkspaceFrame="true"],
     QFrame[conditionDetailsSection="true"],
-    QFrame[setupSidePanel="true"],
     QFrame[setupSourceCard="true"],
     QFrame[setupMetricStrip="true"] {{
         border: 1px solid {color_border_soft};
         border-radius: {CARD_CORNER_RADIUS}px;
         background-color: {color_surface_elevated};
     }}
-    QLabel[setupSidePanelTitle="true"],
     QLabel[setupSourceTitle="true"] {{
         color: {color_text_primary};
         font-size: {FONT_SIZE_SECTION_TITLE}px;
         font-weight: 700;
     }}
-    QLabel[setupMetricLabel="true"],
-    QLabel[setupPanelHelper="true"] {{
+    QLabel[setupMetricLabel="true"] {{
         color: {color_text_secondary};
         font-size: {FONT_SIZE_META}px;
     }}
     QLabel[setupMetricValue="true"] {{
         color: {color_text_primary};
         font-weight: 600;
-    }}
-    QLabel[setupChecklistStatus="true"] {{
-        color: {color_success_text};
-        font-size: {FONT_SIZE_META}px;
-        font-weight: 600;
-    }}
-    QLabel[setupChecklistStatus="true"][setupChecklistState="incomplete"] {{
-        color: {theme.error_text};
-    }}
-    QFrame[setupChecklistDivider="true"] {{
-        border: none;
-        border-top: 1px solid {color_border_soft};
-        max-height: 1px;
     }}
     QTableWidget#assets_table {{
         border: 1px solid {color_border_soft};
@@ -1514,8 +1310,7 @@ def studio_theme_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
         color: {color_text_secondary};
     }}
     QLabel#home_launch_status_summary,
-    QLabel#run_readiness_summary_value,
-    QLabel#dashboard_attention_note {{
+    QLabel#run_readiness_summary_value {{
         color: {color_text_secondary};
     }}
     """
@@ -1631,25 +1426,6 @@ def project_overview_stylesheet(theme: StudioTheme | QPalette | None = None) -> 
     QLabel#project_overview_subtitle {{
         color: {theme.text_secondary};
         font-size: 13px;
-    }}
-    QFrame[setupChecklistPanel="true"] {{
-        border: 1px solid {theme.border_soft};
-        border-radius: 8px;
-        background-color: {theme.surface_elevated};
-    }}
-    QLabel[setupChecklistTitle="true"] {{
-        color: {theme.text_primary};
-        font-size: 13px;
-        font-weight: 700;
-    }}
-    QLabel[setupChecklistItem="true"] {{
-        color: {theme.success_text};
-        font-size: 12px;
-        font-weight: 700;
-        padding: 3px 0;
-    }}
-    QLabel[setupChecklistItem="true"][setupChecklistState="incomplete"] {{
-        color: {theme.error_text};
     }}
     """
 

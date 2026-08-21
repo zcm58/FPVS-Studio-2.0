@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from PIL import Image
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication, QDialog, QDialogButtonBox, QLabel
 from tests.gui.helpers import _open_created_project, _write_image_directory
@@ -41,6 +42,7 @@ from fpvs_studio.gui.create_project_dialog import CreateProjectDialog
 from fpvs_studio.gui.presentation_settings_dialog import (
     _PREVIEW_SAMPLE_LIMIT,
     PresentationSettingsDialog,
+    _PresentationPreview,
     _preview_background_color,
     _representative_sample,
     condition_presentation_summary,
@@ -127,6 +129,99 @@ def test_project_presentation_dialog_applies_native_geometry_and_word_defaults(
     assert "Exact Box: 5.125 x 6.25 deg" in size_preview.preview_value_label.text()
     assert dialog.result() == QDialog.DialogCode.Accepted
     assert _preview_background_color((16, 32, 48)) == "#102030"
+
+
+def test_presentation_preview_caches_and_invalidates_composited_image_layer(
+    qtbot,
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    image_path = tmp_path / "presentation-preview.png"
+    Image.new("RGB", (32, 16), "red").save(image_path)
+    preview = _PresentationPreview()
+    qtbot.addWidget(preview)
+    preview.resize(320, 280)
+    preview.show()
+    settings = StimulusPresentationDefaults()
+    preview.set_preview(
+        settings=settings,
+        modality=StimulusModality.IMAGE,
+        value=image_path,
+        height_value=settings.text_height.values[0],
+        background="#000000",
+    )
+    QApplication.processEvents()
+
+    source_key = preview._source_pixmap.cacheKey()
+    layer_key = preview._image_layer.cacheKey()
+    preview.set_preview(
+        settings=settings,
+        modality=StimulusModality.IMAGE,
+        value=image_path,
+        height_value=settings.text_height.values[0],
+        background="#000000",
+    )
+    preview.repaint()
+    QApplication.processEvents()
+    assert preview._source_pixmap.cacheKey() == source_key
+    assert preview._image_layer.cacheKey() == layer_key
+
+    changed_dpr = preview.devicePixelRatioF() + 0.5
+    monkeypatch.setattr(
+        _PresentationPreview,
+        "devicePixelRatioF",
+        lambda _preview: changed_dpr,
+    )
+    preview.repaint()
+    QApplication.processEvents()
+    dpr_layer_key = preview._image_layer.cacheKey()
+    assert dpr_layer_key != layer_key
+
+    exact_settings = StimulusPresentationDefaults(
+        image_geometry=ImageGeometrySettings(
+            mode=ImageGeometryMode.EXACT_BOX,
+            width_degrees=4.0,
+            height_degrees=6.0,
+        )
+    )
+    preview.set_preview(
+        settings=exact_settings,
+        modality=StimulusModality.IMAGE,
+        value=image_path,
+        height_value=exact_settings.text_height.values[0],
+        background="#000000",
+    )
+    QApplication.processEvents()
+    geometry_layer_key = preview._image_layer.cacheKey()
+    assert preview._source_pixmap.cacheKey() == source_key
+    assert geometry_layer_key != dpr_layer_key
+
+    preview.resize(420, 300)
+    QApplication.processEvents()
+    resized_layer_key = preview._image_layer.cacheKey()
+    assert preview._source_pixmap.cacheKey() == source_key
+    assert resized_layer_key != geometry_layer_key
+
+    Image.new("RGB", (48, 24), "green").save(image_path)
+    preview.repaint()
+    QApplication.processEvents()
+    assert preview._source_pixmap.cacheKey() != source_key
+    assert preview._source_pixmap.size().width() == 48
+    assert preview._source_pixmap.toImage().pixelColor(0, 0).name() == "#008000"
+    assert preview._image_layer.cacheKey() != resized_layer_key
+    rendered_layer = preview._image_layer.toImage()
+    assert rendered_layer.pixelColor(rendered_layer.rect().center()).name() == "#008000"
+    assert preview._modality == StimulusModality.IMAGE
+
+    preview.set_preview(
+        settings=exact_settings,
+        modality=StimulusModality.WORD,
+        value="READ",
+        height_value=exact_settings.text_height.values[0],
+        background="#000000",
+    )
+    assert preview._image_layer.isNull()
+    assert preview._modality == StimulusModality.WORD
 
 
 def test_project_presentation_dialog_cancel_discards_draft_and_validates_lists(

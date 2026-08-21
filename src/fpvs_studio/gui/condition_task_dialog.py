@@ -16,7 +16,7 @@ from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Literal
 
 from PySide6.QtCore import QRectF, QSize, Qt, Signal
-from PySide6.QtGui import QColor, QPainter, QPaintEvent, QPen, QPixmap
+from PySide6.QtGui import QColor, QPainter, QPaintEvent, QPen, QPixmap, QResizeEvent
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -70,6 +70,7 @@ from fpvs_studio.gui.components import (
     mark_primary_action,
     mark_secondary_action,
 )
+from fpvs_studio.gui.preview_cache import PreviewPixmapCache
 
 if TYPE_CHECKING:
     from fpvs_studio.gui.document import ProjectDocument
@@ -391,16 +392,26 @@ class TaskParticipantPreview(QWidget):
     def __init__(self, project_root: Path, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setObjectName("condition_task_participant_preview")
-        self.setMinimumSize(270, 300)
         self._project_root = Path(project_root)
         self._step: TaskStepDraft | None = None
+        self._image_cache = PreviewPixmapCache()
+        self._active_option_image_paths: dict[int, Path] = {}
+        self._source_option_pixmaps: dict[int, QPixmap] = {}
+        self._scaled_option_pixmaps: dict[int, QPixmap] = {}
+        self._scaled_option_keys: dict[int, tuple[int, int, int]] = {}
+        self.setMinimumSize(270, 300)
 
     def sizeHint(self) -> QSize:  # noqa: N802
         return QSize(300, 400)
 
     def set_step(self, step: TaskStepDraft | None) -> None:
         self._step = copy.deepcopy(step)
+        self._reload_preview_images()
         self.update()
+
+    def resizeEvent(self, event: QResizeEvent) -> None:  # noqa: N802
+        super().resizeEvent(event)
+        self._rescale_preview_images()
 
     def paintEvent(self, event: QPaintEvent) -> None:  # noqa: N802
         del event
@@ -465,7 +476,41 @@ class TaskParticipantPreview(QWidget):
         if not step.options:
             painter.drawText(bounds, Qt.AlignmentFlag.AlignCenter, "Add display items")
             return
+        if not self._preview_images_are_current():
+            self._reload_preview_images()
+        for index, (option, rect) in enumerate(
+            zip(step.options, self._option_rects(bounds, step), strict=True)
+        ):
+            self._paint_option(
+                painter,
+                rect,
+                option,
+                self._scaled_option_pixmaps.get(index),
+            )
+
+    def _paint_option(
+        self,
+        painter: QPainter,
+        rect: QRectF,
+        option: TaskOptionDraft,
+        pixmap: QPixmap | None,
+    ) -> None:
+        pen_color = "#f4f4f4" if option.selectable else "#707070"
+        painter.setPen(QPen(QColor(pen_color), 1.0))
+        painter.drawRect(rect)
+        if pixmap is not None and not pixmap.isNull():
+            target_x = rect.center().x() - pixmap.width() / 2
+            painter.drawPixmap(int(target_x), int(rect.y() + 3), pixmap)
+        painter.drawText(
+            QRectF(rect.x() + 3, rect.bottom() - 22, rect.width() - 6, 20),
+            Qt.AlignmentFlag.AlignCenter | Qt.TextFlag.TextWordWrap,
+            option.label or option.option_id,
+        )
+
+    @staticmethod
+    def _option_rects(bounds: QRectF, step: TaskStepDraft) -> list[QRectF]:
         if step.layout_mode == "exact":
+            rects: list[QRectF] = []
             for option in step.options:
                 scale = (
                     bounds.height()
@@ -477,50 +522,82 @@ class TaskParticipantPreview(QWidget):
                 height = max(12.0, (option.height_degrees or default_size) * scale)
                 center_x = bounds.center().x() + option.x_degrees * scale
                 center_y = bounds.center().y() - option.y_degrees * scale
-                rect = QRectF(center_x - width / 2, center_y - height / 2, width, height)
-                self._paint_option(painter, rect, option)
-            return
+                rects.append(
+                    QRectF(center_x - width / 2, center_y - height / 2, width, height)
+                )
+            return rects
 
         columns = max(1, min(step.columns or len(step.options), len(step.options)))
         rows = (len(step.options) + columns - 1) // columns
         cell_width = bounds.width() / columns
         cell_height = bounds.height() / max(1, rows)
-        for index, option in enumerate(step.options):
-            row, column = divmod(index, columns)
-            rect = QRectF(
+        return [
+            QRectF(
                 bounds.x() + column * cell_width + 4,
                 bounds.y() + row * cell_height + 4,
                 cell_width - 8,
                 cell_height - 8,
             )
-            self._paint_option(painter, rect, option)
+            for row, column in (divmod(index, columns) for index in range(len(step.options)))
+        ]
 
-    def _paint_option(
-        self,
-        painter: QPainter,
-        rect: QRectF,
-        option: TaskOptionDraft,
-    ) -> None:
-        pen_color = "#f4f4f4" if option.selectable else "#707070"
-        painter.setPen(QPen(QColor(pen_color), 1.0))
-        painter.drawRect(rect)
-        image_path = self._preview_image_path(option)
-        if image_path is not None:
-            pixmap = QPixmap(str(image_path))
-            if not pixmap.isNull():
-                fitted = pixmap.scaled(
-                    max(1, int(rect.width() - 6)),
-                    max(1, int(rect.height() - 24)),
+    def _reload_preview_images(self) -> None:
+        active_image_paths: dict[int, Path] = {}
+        source_pixmaps: dict[int, QPixmap] = {}
+        if self._step is not None:
+            for index, option in enumerate(self._step.options):
+                image_path = self._preview_image_path(option)
+                if image_path is None:
+                    continue
+                active_image_paths[index] = image_path
+                pixmap = self._image_cache.load(image_path)
+                if not pixmap.isNull():
+                    source_pixmaps[index] = pixmap
+        self._image_cache.retain(active_image_paths.values())
+        self._active_option_image_paths = active_image_paths
+        self._source_option_pixmaps = source_pixmaps
+        self._rescale_preview_images()
+
+    def _preview_images_are_current(self) -> bool:
+        current_paths: dict[int, Path] = {}
+        if self._step is not None:
+            current_paths = {
+                index: image_path
+                for index, option in enumerate(self._step.options)
+                if (image_path := self._preview_image_path(option)) is not None
+            }
+        return current_paths == self._active_option_image_paths and all(
+            self._image_cache.is_current(path) for path in current_paths.values()
+        )
+
+    def _rescale_preview_images(self) -> None:
+        step = self._step
+        if step is None or not step.options:
+            self._scaled_option_pixmaps = {}
+            self._scaled_option_keys = {}
+            return
+        bounds = QRectF(16, 116, self.width() - 32, self.height() - 150)
+        scaled_pixmaps: dict[int, QPixmap] = {}
+        scaled_keys: dict[int, tuple[int, int, int]] = {}
+        for index, rect in enumerate(self._option_rects(bounds, step)):
+            source = self._source_option_pixmaps.get(index)
+            if source is None:
+                continue
+            width = max(1, int(rect.width() - 6))
+            height = max(1, int(rect.height() - 24))
+            key = (source.cacheKey(), width, height)
+            scaled = self._scaled_option_pixmaps.get(index)
+            if scaled is None or self._scaled_option_keys.get(index) != key:
+                scaled = source.scaled(
+                    width,
+                    height,
                     Qt.AspectRatioMode.KeepAspectRatio,
                     Qt.TransformationMode.SmoothTransformation,
                 )
-                target_x = rect.center().x() - fitted.width() / 2
-                painter.drawPixmap(int(target_x), int(rect.y() + 3), fitted)
-        painter.drawText(
-            QRectF(rect.x() + 3, rect.bottom() - 22, rect.width() - 6, 20),
-            Qt.AlignmentFlag.AlignCenter | Qt.TextFlag.TextWordWrap,
-            option.label or option.option_id,
-        )
+            scaled_pixmaps[index] = scaled
+            scaled_keys[index] = key
+        self._scaled_option_pixmaps = scaled_pixmaps
+        self._scaled_option_keys = scaled_keys
 
     def _preview_image_path(self, option: TaskOptionDraft) -> Path | None:
         if option.source_path is not None and option.source_path.is_file():

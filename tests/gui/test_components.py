@@ -8,12 +8,9 @@ from PySide6.QtWidgets import QLabel, QPushButton
 
 from fpvs_studio.gui.components import (
     SectionCard,
-    SetupChecklistPanel,
     SetupMetricStrip,
     SetupProgressStepper,
-    SetupSidePanel,
     SetupSourceCard,
-    SetupWorkspaceFrame,
     condition_template_details_header_stylesheet,
     error_text_stylesheet,
     fixation_settings_stylesheet,
@@ -121,28 +118,7 @@ def test_setup_progress_stepper_emits_clicks_only_when_navigation_enabled(qtbot)
     assert requested == [2]
 
 
-def test_setup_checklist_panel_renders_status_rows(qtbot) -> None:
-    checklist = SetupChecklistPanel("Setup Checklist")
-    qtbot.addWidget(checklist)
-
-    checklist.set_items([("Name", True, "Complete"), ("Images", False, "Missing")])
-
-    item_text = [label.text() for label in checklist.item_labels()]
-    status_text = [label.text() for label in checklist.status_labels()]
-    assert item_text == ["\u2713 Name", "\u2715 Images"]
-    assert status_text == ["Complete", "Missing"]
-    assert checklist.item_labels()[0].property("setupChecklistState") == "complete"
-    assert checklist.status_labels()[1].property("setupChecklistState") == "incomplete"
-
-
-def test_setup_workspace_and_summary_components_construct(qtbot) -> None:
-    left = QLabel("Left")
-    main = QLabel("Main")
-    right = QLabel("Right")
-    workspace = SetupWorkspaceFrame()
-    workspace.set_regions(left=left, main=main, right=right)
-    side_panel = SetupSidePanel("Protocol Defaults")
-    side_panel.set_rows([("Image Version:", "Original")])
+def test_setup_summary_components_construct(qtbot) -> None:
     metric_strip = SetupMetricStrip()
     metric_strip.set_rows([("Base Rate", "6.0 Hz")])
     source_card = SetupSourceCard("Base Images", "Choose Base Images...")
@@ -153,11 +129,9 @@ def test_setup_workspace_and_summary_components_construct(qtbot) -> None:
         resolution="512 x 512",
         variants="original",
     )
-    for widget in (workspace, side_panel, metric_strip, source_card):
+    for widget in (metric_strip, source_card):
         qtbot.addWidget(widget)
 
-    assert workspace.property("setupWorkspaceFrame") == "true"
-    assert side_panel.property("setupSidePanel") == "true"
     assert metric_strip.property("setupMetricStrip") == "true"
     assert source_card.property("setupSourceCard") == "true"
     assert source_card.status_badge.text() == "Ready"

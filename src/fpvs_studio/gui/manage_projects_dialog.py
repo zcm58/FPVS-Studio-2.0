@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from PySide6.QtCore import QRect, Qt, QTimer, Signal
+from PySide6.QtCore import QRect, QSignalBlocker, Qt, QTimer, Signal
 from PySide6.QtGui import QResizeEvent
 from PySide6.QtWidgets import (
     QApplication,
@@ -64,6 +64,7 @@ class ManageProjectsDialog(QDialog):
         self.resize(860, 520)
         self._entries: list[ProjectManagementEntry] = []
         self._entries_by_root: dict[str, ProjectManagementEntry] = {}
+        self._items_by_root: dict[str, QListWidgetItem] = {}
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(18, 18, 18, 18)
@@ -178,24 +179,29 @@ class ManageProjectsDialog(QDialog):
         """Replace the project list after controller-owned state changes."""
 
         self._entries = list(entries)
-        self._apply_filter()
-
-    def _apply_filter(self) -> None:
+        self._entries_by_root = {str(entry.root): entry for entry in self._entries}
         self.project_list.clear()
-        self._entries_by_root = {}
-        filter_text = self.filter_edit.text().casefold().strip()
-        for entry in self._filtered_entries(filter_text):
+        self._items_by_root = {}
+        for entry in self._entries:
             root_key = str(entry.root)
-            self._entries_by_root[root_key] = entry
             item = QListWidgetItem(entry.name)
             item.setData(Qt.ItemDataRole.UserRole, root_key)
             item.setToolTip(root_key)
-            self.project_list.addItem(item)
+            self._items_by_root[root_key] = item
+        self._apply_filter()
 
-        if self.project_list.count() > 0:
-            self.project_list.setCurrentRow(0)
-        else:
-            self._sync_selection(-1)
+    def _apply_filter(self, _filter_text: str = "") -> None:
+        with QSignalBlocker(self.project_list):
+            while self.project_list.count():
+                self.project_list.takeItem(0)
+            filter_text = self.filter_edit.text().casefold().strip()
+            for entry in self._filtered_entries(filter_text):
+                root_key = str(entry.root)
+                self.project_list.addItem(self._items_by_root[root_key])
+
+            selected_row = 0 if self.project_list.count() > 0 else -1
+            self.project_list.setCurrentRow(selected_row)
+        self._sync_selection(selected_row)
 
     def _filtered_entries(self, filter_text: str) -> list[ProjectManagementEntry]:
         if not filter_text:
@@ -207,13 +213,17 @@ class ManageProjectsDialog(QDialog):
         ]
 
     def _selected_entry(self) -> ProjectManagementEntry | None:
+        root_key = self._selected_root_key()
+        if root_key is None:
+            return None
+        return self._entries_by_root.get(root_key)
+
+    def _selected_root_key(self) -> str | None:
         item = self.project_list.currentItem()
         if item is None:
             return None
         root_key = item.data(Qt.ItemDataRole.UserRole)
-        if not isinstance(root_key, str):
-            return None
-        return self._entries_by_root.get(root_key)
+        return root_key if isinstance(root_key, str) else None
 
     def _sync_selection(self, _row: int) -> None:
         entry = self._selected_entry()

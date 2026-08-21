@@ -167,7 +167,6 @@ class StudioMainWindow(QMainWindow):
         self._active_launch_participant_number: str | None = None
         self._apply_compact_window_size()
 
-        self._runtime_fullscreen_ui_state = True
         self.home_page = HomePage(
             document,
             load_condition_template_profiles=on_load_condition_template_profiles,
@@ -214,8 +213,6 @@ class StudioMainWindow(QMainWindow):
                 self.document,
                 load_condition_template_profiles=self._on_load_condition_template_profiles,
                 manage_condition_templates=self._on_manage_condition_templates,
-                fullscreen_state_getter=self._runtime_fullscreen_state,
-                fullscreen_state_setter=self._set_runtime_fullscreen_state,
                 on_return_home=self.show_home,
                 on_save_project=self.save_project,
                 parent=self,
@@ -285,19 +282,6 @@ class StudioMainWindow(QMainWindow):
             self._bundle_import_processing_page = page
             self.main_stack.addWidget(page)
         return self._bundle_import_processing_page
-
-    def _runtime_fullscreen_state(self) -> bool:
-        return self._runtime_fullscreen_ui_state
-
-    def _set_runtime_fullscreen_state(self, checked: bool) -> None:
-        checked_bool = bool(checked)
-        if self._runtime_fullscreen_ui_state == checked_bool:
-            return
-        self._runtime_fullscreen_ui_state = checked_bool
-        if self._setup_wizard_page is not None:
-            self._setup_wizard_page.run_page.sync_fullscreen_checkbox(checked_bool)
-            self._setup_wizard_page.sync_fullscreen_checkbox(checked_bool)
-        self.home_page.refresh()
 
     def show_home(self) -> None:
         self.flush_pending_edits()

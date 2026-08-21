@@ -5,12 +5,12 @@ from __future__ import annotations
 import re
 import sys
 from collections.abc import Sequence
-from math import atan, degrees
+from math import atan, ceil, degrees
 from pathlib import Path
 from typing import TypeVar
 
 from PySide6.QtCore import QRectF, QSignalBlocker, Qt, Signal
-from PySide6.QtGui import QColor, QFont, QPainter, QPaintEvent, QPen, QPixmap
+from PySide6.QtGui import QColor, QFont, QPainter, QPaintEvent, QPen, QPixmap, QResizeEvent
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -62,6 +62,7 @@ from fpvs_studio.gui.components import (
     mark_secondary_action,
 )
 from fpvs_studio.gui.document import ProjectDocument
+from fpvs_studio.gui.preview_cache import PreviewPixmapCache
 from fpvs_studio.preprocessing.manifest import asset_variant_path, find_manifest_set
 
 _GROUP_NAMES = ("transform", "image_geometry", "text_height", "text_color", "text_position")
@@ -547,14 +548,20 @@ class _PresentationPreview(QWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setObjectName("presentation_live_preview")
-        self.setMinimumSize(320, 280)
-        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self._settings = StimulusPresentationDefaults()
         self._modality = StimulusModality.WORD
         self._text = "READ"
         self._image_path: Path | None = None
         self._height_value = self._settings.text_height.values[0]
         self._background = QColor("#000000")
+        self._image_cache = PreviewPixmapCache()
+        self._fallback_pixmap = QPixmap(320, 240)
+        self._fallback_pixmap.fill(QColor("#e2e8f0"))
+        self._source_pixmap = self._fallback_pixmap
+        self._image_layer = QPixmap()
+        self._image_layer_key: tuple[object, ...] | None = None
+        self.setMinimumSize(320, 280)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
     def set_preview(
         self,
@@ -571,7 +578,12 @@ class _PresentationPreview(QWidget):
         self._image_path = value if isinstance(value, Path) else None
         self._height_value = height_value
         self._background = QColor(background)
+        self._reload_image_source()
         self.update()
+
+    def resizeEvent(self, event: QResizeEvent) -> None:  # noqa: N802
+        super().resizeEvent(event)
+        self._rebuild_image_layer()
 
     def paintEvent(self, _event: QPaintEvent) -> None:  # noqa: N802
         painter = QPainter(self)
@@ -619,17 +631,60 @@ class _PresentationPreview(QWidget):
         )
 
     def _paint_image(self, painter: QPainter) -> None:
-        pixmap = QPixmap(str(self._image_path)) if self._image_path else QPixmap()
-        if pixmap.isNull():
-            pixmap = QPixmap(320, 240)
-            pixmap.fill(QColor("#e2e8f0"))
+        if self._image_path is not None and not self._image_cache.is_current(
+            self._image_path
+        ):
+            self._reload_image_source()
+        self._rebuild_image_layer()
+        if not self._image_layer.isNull():
+            painter.drawPixmap(0, 0, self._image_layer)
+
+    def _reload_image_source(self) -> None:
+        if self._modality != StimulusModality.IMAGE:
+            self._image_cache.retain(())
+            self._source_pixmap = self._fallback_pixmap
+            self._image_layer = QPixmap()
+            self._image_layer_key = None
+            return
+        pixmap = self._image_cache.load(self._image_path) if self._image_path else QPixmap()
+        self._image_cache.retain((self._image_path,) if self._image_path else ())
+        self._source_pixmap = pixmap if not pixmap.isNull() else self._fallback_pixmap
+        self._rebuild_image_layer()
+
+    def _rebuild_image_layer(self) -> None:
+        if self._modality != StimulusModality.IMAGE or self.width() <= 0 or self.height() <= 0:
+            return
+        pixmap = self._source_pixmap
         aspect = pixmap.width() / max(1, pixmap.height())
         box = self._geometry_box(aspect)
+        mode = self._settings.image_geometry.mode
+        geometry = self._settings.image_geometry
+        device_pixel_ratio = self.devicePixelRatioF()
+        layer_key = (
+            self.width(),
+            self.height(),
+            device_pixel_ratio,
+            pixmap.cacheKey(),
+            self._settings.transform,
+            mode,
+            geometry.width_degrees,
+            geometry.height_degrees,
+        )
+        if self._image_layer_key == layer_key and not self._image_layer.isNull():
+            return
+        layer = QPixmap(
+            max(1, ceil(self.width() * device_pixel_ratio)),
+            max(1, ceil(self.height() * device_pixel_ratio)),
+        )
+        layer.setDevicePixelRatio(device_pixel_ratio)
+        layer.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(layer)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
         painter.setPen(QPen(QColor("#60a5fa"), 1, Qt.PenStyle.DashLine))
         painter.drawRect(box)
         painter.save()
         self._apply_transform(painter, box.center().x(), box.center().y())
-        mode = self._settings.image_geometry.mode
         if mode == ImageGeometryMode.EXACT_BOX:
             painter.drawPixmap(box, pixmap, QRectF(pixmap.rect()))
         else:
@@ -651,6 +706,9 @@ class _PresentationPreview(QWidget):
                 painter.setClipRect(box)
             painter.drawPixmap(target_rect, target, QRectF(target.rect()))
         painter.restore()
+        painter.end()
+        self._image_layer = layer
+        self._image_layer_key = layer_key
 
     def _paint_word(self, painter: QPainter) -> None:
         position = self._settings.text_position

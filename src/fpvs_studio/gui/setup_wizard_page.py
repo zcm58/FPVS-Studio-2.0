@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import dataclass
 from math import ceil
 
 from PySide6.QtCore import QEvent, QSize, Qt, QTimer
@@ -76,6 +77,15 @@ _SETUP_STEP_SURFACE_MAX_WIDTH = 880
 _SETUP_STEP_WORKBENCH_SURFACE_MAX_WIDTH = 1040
 _SETUP_STEP_SURFACE_MIN_HEIGHT = 360
 _SETUP_STEP_CARD_MAX_HEIGHT = 552
+
+
+@dataclass
+class _ReviewSummaryWidgets:
+    section: QFrame
+    title_label: QLabel
+    body: QWidget
+    body_layout: QVBoxLayout
+    rows: list[tuple[QFrame, QLabel]]
 
 
 def _scan_requires_setup_normalization(scan: ImageNormalizationScan) -> bool:
@@ -165,8 +175,6 @@ class SetupWizardPage(QWidget):
         *,
         load_condition_template_profiles: Callable[[], list[ConditionTemplateProfile]],
         manage_condition_templates: Callable[[], list[ConditionTemplateProfile]],
-        fullscreen_state_getter: Callable[[], bool] | None = None,
-        fullscreen_state_setter: Callable[[bool], None] | None = None,
         on_return_home: Callable[[], None] | None = None,
         on_save_project: Callable[[], bool] | None = None,
         parent: QWidget | None = None,
@@ -195,12 +203,7 @@ class SetupWizardPage(QWidget):
         self.add_condition_button = self.condition_setup_step.add_condition_button
         self.add_condition_button.clicked.connect(self._show_first_condition_prompt_if_needed)
         self.assets_page = AssetsPage(document, self)
-        self.run_page = RunPage(
-            document,
-            fullscreen_state_getter=fullscreen_state_getter,
-            fullscreen_state_setter=fullscreen_state_setter,
-            parent=self,
-        )
+        self.run_page = RunPage(document, parent=self)
         self.project_overview_editor = ProjectOverviewEditor(
             document,
             load_condition_template_profiles=load_condition_template_profiles,
@@ -444,9 +447,6 @@ class SetupWizardPage(QWidget):
             finally:
                 self._theme_refreshing = False
 
-    def sync_fullscreen_checkbox(self, _checked: bool) -> None:
-        return
-
     def is_launch_ready(self) -> bool:
         return self._readiness_report().badge_state == "ready"
 
@@ -636,6 +636,7 @@ class SetupWizardPage(QWidget):
         self.review_checklist_layout.setContentsMargins(0, 0, 0, 0)
         self.review_checklist_layout.setHorizontalSpacing(8)
         self.review_checklist_layout.setVerticalSpacing(6)
+        self._review_summary_widgets: list[_ReviewSummaryWidgets] = []
         self.review_card.body_layout.addWidget(self.review_checklist_container)
 
         action_row = QHBoxLayout()
@@ -901,7 +902,8 @@ class SetupWizardPage(QWidget):
 
         self._refresh_progress_steps()
         self.step_title_label.setText(title)
-        self._refresh_review_summary()
+        if step_key == "review":
+            self._refresh_review_summary()
 
         step_valid = self._current_step_valid()
         condition_image_task_active = self._condition_image_task_active()
@@ -978,30 +980,48 @@ class SetupWizardPage(QWidget):
         return report
 
     def _refresh_review_summary(self) -> None:
-        while self.review_checklist_layout.count():
-            item = self.review_checklist_layout.takeAt(0)
-            if item is None:
-                continue
-            widget = item.widget()
-            if widget is not None:
-                widget.setParent(None)
-                widget.deleteLater()
-
-        for index, (section_title, lines) in enumerate(self._review_checklist_sections()):
+        sections = self._review_checklist_sections()
+        while len(self._review_summary_widgets) < len(sections):
+            index = len(self._review_summary_widgets)
+            widgets = self._create_review_summary_section()
+            self._review_summary_widgets.append(widgets)
             self.review_checklist_layout.addWidget(
-                self._review_summary_section(section_title, lines),
+                widgets.section,
                 index // 2,
                 index % 2,
             )
 
-    def _review_summary_section(self, title: str, lines: tuple[str, ...]) -> QFrame:
+        for widgets, (section_title, lines) in zip(
+            self._review_summary_widgets,
+            sections,
+            strict=False,
+        ):
+            widgets.section.setVisible(True)
+            widgets.title_label.setText(section_title)
+            while len(widgets.rows) < len(lines):
+                row_widgets = self._review_checklist_row(parent=widgets.body)
+                widgets.rows.append(row_widgets)
+                widgets.body_layout.insertWidget(
+                    widgets.body_layout.count() - 1,
+                    row_widgets[0],
+                )
+            for (row_frame, label), text in zip(widgets.rows, lines, strict=False):
+                label.setText(text)
+                row_frame.setVisible(True)
+            for row_frame, _label in widgets.rows[len(lines) :]:
+                row_frame.setVisible(False)
+
+        for widgets in self._review_summary_widgets[len(sections) :]:
+            widgets.section.setVisible(False)
+
+    def _create_review_summary_section(self) -> _ReviewSummaryWidgets:
         section = QFrame(self.review_checklist_container)
         section.setProperty("reviewSummarySection", "true")
         section_layout = QVBoxLayout(section)
         section_layout.setContentsMargins(10, 6, 10, 6)
         section_layout.setSpacing(3)
 
-        title_label = QLabel(title, section)
+        title_label = QLabel(section)
         title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         title_label.setProperty("reviewSummarySectionTitle", "true")
         section_layout.addWidget(title_label)
@@ -1011,13 +1031,17 @@ class SetupWizardPage(QWidget):
         body_layout.setContentsMargins(0, 0, 0, 0)
         body_layout.setSpacing(3)
         body_layout.addStretch(1)
-        for line in lines:
-            body_layout.addWidget(self._review_checklist_row(line, parent=body))
         body_layout.addStretch(1)
         section_layout.addWidget(body, 1)
-        return section
+        return _ReviewSummaryWidgets(
+            section=section,
+            title_label=title_label,
+            body=body,
+            body_layout=body_layout,
+            rows=[],
+        )
 
-    def _review_checklist_row(self, text: str, *, parent: QWidget) -> QFrame:
+    def _review_checklist_row(self, *, parent: QWidget) -> tuple[QFrame, QLabel]:
         row = QFrame(parent)
         row.setProperty("reviewChecklistRow", "true")
         row_layout = QHBoxLayout(row)
@@ -1029,12 +1053,12 @@ class SetupWizardPage(QWidget):
         check_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
         row_layout.addWidget(check_icon, 0, Qt.AlignmentFlag.AlignVCenter)
 
-        label = QLabel(text, row)
+        label = QLabel(row)
         label.setWordWrap(True)
         label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         label.setProperty("reviewChecklistLine", "true")
         row_layout.addWidget(label, 1, Qt.AlignmentFlag.AlignVCenter)
-        return row
+        return row, label
 
     def _review_checklist_sections(self) -> tuple[tuple[str, tuple[str, ...]], ...]:
         project = self._document.project

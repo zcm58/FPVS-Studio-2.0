@@ -165,6 +165,29 @@ def test_setup_wizard_review_uses_centered_confirmation_checklist(
     ).y()
     assert abs(icon_center_y - text_center_y) <= 1
 
+    original_section_ids = {id(section) for section in summary_sections}
+    original_row_ids = {id(row) for row in checklist_rows}
+    guide.session_structure_editor.block_count_spin.setValue(3)
+    guide.flush_pending_edits()
+    guide.refresh()
+    QApplication.processEvents()
+    refreshed_sections = [
+        section
+        for section in review_card.findChildren(QFrame)
+        if section.property("reviewSummarySection") == "true"
+    ]
+    refreshed_rows = [
+        row
+        for row in review_card.findChildren(QFrame)
+        if row.property("reviewChecklistRow") == "true"
+    ]
+    assert {id(section) for section in refreshed_sections} == original_section_ids
+    assert {id(row) for row in refreshed_rows} == original_row_ids
+    refreshed_label_text = "\n".join(
+        label.text() for label in review_card.findChildren(QLabel)
+    )
+    assert "Each condition will repeat 3 times in randomized block order" in refreshed_label_text
+
     assert guide.review_save_button.text() == "Save and Return Home"
     assert guide.review_return_home_button.text() == "Return Home Without Saving"
     assert guide.setup_wizard_return_home_button.isHidden()

@@ -1,4 +1,4 @@
-"""Home and setup-guide pages for the FPVS Studio main window."""
+"""Home launch surface for the FPVS Studio main window."""
 
 from __future__ import annotations
 
@@ -11,7 +11,6 @@ from PySide6.QtWidgets import (
     QGridLayout,
     QHBoxLayout,
     QLabel,
-    QListWidget,
     QPushButton,
     QSizePolicy,
     QVBoxLayout,
@@ -19,12 +18,9 @@ from PySide6.QtWidgets import (
 )
 
 from fpvs_studio.core.models import ConditionTemplateProfile
-from fpvs_studio.gui.assets_pages import AssetsReadinessEditor
 from fpvs_studio.gui.components import (
     PAGE_SECTION_GAP,
     LaunchSurfaceFrame,
-    NonHomePageShell,
-    SectionCard,
     StatusBadgeLabel,
     apply_home_page_theme,
     create_home_project_icon,
@@ -33,25 +29,9 @@ from fpvs_studio.gui.components import (
     mark_secondary_action,
 )
 from fpvs_studio.gui.document import ProjectDocument
-from fpvs_studio.gui.project_overview_page import ProjectOverviewEditor
-from fpvs_studio.gui.runtime_settings_page import DisplaySettingsEditor
-from fpvs_studio.gui.session_pages import FixationSettingsEditor, SessionStructureEditor
 from fpvs_studio.gui.window_helpers import (
     LauncherReadinessReport,
-    _conditions_have_assigned_assets,
-    _configure_read_only_list,
     _launcher_readiness_report,
-    _set_list_items,
-    _timing_template_label,
-)
-
-_SETUP_GUIDE_STEPS: tuple[tuple[str, str, str], ...] = (
-    ("project", "Project Details", "Edit Project"),
-    ("conditions", "Conditions", "Edit Conditions"),
-    ("stimuli", "Stimuli", "Open Stimuli"),
-    ("session", "Session / Fixation", "Edit Session"),
-    ("runtime", "Display", "Display Settings"),
-    ("ready", "Validate / Ready", "Review Readiness"),
 )
 
 _HOME_LAUNCH_BUTTON_MIN_HEIGHT = 72
@@ -148,263 +128,6 @@ class SophiaModeTicker(QWidget):
         return max(
             1,
             self.fontMetrics().horizontalAdvance(f"{_SOPHIA_MODE_TICKER_TEXT}    "),
-        )
-
-
-class SetupDashboardPage(QWidget):
-    """Guided setup page that keeps the existing editors available for compatibility."""
-
-    def __init__(
-        self,
-        document: ProjectDocument,
-        *,
-        load_condition_template_profiles: Callable[[], list[ConditionTemplateProfile]],
-        manage_condition_templates: Callable[[], list[ConditionTemplateProfile]],
-        fullscreen_state_getter: Callable[[], bool] | None = None,
-        fullscreen_state_setter: Callable[[bool], None] | None = None,
-        parent: QWidget | None = None,
-    ) -> None:
-        super().__init__(parent)
-        self._document = document
-        self._step_callbacks: dict[str, Callable[[], None]] = {}
-        self.shell = NonHomePageShell(
-            title="Setup Guide",
-            subtitle=(
-                "Follow the setup steps once, then return to Home for routine launches."
-            ),
-            layout_mode="single_column",
-            width_preset="wide",
-            parent=self,
-        )
-        self.shell.set_footer_text(
-            "Setup Guide actions use the same project state and detailed editors as the "
-            "rest of FPVS Studio."
-        )
-
-        self.setup_summary_card = SectionCard(
-            title="Setup Progress",
-            subtitle="Step-by-step status for getting this project ready to launch.",
-            object_name="dashboard_attention_card",
-            parent=self,
-        )
-        self.setup_summary_card.card_layout.setContentsMargins(12, 10, 12, 10)
-        self.setup_summary_card.card_layout.setSpacing(8)
-        self.setup_summary_card.body_layout.setSpacing(6)
-        self.setup_summary_badge = StatusBadgeLabel(
-            "Checking readiness...", self.setup_summary_card
-        )
-        self.setup_summary_badge.setObjectName("setup_guide_ready_badge")
-        self.setup_summary_note = QLabel(self.setup_summary_card)
-        self.setup_summary_note.setObjectName("dashboard_attention_note")
-        self.setup_summary_note.setWordWrap(True)
-        self.setup_summary_count = QLabel(self.setup_summary_card)
-        self.setup_summary_count.setObjectName("dashboard_attention_count")
-        self.setup_summary_count.setWordWrap(True)
-        summary_strip = QWidget(self.setup_summary_card)
-        summary_strip_layout = QHBoxLayout(summary_strip)
-        summary_strip_layout.setContentsMargins(0, 0, 0, 0)
-        summary_strip_layout.setSpacing(PAGE_SECTION_GAP)
-        summary_strip_layout.addWidget(self.setup_summary_badge, 0)
-        summary_strip_layout.addWidget(self.setup_summary_count, 0)
-        summary_strip_layout.addWidget(self.setup_summary_note, 1)
-        self.setup_summary_card.body_layout.addWidget(summary_strip)
-
-        self.setup_guide_step_list = QListWidget(self.setup_summary_card)
-        self.setup_guide_step_list.setObjectName("setup_guide_step_list")
-        _configure_read_only_list(self.setup_guide_step_list)
-        self.setup_summary_card.body_layout.addWidget(self.setup_guide_step_list)
-
-        self.step_actions_card = SectionCard(
-            title="Setup Steps",
-            subtitle="Use these actions to complete or review each setup area.",
-            object_name="setup_guide_steps_card",
-            parent=self,
-        )
-        self.step_action_buttons: dict[str, QPushButton] = {}
-        step_actions_grid = QGridLayout()
-        step_actions_grid.setContentsMargins(0, 0, 0, 0)
-        step_actions_grid.setHorizontalSpacing(PAGE_SECTION_GAP)
-        step_actions_grid.setVerticalSpacing(8)
-        for index, (step_key, _step_title, action_label) in enumerate(_SETUP_GUIDE_STEPS):
-            button = QPushButton(action_label, self.step_actions_card)
-            button.setObjectName(f"setup_guide_{step_key}_button")
-            mark_secondary_action(button)
-            button.clicked.connect(lambda _checked=False, key=step_key: self._activate_step(key))
-            self.step_action_buttons[step_key] = button
-            step_actions_grid.addWidget(button, index // 3, index % 3)
-        self.step_actions_card.body_layout.addLayout(step_actions_grid)
-
-        self.project_overview_editor = ProjectOverviewEditor(
-            document,
-            load_condition_template_profiles=load_condition_template_profiles,
-            manage_condition_templates=manage_condition_templates,
-            parent=self.shell,
-        )
-        self.session_structure_editor = SessionStructureEditor(
-            document,
-            object_name_prefix="dashboard_",
-            parent=self.shell,
-        )
-        self.fixation_settings_editor = FixationSettingsEditor(
-            document,
-            schedule_row_behavior="disable",
-            parent=self.shell,
-        )
-        self.runtime_settings_editor = DisplaySettingsEditor(
-            document,
-            object_name_prefix="dashboard_",
-            editable=False,
-            framed=True,
-            parent=self.shell,
-        )
-        self.assets_readiness_editor = AssetsReadinessEditor(
-            document,
-            object_name_prefix="dashboard_",
-            parent=self.shell,
-        )
-        self.workspace = QWidget(self.shell)
-        workspace_layout = QHBoxLayout(self.workspace)
-        workspace_layout.setContentsMargins(0, 0, 0, 0)
-        workspace_layout.setSpacing(PAGE_SECTION_GAP)
-
-        self.workspace_left_column = QWidget(self.workspace)
-        left_layout = QVBoxLayout(self.workspace_left_column)
-        left_layout.setContentsMargins(0, 0, 0, 0)
-        left_layout.setSpacing(PAGE_SECTION_GAP)
-        left_layout.addWidget(self.project_overview_editor)
-        left_layout.addWidget(self.session_structure_editor)
-
-        self.workspace_center_column = QWidget(self.workspace)
-        center_layout = QVBoxLayout(self.workspace_center_column)
-        center_layout.setContentsMargins(0, 0, 0, 0)
-        center_layout.setSpacing(0)
-        center_layout.addWidget(self.fixation_settings_editor)
-
-        self.workspace_right_column = QWidget(self.workspace)
-        right_layout = QVBoxLayout(self.workspace_right_column)
-        right_layout.setContentsMargins(0, 0, 0, 0)
-        right_layout.setSpacing(PAGE_SECTION_GAP)
-        right_layout.addWidget(self.assets_readiness_editor)
-        right_layout.addWidget(self.runtime_settings_editor)
-
-        workspace_layout.addWidget(self.workspace_left_column, 3)
-        workspace_layout.addWidget(self.workspace_center_column, 4)
-        workspace_layout.addWidget(self.workspace_right_column, 3)
-
-        self.shell.add_content_widget(self.setup_summary_card)
-        self.shell.add_content_widget(self.step_actions_card)
-        self.shell.add_content_widget(self.workspace, stretch=1)
-        self.workspace.setVisible(False)
-
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.addWidget(self.shell)
-
-        self._document.project_changed.connect(self._refresh_attention_summary)
-        self._document.session_plan_changed.connect(self._refresh_attention_summary)
-        self._refresh_attention_summary()
-
-    def sync_fullscreen_checkbox(self, _checked: bool) -> None:
-        return
-
-    def bind_step_navigation_actions(
-        self,
-        *,
-        edit_conditions: Callable[[], None],
-        open_stimuli_manager: Callable[[], None],
-        open_runtime_settings: Callable[[], None],
-    ) -> None:
-        self._step_callbacks = {
-            "project": self._show_embedded_setup_editors,
-            "conditions": edit_conditions,
-            "stimuli": open_stimuli_manager,
-            "session": self._show_embedded_setup_editors,
-            "runtime": open_runtime_settings,
-            "ready": self._hide_embedded_setup_editors,
-        }
-
-    def _activate_step(self, step_key: str) -> None:
-        callback = self._step_callbacks.get(step_key)
-        if callback is not None:
-            callback()
-
-    def _show_embedded_setup_editors(self) -> None:
-        self.workspace.setVisible(True)
-
-    def _hide_embedded_setup_editors(self) -> None:
-        self.workspace.setVisible(False)
-
-    def _refresh_attention_summary(self) -> None:
-        report = _launcher_readiness_report(
-            self._document,
-            refresh_hz=self.runtime_settings_editor.current_refresh_hz(),
-        )
-        action_items = tuple(
-            item
-            for item in report.readiness_items
-            if item.startswith(("Needs setup:", "Warning:"))
-        )
-        issue_count = len(action_items)
-        self.setup_summary_badge.set_state(report.badge_state, report.status_label)
-        self.setup_summary_count.setText(f"Blockers: {issue_count}")
-        first_blocker = (
-            action_items[0]
-            if action_items
-            else "No blockers. Setup is ready for preview or launch."
-        )
-        summary_text = first_blocker
-        self.setup_summary_note.setText(summary_text)
-        _set_list_items(self.setup_guide_step_list, self._setup_step_lines(report))
-
-    def _setup_step_lines(self, report: LauncherReadinessReport) -> tuple[str, ...]:
-        ordered_conditions = self._document.ordered_conditions()
-        project_name = self._document.project.meta.name.strip()
-        project_ready = bool(project_name and self._document.project_root)
-        assets_ready = _conditions_have_assigned_assets(self._document, ordered_conditions)
-        runtime_ready = self.runtime_settings_editor.current_refresh_hz() > 0.0
-        launch_ready = report.badge_state == "ready"
-
-        project_label = project_name or "name required"
-        stimuli_label = (
-            "assigned for all conditions" if assets_ready else "base and oddball folders needed"
-        )
-        timing_labels = tuple(
-            sorted(
-                {
-                    _timing_template_label(condition.duty_cycle_mode)
-                    for condition in ordered_conditions
-                }
-            )
-        )
-        timing_label = (
-            "no timing configured"
-            if not timing_labels
-            else timing_labels[0]
-            if len(timing_labels) == 1
-            else f"Mixed timing: {', '.join(timing_labels)}"
-        )
-        return (
-            (
-                f"{'Complete' if project_ready else 'Needs setup'}: "
-                f"Project Details - {project_label}"
-            ),
-            (
-                f"{'Complete' if ordered_conditions else 'Needs setup'}: Conditions - "
-                f"{len(ordered_conditions)} configured, {timing_label}"
-            ),
-            (
-                f"{'Complete' if assets_ready else 'Needs setup'}: Stimuli - "
-                f"{stimuli_label}"
-            ),
-            "Complete: Session / Fixation - settings available",
-            (
-                f"{'Complete' if runtime_ready else 'Needs setup'}: Display - "
-                f"{self.runtime_settings_editor.current_refresh_hz():.2f} Hz"
-            ),
-            (
-                f"{'Complete' if launch_ready else 'Needs setup'}: Validate / Ready - "
-                f"{report.status_label}"
-            ),
         )
 
 

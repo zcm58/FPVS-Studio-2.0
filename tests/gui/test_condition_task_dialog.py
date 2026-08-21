@@ -37,6 +37,9 @@ from fpvs_studio.core.task_models import (
 from fpvs_studio.gui.condition_task_dialog import (
     ConditionTaskDialog,
     ConditionTaskFlowDraft,
+    TaskOptionDraft,
+    TaskParticipantPreview,
+    TaskStepDraft,
     _module_from_draft,
     _module_to_draft,
     build_condition_task_models,
@@ -665,6 +668,61 @@ def test_condition_task_dialog_exposes_all_questionnaire_types_and_fits_minimum_
         <= editor_scroll.viewport().width() + 1
     )
     _assert_visible_non_scroll_children_within_parent(dialog)
+
+
+def test_task_participant_preview_caches_and_invalidates_image_rendering(
+    qtbot,
+    tmp_path: Path,
+) -> None:
+    image_path = tmp_path / "preview.png"
+    Image.new("RGB", (24, 12), "red").save(image_path)
+    preview = TaskParticipantPreview(tmp_path)
+    qtbot.addWidget(preview)
+    preview.resize(preview.sizeHint())
+    preview.show()
+    step = TaskStepDraft(
+        step_id="image-choice",
+        kind="choice_grid",
+        title="Choose an image",
+        columns=1,
+        options=[
+            TaskOptionDraft(
+                option_id="image-option",
+                label="Preview image",
+                source_path=image_path,
+            )
+        ],
+    )
+    preview.set_step(step)
+    QApplication.processEvents()
+
+    source_key = preview._source_option_pixmaps[0].cacheKey()
+    scaled_key = preview._scaled_option_pixmaps[0].cacheKey()
+    preview.repaint()
+    QApplication.processEvents()
+    assert preview._source_option_pixmaps[0].cacheKey() == source_key
+    assert preview._scaled_option_pixmaps[0].cacheKey() == scaled_key
+
+    preview.resize(420, 440)
+    QApplication.processEvents()
+    assert preview._source_option_pixmaps[0].cacheKey() == source_key
+    assert preview._scaled_option_pixmaps[0].cacheKey() != scaled_key
+
+    Image.new("RGB", (36, 18), "green").save(image_path)
+    preview.repaint()
+    QApplication.processEvents()
+    refreshed_source = preview._source_option_pixmaps[0]
+    assert refreshed_source.cacheKey() != source_key
+    assert refreshed_source.size().width() == 36
+    assert refreshed_source.toImage().pixelColor(0, 0).name() == "#008000"
+    scaled_image = preview._scaled_option_pixmaps[0].toImage()
+    assert scaled_image.pixelColor(scaled_image.rect().center()).name() == "#008000"
+    assert preview._step is not None
+    assert preview._step.options[0].label == "Preview image"
+
+    preview.set_step(None)
+    assert preview._source_option_pixmaps == {}
+    assert preview._scaled_option_pixmaps == {}
 
 
 def test_conditions_step_opens_task_dialog_and_remains_six_step_sized(
