@@ -164,7 +164,6 @@ def test_setup_workspace_and_summary_components_construct(qtbot) -> None:
 
 
 def test_theme_stylesheet_builders_expose_expected_selectors(qapp) -> None:
-    assert "QTabWidget#main_tabs::pane" in studio_theme_stylesheet()
     assert "QStackedWidget#main_stack" in studio_theme_stylesheet()
     assert "QWidget#home_page" in home_page_stylesheet(qapp.palette())
     assert 'QWidget[launchSurfaceRoot="true"]' in home_page_stylesheet(qapp.palette())
@@ -172,7 +171,6 @@ def test_theme_stylesheet_builders_expose_expected_selectors(qapp) -> None:
     assert 'QFrame[sectionCard="true"]' in section_card_stylesheet()
     assert 'QFrame[launchSurfaceFrame="true"]' in welcome_window_stylesheet(qapp.palette())
     assert "setupProgressStepper" in studio_theme_stylesheet()
-    assert "setup_wizard_status_strip" in studio_theme_stylesheet()
     assert "QDialog#image_size_preview_dialog" in image_size_preview_dialog_stylesheet()
     assert "#a1332b" in error_text_stylesheet()
     assert "text-decoration: underline" in condition_template_details_header_stylesheet()

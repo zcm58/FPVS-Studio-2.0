@@ -51,7 +51,6 @@ class AppSettingsDialog(QDialog):
         self.setModal(True)
         self.resize(700, 360 if experiment_test_mode_available else 320)
 
-        self._fpvs_root_dir = fpvs_root_dir
         self._on_show_root_folder_setup = on_show_root_folder_setup
         self._on_manage_condition_templates = on_manage_condition_templates
         self._on_detailed_run_exports_changed = on_detailed_run_exports_changed
@@ -164,10 +163,7 @@ class AppSettingsDialog(QDialog):
     def _show_root_folder_setup(self) -> None:
         if self._on_show_root_folder_setup is None:
             return
-        selected_path = self._on_show_root_folder_setup(self)
-        if selected_path is None:
-            return
-        self._fpvs_root_dir = selected_path
+        self._on_show_root_folder_setup(self)
 
     def _manage_condition_templates(self) -> None:
         if self._on_manage_condition_templates is None:

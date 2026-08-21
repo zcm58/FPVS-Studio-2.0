@@ -37,6 +37,12 @@ from fpvs_studio.gui.components import (
     mark_secondary_action,
     refresh_widget_style,
 )
+from fpvs_studio.gui.components import (
+    create_double_spin_box as _image_size_spin_box,
+)
+from fpvs_studio.gui.components import (
+    create_resolution_spin_box as _resolution_spin_box,
+)
 from fpvs_studio.gui.document import ProjectDocument
 from fpvs_studio.gui.presentation_settings_dialog import (
     PresentationSettingsDialog,
@@ -545,7 +551,6 @@ class ImageSizePreview(QWidget):
         self._preview_width_px = 1
         self._preview_height_px = 1
         self._natural_axis_reference = False
-        self._capped = False
         self.setMinimumSize(320, 240)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
@@ -559,21 +564,19 @@ class ImageSizePreview(QWidget):
             width_degrees = height_degrees or display.stimulus_width_degrees
         if height_degrees is None:
             height_degrees = width_degrees
+        screen_width_px = _display_screen_width_px(display)
         self._preview_width_px = visual_angle_width_px(
             degrees=width_degrees,
             viewing_distance_cm=display.viewing_distance_cm,
             screen_width_cm=display.screen_width_cm,
-            screen_width_px=_display_screen_width_px(display),
+            screen_width_px=screen_width_px,
         )
         self._preview_height_px = visual_angle_width_px(
             degrees=height_degrees,
             viewing_distance_cm=display.viewing_distance_cm,
             screen_width_cm=display.screen_width_cm,
-            screen_width_px=_display_screen_width_px(display),
+            screen_width_px=screen_width_px,
         )
-        self._capped = self._preview_width_px > max(
-            1, self.width() - 18
-        ) or self._preview_height_px > max(1, self.height() - 18)
         self.update()
 
     def paintEvent(self, event: QPaintEvent) -> None:  # noqa: N802
@@ -1029,31 +1032,3 @@ def _display_screen_width_px(display: object) -> int:
     if bool(getattr(display, "use_current_screen_resolution", False)):
         return _primary_screen_width_px()
     return max(1, int(getattr(display, "screen_width_px", 1920)))
-
-
-def _image_size_spin_box(
-    *,
-    parent: QWidget,
-    object_name: str,
-    minimum: float,
-    maximum: float,
-    decimals: int,
-    step: float,
-    suffix: str,
-) -> QDoubleSpinBox:
-    spin_box = QDoubleSpinBox(parent)
-    spin_box.setObjectName(object_name)
-    spin_box.setRange(minimum, maximum)
-    spin_box.setDecimals(decimals)
-    spin_box.setSingleStep(step)
-    spin_box.setSuffix(suffix)
-    return spin_box
-
-
-def _resolution_spin_box(*, parent: QWidget, object_name: str) -> QSpinBox:
-    spin_box = QSpinBox(parent)
-    spin_box.setObjectName(object_name)
-    spin_box.setRange(1, 20000)
-    spin_box.setSingleStep(10)
-    spin_box.setSuffix(" px")
-    return spin_box

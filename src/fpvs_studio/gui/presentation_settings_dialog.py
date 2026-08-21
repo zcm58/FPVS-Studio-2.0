@@ -9,7 +9,7 @@ from math import atan, degrees
 from pathlib import Path
 from typing import TypeVar
 
-from PySide6.QtCore import QRectF, Qt, Signal
+from PySide6.QtCore import QRectF, QSignalBlocker, Qt, Signal
 from PySide6.QtGui import QColor, QFont, QPainter, QPaintEvent, QPen, QPixmap
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -366,7 +366,8 @@ class PresentationDefaultsEditor(QWidget):
     def _emit_changed(self, *_args: object) -> None:
         """Normalize value-bearing widget signals to the editor's no-argument signal."""
 
-        self.changed.emit()
+        if not self._loading:
+            self.changed.emit()
 
     def _load(self, value: StimulusPresentationOverride) -> None:
         self._loading = True
@@ -436,7 +437,6 @@ class PresentationDefaultsEditor(QWidget):
             self.geometry_width_spin.setEnabled(False)
             self.geometry_height_spin.setEnabled(False)
             self.natural_dimension_combo.setEnabled(False)
-        self.changed.emit()
 
     def _update_height_state(self) -> None:
         randomized = self.text_height_mode_combo.currentData() == (
@@ -448,7 +448,6 @@ class PresentationDefaultsEditor(QWidget):
             if randomized
             else "Enter exactly one fixed text-height value."
         )
-        self.changed.emit()
 
     def _clear_legacy_text_height_compatibility(self) -> None:
         if not self._loading:
@@ -872,18 +871,12 @@ class PresentationSettingsDialog(QDialog):
 
         for editor in self._editors.values():
             editor.changed.connect(self._on_draft_changed)
-        for combo in (
-            self.preview_role_combo,
-            self.preview_modality_combo,
-            self.preview_stimulus_combo,
-            self.preview_size_combo,
-        ):
+        for combo in (self.preview_stimulus_combo, self.preview_size_combo):
             combo.currentIndexChanged.connect(self._refresh_preview)
         self.preview_role_combo.currentIndexChanged.connect(self._reload_stimulus_choices)
         self.preview_modality_combo.currentIndexChanged.connect(self._reload_stimulus_choices)
         apply_studio_theme(self)
         self._reload_stimulus_choices()
-        self._refresh_preview()
 
     @staticmethod
     def _scroll_editor(editor: QWidget) -> QScrollArea:
@@ -950,43 +943,47 @@ class PresentationSettingsDialog(QDialog):
 
     def _reload_stimulus_choices(self) -> None:
         current = self.preview_stimulus_combo.currentData()
-        self.preview_stimulus_combo.clear()
-        self.preview_stimulus_combo.setToolTip(
-            f"The preview shows at most {_PREVIEW_SAMPLE_LIMIT} representative items; "
-            "the experiment still uses the complete stimulus set."
-        )
-        role = self.preview_role_combo.currentData()
-        modality = self.preview_modality_combo.currentData()
-        if self._condition_id is None:
-            self.preview_stimulus_combo.addItem(
-                "Preview image" if modality == StimulusModality.IMAGE else "READ",
-                None if modality == StimulusModality.IMAGE else "READ",
+        with QSignalBlocker(self.preview_stimulus_combo):
+            self.preview_stimulus_combo.clear()
+            self.preview_stimulus_combo.setToolTip(
+                f"The preview shows at most {_PREVIEW_SAMPLE_LIMIT} representative items; "
+                "the experiment still uses the complete stimulus set."
             )
-        else:
-            stimulus_set = self._document.get_condition_stimulus_set(self._condition_id, role)
-            if modality == StimulusModality.WORD:
-                for word in _representative_sample(stimulus_set.words):
-                    self.preview_stimulus_combo.addItem(word, word)
+            role = self.preview_role_combo.currentData()
+            modality = self.preview_modality_combo.currentData()
+            if self._condition_id is None:
+                self.preview_stimulus_combo.addItem(
+                    "Preview image" if modality == StimulusModality.IMAGE else "READ",
+                    None if modality == StimulusModality.IMAGE else "READ",
+                )
             else:
-                condition = self._document.get_condition(self._condition_id)
-                variant = (
-                    condition.stimulus_variant
-                    if condition is not None
-                    else StimulusVariant.ORIGINAL
+                stimulus_set = self._document.get_condition_stimulus_set(
+                    self._condition_id,
+                    role,
                 )
-                paths = self._active_image_preview_paths(stimulus_set, variant)
-                for path in paths:
-                    self.preview_stimulus_combo.addItem(path.name, path)
-                self.preview_stimulus_combo.setToolTip(
-                    f"Showing up to {_PREVIEW_SAMPLE_LIMIT} representative "
-                    f"{variant.value.replace('_', ' ')} assets; the experiment uses "
-                    "the complete stimulus set."
-                )
-        if self.preview_stimulus_combo.count() == 0:
-            self.preview_stimulus_combo.addItem("No example available", None)
-        restored = self.preview_stimulus_combo.findData(current)
-        if restored >= 0:
-            self.preview_stimulus_combo.setCurrentIndex(restored)
+                if modality == StimulusModality.WORD:
+                    for word in _representative_sample(stimulus_set.words):
+                        self.preview_stimulus_combo.addItem(word, word)
+                else:
+                    condition = self._document.get_condition(self._condition_id)
+                    variant = (
+                        condition.stimulus_variant
+                        if condition is not None
+                        else StimulusVariant.ORIGINAL
+                    )
+                    paths = self._active_image_preview_paths(stimulus_set, variant)
+                    for path in paths:
+                        self.preview_stimulus_combo.addItem(path.name, path)
+                    self.preview_stimulus_combo.setToolTip(
+                        f"Showing up to {_PREVIEW_SAMPLE_LIMIT} representative "
+                        f"{variant.value.replace('_', ' ')} assets; the experiment uses "
+                        "the complete stimulus set."
+                    )
+            if self.preview_stimulus_combo.count() == 0:
+                self.preview_stimulus_combo.addItem("No example available", None)
+            restored = self.preview_stimulus_combo.findData(current)
+            if restored >= 0:
+                self.preview_stimulus_combo.setCurrentIndex(restored)
         self._refresh_preview()
 
     def _active_image_preview_paths(

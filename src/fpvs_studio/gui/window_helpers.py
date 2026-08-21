@@ -55,7 +55,7 @@ def _canonical_runtime_background_hex(background_color: str) -> str | None:
     return None
 
 
-def _show_error_dialog(parent: QWidget, title: str, error: Exception) -> None:
+def _show_error_dialog(parent: QWidget | None, title: str, error: Exception) -> None:
     """Show one user-facing error dialog with expandable details."""
 
     dialog = QMessageBox(parent)
@@ -66,6 +66,12 @@ def _show_error_dialog(parent: QWidget, title: str, error: Exception) -> None:
         "".join(traceback.format_exception(type(error), error, error.__traceback__))
     )
     dialog.exec()
+
+
+def _coerce_exception(error: object) -> Exception:
+    """Normalize arbitrary Qt signal payloads for error-dialog helpers."""
+
+    return error if isinstance(error, Exception) else RuntimeError(str(error))
 
 
 def _configure_centered_page_header_label(label: QLabel) -> None:
@@ -172,15 +178,6 @@ def _configure_read_only_list(widget: QListWidget) -> None:
     widget.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
 
 
-def _set_widget_property(widget: QWidget, name: str, value: str) -> None:
-    if widget.property(name) == value:
-        return
-    widget.setProperty(name, value)
-    widget.style().unpolish(widget)
-    widget.style().polish(widget)
-    widget.update()
-
-
 def _set_list_items(widget: QListWidget, lines: list[str] | tuple[str, ...]) -> None:
     widget.clear()
     for line in lines:
@@ -271,10 +268,8 @@ def _launcher_readiness_report(
     else:
         readiness_items.append("Needs setup: Add at least one condition.")
 
-    if conditions_ready and assets_ready:
+    if assets_ready:
         readiness_items.append("Complete: Stimulus assignments present for all conditions.")
-    elif conditions_ready:
-        readiness_items.append("Needs setup: Assign base and oddball sets for each condition.")
     else:
         readiness_items.append("Needs setup: Assign base and oddball sets for each condition.")
 

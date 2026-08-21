@@ -25,21 +25,13 @@ from fpvs_studio.core.condition_template_profiles import (
     list_condition_template_profiles,
     upsert_condition_template_profile,
 )
-from fpvs_studio.core.enums import DutyCycleMode
 from fpvs_studio.core.models import ConditionTemplateProfile, FixationTaskSettings
 from fpvs_studio.gui.components import apply_condition_template_details_header_style
 from fpvs_studio.gui.condition_template_profile_editor_dialog import (
     ConditionTemplateProfileEditorDialog,
 )
 from fpvs_studio.gui.presentation_settings_dialog import presentation_defaults_summary
-
-
-def _duty_cycle_label(mode: DutyCycleMode) -> str:
-    return {
-        DutyCycleMode.CONTINUOUS: "Continuous",
-        DutyCycleMode.BLANK_50: "50% Blank",
-    }[mode]
-
+from fpvs_studio.gui.window_helpers import _duty_cycle_label
 
 _DISPLAY_RESOLUTION_TEXT = "Full Screen (1920 × 1080)"
 

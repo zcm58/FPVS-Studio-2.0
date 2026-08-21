@@ -53,6 +53,7 @@ from fpvs_studio.gui.runtime_settings_page import DisplaySettingsEditor, ImageDi
 from fpvs_studio.gui.session_pages import FixationSettingsEditor, SessionStructureEditor
 from fpvs_studio.gui.window_helpers import (
     LauncherReadinessReport,
+    _coerce_exception,
     _conditions_have_assigned_assets,
     _launcher_readiness_report,
     _show_error_dialog,
@@ -768,10 +769,7 @@ class SetupWizardPage(QWidget):
         self._start_condition_image_normalization(dialog.target_size())
 
     def _on_condition_image_readiness_scan_failed(self, error: object) -> None:
-        if isinstance(error, Exception):
-            _show_error_dialog(self, "Image Readiness Error", error)
-        else:
-            _show_error_dialog(self, "Image Readiness Error", RuntimeError(str(error)))
+        _show_error_dialog(self, "Image Readiness Error", _coerce_exception(error))
 
     def _on_condition_image_readiness_scan_finished(self) -> None:
         self._active_image_readiness_task = None
@@ -841,10 +839,7 @@ class SetupWizardPage(QWidget):
         task.start()
 
     def _on_condition_image_normalization_failed(self, error: object) -> None:
-        if isinstance(error, Exception):
-            _show_error_dialog(self, "Image Normalization Error", error)
-        else:
-            _show_error_dialog(self, "Image Normalization Error", RuntimeError(str(error)))
+        _show_error_dialog(self, "Image Normalization Error", _coerce_exception(error))
 
     def _on_condition_image_normalization_finished(self) -> None:
         self._active_normalization_task = None

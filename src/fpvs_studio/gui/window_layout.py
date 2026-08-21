@@ -126,7 +126,6 @@ class PageContainer(QWidget):
             self._content_row.setStretch(0, 1)
             self._content_row.setStretch(1, 0)
             self._content_row.setStretch(2, 1)
-        self.content_frame.setProperty("pageWidthPreset", width_preset)
 
     def max_content_width(self) -> int:
         return _PAGE_WIDTH_PRESETS[self.width_preset]

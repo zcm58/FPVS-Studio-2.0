@@ -33,6 +33,7 @@ from fpvs_studio.gui.components import (
 from fpvs_studio.gui.design_system import elide_middle
 from fpvs_studio.gui.document import ConditionStimulusRow, ProjectDocument
 from fpvs_studio.gui.window_helpers import (
+    _coerce_exception,
     _prefixed_object_name,
     _resolution_text,
     _show_error_dialog,
@@ -347,10 +348,11 @@ class AssetsPage(QWidget):
         self.refresh()
 
     def _on_background_task_failed(self, error: object) -> None:
-        if isinstance(error, Exception):
-            _show_error_dialog(self, self._active_task_error_title, error)
-        else:
-            _show_error_dialog(self, self._active_task_error_title, RuntimeError(str(error)))
+        _show_error_dialog(
+            self,
+            self._active_task_error_title,
+            _coerce_exception(error),
+        )
 
     def _on_background_task_finished(self) -> None:
         self._active_task = None
@@ -537,10 +539,11 @@ class AssetsReadinessEditor(QWidget):
         self.refresh()
 
     def _on_background_task_failed(self, error: object) -> None:
-        if isinstance(error, Exception):
-            _show_error_dialog(self, self._active_task_error_title, error)
-        else:
-            _show_error_dialog(self, self._active_task_error_title, RuntimeError(str(error)))
+        _show_error_dialog(
+            self,
+            self._active_task_error_title,
+            _coerce_exception(error),
+        )
 
     def _on_background_task_finished(self) -> None:
         self._active_task = None

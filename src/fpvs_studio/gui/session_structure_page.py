@@ -219,13 +219,6 @@ class SessionStructureEditor(QWidget):
             return
         self._update_session_visibility_state()
 
-    def _generate_seed(self) -> None:
-        try:
-            self._document.generate_new_session_seed()
-        except Exception as error:
-            _show_error_dialog(self, "Random Order Seed Error", error)
-
-
 class SessionStructurePage(QWidget):
     """Session-level settings page."""
 

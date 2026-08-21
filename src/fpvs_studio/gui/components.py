@@ -34,6 +34,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QPushButton,
     QSizePolicy,
+    QSpinBox,
     QVBoxLayout,
     QWidget,
 )
@@ -84,7 +85,9 @@ __all__ = [
     "apply_studio_theme",
     "apply_welcome_window_theme",
     "condition_template_details_header_stylesheet",
+    "create_double_spin_box",
     "create_home_project_icon",
+    "create_resolution_spin_box",
     "create_setup_project_icon",
     "error_text_stylesheet",
     "fixation_settings_stylesheet",
@@ -106,6 +109,38 @@ __all__ = [
     "studio_theme_stylesheet",
     "welcome_window_stylesheet",
 ]
+
+
+def create_double_spin_box(
+    *,
+    parent: QWidget,
+    object_name: str,
+    minimum: float,
+    maximum: float,
+    decimals: int,
+    step: float,
+    suffix: str,
+) -> QDoubleSpinBox:
+    """Create a consistently configured decimal settings control."""
+
+    spin_box = QDoubleSpinBox(parent)
+    spin_box.setObjectName(object_name)
+    spin_box.setRange(minimum, maximum)
+    spin_box.setDecimals(decimals)
+    spin_box.setSingleStep(step)
+    spin_box.setSuffix(suffix)
+    return spin_box
+
+
+def create_resolution_spin_box(*, parent: QWidget, object_name: str) -> QSpinBox:
+    """Create the shared pixel-resolution settings control."""
+
+    spin_box = QSpinBox(parent)
+    spin_box.setObjectName(object_name)
+    spin_box.setRange(1, 20000)
+    spin_box.setSingleStep(10)
+    spin_box.setSuffix(" px")
+    return spin_box
 
 
 class FiniteDoubleSpinBox(QDoubleSpinBox):
@@ -287,7 +322,6 @@ class SetupChecklistPanel(QFrame):
                 "setupChecklistState",
                 "complete" if complete else "incomplete",
             )
-            mark = "✓" if complete else "✕"
             mark = "\u2713" if complete else "\u2715"
             item_label.setText(f"{mark} {label_text}")
             status_label = QLabel(status_text, self)
@@ -1145,12 +1179,6 @@ def studio_theme_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
     QLabel[bundleProcessingStatusBadge="true"] {{
         font-size: {FONT_SIZE_CONTROL + 1}px;
     }}
-    QFrame[processingDivider="true"] {{
-        border: none;
-        background-color: {color_border_soft};
-        min-width: 1px;
-        max-width: 1px;
-    }}
     QLabel[processingStepNumber="true"] {{
         border: 1px solid {color_info_border};
         border-radius: 15px;
@@ -1208,11 +1236,6 @@ def studio_theme_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
     QDialog#update_dialog QProgressBar::chunk {{
         border-radius: {CARD_CORNER_RADIUS}px;
         background-color: {color_primary};
-    }}
-    QTabWidget#main_tabs::pane {{
-        border: 1px solid {color_border};
-        background-color: {color_surface_elevated};
-        top: -1px;
     }}
     QPushButton {{
         border: 1px solid {color_border};
@@ -1321,9 +1344,7 @@ def studio_theme_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
     }}
     QListWidget#condition_list,
     QListWidget#setup_wizard_condition_list,
-    QListWidget#run_readiness_checklist,
-    QListWidget#home_readiness_list,
-    QListWidget#dashboard_attention_list {{
+    QListWidget#run_readiness_checklist {{
         border: 1px solid {color_border_soft};
         border-radius: {CARD_CORNER_RADIUS}px;
         background-color: {color_surface_elevated};
@@ -1332,24 +1353,21 @@ def studio_theme_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
     QListWidget#condition_list {{
         padding: 4px;
     }}
-    QListWidget#setup_wizard_condition_list,
-    QListWidget#setup_wizard_condition_image_list {{
+    QListWidget#setup_wizard_condition_list {{
         padding: 5px;
     }}
     QListWidget#condition_list::item {{
         padding: 7px 10px;
         border-radius: 8px;
     }}
-    QListWidget#setup_wizard_condition_list::item,
-    QListWidget#setup_wizard_condition_image_list::item {{
+    QListWidget#setup_wizard_condition_list::item {{
         padding: 5px 10px;
         border-radius: 8px;
     }}
     QListWidget#condition_list::item:hover {{
         background-color: {color_surface_alt};
     }}
-    QListWidget#setup_wizard_condition_list::item:hover,
-    QListWidget#setup_wizard_condition_image_list::item:hover {{
+    QListWidget#setup_wizard_condition_list::item:hover {{
         background-color: {color_surface_alt};
     }}
     QListWidget#condition_list::item:selected {{
@@ -1357,15 +1375,12 @@ def studio_theme_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
         color: {theme.selected_text};
         font-weight: 700;
     }}
-    QListWidget#setup_wizard_condition_list::item:selected,
-    QListWidget#setup_wizard_condition_image_list::item:selected {{
+    QListWidget#setup_wizard_condition_list::item:selected {{
         background-color: {color_primary};
         color: {theme.selected_text};
         font-weight: 700;
     }}
-    QListWidget#run_readiness_checklist::item,
-    QListWidget#home_readiness_list::item,
-    QListWidget#dashboard_attention_list::item {{
+    QListWidget#run_readiness_checklist::item {{
         padding: 4px 6px;
     }}
     QWidget[setupProgressStepper="true"] {{
@@ -1449,33 +1464,6 @@ def studio_theme_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
         border: none;
         border-top: 1px solid {color_border_soft};
         max-height: 1px;
-    }}
-    QFrame#setup_wizard_status_strip {{
-        border-top: 1px solid {color_border_soft};
-        background-color: {color_surface};
-    }}
-    QLabel[wizardStep="true"] {{
-        border: 1px solid {color_border_soft};
-        border-radius: {CARD_CORNER_RADIUS}px;
-        background-color: {color_surface_elevated};
-        color: {color_text_secondary};
-        padding: 6px 8px;
-        font-weight: 600;
-    }}
-    QLabel[wizardStep="true"][wizardStepState="complete"] {{
-        border-color: {color_success_border};
-        background-color: {color_success_bg};
-        color: {color_success_text};
-    }}
-    QLabel[wizardStep="true"][wizardStepState="current"] {{
-        border-color: {color_primary_border};
-        background-color: {color_primary};
-        color: {theme.selected_text};
-    }}
-    QLabel[wizardStep="true"][wizardStepState="upcoming"] {{
-        border-color: {color_border_soft};
-        background-color: {color_surface_alt};
-        color: {color_text_secondary};
     }}
     QTableWidget#assets_table {{
         border: 1px solid {color_border_soft};
@@ -1573,16 +1561,6 @@ def home_page_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
     QWidget#sophia_mode_ticker {{
         background-color: transparent;
     }}
-    QLabel[homeFieldLabel="true"] {{
-        color: {theme.text_muted};
-        font-size: 13px;
-        font-weight: 600;
-    }}
-    QLabel[homeValueRole="primary"] {{
-        color: {theme.text_primary};
-        font-size: 15px;
-        font-weight: 600;
-    }}
     QLabel[homeValueRole="secondary"] {{
         color: {theme.text_secondary};
         font-size: 13px;
@@ -1612,6 +1590,7 @@ def home_page_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
         font-weight: 600;
     }}
     QLabel[homeValueRole="primary"] {{
+        color: {theme.text_primary};
         font-size: 20px;
         font-weight: 700;
     }}
@@ -1652,11 +1631,6 @@ def project_overview_stylesheet(theme: StudioTheme | QPalette | None = None) -> 
     QLabel#project_overview_subtitle {{
         color: {theme.text_secondary};
         font-size: 13px;
-    }}
-    QFrame#project_overview_checklist {{
-        border: 1px solid {theme.border_soft};
-        border-radius: 8px;
-        background-color: {theme.surface_elevated};
     }}
     QFrame[setupChecklistPanel="true"] {{
         border: 1px solid {theme.border_soft};
@@ -1819,7 +1793,6 @@ def section_card_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
     QLabel[sectionCardRole="subtitle"] {{
         color: {theme.text_secondary};
     }}
-    QLabel[reviewChecklistSection="true"],
     QLabel[reviewSummarySectionTitle="true"] {{
         color: {theme.text_primary};
         font-weight: 700;

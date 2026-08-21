@@ -29,7 +29,7 @@ from fpvs_studio.gui.components import (
     mark_primary_action,
     mark_secondary_action,
 )
-from fpvs_studio.gui.window_helpers import _show_error_dialog
+from fpvs_studio.gui.window_helpers import _coerce_exception, _show_error_dialog
 from fpvs_studio.gui.workers import ProgressTask
 from fpvs_studio.preprocessing.normalization import (
     ImageFolderOptimizationResult,
@@ -247,7 +247,7 @@ class ImageResizerPage(QWidget):
         if not self._output_was_user_selected:
             suggested_output = self._suggested_output_dir()
             if suggested_output is not None:
-                self._set_output_dir(suggested_output, user_selected=False)
+                self._output_dir = suggested_output
         self._refresh_paths()
         self._refresh_enabled_state()
 
@@ -284,9 +284,6 @@ class ImageResizerPage(QWidget):
         else:
             self.status_badge.set_state("pending", "Optimize unavailable")
             self.result_label.setText(reason)
-
-    def _can_optimize(self) -> bool:
-        return self._disabled_reason() is None
 
     def _disabled_reason(self) -> str | None:
         if self._source_dir is None or self._output_dir is None:
@@ -351,12 +348,11 @@ class ImageResizerPage(QWidget):
 
     @Slot(object)
     def _on_optimization_failed(self, error: object) -> None:
-        exception = error if isinstance(error, Exception) else RuntimeError(str(error))
         self.status_badge.set_state("error", "Optimization failed")
         self.result_label.setText("No output paths were changed.")
         self._successful_output_dir = None
         self._refresh_output_actions()
-        _show_error_dialog(self, "Image Resizer Error", exception)
+        _show_error_dialog(self, "Image Resizer Error", _coerce_exception(error))
 
     @Slot()
     def _on_optimization_finished(self) -> None:

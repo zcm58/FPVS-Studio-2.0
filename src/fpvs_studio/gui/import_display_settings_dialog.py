@@ -8,13 +8,11 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,
-    QDoubleSpinBox,
     QFrame,
     QGridLayout,
     QHBoxLayout,
     QLabel,
     QPushButton,
-    QSpinBox,
     QVBoxLayout,
     QWidget,
 )
@@ -26,6 +24,12 @@ from fpvs_studio.gui.components import (
     apply_studio_theme,
     mark_primary_action,
     mark_secondary_action,
+)
+from fpvs_studio.gui.components import (
+    create_double_spin_box as _display_double_spin_box,
+)
+from fpvs_studio.gui.components import (
+    create_resolution_spin_box as _display_resolution_spin_box,
 )
 
 
@@ -338,31 +342,3 @@ def detect_primary_display_settings() -> DetectedDisplaySettings:
         screen_width_px=max(1, geometry.width()),
         screen_height_px=max(1, geometry.height()),
     )
-
-
-def _display_double_spin_box(
-    *,
-    parent: QWidget,
-    object_name: str,
-    minimum: float,
-    maximum: float,
-    decimals: int,
-    step: float,
-    suffix: str,
-) -> QDoubleSpinBox:
-    spin_box = QDoubleSpinBox(parent)
-    spin_box.setObjectName(object_name)
-    spin_box.setRange(minimum, maximum)
-    spin_box.setDecimals(decimals)
-    spin_box.setSingleStep(step)
-    spin_box.setSuffix(suffix)
-    return spin_box
-
-
-def _display_resolution_spin_box(*, parent: QWidget, object_name: str) -> QSpinBox:
-    spin_box = QSpinBox(parent)
-    spin_box.setObjectName(object_name)
-    spin_box.setRange(1, 20000)
-    spin_box.setSingleStep(10)
-    spin_box.setSuffix(" px")
-    return spin_box

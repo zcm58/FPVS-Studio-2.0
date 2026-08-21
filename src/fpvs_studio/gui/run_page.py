@@ -45,6 +45,7 @@ from fpvs_studio.gui.document_support import DocumentError, format_validation_re
 from fpvs_studio.gui.runtime_settings_page import DisplaySettingsEditor
 from fpvs_studio.gui.window_helpers import (
     LauncherReadinessReport,
+    _coerce_exception,
     _configure_read_only_list,
     _launcher_readiness_report,
     _set_list_items,
@@ -464,7 +465,6 @@ class RunPage(QWidget):
         super().__init__(parent)
         self._document = document
         self._active_launch_task: ProgressTask | None = None
-        self._active_launch_session_plan: SessionPlan | None = None
         self._active_launch_participant_number: str | None = None
         self._last_run_output_dir: str | None = None
 
@@ -709,7 +709,6 @@ class RunPage(QWidget):
             )
             return LaunchTaskResult(session_plan=session_plan, summary=summary)
 
-        self._active_launch_session_plan = session_plan
         self._active_launch_participant_number = participant_number
         self._last_run_output_dir = None
         self._refresh_run_output_actions()
@@ -742,20 +741,20 @@ class RunPage(QWidget):
         self._apply_launch_summary(result.session_plan, participant_number, result.summary)
 
     def _on_launch_failed(self, error: object) -> None:
-        if isinstance(error, Exception):
-            _show_runtime_error_dialog(self, "Launch Error", error)
-        else:
-            _show_runtime_error_dialog(self, "Launch Error", RuntimeError(str(error)))
+        _show_runtime_error_dialog(self, "Launch Error", _coerce_exception(error))
 
     def _on_launch_finished(self) -> None:
         self._active_launch_task = None
-        self._active_launch_session_plan = None
         self._active_launch_participant_number = None
         self._update_launch_buttons()
 
-    def _update_launch_buttons(self) -> None:
+    def _update_launch_buttons(
+        self,
+        status_report: LauncherReadinessReport | None = None,
+    ) -> None:
         is_busy = self._active_launch_task is not None
-        status_report = self._status_report()
+        if status_report is None:
+            status_report = self._status_report()
         launch_ready = status_report.badge_state == "ready" or (
             status_report.status_label == "Validation Issues"
         )
@@ -905,7 +904,7 @@ class RunPage(QWidget):
             summary_text = f"{summary_text} {report.preview_note}"
         self.readiness_summary_value.setText(summary_text)
         _set_list_items(self.readiness_checklist, report.readiness_items)
-        self._update_launch_buttons()
+        self._update_launch_buttons(report)
 
     def _set_summary(
         self, session_plan: SessionPlan, *, extra_lines: list[str] | None = None

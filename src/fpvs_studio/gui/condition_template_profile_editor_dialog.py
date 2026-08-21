@@ -33,13 +33,7 @@ from fpvs_studio.core.models import (
 )
 from fpvs_studio.gui.components import FiniteDoubleSpinBox
 from fpvs_studio.gui.presentation_settings_dialog import PresentationDefaultsEditor
-
-
-def _duty_cycle_label(mode: DutyCycleMode) -> str:
-    return {
-        DutyCycleMode.CONTINUOUS: "Continuous",
-        DutyCycleMode.BLANK_50: "50% Blank",
-    }[mode]
+from fpvs_studio.gui.window_helpers import _duty_cycle_label
 
 
 class ConditionTemplateProfileEditorDialog(QDialog):

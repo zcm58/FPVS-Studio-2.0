@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
-from PySide6.QtCore import QEvent, QObject, Qt, QTimer, QUrl, Signal, Slot
+from PySide6.QtCore import QEvent, Qt, QTimer, QUrl, Slot
 from PySide6.QtGui import QAction, QCloseEvent, QDesktopServices, QShowEvent
 from PySide6.QtWidgets import (
     QApplication,
@@ -40,7 +40,6 @@ from fpvs_studio.core.project_bundle import (
     export_project_bundle as write_project_bundle,
 )
 from fpvs_studio.core.project_config import PROJECT_CONFIG_SUFFIX, project_config_filename
-from fpvs_studio.core.session_plan import SessionPlan
 from fpvs_studio.gui import folder_actions
 from fpvs_studio.gui.animations import ButtonHoverAnimator
 from fpvs_studio.gui.bundle_export_dialog import BundleExportOptionsDialog
@@ -66,9 +65,10 @@ from fpvs_studio.gui.setup_wizard_page import SetupWizardPage
 from fpvs_studio.gui.update_dialog import UpdateDialog
 from fpvs_studio.gui.window_helpers import (
     _LAUNCH_INTERSTITIAL_DURATION_MS,
+    _coerce_exception,
     _show_error_dialog,
 )
-from fpvs_studio.gui.workers import BackgroundTask, ProgressTask
+from fpvs_studio.gui.workers import BackgroundTask, ProgressSignalBridge, ProgressTask
 from fpvs_studio.runtime.session_export import GROUP_SUMMARY_XLSX_FILENAME
 
 __all__ = [
@@ -85,20 +85,12 @@ _COMPACT_HOME_MINIMUM_SIZE = (760, 520)
 _COMPACT_HOME_DEFAULT_SIZE = (1120, 720)
 _COMPACT_SETUP_MINIMUM_SIZE = (960, 640)
 _COMPACT_SETUP_DEFAULT_SIZE = (1120, 720)
-_WORKSPACE_MINIMUM_SIZE = (1366, 820)
-_WORKSPACE_DEFAULT_SIZE = (1440, 920)
 _UTILITY_MINIMUM_SIZE = (960, 640)
 _UTILITY_DEFAULT_SIZE = (1120, 720)
 _AUTO_WORKSPACE_SIZE_TOLERANCE = 16
 _TUTORIALS_URL = "https://zcm58.github.io/FPVS-Studio-2.0/"
 
 LOGGER = logging.getLogger(__name__)
-
-
-class _BundleExportProgressBridge(QObject):
-    """Carry worker-thread bundle export progress back to the GUI thread."""
-
-    stage_changed = Signal(str)
 
 
 @dataclass(frozen=True)
@@ -156,8 +148,7 @@ class StudioMainWindow(QMainWindow):
         self._auto_workspace_size: tuple[int, int] | None = None
         self._active_bundle_export_task: BackgroundTask | None = None
         self._bundle_export_previous_widget: QWidget | None = None
-        self._bundle_export_target_path: Path | None = None
-        self._bundle_export_progress_bridge: _BundleExportProgressBridge | None = None
+        self._bundle_export_progress_bridge: ProgressSignalBridge | None = None
         self._bundle_export_completed_result: _BundleExportTaskResult | None = None
         self._bundle_import_previous_widget: QWidget | None = None
         self._bundle_import_processing_active = False
@@ -173,7 +164,6 @@ class StudioMainWindow(QMainWindow):
         self._session_seed_task: BackgroundTask | None = None
         self._launch_after_session_seed_ready = False
         self._active_launch_task: ProgressTask | None = None
-        self._active_launch_session_plan: SessionPlan | None = None
         self._active_launch_participant_number: str | None = None
         self._apply_compact_window_size()
 
@@ -383,45 +373,27 @@ class StudioMainWindow(QMainWindow):
         elif was_below_compact_minimum:
             self.resize(*_COMPACT_HOME_DEFAULT_SIZE)
 
-    def _apply_workspace_window_size(self) -> None:
-        needs_workspace_resize = (
-            self.width() < _WORKSPACE_MINIMUM_SIZE[0]
-            or self.height() < _WORKSPACE_MINIMUM_SIZE[1]
-        )
-        compact_return_size = (self.width(), self.height())
-        self.setMinimumSize(*_WORKSPACE_MINIMUM_SIZE)
-        if needs_workspace_resize:
-            self.resize(*_WORKSPACE_DEFAULT_SIZE)
-            self._auto_workspace_sized = True
-            self._auto_workspace_return_size = compact_return_size
-            self._auto_workspace_size = (self.width(), self.height())
-        else:
-            self._clear_auto_workspace_size()
-
     def _apply_utility_window_size(self) -> None:
-        needs_utility_resize = (
-            self.width() < _UTILITY_MINIMUM_SIZE[0]
-            or self.height() < _UTILITY_MINIMUM_SIZE[1]
-        )
-        compact_return_size = (self.width(), self.height())
-        self.setMinimumSize(*_UTILITY_MINIMUM_SIZE)
-        if needs_utility_resize:
-            self.resize(*_UTILITY_DEFAULT_SIZE)
-            self._auto_workspace_sized = True
-            self._auto_workspace_return_size = compact_return_size
-            self._auto_workspace_size = (self.width(), self.height())
-        else:
-            self._clear_auto_workspace_size()
+        self._apply_expanded_window_size(_UTILITY_MINIMUM_SIZE, _UTILITY_DEFAULT_SIZE)
 
     def _apply_setup_window_size(self) -> None:
-        needs_setup_resize = (
-            self.width() < _COMPACT_SETUP_MINIMUM_SIZE[0]
-            or self.height() < _COMPACT_SETUP_MINIMUM_SIZE[1]
+        self._apply_expanded_window_size(
+            _COMPACT_SETUP_MINIMUM_SIZE,
+            _COMPACT_SETUP_DEFAULT_SIZE,
+        )
+
+    def _apply_expanded_window_size(
+        self,
+        minimum_size: tuple[int, int],
+        default_size: tuple[int, int],
+    ) -> None:
+        needs_resize = (
+            self.width() < minimum_size[0] or self.height() < minimum_size[1]
         )
         compact_return_size = (self.width(), self.height())
-        self.setMinimumSize(*_COMPACT_SETUP_MINIMUM_SIZE)
-        if needs_setup_resize:
-            self.resize(*_COMPACT_SETUP_DEFAULT_SIZE)
+        self.setMinimumSize(*minimum_size)
+        if needs_resize:
+            self.resize(*default_size)
             self._auto_workspace_sized = True
             self._auto_workspace_return_size = compact_return_size
             self._auto_workspace_size = (self.width(), self.height())
@@ -665,7 +637,6 @@ class StudioMainWindow(QMainWindow):
             )
             return LaunchTaskResult(session_plan=session_plan, summary=summary)
 
-        self._active_launch_session_plan = session_plan
         self._active_launch_participant_number = participant_number
         task = ProgressTask(
             parent_widget=self,
@@ -759,13 +730,11 @@ class StudioMainWindow(QMainWindow):
 
     @Slot(object)
     def _on_home_launch_failed(self, error: object) -> None:
-        exception = error if isinstance(error, Exception) else RuntimeError(str(error))
-        _show_error_dialog(self, "Launch Error", exception)
+        _show_error_dialog(self, "Launch Error", _coerce_exception(error))
 
     @Slot()
     def _on_home_launch_finished(self) -> None:
         self._active_launch_task = None
-        self._active_launch_session_plan = None
         self._active_launch_participant_number = None
         self.launch_action.setEnabled(True)
         self.home_page.refresh()
@@ -868,7 +837,7 @@ class StudioMainWindow(QMainWindow):
 
     def _start_bundle_export(self, path: Path, *, project_name: str) -> None:
         project_root = self.document.project_root
-        progress_bridge = _BundleExportProgressBridge(self)
+        progress_bridge = ProgressSignalBridge(self)
         progress_bridge.stage_changed.connect(self._on_bundle_export_stage_changed)
         self._bundle_export_progress_bridge = progress_bridge
 
@@ -882,7 +851,6 @@ class StudioMainWindow(QMainWindow):
             return _BundleExportTaskResult(path=path, manifest=manifest)
 
         self._bundle_export_previous_widget = self.main_stack.currentWidget()
-        self._bundle_export_target_path = path
         self._bundle_export_completed_result = None
         self.bundle_export_processing_page.reset_steps()
         self.bundle_export_processing_page.set_transfer_context(
@@ -978,8 +946,11 @@ class StudioMainWindow(QMainWindow):
 
     @Slot(object)
     def _on_bundle_export_failed(self, error: object) -> None:
-        exception = error if isinstance(error, Exception) else RuntimeError(str(error))
-        _show_error_dialog(self, "Export Project Bundle Error", exception)
+        _show_error_dialog(
+            self,
+            "Export Project Bundle Error",
+            _coerce_exception(error),
+        )
 
     @Slot(str)
     def _on_bundle_export_stage_changed(self, stage: str) -> None:
@@ -991,7 +962,6 @@ class StudioMainWindow(QMainWindow):
     def _on_bundle_export_finished(self) -> None:
         self.bundle_export_processing_page.stop()
         self._active_bundle_export_task = None
-        self._bundle_export_target_path = None
         progress_bridge = self._bundle_export_progress_bridge
         if progress_bridge is not None:
             progress_bridge.stage_changed.disconnect(self._on_bundle_export_stage_changed)
@@ -1025,28 +995,14 @@ class StudioMainWindow(QMainWindow):
         previous_widget = self._bundle_export_previous_widget
         self._bundle_export_previous_widget = None
         self._bundle_export_completed_result = None
-        if previous_widget is self.home_page:
-            self.home_page.refresh()
-            self._set_home_chrome_visible(True, status_visible=False)
-            self._apply_compact_window_size()
-            self._sync_home_chrome_offset()
-            self.main_stack.setCurrentWidget(self.home_page)
-            return
-        if self._setup_wizard_page is not None and previous_widget is self._setup_wizard_page:
-            self._set_home_chrome_visible(True)
-            self._apply_setup_window_size()
-            self.main_stack.setCurrentWidget(self._setup_wizard_page)
-            return
-        if self._image_resizer_page is not None and previous_widget is self._image_resizer_page:
-            self._set_home_chrome_visible(True)
-            self._apply_utility_window_size()
-            self.main_stack.setCurrentWidget(self._image_resizer_page)
-            return
-        self.show_home()
+        self._restore_after_bundle_processing(previous_widget)
 
     def _restore_after_bundle_import(self) -> None:
         previous_widget = self._bundle_import_previous_widget
         self._bundle_import_previous_widget = None
+        self._restore_after_bundle_processing(previous_widget)
+
+    def _restore_after_bundle_processing(self, previous_widget: QWidget | None) -> None:
         if previous_widget is self.home_page:
             self.home_page.refresh()
             self._set_home_chrome_visible(True, status_visible=False)

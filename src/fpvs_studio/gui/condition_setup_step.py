@@ -39,6 +39,7 @@ from fpvs_studio.gui.components import (
     PAGE_SECTION_GAP,
     SetupSourceCard,
     mark_compact_info_action,
+    mark_destructive_action,
     mark_primary_action,
     mark_secondary_action,
 )
@@ -54,6 +55,7 @@ from fpvs_studio.gui.presentation_settings_dialog import (
 )
 from fpvs_studio.gui.window_helpers import (
     DebouncedTextCommitter,
+    _coerce_exception,
     _resolution_text,
     _show_error_dialog,
     _sync_text_editor_contents,
@@ -320,7 +322,6 @@ class ConditionSetupStep(QWidget):
 
         self.condition_list = QListWidget(self)
         self.condition_list.setObjectName("setup_wizard_condition_list")
-        self.condition_list.setProperty("setupConditionsList", "true")
         self.condition_list.setSelectionMode(QListWidget.SelectionMode.SingleSelection)
         self.condition_list.setAlternatingRowColors(True)
         self.condition_list.currentItemChanged.connect(self._handle_current_condition_changed)
@@ -342,7 +343,7 @@ class ConditionSetupStep(QWidget):
         self.remove_condition_button = QPushButton("Remove", self)
         self.remove_condition_button.setObjectName("setup_wizard_remove_condition_button")
         self.remove_condition_button.clicked.connect(self._remove_condition)
-        self.remove_condition_button.setProperty("destructiveActionRole", "true")
+        mark_destructive_action(self.remove_condition_button)
 
         list_panel = QWidget(self)
         list_panel.setObjectName("setup_conditions_left_panel")
@@ -1164,10 +1165,11 @@ class ConditionSetupStep(QWidget):
         task.start()
 
     def _on_materialization_failed(self, error: object) -> None:
-        if isinstance(error, Exception):
-            _show_error_dialog(self, "Control Condition Variant Error", error)
-        else:
-            _show_error_dialog(self, "Control Condition Variant Error", RuntimeError(str(error)))
+        _show_error_dialog(
+            self,
+            "Control Condition Variant Error",
+            _coerce_exception(error),
+        )
 
     def _on_materialization_finished(self) -> None:
         self._active_task = None

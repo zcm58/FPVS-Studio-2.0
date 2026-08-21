@@ -195,7 +195,6 @@ class ResponseKeyPickerPopover(QFrame):
             for label, key in row:
                 button = QPushButton(label, self)
                 button.setObjectName(f"response_key_{key}_button")
-                button.setProperty("keyboardKey", key)
                 button.setToolTip(f"Use {label} as the fixation response key.")
                 button.setMinimumHeight(28)
                 if key == "space":
@@ -327,9 +326,6 @@ class FixationSettingsEditor(QWidget):
         self._document = document
         self._schedule_row_behavior = schedule_row_behavior
         self._layout_mode = layout_mode
-        self._compact = compact
-        self._framed = framed
-        self._show_preview = show_preview
         self._section_mode = section_mode
         card_margin_y = 6 if compact else 10
         card_spacing = 5 if compact else 8
@@ -348,7 +344,7 @@ class FixationSettingsEditor(QWidget):
             self,
         )
         self.fixation_accuracy_checkbox.setObjectName("fixation_accuracy_checkbox")
-        self.fixation_accuracy_checkbox.stateChanged.connect(self._on_fixation_accuracy_toggled)
+        self.fixation_accuracy_checkbox.stateChanged.connect(self._on_fixation_controls_changed)
         self.fixation_accuracy_checkbox.setVisible(section_mode in {"all", "response"})
         self._recommended_change_cap: int | None = None
 
@@ -356,7 +352,9 @@ class FixationSettingsEditor(QWidget):
         self.target_count_mode_combo.setObjectName("target_count_mode_combo")
         self.target_count_mode_combo.addItem("Fixed per condition", userData="fixed")
         self.target_count_mode_combo.addItem("Randomized per condition run", userData="randomized")
-        self.target_count_mode_combo.currentIndexChanged.connect(self._on_target_count_mode_changed)
+        self.target_count_mode_combo.currentIndexChanged.connect(
+            self._on_fixation_controls_changed
+        )
 
         self.changes_per_sequence_spin = QSpinBox(self)
         self.changes_per_sequence_spin.setObjectName("changes_per_sequence_spin")
@@ -739,23 +737,21 @@ class FixationSettingsEditor(QWidget):
         self._refresh_preview()
 
     def _update_fixation_visibility_state(self) -> None:
-        fixation_enabled = True
-        self.fixation_enabled_checkbox.setChecked(True)
-        self.fixation_accuracy_checkbox.setEnabled(fixation_enabled)
+        self.fixation_accuracy_checkbox.setEnabled(True)
 
         show_fixation_sections = self._section_mode in {"all", "fixation"}
         for group, panel in (
             (self.fixation_behavior_group, self.fixation_behavior_panel),
             (self.fixation_timing_group, self.fixation_timing_panel),
         ):
-            visible = show_fixation_sections and fixation_enabled
+            visible = show_fixation_sections
             group.setVisible(visible)
             group.setEnabled(visible)
             panel.setVisible(visible)
             panel.setEnabled(visible)
 
         show_response_sections = self._section_mode in {"all", "response"}
-        appearance_visible = show_response_sections and fixation_enabled
+        appearance_visible = show_response_sections
         self.fixation_appearance_group.setVisible(appearance_visible)
         self.fixation_appearance_group.setEnabled(appearance_visible)
         self.fixation_appearance_panel.setVisible(appearance_visible)
@@ -794,12 +790,12 @@ class FixationSettingsEditor(QWidget):
                 self.no_repeat_count_checkbox,
                 True,
             )
-            self.changes_per_sequence_spin.setEnabled(fixation_enabled and not randomized_mode)
-            self.target_count_min_spin.setEnabled(fixation_enabled and randomized_mode)
-            self.target_count_max_spin.setEnabled(fixation_enabled and randomized_mode)
-            self.no_repeat_count_checkbox.setEnabled(fixation_enabled and randomized_mode)
+            self.changes_per_sequence_spin.setEnabled(not randomized_mode)
+            self.target_count_min_spin.setEnabled(randomized_mode)
+            self.target_count_max_spin.setEnabled(randomized_mode)
+            self.no_repeat_count_checkbox.setEnabled(randomized_mode)
 
-        accuracy_enabled = fixation_enabled and self.fixation_accuracy_checkbox.isChecked()
+        accuracy_enabled = self.fixation_accuracy_checkbox.isChecked()
         self.fixation_response_panel.setVisible(show_response_sections)
         self.fixation_response_panel.setEnabled(show_response_sections)
         self.fixation_response_group.setVisible(show_response_sections)
@@ -906,11 +902,7 @@ class FixationSettingsEditor(QWidget):
         self._update_fixation_visibility_state()
         self._apply_fixation_settings()
 
-    def _on_target_count_mode_changed(self) -> None:
-        self._update_fixation_visibility_state()
-        self._apply_fixation_settings()
-
-    def _on_fixation_accuracy_toggled(self) -> None:
+    def _on_fixation_controls_changed(self) -> None:
         self._update_fixation_visibility_state()
         self._apply_fixation_settings()
 

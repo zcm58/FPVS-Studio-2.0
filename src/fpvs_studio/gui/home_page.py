@@ -31,7 +31,6 @@ from fpvs_studio.gui.components import (
     mark_home_launch_action,
     mark_primary_action,
     mark_secondary_action,
-    refresh_widget_style,
 )
 from fpvs_studio.gui.document import ProjectDocument
 from fpvs_studio.gui.project_overview_page import ProjectOverviewEditor
@@ -759,7 +758,6 @@ class HomePage(QWidget):
             self.edit_setup_button.setText("Complete Setup")
             self.edit_setup_button.setProperty("secondaryActionRole", "false")
             mark_primary_action(self.edit_setup_button)
-        refresh_widget_style(self.edit_setup_button)
 
     def _open_setup_from_home(self) -> None:
         report = self._status_report()

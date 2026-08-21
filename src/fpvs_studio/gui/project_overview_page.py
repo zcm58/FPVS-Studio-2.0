@@ -115,19 +115,7 @@ class ProjectOverviewEditor(QWidget):
             "Apply the selected default timing template to all existing conditions."
         )
         self.apply_profile_to_conditions_button.clicked.connect(self._apply_profile_to_conditions)
-        self.apply_profile_to_conditions_button.setMinimumWidth(
-            self.apply_profile_to_conditions_button.fontMetrics().horizontalAdvance(
-                self.apply_profile_to_conditions_button.text()
-            )
-            + 32
-        )
         self.apply_profile_to_conditions_button.setVisible(False)
-        self.manage_templates_button.setMinimumWidth(
-            self.manage_templates_button.fontMetrics().horizontalAdvance(
-                self.manage_templates_button.text()
-            )
-            + 32
-        )
         self.participant_tutorial_checkbox = QCheckBox("Enable participant tutorial?", self)
         self.participant_tutorial_checkbox.setObjectName("participant_tutorial_checkbox")
         self.participant_tutorial_checkbox.setToolTip(_PARTICIPANT_TUTORIAL_TOOLTIP)

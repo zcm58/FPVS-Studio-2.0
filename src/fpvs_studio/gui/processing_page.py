@@ -598,9 +598,7 @@ class _ProcessingStep(QWidget):
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
-        self.label_text = text
         self.setObjectName(f"{object_prefix}_step_{number}")
-        self.setProperty("processingStep", "true")
         self.setMinimumWidth(0)
         self.setMinimumHeight(42)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)

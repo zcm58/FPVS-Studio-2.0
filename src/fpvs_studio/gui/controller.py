@@ -10,14 +10,13 @@ import os
 import shutil
 import stat
 import sys
-import traceback
 from collections.abc import Callable
 from ctypes import wintypes
 from pathlib import Path
 from types import TracebackType
 from typing import cast
 
-from PySide6.QtCore import QObject, QSettings, QThread, QTimer, Signal, Slot
+from PySide6.QtCore import QObject, QSettings, QThread, QTimer, Slot
 from PySide6.QtWidgets import QApplication, QDialog, QFileDialog, QMessageBox, QWidget
 
 from fpvs_studio.core.condition_template_profiles import (
@@ -51,7 +50,13 @@ from fpvs_studio.gui.root_folder_setup_dialog import RootFolderSetupDialog
 from fpvs_studio.gui.settings_dialog import AppSettingsDialog
 from fpvs_studio.gui.update_dialog import UpdateDialog
 from fpvs_studio.gui.welcome_window import WelcomeWindow
-from fpvs_studio.gui.workers import BackgroundTask
+from fpvs_studio.gui.window_helpers import (
+    _coerce_exception,
+)
+from fpvs_studio.gui.window_helpers import (
+    _show_error_dialog as _show_error,
+)
+from fpvs_studio.gui.workers import BackgroundTask, GuiTaskWorker, ProgressSignalBridge
 from fpvs_studio.runtime.export_modes import (
     EXPORT_MODE_COMPACT,
     EXPORT_MODE_FULL,
@@ -79,44 +84,6 @@ def experiment_test_mode_available() -> bool:
     return supported_platform and not bool(getattr(sys, "frozen", False))
 
 
-def _show_error(parent: QWidget | None, title: str, error: Exception) -> None:
-    dialog = QMessageBox(parent)
-    dialog.setIcon(QMessageBox.Icon.Critical)
-    dialog.setWindowTitle(title)
-    dialog.setText(str(error))
-    dialog.setDetailedText(
-        "".join(traceback.format_exception(type(error), error, error.__traceback__))
-    )
-    dialog.exec()
-
-
-class _StartupUpdateCheckWorker(QObject):
-    succeeded = Signal(object)
-    failed = Signal(object)
-    finished = Signal()
-
-    def __init__(self, callback: Callable[[], UpdateCheckResult]) -> None:
-        super().__init__()
-        self._callback = callback
-
-    @Slot()
-    def run(self) -> None:
-        try:
-            result = self._callback()
-        except Exception as error:
-            self.failed.emit(error)
-        else:
-            self.succeeded.emit(result)
-        finally:
-            self.finished.emit()
-
-
-class _BundleImportProgressBridge(QObject):
-    """Carry worker-thread bundle import progress back to the GUI thread."""
-
-    stage_changed = Signal(str)
-
-
 class StudioController(QObject):
     """Own the top-level FPVS Studio windows and project-opening flows."""
 
@@ -136,10 +103,10 @@ class StudioController(QObject):
         self.startup_update_checks_enabled = True
         self._startup_update_check_started = False
         self._startup_update_thread: QThread | None = None
-        self._startup_update_worker: _StartupUpdateCheckWorker | None = None
+        self._startup_update_worker: GuiTaskWorker | None = None
         self._startup_update_check_callback: Callable[[], UpdateCheckResult] = check_for_updates
         self._active_import_bundle_task: BackgroundTask | None = None
-        self._import_bundle_progress_bridge: _BundleImportProgressBridge | None = None
+        self._import_bundle_progress_bridge: ProgressSignalBridge | None = None
         self._import_bundle_processing_window: StudioMainWindow | None = None
         self._import_bundle_processing_dialog: BundleImportProgressDialog | None = None
 
@@ -178,7 +145,7 @@ class StudioController(QObject):
     def _start_startup_update_check(self) -> None:
         if self._startup_update_thread is not None:
             return
-        worker = _StartupUpdateCheckWorker(self._startup_update_check_callback)
+        worker = GuiTaskWorker(self._startup_update_check_callback)
         thread = QThread(self._app)
         worker.moveToThread(thread)
         thread.started.connect(worker.run)
@@ -872,7 +839,7 @@ class StudioController(QObject):
         if task_parent is None:
             raise RuntimeError("Project bundle import requires an active Studio window.")
 
-        progress_bridge = _BundleImportProgressBridge(self)
+        progress_bridge = ProgressSignalBridge(self)
         progress_bridge.stage_changed.connect(self._on_import_project_bundle_stage_changed)
         self._import_bundle_progress_bridge = progress_bridge
         self._import_bundle_processing_window = self.main_window
@@ -957,11 +924,10 @@ class StudioController(QObject):
     def _on_import_project_bundle_failed(self, error: object) -> None:
         window = self._import_bundle_processing_window
         self._finish_project_bundle_import_processing(restore_previous=True)
-        exception = error if isinstance(error, Exception) else RuntimeError(str(error))
         _show_error(
             window or self.main_window or self.welcome_window,
             "Import FPVS Studio Project Error",
-            exception,
+            _coerce_exception(error),
         )
 
     @Slot()

@@ -65,6 +65,7 @@ from fpvs_studio.core.task_models import (
     TaskStepKind as CoreTaskStepKind,
 )
 from fpvs_studio.gui.components import (
+    mark_destructive_action,
     mark_error_text,
     mark_primary_action,
     mark_secondary_action,
@@ -113,7 +114,6 @@ _OCCURRENCE_LABELS = (
     ("Last occurrence in the session", "last_occurrence"),
 )
 _IMAGE_SUFFIXES = frozenset({".jpeg", ".jpg", ".png"})
-_MAX_AUTHORED_TEXT = 10_000
 
 
 @dataclass
@@ -741,14 +741,10 @@ class TaskOptionTable(QTableWidget):
         unit_combo.addItem("Degrees", "degrees")
         unit_combo.addItem("Window-height fraction", "window_height_fraction")
         unit_combo.setCurrentIndex(max(0, unit_combo.findData(option.unit)))
-        unit_combo.currentIndexChanged.connect(self._emit_combo_changed)
+        unit_combo.currentIndexChanged.connect(self._emit_changed)
         self.setCellWidget(row, 10, unit_combo)
 
-    def _emit_changed(self, _item: QTableWidgetItem) -> None:
-        if not self._syncing:
-            self.changed.emit()
-
-    def _emit_combo_changed(self, _index: int) -> None:
+    def _emit_changed(self, *_args: object) -> None:
         if not self._syncing:
             self.changed.emit()
 
@@ -849,7 +845,7 @@ class QuestionnaireEditor(QWidget):
         self.remove_button = QPushButton("Remove", self)
         self.remove_button.setObjectName("condition_task_remove_question_button")
         self.remove_button.clicked.connect(self._remove_question)
-        self.remove_button.setProperty("destructiveActionRole", "true")
+        mark_destructive_action(self.remove_button)
 
         list_actions = QGridLayout()
         list_actions.setContentsMargins(0, 0, 0, 0)
@@ -1400,7 +1396,7 @@ class TaskStepEditor(QWidget):
         self.remove_item_button = QPushButton("Remove Item", self)
         self.remove_item_button.setObjectName("condition_task_remove_item_button")
         self.remove_item_button.clicked.connect(self.option_table.remove_selected)
-        self.remove_item_button.setProperty("destructiveActionRole", "true")
+        mark_destructive_action(self.remove_item_button)
         self.item_up_button = QPushButton("Move Up", self)
         self.item_up_button.setObjectName("condition_task_item_up_button")
         self.item_up_button.clicked.connect(lambda: self.option_table.move_selected(-1))
@@ -1852,7 +1848,7 @@ class TaskModuleEditor(QWidget):
         self.remove_step_button = QPushButton("Remove", self)
         self.remove_step_button.setObjectName("condition_task_remove_step_button")
         self.remove_step_button.clicked.connect(self._remove_step)
-        self.remove_step_button.setProperty("destructiveActionRole", "true")
+        mark_destructive_action(self.remove_step_button)
         step_actions = QGridLayout()
         step_actions.setContentsMargins(0, 0, 0, 0)
         step_actions.setSpacing(6)
@@ -2092,7 +2088,7 @@ class TaskPhaseEditor(QWidget):
         self.remove_button = QPushButton("Remove", self)
         self.remove_button.setObjectName(f"condition_task_{prefix}_remove_button")
         self.remove_button.clicked.connect(self._remove_module)
-        self.remove_button.setProperty("destructiveActionRole", "true")
+        mark_destructive_action(self.remove_button)
 
         actions = QGridLayout()
         actions.setContentsMargins(0, 0, 0, 0)
@@ -2553,7 +2549,7 @@ def _step_from_draft(step: TaskStepDraft) -> TaskStep:
     if step.validation_error:
         raise ValueError(step.validation_error)
     kind = CoreTaskStepKind(step.kind)
-    items = [_display_item_from_draft(option, step=step) for option in step.options]
+    items = [_display_item_from_draft(option) for option in step.options]
     questions = [_question_from_draft(question) for question in step.questions]
     branch_rules = _branch_rules_from_draft(step)
     allowed_keys = list(dict.fromkeys(step.advance_keys))
@@ -2598,11 +2594,7 @@ def _step_from_draft(step: TaskStepDraft) -> TaskStep:
     )
 
 
-def _display_item_from_draft(
-    option: TaskOptionDraft,
-    *,
-    step: TaskStepDraft,
-) -> TaskDisplayItem:
+def _display_item_from_draft(option: TaskOptionDraft) -> TaskDisplayItem:
     image = option.image_path is not None
     selectable = option.selectable
     return TaskDisplayItem(

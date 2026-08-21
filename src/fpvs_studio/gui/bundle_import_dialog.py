@@ -25,19 +25,7 @@ from fpvs_studio.gui.components import (
     mark_primary_action,
     mark_secondary_action,
 )
-from fpvs_studio.gui.processing_page import BundleImportProcessingPage
-
-
-def _format_bytes(size_bytes: int) -> str:
-    value = float(max(0, size_bytes))
-    units = ("B", "KB", "MB", "GB")
-    for unit in units:
-        if value < 1024.0 or unit == units[-1]:
-            if unit == "B":
-                return f"{int(value):,} {unit}"
-            return f"{value:,.1f} {unit}"
-        value /= 1024.0
-    return f"{int(size_bytes):,} B"
+from fpvs_studio.gui.processing_page import BundleImportProcessingPage, _format_file_size
 
 
 class BundleImportReviewDialog(QDialog):
@@ -97,7 +85,7 @@ class BundleImportReviewDialog(QDialog):
         self.filename_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         metadata_label = QLabel(
             f"{manifest.project.name}   •   {len(manifest.files):,} files   •   "
-            f"{_format_bytes(total_bytes)}",
+            f"{_format_file_size(total_bytes)}",
             file_card,
         )
         metadata_label.setObjectName("bundle_import_review_metadata")

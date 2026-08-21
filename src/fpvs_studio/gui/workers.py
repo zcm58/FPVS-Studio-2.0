@@ -11,6 +11,12 @@ from PySide6.QtWidgets import QProgressDialog, QWidget
 ProgressDialogFactory = Callable[[str, str, int, int, QWidget], QProgressDialog]
 
 
+class ProgressSignalBridge(QObject):
+    """Carry string progress updates safely across Qt threads."""
+
+    stage_changed = Signal(str)
+
+
 class GuiTaskWorker(QObject):
     """Run one backend callback away from the UI thread."""
 
