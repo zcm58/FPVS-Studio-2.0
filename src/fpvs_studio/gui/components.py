@@ -1492,7 +1492,9 @@ def apply_non_home_shell_theme(widget: QWidget) -> None:
 
 def image_resizer_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
     theme = _resolved_theme(theme)
-    return f"""
+    return (
+        launch_surface_frame_stylesheet(theme)
+        + f"""
     QWidget#image_resizer_page QScrollArea#page_container_scroll_area,
     QWidget#image_resizer_page QScrollArea#page_container_scroll_area
     QWidget#qt_scrollarea_viewport,
@@ -1529,6 +1531,7 @@ def image_resizer_stylesheet(theme: StudioTheme | QPalette | None = None) -> str
         max-width: 1px;
     }}
     """
+    )
 
 
 def apply_image_resizer_theme(widget: QWidget) -> None:

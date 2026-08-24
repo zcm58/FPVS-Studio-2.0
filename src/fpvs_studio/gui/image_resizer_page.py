@@ -48,6 +48,7 @@ class ImageResizerPage(QWidget):
     ) -> None:
         super().__init__(parent)
         self.setObjectName("image_resizer_page")
+        self.setProperty("launchSurfaceRoot", "true")
         self._on_return_home = on_return_home
         self._source_dir: Path | None = None
         self._output_dir: Path | None = None
@@ -205,9 +206,16 @@ class ImageResizerPage(QWidget):
         workbench_layout.addWidget(results_panel, 2)
         self.shell.add_content_widget(workbench, stretch=1)
 
+        self.surface_frame = QFrame(self)
+        self.surface_frame.setObjectName("image_resizer_surface_frame")
+        self.surface_frame.setProperty("launchSurfaceFrame", "true")
+        surface_layout = QHBoxLayout(self.surface_frame)
+        surface_layout.setContentsMargins(0, 0, 0, 0)
+        surface_layout.addWidget(self.shell)
+
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.addWidget(self.shell)
+        layout.setContentsMargins(32, 32, 32, 32)
+        layout.addWidget(self.surface_frame)
         apply_image_resizer_theme(self)
         self._refresh_paths()
         self._refresh_output_actions()

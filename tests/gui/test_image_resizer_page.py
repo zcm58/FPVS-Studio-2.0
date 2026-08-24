@@ -8,6 +8,7 @@ from PIL import Image
 from PySide6.QtCore import QPoint, Qt
 from PySide6.QtWidgets import QApplication, QWidget
 from tests.gui.helpers import (
+    _assert_visible_children_within_parent,
     _ImmediateProgressTask,
     _open_created_project,
     _write_image_directory,
@@ -50,11 +51,16 @@ def test_image_resizer_uses_wide_two_column_workbench(
     window.image_resizer_action.trigger()
     QApplication.processEvents()
     page = window.image_resizer_page
+    surface_frame = page.findChild(QWidget, "image_resizer_surface_frame")
     workbench = page.findChild(QWidget, "image_resizer_workbench")
     controls_panel = page.findChild(QWidget, "image_resizer_controls_panel")
     results_panel = page.findChild(QWidget, "image_resizer_results_panel")
 
     assert page.shell.page_container.width_preset == "full"
+    assert page.property("launchSurfaceRoot") == "true"
+    assert surface_frame is page.surface_frame
+    assert surface_frame.property("launchSurfaceFrame") == "true"
+    assert 'QFrame[launchSurfaceFrame="true"]' in page.styleSheet()
     assert "QScrollArea#page_container_scroll_area" in page.styleSheet()
     assert "QWidget#qt_scrollarea_viewport" in page.styleSheet()
     assert page.findChild(QWidget, "image_resizer_setup_card") is None
@@ -75,7 +81,8 @@ def test_image_resizer_uses_wide_two_column_workbench(
     results_left = results_panel.mapTo(workbench, QPoint(0, 0)).x()
     assert results_left > controls_right
     assert controls_panel.width() > results_panel.width()
-    assert workbench.width() >= int(window.main_stack.width() * 0.9)
+    assert workbench.width() >= int(surface_frame.width() * 0.8)
+    _assert_visible_children_within_parent(page)
 
 
 def test_image_resizer_source_selection_suggests_output_folder(
