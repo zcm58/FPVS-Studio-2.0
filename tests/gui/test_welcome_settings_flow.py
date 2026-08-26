@@ -36,7 +36,11 @@ from fpvs_studio.core.condition_template_profiles import (
 )
 from fpvs_studio.core.enums import DutyCycleMode, RunMode
 from fpvs_studio.core.execution import SessionExecutionSummary
-from fpvs_studio.core.paths import condition_template_library_path
+from fpvs_studio.core.paths import (
+    APP_DATA_DIRNAME,
+    condition_template_library_path,
+    project_json_path,
+)
 from fpvs_studio.core.project_service import create_project
 from fpvs_studio.core.serialization import load_project_file, write_json_file
 from fpvs_studio.gui import controller as controller_module
@@ -598,6 +602,33 @@ def test_manage_projects_discovers_nested_project_folders_from_disk(
 
     assert [(entry.name, entry.root) for entry in entries] == [
         ("Nested Managed Project", scaffold.project_root)
+    ]
+
+
+def test_manage_projects_excludes_app_owned_metadata_subtree(
+    controller: StudioController,
+) -> None:
+    root_dir = controller.load_fpvs_root_dir()
+    assert root_dir is not None
+    scaffold = create_project(root_dir, "Visible Managed Project")
+    backup_root = (
+        root_dir
+        / APP_DATA_DIRNAME
+        / "backups"
+        / "fixation-defaults-test"
+        / "projects"
+        / scaffold.project_root.name
+    )
+    backup_root.mkdir(parents=True)
+    shutil.copy2(
+        project_json_path(scaffold.project_root),
+        project_json_path(backup_root),
+    )
+
+    entries = controller.load_manageable_project_entries()
+
+    assert [(entry.name, entry.root) for entry in entries] == [
+        ("Visible Managed Project", scaffold.project_root)
     ]
 
 
@@ -1882,8 +1913,8 @@ def test_manage_condition_templates_dialog_renders_hierarchical_details(
     assert "Display Resolution: Full Screen (1920 × 1080)" in details_text
     assert "Fixation Cross: Enabled" in details_text
     assert "Fixation Cross Accuracy Task: Enabled" in details_text
-    assert "Total cross color changes in each condition: 7 ± 1" in details_text
-    assert "Fixation cross timing: 250 ms" in details_text
+    assert "Total cross color changes in each condition: 8 to 13" in details_text
+    assert "Fixation cross timing: 300 ms" in details_text
     assert "Minimum time between color changes: 1000 ms" in details_text
     assert "Maximum time between color changes" not in details_text
     assert "Duty Cycle: Continuous" in details_text
@@ -1902,7 +1933,7 @@ def test_manage_condition_templates_dialog_renders_hierarchical_details(
     blank_details_text = dialog.profile_details.text()
     assert "Template Name: 50% Blank Between Images" in blank_details_text
     assert "Duty Cycle: 50% Blank" in blank_details_text
-    assert "Total cross color changes in each condition: 7 ± 1" in blank_details_text
+    assert "Total cross color changes in each condition: 8 to 13" in blank_details_text
     assert "Display Refresh Rate: Not Set" in blank_details_text
 
 

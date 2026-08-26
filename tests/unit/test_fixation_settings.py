@@ -53,8 +53,11 @@ def test_fixation_settings_defaults_match_current_gui_presets() -> None:
     assert settings.participant_tutorial_enabled is True
     assert settings.changes_per_sequence == 0
     assert settings.target_count_mode == "fixed"
+    assert settings.target_count_min == 8
+    assert settings.target_count_max == 13
     assert settings.base_color == "#0000FF"
     assert settings.target_color == "#FF0000"
+    assert settings.target_duration_ms == 300
     assert settings.response_key == "space"
     assert settings.response_window_seconds == 1.0
 

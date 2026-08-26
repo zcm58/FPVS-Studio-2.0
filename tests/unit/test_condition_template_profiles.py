@@ -192,11 +192,11 @@ def test_built_in_templates_share_defaults_except_duty_cycle() -> None:
     assert fixation_one.enabled is True
     assert fixation_one.accuracy_task_enabled is True
     assert fixation_one.target_count_mode == "randomized"
-    assert fixation_one.target_count_min == 6
-    assert fixation_one.target_count_max == 8
+    assert fixation_one.target_count_min == 8
+    assert fixation_one.target_count_max == 13
     assert fixation_one.no_immediate_repeat_count is True
     assert fixation_one.changes_per_sequence == 7
-    assert fixation_one.target_duration_ms == 250
+    assert fixation_one.target_duration_ms == 300
     assert fixation_one.min_gap_ms == 1000
     assert fixation_one.max_gap_ms == 3000
     assert template_one.defaults.presentation.pre_stream_fixation_seconds == 2.0

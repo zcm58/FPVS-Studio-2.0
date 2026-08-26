@@ -56,6 +56,9 @@ SUPPORTED_VARIANTS = [
 ]
 MAX_WORD_STIMULUS_CHARS = 64
 DEFAULT_STIMULUS_WIDTH_DEGREES = 5.0
+DEFAULT_FIXATION_TARGET_COUNT_MIN = 8
+DEFAULT_FIXATION_TARGET_COUNT_MAX = 13
+DEFAULT_FIXATION_TARGET_DURATION_MS = 300
 LEGACY_WORD_HEIGHT_TO_STIMULUS_WIDTH_RATIO = 0.25
 DEFAULT_WORD_HEIGHT_DEGREES = scaled_visual_angle_degrees(
     degrees=DEFAULT_STIMULUS_WIDTH_DEGREES,
@@ -448,12 +451,12 @@ class FixationTaskSettings(FPVSBaseModel):
         validation_alias=AliasChoices("changes_per_sequence", "color_changes_per_condition"),
     )
     target_count_mode: Literal["fixed", "randomized"] = "fixed"
-    target_count_min: int = Field(default=1, ge=0)
-    target_count_max: int = Field(default=3, ge=0)
+    target_count_min: int = Field(default=DEFAULT_FIXATION_TARGET_COUNT_MIN, ge=0)
+    target_count_max: int = Field(default=DEFAULT_FIXATION_TARGET_COUNT_MAX, ge=0)
     no_immediate_repeat_count: bool = True
     base_color: str | tuple[int, int, int] = "#0000FF"
     target_color: str | tuple[int, int, int] = "#FF0000"
-    target_duration_ms: int = Field(default=250, ge=0)
+    target_duration_ms: int = Field(default=DEFAULT_FIXATION_TARGET_DURATION_MS, ge=0)
     min_gap_ms: int = Field(default=1500, ge=0)
     max_gap_ms: int = Field(default=3000, ge=0)
     response_key: str = "space"

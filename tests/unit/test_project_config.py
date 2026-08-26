@@ -173,6 +173,9 @@ def test_config_import_creates_new_project_shell_without_copying_stimuli(
     assert loaded.settings.session.session_seed == 123
     assert loaded.settings.session.show_condition_title_on_screen is False
     assert loaded.settings.triggers.oddball_trigger_code == 55
+    assert loaded.settings.fixation_task.target_count_min == 8
+    assert loaded.settings.fixation_task.target_count_max == 13
+    assert loaded.settings.fixation_task.target_duration_ms == 300
     assert loaded.conditions[0].name == "Faces"
     assert loaded.conditions[0].trigger_code == 9
     assert loaded.stimulus_sets[0].image_count == 0

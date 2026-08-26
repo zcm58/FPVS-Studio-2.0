@@ -40,9 +40,11 @@ Creating a project asks for:
 - parent folder where the project root will be scaffolded
 
 Opening projects reloads the configured FPVS Studio Root Folder and lists current FPVS
-project folders discovered beneath that root. Recent projects outside the configured
-root are not included. The dialog can open a project or move a project folder to the
-Windows Recycle Bin after an explicit Yes/No confirmation. The dialog includes a
+project folders discovered beneath that root. Discovery excludes the reserved
+`.fpvs-studio` app-metadata subtree, including templates, staging files, and backups.
+Recent projects outside the configured root are not included. The dialog can open a
+project or move a project folder to the Windows Recycle Bin after an explicit Yes/No
+confirmation. The dialog includes a
 compact project filter and can copy the selected project folder path. The currently
 open project is shown but cannot be deleted from its own open window. When a discovered
 folder contains an unreadable or incompatible `project.json`, the dialog keeps Open and
@@ -215,7 +217,8 @@ The authoring window is organized around two user-facing modes:
     code of 1 or higher, and configured base/oddball stimuli for its modality
   - Fixation keeps color changes enabled and exposes schedule, capped target counts,
     timing, and the fixation-only lead-in shown after Space but before condition onset;
-    new projects default to two seconds and migrated legacy projects retain zero
+    new projects default to randomized 8–13 color changes per condition, a 300 ms color
+    change duration, and a two-second lead-in, while migrated legacy projects retain zero
   - Response exposes accuracy tracking, response key/window, appearance, and a live
     preview on the current display background
   - Review is a card-only decision point: users can `Save and Return Home` or

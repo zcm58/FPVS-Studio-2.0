@@ -170,6 +170,8 @@ For v1 project timing:
 
 - `frames_per_cycle` is the nearest positive whole frame count to
   `refresh_hz / requested_base_hz`
+- GUI-created projects default fixation color changes to a seeded randomized inclusive
+  range of 8–13 per condition, with each change lasting 300 ms
 - authored `refresh_hz` is one of `59.94`, `60`, `120`, `144`, or `240 Hz`
 - exact ratios are reported as exact timing
 - non-integral ratios are accepted with requested-versus-realized rate warnings

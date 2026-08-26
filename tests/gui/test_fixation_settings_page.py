@@ -31,6 +31,18 @@ def _build_editor(
     return document, editor
 
 
+def test_fixation_settings_editor_uses_current_option_defaults(qtbot, tmp_path: Path) -> None:
+    document, editor = _build_editor(qtbot, tmp_path)
+
+    fixation = document.project.settings.fixation_task
+    assert fixation.target_count_min == 8
+    assert fixation.target_count_max == 13
+    assert fixation.target_duration_ms == 300
+    assert editor.target_count_min_spin.value() == 8
+    assert editor.target_count_max_spin.value() == 13
+    assert editor.target_duration_spin.value() == 300
+
+
 def test_fixation_settings_editor_persists_fixed_mode_values(qtbot, tmp_path: Path) -> None:
     document, editor = _build_editor(qtbot, tmp_path)
 

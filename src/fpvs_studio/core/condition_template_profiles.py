@@ -14,6 +14,9 @@ from typing import Any
 
 from fpvs_studio.core.enums import DutyCycleMode, SchemaVersion
 from fpvs_studio.core.models import (
+    DEFAULT_FIXATION_TARGET_COUNT_MAX,
+    DEFAULT_FIXATION_TARGET_COUNT_MIN,
+    DEFAULT_FIXATION_TARGET_DURATION_MS,
     Condition,
     ConditionDefaults,
     ConditionTemplateDefaults,
@@ -42,11 +45,11 @@ def _shared_fixation_defaults() -> FixationTaskSettings:
         enabled=True,
         accuracy_task_enabled=True,
         target_count_mode="randomized",
-        target_count_min=6,
-        target_count_max=8,
+        target_count_min=DEFAULT_FIXATION_TARGET_COUNT_MIN,
+        target_count_max=DEFAULT_FIXATION_TARGET_COUNT_MAX,
         no_immediate_repeat_count=True,
         changes_per_sequence=7,
-        target_duration_ms=250,
+        target_duration_ms=DEFAULT_FIXATION_TARGET_DURATION_MS,
         min_gap_ms=1000,
         max_gap_ms=3000,
     )

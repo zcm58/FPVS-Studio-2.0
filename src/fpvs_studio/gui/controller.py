@@ -25,7 +25,11 @@ from fpvs_studio.core.condition_template_profiles import (
     normalize_condition_template_profile_root,
 )
 from fpvs_studio.core.models import ConditionTemplateProfile
-from fpvs_studio.core.paths import condition_template_library_path, project_json_path
+from fpvs_studio.core.paths import (
+    condition_template_library_path,
+    is_reserved_root_entry_name,
+    project_json_path,
+)
 from fpvs_studio.core.project_bundle import (
     PROJECT_BUNDLE_SUFFIX,
     BundleImportStage,
@@ -1044,6 +1048,12 @@ class StudioController(QObject):
                 children = list(current_dir.iterdir())
             except OSError:
                 continue
+            if current_dir == root_dir:
+                children = [
+                    child
+                    for child in children
+                    if not is_reserved_root_entry_name(child.name)
+                ]
             pending_dirs.extend(child for child in children if child.is_dir())
         return project_roots
 
