@@ -513,6 +513,7 @@ class StudioMainWindow(QMainWindow):
         self.tutorials_action = QAction("Tutorials", self)
         self.tutorials_action.setObjectName("tutorials_action")
         self.tutorials_action.triggered.connect(self.open_tutorials)
+        self.tutorials_action.setVisible(False)
         self.about_action = QAction("About", self)
         self.about_action.setObjectName("about_action")
         self.about_action.triggered.connect(self.show_about_dialog)

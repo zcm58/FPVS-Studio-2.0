@@ -342,8 +342,9 @@ title in lowercase with spaces and punctuation removed, such as
 `-completed`. `Export > Group
 Summary...` manually writes an Excel workbook from the current participant summary rows,
 with a first row aggregating rows marked `Include In Analysis = Y` and participant rows
-remaining visible underneath for filtering/audit. `Tutorials` opens the
-public MkDocs quickstart site in the system browser. Settings shows the current app
+remaining visible underneath for filtering/audit. The wired `Tutorials` action remains
+available internally but is temporarily hidden from the File menu until the public
+tutorial section is complete. Settings shows the current app
 version from `pyproject.toml` during source-tree runs and from package metadata in
 bundled installs, and exposes the app-level run export mode. Full run export mode is the
 default and writes detailed `runs/` folders after launch; compact mode skips those

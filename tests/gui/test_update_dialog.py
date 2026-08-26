@@ -42,6 +42,7 @@ def test_main_window_file_menu_groups_actions(
     menu_entries = [
         "---" if action.isSeparator() else action.text()
         for action in window.file_menu.actions()
+        if action.isVisible()
     ]
 
     assert menu_entries == [
@@ -53,7 +54,6 @@ def test_main_window_file_menu_groups_actions(
         "Settings...",
         "---",
         "Check for Updates",
-        "Tutorials",
         "About",
     ]
     assert [action.text() for action in window.import_menu.actions()] == [
@@ -109,7 +109,7 @@ def test_main_window_exposes_file_about_action(
     assert "Neural Engineering Research Division, Mississippi State University" in messages[0][1]
 
 
-def test_main_window_exposes_file_tutorials_action(
+def test_main_window_hides_file_tutorials_action_but_preserves_link(
     controller,
     qtbot,
     tmp_path: Path,
@@ -123,9 +123,13 @@ def test_main_window_exposes_file_tutorials_action(
         lambda url: opened_urls.append(url.toString()),
     )
 
-    actions = [action.text() for action in window.file_menu.actions()]
+    visible_actions = [
+        action.text() for action in window.file_menu.actions() if action.isVisible()
+    ]
     assert window.tutorials_action.text() == "Tutorials"
-    assert "Tutorials" in actions
+    assert window.tutorials_action in window.file_menu.actions()
+    assert not window.tutorials_action.isVisible()
+    assert "Tutorials" not in visible_actions
 
     window.tutorials_action.trigger()
 

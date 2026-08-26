@@ -15,6 +15,7 @@ Current implementation: no active feature execution plan.
 
 Concrete planned work:
 
+- `exec-plans/planned/restore-tutorials-file-menu-entry.md`
 - `exec-plans/planned/luminance-rms-equalization-investigation.md`
 - `exec-plans/planned/sinusoidal-contrast-modulation.md`
 
