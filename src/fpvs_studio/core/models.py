@@ -55,7 +55,9 @@ SUPPORTED_VARIANTS = [
     StimulusVariant.PHASE_SCRAMBLED,
 ]
 MAX_WORD_STIMULUS_CHARS = 64
+DEFAULT_BACKGROUND_COLOR = "#000000"
 DEFAULT_STIMULUS_WIDTH_DEGREES = 5.0
+DEFAULT_SCREEN_WIDTH_CM = 52.0
 DEFAULT_FIXATION_TARGET_COUNT_MIN = 8
 DEFAULT_FIXATION_TARGET_COUNT_MAX = 13
 DEFAULT_FIXATION_TARGET_DURATION_MS = 300
@@ -241,14 +243,14 @@ class DisplaySettings(FPVSBaseModel):
     """Editable display preferences."""
 
     fullscreen: bool = True
-    background_color: str | tuple[int, int, int] = "#000000"
+    background_color: str | tuple[int, int, int] = DEFAULT_BACKGROUND_COLOR
     monitor_name: str | None = None
     preferred_refresh_hz: float | None = Field(default=None, gt=0)
     # Kept as a compatibility mirror for 1.0 projects and config interchange.
     # ProjectSettings.presentation is authoritative for new presentation geometry.
     stimulus_width_degrees: float = Field(default=DEFAULT_STIMULUS_WIDTH_DEGREES, gt=0)
     viewing_distance_cm: float = Field(default=80.0, gt=0)
-    screen_width_cm: float = Field(default=52.03, gt=0)
+    screen_width_cm: float = Field(default=DEFAULT_SCREEN_WIDTH_CM, gt=0)
     screen_width_px: int = Field(default=1920, gt=0)
     screen_height_px: int = Field(default=1080, gt=0)
     use_current_screen_resolution: bool = False
