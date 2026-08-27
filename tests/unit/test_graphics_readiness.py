@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import ctypes
+from dataclasses import replace
 from types import SimpleNamespace
 
 import pytest
@@ -131,6 +133,31 @@ def test_probe_renderer_uses_injected_gl_module_and_decodes_strings() -> None:
     assert result.vendor == "Intel"
     assert result.renderer == "Intel(R) Iris(R) Xe Graphics"
     assert result.version == "4.6"
+
+
+def test_probe_renderer_decodes_pyglet_ctypes_string_pointers() -> None:
+    raw_values = {
+        1: ctypes.create_string_buffer(b"NVIDIA Corporation"),
+        2: ctypes.create_string_buffer(b"NVIDIA GeForce GTX 1660 Ti/PCIe/SSE2"),
+        3: ctypes.create_string_buffer(b"4.6.0 NVIDIA 555.99"),
+    }
+    values = {
+        key: ctypes.cast(buffer, ctypes.POINTER(ctypes.c_ubyte))
+        for key, buffer in raw_values.items()
+    }
+    gl_module = SimpleNamespace(
+        GL_VENDOR=1,
+        GL_RENDERER=2,
+        GL_VERSION=3,
+        glGetString=values.get,
+    )
+
+    result = probe_renderer_from_gl(gl_module)
+
+    assert result.classification == RendererClassification.HARDWARE
+    assert result.vendor == "NVIDIA Corporation"
+    assert result.renderer == "NVIDIA GeForce GTX 1660 Ti/PCIe/SSE2"
+    assert result.version == "4.6.0 NVIDIA 555.99"
 
 
 def test_probe_renderer_returns_unknown_when_gl_query_fails() -> None:
@@ -381,6 +408,29 @@ def test_readiness_never_silently_passes_missing_budget_or_renderer_data() -> No
     assert missing_budget.ready is False
     assert unknown_renderer.status == GraphicsReadinessStatus.UNVERIFIED
     assert unknown_renderer.ready is False
+
+
+def test_readiness_explains_when_verified_dxgi_adapters_cannot_be_identified() -> None:
+    observation = GraphicsBudgetObservation(
+        status=BudgetObservationStatus.VERIFIED,
+        adapters=tuple(
+            replace(adapter, is_active=False) for adapter in _healthy_observation().adapters
+        ),
+        total_system_memory_bytes=32 * GIBIBYTE,
+        available_system_memory_bytes=20 * GIBIBYTE,
+        detail="Renderer hint did not identify one adapter among two candidates.",
+    )
+
+    result = evaluate_graphics_readiness(
+        renderer=_hardware_renderer(),
+        estimate=_small_estimate(),
+        observation=observation,
+        phase=BudgetEvaluationPhase.AFTER_UPLOAD,
+    )
+
+    assert result.status == GraphicsReadinessStatus.UNVERIFIED
+    assert observation.detail in result.reasons
+    assert "No active DXGI adapter budget was identified." in result.reasons
 
 
 def test_readiness_rejects_software_renderer_even_when_memory_is_plentiful() -> None:

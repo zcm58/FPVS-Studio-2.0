@@ -39,9 +39,9 @@ SessionPlan
        -> execute compiled pre-condition task modules, if any
        -> engine.show_transition_screen(..., continue_key="space")
        -> engine.run_condition(RunSpec, ...)
-            -> estimate condition memory and enforce the pre-upload RAM/DXGI gate
+            -> estimate condition memory and evaluate the pre-upload RAM/DXGI gate
             -> create, prime, and GPU-synchronize exactly one condition cache
-            -> enforce the post-upload RAM/DXGI gate
+            -> evaluate the post-upload RAM/DXGI gate
             -> complete technical warmup, using its final configured frames for the
                fixation-only lead-in
             -> reset input and run-relative timing
@@ -117,6 +117,9 @@ The PsychoPy implementation:
 - opens one `visual.Window` per launched session
 - reuses that window across all runs in the `SessionPlan`
 - opens launched playback fullscreen on the default display
+- supplies the selected Pyglet screen's native pixel dimensions to both fullscreen
+  window constructors instead of inheriting PsychoPy's `800x600` default request;
+  detection failure is warning-only because PsychoPy still resolves the actual size
 - reports the active window resolution so runtime can block configured visual-angle
   playback when the current display resolution differs from the intended test resolution
 - shows Space-required condition-start screens and completion text screens; transition
@@ -140,7 +143,8 @@ The PsychoPy implementation:
   a post-delete `glFinish()` before the next condition may prepare its cache
 - verifies production graphics readiness before and after upload using renderer strings,
   conservative unique-image estimates, Windows DXGI budgets, and physical-RAM headroom;
-  software renderers, insufficient memory, and unverified telemetry block frame zero
+  software renderers and measured insufficient memory block frame zero, while missing or
+  ambiguous telemetry proceeds with an exported `unverified` warning
 - records readiness, renderer, memory/headroom, synchronization, and cleanup diagnostics
   in `RuntimeMetadata`
 - prepares every unique resolved render identity before playback, including runtime
@@ -462,6 +466,8 @@ Use this manual checklist when validating a real lab rig:
 - use AC power/high-performance mode and close unrelated GPU- or disk-heavy applications
 - confirm `graphics_readiness_status=ready`, condition-cache synchronization/cleanup
   succeeded, and `len(frame_intervals) == completed_frames`
+- an `unverified` graphics status no longer aborts playback, but it remains a visible
+  warning that the machine's RAM/VRAM headroom could not be fully qualified
 - inspect `timing_qc_strict_violation`; a `true` value invalidates the run for timing-
   sensitive analysis even though playback safely reached its terminal boundary
 - when no photodiode is available, treat flip timestamps and BDF markers as the strongest

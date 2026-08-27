@@ -73,11 +73,12 @@ legacy word-size pixel rounding until those settings are explicitly authored.
   sequencing and validation, participant flow, fixation scoring, trigger I/O
   coordination, and result assembly. Task clocks remain outside `RunSpec` and cannot
   change FPVS frame or trigger schedules.
-- The PsychoPy engine prepares and synchronizes one condition cache at a time, enforces
-  production RAM/graphics-budget readiness before frame zero, executes a precompiled hot
-  loop, ends the last compiled frame with a neutral offset flip, and releases the cache
-  before returning. Runtime scores fixation RT from same-clock hardware timestamps and
-  owns the exported result contracts.
+- The PsychoPy engine prepares and synchronizes one condition cache at a time, checks
+  production RAM/graphics-budget readiness before frame zero, rejects measured resource
+  insufficiency, and preserves unavailable telemetry as an exported warning. It executes
+  a precompiled hot loop, ends the last compiled frame with a neutral offset flip, and
+  releases the cache before returning. Runtime scores fixation RT from same-clock
+  hardware timestamps and owns the exported result contracts.
 - The app-level experiment test mode remains outside persisted project and compiled
   contracts. It explicitly selects null-trigger output and disables connected-display
   refresh and graphics-memory verification while preserving fullscreen playback,

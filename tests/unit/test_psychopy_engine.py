@@ -20,6 +20,11 @@ from fpvs_studio.core.enums import (
     StimulusTransform,
 )
 from fpvs_studio.core.run_spec import FixationEvent, TriggerEvent
+from fpvs_studio.engines import psychopy_window as psychopy_window_module
+from fpvs_studio.engines.graphics_readiness import (
+    BudgetObservationStatus,
+    GraphicsReadinessStatus,
+)
 from fpvs_studio.engines.psychopy_engine import PsychoPyEngine
 from fpvs_studio.engines.psychopy_stimuli import (
     ConditionResourceCleanupError,
@@ -307,6 +312,11 @@ def _build_flip_times(
 
 
 def _patch_fake_psychopy(monkeypatch, engine: PsychoPyEngine, fake_psychopy: object) -> None:
+    monkeypatch.setattr(
+        psychopy_window_module,
+        "_detect_fullscreen_size_px",
+        lambda _display_index: (1920, 1080),
+    )
     engine._psychopy = fake_psychopy
     engine._visual = fake_psychopy.visual
     engine._core = fake_psychopy.core
@@ -335,6 +345,7 @@ def test_measure_refresh_hz_uses_fullscreen_psychopy_probe_and_closes_window(mon
         "waitBlanking": True,
         "color": "black",
         "units": "pix",
+        "size": [1920, 1080],
         "checkTiming": False,
     }
     window = captures["window"]
@@ -466,6 +477,29 @@ def _events(captures: dict[str, object]) -> list[tuple[str, object]]:
     return events
 
 
+def _graphics_readiness_result(
+    status: GraphicsReadinessStatus,
+    *reasons: str,
+) -> SimpleNamespace:
+    return SimpleNamespace(
+        status=status,
+        reasons=reasons,
+        renderer=SimpleNamespace(
+            vendor="NVIDIA Corporation",
+            renderer="NVIDIA GeForce GTX 1660 Ti/PCIe/SSE2",
+            version="4.6",
+            classification=SimpleNamespace(value="hardware"),
+        ),
+        estimate=SimpleNamespace(
+            estimated_gpu_bytes=1_000,
+            conservative_gpu_bytes=1_500,
+        ),
+        budget_status=BudgetObservationStatus.VERIFIED,
+        adapter_assessments=(),
+        system_memory_assessment=None,
+    )
+
+
 def test_psychopy_engine_opens_fullscreen_window_for_launched_session(monkeypatch) -> None:
     captures: dict[str, object] = {}
     fake_psychopy = _build_fake_psychopy(captures, flip_times=[])
@@ -490,6 +524,7 @@ def test_psychopy_engine_opens_fullscreen_window_for_launched_session(monkeypatc
         "waitBlanking": True,
         "color": "black",
         "units": "pix",
+        "size": [1920, 1080],
     }
 
 
@@ -519,6 +554,72 @@ def test_psychopy_engine_preserves_windowed_session_size(monkeypatch) -> None:
         "units": "pix",
         "size": [1280, 720],
     }
+
+
+@pytest.mark.parametrize("display_api_module", ["pyglet.display", "pyglet.canvas"])
+def test_fullscreen_window_uses_selected_pyglet_screen_size(
+    monkeypatch,
+    display_api_module: str,
+) -> None:
+    screens = [
+        SimpleNamespace(width=1920, height=1080),
+        SimpleNamespace(width=2560, height=1440),
+    ]
+    fake_display_module = SimpleNamespace(
+        get_display=lambda: SimpleNamespace(get_screens=lambda: screens)
+    )
+
+    def _fake_import(module_name: str) -> object:
+        if module_name == display_api_module:
+            return fake_display_module
+        raise ModuleNotFoundError(module_name)
+
+    monkeypatch.setattr(psychopy_window_module, "import_module", _fake_import)
+
+    window_kwargs = psychopy_window_module.build_window_kwargs(
+        {"fullscreen": True, "display_index": 1}
+    )
+
+    assert window_kwargs["screen"] == 1
+    assert window_kwargs["size"] == [2560, 1440]
+
+
+def test_fullscreen_window_falls_back_to_psychopy_when_screen_query_fails(
+    monkeypatch,
+    caplog,
+) -> None:
+    def _fail_import(_module_name: str) -> object:
+        raise RuntimeError("display enumeration failed")
+
+    monkeypatch.setattr(psychopy_window_module, "import_module", _fail_import)
+
+    with caplog.at_level(logging.WARNING, logger=psychopy_window_module.__name__):
+        window_kwargs = psychopy_window_module.build_window_kwargs(
+            {"fullscreen": True, "display_index": 1}
+        )
+
+    assert "size" not in window_kwargs
+    assert "PsychoPy will determine the actual fullscreen size" in caplog.text
+
+
+def test_refresh_probe_uses_fullscreen_size_when_launch_is_windowed(monkeypatch) -> None:
+    monkeypatch.setattr(
+        psychopy_window_module,
+        "_detect_fullscreen_size_px",
+        lambda display_index: (2560, 1440) if display_index == 1 else None,
+    )
+
+    window_kwargs = psychopy_window_module.build_refresh_probe_window_kwargs(
+        {
+            "fullscreen": False,
+            "display_index": 1,
+            "windowed_size_px": (1280, 720),
+        }
+    )
+
+    assert window_kwargs["fullscr"] is True
+    assert window_kwargs["allowGUI"] is False
+    assert window_kwargs["size"] == [2560, 1440]
 
 
 def test_psychopy_engine_closes_partial_session_when_keyboard_creation_fails(monkeypatch) -> None:
@@ -753,6 +854,92 @@ def test_psychopy_engine_blocks_on_post_upload_gate_before_first_condition_flip(
     assert window._flip_index == 0
     assert calls == ["before", "after"]
     assert [stim.clear_textures_count for stim in _image_stims(captures)] == [1, 1]
+
+
+def test_psychopy_engine_runs_and_reports_when_graphics_telemetry_is_unverified(
+    monkeypatch,
+    caplog,
+    sample_project,
+    sample_project_root,
+) -> None:
+    run_spec = _two_event_run_spec(sample_project, sample_project_root, duplicate_image=False)
+    captures: dict[str, object] = {}
+    fake_psychopy = _build_fake_psychopy(captures, flip_times=[])
+    engine = PsychoPyEngine()
+    _patch_fake_psychopy(monkeypatch, engine, fake_psychopy)
+    readiness = _graphics_readiness_result(
+        GraphicsReadinessStatus.UNVERIFIED,
+        "No active DXGI adapter budget was identified.",
+    )
+    context = object()
+
+    monkeypatch.setattr(
+        engine,
+        "_graphics_readiness_before_preparation",
+        lambda _project_root, _run_spec: context,
+    )
+
+    def _after(received_context):
+        assert received_context is context
+        engine._require_graphics_readiness(readiness, phase="after image upload")
+        return readiness
+
+    monkeypatch.setattr(engine, "_graphics_readiness_after_preparation", _after)
+
+    try:
+        with caplog.at_level(logging.WARNING):
+            summary = engine.run_condition(
+                run_spec,
+                sample_project_root,
+                runtime_options={
+                    "timing_warmup_frames": 0,
+                    "verify_graphics_memory": True,
+                },
+                trigger_backend=None,
+            )
+    finally:
+        engine.close_session()
+
+    window = captures["window"]
+    assert isinstance(window, _FakeWindow)
+    assert window._flip_index == run_spec.display.total_frames + 1
+    assert summary.aborted is False
+    assert summary.runtime_metadata is not None
+    assert summary.runtime_metadata.graphics_readiness_status == "unverified"
+    assert "could not be fully verified" in summary.warnings[0]
+    assert "playback will proceed" in caplog.text
+
+
+def test_psychopy_engine_still_rejects_known_graphics_resource_failure() -> None:
+    engine = PsychoPyEngine()
+    readiness = _graphics_readiness_result(
+        GraphicsReadinessStatus.REJECTED,
+        "Measured graphics-memory headroom is insufficient.",
+    )
+
+    with pytest.raises(RuntimeError, match="graphics readiness rejected"):
+        engine._require_graphics_readiness(readiness, phase="before image upload")
+
+
+@pytest.mark.parametrize("unverified_phase", ["before", "after"])
+def test_psychopy_engine_preserves_unverified_status_across_both_memory_checks(
+    unverified_phase: str,
+) -> None:
+    ready = _graphics_readiness_result(
+        GraphicsReadinessStatus.READY,
+        "Hardware renderer and memory budgets meet policy.",
+    )
+    unverified = _graphics_readiness_result(
+        GraphicsReadinessStatus.UNVERIFIED,
+        f"{unverified_phase} upload telemetry was unavailable.",
+    )
+    before = unverified if unverified_phase == "before" else ready
+    after = unverified if unverified_phase == "after" else ready
+
+    merged = PsychoPyEngine._merge_graphics_readiness(before, after)
+
+    assert merged.status == GraphicsReadinessStatus.UNVERIFIED
+    assert merged.reasons == unverified.reasons
 
 
 def test_psychopy_engine_reuses_prepared_stimulus_within_condition(

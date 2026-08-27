@@ -8,12 +8,13 @@ keeps import boundaries lazy while making unsupported or failed diagnostics expl
 
 from __future__ import annotations
 
+import ctypes
 import sys
 from collections.abc import Hashable, Iterable, Mapping
 from dataclasses import dataclass, replace
 from enum import Enum
 from math import ceil, isfinite
-from typing import Any, Protocol
+from typing import Any, Protocol, cast
 
 from fpvs_studio.core.enums import ImageGeometryMode, StimulusModality, StimulusTransform
 from fpvs_studio.core.run_spec import RunSpec, StimulusEvent
@@ -251,7 +252,7 @@ class GraphicsReadinessResult:
 
     @property
     def ready(self) -> bool:
-        """Return whether timing-valid playback may proceed."""
+        """Return whether the renderer and memory telemetry are fully verified."""
 
         return self.status == GraphicsReadinessStatus.READY
 
@@ -598,6 +599,8 @@ def evaluate_graphics_readiness(
     else:
         active_adapters = tuple(adapter for adapter in observation.adapters if adapter.is_active)
         if not active_adapters:
+            if observation.detail:
+                unverified_reasons.append(observation.detail)
             unverified_reasons.append("No active DXGI adapter budget was identified.")
 
     projected_condition_gpu_bytes = (
@@ -710,9 +713,20 @@ def _clean_optional_string(value: str | None) -> str | None:
 def _decode_gl_string(value: object) -> str | None:
     if value is None:
         return None
+    if isinstance(value, str):
+        return _clean_optional_string(value)
     if isinstance(value, bytes):
         return _clean_optional_string(value.decode("utf-8", errors="replace"))
-    return _clean_optional_string(str(value))
+    if isinstance(value, ctypes.c_char_p):
+        raw_value = value.value
+    else:
+        pointer_base = getattr(ctypes, "_Pointer", None)
+        if not isinstance(pointer_base, type) or not isinstance(value, pointer_base):
+            raise TypeError("OpenGL renderer strings must be text, bytes, or C pointers.")
+        raw_value = ctypes.cast(cast(Any, value), ctypes.c_char_p).value
+    if raw_value is None:
+        return None
+    return _clean_optional_string(raw_value.decode("utf-8", errors="replace"))
 
 
 def _valid_dimensions(value: tuple[int, int]) -> bool:

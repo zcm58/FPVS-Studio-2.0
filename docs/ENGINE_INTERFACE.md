@@ -32,11 +32,12 @@ as PsychoPy. Runtime owns flow and calls engines through
 - A compiled pre-stream fixation phase is rendered after the participant gate and
   before the stream clock starts. Frame-zero stimuli and condition triggers retain
   their existing alignment.
-- A timing-valid PsychoPy condition may not begin until its condition-local graphics
-  owner reports ready. Readiness means every unique render variant and both immutable
-  fixation colors have been created, drawn once to force deferred upload/glyph work,
-  the back buffer has been cleared, queued GPU work has completed, and the conservative
-  RAM/graphics-budget gate has passed both before and after upload.
+- A PsychoPy condition may not begin until every unique render variant and both
+  immutable fixation colors have been created, drawn once to force deferred upload or
+  glyph work, the back buffer has been cleared, and queued GPU work has completed.
+  Conservative RAM/graphics-budget checks run before and after upload. A measured
+  rejection blocks frame zero; unavailable or ambiguous telemetry proceeds as an
+  explicit `unverified` warning and does not claim hardware qualification.
 - The engine owns exactly one condition cache at a time. It releases textures, masks,
   pixel-buffer objects (PBOs), legacy display lists, retained in-memory crops, prepared
   draw plans, and strong references, then calls `glFinish()` after deletion before
@@ -75,13 +76,22 @@ mirrors use PsychoPy's native flip properties; 180-degree rotation uses native
 orientation. Cover geometry is cropped centrally into a retained Pillow RGB/RGBA image
 during preparation and never writes a project file.
 
+Before creating either the temporary refresh probe or the session window, the PsychoPy
+helper queries the selected Pyglet screen and passes its native pixel dimensions as the
+fullscreen `size`. This avoids PsychoPy interpreting its own `800x600` constructor
+default as the requested fullscreen size. If screen enumeration fails, PsychoPy retains
+ownership of fullscreen sizing and the diagnostic is warning-only.
+
 Production launch settings enable graphics-memory verification. The engine rejects
 known software renderers and uses Windows DXGI per-process budgets plus physical-RAM
 availability with conservative headroom and estimation factors. When multiple DXGI
 entries could represent the active OpenGL renderer, every compatible candidate must
 pass; the engine does not guess one. Missing/failed telemetry is `unverified`, not a
-pass. Experiment Test Mode can explicitly disable this machine qualification without
-claiming timing-valid hardware.
+pass: playback continues after the resource-preparation barrier, while the uncertainty
+is written to run/session warnings and readiness metadata. Known software rendering or
+measured insufficient graphics/system-memory headroom remains a pre-onset rejection.
+Experiment Test Mode can explicitly disable this machine qualification without claiming
+timing-valid hardware.
 
 The prepared cache spans both kinds of memory used by real presentation hardware:
 decoded/retained process data in ordinary system RAM and uploaded OpenGL textures in a
@@ -96,10 +106,11 @@ strong references, pre/post memory checks, priming draws, and synchronization ar
 available software controls.
 
 The readiness barrier means image decoding, stimulus construction, initial draw/upload,
-and queued GPU work finish before frame zero; the production memory gate must also pass
-before and after upload. This removes those known jobs from the timed loop, but it cannot
-control later operating-system scheduling, graphics-driver behavior, display scanout, or
-physical pixel response.
+and queued GPU work finish before frame zero. The production memory gate runs before and
+after upload; measured insufficiency rejects launch, while diagnostic uncertainty is
+preserved as `unverified`. This removes those known jobs from the timed loop, but it
+cannot control later operating-system scheduling, graphics-driver behavior, display
+scanout, or physical pixel response.
 
 The timed plan is compiled before frame zero: stimulus/fixation draw selection and
 trigger lookup do not traverse validated models per frame. During playback, Python GC

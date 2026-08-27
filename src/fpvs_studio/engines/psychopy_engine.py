@@ -648,6 +648,7 @@ class PsychoPyEngine(PresentationEngine):
             completed_frames=completed_frames,
             aborted=self._aborted,
             abort_reason=abort_reason if self._aborted else None,
+            warnings=self._graphics_readiness_warnings(graphics_readiness),
             runtime_metadata=runtime_metadata,
             frame_intervals=frame_intervals,
             fixation_target_onsets=fixation_target_onsets,
@@ -883,8 +884,8 @@ class PsychoPyEngine(PresentationEngine):
         self,
         project_root: Path,
         run_spec: RunSpec,
-    ) -> tuple[Any, Any, WindowsGraphicsBudgetObserver] | None:
-        """Enforce renderer/RAM/VRAM headroom before allocating condition textures."""
+    ) -> tuple[Any, Any, WindowsGraphicsBudgetObserver, GraphicsReadinessResult] | None:
+        """Evaluate renderer/RAM/VRAM headroom before condition allocation."""
 
         if not bool(self._runtime_options.get("verify_graphics_memory", False)):
             return None
@@ -908,17 +909,19 @@ class PsychoPyEngine(PresentationEngine):
             phase=BudgetEvaluationPhase.BEFORE_UPLOAD,
         )
         self._require_graphics_readiness(readiness, phase="before image upload")
-        return (renderer, estimate, observer)
+        return (renderer, estimate, observer, readiness)
 
     def _graphics_readiness_after_preparation(
         self,
-        context: tuple[Any, Any, WindowsGraphicsBudgetObserver] | None,
+        context: (
+            tuple[Any, Any, WindowsGraphicsBudgetObserver, GraphicsReadinessResult] | None
+        ),
     ) -> GraphicsReadinessResult | None:
-        """Confirm actual post-upload headroom after the explicit GPU barrier."""
+        """Evaluate post-upload headroom after the explicit GPU barrier."""
 
         if context is None:
             return None
-        renderer, estimate, observer = context
+        renderer, estimate, observer, before_readiness = context
         observation = activate_renderer_candidates_conservatively(
             observe_windows_graphics_budget(observer),
             renderer_hint=renderer.renderer,
@@ -930,7 +933,7 @@ class PsychoPyEngine(PresentationEngine):
             phase=BudgetEvaluationPhase.AFTER_UPLOAD,
         )
         self._require_graphics_readiness(readiness, phase="after image upload")
-        return readiness
+        return self._merge_graphics_readiness(before_readiness, readiness)
 
     def _decoded_image_metadata(
         self,
@@ -960,9 +963,63 @@ class PsychoPyEngine(PresentationEngine):
         if readiness.status == GraphicsReadinessStatus.READY:
             return
         reasons = "; ".join(readiness.reasons) or "No readiness reason was reported."
-        raise RuntimeError(
+        message = (
             "Condition graphics readiness "
             f"{readiness.status.value} {phase}; playback did not begin. {reasons}"
+        )
+        if readiness.status == GraphicsReadinessStatus.UNVERIFIED:
+            LOGGER.warning(
+                "Condition graphics readiness is unverified %s; playback will proceed "
+                "and the uncertainty will be recorded. %s",
+                phase,
+                reasons,
+            )
+            return
+        raise RuntimeError(message)
+
+    def _graphics_readiness_warnings(
+        self,
+        readiness: GraphicsReadinessResult | None,
+    ) -> list[str]:
+        if readiness is None or readiness.status != GraphicsReadinessStatus.UNVERIFIED:
+            return []
+        reasons = "; ".join(readiness.reasons) or "No readiness reason was reported."
+        return [
+            "Graphics-memory readiness could not be fully verified, but playback "
+            "proceeded after condition resources were prepared and GPU-synchronized "
+            f"because no resource insufficiency was detected. {reasons}"
+        ]
+
+    @staticmethod
+    def _merge_graphics_readiness(
+        before: GraphicsReadinessResult,
+        after: GraphicsReadinessResult,
+    ) -> GraphicsReadinessResult:
+        statuses = {before.status, after.status}
+        if GraphicsReadinessStatus.REJECTED in statuses:
+            status = GraphicsReadinessStatus.REJECTED
+        elif GraphicsReadinessStatus.UNVERIFIED in statuses:
+            status = GraphicsReadinessStatus.UNVERIFIED
+        else:
+            return after
+        reasons = tuple(
+            dict.fromkeys(
+                reason
+                for result in (before, after)
+                if result.status != GraphicsReadinessStatus.READY
+                for reason in result.reasons
+            )
+        )
+        return GraphicsReadinessResult(
+            status=status,
+            reasons=reasons,
+            renderer=after.renderer,
+            estimate=after.estimate,
+            budget_status=after.budget_status,
+            adapter_assessments=(after.adapter_assessments or before.adapter_assessments),
+            system_memory_assessment=(
+                after.system_memory_assessment or before.system_memory_assessment
+            ),
         )
 
     def _graphics_metadata_updates(
