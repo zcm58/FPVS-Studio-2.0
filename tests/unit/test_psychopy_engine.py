@@ -19,9 +19,12 @@ from fpvs_studio.core.enums import (
     StimulusModality,
     StimulusTransform,
 )
-from fpvs_studio.core.run_spec import TriggerEvent
+from fpvs_studio.core.run_spec import FixationEvent, TriggerEvent
 from fpvs_studio.engines.psychopy_engine import PsychoPyEngine
-from fpvs_studio.engines.psychopy_stimuli import release_stimuli
+from fpvs_studio.engines.psychopy_stimuli import (
+    ConditionResourceCleanupError,
+    release_stimuli,
+)
 from fpvs_studio.engines.psychopy_text_screens import show_text_screen
 from fpvs_studio.triggers.base import TriggerBackend
 
@@ -33,6 +36,7 @@ class _FakeWindow:
         flip_times: list[float] | None = None,
         events: list[tuple[str, object]] | None = None,
         raise_on_flip_index: int | None = None,
+        flip_return_none_indices: set[int] | None = None,
         actual_frame_rate: float | None = 60.0,
         **kwargs,
     ) -> None:
@@ -43,10 +47,12 @@ class _FakeWindow:
         self.monitor = None
         self.events = events if events is not None else []
         self.raise_on_flip_index = raise_on_flip_index
+        self.flip_return_none_indices = flip_return_none_indices or set()
         self._flip_times = list(flip_times or [])
         self._flip_index = 0
         self._last_flip_time = 0.0
         self._call_on_flip: list[tuple[object, tuple[object, ...]]] = []
+        self.callback_names: list[str] = []
         self.actual_frame_rate = actual_frame_rate
         self.actual_frame_rate_kwargs: dict[str, object] | None = None
         self.closed = False
@@ -55,10 +61,11 @@ class _FakeWindow:
     def last_flip_time(self) -> float:
         return self._last_flip_time
 
-    def flip(self) -> float:
+    def flip(self) -> float | None:
         self.events.append(("flip", self._flip_index))
         if self._flip_index == self.raise_on_flip_index:
             raise RuntimeError("flip failed")
+        completed_flip_index = self._flip_index
         previous_flip_time = self._last_flip_time
         if self._flip_index < len(self._flip_times):
             self._last_flip_time = self._flip_times[self._flip_index]
@@ -71,10 +78,13 @@ class _FakeWindow:
         self._call_on_flip.clear()
         for callback, args in pending_callbacks:
             callback(*args)
+        if completed_flip_index in self.flip_return_none_indices:
+            return None
         return self._last_flip_time
 
     def callOnFlip(self, callback: object, *args: object) -> None:
         self.events.append(("callOnFlip", args))
+        self.callback_names.append(getattr(callback, "__name__", type(callback).__name__))
         self._call_on_flip.append((callback, args))
 
     def clearBuffer(self) -> None:
@@ -82,6 +92,7 @@ class _FakeWindow:
 
     def close(self) -> None:
         self.closed = True
+        self._call_on_flip.clear()
 
     def getActualFrameRate(self, **kwargs) -> float | None:  # noqa: N802
         self.actual_frame_rate_kwargs = kwargs
@@ -100,18 +111,26 @@ class _FakeClock:
     def getTime(self) -> float:
         return self._window.last_flip_time - self._offset
 
+    def getLastResetTime(self) -> float:  # noqa: N802
+        return self._offset
+
 
 class _FakeKeyboard:
     def __init__(
         self,
         window: _FakeWindow,
         key_batches: list[list[object]] | None = None,
+        backend: str = "ptb",
     ) -> None:
         self.clock = _FakeClock(window)
         self._key_batches = list(key_batches or [])
+        self._backend = backend
 
     def clearEvents(self) -> None:
         return None
+
+    def getBackend(self) -> str:  # noqa: N802
+        return self._backend
 
     def getKeys(
         self,
@@ -175,8 +194,10 @@ def _build_fake_psychopy(
     flip_times: list[float],
     key_batches: list[list[object]] | None = None,
     raise_on_flip_index: int | None = None,
+    flip_return_none_indices: set[int] | None = None,
     record_psychopy_warnings: bool = False,
     actual_frame_rate: float | None = 60.0,
+    keyboard_backend: str = "ptb",
 ) -> object:
     events: list[tuple[str, object]] = []
     image_stims: list[Any] = []
@@ -228,6 +249,7 @@ def _build_fake_psychopy(
             flip_times=flip_times,
             events=events,
             raise_on_flip_index=raise_on_flip_index,
+            flip_return_none_indices=flip_return_none_indices,
             actual_frame_rate=actual_frame_rate,
             **kwargs,
         )
@@ -235,7 +257,13 @@ def _build_fake_psychopy(
         return window
 
     def _fake_keyboard():
-        return _FakeKeyboard(captures["window"], key_batches=key_batches)
+        keyboard = _FakeKeyboard(
+            captures["window"],
+            key_batches=key_batches,
+            backend=keyboard_backend,
+        )
+        captures["keyboard"] = keyboard
+        return keyboard
 
     fake_visual = SimpleNamespace(
         Window=_fake_window,
@@ -244,10 +272,13 @@ def _build_fake_psychopy(
         TextStim=_FakeTextStim,
     )
     fake_core = SimpleNamespace(Clock=lambda: _FakeClock(captures["window"]))
-    fake_logging = (
-        SimpleNamespace(warning=lambda message: events.append(("psychopy_warning", message)))
-        if record_psychopy_warnings
-        else None
+    fake_logging = SimpleNamespace(
+        defaultClock=SimpleNamespace(getLastResetTime=lambda: 0.0),
+        warning=(
+            (lambda message: events.append(("psychopy_warning", message)))
+            if record_psychopy_warnings
+            else logging.warning
+        ),
     )
     return SimpleNamespace(
         visual=fake_visual,
@@ -490,6 +521,27 @@ def test_psychopy_engine_preserves_windowed_session_size(monkeypatch) -> None:
     }
 
 
+def test_psychopy_engine_closes_partial_session_when_keyboard_creation_fails(monkeypatch) -> None:
+    captures: dict[str, object] = {}
+    fake_psychopy = _build_fake_psychopy(captures, flip_times=[])
+
+    def _fail_keyboard_creation():
+        raise RuntimeError("keyboard creation failed")
+
+    fake_psychopy.hardware.keyboard.Keyboard = _fail_keyboard_creation
+    engine = PsychoPyEngine()
+    _patch_fake_psychopy(monkeypatch, engine, fake_psychopy)
+
+    with pytest.raises(RuntimeError, match="keyboard creation failed"):
+        engine.open_session(runtime_options={"fullscreen": False})
+
+    window = captures["window"]
+    assert isinstance(window, _FakeWindow)
+    assert window.closed is True
+    assert engine._window is None
+    assert engine._keyboard is None
+
+
 def test_psychopy_engine_preserves_completion_screen_duration(monkeypatch) -> None:
     captures: dict[str, object] = {}
     engine = PsychoPyEngine()
@@ -651,8 +703,56 @@ def test_psychopy_engine_preloads_unique_images_before_playback_flip(
     assert max(image_indices) < first_flip_index
     window = captures["window"]
     assert isinstance(window, _FakeWindow)
-    assert window._flip_index == run_spec.display.total_frames
+    assert window._flip_index == run_spec.display.total_frames + 1
     assert ("clearBuffer", 0) in events
+
+
+def test_psychopy_engine_blocks_on_post_upload_gate_before_first_condition_flip(
+    monkeypatch,
+    sample_project,
+    sample_project_root,
+) -> None:
+    run_spec = _two_event_run_spec(sample_project, sample_project_root, duplicate_image=False)
+    captures: dict[str, object] = {}
+    fake_psychopy = _build_fake_psychopy(captures, flip_times=[])
+    engine = PsychoPyEngine()
+    _patch_fake_psychopy(monkeypatch, engine, fake_psychopy)
+    calls: list[str] = []
+    context = object()
+
+    def _before(_project_root, _run_spec):
+        calls.append("before")
+        return context
+
+    def _after(received_context):
+        assert received_context is context
+        calls.append("after")
+        assert len(_image_stims(captures)) == 2
+        assert not any(event[0] == "flip" for event in _events(captures))
+        raise RuntimeError("post-upload graphics gate rejected")
+
+    monkeypatch.setattr(engine, "_graphics_readiness_before_preparation", _before)
+    monkeypatch.setattr(engine, "_graphics_readiness_after_preparation", _after)
+
+    try:
+        with pytest.raises(RuntimeError, match="post-upload graphics gate rejected"):
+            engine.run_condition(
+                run_spec,
+                sample_project_root,
+                runtime_options={
+                    "timing_warmup_frames": 0,
+                    "verify_graphics_memory": True,
+                },
+                trigger_backend=None,
+            )
+    finally:
+        engine.close_session()
+
+    window = captures["window"]
+    assert isinstance(window, _FakeWindow)
+    assert window._flip_index == 0
+    assert calls == ["before", "after"]
+    assert [stim.clear_textures_count for stim in _image_stims(captures)] == [1, 1]
 
 
 def test_psychopy_engine_reuses_prepared_stimulus_within_condition(
@@ -771,6 +871,36 @@ def test_psychopy_engine_releases_prepared_stimuli_when_priming_fails(
 
     assert len(_image_stims(captures)) == 2
     assert all(stimulus.clear_textures_count == 1 for stimulus in _image_stims(captures))
+
+
+def test_psychopy_engine_invalidates_session_when_stimulus_construction_fails(
+    monkeypatch,
+    sample_project,
+    sample_project_root,
+) -> None:
+    run_spec = _two_event_run_spec(sample_project, sample_project_root, duplicate_image=False)
+    captures: dict[str, object] = {}
+    fake_psychopy = _build_fake_psychopy(captures, flip_times=[])
+    engine = PsychoPyEngine()
+    _patch_fake_psychopy(monkeypatch, engine, fake_psychopy)
+
+    def _fail_image_stimulus(*args, **kwargs):
+        raise RuntimeError("image construction failed")
+
+    monkeypatch.setattr(fake_psychopy.visual, "ImageStim", _fail_image_stimulus)
+
+    with pytest.raises(RuntimeError, match="image construction failed"):
+        engine.run_condition(
+            run_spec,
+            sample_project_root,
+            runtime_options={"timing_warmup_frames": 0},
+            trigger_backend=None,
+        )
+
+    window = captures["window"]
+    assert isinstance(window, _FakeWindow)
+    assert window.closed is True
+    assert engine._window is None
 
 
 def test_psychopy_engine_sizes_images_from_visual_angle_without_changing_aspect_ratio(
@@ -1350,16 +1480,12 @@ def test_psychopy_engine_cover_crops_centrally_in_memory_and_preserves_alpha(
         engine.close_session()
 
     rendered_source = _image_stims(captures)[0].image
-    assert isinstance(rendered_source, np.ndarray)
-    assert rendered_source.shape == (100, 100, 4)
-    assert rendered_source.flags.c_contiguous is True
-    assert rendered_source[0, 0].tolist() == pytest.approx(
-        [50 / 127.5 - 1.0, 99 / 127.5 - 1.0, -1.0, 127 / 255.0]
-    )
-    assert rendered_source[0, -1].tolist() == pytest.approx(
-        [149 / 127.5 - 1.0, 99 / 127.5 - 1.0, -1.0, 127 / 255.0]
-    )
-    assert rendered_source[-1, 0, 1] == pytest.approx(-1.0)
+    assert isinstance(rendered_source, Image.Image)
+    assert rendered_source.mode == "RGBA"
+    assert rendered_source.size == (100, 100)
+    assert rendered_source.getpixel((0, 0)) == (50, 0, 0, 127)
+    assert rendered_source.getpixel((99, 0)) == (149, 0, 0, 127)
+    assert rendered_source.getpixel((0, 99)) == (50, 99, 0, 127)
     assert sorted(path.name for path in source_path.parent.iterdir()) == files_before
 
 
@@ -1395,6 +1521,213 @@ def test_psychopy_engine_emits_compiled_triggers_on_presentation_flip(
     ]
     call_on_flip_events = [event for event in _events(captures) if event[0] == "callOnFlip"]
     assert len(call_on_flip_events) == 2
+
+
+@pytest.mark.parametrize(
+    ("last_frame_is_blank", "expected_image_draw_count"),
+    [(False, 3), (True, 2)],
+)
+def test_psychopy_engine_terminal_offset_closes_continuous_and_blank_final_frames(
+    monkeypatch,
+    sample_project,
+    sample_project_root,
+    last_frame_is_blank,
+    expected_image_draw_count,
+) -> None:
+    run_spec = _two_event_run_spec(sample_project, sample_project_root, duplicate_image=True)
+    run_spec.stimulus_sequence = [
+        run_spec.stimulus_sequence[0].model_copy(
+            update={
+                "on_start_frame": 0,
+                "on_frames": 1 if last_frame_is_blank else 2,
+                "off_frames": 1 if last_frame_is_blank else 0,
+            }
+        )
+    ]
+    run_spec.display.total_frames = 2
+    run_spec.trigger_events = [TriggerEvent(frame_index=0, code=1, label="condition_start")]
+    interval_s = 1.0 / run_spec.display.refresh_hz
+    captures: dict[str, object] = {}
+    fake_psychopy = _build_fake_psychopy(
+        captures,
+        flip_times=[interval_s, interval_s * 2, interval_s * 3],
+    )
+    trigger_backend = _RecordingTriggerBackend()
+    engine = PsychoPyEngine()
+    _patch_fake_psychopy(monkeypatch, engine, fake_psychopy)
+
+    try:
+        summary = engine.run_condition(
+            run_spec,
+            sample_project_root,
+            runtime_options={"timing_warmup_frames": 0},
+            trigger_backend=trigger_backend,
+        )
+    finally:
+        engine.close_session()
+
+    window = captures["window"]
+    assert isinstance(window, _FakeWindow)
+    assert window._flip_index == 3
+    assert summary.completed_frames == 2
+    assert [record.frame_index for record in summary.frame_intervals] == [0, 1]
+    assert [record.interval_s for record in summary.frame_intervals] == pytest.approx(
+        [interval_s, interval_s]
+    )
+    assert _image_stims(captures)[0].draw_count == expected_image_draw_count
+    assert [record["frame_index"] for record in trigger_backend.records] == [0]
+    assert summary.runtime_metadata is not None
+    assert summary.runtime_metadata.condition_cache_gpu_synchronized is True
+    assert summary.runtime_metadata.condition_cache_cleanup_succeeded is True
+    assert summary.runtime_metadata.condition_cache_unique_variant_count == 1
+
+
+def test_psychopy_engine_terminal_offset_captures_final_frame_response(
+    monkeypatch,
+    sample_project,
+    sample_project_root,
+) -> None:
+    run_spec = _two_event_run_spec(sample_project, sample_project_root, duplicate_image=True)
+    run_spec.fixation = run_spec.fixation.model_copy(
+        update={"response_key": "space", "response_keys": ["space"]}
+    )
+    captures: dict[str, object] = {}
+    fake_psychopy = _build_fake_psychopy(
+        captures,
+        flip_times=[0.1, 0.2, 0.3],
+        key_batches=[[], [], [SimpleNamespace(name="space", rt=0.25)]],
+    )
+    engine = PsychoPyEngine()
+    _patch_fake_psychopy(monkeypatch, engine, fake_psychopy)
+
+    try:
+        summary = engine.run_condition(
+            run_spec,
+            sample_project_root,
+            runtime_options={"timing_warmup_frames": 0},
+            trigger_backend=None,
+        )
+    finally:
+        engine.close_session()
+
+    assert len(summary.response_log) == 1
+    assert summary.response_log[0].frame_index == 1
+    assert summary.response_log[0].time_s == pytest.approx(0.25)
+
+
+def test_psychopy_engine_keeps_trigger_flip_callback_exclusive_and_records_fixation_onset(
+    monkeypatch,
+    sample_project,
+    sample_project_root,
+) -> None:
+    run_spec = _two_event_run_spec(sample_project, sample_project_root, duplicate_image=True)
+    run_spec.fixation_events = [FixationEvent(event_index=0, start_frame=1, duration_frames=1)]
+    run_spec.trigger_events = [TriggerEvent(frame_index=1, code=55, label="oddball_onset")]
+    captures: dict[str, object] = {}
+    fake_psychopy = _build_fake_psychopy(
+        captures,
+        flip_times=[0.1, 0.2, 0.3],
+    )
+    trigger_backend = _RecordingTriggerBackend()
+    engine = PsychoPyEngine()
+    _patch_fake_psychopy(monkeypatch, engine, fake_psychopy)
+
+    try:
+        summary = engine.run_condition(
+            run_spec,
+            sample_project_root,
+            runtime_options={"timing_warmup_frames": 0},
+            trigger_backend=trigger_backend,
+        )
+    finally:
+        engine.close_session()
+
+    window = captures["window"]
+    assert isinstance(window, _FakeWindow)
+    assert window.callback_names == ["_emit_trigger"]
+    assert trigger_backend.records[0]["frame_index"] == 1
+    assert trigger_backend.records[0]["time_s"] == pytest.approx(0.2)
+    assert len(summary.fixation_target_onsets) == 1
+    assert summary.fixation_target_onsets[0].event_index == 0
+    assert summary.fixation_target_onsets[0].frame_index == 1
+    assert summary.fixation_target_onsets[0].time_s == pytest.approx(0.2)
+    shape_stims = captures["shape_stims"]
+    assert isinstance(shape_stims, list)
+    assert [stim.lineColor for stim in shape_stims] == [
+        run_spec.fixation.default_color,
+        run_spec.fixation.target_color,
+    ]
+    assert [stim.draw_count for stim in shape_stims] == [3, 2]
+
+
+def test_psychopy_engine_converts_flip_time_into_keyboard_clock_time_base() -> None:
+    engine = PsychoPyEngine()
+    engine._psychopy_logging = SimpleNamespace(
+        defaultClock=SimpleNamespace(getLastResetTime=lambda: 100.0)
+    )
+    keyboard_clock = SimpleNamespace(getLastResetTime=lambda: 99.25)
+
+    assert engine._keyboard_flip_time_offset(keyboard_clock) == pytest.approx(0.75)
+
+
+def test_psychopy_engine_does_not_invent_fixation_onset_when_clock_conversion_is_missing(
+    monkeypatch,
+    sample_project,
+    sample_project_root,
+) -> None:
+    run_spec = _two_event_run_spec(sample_project, sample_project_root, duplicate_image=True)
+    run_spec.fixation_events = [FixationEvent(event_index=0, start_frame=1, duration_frames=1)]
+    captures: dict[str, object] = {}
+    fake_psychopy = _build_fake_psychopy(captures, flip_times=[0.1, 0.2, 0.3])
+    fake_psychopy.logging = None
+    engine = PsychoPyEngine()
+    _patch_fake_psychopy(monkeypatch, engine, fake_psychopy)
+
+    try:
+        summary = engine.run_condition(
+            run_spec,
+            sample_project_root,
+            runtime_options={"timing_warmup_frames": 0},
+        )
+    finally:
+        engine.close_session()
+
+    assert summary.fixation_target_onsets == []
+
+
+def test_psychopy_engine_event_keyboard_backend_forces_frame_timestamp_fallback(
+    monkeypatch,
+    sample_project,
+    sample_project_root,
+) -> None:
+    run_spec = _two_event_run_spec(sample_project, sample_project_root, duplicate_image=True)
+    run_spec.fixation = run_spec.fixation.model_copy(
+        update={"response_key": "space", "response_keys": ["space"]}
+    )
+    run_spec.fixation_events = [FixationEvent(event_index=0, start_frame=1, duration_frames=1)]
+    key = SimpleNamespace(name="space", rt=0.2)
+    captures: dict[str, object] = {}
+    fake_psychopy = _build_fake_psychopy(
+        captures,
+        flip_times=[0.1, 0.2, 0.3],
+        key_batches=[[], [key], []],
+        keyboard_backend="event",
+    )
+    engine = PsychoPyEngine()
+    _patch_fake_psychopy(monkeypatch, engine, fake_psychopy)
+
+    try:
+        summary = engine.run_condition(
+            run_spec,
+            sample_project_root,
+            runtime_options={"timing_warmup_frames": 0},
+        )
+    finally:
+        engine.close_session()
+
+    assert summary.fixation_target_onsets == []
+    assert len(summary.response_log) == 1
+    assert summary.response_log[0].time_s is None
 
 
 def test_psychopy_engine_trigger_timestamps_exclude_warmup_period(
@@ -1440,6 +1773,41 @@ def test_psychopy_engine_trigger_timestamps_exclude_warmup_period(
     assert trigger_backend.records[1]["time_s"] == pytest.approx(0.2)
 
 
+def test_psychopy_engine_omits_mixed_clock_domain_warmup_intervals(
+    monkeypatch,
+    sample_project,
+    sample_project_root,
+) -> None:
+    run_spec = _two_event_run_spec(sample_project, sample_project_root, duplicate_image=True)
+    captures: dict[str, object] = {}
+    fake_psychopy = _build_fake_psychopy(
+        captures,
+        flip_times=[0.1, 0.2, 0.3, 0.4, 0.5, 0.6],
+        flip_return_none_indices={1},
+    )
+    engine = PsychoPyEngine()
+    _patch_fake_psychopy(monkeypatch, engine, fake_psychopy)
+    evaluate_timing_qc = engine._evaluate_timing_qc
+    captured_warmup_intervals: list[float] = []
+
+    def _capture_timing_qc(**kwargs):
+        captured_warmup_intervals.extend(kwargs["warmup_intervals"])
+        return evaluate_timing_qc(**kwargs)
+
+    monkeypatch.setattr(engine, "_evaluate_timing_qc", _capture_timing_qc)
+
+    try:
+        engine.run_condition(
+            run_spec,
+            sample_project_root,
+            runtime_options={"timing_warmup_frames": 3, "strict_timing": False},
+        )
+    finally:
+        engine.close_session()
+
+    assert captured_warmup_intervals == []
+
+
 def test_psychopy_engine_uses_final_warmup_frames_for_fixation_lead_in(
     monkeypatch,
     sample_project,
@@ -1472,11 +1840,11 @@ def test_psychopy_engine_uses_final_warmup_frames_for_fixation_lead_in(
 
     window = captures["window"]
     assert isinstance(window, _FakeWindow)
-    assert window._flip_index == 6
+    assert window._flip_index == 7
     shape_stims = captures["shape_stims"]
     assert isinstance(shape_stims, list)
-    assert len(shape_stims) == 1
-    assert shape_stims[0].draw_count == 4
+    assert len(shape_stims) == 2
+    assert [stim.draw_count for stim in shape_stims] == [6, 1]
     assert summary.completed_frames == 2
     assert [record["frame_index"] for record in trigger_backend.records] == [0, 1]
     assert trigger_backend.records[0]["time_s"] == pytest.approx(0.1)
@@ -1507,10 +1875,13 @@ def test_two_second_lead_in_uses_final_half_of_default_warmup_at_sixty_hz(
 
     window = captures["window"]
     assert isinstance(window, _FakeWindow)
-    assert window._flip_index == 240 + run_spec.display.total_frames
+    assert window._flip_index == 240 + run_spec.display.total_frames + 1
     shape_stims = captures["shape_stims"]
     assert isinstance(shape_stims, list)
-    assert shape_stims[0].draw_count == 120 + run_spec.display.total_frames
+    assert [stim.draw_count for stim in shape_stims] == [
+        120 + run_spec.display.total_frames + 2,
+        1,
+    ]
     assert summary.runtime_metadata is not None
     assert summary.runtime_metadata.timing_qc_warmup_frames == 240
 
@@ -1542,7 +1913,7 @@ def test_psychopy_engine_reports_long_lead_in_as_actual_pre_stream_qc_frames(
     assert summary.runtime_metadata.timing_qc_warmup_frames == 480
     window = captures["window"]
     assert isinstance(window, _FakeWindow)
-    assert window._flip_index == 482
+    assert window._flip_index == 483
 
 
 def test_psychopy_engine_blank_warmup_escape_aborts_before_stream_and_triggers(
@@ -1583,7 +1954,7 @@ def test_psychopy_engine_blank_warmup_escape_aborts_before_stream_and_triggers(
     assert summary.runtime_metadata.timing_qc_warmup_frames == 1
     shape_stims = captures["shape_stims"]
     assert isinstance(shape_stims, list)
-    assert shape_stims[0].draw_count == 0
+    assert [stim.draw_count for stim in shape_stims] == [1, 1]
 
 
 def test_psychopy_engine_uses_compiled_trigger_events_not_stimulus_roles(
@@ -1676,6 +2047,131 @@ def test_psychopy_engine_releases_condition_stimuli_after_playback_error(
 
     assert [stim.clear_textures_count for stim in _image_stims(captures)] == [1, 1]
     assert engine._active_run_clock is None
+
+
+def test_psychopy_engine_invalidates_session_after_flip_failure_with_queued_trigger(
+    monkeypatch,
+    sample_project,
+    sample_project_root,
+) -> None:
+    run_spec = _two_event_run_spec(sample_project, sample_project_root, duplicate_image=True)
+    run_spec.trigger_events = [TriggerEvent(frame_index=0, code=1, label="condition_start")]
+    captures: dict[str, object] = {}
+    fake_psychopy = _build_fake_psychopy(captures, flip_times=[], raise_on_flip_index=0)
+    trigger_backend = _RecordingTriggerBackend()
+    engine = PsychoPyEngine()
+    _patch_fake_psychopy(monkeypatch, engine, fake_psychopy)
+
+    with pytest.raises(RuntimeError, match="flip failed"):
+        engine.run_condition(
+            run_spec,
+            sample_project_root,
+            runtime_options={"timing_warmup_frames": 0},
+            trigger_backend=trigger_backend,
+        )
+
+    window = captures["window"]
+    assert isinstance(window, _FakeWindow)
+    assert window.closed is True
+    assert window._call_on_flip == []
+    assert trigger_backend.records == []
+    assert engine._window is None
+
+
+def test_psychopy_engine_rejects_multiple_trigger_bytes_on_one_flip_before_frame_zero(
+    monkeypatch,
+    sample_project,
+    sample_project_root,
+) -> None:
+    run_spec = _two_event_run_spec(sample_project, sample_project_root, duplicate_image=True)
+    run_spec.trigger_events = [
+        TriggerEvent(frame_index=0, code=1, label="condition_start"),
+        TriggerEvent(frame_index=0, code=55, label="oddball_onset"),
+    ]
+    captures: dict[str, object] = {}
+    fake_psychopy = _build_fake_psychopy(captures, flip_times=[])
+    trigger_backend = _RecordingTriggerBackend()
+    engine = PsychoPyEngine()
+    _patch_fake_psychopy(monkeypatch, engine, fake_psychopy)
+
+    with pytest.raises(ValueError, match="at most one trigger marker"):
+        engine.run_condition(
+            run_spec,
+            sample_project_root,
+            runtime_options={"timing_warmup_frames": 0},
+            trigger_backend=trigger_backend,
+        )
+
+    assert [event for event in _events(captures) if event[0] == "flip"] == []
+    assert trigger_backend.records == []
+
+
+def test_psychopy_engine_invalidates_session_after_trigger_callback_failure(
+    monkeypatch,
+    sample_project,
+    sample_project_root,
+) -> None:
+    class _FailingTriggerBackend(_RecordingTriggerBackend):
+        def send_trigger(self, *args, **kwargs) -> None:
+            raise RuntimeError("trigger write failed")
+
+    run_spec = _two_event_run_spec(sample_project, sample_project_root, duplicate_image=True)
+    run_spec.trigger_events = [TriggerEvent(frame_index=0, code=1, label="condition_start")]
+    captures: dict[str, object] = {}
+    fake_psychopy = _build_fake_psychopy(captures, flip_times=[0.1])
+    engine = PsychoPyEngine()
+    _patch_fake_psychopy(monkeypatch, engine, fake_psychopy)
+
+    with pytest.raises(RuntimeError, match="trigger write failed"):
+        engine.run_condition(
+            run_spec,
+            sample_project_root,
+            runtime_options={"timing_warmup_frames": 0},
+            trigger_backend=_FailingTriggerBackend(),
+        )
+
+    window = captures["window"]
+    assert isinstance(window, _FakeWindow)
+    assert window.closed is True
+    assert len([event for event in _events(captures) if event[0] == "flip"]) == 1
+    assert engine._window is None
+
+
+def test_psychopy_engine_closes_session_when_cleanup_barrier_fails(
+    monkeypatch,
+    sample_project,
+    sample_project_root,
+) -> None:
+    run_spec = _two_event_run_spec(sample_project, sample_project_root, duplicate_image=True)
+    captures: dict[str, object] = {}
+    fake_psychopy = _build_fake_psychopy(captures, flip_times=[0.1, 0.2, 0.3])
+    sync_count = 0
+
+    def _sync() -> None:
+        nonlocal sync_count
+        sync_count += 1
+        if sync_count == 2:
+            raise OSError("cleanup barrier failed")
+
+    monkeypatch.setattr("fpvs_studio.engines.psychopy_stimuli.synchronize_gpu", _sync)
+    engine = PsychoPyEngine()
+    _patch_fake_psychopy(monkeypatch, engine, fake_psychopy)
+
+    with pytest.raises(ConditionResourceCleanupError) as error_info:
+        engine.run_condition(
+            run_spec,
+            sample_project_root,
+            runtime_options={"timing_warmup_frames": 0},
+        )
+
+    window = captures["window"]
+    assert isinstance(window, _FakeWindow)
+    assert sync_count == 2
+    assert [failure.operation for failure in error_info.value.report.failures] == [
+        "synchronize_cleanup"
+    ]
+    assert window.closed is True
+    assert engine._window is None
 
 
 def test_psychopy_engine_does_not_reuse_stimuli_between_condition_runs(

@@ -16,6 +16,12 @@ from fpvs_studio.core.task_models import TaskResponseRecord
 
 FixationOutcome = Literal["hit", "miss"]
 ResponseOutcome = Literal["hit", "false_alarm"]
+FixationRtScoringSource = Literal[
+    "hardware_timestamp",
+    "frame_fallback",
+    "not_applicable",
+    "mixed",
+]
 TriggerStatus = Literal["scheduled", "sent", "error", "skipped_disabled", "failed", "skipped"]
 TaskAbortStage = Literal["pre_condition", "post_condition"]
 
@@ -114,6 +120,24 @@ class RuntimeMetadata(FPVSBaseModel):
     timing_qc_strict_violation: bool = False
     timing_qc_strict_violation_reason: str | None = None
     timing_qc_strict_abort: bool = False
+    graphics_readiness_status: str | None = None
+    graphics_readiness_reasons: list[str] = Field(default_factory=list)
+    graphics_renderer_vendor: str | None = None
+    graphics_renderer_name: str | None = None
+    graphics_renderer_version: str | None = None
+    graphics_renderer_classification: str | None = None
+    graphics_memory_estimated_gpu_bytes: int | None = Field(default=None, ge=0)
+    graphics_memory_conservative_gpu_bytes: int | None = Field(default=None, ge=0)
+    graphics_memory_budget_bytes: int | None = Field(default=None, ge=0)
+    graphics_memory_usage_bytes: int | None = Field(default=None, ge=0)
+    graphics_memory_headroom_bytes: int | None = None
+    graphics_system_available_bytes: int | None = Field(default=None, ge=0)
+    condition_cache_unique_variant_count: int = Field(default=0, ge=0)
+    condition_cache_gpu_synchronized: bool = False
+    condition_cache_cleanup_succeeded: bool | None = None
+    condition_cache_cleanup_failure_count: int = Field(default=0, ge=0)
+    keyboard_backend: str | None = None
+    fixation_rt_scoring_source: FixationRtScoringSource | None = None
 
 
 class FrameIntervalRecord(FPVSBaseModel):
@@ -121,6 +145,14 @@ class FrameIntervalRecord(FPVSBaseModel):
 
     frame_index: int = Field(ge=0)
     interval_s: float = Field(gt=0)
+
+
+class FixationTargetOnsetRecord(FPVSBaseModel):
+    """Actual flip time for one compiled fixation target onset."""
+
+    event_index: int = Field(ge=0)
+    frame_index: int = Field(ge=0)
+    time_s: float = Field(ge=0)
 
 
 class ResponseRecord(FPVSBaseModel):
@@ -132,6 +164,7 @@ class ResponseRecord(FPVSBaseModel):
     time_s: float | None = Field(default=None, ge=0)
     matched_event_index: int | None = Field(default=None, ge=0)
     rt_frames: int | None = Field(default=None, ge=0)
+    rt_s: float | None = Field(default=None, ge=0)
     correct: bool | None = None
     outcome: ResponseOutcome | None = None
 
@@ -154,7 +187,9 @@ class FixationResponseRecord(FPVSBaseModel):
     first_response_key: str | None = None
     response_frame: int | None = Field(default=None, ge=0)
     response_time_s: float | None = Field(default=None, ge=0)
+    target_onset_time_s: float | None = Field(default=None, ge=0)
     rt_frames: int | None = Field(default=None, ge=0)
+    rt_s: float | None = Field(default=None, ge=0)
     outcome: FixationOutcome
 
     @model_validator(mode="after")
@@ -163,10 +198,16 @@ class FixationResponseRecord(FPVSBaseModel):
             if (
                 self.first_response_key is None
                 or self.response_frame is None
-                or self.rt_frames is None
+                or (self.rt_frames is None and self.rt_s is None)
             ):
                 raise ValueError(
                     "Responded fixation events must include the first response key, frame, and RT."
+                )
+            if self.rt_s is not None and (
+                self.target_onset_time_s is None or self.response_time_s is None
+            ):
+                raise ValueError(
+                    "Timestamp-scored fixation responses require target and response times."
                 )
             if self.outcome != "hit":
                 raise ValueError("Responded fixation events must use the 'hit' outcome.")
@@ -176,6 +217,7 @@ class FixationResponseRecord(FPVSBaseModel):
                 or self.response_frame is not None
                 or self.response_time_s is not None
                 or self.rt_frames is not None
+                or self.rt_s is not None
             ):
                 raise ValueError("Missed fixation events may not include response metadata.")
             if self.outcome != "miss":
@@ -241,6 +283,7 @@ class RunExecutionSummary(FPVSBaseModel):
     warnings: list[str] = Field(default_factory=list)
     runtime_metadata: RuntimeMetadata | None = None
     frame_intervals: list[FrameIntervalRecord] = Field(default_factory=list)
+    fixation_target_onsets: list[FixationTargetOnsetRecord] = Field(default_factory=list)
     fixation_responses: list[FixationResponseRecord] = Field(default_factory=list)
     fixation_task_summary: FixationTaskSummary | None = None
     response_log: list[ResponseRecord] = Field(default_factory=list)

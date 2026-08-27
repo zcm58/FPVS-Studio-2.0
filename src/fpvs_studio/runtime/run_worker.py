@@ -5,12 +5,14 @@ above the engine seam, not ProjectFile compilation or PsychoPy-specific renderin
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
 from fpvs_studio.core.enums import RunMode
 from fpvs_studio.core.execution import (
+    FixationResponseRecord,
+    FixationRtScoringSource,
     FixationTaskSummary,
     FrameIntervalRecord,
     ParticipantMetadata,
@@ -496,6 +498,9 @@ class RuntimeWorker:
                 run_summary.response_log,
                 response_key=run_spec.fixation.response_key,
                 response_window_frames=run_spec.fixation.response_window_frames,
+                fixation_target_onsets=run_summary.fixation_target_onsets,
+                refresh_hz=run_spec.display.refresh_hz,
+                completed_frames=run_summary.completed_frames,
             )
         if run_spec.fixation.accuracy_task_enabled and fixation_task_summary is None:
             fixation_task_summary = build_fixation_task_summary(
@@ -518,6 +523,14 @@ class RuntimeWorker:
                 runtime_metadata = runtime_metadata.model_copy(
                     update={"actual_refresh_hz": estimated_refresh_hz}
                 )
+        runtime_metadata = runtime_metadata.model_copy(
+            update={
+                "fixation_rt_scoring_source": _fixation_rt_scoring_source(
+                    run_spec,
+                    scored_fixation_responses,
+                )
+            }
+        )
 
         trigger_log = list(run_summary.trigger_log)
         if not trigger_log:
@@ -824,13 +837,120 @@ def _estimate_refresh_hz(frame_intervals: list[FrameIntervalRecord]) -> float | 
     return 1.0 / (sum(intervals) / len(intervals))
 
 
+def _fixation_rt_scoring_source(
+    run_spec: RunSpec,
+    fixation_results: list[FixationResponseRecord],
+) -> FixationRtScoringSource:
+    if not run_spec.fixation.accuracy_task_enabled or not fixation_results:
+        return "not_applicable"
+    hit_timestamp_sources = [
+        result.rt_s is not None for result in fixation_results if result.outcome == "hit"
+    ]
+    all_targets_timestamped = all(
+        result.target_onset_time_s is not None for result in fixation_results
+    )
+    if all_targets_timestamped and all(hit_timestamp_sources):
+        return "hardware_timestamp"
+    if not any(hit_timestamp_sources):
+        return "frame_fallback"
+    return "mixed"
+
+
 def _pick_session_runtime_metadata(
     run_results: list[RunExecutionSummary],
 ) -> RuntimeMetadata | None:
-    for run_result in run_results:
-        if run_result.runtime_metadata is not None:
-            return run_result.runtime_metadata
-    return None
+    metadata = [
+        run_result.runtime_metadata
+        for run_result in run_results
+        if run_result.runtime_metadata is not None
+    ]
+    if not metadata:
+        return None
+
+    readiness_statuses = {
+        item.graphics_readiness_status
+        for item in metadata
+        if item.graphics_readiness_status is not None
+    }
+    scoring_sources = {
+        item.fixation_rt_scoring_source
+        for item in metadata
+        if item.fixation_rt_scoring_source is not None
+    }
+    keyboard_backends = {
+        item.keyboard_backend for item in metadata if item.keyboard_backend is not None
+    }
+    cleanup_states = [
+        item.condition_cache_cleanup_succeeded
+        for item in metadata
+        if item.condition_cache_cleanup_succeeded is not None
+    ]
+    return metadata[0].model_copy(
+        update={
+            "graphics_readiness_status": (
+                next(iter(readiness_statuses))
+                if len(readiness_statuses) == 1
+                else ("mixed" if readiness_statuses else None)
+            ),
+            "graphics_readiness_reasons": list(
+                dict.fromkeys(
+                    reason
+                    for item in metadata
+                    for reason in item.graphics_readiness_reasons
+                )
+            ),
+            "graphics_memory_estimated_gpu_bytes": _maximum_optional_int(
+                item.graphics_memory_estimated_gpu_bytes for item in metadata
+            ),
+            "graphics_memory_conservative_gpu_bytes": _maximum_optional_int(
+                item.graphics_memory_conservative_gpu_bytes for item in metadata
+            ),
+            "graphics_memory_budget_bytes": _minimum_optional_int(
+                item.graphics_memory_budget_bytes for item in metadata
+            ),
+            "graphics_memory_usage_bytes": _maximum_optional_int(
+                item.graphics_memory_usage_bytes for item in metadata
+            ),
+            "graphics_memory_headroom_bytes": _minimum_optional_int(
+                item.graphics_memory_headroom_bytes for item in metadata
+            ),
+            "graphics_system_available_bytes": _minimum_optional_int(
+                item.graphics_system_available_bytes for item in metadata
+            ),
+            "condition_cache_unique_variant_count": max(
+                item.condition_cache_unique_variant_count for item in metadata
+            ),
+            "condition_cache_gpu_synchronized": all(
+                item.condition_cache_gpu_synchronized for item in metadata
+            ),
+            "condition_cache_cleanup_succeeded": (
+                all(cleanup_states) if len(cleanup_states) == len(metadata) else None
+            ),
+            "condition_cache_cleanup_failure_count": sum(
+                item.condition_cache_cleanup_failure_count for item in metadata
+            ),
+            "keyboard_backend": (
+                next(iter(keyboard_backends))
+                if len(keyboard_backends) == 1
+                else ("mixed" if keyboard_backends else None)
+            ),
+            "fixation_rt_scoring_source": (
+                next(iter(scoring_sources))
+                if len(scoring_sources) == 1
+                else ("mixed" if scoring_sources else None)
+            ),
+        }
+    )
+
+
+def _maximum_optional_int(values: Iterable[int | None]) -> int | None:
+    present = [value for value in values if value is not None]
+    return max(present) if present else None
+
+
+def _minimum_optional_int(values: Iterable[int | None]) -> int | None:
+    present = [value for value in values if value is not None]
+    return min(present) if present else None
 
 
 def _run_mode() -> RunMode:

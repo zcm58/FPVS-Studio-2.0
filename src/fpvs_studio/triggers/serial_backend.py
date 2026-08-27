@@ -77,6 +77,19 @@ class SerialBackend(TriggerBackend):
             action="send trigger",
         )
 
+    def send_prevalidated_trigger(
+        self,
+        code: int,
+        *,
+        frame_index: int | None = None,
+        label: str | None = None,
+        time_s: float | None = None,
+    ) -> None:
+        """Write one already-validated marker without hot-path model work."""
+
+        del frame_index, label, time_s
+        self._write_marker(code, action="send trigger")
+
     def reset(self) -> None:
         if self._reset_code is None:
             return

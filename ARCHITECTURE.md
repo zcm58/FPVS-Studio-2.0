@@ -27,7 +27,8 @@ lazily only inside the engine package.
   UI remains under the GUI package and delegates to preprocessing.
 - `src/fpvs_studio/runtime/`: launch settings, preflight, session orchestration,
   participant history, fixation scoring, trigger coordination, and execution exports.
-- `src/fpvs_studio/engines/`: presentation interface and lazy PsychoPy implementation.
+- `src/fpvs_studio/engines/`: presentation interface, lazy PsychoPy implementation,
+  condition-local GPU-ready resource ownership, and Windows graphics-budget probing.
 - `src/fpvs_studio/triggers/`: optional hardware adapters used by runtime. Normal event
   codes are `1`-`255`; `0` is manual reset only. The `oddball_onset` code remains `55`
   unless the user explicitly enables and records
@@ -72,10 +73,15 @@ legacy word-size pixel rounding until those settings are explicitly authored.
   sequencing and validation, participant flow, fixation scoring, trigger I/O
   coordination, and result assembly. Task clocks remain outside `RunSpec` and cannot
   change FPVS frame or trigger schedules.
+- The PsychoPy engine prepares and synchronizes one condition cache at a time, enforces
+  production RAM/graphics-budget readiness before frame zero, executes a precompiled hot
+  loop, ends the last compiled frame with a neutral offset flip, and releases the cache
+  before returning. Runtime scores fixation RT from same-clock hardware timestamps and
+  owns the exported result contracts.
 - The app-level experiment test mode remains outside persisted project and compiled
   contracts. It explicitly selects null-trigger output and disables connected-display
-  refresh verification while preserving fullscreen playback, compiled schedules, asset
-  checks, timing QC, task flow, and test exports.
+  refresh and graphics-memory verification while preserving fullscreen playback,
+  compiled schedules, asset checks, timing QC, task flow, and test exports.
 - `ProjectFile` owns the per-participant `manual_removed_electrodes` authoring map saved
   from the launch dialog; it remains outside compiled and runtime playback contracts.
 - Engines render compiled events and one neutral task step at a time; they do not own

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from pathlib import Path
 
 import pytest
@@ -13,8 +14,15 @@ from tests.unit.runtime_launcher_helpers import (
 
 from fpvs_studio.core.compiler import compile_run_spec, compile_session_plan
 from fpvs_studio.core.enums import InterConditionMode, RunMode
-from fpvs_studio.core.execution import ParticipantMetadata, RunExecutionSummary
+from fpvs_studio.core.execution import (
+    FixationResponseRecord,
+    FixationTargetOnsetRecord,
+    ParticipantMetadata,
+    RunExecutionSummary,
+    RuntimeMetadata,
+)
 from fpvs_studio.core.models import DisplayValidationReport
+from fpvs_studio.core.run_spec import RunSpec
 from fpvs_studio.core.serialization import read_json_file
 from fpvs_studio.engines.base import FixationTutorialAttemptResult
 from fpvs_studio.engines.registry import register_engine, unregister_engine
@@ -25,6 +33,10 @@ from fpvs_studio.runtime.launcher import (
     launch_session,
 )
 from fpvs_studio.runtime.preflight import PreflightError
+from fpvs_studio.runtime.run_worker import (
+    _fixation_rt_scoring_source,
+    _pick_session_runtime_metadata,
+)
 from fpvs_studio.triggers.base import TriggerBackend
 
 
@@ -93,6 +105,7 @@ def test_runtime_launcher_dispatches_runspec_to_registered_engine(
             "strict_timing": True,
             "strict_timing_warmup": True,
             "verify_refresh_rate": True,
+        "verify_graphics_memory": True,
         "timing_miss_threshold_multiplier": 1.5,
         "timing_warmup_frames": 240,
         "completion_screen_seconds": 0.5,
@@ -105,6 +118,7 @@ def test_runtime_launcher_dispatches_runspec_to_registered_engine(
     assert summary.runtime_metadata is not None
     assert summary.run_mode is RunMode.SESSION
     assert summary.runtime_metadata.test_mode is False
+    assert summary.runtime_metadata.fixation_rt_scoring_source == "not_applicable"
     assert summary.trigger_log[0].label == "condition_start"
     assert (sample_project_root / "runs" / "faces-run" / "runspec.json").is_file()
     assert (sample_project_root / "runs" / "faces-run" / "run_summary.json").is_file()
@@ -140,14 +154,109 @@ def test_runtime_launcher_dispatches_runspec_to_registered_engine(
         run_spec.fixation_events[0].duration_frames
     )
     assert exported_fixation_rows[0]["outcome"] == "hit"
+    assert exported_fixation_rows[0]["rt_scoring_source"] == "not_applicable"
     assert exported_response_rows[0]["matched_event_index"] == "0"
     assert exported_response_rows[0]["correct"] == "True"
+    assert exported_response_rows[0]["rt_scoring_source"] == "not_applicable"
     assert [row["label"] for row in exported_trigger_rows] == [
         trigger_event.label for trigger_event in run_spec.trigger_events
     ]
     assert all(row["status"] == "skipped_disabled" for row in exported_trigger_rows)
 
 
+def test_launch_run_records_hardware_timestamp_fixation_scoring_source(
+    sample_project,
+    sample_project_root,
+) -> None:
+    class TimestampedStubEngine(StubEngine):
+        def run_condition(
+            self,
+            run_spec: RunSpec,
+            project_root: Path,
+            *,
+            runtime_options: Mapping[str, object] | None = None,
+            trigger_backend: TriggerBackend | None = None,
+        ) -> RunExecutionSummary:
+            summary = super().run_condition(
+                run_spec,
+                project_root,
+                runtime_options=runtime_options,
+                trigger_backend=trigger_backend,
+            )
+            return summary.model_copy(
+                update={
+                    "fixation_target_onsets": [
+                        FixationTargetOnsetRecord(
+                            event_index=event.event_index,
+                            frame_index=event.start_frame,
+                            time_s=event.start_frame / run_spec.display.refresh_hz,
+                        )
+                        for event in run_spec.fixation_events
+                    ]
+                }
+            )
+
+    sample_project.settings.fixation_task.accuracy_task_enabled = True
+    captures: dict[str, object] = {}
+    register_engine("stub-hardware-timestamps", lambda: TimestampedStubEngine(captures))
+    try:
+        run_spec = compile_run_spec(
+            sample_project,
+            refresh_hz=60.0,
+            project_root=sample_project_root,
+            run_id="faces-run",
+        )
+
+        summary = launch_run(
+            sample_project_root,
+            run_spec,
+            participant_number=PARTICIPANT_NUMBER,
+            launch_settings=LaunchSettings(engine_name="stub-hardware-timestamps"),
+        )
+    finally:
+        unregister_engine("stub-hardware-timestamps")
+
+    assert summary.runtime_metadata is not None
+    assert summary.runtime_metadata.fixation_rt_scoring_source == "hardware_timestamp"
+    assert all(
+        result.target_onset_time_s is not None for result in summary.fixation_responses
+    )
+    output_dir = sample_project_root / "runs" / "faces-run"
+    assert {
+        row["rt_scoring_source"] for row in _read_csv_rows(output_dir / "fixation_events.csv")
+    } == {"hardware_timestamp"}
+    assert {
+        row["rt_scoring_source"] for row in _read_csv_rows(output_dir / "responses.csv")
+    } == {"hardware_timestamp"}
+
+
+def test_fixation_rt_provenance_does_not_overstate_pre_scored_frame_rt(
+    sample_project,
+    sample_project_root,
+) -> None:
+    sample_project.settings.fixation_task.accuracy_task_enabled = True
+    run_spec = compile_run_spec(
+        sample_project,
+        refresh_hz=60.0,
+        project_root=sample_project_root,
+        run_id="pre-scored-frame-rt",
+    )
+    fixation_event = run_spec.fixation_events[0]
+    pre_scored_result = FixationResponseRecord(
+        event_index=fixation_event.event_index,
+        start_frame=fixation_event.start_frame,
+        duration_frames=fixation_event.duration_frames,
+        responded=True,
+        first_response_key=run_spec.fixation.response_key,
+        response_frame=fixation_event.start_frame,
+        response_time_s=1.0,
+        target_onset_time_s=0.5,
+        rt_frames=0,
+        rt_s=None,
+        outcome="hit",
+    )
+
+    assert _fixation_rt_scoring_source(run_spec, [pre_scored_result]) == "frame_fallback"
 
 
 def test_launch_session_runs_all_entries_with_stub_engine_and_reuses_session_window(
@@ -598,8 +707,6 @@ def test_launch_session_aborts_before_playback_when_tutorial_attempt_aborts(
     assert captures.get("run_ids") is None
 
 
-
-
 def test_launch_session_reuses_participant_number_with_incremented_output_labels(
     multi_condition_project,
     multi_condition_project_root,
@@ -651,8 +758,6 @@ def test_launch_session_reuses_participant_number_with_incremented_output_labels
     ).is_file()
 
 
-
-
 def test_session_launch_ignores_legacy_fixed_break_transition_path(
     multi_condition_project,
     multi_condition_project_root,
@@ -683,8 +788,6 @@ def test_session_launch_ignores_legacy_fixed_break_transition_path(
     assert all(
         item["continue_prompt"] == "Press Space to begin." for item in captures["transitions"]
     )
-
-
 
 
 def test_session_launch_forces_space_transition_key(
@@ -751,8 +854,6 @@ def test_single_run_launch_aborts_before_playback_when_start_screen_is_cancelled
     assert (sample_project_root / "runs" / "faces-run" / "run_summary.json").is_file()
 
 
-
-
 def test_session_launch_inserts_manual_inter_block_break_between_non_final_blocks(
     multi_condition_project,
     multi_condition_project_root,
@@ -785,8 +886,6 @@ def test_session_launch_inserts_manual_inter_block_break_between_non_final_block
     ]
 
 
-
-
 def test_session_launch_passes_condition_instructions_to_transition_screens(
     multi_condition_project,
     multi_condition_project_root,
@@ -812,8 +911,6 @@ def test_session_launch_passes_condition_instructions_to_transition_screens(
 
     bodies = [item["body"] for item in captures["transitions"]]
     assert all("Instructions for condition" in body for body in bodies)
-
-
 
 
 def test_session_launch_preserves_instruction_text_verbatim(
@@ -845,8 +942,6 @@ def test_session_launch_preserves_instruction_text_verbatim(
     assert captures["transitions"][0]["body"].startswith(f"{exact_text}\n\n")
 
 
-
-
 def test_session_launch_preflight_rejects_missing_assets_before_engine_run(
     sample_project,
     sample_project_root,
@@ -876,8 +971,6 @@ def test_session_launch_preflight_rejects_missing_assets_before_engine_run(
         unregister_engine("stub-preflight")
 
     assert "run_ids" not in captures
-
-
 
 
 def test_session_launch_preflight_rejects_invalid_timing_before_engine_run(
@@ -1108,3 +1201,73 @@ def test_launch_run_uses_session_mode_without_mode_gate(
     assert summary.runtime_metadata is not None
     assert summary.runtime_metadata.test_mode is False
 
+
+def test_session_runtime_metadata_aggregates_two_conditions_conservatively() -> None:
+    first = RunExecutionSummary(
+        project_id="project",
+        run_id="run-a",
+        condition_id="condition-a",
+        condition_name="Condition A",
+        engine_name="psychopy",
+        run_mode=RunMode.SESSION,
+        runtime_metadata=RuntimeMetadata(
+            engine_name="psychopy",
+            graphics_readiness_status="ready",
+            graphics_readiness_reasons=["first", "shared"],
+            graphics_memory_estimated_gpu_bytes=100,
+            graphics_memory_conservative_gpu_bytes=150,
+            graphics_memory_budget_bytes=1_000,
+            graphics_memory_usage_bytes=400,
+            graphics_memory_headroom_bytes=600,
+            graphics_system_available_bytes=4_000,
+            condition_cache_unique_variant_count=5,
+            condition_cache_gpu_synchronized=True,
+            condition_cache_cleanup_succeeded=True,
+            condition_cache_cleanup_failure_count=0,
+            keyboard_backend="ptb",
+            fixation_rt_scoring_source="hardware_timestamp",
+        ),
+    )
+    second = RunExecutionSummary(
+        project_id="project",
+        run_id="run-b",
+        condition_id="condition-b",
+        condition_name="Condition B",
+        engine_name="psychopy",
+        run_mode=RunMode.SESSION,
+        runtime_metadata=RuntimeMetadata(
+            engine_name="psychopy",
+            graphics_readiness_status="blocked",
+            graphics_readiness_reasons=["shared", "second"],
+            graphics_memory_estimated_gpu_bytes=200,
+            graphics_memory_conservative_gpu_bytes=300,
+            graphics_memory_budget_bytes=900,
+            graphics_memory_usage_bytes=500,
+            graphics_memory_headroom_bytes=400,
+            graphics_system_available_bytes=3_000,
+            condition_cache_unique_variant_count=7,
+            condition_cache_gpu_synchronized=False,
+            condition_cache_cleanup_succeeded=False,
+            condition_cache_cleanup_failure_count=2,
+            keyboard_backend="iohub",
+            fixation_rt_scoring_source="frame_fallback",
+        ),
+    )
+
+    metadata = _pick_session_runtime_metadata([first, second])
+
+    assert metadata is not None
+    assert metadata.graphics_readiness_status == "mixed"
+    assert metadata.graphics_readiness_reasons == ["first", "shared", "second"]
+    assert metadata.graphics_memory_estimated_gpu_bytes == 200
+    assert metadata.graphics_memory_conservative_gpu_bytes == 300
+    assert metadata.graphics_memory_budget_bytes == 900
+    assert metadata.graphics_memory_usage_bytes == 500
+    assert metadata.graphics_memory_headroom_bytes == 400
+    assert metadata.graphics_system_available_bytes == 3_000
+    assert metadata.condition_cache_unique_variant_count == 7
+    assert metadata.condition_cache_gpu_synchronized is False
+    assert metadata.condition_cache_cleanup_succeeded is False
+    assert metadata.condition_cache_cleanup_failure_count == 2
+    assert metadata.keyboard_backend == "mixed"
+    assert metadata.fixation_rt_scoring_source == "mixed"

@@ -111,9 +111,15 @@ manual_smoke = []
 
 [scopes.engine]
 checks = []
-tests = ["tests/unit/test_psychopy_engine.py", "tests/unit/test_runtime_tasks.py"]
+tests = [
+  "tests/unit/test_psychopy_engine.py",
+  "tests/unit/test_psychopy_stimuli_resources.py",
+  "tests/unit/test_graphics_readiness.py",
+  "tests/unit/test_windows_graphics_budget.py",
+  "tests/unit/test_runtime_tasks.py",
+]
 ci_tests = ["tests/integration/test_psychopy_engine.py"]
-include = ["src/fpvs_studio/engines/**", "tests/unit/test_psychopy_engine.py", "tests/unit/test_runtime_tasks.py", "tests/integration/test_psychopy_engine.py"]
+include = ["src/fpvs_studio/engines/**", "tests/unit/test_psychopy_engine.py", "tests/unit/test_psychopy_stimuli_resources.py", "tests/unit/test_graphics_readiness.py", "tests/unit/test_windows_graphics_budget.py", "tests/unit/test_runtime_tasks.py", "tests/integration/test_psychopy_engine.py"]
 manual_smoke = ["Run a short experiment on the intended presentation machine when engine playback changes."]
 
 [scopes.triggers]

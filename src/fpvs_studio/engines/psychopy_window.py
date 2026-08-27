@@ -53,7 +53,13 @@ def build_refresh_probe_window_kwargs(
     return window_kwargs
 
 
-def create_fixation_stim(*, visual: Any, window: Any, run_spec: RunSpec) -> Any:
+def create_fixation_stim(
+    *,
+    visual: Any,
+    window: Any,
+    run_spec: RunSpec,
+    color: str | None = None,
+) -> Any:
     """Create the fixation cross stimulus for one run."""
 
     return visual.ShapeStim(
@@ -67,7 +73,7 @@ def create_fixation_stim(*, visual: Any, window: Any, run_spec: RunSpec) -> Any:
         ),
         closeShape=False,
         lineWidth=run_spec.fixation.line_width_px,
-        lineColor=run_spec.fixation.default_color,
+        lineColor=color or run_spec.fixation.default_color,
         fillColor=None,
         autoLog=False,
     )

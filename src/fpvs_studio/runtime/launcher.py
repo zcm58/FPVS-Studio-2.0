@@ -47,6 +47,7 @@ class LaunchSettings:
     strict_timing: bool = True
     strict_timing_warmup: bool = True
     verify_refresh_rate: bool = True
+    verify_graphics_memory: bool = True
     timing_miss_threshold_multiplier: float = 1.5
     timing_warmup_frames: int = 240
     completion_screen_seconds: float = 0.5
@@ -77,6 +78,8 @@ def _validate_launch_settings(settings: LaunchSettings) -> None:
         raise LaunchSettingsError("strict_timing_warmup must be a boolean.")
     if not isinstance(settings.verify_refresh_rate, bool):
         raise LaunchSettingsError("verify_refresh_rate must be a boolean.")
+    if not isinstance(settings.verify_graphics_memory, bool):
+        raise LaunchSettingsError("verify_graphics_memory must be a boolean.")
     if (
         not isinstance(settings.timing_miss_threshold_multiplier, (int, float))
         or settings.timing_miss_threshold_multiplier <= 1.0

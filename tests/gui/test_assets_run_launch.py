@@ -290,8 +290,9 @@ def test_launch_action_wires_runtime_launcher_with_backend_launch_settings(
     assert not hasattr(launch_settings, "test_mode")
     assert launch_settings.fullscreen is True
     assert launch_settings.strict_timing is True
-    assert launch_settings.strict_timing_warmup is False
-    assert launch_settings.timing_miss_threshold_multiplier == 4.0
+    assert launch_settings.strict_timing_warmup is True
+    assert launch_settings.verify_graphics_memory is True
+    assert launch_settings.timing_miss_threshold_multiplier == 1.5
     assert launch_settings.timing_warmup_frames == 240
     assert launch_settings.completion_screen_seconds == 0.5
     assert launch_settings.export_mode == EXPORT_MODE_COMPACT

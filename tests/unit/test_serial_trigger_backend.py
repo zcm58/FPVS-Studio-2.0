@@ -322,3 +322,72 @@ def test_runtime_records_error_and_reraises_serial_write_failures() -> None:
 
     assert backend.records[0].status == "error"
     assert backend.records[0].message == "write failed"
+
+
+def test_serial_prevalidated_hot_path_skips_revalidation(monkeypatch) -> None:
+    serial_module = _FakeSerialModule()
+    backend = SerialBackend("COM3", 115200, serial_module=serial_module)
+    backend.connect()
+
+    monkeypatch.setattr(
+        "fpvs_studio.triggers.serial_backend.validate_event_trigger_code",
+        lambda _code: (_ for _ in ()).throw(AssertionError("unexpected validation")),
+    )
+
+    backend.send_prevalidated_trigger(
+        55,
+        frame_index=10,
+        label="oddball_onset",
+        time_s=0.5,
+    )
+
+    assert serial_module.port.writes == [bytes([55])]
+
+
+def test_logged_prevalidated_hot_path_defers_model_materialization(monkeypatch) -> None:
+    class _RecordingBackend(TriggerBackend):
+        def __init__(self) -> None:
+            self.sent: list[tuple[int, int | None, str | None, float | None]] = []
+
+        def connect(self) -> None:
+            return None
+
+        def send_trigger(
+            self,
+            code: int,
+            *,
+            frame_index: int | None = None,
+            label: str | None = None,
+            time_s: float | None = None,
+        ) -> None:
+            self.sent.append((code, frame_index, label, time_s))
+
+        def reset(self) -> None:
+            return None
+
+        def close(self) -> None:
+            return None
+
+    from fpvs_studio.runtime.triggers import LoggedTriggerBackend
+
+    physical_backend = _RecordingBackend()
+    backend = LoggedTriggerBackend(physical_backend, backend_name="serial")
+
+    def _unexpected_model_construction(**_kwargs):
+        raise AssertionError("validated trigger models belong outside the flip callback")
+
+    monkeypatch.setattr(
+        "fpvs_studio.runtime.triggers.TriggerRecord",
+        _unexpected_model_construction,
+    )
+
+    backend.send_prevalidated_trigger(
+        55,
+        frame_index=10,
+        label="oddball_onset",
+        time_s=0.5,
+    )
+
+    assert physical_backend.sent == [(55, 10, "oddball_onset", 0.5)]
+    with pytest.raises(AssertionError, match="outside the flip callback"):
+        _ = backend.records
