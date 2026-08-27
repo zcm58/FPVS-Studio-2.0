@@ -122,9 +122,10 @@ The PsychoPy implementation:
   detection failure is warning-only because PsychoPy still resolves the actual size
 - reports the active window resolution so runtime can block configured visual-angle
   playback when the current display resolution differs from the intended test resolution
-- shows Space-required condition-start screens and completion text screens; transition
-  headings always use generic condition numbers while authored condition names stay in
-  runtime artifacts
+- shows Space-required condition-start screens and one final `All done!` / participant-
+  thanks screen after every condition has completed; transition headings always use
+  generic `Condition X of Y` numbers while authored condition names stay in runtime
+  artifacts
 - runs fixation-only participant tutorial attempts when runtime asks for practice
 - shows a dedicated manual inter-block break screen between non-final blocks
 - renders runtime-resolved modular instruction, study, image/text choice-grid,

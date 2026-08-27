@@ -694,11 +694,14 @@ class PsychoPyEngine(PresentationEngine):
         total_condition_count: int,
         was_aborted: bool,
     ) -> bool:
-        heading = "Session aborted" if was_aborted else "Session complete"
+        heading = "Session aborted" if was_aborted else "All done!"
         body = (
             f"Completed {completed_condition_count} of {total_condition_count} conditions."
             if was_aborted
-            else f"Completed all {total_condition_count} conditions."
+            else (
+                "Thanks for your time!\n\n"
+                f"Completed all {total_condition_count} conditions."
+            )
         )
         raw_countdown_seconds = self._runtime_options.get(
             "completion_screen_seconds",

@@ -643,7 +643,7 @@ def test_psychopy_engine_closes_partial_session_when_keyboard_creation_fails(mon
     assert engine._keyboard is None
 
 
-def test_psychopy_engine_preserves_completion_screen_duration(monkeypatch) -> None:
+def test_psychopy_engine_uses_final_thanks_copy_and_preserves_duration(monkeypatch) -> None:
     captures: dict[str, object] = {}
     engine = PsychoPyEngine()
 
@@ -661,6 +661,8 @@ def test_psychopy_engine_preserves_completion_screen_duration(monkeypatch) -> No
     )
 
     assert aborted is False
+    assert captures["heading"] == "All done!"
+    assert captures["body"] == "Thanks for your time!\n\nCompleted all 2 conditions."
     assert captures["countdown_seconds"] == 0.5
 
 
