@@ -8,15 +8,18 @@ branching, correctness, and response persistence.
 from __future__ import annotations
 
 from dataclasses import replace
+from importlib import import_module
 from pathlib import Path
 from typing import Any, TypedDict
 
+from fpvs_studio.assets import bundled_task_font_path
 from fpvs_studio.core.paths import resolve_project_relative_path
 from fpvs_studio.engines.base import ResolvedTaskItem, ResolvedTaskStep, TaskEngineInput
 
 _TEXT_RESPONSE_KINDS = frozenset({"short_text", "long_text", "numeric"})
 _CHOICE_RESPONSE_KINDS = frozenset({"single_choice", "multiple_choice", "rating"})
 _EDITABLE_TEXT_RESPONSE_KINDS = frozenset({"short_text", "long_text"})
+_REGISTERED_BUNDLED_TASK_FONTS: set[str] = set()
 
 
 class _KeyResult(TypedDict):
@@ -48,11 +51,13 @@ def render_task_step(
 ) -> TaskEngineInput:
     """Render one modular task step and collect a neutral response."""
 
+    _register_bundled_task_font(step.font_family)
     item_stimuli = _prepare_item_stimuli(
         visual=visual,
         window=window,
         project_root=project_root,
         items=step.items,
+        font_family=step.font_family,
     )
     displayed_item_ids = tuple(item.item_id for item in step.items)
     selected_item_ids: list[str] = []
@@ -289,6 +294,7 @@ def _prepare_item_stimuli(
     window: Any,
     project_root: Path,
     items: tuple[ResolvedTaskItem, ...],
+    font_family: str = "Arial",
 ) -> dict[str, Any]:
     stimuli: dict[str, Any] = {}
     for item in items:
@@ -305,7 +311,7 @@ def _prepare_item_stimuli(
         stimuli[item.item_id] = visual.TextStim(
             window,
             text=item.text or "",
-            font="Arial",
+            font=font_family,
             units="pix",
             pos=item.position_px,
             height=item.text_height_px,
@@ -314,6 +320,52 @@ def _prepare_item_stimuli(
             autoLog=False,
         )
     return stimuli
+
+
+def _register_bundled_task_font(font_family: str) -> None:
+    """Register a packaged task font once with both PsychoPy text renderers."""
+
+    font_path = bundled_task_font_path(font_family)
+    if font_path is None or font_family in _REGISTERED_BUNDLED_TASK_FONTS:
+        return
+    if not font_path.is_file():
+        raise RuntimeError(
+            f"Bundled task font '{font_family}' is missing from the FPVS Studio install."
+        )
+    try:
+        pyglet_font = import_module("pyglet.font")
+        pyglet_font.add_file(str(font_path))
+        pyglet_registered = bool(pyglet_font.have_font(font_family))
+        textbox2 = import_module("psychopy.visual.textbox2")
+        added_fonts = textbox2.allFonts.addFontFile(str(font_path))
+        matching_fonts = textbox2.allFonts.getFontsMatching(
+            font_family,
+            fallback=False,
+        )
+        resolved_font_path = font_path.resolve()
+        textbox_registered = (
+            bool(added_fonts)
+            and any(
+                Path(getattr(font_info, "path", "")).resolve()
+                == resolved_font_path
+                for font_info in added_fonts
+            )
+            and bool(matching_fonts)
+            and any(
+                Path(getattr(font_info, "path", "")).resolve()
+                == resolved_font_path
+                for font_info in matching_fonts
+            )
+        )
+    except Exception as exc:
+        raise RuntimeError(
+            f"Bundled task font '{font_family}' could not be registered with PsychoPy."
+        ) from exc
+    if not pyglet_registered or not textbox_registered:
+        raise RuntimeError(
+            f"Bundled task font '{font_family}' could not be registered with PsychoPy."
+        )
+    _REGISTERED_BUNDLED_TASK_FONTS.add(font_family)
 
 
 def _prepare_text_box(
@@ -330,7 +382,7 @@ def _prepare_text_box(
     text_box = text_box_type(
         window,
         text="",
-        font="Arial",
+        font=step.font_family,
         units="pix",
         pos=(0, -window_height * 0.14),
         size=(_window_width(window) * 0.82, box_height),
@@ -392,7 +444,7 @@ def _draw_step(
         visual.TextStim(
             window,
             text=step.heading,
-            font="Arial",
+            font=step.font_family,
             units="pix",
             height=max(28.0, window_height * 0.042),
             pos=(0, window_height * 0.38),
@@ -406,7 +458,7 @@ def _draw_step(
         visual.TextStim(
             window,
             text=body,
-            font="Arial",
+            font=step.font_family,
             units="pix",
             height=step.prompt_height_px or max(22.0, window_height * 0.031),
             pos=prompt_position,
@@ -423,7 +475,7 @@ def _draw_step(
         visual.TextStim(
             window,
             text=step.body,
-            font="Arial",
+            font=step.font_family,
             units="pix",
             height=max(20.0, window_height * 0.027),
             pos=(0, window_height * 0.29),
@@ -440,7 +492,7 @@ def _draw_step(
         visual.TextStim(
             window,
             text=step.prompt,
-            font="Arial",
+            font=step.font_family,
             units="pix",
             height=step.prompt_height_px or max(22.0, window_height * 0.031),
             pos=(0, window_height * 0.18),
@@ -454,7 +506,7 @@ def _draw_step(
             visual.TextStim(
                 window,
                 text="[selected]",
-                font="Arial",
+                font=step.font_family,
                 units="pix",
                 height=max(16.0, item.text_height_px * 0.55),
                 pos=(
@@ -469,7 +521,7 @@ def _draw_step(
         visual.TextStim(
             window,
             text="Submit",
-            font="Arial",
+            font=step.font_family,
             units="pix",
             height=max(20.0, window_height * 0.027),
             pos=_text_submit_position(window),
@@ -485,7 +537,7 @@ def _draw_step(
         visual.TextStim(
             window,
             text=display_value,
-            font="Arial",
+            font=step.font_family,
             units="pix",
             height=max(22.0, window_height * 0.03),
             pos=(0, -window_height * 0.14),
@@ -500,7 +552,7 @@ def _draw_step(
         visual.TextStim(
             window,
             text=footer,
-            font="Arial",
+            font=step.font_family,
             units="pix",
             height=max(16.0, window_height * 0.022),
             pos=(0, -window_height * 0.42),

@@ -16,7 +16,15 @@ from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Literal
 
 from PySide6.QtCore import QRectF, QSize, Qt, Signal
-from PySide6.QtGui import QColor, QPainter, QPaintEvent, QPen, QPixmap, QResizeEvent
+from PySide6.QtGui import (
+    QColor,
+    QFontDatabase,
+    QPainter,
+    QPaintEvent,
+    QPen,
+    QPixmap,
+    QResizeEvent,
+)
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -45,12 +53,14 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from fpvs_studio.assets import bundled_task_font_path
 from fpvs_studio.core.enums import PresentationUnit
 from fpvs_studio.core.task_models import (
     TaskBinding,
     TaskBranchOperator,
     TaskBranchRule,
     TaskDisplayItem,
+    TaskFontFamily,
     TaskItemModality,
     TaskLayoutMode,
     TaskModule,
@@ -93,6 +103,7 @@ QuestionKind = Literal[
 ]
 
 _ID_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+_REGISTERED_QT_TASK_FONTS: set[str] = set()
 _MODULE_LABELS: tuple[tuple[str, TaskStepKind], ...] = (
     ("Instruction / Content", "instruction"),
     ("Study Display", "study"),
@@ -101,6 +112,18 @@ _MODULE_LABELS: tuple[tuple[str, TaskStepKind], ...] = (
     ("Raw Key Response", "raw_key"),
     ("Timed Feedback", "timed_feedback"),
 )
+
+
+def _register_qt_task_font(font_family: str) -> None:
+    """Make a packaged task font available to the authoring preview."""
+
+    font_path = bundled_task_font_path(font_family)
+    if font_path is None or font_family in _REGISTERED_QT_TASK_FONTS:
+        return
+    if font_path.is_file() and QFontDatabase.addApplicationFont(str(font_path)) >= 0:
+        _REGISTERED_QT_TASK_FONTS.add(font_family)
+
+
 _QUESTION_LABELS: tuple[tuple[str, QuestionKind], ...] = (
     ("Single Choice", "single_choice"),
     ("Multiple Choice", "multiple_choice"),
@@ -180,6 +203,7 @@ class TaskStepDraft:
     kind: TaskStepKind = "instruction"
     title: str = "Instruction"
     prompt: str = ""
+    font_family: str = TaskFontFamily.ARIAL.value
     prompt_x: float = 0.0
     prompt_y: float = 0.0
     prompt_unit: str = "degrees"
@@ -406,6 +430,8 @@ class TaskParticipantPreview(QWidget):
 
     def set_step(self, step: TaskStepDraft | None) -> None:
         self._step = copy.deepcopy(step)
+        if step is not None:
+            _register_qt_task_font(step.font_family)
         self._reload_preview_images()
         self.update()
 
@@ -423,6 +449,9 @@ class TaskParticipantPreview(QWidget):
         if step is None:
             painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, "Select a task step")
             return
+        font = painter.font()
+        font.setFamily(step.font_family)
+        painter.setFont(font)
 
         title_rect = QRectF(16, 12, self.width() - 32, 34)
         painter.drawText(title_rect, Qt.AlignmentFlag.AlignCenter, step.title or "Untitled step")
@@ -1339,6 +1368,10 @@ class TaskStepEditor(QWidget):
             self.step_kind_combo.addItem(label, kind)
         self.title_edit = QLineEdit(self)
         self.title_edit.setObjectName("condition_task_step_title_edit")
+        self.font_family_combo = QComboBox(self)
+        self.font_family_combo.setObjectName("condition_task_font_family_combo")
+        for font_family in TaskFontFamily:
+            self.font_family_combo.addItem(font_family.value, font_family.value)
         self.prompt_edit = QTextEdit(self)
         self.prompt_edit.setObjectName("condition_task_prompt_edit")
         self.prompt_edit.setFixedHeight(72)
@@ -1379,6 +1412,7 @@ class TaskStepEditor(QWidget):
         common_form.addRow("Stable ID", self.step_id_edit)
         common_form.addRow("Module type", self.step_kind_combo)
         common_form.addRow("Display title", self.title_edit)
+        common_form.addRow("Font family", self.font_family_combo)
         common_form.addRow("Prompt / content", self.prompt_edit)
         common_form.addRow("", self.prompt_geometry_checkbox)
         common_form.addRow("Prompt units", self.prompt_unit_combo)
@@ -1621,6 +1655,7 @@ class TaskStepEditor(QWidget):
             self.step_id_edit.textChanged,
             self.step_kind_combo.currentIndexChanged,
             self.title_edit.textChanged,
+            self.font_family_combo.currentIndexChanged,
             self.prompt_edit.textChanged,
             self.prompt_geometry_checkbox.toggled,
             self.prompt_unit_combo.currentIndexChanged,
@@ -1677,6 +1712,9 @@ class TaskStepEditor(QWidget):
             self.step_id_edit.setText(step.step_id)
             self.step_kind_combo.setCurrentIndex(self.step_kind_combo.findData(step.kind))
             self.title_edit.setText(step.title)
+            self.font_family_combo.setCurrentIndex(
+                self.font_family_combo.findData(step.font_family)
+            )
             self.prompt_edit.setPlainText(step.prompt)
             prompt_exact = (
                 step.prompt_height is not None
@@ -1747,6 +1785,7 @@ class TaskStepEditor(QWidget):
             }
             step.continue_key = "space" if kind in {"instruction", "study"} else None
         step.title = self.title_edit.text()
+        step.font_family = str(self.font_family_combo.currentData())
         step.prompt = self.prompt_edit.toPlainText()
         if self.prompt_geometry_checkbox.isChecked():
             step.prompt_x = self.prompt_x_spin.value()
@@ -2468,6 +2507,7 @@ def _step_to_draft(step: TaskStep) -> TaskStepDraft:
         kind=step.kind.value,
         title=step.heading,
         prompt=step.text,
+        font_family=step.font_family.value,
         prompt_x=step.prompt_x,
         prompt_y=step.prompt_y,
         prompt_unit=step.prompt_unit.value,
@@ -2644,6 +2684,7 @@ def _step_from_draft(step: TaskStepDraft) -> TaskStep:
         kind=kind,
         heading=step.title,
         text=step.prompt,
+        font_family=TaskFontFamily(step.font_family),
         prompt_x=step.prompt_x,
         prompt_y=step.prompt_y,
         prompt_unit=PresentationUnit(step.prompt_unit),

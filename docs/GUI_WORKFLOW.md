@@ -172,6 +172,10 @@ The authoring window is organized around two user-facing modes:
     individual choice steps can repeat, and bindings can run on every, first, or last
     occurrence of a condition; a pre-condition binding can explicitly replace the
     standard condition start screen when its authored reminder already serves that role
+  - every task-step editor exposes a `Font family` choice of Arial or Open Sans; Arial
+    remains the default for existing and newly added steps, while the bundled Open Sans
+    face is used by both the authoring preview and runtime task screen when selected;
+    the choice applies to all text belonging to that step
   - study and choice displays default to responsive grids and can opt into exact
     center-origin PsychoPy geometry; exact items support degrees of visual angle or
     fractions of window height, per-item position and size, selectable/scored targets,
@@ -291,13 +295,21 @@ check that
 requires typing `Confirm` before the runtime task starts; cancelling that check returns
 to FPVS Studio without starting the experiment.
 
-When Experiment Test Mode is enabled, launch replaces participant collection with an
-explicit acknowledgement and reserved participant ID `0`, skips manual-electrode
+When Experiment Test Mode is enabled, launch first applies the same full-project
+validation gate as a production launch, then replaces participant collection with an
+explicit acknowledgement and a `Condition to run` selector. The selector defaults to
+`All conditions (current behavior)` each time the dialog opens; choosing one numbered
+condition passes its stable condition ID only to that accepted launch. The selection is
+not saved in app settings or the project, and no dedicated selector field is added to
+compiled contracts; the resulting ordinary `SessionPlan` contains only the compiled
+condition entries. A selected condition still runs once per configured block with its
+ordinary pre/post tasks, timing, preflight, and output behavior. Test mode uses reserved
+participant ID `0`, skips manual-electrode
 project updates, suppresses the Sophia/BioSemi gate, uses logged null-trigger output,
-and disables connected-display refresh verification. Compilation, routine asset
-preflight, fullscreen playback, frame schedules, task flow, timing warmup/QC, and test
-exports remain unchanged. Participant summaries already exclude reserved IDs `0` and
-`00`.
+and disables connected-display refresh verification. Fullscreen playback, frame
+schedules, task flow, timing warmup/QC, and normal test exports remain unchanged.
+Production launches do not expose the selector and continue to compile all conditions.
+Participant summaries already exclude reserved IDs `0` and `00`.
 
 The Stimuli Manager remains an internal support page for variant/materialization
 behavior, not a guided setup step or visible top-level tab during normal use. Its raw
@@ -520,7 +532,9 @@ Current honest behavior:
 - runtime launch settings keep presentation and timing-QC policies explicit
 - source-only Experiment Test Mode on Windows and Linux composes those explicit settings
   to disable serial and connected-refresh checks while preserving fullscreen playback,
-  compilation, asset checks, timing QC, task flow, and exports
+  compilation, asset checks, timing QC, task flow, and exports; its per-launch selector
+  defaults to all conditions and may instead compile one condition without changing its
+  configured block count or pre/post tasks
 
 ## Fixation Accuracy Task
 

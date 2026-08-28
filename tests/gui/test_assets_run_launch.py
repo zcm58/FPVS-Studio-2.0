@@ -332,9 +332,10 @@ def test_launch_after_preview_recompiles_and_preflights_once_per_click(
     preflight_session_ids: list[str] = []
     launched_session_ids: list[str] = []
 
-    def _capture_compile(*, refresh_hz):
+    def _capture_compile(*, refresh_hz, condition_ids=None):
         compile_calls.append(refresh_hz)
-        return original_compile(refresh_hz=refresh_hz)
+        assert condition_ids is None
+        return original_compile(refresh_hz=refresh_hz, condition_ids=condition_ids)
 
     def _capture_preflight_compiled(session_plan, **kwargs):
         preflight_session_ids.append(session_plan.session_id)

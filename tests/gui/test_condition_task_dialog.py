@@ -24,6 +24,7 @@ from fpvs_studio.core.task_models import (
     TaskBranchOperator,
     TaskBranchRule,
     TaskDisplayItem,
+    TaskFontFamily,
     TaskItemModality,
     TaskLayoutMode,
     TaskModule,
@@ -91,6 +92,7 @@ def test_task_model_adapter_preserves_unset_scoring_geometry_and_question_bounds
             TaskStep(
                 step_id="choice",
                 kind=TaskStepKind.CHOICE_GRID,
+                font_family=TaskFontFamily.OPEN_SANS,
                 layout_mode=TaskLayoutMode.RESPONSIVE_GRID,
                 columns=2,
                 submission_mode=TaskSubmissionMode.EXPLICIT,
@@ -170,6 +172,7 @@ def test_task_model_adapter_preserves_unset_scoring_geometry_and_question_bounds
             TaskStep(
                 step_id="acknowledge",
                 kind=TaskStepKind.INSTRUCTION,
+                font_family=TaskFontFamily.OPEN_SANS,
                 heading="Continue",
                 text="Ready?",
                 continue_key="space",
@@ -248,6 +251,7 @@ def test_condition_task_dialog_apply_is_lossless_after_visiting_every_step(
             TaskStep(
                 step_id="choice",
                 kind=TaskStepKind.CHOICE_GRID,
+                font_family=TaskFontFamily.OPEN_SANS,
                 columns=2,
                 items=[
                     TaskDisplayItem(

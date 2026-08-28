@@ -14,7 +14,8 @@ lazily only inside the engine package.
 ## Package Map
 
 - `src/fpvs_studio/app/`: thin application entry points and startup wiring.
-- `src/fpvs_studio/assets/`: packaged release-facing static assets.
+- `src/fpvs_studio/assets/`: packaged release-facing static assets, including the
+  licensed Open Sans face used by authored modular tasks.
 - `src/fpvs_studio/gui/`: PySide6 windows, dialogs, controllers, document binding,
   Home/Setup workflows, and shared components/theme helpers.
 - `src/fpvs_studio/core/`: editable models, validation, compilation, `RunSpec`,
@@ -61,6 +62,9 @@ otherwise preserves a zero-second lead-in, empty condition-task bindings, and le
 word-size pixel rounding until those settings are explicitly authored. A legacy zero
 fixation-target duration becomes the current 300 ms default because the newly enabled
 task requires a positive duration.
+Modular-task font selection is additive within the schema `1.2.0` compiled task/session
+contract: missing values resolve to Arial, and the selection never enters the `RunSpec`
+timed-frame contract.
 
 - Compilation owns protocol scheduling, asset resolution, randomized session order,
   realized fixation target selection, presentation-setting inheritance, and balanced
@@ -76,18 +80,24 @@ task requires a positive duration.
   preflight repeats it once per session without changing compiled schedules.
 - Runtime owns machine launch options, session transitions, declarative pre/post task
   sequencing and validation, participant flow, fixation scoring, trigger I/O
-  coordination, and result assembly. Task clocks remain outside `RunSpec` and cannot
-  change FPVS frame or trigger schedules.
+  coordination, and result assembly. Task clocks and compiled Arial/Open Sans font
+  choices remain outside `RunSpec` and cannot change FPVS frame or trigger schedules.
 - The PsychoPy engine prepares and synchronizes one condition cache at a time, checks
   production RAM/graphics-budget readiness before frame zero, rejects measured resource
   insufficiency, and preserves unavailable telemetry as an exported warning. It executes
   a precompiled hot loop, ends the last compiled frame with a neutral offset flip, and
   releases the cache before returning. Runtime scores fixation RT from same-clock
   hardware timestamps and owns the exported result contracts.
-- The app-level experiment test mode remains outside persisted project and compiled
-  contracts. It explicitly selects null-trigger output and disables connected-display
-  refresh and graphics-memory verification while preserving fullscreen playback,
-  compiled schedules, asset checks, timing QC, task flow, and test exports.
+- The app-level experiment test-mode setting and selector remain outside persisted
+  project contracts. Each test launch may compile all conditions (the default) or one
+  selected condition; the resulting ordinary `SessionPlan` contains only the compiled
+  entries, with no dedicated test-scope field. A selected condition still appears once
+  per configured block with its ordinary task flow and execution behavior. Production
+  launches always compile all conditions. Test mode explicitly selects null-trigger
+  output and disables
+  connected-display refresh and graphics-memory verification while preserving
+  fullscreen playback, compiled schedules, asset checks, timing QC, task flow, and test
+  exports.
 - `ProjectFile` owns the per-participant `manual_removed_electrodes` authoring map saved
   from the launch dialog; it remains outside compiled and runtime playback contracts.
 - Engines render compiled events and one neutral task step at a time; they do not own

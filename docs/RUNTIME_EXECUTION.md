@@ -83,6 +83,10 @@ session.
 Task assets are preflighted as contained project-relative paths before participant
 screens open. Routine preflight checks existence; deep preflight also decodes task
 images. The selected engine must advertise the neutral modular-task rendering seam.
+Task fonts are not project assets: runtime carries the authored Arial or Open Sans enum
+from `TaskStepSpec` into every `ResolvedTaskStep`. Missing font values from compatible
+project data resolve to Arial; Open Sans is supplied by FPVS Studio rather than a
+machine-local font installation.
 
 Default launch settings require connected-display refresh verification. Preflight first
 asks a runtime-owned platform adapter for the primary/default display's configured
@@ -130,9 +134,12 @@ The PsychoPy implementation:
 - shows a dedicated manual inter-block break screen between non-final blocks
 - renders runtime-resolved modular instruction, study, image/text choice-grid,
   questionnaire, raw-key, and fixed-duration feedback screens outside FPVS timing
-- uses one stable Arial font for modular task text, honors exact calibrated geometry or
-  runtime-created responsive grids, and resolves task images through the contained
-  project-path helper before creating stimuli
+- applies each task step's Arial or Open Sans choice to every modular-task text surface,
+  including headings, prompts, item/option labels, editable response text, validation,
+  submit controls, and footers; bundled Open Sans is registered for both PsychoPy text
+  renderers before use
+- honors exact calibrated geometry or runtime-created responsive grids and resolves
+  task images through the contained project-path helper before creating stimuli
 - starts each task response clock and clears carried keyboard events on the first task
   flip; mouse responses return stable item ids, coordinates, button, and reaction time
 - ignores all non-Escape keys on fixed-duration feedback screens so authored durations
@@ -471,13 +478,20 @@ In the current v1 runtime:
 
 Source-tree Windows and Linux runs can enable the app-level Experiment Test Mode. The
 GUI supplies reserved participant ID `0`, omits participant metadata and manual-electrode
-updates, and skips the Sophia/BioSemi recording gate. The document launch adapter keeps
-the authored trigger settings unchanged while creating `LaunchSettings` with
-`serial_enabled=false`, `verify_refresh_rate=false`, and
+updates, and skips the Sophia/BioSemi recording gate. After the ordinary full-project
+launch validation succeeds, the test confirmation defaults to all conditions and may
+instead pass one stable condition ID into session compilation for that launch only. A
+selected condition is still compiled once per configured block and keeps its normal
+pre/post tasks, timing, asset preflight, and output behavior. The selection is not
+saved in the project or app settings and has no dedicated compiled field; the resulting
+ordinary `SessionPlan` records only the compiled entries. Production launches continue
+to compile all conditions. The document launch adapter keeps the authored trigger
+settings unchanged while creating `LaunchSettings` with `serial_enabled=false`,
+`verify_refresh_rate=false`, and
 `verify_graphics_memory=false`. Fullscreen playback, compilation, asset preflight,
 condition/task flow, frame timing, timing warmup/QC, and normal test exports remain
-active, but the result does not claim graphics-hardware qualification. The preference is
-unavailable in packaged builds and is not persisted in ProjectFile, RunSpec, or
+active, but the result does not claim graphics-hardware qualification. The preference
+is unavailable in packaged builds and is not persisted in ProjectFile, RunSpec, or
 SessionPlan.
 
 Compilation, session flow, scoring, and export behavior remain independent of the

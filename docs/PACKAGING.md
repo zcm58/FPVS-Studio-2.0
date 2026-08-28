@@ -111,6 +111,14 @@ explicitly includes `psychopy.visual.backends.pygletbackend`,
 imports in place or installed apps can build successfully but fail when
 `Launch Experiment` tries to open the presentation window.
 
+Modular-task Open Sans rendering is self-contained. Keep
+`src/fpvs_studio/assets/fonts/OpenSans-Regular.ttf` and its
+`OpenSans-OFL.txt` SIL Open Font License together as release-facing package data. The
+PyInstaller spec's `collect_data_files("fpvs_studio")` path carries both files into the
+bundle, so neither source-tree nor installed playback may depend on a system Open Sans
+installation. Packaging verification must continue to check that the font can be
+loaded and that its OFL license is present.
+
 ## Sharing A Lab Build
 
 For internal testing, zip the entire folder:

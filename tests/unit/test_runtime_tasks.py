@@ -7,14 +7,17 @@ import json
 from pathlib import Path
 
 import pytest
+from PIL import ImageFont
 from tests.unit.runtime_launcher_helpers import StubEngine
 from tests.unit.test_runtime_preflight import _PreflightEngine
 
+from fpvs_studio.assets import bundled_task_font_path
 from fpvs_studio.core.compiler import compile_run_spec, compile_session_plan
 from fpvs_studio.core.enums import PresentationUnit
 from fpvs_studio.core.task_models import (
     TaskBranchOperator,
     TaskDisplayItem,
+    TaskFontFamily,
     TaskItemModality,
     TaskLayoutMode,
     TaskModuleSpec,
@@ -26,6 +29,7 @@ from fpvs_studio.core.task_models import (
     TaskStepKind,
     TaskStepSpec,
 )
+from fpvs_studio.engines import psychopy_tasks
 from fpvs_studio.engines.base import ResolvedTaskItem, ResolvedTaskStep, TaskEngineInput
 from fpvs_studio.engines.psychopy_tasks import (
     _completed_input,
@@ -33,6 +37,8 @@ from fpvs_studio.engines.psychopy_tasks import (
     _handle_keys,
     _key_list_for_step,
     _prepare_item_stimuli,
+    _prepare_text_box,
+    _register_bundled_task_font,
     render_task_step,
 )
 from fpvs_studio.runtime.preflight import PreflightError, preflight_session_plan
@@ -257,6 +263,7 @@ def test_questionnaire_uses_authored_text_limit_and_rating_endpoint_labels(
     step = TaskStepSpec(
         step_id="questionnaire",
         kind=TaskStepKind.QUESTIONNAIRE,
+        font_family=TaskFontFamily.OPEN_SANS,
         questions=questions,
         random_seed=4,
         realized_question_option_orders={},
@@ -281,6 +288,10 @@ def test_questionnaire_uses_authored_text_limit_and_rating_endpoint_labels(
     )
 
     assert outcome.aborted is False
+    assert all(
+        rendered.font_family == TaskFontFamily.OPEN_SANS.value
+        for rendered in engine.rendered_steps
+    )
     assert engine.rendered_steps[0].maximum_text_length == 37
     assert {item.text for item in engine.rendered_steps[1].items} >= {
         "Not confident",
@@ -295,9 +306,12 @@ def test_exact_prompt_and_item_geometry_resolve_from_degrees(
 ) -> None:
     engine = _TaskEngine([TaskEngineInput(selected_item_ids=("apple",))])
 
+    step = _choice_step().model_copy(
+        update={"font_family": TaskFontFamily.OPEN_SANS}
+    )
     run_task_modules(
         engine,
-        [_module(_choice_step())],
+        [_module(step)],
         project_root=sample_project_root,
         run_spec=_compiled_run(sample_project, sample_project_root),
         block_index=0,
@@ -305,6 +319,7 @@ def test_exact_prompt_and_item_geometry_resolve_from_degrees(
     )
 
     rendered = engine.rendered_steps[0]
+    assert rendered.font_family == TaskFontFamily.OPEN_SANS.value
     assert rendered.prompt_position_px is not None
     assert rendered.prompt_position_px[0] == 0
     assert rendered.prompt_position_px[1] > 0
@@ -383,6 +398,181 @@ def test_psychopy_task_text_uses_one_font_and_rejects_escaping_image_path(
                 ),
             ),
         )
+
+
+def test_psychopy_task_text_uses_bundled_open_sans(tmp_path: Path) -> None:
+    text_calls: list[dict[str, object]] = []
+
+    class _Stim:
+        def __init__(self, *args, **kwargs) -> None:
+            text_calls.append(kwargs)
+
+        def draw(self) -> None:
+            return None
+
+    class _Visual:
+        TextStim = _Stim
+        ImageStim = _Stim
+
+    class _Window:
+        size = (1280, 720)
+
+    text_item = ResolvedTaskItem(item_id="label", text="Pen")
+    prepared = _prepare_item_stimuli(
+        visual=_Visual,
+        window=_Window(),
+        project_root=tmp_path,
+        items=(text_item,),
+        font_family=TaskFontFamily.OPEN_SANS.value,
+    )
+    _draw_step(
+        visual=_Visual,
+        window=_Window(),
+        step=ResolvedTaskStep(
+            task_id="word-recognition",
+            step_id="study",
+            kind="study",
+            font_family=TaskFontFamily.OPEN_SANS.value,
+            response_kind="continue",
+            heading="Remember",
+            body="Study these words",
+            items=(text_item,),
+        ),
+        item_stimuli=prepared,
+        selected_item_ids=[],
+        response_text="",
+        validation_message=None,
+    )
+
+    assert text_calls
+    assert all(call.get("font") == TaskFontFamily.OPEN_SANS.value for call in text_calls)
+    font_path = bundled_task_font_path(TaskFontFamily.OPEN_SANS.value)
+    assert font_path is not None and font_path.is_file()
+    assert ImageFont.truetype(str(font_path), size=12).getname()[0] == "Open Sans"
+    license_path = font_path.with_name("OpenSans-OFL.txt")
+    assert "SIL OPEN FONT LICENSE Version 1.1" in license_path.read_text(encoding="utf-8")
+
+
+def test_bundled_open_sans_registers_once_with_both_psychopy_renderers(
+    monkeypatch,
+) -> None:
+    registrations: list[tuple[str, str]] = []
+    font_path = bundled_task_font_path(TaskFontFamily.OPEN_SANS.value)
+    assert font_path is not None
+
+    class _FontInfo:
+        path = str(font_path)
+
+    class _PygletFont:
+        @staticmethod
+        def add_file(path: str) -> None:
+            registrations.append(("pyglet", path))
+
+        @staticmethod
+        def have_font(font_family: str) -> bool:
+            return font_family == TaskFontFamily.OPEN_SANS.value
+
+    class _AllFonts:
+        @staticmethod
+        def addFontFile(path: str) -> set[_FontInfo]:
+            registrations.append(("textbox2", path))
+            return {_FontInfo()}
+
+        @staticmethod
+        def getFontsMatching(font_family: str, *, fallback: bool) -> list[_FontInfo]:
+            assert fallback is False
+            return [_FontInfo()] if font_family == TaskFontFamily.OPEN_SANS.value else []
+
+    class _TextBoxModule:
+        allFonts = _AllFonts()
+
+    modules = {
+        "pyglet.font": _PygletFont(),
+        "psychopy.visual.textbox2": _TextBoxModule(),
+    }
+    monkeypatch.setattr(psychopy_tasks, "import_module", modules.__getitem__)
+    monkeypatch.setattr(psychopy_tasks, "_REGISTERED_BUNDLED_TASK_FONTS", set())
+
+    _register_bundled_task_font(TaskFontFamily.ARIAL.value)
+    _register_bundled_task_font(TaskFontFamily.OPEN_SANS.value)
+    _register_bundled_task_font(TaskFontFamily.OPEN_SANS.value)
+
+    assert registrations == [
+        ("pyglet", str(font_path)),
+        ("textbox2", str(font_path)),
+    ]
+    assert psychopy_tasks._REGISTERED_BUNDLED_TASK_FONTS == {
+        TaskFontFamily.OPEN_SANS.value
+    }
+
+
+def test_bundled_open_sans_registration_rejects_renderer_fallback(monkeypatch) -> None:
+    class _PygletFont:
+        @staticmethod
+        def add_file(_path: str) -> None:
+            return None
+
+        @staticmethod
+        def have_font(_font_family: str) -> bool:
+            return True
+
+    class _AllFonts:
+        @staticmethod
+        def addFontFile(_path: str) -> None:
+            return None
+
+        @staticmethod
+        def getFontsMatching(_font_family: str, *, fallback: bool) -> None:
+            assert fallback is False
+            return None
+
+    class _TextBoxModule:
+        allFonts = _AllFonts()
+
+    modules = {
+        "pyglet.font": _PygletFont(),
+        "psychopy.visual.textbox2": _TextBoxModule(),
+    }
+    monkeypatch.setattr(psychopy_tasks, "import_module", modules.__getitem__)
+    monkeypatch.setattr(psychopy_tasks, "_REGISTERED_BUNDLED_TASK_FONTS", set())
+
+    with pytest.raises(RuntimeError, match="could not be registered with PsychoPy"):
+        _register_bundled_task_font(TaskFontFamily.OPEN_SANS.value)
+
+    assert not psychopy_tasks._REGISTERED_BUNDLED_TASK_FONTS
+
+
+def test_psychopy_text_box_uses_resolved_open_sans() -> None:
+    text_box_calls: list[dict[str, object]] = []
+
+    class _TextBox:
+        def __init__(self, *args, **kwargs) -> None:
+            text_box_calls.append(kwargs)
+            self.text = ""
+            self.hasFocus = False
+
+    class _Visual:
+        TextBox2 = _TextBox
+
+    class _Window:
+        size = (1280, 720)
+
+    text_box, submitted = _prepare_text_box(
+        visual=_Visual,
+        window=_Window(),
+        step=ResolvedTaskStep(
+            task_id="word-recognition",
+            step_id="recall-prompt",
+            kind="questionnaire",
+            response_kind="long_text",
+            font_family=TaskFontFamily.OPEN_SANS.value,
+        ),
+    )
+
+    assert text_box is not None
+    assert submitted == [False]
+    assert text_box_calls[0]["font"] == TaskFontFamily.OPEN_SANS.value
+    assert text_box.hasFocus is True
 
 
 def test_questionnaire_choice_unknown_or_nonselectable_ids_are_invalid(
