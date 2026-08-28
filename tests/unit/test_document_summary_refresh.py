@@ -184,8 +184,12 @@ def test_experiment_test_mode_uses_null_trigger_launch_settings(
     assert document.project.settings.triggers.serial_port == "COM3"
     assert captured_launch_settings[0].serial_enabled is True
     assert captured_launch_settings[0].verify_refresh_rate is True
+    assert captured_launch_settings[0].verify_graphics_memory is True
+    assert captured_launch_settings[0].strict_timing_warmup is True
+    assert captured_launch_settings[0].timing_miss_threshold_multiplier == 1.5
     assert captured_launch_settings[1].serial_enabled is False
     assert captured_launch_settings[1].verify_refresh_rate is False
+    assert captured_launch_settings[1].verify_graphics_memory is False
     assert captured_launch_settings[1].serial_port == "COM3"
     assert not hasattr(captured_launch_settings[1], "test_mode")
 

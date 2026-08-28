@@ -67,6 +67,21 @@ SESSION_CONDITION_HISTORY_HEADER = [
     "timing_qc_first_bad_frame_index",
     "timing_qc_max_interval_s",
     "timing_qc_strict_violation_reason",
+    "keyboard_backend",
+    "fixation_rt_scoring_source",
+    "graphics_readiness_status",
+    "graphics_renderer_classification",
+    "graphics_renderer_name",
+    "graphics_memory_estimated_gpu_bytes",
+    "graphics_memory_conservative_gpu_bytes",
+    "graphics_memory_budget_bytes",
+    "graphics_memory_usage_bytes",
+    "graphics_memory_headroom_bytes",
+    "graphics_system_available_bytes",
+    "condition_cache_unique_variant_count",
+    "condition_cache_gpu_synchronized",
+    "condition_cache_cleanup_succeeded",
+    "condition_cache_cleanup_failure_count",
     "total_targets",
     "hit_count",
     "miss_count",
@@ -403,6 +418,9 @@ def write_run_artifacts(output_dir: Path, run_spec: RunSpec, summary: RunExecuti
             "response_time_s",
             "rt_frames",
             "outcome",
+            "target_onset_time_s",
+            "rt_s",
+            "rt_scoring_source",
         ],
         [
             (
@@ -415,6 +433,13 @@ def write_run_artifacts(output_dir: Path, run_spec: RunSpec, summary: RunExecuti
                 event.response_time_s,
                 event.rt_frames,
                 event.outcome,
+                event.target_onset_time_s,
+                event.rt_s,
+                (
+                    summary.runtime_metadata.fixation_rt_scoring_source
+                    if summary.runtime_metadata is not None
+                    else ""
+                ),
             )
             for event in summary.fixation_responses
         ],
@@ -430,6 +455,8 @@ def write_run_artifacts(output_dir: Path, run_spec: RunSpec, summary: RunExecuti
             "rt_frames",
             "correct",
             "outcome",
+            "rt_s",
+            "rt_scoring_source",
         ],
         [
             (
@@ -441,6 +468,12 @@ def write_run_artifacts(output_dir: Path, run_spec: RunSpec, summary: RunExecuti
                 response.rt_frames,
                 response.correct,
                 response.outcome,
+                response.rt_s,
+                (
+                    summary.runtime_metadata.fixation_rt_scoring_source
+                    if summary.runtime_metadata is not None
+                    else ""
+                ),
             )
             for response in summary.response_log
         ],
@@ -589,6 +622,9 @@ def write_session_artifacts(
             "response_time_s",
             "rt_frames",
             "outcome",
+            "target_onset_time_s",
+            "rt_s",
+            "rt_scoring_source",
         ],
         [
             (
@@ -602,6 +638,13 @@ def write_session_artifacts(
                 event.response_time_s,
                 event.rt_frames,
                 event.outcome,
+                event.target_onset_time_s,
+                event.rt_s,
+                (
+                    run_result.runtime_metadata.fixation_rt_scoring_source
+                    if run_result.runtime_metadata is not None
+                    else ""
+                ),
             )
             for run_result in summary.run_results
             for event in run_result.fixation_responses
@@ -619,6 +662,8 @@ def write_session_artifacts(
             "rt_frames",
             "correct",
             "outcome",
+            "rt_s",
+            "rt_scoring_source",
         ],
         [
             (
@@ -631,6 +676,12 @@ def write_session_artifacts(
                 response.rt_frames,
                 response.correct,
                 response.outcome,
+                response.rt_s,
+                (
+                    run_result.runtime_metadata.fixation_rt_scoring_source
+                    if run_result.runtime_metadata is not None
+                    else ""
+                ),
             )
             for run_result in summary.run_results
             for response in run_result.response_log
@@ -856,6 +907,43 @@ def _session_condition_history_row(
         metadata.timing_qc_strict_violation_reason
         if metadata is not None and metadata.timing_qc_strict_violation_reason
         else "",
+        metadata.keyboard_backend if metadata is not None and metadata.keyboard_backend else "",
+        metadata.fixation_rt_scoring_source
+        if metadata is not None and metadata.fixation_rt_scoring_source
+        else "",
+        metadata.graphics_readiness_status
+        if metadata is not None and metadata.graphics_readiness_status
+        else "",
+        metadata.graphics_renderer_classification
+        if metadata is not None and metadata.graphics_renderer_classification
+        else "",
+        metadata.graphics_renderer_name
+        if metadata is not None and metadata.graphics_renderer_name
+        else "",
+        metadata.graphics_memory_estimated_gpu_bytes
+        if metadata is not None and metadata.graphics_memory_estimated_gpu_bytes is not None
+        else "",
+        metadata.graphics_memory_conservative_gpu_bytes
+        if metadata is not None and metadata.graphics_memory_conservative_gpu_bytes is not None
+        else "",
+        metadata.graphics_memory_budget_bytes
+        if metadata is not None and metadata.graphics_memory_budget_bytes is not None
+        else "",
+        metadata.graphics_memory_usage_bytes
+        if metadata is not None and metadata.graphics_memory_usage_bytes is not None
+        else "",
+        metadata.graphics_memory_headroom_bytes
+        if metadata is not None and metadata.graphics_memory_headroom_bytes is not None
+        else "",
+        metadata.graphics_system_available_bytes
+        if metadata is not None and metadata.graphics_system_available_bytes is not None
+        else "",
+        metadata.condition_cache_unique_variant_count if metadata is not None else "",
+        metadata.condition_cache_gpu_synchronized if metadata is not None else "",
+        metadata.condition_cache_cleanup_succeeded
+        if metadata is not None and metadata.condition_cache_cleanup_succeeded is not None
+        else "",
+        metadata.condition_cache_cleanup_failure_count if metadata is not None else "",
         fixation.total_targets if fixation is not None else "",
         fixation.hit_count if fixation is not None else "",
         fixation.miss_count if fixation is not None else "",

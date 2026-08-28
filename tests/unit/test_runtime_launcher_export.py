@@ -221,6 +221,14 @@ def test_session_export_captures_seed_and_runtime_logs(
     assert len(response_rows) == sum(
         len(run_result.response_log) for run_result in exported_summary.run_results
     )
+    assert list(fixation_rows[0])[-3:] == [
+        "target_onset_time_s",
+        "rt_s",
+        "rt_scoring_source",
+    ]
+    assert list(response_rows[0])[-2:] == ["rt_s", "rt_scoring_source"]
+    assert {row["rt_scoring_source"] for row in fixation_rows} == {"frame_fallback"}
+    assert {row["rt_scoring_source"] for row in response_rows} == {"frame_fallback"}
     assert len(trigger_rows) == sum(
         len(run_result.trigger_log) for run_result in exported_summary.run_results
     )
@@ -320,6 +328,40 @@ def test_compact_session_export_updates_summary_logs_without_runs_folder(
     assert all(row["participant_handedness"] == "Ambidextrous" for row in condition_history_rows)
     assert all(row["participant_colorblind"] == "No" for row in condition_history_rows)
     assert all(row["session_seed"] == "78" for row in condition_history_rows)
+    provenance_columns = {
+        "keyboard_backend",
+        "fixation_rt_scoring_source",
+        "graphics_readiness_status",
+        "graphics_renderer_classification",
+        "graphics_renderer_name",
+        "graphics_memory_estimated_gpu_bytes",
+        "graphics_memory_conservative_gpu_bytes",
+        "graphics_memory_budget_bytes",
+        "graphics_memory_usage_bytes",
+        "graphics_memory_headroom_bytes",
+        "graphics_system_available_bytes",
+        "condition_cache_unique_variant_count",
+        "condition_cache_gpu_synchronized",
+        "condition_cache_cleanup_succeeded",
+        "condition_cache_cleanup_failure_count",
+    }
+    assert provenance_columns.issubset(condition_history_rows[0])
+    assert all(
+        row["fixation_rt_scoring_source"] == "frame_fallback"
+        for row in condition_history_rows
+    )
+    assert all(
+        row["condition_cache_unique_variant_count"] == "0"
+        for row in condition_history_rows
+    )
+    assert all(
+        row["condition_cache_gpu_synchronized"] == "False"
+        for row in condition_history_rows
+    )
+    assert all(
+        row["condition_cache_cleanup_failure_count"] == "0"
+        for row in condition_history_rows
+    )
 
     participant_summary_row = participant_summary_rows[0]
     assert participant_summary_rows == [participant_summary_row]
@@ -348,8 +390,14 @@ def test_participant_summary_backfills_run_seeds_from_session_plan_for_legacy_hi
     write_json_file(multi_condition_project_root / output_dir / "session_plan.json", session_plan)
     history_path = multi_condition_project_root / "logs" / "session_condition_history.csv"
     history_path.parent.mkdir(parents=True, exist_ok=True)
+    first_provenance_column = SESSION_CONDITION_HISTORY_HEADER.index("keyboard_backend")
+    first_metric_column = SESSION_CONDITION_HISTORY_HEADER.index("total_targets")
+    legacy_header = [
+        *SESSION_CONDITION_HISTORY_HEADER[:first_provenance_column],
+        *SESSION_CONDITION_HISTORY_HEADER[first_metric_column:],
+    ]
     with history_path.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=SESSION_CONDITION_HISTORY_HEADER)
+        writer = csv.DictWriter(handle, fieldnames=legacy_header)
         writer.writeheader()
         for entry in session_plan.ordered_entries():
             writer.writerow(
@@ -375,7 +423,14 @@ def test_participant_summary_backfills_run_seeds_from_session_plan_for_legacy_hi
 
     summary_path = write_participant_summary(multi_condition_project_root)
     participant_summary_rows = _read_csv_rows(summary_path)
+    with history_path.open("r", encoding="utf-8", newline="") as handle:
+        upgraded_header = next(csv.reader(handle))
+    upgraded_history_rows = _read_csv_rows(history_path)
 
+    assert upgraded_header == SESSION_CONDITION_HISTORY_HEADER
+    assert upgraded_history_rows[0]["fixation_rt_scoring_source"] == ""
+    assert upgraded_history_rows[0]["graphics_readiness_status"] == ""
+    assert upgraded_history_rows[0]["condition_cache_unique_variant_count"] == ""
     assert participant_summary_rows[0]["PID"] == "0040"
     assert participant_summary_rows[0]["Condition Display Order Seed"] == "77"
     assert participant_summary_rows[0]["Image Display Order Seeds"] == "; ".join(

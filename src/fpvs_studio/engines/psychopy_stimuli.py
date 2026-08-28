@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import MutableMapping
+from collections.abc import Callable, Mapping, MutableMapping, Sequence
+from dataclasses import dataclass
+from importlib import import_module
 from pathlib import Path
 from typing import Any
 
-import numpy as np
 from PIL import Image
 
 from fpvs_studio.core.display_geometry import visual_angle_width_px
@@ -17,6 +18,7 @@ from fpvs_studio.core.enums import (
     StimulusModality,
     StimulusTransform,
 )
+from fpvs_studio.core.paths import resolve_project_relative_path
 from fpvs_studio.core.run_spec import (
     STUDIO_WORD_FONT_NAME,
     DisplayRunSpec,
@@ -29,8 +31,193 @@ from fpvs_studio.core.run_spec import (
 )
 
 LOGGER = logging.getLogger(__name__)
-_PSYCHOPY_TEXTURE_ID_ATTRIBUTES = ("_texID", "_maskID", "_pixBuffID")
+_PSYCHOPY_TEXTURE_ID_ATTRIBUTES = (
+    "_texID",
+    "_maskID",
+    "_pixbuffID",
+    "_pixBuffID",
+)
 WORD_TEXT_HEIGHT_TO_STIMULUS_WIDTH_RATIO = 0.25
+
+
+@dataclass(frozen=True)
+class StimulusCleanupFailure:
+    """One graphics-resource operation that failed during condition cleanup."""
+
+    stimulus_index: int | None
+    operation: str
+    error_type: str
+    message: str
+
+
+@dataclass(frozen=True)
+class StimulusCleanupReport:
+    """Result of one deterministic, condition-local cleanup attempt."""
+
+    stimulus_count: int
+    failures: tuple[StimulusCleanupFailure, ...] = ()
+
+    @property
+    def succeeded(self) -> bool:
+        return not self.failures
+
+    def raise_for_failure(self) -> None:
+        if self.failures:
+            raise ConditionResourceCleanupError(self)
+
+
+class ConditionResourceCleanupError(RuntimeError):
+    """Raised when one or more prepared graphics resources could not be deleted."""
+
+    def __init__(self, report: StimulusCleanupReport) -> None:
+        self.report = report
+        super().__init__(
+            "Failed to release "
+            f"{len(report.failures)} PsychoPy condition graphics resource operation(s)."
+        )
+
+
+class ConditionResourcePreparationError(RuntimeError):
+    """Preparation failed and its partial-build rollback also had cleanup failures."""
+
+    def __init__(self, cleanup_report: StimulusCleanupReport) -> None:
+        self.cleanup_report = cleanup_report
+        super().__init__(
+            "PsychoPy condition preparation failed and rollback could not release "
+            f"{len(cleanup_report.failures)} graphics resource operation(s)."
+        )
+
+
+class PreparedConditionResources:
+    """Own all drawables and graphics resources for exactly one condition.
+
+    Instances are created through :func:`prepare_condition_resources`. The prepared
+    sequence is a shared list so releasing the owner also clears an engine-held
+    reference to that same sequence. A resource owner never becomes ready until all
+    unique drawables and all fixation variants have been primed and queued GPU work
+    has completed.
+    """
+
+    def __init__(
+        self,
+        *,
+        gpu_sync: Callable[[], None],
+        fixation_stimuli: Sequence[Any] = (),
+        delete_pixel_buffer: Callable[[Any], None] | None = None,
+        delete_display_list: Callable[[Any], None] | None = None,
+    ) -> None:
+        self._stimuli: dict[tuple[object, ...], Any] = {}
+        self._prepared_sequence: list[Any] = []
+        self._fixation_stimuli: list[Any] = list(fixation_stimuli)
+        self._delete_pixel_buffer = delete_pixel_buffer
+        self._delete_display_list = delete_display_list
+        self._gpu_sync: Callable[[], None] | None = gpu_sync
+        self._gpu_synchronized = False
+        self._ready = False
+        self._released = False
+        self._cleanup_report: StimulusCleanupReport | None = None
+
+    @property
+    def stimuli(self) -> Mapping[tuple[object, ...], Any]:
+        """Return the prepared render variants while this owner is live."""
+
+        return self._stimuli
+
+    @property
+    def prepared_sequence(self) -> Sequence[Any]:
+        """Return the event-indexed draw sequence cleared in-place on release."""
+
+        return self._prepared_sequence
+
+    @property
+    def fixation_stim(self) -> Any | None:
+        """Return the first/default fixation drawable for compatibility."""
+
+        return self._fixation_stimuli[0] if self._fixation_stimuli else None
+
+    @property
+    def fixation_stimuli(self) -> Sequence[Any]:
+        """Return all immutable fixation-color variants, cleared on release."""
+
+        return self._fixation_stimuli
+
+    @property
+    def gpu_synchronized(self) -> bool:
+        return self._gpu_synchronized
+
+    @property
+    def ready(self) -> bool:
+        return self._ready
+
+    @property
+    def released(self) -> bool:
+        return self._released
+
+    @property
+    def cleanup_report(self) -> StimulusCleanupReport | None:
+        return self._cleanup_report
+
+    def release(self, *, raise_on_error: bool = False) -> StimulusCleanupReport:
+        """Release owned graphics resources once and clear all strong references.
+
+        Repeated calls return the original report without attempting a second OpenGL
+        deletion. Callers can inspect the report or request an exception explicitly;
+        this keeps a cleanup failure from accidentally masking an active playback
+        exception in a ``finally`` block.
+        """
+
+        if self._cleanup_report is None:
+            cleanup_report = release_stimuli(
+                self._stimuli,
+                additional_stimuli=self._fixation_stimuli,
+                delete_pixel_buffer=self._delete_pixel_buffer,
+                delete_display_list=self._delete_display_list,
+            )
+            gpu_sync = self._gpu_sync
+            if gpu_sync is not None:
+                try:
+                    gpu_sync()
+                except Exception as error:
+                    cleanup_report = StimulusCleanupReport(
+                        stimulus_count=cleanup_report.stimulus_count,
+                        failures=(
+                            *cleanup_report.failures,
+                            _cleanup_failure(
+                                stimulus_index=None,
+                                operation="synchronize_cleanup",
+                                error=error,
+                            ),
+                        ),
+                    )
+            self._cleanup_report = cleanup_report
+            self._prepared_sequence.clear()
+            self._fixation_stimuli.clear()
+            self._gpu_sync = None
+            self._gpu_synchronized = False
+            self._ready = False
+            self._released = True
+        if raise_on_error:
+            self._cleanup_report.raise_for_failure()
+        return self._cleanup_report
+
+    def _prime_and_synchronize(
+        self,
+        *,
+        window: Any,
+        gpu_sync: Callable[[], None],
+    ) -> None:
+        if self._released:
+            raise RuntimeError("Released condition resources cannot be prepared again.")
+        if self._ready or self._gpu_synchronized:
+            raise RuntimeError("Condition resources have already been synchronized.")
+        _prime_stimuli(
+            self._stimuli,
+            window=window,
+            fixation_stimuli=self._fixation_stimuli,
+        )
+        gpu_sync()
+        self._gpu_synchronized = True
+        self._ready = True
 
 
 def fixation_color_for_frame(
@@ -73,37 +260,145 @@ def prepare_stimuli(
     project_root: Path,
     run_spec: RunSpec,
 ) -> dict[tuple[object, ...], Any]:
-    """Create every unique render variant before timed condition playback."""
+    """Create and prime every unique render variant.
+
+    This compatibility helper does not perform the explicit GPU-ready barrier because
+    it has no fixation drawable to prime. New condition playback should use
+    :func:`prepare_condition_resources`.
+    """
 
     stimuli: dict[tuple[object, ...], Any] = {}
+    try:
+        _populate_prepared_stimuli(
+            stimuli=stimuli,
+            prepared_sequence=None,
+            visual=visual,
+            window=window,
+            project_root=project_root,
+            run_spec=run_spec,
+        )
+        _prime_stimuli(stimuli, window=window)
+    except BaseException:
+        release_stimuli(stimuli)
+        raise
+    return stimuli
+
+
+def prepare_condition_resources(
+    *,
+    visual: Any,
+    window: Any,
+    project_root: Path,
+    run_spec: RunSpec,
+    fixation_stim: Any | None = None,
+    fixation_stimuli: Sequence[Any] | None = None,
+    gpu_sync: Callable[[], None] | None = None,
+    delete_pixel_buffer: Callable[[Any], None] | None = None,
+    delete_display_list: Callable[[Any], None] | None = None,
+) -> PreparedConditionResources:
+    """Build, prime, synchronize, and return one condition-local resource owner.
+
+    Pass either one compatibility ``fixation_stim`` or the immutable color variants
+    in ``fixation_stimuli``. Any failure before readiness rolls back every resource
+    that was already created. If rollback itself is incomplete, the raised preparation
+    error retains the original exception as its cause and exposes the structured
+    cleanup report.
+    """
+
+    prepared_fixation_stimuli = _normalize_fixation_stimuli(
+        fixation_stim=fixation_stim,
+        fixation_stimuli=fixation_stimuli,
+    )
+    resolved_gpu_sync = gpu_sync or synchronize_gpu
+    resources = PreparedConditionResources(
+        gpu_sync=resolved_gpu_sync,
+        fixation_stimuli=prepared_fixation_stimuli,
+        delete_pixel_buffer=delete_pixel_buffer,
+        delete_display_list=delete_display_list,
+    )
+    try:
+        _populate_prepared_stimuli(
+            stimuli=resources._stimuli,
+            prepared_sequence=resources._prepared_sequence,
+            visual=visual,
+            window=window,
+            project_root=project_root,
+            run_spec=run_spec,
+        )
+        resources._prime_and_synchronize(
+            window=window,
+            gpu_sync=resolved_gpu_sync,
+        )
+    except BaseException as error:
+        cleanup_report = resources.release()
+        if cleanup_report.failures and isinstance(error, Exception):
+            raise ConditionResourcePreparationError(cleanup_report) from error
+        raise
+    return resources
+
+
+def synchronize_gpu() -> None:
+    """Wait once for all previously submitted PsychoPy/OpenGL work to complete."""
+
+    gl_module = _load_psychopy_gl()
+    finish = getattr(gl_module, "glFinish", None)
+    if not callable(finish):
+        raise RuntimeError("PsychoPy's OpenGL module does not expose glFinish().")
+    finish()
+
+
+def _normalize_fixation_stimuli(
+    *,
+    fixation_stim: Any | None,
+    fixation_stimuli: Sequence[Any] | None,
+) -> tuple[Any, ...]:
+    if fixation_stim is not None and fixation_stimuli is not None:
+        raise ValueError("Pass fixation_stim or fixation_stimuli, not both.")
+    normalized = tuple(fixation_stimuli or ())
+    if fixation_stim is not None:
+        normalized = (fixation_stim,)
+    if not normalized:
+        raise ValueError("Condition preparation requires at least one fixation stimulus.")
+    return normalized
+
+
+def _populate_prepared_stimuli(
+    *,
+    stimuli: dict[tuple[object, ...], Any],
+    prepared_sequence: list[Any] | None,
+    visual: Any,
+    window: Any,
+    project_root: Path,
+    run_spec: RunSpec,
+) -> None:
     for event in run_spec.stimulus_sequence:
         render_key = stimulus_render_key(event, run_spec=run_spec)
-        if render_key in stimuli:
-            continue
-        try:
-            stimuli[render_key] = _prepare_stimulus(
+        stimulus = stimuli.get(render_key)
+        if stimulus is None:
+            stimulus = _prepare_stimulus(
                 visual=visual,
                 window=window,
                 project_root=project_root,
                 run_spec=run_spec,
                 event=event,
             )
-        except Exception:
-            release_stimuli(stimuli)
-            raise
-    try:
-        _prime_stimuli(stimuli, window=window)
-    except Exception:
-        release_stimuli(stimuli)
-        raise
-    return stimuli
+            stimuli[render_key] = stimulus
+        if prepared_sequence is not None:
+            prepared_sequence.append(stimulus)
 
 
-def _prime_stimuli(stimuli: dict[tuple[object, ...], Any], *, window: Any) -> None:
+def _prime_stimuli(
+    stimuli: Mapping[tuple[object, ...], Any],
+    *,
+    window: Any,
+    fixation_stimuli: Sequence[Any] = (),
+) -> None:
     """Force deferred texture/glyph work before any timed presentation flip."""
 
     for stimulus in stimuli.values():
         stimulus.draw()
+    for fixation_stim in fixation_stimuli:
+        fixation_stim.draw()
     clear_buffer = getattr(window, "clearBuffer", None)
     if not callable(clear_buffer):
         raise RuntimeError("PsychoPy window cannot clear its back buffer after preload.")
@@ -158,7 +453,7 @@ def _prepare_stimulus(
     if event.stimulus_modality == StimulusModality.IMAGE:
         if event.image_path is None:
             raise ValueError("Image stimulus event is missing image_path.")
-        absolute_path = project_root / Path(event.image_path)
+        absolute_path = resolve_project_relative_path(project_root, event.image_path)
         image_source, stimulus_size = _prepared_image_source_and_size(
             absolute_path=absolute_path,
             window=window,
@@ -309,7 +604,7 @@ def _central_cover_crop(
     image: Image.Image,
     target_width_px: int,
     target_height_px: int,
-) -> Any:
+) -> Image.Image:
     source_width_px, source_height_px = image.size
     target_ratio = target_width_px / target_height_px
     source_ratio = source_width_px / source_height_px
@@ -323,20 +618,8 @@ def _central_cover_crop(
         box = (0, top, source_width_px, top + crop_height)
     cropped = image.crop(box)
     if "A" in image.getbands() or "transparency" in image.info:
-        cropped = cropped.convert("RGBA")
-    else:
-        cropped = cropped.convert("RGB")
-    # PsychoPy's signed texture shader expects in-memory RGB channels in -1..1,
-    # while the shader consumes alpha in 0..1.
-    # PsychoPy applies this top-to-bottom texture conversion for file/PIL inputs,
-    # but not for ndarray inputs. Cover uses an ndarray to avoid derived files, so
-    # mirror the conversion here to retain the source's displayed orientation.
-    source = np.flipud(np.asarray(cropped, dtype=np.float32))
-    prepared = np.empty(source.shape, dtype=np.float32)
-    prepared[..., :3] = source[..., :3] / 127.5 - 1.0
-    if source.shape[2] == 4:
-        prepared[..., 3] = source[..., 3] / 255.0
-    return np.ascontiguousarray(prepared)
+        return cropped.convert("RGBA")
+    return cropped.convert("RGB")
 
 
 def _degrees_to_pixels(
@@ -432,35 +715,145 @@ def _word_text_height_px(
     )
 
 
-def release_stimuli(stimuli: MutableMapping[Any, Any]) -> None:
-    """Release PsychoPy stimulus textures for one condition run."""
+def release_stimuli(
+    stimuli: MutableMapping[Any, Any],
+    *,
+    additional_stimuli: Sequence[Any] = (),
+    delete_pixel_buffer: Callable[[Any], None] | None = None,
+    delete_display_list: Callable[[Any], None] | None = None,
+) -> StimulusCleanupReport:
+    """Release PsychoPy resources and return a structured cleanup report.
 
-    cleanup_error_count = 0
-    last_cleanup_error: Exception | None = None
-    for stimulus in list(stimuli.values()):
+    PsychoPy 2026 creates ``_pixbuffID`` but its cleanup method checks the differently
+    cased ``_pixBuffID``. Delete the real lowercase pixel buffer explicitly before
+    calling ``clearTextures``. All Python-side IDs are then discarded so a destructor
+    cannot repeat a failed GL operation; a caller that sees failures can recover by
+    closing and recreating the graphics context.
+    """
+
+    failures: list[StimulusCleanupFailure] = []
+    unique_stimuli: list[Any] = []
+    seen_stimulus_ids: set[int] = set()
+    for stimulus in (*stimuli.values(), *additional_stimuli):
+        stimulus_identity = id(stimulus)
+        if stimulus_identity in seen_stimulus_ids:
+            continue
+        seen_stimulus_ids.add(stimulus_identity)
+        unique_stimuli.append(stimulus)
+
+    for stimulus_index, stimulus in enumerate(unique_stimuli):
+        display_list_id = getattr(stimulus, "_listID", None)
+        if display_list_id is not None:
+            try:
+                (delete_display_list or _delete_psychopy_display_list)(display_list_id)
+            except Exception as error:
+                failures.append(
+                    _cleanup_failure(
+                        stimulus_index=stimulus_index,
+                        operation="delete_display_list",
+                        error=error,
+                    )
+                )
+            else:
+                _neutralize_psychopy_display_list_id(stimulus)
+
+        pixel_buffer_id = getattr(stimulus, "_pixbuffID", None)
+        if pixel_buffer_id is not None:
+            try:
+                (delete_pixel_buffer or _delete_psychopy_pixel_buffer)(pixel_buffer_id)
+            except Exception as error:
+                failures.append(
+                    _cleanup_failure(
+                        stimulus_index=stimulus_index,
+                        operation="delete_pixel_buffer",
+                        error=error,
+                    )
+                )
+            else:
+                _discard_psychopy_texture_id(stimulus, "_pixbuffID")
+
         try:
             clear_textures = getattr(stimulus, "clearTextures", None)
             if callable(clear_textures):
                 clear_textures()
         except Exception as error:
-            cleanup_error_count += 1
-            last_cleanup_error = error
+            failures.append(
+                _cleanup_failure(
+                    stimulus_index=stimulus_index,
+                    operation="clear_textures",
+                    error=error,
+                )
+            )
         finally:
             _discard_psychopy_texture_ids(stimulus)
+            _neutralize_psychopy_display_list_id(stimulus)
     stimuli.clear()
-    if cleanup_error_count:
+
+    report = StimulusCleanupReport(
+        stimulus_count=len(unique_stimuli),
+        failures=tuple(failures),
+    )
+    if failures:
         LOGGER.warning(
             "Ignored %d PsychoPy stimulus texture cleanup error(s); "
             "discarded texture ids to prevent repeated destructor cleanup failures. "
             "Last error type: %s.",
-            cleanup_error_count,
-            type(last_cleanup_error).__name__,
+            len(failures),
+            failures[-1].error_type,
         )
+    return report
+
+
+def _load_psychopy_gl() -> Any:
+    """Load PsychoPy's active OpenGL module only inside the engine call path."""
+
+    return import_module("psychopy.visual.basevisual").GL
+
+
+def _delete_psychopy_pixel_buffer(pixel_buffer_id: Any) -> None:
+    gl_module = _load_psychopy_gl()
+    delete_buffers = getattr(gl_module, "glDeleteBuffers", None)
+    if not callable(delete_buffers):
+        raise RuntimeError("PsychoPy's OpenGL module does not expose glDeleteBuffers().")
+    delete_buffers(1, pixel_buffer_id)
+
+
+def _delete_psychopy_display_list(display_list_id: Any) -> None:
+    gl_module = _load_psychopy_gl()
+    delete_lists = getattr(gl_module, "glDeleteLists", None)
+    if not callable(delete_lists):
+        raise RuntimeError("PsychoPy's OpenGL module does not expose glDeleteLists().")
+    delete_lists(display_list_id, 1)
+
+
+def _cleanup_failure(
+    *,
+    stimulus_index: int | None,
+    operation: str,
+    error: Exception,
+) -> StimulusCleanupFailure:
+    return StimulusCleanupFailure(
+        stimulus_index=stimulus_index,
+        operation=operation,
+        error_type=type(error).__name__,
+        message=str(error),
+    )
 
 
 def _discard_psychopy_texture_ids(stimulus: Any) -> None:
     for attribute_name in _PSYCHOPY_TEXTURE_ID_ATTRIBUTES:
-        try:
-            delattr(stimulus, attribute_name)
-        except AttributeError:
-            continue
+        _discard_psychopy_texture_id(stimulus, attribute_name)
+
+
+def _neutralize_psychopy_display_list_id(stimulus: Any) -> None:
+    """Prevent TextStim's destructor from deleting an already-released list again."""
+
+    if hasattr(stimulus, "_listID"):
+        stimulus._listID = 0
+
+
+def _discard_psychopy_texture_id(stimulus: Any, attribute_name: str) -> None:
+    try:
+        delattr(stimulus, attribute_name)
+    except AttributeError:
+        return

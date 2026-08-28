@@ -29,6 +29,8 @@ def test_launch_settings_default_to_strict_timing_fail_fast() -> None:
     assert settings.strict_timing_warmup is True
     assert settings.verify_refresh_rate is True
     assert runtime_options["verify_refresh_rate"] is True
+    assert settings.verify_graphics_memory is True
+    assert runtime_options["verify_graphics_memory"] is True
     assert "test_mode" not in runtime_options
     assert settings.timing_miss_threshold_multiplier == 1.5
     assert settings.timing_warmup_frames == 240
@@ -41,6 +43,12 @@ def test_launch_settings_can_explicitly_disable_connected_refresh_verification()
     settings = LaunchSettings(verify_refresh_rate=False)
 
     assert settings.as_runtime_options()["verify_refresh_rate"] is False
+
+
+def test_launch_settings_can_explicitly_disable_graphics_memory_verification() -> None:
+    settings = LaunchSettings(verify_graphics_memory=False)
+
+    assert settings.as_runtime_options()["verify_graphics_memory"] is False
 
 
 def test_launch_session_preflight_rejects_windowed_mode_when_strict_timing_enabled(
@@ -280,6 +288,39 @@ def test_launch_session_rejects_non_boolean_refresh_verification_before_engine_c
             )
     finally:
         unregister_engine("stub-invalid-refresh-verification")
+
+    assert captures == {}
+
+
+def test_launch_session_rejects_non_boolean_graphics_verification_before_engine_creation(
+    sample_project,
+    sample_project_root,
+) -> None:
+    captures: dict[str, object] = {}
+    register_engine("stub-invalid-graphics-verification", lambda: StubEngine(captures))
+    try:
+        session_plan = compile_session_plan(
+            sample_project,
+            refresh_hz=60.0,
+            project_root=sample_project_root,
+            random_seed=40,
+        )
+
+        with pytest.raises(
+            LaunchSettingsError,
+            match="verify_graphics_memory must be a boolean",
+        ):
+            launch_session(
+                sample_project_root,
+                session_plan,
+                participant_number=PARTICIPANT_NUMBER,
+                launch_settings=LaunchSettings(
+                    engine_name="stub-invalid-graphics-verification",
+                    verify_graphics_memory="yes",  # type: ignore[arg-type]
+                ),
+            )
+    finally:
+        unregister_engine("stub-invalid-graphics-verification")
 
     assert captures == {}
 

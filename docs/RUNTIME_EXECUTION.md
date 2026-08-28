@@ -39,11 +39,15 @@ SessionPlan
        -> execute compiled pre-condition task modules, if any
        -> engine.show_transition_screen(..., continue_key="space")
        -> engine.run_condition(RunSpec, ...)
-            -> preload resolved presentation objects
+            -> estimate condition memory and evaluate the pre-upload RAM/DXGI gate
+            -> create, prime, and GPU-synchronize exactly one condition cache
+            -> evaluate the post-upload RAM/DXGI gate
             -> complete technical warmup, using its final configured frames for the
                fixation-only lead-in
             -> reset input and run-relative timing
             -> present stream frame zero and its condition trigger together
+            -> end the last compiled frame with a neutral, trigger-free offset flip
+            -> release the condition cache before returning
        -> execute compiled post-condition task modules, if any
        -> if this completed a non-final block:
             -> engine.show_block_break_screen(...)
@@ -113,11 +117,15 @@ The PsychoPy implementation:
 - opens one `visual.Window` per launched session
 - reuses that window across all runs in the `SessionPlan`
 - opens launched playback fullscreen on the default display
+- supplies the selected Pyglet screen's native pixel dimensions to both fullscreen
+  window constructors instead of inheriting PsychoPy's `800x600` default request;
+  detection failure is warning-only because PsychoPy still resolves the actual size
 - reports the active window resolution so runtime can block configured visual-angle
   playback when the current display resolution differs from the intended test resolution
-- shows Space-required condition-start screens and completion text screens; transition
-  headings always use generic condition numbers while authored condition names stay in
-  runtime artifacts
+- shows Space-required condition-start screens and one final `All done!` / participant-
+  thanks screen after every condition has completed; transition headings always use
+  generic `Condition X of Y` numbers while authored condition names stay in runtime
+  artifacts
 - runs fixation-only participant tutorial attempts when runtime asks for practice
 - shows a dedicated manual inter-block break screen between non-final blocks
 - renders runtime-resolved modular instruction, study, image/text choice-grid,
@@ -129,8 +137,17 @@ The PsychoPy implementation:
   flip; mouse responses return stable item ids, coordinates, button, and reaction time
 - ignores all non-Escape keys on fixed-duration feedback screens so authored durations
   cannot be skipped
-- preloads each condition's unique image or word stimuli before playback and releases
-  condition-local resources when the condition ends
+- preloads each condition's unique image or word render variants before playback,
+  explicitly primes both fixation colors, waits for queued GPU work once, and releases
+  condition-local resources before the next condition
+- deletes condition-owned textures, masks, PBOs, and legacy display lists, then waits on
+  a post-delete `glFinish()` before the next condition may prepare its cache
+- verifies production graphics readiness before and after upload using renderer strings,
+  conservative unique-image estimates, Windows DXGI budgets, and physical-RAM headroom;
+  software renderers and measured insufficient memory block frame zero, while missing or
+  ambiguous telemetry proceeds with an exported `unverified` warning
+- records readiness, renderer, memory/headroom, synchronization, and cleanup diagnostics
+  in `RuntimeMetadata`
 - prepares every unique resolved render identity before playback, including runtime
   mirrors/rotation, word height/color/position, and native rectangular image geometry
 - performs `cover` cropping centrally in memory during preparation without creating
@@ -138,11 +155,21 @@ The PsychoPy implementation:
 - renders the compiled default-color fixation cross for the exact pre-stream lead-in
   frame count, emits no trigger or task response during that phase, then resets the run
   clock before stream frame zero
-- executes the compiled frame schedule directly from `RunSpec`
-- draws the fixation cross continuously and switches color on compiled
-  `FixationEvent` windows
+- compiles stimulus/fixation draw calls and trigger/onset lookup before frame zero, then
+  executes that immutable frame plan without per-frame result-model construction
+- draws one of two pre-created fixation stimuli continuously on compiled `FixationEvent`
+  windows; the secondary task never changes the FPVS or trigger schedule
 - polls response keys and escape
-- records frame intervals and runtime metadata
+- treats only PsychoPy's PTB and ioHub keyboard backends as timestamp-capable; for those
+  backends, it converts each returned flip timestamp into the keyboard clock's time base
+  so RT does not depend on the later frame in which a buffered key is retrieved
+- discards key timestamps from PsychoPy's `event` backend (and unknown backends) and uses
+  frame scoring for the whole condition instead of presenting those values as hardware
+  timestamps
+- performs one neutral, trigger-free terminal flip and records one duration for every
+  completed compiled frame, including the final continuous image or 50%-blank interval
+- records frame intervals and runtime metadata; validated execution models and timing QC
+  are materialized after playback rather than in the frame loop
 - treats strict timing misses as post-run quality-control flags instead of aborting
   playback; `RuntimeMetadata` records `timing_qc_strict_violation`,
   `timing_qc_strict_violation_reason`, `timing_qc_first_bad_phase`,
@@ -157,6 +184,11 @@ The PsychoPy implementation:
 - engine observes compiled `TriggerEvent` entries during playback
 - the PsychoPy engine uses flip-locked scheduling with `window.callOnFlip(...)`, tying
   marker-write callbacks to the flip that presents the compiled frame
+- trigger payloads are validated before playback; the flip callback reads the run clock,
+  performs the synchronous prepared hardware write, and appends a primitive log entry.
+  Validated `TriggerRecord` construction is deferred until runtime requests records.
+- trigger writes are the only experiment callbacks registered on timed image-onset
+  flips; secondary fixation timing uses the returned flip timestamp instead
 - trigger attempts are recorded with frame/time metadata, backend name, status, and
   failure message when applicable; exported trigger `time_s` values are run-playback
   times and do not include timing warmup frames
@@ -191,7 +223,10 @@ still needs BioSemi/BDF and photodiode validation on the actual machine and disp
 
 ## Fixation logging
 
-The engine captures raw response key presses.
+With PsychoPy's PTB or ioHub keyboard backend, the engine captures raw response-key and
+fixation-target flip times in the same keyboard-clock time base. With the `event` backend,
+an unknown backend, or incomplete same-clock timing data, runtime scores the whole
+condition by frame instead; it never mixes timestamp and frame scoring within a condition.
 
 Runtime then scores them against compiled `FixationEvent` windows and exports:
 
@@ -200,6 +235,8 @@ Runtime then scores them against compiled `FixationEvent` windows and exports:
 - one condition-level fixation summary (targets, hits, misses, false alarms,
   accuracy %, mean RT)
 - compiled fixation event timing preserved in the exported fixation rows
+- `keyboard_backend` and `fixation_rt_scoring_source` provenance in runtime metadata and
+  condition history, plus `rt_scoring_source` on detailed fixation/response rows
 
 That keeps the scoring logic testable without requiring PsychoPy.
 
@@ -208,6 +245,11 @@ Scoring semantics for the fixation accuracy task:
 - response key: `space`
 - `escape` is reserved for participant/operator abort and is rejected as a response key
 - response window: `1.0` second from fixation target onset
+- RT and response-window matching use seconds-based hardware timestamps when every
+  target and task-key response has complete same-clock data; otherwise the entire run
+  falls back to legacy frame scoring rather than mixing time bases
+- `fixation_rt_scoring_source` is `hardware_timestamp`, `frame_fallback`, or
+  `not_applicable` for a condition; session-level metadata may be `mixed`
 - first valid response in-window counts as the target hit
 - responses outside open windows are false alarms
 - mean RT is computed from hits only
@@ -381,17 +423,20 @@ In the current v1 runtime:
   BioSemi-compatible serial output on `COM3`, and oddball onset output is locked to
   marker code `55` unless the project records an explicit nonstandard-code override
 - completion screens retain the explicit 0.5-second auto-dismiss duration
-- GUI launches explicitly retain report-only warmup timing misses, a four-frame-interval
-  miss threshold, and a 240-frame timing warmup
+- GUI launches use report-only timing misses, a `1.5`-frame-interval miss threshold,
+  strict post-settle warmup QC, a 240-frame timing warmup, and production graphics-memory
+  verification
 
 Source-tree Windows and Linux runs can enable the app-level Experiment Test Mode. The
 GUI supplies reserved participant ID `0`, omits participant metadata and manual-electrode
 updates, and skips the Sophia/BioSemi recording gate. The document launch adapter keeps
 the authored trigger settings unchanged while creating `LaunchSettings` with
-`serial_enabled=false` and `verify_refresh_rate=false`. Fullscreen playback, compilation,
-asset preflight, condition/task flow, frame timing, timing warmup/QC, and normal test
-exports remain active. The preference is unavailable in packaged builds and is not
-persisted in ProjectFile, RunSpec, or SessionPlan.
+`serial_enabled=false`, `verify_refresh_rate=false`, and
+`verify_graphics_memory=false`. Fullscreen playback, compilation, asset preflight,
+condition/task flow, frame timing, timing warmup/QC, and normal test exports remain
+active, but the result does not claim graphics-hardware qualification. The preference is
+unavailable in packaged builds and is not persisted in ProjectFile, RunSpec, or
+SessionPlan.
 
 Compilation, session flow, scoring, and export behavior remain independent of the
 retired runtime mode gate; test behavior is composed only from explicit launch options.
@@ -417,4 +462,17 @@ Use this manual checklist when validating a real lab rig:
 - confirm ActiView displays the expected trigger/status values
 - run one FPVS condition
 - confirm `condition_start` and `oddball_onset` markers appear in the BDF/status channel
-- compare trigger timing to a photodiode for at least one run when timing precision matters
+- use native resolution and a fixed approved refresh rate; disable Windows Dynamic
+  Refresh Rate, VRR/Adaptive Sync, display power saving, overlays, and notifications
+- use AC power/high-performance mode and close unrelated GPU- or disk-heavy applications
+- confirm `graphics_readiness_status=ready`, condition-cache synchronization/cleanup
+  succeeded, and `len(frame_intervals) == completed_frames`
+- an `unverified` graphics status no longer aborts playback, but it remains a visible
+  warning that the machine's RAM/VRAM headroom could not be fully qualified
+- inspect `timing_qc_strict_violation`; a `true` value invalidates the run for timing-
+  sensitive analysis even though playback safely reached its terminal boundary
+- when no photodiode is available, treat flip timestamps and BDF markers as the strongest
+  software evidence only: a flip timestamp marks the software/display-swap boundary and
+  a BDF marker confirms marker delivery, but neither proves when the panel emitted light
+- if a photodiode becomes available later, validate software flip/trigger alignment and
+  panel latency on the intended display before making photon-onset claims

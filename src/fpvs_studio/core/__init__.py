@@ -6,6 +6,7 @@ here; callers consume neutral contracts only."""
 from fpvs_studio.core.compiler import CompileError, compile_run_spec, compile_session_plan
 from fpvs_studio.core.execution import (
     FixationResponseRecord,
+    FixationTargetOnsetRecord,
     FrameIntervalRecord,
     ResponseRecord,
     RunExecutionSummary,
@@ -45,6 +46,7 @@ from fpvs_studio.core.template_library import default_template, get_template, li
 __all__ = [
     "CompileError",
     "FixationResponseRecord",
+    "FixationTargetOnsetRecord",
     "FrameIntervalRecord",
     "ProjectFile",
     "ProjectScaffold",

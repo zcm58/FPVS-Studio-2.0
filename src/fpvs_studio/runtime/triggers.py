@@ -17,6 +17,9 @@ from fpvs_studio.triggers.serial_backend import SerialBackend
 LOGGER = logging.getLogger(__name__)
 
 
+_RawTriggerAttempt = tuple[int, float | None, int, str, TriggerStatus, str | None]
+
+
 class TriggerEmissionError(RuntimeError):
     """Raised when a connected trigger backend fails during marker emission."""
 
@@ -29,7 +32,7 @@ class LoggedTriggerBackend(TriggerBackend):
     ) -> None:
         self._backend = backend or NullBackend()
         self._backend_name = backend_name
-        self._records: list[TriggerRecord] = []
+        self._raw_records: list[_RawTriggerAttempt] = []
 
     @property
     def backend_name(self) -> str:
@@ -39,9 +42,23 @@ class LoggedTriggerBackend(TriggerBackend):
 
     @property
     def records(self) -> tuple[TriggerRecord, ...]:
-        """Return the recorded trigger attempts."""
+        """Materialize neutral trigger records outside the display callback."""
 
-        return tuple(self._records)
+        return tuple(
+            TriggerRecord(
+                trigger_index=index,
+                frame_index=frame_index,
+                time_s=time_s,
+                code=code,
+                label=label,
+                backend_name=self._backend_name,
+                status=status,
+                message=message,
+            )
+            for index, (frame_index, time_s, code, label, status, message) in enumerate(
+                self._raw_records
+            )
+        )
 
     def connect(self) -> None:
         self._backend.connect()
@@ -55,27 +72,44 @@ class LoggedTriggerBackend(TriggerBackend):
         time_s: float | None = None,
     ) -> None:
         trigger_code = validate_event_trigger_code(code, label=label or "trigger")
+        self.send_prevalidated_trigger(
+            trigger_code,
+            frame_index=frame_index,
+            label=label,
+            time_s=time_s,
+        )
+
+    def send_prevalidated_trigger(
+        self,
+        code: int,
+        *,
+        frame_index: int | None = None,
+        label: str | None = None,
+        time_s: float | None = None,
+    ) -> None:
+        """Perform the physical write and append only primitive callback-time data."""
+
+        normalized_label = label or "trigger"
+        normalized_frame_index = frame_index if frame_index is not None else 0
         status: TriggerStatus = "sent"
         message: str | None = None
         caught_exception: Exception | None = None
         if self._backend_name == "null":
-            self._records.append(
-                TriggerRecord(
-                    trigger_index=len(self._records),
-                    frame_index=frame_index or 0,
-                    time_s=time_s,
-                    code=trigger_code,
-                    label=label or "trigger",
-                    backend_name=self._backend_name,
-                    status="skipped_disabled",
-                    message="Trigger output is disabled; marker was logged only.",
+            self._raw_records.append(
+                (
+                    normalized_frame_index,
+                    time_s,
+                    code,
+                    normalized_label,
+                    "skipped_disabled",
+                    "Trigger output is disabled; marker was logged only.",
                 )
             )
             return
 
         try:
-            self._backend.send_trigger(
-                trigger_code,
+            self._backend.send_prevalidated_trigger(
+                code,
                 frame_index=frame_index,
                 label=label,
                 time_s=time_s,
@@ -85,17 +119,9 @@ class LoggedTriggerBackend(TriggerBackend):
             message = str(exc)
             caught_exception = exc
 
-        record = TriggerRecord(
-            trigger_index=len(self._records),
-            frame_index=frame_index or 0,
-            time_s=time_s,
-            code=trigger_code,
-            label=label or "trigger",
-            backend_name=self._backend_name,
-            status=status,
-            message=message,
+        self._raw_records.append(
+            (normalized_frame_index, time_s, code, normalized_label, status, message)
         )
-        self._records.append(record)
         if status == "error":
             raise TriggerEmissionError(message) from caught_exception
 
