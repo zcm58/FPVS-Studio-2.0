@@ -263,6 +263,37 @@ Scoring semantics for the fixation accuracy task:
   researcher can press Space to continue without tutorial completion or Escape to abort,
   and continuing records a session warning
 
+## Fixation data view query
+
+The GUI-neutral runtime reporting query for `View > Fixation Cross Data...` reads only
+the active project's `logs/session_condition_history.csv`. The caller supplies the
+active project root, and the service resolves its `logs/` directory through the shared
+`core.paths.logs_dir` project-path helper. It does not inspect detailed `runs/` folders,
+use the process working directory as a fallback, regenerate participant summaries, or
+write project data. The GUI runs this query in a background task so opening the view
+does not block the UI thread.
+
+The query shares the established group-summary inclusion and weighting semantics:
+
+- participant IDs `0` and `00` are excluded
+- if any row for a participant session is aborted, that whole session is excluded;
+  separate included sessions for the same participant remain separate contributions
+- overall and per-condition weighted accuracy is
+  `100 * sum(hit_count) / sum(total_targets)`; false alarms remain separately scored and
+  do not reduce this accuracy value
+- overall mean reaction time is
+  `sum(mean_rt_ms * hit_count) / sum(hit_count)` over rows with hits; no included hits
+  produces `N/A`, not zero
+- condition rows are grouped by stable `condition_id` and use the latest nonblank logged
+  condition name, so renaming a condition does not split its history
+
+Missing history and history with no target-bearing included sessions return the normal
+`No fixation data yet` result. Unreadable or malformed history returns a recoverable
+error result rather than changing the file. A populated result reports the distinct
+included participant-session count and condition rows with included-session and
+hits/targets totals. This query is a read-only projection: it changes neither fixation
+scoring nor CSV/XLSX schemas, group-summary export, or either run-export mode.
+
 ## Exports
 
 Launch-time participant metadata:

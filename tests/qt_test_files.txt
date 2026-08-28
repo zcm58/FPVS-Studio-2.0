@@ -2,6 +2,7 @@ tests/gui/test_assets_run_launch.py
 tests/gui/test_components.py
 tests/gui/test_condition_task_dialog.py
 tests/gui/test_conditions_session_fixation.py
+tests/gui/test_fixation_cross_data_dialog.py
 tests/gui/test_fixation_settings_page.py
 tests/gui/test_home_launch_surface.py
 tests/gui/test_image_resizer_page.py

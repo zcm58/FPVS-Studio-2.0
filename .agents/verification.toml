@@ -97,6 +97,7 @@ checks = []
 tests = [
   "tests/unit/test_runtime_display_refresh.py",
   "tests/unit/test_runtime_fixation.py",
+  "tests/unit/test_runtime_fixation_report.py",
   "tests/unit/test_runtime_launcher_export.py",
   "tests/unit/test_runtime_launcher_feedback_abort.py",
   "tests/unit/test_runtime_launcher_flow.py",

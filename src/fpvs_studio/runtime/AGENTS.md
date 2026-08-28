@@ -65,6 +65,9 @@ This phase should establish:
 - provide a manual group-summary workbook export from the participant summary rows,
   excluding rows where `Include In Analysis` is `N` from aggregate metrics while
   keeping those rows visible for filtering/audit
+- provide a read-only pooled fixation-data query from the active project's condition
+  history, sharing participant-session inclusion and weighting semantics without
+  regenerating summaries or changing project data
 - preserve clear separation from GUI code
 
 ## Restrictions

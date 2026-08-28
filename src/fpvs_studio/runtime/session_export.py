@@ -988,22 +988,37 @@ def _participant_summary_rows(
     project_root: Path,
     history_rows: list[dict[str, str]],
 ) -> list[list[object]]:
-    grouped_rows: dict[tuple[str, str, str], list[dict[str, str]]] = {}
-    for row in history_rows:
-        if _is_admin_test_participant_id(row.get("participant_number", "")):
-            continue
-        key = (
-            row.get("participant_number", ""),
-            row.get("session_id", ""),
-            row.get("output_dir", ""),
-        )
-        if not any(key):
-            continue
-        grouped_rows.setdefault(key, []).append(row)
+    grouped_rows = _participant_session_history_groups(history_rows)
     return [
         _participant_summary_row(project_root, rows)
         for rows in grouped_rows.values()
     ]
+
+
+def _participant_session_history_groups(
+    history_rows: list[dict[str, str]],
+) -> dict[tuple[str, str, str], list[dict[str, str]]]:
+    """Group non-admin history rows by the participant-summary session identity."""
+
+    grouped_rows: dict[tuple[str, str, str], list[dict[str, str]]] = {}
+    for row in history_rows:
+        if _is_admin_test_participant_id(row.get("participant_number", "")):
+            continue
+        key = _participant_session_history_identity(row)
+        if not any(key):
+            continue
+        grouped_rows.setdefault(key, []).append(row)
+    return grouped_rows
+
+
+def _participant_session_history_identity(row: dict[str, str]) -> tuple[str, str, str]:
+    """Return the participant-summary identity for one condition-history row."""
+
+    return (
+        row.get("participant_number", ""),
+        row.get("session_id", ""),
+        row.get("output_dir", ""),
+    )
 
 
 def _is_admin_test_participant_id(participant_number: str) -> bool:
@@ -1019,10 +1034,7 @@ def _participant_summary_row(project_root: Path, rows: list[dict[str, str]]) -> 
     )
     mean_accuracy = (hit_count / total_targets) * 100.0 if total_targets > 0 else None
     mean_rt_ms = _weighted_mean_rt_ms(ordered_rows)
-    aborted = any(
-        _csv_bool(row.get("session_aborted")) or _csv_bool(row.get("run_aborted"))
-        for row in ordered_rows
-    )
+    aborted = _session_history_rows_aborted(ordered_rows)
     return [
         _first_non_blank(ordered_rows, "participant_number"),
         _first_non_blank(ordered_rows, "participant_age"),
@@ -1040,6 +1052,15 @@ def _participant_summary_row(project_root: Path, rows: list[dict[str, str]]) -> 
         _float_value(mean_accuracy),
         _float_value(mean_rt_ms),
     ]
+
+
+def _session_history_rows_aborted(rows: list[dict[str, str]]) -> bool:
+    """Return whether any condition row aborts its whole participant session."""
+
+    return any(
+        _csv_bool(row.get("session_aborted")) or _csv_bool(row.get("run_aborted"))
+        for row in rows
+    )
 
 
 def _write_participant_summary_xlsx(path: Path, rows: list[list[object]]) -> None:

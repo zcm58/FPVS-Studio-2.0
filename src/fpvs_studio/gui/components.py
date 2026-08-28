@@ -1261,7 +1261,8 @@ def studio_theme_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
         color: {color_text_primary};
         font-weight: 600;
     }}
-    QTableWidget#assets_table {{
+    QTableWidget#assets_table,
+    QTableWidget#fixation_cross_data_table {{
         border: 1px solid {color_border_soft};
         border-radius: {CARD_CORNER_RADIUS}px;
         background-color: {color_surface_elevated};
@@ -1270,7 +1271,8 @@ def studio_theme_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
         selection-color: {theme.selected_text};
         outline: none;
     }}
-    QTableWidget#assets_table QHeaderView::section {{
+    QTableWidget#assets_table QHeaderView::section,
+    QTableWidget#fixation_cross_data_table QHeaderView::section {{
         background-color: {color_surface_alt};
         border: none;
         border-right: 1px solid {color_border_soft};
@@ -1279,14 +1281,17 @@ def studio_theme_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
         color: {color_text_secondary};
         font-weight: 700;
     }}
-    QTableWidget#assets_table::item {{
+    QTableWidget#assets_table::item,
+    QTableWidget#fixation_cross_data_table::item {{
         padding: 4px 8px;
     }}
-    QTableWidget#assets_table::item:selected {{
+    QTableWidget#assets_table::item:selected,
+    QTableWidget#fixation_cross_data_table::item:selected {{
         background-color: {color_primary};
         color: {theme.selected_text};
     }}
-    QTableWidget#assets_table::item:hover {{
+    QTableWidget#assets_table::item:hover,
+    QTableWidget#fixation_cross_data_table::item:hover {{
         background-color: {color_surface_alt};
     }}
     QPlainTextEdit#assets_status_text,

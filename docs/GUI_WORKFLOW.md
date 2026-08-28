@@ -74,8 +74,9 @@ The authoring window is organized around two user-facing modes:
 
 - `Home`
   - daily-use launch surface for ready projects
-  - keeps the main `File` and `Tools` menus available while preserving the same centered
-    launch-card placement used by the menu-free home surface
+  - keeps the main `File`, `View`, and `Tools` menus available in that order while
+    preserving the same centered launch-card placement used by the menu-free home
+    surface
   - a centered project card with project title, description, launch readiness badge, condition count, block
     count, fixation cross status, accuracy tracking status, project open/create
     actions, including create, import, and open, setup editing, and a prominent centered
@@ -223,6 +224,19 @@ The authoring window is organized around two user-facing modes:
     preview on the current display background
   - Review is a card-only decision point: users can `Save and Return Home` or
     `Return Home Without Saving`; returning without saving always asks for confirmation
+- `View > Fixation Cross Data...`
+  - opens a compact read-only view of the active project's pooled fixation-task results
+  - loads `logs/session_condition_history.csv` in the background through the runtime
+    reporting boundary, keeping log parsing and aggregation out of GUI widgets
+  - shows overall weighted accuracy, hit-weighted mean reaction time, included
+    participant-session count, and condition rows with included sessions, hits/targets,
+    and pooled weighted accuracy
+  - shows `No fixation data yet` when history is missing or has no target-bearing
+    included sessions; unreadable or malformed history produces a recoverable error
+    state and leaves project data unchanged
+  - groups renamed conditions under their stable condition identity and exposes long
+    display names without clipping; detailed inclusion and weighting rules are defined
+    in `RUNTIME_EXECUTION.md`
 - `Tools > Image Resizer`
   - in-window utility for optimizing an arbitrary folder of source images
   - primary action is `Optimize Images for FPVS`
@@ -287,10 +301,13 @@ and materialization still surface invalid or inconsistent source details before 
 launch. Word stimulus rows are shown for readiness context but cannot use image-folder
 import, inspection, or materialization actions.
 
-The `File` menu groups manage-projects, `Import` and `Export` submenus, settings, and
-help/update actions with native separators. `Import > Project Bundle...` first shows a
-review dialog with bundle identity, manifest file count/size, the receiving project path,
-collision-safe naming guidance, and included/excluded content. Confirming the review imports a
+The top-level menu order is `File`, `View`, `Tools`. The `File` menu groups
+manage-projects, `Import` and `Export` submenus, settings, and help/update actions with
+native separators. `View` starts with `Fixation Cross Data...`; the action is disabled
+with other project actions during bundle processing. `Import > Project Bundle...` first
+shows a review dialog with bundle identity, manifest file count/size, the receiving
+project path, collision-safe naming guidance, and included/excluded content. Confirming
+the review imports a
 `.fpvsbundle` into a new project folder under the configured FPVS Studio Root Folder,
 verifies archive paths and hashes in an app-owned staging folder, resolves
 project-folder collisions, and shows staged verify/base-stimuli/oddball-stimuli/project
@@ -456,6 +473,8 @@ The current GUI supports:
   color changes are balanced across the full condition with seeded jitter and
   deterministic no-immediate-repeat behavior across consecutive compiled runs
 - checking for app updates from `File > Check for Updates`
+- reviewing the active project's pooled fixation accuracy and reaction-time history from
+  `View > Fixation Cross Data...` without modifying logs, scoring, or exports
 - authoring multiple conditions
 - importing base and oddball image folders
 - authoring base and oddball word lists for word-based conditions

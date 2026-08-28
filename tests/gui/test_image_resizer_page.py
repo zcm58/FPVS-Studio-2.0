@@ -24,7 +24,11 @@ def test_tools_menu_exposes_in_window_image_resizer(
 ) -> None:
     _, window = _open_created_project(controller, qtbot, tmp_path, "Image Resizer Menu")
 
-    assert [action.text() for action in window.menuBar().actions()] == ["File", "Tools"]
+    assert [action.text() for action in window.menuBar().actions()] == [
+        "File",
+        "View",
+        "Tools",
+    ]
     assert [action.text() for action in window.tools_menu.actions()] == ["Image Resizer"]
 
     window.image_resizer_action.trigger()
