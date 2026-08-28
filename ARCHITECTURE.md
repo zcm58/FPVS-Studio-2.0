@@ -26,7 +26,8 @@ lazily only inside the engine package.
 - `src/fpvs_studio/tools/`: reserved for Studio-native utilities. Current Image Resizer
   UI remains under the GUI package and delegates to preprocessing.
 - `src/fpvs_studio/runtime/`: launch settings, preflight, session orchestration,
-  participant history, fixation scoring, trigger coordination, and execution exports.
+  participant history, fixation reporting and explicit-path Excel export, fixation
+  scoring, trigger coordination, and execution exports.
 - `src/fpvs_studio/engines/`: presentation interface, lazy PsychoPy implementation,
   condition-local GPU-ready resource ownership, and Windows graphics-budget probing.
 - `src/fpvs_studio/triggers/`: optional hardware adapters used by runtime. Normal event
@@ -50,12 +51,16 @@ ProjectFile
   -> exporters -> project logs and optional detailed run artifacts
 ```
 
-`ProjectFile`, `SessionPlan`, execution-result, and `.fpvsconfig` contracts use schema
-`1.2.0`; the single-condition timed `RunSpec` remains schema `1.1.0`. Loaders migrate
-schema `1.0.0` and `1.1.0` projects, condition-template libraries, and configuration
-files in memory; reading or launching a legacy project does not rewrite it.
-Compatibility preserves a zero-second lead-in, empty condition-task bindings, and the
-legacy word-size pixel rounding until those settings are explicitly authored.
+`ProjectFile` uses schema `1.3.0`; `SessionPlan`, execution-result, and `.fpvsconfig`
+contracts remain schema `1.2.0`, and the single-condition timed `RunSpec` remains schema
+`1.1.0`. Project loaders migrate schemas `1.0.0`, `1.1.0`, and `1.2.0` in memory;
+reading or launching an older project does not rewrite it. The `1.3.0` project migration
+enables fixation color changes, accuracy scoring, and the participant tutorial once,
+while a later current-schema save may preserve an explicit user opt-out. Compatibility
+otherwise preserves a zero-second lead-in, empty condition-task bindings, and legacy
+word-size pixel rounding until those settings are explicitly authored. A legacy zero
+fixation-target duration becomes the current 300 ms default because the newly enabled
+task requires a positive duration.
 
 - Compilation owns protocol scheduling, asset resolution, randomized session order,
   realized fixation target selection, presentation-setting inheritance, and balanced

@@ -28,6 +28,7 @@ from fpvs_studio.core.enums import (
     ImageGeometryMode,
     InterConditionMode,
     PresentationUnit,
+    ProjectSchemaVersion,
     RunMode,
     SchemaVersion,
     StimulusModality,
@@ -444,8 +445,8 @@ class ProtocolSettings(FPVSBaseModel):
 class FixationTaskSettings(FPVSBaseModel):
     """Project-level fixation-cross color-change task settings."""
 
-    enabled: bool = False
-    accuracy_task_enabled: bool = False
+    enabled: bool = True
+    accuracy_task_enabled: bool = True
     participant_tutorial_enabled: bool = True
     changes_per_sequence: int = Field(
         default=0,
@@ -738,7 +739,7 @@ class Condition(FPVSBaseModel):
 class ProjectFile(FPVSBaseModel):
     """Canonical editable project file."""
 
-    schema_version: SchemaVersion = SchemaVersion.V1_2
+    schema_version: ProjectSchemaVersion = ProjectSchemaVersion.V1_3
     meta: ProjectMeta
     settings: ProjectSettings = Field(default_factory=ProjectSettings)
     stimulus_sets: list[StimulusSet] = Field(default_factory=list)

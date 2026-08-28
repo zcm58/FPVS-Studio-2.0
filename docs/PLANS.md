@@ -17,7 +17,6 @@ Concrete planned work:
 
 - `exec-plans/planned/restore-tutorials-file-menu-entry.md`
 - `exec-plans/planned/bounded-updater-storage-and-clean-upgrades.md`
-- `exec-plans/planned/fixation-cross-data-view.md`
 - `exec-plans/planned/luminance-rms-equalization-investigation.md`
 - `exec-plans/planned/sinusoidal-contrast-modulation.md`
 

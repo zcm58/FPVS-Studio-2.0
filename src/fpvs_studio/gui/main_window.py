@@ -46,6 +46,7 @@ from fpvs_studio.gui.bundle_export_dialog import BundleExportOptionsDialog
 from fpvs_studio.gui.components import apply_studio_theme
 from fpvs_studio.gui.document import ProjectDocument
 from fpvs_studio.gui.document_support import DocumentError, format_validation_report
+from fpvs_studio.gui.fixation_cross_data_dialog import FixationCrossDataDialog
 from fpvs_studio.gui.home_page import HomePage
 from fpvs_studio.gui.image_resizer_page import ImageResizerPage
 from fpvs_studio.gui.processing_page import (
@@ -157,6 +158,7 @@ class StudioMainWindow(QMainWindow):
         self._bundle_export_processing_page: BundleExportProcessingPage | None = None
         self._bundle_export_result_page: BundleExportResultPage | None = None
         self._bundle_import_processing_page: BundleImportProcessingPage | None = None
+        self._fixation_cross_data_dialog: FixationCrossDataDialog | None = None
         self._on_load_condition_template_profiles = on_load_condition_template_profiles
         self._on_manage_condition_templates = on_manage_condition_templates
         self._deferred_open_tasks_started = False
@@ -528,9 +530,13 @@ class StudioMainWindow(QMainWindow):
         self.image_resizer_action = QAction("Image Resizer", self)
         self.image_resizer_action.setObjectName("image_resizer_action")
         self.image_resizer_action.triggered.connect(self.show_image_resizer)
+        self.fixation_cross_data_action = QAction("Fixation Task Accuracy...", self)
+        self.fixation_cross_data_action.setObjectName("fixation_cross_data_action")
+        self.fixation_cross_data_action.triggered.connect(self.show_fixation_cross_data)
 
     def _create_menu_and_toolbar(self) -> None:
         self.file_menu = self.menuBar().addMenu("File")
+        self.view_menu = self.menuBar().addMenu("View")
         self.tools_menu = self.menuBar().addMenu("Tools")
         self.menuBar().setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.file_menu.addAction(self.manage_projects_action)
@@ -553,7 +559,47 @@ class StudioMainWindow(QMainWindow):
         self.file_menu.addAction(self.check_updates_action)
         self.file_menu.addAction(self.tutorials_action)
         self.file_menu.addAction(self.about_action)
+        self.view_menu.addAction(self.fixation_cross_data_action)
         self.tools_menu.addAction(self.image_resizer_action)
+
+    def show_fixation_cross_data(self) -> None:
+        dialog = self._fixation_cross_data_dialog
+        if dialog is None:
+            dialog = FixationCrossDataDialog(
+                project_root=self.document.project_root,
+                parent=self,
+            )
+            self._fixation_cross_data_dialog = dialog
+        dialog.show()
+        dialog.raise_()
+        dialog.activateWindow()
+        dialog.start_loading()
+
+    def _allow_project_handoff_during_fixation_load(self) -> bool:
+        dialog = self._fixation_cross_data_dialog
+        if dialog is None or not dialog.is_busy:
+            return True
+        if dialog.is_exporting:
+            title = "Fixation Accuracy Export"
+            message = (
+                "FPVS Studio is still exporting fixation task accuracy. Please wait "
+                "for the workbook to finish before closing or opening another project."
+            )
+        else:
+            title = "Fixation Accuracy Loading"
+            message = (
+                "FPVS Studio is still loading fixation task accuracy. Please wait for "
+                "the view to finish before closing or opening another project."
+            )
+        QMessageBox.information(
+            self,
+            title,
+            message,
+        )
+        dialog.show()
+        dialog.raise_()
+        dialog.activateWindow()
+        return False
 
     def show_update_dialog(self) -> None:
         dialog = UpdateDialog(parent=self, on_before_install=self.maybe_save_changes)
@@ -911,6 +957,7 @@ class StudioMainWindow(QMainWindow):
             self.export_group_summary_action,
             self.save_project_action,
             self.settings_action,
+            self.fixation_cross_data_action,
             self.image_resizer_action,
             self.launch_action,
         )
@@ -1121,27 +1168,40 @@ class StudioMainWindow(QMainWindow):
             )
             event.ignore()
             return
+        if not self._allow_project_handoff_during_fixation_load():
+            event.ignore()
+            return
         if self.maybe_save_changes():
             event.accept()
         else:
             event.ignore()
 
     def _request_new_project(self) -> None:
+        if not self._allow_project_handoff_during_fixation_load():
+            return
         if self.maybe_save_changes():
             self._on_request_new_project()
 
     def _request_open_project(self) -> None:
+        if not self._allow_project_handoff_during_fixation_load():
+            return
         if self.maybe_save_changes():
             self._on_request_open_project()
 
     def _request_manage_projects(self) -> None:
+        if not self._allow_project_handoff_during_fixation_load():
+            return
         self._on_request_manage_projects()
 
     def _request_import_project_config(self) -> None:
+        if not self._allow_project_handoff_during_fixation_load():
+            return
         if self.maybe_save_changes():
             self._on_request_import_project_config()
 
     def _request_import_project_bundle(self) -> None:
+        if not self._allow_project_handoff_during_fixation_load():
+            return
         if self.maybe_save_changes():
             self._on_request_import_project_bundle()
 

@@ -1,6 +1,6 @@
 # Fixation Cross Data View
 
-Status: Planned
+Status: Completed
 
 ## Summary
 
@@ -65,6 +65,15 @@ fixation-task accuracy and reaction-time results.
 
 No inferential statistics, charts, participant drill-down, inclusion editing, live
 monitoring, new export format, or fixation-scoring change is included in this first view.
+
+## Completion
+
+Completed on 2026-08-28. The implementation added the GUI-neutral read-only reporting
+service, the background-loaded dialog and `View` menu action, project-handoff protection
+while its worker is active, current workflow/architecture documentation, focused runtime
+tests, and registered pytest-qt coverage for all dialog states and minimum-size layout.
+Safe local verification passed; registered Qt execution and the visible smoke path remain
+CI/release checks under repository policy.
 
 ## Verification
 

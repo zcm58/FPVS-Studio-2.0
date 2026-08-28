@@ -74,8 +74,9 @@ The authoring window is organized around two user-facing modes:
 
 - `Home`
   - daily-use launch surface for ready projects
-  - keeps the main `File` and `Tools` menus available while preserving the same centered
-    launch-card placement used by the menu-free home surface
+  - keeps the main `File`, `View`, and `Tools` menus available in that order while
+    preserving the same centered launch-card placement used by the menu-free home
+    surface
   - a centered project card with project title, description, launch readiness badge, condition count, block
     count, fixation cross status, accuracy tracking status, project open/create
     actions, including create, import, and open, setup editing, and a prominent centered
@@ -125,7 +126,8 @@ The authoring window is organized around two user-facing modes:
     Images, and does not rewrite existing conditions unless the user explicitly applies
     the selected template to all conditions
   - Project exposes `Enable participant tutorial?`, which controls whether the
-    participant sees the fixation response tutorial before the first condition
+    participant sees the fixation response tutorial before the first condition; it is
+    enabled by default for new projects and by the one-time migration of older projects
   - Experiment combines display, presentation-default, image-size, and session settings
     in one compact centered card; a compact `Configure Presentation...` action opens the
     reusable presentation editor instead of expanding the wizard card
@@ -220,9 +222,26 @@ The authoring window is organized around two user-facing modes:
     new projects default to randomized 8–13 color changes per condition, a 300 ms color
     change duration, and a two-second lead-in, while migrated legacy projects retain zero
   - Response exposes accuracy tracking, response key/window, appearance, and a live
-    preview on the current display background
+    preview on the current display background; accuracy tracking is enabled by default
+    for new projects and by the one-time migration of older projects
   - Review is a card-only decision point: users can `Save and Return Home` or
     `Return Home Without Saving`; returning without saving always asks for confirmation
+- `View > Fixation Task Accuracy...`
+  - opens a compact view of the active project's pooled fixation-task results
+  - loads `logs/session_condition_history.csv` in the background through the runtime
+    reporting boundary, keeping log parsing and aggregation out of GUI widgets
+  - shows overall weighted accuracy, hit-weighted mean reaction time, included
+    participant-session count, and condition rows with included sessions, hits/targets,
+    and pooled weighted accuracy
+  - shows `No fixation data yet` when history is missing or has no target-bearing
+    included sessions; unreadable or malformed history produces a recoverable error
+    state and leaves project data unchanged
+  - groups renamed conditions under their stable condition identity and exposes long
+    display names without clipping; detailed inclusion and weighting rules are defined
+    in `RUNTIME_EXECUTION.md`
+  - `Export Excel...` opens the native save dialog and writes the currently displayed
+    summary to the selected `.xlsx` path in the background; cancelling makes no changes,
+    and export errors leave the loaded results available
 - `Tools > Image Resizer`
   - in-window utility for optimizing an arbitrary folder of source images
   - primary action is `Optimize Images for FPVS`
@@ -287,10 +306,13 @@ and materialization still surface invalid or inconsistent source details before 
 launch. Word stimulus rows are shown for readiness context but cannot use image-folder
 import, inspection, or materialization actions.
 
-The `File` menu groups manage-projects, `Import` and `Export` submenus, settings, and
-help/update actions with native separators. `Import > Project Bundle...` first shows a
-review dialog with bundle identity, manifest file count/size, the receiving project path,
-collision-safe naming guidance, and included/excluded content. Confirming the review imports a
+The top-level menu order is `File`, `View`, `Tools`. The `File` menu groups
+manage-projects, `Import` and `Export` submenus, settings, and help/update actions with
+native separators. `View` starts with `Fixation Task Accuracy...`; the action is disabled
+with other project actions during bundle processing. `Import > Project Bundle...` first
+shows a review dialog with bundle identity, manifest file count/size, the receiving
+project path, collision-safe naming guidance, and included/excluded content. Confirming
+the review imports a
 `.fpvsbundle` into a new project folder under the configured FPVS Studio Root Folder,
 verifies archive paths and hashes in an app-owned staging folder, resolves
 project-folder collisions, and shows staged verify/base-stimuli/oddball-stimuli/project
@@ -449,13 +471,16 @@ The current GUI supports:
   each launch and condition starts are fixed to `Press Space to begin`
 - configuring display refresh rate and choosing a black or dark-gray presentation
   background
-- configuring fixation settings, including an optional fixation accuracy task
-  (Space within 1.0 s of each fixation color change) and optional participant tutorial
-  before the first condition
+- configuring fixation settings, with the fixation accuracy task (Space within 1.0 s of
+  each fixation color change) and participant tutorial enabled by default while remaining
+  independently user-configurable
 - configuring fixed or randomized fixation target counts per condition run; compiled
   color changes are balanced across the full condition with seeded jitter and
   deterministic no-immediate-repeat behavior across consecutive compiled runs
 - checking for app updates from `File > Check for Updates`
+- reviewing the active project's pooled fixation accuracy and reaction-time history from
+  `View > Fixation Task Accuracy...` without modifying logs or scoring, with an optional
+  Excel export written only to the user-selected destination
 - authoring multiple conditions
 - importing base and oddball image folders
 - authoring base and oddball word lists for word-based conditions

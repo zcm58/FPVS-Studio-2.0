@@ -166,6 +166,7 @@ def test_config_import_creates_new_project_shell_without_copying_stimuli(
     scaffold = create_project_from_config(tmp_path, config)
     loaded = load_project_file(scaffold.project_root / "project.json")
 
+    assert config.schema_version == "1.2.0"
     assert loaded.meta.name == sample_project.meta.name
     assert loaded.settings.display.viewing_distance_cm == 90.0
     assert loaded.settings.protocol.base_hz == 7.5
@@ -173,6 +174,9 @@ def test_config_import_creates_new_project_shell_without_copying_stimuli(
     assert loaded.settings.session.session_seed == 123
     assert loaded.settings.session.show_condition_title_on_screen is False
     assert loaded.settings.triggers.oddball_trigger_code == 55
+    assert loaded.settings.fixation_task.enabled is True
+    assert loaded.settings.fixation_task.accuracy_task_enabled is True
+    assert loaded.settings.fixation_task.participant_tutorial_enabled is True
     assert loaded.settings.fixation_task.target_count_min == 8
     assert loaded.settings.fixation_task.target_count_max == 13
     assert loaded.settings.fixation_task.target_duration_ms == 300

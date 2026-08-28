@@ -65,6 +65,10 @@ This phase should establish:
 - provide a manual group-summary workbook export from the participant summary rows,
   excluding rows where `Include In Analysis` is `N` from aggregate metrics while
   keeping those rows visible for filtering/audit
+- provide a read-only pooled fixation-data query from the active project's condition
+  history, sharing participant-session inclusion and weighting semantics without
+  regenerating summaries or changing project data, plus an explicit-path Excel writer
+  for the already loaded typed result
 - preserve clear separation from GUI code
 
 ## Restrictions
@@ -99,6 +103,7 @@ Even if the exporter is skeletal in this phase, define a stable shape for:
 - project-level `logs/participant_summary.csv`
 - project-level `logs/participant_summary.xlsx`
 - manual group summary workbook exports, defaulting to `group_summary.xlsx`
+- manual fixation task accuracy workbook exports to a user-selected `.xlsx` path
 - app-selected run export mode: full writes detailed `runs/` artifacts, compact writes
   only project-level summary logs
 - full task sessions write `task_responses.csv` and per-run append-only

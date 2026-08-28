@@ -13,11 +13,20 @@ class StrEnum(str, Enum):
 
 
 class SchemaVersion(StrEnum):
-    """Supported persisted schema versions."""
+    """Supported schema versions shared by unchanged persisted contracts."""
 
     V1 = "1.0.0"
     V1_1 = "1.1.0"
     V1_2 = "1.2.0"
+
+
+class ProjectSchemaVersion(StrEnum):
+    """Supported editable project-file schema versions."""
+
+    V1 = "1.0.0"
+    V1_1 = "1.1.0"
+    V1_2 = "1.2.0"
+    V1_3 = "1.3.0"
 
 
 class DutyCycleMode(StrEnum):

@@ -523,16 +523,23 @@ def test_schema_1_1_migrates_to_empty_task_collections(sample_project) -> None:
     payload = sample_project.model_dump(mode="json")
     payload["schema_version"] = "1.1.0"
     payload.pop("task_modules")
+    payload["settings"]["fixation_task"]["enabled"] = False
     for condition in payload["conditions"]:
         condition.pop("pre_task_bindings")
         condition.pop("post_task_bindings")
 
     migrated = migrate_project_payload(payload)
 
-    assert migrated.schema_version.value == "1.2.0"
+    assert migrated.schema_version.value == "1.3.0"
+    assert migrated.settings.fixation_task.enabled is True
+    assert migrated.settings.fixation_task.accuracy_task_enabled is True
+    assert migrated.settings.fixation_task.participant_tutorial_enabled is True
     assert migrated.task_modules == []
     assert migrated.conditions[0].pre_task_bindings == []
     assert migrated.conditions[0].post_task_bindings == []
+    assert payload["settings"]["fixation_task"]["enabled"] is False
+    assert payload["settings"]["fixation_task"]["accuracy_task_enabled"] is False
+    assert payload["settings"]["fixation_task"]["participant_tutorial_enabled"] is False
 
 
 def test_project_validation_reports_missing_task_binding(sample_project) -> None:
