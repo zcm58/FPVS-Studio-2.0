@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
 from PyInstaller.utils.hooks import (
     collect_data_files,
@@ -52,6 +52,22 @@ def _copy_metadata(distribution_name: str) -> list[tuple[str, str]]:
         raise RuntimeError(
             f"Could not copy PyInstaller package metadata for {distribution_name}."
         ) from error
+
+
+def _is_host_icu_binary(binary: tuple[str, str, str]) -> bool:
+    """Reject foreign ICU DLLs resolved from the release host's PATH.
+
+    Qt6Core intentionally uses the unversioned ICU shim supplied by supported
+    Windows versions. A third-party ``icuuc.dll`` discovered on PATH can export
+    only version-suffixed symbols and make the frozen QtWidgets import fail.
+    Its top-level ICU data DLL is unused once the foreign shim is removed.
+    """
+
+    destination = PureWindowsPath(binary[0])
+    if len(destination.parts) != 1:
+        return False
+    name = destination.name.lower()
+    return name == "icuuc.dll" or (name.startswith("icudt") and name.endswith(".dll"))
 
 
 hiddenimports = []
@@ -120,6 +136,7 @@ a = Analysis(
     ],
     noarchive=False,
 )
+a.binaries = [binary for binary in a.binaries if not _is_host_icu_binary(binary)]
 pyz = PYZ(a.pure)
 
 exe = EXE(

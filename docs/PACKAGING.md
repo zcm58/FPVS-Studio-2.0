@@ -104,6 +104,11 @@ If PyInstaller reports multiple Qt bindings, keep `PySide6` and remove or exclud
 unrelated Qt bindings such as `PyQt5` or `PyQt6` from the build environment. The checked
 in spec already excludes those bindings for the local build.
 
+The spec also removes top-level `icuuc.dll` and `icudt*.dll` files discovered through
+the build host's `PATH`. On supported Windows versions, Qt uses the operating system's
+unversioned ICU shim. Bundling an unrelated application's version-suffixed ICU runtime
+can prevent `PySide6.QtWidgets` from loading even though PyInstaller completes.
+
 PsychoPy loads visual primitives and the runtime window backend dynamically at launch
 time. The checked-in PyInstaller spec collects `psychopy.visual` submodules and
 explicitly includes `psychopy.visual.backends.pygletbackend`,

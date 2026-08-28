@@ -86,6 +86,13 @@ def test_pyinstaller_includes_psychopy_visual_lazy_imports() -> None:
     assert "Could not copy PyInstaller package metadata" in PYINSTALLER_SPEC_TEXT
 
 
+def test_pyinstaller_rejects_path_resolved_host_icu_dlls() -> None:
+    assert "_is_host_icu_binary" in PYINSTALLER_SPEC_TEXT
+    assert 'name == "icuuc.dll"' in PYINSTALLER_SPEC_TEXT
+    assert 'name.startswith("icudt")' in PYINSTALLER_SPEC_TEXT
+    assert "a.binaries = [" in PYINSTALLER_SPEC_TEXT
+
+
 def test_bundled_open_sans_font_and_license_are_packaged_assets() -> None:
     font_path = bundled_task_font_path("Open Sans")
 
