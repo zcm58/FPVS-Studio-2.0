@@ -1,4 +1,4 @@
-"""Registered Qt coverage for the read-only fixation-cross data view."""
+"""Registered Qt coverage for the fixation-task accuracy view and export."""
 
 from __future__ import annotations
 
@@ -12,9 +12,11 @@ from tests.gui.helpers import assert_visible_children_within_parent, open_create
 from fpvs_studio.gui.controller import StudioController
 from fpvs_studio.gui.fixation_cross_data_dialog import FixationCrossDataDialog
 from fpvs_studio.runtime.fixation_report import (
+    FIXATION_TASK_ACCURACY_FILENAME,
     FixationConditionSummary,
     FixationCrossDataSummary,
     FixationDataError,
+    FixationExportError,
 )
 
 
@@ -105,6 +107,13 @@ def _deferred_dialog(qtbot, tmp_path: Path, monkeypatch) -> FixationCrossDataDia
     return dialog
 
 
+def _populated_dialog(qtbot, tmp_path: Path, monkeypatch) -> FixationCrossDataDialog:
+    dialog = _deferred_dialog(qtbot, tmp_path, monkeypatch)
+    _DeferredBackgroundTask.instances[0].complete_successfully(_summary())
+    assert dialog.state_name == "populated"
+    return dialog
+
+
 def test_view_menu_order_and_action_load_active_project(
     qtbot,
     controller: StudioController,
@@ -133,13 +142,18 @@ def test_view_menu_order_and_action_load_active_project(
         "View",
         "Tools",
     ]
-    assert [action.text() for action in window.view_menu.actions()] == ["Fixation Cross Data..."]
+    assert [action.text() for action in window.view_menu.actions()] == [
+        "Fixation Task Accuracy..."
+    ]
 
     window.fixation_cross_data_action.trigger()
 
     dialog = window._fixation_cross_data_dialog
     assert dialog is not None
     assert dialog.isVisible()
+    assert dialog.windowTitle() == "Fixation Task Accuracy — FPVS Studio"
+    assert dialog.data_card.title_label.text() == "Fixation Task Accuracy"
+    assert dialog.export_button.text() == "Export Excel..."
     assert loaded_roots == [document.project_root]
     assert dialog.state_name == "no_data"
 
@@ -156,8 +170,10 @@ def test_dialog_shows_loading_then_populated_data_without_clipping(
     assert dialog.width() == 800
     assert dialog.height() == 520
     assert dialog.state_name == "loading"
-    assert dialog.state_title_label.text() == "Loading fixation data..."
+    assert dialog.state_title_label.text() == "Loading fixation task accuracy..."
     assert dialog.refresh_button.isEnabled() is False
+    assert dialog.export_button.isEnabled() is False
+    assert dialog.close_button.isEnabled() is False
     assert len(_DeferredBackgroundTask.instances) == 1
     assert _DeferredBackgroundTask.instances[0].started is True
     QApplication.processEvents()
@@ -188,6 +204,8 @@ def test_dialog_shows_loading_then_populated_data_without_clipping(
     assert dialog.conditions_table.item(0, 2).text() == "12 / 16"
     assert dialog.conditions_table.item(0, 3).text() == "75.0%"
     assert dialog.refresh_button.isEnabled()
+    assert dialog.export_button.isEnabled()
+    assert dialog.close_button.isEnabled()
     assert_visible_children_within_parent(dialog)
 
 
@@ -206,6 +224,7 @@ def test_dialog_treats_missing_or_zero_target_history_as_no_data(
     assert "fixation targets" in dialog.state_detail_label.text()
     assert dialog.refresh_button.text() == "Refresh"
     assert dialog.refresh_button.isEnabled()
+    assert dialog.export_button.isEnabled() is False
     dialog.resize(720, 480)
     QApplication.processEvents()
     assert_visible_children_within_parent(dialog)
@@ -228,6 +247,7 @@ def test_dialog_keeps_load_errors_recoverable_with_retry(
     assert "project was not changed" in dialog.state_detail_label.text()
     assert dialog.refresh_button.text() == "Retry"
     assert dialog.refresh_button.isEnabled()
+    assert dialog.export_button.isEnabled() is False
     dialog.resize(720, 480)
     QApplication.processEvents()
     assert_visible_children_within_parent(dialog)
@@ -237,6 +257,148 @@ def test_dialog_keeps_load_errors_recoverable_with_retry(
     assert len(_DeferredBackgroundTask.instances) == 2
     assert dialog.state_name == "loading"
     assert dialog.refresh_button.isEnabled() is False
+    _DeferredBackgroundTask.instances[1].complete_successfully(None)
+
+
+def test_excel_export_chooser_cancel_has_no_side_effects(
+    qtbot,
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    dialog = _populated_dialog(qtbot, tmp_path, monkeypatch)
+    export_calls: list[tuple[FixationCrossDataSummary, Path]] = []
+    monkeypatch.setattr(
+        "fpvs_studio.gui.fixation_cross_data_dialog.QFileDialog.getSaveFileName",
+        lambda *_args, **_kwargs: ("", ""),
+    )
+    monkeypatch.setattr(
+        "fpvs_studio.gui.fixation_cross_data_dialog.write_fixation_task_accuracy_xlsx",
+        lambda summary, path: export_calls.append((summary, path)) or path,
+    )
+    task_count = len(_DeferredBackgroundTask.instances)
+
+    dialog.export_button.click()
+
+    assert len(_DeferredBackgroundTask.instances) == task_count
+    assert export_calls == []
+    assert dialog.export_state_name == "idle"
+    assert dialog.status_badge.text() == "Data Ready"
+    assert dialog.export_button.isEnabled()
+    assert dialog.state_stack.currentWidget() is dialog.results_page
+
+
+def test_excel_export_uses_selected_path_and_reports_async_success(
+    qtbot,
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    dialog = _populated_dialog(qtbot, tmp_path, monkeypatch)
+    summary = dialog._summary
+    assert summary is not None
+    selected_path = (
+        tmp_path
+        / "a-very-long-research-export-folder-name-for-tooltip-coverage"
+        / "pooled-fixation-task-accuracy"
+    )
+    chooser_calls: list[tuple[str, str, str]] = []
+    export_calls: list[tuple[FixationCrossDataSummary, Path]] = []
+
+    def _select_export_path(_parent, title: str, initial: str, file_filter: str):
+        chooser_calls.append((title, initial, file_filter))
+        return str(selected_path), "Excel Workbooks (*.xlsx)"
+
+    def _export(loaded_summary: FixationCrossDataSummary, path: Path) -> Path:
+        export_calls.append((loaded_summary, path))
+        return path.with_suffix(".xlsx")
+
+    monkeypatch.setattr(
+        "fpvs_studio.gui.fixation_cross_data_dialog.QFileDialog.getSaveFileName",
+        _select_export_path,
+    )
+    monkeypatch.setattr(
+        "fpvs_studio.gui.fixation_cross_data_dialog.write_fixation_task_accuracy_xlsx",
+        _export,
+    )
+
+    dialog.export_button.click()
+
+    assert chooser_calls == [
+        (
+            "Export Fixation Task Accuracy",
+            str(tmp_path / FIXATION_TASK_ACCURACY_FILENAME),
+            "Excel Workbooks (*.xlsx);;All Files (*)",
+        )
+    ]
+    assert len(_DeferredBackgroundTask.instances) == 2
+    export_task = _DeferredBackgroundTask.instances[1]
+    assert export_task.started is True
+    assert dialog.is_exporting
+    assert dialog.is_busy
+    assert dialog.export_state_name == "pending"
+    assert dialog.status_badge.text() == "Exporting Excel"
+    assert dialog.export_button.isEnabled() is False
+    assert dialog.refresh_button.isEnabled() is False
+    assert dialog.close_button.isEnabled() is False
+    assert dialog.state_stack.currentWidget() is dialog.results_page
+    dialog.resize(720, 480)
+    QApplication.processEvents()
+    assert dialog.width() == 720
+    assert dialog.height() == 480
+    assert_visible_children_within_parent(dialog)
+
+    close_event = QCloseEvent()
+    dialog.closeEvent(close_event)
+    assert close_event.isAccepted() is False
+
+    actual_path = export_task.callback()
+    assert export_calls == [(summary, selected_path)]
+    assert actual_path == selected_path.with_suffix(".xlsx")
+    export_task.complete_successfully(actual_path)
+
+    assert dialog.is_exporting is False
+    assert dialog.export_state_name == "success"
+    assert dialog.status_badge.text() == "Excel Exported"
+    assert dialog.export_path_label.toolTip() == str(actual_path)
+    assert "exported successfully" in dialog.export_feedback_label.text().lower()
+    assert dialog.export_button.isEnabled()
+    assert dialog.refresh_button.isEnabled()
+    assert dialog.close_button.isEnabled()
+    QApplication.processEvents()
+    assert_visible_children_within_parent(dialog)
+
+
+def test_excel_export_error_keeps_loaded_results_and_allows_retry(
+    qtbot,
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    dialog = _populated_dialog(qtbot, tmp_path, monkeypatch)
+    selected_path = tmp_path / "blocked-export.xlsx"
+    monkeypatch.setattr(
+        "fpvs_studio.gui.fixation_cross_data_dialog.QFileDialog.getSaveFileName",
+        lambda *_args, **_kwargs: (str(selected_path), "Excel Workbooks (*.xlsx)"),
+    )
+
+    dialog.export_button.click()
+    _DeferredBackgroundTask.instances[1].fail(
+        FixationExportError("The selected workbook could not be written.")
+    )
+
+    assert dialog.export_state_name == "error"
+    assert dialog.status_badge.text() == "Export Failed"
+    assert "could not be written" in dialog.export_feedback_label.text()
+    assert "still available" in dialog.export_feedback_label.text()
+    assert dialog.state_name == "populated"
+    assert dialog.state_stack.currentWidget() is dialog.results_page
+    assert dialog.conditions_table.rowCount() == 2
+    assert dialog.export_button.isEnabled()
+    assert dialog.refresh_button.isEnabled()
+    assert dialog.close_button.isEnabled()
+    dialog.resize(720, 480)
+    QApplication.processEvents()
+    assert dialog.width() == 720
+    assert dialog.height() == 480
+    assert_visible_children_within_parent(dialog)
 
 
 def test_fixation_data_action_is_disabled_during_bundle_processing(
@@ -260,7 +422,7 @@ def test_fixation_data_action_is_disabled_during_bundle_processing(
     assert window.fixation_cross_data_action.isEnabled()
 
 
-def test_active_fixation_load_blocks_window_close_and_project_handoff(
+def test_active_fixation_tasks_block_window_close_and_project_handoff(
     qtbot,
     controller: StudioController,
     tmp_path: Path,
@@ -295,11 +457,34 @@ def test_active_fixation_load_blocks_window_close_and_project_handoff(
     assert close_event.isAccepted() is False
     assert open_requests == []
     assert [title for title, _message in information_messages] == [
-        "Fixation Data Loading",
-        "Fixation Data Loading",
+        "Fixation Accuracy Loading",
+        "Fixation Accuracy Loading",
     ]
 
-    _DeferredBackgroundTask.instances[0].complete_successfully(None)
+    _DeferredBackgroundTask.instances[0].complete_successfully(_summary())
+    dialog = window._fixation_cross_data_dialog
+    assert dialog is not None
+    selected_path = tmp_path / "handoff-guard.xlsx"
+    monkeypatch.setattr(
+        "fpvs_studio.gui.fixation_cross_data_dialog.QFileDialog.getSaveFileName",
+        lambda *_args, **_kwargs: (str(selected_path), "Excel Workbooks (*.xlsx)"),
+    )
+    dialog.export_button.click()
+
+    export_close_event = QCloseEvent()
+    window.closeEvent(export_close_event)
+    window._request_open_project()
+
+    assert export_close_event.isAccepted() is False
+    assert open_requests == []
+    assert [title for title, _message in information_messages] == [
+        "Fixation Accuracy Loading",
+        "Fixation Accuracy Loading",
+        "Fixation Accuracy Export",
+        "Fixation Accuracy Export",
+    ]
+
+    _DeferredBackgroundTask.instances[1].complete_successfully(selected_path)
     window._request_open_project()
 
     assert open_requests == [True]

@@ -530,7 +530,7 @@ class StudioMainWindow(QMainWindow):
         self.image_resizer_action = QAction("Image Resizer", self)
         self.image_resizer_action.setObjectName("image_resizer_action")
         self.image_resizer_action.triggered.connect(self.show_image_resizer)
-        self.fixation_cross_data_action = QAction("Fixation Cross Data...", self)
+        self.fixation_cross_data_action = QAction("Fixation Task Accuracy...", self)
         self.fixation_cross_data_action.setObjectName("fixation_cross_data_action")
         self.fixation_cross_data_action.triggered.connect(self.show_fixation_cross_data)
 
@@ -577,15 +577,24 @@ class StudioMainWindow(QMainWindow):
 
     def _allow_project_handoff_during_fixation_load(self) -> bool:
         dialog = self._fixation_cross_data_dialog
-        if dialog is None or not dialog.is_loading:
+        if dialog is None or not dialog.is_busy:
             return True
+        if dialog.is_exporting:
+            title = "Fixation Accuracy Export"
+            message = (
+                "FPVS Studio is still exporting fixation task accuracy. Please wait "
+                "for the workbook to finish before closing or opening another project."
+            )
+        else:
+            title = "Fixation Accuracy Loading"
+            message = (
+                "FPVS Studio is still loading fixation task accuracy. Please wait for "
+                "the view to finish before closing or opening another project."
+            )
         QMessageBox.information(
             self,
-            "Fixation Data Loading",
-            (
-                "FPVS Studio is still loading fixation data. Please wait for the "
-                "view to finish before closing or opening another project."
-            ),
+            title,
+            message,
         )
         dialog.show()
         dialog.raise_()

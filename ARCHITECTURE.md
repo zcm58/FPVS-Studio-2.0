@@ -26,8 +26,8 @@ lazily only inside the engine package.
 - `src/fpvs_studio/tools/`: reserved for Studio-native utilities. Current Image Resizer
   UI remains under the GUI package and delegates to preprocessing.
 - `src/fpvs_studio/runtime/`: launch settings, preflight, session orchestration,
-  participant history, read-only fixation reporting, fixation scoring, trigger
-  coordination, and execution exports.
+  participant history, fixation reporting and explicit-path Excel export, fixation
+  scoring, trigger coordination, and execution exports.
 - `src/fpvs_studio/engines/`: presentation interface, lazy PsychoPy implementation,
   condition-local GPU-ready resource ownership, and Windows graphics-budget probing.
 - `src/fpvs_studio/triggers/`: optional hardware adapters used by runtime. Normal event

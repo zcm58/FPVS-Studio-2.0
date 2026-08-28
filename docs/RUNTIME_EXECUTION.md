@@ -263,9 +263,9 @@ Scoring semantics for the fixation accuracy task:
   researcher can press Space to continue without tutorial completion or Escape to abort,
   and continuing records a session warning
 
-## Fixation data view query
+## Fixation task accuracy query and export
 
-The GUI-neutral runtime reporting query for `View > Fixation Cross Data...` reads only
+The GUI-neutral runtime reporting query for `View > Fixation Task Accuracy...` reads only
 the active project's `logs/session_condition_history.csv`. The caller supplies the
 active project root, and the service resolves its `logs/` directory through the shared
 `core.paths.logs_dir` project-path helper. It does not inspect detailed `runs/` folders,
@@ -292,7 +292,18 @@ Missing history and history with no target-bearing included sessions return the 
 error result rather than changing the file. A populated result reports the distinct
 included participant-session count and condition rows with included-session and
 hits/targets totals. This query is a read-only projection: it changes neither fixation
-scoring nor CSV/XLSX schemas, group-summary export, or either run-export mode.
+scoring nor existing session/group CSV/XLSX schemas or either run-export mode.
+
+The dialog can pass the already loaded typed summary to the runtime Excel writer after
+the user selects a destination. The writer creates one flat `Fixation Task Accuracy`
+worksheet with a single header row, one overall row, and one row per condition. Counts,
+accuracy, and reaction time remain numeric with units in their headers; identifiers and
+condition names remain literal text even when they resemble formulas. The full table has
+column filters, all populated cells are centered and wrapped, and colors and fills remain
+Excel defaults; column widths, number formats, condition-row heights, and a frozen header
+improve navigation without encoding data. When the selected filename does not already
+end in `.xlsx`, the writer appends `.xlsx` without replacing another suffix. It touches
+only that explicit destination and never rewrites project logs or summary artifacts.
 
 ## Exports
 

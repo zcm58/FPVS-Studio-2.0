@@ -1,8 +1,8 @@
-"""Read-only fixation-task reporting from one active project's compact history.
+"""GUI-neutral fixation-task reporting and explicit workbook export.
 
-The service resolves the canonical project log path, applies the participant-summary
-session inclusion rules, and returns immutable aggregation results. It never refreshes
-or rewrites project exports.
+The query resolves the canonical project log path, applies the participant-summary
+session inclusion rules, and returns immutable aggregation results. The writer exports
+those results only to its caller-selected path. Neither operation changes project logs.
 """
 
 from __future__ import annotations
@@ -12,6 +12,11 @@ import math
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
+
+from openpyxl import Workbook  # type: ignore[import-untyped]
+from openpyxl.styles import Alignment  # type: ignore[import-untyped]
+from openpyxl.utils import get_column_letter  # type: ignore[import-untyped]
 
 from fpvs_studio.core.paths import logs_dir
 from fpvs_studio.runtime.session_export import (
@@ -23,11 +28,29 @@ from fpvs_studio.runtime.session_export import (
 )
 
 __all__ = [
+    "FIXATION_TASK_ACCURACY_FILENAME",
+    "FIXATION_TASK_ACCURACY_HEADER",
+    "FIXATION_TASK_ACCURACY_SHEET_NAME",
     "FixationConditionSummary",
     "FixationCrossDataSummary",
     "FixationDataError",
+    "FixationExportError",
     "load_fixation_cross_data",
+    "write_fixation_task_accuracy_xlsx",
 ]
+
+FIXATION_TASK_ACCURACY_FILENAME = "fixation_task_accuracy.xlsx"
+FIXATION_TASK_ACCURACY_SHEET_NAME = "Fixation Task Accuracy"
+FIXATION_TASK_ACCURACY_HEADER = (
+    "Row Type",
+    "Condition ID",
+    "Condition",
+    "Included Sessions",
+    "Hits",
+    "Targets",
+    "Accuracy (%)",
+    "Mean Reaction Time (ms)",
+)
 
 _REQUIRED_HISTORY_COLUMNS = frozenset(
     {
@@ -45,10 +68,18 @@ _REQUIRED_HISTORY_COLUMNS = frozenset(
 )
 _TRUE_VALUES = frozenset({"1", "true", "yes", "y"})
 _FALSE_VALUES = frozenset({"", "0", "false", "no", "n"})
+_CONDITION_NAME_COLUMN_INDEX = 3
+_CONDITION_NAME_WRAP_WIDTH = 60
+_BASE_EXCEL_ROW_HEIGHT = 15.0
+_MAX_WRAPPED_ROW_LINES = 6
 
 
 class FixationDataError(RuntimeError):
     """Raised when the active project's fixation history cannot be safely reported."""
+
+
+class FixationExportError(RuntimeError):
+    """Raised when a fixation-task accuracy workbook cannot be written."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -74,6 +105,116 @@ class FixationCrossDataSummary:
     accuracy_percent: float
     mean_rt_ms: float | None
     conditions: tuple[FixationConditionSummary, ...]
+
+
+def write_fixation_task_accuracy_xlsx(
+    summary: FixationCrossDataSummary,
+    output_path: Path,
+) -> Path:
+    """Write ``summary`` as a flat, machine-readable Excel table.
+
+    The caller owns output-path selection. This function writes only the selected
+    workbook and never reads or updates project logs.
+    """
+
+    path = _fixation_accuracy_xlsx_path(output_path)
+    workbook = Workbook()
+    worksheet = workbook.active
+    worksheet.title = FIXATION_TASK_ACCURACY_SHEET_NAME
+    worksheet.append(FIXATION_TASK_ACCURACY_HEADER)
+    worksheet.append(_fixation_accuracy_overall_row(summary))
+    for condition in summary.conditions:
+        worksheet.append(_fixation_accuracy_condition_row(condition))
+
+    worksheet.auto_filter.ref = worksheet.dimensions
+    worksheet.freeze_panes = "A2"
+    _format_fixation_accuracy_worksheet(worksheet)
+
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        workbook.save(path)
+    except OSError as exc:
+        raise FixationExportError(
+            "The fixation task accuracy workbook could not be saved."
+        ) from exc
+    return path
+
+
+def _fixation_accuracy_overall_row(
+    summary: FixationCrossDataSummary,
+) -> tuple[object, ...]:
+    return (
+        "Overall",
+        None,
+        None,
+        summary.included_session_count,
+        summary.hit_count,
+        summary.total_targets,
+        summary.accuracy_percent,
+        summary.mean_rt_ms,
+    )
+
+
+def _fixation_accuracy_condition_row(
+    summary: FixationConditionSummary,
+) -> tuple[object, ...]:
+    return (
+        "Condition",
+        summary.condition_id,
+        summary.condition_name,
+        summary.included_session_count,
+        summary.hit_count,
+        summary.total_targets,
+        summary.accuracy_percent,
+        summary.mean_rt_ms,
+    )
+
+
+def _format_fixation_accuracy_worksheet(worksheet: Any) -> None:
+    centered = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    for row in worksheet.iter_rows():
+        for cell in row:
+            if cell.value is not None:
+                cell.alignment = centered
+            if isinstance(cell.value, str):
+                cell.data_type = "s"
+            if cell.row > 1 and cell.column in {7, 8} and isinstance(
+                cell.value, (int, float)
+            ):
+                cell.number_format = "0.0"
+
+    for column_index, cells in enumerate(worksheet.iter_cols(), start=1):
+        max_text_length = max(
+            (len(str(cell.value)) for cell in cells if cell.value is not None),
+            default=0,
+        )
+        worksheet.column_dimensions[get_column_letter(column_index)].width = min(
+            max(max_text_length + 2, 12),
+            60,
+        )
+
+    for row_index in range(3, worksheet.max_row + 1):
+        condition_name = worksheet.cell(
+            row=row_index,
+            column=_CONDITION_NAME_COLUMN_INDEX,
+        ).value
+        if not isinstance(condition_name, str):
+            continue
+        wrapped_line_count = sum(
+            max(1, math.ceil(len(line) / _CONDITION_NAME_WRAP_WIDTH))
+            for line in (condition_name.splitlines() or [""])
+        )
+        if wrapped_line_count > 1:
+            worksheet.row_dimensions[row_index].height = _BASE_EXCEL_ROW_HEIGHT * min(
+                wrapped_line_count,
+                _MAX_WRAPPED_ROW_LINES,
+            )
+
+
+def _fixation_accuracy_xlsx_path(output_path: Path) -> Path:
+    if output_path.suffix.lower() == ".xlsx":
+        return output_path
+    return output_path.parent / f"{output_path.name}.xlsx"
 
 
 def load_fixation_cross_data(project_root: Path) -> FixationCrossDataSummary | None:

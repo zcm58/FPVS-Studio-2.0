@@ -5,13 +5,192 @@ from dataclasses import FrozenInstanceError
 from pathlib import Path
 
 import pytest
+from openpyxl import load_workbook  # type: ignore[import-untyped]
 
 from fpvs_studio.runtime.fixation_report import (
+    FIXATION_TASK_ACCURACY_FILENAME,
+    FIXATION_TASK_ACCURACY_HEADER,
+    FIXATION_TASK_ACCURACY_SHEET_NAME,
+    FixationConditionSummary,
     FixationCrossDataSummary,
     FixationDataError,
+    FixationExportError,
     load_fixation_cross_data,
+    write_fixation_task_accuracy_xlsx,
 )
 from fpvs_studio.runtime.session_export import SESSION_CONDITION_HISTORY_HEADER
+
+
+def test_write_fixation_task_accuracy_xlsx_preserves_flat_values_and_default_fills(
+    tmp_path: Path,
+) -> None:
+    summary = _fixation_summary()
+
+    output_path = write_fixation_task_accuracy_xlsx(
+        summary,
+        tmp_path / "exports" / "fixation-results.xlsx",
+    )
+
+    assert output_path == tmp_path / "exports" / "fixation-results.xlsx"
+    workbook = load_workbook(output_path)
+    assert workbook.sheetnames == [FIXATION_TASK_ACCURACY_SHEET_NAME]
+    worksheet = workbook[FIXATION_TASK_ACCURACY_SHEET_NAME]
+    assert worksheet.max_row == 4
+    assert worksheet.max_column == len(FIXATION_TASK_ACCURACY_HEADER)
+    assert [cell.value for cell in worksheet[1]] == list(FIXATION_TASK_ACCURACY_HEADER)
+    assert list(worksheet.values)[1:] == [
+        ("Overall", None, None, 3, 30, 40, 75, 312.5),
+        ("Condition", "condition-a", "Faces", 3, 8, 10, 80, 300),
+        ("Condition", "condition-b", "Words", 2, 22, 30, 73.33333333333333, None),
+    ]
+    assert worksheet.auto_filter.ref == "A1:H4"
+    assert worksheet.freeze_panes == "A2"
+
+    numeric_cells = ("D2", "E2", "F2", "G2", "H2", "D3", "E3", "F3", "G3", "H3")
+    for coordinate in numeric_cells:
+        cell = worksheet[coordinate]
+        assert isinstance(cell.value, (int, float))
+        assert cell.data_type == "n"
+
+    for coordinate in ("G2", "H2", "G3", "H3", "G4"):
+        assert worksheet[coordinate].number_format == "0.0"
+    for coordinate in ("D2", "E2", "F2", "D3", "E3", "F3"):
+        assert worksheet[coordinate].number_format == "General"
+
+    for row in worksheet.iter_rows():
+        for cell in row:
+            if cell.value is None:
+                continue
+            assert cell.alignment.horizontal == "center"
+            assert cell.alignment.vertical == "center"
+            assert cell.alignment.wrap_text is True
+            if isinstance(cell.value, str):
+                assert cell.data_type == "s"
+            assert cell.fill.fill_type is None
+            assert cell.fill.fgColor.rgb == "00000000"
+            assert cell.fill.bgColor.rgb == "00000000"
+
+
+def test_write_fixation_task_accuracy_xlsx_adds_suffix_without_changing_logs(
+    tmp_path: Path,
+) -> None:
+    project_root = tmp_path / "project"
+    history_path = project_root / "logs" / "session_condition_history.csv"
+    history_path.parent.mkdir(parents=True)
+    history_path.write_text("history stays untouched\n", encoding="utf-8")
+    original_history = history_path.read_bytes()
+
+    output_path = write_fixation_task_accuracy_xlsx(
+        _fixation_summary(),
+        project_root / "exports" / "accuracy",
+    )
+
+    assert output_path == project_root / "exports" / "accuracy.xlsx"
+    assert output_path.is_file()
+    assert history_path.read_bytes() == original_history
+    assert not (project_root / "logs" / "participant_summary.csv").exists()
+    assert not (project_root / "logs" / "participant_summary.xlsx").exists()
+
+
+def test_write_fixation_task_accuracy_xlsx_appends_after_an_alternate_suffix(
+    tmp_path: Path,
+) -> None:
+    selected_path = tmp_path / "report.csv"
+    selected_path.write_text("selected file remains", encoding="utf-8")
+    replacement_collision = tmp_path / "report.xlsx"
+    replacement_collision.write_text("existing workbook remains", encoding="utf-8")
+
+    output_path = write_fixation_task_accuracy_xlsx(_fixation_summary(), selected_path)
+
+    assert output_path == tmp_path / "report.csv.xlsx"
+    assert output_path.is_file()
+    assert selected_path.read_text(encoding="utf-8") == "selected file remains"
+    assert replacement_collision.read_text(encoding="utf-8") == "existing workbook remains"
+
+
+def test_write_fixation_task_accuracy_xlsx_keeps_formula_like_names_as_wrapped_text(
+    tmp_path: Path,
+) -> None:
+    condition_id = "=SUM(1, 2)"
+    condition_name = "=" + ("A long literal condition name for export verification " * 4)
+    summary = FixationCrossDataSummary(
+        included_session_count=1,
+        total_targets=10,
+        hit_count=8,
+        accuracy_percent=80.0,
+        mean_rt_ms=300.0,
+        conditions=(
+            FixationConditionSummary(
+                condition_id=condition_id,
+                condition_name=condition_name,
+                included_session_count=1,
+                total_targets=10,
+                hit_count=8,
+                accuracy_percent=80.0,
+                mean_rt_ms=300.0,
+            ),
+        ),
+    )
+    output_path = write_fixation_task_accuracy_xlsx(summary, tmp_path / "literal-text")
+
+    worksheet = load_workbook(output_path)[FIXATION_TASK_ACCURACY_SHEET_NAME]
+    assert worksheet["B3"].value == condition_id
+    assert worksheet["B3"].data_type == "s"
+    assert worksheet["C3"].value == condition_name
+    assert worksheet["C3"].data_type == "s"
+    assert worksheet["C3"].alignment.wrap_text is True
+    assert worksheet.row_dimensions[3].height is not None
+    assert worksheet.row_dimensions[3].height > 15.0
+    assert worksheet["C3"].fill.fill_type is None
+
+    data_only_worksheet = load_workbook(
+        output_path,
+        data_only=True,
+    )[FIXATION_TASK_ACCURACY_SHEET_NAME]
+    assert data_only_worksheet["B3"].value == condition_id
+    assert data_only_worksheet["C3"].value == condition_name
+
+
+def test_write_fixation_task_accuracy_xlsx_replaces_an_existing_workbook(
+    tmp_path: Path,
+) -> None:
+    output_path = tmp_path / FIXATION_TASK_ACCURACY_FILENAME
+    write_fixation_task_accuracy_xlsx(_fixation_summary(), output_path)
+    replacement = FixationCrossDataSummary(
+        included_session_count=1,
+        total_targets=2,
+        hit_count=1,
+        accuracy_percent=50.0,
+        mean_rt_ms=450.0,
+        conditions=(),
+    )
+
+    returned_path = write_fixation_task_accuracy_xlsx(replacement, output_path)
+
+    assert returned_path == output_path
+    worksheet = load_workbook(output_path)[FIXATION_TASK_ACCURACY_SHEET_NAME]
+    assert worksheet.max_row == 2
+    assert [cell.value for cell in worksheet[2]] == [
+        "Overall",
+        None,
+        None,
+        1,
+        1,
+        2,
+        50,
+        450,
+    ]
+
+
+def test_write_fixation_task_accuracy_xlsx_wraps_filesystem_errors(tmp_path: Path) -> None:
+    blocking_parent = tmp_path / "not-a-directory"
+    blocking_parent.write_text("occupied", encoding="utf-8")
+
+    with pytest.raises(FixationExportError, match="could not be saved"):
+        write_fixation_task_accuracy_xlsx(
+            _fixation_summary(),
+            blocking_parent / "accuracy",
+        )
 
 
 def test_load_fixation_cross_data_pools_repeated_runs_and_sessions_by_condition(
@@ -337,3 +516,33 @@ def _history_row(**overrides: str) -> dict[str, str]:
     )
     row.update(overrides)
     return row
+
+
+def _fixation_summary() -> FixationCrossDataSummary:
+    return FixationCrossDataSummary(
+        included_session_count=3,
+        total_targets=40,
+        hit_count=30,
+        accuracy_percent=75.0,
+        mean_rt_ms=312.5,
+        conditions=(
+            FixationConditionSummary(
+                condition_id="condition-a",
+                condition_name="Faces",
+                included_session_count=3,
+                total_targets=10,
+                hit_count=8,
+                accuracy_percent=80.0,
+                mean_rt_ms=300.0,
+            ),
+            FixationConditionSummary(
+                condition_id="condition-b",
+                condition_name="Words",
+                included_session_count=2,
+                total_targets=30,
+                hit_count=22,
+                accuracy_percent=73.33333333333333,
+                mean_rt_ms=None,
+            ),
+        ),
+    )

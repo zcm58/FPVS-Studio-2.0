@@ -224,8 +224,8 @@ The authoring window is organized around two user-facing modes:
     preview on the current display background
   - Review is a card-only decision point: users can `Save and Return Home` or
     `Return Home Without Saving`; returning without saving always asks for confirmation
-- `View > Fixation Cross Data...`
-  - opens a compact read-only view of the active project's pooled fixation-task results
+- `View > Fixation Task Accuracy...`
+  - opens a compact view of the active project's pooled fixation-task results
   - loads `logs/session_condition_history.csv` in the background through the runtime
     reporting boundary, keeping log parsing and aggregation out of GUI widgets
   - shows overall weighted accuracy, hit-weighted mean reaction time, included
@@ -237,6 +237,9 @@ The authoring window is organized around two user-facing modes:
   - groups renamed conditions under their stable condition identity and exposes long
     display names without clipping; detailed inclusion and weighting rules are defined
     in `RUNTIME_EXECUTION.md`
+  - `Export Excel...` opens the native save dialog and writes the currently displayed
+    summary to the selected `.xlsx` path in the background; cancelling makes no changes,
+    and export errors leave the loaded results available
 - `Tools > Image Resizer`
   - in-window utility for optimizing an arbitrary folder of source images
   - primary action is `Optimize Images for FPVS`
@@ -303,7 +306,7 @@ import, inspection, or materialization actions.
 
 The top-level menu order is `File`, `View`, `Tools`. The `File` menu groups
 manage-projects, `Import` and `Export` submenus, settings, and help/update actions with
-native separators. `View` starts with `Fixation Cross Data...`; the action is disabled
+native separators. `View` starts with `Fixation Task Accuracy...`; the action is disabled
 with other project actions during bundle processing. `Import > Project Bundle...` first
 shows a review dialog with bundle identity, manifest file count/size, the receiving
 project path, collision-safe naming guidance, and included/excluded content. Confirming
@@ -474,7 +477,8 @@ The current GUI supports:
   deterministic no-immediate-repeat behavior across consecutive compiled runs
 - checking for app updates from `File > Check for Updates`
 - reviewing the active project's pooled fixation accuracy and reaction-time history from
-  `View > Fixation Cross Data...` without modifying logs, scoring, or exports
+  `View > Fixation Task Accuracy...` without modifying logs or scoring, with an optional
+  Excel export written only to the user-selected destination
 - authoring multiple conditions
 - importing base and oddball image folders
 - authoring base and oddball word lists for word-based conditions
