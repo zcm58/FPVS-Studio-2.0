@@ -19,9 +19,20 @@ randomization so the planned order is deterministic for a given random order see
 
 ```text
 project.json -> ProjectFile
-ProjectFile + refresh_hz -> compile_session_plan(...) -> SessionPlan
+ProjectFile + refresh_hz + optional condition_ids -> compile_session_plan(...) -> SessionPlan
 SessionPlan -> runtime preflight -> runtime session flow -> engine
 ```
+
+When `condition_ids` is omitted, compilation includes every project condition. Passing
+a subset limits the compiled pool, but does not change session semantics: every selected
+condition still appears once per configured block, and its normal pre/post task
+bindings, timing, validation, preflight, and execution/export contracts remain in
+force. The GUI uses this input only for an accepted Experiment Test Mode launch; its
+selector defaults to all conditions and is not persisted in `ProjectFile` or app
+settings. No dedicated selector field is added to `RunSpec` or `SessionPlan`; the
+resulting ordinary plan simply records the entries that were compiled. Production GUI
+launches omit the subset and therefore include all conditions. The launch surface still
+validates the full project before it offers the test-mode selector.
 
 ## Main models
 
@@ -58,7 +69,11 @@ Task modules are project-owned, ordered declarative workflows. Conditions bind t
 to pre- or post-condition phases with one of three occurrence scopes: every session
 entry, the first occurrence of that condition, or its last occurrence. Compilation
 resolves each applicable binding into `TaskModuleSpec` and records deterministic item
-and questionnaire-option order without changing the embedded `RunSpec`.
+and questionnaire-option order without changing the embedded `RunSpec`. Each
+`TaskStep` also carries a closed Arial/Open Sans font-family choice into its
+`TaskStepSpec`; omitted values default to Arial so existing projects retain their
+rendering. This is an additive field in the existing schema `1.2.0` task/session
+contract, not a schema bump or a change to the `RunSpec` frame contract.
 
 Each module contains ordered task steps and may repeat as a group. This group repeat
 keeps workflows such as Creatine's choice-grid then timed-feedback pair interleaved.
@@ -130,9 +145,9 @@ Engines still consume one `RunSpec` at a time.
 
 Task clocks and responses stay outside the stream frame clock. A task cannot schedule
 an FPVS trigger, fixation target, or stimulus event. The engine renders one neutral
-compiled task step and returns neutral participant input; runtime owns repetition,
-validation, retries, bounded forward branching, aborts, and incremental response
-checkpointing.
+compiled task step and returns neutral participant input. Runtime preserves the
+compiled step font on `ResolvedTaskStep` while owning repetition, validation, retries,
+bounded forward branching, aborts, and incremental response checkpointing.
 
 ## Relationship to execution results
 

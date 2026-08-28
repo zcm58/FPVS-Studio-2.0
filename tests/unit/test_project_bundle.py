@@ -24,6 +24,7 @@ from fpvs_studio.core.serialization import load_project_file, save_project_file
 from fpvs_studio.core.task_models import (
     TaskBinding,
     TaskDisplayItem,
+    TaskFontFamily,
     TaskItemModality,
     TaskModule,
     TaskStep,
@@ -98,6 +99,7 @@ def test_project_bundle_preserves_task_definitions_and_assets(
                 TaskStep(
                     step_id="study",
                     kind=TaskStepKind.STUDY,
+                    font_family=TaskFontFamily.OPEN_SANS,
                     continue_key="space",
                     items=[
                         TaskDisplayItem(
@@ -120,6 +122,10 @@ def test_project_bundle_preserves_task_definitions_and_assets(
         assert "stimuli/task-assets/memory/apple.png" in archive.namelist()
     imported = import_project_bundle(bundle_path, tmp_path / "import-root")
     assert imported.project.task_modules[0].task_id == "memory"
+    assert (
+        imported.project.task_modules[0].steps[0].font_family
+        == TaskFontFamily.OPEN_SANS
+    )
     assert (
         imported.project_root / "stimuli" / "task-assets" / "memory" / "apple.png"
     ).is_file()

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from importlib import import_module
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
@@ -55,7 +56,12 @@ class DocumentRuntimeMixin:
 
         return condition_fixation_guidance(self._project, refresh_hz=refresh_hz)
 
-    def compile_session(self, *, refresh_hz: float) -> SessionPlan:
+    def compile_session(
+        self,
+        *,
+        refresh_hz: float,
+        condition_ids: Sequence[str] | None = None,
+    ) -> SessionPlan:
         """Compile the current project into a session plan."""
 
         self.ensure_unused_session_seed_for_launch()
@@ -67,6 +73,7 @@ class DocumentRuntimeMixin:
                 self._project,
                 refresh_hz=refresh_hz,
                 project_root=self._project_root,
+                condition_ids=(list(condition_ids) if condition_ids is not None else None),
             )
         except (CompileError, ValidationError, ValueError) as exc:
             raise DocumentError(str(exc)) from exc

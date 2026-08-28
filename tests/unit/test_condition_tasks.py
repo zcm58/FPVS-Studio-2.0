@@ -21,6 +21,7 @@ from fpvs_studio.core.task_models import (
     TaskBranchOperator,
     TaskBranchRule,
     TaskDisplayItem,
+    TaskFontFamily,
     TaskItemModality,
     TaskLayoutMode,
     TaskModule,
@@ -62,6 +63,7 @@ def test_task_models_support_exact_creatine_geometry_and_questionnaire() -> None
             TaskStep(
                 step_id="recognition",
                 kind=TaskStepKind.CHOICE_GRID,
+                font_family=TaskFontFamily.OPEN_SANS,
                 text="Select all 4",
                 layout_mode=TaskLayoutMode.EXACT,
                 items=[
@@ -131,6 +133,8 @@ def test_task_models_support_exact_creatine_geometry_and_questionnaire() -> None
     )
 
     assert module.repeat_count == 4
+    assert module.steps[0].font_family == TaskFontFamily.OPEN_SANS
+    assert module.steps[1].font_family == TaskFontFamily.ARIAL
     assert module.steps[0].items[0].x == -10
     assert module.steps[0].items[1].selectable is False
     assert [question.kind for question in module.steps[2].questions] == [
@@ -138,6 +142,47 @@ def test_task_models_support_exact_creatine_geometry_and_questionnaire() -> None
         TaskQuestionKind.LONG_TEXT,
         TaskQuestionKind.MULTIPLE_CHOICE,
     ]
+
+
+def test_task_font_family_rejects_unavailable_fonts() -> None:
+    with pytest.raises(ValidationError, match="font_family"):
+        TaskStep(
+            step_id="unsupported-font",
+            kind=TaskStepKind.INSTRUCTION,
+            continue_key="space",
+            font_family="Comic Sans MS",
+        )
+
+
+def test_task_step_without_font_field_defaults_to_arial() -> None:
+    payload = _instruction_module().model_dump(mode="json")
+    payload["steps"][0].pop("font_family")
+
+    reloaded = TaskModule.model_validate(payload)
+
+    assert reloaded.steps[0].font_family == TaskFontFamily.ARIAL
+
+
+def test_session_compilation_preserves_task_font_family(
+    sample_project,
+    sample_project_root: Path,
+) -> None:
+    module = _instruction_module()
+    module.steps[0].font_family = TaskFontFamily.OPEN_SANS
+    sample_project.task_modules = [module]
+    sample_project.conditions[0].pre_task_bindings = [
+        TaskBinding(task_id=module.task_id)
+    ]
+
+    plan = compile_session_plan(
+        sample_project,
+        refresh_hz=60.0,
+        project_root=sample_project_root,
+        random_seed=314,
+    )
+
+    compiled_step = plan.ordered_entries()[0].pre_tasks[0].steps[0]
+    assert compiled_step.font_family == TaskFontFamily.OPEN_SANS
 
 
 def test_exact_prompt_only_step_supports_psychopy_text_geometry() -> None:
@@ -613,6 +658,48 @@ def test_session_compiles_occurrence_scopes_and_deterministic_options(
         if entry.condition_id == condition.condition_id and entry.block_index == 0
     )
     assert first_order == second_entry.pre_tasks[0].steps[0].realized_question_option_orders
+
+
+def test_selected_condition_retains_first_every_and_last_task_occurrences(
+    multi_condition_project,
+    multi_condition_project_root: Path,
+) -> None:
+    project = multi_condition_project
+    project.settings.session.block_count = 3
+    first_module = _instruction_module("first-entry")
+    every_module = _instruction_module("every-entry")
+    last_module = _instruction_module("last-entry")
+    project.task_modules = [first_module, every_module, last_module]
+    condition = project.conditions[0]
+    condition.pre_task_bindings = [
+        TaskBinding(task_id="first-entry", occurrence=TaskOccurrence.FIRST_OCCURRENCE),
+        TaskBinding(task_id="every-entry", occurrence=TaskOccurrence.EVERY_ENTRY),
+    ]
+    condition.post_task_bindings = [
+        TaskBinding(task_id="last-entry", occurrence=TaskOccurrence.LAST_OCCURRENCE)
+    ]
+
+    plan = compile_session_plan(
+        project,
+        refresh_hz=60,
+        project_root=multi_condition_project_root,
+        random_seed=4242,
+        condition_ids=[condition.condition_id],
+    )
+    entries = plan.ordered_entries()
+
+    assert plan.total_runs == project.settings.session.block_count
+    assert all(block.condition_order == [condition.condition_id] for block in plan.blocks)
+    assert [[task.task_id for task in entry.pre_tasks] for entry in entries] == [
+        ["first-entry", "every-entry"],
+        ["every-entry"],
+        ["every-entry"],
+    ]
+    assert [[task.task_id for task in entry.post_tasks] for entry in entries] == [
+        [],
+        [],
+        ["last-entry"],
+    ]
 
 
 def test_task_authoring_does_not_change_run_spec(

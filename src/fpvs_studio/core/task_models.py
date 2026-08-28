@@ -123,6 +123,13 @@ class TaskLayoutMode(str, Enum):
     EXACT = "exact"
 
 
+class TaskFontFamily(str, Enum):
+    """Font families supported by the portable modular-task renderer."""
+
+    ARIAL = "Arial"
+    OPEN_SANS = "Open Sans"
+
+
 class TaskSubmissionMode(str, Enum):
     """Whether a response completes immediately or waits for an explicit submit."""
 
@@ -387,6 +394,7 @@ class TaskStep(TaskBaseModel):
     kind: TaskStepKind
     heading: str = ""
     text: str = ""
+    font_family: TaskFontFamily = TaskFontFamily.ARIAL
     prompt_x: float = 0.0
     prompt_y: float = 0.0
     prompt_unit: PresentationUnit = PresentationUnit.DEGREES

@@ -27,10 +27,13 @@ from tests.gui.helpers import (
 
 from fpvs_studio.core.enums import RunMode
 from fpvs_studio.core.execution import SessionExecutionSummary
+from fpvs_studio.core.session_plan import SessionPlan
 from fpvs_studio.gui.controller import StudioController
 from fpvs_studio.gui.run_page import (
     TEST_MODE_PARTICIPANT_NUMBER,
     ParticipantLaunchDetails,
+    TestModeLaunchConfirmationDialog,
+    TestModeLaunchSelection,
 )
 
 
@@ -219,13 +222,17 @@ def test_home_test_mode_acknowledgement_replaces_participant_prompt(
     monkeypatch,
 ) -> None:
     _, window = _open_created_project(controller, qtbot, tmp_path, "Home Test Mode")
+    window.document.create_condition(name="Faces")
+    selected_condition_id = window.document.create_condition(name="Word Recognition")
     window.document.set_experiment_test_mode_enabled(True)
-    acknowledgements: list[bool] = []
-    monkeypatch.setattr(
-        window,
-        "_confirm_test_mode_launch",
-        lambda: acknowledgements.append(True) or True,
-    )
+
+    def _accept_selected(dialog: TestModeLaunchConfirmationDialog) -> int:
+        selected_index = dialog.condition_combo.findData(selected_condition_id)
+        assert selected_index > 0
+        dialog.condition_combo.setCurrentIndex(selected_index)
+        return int(dialog.DialogCode.Accepted)
+
+    monkeypatch.setattr(TestModeLaunchConfirmationDialog, "exec", _accept_selected)
     monkeypatch.setattr(
         window,
         "_prompt_participant_number",
@@ -236,8 +243,10 @@ def test_home_test_mode_acknowledgement_replaces_participant_prompt(
 
     details = window._collect_launch_participant_details()
 
-    assert acknowledgements == [True]
-    assert details == ParticipantLaunchDetails(participant_number=TEST_MODE_PARTICIPANT_NUMBER)
+    assert details == ParticipantLaunchDetails(
+        participant_number=TEST_MODE_PARTICIPANT_NUMBER,
+        selected_condition_ids=(selected_condition_id,),
+    )
 
 
 def test_home_test_mode_cancel_stops_before_participant_prompt(
@@ -248,7 +257,11 @@ def test_home_test_mode_cancel_stops_before_participant_prompt(
 ) -> None:
     _, window = _open_created_project(controller, qtbot, tmp_path, "Cancelled Test Mode")
     window.document.set_experiment_test_mode_enabled(True)
-    monkeypatch.setattr(window, "_confirm_test_mode_launch", lambda: False)
+    monkeypatch.setattr(
+        TestModeLaunchConfirmationDialog,
+        "exec",
+        lambda dialog: int(dialog.DialogCode.Rejected),
+    )
     monkeypatch.setattr(
         window,
         "_prompt_participant_number",
@@ -258,6 +271,64 @@ def test_home_test_mode_cancel_stops_before_participant_prompt(
     )
 
     assert window._collect_launch_participant_details() is None
+
+
+def test_home_test_mode_launch_compiles_only_the_selected_condition(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Home Selected Test")
+    _prepare_compile_ready_project(window, tmp_path / "home-selected-test-first")
+    _prepare_compile_ready_project(window, tmp_path / "home-selected-test-second")
+    selected_condition_id = window.document.ordered_conditions()[1].condition_id
+    window.document.set_experiment_test_mode_enabled(True)
+    qtbot.waitUntil(lambda: window._session_seed_ready)
+
+    monkeypatch.setattr("fpvs_studio.gui.main_window.ProgressTask", _ImmediateProgressTask)
+    monkeypatch.setattr(
+        window,
+        "_confirm_test_mode_launch",
+        lambda: TestModeLaunchSelection(
+            selected_condition_ids=(selected_condition_id,)
+        ),
+    )
+    monkeypatch.setattr(window.document, "preflight_compiled_session", lambda _plan: None)
+    monkeypatch.setattr(
+        "fpvs_studio.gui.main_window.QMessageBox.information",
+        lambda *args, **kwargs: QMessageBox.StandardButton.Ok,
+    )
+    captures: dict[str, object] = {}
+
+    def _fake_launch(session_plan, **kwargs):
+        captures["session_plan"] = session_plan
+        captures.update(kwargs)
+        return SessionExecutionSummary(
+            project_id=session_plan.project_id,
+            session_id=session_plan.session_id,
+            engine_name="stub",
+            run_mode=RunMode.SESSION,
+            participant_number=kwargs["participant_number"],
+            total_condition_count=session_plan.total_runs,
+            completed_condition_count=session_plan.total_runs,
+        )
+
+    monkeypatch.setattr(window.document, "launch_compiled_session", _fake_launch)
+
+    window.launch_session()
+
+    session_plan = captures["session_plan"]
+    assert isinstance(session_plan, SessionPlan)
+    assert captures["participant_number"] == TEST_MODE_PARTICIPANT_NUMBER
+    assert session_plan.total_runs == window.document.project.settings.session.block_count
+    assert {
+        entry.condition_id for entry in session_plan.ordered_entries()
+    } == {selected_condition_id}
+    assert all(
+        block.condition_order == [selected_condition_id]
+        for block in session_plan.blocks
+    )
 
 
 def test_home_quick_action_buttons_present_and_wired(

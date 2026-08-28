@@ -194,6 +194,39 @@ def test_experiment_test_mode_uses_null_trigger_launch_settings(
     assert not hasattr(captured_launch_settings[1], "test_mode")
 
 
+def test_document_compile_session_filters_conditions_without_persisting_selection(
+    multi_condition_project,
+    multi_condition_project_root: Path,
+) -> None:
+    document = ProjectDocument(
+        project_root=multi_condition_project_root,
+        project=multi_condition_project.model_copy(deep=True),
+    )
+    original_condition_ids = [
+        condition.condition_id for condition in document.project.conditions
+    ]
+    selected_condition_id = original_condition_ids[2]
+
+    session_plan = document.compile_session(
+        refresh_hz=60.0,
+        condition_ids=[selected_condition_id],
+    )
+
+    assert session_plan.total_runs == document.project.settings.session.block_count
+    assert all(
+        block.condition_order == [selected_condition_id]
+        for block in session_plan.blocks
+    )
+    assert {
+        entry.condition_id for entry in session_plan.ordered_entries()
+    } == {selected_condition_id}
+    assert [condition.condition_id for condition in document.project.conditions] == (
+        original_condition_ids
+    )
+    assert document.dirty is False
+    assert document.last_session_plan is session_plan
+
+
 def _write_history_rows(path: Path, rows: list[dict[str, str]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8", newline="") as handle:

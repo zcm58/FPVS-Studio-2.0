@@ -94,6 +94,7 @@ class ResolvedTaskStep:
     show_footer: bool = True
     repeat_index: int = 0
     question_id: str | None = None
+    font_family: str = "Arial"
 
 
 @dataclass(frozen=True)

@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from PySide6.QtWidgets import (
+    QApplication,
     QCheckBox,
     QComboBox,
     QDialogButtonBox,
@@ -31,6 +32,7 @@ from fpvs_studio.core.serialization import (
     load_project_file,
     save_project_file,
 )
+from fpvs_studio.core.session_plan import SessionPlan
 from fpvs_studio.gui.controller import StudioController
 from fpvs_studio.gui.run_page import (
     TEST_MODE_PARTICIPANT_NUMBER,
@@ -38,6 +40,7 @@ from fpvs_studio.gui.run_page import (
     ParticipantLaunchDetails,
     ParticipantNumberDialog,
     TestModeLaunchConfirmationDialog,
+    TestModeLaunchSelection,
 )
 
 
@@ -315,12 +318,21 @@ def test_biosemi_recording_confirmation_dialog_blocks_continue_until_confirm(
 def test_test_mode_launch_confirmation_requires_explicit_acknowledgement(
     qtbot,
 ) -> None:
-    dialog = TestModeLaunchConfirmationDialog()
+    long_condition_name = (
+        "Word Recognition With Pre-Task Encoding and a Deliberately Long Display Name"
+    )
+    dialog = TestModeLaunchConfirmationDialog(
+        conditions=(
+            ("faces", "Faces"),
+            ("word-recognition", long_condition_name),
+        )
+    )
     qtbot.addWidget(dialog)
     dialog.show()
     qtbot.waitUntil(dialog.isVisible)
 
     prompt = dialog.findChild(QLabel, "test_mode_launch_confirmation_prompt")
+    condition_combo = dialog.findChild(QComboBox, "test_mode_condition_combo")
     acknowledgement = dialog.findChild(
         QCheckBox,
         "test_mode_launch_acknowledgement_checkbox",
@@ -330,27 +342,71 @@ def test_test_mode_launch_confirmation_requires_explicit_acknowledgement(
         "test_mode_launch_confirmation_button_box",
     )
     assert prompt is not None
+    assert condition_combo is not None
     assert acknowledgement is not None
     assert button_box is not None
     launch_button = button_box.button(QDialogButtonBox.StandardButton.Ok)
     assert launch_button is not None
     assert dialog.size().width() == 700
-    assert dialog.size().height() == 320
+    assert dialog.size().height() == 380
     assert dialog.windowTitle() == "Confirm Experiment Test Launch"
     assert "Serial-port validation" in prompt.text()
     assert "participant information collection" in prompt.text()
     assert "reserved test ID 0" in prompt.text()
     assert "runtime timing QC" in prompt.text()
+    assert condition_combo.count() == 3
+    assert "All conditions" in condition_combo.currentText()
+    assert dialog.selected_condition_ids is None
     assert launch_button.text() == "Launch Test"
     assert launch_button.isEnabled() is False
     assert acknowledgement.width() >= acknowledgement.fontMetrics().horizontalAdvance(
         acknowledgement.text()
     )
+
+    condition_combo.setCurrentIndex(2)
+    QApplication.processEvents()
+
+    assert dialog.selected_condition_ids == ("word-recognition",)
+    assert long_condition_name in condition_combo.currentText()
+    assert condition_combo.toolTip() == condition_combo.currentText()
     _assert_visible_children_within_parent(dialog)
 
     acknowledgement.setChecked(True)
 
     assert launch_button.isEnabled() is True
+
+
+def test_run_page_test_mode_confirmation_returns_selected_scope_or_cancel(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Test Scope Prompt")
+    window.document.create_condition(name="Faces")
+    selected_condition_id = window.document.create_condition(name="Word Recognition")
+
+    def _accept_selected(dialog: TestModeLaunchConfirmationDialog) -> int:
+        selected_index = dialog.condition_combo.findData(selected_condition_id)
+        assert selected_index > 0
+        dialog.condition_combo.setCurrentIndex(selected_index)
+        return int(dialog.DialogCode.Accepted)
+
+    monkeypatch.setattr(TestModeLaunchConfirmationDialog, "exec", _accept_selected)
+
+    selection = window.run_page._confirm_test_mode_launch()
+
+    assert selection == TestModeLaunchSelection(
+        selected_condition_ids=(selected_condition_id,)
+    )
+
+    monkeypatch.setattr(
+        TestModeLaunchConfirmationDialog,
+        "exec",
+        lambda dialog: int(dialog.DialogCode.Rejected),
+    )
+
+    assert window.run_page._confirm_test_mode_launch() is None
 
 
 def test_run_page_test_mode_skips_participant_collection_and_uses_reserved_id(
@@ -360,10 +416,18 @@ def test_run_page_test_mode_skips_participant_collection_and_uses_reserved_id(
     monkeypatch,
 ) -> None:
     _, window = _open_created_project(controller, qtbot, tmp_path, "Test Mode Launch")
-    _prepare_compile_ready_project(window, tmp_path / "test-mode-launch")
+    _prepare_compile_ready_project(window, tmp_path / "test-mode-launch-first")
+    _prepare_compile_ready_project(window, tmp_path / "test-mode-launch-second")
+    selected_condition_id = window.document.ordered_conditions()[1].condition_id
     window.document.set_experiment_test_mode_enabled(True)
     monkeypatch.setattr("fpvs_studio.gui.run_page.ProgressTask", _ImmediateProgressTask)
-    monkeypatch.setattr(window.run_page, "_confirm_test_mode_launch", lambda: True)
+    monkeypatch.setattr(
+        window.run_page,
+        "_confirm_test_mode_launch",
+        lambda: TestModeLaunchSelection(
+            selected_condition_ids=(selected_condition_id,)
+        ),
+    )
     monkeypatch.setattr(
         window.run_page,
         "_prompt_participant_number",
@@ -382,6 +446,7 @@ def test_run_page_test_mode_skips_participant_collection_and_uses_reserved_id(
     captures: dict[str, object] = {}
 
     def _capture_launch(session_plan, **kwargs):
+        captures["session_plan"] = session_plan
         captures.update(kwargs)
         return SessionExecutionSummary(
             project_id=session_plan.project_id,
@@ -399,6 +464,16 @@ def test_run_page_test_mode_skips_participant_collection_and_uses_reserved_id(
 
     assert captures["participant_number"] == TEST_MODE_PARTICIPANT_NUMBER
     assert captures["participant_metadata"] is None
+    session_plan = captures["session_plan"]
+    assert isinstance(session_plan, SessionPlan)
+    assert session_plan.total_runs == window.document.project.settings.session.block_count
+    assert {
+        entry.condition_id for entry in session_plan.ordered_entries()
+    } == {selected_condition_id}
+    assert all(
+        block.condition_order == [selected_condition_id]
+        for block in session_plan.blocks
+    )
     assert window.document.project.manual_removed_electrodes == {}
     assert (
         "Launch Mode: Experiment Test (reserved ID 0)" in window.run_page.summary_text.toPlainText()

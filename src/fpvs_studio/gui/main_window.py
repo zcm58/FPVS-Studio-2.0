@@ -60,6 +60,7 @@ from fpvs_studio.gui.run_page import (
     ParticipantLaunchDetails,
     ParticipantNumberDialog,
     TestModeLaunchConfirmationDialog,
+    TestModeLaunchSelection,
 )
 from fpvs_studio.gui.setup_wizard_page import SetupWizardPage
 from fpvs_studio.gui.update_dialog import UpdateDialog
@@ -601,7 +602,10 @@ class StudioMainWindow(QMainWindow):
             return
         participant_number = participant_details.participant_number
         try:
-            session_plan = self.document.compile_session(refresh_hz=refresh_hz)
+            session_plan = self.document.compile_session(
+                refresh_hz=refresh_hz,
+                condition_ids=participant_details.selected_condition_ids,
+            )
         except Exception as error:
             _show_error_dialog(self, "Launch Blocked", error)
             return
@@ -651,15 +655,29 @@ class StudioMainWindow(QMainWindow):
         dialog = BioSemiRecordingConfirmationDialog(self)
         return dialog.exec() == int(dialog.DialogCode.Accepted)
 
-    def _confirm_test_mode_launch(self) -> bool:
-        dialog = TestModeLaunchConfirmationDialog(self)
-        return dialog.exec() == int(dialog.DialogCode.Accepted)
+    def _confirm_test_mode_launch(self) -> TestModeLaunchSelection | None:
+        dialog = TestModeLaunchConfirmationDialog(
+            self,
+            conditions=[
+                (condition.condition_id, condition.name)
+                for condition in self.document.ordered_conditions()
+            ],
+        )
+        if dialog.exec() != int(dialog.DialogCode.Accepted):
+            return None
+        return TestModeLaunchSelection(
+            selected_condition_ids=dialog.selected_condition_ids
+        )
 
     def _collect_launch_participant_details(self) -> ParticipantLaunchDetails | None:
         if self.document.experiment_test_mode_enabled:
-            if not self._confirm_test_mode_launch():
+            selection = self._confirm_test_mode_launch()
+            if selection is None:
                 return None
-            return ParticipantLaunchDetails(participant_number=TEST_MODE_PARTICIPANT_NUMBER)
+            return ParticipantLaunchDetails(
+                participant_number=TEST_MODE_PARTICIPANT_NUMBER,
+                selected_condition_ids=selection.selected_condition_ids,
+            )
         while True:
             participant_details = self._prompt_participant_number()
             if participant_details is None:

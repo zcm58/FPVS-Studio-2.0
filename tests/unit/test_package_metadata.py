@@ -5,7 +5,10 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from PIL import ImageFont
+
 from fpvs_studio import __version__
+from fpvs_studio.assets import bundled_task_font_path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PYPROJECT_TEXT = (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
@@ -81,6 +84,18 @@ def test_pyinstaller_includes_psychopy_visual_lazy_imports() -> None:
     assert '"psychopy.visual.line"' in PYINSTALLER_SPEC_TEXT
     assert "Could not collect PyInstaller submodules" in PYINSTALLER_SPEC_TEXT
     assert "Could not copy PyInstaller package metadata" in PYINSTALLER_SPEC_TEXT
+
+
+def test_bundled_open_sans_font_and_license_are_packaged_assets() -> None:
+    font_path = bundled_task_font_path("Open Sans")
+
+    assert font_path is not None and font_path.is_file()
+    assert ImageFont.truetype(str(font_path), size=12).getname()[0] == "Open Sans"
+    assert "SIL OPEN FONT LICENSE Version 1.1" in font_path.with_name(
+        "OpenSans-OFL.txt"
+    ).read_text(encoding="utf-8")
+    assert '    "fpvs_studio",' in PYINSTALLER_SPEC_TEXT
+    assert "datas += _collect_data(package)" in PYINSTALLER_SPEC_TEXT
 
 
 def test_build_exe_fails_on_stale_installed_package_metadata() -> None:

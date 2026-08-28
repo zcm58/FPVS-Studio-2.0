@@ -27,6 +27,9 @@ as PsychoPy. Runtime owns flow and calls engines through
 - Runtime may pass one `ResolvedTaskStep` at a time to `render_task_step(...)`.
   Engines return `TaskEngineInput`; they do not own module ordering, repeats, retries,
   branching, validation, scoring, abort policy, or response export.
+- `ResolvedTaskStep.font_family` is the engine-neutral Arial/Open Sans choice compiled
+  from the authored step. An engine must use it consistently for every text surface in
+  that step; it must not substitute a machine-dependent font path into the contract.
 - Engines apply compiled image/word transforms and geometry at presentation time. They
   must not write transformed stimulus assets or infer authoring inheritance.
 - A compiled pre-stream fixation phase is rendered after the participant gate and
@@ -143,9 +146,14 @@ positions and sizes before calling the engine. Exact layouts preserve authored
 coordinates; responsive layouts arrive as already-positioned grids. The PsychoPy task
 renderer supports instructions, study displays, single/multiple image or text choices,
 short/long text, numeric input, rating scales, raw keys, and unskippable timed feedback.
-It uses Arial consistently, prepares task images through contained project-relative
-path resolution, and returns stable selected ids plus raw key/text/numeric and mouse/RT
-details. It uses native editable text controls for shifted characters, Unicode, and
-multiline long text; long text submits through the visible Submit control. Task clocks
-and keyboard clocks reset and carried events clear on the first task flip, without
-altering the FPVS run clock, compiled frame sequence, or flip-locked trigger schedule.
+It applies the resolved Arial or Open Sans family to headings, prompts, item and option
+labels, editable response text, validation messages, submit controls, and footers. Arial
+is the compatibility default. Open Sans is loaded from FPVS Studio's bundled regular
+font and registered with both the Pyglet `TextStim` path and PsychoPy `TextBox2`; the
+renderer does not rely on a host installation. It prepares task images through
+contained project-relative path resolution and returns stable selected ids plus raw
+key/text/numeric and mouse/RT details. It uses native editable text controls for shifted
+characters, Unicode, and multiline long text; long text submits through the visible
+Submit control. Task clocks and keyboard clocks reset and carried events clear on the
+first task flip, without altering the FPVS run clock, compiled frame sequence, or
+flip-locked trigger schedule.

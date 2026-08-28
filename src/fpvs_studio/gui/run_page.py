@@ -75,11 +75,19 @@ def _show_runtime_error_dialog(parent: QWidget, title: str, error: Exception) ->
 
 @dataclass(frozen=True)
 class ParticipantLaunchDetails:
-    """Launch-time participant details collected by the GUI."""
+    """Launch-time participant details and optional ephemeral test scope."""
 
     participant_number: str
     participant_metadata: ParticipantMetadata | None = None
     manual_removed_electrodes: tuple[str, ...] = ()
+    selected_condition_ids: tuple[str, ...] | None = None
+
+
+@dataclass(frozen=True)
+class TestModeLaunchSelection:
+    """Accepted per-launch condition scope for Experiment Test Mode."""
+
+    selected_condition_ids: tuple[str, ...] | None = None
 
 
 @dataclass(frozen=True)
@@ -374,12 +382,18 @@ class BioSemiRecordingConfirmationDialog(QDialog):
 class TestModeLaunchConfirmationDialog(QDialog):
     """Require explicit acknowledgement of experiment test-mode limitations."""
 
-    def __init__(self, parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        parent: QWidget | None = None,
+        *,
+        conditions: Sequence[tuple[str, str]] = (),
+    ) -> None:
         super().__init__(parent)
         self.setObjectName("test_mode_launch_confirmation_dialog")
         self.setWindowTitle("Confirm Experiment Test Launch")
         self.setModal(True)
-        self.resize(700, 320)
+        self.setMinimumSize(700, 380)
+        self.resize(700, 380)
 
         self.prompt_label = QLabel(
             "Experiment Test Mode is enabled. This launch verifies experiment setup "
@@ -387,11 +401,39 @@ class TestModeLaunchConfirmationDialog(QDialog):
             "Sophia Mode recording check, connected-display refresh verification, and "
             "participant information collection are disabled. The run uses reserved "
             "test ID 0. Fullscreen presentation, compiled timing and asset validation, "
-            "runtime timing QC, condition tasks, and normal test outputs remain enabled.",
+            "runtime timing QC, condition tasks, and normal test outputs remain enabled. "
+            "Choose the full session or one condition for this launch.",
             self,
         )
         self.prompt_label.setObjectName("test_mode_launch_confirmation_prompt")
         self.prompt_label.setWordWrap(True)
+
+        self.condition_combo = QComboBox(self)
+        self.condition_combo.setObjectName("test_mode_condition_combo")
+        self.condition_combo.addItem("All conditions (current behavior)", None)
+        for condition_number, (condition_id, condition_name) in enumerate(
+            conditions,
+            start=1,
+        ):
+            label = f"Condition {condition_number}: {condition_name}"
+            self.condition_combo.addItem(label, condition_id)
+            item_index = self.condition_combo.count() - 1
+            self.condition_combo.setItemData(
+                item_index,
+                label,
+                Qt.ItemDataRole.ToolTipRole,
+            )
+        self.condition_combo.currentIndexChanged.connect(
+            self._refresh_condition_tooltip
+        )
+        self._refresh_condition_tooltip(self.condition_combo.currentIndex())
+
+        condition_form = QFormLayout()
+        condition_form.setContentsMargins(0, 0, 0, 0)
+        condition_form.setFieldGrowthPolicy(
+            QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow
+        )
+        condition_form.addRow("Condition to run", self.condition_combo)
 
         self.acknowledgement_checkbox = QCheckBox(
             "I understand this is a non-participant test launch.",
@@ -415,8 +457,21 @@ class TestModeLaunchConfirmationDialog(QDialog):
         layout = QVBoxLayout(self)
         layout.setSpacing(14)
         layout.addWidget(self.prompt_label)
+        layout.addLayout(condition_form)
         layout.addWidget(self.acknowledgement_checkbox)
         layout.addWidget(self.button_box)
+
+    @property
+    def selected_condition_ids(self) -> tuple[str, ...] | None:
+        """Return the selected condition scope, or ``None`` for the full session."""
+
+        condition_id = self.condition_combo.currentData()
+        if condition_id is None:
+            return None
+        return (str(condition_id),)
+
+    def _refresh_condition_tooltip(self, _index: int) -> None:
+        self.condition_combo.setToolTip(self.condition_combo.currentText())
 
     def accept(self) -> None:
         if not self.acknowledgement_checkbox.isChecked():
@@ -679,7 +734,10 @@ class RunPage(QWidget):
                 _show_runtime_error_dialog(self, "Launch Blocked", error)
                 return
         try:
-            session_plan = self._document.compile_session(refresh_hz=refresh_hz)
+            session_plan = self._document.compile_session(
+                refresh_hz=refresh_hz,
+                condition_ids=participant_details.selected_condition_ids,
+            )
         except Exception as error:
             _show_runtime_error_dialog(self, "Launch Blocked", error)
             return
@@ -841,15 +899,29 @@ class RunPage(QWidget):
         dialog = BioSemiRecordingConfirmationDialog(self)
         return dialog.exec() == int(QDialog.DialogCode.Accepted)
 
-    def _confirm_test_mode_launch(self) -> bool:
-        dialog = TestModeLaunchConfirmationDialog(self)
-        return dialog.exec() == int(QDialog.DialogCode.Accepted)
+    def _confirm_test_mode_launch(self) -> TestModeLaunchSelection | None:
+        dialog = TestModeLaunchConfirmationDialog(
+            self,
+            conditions=[
+                (condition.condition_id, condition.name)
+                for condition in self._document.ordered_conditions()
+            ],
+        )
+        if dialog.exec() != int(QDialog.DialogCode.Accepted):
+            return None
+        return TestModeLaunchSelection(
+            selected_condition_ids=dialog.selected_condition_ids
+        )
 
     def _collect_launch_participant_details(self) -> ParticipantLaunchDetails | None:
         if self._document.experiment_test_mode_enabled:
-            if not self._confirm_test_mode_launch():
+            selection = self._confirm_test_mode_launch()
+            if selection is None:
                 return None
-            return ParticipantLaunchDetails(participant_number=TEST_MODE_PARTICIPANT_NUMBER)
+            return ParticipantLaunchDetails(
+                participant_number=TEST_MODE_PARTICIPANT_NUMBER,
+                selected_condition_ids=selection.selected_condition_ids,
+            )
         while True:
             participant_details = _coerce_participant_launch_details(
                 self._prompt_participant_number()
