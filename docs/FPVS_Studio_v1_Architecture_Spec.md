@@ -41,6 +41,14 @@ With the default oddball every 5th stimulus:
 
 The true per-sequence duration is derived from the active display's refresh-compatible frame timing.
 
+### 2.4 Fixation-task defaults
+
+New projects enable fixation color changes, fixation accuracy scoring, and the participant
+tutorial by default. Loading a project from editable-project schema `1.0.0`, `1.1.0`, or
+`1.2.0` applies the same enabled state through the in-memory migration to `1.3.0` without
+rewriting the project merely because it was opened. After an ordinary save records the
+current schema, an explicit user opt-out remains disabled on later loads.
+
 ## 3. Locked v1 product features
 
 - standalone desktop app
@@ -50,7 +58,7 @@ The true per-sequence duration is derived from the active display's refresh-comp
 - Home and Setup Wizard GUI workflow
 - image-based and word-based conditions
 - project-level fixation cross task
-- fixation accuracy tracking and optional participant tutorial
+- fixation accuracy tracking and participant tutorial, enabled by default but editable
 - preprocessing and guided image normalization
 - control generators for:
   - `rot180` (orientation inversion)

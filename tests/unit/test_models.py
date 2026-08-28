@@ -13,6 +13,8 @@ from fpvs_studio.core.enums import (
     ImageGeometryMode,
     InterConditionMode,
     PresentationUnit,
+    ProjectSchemaVersion,
+    SchemaVersion,
     StimulusModality,
     TextHeightMode,
     TriggerBackendKind,
@@ -20,6 +22,7 @@ from fpvs_studio.core.enums import (
 from fpvs_studio.core.models import (
     MAX_WORD_STIMULUS_CHARS,
     Condition,
+    ConditionTemplateProfileLibrary,
     DisplaySettings,
     FixationTaskSettings,
     ImageGeometrySettings,
@@ -48,7 +51,18 @@ def test_project_model_round_trip(tmp_path, sample_project) -> None:
     loaded = load_project_file(project_path)
 
     assert loaded == sample_project
-    assert loaded.schema_version.value == "1.2.0"
+    assert loaded.schema_version.value == "1.3.0"
+
+
+def test_project_schema_version_does_not_expand_unrelated_contracts() -> None:
+    assert ProjectSchemaVersion("1.3.0") is ProjectSchemaVersion.V1_3
+
+    with pytest.raises(ValueError):
+        SchemaVersion("1.3.0")
+    with pytest.raises(ValidationError):
+        ConditionTemplateProfileLibrary.model_validate(
+            {"schema_version": "1.3.0", "profiles": []}
+        )
 
 
 @pytest.mark.parametrize(
@@ -163,6 +177,13 @@ def test_load_project_file_migrates_v1_presentation_without_rewriting_assets(
     payload["schema_version"] = "1.0.0"
     payload["settings"].pop("presentation")
     payload["settings"]["display"]["stimulus_width_degrees"] = 8.0
+    payload["settings"]["fixation_task"].update(
+        {
+            "enabled": False,
+            "accuracy_task_enabled": False,
+            "participant_tutorial_enabled": False,
+        }
+    )
     for condition in payload["conditions"]:
         condition.pop("presentation")
     original_payload = json.dumps(payload, indent=2)
@@ -170,7 +191,10 @@ def test_load_project_file_migrates_v1_presentation_without_rewriting_assets(
 
     loaded = load_project_file(project_path)
 
-    assert loaded.schema_version.value == "1.2.0"
+    assert loaded.schema_version.value == "1.3.0"
+    assert loaded.settings.fixation_task.enabled is True
+    assert loaded.settings.fixation_task.accuracy_task_enabled is True
+    assert loaded.settings.fixation_task.participant_tutorial_enabled is True
     assert loaded.settings.presentation.pre_stream_fixation_seconds == 0.0
     geometry = loaded.settings.presentation.defaults.image_geometry
     assert geometry.mode == ImageGeometryMode.NATURAL_ASPECT
@@ -181,6 +205,54 @@ def test_load_project_file_migrates_v1_presentation_without_rewriting_assets(
     )
     assert loaded.settings.presentation.defaults.text_height.legacy_stimulus_width_fraction == 0.25
     assert project_path.read_text(encoding="utf-8") == original_payload
+
+
+def test_load_project_file_migrates_v1_2_fixation_defaults_once(
+    tmp_path,
+    sample_project,
+) -> None:
+    project_path = tmp_path / "project.json"
+    payload = sample_project.model_dump(mode="json")
+    payload["schema_version"] = "1.2.0"
+    fixation = payload["settings"]["fixation_task"]
+    fixation.update(
+        {
+            "enabled": False,
+            "accuracy_task_enabled": False,
+            "participant_tutorial_enabled": False,
+            "target_duration_ms": 0,
+            "changes_per_sequence": 4,
+            "base_color": "#123456",
+        }
+    )
+    original_payload = json.dumps(payload, indent=2)
+    project_path.write_text(original_payload, encoding="utf-8")
+
+    loaded = load_project_file(project_path)
+
+    assert loaded.schema_version.value == "1.3.0"
+    assert loaded.settings.fixation_task.enabled is True
+    assert loaded.settings.fixation_task.accuracy_task_enabled is True
+    assert loaded.settings.fixation_task.participant_tutorial_enabled is True
+    assert loaded.settings.fixation_task.target_duration_ms == 300
+    assert loaded.settings.fixation_task.changes_per_sequence == 4
+    assert loaded.settings.fixation_task.base_color == "#123456"
+    assert project_path.read_text(encoding="utf-8") == original_payload
+
+    loaded.settings.fixation_task.accuracy_task_enabled = False
+    loaded.settings.fixation_task.participant_tutorial_enabled = False
+    loaded.settings.fixation_task.enabled = False
+    save_project_file(loaded, project_path)
+
+    reloaded = load_project_file(project_path)
+
+    assert reloaded.schema_version.value == "1.3.0"
+    assert reloaded.settings.fixation_task.enabled is False
+    assert reloaded.settings.fixation_task.accuracy_task_enabled is False
+    assert reloaded.settings.fixation_task.participant_tutorial_enabled is False
+    assert reloaded.settings.fixation_task.target_duration_ms == 300
+    assert reloaded.settings.fixation_task.changes_per_sequence == 4
+    assert reloaded.settings.fixation_task.base_color == "#123456"
 
 
 def test_manual_removed_electrodes_normalize_and_round_trip(

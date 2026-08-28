@@ -197,6 +197,8 @@ def _build_project(project_id: str, project_name: str, *, condition_count: int) 
         settings=ProjectSettings(
             fixation_task=FixationTaskSettings(
                 enabled=True,
+                accuracy_task_enabled=False,
+                participant_tutorial_enabled=False,
                 changes_per_sequence=2,
                 target_duration_ms=250,
                 min_gap_ms=1000,

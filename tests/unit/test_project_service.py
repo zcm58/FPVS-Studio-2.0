@@ -55,6 +55,9 @@ def test_project_scaffolding_creates_expected_directories_and_files(tmp_path) ->
     assert project.settings.protocol.base_hz == 6.0
     assert project.settings.protocol.oddball_every_n == 5
     assert project.settings.protocol.oddball_hz == 1.2
+    assert project.settings.fixation_task.enabled is True
+    assert project.settings.fixation_task.accuracy_task_enabled is True
+    assert project.settings.fixation_task.participant_tutorial_enabled is True
     assert project.settings.supported_variants[0].value == "original"
     assert manifest.project_id == project.meta.project_id
 

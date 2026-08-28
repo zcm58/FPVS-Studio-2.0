@@ -48,8 +48,8 @@ def test_fixation_settings_keeps_legacy_max_gap_without_range_contract() -> None
 def test_fixation_settings_defaults_match_current_gui_presets() -> None:
     settings = FixationTaskSettings()
 
-    assert settings.enabled is False
-    assert settings.accuracy_task_enabled is False
+    assert settings.enabled is True
+    assert settings.accuracy_task_enabled is True
     assert settings.participant_tutorial_enabled is True
     assert settings.changes_per_sequence == 0
     assert settings.target_count_mode == "fixed"

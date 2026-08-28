@@ -126,7 +126,8 @@ The authoring window is organized around two user-facing modes:
     Images, and does not rewrite existing conditions unless the user explicitly applies
     the selected template to all conditions
   - Project exposes `Enable participant tutorial?`, which controls whether the
-    participant sees the fixation response tutorial before the first condition
+    participant sees the fixation response tutorial before the first condition; it is
+    enabled by default for new projects and by the one-time migration of older projects
   - Experiment combines display, presentation-default, image-size, and session settings
     in one compact centered card; a compact `Configure Presentation...` action opens the
     reusable presentation editor instead of expanding the wizard card
@@ -221,7 +222,8 @@ The authoring window is organized around two user-facing modes:
     new projects default to randomized 8–13 color changes per condition, a 300 ms color
     change duration, and a two-second lead-in, while migrated legacy projects retain zero
   - Response exposes accuracy tracking, response key/window, appearance, and a live
-    preview on the current display background
+    preview on the current display background; accuracy tracking is enabled by default
+    for new projects and by the one-time migration of older projects
   - Review is a card-only decision point: users can `Save and Return Home` or
     `Return Home Without Saving`; returning without saving always asks for confirmation
 - `View > Fixation Task Accuracy...`
@@ -469,9 +471,9 @@ The current GUI supports:
   each launch and condition starts are fixed to `Press Space to begin`
 - configuring display refresh rate and choosing a black or dark-gray presentation
   background
-- configuring fixation settings, including an optional fixation accuracy task
-  (Space within 1.0 s of each fixation color change) and optional participant tutorial
-  before the first condition
+- configuring fixation settings, with the fixation accuracy task (Space within 1.0 s of
+  each fixation color change) and participant tutorial enabled by default while remaining
+  independently user-configurable
 - configuring fixed or randomized fixation target counts per condition run; compiled
   color changes are balanced across the full condition with seeded jitter and
   deterministic no-immediate-repeat behavior across consecutive compiled runs
