@@ -6,7 +6,7 @@ Use this page when recording which FPVS Studio version was used for a study.
 
 - Name: FPVS Studio
 - Package name: `fpvs-studio`
-- Current package version: `1.0.0`
+- Current package version: `1.3.0`
 - Repository: <https://github.com/zcm58/FPVS-Studio-2.0>
 - License: GPLv3 or later
 
@@ -16,7 +16,7 @@ For each study, save:
 
 - the FPVS Studio version
 - the GitHub Release tag
-- the installer file name, such as `FPVS-Studio-Setup-1.0.0.exe`
+- the installer file name, such as `FPVS-Studio-Setup-1.3.0.exe`
 - the project `.fpvsconfig` export, if your lab uses it for handoff records
 - the final project folder, including `runs\` and `logs\`
 
@@ -33,7 +33,7 @@ tag, trigger setup, display setup, and study-specific configuration details.
 
 ## Current v1 Scope
 
-The current 1.0.0 package is a beta release intended for Windows 11 lab
+The current 1.3.0 package is a beta release intended for Windows 11 lab
 computers and BioSemi-compatible serial trigger workflows. It uses a fixed FPVS
 timing template with 6 Hz base stimulation and oddballs every 5th item.
 
