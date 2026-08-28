@@ -35,8 +35,9 @@ component layer, Qt worker patterns, and registered pytest-qt coverage.
   not for the desktop authoring app.
 
 GUI verification uses `./scripts/verify.ps1 -Scope gui -Tier focused`
-plus a documented visible manual smoke path. Registered pytest-qt coverage runs in CI by
-default; use the repo precommit tier when GUI work touches multiple layers.
+plus a documented visible manual smoke path. Registered pytest-qt coverage is retained
+for an optional approved visible `full` run; use the repo precommit tier when GUI work
+touches multiple layers.
 
 ## No-Clipping Baseline
 
@@ -109,7 +110,7 @@ interaction.
   minimum/default size, with realistic long content and relevant dynamic states.
 - Setup Wizard layout changes must update compact no-clipping coverage in
   `tests/gui/test_setup_wizard_shell.py` for all six steps at `1120x720`.
-- Do not run Qt locally unless the user approves a safe visible environment. CI owns
-  explicit Qt opt-in and offscreen execution.
+- Do not run Qt unless the user approves a safe visible environment. Use the optional
+  `full` tier with explicit opt-in, and do not use offscreen execution.
 - Run `./scripts/verify.ps1 -Scope repo -Tier precommit` when GUI changes
   touch multiple layers.

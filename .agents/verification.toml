@@ -9,7 +9,7 @@ tests = [
   "tests/unit/test_qt_test_registry.py",
   "tests/unit/test_verification_driver.py",
 ]
-ci_tests = []
+full_tests = []
 include = [
   ".agents/**",
   ".github/**",
@@ -29,14 +29,14 @@ manual_smoke = []
 [scopes.docs]
 checks = ["docs-hygiene"]
 tests = ["tests/unit/test_harness_docs.py"]
-ci_tests = []
+full_tests = []
 include = ["AGENTS.md", "ARCHITECTURE.md", "docs/**", ".agents/skills/**"]
 manual_smoke = []
 
 [scopes.gui]
 checks = []
 tests = []
-ci_tests = ["tests/gui"]
+full_tests = ["tests/gui"]
 include = ["src/fpvs_studio/gui/**", "tests/gui/**"]
 manual_smoke = [
   "Launch FPVS Studio normally in a visible Windows session.",
@@ -53,7 +53,7 @@ tests = [
   "tests/unit/test_document_summary_refresh.py",
   "tests/unit/test_condition_tasks.py",
 ]
-ci_tests = []
+full_tests = []
 include = ["src/fpvs_studio/core/**", "tests/unit/test_models.py", "tests/unit/test_validation.py", "tests/unit/test_fixation_settings.py", "tests/unit/test_condition_tasks.py", "tests/unit/test_document_*.py"]
 manual_smoke = []
 
@@ -64,7 +64,7 @@ tests = [
   "tests/unit/test_compiler_fixation.py",
   "tests/unit/test_session_plan.py",
 ]
-ci_tests = []
+full_tests = []
 include = ["src/fpvs_studio/core/compiler.py", "src/fpvs_studio/core/compiler_tasks.py", "src/fpvs_studio/core/run_spec.py", "src/fpvs_studio/core/session_plan.py", "tests/unit/test_compiler*.py", "tests/unit/test_session_plan.py"]
 manual_smoke = []
 
@@ -77,7 +77,7 @@ tests = [
   "tests/unit/test_project_service.py",
   "tests/unit/test_template_library.py",
 ]
-ci_tests = []
+full_tests = []
 include = ["src/fpvs_studio/core/project*.py", "src/fpvs_studio/core/task_assets.py", "src/fpvs_studio/core/template_library.py", "src/fpvs_studio/core/condition_template_profiles.py", "tests/unit/test_project*.py", "tests/unit/test_template_library.py", "tests/unit/test_condition_template_profiles.py"]
 manual_smoke = []
 
@@ -88,7 +88,7 @@ tests = [
   "tests/unit/test_preprocessing_inspection.py",
   "tests/unit/test_preprocessing_normalization.py",
 ]
-ci_tests = []
+full_tests = []
 include = ["src/fpvs_studio/preprocessing/**", "tests/unit/test_preprocessing_*.py"]
 manual_smoke = []
 
@@ -105,7 +105,7 @@ tests = [
   "tests/unit/test_runtime_preflight.py",
   "tests/unit/test_runtime_tasks.py",
 ]
-ci_tests = []
+full_tests = []
 include = ["src/fpvs_studio/runtime/**", "src/fpvs_studio/core/execution.py", "tests/unit/test_runtime_*.py"]
 manual_smoke = []
 
@@ -118,14 +118,14 @@ tests = [
   "tests/unit/test_windows_graphics_budget.py",
   "tests/unit/test_runtime_tasks.py",
 ]
-ci_tests = ["tests/integration/test_psychopy_engine.py"]
+full_tests = ["tests/integration/test_psychopy_engine.py"]
 include = ["src/fpvs_studio/engines/**", "tests/unit/test_psychopy_engine.py", "tests/unit/test_psychopy_stimuli_resources.py", "tests/unit/test_graphics_readiness.py", "tests/unit/test_windows_graphics_budget.py", "tests/unit/test_runtime_tasks.py", "tests/integration/test_psychopy_engine.py"]
 manual_smoke = ["Run a short experiment on the intended presentation machine when engine playback changes."]
 
 [scopes.triggers]
 checks = []
 tests = ["tests/unit/test_serial_trigger_backend.py"]
-ci_tests = []
+full_tests = []
 include = ["src/fpvs_studio/triggers/**", "src/fpvs_studio/runtime/triggers.py", "tests/unit/test_serial_trigger_backend.py"]
 manual_smoke = ["Use the intended trigger hardware for a visible/manual smoke when serial I/O behavior changes."]
 
@@ -135,7 +135,7 @@ tests = [
   "tests/unit/test_update_check.py",
   "tests/unit/test_update_download.py",
 ]
-ci_tests = []
+full_tests = []
 include = ["src/fpvs_studio/updates/**", "src/fpvs_studio/gui/update_dialog.py", "tests/unit/test_update_*.py"]
 manual_smoke = ["Use File > Check for Updates in a visible Studio window when update presentation or installer handoff changes."]
 
@@ -145,6 +145,6 @@ tests = [
   "tests/unit/test_app_main.py",
   "tests/unit/test_package_metadata.py",
 ]
-ci_tests = []
+full_tests = []
 include = ["packaging/**", "scripts/build_*.ps1", "scripts/smoke_packaged_app.ps1", "src/fpvs_studio/app/**", "src/fpvs_studio/__init__.py", "tests/unit/test_app_main.py", "tests/unit/test_package_metadata.py", "pyproject.toml"]
 manual_smoke = ["Build and launch the packaged application when packaging inputs or startup wiring changes."]

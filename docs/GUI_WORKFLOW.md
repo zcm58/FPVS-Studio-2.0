@@ -521,17 +521,17 @@ base/oddball scheduling.
 
 ## GUI Test Guidance
 
-Add or update registered pytest-qt coverage for changed GUI behavior, but leave its
-execution to CI by default. Ordinary local verification excludes registered Qt modules
-before import and runs backend, boundary, lint, and compilation checks:
+Add or update registered pytest-qt coverage for changed GUI behavior. Ordinary local
+verification excludes registered Qt modules before import and runs backend, boundary,
+lint, and compilation checks:
 
 ```powershell
 ./scripts/verify.ps1 -Scope gui -Tier focused
 ```
 
-Do not set `QT_QPA_PLATFORM=offscreen` locally. CI owns offscreen configuration and
-explicit Qt opt-in through the `full-ci` tier. Local Qt execution requires user approval
-and a safe visible environment.
+Do not set `QT_QPA_PLATFORM=offscreen`. Registered Qt tests run only through the optional
+`full` tier with `FPVS_ALLOW_QT_TESTS=1`, explicit user approval, and a safe visible
+environment. There is no GitHub test workflow to run them automatically.
 
 For GUI coverage:
 
@@ -551,5 +551,5 @@ For GUI coverage:
   `test_image_resizer_page.py` for the utility page
 
 Local handoff must document a visible manual smoke path for the changed workflow and
-report registered Qt coverage as CI-pending unless it ran in an explicitly approved
+state whether registered Qt coverage was not run or ran in an explicitly approved
 visible environment.

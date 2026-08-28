@@ -76,7 +76,7 @@ def pytest_addoption(parser) -> None:
         default=False,
         help=(
             "Collect registered Qt tests. These tests require an explicitly "
-            "approved visible or CI Qt environment."
+            "approved visible Qt environment."
         ),
     )
 

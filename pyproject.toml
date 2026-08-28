@@ -60,7 +60,7 @@ addopts = "-ra --import-mode=importlib --timeout=30 --timeout-method=thread -p n
 pythonpath = ["src"]
 testpaths = ["tests"]
 markers = [
-  "qt: requires an explicitly approved visible or CI Qt environment",
+  "qt: requires an explicitly approved visible Qt environment",
 ]
 
 [tool.ruff]
