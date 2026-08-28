@@ -1,6 +1,6 @@
 param(
     [string]$Scope,
-    [ValidateSet("focused", "precommit", "full-ci")]
+    [ValidateSet("focused", "precommit", "full")]
     [string]$Tier = "focused",
     [switch]$List,
     [switch]$CheckConfig

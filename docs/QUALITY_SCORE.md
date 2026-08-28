@@ -1,8 +1,8 @@
-# Quality Gates
+# Local Quality Checks
 
-FPVS Studio uses executable evidence instead of a manually maintained numeric score.
-The scope-aware driver is the agent entry point; its configuration owns the underlying
-test, audit, lint, type, and compilation commands.
+FPVS Studio uses locally executable evidence instead of a manually maintained numeric
+score or a GitHub code-quality gate. The scope-aware driver is the agent entry point;
+its configuration owns the underlying test, audit, lint, type, and compilation commands.
 
 ## Standard Route
 
@@ -13,8 +13,8 @@ test, audit, lint, type, and compilation commands.
 
 - `focused` runs the selected scope plus changed-file Ruff and compilation.
 - `precommit` adds mechanical/docs audits, mypy, and the safe non-Qt pytest suite.
-- `full-ci` runs full Ruff, mypy, and pytest with registered Qt tests explicitly
-  enabled under CI's offscreen configuration.
+- `full` optionally runs full Ruff, mypy, and pytest with registered Qt tests explicitly
+  enabled in a user-approved safe visible environment.
 
 Use `docs/agent/agent-index.md` to choose among `repo`, `docs`, `gui`, `core`,
 `compiler`, `project-io`, `preprocessing`, `runtime`, `engine`, `triggers`, `updates`,
@@ -34,9 +34,11 @@ The configured audits enforce repository invariants such as:
 - registered Qt tests cannot enter the default local suite before import
 
 GUI-focused local verification does not run Qt. It reports the required visible/manual
-smoke path, while registered pytest-qt coverage runs in the explicit CI tier. Any skipped
-or failing check must be reported with its command, reason, and residual risk.
+smoke path, while registered pytest-qt coverage runs only through the optional `full`
+tier. Any skipped or failing check must be reported with its command, reason, and
+residual risk.
 
-PowerShell wrappers remain available for developer-specific workflows, release builds,
-and CI compatibility. Do not duplicate their individual commands in agent guidance;
-route ordinary work through the driver.
+PowerShell wrappers remain available for developer-specific workflows and release
+builds. Do not duplicate their individual commands in agent guidance; route ordinary
+work through the driver. GitHub does not repeat these repository checks; its independent
+documentation build and publishing workflow remains automated.

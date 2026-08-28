@@ -44,7 +44,8 @@ PowerShell wrapper, or the Python driver.
 
 - `focused`: selected scope checks plus changed-file Ruff and Python compilation.
 - `precommit`: repo audits, mypy, changed-file checks, and the safe non-Qt pytest suite.
-- `full-ci`: full Ruff, mypy, and pytest with registered Qt tests explicitly enabled.
+- `full`: optional full Ruff, mypy, and pytest with registered Qt tests explicitly
+  enabled for an approved visible local environment.
 
 Use the broader local gate after cross-layer or shared-contract changes:
 
@@ -52,9 +53,11 @@ Use the broader local gate after cross-layer or shared-contract changes:
 ./scripts/verify.ps1 -Scope repo -Tier precommit
 ```
 
-Do not run `full-ci` locally by default. Qt tests are excluded before import during
-ordinary local verification. CI owns explicit Qt opt-in and offscreen configuration;
-local Qt execution requires user approval and a safe visible environment.
+Do not run `full` by default. Qt tests are excluded before import during ordinary local
+verification. The full tier requires `FPVS_ALLOW_QT_TESTS=1`, user approval, and a safe
+visible environment; do not set `QT_QPA_PLATFORM=offscreen`. GitHub does not repeat the
+repository's local test or code-quality checks. Its documentation build and publishing
+workflow is separate.
 
 ## Skill Routing
 

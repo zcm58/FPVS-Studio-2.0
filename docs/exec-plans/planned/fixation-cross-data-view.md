@@ -74,5 +74,4 @@ monitoring, new export format, or fixation-scoring change is included in this fi
 ./scripts/verify.ps1 -Scope repo -Tier precommit
 ```
 
-Registered Qt coverage remains CI-owned unless a safe visible local run is explicitly
-approved.
+Run registered Qt coverage only when a safe visible `full` run is explicitly approved.

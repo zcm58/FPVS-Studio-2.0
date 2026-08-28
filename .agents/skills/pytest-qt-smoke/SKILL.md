@@ -1,6 +1,6 @@
 ---
 name: pytest-qt-smoke
-description: Use when adding or updating registered CI pytest-qt smoke coverage for changed PySide6 widgets, dialogs, windows, layout or text clipping, signals, controller bindings, enabled states, status text, or non-blocking GUI behavior. Do not run Qt locally unless the user approves a safe visible environment.
+description: Use when adding or updating registered pytest-qt smoke coverage for changed PySide6 widgets, dialogs, windows, layout or text clipping, signals, controller bindings, enabled states, status text, or non-blocking GUI behavior. Do not run Qt unless the user approves a safe visible environment.
 ---
 
 # pytest-qt Smoke
@@ -38,9 +38,9 @@ GUI scope and document a visible manual smoke path:
 ./scripts/verify.ps1 -Scope gui -Tier focused
 ```
 
-Do not set `QT_QPA_PLATFORM=offscreen` locally. CI owns offscreen configuration and the
-explicit Qt opt-in in the `full-ci` tier. Run Qt locally only when the user explicitly
-approves a safe visible GUI environment.
+Do not set `QT_QPA_PLATFORM=offscreen`. Registered Qt tests run only through the optional
+`full` tier with `FPVS_ALLOW_QT_TESTS=1`, and only when the user explicitly approves a
+safe visible GUI environment. GitHub does not run them automatically.
 
 ## Output Checklist
 
@@ -48,4 +48,4 @@ approves a safe visible GUI environment.
 - Report the minimum/default size and clipping states covered.
 - List monkeypatched dialogs, runtime calls, or controllers.
 - Report the safe focused command, manual visible smoke path, and whether registered Qt
-  coverage was left for CI or run in an approved visible environment.
+  coverage was not run or ran in an approved visible environment.

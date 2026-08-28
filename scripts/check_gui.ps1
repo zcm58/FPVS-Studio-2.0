@@ -6,8 +6,8 @@ $Python = Resolve-RepoPython -RepoRoot $RepoRoot
 
 if ($env:FPVS_ALLOW_QT_TESTS -notin @("1", "true", "yes", "on")) {
     throw (
-        "GUI tests require explicit opt-in. Set FPVS_ALLOW_QT_TESTS=1 only in CI " +
-        "or a user-approved safe visible Qt environment."
+        "GUI tests require explicit opt-in. Set FPVS_ALLOW_QT_TESTS=1 only in " +
+        "a user-approved safe visible Qt environment."
     )
 }
 
@@ -18,7 +18,7 @@ try {
         "--scope",
         "gui",
         "--tier",
-        "full-ci"
+        "full"
     )
 }
 finally {

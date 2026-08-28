@@ -40,6 +40,32 @@ def test_repo_guidance_references_existing_harness_files() -> None:
     assert missing_paths == []
 
 
+def test_quality_verification_is_local_only() -> None:
+    assert not (PROJECT_ROOT / ".github" / "workflows" / "ci.yml").exists()
+
+    current_contracts = [
+        "AGENTS.md",
+        "ARCHITECTURE.md",
+        ".agents/scripts/verify.py",
+        ".agents/verification.toml",
+        ".agents/skills/pyside6-gui-cleanup/SKILL.md",
+        ".agents/skills/pytest-qt-smoke/SKILL.md",
+        "scripts/check_gui.ps1",
+        "scripts/check_quality.ps1",
+        "scripts/verify.ps1",
+        "src/fpvs_studio/gui/AGENTS.md",
+        "docs/ENVIRONMENT.md",
+        "docs/FRONTEND.md",
+        "docs/GUI_WORKFLOW.md",
+        "docs/QUALITY_SCORE.md",
+        "docs/agent/agent-index.md",
+    ]
+    for relative_path in current_contracts:
+        contract = _read_repo_file(relative_path)
+        assert "full-ci" not in contract
+        assert "ci_tests" not in contract
+
+
 def test_architecture_package_map_matches_source_packages() -> None:
     architecture = _read_repo_file("ARCHITECTURE.md")
     documented_packages = set(

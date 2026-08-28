@@ -55,7 +55,7 @@ backend-driven.
 
 ## Testing guidance
 
-- Keep registered CI GUI tests deterministic.
+- Keep registered GUI tests deterministic.
 - Stub `QFileDialog`, `QMessageBox`, and runtime-launch calls in tests.
 - Prefer direct state assertions over window-exposure assumptions.
 - Show changed surfaces at their documented minimum/default size, process Qt events,
@@ -63,5 +63,5 @@ backend-driven.
   long paths, names, status messages, and validation text, not only short fixtures.
 - Register Qt modules in `tests/qt_test_files.txt`. Run
   `./scripts/verify.ps1 -Scope gui -Tier focused` plus a visible manual
-  smoke path locally; leave Qt execution to CI unless the user approves a safe visible
-  environment.
+  smoke path locally. Run the optional `full` Qt tier only when the user approves a
+  safe visible environment; GitHub does not run it automatically.

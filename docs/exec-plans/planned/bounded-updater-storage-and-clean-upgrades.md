@@ -48,7 +48,7 @@ Read `src/fpvs_studio/updates/AGENTS.md`, `packaging/AGENTS.md`, and
 
 1. Implement cache policy plus `tmp_path` unit tests before changing GUI or packaging.
 2. Add download locking/final cleanup, then GUI shutdown coordination and registered
-   CI Qt coverage.
+   Qt coverage.
 3. Add digest verification and update the documented GitHub Release contract.
 4. Add safe installed-file reconciliation and a Windows two-version packaging check.
 
@@ -70,6 +70,6 @@ uninstall leaves no obsolete app files or update installers.
 ## Verification
 
 Run the `updates`, `gui`, and `packaging` focused scopes, followed by repo precommit.
-Leave registered Qt execution to CI unless the user approves a safe visible local run.
+Run registered Qt coverage only when the user approves a safe visible `full` run.
 Complete the documented Windows fresh-install, update-over-old, and uninstall smoke
 path before release.

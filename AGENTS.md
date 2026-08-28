@@ -76,7 +76,7 @@ contracts live in the nearest package `AGENTS.md` and the focused docs linked fr
 - Add or update registered pytest-qt coverage for changed GUI behavior, but do not run
   Qt tests locally by default. Local GUI verification uses non-Qt checks plus a
   documented visible/manual smoke path. Run Qt locally only in a user-approved safe
-  visible environment; offscreen Qt execution is CI-only.
+  visible environment; do not use offscreen Qt execution locally.
 
 ## Skills and Plans
 
@@ -101,9 +101,12 @@ Python interpreter. Use the narrowest relevant scope from `docs/agent/agent-inde
 ```
 
 `focused` runs scope checks plus changed-file Ruff/compilation. `precommit` adds repo
-audits, mypy, and the safe non-Qt suite. `full-ci` is the explicit CI tier and includes
-registered Qt tests. Add `-List` to a routed command to inspect its steps and use
-`./scripts/verify.ps1 -CheckConfig` after changing the harness.
+audits, mypy, and the safe non-Qt suite. `full` is an optional comprehensive local tier
+that includes registered Qt tests and requires explicit opt-in in a user-approved safe
+visible environment. Add `-List` to a routed command to inspect its steps and use
+`./scripts/verify.ps1 -CheckConfig` after changing the harness. GitHub does not run a
+repository test or code-quality workflow; developers own these checks locally. The
+independent documentation build and publishing workflow remains automated.
 
 ## Documentation Freshness
 

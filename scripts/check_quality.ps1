@@ -1,5 +1,5 @@
 param(
-    [switch]$FullCi
+    [switch]$Full
 )
 
 $ErrorActionPreference = "Stop"
@@ -10,7 +10,7 @@ $Python = Resolve-RepoPython -RepoRoot $RepoRoot
 
 Push-Location $RepoRoot
 try {
-    $Tier = if ($FullCi) { "full-ci" } else { "precommit" }
+    $Tier = if ($Full) { "full" } else { "precommit" }
     Invoke-NativeChecked -File $Python -Arguments @(
         ".agents\scripts\verify.py",
         "--scope",

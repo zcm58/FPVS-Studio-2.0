@@ -99,9 +99,11 @@ Use the safe GUI route for non-Qt checks:
 ./scripts/verify.ps1 -Scope gui -Tier focused
 ```
 
-Do not set `QT_QPA_PLATFORM=offscreen` for local work. CI owns offscreen configuration,
-plugin opt-in, and registered Qt execution through the `full-ci` tier. Run Qt locally
-only after explicit user approval in a safe visible GUI environment.
+Do not set `QT_QPA_PLATFORM=offscreen`. Registered Qt execution is available through
+the optional `full` tier with `FPVS_ALLOW_QT_TESTS=1`, but run it only after explicit
+user approval in a safe visible GUI environment. GitHub does not run repository tests.
+The repo-wide `full` tier also requires the `dev` and `engine` extras shown in the local
+setup commands above.
 
 ## Manual Verification
 
@@ -111,7 +113,8 @@ For local GUI work:
 2. Launch `.\.venv3.10\Scripts\python -m fpvs_studio.app` visibly.
 3. Exercise only the changed surface and its important success, empty, busy, and error
    states at the documented minimum/default size.
-4. Record the manual path and leave registered pytest-qt execution to CI.
+4. Record the manual path and whether the optional registered pytest-qt suite was not
+   run or ran in an approved visible environment.
 
 Do not enter a real PsychoPy participant session, hardware workflow, or destructive
 dialog unless the task explicitly requires and authorizes it.

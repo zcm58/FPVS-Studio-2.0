@@ -141,16 +141,18 @@ current compatible Python interpreter:
 
 - `focused`: scope tests/checks plus changed-file Ruff and compilation.
 - `precommit`: mechanical/docs audits, mypy, changed-file checks, and safe non-Qt pytest.
-- `full-ci`: full Ruff, mypy, and pytest with registered Qt tests explicitly enabled.
+- `full`: optional full Ruff, mypy, and pytest with registered Qt tests explicitly
+  enabled for an approved visible local environment.
 
 Add `-List` to a scoped command to inspect its steps and use
 `./scripts/verify.ps1 -CheckConfig` after harness edits. GUI-focused local verification
 does not run Qt. Document a visible manual smoke path; run Qt locally only when the user
-approves a safe visible environment. Offscreen Qt is restricted to the explicit CI tier.
+approves a safe visible environment, and do not set `QT_QPA_PLATFORM=offscreen`.
 
-Legacy PowerShell wrappers remain supported for developer workflows, packaging, and CI,
-but agent routing should use the driver so environment selection and test safety remain
-consistent.
+GitHub does not run a repository test or code-quality workflow; the independent
+documentation build and publishing workflow remains automated. Legacy PowerShell
+wrappers remain supported for developer workflows and packaging, but agent routing
+should use the driver so environment selection and test safety remain consistent.
 
 ## Documentation Freshness
 

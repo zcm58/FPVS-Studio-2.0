@@ -27,5 +27,5 @@ remain implemented while the entry is hidden.
 
 - `Tutorials` is visible exactly once in the File menu.
 - Activating it opens the completed public tutorial site through the existing callback.
-- Registered GUI coverage passes in CI, and the safe GUI/docs verification scopes pass
-  locally.
+- Registered GUI coverage is retained for an optional approved visible `full` run, and
+  the safe GUI/docs verification scopes pass locally.

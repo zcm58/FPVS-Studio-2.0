@@ -20,6 +20,7 @@ except ModuleNotFoundError:  # Python 3.10
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CONFIG_PATH = REPO_ROOT / ".agents" / "verification.toml"
 QT_OPT_IN_ENV = "FPVS_ALLOW_QT_TESTS"
+QT_PLATFORM_ENV = "QT_QPA_PLATFORM"
 SUPPORTED_PYTHON = (3, 10)
 KNOWN_CHECKS = frozenset({"docs-hygiene", "gc"})
 
@@ -31,7 +32,7 @@ class VerificationScope:
     name: str
     checks: tuple[str, ...]
     tests: tuple[str, ...]
-    ci_tests: tuple[str, ...]
+    full_tests: tuple[str, ...]
     include: tuple[str, ...]
     manual_smoke: tuple[str, ...]
 
@@ -90,7 +91,9 @@ def load_scopes(
             name=scope_name,
             checks=_string_tuple(raw.get("checks"), field=f"{scope_name}.checks"),
             tests=_string_tuple(raw.get("tests"), field=f"{scope_name}.tests"),
-            ci_tests=_string_tuple(raw.get("ci_tests"), field=f"{scope_name}.ci_tests"),
+            full_tests=_string_tuple(
+                raw.get("full_tests"), field=f"{scope_name}.full_tests"
+            ),
             include=_string_tuple(raw.get("include"), field=f"{scope_name}.include"),
             manual_smoke=_string_tuple(
                 raw.get("manual_smoke"), field=f"{scope_name}.manual_smoke"
@@ -150,7 +153,7 @@ def validate_config(
             errors.append(f"{scope.name}: unknown check: {check}")
         if not scope.include:
             errors.append(f"{scope.name}: include patterns must not be empty")
-        for test_path in (*scope.tests, *scope.ci_tests):
+        for test_path in (*scope.tests, *scope.full_tests):
             absolute = repo_root / test_path
             if not absolute.exists():
                 errors.append(f"{scope.name}: test path does not exist: {test_path}")
@@ -270,9 +273,9 @@ def build_commands(
     powershell: str,
     changed: Sequence[str],
 ) -> list[list[str]]:
-    """Build commands for a focused, precommit, or full-CI tier."""
+    """Build commands for a focused, precommit, or optional full tier."""
 
-    if tier == "full-ci" and scope.name == "repo":
+    if tier == "full" and scope.name == "repo":
         return [
             [str(python), "-m", "ruff", "check", "."],
             [str(python), "-m", "mypy", "src"],
@@ -304,8 +307,8 @@ def build_commands(
     )
     tests = scope.tests
     allow_qt = False
-    if tier == "full-ci":
-        tests = tuple(dict.fromkeys((*scope.tests, *scope.ci_tests)))
+    if tier == "full":
+        tests = tuple(dict.fromkeys((*scope.tests, *scope.full_tests)))
         allow_qt = True
     if tests:
         commands.append(_pytest_command(python, tests, allow_qt=allow_qt))
@@ -319,7 +322,15 @@ def run_commands(commands: Sequence[Sequence[str]], *, list_only: bool) -> int:
         print(f"> {subprocess.list2cmdline(list(command))}", flush=True)
         if list_only:
             continue
-        result = subprocess.run(command, cwd=REPO_ROOT, check=False)
+        command_env = os.environ.copy()
+        if "--allow-qt-tests" not in command:
+            command_env.pop(QT_OPT_IN_ENV, None)
+        result = subprocess.run(
+            command,
+            cwd=REPO_ROOT,
+            check=False,
+            env=command_env,
+        )
         if result.returncode:
             return int(result.returncode)
     return 0
@@ -341,7 +352,7 @@ def parse_args(
     parser.add_argument("--scope", choices=sorted(scopes))
     parser.add_argument(
         "--tier",
-        choices=("focused", "precommit", "full-ci"),
+        choices=("focused", "precommit", "full"),
         default="focused",
     )
     parser.add_argument("--list", action="store_true", help="Print commands without running them.")
@@ -382,9 +393,20 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.scope is None:
         print("--scope is required unless --check-config is used", file=sys.stderr)
         return 2
-    if args.tier == "full-ci" and not args.list and not _qt_opted_in():
+    if args.tier == "full" and not args.list and not _qt_opted_in():
         print(
-            f"verification error: full-ci requires {QT_OPT_IN_ENV}=1",
+            f"verification error: full requires {QT_OPT_IN_ENV}=1",
+            file=sys.stderr,
+        )
+        return 2
+    if (
+        args.tier == "full"
+        and not args.list
+        and os.environ.get(QT_PLATFORM_ENV, "").strip().casefold() == "offscreen"
+    ):
+        print(
+            "verification error: full requires a visible Qt environment; "
+            f"unset {QT_PLATFORM_ENV}=offscreen",
             file=sys.stderr,
         )
         return 2
