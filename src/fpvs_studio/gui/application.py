@@ -8,10 +8,12 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+from PySide6.QtCore import QTimer
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication, QStyle
 
 from fpvs_studio.gui.controller import StudioController
+from fpvs_studio.gui.update_lifecycle import update_lifecycle
 
 _APP_ICON_PATH = Path(__file__).resolve().parent.parent / "assets" / "fpvs-studio.ico"
 
@@ -48,5 +50,31 @@ def run_gui_app(argv: list[str] | None = None) -> int:
 
     app = create_application(argv)
     controller = StudioController(app)
-    controller.show_welcome()
-    return app.exec()
+    lifecycle = update_lifecycle(app)
+    lifecycle.begin_startup()
+    startup_errors: list[Exception] = []
+
+    def _show_initial_window() -> None:
+        try:
+            # This does not depend on a project root, release metadata, or a network
+            # check. It runs even if first-run root-folder onboarding is canceled.
+            controller.start_update_cache_housekeeping()
+            controller.show_welcome()
+        except Exception as error:
+            startup_errors.append(error)
+            lifecycle.request_shutdown()
+        finally:
+            lifecycle.finish_startup()
+        if controller.welcome_window is None and controller.main_window is None:
+            lifecycle.request_shutdown()
+
+    QTimer.singleShot(0, _show_initial_window)
+    exit_code = app.exec()
+    # A direct QApplication.exit() can bypass the Quit event guard. Continue ordinary
+    # event processing until updater cancellation finishes; never block on thread.wait.
+    while lifecycle.has_active_jobs:
+        lifecycle.request_shutdown()
+        app.exec()
+    if startup_errors:
+        raise startup_errors[0]
+    return exit_code

@@ -392,11 +392,34 @@ Moving a project to the Recycle Bin remains a controller-owned filesystem operat
 guarded by `project.json` validation, confirmation, a post-action path check, and a disk
 refresh of the manage list after each attempt. `Check for Updates` queries GitHub
 Releases without blocking the GUI, shows current/latest versions and release notes,
-downloads the matching Windows installer with progress, supports this-launch-only
-`Remind Me Later`, and asks before closing FPVS Studio to launch the installer. Manual
-update-check failures show a clear try-again-later message. A silent startup update
+downloads and verifies the matching Windows installer with progress, and supports
+this-launch-only `Remind Me Later`. A newer release without a trusted installer SHA-256
+digest is still shown as available, with an explanation that in-app installation is
+unavailable and a release-page link; it is not reported as up to date. Manual
+update-check failures show a clear try-again-later message. A silent startup metadata
 check runs once after the Welcome window is shown; it stays silent unless an update is
-available. The Home page keeps full project descriptions in project data but shows a
+available. Independently, normal application startup schedules offline update-cache
+housekeeping before root-folder onboarding, even with no configured project root or
+network connection. Cache ownership and retention rules belong to the backend; see
+`docs/PACKAGING.md`.
+
+Updater workers belong to an application-level lifecycle coordinator, not the dialog
+that requested them. Close, window X, and Escape cancel a busy operation and keep the
+dialog responsive in `Canceling...` until the worker thread really finishes. Incomplete
+downloads are discarded and retries start from zero. Application quit and last-window
+closure also cancel outstanding jobs and defer final exit without a GUI-thread wait;
+parent-window destruction cannot destroy a running updater thread. Cache checks,
+download hashing/reuse, and final installer verification/launch run in workers. The
+Install action becomes available only after the download worker thread finishes;
+confirmation and any project Save prompt run on the GUI thread before the final
+verification/launch worker starts. A successful installer launch commits the handoff:
+a late cancellation cannot undo it, and FPVS Studio quits only after that worker ends.
+
+The update dialog has a `680x600` minimum and `760x620` default size. Its action grid
+keeps long button labels visible at both sizes. Versions and status text wrap; release
+notes and error details use an intentionally bounded, selectable preview with the full
+value in a tooltip, and the full release page remains available by button. The Home
+page keeps full project descriptions in project data but shows a
 bounded preview under the project title to avoid launch-surface clipping. The `Tools`
 menu exposes standalone utilities such as Image Resizer; these utilities may use
 preprocessing services but must not silently mutate the active project.
@@ -441,8 +464,12 @@ preprocessing services but must not silently mutate the active project.
 - In-app update presentation lives in `src/fpvs_studio/gui/update_dialog.py`; release
   parsing, version comparison, installer download, and installer launch helpers stay in
   `src/fpvs_studio/updates/`.
-- Startup update-check orchestration lives in `src/fpvs_studio/gui/controller.py`; it
-  should stay silent unless a newer release is available.
+- App-owned updater worker/cancellation lifetime lives in
+  `src/fpvs_studio/gui/update_lifecycle.py`; `application.py` owns startup and the final
+  asynchronous shutdown drain. These contain no cache-retention or installer-trust rules.
+- Startup offline cache-housekeeping and one-shot metadata-check orchestration live in
+  `src/fpvs_studio/gui/controller.py`; housekeeping errors are nonfatal/logged, and the
+  metadata check should stay silent unless a newer release is available.
 - Standalone image resizing lives in `src/fpvs_studio/gui/image_resizer_page.py`; it uses
   the shared component layer and delegates batch work to preprocessing through Qt workers.
 - Bundle review and Welcome-hosted progress dialogs live in
@@ -592,3 +619,27 @@ For GUI coverage:
 Local handoff must document a visible manual smoke path for the changed workflow and
 state whether registered Qt coverage was not run or ran in an explicitly approved
 visible environment.
+
+Updater visible/manual smoke (pending an approved visible Windows session):
+
+1. Open `File > Check for Updates` and inspect the `680x600` minimum and `760x620`
+   default sizes with long versions, release notes, and error details. Check every action
+   label, wrapped status, the full-detail tooltip, and release-page action without resizing.
+2. Using controlled offline callbacks (as in `tests/gui/test_update_dialog.py`), exercise
+   current, newer/trusted, newer/missing-digest, busy, canceled, and failed states. A
+   missing digest must disable Download/Install while preserving the newer-version copy.
+   Verify progress beyond 2 GiB with synthetic byte counts, not a large real download.
+3. Hold fake metadata/download/verification work open, then use Close, X, and Escape.
+   Check that cancellation is visible, controls stay responsive, and the dialog closes
+   only after worker completion. Repeat with application quit, last-window closure,
+   parent destruction, and first-run root-picker cancellation. No running-thread warning
+   or hidden updater job may remain; temporary root-picker transitions must not quit.
+4. Stub installer launch and confirmation/save prompts. Confirm that neither hashing nor
+   launching occurs on the GUI thread, Install stays disabled until download-thread
+   completion, declining/canceling never launches, and a committed fake launch quits only
+   after its worker finishes. Closing/destroying a prompt must not start a hidden launch.
+
+The registered updater module contains deterministic fake-worker cases for these paths;
+source/lint/compilation checks do not validate real Qt event delivery or visible layout.
+Actual installer/upgrade lifecycle checks remain separately documented in
+`docs/PACKAGING.md`; this smoke must not launch a real installer or clean a real cache.

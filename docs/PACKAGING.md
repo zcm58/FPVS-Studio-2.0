@@ -31,7 +31,7 @@ The PyInstaller spec includes package metadata in the bundled app.
 The package distribution name is `fpvs-studio`; the GUI and executable still use the
 display name `FPVS Studio`.
 
-For the current package, use the PEP 440-compatible package version `1.3.0`.
+For the current beta package, use the PEP 440-compatible package version `1.3.1b2`.
 The GitHub Release title can use a friendlier beta label, but the release tag and
 installer filename must use the exact package version.
 
@@ -134,9 +134,11 @@ Compress-Archive -Path "dist\FPVS Studio\*" -DestinationPath "dist\FPVS-Studio.z
 
 ## Build The Installer
 
-Install Inno Setup 6 locally before building an installer. The build script looks for
+Install Inno Setup 6.5 or newer locally before building an installer. Clean-upgrade
+verification uses its stream-based SHA-256 support; older compilers are rejected.
+The build script looks for
 `ISCC.exe` on `PATH`, in the default Inno Setup install folders, through `ISCC_EXE`, or
-through the explicit `-InnoCompiler` argument.
+through the explicit `-InnoCompiler` argument or its Windows uninstall registration.
 
 For the normal release build, run the one-step wrapper:
 
@@ -184,7 +186,7 @@ Then build the setup EXE:
 Expected output for the current package:
 
 ```text
-dist\installer\FPVS-Studio-Setup-1.3.0.exe
+dist\installer\FPVS-Studio-Setup-1.3.1b2.exe
 ```
 
 The installer build validates that the PyInstaller bundle has an `_internal` folder and
@@ -221,10 +223,56 @@ against the exact bundle being wrapped, the installer smoke gate can be skipped:
 .\scripts\build_installer.ps1 -SkipSmoke
 ```
 
+For an explicitly requested local beta that the user will test manually, build into
+an isolated label so existing unlabelled artifacts remain untouched:
+
+```powershell
+.\scripts\build_exe.ps1 -BuildLabel beta-1.3.1b2
+.\scripts\build_installer.ps1 -BuildLabel beta-1.3.1b2 -SkipSmoke
+```
+
+This produces `dist\beta-1.3.1b2\installer\FPVS-Studio-Setup-1.3.1b2.exe`, with
+bundle/build metadata under the matching `dist\beta-1.3.1b2\` and
+`build\beta-1.3.1b2\` directories. A build label must be a safe single directory
+name, not a path. `build_release.ps1` also forwards `-BuildLabel`, but retains the
+ordinary packaged smoke gate. Skipping the smoke for a manual-test candidate does
+not constitute a successful packaged launch or authorize release publication. Record
+that check as pending and do not launch the app, installer, or uninstaller for the user.
+
 The installer wraps the whole `dist\FPVS Studio\` folder. It installs per-user under
 `%LOCALAPPDATA%\Programs\FPVS Studio`, creates Start Menu shortcuts, and offers an
 optional Desktop shortcut. User settings, projects, templates, run history, and logs
 remain outside the install folder.
+
+### Clean Upgrade Ownership
+
+Before compiling setup, `scripts/build_installer_inventory.py` hashes the final bundle
+and generates `current-owned-files.txt` and `legacy-owned-files.txt` under
+`build/installer-inventory/`. The latter is validated from the checked-in
+`packaging/inventory/published-legacy-inventory.json`. That inventory was extracted
+from exact checksum-authenticated public installers through 1.3.0; it covers older
+files carried forward by multiple upgrades, not just a fresh 1.3.0 installation.
+See `packaging/inventory/README.md` for provenance and safe regeneration instructions.
+No historical installers or extractor tools are downloaded on end-user machines.
+
+The installed ownership record is `fpvs-owned-files-v1.txt`. Inno captures previous
+ownership before replacing files and reconciles obsolete entries only after successful
+installation. Deletion requires a validated install-relative path and a matching known
+content hash. Unknown/modified files and project-data names remain untouched; symlinks,
+junctions, rooted paths, traversal, and unsafe Windows aliases do not establish ownership.
+Upgrade reconciliation removes files only and retains directories, including explicitly
+shipped empty directories. Inno retains its ordinary logged-directory uninstall behavior.
+The profile-root guard resolves `CSIDL_PROFILE` through Inno's
+`GetShellFolderByCSIDL(..., False)` without creating directories; an empty or invalid
+result stops preparation. Runtime `ExpandConstant` names are checked separately from
+native compilation, which does not validate constant names inside Pascal strings.
+Failed obsolete deletions remain recorded in
+`fpvs-pending-owned-files-v1.txt` so later upgrades can retry them. A cleanup warning is
+not evidence that the installation reached fresh-install parity.
+
+Do not use a wildcard deletion of `{app}` or `_internal`, and do not set
+`UninstallLogMode=overwrite`. The installer is self-contained: reconciliation does not
+require installed Python, PowerShell, or a separate maintenance application.
 
 Upload the setup EXE to the matching GitHub Release after smoke testing fresh install,
 launch, update-over-old-version install, and uninstall behavior. The clean-PC or clean-VM
@@ -257,14 +305,97 @@ Release requirements for the updater:
 - beta/prerelease users can see prerelease updates; stable users ignore prereleases by
   default
 - draft releases are ignored
+- the selected asset must expose valid `sha256:<64 hex digits>` digest metadata and a
+  positive byte size; GitHub's [release asset API](https://docs.github.com/en/rest/releases/assets)
+  supplies the digest for published assets
+- installer URLs must belong to this repository's HTTPS GitHub release-download path,
+  and names must match the selected version; the published `v0.9.9.10` / `0.9.10`
+  filename mismatch is the sole explicit legacy alias
+
+A newer release lacking trustworthy installer metadata remains visible as an available
+release, with its release-page link, but in-app download/install is unavailable. Do not
+silently accept size-only validation or report that the installed app is up to date.
+SHA-256 checks are required before reuse and again immediately before launch; release
+signing infrastructure is not introduced by this feature.
 
 The updater stores downloaded installers in a user-writable update cache, never in the
-install folder or project folders. On `Install and Restart`, FPVS Studio asks for final
-confirmation, launches the downloaded Inno installer with `/RELAUNCH=1`, and exits. The
+install folder or project folders. On Windows the normal cache is
+`%LOCALAPPDATA%\FPVS Studio\updates`. Startup housekeeping is independent of the
+configured FPVS Studio Root Folder and of network update-check success. Under one
+exclusive inter-process lock it removes recognized installers at or below the running
+version, retains at most the highest verified newer installer, and removes abandoned
+recognized partials. Small verification receipts allow offline cache validation; legacy
+size-only cached files cannot be reused without trusted verification metadata.
+
+The cache payload bound after successful housekeeping is one complete installer and
+one actively locked unique staging file, excluding small lock/receipt metadata. Unknown
+files and links are never cleanup targets. Startup cleanup errors are logged and do not
+prevent launch; an explicit download refuses to add payloads if required pruning fails.
+An active download holds the same lock through cleanup, transfer, checksum verification,
+and promotion. Competing attempts report that the cache is busy. Canceled or interrupted
+downloads are discarded; a retry starts from zero. Uninstall cleans only recognized
+app-owned cache files under the same lock, and removes the cache directory only if empty.
+
+On `Install and Restart`, FPVS Studio asks for final confirmation, saves the open project
+through its existing GUI callback, verifies the downloaded file in a background worker,
+launches the Inno installer with `/RELAUNCH=1`, and exits after that worker has finished. The
 installer remains responsible for replacing app files and relaunching FPVS Studio. User
 projects, app settings, condition templates, run history, and logs remain outside the
 install folder during updates. Normal first-time installer runs still show the standard
 launch checkbox on the final page.
+
+Closing an update dialog through its button, Escape, or the window close control requests
+cancellation and defers teardown until updater work finishes. Application quit similarly
+cancels/finishes app-owned updater jobs without destroying running Qt threads or blocking
+the GUI thread. Metadata checks, hashing, cache housekeeping, and download I/O all stay
+off the GUI thread. Startup never downloads an installer or launches setup automatically.
+
+### Updater And Upgrade Acceptance
+
+Run the focused `updates`, `gui`, and `packaging` verification scopes, then repo
+precommit. Ordinary local verification uses temporary files and mocked network/process
+operations; it does not run an installer, uninstall an application, or execute Qt.
+Registered Qt coverage requires a separately approved safe visible environment.
+
+A safe native syntax check compiles the actual Inno script against a tiny,
+non-executable synthetic bundle, without running the resulting setup:
+
+```powershell
+python scripts/check_installer_compile.py --inno-compiler "C:\Path\To\ISCC.exe"
+```
+
+The temporary fixture and compiled output are removed automatically. The explicit
+[Windows lifecycle checklist](../packaging/inno/LIFECYCLE_TESTS.md) covers the
+remaining real-install acceptance and the read-only installed-file parity checker.
+
+Before release, use a disposable Windows VM or separate test account to verify:
+
+- fresh install and visible updater layout in ready, busy, cancellation, error, and
+  downloaded states; Close, Escape, the window close control, and app quit during work
+- fresh 1.3.0 to the new version, plus an earlier published release to 1.3.0 to the new
+  version; compare owned payload files/hashes against a fresh new-version installation
+- a genuinely historical obsolete-file sentinel is removed, while an unrelated file
+  and project/settings/templates/run/log sentinels survive
+- same-size installer corruption is rejected, simultaneous processes cannot share a
+  download, interrupted transfers leave no reusable partial, and post-update startup
+  prunes the old installer without deleting a still-running setup executable
+- a locked obsolete file, failed cleanup, retry on the next upgrade, malformed ownership
+  metadata, path/junction escapes, and canceled/failed setup preserve safe recovery
+- final uninstall removes owned application/cache payloads but not unrelated files or
+  project/settings data
+
+For this feature's initial implementation, no disposable environment was available.
+On 2026-08-31 the user accepted the visible updater GUI and requested a local
+`1.3.1b1` installer to run manually on their own machine. That approval permits
+building and handing off the candidate, not agent-run installation or failure tests.
+The user then reported that beta 1 stopped during preparation on the unsupported
+`{userprofile}` constant, before application-file replacement. Beta `1.3.1b2` replaces
+that lookup with the supported shell-folder API and includes regression coverage;
+the replacement installer still requires the user's manual test.
+Safe local tests and compiler checks are evidence only for the code they exercise;
+real Windows install/upgrade/uninstall acceptance remains pending in the active plan.
+Do not use the working installation for destructive failure/recovery tests or publish
+a release as though the remaining lifecycle checks passed.
 
 ## App Icon And Branding
 

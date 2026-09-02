@@ -11,12 +11,13 @@ Use this page to find planning material before making feature-sized changes.
 - Completed plans: `exec-plans/completed/`
 - Technical debt tracker: `exec-plans/tech-debt-tracker.md`
 
-Current implementation: no active feature execution plan.
+Current implementation:
+
+- `exec-plans/active/bounded-updater-storage-and-clean-upgrades.md`
 
 Concrete planned work:
 
 - `exec-plans/planned/restore-tutorials-file-menu-entry.md`
-- `exec-plans/planned/bounded-updater-storage-and-clean-upgrades.md`
 - `exec-plans/planned/luminance-rms-equalization-investigation.md`
 - `exec-plans/planned/sinusoidal-contrast-modulation.md`
 

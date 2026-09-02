@@ -35,10 +35,13 @@ lazily only inside the engine package.
   codes are `1`-`255`; `0` is manual reset only. The `oddball_onset` code remains `55`
   unless the user explicitly enables and records
   `allow_nonstandard_oddball_trigger_code`.
-- `src/fpvs_studio/updates/`: GUI-neutral GitHub Releases checking, installer download,
-  and explicit installer-launch helpers.
+- `src/fpvs_studio/updates/`: GUI-neutral GitHub Releases checking, bounded updater
+  cache ownership/locking, cancelable checksum-verified downloads, and explicit
+  verified installer-launch helpers.
 - `tests/`: unit, integration, and registered pytest-qt coverage.
-- `packaging/`: PyInstaller/Inno configuration and release assets for Windows builds.
+- `packaging/`: PyInstaller/Inno configuration, published legacy ownership inventory,
+  and release assets for Windows builds. Installer-owned file reconciliation remains
+  here, separate from project data and the runtime updater cache.
 
 Every source package has a nested `AGENTS.md`; read the one governing files you edit.
 
@@ -185,7 +188,8 @@ The application version is declared in `pyproject.toml`; the distribution name i
 `fpvs-studio` and the user-facing name is FPVS Studio. Packaging and in-app updater
 requirements live in `docs/PACKAGING.md`, `packaging/AGENTS.md`, and the updates package
 guide. Use the `packaging` or `updates` verification scope rather than discovering raw
-test commands again.
+test commands again. Packaging entry points accept an optional safe `BuildLabel` to
+isolate beta artifacts under matching ignored `build/` and `dist/` subdirectories.
 
 ## Module Decomposition
 
