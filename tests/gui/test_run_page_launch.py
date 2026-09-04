@@ -108,11 +108,13 @@ def test_background_color_control_is_run_tab_presets_only(
         QComboBox, "runtime_background_color_combo"
     )
     assert runtime_background_combo is not None
-    assert runtime_background_combo.count() == 2
+    assert runtime_background_combo.count() == 3
     assert runtime_background_combo.itemText(0) == "Black"
     assert runtime_background_combo.itemData(0) == "#000000"
     assert runtime_background_combo.itemText(1) == "Dark Gray"
     assert runtime_background_combo.itemData(1) == "#101010"
+    assert runtime_background_combo.itemText(2) == "Neutral Gray"
+    assert runtime_background_combo.itemData(2) == "#808080"
     assert runtime_background_combo.currentText() == "Black"
 
     scope_label = window.run_page.findChild(QLabel, "runtime_background_scope_label")

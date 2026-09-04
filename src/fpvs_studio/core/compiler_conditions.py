@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from fpvs_studio.core.compiler_support import CompileError
-from fpvs_studio.core.enums import StimulusModality
+from fpvs_studio.core.contrast_modulation import is_sinusoidal_neutral_background
+from fpvs_studio.core.enums import DutyCycleMode, StimulusModality
 from fpvs_studio.core.models import Condition, ProjectFile, StimulusSet
 from fpvs_studio.core.validation import validate_display_refresh
 
@@ -97,6 +98,19 @@ def validate_selected_condition(
             f"Condition '{condition.name}' cannot mix base {base_set.modality.value} "
             f"stimuli with oddball {oddball_set.modality.value} stimuli."
         )
+    if condition.duty_cycle_mode == DutyCycleMode.SINUSOIDAL:
+        if base_set.modality != StimulusModality.IMAGE:
+            raise CompileError(
+                f"Condition '{condition.name}' cannot use Contrast Modulation with word "
+                "stimuli; sinusoidal contrast modulation currently supports images only."
+            )
+        if not is_sinusoidal_neutral_background(
+            project.settings.display.background_color
+        ):
+            raise CompileError(
+                f"Condition '{condition.name}' uses Contrast Modulation, which requires "
+                "the presentation background to be Neutral Gray (#808080)."
+            )
     if base_set.modality == StimulusModality.IMAGE:
         if base_set.image_count <= 0:
             raise CompileError(

@@ -18,7 +18,6 @@ Concrete planned work:
 - `exec-plans/planned/restore-tutorials-file-menu-entry.md`
 - `exec-plans/planned/bounded-updater-storage-and-clean-upgrades.md`
 - `exec-plans/planned/luminance-rms-equalization-investigation.md`
-- `exec-plans/planned/sinusoidal-contrast-modulation.md`
 
 Completed plans are historical implementation notes. Read their directory only when
 the current contracts do not explain why a landed decision exists.

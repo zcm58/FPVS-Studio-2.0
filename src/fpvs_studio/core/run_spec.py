@@ -12,6 +12,7 @@ from typing import Literal
 from pydantic import Field, StrictInt, field_validator, model_validator
 
 from fpvs_studio.core.enums import (
+    DutyCycleMode,
     ImageGeometryMode,
     PresentationUnit,
     SchemaVersion,
@@ -120,6 +121,7 @@ class DisplayRunSpec(FPVSBaseModel):
     screen_width_px: int = Field(gt=0)
     screen_height_px: int = Field(gt=0)
     use_current_screen_resolution: bool = False
+    duty_cycle_mode: DutyCycleMode = DutyCycleMode.CONTINUOUS
     frames_per_stimulus: int = Field(gt=0)
     on_frames: int = Field(ge=0)
     off_frames: int = Field(ge=0)

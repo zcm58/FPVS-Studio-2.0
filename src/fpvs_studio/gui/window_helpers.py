@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from PySide6.QtCore import QEvent, QObject, QSignalBlocker, Qt, QTimer
 from PySide6.QtGui import QTextCursor
 from PySide6.QtWidgets import (
+    QComboBox,
     QFormLayout,
     QLabel,
     QListWidget,
@@ -19,6 +20,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from fpvs_studio.core.contrast_modulation import SINUSOIDAL_NEUTRAL_BACKGROUND_COLOR
 from fpvs_studio.core.enums import (
     DutyCycleMode,
     InterConditionMode,
@@ -40,6 +42,12 @@ _FIXATION_FEASIBILITY_TOOLTIP_TEXT = (
 _RUNTIME_BACKGROUND_COLOR_PRESETS: tuple[tuple[str, str], ...] = (
     ("Black", "#000000"),
     ("Dark Gray", "#101010"),
+    ("Neutral Gray", SINUSOIDAL_NEUTRAL_BACKGROUND_COLOR),
+)
+_IMAGE_PRESENTATION_MODES = (
+    DutyCycleMode.CONTINUOUS,
+    DutyCycleMode.BLANK_50,
+    DutyCycleMode.SINUSOIDAL,
 )
 _LAUNCH_INTERSTITIAL_DURATION_MS = 700
 _PAGE_WIDTH_PRESETS: dict[str, int] = CONTENT_MAX_WIDTHS
@@ -94,6 +102,7 @@ def _duty_cycle_label(mode: DutyCycleMode) -> str:
     return {
         DutyCycleMode.CONTINUOUS: "Continuous",
         DutyCycleMode.BLANK_50: "50% Blank",
+        DutyCycleMode.SINUSOIDAL: "Contrast Modulation",
     }[mode]
 
 
@@ -101,7 +110,46 @@ def _timing_template_label(mode: DutyCycleMode) -> str:
     return {
         DutyCycleMode.CONTINUOUS: "Continuous Images",
         DutyCycleMode.BLANK_50: "50% Blank Between Images",
+        DutyCycleMode.SINUSOIDAL: "Contrast Modulation",
     }[mode]
+
+
+def _sync_timing_template_combo(
+    combo: QComboBox,
+    *,
+    modality: StimulusModality,
+    selected_mode: DutyCycleMode | None,
+) -> None:
+    """Expose contrast modulation only for image-condition authoring."""
+
+    modes = (
+        _IMAGE_PRESENTATION_MODES
+        if modality == StimulusModality.IMAGE
+        else _IMAGE_PRESENTATION_MODES[:2]
+    )
+    displayed_modes = tuple(combo.itemData(index) for index in range(combo.count()))
+    with QSignalBlocker(combo):
+        if displayed_modes != modes:
+            combo.clear()
+            for mode in modes:
+                combo.addItem(_timing_template_label(mode), userData=mode)
+        selected_index = combo.findData(selected_mode) if selected_mode is not None else -1
+        combo.setCurrentIndex(selected_index)
+
+    if modality == StimulusModality.IMAGE:
+        guidance = (
+            "Contrast Modulation is available for image conditions and requires "
+            "Neutral Gray (#808080) in Experiment settings."
+        )
+    else:
+        guidance = (
+            "Word conditions support Continuous Images and 50% Blank Between Images. "
+            "Switching an image condition to Words resets Contrast Modulation to "
+            "Continuous Images."
+        )
+    combo.setToolTip(guidance)
+    combo.setAccessibleName("Presentation mode")
+    combo.setAccessibleDescription(guidance)
 
 
 def _transition_label(mode: InterConditionMode) -> str:

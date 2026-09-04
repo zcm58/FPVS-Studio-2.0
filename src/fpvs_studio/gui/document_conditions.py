@@ -574,7 +574,23 @@ class DocumentConditionMixin:
                         words=[],
                     )
                 )
-        project = validated_copy(self._project, stimulus_sets=updated_sets)
+        updated_conditions = self._project.conditions
+        if (
+            modality == StimulusModality.WORD
+            and condition.duty_cycle_mode == DutyCycleMode.SINUSOIDAL
+        ):
+            continuous_condition = condition.model_copy(
+                update={"duty_cycle_mode": DutyCycleMode.CONTINUOUS}
+            )
+            updated_conditions = [
+                continuous_condition if item.condition_id == condition_id else item
+                for item in self._project.conditions
+            ]
+        project = validated_copy(
+            self._project,
+            conditions=updated_conditions,
+            stimulus_sets=updated_sets,
+        )
         self._replace_project(project)
 
     def update_condition_words(self, condition_id: str, *, role: str, words: list[str]) -> None:

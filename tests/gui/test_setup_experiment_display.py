@@ -8,6 +8,7 @@ import pytest
 from PySide6.QtCore import (
     QObject,
     QPoint,
+    QRect,
     Qt,
     Signal,
 )
@@ -25,6 +26,7 @@ from tests.gui.helpers import (
     _open_created_project,
 )
 
+from fpvs_studio.core.enums import DutyCycleMode
 from fpvs_studio.gui.controller import StudioController
 from fpvs_studio.runtime.display_mode import NativeDisplayMode
 from fpvs_studio.runtime.display_refresh import DisplayRefreshVerification
@@ -186,6 +188,46 @@ def test_setup_wizard_experiment_and_fixation_steps_are_width_safe(
     window.resize(1120, 720)
     QApplication.processEvents()
     assert guide.shell.page_container.scroll_area.verticalScrollBar().maximum() == 0
+
+
+def test_contrast_modulation_background_guidance_fits_setup_minimum(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Contrast Background")
+    guide = window.setup_wizard_page
+    condition_id = guide._document.create_condition()
+    guide._document.update_condition_timing_template(
+        condition_id,
+        DutyCycleMode.SINUSOIDAL,
+    )
+
+    window.resize(1120, 720)
+    window.show_setup_wizard(step_key="experiment")
+    editor = guide.runtime_settings_editor
+    neutral_gray_index = editor.runtime_background_color_combo.findData("#808080")
+    assert neutral_gray_index >= 0
+    assert [
+        editor.runtime_background_color_combo.itemText(index)
+        for index in range(editor.runtime_background_color_combo.count())
+    ] == ["Black", "Dark Gray", "Neutral Gray"]
+    editor.runtime_background_color_combo.setCurrentIndex(neutral_gray_index)
+    QApplication.processEvents()
+
+    assert guide._document.project.settings.display.background_color == "#808080"
+    assert editor.timing_report().duty_cycle_mode == DutyCycleMode.SINUSOIDAL
+    note = editor.contrast_background_note_label
+    assert note.isVisible()
+    assert note.text() == "Contrast Modulation requires Neutral Gray (#808080)."
+    required_note_height = note.fontMetrics().boundingRect(
+        QRect(0, 0, max(1, note.contentsRect().width()), 1000),
+        Qt.TextFlag.TextWordWrap,
+        note.text(),
+    ).height()
+    assert note.contentsRect().height() >= required_note_height
+    _assert_visible_children_within_parent(editor)
+    _assert_setup_wizard_vertical_scrolling_disabled(guide)
 
 
 def test_setup_wizard_fpvs_rates_persist_and_report_exact_or_approximate_timing(

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import math
 
+from fpvs_studio.core.contrast_modulation import MIN_SINUSOIDAL_FRAMES_PER_STIMULUS
 from fpvs_studio.core.enums import DutyCycleMode
 
 FRAME_TOLERANCE = 1e-6
@@ -43,6 +44,16 @@ def validate_blank_mode_frames(frames_per_stimulus_value: int) -> None:
         )
 
 
+def validate_sinusoidal_mode_frames(frames_per_stimulus_value: int) -> None:
+    """Enforce enough samples for a background-to-peak-to-return contrast cycle."""
+
+    if frames_per_stimulus_value < MIN_SINUSOIDAL_FRAMES_PER_STIMULUS:
+        raise FrameValidationError(
+            "Sinusoidal contrast modulation requires at least "
+            f"{MIN_SINUSOIDAL_FRAMES_PER_STIMULUS} frames per stimulus cycle."
+        )
+
+
 def on_off_frames(
     frames_per_stimulus_value: int,
     duty_cycle_mode: DutyCycleMode,
@@ -51,6 +62,11 @@ def on_off_frames(
 
     if duty_cycle_mode == DutyCycleMode.CONTINUOUS:
         return frames_per_stimulus_value, 0
-    validate_blank_mode_frames(frames_per_stimulus_value)
-    half_cycle = frames_per_stimulus_value // 2
-    return half_cycle, half_cycle
+    if duty_cycle_mode == DutyCycleMode.SINUSOIDAL:
+        validate_sinusoidal_mode_frames(frames_per_stimulus_value)
+        return frames_per_stimulus_value, 0
+    if duty_cycle_mode == DutyCycleMode.BLANK_50:
+        validate_blank_mode_frames(frames_per_stimulus_value)
+        half_cycle = frames_per_stimulus_value // 2
+        return half_cycle, half_cycle
+    raise FrameValidationError(f"Unsupported presentation mode '{duty_cycle_mode}'.")

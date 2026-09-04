@@ -12,8 +12,10 @@ import pytest
 from PIL import Image
 
 from fpvs_studio.core.compiler import compile_run_spec
+from fpvs_studio.core.contrast_modulation import sinusoidal_contrast_envelope
 from fpvs_studio.core.display_geometry import visual_angle_width_px
 from fpvs_studio.core.enums import (
+    DutyCycleMode,
     ImageGeometryMode,
     PresentationUnit,
     StimulusModality,
@@ -222,6 +224,9 @@ def _build_fake_psychopy(
         def __init__(self, *args, image: str, **kwargs) -> None:
             super().__init__(*args, **kwargs)
             self.image = image
+            self._contrast = kwargs.get("contrast", 1.0)
+            self.contrast_assignment_count = 0
+            self.draw_contrasts: list[float] = []
             self.size = kwargs.get("size")
             self.flipHoriz = kwargs.get("flipHoriz")
             self.flipVert = kwargs.get("flipVert")
@@ -229,6 +234,21 @@ def _build_fake_psychopy(
             self.clear_textures_count = 0
             image_stims.append(self)
             events.append(("image", image))
+
+        @property
+        def contrast(self) -> float:
+            return float(self._contrast)
+
+        @contrast.setter
+        def contrast(self, value: float) -> None:
+            self.contrast_assignment_count += 1
+            self._contrast = value
+
+        def draw(self) -> None:
+            super().draw()
+            contrast = float(self.contrast)
+            self.draw_contrasts.append(contrast)
+            events.append(("image_draw", (self, contrast)))
 
         def clearTextures(self) -> None:
             self.clear_textures_count += 1
@@ -419,6 +439,42 @@ def _two_event_run_spec(sample_project, sample_project_root, *, duplicate_image:
     return run_spec
 
 
+def _two_cycle_image_run_spec(
+    sample_project,
+    sample_project_root,
+    *,
+    duty_cycle_mode: DutyCycleMode,
+    base_hz: float = 6.0,
+):
+    sample_project.settings.fixation_task.enabled = False
+    sample_project.settings.fixation_task.accuracy_task_enabled = False
+    sample_project.settings.protocol.base_hz = base_hz
+    sample_project.settings.display.background_color = "#808080"
+    sample_project.conditions[0].duty_cycle_mode = duty_cycle_mode
+    sample_project.conditions[0].oddball_cycle_repeats_per_sequence = 1
+    run_spec = compile_run_spec(
+        sample_project,
+        refresh_hz=60.0,
+        project_root=sample_project_root,
+        run_id=f"{duty_cycle_mode.value}-{base_hz:g}-hz-smoke",
+    )
+    first_event = run_spec.stimulus_sequence[0].model_copy(update={"sequence_index": 0})
+    second_source = next(
+        event for event in run_spec.stimulus_sequence if event.image_path != first_event.image_path
+    )
+    second_event = second_source.model_copy(
+        update={
+            "sequence_index": 1,
+            "on_start_frame": run_spec.display.frames_per_stimulus,
+        }
+    )
+    run_spec.stimulus_sequence = [first_event, second_event]
+    run_spec.fixation_events = []
+    run_spec.trigger_events = []
+    run_spec.display.total_frames = 2 * run_spec.display.frames_per_stimulus
+    return run_spec.model_copy(update={"pre_stream_fixation_frames": 0})
+
+
 def _two_word_event_run_spec(sample_project):
     sample_project.settings.fixation_task.enabled = False
     sample_project.settings.fixation_task.accuracy_task_enabled = False
@@ -475,6 +531,18 @@ def _events(captures: dict[str, object]) -> list[tuple[str, object]]:
     events = captures["events"]
     assert isinstance(events, list)
     return events
+
+
+def _timed_image_draws(captures: dict[str, object]) -> list[tuple[Any, float]]:
+    events = _events(captures)
+    preload_clear_index = next(
+        index for index, event in enumerate(events) if event[0] == "clearBuffer"
+    )
+    return [
+        event[1]
+        for index, event in enumerate(events)
+        if index > preload_clear_index and event[0] == "image_draw"
+    ]
 
 
 def _graphics_readiness_result(
@@ -969,6 +1037,159 @@ def test_psychopy_engine_reuses_prepared_stimulus_within_condition(
     assert len(image_stims) == 1
     assert image_stims[0].draw_count == 3
     assert image_stims[0].clear_textures_count == 1
+
+
+@pytest.mark.parametrize(("base_hz", "expected_frames"), [(4.0, 15), (5.0, 12), (6.0, 10)])
+def test_psychopy_engine_applies_frequency_agnostic_sinusoidal_contrast_per_cycle(
+    monkeypatch,
+    sample_project,
+    sample_project_root,
+    base_hz: float,
+    expected_frames: int,
+) -> None:
+    run_spec = _two_cycle_image_run_spec(
+        sample_project,
+        sample_project_root,
+        duty_cycle_mode=DutyCycleMode.SINUSOIDAL,
+        base_hz=base_hz,
+    )
+    captures: dict[str, object] = {}
+    fake_psychopy = _build_fake_psychopy(captures, flip_times=[])
+    engine = PsychoPyEngine()
+    _patch_fake_psychopy(monkeypatch, engine, fake_psychopy)
+
+    try:
+        engine.run_condition(
+            run_spec,
+            sample_project_root,
+            runtime_options={"timing_warmup_frames": 0},
+            trigger_backend=None,
+        )
+    finally:
+        engine.close_session()
+
+    assert run_spec.display.frames_per_stimulus == expected_frames
+    timed_draws = _timed_image_draws(captures)
+    image_stims = _image_stims(captures)
+    expected_envelope = sinusoidal_contrast_envelope(expected_frames)
+    assert len(image_stims) == 2
+    assert [stimulus.contrast_assignment_count for stimulus in image_stims] == [
+        expected_frames,
+        expected_frames,
+    ]
+    assert [contrast for _stimulus, contrast in timed_draws] == pytest.approx(
+        [*expected_envelope, *expected_envelope]
+    )
+    assert all(stimulus is image_stims[0] for stimulus, _contrast in timed_draws[:expected_frames])
+    assert all(stimulus is image_stims[1] for stimulus, _contrast in timed_draws[expected_frames:])
+
+
+def test_engine_validation_uses_explicit_sinusoidal_mode(
+    sample_project,
+    sample_project_root,
+) -> None:
+    run_spec = _two_cycle_image_run_spec(
+        sample_project,
+        sample_project_root,
+        duty_cycle_mode=DutyCycleMode.SINUSOIDAL,
+    )
+
+    report = PsychoPyEngine().validate_run_spec(run_spec)
+
+    assert report.compatible is True
+    assert report.duty_cycle_mode == DutyCycleMode.SINUSOIDAL
+
+
+@pytest.mark.parametrize(
+    ("duty_cycle_mode", "expected_draws_per_cycle"),
+    [(DutyCycleMode.CONTINUOUS, 10), (DutyCycleMode.BLANK_50, 5)],
+)
+def test_psychopy_engine_keeps_existing_image_modes_at_full_contrast(
+    monkeypatch,
+    sample_project,
+    sample_project_root,
+    duty_cycle_mode: DutyCycleMode,
+    expected_draws_per_cycle: int,
+) -> None:
+    run_spec = _two_cycle_image_run_spec(
+        sample_project,
+        sample_project_root,
+        duty_cycle_mode=duty_cycle_mode,
+    )
+    captures: dict[str, object] = {}
+    fake_psychopy = _build_fake_psychopy(captures, flip_times=[])
+    engine = PsychoPyEngine()
+    _patch_fake_psychopy(monkeypatch, engine, fake_psychopy)
+
+    try:
+        engine.run_condition(
+            run_spec,
+            sample_project_root,
+            runtime_options={"timing_warmup_frames": 0},
+            trigger_backend=None,
+        )
+    finally:
+        engine.close_session()
+
+    timed_draws = _timed_image_draws(captures)
+    image_stims = _image_stims(captures)
+    assert [stimulus.contrast_assignment_count for stimulus in image_stims] == [0, 0]
+    assert [contrast for _stimulus, contrast in timed_draws] == [1.0] * (
+        expected_draws_per_cycle * 2
+    )
+    assert all(
+        stimulus is image_stims[0] for stimulus, _contrast in timed_draws[:expected_draws_per_cycle]
+    )
+    assert all(
+        stimulus is image_stims[1] for stimulus, _contrast in timed_draws[expected_draws_per_cycle:]
+    )
+
+
+def test_psychopy_engine_rejects_sinusoidal_word_runs_before_playback(
+    sample_project,
+) -> None:
+    run_spec = _two_word_event_run_spec(sample_project)
+    run_spec.display = run_spec.display.model_copy(
+        update={"duty_cycle_mode": DutyCycleMode.SINUSOIDAL}
+    )
+    engine = PsychoPyEngine()
+
+    with pytest.raises(RuntimeError, match="supports image conditions only"):
+        engine._build_playback_plan(
+            run_spec,
+            prepared_sequence=[_FakeStim(), _FakeStim()],
+            default_fixation_stim=_FakeStim(),
+            target_fixation_stim=_FakeStim(),
+        )
+
+
+def test_psychopy_engine_reuses_prebound_contrast_draws_across_repeated_cycles(
+    sample_project,
+    sample_project_root,
+) -> None:
+    run_spec = _two_cycle_image_run_spec(
+        sample_project,
+        sample_project_root,
+        duty_cycle_mode=DutyCycleMode.SINUSOIDAL,
+    )
+    engine = PsychoPyEngine()
+    prepared_stimulus = _FakeStim()
+
+    playback_plan = engine._build_playback_plan(
+        run_spec,
+        prepared_sequence=[prepared_stimulus, prepared_stimulus],
+        default_fixation_stim=_FakeStim(),
+        target_fixation_stim=_FakeStim(),
+    )
+
+    frames_per_cycle = run_spec.display.frames_per_stimulus
+    first_cycle_draws = [frame[0] for frame in playback_plan[:frames_per_cycle]]
+    second_cycle_draws = [frame[0] for frame in playback_plan[frames_per_cycle:]]
+    assert len({id(draw) for draw in first_cycle_draws}) == frames_per_cycle
+    assert all(
+        first_draw is second_draw
+        for first_draw, second_draw in zip(first_cycle_draws, second_cycle_draws, strict=True)
+    )
 
 
 def test_psychopy_engine_prepares_and_draws_word_stimuli(

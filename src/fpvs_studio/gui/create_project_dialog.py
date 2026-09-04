@@ -8,7 +8,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from pathlib import Path
 
-from PySide6.QtCore import QSignalBlocker
+from PySide6.QtCore import QSignalBlocker, Qt
 from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
@@ -137,6 +137,11 @@ class CreateProjectDialog(QDialog):
                 self.condition_profile_combo.addItem(
                     profile.display_name,
                     userData=profile.profile_id,
+                )
+                self.condition_profile_combo.setItemData(
+                    self.condition_profile_combo.count() - 1,
+                    profile.description,
+                    Qt.ItemDataRole.ToolTipRole,
                 )
             if current_profile_id is None:
                 self.condition_profile_combo.setCurrentIndex(0 if profiles else -1)

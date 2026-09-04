@@ -8,6 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from math import ceil, copysign, floor, isclose, isfinite
 
+from fpvs_studio.core.contrast_modulation import is_sinusoidal_neutral_background
 from fpvs_studio.core.display_geometry import visual_angle_width_cm
 from fpvs_studio.core.enums import (
     DutyCycleMode,
@@ -23,6 +24,7 @@ from fpvs_studio.core.frame_validation import (
     FrameValidationError,
     frames_per_stimulus,
     validate_blank_mode_frames,
+    validate_sinusoidal_mode_frames,
 )
 from fpvs_studio.core.models import (
     Condition,
@@ -194,6 +196,12 @@ def validate_display_refresh(
     if compatible and duty_cycle_mode == DutyCycleMode.BLANK_50 and frames_per_cycle is not None:
         try:
             validate_blank_mode_frames(frames_per_cycle)
+        except FrameValidationError as exc:
+            compatible = False
+            errors.append(str(exc))
+    if compatible and duty_cycle_mode == DutyCycleMode.SINUSOIDAL and frames_per_cycle is not None:
+        try:
+            validate_sinusoidal_mode_frames(frames_per_cycle)
         except FrameValidationError as exc:
             compatible = False
             errors.append(str(exc))
@@ -554,6 +562,20 @@ def validate_project(
     stimulus_sets = {item.set_id: item for item in project.stimulus_sets}
     task_modules = {item.task_id: item for item in project.task_modules}
 
+    if any(
+        condition.duty_cycle_mode == DutyCycleMode.SINUSOIDAL
+        for condition in project.conditions
+    ) and not is_sinusoidal_neutral_background(project.settings.display.background_color):
+        issues.append(
+            ValidationIssue(
+                location="settings.display.background_color",
+                message=(
+                    "Contrast Modulation requires the presentation background to be "
+                    "Neutral Gray (#808080)."
+                ),
+            )
+        )
+
     for task in project.task_modules:
         required_prefix = f"stimuli/task-assets/{task.task_id}/"
         for step in task.steps:
@@ -707,6 +729,22 @@ def validate_project(
                 )
             )
             continue
+        if (
+            condition.duty_cycle_mode == DutyCycleMode.SINUSOIDAL
+            and base_set is not None
+            and oddball_set is not None
+            and base_set.modality == StimulusModality.WORD
+        ):
+            issues.append(
+                ValidationIssue(
+                    location=f"conditions.{condition.condition_id}.duty_cycle_mode",
+                    message=(
+                        f"Condition '{condition.name}' cannot use Contrast Modulation with "
+                        "word stimuli; sinusoidal contrast modulation currently supports "
+                        "images only."
+                    ),
+                )
+            )
         if (
             base_set is not None
             and oddball_set is not None

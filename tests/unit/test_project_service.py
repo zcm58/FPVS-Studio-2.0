@@ -100,3 +100,18 @@ def test_project_scaffolding_applies_condition_template_profile_snapshot(tmp_pat
     assert project.settings.fixation_task.target_duration_ms == 300
     assert project.settings.fixation_task.min_gap_ms == 1000
     assert project.settings.fixation_task.max_gap_ms == 3000
+
+
+def test_project_scaffolding_applies_sinusoidal_profile_background(tmp_path) -> None:
+    profile = get_condition_template_profile(tmp_path, "sinusoidal-contrast-v1")
+
+    scaffold = create_project(
+        tmp_path,
+        "Contrast Project",
+        condition_template_profile=profile,
+    )
+    project = load_project_file(project_json_path(scaffold.project_root))
+
+    assert project.settings.condition_profile_id == "sinusoidal-contrast-v1"
+    assert project.settings.condition_defaults.duty_cycle_mode.value == "sinusoidal"
+    assert project.settings.display.background_color == "#808080"

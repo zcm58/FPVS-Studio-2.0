@@ -23,6 +23,9 @@ backend-driven.
 - Keep condition modality authoring in the guided Conditions step. Image conditions use
   base/oddball image source cards; word conditions use typed base/oddball word-list
   editors, and image-only actions stay disabled for word conditions.
+- Present Contrast Modulation as the third image presentation mode alongside Continuous
+  Images and 50% Blank Between Images. Do not offer it for word conditions, and expose
+  Neutral Gray as the required project background without changing existing modes.
 - Do not reintroduce Setup Wizard Advanced buttons or generic footer/status copy
   without an explicit workflow plan.
 - Keep fixation accuracy-task and participant-tutorial controls in the Fixation/Session

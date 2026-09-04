@@ -115,6 +115,54 @@ def test_refresh_validation_rejects_blank_50_on_odd_frame_cycles() -> None:
     assert any("blank_50" in message for message in report.errors)
 
 
+def test_refresh_validation_rejects_degenerate_sinusoidal_cycle() -> None:
+    report = validate_display_refresh(
+        60.0,
+        duty_cycle_mode=DutyCycleMode.SINUSOIDAL,
+        base_hz=20.0,
+    )
+
+    assert report.compatible is False
+    assert any("at least 4 frames" in message for message in report.errors)
+
+
+def test_project_validation_requires_neutral_gray_for_sinusoidal_mode(sample_project) -> None:
+    sample_project.conditions[0].duty_cycle_mode = DutyCycleMode.SINUSOIDAL
+
+    report = validate_project(sample_project)
+
+    assert report.is_valid is False
+    assert any(
+        issue.location == "settings.display.background_color"
+        and "Neutral Gray (#808080)" in issue.message
+        for issue in report.issues
+    )
+
+
+def test_project_validation_rejects_sinusoidal_word_condition(sample_project) -> None:
+    for index, stimulus_set in enumerate(sample_project.stimulus_sets):
+        sample_project.stimulus_sets[index] = stimulus_set.model_copy(
+            update={
+                "modality": StimulusModality.WORD,
+                "source_dir": None,
+                "resolution": None,
+                "image_count": 0,
+                "words": ["word"],
+            }
+        )
+    sample_project.settings.display.background_color = "#808080"
+    sample_project.conditions[0].duty_cycle_mode = DutyCycleMode.SINUSOIDAL
+
+    report = validate_project(sample_project)
+
+    assert report.is_valid is False
+    assert any(
+        issue.location == "conditions.faces.duty_cycle_mode"
+        and "currently supports images only" in issue.message
+        for issue in report.issues
+    )
+
+
 def test_project_validation_accepts_different_square_source_resolutions(sample_project) -> None:
     sample_project.stimulus_sets[1].resolution = ImageResolution(width_px=512, height_px=512)
 

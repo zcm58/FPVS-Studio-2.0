@@ -32,6 +32,9 @@ as PsychoPy. Runtime owns flow and calls engines through
   that step; it must not substitute a machine-dependent font path into the contract.
 - Engines apply compiled image/word transforms and geometry at presentation time. They
   must not write transformed stimulus assets or infer authoring inheritance.
+- Engines apply sinusoidal contrast only when the explicit compiled image presentation
+  mode requests it. The envelope is core-owned and frame-count-derived; engines must not
+  infer it from the full-cycle on/off split or recompute it from a nominal frequency.
 - A compiled pre-stream fixation phase is rendered after the participant gate and
   before the stream clock starts. Frame-zero stimuli and condition triggers retain
   their existing alignment.
@@ -115,12 +118,13 @@ preserved as `unverified`. This removes those known jobs from the timed loop, bu
 cannot control later operating-system scheduling, graphics-driver behavior, display
 scanout, or physical pixel response.
 
-The timed plan is compiled before frame zero: stimulus/fixation draw selection and
-trigger lookup do not traverse validated models per frame. During playback, Python GC
-is paused, interval/key/target data is collected as primitive values, and core result
-models are constructed after the terminal flip. Default and target fixation crosses are
-separate pre-primed stimuli, so changing the secondary attention task does not mutate a
-PsychoPy property on every FPVS frame.
+The timed plan is compiled before frame zero: stimulus/fixation draw selection,
+sinusoidal image contrast operations, and trigger lookup do not traverse validated
+models per frame. During playback, Python GC is paused, interval/key/target data is
+collected as primitive values, and core result models are constructed after the
+terminal flip. Default and target fixation crosses are separate pre-primed stimuli, so
+changing the secondary attention task does not mutate a PsychoPy property on every FPVS
+frame.
 
 Only PsychoPy's PTB and ioHub keyboard backends provide fixation timestamps used for
 same-clock RT scoring. The `event` or an unknown backend uses whole-condition frame

@@ -12,6 +12,7 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
+from fpvs_studio.core.contrast_modulation import SINUSOIDAL_NEUTRAL_BACKGROUND_COLOR
 from fpvs_studio.core.enums import DutyCycleMode, SchemaVersion
 from fpvs_studio.core.models import (
     DEFAULT_FIXATION_TARGET_COUNT_MAX,
@@ -37,6 +38,7 @@ from fpvs_studio.core.serialization import write_json_file
 
 STUDIO_DEFAULT_PROFILE_ID = "studio-default-v1"
 SIXTY_HZ_BLANK_FIXATION_PROFILE_ID = "sixty-hz-blank50-fixation-v1"
+SINUSOIDAL_CONTRAST_PROFILE_ID = "sinusoidal-contrast-v1"
 CONDITION_TEMPLATE_LIBRARY_SCHEMA_VERSION = SchemaVersion.V1_1
 
 
@@ -61,6 +63,7 @@ def _built_in_profile(
     display_name: str,
     description: str,
     duty_cycle_mode: DutyCycleMode,
+    background_color: str | None = None,
 ) -> ConditionTemplateProfile:
     return ConditionTemplateProfile(
         profile_id=profile_id,
@@ -73,7 +76,10 @@ def _built_in_profile(
                 sequence_count=1,
                 oddball_cycle_repeats_per_sequence=146,
             ),
-            display=ConditionTemplateDisplayDefaults(preferred_refresh_hz=None),
+            display=ConditionTemplateDisplayDefaults(
+                preferred_refresh_hz=None,
+                background_color=background_color,
+            ),
             fixation_task=_shared_fixation_defaults(),
         ),
     )
@@ -100,6 +106,16 @@ def built_in_condition_template_profiles() -> list[ConditionTemplateProfile]:
                 "and fixation cross accuracy task defaults."
             ),
             duty_cycle_mode=DutyCycleMode.BLANK_50,
+        ),
+        _built_in_profile(
+            profile_id=SINUSOIDAL_CONTRAST_PROFILE_ID,
+            display_name="Contrast Modulation",
+            description=(
+                "Frequency-agnostic sinusoidal contrast modulation with the required "
+                "neutral-gray background and fixation task defaults."
+            ),
+            duty_cycle_mode=DutyCycleMode.SINUSOIDAL,
+            background_color=SINUSOIDAL_NEUTRAL_BACKGROUND_COLOR,
         ),
     ]
 
@@ -278,9 +294,14 @@ def apply_condition_template_profile_to_settings(
 ) -> ProjectSettings:
     """Apply one profile snapshot to project settings."""
 
-    display = settings.display.model_copy(
-        update={"preferred_refresh_hz": profile.defaults.display.preferred_refresh_hz}
-    )
+    display_updates: dict[str, object] = {
+        "preferred_refresh_hz": profile.defaults.display.preferred_refresh_hz
+    }
+    if profile.defaults.display.background_color is not None:
+        display_updates["background_color"] = deepcopy(
+            profile.defaults.display.background_color
+        )
+    display = settings.display.model_copy(update=display_updates)
     return settings.model_copy(
         update={
             "condition_profile_id": profile.profile_id,

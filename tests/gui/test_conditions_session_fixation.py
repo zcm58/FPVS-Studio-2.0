@@ -104,6 +104,47 @@ def test_condition_editor_round_trip(
     assert condition.duty_cycle_mode == DutyCycleMode.BLANK_50
 
 
+def test_contrast_modulation_and_neutral_background_round_trip(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Contrast Roundtrip")
+    guide = window.setup_wizard_page
+    guide.open_wizard(step_key="conditions")
+    step = guide.condition_setup_step
+    qtbot.mouseClick(step.add_condition_button, Qt.MouseButton.LeftButton)
+    condition_id = step.selected_condition_id()
+    assert isinstance(condition_id, str)
+
+    sinusoidal_index = step.timing_template_combo.findData(DutyCycleMode.SINUSOIDAL)
+    assert sinusoidal_index >= 0
+    step.timing_template_combo.setCurrentIndex(sinusoidal_index)
+    background_combo = guide.runtime_settings_editor.runtime_background_color_combo
+    neutral_gray_index = background_combo.findData("#808080")
+    assert neutral_gray_index >= 0
+    background_combo.setCurrentIndex(neutral_gray_index)
+    QApplication.processEvents()
+
+    assert window.save_project() is True
+    controller.open_project(window.document.project_root)
+    assert controller.main_window is not None
+    qtbot.addWidget(controller.main_window)
+
+    reopened = controller.main_window
+    reopened_condition = reopened.document.get_condition(condition_id)
+    assert reopened_condition is not None
+    assert reopened_condition.duty_cycle_mode == DutyCycleMode.SINUSOIDAL
+    assert reopened.document.project.settings.display.background_color == "#808080"
+    reopened.show_setup_wizard(step_key="conditions")
+    reopened_step = reopened.setup_wizard_page.condition_setup_step
+    assert reopened_step.timing_template_combo.currentData() == DutyCycleMode.SINUSOIDAL
+    reopened.show_setup_wizard(step_key="experiment")
+    reopened_editor = reopened.setup_wizard_page.runtime_settings_editor
+    assert reopened_editor.runtime_background_color_combo.currentData() == "#808080"
+    assert reopened_editor.contrast_background_note_label.isVisible()
+
+
 def test_condition_instructions_strip_bidi_controls_during_edit(
     qtbot,
     controller: StudioController,

@@ -21,6 +21,8 @@ play compiled runs end to end.
 - Add a real but minimal `PsychoPyEngine`.
 - Render both image and word stimulus events from `RunSpec` payloads without
   changing the compiled frame schedule.
+- Apply the compiled sinusoidal mode only to image stimuli, using precomputed per-frame
+  contrast operations while leaving continuous and 50%-blank drawing unchanged.
 - Keep condition-local stimulus preparation and cleanup inside the engine run
   boundary; do not retain image or text stimuli across conditions.
 - Render runtime-owned instruction, inter-block break, and completion screens without moving session sequencing into the engine.

@@ -7,10 +7,12 @@ engine."""
 from __future__ import annotations
 
 from collections.abc import Mapping
+from math import isclose
 from pathlib import Path
 
 from PIL import Image
 
+from fpvs_studio.core.contrast_modulation import is_sinusoidal_neutral_background
 from fpvs_studio.core.enums import DutyCycleMode, StimulusModality
 from fpvs_studio.core.run_spec import RunSpec
 from fpvs_studio.core.session_plan import SessionPlan
@@ -81,12 +83,9 @@ def _verify_connected_refresh_rate(
 
 
 def _validate_display_refresh_timing(run_spec: RunSpec) -> None:
-    duty_cycle_mode = (
-        DutyCycleMode.BLANK_50 if run_spec.display.off_frames > 0 else DutyCycleMode.CONTINUOUS
-    )
     display_report = validate_display_refresh(
         run_spec.display.refresh_hz,
-        duty_cycle_mode=duty_cycle_mode,
+        duty_cycle_mode=run_spec.display.duty_cycle_mode,
         base_hz=run_spec.condition.base_hz,
         oddball_every_n=run_spec.condition.oddball_every_n,
     )
@@ -102,6 +101,32 @@ def _validate_display_refresh_timing(run_spec: RunSpec) -> None:
         raise PreflightError(
             "Run preflight failed because compiled frames_per_stimulus does not match "
             "the requested refresh rate and base frequency."
+        )
+
+
+def _validate_sinusoidal_presentation(run_spec: RunSpec) -> None:
+    if run_spec.display.duty_cycle_mode != DutyCycleMode.SINUSOIDAL:
+        return
+    if run_spec.condition.stimulus_modality != StimulusModality.IMAGE or any(
+        event.stimulus_modality != StimulusModality.IMAGE
+        for event in run_spec.stimulus_sequence
+    ):
+        raise PreflightError(
+            "Run preflight failed because Contrast Modulation supports image stimuli only."
+        )
+    if not is_sinusoidal_neutral_background(run_spec.display.background_color):
+        raise PreflightError(
+            "Run preflight failed because Contrast Modulation requires the presentation "
+            "background to be Neutral Gray (#808080)."
+        )
+    if (
+        run_spec.display.on_frames != run_spec.display.frames_per_stimulus
+        or run_spec.display.off_frames != 0
+        or not isclose(run_spec.display.duty_cycle, 1.0, rel_tol=0.0, abs_tol=1e-9)
+    ):
+        raise PreflightError(
+            "Run preflight failed because Contrast Modulation must retain the image for "
+            "the full stimulus cycle (on_frames=frames_per_stimulus, off_frames=0)."
         )
 
 
@@ -409,6 +434,7 @@ def preflight_run_spec(
             "Run preflight failed because strict timing does not support variable-refresh displays."
         )
 
+    _validate_sinusoidal_presentation(run_spec)
     _validate_image_assets(project_root, run_spec, decode=decode_image_assets)
     if (
         run_spec.display.on_frames + run_spec.display.off_frames

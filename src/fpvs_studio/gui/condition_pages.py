@@ -49,6 +49,7 @@ from fpvs_studio.gui.window_helpers import (
     _resolution_text,
     _show_error_dialog,
     _sync_text_editor_contents,
+    _sync_timing_template_combo,
     _timing_template_label,
     _variant_label,
 )
@@ -175,8 +176,11 @@ class ConditionsPage(QWidget):
 
         self.timing_template_combo = QComboBox(self)
         self.timing_template_combo.setObjectName("condition_timing_template_combo")
-        for mode in (DutyCycleMode.CONTINUOUS, DutyCycleMode.BLANK_50):
-            self.timing_template_combo.addItem(_timing_template_label(mode), userData=mode)
+        _sync_timing_template_combo(
+            self.timing_template_combo,
+            modality=StimulusModality.IMAGE,
+            selected_mode=DutyCycleMode.CONTINUOUS,
+        )
         self.timing_template_combo.currentIndexChanged.connect(self._apply_timing_template)
 
         self.template_info_label = QLabel(self)
@@ -458,8 +462,11 @@ class ConditionsPage(QWidget):
                 self.condition_name_edit.clear()
             with QSignalBlocker(self.instructions_edit):
                 self.instructions_edit.clear()
-            with QSignalBlocker(self.timing_template_combo):
-                self.timing_template_combo.setCurrentIndex(-1)
+            _sync_timing_template_combo(
+                self.timing_template_combo,
+                modality=StimulusModality.IMAGE,
+                selected_mode=None,
+            )
             self.template_info_label.setText("Add a condition to begin.")
             self.base_source_state.set_state("pending", "Base source not configured")
             self.base_source_value.set_path_text("Not configured", max_length=74)
@@ -511,10 +518,11 @@ class ConditionsPage(QWidget):
             self.variant_combo.setCurrentIndex(
                 self.variant_combo.findData(condition.stimulus_variant)
             )
-        with QSignalBlocker(self.timing_template_combo):
-            self.timing_template_combo.setCurrentIndex(
-                self.timing_template_combo.findData(condition.duty_cycle_mode)
-            )
+        _sync_timing_template_combo(
+            self.timing_template_combo,
+            modality=StimulusModality.IMAGE if image_mode else StimulusModality.WORD,
+            selected_mode=condition.duty_cycle_mode,
+        )
         protocol = self._document.project.settings.protocol
         self.template_info_label.setText(
             f"{template.display_name}: base {protocol.base_hz:g} Hz, oddball every "

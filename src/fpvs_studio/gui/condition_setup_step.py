@@ -59,6 +59,7 @@ from fpvs_studio.gui.window_helpers import (
     _resolution_text,
     _show_error_dialog,
     _sync_text_editor_contents,
+    _sync_timing_template_combo,
     _timing_template_label,
 )
 from fpvs_studio.gui.workers import ProgressTask
@@ -420,8 +421,11 @@ class ConditionSetupStep(QWidget):
         task_row_layout.addWidget(self.task_button)
         self.timing_template_combo = QComboBox(self)
         self.timing_template_combo.setObjectName("setup_wizard_condition_timing_template_combo")
-        for mode in (DutyCycleMode.CONTINUOUS, DutyCycleMode.BLANK_50):
-            self.timing_template_combo.addItem(_timing_template_label(mode), mode)
+        _sync_timing_template_combo(
+            self.timing_template_combo,
+            modality=StimulusModality.IMAGE,
+            selected_mode=DutyCycleMode.CONTINUOUS,
+        )
         self.timing_template_combo.currentIndexChanged.connect(self._apply_timing_template)
         self.target_repeats_spin = QSpinBox(self)
         self.target_repeats_spin.setObjectName("setup_wizard_target_repeats_per_image_spin")
@@ -731,8 +735,11 @@ class ConditionSetupStep(QWidget):
                 self.trigger_code_spin.setValue(1)
             with QSignalBlocker(self.modality_combo):
                 self.modality_combo.setCurrentIndex(0)
-            with QSignalBlocker(self.timing_template_combo):
-                self.timing_template_combo.setCurrentIndex(-1)
+            _sync_timing_template_combo(
+                self.timing_template_combo,
+                modality=StimulusModality.IMAGE,
+                selected_mode=None,
+            )
             with QSignalBlocker(self.target_repeats_spin):
                 self.target_repeats_spin.setValue(
                     self._document.project.settings.condition_defaults.target_repeats_per_image
@@ -767,10 +774,11 @@ class ConditionSetupStep(QWidget):
             self.trigger_code_spin.setValue(condition.trigger_code)
         with QSignalBlocker(self.modality_combo):
             self.modality_combo.setCurrentIndex(self.modality_combo.findData(modality.value))
-        with QSignalBlocker(self.timing_template_combo):
-            self.timing_template_combo.setCurrentIndex(
-                self.timing_template_combo.findData(condition.duty_cycle_mode)
-            )
+        _sync_timing_template_combo(
+            self.timing_template_combo,
+            modality=modality,
+            selected_mode=condition.duty_cycle_mode,
+        )
         with QSignalBlocker(self.target_repeats_spin):
             self.target_repeats_spin.setValue(
                 self._document.project.settings.condition_defaults.target_repeats_per_image

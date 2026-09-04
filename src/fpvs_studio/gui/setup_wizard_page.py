@@ -1136,6 +1136,7 @@ class SetupWizardPage(QWidget):
         return {
             "#000000": "Black background",
             "#101010": "Dark gray background",
+            "#808080": "Neutral gray background",
         }.get(background_color, background_color)
 
     def _fixation_review_line(self) -> str:

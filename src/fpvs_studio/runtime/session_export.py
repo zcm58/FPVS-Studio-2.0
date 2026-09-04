@@ -17,7 +17,6 @@ from openpyxl import Workbook  # type: ignore[import-untyped]
 from openpyxl.styles import Alignment, Font, PatternFill  # type: ignore[import-untyped]
 from openpyxl.utils import get_column_letter  # type: ignore[import-untyped]
 
-from fpvs_studio.core.enums import DutyCycleMode
 from fpvs_studio.core.execution import RunExecutionSummary, SessionExecutionSummary
 from fpvs_studio.core.models import DisplayValidationReport, validate_project_relative_path
 from fpvs_studio.core.paths import from_project_relative_posix, logs_dir
@@ -211,12 +210,9 @@ def compact_task_checkpoint_path(
 
 
 def _display_report_for_run(run_spec: RunSpec) -> DisplayValidationReport:
-    duty_cycle_mode = (
-        DutyCycleMode.BLANK_50 if run_spec.display.off_frames > 0 else DutyCycleMode.CONTINUOUS
-    )
     return validate_display_refresh(
         run_spec.display.refresh_hz,
-        duty_cycle_mode=duty_cycle_mode,
+        duty_cycle_mode=run_spec.display.duty_cycle_mode,
         base_hz=run_spec.condition.base_hz,
         oddball_every_n=run_spec.condition.oddball_every_n,
     )

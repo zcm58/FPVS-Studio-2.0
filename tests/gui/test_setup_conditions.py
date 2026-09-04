@@ -474,6 +474,61 @@ def test_setup_wizard_condition_timing_template_updates_selected_condition_only(
     assert "50% Blank Between Images" in step.condition_list.currentItem().text()
 
 
+def test_setup_wizard_contrast_modulation_is_available_for_images_only(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Image Presentation Modes")
+    guide = window.setup_wizard_page
+    step = guide.condition_setup_step
+    guide.open_wizard(step_key="conditions")
+
+    qtbot.mouseClick(step.add_condition_button, Qt.MouseButton.LeftButton)
+    condition_id = step.selected_condition_id()
+    assert isinstance(condition_id, str)
+    assert [
+        step.timing_template_combo.itemText(index)
+        for index in range(step.timing_template_combo.count())
+    ] == [
+        "Continuous Images",
+        "50% Blank Between Images",
+        "Contrast Modulation",
+    ]
+    sinusoidal_index = step.timing_template_combo.findData(DutyCycleMode.SINUSOIDAL)
+    assert sinusoidal_index >= 0
+    assert "Neutral Gray (#808080)" in step.timing_template_combo.toolTip()
+
+    step.timing_template_combo.setCurrentIndex(sinusoidal_index)
+    QApplication.processEvents()
+    condition = window.document.get_condition(condition_id)
+    assert condition is not None
+    assert condition.duty_cycle_mode == DutyCycleMode.SINUSOIDAL
+
+    step.modality_combo.setCurrentIndex(
+        step.modality_combo.findData(StimulusModality.WORD.value)
+    )
+    QApplication.processEvents()
+
+    condition = window.document.get_condition(condition_id)
+    assert condition is not None
+    assert condition.duty_cycle_mode == DutyCycleMode.CONTINUOUS
+    assert [
+        step.timing_template_combo.itemText(index)
+        for index in range(step.timing_template_combo.count())
+    ] == ["Continuous Images", "50% Blank Between Images"]
+    assert step.timing_template_combo.findData(DutyCycleMode.SINUSOIDAL) == -1
+    assert step.timing_template_combo.currentData() == DutyCycleMode.CONTINUOUS
+    assert "resets Contrast Modulation" in step.timing_template_combo.toolTip()
+
+    step.modality_combo.setCurrentIndex(
+        step.modality_combo.findData(StimulusModality.IMAGE.value)
+    )
+    QApplication.processEvents()
+    assert step.timing_template_combo.count() == 3
+    assert step.timing_template_combo.findData(DutyCycleMode.SINUSOIDAL) >= 0
+
+
 def test_setup_wizard_conditions_step_shows_repeat_target_and_balance(
     qtbot,
     controller: StudioController,

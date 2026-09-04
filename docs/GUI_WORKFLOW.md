@@ -134,7 +134,8 @@ The authoring window is organized around two user-facing modes:
   - the Display column exposes an approved monitor-refresh dropdown (`59.94`, `60`,
     `120`, `144`, or `240 Hz`), `Detect My Refresh Rate`, project-wide base rate,
     integer oddball cadence, derived oddball rate/frame counts/condition duration, and
-    presentation background (`Black` or `Dark Gray`); setup requires a successful
+    presentation background (`Black`, `Dark Gray`, or `Neutral Gray`); Neutral Gray is
+    required when any image condition uses Contrast Modulation; setup requires a successful
     PsychoPy fullscreen measurement before `Next`, changing the dropdown clears the
     prior verification, and 59.94 Hz retains its visible requested-versus-realized
     whole-frame timing warning; current launches always use PsychoPy, fullscreen
@@ -196,8 +197,9 @@ The authoring window is organized around two user-facing modes:
   - image geometry supports Exact Box, Contain, Cover, and Natural Aspect; word
     presentation supports fixed or balanced-randomized height in degrees or window
     height, fixed Arial rendering, opaque color, and authored position
-  - each selected condition exposes an advanced timing selector for Continuous Images
-    or 50% Blank Between Images; changing it updates only that condition
+  - each selected image condition exposes an advanced presentation selector for
+    Continuous Images, 50% Blank Between Images, or Contrast Modulation; word conditions
+    expose only the first two, and changing the selection updates only that condition
   - image conditions use the existing base/oddball image source cards; word conditions
     use typed Base Words and Oddball Words editors with one word or short phrase per line
   - word editors save only non-empty lines while preserving the focused editor's

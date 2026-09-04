@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from fpvs_studio.core.contrast_modulation import SINUSOIDAL_NEUTRAL_BACKGROUND_COLOR
 from fpvs_studio.core.display_geometry import visual_angle_width_cm, visual_angle_width_px
 from fpvs_studio.core.enums import DutyCycleMode, EngineName, ImageGeometryMode
 from fpvs_studio.core.models import DisplayValidationReport
@@ -133,6 +134,10 @@ class DisplaySettingsEditor(QWidget):
         )
         for label, background_hex in _RUNTIME_BACKGROUND_COLOR_PRESETS:
             self.runtime_background_color_combo.addItem(label, userData=background_hex)
+        self.runtime_background_color_combo.setToolTip(
+            f"Neutral Gray ({SINUSOIDAL_NEUTRAL_BACKGROUND_COLOR}) is required whenever "
+            "an image condition uses Contrast Modulation."
+        )
         self.runtime_background_color_combo.currentIndexChanged.connect(
             self._apply_runtime_background_color
         )
@@ -145,6 +150,17 @@ class DisplaySettingsEditor(QWidget):
             _prefixed_object_name(object_name_prefix, "runtime_background_scope_label")
         )
         self.runtime_background_scope_label.setWordWrap(True)
+
+        self.contrast_background_note_label = QLabel(
+            "Contrast Modulation requires Neutral Gray "
+            f"({SINUSOIDAL_NEUTRAL_BACKGROUND_COLOR}).",
+            self,
+        )
+        self.contrast_background_note_label.setObjectName(
+            _prefixed_object_name(object_name_prefix, "contrast_background_note_label")
+        )
+        self.contrast_background_note_label.setWordWrap(True)
+        self.contrast_background_note_label.setVisible(False)
 
         self.timing_summary_label = QLabel(self)
         self.timing_summary_label.setObjectName(
@@ -172,6 +188,7 @@ class DisplaySettingsEditor(QWidget):
         self.form_layout.addRow("Base rate", self.base_hz_spin)
         self.form_layout.addRow("Oddball every", self.oddball_every_n_spin)
         self.form_layout.addRow("Background", self.runtime_background_color_combo)
+        self.form_layout.addRow(self.contrast_background_note_label)
         self.form_layout.addRow(self.timing_summary_label)
         self.form_layout.addRow(self.timing_status_label)
         if show_scope_label:
@@ -237,17 +254,25 @@ class DisplaySettingsEditor(QWidget):
         ]
         if not condition_modes:
             condition_modes = [self._document.project.settings.condition_defaults.duty_cycle_mode]
-        duty_cycle_mode = (
-            DutyCycleMode.BLANK_50
-            if DutyCycleMode.BLANK_50 in condition_modes
-            else DutyCycleMode.CONTINUOUS
-        )
-        return validate_display_refresh(
-            self.current_refresh_hz(),
-            duty_cycle_mode=duty_cycle_mode,
-            base_hz=protocol.base_hz,
-            oddball_every_n=protocol.oddball_every_n,
-        )
+        ordered_modes = [
+            mode
+            for mode in (
+                DutyCycleMode.BLANK_50,
+                DutyCycleMode.SINUSOIDAL,
+                DutyCycleMode.CONTINUOUS,
+            )
+            if mode in condition_modes
+        ]
+        reports = [
+            validate_display_refresh(
+                self.current_refresh_hz(),
+                duty_cycle_mode=mode,
+                base_hz=protocol.base_hz,
+                oddball_every_n=protocol.oddball_every_n,
+            )
+            for mode in ordered_modes
+        ]
+        return next((report for report in reports if not report.compatible), reports[0])
 
     def timing_is_compatible(self) -> bool:
         return self.timing_report().compatible and (
@@ -289,6 +314,16 @@ class DisplaySettingsEditor(QWidget):
             if selected_index < 0:
                 selected_index = self.runtime_background_color_combo.findData("#000000")
             self.runtime_background_color_combo.setCurrentIndex(selected_index)
+        condition_modes = [
+            condition.duty_cycle_mode for condition in self._document.project.conditions
+        ]
+        if not condition_modes:
+            condition_modes = [
+                self._document.project.settings.condition_defaults.duty_cycle_mode
+            ]
+        self.contrast_background_note_label.setVisible(
+            DutyCycleMode.SINUSOIDAL in condition_modes
+        )
 
         controls_enabled = self._editable and self._refresh_probe_task is None
         self.refresh_hz_combo.setEnabled(controls_enabled)

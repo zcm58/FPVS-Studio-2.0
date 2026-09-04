@@ -44,6 +44,14 @@ For a project-selected base rate:
   - `on_frames = frames_per_stimulus / 2`
   - `off_frames = frames_per_stimulus / 2`
   - `frames_per_stimulus` must be even
+- `sinusoidal`
+  - image-only; the image is drawn for every frame in the cycle
+  - `on_frames = frames_per_stimulus`
+  - `off_frames = 0`
+  - contrast for local frame `k` is sampled from
+    `0.5 * (1 - cos(2*pi*k/frames_per_stimulus))`, with odd-frame samples normalized
+    so their displayed peak is exactly `1.0`
+  - the background must be neutral gray (`#808080`)
 
 Exact ratios such as 144 Hz / 6 Hz compile without a warning. Non-integral ratios
 such as 59.94 Hz / 6 Hz compile to the nearest whole-frame cadence and produce a
@@ -60,9 +68,11 @@ not recompute protocol logic from `ProjectFile`.
 
 The editable project stores project-wide `base_hz` and integer `oddball_every_n`
 settings plus duty-cycle mode per condition. Project-level
-condition-template profiles only seed defaults for authoring; mixed Continuous Images
-and 50% Blank Between Images sessions compile into separate `RunSpec` entries with each
-condition's resolved frame counts.
+condition-template profiles only seed defaults for authoring. Mixed Continuous Images,
+50% Blank Between Images, and image-only Contrast Modulation sessions compile into
+separate `RunSpec` entries with each condition's resolved frame counts. The contrast
+envelope is derived from that count, so 4, 5, 6, and other supported requested base
+rates do not require mode-specific tables.
 
 ## Main fields
 
@@ -70,6 +80,7 @@ condition's resolved frame counts.
 
 - refresh rate
 - background color
+- explicit presentation/duty-cycle mode
 - per-stimulus frame count
 - on/off frame split
 - duty cycle

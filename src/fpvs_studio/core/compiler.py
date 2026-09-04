@@ -241,6 +241,7 @@ def compile_run_spec(
             screen_width_px=project.settings.display.screen_width_px,
             screen_height_px=project.settings.display.screen_height_px,
             use_current_screen_resolution=project.settings.display.use_current_screen_resolution,
+            duty_cycle_mode=condition.duty_cycle_mode,
             frames_per_stimulus=frames_per_stimulus_value,
             on_frames=on_frames,
             off_frames=off_frames,

@@ -52,9 +52,10 @@ tests = [
   "tests/unit/test_document_conditions.py",
   "tests/unit/test_document_summary_refresh.py",
   "tests/unit/test_condition_tasks.py",
+  "tests/unit/test_contrast_modulation.py",
 ]
 full_tests = []
-include = ["src/fpvs_studio/core/**", "tests/unit/test_models.py", "tests/unit/test_validation.py", "tests/unit/test_fixation_settings.py", "tests/unit/test_condition_tasks.py", "tests/unit/test_document_*.py"]
+include = ["src/fpvs_studio/core/**", "tests/unit/test_models.py", "tests/unit/test_validation.py", "tests/unit/test_fixation_settings.py", "tests/unit/test_condition_tasks.py", "tests/unit/test_contrast_modulation.py", "tests/unit/test_document_*.py"]
 manual_smoke = []
 
 [scopes.compiler]
@@ -62,10 +63,11 @@ checks = []
 tests = [
   "tests/unit/test_compiler.py",
   "tests/unit/test_compiler_fixation.py",
+  "tests/unit/test_contrast_modulation.py",
   "tests/unit/test_session_plan.py",
 ]
 full_tests = []
-include = ["src/fpvs_studio/core/compiler.py", "src/fpvs_studio/core/compiler_tasks.py", "src/fpvs_studio/core/run_spec.py", "src/fpvs_studio/core/session_plan.py", "tests/unit/test_compiler*.py", "tests/unit/test_session_plan.py"]
+include = ["src/fpvs_studio/core/compiler.py", "src/fpvs_studio/core/compiler_tasks.py", "src/fpvs_studio/core/run_spec.py", "src/fpvs_studio/core/session_plan.py", "tests/unit/test_compiler*.py", "tests/unit/test_contrast_modulation.py", "tests/unit/test_session_plan.py"]
 manual_smoke = []
 
 [scopes."project-io"]

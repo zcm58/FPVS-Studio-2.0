@@ -805,6 +805,16 @@ class ConditionTemplateDisplayDefaults(FPVSBaseModel):
     """Display defaults that can be snapshotted into a project from a profile."""
 
     preferred_refresh_hz: float | None = Field(default=None, gt=0)
+    background_color: str | tuple[int, int, int] | None = None
+
+    @field_validator("background_color")
+    @classmethod
+    def validate_background_color(
+        cls, value: str | tuple[int, int, int] | None
+    ) -> str | tuple[int, int, int] | None:
+        if value is None:
+            return None
+        return validate_color(value)
 
 
 class ConditionTemplateDefaults(FPVSBaseModel):

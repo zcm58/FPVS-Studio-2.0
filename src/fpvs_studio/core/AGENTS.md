@@ -90,6 +90,8 @@ Implement friendly, explicit validation for:
 - image conditions have configured base/oddball image stimulus sources
 - word conditions have non-empty base/oddball word lists
 - valid duty-cycle mode
+- sinusoidal contrast is image-only and requires the neutral-gray presentation
+  background; its envelope must be derived from the resolved frames per stimulus
 - display compatibility:
   - accept authored monitor refresh targets only from the core-owned approved list
     (`59.94`, `60`, `120`, `144`, and `240 Hz`)
@@ -118,6 +120,8 @@ A minimal compiler in this phase should be able to:
 - compile one multi-condition session into one `SessionPlan`
 - keep execution-result/export contracts engine-neutral in `execution.py`
 - derive per-stimulus frames plus on/off frames from duty-cycle mode
+- compile the explicit presentation mode and a deterministic, frame-count-derived
+  sinusoidal contrast envelope without changing event or trigger scheduling
 - build the explicit base/oddball role sequence
 - assign deterministic stimulus payloads: project-relative image paths for image
   conditions, authored text for word conditions

@@ -7,6 +7,7 @@ import json
 import pytest
 
 from fpvs_studio.core.condition_template_profiles import (
+    SINUSOIDAL_CONTRAST_PROFILE_ID,
     SIXTY_HZ_BLANK_FIXATION_PROFILE_ID,
     STUDIO_DEFAULT_PROFILE_ID,
     apply_condition_template_profile_to_settings,
@@ -46,11 +47,13 @@ def test_condition_template_library_is_seeded_with_built_ins(tmp_path) -> None:
 
     assert STUDIO_DEFAULT_PROFILE_ID in profile_ids
     assert SIXTY_HZ_BLANK_FIXATION_PROFILE_ID in profile_ids
+    assert SINUSOIDAL_CONTRAST_PROFILE_ID in profile_ids
     assert profiles_by_id[STUDIO_DEFAULT_PROFILE_ID].display_name == "Continuous Images"
     assert (
         profiles_by_id[SIXTY_HZ_BLANK_FIXATION_PROFILE_ID].display_name
         == "50% Blank Between Images"
     )
+    assert profiles_by_id[SINUSOIDAL_CONTRAST_PROFILE_ID].display_name == "Contrast Modulation"
     assert condition_template_library_path(tmp_path).is_file()
     assert condition_template_library_path(tmp_path).parent == (
         tmp_path / APP_DATA_DIRNAME / TEMPLATES_DIRNAME
@@ -168,27 +171,38 @@ def test_condition_template_library_save_load_stays_under_app_templates_dir(
     assert "custom-profile" in loaded_ids
 
 
-def test_built_in_templates_share_defaults_except_duty_cycle() -> None:
+def test_built_in_templates_share_protocol_and_fixation_defaults() -> None:
     profiles_by_id = {
         profile.profile_id: profile for profile in built_in_condition_template_profiles()
     }
     template_one = profiles_by_id[STUDIO_DEFAULT_PROFILE_ID]
     template_two = profiles_by_id[SIXTY_HZ_BLANK_FIXATION_PROFILE_ID]
+    template_three = profiles_by_id[SINUSOIDAL_CONTRAST_PROFILE_ID]
 
     assert template_one.defaults.condition.duty_cycle_mode == DutyCycleMode.CONTINUOUS
     assert template_two.defaults.condition.duty_cycle_mode == DutyCycleMode.BLANK_50
+    assert template_three.defaults.condition.duty_cycle_mode == DutyCycleMode.SINUSOIDAL
     assert template_one.defaults.condition.sequence_count == 1
     assert template_two.defaults.condition.sequence_count == 1
+    assert template_three.defaults.condition.sequence_count == 1
     assert template_one.defaults.condition.oddball_cycle_repeats_per_sequence == 146
     assert template_two.defaults.condition.oddball_cycle_repeats_per_sequence == 146
+    assert template_three.defaults.condition.oddball_cycle_repeats_per_sequence == 146
     assert template_one.defaults.condition.target_repeats_per_image == 7
     assert template_two.defaults.condition.target_repeats_per_image == 7
+    assert template_three.defaults.condition.target_repeats_per_image == 7
     assert template_one.defaults.display.preferred_refresh_hz is None
     assert template_two.defaults.display.preferred_refresh_hz is None
+    assert template_three.defaults.display.preferred_refresh_hz is None
+    assert template_one.defaults.display.background_color is None
+    assert template_two.defaults.display.background_color is None
+    assert template_three.defaults.display.background_color == "#808080"
 
     fixation_one = template_one.defaults.fixation_task
     fixation_two = template_two.defaults.fixation_task
+    fixation_three = template_three.defaults.fixation_task
     assert fixation_one == fixation_two
+    assert fixation_one == fixation_three
     assert fixation_one.enabled is True
     assert fixation_one.accuracy_task_enabled is True
     assert fixation_one.target_count_mode == "randomized"
@@ -201,6 +215,46 @@ def test_built_in_templates_share_defaults_except_duty_cycle() -> None:
     assert fixation_one.max_gap_ms == 3000
     assert template_one.defaults.presentation.pre_stream_fixation_seconds == 2.0
     assert template_two.defaults.presentation == template_one.defaults.presentation
+    assert template_three.defaults.presentation == template_one.defaults.presentation
+
+
+def test_condition_template_profile_applies_optional_background_snapshot() -> None:
+    original = ProjectSettings()
+    original.display.background_color = "#123456"
+    continuous = next(
+        profile
+        for profile in built_in_condition_template_profiles()
+        if profile.profile_id == STUDIO_DEFAULT_PROFILE_ID
+    )
+    sinusoidal = next(
+        profile
+        for profile in built_in_condition_template_profiles()
+        if profile.profile_id == SINUSOIDAL_CONTRAST_PROFILE_ID
+    )
+
+    unchanged = apply_condition_template_profile_to_settings(original, continuous)
+    applied = apply_condition_template_profile_to_settings(original, sinusoidal)
+
+    assert unchanged.display.background_color == "#123456"
+    assert applied.display.background_color == "#808080"
+    assert applied.condition_defaults.duty_cycle_mode == DutyCycleMode.SINUSOIDAL
+
+
+def test_legacy_current_schema_profile_without_background_loads_unchanged(tmp_path) -> None:
+    user_profile = ConditionTemplateProfile(
+        profile_id="legacy-no-background",
+        display_name="Legacy No Background",
+    )
+    payload = ConditionTemplateProfileLibrary(profiles=[user_profile]).model_dump(mode="json")
+    payload["profiles"][0]["defaults"]["display"].pop("background_color")
+    library_path = condition_template_library_path(tmp_path)
+    library_path.parent.mkdir(parents=True)
+    library_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    loaded = load_condition_template_profile_library(tmp_path)
+    profile = next(item for item in loaded.profiles if item.profile_id == "legacy-no-background")
+
+    assert profile.defaults.display.background_color is None
 
 
 def test_condition_template_profile_applies_presentation_snapshot() -> None:

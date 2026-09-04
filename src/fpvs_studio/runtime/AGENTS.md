@@ -28,6 +28,8 @@ This phase should establish:
 - select engine by name
 - preflight compiled stimulus payloads before launch: image events must point to
   existing project-relative files, while word events must carry non-empty text
+- reject a compiled sinusoidal run unless it is image-based and uses the required
+  neutral-gray presentation background
 - query the primary/default configured display mode through the platform adapter before
   launch, preserving exact Windows rational selection and KDE Linux VRR rejection
 - honor an explicit `verify_refresh_rate=false` runtime option for source-only

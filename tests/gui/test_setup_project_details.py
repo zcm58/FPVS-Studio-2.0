@@ -22,9 +22,11 @@ from tests.gui.helpers import (
 )
 
 from fpvs_studio.core.condition_template_profiles import (
+    SINUSOIDAL_CONTRAST_PROFILE_ID,
     SIXTY_HZ_BLANK_FIXATION_PROFILE_ID,
     STUDIO_DEFAULT_PROFILE_ID,
 )
+from fpvs_studio.core.enums import DutyCycleMode
 from fpvs_studio.gui import controller as controller_module
 from fpvs_studio.gui.controller import StudioController
 from fpvs_studio.runtime.display_mode import NativeDisplayMode
@@ -57,6 +59,13 @@ def test_setup_wizard_surfaces_steps_and_keeps_shared_editors_available(
     blank_index = project_editor.condition_profile_combo.findData(
         SIXTY_HZ_BLANK_FIXATION_PROFILE_ID
     )
+    contrast_index = project_editor.condition_profile_combo.findData(
+        SINUSOIDAL_CONTRAST_PROFILE_ID
+    )
+    assert contrast_index >= 0
+    assert project_editor.condition_profile_combo.itemText(contrast_index) == (
+        "Contrast Modulation"
+    )
     assert (
         project_editor.condition_profile_combo.itemData(
             continuous_index,
@@ -72,6 +81,10 @@ def test_setup_wizard_surfaces_steps_and_keeps_shared_editors_available(
         )
         == "Use this template if you'd like to display images with 50% of the image "
         "display period being blank before the next image is shown."
+    )
+    assert "Neutral Gray (#808080)" in project_editor.condition_profile_combo.itemData(
+        contrast_index,
+        Qt.ItemDataRole.ToolTipRole,
     )
     assert project_editor.manage_templates_button is not None
     assert project_editor.apply_profile_to_conditions_button is not None
@@ -137,6 +150,32 @@ def test_setup_wizard_surfaces_steps_and_keeps_shared_editors_available(
     assert "Fixation" in step_metadata_text
     assert "Response" in step_metadata_text
     assert "Review" in step_metadata_text
+
+
+def test_setup_project_contrast_profile_applies_required_background(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Contrast Profile")
+    dashboard = window.setup_wizard_page
+    editor = dashboard.project_overview_editor
+    contrast_index = editor.condition_profile_combo.findData(
+        SINUSOIDAL_CONTRAST_PROFILE_ID
+    )
+    assert contrast_index >= 0
+
+    editor.condition_profile_combo.setCurrentIndex(contrast_index)
+    QApplication.processEvents()
+
+    assert (
+        window.document.project.settings.condition_defaults.duty_cycle_mode
+        == DutyCycleMode.SINUSOIDAL
+    )
+    assert window.document.project.settings.display.background_color == "#808080"
+    assert dashboard.runtime_settings_editor.runtime_background_color_combo.currentData() == (
+        "#808080"
+    )
 
 
 def test_project_details_template_actions_fit_at_setup_default_size(

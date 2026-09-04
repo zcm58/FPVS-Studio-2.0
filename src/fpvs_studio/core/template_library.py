@@ -22,6 +22,7 @@ _TEMPLATES = TemplateLibraryRecord(
             supported_duty_cycle_modes=(
                 DutyCycleMode.CONTINUOUS,
                 DutyCycleMode.BLANK_50,
+                DutyCycleMode.SINUSOIDAL,
             ),
             default_oddball_cycle_repeats_per_sequence=146,
         )

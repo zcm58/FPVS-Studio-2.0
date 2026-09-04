@@ -47,6 +47,16 @@ def _format_refresh_rate(preferred_refresh_hz: float | None) -> str:
     return f"{value_text} Hz"
 
 
+def _format_background_color(value: str | tuple[int, int, int] | None) -> str:
+    if value is None:
+        return "Keep Current Project Background"
+    if isinstance(value, tuple):
+        value = "#{:02X}{:02X}{:02X}".format(*value)
+    if value.lower() == "#808080":
+        return "Neutral Gray (#808080)"
+    return value
+
+
 def _format_color_changes_per_condition(fixation: FixationTaskSettings) -> str:
     if fixation.target_count_mode != "randomized":
         return str(fixation.changes_per_sequence)
@@ -77,6 +87,8 @@ def _format_profile_details(profile: ConditionTemplateProfile) -> str:
             [
                 "Display Refresh Rate: "
                 f"{_format_refresh_rate(defaults.display.preferred_refresh_hz)}",
+                "Background: "
+                f"{_format_background_color(defaults.display.background_color)}",
                 f"Display Resolution: {_DISPLAY_RESOLUTION_TEXT}",
             ],
         ),

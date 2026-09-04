@@ -34,6 +34,7 @@ class DutyCycleMode(StrEnum):
 
     CONTINUOUS = "continuous"
     BLANK_50 = "blank_50"
+    SINUSOIDAL = "sinusoidal"
 
 
 class InterConditionMode(StrEnum):

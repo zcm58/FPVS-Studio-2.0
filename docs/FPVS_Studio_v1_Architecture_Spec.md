@@ -24,10 +24,16 @@ Projects may edit `base_hz` and integer `oddball_every_n`; `oddball_hz` is deriv
 
 ### 2.2 Duty-cycle modes
 
-Each condition may choose one of two duty-cycle modes:
+Each image condition may choose one of three presentation modes:
 
 - `continuous`: stimulus visible for the full resolved frame cycle
 - `blank_50`: stimulus visible for half the resolved cycle, followed by an equal blank interval
+- `sinusoidal`: stimulus visible for the full cycle with its contrast following one
+  frequency-agnostic raised-cosine envelope derived from the resolved frame count;
+  this mode requires a neutral-gray (`#808080`) presentation background
+
+Word conditions support `continuous` and `blank_50`; sinusoidal contrast modulation is
+image-only in v1.
 
 ### 2.3 Sequence repeat default
 
@@ -73,8 +79,8 @@ current schema, an explicit user opt-out remains disabled on later loads.
 - photodiode patch
 - lab-validated BioSemi/BDF trigger timing
 - additional behavioral tasks
-- user-editable base/oddball frequencies in v1
-- configurable FPVS protocol timing
+- a separate contrast-envelope frequency independent of the project base rate
+- user-authored contrast-envelope shape, phase, or amplitude
 
 ## 5. FPVS Studio root and project folder structure
 
@@ -184,6 +190,9 @@ For v1 project timing:
 - exact ratios are reported as exact timing
 - non-integral ratios are accepted with requested-versus-realized rate warnings
 - `blank_50` requires an even resolved `frames_per_cycle`
+- `sinusoidal` uses every resolved cycle frame and derives one complete 0-to-1-to-0
+  contrast envelope from that frame count, whether the requested base rate is 4, 5, 6,
+  or another refresh-compatible value
 - setup and runtime compare the configured rate to an explicit engine measurement of
   the connected presentation display; measurement state remains machine-local
 

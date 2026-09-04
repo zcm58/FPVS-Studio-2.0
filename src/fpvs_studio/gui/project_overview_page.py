@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
 )
 
 from fpvs_studio.core.condition_template_profiles import (
+    SINUSOIDAL_CONTRAST_PROFILE_ID,
     SIXTY_HZ_BLANK_FIXATION_PROFILE_ID,
     STUDIO_DEFAULT_PROFILE_ID,
 )
@@ -47,6 +48,10 @@ _CONDITION_PROFILE_TOOLTIPS = {
     SIXTY_HZ_BLANK_FIXATION_PROFILE_ID: (
         "Use this template if you'd like to display images with 50% of the image "
         "display period being blank before the next image is shown."
+    ),
+    SINUSOIDAL_CONTRAST_PROFILE_ID: (
+        "Use this template for image conditions with sinusoidal contrast modulation. "
+        "It also selects the required Neutral Gray (#808080) presentation background."
     ),
 }
 _PARTICIPANT_TUTORIAL_TOOLTIP = (

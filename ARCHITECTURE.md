@@ -67,8 +67,9 @@ contract: missing values resolve to Arial, and the selection never enters the `R
 timed-frame contract.
 
 - Compilation owns protocol scheduling, asset resolution, randomized session order,
-  realized fixation target selection, presentation-setting inheritance, and balanced
-  word-height realization.
+  realized fixation target selection, presentation-setting inheritance, balanced
+  word-height realization, and the frame count from which core defines a sinusoidal
+  contrast envelope.
 - Editable project protocol settings own requested base Hz and integer oddball cadence;
   compilation resolves them to whole-frame timing and records requested rates in each
   `RunSpec`.
@@ -85,9 +86,10 @@ timed-frame contract.
 - The PsychoPy engine prepares and synchronizes one condition cache at a time, checks
   production RAM/graphics-budget readiness before frame zero, rejects measured resource
   insufficiency, and preserves unavailable telemetry as an exported warning. It executes
-  a precompiled hot loop, ends the last compiled frame with a neutral offset flip, and
-  releases the cache before returning. Runtime scores fixation RT from same-clock
-  hardware timestamps and owns the exported result contracts.
+  a precompiled hot loop, including preselected per-frame image contrast operations for
+  sinusoidal mode, ends the last compiled frame with a neutral offset flip, and releases
+  the cache before returning. Runtime scores fixation RT from same-clock hardware
+  timestamps and owns the exported result contracts.
 - The app-level experiment test-mode setting and selector remain outside persisted
   project contracts. Each test launch may compile all conditions (the default) or one
   selected condition; the resulting ordinary `SessionPlan` contains only the compiled

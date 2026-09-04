@@ -9,7 +9,7 @@ import pytest
 from PIL import Image
 
 from fpvs_studio.core.compiler import compile_run_spec, compile_session_plan
-from fpvs_studio.core.enums import StimulusModality
+from fpvs_studio.core.enums import DutyCycleMode, StimulusModality
 from fpvs_studio.core.execution import RunExecutionSummary
 from fpvs_studio.core.run_spec import RunSpec
 from fpvs_studio.engines.base import FixationTutorialAttemptResult, PresentationEngine
@@ -302,6 +302,7 @@ def test_preflight_rejects_blank_50_when_frames_per_stimulus_is_odd(
         project_root=sample_project_root,
         run_id="faces-run",
     )
+    run_spec.display.duty_cycle_mode = DutyCycleMode.BLANK_50
     run_spec.display.on_frames = 8
     run_spec.display.off_frames = 7
     for event in run_spec.stimulus_sequence:
@@ -309,6 +310,98 @@ def test_preflight_rejects_blank_50_when_frames_per_stimulus_is_odd(
         event.off_frames = 7
 
     with pytest.raises(PreflightError, match="blank_50"):
+        preflight_run_spec(sample_project_root, run_spec, engine=_PreflightEngine())
+
+
+def test_preflight_accepts_valid_sinusoidal_image_run(
+    sample_project,
+    sample_project_root,
+) -> None:
+    sample_project.settings.display.background_color = "#808080"
+    sample_project.conditions[0].duty_cycle_mode = DutyCycleMode.SINUSOIDAL
+    run_spec = compile_run_spec(
+        sample_project,
+        refresh_hz=60.0,
+        project_root=sample_project_root,
+        run_id="sinusoidal-run",
+    )
+
+    preflight_run_spec(sample_project_root, run_spec, engine=_PreflightEngine())
+
+
+def test_preflight_rejects_sinusoidal_run_with_non_neutral_background(
+    sample_project,
+    sample_project_root,
+) -> None:
+    sample_project.settings.display.background_color = "#808080"
+    sample_project.conditions[0].duty_cycle_mode = DutyCycleMode.SINUSOIDAL
+    run_spec = compile_run_spec(
+        sample_project,
+        refresh_hz=60.0,
+        project_root=sample_project_root,
+        run_id="sinusoidal-run",
+    )
+    run_spec.display.background_color = "#000000"
+
+    with pytest.raises(PreflightError, match=r"Neutral Gray \(#808080\)"):
+        preflight_run_spec(sample_project_root, run_spec, engine=_PreflightEngine())
+
+
+def test_preflight_rejects_sinusoidal_run_with_word_modality(
+    sample_project,
+    sample_project_root,
+) -> None:
+    run_spec = compile_run_spec(
+        sample_project,
+        refresh_hz=60.0,
+        project_root=sample_project_root,
+        run_id="faces-run",
+    )
+    run_spec.display.duty_cycle_mode = DutyCycleMode.SINUSOIDAL
+    run_spec.display.background_color = "#808080"
+    run_spec.condition.stimulus_modality = StimulusModality.WORD
+
+    with pytest.raises(PreflightError, match="supports image stimuli only"):
+        preflight_run_spec(sample_project_root, run_spec, engine=_PreflightEngine())
+
+
+def test_preflight_rejects_sinusoidal_run_with_blank_frames(
+    sample_project,
+    sample_project_root,
+) -> None:
+    sample_project.settings.display.background_color = "#808080"
+    sample_project.conditions[0].duty_cycle_mode = DutyCycleMode.SINUSOIDAL
+    run_spec = compile_run_spec(
+        sample_project,
+        refresh_hz=60.0,
+        project_root=sample_project_root,
+        run_id="sinusoidal-run",
+    )
+    run_spec.display.on_frames = 5
+    run_spec.display.off_frames = 5
+    run_spec.display.duty_cycle = 0.5
+
+    with pytest.raises(PreflightError, match="full stimulus cycle"):
+        preflight_run_spec(sample_project_root, run_spec, engine=_PreflightEngine())
+
+
+def test_preflight_rejects_degenerate_sinusoidal_frame_cycle(
+    sample_project,
+    sample_project_root,
+) -> None:
+    sample_project.settings.display.background_color = "#808080"
+    sample_project.conditions[0].duty_cycle_mode = DutyCycleMode.SINUSOIDAL
+    run_spec = compile_run_spec(
+        sample_project,
+        refresh_hz=60.0,
+        project_root=sample_project_root,
+        run_id="sinusoidal-run",
+    )
+    run_spec.condition.base_hz = 20.0
+    run_spec.display.frames_per_stimulus = 3
+    run_spec.display.on_frames = 3
+
+    with pytest.raises(PreflightError, match="at least 4 frames"):
         preflight_run_spec(sample_project_root, run_spec, engine=_PreflightEngine())
 
 

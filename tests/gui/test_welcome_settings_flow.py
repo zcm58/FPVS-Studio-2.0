@@ -29,6 +29,7 @@ from tests.gui.helpers import (
 
 from fpvs_studio import __version__
 from fpvs_studio.core.condition_template_profiles import (
+    SINUSOIDAL_CONTRAST_PROFILE_ID,
     SIXTY_HZ_BLANK_FIXATION_PROFILE_ID,
     STUDIO_DEFAULT_PROFILE_ID,
     built_in_condition_template_profiles,
@@ -1728,6 +1729,13 @@ def test_create_project_dialog_defaults_to_continuous_image_timing(
     assert SIXTY_HZ_BLANK_FIXATION_PROFILE_ID not in dialog.condition_profile_combo.itemText(
         blank_index
     )
+    contrast_index = dialog.condition_profile_combo.findData(SINUSOIDAL_CONTRAST_PROFILE_ID)
+    assert contrast_index >= 0
+    assert dialog.condition_profile_combo.itemText(contrast_index) == "Contrast Modulation"
+    assert "neutral-gray background" in dialog.condition_profile_combo.itemData(
+        contrast_index,
+        Qt.ItemDataRole.ToolTipRole,
+    )
     messages: list[str] = []
     monkeypatch.setattr(
         "fpvs_studio.gui.create_project_dialog.QMessageBox.warning",
@@ -1869,8 +1877,10 @@ def test_manage_condition_templates_dialog_renders_hierarchical_details(
     list_text = _list_widget_text(dialog.profile_list)
     assert "Continuous Images" in list_text
     assert "50% Blank Between Images" in list_text
+    assert "Contrast Modulation" in list_text
     assert STUDIO_DEFAULT_PROFILE_ID not in list_text
     assert SIXTY_HZ_BLANK_FIXATION_PROFILE_ID not in list_text
+    assert SINUSOIDAL_CONTRAST_PROFILE_ID not in list_text
     assert "[Built-in]" not in list_text
 
     details_header = dialog.findChild(QLabel, "condition_template_details_header")
@@ -1935,6 +1945,65 @@ def test_manage_condition_templates_dialog_renders_hierarchical_details(
     assert "Duty Cycle: 50% Blank" in blank_details_text
     assert "Total cross color changes in each condition: 8 to 13" in blank_details_text
     assert "Display Refresh Rate: Not Set" in blank_details_text
+
+    contrast_row = _find_profile_row(dialog, SINUSOIDAL_CONTRAST_PROFILE_ID)
+    dialog.profile_list.setCurrentRow(contrast_row)
+    QApplication.processEvents()
+
+    contrast_details_text = dialog.profile_details.text()
+    assert "Template Name: Contrast Modulation" in contrast_details_text
+    assert "Duty Cycle: Contrast Modulation" in contrast_details_text
+    assert "Background: Neutral Gray (#808080)" in contrast_details_text
+    assert "neutral-gray background" in contrast_details_text
+
+
+def test_contrast_profile_editor_preserves_required_background_and_fits(
+    qtbot,
+) -> None:
+    profile = next(
+        item
+        for item in built_in_condition_template_profiles()
+        if item.profile_id == SINUSOIDAL_CONTRAST_PROFILE_ID
+    )
+    dialog = ConditionTemplateProfileEditorDialog(
+        existing_profile_ids={profile.profile_id},
+        initial_profile=profile,
+    )
+    qtbot.addWidget(dialog)
+    dialog.resize(760, 760)
+    dialog.show()
+    QApplication.processEvents()
+
+    assert [
+        dialog.duty_cycle_combo.itemText(index)
+        for index in range(dialog.duty_cycle_combo.count())
+    ] == ["Continuous", "50% Blank", "Contrast Modulation"]
+    assert dialog.duty_cycle_combo.currentData() == DutyCycleMode.SINUSOIDAL
+    assert dialog.background_combo.currentData() == "#808080"
+    assert not dialog.background_combo.isEnabled()
+    assert "requires Neutral Gray (#808080)" in dialog.background_combo.toolTip()
+
+    dialog.duty_cycle_combo.setCurrentIndex(
+        dialog.duty_cycle_combo.findData(DutyCycleMode.CONTINUOUS)
+    )
+    assert dialog.background_combo.isEnabled()
+    dark_gray_index = dialog.background_combo.findData("#101010")
+    dialog.background_combo.setCurrentIndex(dark_gray_index)
+    dialog.duty_cycle_combo.setCurrentIndex(
+        dialog.duty_cycle_combo.findData(DutyCycleMode.SINUSOIDAL)
+    )
+    assert dialog.background_combo.currentData() == "#808080"
+    assert dialog._build_profile().defaults.display.background_color == "#808080"
+
+    assert dialog.width() == 760
+    assert dialog.height() == 760
+    assert dialog.background_combo.width() >= max(
+        dialog.background_combo.fontMetrics().horizontalAdvance(
+            dialog.background_combo.itemText(index)
+        )
+        for index in range(dialog.background_combo.count())
+    )
+    assert_visible_children_within_parent(dialog)
 
 
 def test_manage_condition_templates_add_edit_duplicate_delete_round_trip(
@@ -2015,6 +2084,7 @@ def test_manage_condition_templates_add_edit_duplicate_delete_round_trip(
         profile.profile_id: profile for profile in list_condition_template_profiles(root_dir)
     }
     assert profiles_by_id["custom-profile"].display_name == "Custom Profile Edited"
+    assert profiles_by_id["custom-profile"].defaults.display.background_color is None
     assert "custom-profile-copy" not in profiles_by_id
 
 

@@ -110,6 +110,9 @@ image decoding is reserved for preprocessing/manual deep preflight and engine st
 preparation. Word events require non-empty text and do not require filesystem assets.
 Unknown modalities, missing payload fields, missing image files, or reused stimulus ids
 with conflicting payloads fail before launch instead of falling back to image behavior.
+Sinusoidal contrast runs additionally require image events and the compiled neutral-gray
+background; runtime rejects incompatible compiled copies instead of treating their
+full-cycle on/off timing as continuous presentation.
 
 ## PsychoPy engine
 
@@ -164,6 +167,9 @@ The PsychoPy implementation:
   clock before stream frame zero
 - compiles stimulus/fixation draw calls and trigger/onset lookup before frame zero, then
   executes that immutable frame plan without per-frame result-model construction
+- derives the core-defined sinusoidal contrast samples once from the compiled frame
+  count, then applies them through preselected image operations; 4, 5, 6, and other
+  base rates use their resolved cycle lengths without a nominal-frequency lookup
 - draws one of two pre-created fixation stimuli continuously on compiled `FixationEvent`
   windows; the secondary task never changes the FPVS or trigger schedule
 - polls response keys and escape

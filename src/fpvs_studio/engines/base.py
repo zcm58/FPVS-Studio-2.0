@@ -11,7 +11,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
-from fpvs_studio.core.enums import DutyCycleMode
 from fpvs_studio.core.execution import RunExecutionSummary
 from fpvs_studio.core.models import DisplayValidationReport
 from fpvs_studio.core.run_spec import RunSpec
@@ -126,12 +125,9 @@ class PresentationEngine(ABC):
     def validate_run_spec(self, run_spec: RunSpec) -> DisplayValidationReport:
         """Validate display timing for a run spec."""
 
-        duty_cycle_mode = (
-            DutyCycleMode.BLANK_50 if run_spec.display.off_frames > 0 else DutyCycleMode.CONTINUOUS
-        )
         return validate_display_refresh(
             run_spec.display.refresh_hz,
-            duty_cycle_mode=duty_cycle_mode,
+            duty_cycle_mode=run_spec.display.duty_cycle_mode,
             base_hz=run_spec.condition.base_hz,
             oddball_every_n=run_spec.condition.oddball_every_n,
         )

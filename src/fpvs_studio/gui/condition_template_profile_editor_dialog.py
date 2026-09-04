@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QSignalBlocker, Qt
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from fpvs_studio.core.contrast_modulation import SINUSOIDAL_NEUTRAL_BACKGROUND_COLOR
 from fpvs_studio.core.enums import DutyCycleMode
 from fpvs_studio.core.models import (
     ConditionDefaults,
@@ -33,7 +34,10 @@ from fpvs_studio.core.models import (
 )
 from fpvs_studio.gui.components import FiniteDoubleSpinBox
 from fpvs_studio.gui.presentation_settings_dialog import PresentationDefaultsEditor
-from fpvs_studio.gui.window_helpers import _duty_cycle_label
+from fpvs_studio.gui.window_helpers import (
+    _RUNTIME_BACKGROUND_COLOR_PRESETS,
+    _duty_cycle_label,
+)
 
 
 class ConditionTemplateProfileEditorDialog(QDialog):
@@ -110,10 +114,20 @@ class ConditionTemplateProfileEditorDialog(QDialog):
             )
         )
 
+        self.background_combo = QComboBox(self)
+        self.background_combo.setObjectName("condition_profile_background_combo")
+        self.background_combo.addItem("Keep Current Project Background", userData=None)
+        for label, background_hex in _RUNTIME_BACKGROUND_COLOR_PRESETS:
+            self.background_combo.addItem(label, userData=background_hex)
+        self.duty_cycle_combo.currentIndexChanged.connect(
+            self._update_display_defaults_state
+        )
+
         display_group = QGroupBox("Display Defaults", self)
-        display_layout = QVBoxLayout(display_group)
-        display_layout.addWidget(self.preferred_refresh_enabled_checkbox)
-        display_layout.addWidget(self.preferred_refresh_spin)
+        display_layout = QFormLayout(display_group)
+        display_layout.addRow(self.preferred_refresh_enabled_checkbox)
+        display_layout.addRow("Preferred Refresh", self.preferred_refresh_spin)
+        display_layout.addRow("Background", self.background_combo)
 
         self.fixation_enabled_checkbox = QCheckBox("Fixation task enabled", self)
         self.fixation_enabled_checkbox.setObjectName("condition_profile_fixation_enabled_checkbox")
@@ -299,6 +313,11 @@ class ConditionTemplateProfileEditorDialog(QDialog):
         self.preferred_refresh_spin.setValue(
             preferred_refresh if preferred_refresh is not None else 60.0
         )
+        background = profile.defaults.display.background_color
+        if isinstance(background, tuple):
+            background = "#{:02X}{:02X}{:02X}".format(*background)
+        background_index = self.background_combo.findData(background)
+        self.background_combo.setCurrentIndex(background_index if background_index >= 0 else 0)
 
         fixation = profile.defaults.fixation_task
         self.fixation_enabled_checkbox.setChecked(True)
@@ -324,12 +343,36 @@ class ConditionTemplateProfileEditorDialog(QDialog):
             profile.defaults.presentation.pre_stream_fixation_seconds
         )
         self._update_target_count_mode_state()
+        self._update_display_defaults_state()
 
     def _update_target_count_mode_state(self) -> None:
         randomized = self.target_count_mode_combo.currentData() == "randomized"
         self.target_count_min_spin.setEnabled(randomized)
         self.target_count_max_spin.setEnabled(randomized)
         self.no_repeat_count_checkbox.setEnabled(randomized)
+
+    def _update_display_defaults_state(self) -> None:
+        """Keep reusable sinusoidal profiles paired with their required background."""
+
+        sinusoidal = self.duty_cycle_combo.currentData() == DutyCycleMode.SINUSOIDAL
+        if sinusoidal:
+            neutral_index = self.background_combo.findData(
+                SINUSOIDAL_NEUTRAL_BACKGROUND_COLOR
+            )
+            with QSignalBlocker(self.background_combo):
+                self.background_combo.setCurrentIndex(neutral_index)
+            guidance = (
+                "Contrast Modulation requires Neutral Gray (#808080), so this profile "
+                "background is fixed."
+            )
+        else:
+            guidance = (
+                "Choose a project background to apply with this profile, or keep the "
+                "project's current background."
+            )
+        self.background_combo.setEnabled(not sinusoidal)
+        self.background_combo.setToolTip(guidance)
+        self.background_combo.setAccessibleDescription(guidance)
 
     def _build_profile(self) -> ConditionTemplateProfile:
         response_key = self.response_key_edit.text().strip().lower()
@@ -357,7 +400,10 @@ class ConditionTemplateProfileEditorDialog(QDialog):
                     oddball_cycle_repeats_per_sequence=self.oddball_cycles_spin.value(),
                     target_repeats_per_image=self.target_repeats_spin.value(),
                 ),
-                display=ConditionTemplateDisplayDefaults(preferred_refresh_hz=preferred_refresh_hz),
+                display=ConditionTemplateDisplayDefaults(
+                    preferred_refresh_hz=preferred_refresh_hz,
+                    background_color=self.background_combo.currentData(),
+                ),
                 presentation=ProjectPresentationSettings(
                     pre_stream_fixation_seconds=self.pre_stream_fixation_spin.value(),
                     defaults=self.presentation_editor.build_defaults(),

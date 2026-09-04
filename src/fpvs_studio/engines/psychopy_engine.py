@@ -9,13 +9,15 @@ import gc
 import logging
 from collections.abc import Mapping
 from datetime import datetime, timezone
+from functools import partial
 from importlib import import_module
 from pathlib import Path
 from typing import Any
 
 from PIL import Image
 
-from fpvs_studio.core.enums import EngineName, RunMode
+from fpvs_studio.core.contrast_modulation import sinusoidal_contrast_envelope
+from fpvs_studio.core.enums import DutyCycleMode, EngineName, RunMode, StimulusModality
 from fpvs_studio.core.execution import (
     FixationTargetOnsetRecord,
     FrameIntervalRecord,
@@ -71,6 +73,17 @@ from fpvs_studio.triggers.base import TriggerBackend
 
 LOGGER = logging.getLogger(__name__)
 TIMING_DIAGNOSTIC_THRESHOLD_MULTIPLIER = 1.5
+
+
+def _draw_image_with_contrast(
+    stimulus: Any,
+    stimulus_draw: Any,
+    contrast: float,
+) -> None:
+    """Apply one precomputed contrast sample immediately before drawing an image."""
+
+    stimulus.contrast = contrast
+    stimulus_draw()
 
 
 class PsychoPyEngine(PresentationEngine):
@@ -763,6 +776,21 @@ class PsychoPyEngine(PresentationEngine):
 
         if len(prepared_sequence) != len(run_spec.stimulus_sequence):
             raise RuntimeError("Prepared stimulus sequence does not match the RunSpec.")
+        duty_cycle_mode = run_spec.display.duty_cycle_mode
+        sinusoidal_mode = duty_cycle_mode == DutyCycleMode.SINUSOIDAL
+        if sinusoidal_mode and (
+            run_spec.condition.stimulus_modality != StimulusModality.IMAGE
+            or any(
+                event.stimulus_modality != StimulusModality.IMAGE
+                for event in run_spec.stimulus_sequence
+            )
+        ):
+            raise RuntimeError("Contrast Modulation supports image conditions only.")
+        contrast_envelope = (
+            sinusoidal_contrast_envelope(run_spec.display.frames_per_stimulus)
+            if sinusoidal_mode
+            else None
+        )
         trigger_lookup = self._build_trigger_lookup(run_spec)
         draw_by_stimulus_identity: dict[int, Any] = {}
         prepared_draw_sequence: list[Any] = []
@@ -773,6 +801,7 @@ class PsychoPyEngine(PresentationEngine):
                 stimulus_draw = stimulus.draw
                 draw_by_stimulus_identity[stimulus_identity] = stimulus_draw
             prepared_draw_sequence.append(stimulus_draw)
+        contrast_draw_by_identity_and_frame: dict[tuple[int, int], Any] = {}
         default_fixation_draw = default_fixation_stim.draw
         target_fixation_draw = target_fixation_stim.draw
         target_onset_lookup: dict[int, list[FixationEvent]] = {}
@@ -795,11 +824,29 @@ class PsychoPyEngine(PresentationEngine):
             stimulus_event = (
                 run_spec.stimulus_sequence[stimulus_index] if run_spec.stimulus_sequence else None
             )
-            stimulus_draw = (
-                prepared_draw_sequence[stimulus_index]
-                if should_draw_stimulus(stimulus_event, frame_index)
-                else None
-            )
+            stimulus_draw = None
+            if stimulus_event is not None and should_draw_stimulus(
+                stimulus_event,
+                frame_index,
+            ):
+                prepared_stimulus_draw = prepared_draw_sequence[stimulus_index]
+                if contrast_envelope is not None:
+                    local_frame = frame_index - stimulus_event.on_start_frame
+                    prepared_stimulus = prepared_sequence[stimulus_index]
+                    contrast_draw_key = (id(prepared_stimulus), local_frame)
+                    stimulus_draw = contrast_draw_by_identity_and_frame.get(
+                        contrast_draw_key
+                    )
+                    if stimulus_draw is None:
+                        stimulus_draw = partial(
+                            _draw_image_with_contrast,
+                            prepared_stimulus,
+                            prepared_stimulus_draw,
+                            contrast_envelope[local_frame],
+                        )
+                        contrast_draw_by_identity_and_frame[contrast_draw_key] = stimulus_draw
+                else:
+                    stimulus_draw = prepared_stimulus_draw
 
             while (
                 fixation_index + 1 < len(ordered_fixation_events)
