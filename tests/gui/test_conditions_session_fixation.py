@@ -592,18 +592,20 @@ def test_cycle_tooltips_and_fixation_feasibility_render_and_update(
     QApplication.processEvents()
 
     guidance_before = page.fixation_feasibility_label.text()
-    assert "Recommended maximum cross changes per condition:" in guidance_before
+    assert "Effective maximum changes per condition:" in guidance_before
     assert "Refresh rate:" not in guidance_before
     assert "Per-condition estimated feasible max color changes:" not in guidance_before
     assert (
-        page.fixation_feasibility_label.toolTip()
-        == "Derived from each condition's duration and the current fixation timing settings."
+        page.fixation_feasibility_label.toolTip().startswith(
+            "Derived from each condition's duration and the current fixation timing settings."
+        )
     )
     feasibility_card = page.findChild(QWidget, "fixation_feasibility_card")
     assert feasibility_card is not None
     assert (
-        feasibility_card.toolTip()
-        == "Derived from each condition's duration and the current fixation timing settings."
+        feasibility_card.toolTip().startswith(
+            "Derived from each condition's duration and the current fixation timing settings."
+        )
     )
 
     condition_id = window.conditions_page.selected_condition_id()
@@ -615,7 +617,7 @@ def test_cycle_tooltips_and_fixation_feasibility_render_and_update(
     QApplication.processEvents()
     guidance_after = page.fixation_feasibility_label.text()
     assert guidance_after != guidance_before
-    assert "Recommended maximum cross changes per condition:" in guidance_after
+    assert "Effective maximum changes per condition:" in guidance_after
 
 
 def test_condition_page_stimulus_repeat_guidance_updates_with_target(
@@ -667,7 +669,7 @@ def test_fixation_feasibility_shows_single_value_for_uniform_condition_lengths(
     QApplication.processEvents()
 
     guidance = page.fixation_feasibility_label.text()
-    assert "Recommended maximum cross changes per condition:" in guidance
+    assert "Effective maximum changes per condition:" in guidance
     assert "varies by condition" not in guidance
     assert "\n" not in guidance
 

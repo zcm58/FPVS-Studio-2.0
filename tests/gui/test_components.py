@@ -4,16 +4,29 @@ from __future__ import annotations
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QPalette
-from PySide6.QtWidgets import QLabel, QPushButton
+from PySide6.QtWidgets import (
+    QApplication,
+    QComboBox,
+    QDialog,
+    QFormLayout,
+    QLabel,
+    QLineEdit,
+    QPushButton,
+    QSpinBox,
+    QTextEdit,
+)
+from tests.gui.helpers import assert_visible_children_within_parent
 
 from fpvs_studio.gui.components import (
     SectionCard,
     SetupMetricStrip,
     SetupProgressStepper,
     SetupSourceCard,
+    apply_dialog_theme,
     condition_template_details_header_stylesheet,
     error_text_stylesheet,
     fixation_settings_stylesheet,
+    form_controls_stylesheet,
     home_page_stylesheet,
     image_size_preview_dialog_stylesheet,
     mark_error_text,
@@ -78,7 +91,7 @@ def test_error_text_helper_marks_and_styles_label(qtbot) -> None:
     mark_error_text(label)
 
     assert label.property("errorText") == "true"
-    assert "#a1332b" in label.styleSheet()
+    assert resolve_studio_theme(label.palette()).error_text in label.styleSheet()
 
 
 def test_public_section_card_reexport_constructs(qtbot) -> None:
@@ -146,7 +159,7 @@ def test_theme_stylesheet_builders_expose_expected_selectors(qapp) -> None:
     assert 'QFrame[launchSurfaceFrame="true"]' in welcome_window_stylesheet(qapp.palette())
     assert "setupProgressStepper" in studio_theme_stylesheet()
     assert "QDialog#image_size_preview_dialog" in image_size_preview_dialog_stylesheet()
-    assert "#a1332b" in error_text_stylesheet()
+    assert resolve_studio_theme().error_text in error_text_stylesheet()
     assert "text-decoration: underline" in condition_template_details_header_stylesheet()
 
 
@@ -165,6 +178,9 @@ def test_studio_themes_keep_accessible_text_contrast(qapp) -> None:
         assert contrast_ratio(theme.text_primary, theme.surface_elevated) >= 4.5
         assert contrast_ratio(theme.text_secondary, theme.surface_elevated) >= 4.5
         assert contrast_ratio(theme.selected_text, theme.primary) >= 4.5
+        assert contrast_ratio(theme.error_text, theme.page_background) >= 4.5
+        assert contrast_ratio(theme.error_text, theme.surface_elevated) >= 4.5
+        assert theme.error_text in error_text_stylesheet(theme)
 
 
 def test_dark_theme_stylesheets_use_dark_tokens(qapp) -> None:
@@ -182,3 +198,103 @@ def test_dark_theme_stylesheets_use_dark_tokens(qapp) -> None:
         dark_palette
     )
     assert f"color: {dark_theme.text_primary};" in setup_wizard_stylesheet(dark_palette)
+
+
+def test_error_label_follows_palette_changes(qtbot) -> None:
+    label = QLabel("Choose a source folder before continuing.")
+    qtbot.addWidget(label)
+    label.setPalette(_palette_with_window_color("#f4f7fb"))
+    mark_error_text(label)
+    assert LIGHT_STUDIO_THEME.error_text in label.styleSheet()
+
+    label.setPalette(_palette_with_window_color("#202124"))
+    QApplication.processEvents()
+    assert DARK_STUDIO_THEME.error_text in label.styleSheet()
+
+
+def test_form_styles_preserve_native_arrow_subcontrols(qapp) -> None:
+    stylesheet = form_controls_stylesheet()
+    assert "QComboBox:focus" in stylesheet
+    assert "QAbstractSpinBox:disabled" in stylesheet
+    assert "QAbstractSpinBox QLineEdit" in stylesheet
+    for subcontrol in ("::down-arrow", "::up-arrow", "::up-button", "::down-button"):
+        assert subcontrol not in stylesheet
+
+
+def test_shared_fields_keep_keyboard_editing_and_selection(qtbot) -> None:
+    dialog = QDialog()
+    qtbot.addWidget(dialog)
+    layout = QFormLayout(dialog)
+    name = QLineEdit("Condition", dialog)
+    combo = QComboBox(dialog)
+    combo.addItems(["Continuous images", "Contrast modulation"])
+    repeats = QSpinBox(dialog)
+    repeats.setValue(3)
+    layout.addRow("Name", name)
+    layout.addRow("Presentation", combo)
+    layout.addRow("Repeats", repeats)
+    apply_dialog_theme(dialog)
+    dialog.resize(420, 200)
+    dialog.show()
+    name.setFocus()
+    name.selectAll()
+    qtbot.keyClicks(name, "Renamed condition")
+    combo.setFocus()
+    qtbot.keyClick(combo, Qt.Key.Key_Down)
+    repeats.setFocus()
+    qtbot.keyClick(repeats, Qt.Key.Key_Up)
+    QApplication.processEvents()
+
+    assert name.text() == "Renamed condition"
+    assert combo.currentText() == "Contrast modulation"
+    assert repeats.value() == 4
+    assert_visible_children_within_parent(dialog)
+
+
+def test_eight_setup_steps_show_complete_labels_at_compact_width(qtbot) -> None:
+    titles = [
+        "Project", "Conditions", "Timing", "Image Size", "Session",
+        "Fixation", "Response", "Review",
+    ]
+    stepper = SetupProgressStepper(titles)
+    qtbot.addWidget(stepper)
+    stepper.resize(1040, stepper.minimumHeight())
+    stepper.show()
+    QApplication.processEvents()
+
+    assert_visible_children_within_parent(stepper)
+    assert [label.text() for label in stepper.step_labels] == titles
+    for label in stepper.step_labels:
+        assert label.width() >= label.fontMetrics().horizontalAdvance(label.text())
+
+
+def test_source_details_exposes_and_copies_full_long_path(qtbot) -> None:
+    source = SetupSourceCard("Base images", "Choose images", show_details=True)
+    qtbot.addWidget(source)
+    assert not source.source_details_button.isEnabled()
+    path = "C:/Research/" + "Long source folder for stimulus inspection/" * 8
+    source.set_source_details(path)
+    source.show()
+    qtbot.mouseClick(source.source_details_button, Qt.MouseButton.LeftButton)
+    dialog = source.findChild(QDialog, "setup_source_card_source_details_dialog")
+    assert dialog is not None
+    QApplication.processEvents()
+    assert not dialog.isModal()
+    assert_visible_children_within_parent(dialog)
+    path_text = dialog.findChild(QTextEdit, "source_details_path")
+    assert path_text is not None
+    assert path_text.toPlainText() == path
+    copy_button = dialog.findChild(QPushButton, "source_details_copy_path")
+    assert copy_button is not None
+    qtbot.mouseClick(copy_button, Qt.MouseButton.LeftButton)
+    assert QApplication.clipboard().text() == path
+    replacement_path = "C:/Research/Another condition/oddball images"
+    source.set_source_details(replacement_path)
+    assert path_text.toPlainText() == replacement_path
+    qtbot.mouseClick(copy_button, Qt.MouseButton.LeftButton)
+    assert QApplication.clipboard().text() == replacement_path
+    qtbot.mouseClick(source.source_details_button, Qt.MouseButton.LeftButton)
+    assert source.findChild(QDialog, "setup_source_card_source_details_dialog") is dialog
+    source.set_source_details("")
+    assert not source.source_details_button.isEnabled()
+    assert not dialog.isVisible()

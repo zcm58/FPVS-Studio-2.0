@@ -72,6 +72,14 @@ workflow is separate.
 Read a selected skill completely before acting. A passing skill audit is sufficient
 evidence for its invariant unless the task changes that audit or boundary.
 
+## Setup Design Verification
+
+The eight-step Setup flow and shared dialog acceptance sizes are documented in
+[GUI workflow](../GUI_WORKFLOW.md#setup-design-and-manual-acceptance). Use the GUI
+focused route for edits and the repo precommit tier for shared component changes.
+The active [setup design plan](../exec-plans/active/setup-ux-design-refinement.md)
+tracks implementation and the pending visible review.
+
 ## Planning Route
 
 - Planning map: `docs/PLANS.md`

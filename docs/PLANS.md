@@ -13,11 +13,11 @@ Use this page to find planning material before making feature-sized changes.
 
 Current implementation:
 
+- `exec-plans/active/setup-ux-design-refinement.md`
 - `exec-plans/active/bounded-updater-storage-and-clean-upgrades.md`
 
 Concrete planned work:
 
-- `exec-plans/planned/setup-ux-design-refinement.md`
 - `exec-plans/planned/restore-tutorials-file-menu-entry.md`
 - `exec-plans/planned/luminance-rms-equalization-investigation.md`
 

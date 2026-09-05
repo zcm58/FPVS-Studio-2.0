@@ -54,6 +54,54 @@ def _apply_button(dialog: PresentationSettingsDialog):
     return dialog.button_box.button(QDialogButtonBox.StandardButton.Apply)
 
 
+def test_presentation_dialog_header_and_preview_fit_minimum_size(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+) -> None:
+    document, window = _open_created_project(controller, qtbot, tmp_path, "Compact presentation")
+    condition_id = document.create_condition(name="Image recognition with peripheral distractors")
+    dialog = PresentationSettingsDialog(document, condition_id=condition_id, parent=window)
+    qtbot.addWidget(dialog)
+    dialog.resize(900, 600)
+    dialog.show()
+    QApplication.processEvents()
+
+    assert dialog.width() == 900
+    assert dialog.height() == 600
+    assert "Cancel leaves it unchanged" in dialog.header.subtitle_label.text()
+    for label in (dialog.header.title_label, dialog.header.subtitle_label):
+        assert label.height() >= label.heightForWidth(label.width())
+    for widget in (
+        dialog.header, dialog.editor_tabs, dialog.preview_widget, dialog.button_box,
+        dialog.preview_role_combo, dialog.preview_modality_combo,
+        dialog.preview_stimulus_combo, dialog.preview_size_combo,
+    ):
+        parent = widget.parentWidget()
+        assert parent is not None
+        assert parent.rect().contains(widget.geometry())
+    assert dialog.preview_stimulus_combo.toolTip().startswith(
+        dialog.preview_stimulus_combo.currentText() + "\n\n"
+    )
+    assert "complete stimulus set" in dialog.preview_stimulus_combo.toolTip()
+    assert dialog.preview_size_combo.toolTip() == dialog.preview_size_combo.currentText()
+    dialog.preview_summary_label.setText(
+        "Natural aspect image geometry.\nWarning: the authored image box may extend "
+        "beyond the active display."
+    )
+    dialog.validation_label.setText(
+        "The selected presentation settings are invalid. Enter a positive image width "
+        "and height, then choose Apply again."
+    )
+    dialog.validation_label.show()
+    QApplication.processEvents()
+    assert dialog.height() == 600
+    for label in (dialog.preview_summary_label, dialog.validation_label):
+        assert label.height() >= label.heightForWidth(label.width())
+        assert label.parentWidget().rect().contains(label.geometry())
+    assert dialog.rect().contains(dialog.button_box.geometry())
+
+
 def test_project_presentation_dialog_applies_native_geometry_and_word_defaults(
     qtbot,
     controller: StudioController,
@@ -420,6 +468,15 @@ def test_condition_dialog_resolves_common_and_role_overrides_with_live_sizes(
     assert dialog.preview_stimulus_combo.count() == 2
     assert dialog.preview_size_combo.count() == 3
     assert dialog.preview_size_combo.isEnabled()
+    assert dialog.preview_stimulus_combo.toolTip().startswith("target\n\n")
+    assert dialog.preview_size_combo.toolTip() == "0.03"
+    dialog.preview_stimulus_combo.setCurrentIndex(1)
+    dialog.preview_size_combo.setCurrentIndex(2)
+    assert dialog.preview_stimulus_combo.toolTip().startswith("mirror\n\n")
+    assert "complete stimulus set" in dialog.preview_stimulus_combo.toolTip()
+    assert dialog.preview_size_combo.toolTip() == "0.05"
+    dialog._refresh_preview()
+    assert dialog.preview_size_combo.toolTip() == "0.05"
     qtbot.mouseClick(_apply_button(dialog), Qt.MouseButton.LeftButton)
 
     condition = document.get_condition(condition_id)
@@ -624,7 +681,7 @@ def test_setup_entry_buttons_open_project_and_condition_dialogs(
     monkeypatch.setattr(PresentationSettingsDialog, "exec", _capture_exec)
     guide = window.setup_wizard_page
     window.resize(1120, 720)
-    window.show_setup_wizard(step_key="experiment")
+    window.show_setup_wizard(step_key="image_size")
     QApplication.processEvents()
     assert guide.image_display_size_editor.configure_presentation_button.isVisible()
     qtbot.mouseClick(

@@ -52,7 +52,7 @@ def _refresh_verification(
     )
 
 
-def test_setup_wizard_experiment_and_fixation_steps_are_width_safe(
+def test_setup_wizard_timing_image_size_and_session_have_separate_width_safe_pages(
     qtbot,
     controller: StudioController,
     tmp_path: Path,
@@ -60,134 +60,58 @@ def test_setup_wizard_experiment_and_fixation_steps_are_width_safe(
     _, window = _open_created_project(controller, qtbot, tmp_path, "Experiment Settings Guided")
     guide = window.setup_wizard_page
     window.show_setup_wizard(step_key="experiment")
-
-    assert guide.content_stack.currentWidget() is guide.guided_panel
+    editor = guide.runtime_settings_editor
     assert guide.step_stack.currentWidget() is guide.experiment_step_surface
-    assert guide.experiment_step_surface.content.objectName() == (
-        "setup_wizard_experiment_settings_page"
-    )
     assert guide.findChild(QPushButton, "setup_wizard_advanced_button") is None
-    _assert_setup_wizard_vertical_scrolling_disabled(guide)
-    assert guide.runtime_settings_editor.refresh_hz_combo is not None
-    assert guide.runtime_settings_editor.detect_refresh_button is not None
-    assert guide.runtime_settings_editor.base_hz_spin is not None
-    assert guide.runtime_settings_editor.oddball_every_n_spin is not None
-    assert guide.image_display_size_editor.width_degrees_spin is not None
-    assert guide.session_structure_editor.block_count_spin is not None
-    assert guide.fixation_settings_editor is not guide.step_stack.currentWidget()
-    assert guide.runtime_settings_editor.card is None
-    assert guide.session_structure_editor.session_card is None
-    assert guide.experiment_settings_card.objectName() == "setup_wizard_experiment_settings_card"
-    assert guide.experiment_settings_card.maximumWidth() == 880
-    assert guide.experiment_settings_card.minimumHeight() == 280
-    assert (
-        guide.experiment_settings_card.findChild(
-            QLabel,
-            "setup_wizard_experiment_settings_card_title",
-        )
-        is None
-    )
-    assert guide.session_structure_editor.block_count_spin.value() == 2
-    show_title_checkbox = guide.session_structure_editor.show_condition_title_checkbox
-    assert show_title_checkbox.isVisible() is False
-    assert show_title_checkbox.isEnabled() is False
-    guide.session_structure_editor.block_count_spin.setValue(3)
-    assert window.document.project.settings.session.show_condition_title_on_screen is False
-    assert not guide.session_structure_editor.generate_seed_button.isVisible()
-    assert not guide.session_structure_editor.session_seed_spin.isVisible()
-    assert not guide.session_structure_editor.seed_row_widget.isVisible()
-    assert guide.session_structure_editor.session_layout.horizontalSpacing() == 12
-    assert guide.session_structure_editor.session_layout.verticalSpacing() == 10
-    assert not guide.runtime_settings_editor.runtime_background_scope_label.isVisible()
-    experiment_labels = "\n".join(
-        label.text() for label in guide.experiment_settings_card.findChildren(QLabel)
-    )
-    assert "Monitor refresh" in experiment_labels
-    assert "Base rate" in experiment_labels
-    assert "Oddball every" in experiment_labels
-    assert "Image Size" in experiment_labels
-    assert "Image width" in experiment_labels
-    assert "Viewing distance" in experiment_labels
-    assert "Screen width" in experiment_labels
-    assert "Repeats per condition" in experiment_labels
-    assert "Condition order" in experiment_labels
-    assert "randomized automatically" in experiment_labels
-    assert "Experiment Settings" not in experiment_labels
-    assert "Block count" not in experiment_labels
-    assert "Random order seed" not in experiment_labels
-    assert "New Seed" not in experiment_labels
-    assert "Used during FPVS image presentation." not in experiment_labels
-    assert (
-        len(
-            [
-                widget
-                for widget in guide.experiment_settings_card.findChildren(QWidget)
-                if widget.property("experimentSettingsSection") == "true"
-            ]
-        )
-        == 3
-    )
-    for section in guide.experiment_settings_card.findChildren(QWidget):
-        if section.property("experimentSettingsSection") == "true":
-            assert section.minimumHeight() == 224
-    assert window.minimumWidth() == 960
-    assert window.minimumHeight() == 640
-
-    refresh_combo = guide.runtime_settings_editor.refresh_hz_combo
-    refresh_combo.setCurrentIndex(refresh_combo.findData(59.94))
-    guide.runtime_settings_editor._on_refresh_detection_succeeded(
+    assert editor.card is None
+    assert editor.detect_refresh_button.text() == "Verify display"
+    assert editor.refresh_verification_notice.isVisible()
+    assert "fullscreen" in editor.refresh_verification_notice.text()
+    assert "will not start" in editor.refresh_verification_notice.text()
+    assert not guide.image_display_size_editor.isVisible()
+    assert not guide.session_structure_editor.isVisible()
+    assert not editor.runtime_background_scope_label.isVisible()
+    editor._on_refresh_detection_succeeded(
         _refresh_verification(60_000, 1_001, 59.94, 59.94)
     )
-    assert guide.runtime_settings_editor.timing_status_label.isVisible()
-    assert "Approximate timing" in guide.runtime_settings_editor.timing_status_label.text()
+    assert "Approximate timing" in editor.timing_status_label.text()
 
+    pages = (
+        ("experiment", guide.experiment_step_surface, editor),
+        ("image_size", guide.image_size_step_surface, guide.image_display_size_editor),
+        ("session", guide.session_step_surface, guide.session_structure_editor),
+    )
     for width, height in ((1120, 720), (1180, 760)):
         window.resize(width, height)
-        QApplication.processEvents()
-        experiment_page = guide.experiment_step_surface
-        experiment_card = guide.experiment_settings_card
-        display_panel = guide.runtime_settings_editor
-        image_size_panel = guide.image_display_size_editor
-        session_panel = guide.session_structure_editor
-        assert guide.shell.page_container.scroll_area.horizontalScrollBar().maximum() == 0
-        _assert_setup_wizard_vertical_scrolling_disabled(guide)
-        _assert_balanced_setup_stepper(guide)
-        card_left = experiment_card.mapTo(experiment_page, QPoint(0, 0)).x()
-        card_right = experiment_card.mapTo(
-            experiment_page,
-            QPoint(experiment_card.width(), 0),
-        ).x()
-        display_right = display_panel.mapTo(
-            experiment_card,
-            QPoint(display_panel.width(), 0),
-        ).x()
-        image_size_left = image_size_panel.mapTo(experiment_card, QPoint(0, 0)).x()
-        image_size_right = image_size_panel.mapTo(
-            experiment_card,
-            QPoint(image_size_panel.width(), 0),
-        ).x()
-        session_left = session_panel.mapTo(experiment_card, QPoint(0, 0)).x()
-        session_right = session_panel.mapTo(
-            experiment_card,
-            QPoint(session_panel.width(), 0),
-        ).x()
-        assert card_left >= 0
-        assert card_right <= experiment_page.width()
-        assert experiment_card.width() <= 880
-        assert display_right <= image_size_left
-        assert image_size_right <= session_left
-        assert session_right <= experiment_card.width()
+        for key, surface, page_editor in pages:
+            guide.open_wizard(step_key=key)
+            QApplication.processEvents()
+            assert guide.step_stack.currentWidget() is surface
+            assert page_editor.isVisible()
+            assert all(
+                not other_editor.isVisible()
+                for other_key, _, other_editor in pages
+                if other_key != key
+            )
+            _assert_setup_wizard_vertical_scrolling_disabled(guide)
+            _assert_balanced_setup_stepper(guide)
+            assert guide.shell.page_container.scroll_area.horizontalScrollBar().maximum() == 0
+            assert guide.shell.page_container.scroll_area.verticalScrollBar().maximum() == 0
+            _assert_visible_children_within_parent(surface)
+            for label in page_editor.findChildren(QLabel):
+                if label.isVisible() and not label.wordWrap() and label.text():
+                    assert label.contentsRect().width() >= label.fontMetrics().horizontalAdvance(
+                        label.text()
+                    ), label.objectName()
 
-        review_item = guide.progress_steps.step_items[-1]
-        review_right = review_item.mapTo(
-            guide.progress_steps,
-            QPoint(review_item.width(), 0),
-        ).x()
-        assert review_right <= guide.progress_steps.width()
-
-    window.resize(1120, 720)
-    QApplication.processEvents()
-    assert guide.shell.page_container.scroll_area.verticalScrollBar().maximum() == 0
+    session = guide.session_structure_editor
+    assert session.block_count_spin.value() == 2
+    session.block_count_spin.setValue(3)
+    assert window.document.project.settings.session.block_count == 3
+    assert not window.document.project.settings.session.show_condition_title_on_screen
+    assert not session.generate_seed_button.isVisible()
+    assert not session.session_seed_spin.isVisible()
+    assert not session.show_condition_title_checkbox.isVisible()
 
 
 def test_contrast_modulation_background_guidance_fits_setup_minimum(
@@ -227,6 +151,38 @@ def test_contrast_modulation_background_guidance_fits_setup_minimum(
     ).height()
     assert note.contentsRect().height() >= required_note_height
     _assert_visible_children_within_parent(editor)
+
+
+def test_fixation_limit_and_automatic_adjustment_fit_setup_minimum(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Fixation Limit Guidance")
+    guide = window.setup_wizard_page
+    condition_name = "Semantic Categories — High Familiarity and Low Visual Similarity Condition"
+    condition_id = window.document.create_condition(name=condition_name)
+    window.document.update_condition(
+        condition_id, sequence_count=1, oddball_cycle_repeats_per_sequence=72
+    )
+    window.show_setup_wizard(step_key="fixation")
+    editor = guide.fixation_schedule_editor
+
+    assert condition_name in editor.fixation_feasibility_label.toolTip()
+    assert "Effective maximum changes per condition: 7" in editor.fixation_feasibility_label.text()
+    assert editor.fixation_adjustment_label.isVisible()
+    for width, height in ((1120, 720), (1180, 760)):
+        window.resize(width, height)
+        QApplication.processEvents()
+        assert guide.shell.page_container.scroll_area.verticalScrollBar().maximum() == 0
+        _assert_visible_children_within_parent(guide.fixation_step_surface)
+        for label in (editor.fixation_feasibility_label, editor.fixation_adjustment_label):
+            required = label.fontMetrics().boundingRect(
+                QRect(0, 0, max(1, label.contentsRect().width()), 1000),
+                Qt.TextFlag.TextWordWrap,
+                label.text(),
+            )
+            assert label.contentsRect().height() >= required.height(), label.objectName()
     _assert_setup_wizard_vertical_scrolling_disabled(guide)
 
 
@@ -463,7 +419,7 @@ def test_setup_wizard_experiment_image_size_controls_update_preview_and_review(
     _, window = _open_created_project(controller, qtbot, tmp_path, "Image Size Guided")
     guide = window.setup_wizard_page
     window.main_stack.setCurrentWidget(guide)
-    guide.open_wizard(step_key="experiment")
+    guide.open_wizard(step_key="image_size")
     editor = guide.image_display_size_editor
     preview_captures: dict[str, object] = {}
 
@@ -526,7 +482,8 @@ def test_setup_wizard_experiment_image_size_controls_update_preview_and_review(
 
     guide.open_wizard(step_key="review")
     review_text = "\n".join(label.text() for label in guide.review_card.findChildren(QLabel))
-    assert "Presentation: Natural aspect, 6.5 deg wide; none at 75 cm" in review_text
+    assert "Natural aspect, 6.5 deg wide; none" in review_text
+    assert "Viewing distance: 75 cm" in review_text
     next_bottom = guide.setup_wizard_next_button.mapTo(
         guide,
         QPoint(0, guide.setup_wizard_next_button.height()),
@@ -560,7 +517,7 @@ def test_setup_wizard_experiment_image_size_controls_update_preview_and_review(
         "fixation_feasibility_card",
     )
     assert feasibility_card is not None
-    assert feasibility_card.maximumHeight() == 42
+    assert feasibility_card.maximumHeight() > 42
     assert (
         len(
             [
@@ -698,7 +655,7 @@ def test_full_screen_image_size_preview_edits_sync_with_experiment_page(
 
     _, window = _open_created_project(controller, qtbot, tmp_path, "Image Size Preview Edit")
     guide = window.setup_wizard_page
-    guide.open_wizard(step_key="experiment")
+    guide.open_wizard(step_key="image_size")
     editor = guide.image_display_size_editor
     dialog = ImageSizePreviewDialog(window.document, editor)
     qtbot.addWidget(dialog)

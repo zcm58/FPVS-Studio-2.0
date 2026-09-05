@@ -5,26 +5,24 @@ from __future__ import annotations
 from pathlib import Path
 
 from PySide6.QtCore import (
-    QPoint,
     Qt,
 )
 from PySide6.QtWidgets import (
     QApplication,
-    QFrame,
     QLabel,
     QMessageBox,
-    QPushButton,
 )
 from tests.gui.helpers import (
     _open_created_project,
     _prepare_compile_ready_project,
     _write_image_directory,
+    assert_visible_children_within_parent,
 )
 
 from fpvs_studio.gui.controller import StudioController
 
 
-def test_setup_wizard_review_uses_centered_confirmation_checklist(
+def test_setup_wizard_review_summarizes_actual_settings_and_supports_editing(
     qtbot,
     controller: StudioController,
     tmp_path: Path,
@@ -34,6 +32,9 @@ def test_setup_wizard_review_uses_centered_confirmation_checklist(
     guide = window.setup_wizard_page
     guide.project_overview_editor.project_description_edit.setPlainText(
         "Review checklist project description."
+    )
+    guide.project_overview_editor.project_name_edit.setText(
+        "Longitudinal face and object discrimination with contrast modulation and response tracking"
     )
     guide.flush_pending_edits()
 
@@ -66,187 +67,120 @@ def test_setup_wizard_review_uses_centered_confirmation_checklist(
     guide.open_wizard(step_key="review")
     QApplication.processEvents()
     assert guide.step_stack.currentWidget() is guide.review_step_surface
-    assert not guide.step_title_label.isVisible()
-    assert not guide.step_status_badge.isVisible()
-
+    window.resize(1120, 720)
+    QApplication.processEvents()
     review_card = guide.review_card
-    assert review_card.minimumWidth() == 700
-    assert review_card.maximumWidth() == 880
-    review_page = guide.step_stack.currentWidget()
-    card_left = review_card.mapTo(review_page, QPoint(0, 0)).x()
-    card_center = card_left + (review_card.width() / 2)
-    assert abs(card_center - (review_page.width() / 2)) < 20
-    assert review_card.width() >= 700
-
     label_text = "\n".join(label.text() for label in review_card.findChildren(QLabel))
     assert "Review Your Experiment" in label_text
-    assert "Please confirm your experiment settings." in label_text
-    assert "Would you like to save your experiment?" not in label_text
-    assert "Project Details" in label_text
-    assert "Conditions" in label_text
-    assert "Experiment Settings" in label_text
-    assert "Fixation Cross" in label_text
-    assert "Project details complete: Review Checklist Project" in label_text
-    assert "2 conditions configured" in label_text
-    assert "Timing: Continuous Images" in label_text
-    assert "Faces: base 3 images, oddball 3 images" not in label_text
-    assert "Objects: base 3 images, oddball 3 images" not in label_text
-    assert "Each condition will repeat 2 times in randomized block order" in label_text
-    assert "Condition order is randomized automatically at launch" in label_text
-    assert "Estimated run time: 10 minutes" in label_text
-    assert "Condition durations:" not in label_text
-    assert "Break estimate:" not in label_text
-    assert "Total estimated run:" not in label_text
-    assert "Random order seed:" not in label_text
-    assert "Monitor: 60.00 Hz, Black background" in label_text
-    assert "FPVS timing: 6 Hz base, oddball every 5 stimuli (1.2 Hz)" in label_text
-    assert "Presentation: Natural aspect, 5 deg wide; none at 80 cm" in label_text
-    assert "Fixation cross configured; 2 s pre-stream gaze lead-in" in label_text
-    assert "Launch requirements are satisfied" not in label_text
-    summary_sections = [
-        section
-        for section in review_card.findChildren(QFrame)
-        if section.property("reviewSummarySection") == "true"
-    ]
-    checklist_rows = [
-        row
-        for row in review_card.findChildren(QFrame)
-        if row.property("reviewChecklistRow") == "true"
-    ]
-    check_icons = [
+    assert "2 conditions" in label_text
+    assert "2 repeats per condition" in label_text
+    assert "Accuracy tracking: On" in label_text
+    assert "Response: G within" in label_text
+    assert "Participant tutorial: On" in label_text
+    assert "Task flow: 0 pre-condition, 0 post-condition bindings" in label_text
+    assert "Display verification required" in label_text
+    assert not [
         label
         for label in review_card.findChildren(QLabel)
         if label.property("reviewCheckIcon") == "true"
     ]
-    assert len(summary_sections) == 4
-    assert len(checklist_rows) == 10
-    assert len(check_icons) == len(checklist_rows)
-    section_title_tops = [
-        next(
-            label
-            for label in section.findChildren(QLabel)
-            if label.property("reviewSummarySectionTitle") == "true"
-        ).mapTo(section, QPoint(0, 0)).y()
-        for section in summary_sections
-    ]
-    assert max(section_title_tops) - min(section_title_tops) <= 1
-    for row in checklist_rows:
-        text_label = next(
-            label
-            for label in row.findChildren(QLabel)
-            if label.property("reviewChecklistLine") == "true"
-        )
-        assert text_label.alignment() & Qt.AlignmentFlag.AlignHCenter
-    fixation_row = next(
-        row
-        for row in checklist_rows
-        if any(
-            label.text() == "Fixation cross configured; 2 s pre-stream gaze lead-in"
-            for label in row.findChildren(QLabel)
-        )
-    )
-    fixation_check_icon = next(
-        label
-        for label in fixation_row.findChildren(QLabel)
-        if label.property("reviewCheckIcon") == "true"
-    )
-    fixation_text_label = next(
-        label
-        for label in fixation_row.findChildren(QLabel)
-        if label.property("reviewChecklistLine") == "true"
-    )
-    icon_center_y = fixation_check_icon.mapTo(
-        fixation_row,
-        QPoint(0, fixation_check_icon.height() // 2),
-    ).y()
-    text_center_y = fixation_text_label.mapTo(
-        fixation_row,
-        QPoint(0, fixation_text_label.height() // 2),
-    ).y()
-    assert abs(icon_center_y - text_center_y) <= 1
+    assert not any(item.edit_button.isVisible() for item in guide._review_summary_widgets)
+    assert not any(item.fixation_edit_button.isVisible() for item in guide._review_summary_widgets)
+    assert_visible_children_within_parent(review_card)
 
-    original_section_ids = {id(section) for section in summary_sections}
-    original_row_ids = {id(row) for row in checklist_rows}
-    guide.session_structure_editor.block_count_spin.setValue(3)
-    guide.flush_pending_edits()
-    guide.refresh()
+    guide.open_wizard(step_key="review", allow_step_jumps=True)
     QApplication.processEvents()
-    refreshed_sections = [
-        section
-        for section in review_card.findChildren(QFrame)
-        if section.property("reviewSummarySection") == "true"
-    ]
-    refreshed_rows = [
-        row
-        for row in review_card.findChildren(QFrame)
-        if row.property("reviewChecklistRow") == "true"
-    ]
-    assert {id(section) for section in refreshed_sections} == original_section_ids
-    assert {id(row) for row in refreshed_rows} == original_row_ids
-    refreshed_label_text = "\n".join(
-        label.text() for label in review_card.findChildren(QLabel)
+    assert_visible_children_within_parent(guide.review_step_surface)
+    assert guide.shell.page_container.scroll_area.verticalScrollBar().maximum() == 0
+    for label in review_card.findChildren(QLabel):
+        if label.isVisible() and label.wordWrap():
+            assert label.height() >= label.heightForWidth(label.width()), label.text()
+    fixation_edit = next(
+        item.fixation_edit_button
+        for item in guide._review_summary_widgets
+        if item.fixation_edit_button.isVisible()
     )
-    assert "Each condition will repeat 3 times in randomized block order" in refreshed_label_text
-
-    assert guide.review_save_button.text() == "Save and Return Home"
-    assert guide.review_return_home_button.text() == "Return Home Without Saving"
-    assert guide.setup_wizard_return_home_button.isHidden()
-    assert guide.setup_wizard_next_button.isHidden()
-    assert guide.setup_wizard_back_button.isVisible()
-    assert (
-        len(
-            [
-                button
-                for button in review_card.findChildren(QPushButton)
-                if button.text() == "Return Home Without Saving"
-            ]
-        )
-        == 1
+    qtbot.mouseClick(fixation_edit, Qt.MouseButton.LeftButton)
+    assert guide.step_stack.currentWidget() is guide.fixation_step_surface
+    guide.open_wizard(step_key="review", allow_step_jumps=True)
+    session_edit = next(
+        item.edit_button
+        for item in guide._review_summary_widgets
+        if item.edit_button.property("reviewStepKey") == "session"
     )
-    assert window.document.dirty is True
+    qtbot.mouseClick(session_edit, Qt.MouseButton.LeftButton)
+    assert guide.step_stack.currentWidget() is guide.session_step_surface
+    guide.session_structure_editor.block_count_spin.setValue(3)
+    guide.open_wizard(step_key="review")
+    assert any(
+        "3 repeats per condition" in label.text() for label in review_card.findChildren(QLabel)
+    )
 
     prompts: list[str] = []
-
-    def _decline_unsaved_return(*args, **_kwargs):
-        prompts.append(str(args[2]))
-        return QMessageBox.StandardButton.No
-
     monkeypatch.setattr(
         "fpvs_studio.gui.setup_wizard_page.QMessageBox.question",
-        _decline_unsaved_return,
+        lambda *args, **kwargs: prompts.append(str(args[2])) or QMessageBox.StandardButton.No,
     )
-    save_confirmations: list[str] = []
+    qtbot.mouseClick(guide.review_return_home_button, Qt.MouseButton.LeftButton)
+    assert window.main_stack.currentWidget() is guide
+    assert "without saving to disk" in prompts[0]
+    assert "remain in this open project" in prompts[0]
 
-    def _capture_save_confirmation(*args, **_kwargs):
-        save_confirmations.append(str(args[2]))
-        assert window.main_stack.currentWidget() is guide
-        return QMessageBox.StandardButton.Ok
+    def _unexpected_save_modal(*_args, **_kwargs):
+        raise AssertionError("A successful save should use the existing nonmodal status message.")
 
     monkeypatch.setattr(
-        "fpvs_studio.gui.setup_wizard_page.QMessageBox.information",
-        _capture_save_confirmation,
+        "fpvs_studio.gui.setup_wizard_page.QMessageBox.information", _unexpected_save_modal
     )
-    qtbot.mouseClick(guide.review_return_home_button, Qt.MouseButton.LeftButton)
-
-    assert window.main_stack.currentWidget() is guide
-    assert prompts == ["Are you sure you want to return home without saving your changes?"]
-
     qtbot.mouseClick(guide.review_save_button, Qt.MouseButton.LeftButton)
     assert window.document.dirty is False
-    assert save_confirmations == ["Experiment settings have been saved."]
     assert window.main_stack.currentWidget() is window.home_page
+    assert window.statusBar().currentMessage() == "Project saved."
 
+
+def test_setup_review_reports_effective_tutorial_and_response_state(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Review Effective Response")
+    guide = window.setup_wizard_page
+    guide.project_overview_editor.participant_tutorial_checkbox.setChecked(True)
+    guide.fixation_settings_editor.fixation_accuracy_checkbox.setChecked(False)
     window.main_stack.setCurrentWidget(guide)
-    guide.open_wizard(step_key="review")
+    window.resize(1120, 720)
+    guide.open_wizard(step_key="review", allow_step_jumps=True)
     QApplication.processEvents()
-    prompts.clear()
-    qtbot.mouseClick(guide.review_return_home_button, Qt.MouseButton.LeftButton)
-    assert window.main_stack.currentWidget() is guide
-    assert prompts == ["Are you sure you want to return home without saving your changes?"]
+    text = "\n".join(label.text() for label in guide.review_card.findChildren(QLabel))
+    assert "Accuracy tracking: Off" in text
+    assert "Response scoring: Off" in text
+    assert "Participant tutorial: Off (accuracy tracking is off)" in text
+    assert "Participant tutorial: On" not in text
+    assert_visible_children_within_parent(guide.review_step_surface)
+    for label in guide.review_card.findChildren(QLabel):
+        if label.isVisible() and label.wordWrap():
+            assert label.height() >= label.heightForWidth(label.width()), label.text()
 
-    window.home_page.refresh()
-    assert "Launch requirements are satisfied" not in window.home_page.launch_status_summary.text()
-    assert window.home_page.launch_status_summary.text() == ""
+    project_edit = next(
+        item.edit_button
+        for item in guide._review_summary_widgets
+        if item.edit_button.property("reviewStepKey") == "project"
+    )
+    qtbot.mouseClick(project_edit, Qt.MouseButton.LeftButton)
+    assert guide.project_overview_editor.participant_tutorial_checkbox.isVisible()
+    guide.project_overview_editor.participant_tutorial_checkbox.setChecked(False)
+    guide.open_wizard(step_key="review", allow_step_jumps=True)
+    text = "\n".join(label.text() for label in guide.review_card.findChildren(QLabel))
+    assert "Participant tutorial: Off" in text
+    assert "accuracy tracking is off" not in text
+
+    response_edit = next(
+        item.edit_button
+        for item in guide._review_summary_widgets
+        if item.edit_button.property("reviewStepKey") == "response"
+    )
+    qtbot.mouseClick(response_edit, Qt.MouseButton.LeftButton)
+    assert guide.step_stack.currentWidget() is guide.response_step_surface
 
 
 def test_setup_wizard_review_save_failure_stays_on_review(

@@ -64,19 +64,21 @@ interaction.
 - Setup Wizard is the guided setup/editing surface. Setup uses the compact
   Welcome/Home-sized `1120x720` default window, with Image Resizer using the
   same focused utility footprint instead of the larger workspace sizing. Wizard
-  pages share the same setup step surface so content
+  steps are Project, Conditions, Timing, Image Size, Session, Fixation, Response, and
+  Review. Pages share the same setup step surface so content
   width, margins, and vertical alignment stay consistent across steps. The shared
   setup frame, top progress stepper, bottom navigation, and visible child widgets
   must fit at `1120x720` without bottom clipping or required vertical scrolling.
 - Conditions is a combined guided setup area for condition list/actions, names,
   triggers, instructions, modality selection, image-folder assignment, typed word-list
   authoring, control-condition creation, and image normalization. It uses compact list
-  rows and source cards without extra section headers. Raw image-folder selection is
-  permissive; uniform rectangular sets are valid native inputs, while inconsistent
+  rows and source cards, separating `All conditions` repeat settings from
+  `This condition` fields. Image sources have keyboard-accessible full-path details
+  and copy. Raw image-folder selection is permissive; uniform rectangular sets are valid native inputs, while inconsistent
   dimensions within a set are handled by the guided normalization flow before leaving
   Conditions. Control-condition creation and normalization stay image-only paths. A
   condition-level `Pre/Post Tasks...` dialog authors reusable ordered participant-task
-  modules and neutral questionnaire workflows while preserving the six-step wizard;
+  modules and neutral questionnaire workflows while preserving the eight-step wizard;
   task media is staged until Apply and then stored under the active project's
   `stimuli/task-assets/<task-id>/` folder.
 - Fixation and Response are split guided setup areas: Fixation handles color-change
@@ -93,7 +95,10 @@ interaction.
 - Settings exposes app-level preferences for the FPVS Studio Root Folder, condition
   templates, run export mode, Sophia Mode, and source-only Experiment Test Mode on
   Windows and Linux development hosts. These preferences are persisted with `QSettings`
-  and remain outside project files.
+  and remain outside project files. Shared dialog headers and form-control styles
+  also cover the staged Presentation and Pre/Post Tasks editors; Settings retains
+  immediate saving. See [GUI workflow](GUI_WORKFLOW.md#setup-design-and-manual-acceptance)
+  for minimum sizes and the visible acceptance path.
 - The current Setup Wizard does not expose Advanced buttons; dense/internal support
   pages should remain behind guided workflows unless a future plan explicitly
   reintroduces them.
@@ -109,7 +114,7 @@ interaction.
 - Add or update registered pytest-qt no-clipping coverage at the documented
   minimum/default size, with realistic long content and relevant dynamic states.
 - Setup Wizard layout changes must update compact no-clipping coverage in
-  `tests/gui/test_setup_wizard_shell.py` for all six steps at `1120x720`.
+  `tests/gui/test_setup_wizard_shell.py` for all eight steps at `1120x720`.
 - Do not run Qt unless the user approves a safe visible environment. Use the optional
   `full` tier with explicit opt-in, and do not use offscreen execution.
 - Run `./scripts/verify.ps1 -Scope repo -Tier precommit` when GUI changes

@@ -9,6 +9,7 @@ tests/gui/test_image_resizer_page.py
 tests/gui/test_presentation_settings_dialog.py
 tests/gui/test_project_config_import_export.py
 tests/gui/test_run_page_launch.py
+tests/gui/test_settings_dialog.py
 tests/gui/test_setup_conditions.py
 tests/gui/test_setup_dashboard_sync.py
 tests/gui/test_setup_experiment_display.py

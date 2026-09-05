@@ -623,7 +623,8 @@ def test_condition_task_dialog_exposes_all_questionnaire_types_and_fits_minimum_
         tmp_path,
         "Questionnaire Authoring",
     )
-    condition_id = document.create_condition(name="Custom Questionnaire")
+    condition_name = "Participant questionnaire after image recognition and confidence ratings"
+    condition_id = document.create_condition(name=condition_name)
     dialog = ConditionTaskDialog(document, condition_id=condition_id, parent=window)
     qtbot.addWidget(dialog)
     dialog.resize(1000, 640)
@@ -662,6 +663,12 @@ def test_condition_task_dialog_exposes_all_questionnaire_types_and_fits_minimum_
         dialog.post_editor.module_editor.step_editor.submission_mode_combo.findData("explicit") >= 0
     )
     assert dialog.preview.isVisible()
+    assert condition_name in dialog.header.title_label.text()
+    assert dialog.header.title_label.wordWrap()
+    assert "Cancel leaves the condition unchanged" in dialog.header.subtitle_label.text()
+    assert dialog.header.title_label.height() >= dialog.header.title_label.heightForWidth(
+        dialog.header.title_label.width()
+    )
     editor_scroll = dialog.post_editor.findChild(
         QAbstractScrollArea,
         "condition_task_post_editor_scroll",
@@ -729,7 +736,7 @@ def test_task_participant_preview_caches_and_invalidates_image_rendering(
     assert preview._scaled_option_pixmaps == {}
 
 
-def test_conditions_step_opens_task_dialog_and_remains_six_step_sized(
+def test_conditions_step_opens_task_dialog_and_remains_eight_step_sized(
     qtbot,
     controller: StudioController,
     tmp_path: Path,
@@ -759,6 +766,6 @@ def test_conditions_step_opens_task_dialog_and_remains_six_step_sized(
     assert step.task_summary_label.text() == "No pre/post tasks"
     qtbot.mouseClick(step.task_button, Qt.MouseButton.LeftButton)
     assert captures == [condition_id]
-    assert len(window.setup_wizard_page.progress_step_labels) == 6
+    assert len(window.setup_wizard_page.progress_step_labels) == 8
     _assert_widget_within_parent(step.task_button)
     _assert_widget_within_parent(step.task_summary_label)

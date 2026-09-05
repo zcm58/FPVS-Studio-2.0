@@ -83,8 +83,8 @@ def test_setup_wizard_exists_and_uses_single_column_shell_with_steps(
     assert wizard.findChild(QLabel, "setup_wizard_progress_header") is None
     assert wizard.progress_steps.objectName() == "setup_wizard_progress_steps"
     assert wizard.step_status_badge.objectName() == "setup_wizard_ready_badge"
-    assert len(wizard.progress_steps.step_items) == 6
-    assert wizard.step_stack.count() == 6
+    assert len(wizard.progress_steps.step_items) == 8
+    assert wizard.step_stack.count() == 8
     assert wizard.project_step_surface.property("setupStepSurface") == "true"
     assert wizard.conditions_step_surface.property("setupStepSurface") == "true"
     assert wizard.conditions_step_surface.content.maximumWidth() == 1040
@@ -106,7 +106,9 @@ def test_setup_wizard_exists_and_uses_single_column_shell_with_steps(
     assert "Step 1 of 6" not in "\n".join(label.text() for label in wizard.findChildren(QLabel))
     assert "Project" in step_metadata_text
     assert "Conditions" in step_metadata_text
-    assert "Experiment" in step_metadata_text
+    assert "Timing" in step_metadata_text
+    assert "Image Size" in step_metadata_text
+    assert "Session" in step_metadata_text
     assert "Display Settings" not in step_metadata_text
     assert "Session Design" not in step_metadata_text
     assert "Fixation" in step_metadata_text
@@ -114,10 +116,10 @@ def test_setup_wizard_exists_and_uses_single_column_shell_with_steps(
     assert "Review" in step_metadata_text
     assert wizard.findChild(QWidget, "setup_wizard_step_1_project") is not None
     assert wizard.findChild(QWidget, "setup_wizard_step_2_conditions") is not None
-    assert wizard.findChild(QWidget, "setup_wizard_step_3_experiment") is not None
-    assert wizard.findChild(QWidget, "setup_wizard_step_4_fixation") is not None
-    assert wizard.findChild(QWidget, "setup_wizard_step_5_response") is not None
-    assert wizard.findChild(QWidget, "setup_wizard_step_6_review") is not None
+    assert wizard.findChild(QWidget, "setup_wizard_step_3_timing") is not None
+    assert wizard.findChild(QWidget, "setup_wizard_step_6_fixation") is not None
+    assert wizard.findChild(QWidget, "setup_wizard_step_7_response") is not None
+    assert wizard.findChild(QWidget, "setup_wizard_step_8_review") is not None
     assert wizard.progress_steps.step_circles[0].property("setupProgressState") == "current"
     next_hint = wizard.findChild(QLabel, "setup_wizard_next_hint_label")
     assert next_hint is not None
@@ -156,6 +158,8 @@ def test_setup_wizard_exists_and_uses_single_column_shell_with_steps(
         "project",
         "conditions",
         "experiment",
+        "image_size",
+        "session",
         "fixation",
         "response",
         "review",
@@ -218,6 +222,8 @@ def test_setup_wizard_compact_steps_do_not_clip_visible_content(
         "project",
         "conditions",
         "experiment",
+        "image_size",
+        "session",
         "fixation",
         "response",
         "review",
@@ -229,7 +235,7 @@ def test_setup_wizard_compact_steps_do_not_clip_visible_content(
         _assert_visible_children_within_parent(wizard.step_stack.currentWidget())
         if step_key == "conditions":
             assert wizard.condition_setup_step.presentation_button.isVisible()
-        elif step_key == "experiment":
+        elif step_key == "image_size":
             assert (
                 wizard.image_display_size_editor.configure_presentation_button.isVisible()
             )
@@ -556,7 +562,7 @@ def test_edit_setup_stepper_can_jump_to_any_step(
     QApplication.processEvents()
 
     guide = reopened.setup_wizard_page
-    qtbot.mouseClick(guide.progress_steps.step_circles[4], Qt.MouseButton.LeftButton)
+    qtbot.mouseClick(guide.progress_steps.step_circles[6], Qt.MouseButton.LeftButton)
     assert guide.step_stack.currentWidget() is guide.response_step_surface
 
     qtbot.mouseClick(guide.progress_steps.step_circles[1], Qt.MouseButton.LeftButton)

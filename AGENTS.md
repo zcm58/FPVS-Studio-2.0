@@ -70,7 +70,7 @@ contracts live in the nearest package `AGENTS.md` and the focused docs linked fr
   one-off styles.
 - No clipping is the default. Every changed surface must fit at its documented
   minimum/default size with realistic longest content and all relevant states.
-- The Setup Wizard must fit all six steps at `1120x720` without required scrolling,
+- The Setup Wizard must fit all eight steps at `1120x720` without required scrolling,
   child-widget clipping, or unintended truncation.
 - Intentional elision needs an accessible full-value path and explicit coverage.
 - Add or update registered pytest-qt coverage for changed GUI behavior, but do not run

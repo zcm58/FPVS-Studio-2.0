@@ -1,10 +1,25 @@
 # Setup UX And Shared Visual Design Refinement
 
-Status: Planned
+Status: Active
+
+## Implementation Approval (2026-09-05)
+
+The user approved implementing the concept on this branch and explicitly allows
+additional steps to give controls more space. This replaces the original six-step
+constraint. The implementation uses Project, Conditions, Timing, Image Size,
+Session, Fixation, Response, and Review, retaining `1120x720` as the design minimum.
+Timing keeps the existing `experiment` navigation key for compatibility. Image Size
+and Session get their own pages using the existing document-backed editors.
+
+Implementation includes shared theme/control states, Conditions scope and source
+details, display verification wording, useful Review summaries and edit navigation,
+non-blocking save feedback, and supporting dialog consistency. Scientific behavior,
+save semantics, and first-time validation gates remain intact. Registered Qt tests
+will be updated; visible acceptance is deferred to the user's manual review.
 
 ## Recommendation
 
-Refine the existing six-step Setup workflow around clearer decisions, consistent
+Refine Setup into an eight-step workflow around clearer decisions, consistent
 controls, and trustworthy feedback. Keep the compact Windows desktop shape and
 extend the shared visual language through every app-owned supporting dialog.
 
@@ -15,7 +30,8 @@ make an experiment easier to configure and verify.
 
 Review date: 2026-09-05. Baseline: `ce63afe` (1.4.1 source).
 Review branch: `codex/setup-ux-design-review`.
-This document proposes changes; no application behavior has been implemented.
+The baseline findings below retain the rationale for this implementation. The
+implementation record and pending acceptance checks describe the current branch.
 
 ## Evidence And Limits
 
@@ -33,11 +49,12 @@ it omits some controls and does not demonstrate that the complete PySide6 screen
 
 ## Preserve
 
-- Project, Conditions, Experiment, Fixation, Response, Review remain the six steps.
+- Project, Conditions, Timing, Image Size, Session, Fixation, Response, Review form
+  the eight guided steps. Existing document-backed editors keep their ownership.
 - First-time setup keeps sequential validation gates. Ready-project Edit Setup keeps
   its existing clickable stepper; direct navigation is already implemented.
 - Home stays the daily launch surface. No new permanent application sidebar is needed.
-- All six complete steps must fit at `1120x720`, with no required page scrolling or
+- All eight complete steps must fit at `1120x720`, with no required page scrolling or
   hidden controls. Retain the stable stepper and bottom navigation positions.
 - Preserve explicit saving, confirmation before abandoning unsaved changes, staged
   task edits, normalization consent, and background workers.
@@ -113,12 +130,12 @@ Display verification already has waiting, busy, warning, error, and verified sta
 The action is labeled "Detect My Refresh Rate", but it performs a fullscreen PsychoPy
 stability check as well as reading the configured mode.
 
-**Change:** Keep the step, but order its groups as Display and verification, Timing,
-Image geometry, and Session. Use a concise "Verify display" action and explain before
+**Change:** Separate Timing and display verification, Image Size, and Session into
+three focused pages using the existing editors. Use a concise "Verify display" action and explain before
 activation that it briefly opens a fullscreen check. Show requested and realized rates
 in aligned labeled rows; keep frame counts available without burying warnings.
 Show the Neutral Gray requirement immediately beside Contrast Modulation selection,
-with an explicit route to the Experiment background control.
+with an explicit route to the Timing background control.
 
 **Why:** This groups related decisions and makes a mandatory hardware check easier to
 understand. The existing asynchronous verification remains the source of truth.
@@ -252,7 +269,7 @@ Line numbers refer to the reviewed baseline and will move during implementation.
 | Supporting dialog construction | `settings_dialog.py:65`; `presentation_settings_dialog.py:936`; `condition_task_dialog.py:2856` |
 | Effective fixation limits | `fixation_settings_page.py:807`, `:825`, `:853` |
 | Hidden source path | `condition_setup_step.py:495`, `:843`; `components.py:589` |
-| Six-step geometry and navigation | `tests/gui/test_setup_wizard_shell.py:202`, `:523`, `:538` |
+| Baseline geometry and navigation | `tests/gui/test_setup_wizard_shell.py:202`, `:523`, `:538` |
 
 Unqualified Python paths in this table are under `src/fpvs_studio/gui/`.
 
@@ -279,7 +296,7 @@ native PySide6 behavior. This does not propose a move to WinUI, React, or a brow
 The review sampled supporting dialogs; the following list is the implementation
 coverage inventory, not a claim that every surface has been visually audited:
 
-1. Shared components and all six Setup steps, including field errors and busy states.
+1. Shared components and all eight Setup steps, including field errors and busy states.
 2. Settings/root setup, condition templates, presentation overrides, pre/post tasks,
    normalization, and control-condition creation.
 3. Welcome/Home and project management; import/export progress and result surfaces.
@@ -292,8 +309,8 @@ same component rules. Native operating-system dialogs should remain recognizable
 
 1. **Shared states and copy:** correct theme-aware validation text, modality-aware
    blocker language, and scope labels. Add focused behavior/contrast coverage.
-2. **Setup composition:** refine Conditions and Experiment within the existing shell;
-   preserve every currently available control and the six-step flow.
+2. **Setup composition:** refine Conditions and split Timing, Image Size, and Session within the existing
+   shell; preserve every currently available control and sequential validation.
 3. **Review and completion:** improve summary content, save feedback, and precise
    confirmation wording. No changes to save ownership or persistence.
 4. **Supporting surfaces:** apply the same patterns using the rollout inventory.
@@ -314,19 +331,43 @@ one presentation setting, and a user recovering from missing stimuli/unverified
 display. Record completion, wrong-scope edits, backtracking, and assistance requests.
 Compare before/after; no percentage improvement is claimed without those observations.
 
-## Review Verification
+## Implementation Record
 
-- GUI focused baseline passed; the current route performed no Qt execution.
-- This branch changes planning documentation only; application code remains unchanged.
-- Docs focused verification passed: documentation hygiene and 9 harness-doc tests.
-  `git diff --check` passed.
-- Qt geometry, playback, and real Windows interaction checks remain unperformed.
-- The active updater acceptance plan is unrelated and remains untouched.
+- Shared theme-aware validation and form controls now cover app-owned themed surfaces;
+  added reusable dialog headers for Settings, Presentation, and Pre/Post Tasks.
+- Conditions separates global repeat targets from selected-condition fields and exposes
+  stored image-source paths with copy. Image/word-specific blockers have a `Show field`
+  action. Routine first-condition informational dialogs were removed.
+- Timing, Image Size, and Session use separate cards/pages. Verification has a visible
+  fullscreen notice and keeps the existing worker and validation gate.
+- Review summarizes response/accuracy, tutorial, and task bindings, with ready-project
+  Edit shortcuts. Save uses the existing nonmodal confirmation; leave-setup copy explains
+  in-memory versus disk state.
+- Fixation shows the effective smallest limit and limiting condition. Corrected an
+  existing widget-clamp synchronization defect so automatic count changes reach the
+  document; scientific cap policy and fixation enablement remain unchanged.
+- Settings groups preferences at `700x520` packaged / `700x610` source minimum/default.
+  Presentation keeps its `900x600` minimum with compact preview selectors and a flexible
+  preview. Apply/Cancel and immediate Settings persistence remain distinct.
+- Added/updated registered Qt coverage for eight-step navigation, minimum geometry,
+  source details, missing-field recovery, summaries/save behavior, and fixation limits.
 
-## Decisions For Implementation
+## Verification And Pending Acceptance
 
-Recommended first scope: proposals 1, 2, 3, 4, and the shared foundations of 6.
-Use the refined existing blue/cyan language in both current light/dark modes. Keep the
-six steps and current settings requirements. A future request could separately consider
-making project description optional or restructuring the Fixation/Response steps;
-neither is necessary for this design refinement and neither is included here.
+- GUI focused lint and changed-file compilation pass. No Qt tests or app windows have
+  been launched by the agent; manual fit is not established by source inspection.
+- Final repo precommit passed: Ruff/compilation, mypy (137 source files), repository
+  audits, docs hygiene, and 966 non-Qt tests. Five Windows symlink tests were skipped
+  because this account lacks symlink privileges. Docs focused also passed its nine
+  harness-documentation tests; `git diff --check` is clean.
+- The branch is ready for the user's visible review. Keep this plan active until all
+  eight steps and supporting dialogs pass manual acceptance.
+- Follow the [visible smoke path](../../GUI_WORKFLOW.md#setup-design-and-manual-acceptance).
+  Record clipping, focus, readability, and workflow feedback before deciding on merge.
+- This slice applies the common control vocabulary throughout themed surfaces and
+  restructures the sampled setup/support dialogs. A full state-by-state visual audit
+  of every utility, updater, and import/export surface remains pending; no app-wide
+  visual acceptance or measured usability improvement is claimed.
+- Do not change project-description requirements, add autosave, or alter scientific
+  contracts as part of this design review. The unrelated updater acceptance plan stays
+  untouched.

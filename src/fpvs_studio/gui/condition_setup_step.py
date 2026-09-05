@@ -29,7 +29,7 @@ from PySide6.QtWidgets import (
 )
 
 from fpvs_studio.core.enums import DutyCycleMode, StimulusModality, StimulusVariant
-from fpvs_studio.core.models import Condition, StimulusSet
+from fpvs_studio.core.models import Condition, ConditionPresentationSettings, StimulusSet
 from fpvs_studio.core.paths import stimuli_dir
 from fpvs_studio.core.validation import (
     StimulusRepeatRoleGuidance,
@@ -68,7 +68,7 @@ _DEFAULT_CONDITION_NAME_RE = re.compile(r"^Condition \d+$")
 _SOURCE_CARD_MIN_WIDTH = 210
 _SOURCE_CARD_HEIGHT = 164
 _SOURCE_ROW_MIN_WIDTH = (_SOURCE_CARD_MIN_WIDTH * 2) + PAGE_SECTION_GAP
-_SOURCE_HEADER_HEIGHT = 24
+_SOURCE_HEADER_HEIGHT = 30
 _SOURCE_METRICS_HEIGHT = 56
 _INSTRUCTIONS_HEIGHT = 80
 _CONDITION_STEP_MIN_WIDTH = 840
@@ -351,6 +351,13 @@ class ConditionSetupStep(QWidget):
         list_layout = QVBoxLayout(list_panel)
         list_layout.setContentsMargins(0, 0, 0, 0)
         list_layout.setSpacing(8)
+        self.condition_list_hint = QLabel(
+            "Add a condition, then choose images or enter words.", list_panel
+        )
+        self.condition_list_hint.setObjectName("setup_conditions_list_hint")
+        self.condition_list_hint.setProperty("setupMetricLabel", "true")
+        self.condition_list_hint.setWordWrap(True)
+        list_layout.addWidget(self.condition_list_hint)
         list_layout.addWidget(self.condition_list, 1)
         action_grid = QGridLayout()
         action_grid.setContentsMargins(0, 0, 0, 0)
@@ -375,6 +382,7 @@ class ConditionSetupStep(QWidget):
 
         self.condition_name_edit = QLineEdit(self)
         self.condition_name_edit.setObjectName("setup_wizard_condition_name_edit")
+        self.condition_name_edit.setPlaceholderText("Give this condition a descriptive name")
         self.condition_name_edit.editingFinished.connect(self._apply_name)
         self.trigger_code_spin = QSpinBox(self)
         self.trigger_code_spin.setObjectName("setup_wizard_condition_trigger_code_spin")
@@ -389,7 +397,7 @@ class ConditionSetupStep(QWidget):
         self.presentation_summary_label.setObjectName("setup_wizard_condition_presentation_summary")
         self.presentation_summary_label.setWordWrap(True)
         self.presentation_summary_label.setMinimumWidth(0)
-        self.presentation_button = QPushButton("Presentation...", self)
+        self.presentation_button = QPushButton("Size, position & transforms...", self)
         self.presentation_button.setObjectName("setup_wizard_condition_presentation_button")
         self.presentation_button.setToolTip(
             "Configure condition, Base, and Oddball presentation overrides."
@@ -427,11 +435,23 @@ class ConditionSetupStep(QWidget):
             selected_mode=DutyCycleMode.CONTINUOUS,
         )
         self.timing_template_combo.currentIndexChanged.connect(self._apply_timing_template)
+        self.presentation_mode_help = QLabel(self)
+        self.presentation_mode_help.setObjectName("setup_conditions_presentation_mode_help")
+        self.presentation_mode_help.setProperty("setupMetricLabel", "true")
+        self.presentation_mode_help.setWordWrap(True)
+        self.presentation_mode_help.setMinimumWidth(0)
+        mode_row = QWidget(self)
+        mode_layout = QVBoxLayout(mode_row)
+        mode_layout.setContentsMargins(0, 0, 0, 0)
+        mode_layout.setSpacing(2)
+        mode_layout.addWidget(self.timing_template_combo)
+        mode_layout.addWidget(self.presentation_mode_help)
         self.target_repeats_spin = QSpinBox(self)
         self.target_repeats_spin.setObjectName("setup_wizard_target_repeats_per_image_spin")
         self.target_repeats_spin.setRange(1, 10000)
         self.target_repeats_spin.setToolTip(
-            "Target maximum repetitions for each individual base or oddball stimulus."
+            "Advisory target maximum repetitions for each base or oddball stimulus, "
+            "shared by all conditions. This does not change condition timing."
         )
         self.target_repeats_spin.valueChanged.connect(self._apply_target_repeats)
         self.repeat_calculator_button = QPushButton("i", self)
@@ -451,7 +471,6 @@ class ConditionSetupStep(QWidget):
             self.condition_name_edit,
             self.trigger_code_spin,
             self.modality_combo,
-            self.target_repeats_spin,
             self.instructions_edit,
         )
         self._instructions_committer = DebouncedTextCommitter(
@@ -466,6 +485,10 @@ class ConditionSetupStep(QWidget):
         details_section_layout = QVBoxLayout(self.condition_details_section)
         details_section_layout.setContentsMargins(10, 5, 10, 5)
         details_section_layout.setSpacing(4)
+        self.condition_scope_label = QLabel("This condition", self.condition_details_section)
+        self.condition_scope_label.setObjectName("setup_conditions_scope_label")
+        self.condition_scope_label.setProperty("setupSourceTitle", "true")
+        details_section_layout.addWidget(self.condition_scope_label)
 
         form = QFormLayout()
         form.setContentsMargins(0, 0, 0, 0)
@@ -480,17 +503,35 @@ class ConditionSetupStep(QWidget):
         form.addRow("Condition Name", self.condition_name_edit)
         form.addRow("Trigger Code", self.trigger_code_spin)
         form.addRow("Stimulus Type", self.modality_combo)
-        form.addRow("Presentation", presentation_row)
+        form.addRow("Appearance", presentation_row)
         form.addRow("Participant Tasks", task_row)
-        form.addRow("Advanced Timing", self.timing_template_combo)
-        form.addRow(self.target_repeats_label, self.target_repeats_spin)
+        self.presentation_mode_label = QLabel("Presentation mode", self)
+        self.presentation_mode_label.setBuddy(self.timing_template_combo)
+        form.addRow(self.presentation_mode_label, mode_row)
         form.addRow(self.instructions_label, self.instructions_edit)
         details_section_layout.addLayout(form)
-        details_section_layout.addWidget(
-            self.repeat_calculator_button,
-            0,
-            Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom,
-        )
+
+        self.all_conditions_section = QFrame(list_panel)
+        self.all_conditions_section.setObjectName("setup_conditions_all_conditions_section")
+        self.all_conditions_section.setProperty("conditionDetailsSection", "true")
+        all_conditions_layout = QVBoxLayout(self.all_conditions_section)
+        all_conditions_layout.setContentsMargins(10, 8, 10, 8)
+        all_conditions_layout.setSpacing(6)
+        self.all_conditions_label = QLabel("All conditions", self.all_conditions_section)
+        self.all_conditions_label.setProperty("setupSourceTitle", "true")
+        all_conditions_layout.addWidget(self.all_conditions_label)
+        repeats_row = QHBoxLayout()
+        repeats_row.setSpacing(6)
+        self.target_repeats_label.setBuddy(self.target_repeats_spin)
+        repeats_row.addWidget(self.target_repeats_label)
+        repeats_row.addWidget(self.target_repeats_spin, 1)
+        repeats_row.addWidget(self.repeat_calculator_button)
+        all_conditions_layout.addLayout(repeats_row)
+        repeat_help = QLabel("Advisory target; timing is unchanged.", self.all_conditions_section)
+        repeat_help.setProperty("setupMetricLabel", "true")
+        repeat_help.setWordWrap(True)
+        all_conditions_layout.addWidget(repeat_help)
+        list_layout.addWidget(self.all_conditions_section)
 
         self.base_source_card = SetupSourceCard(
             "Base Images",
@@ -499,6 +540,7 @@ class ConditionSetupStep(QWidget):
             compact=True,
             show_variants=False,
             show_folder=False,
+            show_details=True,
             center_title=True,
             center_content=True,
             parent=self,
@@ -523,6 +565,7 @@ class ConditionSetupStep(QWidget):
             compact=True,
             show_variants=False,
             show_folder=False,
+            show_details=True,
             center_title=True,
             center_content=True,
             parent=self,
@@ -649,7 +692,6 @@ class ConditionSetupStep(QWidget):
             self.condition_name_edit,
             self.trigger_code_spin,
             self.modality_combo,
-            self.target_repeats_spin,
             self.instructions_edit,
         )
         for field in detail_fields:
@@ -664,7 +706,10 @@ class ConditionSetupStep(QWidget):
                     f"{_timing_template_label(condition.duty_cycle_mode)} - "
                     f"{self._condition_status_text(condition)}"
                 )
-                item.setToolTip(self._condition_status_text(condition))
+                item.setToolTip(
+                    f"{condition.name}\n{_timing_template_label(condition.duty_cycle_mode)}\n"
+                    f"{self._condition_status_text(condition)}"
+                )
                 item.setSizeHint(QSize(0, 48))
                 item.setData(Qt.ItemDataRole.UserRole, condition.condition_id)
                 self.condition_list.addItem(item)
@@ -678,6 +723,39 @@ class ConditionSetupStep(QWidget):
         self._instructions_committer.flush()
         self._base_words_committer.flush()
         self._oddball_words_committer.flush()
+
+    def focus_setup_blocker(self) -> None:
+        """Select the first incomplete condition and focus its missing field."""
+
+        self.flush_pending_edits()
+        for condition in self._document.ordered_conditions():
+            if not is_guided_condition_name(condition.name):
+                self._select_condition(condition.condition_id)
+                self.condition_name_edit.setFocus()
+                self.condition_name_edit.selectAll()
+                return
+            if not is_guided_trigger_code(condition.trigger_code):
+                self._select_condition(condition.condition_id)
+                self.trigger_code_spin.setFocus()
+                return
+            for role in ("base", "oddball"):
+                stimulus_set = self._document.get_condition_stimulus_set(
+                    condition.condition_id, role
+                )
+                if self._stimulus_ready(stimulus_set):
+                    continue
+                self._select_condition(condition.condition_id)
+                field: QWidget
+                if stimulus_set.modality == StimulusModality.WORD:
+                    field = self.base_words_edit if role == "base" else self.oddball_words_edit
+                else:
+                    field = (
+                        self.base_import_button if role == "base" else self.oddball_import_button
+                    )
+                field.setFocus()
+                return
+        if not self._document.ordered_conditions():
+            self.add_condition_button.setFocus()
 
     def _handle_current_condition_changed(self, *_args: object) -> None:
         self.flush_pending_edits()
@@ -709,7 +787,6 @@ class ConditionSetupStep(QWidget):
             self.presentation_button,
             self.task_button,
             self.timing_template_combo,
-            self.target_repeats_spin,
             self.repeat_calculator_button,
             self.instructions_edit,
             self.base_words_edit,
@@ -729,8 +806,13 @@ class ConditionSetupStep(QWidget):
             else "Choose base and oddball images before creating a control condition."
         )
         if condition is None:
+            self.condition_scope_label.setText("Add your first condition")
+            self.condition_scope_label.setToolTip("")
+            self.condition_list_hint.setText("Add a condition, then choose images or enter words.")
+            self.presentation_mode_help.setText("Choose how each stimulus appears during a cycle.")
             with QSignalBlocker(self.condition_name_edit):
                 self.condition_name_edit.clear()
+                self.condition_name_edit.setToolTip("")
             with QSignalBlocker(self.trigger_code_spin):
                 self.trigger_code_spin.setValue(1)
             with QSignalBlocker(self.modality_combo):
@@ -754,8 +836,8 @@ class ConditionSetupStep(QWidget):
             self.oddball_words_count.setText("0 words")
             self.sources_row.setVisible(True)
             self.words_panel.setVisible(False)
-            self.presentation_summary_label.setText("Select a condition")
-            self.task_summary_label.setText("Select a condition")
+            self.presentation_summary_label.setText("No selection")
+            self.task_summary_label.setText("No selection")
             self._set_checklist_statuses(False, False, False, False)
             self._set_source_summary(None, role="base")
             self._set_source_summary(None, role="oddball")
@@ -768,8 +850,27 @@ class ConditionSetupStep(QWidget):
         trigger_ready = is_guided_trigger_code(condition.trigger_code)
         base_ready = self._stimulus_ready(base_set)
         oddball_ready = self._stimulus_ready(oddball_set)
+        self.condition_scope_label.setText("This condition")
+        self.condition_scope_label.setToolTip(condition.name)
+        self.condition_scope_label.setAccessibleDescription(f"Editing {condition.name}")
+        if base_ready and oddball_ready:
+            self.condition_list_hint.setText(
+                "Review this condition, or add another to your experiment."
+            )
+        elif modality == StimulusModality.WORD:
+            self.condition_list_hint.setText("Enter base and oddball words below, one per line.")
+        else:
+            self.condition_list_hint.setText(
+                "Choose base and oddball image folders for this condition."
+            )
+        self.presentation_mode_help.setText(
+            "Requires Neutral Gray background. Set it in Timing."
+            if condition.duty_cycle_mode == DutyCycleMode.SINUSOIDAL
+            else "Choose how each stimulus appears during a cycle."
+        )
         with QSignalBlocker(self.condition_name_edit):
             self.condition_name_edit.setText(condition.name)
+            self.condition_name_edit.setToolTip(condition.name)
         with QSignalBlocker(self.trigger_code_spin):
             self.trigger_code_spin.setValue(condition.trigger_code)
         with QSignalBlocker(self.modality_combo):
@@ -801,9 +902,19 @@ class ConditionSetupStep(QWidget):
             if word_mode
             else self.create_control_condition_button.toolTip()
         )
-        self.presentation_summary_label.setText(
-            condition_presentation_summary(self._document, condition.condition_id)
+        presentation_summary = condition_presentation_summary(
+            self._document, condition.condition_id
         )
+        self.presentation_summary_label.setText(
+            "Project defaults"
+            if condition.presentation == ConditionPresentationSettings()
+            else "Custom settings"
+        )
+        self.presentation_summary_label.setToolTip(presentation_summary)
+        self.presentation_button.setToolTip(
+            "Configure this condition's size, position and transforms.\n" + presentation_summary
+        )
+        self.presentation_button.setAccessibleDescription(presentation_summary)
         self.task_summary_label.setText(
             condition_task_summary(self._document, condition.condition_id)
         )
@@ -847,6 +958,14 @@ class ConditionSetupStep(QWidget):
             self.base_resolution_value if role == "base" else self.oddball_resolution_value
         )
         source_card = self.base_source_card if role == "base" else self.oddball_source_card
+        source_card.set_source_details(
+            str(self._document.project_root / stimulus_set.source_dir)
+            if stimulus_set is not None
+            and stimulus_set.modality == StimulusModality.IMAGE
+            and stimulus_set.source_dir
+            and stimulus_set.image_count > 0
+            else ""
+        )
         if stimulus_set is None:
             source_value.set_path_text("Not configured", max_length=86)
             count_value.setText("0 images")

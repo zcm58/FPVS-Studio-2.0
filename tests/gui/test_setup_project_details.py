@@ -119,7 +119,7 @@ def test_setup_wizard_surfaces_steps_and_keeps_shared_editors_available(
     assert fixation_editor.fixation_enabled_checkbox is not None
     assert not fixation_editor.fixation_enabled_checkbox.isVisible()
     assert fixation_editor.target_count_mode_combo is not None
-    assert "Recommended maximum cross changes per condition:" in (
+    assert "Effective maximum changes per condition:" in (
         fixation_editor.fixation_feasibility_label.text()
     )
 
@@ -142,11 +142,13 @@ def test_setup_wizard_surfaces_steps_and_keeps_shared_editors_available(
     assert not hasattr(dashboard.condition_setup_step, "variant_combo")
     assert dashboard.assets_page is window.assets_page
     assert dashboard.run_page is window.run_page
-    assert len(dashboard.progress_steps.step_items) == 6
+    assert len(dashboard.progress_steps.step_items) == 8
     step_metadata_text = "\n".join(item.toolTip() for item in dashboard.progress_steps.step_items)
     assert "Project" in step_metadata_text
     assert "Conditions" in step_metadata_text
-    assert "Experiment" in step_metadata_text
+    assert "Timing" in step_metadata_text
+    assert "Image Size" in step_metadata_text
+    assert "Session" in step_metadata_text
     assert "Fixation" in step_metadata_text
     assert "Response" in step_metadata_text
     assert "Review" in step_metadata_text
@@ -317,16 +319,16 @@ def test_setup_wizard_navigation_has_no_conditions_advanced_editor(
         lambda *args, **kwargs: information_prompts.append(str(args[2])),
     )
     qtbot.mouseClick(guide.add_condition_button, Qt.MouseButton.LeftButton)
-    assert information_prompts == ["Please ensure you create all conditions before proceeding."]
+    assert information_prompts == []
     assert not next_button.isEnabled()
     assert "name every condition" in guide.step_status_label.text().lower()
 
     condition_id = guide.condition_setup_step.selected_condition_id()
     assert isinstance(condition_id, str)
     guide._document.update_condition(condition_id, name="Faces")
-    qtbot.waitUntil(lambda: "assign base and oddball" in guide.step_status_label.text().lower())
+    qtbot.waitUntil(lambda: "choose base images" in guide.step_status_label.text().lower())
     assert not next_button.isEnabled()
-    assert "assign base and oddball" in guide.step_status_label.text().lower()
+    assert "choose base images" in guide.step_status_label.text().lower()
     assert guide.condition_setup_step.selected_condition_id() == condition_id
 
     base_dir = _write_image_directory(tmp_path / "wizard-condition-base")
@@ -353,7 +355,8 @@ def test_setup_wizard_navigation_has_no_conditions_advanced_editor(
     )
     assert not guide.step_title_label.isVisible()
     assert guide.experiment_settings_card.isAncestorOf(guide.runtime_settings_editor)
-    assert guide.experiment_settings_card.isAncestorOf(guide.session_structure_editor)
+    assert guide.session_settings_card.isAncestorOf(guide.session_structure_editor)
+    assert not guide.experiment_settings_card.isAncestorOf(guide.session_structure_editor)
     assert guide.content_stack.currentWidget() is guide.guided_panel
 
     guide.runtime_settings_editor._on_refresh_detection_succeeded(
@@ -373,6 +376,10 @@ def test_setup_wizard_navigation_has_no_conditions_advanced_editor(
     QApplication.processEvents()
     assert next_button.isEnabled()
     qtbot.mouseClick(next_button, Qt.MouseButton.LeftButton)
+    assert guide.step_stack.currentWidget() is guide.image_size_step_surface
+    qtbot.mouseClick(next_button, Qt.MouseButton.LeftButton)
+    assert guide.step_stack.currentWidget() is guide.session_step_surface
+    qtbot.mouseClick(next_button, Qt.MouseButton.LeftButton)
     assert guide.step_stack.currentWidget() is guide.fixation_step_surface
     assert guide.fixation_step_surface.content is guide.fixation_schedule_editor
     assert guide.step_title_label.text() == "Fixation"
@@ -384,6 +391,10 @@ def test_setup_wizard_navigation_has_no_conditions_advanced_editor(
 
     qtbot.mouseClick(back_button, Qt.MouseButton.LeftButton)
     assert guide.step_stack.currentWidget() is guide.fixation_step_surface
+    qtbot.mouseClick(back_button, Qt.MouseButton.LeftButton)
+    assert guide.step_stack.currentWidget() is guide.session_step_surface
+    qtbot.mouseClick(back_button, Qt.MouseButton.LeftButton)
+    assert guide.step_stack.currentWidget() is guide.image_size_step_surface
     qtbot.mouseClick(back_button, Qt.MouseButton.LeftButton)
     assert guide.step_stack.currentWidget() is guide.experiment_step_surface
     qtbot.mouseClick(back_button, Qt.MouseButton.LeftButton)
@@ -500,3 +511,90 @@ def test_project_description_typing_reduces_validation_churn(
         timeout=1000,
     )
     assert validation_calls <= 8
+
+
+def test_setup_footer_show_field_guides_description_and_missing_word_roles(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    from fpvs_studio.core.enums import StimulusModality
+
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Setup Field Guidance")
+    guide = window.setup_wizard_page
+    step = guide.condition_setup_step
+    monkeypatch.setattr(guide, "_ensure_condition_image_prescan_started", lambda: None)
+
+    def _unexpected_picker(*_args, **_kwargs):
+        raise AssertionError("Show field must only focus an editor; it must not open a picker.")
+
+    monkeypatch.setattr(
+        "fpvs_studio.gui.condition_setup_step.QFileDialog.getExistingDirectory",
+        _unexpected_picker,
+    )
+    window.resize(1120, 720)
+    window.show_setup_wizard(step_key="project")
+    window.show()
+    QApplication.processEvents()
+    fix_button = guide.setup_wizard_fix_button
+    next_button = guide.setup_wizard_next_button
+    description_edit = guide.project_overview_editor.project_description_edit
+    assert fix_button.isVisible()
+    assert not next_button.isEnabled()
+    assert "project description" in guide.setup_wizard_next_hint_label.text().lower()
+
+    qtbot.mouseClick(fix_button, Qt.MouseButton.LeftButton)
+    assert description_edit.hasFocus()
+    description_edit.setPlainText("Compare FPVS responses to semantic word categories.")
+    guide.flush_pending_edits()
+    guide.refresh()
+    QApplication.processEvents()
+    assert next_button.isEnabled()
+    assert not fix_button.isVisible()
+    qtbot.mouseClick(next_button, Qt.MouseButton.LeftButton)
+    assert guide.step_stack.currentWidget() is guide.conditions_step_surface
+    qtbot.mouseClick(fix_button, Qt.MouseButton.LeftButton)
+    assert step.add_condition_button.hasFocus()
+
+    long_name = "Familiar animal words and unfamiliar semantic category exemplars"
+    condition_id = window.document.create_condition(name=long_name)
+    window.document.set_condition_stimulus_modality(
+        condition_id, modality=StimulusModality.WORD
+    )
+    other_id = window.document.create_condition(name="Object words")
+    window.document.set_condition_stimulus_modality(other_id, modality=StimulusModality.WORD)
+    window.document.update_condition_words(other_id, role="base", words=["table", "chair"])
+    window.document.update_condition_words(other_id, role="oddball", words=["hammer"])
+    step._select_condition(other_id)
+    guide.refresh()
+    QApplication.processEvents()
+    hint = guide.setup_wizard_next_hint_label
+    assert f"Add base words to {long_name}" in hint.text()
+    assert long_name in hint.toolTip()
+    assert "folder" not in hint.text().lower()
+    assert not next_button.isEnabled()
+    assert fix_button.isVisible()
+    assert hint.heightForWidth(hint.width()) <= hint.height()
+    assert_visible_children_within_parent(guide.setup_wizard_next_hint_container)
+    assert_setup_wizard_vertical_scrolling_disabled(guide)
+
+    qtbot.mouseClick(fix_button, Qt.MouseButton.LeftButton)
+    assert step.selected_condition_id() == condition_id
+    assert step.base_words_edit.hasFocus()
+    step.base_words_edit.setPlainText("cat\ndog")
+    step.flush_pending_edits()
+    guide.refresh()
+    QApplication.processEvents()
+    assert f"Add oddball words to {long_name}" in hint.text()
+    qtbot.mouseClick(fix_button, Qt.MouseButton.LeftButton)
+    assert step.oddball_words_edit.hasFocus()
+    step.oddball_words_edit.setPlainText("hammer\nsaw")
+    step.flush_pending_edits()
+    guide.refresh()
+    QApplication.processEvents()
+
+    assert next_button.isEnabled()
+    assert not fix_button.isVisible()
+    assert not hint.isVisible()
+    assert guide.step_stack.currentWidget() is guide.conditions_step_surface

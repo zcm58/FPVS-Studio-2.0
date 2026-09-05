@@ -75,6 +75,8 @@ from fpvs_studio.core.task_models import (
     TaskStepKind as CoreTaskStepKind,
 )
 from fpvs_studio.gui.components import (
+    DialogHeader,
+    apply_dialog_theme,
     mark_destructive_action,
     mark_error_text,
     mark_primary_action,
@@ -2858,17 +2860,18 @@ class ConditionTaskDialog(QDialog):
         self._condition_id = condition_id
         initial = condition_task_flow_from_document(document, condition_id)
 
-        header = QLabel(f"Participant tasks for {condition.name}", self)
-        header.setObjectName("condition_task_dialog_header")
-        header.setProperty("sectionCardRole", "title")
-        helper = QLabel(
-            "Build reusable modules before or after the timed FPVS stream. Module and "
-            "step clocks remain separate from FPVS frames and triggers. Exact layouts "
-            "use degrees of visual angle; responsive grids adapt to the participant display.",
-            self,
+        self.header = DialogHeader(
+            f"Participant tasks for {condition.name}",
+            "Arrange tasks before or after this condition. Apply Tasks keeps your edits; "
+            "Cancel leaves the condition unchanged.",
+            parent=self,
         )
-        helper.setObjectName("condition_task_dialog_helper")
-        helper.setWordWrap(True)
+        self.header.title_label.setObjectName("condition_task_dialog_header")
+        self.header.subtitle_label.setObjectName("condition_task_dialog_helper")
+        self.header.setToolTip(
+            "Task timing stays separate from the FPVS stream. Exact layouts use degrees "
+            "of visual angle; responsive grids adapt to the participant display."
+        )
 
         self.phase_tabs = QTabWidget(self)
         self.phase_tabs.setObjectName("condition_task_phase_tabs")
@@ -2932,8 +2935,7 @@ class ConditionTaskDialog(QDialog):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 14, 16, 14)
         layout.setSpacing(8)
-        layout.addWidget(header)
-        layout.addWidget(helper)
+        layout.addWidget(self.header)
         layout.addLayout(content, 1)
         layout.addWidget(self.validation_label)
         layout.addWidget(self.button_box)
@@ -2942,6 +2944,7 @@ class ConditionTaskDialog(QDialog):
             editor.selection_changed.connect(self._refresh_preview)
             editor.changed.connect(self._validate_draft)
         self.phase_tabs.currentChanged.connect(self._refresh_active_preview)
+        apply_dialog_theme(self)
         self._refresh_active_preview()
         self._validate_draft()
 

@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
     QDialogButtonBox,
     QFormLayout,
     QFrame,
+    QGridLayout,
     QGroupBox,
     QHBoxLayout,
     QLabel,
@@ -55,8 +56,9 @@ from fpvs_studio.core.paths import (
 )
 from fpvs_studio.core.presentation import resolve_role_presentation
 from fpvs_studio.gui.components import (
+    DialogHeader,
     FiniteDoubleSpinBox,
-    apply_studio_theme,
+    apply_dialog_theme,
     mark_error_text,
     mark_primary_action,
     mark_secondary_action,
@@ -560,7 +562,7 @@ class _PresentationPreview(QWidget):
         self._source_pixmap = self._fallback_pixmap
         self._image_layer = QPixmap()
         self._image_layer_key: tuple[object, ...] | None = None
-        self.setMinimumSize(320, 280)
+        self.setMinimumSize(320, 100)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
     def set_preview(
@@ -761,24 +763,29 @@ class PresentationSettingsDialog(QDialog):
             condition.presentation.model_copy(deep=True) if condition is not None else None
         )
         self._syncing_inheritance = False
+        self._preview_sample_context = ""
 
-        header = QLabel(
+        self.header = DialogHeader(
             (
                 f"Presentation overrides for {condition.name}"
                 if condition is not None
                 else "Project presentation defaults"
             ),
-            self,
+            (
+                "This condition inherits project defaults unless overridden. "
+                "Apply keeps your edits; Cancel leaves it unchanged."
+                if condition is not None
+                else "Defaults for all conditions without overrides. "
+                "Apply keeps your edits; Cancel leaves defaults unchanged."
+            ),
+            parent=self,
         )
-        header.setObjectName("presentation_settings_header")
-        header.setProperty("sectionCardRole", "title")
-        helper = QLabel(
-            "Runtime transforms do not create stimulus files. Condition settings inherit "
-            "from the project, then Base and Oddball may override complete groups.",
-            self,
+        self.header.title_label.setObjectName("presentation_settings_header")
+        self.header.subtitle_label.setObjectName("presentation_settings_helper")
+        self.header.setToolTip(
+            "Runtime transforms do not create stimulus files. Base and Oddball may "
+            "override complete presentation groups."
         )
-        helper.setObjectName("presentation_settings_helper")
-        helper.setWordWrap(True)
 
         self.editor_tabs = QTabWidget(self)
         self.editor_tabs.setObjectName("presentation_settings_tabs")
@@ -874,17 +881,32 @@ class PresentationSettingsDialog(QDialog):
         preview_panel = QFrame(self)
         preview_panel.setObjectName("presentation_preview_panel")
         preview_layout = QVBoxLayout(preview_panel)
-        preview_layout.setContentsMargins(12, 12, 12, 12)
+        preview_layout.setContentsMargins(8, 8, 8, 8)
         preview_layout.setSpacing(8)
         preview_title = QLabel("Live preview", preview_panel)
         preview_title.setProperty("sectionCardRole", "title")
         preview_layout.addWidget(preview_title)
-        preview_form = QFormLayout()
+        preview_form = QGridLayout()
         preview_form.setContentsMargins(0, 0, 0, 0)
-        preview_form.addRow("Role", self.preview_role_combo)
-        preview_form.addRow("Stimulus type", self.preview_modality_combo)
-        preview_form.addRow("Example", self.preview_stimulus_combo)
-        preview_form.addRow("Word height", self.preview_size_combo)
+        preview_form.setHorizontalSpacing(6)
+        preview_form.setVerticalSpacing(8)
+        preview_form.setColumnStretch(1, 1)
+        preview_form.setColumnStretch(3, 1)
+        for row, column, title, combo in (
+            (0, 0, "Role", self.preview_role_combo),
+            (0, 2, "Type", self.preview_modality_combo),
+            (1, 0, "Example", self.preview_stimulus_combo),
+            (1, 2, "Word height", self.preview_size_combo),
+        ):
+            label = QLabel(title, preview_panel)
+            label.setBuddy(combo)
+            combo.setAccessibleName(title)
+            combo.setMinimumWidth(0)
+            combo.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
+            combo.currentTextChanged.connect(self._refresh_preview_choice_tooltips)
+            combo.setToolTip(combo.currentText())
+            preview_form.addWidget(label, row, column)
+            preview_form.addWidget(combo, row, column + 1)
         preview_layout.addLayout(preview_form)
         preview_layout.addWidget(self.preview_widget, 1)
         preview_layout.addWidget(self.preview_summary_label)
@@ -914,8 +936,7 @@ class PresentationSettingsDialog(QDialog):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 14, 16, 14)
         layout.setSpacing(8)
-        layout.addWidget(header)
-        layout.addWidget(helper)
+        layout.addWidget(self.header)
         if self.condition_lead_in_checkbox is not None:
             assert self.condition_lead_in_spin is not None
             lead_in_row = QHBoxLayout()
@@ -933,7 +954,7 @@ class PresentationSettingsDialog(QDialog):
             combo.currentIndexChanged.connect(self._refresh_preview)
         self.preview_role_combo.currentIndexChanged.connect(self._reload_stimulus_choices)
         self.preview_modality_combo.currentIndexChanged.connect(self._reload_stimulus_choices)
-        apply_studio_theme(self)
+        apply_dialog_theme(self)
         self._reload_stimulus_choices()
 
     @staticmethod
@@ -1003,7 +1024,7 @@ class PresentationSettingsDialog(QDialog):
         current = self.preview_stimulus_combo.currentData()
         with QSignalBlocker(self.preview_stimulus_combo):
             self.preview_stimulus_combo.clear()
-            self.preview_stimulus_combo.setToolTip(
+            self._preview_sample_context = (
                 f"The preview shows at most {_PREVIEW_SAMPLE_LIMIT} representative items; "
                 "the experiment still uses the complete stimulus set."
             )
@@ -1032,7 +1053,7 @@ class PresentationSettingsDialog(QDialog):
                     paths = self._active_image_preview_paths(stimulus_set, variant)
                     for path in paths:
                         self.preview_stimulus_combo.addItem(path.name, path)
-                    self.preview_stimulus_combo.setToolTip(
+                    self._preview_sample_context = (
                         f"Showing up to {_PREVIEW_SAMPLE_LIMIT} representative "
                         f"{variant.value.replace('_', ' ')} assets; the experiment uses "
                         "the complete stimulus set."
@@ -1042,7 +1063,26 @@ class PresentationSettingsDialog(QDialog):
             restored = self.preview_stimulus_combo.findData(current)
             if restored >= 0:
                 self.preview_stimulus_combo.setCurrentIndex(restored)
+        self._refresh_preview_choice_tooltips()
         self._refresh_preview()
+
+    def _refresh_preview_choice_tooltips(self) -> None:
+        """Expose complete selections even after signal-blocked repopulation."""
+
+        for combo in (
+            self.preview_role_combo,
+            self.preview_modality_combo,
+            self.preview_size_combo,
+        ):
+            combo.setToolTip(combo.currentText())
+        selected = self.preview_stimulus_combo.currentData()
+        full_value = (
+            str(selected) if isinstance(selected, Path)
+            else self.preview_stimulus_combo.currentText()
+        )
+        self.preview_stimulus_combo.setToolTip(
+            f"{full_value}\n\n{self._preview_sample_context}".strip()
+        )
 
     def _active_image_preview_paths(
         self,
@@ -1128,6 +1168,7 @@ class PresentationSettingsDialog(QDialog):
         restored = self.preview_size_combo.findData(current_value)
         self.preview_size_combo.setCurrentIndex(restored if restored >= 0 else 0)
         self.preview_size_combo.blockSignals(False)
+        self._refresh_preview_choice_tooltips()
         modality = self.preview_modality_combo.currentData()
         self.preview_size_combo.setEnabled(modality == StimulusModality.WORD and len(values) > 1)
         self.preview_widget.set_preview(

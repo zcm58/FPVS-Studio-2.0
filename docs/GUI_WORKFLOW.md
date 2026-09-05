@@ -10,7 +10,7 @@ Run the authoring application with:
 
 The installed script entry point is also available as `fpvs-studio`.
 
-Setup's `Detect My Refresh Rate` action and launch preflight use the native configured
+Setup's `Verify display` action and launch preflight use the native configured
 mode for the primary/default display plus a temporary fullscreen PsychoPy stability
 observation. Windows uses its exact rational display path; KDE Linux uses KScreen's
 structured current-mode and VRR data, while Linux X11 uses XRandR. Variable-refresh
@@ -99,9 +99,10 @@ The authoring window is organized around two user-facing modes:
     workflows
 - `Setup Wizard`
   - in-window setup flow for new/incomplete projects and intentional edits
-  - ordered steps: Project, Conditions, Experiment, Fixation, Response, Review
+  - ordered steps: Project, Conditions, Timing, Image Size, Session, Fixation, Response, Review
   - `Next` is disabled until the active step is complete, with a compact footer hint
-    naming the current blocker
+    naming the current blocker; Project and Conditions also offer `Show field` to
+    focus the missing input, with image/word-specific source wording
   - the top progress indicator is a compact connected numbered stepper with
     completed/current/upcoming states, without redundant complete-state status bars
   - when a user opens setup from a ready project's `Edit Setup` action, the numbered
@@ -111,7 +112,7 @@ The authoring window is organized around two user-facing modes:
     guided steps free of Advanced buttons and vertical scrolling
   - guided steps use a shared setup step surface for consistent width, margins,
     and alignment inside the wizard card
-  - all six setup steps must fit inside the compact `1120x720` setup window
+  - all eight setup steps must fit inside the compact `1120x720` setup window
     without bottom clipping, visible child widgets outside their parent bounds,
     or required vertical scrolling
   - the wizard avoids generic footer/status copy; individual step cards should
@@ -128,19 +129,20 @@ The authoring window is organized around two user-facing modes:
   - Project exposes `Enable participant tutorial?`, which controls whether the
     participant sees the fixation response tutorial before the first condition; it is
     enabled by default for new projects and by the one-time migration of older projects
-  - Experiment combines display, presentation-default, image-size, and session settings
-    in one compact centered card; a compact `Configure Presentation...` action opens the
-    reusable presentation editor instead of expanding the wizard card
-  - the Display column exposes an approved monitor-refresh dropdown (`59.94`, `60`,
-    `120`, `144`, or `240 Hz`), `Detect My Refresh Rate`, project-wide base rate,
+  - Timing, Image Size, and Session each use a separate centered settings card to keep
+    controls readable at the compact size; Image Size retains `Configure Presentation...`
+    for the full draft-based presentation editor
+  - Timing exposes an approved monitor-refresh dropdown (`59.94`, `60`,
+    `120`, `144`, or `240 Hz`), `Verify display`, project-wide base rate,
     integer oddball cadence, derived oddball rate/frame counts/condition duration, and
     presentation background (`Black`, `Dark Gray`, or `Neutral Gray`); Neutral Gray is
     required when any image condition uses Contrast Modulation; setup requires a successful
-    PsychoPy fullscreen measurement before `Next`, changing the dropdown clears the
+    PsychoPy fullscreen measurement before `Next`; a visible notice explains the
+    fullscreen check before activation. Changing the dropdown clears the
     prior verification, and 59.94 Hz retains its visible requested-versus-realized
     whole-frame timing warning; current launches always use PsychoPy, fullscreen
     session playback, and the default display without exposing those as choices
-  - the Image Size column exposes calibrated display geometry and a concise summary of
+  - the Image Size step exposes calibrated display geometry and a concise summary of
     the project presentation defaults,
     approximate viewing distance in cm, physical screen width in cm, intended test
     display resolution in pixels, and an optional current-primary-screen resolution
@@ -151,23 +153,26 @@ The authoring window is organized around two user-facing modes:
     resolution
   - new projects default the fixation cross appearance to the ACR-matched 27 px cross
     size and 2 px line width
-  - the Session column exposes repeats per condition and the fixed Space start key;
+  - the Session step exposes repeats per condition and the fixed Space start key;
     condition names remain internal during participant transition screens, and condition
     order is always randomized automatically for each launch
   - the Conditions step uses compact condition rows showing each condition's current
     timing template and a combined condition
     setup surface for condition list actions, name, trigger code, participant
     instructions, modality, and base/oddball stimulus authoring; its frameless two-column
-    workspace keeps repeat controls and participant instructions fully visible, uses one
+    workspace separates an `All conditions` repeat target beneath the list from the
+    `This condition` editor and participant instructions, uses one
     responsive field column whose minimum width is set by the Advanced Timing selector,
     places repeat guidance behind a compact lower-right information action, and keeps
-    image source-card headings top-anchored above enlarged count/resolution summaries
-  - each selected condition exposes a compact `Presentation...` action for inherited
-    condition, Base-role, and Oddball-role settings; the draft-based dialog supports
+    image source-card headings top-anchored above count/resolution summaries. Imported
+    image sets expose `Source details` with the full stored path and `Copy path`;
+    inspecting a source does not read files or start an image worker
+  - each selected condition exposes a compact `Project defaults` / `Custom settings`
+    action for inherited condition, Base-role, and Oddball-role settings; the draft-based dialog supports
     reset-to-inherited controls and a live representative-stimulus preview
   - each selected condition also exposes `Pre/Post Tasks...` with a compact saved-flow
     summary; its reusable dialog keeps separate ordered pre-condition and post-condition
-    module lists without adding a seventh wizard step
+    module lists inside the existing Conditions workflow
   - task modules can contain ordered instruction/content, study display, choice grid,
     questionnaire, raw-key response, and timed-feedback steps; whole modules and
     individual choice steps can repeat, and bindings can run on every, first, or last
@@ -262,9 +267,9 @@ The authoring window is organized around two user-facing modes:
 
 Detailed Conditions remains available internally for existing document bindings, but it
 is no longer exposed as a wizard advanced step and does not expose duty-cycle editing.
-Session controls are directly visible in Experiment Settings, and
-Fixation and Response are guided setup pages. The Run / Runtime page remains a launch, readiness, and session-preview
-surface, not a display-engine configuration step.
+Timing, Image Size, Session, Fixation, and Response are separate guided setup pages.
+The Run / Runtime page remains a launch, readiness, and session-preview surface,
+not a display-engine configuration step.
 Run / Runtime feedback exposes `Open Run Folder` and `Copy Run Folder` after a launch
 completion or abort when the runtime summary includes an output directory. In compact
 summary export mode, the runtime summary has no run-folder output path, so those buttons
@@ -645,3 +650,29 @@ The registered updater module contains deterministic fake-worker cases for these
 source/lint/compilation checks do not validate real Qt event delivery or visible layout.
 Actual installer/upgrade lifecycle checks remain separately documented in
 `docs/PACKAGING.md`; this smoke must not launch a real installer or clean a real cache.
+
+## Setup Design And Manual Acceptance
+
+The shared component owner supplies theme-aware form fields, keyboard focus states,
+validation text, dialog headers, and button roles. Settings groups preferences into
+Workspace, Participant runs, and Development; preferences still save immediately.
+Its minimum/default size is `700x520` for packaged builds and `700x610` for source runs.
+Presentation (`900x600` minimum) and Pre/Post Tasks retain staged Apply/Cancel behavior.
+Native dropdown/spinner affordances and system file pickers remain available.
+
+Review uses factual summaries for project, conditions/task bindings, Timing, Image Size,
+Session, and Fixation/Response, with effective tutorial status in Project. Edit actions
+follow ready-project step-jump permissions. Saving returns Home with the existing nonmodal status-bar confirmation;
+returning without saving explains that edits remain in memory until the project closes.
+Fixation displays the effective smallest count limit, identifies the limiting condition,
+and explains count adjustments caused by changed durations; full per-condition limits
+remain accessible in the tooltip.
+
+For visible acceptance on Windows, walk all eight steps at `1120x720` in both themes,
+then repeat at the normal expanded size and available 125/150% scaling. Include long
+condition names and source paths, image and word conditions, missing-field recovery,
+verification busy/failure/verified states, and unequal condition durations. Inspect
+Settings, Presentation, and Pre/Post Tasks at their documented sizes; check keyboard
+focus and popup controls. Save/reopen to verify persistence, and confirm Cancel leaves
+staged dialogs unchanged. The implementation's registered Qt coverage is separate from
+this manual review and is not run by ordinary local verification.

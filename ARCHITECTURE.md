@@ -17,7 +17,9 @@ lazily only inside the engine package.
 - `src/fpvs_studio/assets/`: packaged release-facing static assets, including the
   licensed Open Sans face used by authored modular tasks.
 - `src/fpvs_studio/gui/`: PySide6 windows, dialogs, controllers, document binding,
-  Home/Setup workflows, and shared components/theme helpers.
+  Home/Setup workflows, and shared components/theme helpers. Setup composes eight
+  model-backed pages (Project, Conditions, Timing, Image Size, Session, Fixation,
+  Response, Review); shared dialog/form styling remains in `gui/components.py`.
 - `src/fpvs_studio/core/`: editable models, validation, compilation, `RunSpec`,
   `SessionPlan`, reusable condition-task definitions, execution results, persistence,
   `.fpvsconfig` interchange, portable `.fpvsbundle` services, and other engine-neutral

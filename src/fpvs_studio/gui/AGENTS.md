@@ -17,6 +17,9 @@ backend-driven.
 - Preserve the Home/Setup Wizard workflow: Home is the returning-user launch surface;
   detailed setup widgets should be reached through the guided wizard, not new top-level
   tabs.
+- Keep the eight guided steps in order: Project, Conditions, Timing, Image Size,
+  Session, Fixation, Response, Review. Budget all steps for `1120x720` without required
+  scrolling. Timing retains the `experiment` navigation key for internal callers.
 - Preserve Home setup actions: ready projects expose `Edit Setup`, incomplete projects
   expose `Complete Setup`, and first-time setup opens at the earliest incomplete step
   without enabling arbitrary step jumps.

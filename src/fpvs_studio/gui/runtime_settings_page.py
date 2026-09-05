@@ -96,21 +96,33 @@ class DisplaySettingsEditor(QWidget):
         for refresh_hz in APPROVED_MONITOR_REFRESH_RATES_HZ:
             self.refresh_hz_combo.addItem(f"{refresh_hz:g} Hz", userData=refresh_hz)
         self.refresh_hz_combo.setToolTip(
-            "Approved presentation-display rates. Use Detect My Refresh Rate to verify "
-            "the active native display mode and apply its approved value."
+            "Approved presentation-display rates. Verify display checks the active "
+            "native display mode and applies its approved value."
         )
         self.refresh_hz_combo.currentIndexChanged.connect(self._apply_refresh_hz)
 
-        self.detect_refresh_button = QPushButton("Detect My Refresh Rate", self)
+        self.detect_refresh_button = QPushButton("Verify display", self)
         self.detect_refresh_button.setObjectName(
             _prefixed_object_name(object_name_prefix, "detect_refresh_button")
         )
         self.detect_refresh_button.setToolTip(
-            "Reads the active native display mode, then temporarily opens PsychoPy "
-            "fullscreen to verify stable frame delivery."
+            "Reads the active native display mode, then briefly opens a fullscreen "
+            "check to verify stable frame delivery."
         )
         self.detect_refresh_button.clicked.connect(self._start_refresh_detection)
         mark_secondary_action(self.detect_refresh_button)
+
+        self.refresh_verification_notice = QLabel(
+            "Verification briefly opens a fullscreen display check on the primary monitor. "
+            "Your experiment will not start.",
+            self,
+        )
+        self.refresh_verification_notice.setObjectName(
+            _prefixed_object_name(object_name_prefix, "refresh_verification_notice")
+        )
+        self.refresh_verification_notice.setWordWrap(True)
+        self.refresh_verification_notice.setMinimumWidth(0)
+        self.refresh_verification_notice.setProperty("setupMetricLabel", "true")
 
         self.base_hz_spin = QDoubleSpinBox(self)
         self.base_hz_spin.setObjectName(_prefixed_object_name(object_name_prefix, "base_hz_spin"))
@@ -182,9 +194,16 @@ class DisplaySettingsEditor(QWidget):
         self.form_layout = QFormLayout(self.form_container)
         self.form_layout.setContentsMargins(0, 0, 0, 0)
         self.form_layout.setHorizontalSpacing(12)
-        self.form_layout.setVerticalSpacing(8)
-        self.form_layout.addRow("Monitor refresh", self.refresh_hz_combo)
-        self.form_layout.addRow(self.detect_refresh_button)
+        self.form_layout.setVerticalSpacing(10)
+        self.form_layout.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
+        refresh_controls = QWidget(self.form_container)
+        refresh_controls_layout = QHBoxLayout(refresh_controls)
+        refresh_controls_layout.setContentsMargins(0, 0, 0, 0)
+        refresh_controls_layout.setSpacing(8)
+        refresh_controls_layout.addWidget(self.refresh_hz_combo, 1)
+        refresh_controls_layout.addWidget(self.detect_refresh_button)
+        self.form_layout.addRow("Monitor refresh", refresh_controls)
+        self.form_layout.addRow(self.refresh_verification_notice)
         self.form_layout.addRow("Base rate", self.base_hz_spin)
         self.form_layout.addRow("Oddball every", self.oddball_every_n_spin)
         self.form_layout.addRow("Background", self.runtime_background_color_combo)
@@ -293,11 +312,11 @@ class DisplaySettingsEditor(QWidget):
         if report.errors:
             return report.errors[0]
         if self._refresh_probe_task is not None:
-            return "Wait for display refresh detection to finish"
+            return "Wait for display verification to finish"
         if self._refresh_measurement_error:
             return self._refresh_measurement_error
         if self._require_refresh_verification and not self.refresh_is_verified():
-            return "Detect and verify the connected display refresh rate"
+            return "Verify the connected display before continuing"
         return "Set compatible FPVS timing"
 
     def refresh(self) -> None:
@@ -329,6 +348,7 @@ class DisplaySettingsEditor(QWidget):
         self.refresh_hz_combo.setEnabled(controls_enabled)
         self.detect_refresh_button.setEnabled(controls_enabled)
         self.detect_refresh_button.setVisible(self._editable)
+        self.refresh_verification_notice.setVisible(self._editable)
         self.base_hz_spin.setEnabled(self._editable)
         self.oddball_every_n_spin.setEnabled(self._editable)
         self.runtime_background_color_combo.setEnabled(self._editable)
@@ -379,8 +399,7 @@ class DisplaySettingsEditor(QWidget):
         elif self._require_refresh_verification and not self.refresh_is_verified():
             self.timing_status_label.setProperty("statusState", "warning")
             self.timing_status_label.setText(
-                "Verification required: detect the connected display refresh rate "
-                "before continuing."
+                "Verification required: choose Verify display before continuing."
             )
             self.timing_status_label.setVisible(True)
         elif report.warnings:
@@ -543,7 +562,7 @@ class DisplaySettingsEditor(QWidget):
     def _on_refresh_detection_failed(self, error: object) -> None:
         LOGGER.error("Display refresh detection failed: %s", error)
         self._refresh_verification = None
-        self._refresh_measurement_error = f"Refresh detection failed: {error}"
+        self._refresh_measurement_error = f"Display verification failed: {error}"
         self._refresh_timing_status()
         self.refresh_verification_changed.emit()
 

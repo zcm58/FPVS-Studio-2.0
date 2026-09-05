@@ -31,6 +31,7 @@ from fpvs_studio.gui.components import (
     apply_fixation_settings_theme,
     mark_secondary_action,
 )
+from fpvs_studio.gui.design_system import elide_middle
 from fpvs_studio.gui.document import ProjectDocument
 from fpvs_studio.gui.window_helpers import (
     _FIXATION_FEASIBILITY_TOOLTIP_TEXT,
@@ -347,6 +348,7 @@ class FixationSettingsEditor(QWidget):
         self.fixation_accuracy_checkbox.stateChanged.connect(self._on_fixation_controls_changed)
         self.fixation_accuracy_checkbox.setVisible(section_mode in {"all", "response"})
         self._recommended_change_cap: int | None = None
+        self._last_automatic_adjustment: tuple[int, int, int, bool] | None = None
 
         self.target_count_mode_combo = QComboBox(self)
         self.target_count_mode_combo.setObjectName("target_count_mode_combo")
@@ -540,8 +542,7 @@ class FixationSettingsEditor(QWidget):
         feasibility_card = QFrame(self.fixation_panel)
         feasibility_card.setObjectName("fixation_feasibility_card")
         feasibility_card.setToolTip(_FIXATION_FEASIBILITY_TOOLTIP_TEXT)
-        feasibility_card.setMaximumHeight(42)
-        feasibility_card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        feasibility_card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         feasibility_layout = QVBoxLayout(feasibility_card)
         feasibility_layout.setContentsMargins(10, 4, 10, 4)
         feasibility_layout.setSpacing(0)
@@ -549,10 +550,20 @@ class FixationSettingsEditor(QWidget):
         self.fixation_feasibility_label.setObjectName("fixation_feasibility_label")
         self.fixation_feasibility_label.setToolTip(_FIXATION_FEASIBILITY_TOOLTIP_TEXT)
         self.fixation_feasibility_label.setWordWrap(True)
+        self.fixation_feasibility_label.setTextFormat(Qt.TextFormat.PlainText)
         self.fixation_feasibility_label.setAlignment(
             Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft
         )
         feasibility_layout.addWidget(self.fixation_feasibility_label)
+
+        self.fixation_adjustment_label = QLabel(self.fixation_panel)
+        self.fixation_adjustment_label.setObjectName("fixation_adjustment_label")
+        self.fixation_adjustment_label.setTextFormat(Qt.TextFormat.PlainText)
+        self.fixation_adjustment_label.setWordWrap(True)
+        self.fixation_adjustment_label.setMinimumWidth(0)
+        self.fixation_adjustment_label.setProperty("statusBadge", "true")
+        self.fixation_adjustment_label.setProperty("statusState", "info")
+        self.fixation_adjustment_label.setVisible(False)
 
         settings_column = QWidget(self.fixation_panel)
         settings_column_layout = QVBoxLayout(settings_column)
@@ -561,6 +572,7 @@ class FixationSettingsEditor(QWidget):
         settings_column_layout.addLayout(enablement_layout)
         if section_mode in {"all", "fixation"}:
             settings_column_layout.addWidget(feasibility_card)
+            settings_column_layout.addWidget(self.fixation_adjustment_label)
         else:
             feasibility_card.setVisible(False)
         self.fixation_behavior_panel = _settings_section(
@@ -685,6 +697,15 @@ class FixationSettingsEditor(QWidget):
 
     def refresh(self) -> None:
         fixation = self._document.project.settings.fixation_task
+        current_counts = (
+            fixation.changes_per_sequence,
+            fixation.target_count_min,
+            fixation.target_count_max,
+            fixation.no_immediate_repeat_count,
+        )
+        if self._last_automatic_adjustment != current_counts:
+            self._last_automatic_adjustment = None
+            self.fixation_adjustment_label.setVisible(False)
         with QSignalBlocker(self.fixation_enabled_checkbox):
             self.fixation_enabled_checkbox.setChecked(True)
         with QSignalBlocker(self.fixation_accuracy_checkbox):
@@ -810,17 +831,23 @@ class FixationSettingsEditor(QWidget):
         guidance_rows: list[ConditionFixationGuidance] | None,
         guidance_error: Exception | None,
     ) -> str:
-        label = "Recommended maximum cross changes per condition"
+        label = "Effective maximum changes per condition"
         if guidance_error is not None:
             return f"{label}: unavailable ({guidance_error})"
         if not guidance_rows:
             return f"{label}: unavailable (add a condition)."
-        estimated_values = sorted(
-            {row.recommended_max_color_changes_per_condition for row in guidance_rows}
+        cap = min(row.recommended_max_color_changes_per_condition for row in guidance_rows)
+        limiting = [
+            row for row in guidance_rows
+            if row.recommended_max_color_changes_per_condition == cap
+        ]
+        first = limiting[0]
+        condition_name = elide_middle(first.condition_name, 54)
+        others = f" (+{len(limiting) - 1} more)" if len(limiting) > 1 else ""
+        return (
+            f"{label}: {cap}\n"
+            f"Limited by {condition_name}{others} ({first.condition_duration_seconds:g} s)."
         )
-        if len(estimated_values) == 1:
-            return f"{label}: {estimated_values[0]}"
-        return f"{label}: {estimated_values[0]}-{estimated_values[-1]} (varies by condition)"
 
     def _recommended_project_change_cap(
         self,
@@ -849,35 +876,67 @@ class FixationSettingsEditor(QWidget):
                 guidance_error=guidance_error,
             )
         )
+        details = _FIXATION_FEASIBILITY_TOOLTIP_TEXT
+        if guidance_rows:
+            details += "\nThe smallest condition limit applies to the whole project.\n" + "\n".join(
+                f"{row.condition_name}: {row.recommended_max_color_changes_per_condition} changes "
+                f"({row.condition_duration_seconds:g} s)"
+                for row in guidance_rows
+            )
+        self.fixation_feasibility_label.setToolTip(details)
 
     def _apply_recommended_change_cap(self) -> None:
         cap = self._recommended_change_cap
         maximum = cap if cap is not None else 1000
-        changed = False
+        fixation = self._document.project.settings.fixation_task
+        previous = (
+            fixation.changes_per_sequence,
+            fixation.target_count_min,
+            fixation.target_count_max,
+            fixation.no_immediate_repeat_count,
+        )
+        fixed = min(fixation.changes_per_sequence, maximum)
+        target_max = min(fixation.target_count_max, maximum)
+        target_min = min(fixation.target_count_min, target_max)
+        no_repeat = fixation.no_immediate_repeat_count and target_min != target_max
         with QSignalBlocker(self.changes_per_sequence_spin):
             self.changes_per_sequence_spin.setMaximum(maximum)
-            if self.changes_per_sequence_spin.value() > maximum:
-                self.changes_per_sequence_spin.setValue(maximum)
-                changed = True
+            self.changes_per_sequence_spin.setValue(fixed)
         with QSignalBlocker(self.target_count_max_spin):
             self.target_count_max_spin.setMaximum(maximum)
-            if self.target_count_max_spin.value() > maximum:
-                self.target_count_max_spin.setValue(maximum)
-                changed = True
+            self.target_count_max_spin.setValue(target_max)
         with QSignalBlocker(self.target_count_min_spin):
             self.target_count_min_spin.setMaximum(maximum)
-            if self.target_count_min_spin.value() > self.target_count_max_spin.value():
-                self.target_count_min_spin.setValue(self.target_count_max_spin.value())
-                changed = True
-        if (
-            self.no_repeat_count_checkbox.isChecked()
-            and self.target_count_min_spin.value() == self.target_count_max_spin.value()
-        ):
-            with QSignalBlocker(self.no_repeat_count_checkbox):
-                self.no_repeat_count_checkbox.setChecked(False)
-            changed = True
-        if changed:
-            self._apply_fixation_settings()
+            self.target_count_min_spin.setValue(target_min)
+        with QSignalBlocker(self.no_repeat_count_checkbox):
+            self.no_repeat_count_checkbox.setChecked(no_repeat)
+        adjusted = (fixed, target_min, target_max, no_repeat)
+        if adjusted == previous:
+            return
+        # Compare with the model: setMaximum() can clamp a spin box before its
+        # value is read. Persist only these existing cap-policy adjustments.
+        self._document.update_fixation_settings(
+            changes_per_sequence=fixed,
+            target_count_min=target_min,
+            target_count_max=target_max,
+            no_immediate_repeat_count=no_repeat,
+        )
+        changes = [
+            f"{label} {old} → {new}"
+            for label, old, new in (
+                ("fixed changes", previous[0], fixed),
+                ("minimum", previous[1], target_min),
+                ("maximum", previous[2], target_max),
+            )
+            if old != new
+        ]
+        message = "Adjusted automatically to the project limit: " + "; ".join(changes) + "."
+        if previous[3] and not no_repeat:
+            repeat_note = "Repeated counts are allowed because the range now has one value."
+            message = f"{message} {repeat_note}" if changes else repeat_note
+        self._last_automatic_adjustment = adjusted
+        self.fixation_adjustment_label.setText(message)
+        self.fixation_adjustment_label.setVisible(self._section_mode in {"all", "fixation"})
 
     def _refresh_preview(self) -> None:
         if self.preview_widget is None:

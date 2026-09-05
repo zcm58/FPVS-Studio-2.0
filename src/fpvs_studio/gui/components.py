@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import re
 import sys
+from collections.abc import Callable
 from math import isfinite
 from typing import Any
 
@@ -27,6 +28,9 @@ from PySide6.QtGui import (
     QValidator,
 )
 from PySide6.QtWidgets import (
+    QApplication,
+    QDialog,
+    QDialogButtonBox,
     QDoubleSpinBox,
     QFrame,
     QGridLayout,
@@ -35,6 +39,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QSizePolicy,
     QSpinBox,
+    QTextEdit,
     QVBoxLayout,
     QWidget,
 )
@@ -58,6 +63,7 @@ PageContainer: Any
 SectionCard: Any
 
 __all__ = [
+    "DialogHeader",
     "LaunchSurfaceFrame",
     "FiniteDoubleSpinBox",
     "NonHomePageShell",
@@ -70,6 +76,7 @@ __all__ = [
     "SetupSourceCard",
     "StatusBadgeLabel",
     "apply_condition_template_details_header_style",
+    "apply_dialog_theme",
     "apply_error_text_style",
     "apply_fixation_settings_theme",
     "apply_home_page_theme",
@@ -86,7 +93,9 @@ __all__ = [
     "create_home_project_icon",
     "create_resolution_spin_box",
     "create_setup_project_icon",
+    "dialog_stylesheet",
     "error_text_stylesheet",
+    "form_controls_stylesheet",
     "fixation_settings_stylesheet",
     "home_page_stylesheet",
     "image_resizer_stylesheet",
@@ -106,6 +115,32 @@ __all__ = [
     "studio_theme_stylesheet",
     "welcome_window_stylesheet",
 ]
+
+
+class DialogHeader(QWidget):
+    """Compact shared heading with room for the scope and save behavior."""
+
+    def __init__(
+        self,
+        title: str,
+        subtitle: str,
+        *,
+        parent: QWidget | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self.title_label = QLabel(title, self)
+        self.title_label.setProperty("dialogHeading", "true")
+        self.subtitle_label = QLabel(subtitle, self)
+        self.subtitle_label.setProperty("dialogHelp", "true")
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(4)
+        for label in (self.title_label, self.subtitle_label):
+            label.setWordWrap(True)
+            label.setTextFormat(Qt.TextFormat.PlainText)
+            label.setMinimumWidth(0)
+            label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+            layout.addWidget(label)
 
 
 def create_double_spin_box(
@@ -553,6 +588,7 @@ class SetupSourceCard(QFrame):
         compact: bool = False,
         show_variants: bool = True,
         show_folder: bool = True,
+        show_details: bool = False,
         center_title: bool = False,
         center_content: bool = False,
         parent: QWidget | None = None,
@@ -562,6 +598,7 @@ class SetupSourceCard(QFrame):
         self.setProperty("setupSourceCard", "true")
         self._show_variants = show_variants
         self._show_folder = show_folder
+        self._source_details = ""
         self._layout = QVBoxLayout(self)
         if compact:
             self._layout.setContentsMargins(10, 8, 10, 8)
@@ -584,6 +621,15 @@ class SetupSourceCard(QFrame):
             header_layout.addWidget(self.title_label)
             header_layout.addStretch(1)
             header_layout.addWidget(self.status_badge)
+        self.source_details_button = QPushButton("i", header)
+        self.source_details_button.setObjectName(f"{object_name}_source_details_button")
+        self.source_details_button.setAccessibleName(f"{title} source details")
+        self.source_details_button.setToolTip("View the full source path and copy it.")
+        mark_compact_info_action(self.source_details_button)
+        self.source_details_button.setVisible(show_details)
+        self.source_details_button.setEnabled(False)
+        self.source_details_button.clicked.connect(self._show_source_details)
+        header_layout.addWidget(self.source_details_button)
         self._layout.addWidget(header)
 
         folder_label = QLabel("Folder", self)
@@ -653,6 +699,64 @@ class SetupSourceCard(QFrame):
         if self._show_variants:
             rows.append(("Variants", variants))
         self.metrics.set_rows(rows)
+
+    def set_source_details(self, path: str) -> None:
+        """Keep the full selected source accessible without expanding the card."""
+
+        if path != self._source_details:
+            existing = self.findChild(
+                QDialog, f"{self.objectName()}_source_details_dialog"
+            )
+            if existing is not None:
+                if path:
+                    path_text = existing.findChild(QTextEdit, "source_details_path")
+                    if path_text is not None:
+                        path_text.setPlainText(path)
+                else:
+                    existing.setObjectName("")
+                    existing.close()
+        self._source_details = path
+        self.source_details_button.setEnabled(bool(path))
+
+    def _show_source_details(self) -> None:
+        if not self._source_details:
+            return
+        object_name = f"{self.objectName()}_source_details_dialog"
+        existing = self.findChild(QDialog, object_name)
+        if existing is not None:
+            existing.raise_()
+            existing.activateWindow()
+            return
+        dialog = QDialog(self)
+        dialog.setObjectName(object_name)
+        dialog.setWindowTitle("Source details")
+        dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+        dialog.setMinimumSize(480, 230)
+        dialog.resize(540, 230)
+        header = DialogHeader(
+            self.title_label.text(), "Selected source folder", parent=dialog
+        )
+        path_text = QTextEdit(dialog)
+        path_text.setObjectName("source_details_path")
+        path_text.setAccessibleName("Full source folder path")
+        path_text.setReadOnly(True)
+        path_text.setPlainText(self._source_details)
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close, parent=dialog)
+        copy_button = buttons.addButton("Copy path", QDialogButtonBox.ButtonRole.ActionRole)
+        copy_button.setObjectName("source_details_copy_path")
+        mark_secondary_action(copy_button)
+        copy_button.clicked.connect(
+            lambda: QApplication.clipboard().setText(path_text.toPlainText())
+        )
+        buttons.rejected.connect(dialog.close)
+        layout = QVBoxLayout(dialog)
+        layout.setContentsMargins(20, 16, 20, 16)
+        layout.setSpacing(12)
+        layout.addWidget(header)
+        layout.addWidget(path_text, 1)
+        layout.addWidget(buttons)
+        apply_dialog_theme(dialog)
+        dialog.show()
 
 
 def _object_suffix(text: str) -> str:
@@ -812,6 +916,184 @@ def _resolved_theme(theme: StudioTheme | QPalette | None = None) -> StudioTheme:
     return resolve_studio_theme(theme)
 
 
+class _PaletteStylesheetFilter(QObject):
+    """Refresh local semantic styles when the effective Windows palette changes."""
+
+    def __init__(
+        self,
+        widget: QWidget,
+        builder: Callable[[QPalette], str],
+    ) -> None:
+        super().__init__(widget)
+        self._widget = widget
+        self._builder = builder
+        self._applying = False
+
+    def apply(self, palette: QPalette | None = None) -> None:
+        if self._applying:
+            return
+        self._applying = True
+        try:
+            stylesheet = self._builder(palette if palette is not None else self._widget.palette())
+            if self._widget.styleSheet() != stylesheet:
+                self._widget.setStyleSheet(stylesheet)
+        finally:
+            self._applying = False
+
+    def eventFilter(self, watched: QObject, event: QEvent) -> bool:  # noqa: N802
+        if event.type() in {
+            QEvent.Type.ApplicationPaletteChange,
+            QEvent.Type.ThemeChange,
+        }:
+            # A local stylesheet may still supply the old Window brush. Resolve
+            # application changes from the fresh application palette instead.
+            self.apply(QApplication.palette())
+        elif event.type() == QEvent.Type.PaletteChange:
+            self.apply()
+        return super().eventFilter(watched, event)
+
+
+def _apply_palette_stylesheet(
+    widget: QWidget, builder: Callable[[QPalette], str]
+) -> None:
+    observer = widget.findChild(
+        _PaletteStylesheetFilter,
+        "studio_palette_stylesheet_filter",
+        Qt.FindChildOption.FindDirectChildrenOnly,
+    )
+    if observer is None:
+        observer = _PaletteStylesheetFilter(widget, builder)
+        observer.setObjectName("studio_palette_stylesheet_filter")
+        widget.installEventFilter(observer)
+    observer.apply()
+
+
+def form_controls_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
+    """Shared compact fields; native dropdown and spinner affordances stay intact."""
+
+    theme = _resolved_theme(theme)
+    return f"""
+    QLineEdit, QComboBox, QAbstractSpinBox, QTextEdit, QPlainTextEdit {{
+        color: {theme.text_primary};
+        background-color: {theme.surface_elevated};
+        border: 1px solid {theme.border};
+        border-radius: 6px;
+        padding: 3px 6px;
+        font-size: {FONT_SIZE_CONTROL}px;
+        selection-background-color: {theme.primary};
+        selection-color: {theme.selected_text};
+    }}
+    QLineEdit, QComboBox, QAbstractSpinBox {{
+        min-height: 22px;
+    }}
+    QLineEdit:hover, QComboBox:hover, QAbstractSpinBox:hover,
+    QTextEdit:hover, QPlainTextEdit:hover {{
+        border-color: {theme.text_hint};
+    }}
+    QLineEdit:focus, QComboBox:focus, QAbstractSpinBox:focus,
+    QTextEdit:focus, QPlainTextEdit:focus {{
+        border-color: {theme.focus_ring};
+    }}
+    QLineEdit:disabled, QComboBox:disabled, QAbstractSpinBox:disabled,
+    QTextEdit:disabled, QPlainTextEdit:disabled {{
+        color: {theme.disabled_text};
+        background-color: {theme.surface_alt};
+        border-color: {theme.border_soft};
+    }}
+    QAbstractSpinBox QLineEdit, QComboBox QLineEdit {{
+        border: none;
+        border-radius: 0;
+        padding: 0;
+        min-height: 0;
+        background-color: transparent;
+    }}
+    QComboBox QAbstractItemView {{
+        color: {theme.text_primary};
+        background-color: {theme.surface_elevated};
+        selection-background-color: {theme.primary};
+        selection-color: {theme.selected_text};
+        border: 1px solid {theme.border};
+    }}
+    QCheckBox, QRadioButton {{
+        color: {theme.text_primary};
+        spacing: 8px;
+        font-size: {FONT_SIZE_CONTROL}px;
+    }}
+    QCheckBox:disabled, QRadioButton:disabled {{
+        color: {theme.disabled_text};
+    }}
+    QTabWidget::pane {{
+        border: 1px solid {theme.border_soft};
+        border-radius: 6px;
+        background-color: {theme.surface};
+    }}
+    QTabBar::tab {{
+        color: {theme.text_secondary};
+        background-color: {theme.surface_alt};
+        border: none;
+        border-bottom: 2px solid transparent;
+        padding: 7px 12px;
+    }}
+    QTabBar::tab:selected {{
+        color: {theme.text_primary};
+        border-bottom-color: {theme.primary};
+        background-color: {theme.surface};
+    }}
+    QTabBar::tab:hover {{
+        color: {theme.text_primary};
+    }}
+    QGroupBox {{
+        color: {theme.text_primary};
+        border: 1px solid {theme.border_soft};
+        border-radius: 8px;
+        margin-top: 10px;
+        padding-top: 8px;
+        font-weight: 600;
+    }}
+    QGroupBox::title {{
+        subcontrol-origin: margin;
+        subcontrol-position: top left;
+        left: 10px;
+        padding: 0 4px;
+    }}
+    """
+
+
+def dialog_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
+    theme = _resolved_theme(theme)
+    return studio_theme_stylesheet(theme) + section_card_stylesheet(theme) + f"""
+    QDialog[studioDialog="true"] {{
+        background-color: {theme.page_background};
+        color: {theme.text_primary};
+        font-size: {FONT_SIZE_BODY}px;
+    }}
+    QLabel[dialogHeading="true"] {{
+        color: {theme.text_primary};
+        font-size: 18px;
+        font-weight: 700;
+    }}
+    QLabel[dialogHelp="true"] {{
+        color: {theme.text_secondary};
+        font-size: {FONT_SIZE_BODY}px;
+    }}
+    QFrame[settingsSection="true"] {{
+        background-color: {theme.surface};
+        border: 1px solid {theme.border_soft};
+        border-radius: {CARD_CORNER_RADIUS}px;
+    }}
+    QLabel[settingsSectionTitle="true"] {{
+        color: {theme.text_primary};
+        font-size: {FONT_SIZE_SECTION_TITLE}px;
+        font-weight: 600;
+    }}
+    """
+
+
+def apply_dialog_theme(widget: QWidget) -> None:
+    widget.setProperty("studioDialog", "true")
+    _apply_palette_stylesheet(widget, dialog_stylesheet)
+
+
 def studio_theme_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
     theme = _resolved_theme(theme)
     color_page_background = theme.page_background
@@ -838,7 +1120,7 @@ def studio_theme_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
     color_pending_bg = theme.pending_bg
     color_pending_border = theme.pending_border
     color_pending_text = theme.pending_text
-    return f"""
+    return form_controls_stylesheet(theme) + error_text_stylesheet(theme) + f"""
     QMainWindow#studio_main_window,
     QStackedWidget#main_stack,
     QDialog#update_dialog,
@@ -1242,11 +1524,14 @@ def studio_theme_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
         max-height: 2px;
     }}
     QFrame[conditionDetailsSection="true"],
-    QFrame[setupSourceCard="true"],
-    QFrame[setupMetricStrip="true"] {{
+    QFrame[setupSourceCard="true"] {{
         border: 1px solid {color_border_soft};
         border-radius: {CARD_CORNER_RADIUS}px;
         background-color: {color_surface_elevated};
+    }}
+    QFrame[setupMetricStrip="true"] {{
+        border: none;
+        background-color: transparent;
     }}
     QLabel[setupSourceTitle="true"] {{
         color: {color_text_primary};
@@ -1723,16 +2008,17 @@ def apply_image_size_preview_dialog_theme(widget: QWidget) -> None:
     widget.setStyleSheet(image_size_preview_dialog_stylesheet())
 
 
-def error_text_stylesheet() -> str:
-    return """
-    QLabel[errorText="true"] {
-        color: #a1332b;
-    }
+def error_text_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
+    theme = _resolved_theme(theme)
+    return f"""
+    QLabel[errorText="true"] {{
+        color: {theme.error_text};
+    }}
     """
 
 
 def apply_error_text_style(label: QLabel) -> None:
-    label.setStyleSheet(error_text_stylesheet())
+    _apply_palette_stylesheet(label, error_text_stylesheet)
 
 
 def condition_template_details_header_stylesheet() -> str:

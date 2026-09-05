@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QLabel,
     QPushButton,
+    QTextEdit,
     QWidget,
 )
 from tests.gui.helpers import (
@@ -504,6 +505,8 @@ def test_setup_wizard_contrast_modulation_is_available_for_images_only(
     condition = window.document.get_condition(condition_id)
     assert condition is not None
     assert condition.duty_cycle_mode == DutyCycleMode.SINUSOIDAL
+    assert "Neutral Gray" in step.presentation_mode_help.text()
+    assert "Timing" in step.presentation_mode_help.text()
 
     step.modality_combo.setCurrentIndex(
         step.modality_combo.findData(StimulusModality.WORD.value)
@@ -520,6 +523,8 @@ def test_setup_wizard_contrast_modulation_is_available_for_images_only(
     assert step.timing_template_combo.findData(DutyCycleMode.SINUSOIDAL) == -1
     assert step.timing_template_combo.currentData() == DutyCycleMode.CONTINUOUS
     assert "resets Contrast Modulation" in step.timing_template_combo.toolTip()
+    assert "Neutral Gray" not in step.presentation_mode_help.text()
+    assert "words" in step.condition_list_hint.text()
 
     step.modality_combo.setCurrentIndex(
         step.modality_combo.findData(StimulusModality.IMAGE.value)
@@ -697,7 +702,6 @@ def test_setup_wizard_conditions_step_keeps_source_geometry_for_incomplete_condi
         step.condition_name_edit,
         step.trigger_code_spin,
         step.modality_combo,
-        step.target_repeats_spin,
         step.instructions_edit,
     ):
         assert field.width() == standard_field_width
@@ -754,7 +758,7 @@ def test_setup_wizard_conditions_step_keeps_source_geometry_for_incomplete_condi
     for source_card in (step.base_source_card, step.oddball_source_card):
         header = source_card.title_label.parentWidget()
         assert header is not None
-        assert header.height() == 24
+        assert header.height() == 30
         title_top = source_card.title_label.mapTo(
             source_card,
             source_card.title_label.rect().topLeft(),
@@ -766,14 +770,10 @@ def test_setup_wizard_conditions_step_keeps_source_geometry_for_incomplete_condi
     assert step.oddball_source_value.alignment() & Qt.AlignmentFlag.AlignHCenter
     assert step.base_source_card.metrics._rows[0][1].alignment() & Qt.AlignmentFlag.AlignHCenter
     assert step.oddball_source_card.metrics._rows[0][1].alignment() & Qt.AlignmentFlag.AlignHCenter
-    target_label_top = step.target_repeats_label.mapTo(
-        step.condition_details_section,
-        step.target_repeats_label.rect().topLeft(),
-    ).y()
-    target_controls_top = step.target_repeats_spin.mapTo(
-        step.condition_details_section,
-        step.target_repeats_spin.rect().topLeft(),
-    ).y()
+    assert step.target_repeats_spin.parentWidget() is step.all_conditions_section
+    assert step.target_repeats_label.parentWidget() is step.all_conditions_section
+    assert step.repeat_calculator_button.parentWidget() is step.all_conditions_section
+    assert step.all_conditions_label.text() == "All conditions"
     instructions_label_top = step.instructions_label.mapTo(
         step.condition_details_section,
         step.instructions_label.rect().topLeft(),
@@ -782,15 +782,13 @@ def test_setup_wizard_conditions_step_keeps_source_geometry_for_incomplete_condi
         step.condition_details_section,
         step.instructions_edit.rect().topLeft(),
     ).y()
-    assert abs(target_label_top - target_controls_top) <= 1
     assert abs(instructions_label_top - instructions_editor_top) <= 1
-    assert instructions_editor_top > target_controls_top
     info_bottom_right = step.repeat_calculator_button.mapTo(
-        step.condition_details_section,
+        step.all_conditions_section,
         step.repeat_calculator_button.rect().bottomRight(),
     )
-    assert step.condition_details_section.width() - info_bottom_right.x() <= 12
-    assert step.condition_details_section.height() - info_bottom_right.y() <= 7
+    assert step.all_conditions_section.width() - info_bottom_right.x() <= 12
+    _assert_visible_children_within_parent(step.all_conditions_section)
     _assert_visible_children_within_parent(workspace)
 
     base_bottom = step.base_source_card.mapTo(
@@ -801,20 +799,138 @@ def test_setup_wizard_conditions_step_keeps_source_geometry_for_incomplete_condi
         workspace,
         step.oddball_source_card.rect().bottomLeft(),
     ).y()
-    control_bottom = step.create_control_condition_button.mapTo(
+    all_conditions_bottom = step.all_conditions_section.mapTo(
         workspace,
-        step.create_control_condition_button.rect().bottomLeft(),
+        step.all_conditions_section.rect().bottomLeft(),
     ).y()
-    remove_bottom = step.remove_condition_button.mapTo(
-        workspace,
-        step.remove_condition_button.rect().bottomLeft(),
-    ).y()
-    assert base_bottom == oddball_bottom == control_bottom == remove_bottom, (
+    assert base_bottom == oddball_bottom == all_conditions_bottom, (
         base_bottom,
         oddball_bottom,
-        control_bottom,
-        remove_bottom,
+        all_conditions_bottom,
     )
+
+
+@pytest.mark.parametrize("modality", [StimulusModality.IMAGE, StimulusModality.WORD])
+def test_condition_scope_and_long_content_fit_minimum_setup_size(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+    modality: StimulusModality,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Condition Scope")
+    guide = window.setup_wizard_page
+    step = guide.condition_setup_step
+    window.resize(1120, 720)
+    window.show_setup_wizard(step_key="conditions")
+    assert step.target_repeats_spin.isEnabled()
+    step.target_repeats_spin.setValue(10000)
+    assert window.document.project.settings.condition_defaults.target_repeats_per_image == 10000
+
+    condition_id = window.document.create_condition()
+    long_name = ("Semantic categories with familiar and unfamiliar exemplars " * 3).strip()
+    window.document.update_condition(condition_id, name=long_name, trigger_code=255)
+    step._select_condition(condition_id)
+    step.modality_combo.setCurrentIndex(step.modality_combo.findData(modality.value))
+    if modality == StimulusModality.IMAGE:
+        step.timing_template_combo.setCurrentIndex(
+            step.timing_template_combo.findData(DutyCycleMode.SINUSOIDAL)
+        )
+    else:
+        step.base_words_edit.setPlainText("familiar category exemplar\n" * 40)
+        step.flush_pending_edits()
+    step.instructions_edit.setPlainText(
+        "Look at each stimulus and follow the task instructions. " * 20
+    )
+    step.flush_pending_edits()
+    QApplication.processEvents()
+
+    assert window.size().width() == 1120
+    assert window.size().height() == 720
+    assert step.condition_scope_label.text() == "This condition"
+    assert step.condition_scope_label.toolTip() == long_name.strip()
+    assert long_name.strip() in step.condition_list.currentItem().toolTip()
+    assert step.condition_name_edit.toolTip() == long_name.strip()
+    assert step.presentation_mode_label.text() == "Presentation mode"
+    assert step.target_repeats_spin.parentWidget() is step.all_conditions_section
+    assert step.presentation_button.accessibleDescription()
+    assert step.target_repeats_spin.value() == 10000
+    for label in (step.condition_scope_label, step.all_conditions_label, step.target_repeats_label):
+        assert label.width() >= label.fontMetrics().horizontalAdvance(label.text())
+    for label in (step.presentation_mode_help, step.condition_list_hint):
+        required_height = label.heightForWidth(label.width())
+        assert required_height <= label.height()
+    for parent in (step, step.condition_details_section, step.all_conditions_section):
+        _assert_visible_children_within_parent(parent)
+    if modality == StimulusModality.IMAGE:
+        for card in (step.base_source_card, step.oddball_source_card):
+            _assert_visible_children_within_parent(card)
+    else:
+        _assert_visible_children_within_parent(step.words_panel)
+
+
+def test_condition_source_details_exposes_full_project_path_by_keyboard(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Inspectable Sources")
+    step = window.setup_wizard_page.condition_setup_step
+    window.resize(1120, 720)
+    window.show_setup_wizard(step_key="conditions")
+    condition_id = window.document.create_condition()
+    step._select_condition(condition_id)
+    assert not step.base_source_card.source_details_button.isEnabled()
+    source = window.document.get_condition_stimulus_set(condition_id, "base")
+    # Retained metadata can reference a missing folder; inspection does no filesystem work.
+    source.source_dir = "stimuli/original-images/" + "long-category-source-folder/" * 8
+    source.image_count = 2
+    step.refresh()
+    QApplication.processEvents()
+    expected_path = str(window.document.project_root / source.source_dir)
+    button = step.base_source_card.source_details_button
+    assert button.isEnabled()
+    button.setFocus()
+    qtbot.keyClick(button, Qt.Key.Key_Space)
+    QApplication.processEvents()
+    dialog = step.base_source_card.findChild(
+        QDialog, "setup_conditions_base_source_card_source_details_dialog"
+    )
+    assert dialog is not None and dialog.isVisible()
+    qtbot.addWidget(dialog)
+    path_text = dialog.findChild(QTextEdit, "source_details_path")
+    assert path_text is not None and path_text.toPlainText() == expected_path
+    copy_button = dialog.findChild(QPushButton, "source_details_copy_path")
+    assert copy_button is not None
+    copy_button.setFocus()
+    qtbot.keyClick(copy_button, Qt.Key.Key_Space)
+    assert QApplication.clipboard().text() == expected_path
+    dialog.close()
+
+
+def test_condition_blocker_focus_selects_missing_word_role_without_opening_dialog(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Condition Correction")
+    step = window.setup_wizard_page.condition_setup_step
+    window.show_setup_wizard(step_key="conditions")
+    condition_id = window.document.create_condition()
+    step._select_condition(condition_id)
+    step.focus_setup_blocker()
+    assert step.condition_name_edit.hasFocus()
+    window.document.update_condition(condition_id, name="Animal words")
+    step.modality_combo.setCurrentIndex(step.modality_combo.findData(StimulusModality.WORD.value))
+    step.base_words_edit.setPlainText("cat\ndog")
+    step.flush_pending_edits()
+    other_id = window.document.create_condition()
+    step._select_condition(other_id)
+
+    step.focus_setup_blocker()
+
+    assert step.selected_condition_id() == condition_id
+    assert step.oddball_words_edit.hasFocus()
+    assert "words" in step.condition_list_hint.text()
 
 
 def test_setup_wizard_conditions_next_silently_advances_when_images_are_uniform(

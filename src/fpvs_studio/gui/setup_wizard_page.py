@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from fpvs_studio.core.enums import StimulusModality
 from fpvs_studio.core.frame_validation import FrameValidationError
 from fpvs_studio.core.models import ConditionTemplateProfile
 from fpvs_studio.core.validation import condition_fixation_guidance
@@ -66,12 +67,13 @@ from fpvs_studio.preprocessing.normalization import ImageNormalizationScan
 _WIZARD_STEPS: tuple[tuple[str, str], ...] = (
     ("project", "Project"),
     ("conditions", "Conditions"),
-    ("experiment", "Experiment"),
+    ("experiment", "Timing"),
+    ("image_size", "Image Size"),
+    ("session", "Session"),
     ("fixation", "Fixation"),
     ("response", "Response"),
     ("review", "Review"),
 )
-_CREATE_ALL_CONDITIONS_PROMPT = "Please ensure you create all conditions before proceeding."
 _ESTIMATED_INTER_CONDITION_BREAK_SECONDS = 30
 _SETUP_STEP_SURFACE_MAX_WIDTH = 880
 _SETUP_STEP_WORKBENCH_SURFACE_MAX_WIDTH = 1040
@@ -86,6 +88,8 @@ class _ReviewSummaryWidgets:
     body: QWidget
     body_layout: QVBoxLayout
     rows: list[tuple[QFrame, QLabel]]
+    edit_button: QPushButton
+    fixation_edit_button: QPushButton
 
 
 def _scan_requires_setup_normalization(scan: ImageNormalizationScan) -> bool:
@@ -201,7 +205,6 @@ class SetupWizardPage(QWidget):
         self.conditions_page = ConditionsPage(document, embedded=True, parent=self)
         self.condition_setup_step = ConditionSetupStep(document, self)
         self.add_condition_button = self.condition_setup_step.add_condition_button
-        self.add_condition_button.clicked.connect(self._show_first_condition_prompt_if_needed)
         self.assets_page = AssetsPage(document, self)
         self.run_page = RunPage(document, parent=self)
         self.project_overview_editor = ProjectOverviewEditor(
@@ -406,6 +409,11 @@ class SetupWizardPage(QWidget):
         next_hint_layout = QHBoxLayout(self.setup_wizard_next_hint_container)
         next_hint_layout.setContentsMargins(0, 0, 0, 0)
         next_hint_layout.addWidget(self.setup_wizard_next_hint_label)
+        self.setup_wizard_fix_button = QPushButton("Show field", self)
+        self.setup_wizard_fix_button.setObjectName("setup_wizard_fix_button")
+        mark_secondary_action(self.setup_wizard_fix_button)
+        self.setup_wizard_fix_button.clicked.connect(self._focus_step_blocker)
+        next_hint_layout.addWidget(self.setup_wizard_fix_button)
 
         button_row = QWidget(self)
         button_layout = QHBoxLayout(button_row)
@@ -498,6 +506,30 @@ class SetupWizardPage(QWidget):
             center_vertically=True,
             parent=self,
         )
+        self.image_size_settings_card = self._settings_step_card(
+            self.image_display_size_editor,
+            title="Image Size",
+            subtitle="Set the on-screen stimulus size and calibrate the viewing geometry.",
+            object_name="setup_wizard_image_size_settings_card",
+        )
+        self.image_size_step_surface = _SetupStepSurface(
+            self.image_size_settings_card,
+            object_name="setup_wizard_image_size_surface",
+            center_vertically=True,
+            parent=self,
+        )
+        self.session_settings_card = self._settings_step_card(
+            self.session_structure_editor,
+            title="Session",
+            subtitle="Choose how often each condition runs. Order is randomized at launch.",
+            object_name="setup_wizard_session_settings_card",
+        )
+        self.session_step_surface = _SetupStepSurface(
+            self.session_settings_card,
+            object_name="setup_wizard_session_surface",
+            center_vertically=True,
+            parent=self,
+        )
         self.fixation_step_surface = _SetupStepSurface(
             self.fixation_schedule_editor,
             object_name="setup_wizard_fixation_surface",
@@ -519,91 +551,33 @@ class SetupWizardPage(QWidget):
         self.step_stack.addWidget(self.project_step_surface)
         self.step_stack.addWidget(self.conditions_step_surface)
         self.step_stack.addWidget(self.experiment_step_surface)
+        self.step_stack.addWidget(self.image_size_step_surface)
+        self.step_stack.addWidget(self.session_step_surface)
         self.step_stack.addWidget(self.fixation_step_surface)
         self.step_stack.addWidget(self.response_step_surface)
         self.step_stack.addWidget(self.review_step_surface)
+
+    def _settings_step_card(
+        self, editor: QWidget, *, title: str, subtitle: str, object_name: str
+    ) -> SectionCard:
+        card = SectionCard(title=title, subtitle=subtitle, object_name=object_name, parent=self)
+        card.setMaximumWidth(_SETUP_STEP_SURFACE_MAX_WIDTH)
+        card.setMinimumWidth(680)
+        card.body_layout.addWidget(editor)
+        return card
 
     def _experiment_settings_step_page(self) -> QWidget:
         page = QWidget(self)
         page.setObjectName("setup_wizard_experiment_settings_page")
         layout = QVBoxLayout(page)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(0)
-
-        self.experiment_settings_card = QWidget(page)
-        self.experiment_settings_card.setObjectName("setup_wizard_experiment_settings_card")
-        self.experiment_settings_card.setMaximumWidth(_SETUP_STEP_SURFACE_MAX_WIDTH)
-        self.experiment_settings_card.setMinimumHeight(280)
-        self.experiment_settings_card.setSizePolicy(
-            QSizePolicy.Policy.Expanding,
-            QSizePolicy.Policy.Preferred,
+        self.experiment_settings_card = self._settings_step_card(
+            self.runtime_settings_editor,
+            title="Timing and Display",
+            subtitle="Verify this display, then choose the experiment cadence and background.",
+            object_name="setup_wizard_experiment_settings_card",
         )
-        experiment_layout = QVBoxLayout(self.experiment_settings_card)
-        experiment_layout.setContentsMargins(0, 0, 0, 0)
-        experiment_layout.setSpacing(0)
-
-        content = QWidget(self.experiment_settings_card)
-        content_layout = QHBoxLayout(content)
-        content_layout.setContentsMargins(0, 0, 0, 0)
-        content_layout.setSpacing(PAGE_SECTION_GAP + 4)
-
-        display_column = QFrame(content)
-        display_column.setProperty("experimentSettingsSection", "true")
-        display_column.setMinimumHeight(224)
-        display_column_layout = QVBoxLayout(display_column)
-        display_column_layout.setContentsMargins(14, 12, 14, 12)
-        display_column_layout.setSpacing(12)
-        display_title = QLabel("Display Settings", display_column)
-        display_title.setProperty("sectionCardRole", "title")
-        display_column_layout.addWidget(display_title)
-        display_column_layout.addWidget(self.runtime_settings_editor)
-        display_column_layout.addStretch(1)
-
-        image_size_column = QFrame(content)
-        image_size_column.setProperty("experimentSettingsSection", "true")
-        image_size_column.setMinimumHeight(224)
-        image_size_column_layout = QVBoxLayout(image_size_column)
-        image_size_column_layout.setContentsMargins(14, 12, 14, 12)
-        image_size_column_layout.setSpacing(12)
-        image_size_title = QLabel("Image Size", image_size_column)
-        image_size_title.setProperty("sectionCardRole", "title")
-        image_size_column_layout.addWidget(image_size_title)
-        image_size_column_layout.addWidget(self.image_display_size_editor)
-
-        session_column = QFrame(content)
-        session_column.setProperty("experimentSettingsSection", "true")
-        session_column.setMinimumHeight(224)
-        session_column_layout = QVBoxLayout(session_column)
-        session_column_layout.setContentsMargins(14, 12, 14, 12)
-        session_column_layout.setSpacing(12)
-        session_title = QLabel("Session", session_column)
-        session_title.setProperty("sectionCardRole", "title")
-        session_column_layout.addWidget(session_title)
-        session_column_layout.addWidget(self.session_structure_editor)
-        session_column_layout.addStretch(1)
-
-        self.runtime_settings_editor.setSizePolicy(
-            QSizePolicy.Policy.Expanding,
-            QSizePolicy.Policy.Preferred,
-        )
-        self.image_display_size_editor.setSizePolicy(
-            QSizePolicy.Policy.Expanding,
-            QSizePolicy.Policy.Preferred,
-        )
-        self.session_structure_editor.setSizePolicy(
-            QSizePolicy.Policy.Expanding,
-            QSizePolicy.Policy.Preferred,
-        )
-        content_layout.addWidget(display_column, 2)
-        content_layout.addWidget(image_size_column, 2)
-        content_layout.addWidget(session_column, 3)
-        experiment_layout.addWidget(content)
-
-        layout.addWidget(
-            self.experiment_settings_card,
-            0,
-            Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter,
-        )
+        layout.addWidget(self.experiment_settings_card)
         return page
 
     def _review_step_page(self) -> QWidget:
@@ -623,12 +597,6 @@ class SetupWizardPage(QWidget):
         self.review_card.card_layout.setContentsMargins(14, 10, 14, 10)
         self.review_card.card_layout.setSpacing(6)
         self.review_card.body_layout.setSpacing(6)
-        self.review_card.title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        if self.review_card.subtitle_label is not None:
-            self.review_card.subtitle_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        header_layout = self.review_card.card_layout.itemAt(0).layout()
-        if header_layout is not None:
-            header_layout.insertStretch(0, 1)
 
         self.review_checklist_container = QWidget(self.review_card)
         self.review_checklist_container.setObjectName("setup_wizard_review_checklist")
@@ -660,18 +628,6 @@ class SetupWizardPage(QWidget):
 
         layout.addWidget(self.review_card, 0, Qt.AlignmentFlag.AlignHCenter)
         return page
-
-    def _show_first_condition_prompt_if_needed(self) -> None:
-        step_key = _WIZARD_STEPS[self._active_step_index][0]
-        if step_key != "conditions" or self.content_stack.currentWidget() is not self.guided_panel:
-            return
-        self.refresh()
-        if len(self._document.ordered_conditions()) == 1:
-            QMessageBox.information(
-                self,
-                "Create All Conditions",
-                _CREATE_ALL_CONDITIONS_PROMPT,
-            )
 
     def _go_back(self) -> None:
         self.flush_pending_edits()
@@ -854,7 +810,9 @@ class SetupWizardPage(QWidget):
             answer = QMessageBox.question(
                 self,
                 "Unsaved Changes",
-                "Are you sure you want to return home without saving your changes?",
+                "Return Home without saving to disk?\n\n"
+                "Your edits remain in this open project until you close it. "
+                "Save the project to keep them for your next session.",
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                 QMessageBox.StandardButton.No,
             )
@@ -880,12 +838,6 @@ class SetupWizardPage(QWidget):
         if self._on_save_project is not None:
             saved = self._on_save_project()
             if saved and self._on_return_home is not None:
-                QMessageBox.information(
-                    self,
-                    "Experiment Saved",
-                    "Experiment settings have been saved.",
-                    QMessageBox.StandardButton.Ok,
-                )
                 self._on_return_home()
 
     def refresh(self) -> None:
@@ -934,6 +886,11 @@ class SetupWizardPage(QWidget):
         self.setup_wizard_next_hint_label.setText(hint_text)
         self.setup_wizard_next_hint_label.setToolTip(hint_text)
         self.setup_wizard_next_hint_label.setVisible(bool(hint_text))
+        self.setup_wizard_fix_button.setVisible(
+            bool(hint_text)
+            and not condition_image_task_active
+            and step_key in {"project", "conditions"}
+        )
         self._sync_guided_panel_height()
         QTimer.singleShot(0, self._sync_guided_panel_height)
         self._ensure_condition_image_prescan_started()
@@ -991,13 +948,24 @@ class SetupWizardPage(QWidget):
                 index % 2,
             )
 
-        for widgets, (section_title, lines) in zip(
+        for widgets, (step_key, section_title, lines) in zip(
             self._review_summary_widgets,
             sections,
             strict=False,
         ):
             widgets.section.setVisible(True)
             widgets.title_label.setText(section_title)
+            widgets.edit_button.setProperty("reviewStepKey", step_key)
+            widgets.edit_button.setText("Response" if step_key == "response" else "Edit")
+            widgets.edit_button.setAccessibleName(
+                "Edit Response" if step_key == "response" else f"Edit {section_title}"
+            )
+            widgets.edit_button.setVisible(self._step_jump_enabled)
+            widgets.edit_button.setEnabled(not self._condition_image_task_active())
+            widgets.fixation_edit_button.setVisible(
+                self._step_jump_enabled and step_key == "response"
+            )
+            widgets.fixation_edit_button.setEnabled(not self._condition_image_task_active())
             while len(widgets.rows) < len(lines):
                 row_widgets = self._review_checklist_row(parent=widgets.body)
                 widgets.rows.append(row_widgets)
@@ -1007,6 +975,7 @@ class SetupWizardPage(QWidget):
                 )
             for (row_frame, label), text in zip(widgets.rows, lines, strict=False):
                 label.setText(text)
+                label.setToolTip(text)
                 row_frame.setVisible(True)
             for row_frame, _label in widgets.rows[len(lines) :]:
                 row_frame.setVisible(False)
@@ -1022,15 +991,30 @@ class SetupWizardPage(QWidget):
         section_layout.setSpacing(3)
 
         title_label = QLabel(section)
-        title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         title_label.setProperty("reviewSummarySectionTitle", "true")
-        section_layout.addWidget(title_label)
+        header = QHBoxLayout()
+        header.addWidget(title_label, 1)
+        fixation_edit_button = QPushButton("Fixation", section)
+        fixation_edit_button.setAccessibleName("Edit Fixation")
+        mark_secondary_action(fixation_edit_button)
+        fixation_edit_button.clicked.connect(
+            lambda: self._go_to_step_from_progress(self._step_index_for_key("fixation"))
+        )
+        header.addWidget(fixation_edit_button)
+        edit_button = QPushButton("Edit", section)
+        mark_secondary_action(edit_button)
+        edit_button.clicked.connect(
+            lambda: self._go_to_step_from_progress(
+                self._step_index_for_key(str(edit_button.property("reviewStepKey")))
+            )
+        )
+        header.addWidget(edit_button)
+        section_layout.addLayout(header)
 
         body = QWidget(section)
         body_layout = QVBoxLayout(body)
         body_layout.setContentsMargins(0, 0, 0, 0)
         body_layout.setSpacing(3)
-        body_layout.addStretch(1)
         body_layout.addStretch(1)
         section_layout.addWidget(body, 1)
         return _ReviewSummaryWidgets(
@@ -1039,6 +1023,8 @@ class SetupWizardPage(QWidget):
             body=body,
             body_layout=body_layout,
             rows=[],
+            edit_button=edit_button,
+            fixation_edit_button=fixation_edit_button,
         )
 
     def _review_checklist_row(self, *, parent: QWidget) -> tuple[QFrame, QLabel]:
@@ -1048,63 +1034,93 @@ class SetupWizardPage(QWidget):
         row_layout.setContentsMargins(0, 1, 0, 1)
         row_layout.setSpacing(6)
 
-        check_icon = QLabel("\u2713", row)
-        check_icon.setProperty("reviewCheckIcon", "true")
-        check_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        row_layout.addWidget(check_icon, 0, Qt.AlignmentFlag.AlignVCenter)
-
         label = QLabel(row)
         label.setWordWrap(True)
-        label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         label.setProperty("reviewChecklistLine", "true")
         row_layout.addWidget(label, 1, Qt.AlignmentFlag.AlignVCenter)
         return row, label
 
-    def _review_checklist_sections(self) -> tuple[tuple[str, tuple[str, ...]], ...]:
+    def _review_checklist_sections(self) -> tuple[tuple[str, str, tuple[str, ...]], ...]:
         project = self._document.project
         conditions = self._document.ordered_conditions()
         session = project.settings.session
         display = project.settings.display
-
-        condition_count_line = (
-            f"{len(conditions)} condition{'s' if len(conditions) != 1 else ''} configured"
-        )
-        condition_lines: tuple[str, ...] = (condition_count_line,)
-        if conditions:
-            timing_labels = tuple(
-                sorted(
-                    {_timing_template_label(condition.duty_cycle_mode) for condition in conditions}
-                )
-            )
-            timing_line = (
-                f"Timing: {timing_labels[0]}"
-                if len(timing_labels) == 1
-                else f"Timing: Mixed ({', '.join(timing_labels)})"
-            )
-            condition_lines = (condition_count_line, timing_line)
-
-        block_count = session.block_count
         protocol = project.settings.protocol
-        background_label = self._display_background_label(str(display.background_color))
-        repeat_word = "time" if block_count == 1 else "times"
-        experiment_lines = (
-            f"Each condition will repeat {block_count} {repeat_word} in randomized block order",
-            "Condition order is randomized automatically at launch",
-            f"Monitor: {self.runtime_settings_editor.current_refresh_hz():.2f} Hz, "
-            f"{background_label}",
-            f"FPVS timing: {protocol.base_hz:g} Hz base, oddball every "
-            f"{protocol.oddball_every_n} stimuli ({protocol.oddball_hz:g} Hz)",
-            "Presentation: "
-            f"{presentation_defaults_summary(project.settings.presentation.defaults)} at "
-            f"{display.viewing_distance_cm:.0f} cm on "
-            f"{display.screen_width_px} x {display.screen_height_px}",
-            *self._review_timing_estimate_lines(),
+        fixation = project.settings.fixation_task
+        refresh_hz = self.runtime_settings_editor.current_refresh_hz()
+        default_lead_in = project.settings.presentation.pre_stream_fixation_seconds
+        modes = sorted({_timing_template_label(item.duty_cycle_mode) for item in conditions})
+        mode_summary = modes[0] if len(modes) == 1 else f"Mixed presentation ({len(modes)} modes)"
+        pre_count = sum(len(item.pre_task_bindings) for item in conditions)
+        post_count = sum(len(item.post_task_bindings) for item in conditions)
+        verified = (
+            "Verified on this display"
+            if self.runtime_settings_editor.refresh_is_verified()
+            else "Display verification required"
+        )
+        response = (
+            f"Response: {fixation.response_key.upper()} "
+            f"within {fixation.response_window_seconds:g} s"
+            if fixation.accuracy_task_enabled
+            else "Response scoring: Off"
+        )
+        tutorial = (
+            "Off (accuracy tracking is off)"
+            if not fixation.accuracy_task_enabled and fixation.participant_tutorial_enabled
+            else "On"
+            if fixation.participant_tutorial_enabled
+            else "Off"
         )
         return (
-            ("Project Details", (f"Project details complete: {project.meta.name}",)),
-            ("Conditions", tuple(condition_lines)),
-            ("Experiment Settings", experiment_lines),
-            ("Fixation Cross", (self._fixation_review_line(),)),
+            ("project", "Project", (project.meta.name, f"Participant tutorial: {tutorial}")),
+            (
+                "conditions",
+                "Conditions",
+                (
+                    f"{len(conditions)} conditions · {mode_summary}"
+                    if conditions
+                    else "No conditions",
+                    f"Task flow: {pre_count} pre-condition, {post_count} post-condition bindings",
+                ),
+            ),
+            (
+                "experiment",
+                "Timing",
+                (
+                    f"Monitor: {refresh_hz:g} Hz · {verified}",
+                    f"{protocol.base_hz:g} Hz base · oddball every {protocol.oddball_every_n} "
+                    f"({protocol.oddball_hz:g} Hz)",
+                    self._display_background_label(str(display.background_color)),
+                ),
+            ),
+            (
+                "image_size",
+                "Image Size",
+                (
+                    presentation_defaults_summary(project.settings.presentation.defaults),
+                    f"Viewing distance: {display.viewing_distance_cm:g} cm · "
+                    f"{display.screen_width_px} × {display.screen_height_px} px",
+                ),
+            ),
+            (
+                "session",
+                "Session",
+                (
+                    f"{session.block_count} repeats per condition · randomized order",
+                    *self._review_timing_estimate_lines(),
+                ),
+            ),
+            (
+                "response",
+                "Fixation and Response",
+                (
+                    f"Color changes: {'On' if fixation.enabled else 'Off'} · "
+                    f"default lead-in {default_lead_in:g} s",
+                    f"Accuracy tracking: {'On' if fixation.accuracy_task_enabled else 'Off'}",
+                    response,
+                ),
+            ),
         )
 
     def _review_timing_estimate_lines(self) -> tuple[str, ...]:
@@ -1139,10 +1155,6 @@ class SetupWizardPage(QWidget):
             "#808080": "Neutral gray background",
         }.get(background_color, background_color)
 
-    def _fixation_review_line(self) -> str:
-        lead_in = self._document.project.settings.presentation.pre_stream_fixation_seconds
-        return f"Fixation cross configured; {lead_in:g} s pre-stream gaze lead-in"
-
     def _step_status_text(self, index: int) -> str:
         step_key = _WIZARD_STEPS[index][0]
         if step_key == "project" and not self._project_details_ready():
@@ -1157,7 +1169,7 @@ class SetupWizardPage(QWidget):
                 return "Name every condition"
             if not self._conditions_have_required_trigger_codes(ordered_conditions):
                 return "Set trigger codes"
-            return "Assign base and oddball folders"
+            return self._condition_setup_blocker()
         if step_key == "review":
             return "Review blockers"
         return self._current_step_blocker() if index == self._active_step_index else "Needs setup"
@@ -1174,7 +1186,7 @@ class SetupWizardPage(QWidget):
             return self._conditions_images_ready(ordered_conditions)
         if step_key == "experiment":
             return self.runtime_settings_editor.timing_is_compatible()
-        if step_key == "fixation":
+        if step_key in {"image_size", "session", "fixation"}:
             return True
         if step_key == "response":
             return True
@@ -1187,14 +1199,7 @@ class SetupWizardPage(QWidget):
         if step_key == "project":
             return self._project_details_blocker()
         if step_key == "conditions":
-            ordered_conditions = self._document.ordered_conditions()
-            if not ordered_conditions:
-                return "Add at least one condition"
-            if not self._conditions_have_required_names(ordered_conditions):
-                return "Enter descriptive condition names"
-            if not self._conditions_have_required_trigger_codes(ordered_conditions):
-                return "Set trigger codes above 0"
-            return "Assign base and oddball folders"
+            return self._condition_setup_blocker()
         if step_key == "experiment":
             return self.runtime_settings_editor.timing_blocker()
         if step_key == "review":
@@ -1203,6 +1208,40 @@ class SetupWizardPage(QWidget):
 
     def _next_step_hint_text(self) -> str:
         return f"To continue: {self._current_step_blocker()}"
+
+    def _condition_setup_blocker(self) -> str:
+        conditions = self._document.ordered_conditions()
+        if not conditions:
+            return "Add at least one condition"
+        sets = {item.set_id: item for item in self._document.project.stimulus_sets}
+        for index, condition in enumerate(conditions, start=1):
+            if not is_guided_condition_name(condition.name):
+                return f"Enter a descriptive name for condition {index}"
+            if not is_guided_trigger_code(condition.trigger_code):
+                return f"Set a trigger code above 0 for {condition.name}"
+            for role, set_id in (
+                ("base", condition.base_stimulus_set_id),
+                ("oddball", condition.oddball_stimulus_set_id),
+            ):
+                stimulus_set = sets.get(set_id)
+                if stimulus_set is not None and stimulus_set.modality == StimulusModality.WORD:
+                    if not stimulus_set.word_count:
+                        return f"Add {role} words to {condition.name}"
+                elif stimulus_set is None or not stimulus_set.image_count:
+                    return f"Choose {role} images for {condition.name}"
+        return "Check condition stimuli"
+
+    def _focus_step_blocker(self) -> None:
+        if self._current_step_key() == "conditions":
+            self.condition_setup_step.focus_setup_blocker()
+        elif self._current_step_key() == "project":
+            editor = self.project_overview_editor
+            target = (
+                editor.project_name_edit
+                if not self._document.project.meta.name.strip()
+                else editor.project_description_edit
+            )
+            target.setFocus(Qt.FocusReason.OtherFocusReason)
 
     def _project_details_ready(self) -> bool:
         project = self._document.project
@@ -1255,7 +1294,8 @@ class SetupWizardPage(QWidget):
         aliases = {
             "display": "experiment",
             "runtime": "experiment",
-            "session": "experiment",
+            "timing": "experiment",
+            "geometry": "image_size",
             "images": "conditions",
             "stimuli": "conditions",
             "assets": "conditions",
