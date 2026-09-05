@@ -1,6 +1,7 @@
 param(
     [switch]$SkipInstall,
-    [string]$InnoCompiler
+    [string]$InnoCompiler,
+    [string]$BuildLabel
 )
 
 $ErrorActionPreference = "Stop"
@@ -8,19 +9,6 @@ $ErrorActionPreference = "Stop"
 $RepoRoot = Split-Path -Parent $PSScriptRoot
 $BuildExeScript = Join-Path $PSScriptRoot "build_exe.ps1"
 $BuildInstallerScript = Join-Path $PSScriptRoot "build_installer.ps1"
-
-function Invoke-RepoScript {
-    param(
-        [Parameter(Mandatory = $true)]
-        [string]$ScriptPath,
-        [string[]]$ScriptArguments = @()
-    )
-
-    & $ScriptPath @ScriptArguments
-    if ($LASTEXITCODE -ne 0) {
-        throw "Command failed with exit code ${LASTEXITCODE}: $ScriptPath $($ScriptArguments -join ' ')"
-    }
-}
 
 Push-Location $RepoRoot
 try {
@@ -33,22 +21,22 @@ try {
         )
     }
     if ($SkipInstall) {
-        & $BuildExeScript -SkipInstall
-        if ($LASTEXITCODE -ne 0) {
-            throw "Command failed with exit code ${LASTEXITCODE}: $BuildExeScript -SkipInstall"
-        }
+        & $BuildExeScript -SkipInstall -BuildLabel $BuildLabel
     }
     else {
-        Invoke-RepoScript -ScriptPath $BuildExeScript
+        & $BuildExeScript -BuildLabel $BuildLabel
+    }
+    if ($LASTEXITCODE -ne 0) {
+        throw "Command failed with exit code ${LASTEXITCODE}: $BuildExeScript"
     }
 
     Write-Output ""
     Write-Output "Building FPVS Studio installer..."
     if ($InnoCompiler) {
-        & $BuildInstallerScript -InnoCompiler $InnoCompiler
+        & $BuildInstallerScript -InnoCompiler $InnoCompiler -BuildLabel $BuildLabel
     }
     else {
-        & $BuildInstallerScript
+        & $BuildInstallerScript -BuildLabel $BuildLabel
     }
     if ($LASTEXITCODE -ne 0) {
         throw "Command failed with exit code ${LASTEXITCODE}: $BuildInstallerScript"

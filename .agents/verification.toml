@@ -135,19 +135,22 @@ manual_smoke = ["Use the intended trigger hardware for a visible/manual smoke wh
 [scopes.updates]
 checks = []
 tests = [
+  "tests/unit/test_update_cache.py",
   "tests/unit/test_update_check.py",
   "tests/unit/test_update_download.py",
 ]
 full_tests = []
-include = ["src/fpvs_studio/updates/**", "src/fpvs_studio/gui/update_dialog.py", "tests/unit/test_update_*.py"]
+include = ["src/fpvs_studio/updates/**", "src/fpvs_studio/gui/update_dialog.py", "src/fpvs_studio/gui/update_lifecycle.py", "tests/unit/test_update_*.py"]
 manual_smoke = ["Use File > Check for Updates in a visible Studio window when update presentation or installer handoff changes."]
 
 [scopes.packaging]
 checks = []
 tests = [
   "tests/unit/test_app_main.py",
+  "tests/unit/test_installer_inventory.py",
+  "tests/unit/test_legacy_installer_inventory.py",
   "tests/unit/test_package_metadata.py",
 ]
 full_tests = []
-include = ["packaging/**", "scripts/build_*.ps1", "scripts/smoke_packaged_app.ps1", "src/fpvs_studio/app/**", "src/fpvs_studio/__init__.py", "tests/unit/test_app_main.py", "tests/unit/test_package_metadata.py", "pyproject.toml"]
+include = ["packaging/**", "scripts/build_*.ps1", "scripts/build_installer_inventory.py", "scripts/refresh_legacy_installer_inventory.py", "scripts/check_installer_compile.py", "scripts/check_installer_tree.py", "scripts/smoke_packaged_app.ps1", "src/fpvs_studio/app/**", "src/fpvs_studio/__init__.py", "tests/unit/test_app_main.py", "tests/unit/test_package_metadata.py", "tests/unit/test_*installer_inventory.py", "pyproject.toml"]
 manual_smoke = ["Build and launch the packaged application when packaging inputs or startup wiring changes."]

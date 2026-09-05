@@ -38,6 +38,13 @@ backend-driven.
 - Keep runtime launch messaging honest about fullscreen display verification and
   timing-QC behavior.
 - Surface user-facing errors clearly, but keep the application recoverable.
+- Route updater work through the application-owned `update_lifecycle.py` coordinator.
+  Keep offline startup cache housekeeping independent of root-folder setup and metadata
+  checks. Dialog close/app quit must cancel or defer teardown until worker threads really
+  finish; never wait on a worker from the GUI thread or parent it to a disposable dialog.
+  Keep cache hashing, trusted-installer checks, and final launch in backend worker calls;
+  confirmation and project Save prompts stay on the GUI thread. Preserve newer-release
+  visibility when a missing trusted digest prevents in-app installation.
 - Use `fpvs_studio.gui.components` as the public component/theme surface for shared
   page shells, section cards, status/path labels, button role helpers, and reusable
   styles.

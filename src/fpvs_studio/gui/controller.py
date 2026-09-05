@@ -6,6 +6,7 @@ error surfacing, not core protocol semantics or runtime execution internals."""
 from __future__ import annotations
 
 import ctypes
+import logging
 import os
 import shutil
 import stat
@@ -13,12 +14,14 @@ import sys
 from collections.abc import Callable
 from ctypes import wintypes
 from pathlib import Path
+from threading import Event
 from types import TracebackType
 from typing import cast
 
-from PySide6.QtCore import QObject, QSettings, QThread, QTimer, Slot
+from PySide6.QtCore import QObject, QSettings, QTimer, Slot
 from PySide6.QtWidgets import QApplication, QDialog, QFileDialog, QMessageBox, QWidget
 
+from fpvs_studio import __version__
 from fpvs_studio.core.condition_template_profiles import (
     get_condition_template_profile,
     list_condition_template_profiles,
@@ -53,6 +56,7 @@ from fpvs_studio.gui.manage_projects_dialog import ManageProjectsDialog, Project
 from fpvs_studio.gui.root_folder_setup_dialog import RootFolderSetupDialog
 from fpvs_studio.gui.settings_dialog import AppSettingsDialog
 from fpvs_studio.gui.update_dialog import UpdateDialog
+from fpvs_studio.gui.update_lifecycle import UpdateJob, UpdateTaskResult, update_lifecycle
 from fpvs_studio.gui.welcome_window import WelcomeWindow
 from fpvs_studio.gui.window_helpers import (
     _coerce_exception,
@@ -60,12 +64,13 @@ from fpvs_studio.gui.window_helpers import (
 from fpvs_studio.gui.window_helpers import (
     _show_error_dialog as _show_error,
 )
-from fpvs_studio.gui.workers import BackgroundTask, GuiTaskWorker, ProgressSignalBridge
+from fpvs_studio.gui.workers import BackgroundTask, ProgressSignalBridge
 from fpvs_studio.runtime.export_modes import (
     EXPORT_MODE_COMPACT,
     EXPORT_MODE_FULL,
     VALID_EXPORT_MODES,
 )
+from fpvs_studio.updates.downloader import cleanup_update_cache
 from fpvs_studio.updates.github_releases import check_for_updates
 from fpvs_studio.updates.models import UpdateCheckResult
 
@@ -79,6 +84,7 @@ _SOPHIA_MODE_TICKER_KEY = "launch/show_sophia_mode_ticker"
 _EXPERIMENT_TEST_MODE_KEY = "launch/experiment_test_mode"
 _LEGACY_LINUX_DEVELOPMENT_TEST_MODE_KEY = "launch/linux_development_test_mode"
 _MAX_RECENT_PROJECTS = 8
+_LOGGER = logging.getLogger(__name__)
 
 
 def _condition_template_library_signature(root_dir: Path) -> tuple[int, int, int] | None:
@@ -113,10 +119,15 @@ class StudioController(QObject):
         self._fpvs_root_dir: Path | None = None
         self._projects_parent_dir = Path.cwd()
         self.startup_update_checks_enabled = True
+        self._update_lifecycle = update_lifecycle(app)
+        self._startup_cache_cleanup_started = False
+        self._startup_cache_job: UpdateJob | None = None
+        self._startup_cache_cleanup_callback = cleanup_update_cache
         self._startup_update_check_started = False
-        self._startup_update_thread: QThread | None = None
-        self._startup_update_worker: GuiTaskWorker | None = None
-        self._startup_update_check_callback: Callable[[], UpdateCheckResult] = check_for_updates
+        self._startup_update_job: UpdateJob | None = None
+        self._startup_update_check_callback: Callable[[Event], UpdateCheckResult] = (
+            lambda cancel: check_for_updates(cancel_event=cancel)
+        )
         self._active_import_bundle_task: BackgroundTask | None = None
         self._import_bundle_progress_bridge: ProgressSignalBridge | None = None
         self._import_bundle_processing_window: StudioMainWindow | None = None
@@ -163,27 +174,54 @@ class StudioController(QObject):
         QTimer.singleShot(0, self._start_startup_update_check)
 
     def _start_startup_update_check(self) -> None:
-        if self._startup_update_thread is not None:
+        if self._startup_update_job is not None or self._update_lifecycle.is_shutting_down:
             return
-        worker = GuiTaskWorker(self._startup_update_check_callback)
-        thread = QThread(self._app)
-        worker.moveToThread(thread)
-        thread.started.connect(worker.run)
-        worker.succeeded.connect(self._handle_startup_update_check_result)
-        worker.failed.connect(lambda _error: None)
-        worker.finished.connect(thread.quit)
-        worker.finished.connect(worker.deleteLater)
-        thread.finished.connect(thread.deleteLater)
-        thread.finished.connect(self._handle_startup_update_thread_finished)
-        self._startup_update_worker = worker
-        self._startup_update_thread = thread
-        thread.start()
+        check_callback = self._startup_update_check_callback
+        job = self._update_lifecycle.start_task(lambda _progress, cancel: check_callback(cancel))
+        job.finished.connect(self._handle_startup_update_check_finished)
+        self.destroyed.connect(job.cancel)
+        self._startup_update_job = job
+
+    def start_update_cache_housekeeping(self) -> None:
+        """Schedule offline, app-cache-only startup work before root-folder onboarding."""
+
+        if self._startup_cache_cleanup_started or self._update_lifecycle.is_shutting_down:
+            return
+        self._startup_cache_cleanup_started = True
+        cleanup_callback = self._startup_cache_cleanup_callback
+        job = self._update_lifecycle.start_task(
+            lambda _progress, cancel: cleanup_callback(__version__, cancel_event=cancel)
+        )
+        job.finished.connect(self._handle_startup_cache_finished)
+        self.destroyed.connect(job.cancel)
+        self._startup_cache_job = job
+
+    @Slot(object)
+    def _handle_startup_cache_finished(self, outcome: object) -> None:
+        self._startup_cache_job = None
+        if isinstance(outcome, UpdateTaskResult) and outcome.error is not None:
+            if not outcome.cancelled:
+                _LOGGER.warning(
+                    "Startup update-cache housekeeping could not complete",
+                    extra={"error": str(outcome.error)},
+                )
+
+    @Slot(object)
+    def _handle_startup_update_check_finished(self, outcome: object) -> None:
+        self._startup_update_job = None
+        if not isinstance(outcome, UpdateTaskResult) or outcome.cancelled:
+            return
+        if outcome.error is not None:
+            _LOGGER.info("Silent startup update check failed", extra={"error": str(outcome.error)})
+            return
+        if not self._update_lifecycle.is_shutting_down:
+            self._handle_startup_update_check_result(outcome.value)
 
     @Slot(object)
     def _handle_startup_update_check_result(self, result: object) -> None:
         if not isinstance(result, UpdateCheckResult):
             return
-        if not result.update_available or result.installer_asset is None:
+        if not result.update_available or self._update_lifecycle.is_shutting_down:
             return
         parent = self.main_window or self.welcome_window
         dialog = UpdateDialog(
@@ -191,13 +229,9 @@ class StudioController(QObject):
             auto_check=False,
             initial_result=result,
             on_before_install=self._maybe_save_current_project,
+            lifecycle=self._update_lifecycle,
         )
         dialog.exec()
-
-    @Slot()
-    def _handle_startup_update_thread_finished(self) -> None:
-        self._startup_update_thread = None
-        self._startup_update_worker = None
 
     def _maybe_save_current_project(self) -> bool:
         if self.main_window is None:

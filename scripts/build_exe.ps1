@@ -1,29 +1,15 @@
 param(
-    [switch]$SkipInstall
+    [switch]$SkipInstall,
+    [string]$BuildLabel
 )
 
 $ErrorActionPreference = "Stop"
 
 $RepoRoot = Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot "script_helpers.ps1")
+. (Join-Path $PSScriptRoot "build_paths.ps1")
+$BuildPaths = Get-PackagingBuildPaths -RepoRoot $RepoRoot -BuildLabel $BuildLabel
 $Python = Resolve-RepoPython -RepoRoot $RepoRoot
-
-function Remove-RepoOutput {
-    param([string]$RelativePath)
-
-    $target = Join-Path $RepoRoot $RelativePath
-    if (-not (Test-Path -LiteralPath $target)) {
-        return
-    }
-
-    $resolvedRepo = (Resolve-Path -LiteralPath $RepoRoot).Path
-    $resolvedTarget = (Resolve-Path -LiteralPath $target).Path
-    if (-not $resolvedTarget.StartsWith($resolvedRepo, [System.StringComparison]::OrdinalIgnoreCase)) {
-        throw "Refusing to remove path outside repo: $resolvedTarget"
-    }
-
-    Remove-Item -LiteralPath $resolvedTarget -Recurse -Force
-}
 
 function Get-AppVersion {
     $pyprojectPath = Join-Path $RepoRoot "pyproject.toml"
@@ -66,7 +52,7 @@ function Assert-BundledPackageMetadataVersion {
         [string]$ExpectedVersion
     )
 
-    $bundleRoot = Join-Path $RepoRoot "dist\FPVS Studio"
+    $bundleRoot = $BuildPaths.BundleRoot
     $metadataDirs = @(
         Get-ChildItem -Path $bundleRoot -Recurse -Directory -Filter "fpvs_studio-*.dist-info"
     )
@@ -103,8 +89,8 @@ try {
     $appVersion = Get-AppVersion
     Assert-PackageMetadataVersion -ExpectedVersion $appVersion
 
-    Remove-RepoOutput "build\pyinstaller"
-    Remove-RepoOutput "dist\FPVS Studio"
+    Remove-PackagingOutput -RepoRoot $RepoRoot -TargetPath $BuildPaths.WorkRoot
+    Remove-PackagingOutput -RepoRoot $RepoRoot -TargetPath $BuildPaths.BundleRoot
 
     Invoke-NativeChecked -File $Python -Arguments @(
         "-m",
@@ -112,13 +98,13 @@ try {
         "--noconfirm",
         "--clean",
         "--workpath",
-        "build\pyinstaller",
+        $BuildPaths.WorkRoot,
         "--distpath",
-        "dist",
+        $BuildPaths.DistRoot,
         "packaging\pyinstaller\fpvs_studio.spec"
     )
 
-    $exePath = Join-Path $RepoRoot "dist\FPVS Studio\FPVS Studio.exe"
+    $exePath = Join-Path $BuildPaths.BundleRoot "FPVS Studio.exe"
     if (-not (Test-Path -LiteralPath $exePath)) {
         throw "Expected packaged executable was not created: $exePath"
     }

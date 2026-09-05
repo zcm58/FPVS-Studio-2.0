@@ -37,8 +37,14 @@ def collect_packaged_smoke_report() -> dict[str, Any]:
         release_notes_summary="Packaging smoke test.",
         installer_asset=InstallerAsset(
             name="FPVS-Studio-Setup-999.0.0.exe",
-            download_url="https://github.com/downloads/FPVS-Studio-Setup-999.0.0.exe",
+            download_url=(
+                "https://github.com/zcm58/FPVS-Studio-2.0/releases/download/"
+                "v999.0.0/FPVS-Studio-Setup-999.0.0.exe"
+            ),
             size_bytes=1,
+            sha256="a" * 64,
+            version="999.0.0",
+            asset_id=1,
         ),
         is_prerelease=True,
     )

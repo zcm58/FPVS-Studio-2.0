@@ -1,33 +1,25 @@
 param(
     [string]$InnoCompiler,
-    [switch]$SkipSmoke
+    [switch]$SkipSmoke,
+    [string]$BuildLabel
 )
 
 $ErrorActionPreference = "Stop"
 
 $RepoRoot = Split-Path -Parent $PSScriptRoot
+. (Join-Path $PSScriptRoot "script_helpers.ps1")
+. (Join-Path $PSScriptRoot "build_paths.ps1")
+$BuildPaths = Get-PackagingBuildPaths -RepoRoot $RepoRoot -BuildLabel $BuildLabel
+$Python = Resolve-RepoPython -RepoRoot $RepoRoot
 $SpecPath = Join-Path $RepoRoot "packaging\inno\fpvs_studio.iss"
-$BundleExePath = Join-Path $RepoRoot "dist\FPVS Studio\FPVS Studio.exe"
-$BundleInternalPath = Join-Path $RepoRoot "dist\FPVS Studio\_internal"
-$InstallerOutputDir = Join-Path $RepoRoot "dist\installer"
+$BundleRoot = $BuildPaths.BundleRoot
+$BundleExePath = Join-Path $BundleRoot "FPVS Studio.exe"
+$BundleInternalPath = Join-Path $BundleRoot "_internal"
+$InstallerOutputDir = $BuildPaths.InstallerRoot
 $SmokePackagedAppScript = Join-Path $PSScriptRoot "smoke_packaged_app.ps1"
-
-function Remove-RepoOutput {
-    param([string]$RelativePath)
-
-    $target = Join-Path $RepoRoot $RelativePath
-    if (-not (Test-Path -LiteralPath $target)) {
-        return
-    }
-
-    $resolvedRepo = (Resolve-Path -LiteralPath $RepoRoot).Path
-    $resolvedTarget = (Resolve-Path -LiteralPath $target).Path
-    if (-not $resolvedTarget.StartsWith($resolvedRepo, [System.StringComparison]::OrdinalIgnoreCase)) {
-        throw "Refusing to remove path outside repo: $resolvedTarget"
-    }
-
-    Remove-Item -LiteralPath $resolvedTarget -Recurse -Force
-}
+$InventoryScript = Join-Path $PSScriptRoot "build_installer_inventory.py"
+$LegacyInventoryPath = Join-Path $RepoRoot "packaging\inventory\published-legacy-inventory.json"
+$InventoryOutputDir = $BuildPaths.InventoryRoot
 
 function Invoke-Native {
     param(
@@ -54,7 +46,7 @@ function Get-AppVersion {
 
 function Assert-BundleInput {
     if (-not (Test-Path -LiteralPath $BundleExePath)) {
-        throw "Expected PyInstaller bundle was not found. Run .\scripts\build_exe.ps1 first."
+        throw "Expected PyInstaller bundle was not found: $BundleExePath. Run .\scripts\build_exe.ps1 with the same BuildLabel first."
     }
     if (-not (Test-Path -LiteralPath $BundleInternalPath)) {
         throw "Expected PyInstaller bundle internals were not found: $BundleInternalPath"
@@ -113,6 +105,21 @@ function Resolve-InnoCompiler {
         }
     }
 
+    $registryPaths = @(
+        "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\Inno Setup 6_is1",
+        "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Inno Setup 6_is1",
+        "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\Inno Setup 6_is1"
+    )
+    foreach ($registryPath in $registryPaths) {
+        $registration = Get-ItemProperty -LiteralPath $registryPath -ErrorAction SilentlyContinue
+        if ($registration -and $registration.InstallLocation) {
+            $candidatePath = Join-Path $registration.InstallLocation "ISCC.exe"
+            if (Test-Path -LiteralPath $candidatePath) {
+                return (Resolve-Path -LiteralPath $candidatePath).Path
+            }
+        }
+    }
+
     throw (
         "Inno Setup compiler was not found. Install Inno Setup 6, add ISCC.exe to PATH, " +
         "set ISCC_EXE, or pass -InnoCompiler with the full ISCC.exe path."
@@ -131,12 +138,21 @@ try {
     }
 
     $appVersion = Get-AppVersion
+    Invoke-Native -File $Python -Arguments @(
+        $InventoryScript,
+        "--bundle-root", $BundleRoot,
+        "--app-version", $appVersion,
+        "--legacy-inventory", $LegacyInventoryPath,
+        "--output-dir", $InventoryOutputDir
+    )
     $isccPath = Resolve-InnoCompiler -ConfiguredPath $InnoCompiler
-    Remove-RepoOutput "dist\installer"
+    Remove-PackagingOutput -RepoRoot $RepoRoot -TargetPath $InstallerOutputDir
     New-Item -ItemType Directory -Force -Path $InstallerOutputDir | Out-Null
 
     Invoke-Native -File $isccPath -Arguments @(
         "/DAppVersion=$appVersion",
+        "/DBundleRoot=$BundleRoot",
+        "/DOwnedInventoryRoot=$InventoryOutputDir",
         "/O$InstallerOutputDir",
         "/FFPVS-Studio-Setup-$appVersion",
         $SpecPath
