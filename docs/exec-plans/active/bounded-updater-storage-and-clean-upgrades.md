@@ -2,6 +2,16 @@
 
 Status: Active
 
+## Merge Decision (2026-09-05)
+
+- The user authorized merging the updater branch into `master`, superseding the
+  earlier feature-branch hold below. The local merge is complete; pushing is deferred.
+- Fresh updater focused verification passed (166 tests, four Windows symlink skips),
+  and repo precommit passed (923 tests, five Windows symlink skips), including mypy
+  and repository/documentation audits.
+- Keep this plan active for the unperformed installer lifecycle acceptance checks.
+  Merge authorization does not mark those checks as passed.
+
 ## Approved Decisions (2026-08-30)
 
 - Work on `codex/bounded-updater-storage-clean-upgrades`.
