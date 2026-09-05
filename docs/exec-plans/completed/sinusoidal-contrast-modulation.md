@@ -2,6 +2,15 @@
 
 Status: Completed
 
+## Manual Acceptance (2026-09-05)
+
+- The user confirmed that contrast modulation works as intended and authorized
+  merging into `master` and preparing the 1.4.0 feature release.
+- The combined updater/contrast branch passed 962 unit tests (five Windows symlink
+  permission skips), 170 focused engine tests, mypy, and repository audits before
+  manual acceptance. Packaged-release smoke testing is separate from this source
+  playback acceptance.
+
 ## Approved Decisions (2026-09-04)
 
 - Implement this as the third presentation mode alongside `Continuous Images` and
