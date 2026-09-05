@@ -235,8 +235,9 @@ The authoring window is organized around two user-facing modes:
   - Response exposes accuracy tracking, response key/window, appearance, and a live
     preview on the current display background; accuracy tracking is enabled by default
     for new projects and by the one-time migration of older projects
-  - Review is a card-only decision point: users can `Save and Return Home` or
-    `Return Home Without Saving`; returning without saving always asks for confirmation
+  - Review presents its summaries in a card, with `Save and Return Home` and
+    `Return Home Without Saving` in the bottom navigation alongside Back;
+    returning without saving always asks for confirmation
 - `View > Fixation Task Accuracy...`
   - opens a compact view of the active project's pooled fixation-task results
   - loads `logs/session_condition_history.csv` in the background through the runtime
@@ -662,7 +663,10 @@ Native dropdown/spinner affordances and system file pickers remain available.
 
 Review uses factual summaries for project, conditions/task bindings, Timing, Image Size,
 Session, and Fixation/Response, with effective tutorial status in Project. Edit actions
-follow ready-project step-jump permissions. Saving returns Home with the existing nonmodal status-bar confirmation;
+follow ready-project step-jump permissions. Review's completion actions use the shared
+bottom navigation outside the summary frame: Return Home Without Saving on the left,
+Back and Save and Return Home on the right. Other steps retain Return Home, Back, and
+Next in that row. Saving returns Home with the existing nonmodal status-bar confirmation;
 returning without saving explains that edits remain in memory until the project closes.
 Fixation displays the effective smallest count limit, identifies the limiting condition,
 and explains count adjustments caused by changed durations; full per-condition limits

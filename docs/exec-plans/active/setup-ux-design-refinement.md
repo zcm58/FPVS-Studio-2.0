@@ -354,6 +354,28 @@ Compare before/after; no percentage improvement is claimed without those observa
 
 ## Verification And Pending Acceptance
 
+### User Screenshot Follow-Up
+
+The user's visible review identified overlapping Conditions status labels and clipped
+participant instructions. Compatibility labels that are not part of a layout must
+remain hidden; the condition form must reserve enough height for its instructions.
+Trigger Code and Stimulus Type now share a row, ordinary presentation-mode guidance
+is omitted, and the image/word source rows share a compact height. The Neutral Gray
+requirement remains visible for contrast modulation, and instructions retain an
+80-pixel editor with the complete text available through its normal scrolling.
+The user also requested Review's completion actions in the shared bottom navigation,
+outside the summary frame, and authorized committing and pushing the branch after the
+fix. Return Home Without Saving replaces the left Return Home action on Review;
+Back and Save and Return Home occupy the right side. Existing save/confirmation
+callbacks and first-time navigation gates remain intact.
+
+Registered coverage checks Conditions label visibility, wrapped text height and
+instruction bounds with multiple conditions, plus Review footer placement and switching
+between Review and Response at the compact/default sizes. Visible acceptance should
+repeat the supplied Conditions case and check Review's footer in both themes.
+
+### Check Results
+
 - GUI focused lint and changed-file compilation pass. No Qt tests or app windows have
   been launched by the agent; manual fit is not established by source inspection.
 - Final repo precommit passed: Ruff/compilation, mypy (137 source files), repository

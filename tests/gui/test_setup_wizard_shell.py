@@ -252,18 +252,21 @@ def test_setup_wizard_compact_steps_do_not_clip_visible_content(
                 wizard.progress_panel_shell.rect().topLeft(),
             ).y()
         )
-        back_button_lefts.append(
-            wizard.setup_wizard_back_button.mapTo(
-                wizard,
-                wizard.setup_wizard_back_button.rect().topLeft(),
-            ).x()
-        )
+        if step_key != "review":
+            back_button_lefts.append(
+                wizard.setup_wizard_back_button.mapTo(
+                    wizard,
+                    wizard.setup_wizard_back_button.rect().topLeft(),
+                ).x()
+            )
         assert wizard.step_stack.currentWidget().height() <= wizard.content_stack.height()
 
         for button in (
             wizard.setup_wizard_back_button,
             wizard.setup_wizard_next_button,
             wizard.setup_wizard_return_home_button,
+            wizard.review_save_button,
+            wizard.review_return_home_button,
         ):
             if button.isVisible():
                 bottom = button.mapTo(wizard, button.rect().bottomLeft()).y()

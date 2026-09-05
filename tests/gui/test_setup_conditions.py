@@ -700,8 +700,6 @@ def test_setup_wizard_conditions_step_keeps_source_geometry_for_incomplete_condi
     standard_field_width = step.timing_template_combo.width()
     for field in (
         step.condition_name_edit,
-        step.trigger_code_spin,
-        step.modality_combo,
         step.instructions_edit,
     ):
         assert field.width() == standard_field_width
@@ -931,6 +929,125 @@ def test_condition_blocker_focus_selects_missing_word_role_without_opening_dialo
     assert step.selected_condition_id() == condition_id
     assert step.oddball_words_edit.hasFocus()
     assert "words" in step.condition_list_hint.text()
+
+
+@pytest.mark.parametrize("window_size", [(1092, 738), (1120, 720)])
+@pytest.mark.parametrize(
+    ("modality", "mode"),
+    [
+        (StimulusModality.IMAGE, DutyCycleMode.CONTINUOUS),
+        (StimulusModality.IMAGE, DutyCycleMode.SINUSOIDAL),
+        (StimulusModality.WORD, DutyCycleMode.CONTINUOUS),
+    ],
+)
+def test_conditions_six_condition_layout_keeps_hint_and_instructions_clear(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+    monkeypatch,
+    window_size: tuple[int, int],
+    modality: StimulusModality,
+    mode: DutyCycleMode,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Conditions Clipping")
+    guide = window.setup_wizard_page
+    step = guide.condition_setup_step
+    monkeypatch.setattr(guide, "_ensure_condition_image_prescan_started", lambda: None)
+    window.document.update_project_description("Compare six semantic stimulus categories.")
+    base_dir = _write_image_directory(tmp_path / "base-sources", count=10, size=(512, 512))
+    oddball_dir = _write_image_directory(tmp_path / "oddball-sources", count=5, size=(512, 512))
+    condition_ids = []
+    instructions = (
+        "Watch the fixation cross and press Space when it changes from blue to red.\n\n"
+        "Please remain as still as possible throughout the experiment. "
+        "Wait for the researcher before continuing to the next session."
+    )
+    for name in (
+        "Positive valence",
+        "Negative valence",
+        "Erotic valence",
+        "Neutral happy",
+        "Neutral sad",
+        "Familiar animal words and unfamiliar semantic exemplars",
+    ):
+        condition_id = window.document.create_condition(name=name)
+        condition_ids.append(condition_id)
+        window.document.update_condition(condition_id, instructions=instructions)
+        if modality == StimulusModality.WORD:
+            window.document.set_condition_stimulus_modality(condition_id, modality=modality)
+            window.document.update_condition_words(
+                condition_id, role="base", words=["familiar animal", "domestic cat", "small dog"]
+            )
+            window.document.update_condition_words(
+                condition_id, role="oddball", words=["hammer", "table"]
+            )
+        else:
+            window.document.import_condition_stimulus_folder(
+                condition_id, role="base", source_dir=base_dir
+            )
+            window.document.import_condition_stimulus_folder(
+                condition_id, role="oddball", source_dir=oddball_dir
+            )
+            window.document.update_condition_timing_template(condition_id, mode)
+
+    window.document.update_condition(condition_ids[0], trigger_code=255)
+    window.show_setup_wizard(step_key="conditions")
+    window.resize(*window_size)
+    window.show()
+    for selected_id in (condition_ids[0], condition_ids[-1]):
+        step._select_condition(selected_id)
+        guide.refresh()
+        QApplication.processEvents()
+        assert (window.width(), window.height()) == window_size
+        assert step.condition_list.count() == 6
+        assert step.instructions_edit.toPlainText() == instructions
+        assert step.instructions_edit.height() == 80
+        assert step.condition_list_hint.text().startswith("Review this condition")
+        assert step.words_panel.isVisible() == (modality == StimulusModality.WORD)
+        trigger_edit = step.trigger_code_spin.lineEdit()
+        assert trigger_edit is not None
+        assert trigger_edit.width() >= trigger_edit.fontMetrics().horizontalAdvance(
+            trigger_edit.text()
+        )
+        if selected_id == condition_ids[0]:
+            assert step.trigger_code_spin.value() == 255
+        for state_label in (
+            step.name_check_status,
+            step.trigger_check_status,
+            step.base_check_status,
+            step.oddball_check_status,
+            step.base_count_value,
+            step.base_resolution_value,
+            step.oddball_count_value,
+            step.oddball_resolution_value,
+        ):
+            assert not state_label.isVisible(), state_label.objectName()
+        _assert_visible_children_within_parent(step)
+        labels = [label for label in step.findChildren(QLabel) if label.isVisible()]
+        for index, label in enumerate(labels):
+            if label.wordWrap():
+                assert label.heightForWidth(label.width()) <= label.height(), label.objectName()
+            else:
+                assert label.height() >= label.fontMetrics().height(), label.objectName()
+                assert label.width() >= label.fontMetrics().horizontalAdvance(label.text()), (
+                    label.objectName()
+                )
+            label_rect = label.rect().translated(label.mapTo(step, label.rect().topLeft()))
+            for other in labels[index + 1:]:
+                other_rect = other.rect().translated(other.mapTo(step, other.rect().topLeft()))
+                assert not label_rect.intersects(other_rect), (
+                    label.objectName(), other.objectName()
+                )
+        hint_bottom = step.condition_list_hint.mapTo(
+            step, step.condition_list_hint.rect().bottomLeft()
+        ).y()
+        list_top = step.condition_list.mapTo(step, step.condition_list.rect().topLeft()).y()
+        assert hint_bottom < list_top
+        instructions_bottom = step.instructions_edit.mapTo(
+            step.condition_details_section, step.instructions_edit.rect().bottomLeft()
+        ).y()
+        assert instructions_bottom <= step.condition_details_section.height() - 4
+        assert not guide.shell.page_container.scroll_area.verticalScrollBar().isEnabled()
 
 
 def test_setup_wizard_conditions_next_silently_advances_when_images_are_uniform(

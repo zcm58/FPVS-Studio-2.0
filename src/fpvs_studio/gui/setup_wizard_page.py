@@ -387,13 +387,18 @@ class SetupWizardPage(QWidget):
         self.setup_wizard_next_button = QPushButton("Next", self)
         self.setup_wizard_next_button.setObjectName("setup_wizard_next_button")
         self.setup_wizard_next_button.clicked.connect(self._go_next)
-        next_button_size_policy = self.setup_wizard_next_button.sizePolicy()
-        next_button_size_policy.setRetainSizeWhenHidden(True)
-        self.setup_wizard_next_button.setSizePolicy(next_button_size_policy)
         mark_primary_action(self.setup_wizard_next_button)
         self.setup_wizard_return_home_button = QPushButton("Return Home", self)
         self.setup_wizard_return_home_button.setObjectName("setup_wizard_return_home_button")
         self.setup_wizard_return_home_button.clicked.connect(self._return_home)
+        self.review_save_button = QPushButton("Save and Return Home", self)
+        self.review_save_button.setObjectName("setup_wizard_review_save_button")
+        self.review_save_button.clicked.connect(self._save_from_review)
+        mark_primary_action(self.review_save_button)
+        self.review_return_home_button = QPushButton("Return Home Without Saving", self)
+        self.review_return_home_button.setObjectName("setup_wizard_review_return_home_button")
+        self.review_return_home_button.clicked.connect(self._return_home)
+        mark_secondary_action(self.review_return_home_button)
         self.setup_wizard_next_hint_label = QLabel(self)
         self.setup_wizard_next_hint_label.setObjectName("setup_wizard_next_hint_label")
         self.setup_wizard_next_hint_label.setAlignment(
@@ -416,13 +421,16 @@ class SetupWizardPage(QWidget):
         next_hint_layout.addWidget(self.setup_wizard_fix_button)
 
         button_row = QWidget(self)
+        button_row.setObjectName("setup_wizard_navigation_row")
         button_layout = QHBoxLayout(button_row)
         button_layout.setContentsMargins(PAGE_MARGIN_X, 0, PAGE_MARGIN_X, 2)
         button_layout.setSpacing(PAGE_SECTION_GAP)
         button_layout.addWidget(self.setup_wizard_return_home_button)
+        button_layout.addWidget(self.review_return_home_button)
         button_layout.addWidget(self.setup_wizard_next_hint_container, 1)
         button_layout.addWidget(self.setup_wizard_back_button)
         button_layout.addWidget(self.setup_wizard_next_button)
+        button_layout.addWidget(self.review_save_button)
 
         self.shell.add_content_widget(step_card, stretch=1)
 
@@ -606,25 +614,6 @@ class SetupWizardPage(QWidget):
         self.review_checklist_layout.setVerticalSpacing(6)
         self._review_summary_widgets: list[_ReviewSummaryWidgets] = []
         self.review_card.body_layout.addWidget(self.review_checklist_container)
-
-        action_row = QHBoxLayout()
-        action_row.setContentsMargins(0, 0, 0, 0)
-        action_row.addStretch(1)
-        self.review_save_button = QPushButton("Save and Return Home", self.review_card)
-        self.review_save_button.setObjectName("setup_wizard_review_save_button")
-        self.review_save_button.clicked.connect(self._save_from_review)
-        mark_primary_action(self.review_save_button)
-        self.review_return_home_button = QPushButton(
-            "Return Home Without Saving",
-            self.review_card,
-        )
-        self.review_return_home_button.setObjectName("setup_wizard_review_return_home_button")
-        self.review_return_home_button.clicked.connect(self._return_home)
-        mark_secondary_action(self.review_return_home_button)
-        action_row.addWidget(self.review_save_button)
-        action_row.addWidget(self.review_return_home_button)
-        action_row.addStretch(1)
-        self.review_card.body_layout.addLayout(action_row)
 
         layout.addWidget(self.review_card, 0, Qt.AlignmentFlag.AlignHCenter)
         return page
@@ -876,6 +865,10 @@ class SetupWizardPage(QWidget):
         self.setup_wizard_next_button.setVisible(step_key != "review")
         self.setup_wizard_return_home_button.setEnabled(not condition_image_task_active)
         self.setup_wizard_return_home_button.setVisible(step_key != "review")
+        self.review_save_button.setVisible(step_key == "review")
+        self.review_return_home_button.setVisible(step_key == "review")
+        self.review_save_button.setEnabled(not condition_image_task_active)
+        self.review_return_home_button.setEnabled(not condition_image_task_active)
         hint_text = (
             self._active_condition_image_task_hint()
             if condition_image_task_active

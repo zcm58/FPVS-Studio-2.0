@@ -66,7 +66,7 @@ from fpvs_studio.gui.workers import ProgressTask
 
 _DEFAULT_CONDITION_NAME_RE = re.compile(r"^Condition \d+$")
 _SOURCE_CARD_MIN_WIDTH = 210
-_SOURCE_CARD_HEIGHT = 164
+_SOURCE_CARD_HEIGHT = 160
 _SOURCE_ROW_MIN_WIDTH = (_SOURCE_CARD_MIN_WIDTH * 2) + PAGE_SECTION_GAP
 _SOURCE_HEADER_HEIGHT = 30
 _SOURCE_METRICS_HEIGHT = 56
@@ -379,6 +379,15 @@ class ConditionSetupStep(QWidget):
         self.base_check_status.setObjectName("setup_wizard_condition_base_check")
         self.oddball_check_status = QLabel("Missing", self)
         self.oddball_check_status.setObjectName("setup_wizard_condition_oddball_check")
+        # These compatibility values are read by callers/tests, not laid out controls.
+        # Unmanaged visible labels would paint over the upper-left condition hint.
+        for status in (
+            self.name_check_status,
+            self.trigger_check_status,
+            self.base_check_status,
+            self.oddball_check_status,
+        ):
+            status.hide()
 
         self.condition_name_edit = QLineEdit(self)
         self.condition_name_edit.setObjectName("setup_wizard_condition_name_edit")
@@ -393,6 +402,20 @@ class ConditionSetupStep(QWidget):
         self.modality_combo.addItem("Images", StimulusModality.IMAGE.value)
         self.modality_combo.addItem("Words", StimulusModality.WORD.value)
         self.modality_combo.currentIndexChanged.connect(self._apply_modality)
+        identity_row = QWidget(self)
+        identity_row.setObjectName("setup_conditions_identity_row")
+        identity_layout = QHBoxLayout(identity_row)
+        identity_layout.setContentsMargins(0, 0, 0, 0)
+        identity_layout.setSpacing(8)
+        self.trigger_code_spin.setSizePolicy(
+            QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed
+        )
+        self.modality_label = QLabel("Stimulus Type", identity_row)
+        self.modality_label.setObjectName("setup_conditions_modality_label")
+        self.modality_label.setBuddy(self.modality_combo)
+        identity_layout.addWidget(self.trigger_code_spin)
+        identity_layout.addWidget(self.modality_label)
+        identity_layout.addWidget(self.modality_combo, 1)
         self.presentation_summary_label = QLabel(self)
         self.presentation_summary_label.setObjectName("setup_wizard_condition_presentation_summary")
         self.presentation_summary_label.setWordWrap(True)
@@ -469,8 +492,6 @@ class ConditionSetupStep(QWidget):
         _configure_detail_field_widths(
             self.timing_template_combo,
             self.condition_name_edit,
-            self.trigger_code_spin,
-            self.modality_combo,
             self.instructions_edit,
         )
         self._instructions_committer = DebouncedTextCommitter(
@@ -483,7 +504,7 @@ class ConditionSetupStep(QWidget):
         self.condition_details_section.setObjectName("setup_conditions_details_section")
         self.condition_details_section.setProperty("conditionDetailsSection", "true")
         details_section_layout = QVBoxLayout(self.condition_details_section)
-        details_section_layout.setContentsMargins(10, 5, 10, 5)
+        details_section_layout.setContentsMargins(10, 4, 10, 4)
         details_section_layout.setSpacing(4)
         self.condition_scope_label = QLabel("This condition", self.condition_details_section)
         self.condition_scope_label.setObjectName("setup_conditions_scope_label")
@@ -501,8 +522,9 @@ class ConditionSetupStep(QWidget):
         self.instructions_label = QLabel("Participant Instructions", self)
         self.instructions_label.setObjectName("setup_conditions_instructions_label")
         form.addRow("Condition Name", self.condition_name_edit)
-        form.addRow("Trigger Code", self.trigger_code_spin)
-        form.addRow("Stimulus Type", self.modality_combo)
+        trigger_label = QLabel("Trigger Code", self)
+        trigger_label.setBuddy(self.trigger_code_spin)
+        form.addRow(trigger_label, identity_row)
         form.addRow("Appearance", presentation_row)
         form.addRow("Participant Tasks", task_row)
         self.presentation_mode_label = QLabel("Presentation mode", self)
@@ -553,6 +575,8 @@ class ConditionSetupStep(QWidget):
         self.base_count_value.setObjectName("setup_wizard_base_count_value")
         self.base_resolution_value = QLabel(self)
         self.base_resolution_value.setObjectName("setup_wizard_base_resolution_value")
+        self.base_count_value.hide()
+        self.base_resolution_value.hide()
         _configure_guided_source_card(self.base_source_card)
         self.base_import_button = self.base_source_card.choose_button
         self.base_import_button.setObjectName("setup_wizard_import_base_folder_button")
@@ -578,6 +602,8 @@ class ConditionSetupStep(QWidget):
         self.oddball_count_value.setObjectName("setup_wizard_oddball_count_value")
         self.oddball_resolution_value = QLabel(self)
         self.oddball_resolution_value.setObjectName("setup_wizard_oddball_resolution_value")
+        self.oddball_count_value.hide()
+        self.oddball_resolution_value.hide()
         _configure_guided_source_card(self.oddball_source_card)
         self.oddball_import_button = self.oddball_source_card.choose_button
         self.oddball_import_button.setObjectName("setup_wizard_import_oddball_folder_button")
@@ -594,18 +620,21 @@ class ConditionSetupStep(QWidget):
 
         self.words_panel = QFrame(self)
         self.words_panel.setObjectName("setup_conditions_words_panel")
+        self.words_panel.setFixedHeight(_SOURCE_CARD_HEIGHT)
         words_layout = QHBoxLayout(self.words_panel)
         words_layout.setContentsMargins(0, 0, 0, 0)
         words_layout.setSpacing(PAGE_SECTION_GAP)
         self.base_words_edit = QTextEdit(self.words_panel)
         self.base_words_edit.setObjectName("setup_wizard_base_words_edit")
-        self.base_words_edit.setFixedHeight(124)
+        self.base_words_edit.setMinimumHeight(96)
+        self.base_words_edit.setMaximumHeight(124)
         self.base_words_edit.setPlaceholderText("One base word or short phrase per line")
         self.base_words_count = QLabel("0 words", self.words_panel)
         self.base_words_count.setObjectName("setup_wizard_base_words_count")
         self.oddball_words_edit = QTextEdit(self.words_panel)
         self.oddball_words_edit.setObjectName("setup_wizard_oddball_words_edit")
-        self.oddball_words_edit.setFixedHeight(124)
+        self.oddball_words_edit.setMinimumHeight(96)
+        self.oddball_words_edit.setMaximumHeight(124)
         self.oddball_words_edit.setPlaceholderText("One oddball word or short phrase per line")
         self.oddball_words_count = QLabel("0 words", self.words_panel)
         self.oddball_words_count.setObjectName("setup_wizard_oddball_words_count")
@@ -690,8 +719,6 @@ class ConditionSetupStep(QWidget):
         detail_fields = (
             self.timing_template_combo,
             self.condition_name_edit,
-            self.trigger_code_spin,
-            self.modality_combo,
             self.instructions_edit,
         )
         for field in detail_fields:
@@ -809,7 +836,8 @@ class ConditionSetupStep(QWidget):
             self.condition_scope_label.setText("Add your first condition")
             self.condition_scope_label.setToolTip("")
             self.condition_list_hint.setText("Add a condition, then choose images or enter words.")
-            self.presentation_mode_help.setText("Choose how each stimulus appears during a cycle.")
+            self.presentation_mode_help.setText("")
+            self.presentation_mode_help.hide()
             with QSignalBlocker(self.condition_name_edit):
                 self.condition_name_edit.clear()
                 self.condition_name_edit.setToolTip("")
@@ -863,11 +891,11 @@ class ConditionSetupStep(QWidget):
             self.condition_list_hint.setText(
                 "Choose base and oddball image folders for this condition."
             )
+        contrast_mode = condition.duty_cycle_mode == DutyCycleMode.SINUSOIDAL
         self.presentation_mode_help.setText(
-            "Requires Neutral Gray background. Set it in Timing."
-            if condition.duty_cycle_mode == DutyCycleMode.SINUSOIDAL
-            else "Choose how each stimulus appears during a cycle."
+            "Neutral Gray required; set it in Timing." if contrast_mode else ""
         )
+        self.presentation_mode_help.setVisible(contrast_mode)
         with QSignalBlocker(self.condition_name_edit):
             self.condition_name_edit.setText(condition.name)
             self.condition_name_edit.setToolTip(condition.name)

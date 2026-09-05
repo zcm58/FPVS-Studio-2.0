@@ -22,6 +22,56 @@ from tests.gui.helpers import (
 from fpvs_studio.gui.controller import StudioController
 
 
+def test_review_actions_share_bottom_navigation_and_switch_with_steps(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Review Footer")
+    guide = window.setup_wizard_page
+    window.main_stack.setCurrentWidget(guide)
+    navigation = guide.setup_wizard_back_button.parentWidget()
+    assert navigation is not None
+    for size in ((1120, 720), (1180, 760)):
+        window.resize(*size)
+        guide.open_wizard(step_key="review", allow_step_jumps=True)
+        QApplication.processEvents()
+        assert not guide.setup_wizard_next_button.isVisible()
+        assert not guide.setup_wizard_return_home_button.isVisible()
+        assert_visible_children_within_parent(navigation)
+        assert_visible_children_within_parent(guide.review_step_surface)
+        card_bottom = guide.step_card.mapTo(guide, guide.step_card.rect().bottomLeft()).y()
+        buttons = (
+            guide.review_return_home_button,
+            guide.setup_wizard_back_button,
+            guide.review_save_button,
+        )
+        for button in buttons:
+            assert button.isVisible()
+            assert button.parentWidget() is navigation
+            assert not guide.step_card.isAncestorOf(button)
+            assert button.mapTo(guide, button.rect().topLeft()).y() > card_bottom
+            assert button.mapTo(guide, button.rect().bottomLeft()).y() < guide.height()
+            assert button.width() >= button.fontMetrics().horizontalAdvance(button.text())
+        for left, right in zip(buttons, buttons[1:], strict=False):
+            assert left.geometry().right() < right.geometry().left()
+        assert len({button.geometry().center().y() for button in buttons}) == 1
+        assert guide.shell.page_container.scroll_area.verticalScrollBar().maximum() == 0
+
+        qtbot.mouseClick(guide.setup_wizard_back_button, Qt.MouseButton.LeftButton)
+        QApplication.processEvents()
+        assert guide.step_stack.currentWidget() is guide.response_step_surface
+        assert not guide.review_save_button.isVisible()
+        assert not guide.review_return_home_button.isVisible()
+        assert guide.setup_wizard_next_button.isVisible()
+        assert guide.setup_wizard_return_home_button.isVisible()
+        qtbot.mouseClick(guide.setup_wizard_next_button, Qt.MouseButton.LeftButton)
+        QApplication.processEvents()
+        assert guide.step_stack.currentWidget() is guide.review_step_surface
+        assert guide.review_save_button.isVisible()
+        assert guide.review_return_home_button.isVisible()
+
+
 def test_setup_wizard_review_summarizes_actual_settings_and_supports_editing(
     qtbot,
     controller: StudioController,
