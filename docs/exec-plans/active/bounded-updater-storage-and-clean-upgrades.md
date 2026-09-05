@@ -2,6 +2,22 @@
 
 Status: Active
 
+## Installed Version Regression (2026-09-05)
+
+- The user installed the 1.4.0 candidate and reported `FPVS Studio version None`.
+  Read-only inspection confirmed an empty retained `fpvs_studio-1.3.0.dist-info`
+  directory preceding complete 1.4.0 metadata. Python's first-match version lookup
+  returned `None` for that old directory.
+- The 1.4.1 correction resolves frozen versions from exactly one complete FPVS Studio
+  distribution under the bundle root and makes the packaging diagnostic ignore empty
+  historical metadata directories. It does not delete installed files or directories.
+- Regression coverage recreates the upgrade residue in temporary folders without Qt
+  execution. The corrected installer still needs manual acceptance.
+- Packaging focused verification passed (152 tests), and repo precommit passed
+  (966 tests, five Windows symlink-permission skips), including Ruff, compilation,
+  mypy, and repo/doc audits. The corrected resolver also read the existing installed
+  metadata as 1.4.0 without modifying the installation or launching Qt.
+
 ## Merge Decision (2026-09-05)
 
 - The user authorized merging the updater branch into `master`, superseding the

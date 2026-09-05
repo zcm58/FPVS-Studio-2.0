@@ -31,7 +31,7 @@ The PyInstaller spec includes package metadata in the bundled app.
 The package distribution name is `fpvs-studio`; the GUI and executable still use the
 display name `FPVS Studio`.
 
-For the current release package, use the PEP 440-compatible package version `1.4.0`.
+For the current release package, use the PEP 440-compatible package version `1.4.1`.
 The GitHub Release title can use a friendlier beta label, but the release tag and
 installer filename must use the exact package version.
 
@@ -186,7 +186,7 @@ Then build the setup EXE:
 Expected output for the current package:
 
 ```text
-dist\installer\FPVS-Studio-Setup-1.4.0.exe
+dist\installer\FPVS-Studio-Setup-1.4.1.exe
 ```
 
 The installer build validates that the PyInstaller bundle has an `_internal` folder and
@@ -255,8 +255,12 @@ files carried forward by multiple upgrades, not just a fresh 1.3.0 installation.
 See `packaging/inventory/README.md` for provenance and safe regeneration instructions.
 No historical installers or extractor tools are downloaded on end-user machines.
 
-The installed ownership record is `fpvs-owned-files-v1.txt`. Inno captures previous
-ownership before replacing files and reconciles obsolete entries only after successful
+The installed ownership record is `fpvs-owned-files-v1.txt`.
+Empty historical `.dist-info` directories may remain;
+frozen app version lookup ignores entries without FPVS Studio metadata and requires
+exactly one complete distribution in the bundle. Missing, invalid, or ambiguous
+version metadata is an explicit startup error rather than a `None` app version.
+Inno captures previous ownership before replacing files and reconciles obsolete entries only after successful
 installation. Deletion requires a validated install-relative path and a matching known
 content hash. Unknown/modified files and project-data names remain untouched; symlinks,
 junctions, rooted paths, traversal, and unsafe Windows aliases do not establish ownership.

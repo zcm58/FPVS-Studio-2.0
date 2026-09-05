@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import runpy
 import shutil
 import subprocess
 from pathlib import Path
@@ -70,9 +71,60 @@ def test_package_version_matches_pyproject_version() -> None:
 
     assert pyproject_match is not None
     assert "version(\"fpvs-studio\")" in PACKAGE_INIT_TEXT
-    assert "_source_tree_version() or version(\"fpvs-studio\")" in PACKAGE_INIT_TEXT
+    assert "_source_tree_version() or _installed_version()" in PACKAGE_INIT_TEXT
     assert "__version__ = \"0.1.0\"" not in PACKAGE_INIT_TEXT
     assert __version__ == pyproject_match.group(1)
+
+
+def test_frozen_version_ignores_empty_upgrade_metadata(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import sys
+
+    bundle = tmp_path / "_internal"
+    (bundle / "fpvs_studio-1.3.0.dist-info" / "licenses").mkdir(parents=True)
+    current = bundle / "fpvs_studio-1.4.0.dist-info"
+    current.mkdir()
+    (current / "METADATA").write_text("Name: fpvs-studio\nVersion: 1.4.0\n")
+    package = bundle / "fpvs_studio"
+    package.mkdir()
+    init = package / "__init__.py"
+    init.write_text(PACKAGE_INIT_TEXT, encoding="utf-8")
+    monkeypatch.setattr(sys, "_MEIPASS", str(bundle), raising=False)
+    assert runpy.run_path(str(init))["__version__"] == "1.4.0"
+
+    from fpvs_studio.gui.packaged_smoke import _fpvs_studio_dist_info_names
+
+    assert _fpvs_studio_dist_info_names() == [current.name]
+    (bundle / "fpvs_studio-1.3.0.dist-info" / "METADATA").write_text(
+        "Name: fpvs-studio\nVersion: 1.3.0\n"
+    )
+    with pytest.raises(RuntimeError, match="exactly one complete"):
+        runpy.run_path(str(init))
+
+
+@pytest.mark.parametrize(
+    "metadata", [None, "Name: fpvs-studio\n", "Name: fpvs-studio\nVersion: invalid\n"]
+)
+def test_frozen_version_rejects_missing_or_invalid_metadata(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, metadata: str | None
+) -> None:
+    import sys
+
+    from packaging.version import InvalidVersion
+
+    bundle = tmp_path / "_internal"
+    dist = bundle / "fpvs_studio-1.4.0.dist-info"
+    dist.mkdir(parents=True)
+    if metadata is not None:
+        (dist / "METADATA").write_text(metadata)
+    package = bundle / "fpvs_studio"
+    package.mkdir()
+    init = package / "__init__.py"
+    init.write_text(PACKAGE_INIT_TEXT, encoding="utf-8")
+    monkeypatch.setattr(sys, "_MEIPASS", str(bundle), raising=False)
+    with pytest.raises((RuntimeError, InvalidVersion)):
+        runpy.run_path(str(init))
 
 
 def test_default_install_requires_pyside6_but_keeps_psychopy_optional() -> None:

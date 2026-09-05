@@ -6,7 +6,6 @@ import os
 import sys
 import tempfile
 from importlib import import_module
-from importlib.metadata import version as package_version
 from pathlib import Path
 from typing import Any
 
@@ -19,7 +18,7 @@ def collect_packaged_smoke_report() -> dict[str, Any]:
 
     from PySide6.QtWidgets import QApplication
 
-    from fpvs_studio import __version__
+    from fpvs_studio import __version__, _installed_version
     from fpvs_studio.gui.update_dialog import UpdateDialog
     from fpvs_studio.updates.models import InstallerAsset, UpdateCheckResult
 
@@ -27,7 +26,7 @@ def collect_packaged_smoke_report() -> dict[str, Any]:
     if not isinstance(app, QApplication):
         app = QApplication(["fpvs-studio-packaged-smoke"])
 
-    metadata_version = package_version("fpvs-studio")
+    metadata_version = _installed_version()
     dist_info_names = _fpvs_studio_dist_info_names()
     result = UpdateCheckResult(
         current_version=__version__,
@@ -127,7 +126,11 @@ def _fpvs_studio_dist_info_names() -> list[str]:
     if bundle_internal is None:
         return []
     internal_path = Path(bundle_internal)
-    return sorted(path.name for path in internal_path.glob("fpvs_studio-*.dist-info"))
+    return sorted(
+        path.name
+        for path in internal_path.glob("fpvs_studio-*.dist-info")
+        if (path / "METADATA").is_file()
+    )
 
 
 def _runtime_dependency_report() -> dict[str, Any]:

@@ -3,8 +3,11 @@ neutral core contracts, preprocessing, runtime, engines, and the PySide6 GUI und
 namespace. The package itself is only an import boundary; protocol ownership stays in
 core models and compiled artifacts."""
 
-from importlib.metadata import version
+import sys
+from importlib.metadata import distributions, version
 from pathlib import Path
+
+from packaging.version import Version
 
 __all__ = ["__version__"]
 
@@ -37,4 +40,25 @@ def _source_tree_version() -> str | None:
     return project_version
 
 
-__version__ = _source_tree_version() or version("fpvs-studio")
+def _installed_version() -> str:
+    """Resolve frozen metadata without mistaking retained empty directories for it."""
+    bundle_root = getattr(sys, "_MEIPASS", None)
+    if bundle_root is None:
+        return version("fpvs-studio")
+
+    versions = []
+    for distribution in distributions(path=[str(bundle_root)]):
+        name = distribution.metadata["Name"] or ""
+        if name.lower().replace("_", "-") != "fpvs-studio":
+            continue
+        value = distribution.version
+        if not value:
+            raise RuntimeError("Bundled FPVS Studio metadata has no version.")
+        Version(value)
+        versions.append(value)
+    if len(versions) != 1:
+        raise RuntimeError("Expected exactly one complete bundled FPVS Studio distribution.")
+    return versions[0]
+
+
+__version__ = _source_tree_version() or _installed_version()
