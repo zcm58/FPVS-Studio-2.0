@@ -17,6 +17,7 @@ Current implementation:
 
 Concrete planned work:
 
+- `exec-plans/planned/setup-ux-design-refinement.md`
 - `exec-plans/planned/restore-tutorials-file-menu-entry.md`
 - `exec-plans/planned/luminance-rms-equalization-investigation.md`
 
