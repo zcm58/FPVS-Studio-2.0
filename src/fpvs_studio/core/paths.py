@@ -5,6 +5,7 @@ validate domain rules or perform runtime scheduling."""
 
 from __future__ import annotations
 
+import os
 import re
 from pathlib import Path, PurePosixPath, PureWindowsPath
 
@@ -27,6 +28,33 @@ CONDITION_TEMPLATE_LIBRARY_FILENAME = "condition_templates.json"
 RESERVED_ROOT_ENTRY_NAMES = frozenset({APP_DATA_DIRNAME})
 
 _NON_ALNUM_RE = re.compile(r"[^a-z0-9]+")
+
+
+def filesystem_path(path: Path) -> Path:
+    """Use the Windows extended namespace for I/O without changing stored paths.
+
+    Apply before directory traversal so child paths also support long filenames.
+    Normalize relative paths and dot segments before adding the namespace prefix.
+    """
+    if os.name != "nt":
+        return path
+    absolute = os.path.abspath(path)
+    if absolute.startswith("\\\\?\\"):
+        return Path(absolute)
+    if absolute.startswith("\\\\"):
+        return Path("\\\\?\\UNC\\" + absolute[2:])
+    return Path("\\\\?\\" + absolute)
+
+
+def _without_windows_namespace(path: Path) -> Path:
+    if os.name != "nt":
+        return path
+    value = str(path)
+    if value.startswith("\\\\?\\UNC\\"):
+        return Path("\\\\" + value[8:])
+    if value.startswith("\\\\?\\"):
+        return Path(value[4:])
+    return path
 
 
 def validate_project_relative_path(value: str) -> str:
@@ -57,17 +85,21 @@ def resolve_project_relative_path(project_root: Path, relative_path: str) -> Pat
     """Resolve a persisted path under ``project_root`` without requiring existence.
 
     Resolution follows any existing symlink or junction prefixes. A target whose
-    resolved location leaves the resolved project root is rejected.
+    resolved location leaves the resolved project root is rejected. Long Windows
+    targets retain the extended namespace for subsequent filesystem access.
     """
 
     normalized = validate_project_relative_path(relative_path)
-    resolved_root = project_root.resolve(strict=False)
+    resolved_root = filesystem_path(project_root).resolve(strict=False)
     resolved_target = (resolved_root / Path(normalized)).resolve(strict=False)
     try:
         resolved_target.relative_to(resolved_root)
     except ValueError as exc:
         raise ValueError(f"Project-relative path escapes the project root: {normalized}") from exc
-    return resolved_target
+    ordinary_target = _without_windows_namespace(resolved_target)
+    if os.name == "nt" and len(str(ordinary_target).encode("utf-16-le")) // 2 >= 248:
+        return resolved_target
+    return ordinary_target
 
 
 def slugify_project_name(name: str) -> str:
@@ -217,7 +249,9 @@ def condition_template_library_path(root_dir: Path) -> Path:
 def to_project_relative_posix(project_root: Path, target_path: Path) -> str:
     """Convert a path under a project root to a persisted POSIX relative path."""
 
-    relative = target_path.resolve().relative_to(project_root.resolve())
+    relative = filesystem_path(target_path).resolve().relative_to(
+        filesystem_path(project_root).resolve()
+    )
     return relative.as_posix()
 
 

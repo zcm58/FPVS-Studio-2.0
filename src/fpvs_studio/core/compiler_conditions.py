@@ -6,7 +6,10 @@ from fpvs_studio.core.compiler_support import CompileError
 from fpvs_studio.core.contrast_modulation import is_sinusoidal_neutral_background
 from fpvs_studio.core.enums import DutyCycleMode, StimulusModality
 from fpvs_studio.core.models import Condition, ProjectFile, StimulusSet
-from fpvs_studio.core.validation import validate_display_refresh
+from fpvs_studio.core.validation import (
+    validate_attentional_blink_condition,
+    validate_display_refresh,
+)
 
 
 def ordered_conditions(project: ProjectFile) -> list[Condition]:
@@ -70,6 +73,9 @@ def validate_selected_condition(
     """Validate the specific condition being compiled."""
 
     stimulus_sets = {item.set_id: item for item in project.stimulus_sets}
+    ab_errors = validate_attentional_blink_condition(project, condition, refresh_hz=refresh_hz)
+    if ab_errors:
+        raise CompileError("; ".join(ab_errors))
 
     protocol = project.settings.protocol
     timing_report = validate_display_refresh(

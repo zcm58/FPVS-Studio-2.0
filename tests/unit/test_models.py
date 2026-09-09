@@ -51,12 +51,15 @@ def test_project_model_round_trip(tmp_path, sample_project) -> None:
     loaded = load_project_file(project_path)
 
     assert loaded == sample_project
-    assert loaded.schema_version.value == "1.3.0"
+    assert loaded.schema_version.value == "1.4.0"
 
 
 def test_project_schema_version_does_not_expand_unrelated_contracts() -> None:
     assert ProjectSchemaVersion("1.3.0") is ProjectSchemaVersion.V1_3
+    assert ProjectSchemaVersion("1.4.0") is ProjectSchemaVersion.V1_4
 
+    with pytest.raises(ValueError):
+        SchemaVersion("1.4.0")
     with pytest.raises(ValueError):
         SchemaVersion("1.3.0")
     with pytest.raises(ValidationError):
@@ -191,7 +194,7 @@ def test_load_project_file_migrates_v1_presentation_without_rewriting_assets(
 
     loaded = load_project_file(project_path)
 
-    assert loaded.schema_version.value == "1.3.0"
+    assert loaded.schema_version.value == "1.4.0"
     assert loaded.settings.fixation_task.enabled is True
     assert loaded.settings.fixation_task.accuracy_task_enabled is True
     assert loaded.settings.fixation_task.participant_tutorial_enabled is True
@@ -230,7 +233,7 @@ def test_load_project_file_migrates_v1_2_fixation_defaults_once(
 
     loaded = load_project_file(project_path)
 
-    assert loaded.schema_version.value == "1.3.0"
+    assert loaded.schema_version.value == "1.4.0"
     assert loaded.settings.fixation_task.enabled is True
     assert loaded.settings.fixation_task.accuracy_task_enabled is True
     assert loaded.settings.fixation_task.participant_tutorial_enabled is True
@@ -246,7 +249,7 @@ def test_load_project_file_migrates_v1_2_fixation_defaults_once(
 
     reloaded = load_project_file(project_path)
 
-    assert reloaded.schema_version.value == "1.3.0"
+    assert reloaded.schema_version.value == "1.4.0"
     assert reloaded.settings.fixation_task.enabled is False
     assert reloaded.settings.fixation_task.accuracy_task_enabled is False
     assert reloaded.settings.fixation_task.participant_tutorial_enabled is False

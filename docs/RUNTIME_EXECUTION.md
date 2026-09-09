@@ -114,6 +114,15 @@ Sinusoidal contrast runs additionally require image events and the compiled neut
 background; runtime rejects incompatible compiled copies instead of treating their
 full-cycle on/off timing as continuous presentation.
 
+Experimental attentional-blink runs use the compiled within-slot contract in
+[RunSpec](RUNSPEC.md#experimental-attentional-blink-slots). Preflight reconstructs
+the expected frame schedule from its requested durations and approved refresh rate,
+then checks phase order, global slot indices, event roles, durations, cycle coverage,
+and T1/T2 markers. It also checks the separate T2 source and presentation geometry.
+AB must use continuous images; invalid compiled copies do not silently become
+ordinary FPVS runs. The engine draws the expanded events at their compiled frame
+boundaries through the same prepared playback plan.
+
 ## PsychoPy engine
 
 The PsychoPy implementation:
@@ -410,6 +419,7 @@ Per session, full export mode:
 - `participant_metadata.csv`
 - `conditions.csv`
 - `events.csv`
+- `attentional_blink_events.csv` when AB runs have execution results
 - `fixation_events.csv`
 - `responses.csv`
 - `frame_intervals.csv`
@@ -427,6 +437,7 @@ Per run, full export mode:
     exact/approximate status and realized base/oddball rates when the requested cadence
     does not divide evenly into the monitor refresh
 - `events.csv`
+- `attentional_blink_events.csv` for an AB run
 - `fixation_events.csv`
 - `responses.csv`
 - `frame_intervals.csv`
@@ -459,6 +470,40 @@ but embed hashed modular-task media together with task definitions so those work
 remain portable. They never contain participant task responses. A config does not
 replace the authoritative artifacts under `runs/`, and runtime does not consume
 `.fpvsconfig` during playback.
+
+### Attentional-blink event exports
+
+AB run results carry optional `RunExecutionSummary.attentional_blink_onsets` records.
+Each observed image onset includes its sequential event index, phase, global slot
+index, frame index, and `time_s`. The engine captures the returned display-flip
+timestamp at every Base, T1, separator, and T2 onset. `time_s` is relative to the
+**first stream flip**, excluding warmup and pre-stream fixation. If that first flip
+has no timestamp, all relative onset times remain unavailable. A missing timestamp
+on a later onset leaves only that onset's time unavailable; planned timing or a
+fallback clock is never substituted. Existing trigger and fixation timestamp fields
+keep their established clock origins and must not be assumed to share this zero.
+
+`attentional_blink_events.csv` is written beside each full AB run and in the full
+session folder. Both full and compact sessions also append these rows to
+`logs/attentional_blink_events.csv`; compact mode does not create a `runs/` folder.
+The table joins the complete compiled sequence to observed onset records and includes:
+
+- project, session, run, condition, and participant identifiers
+- event index, global slot index, phase, and project-relative image path
+- planned onset frame, duration frames, refresh rate, onset seconds, and duration ms
+- requested and achieved T1/ISI/T2 durations, plus achieved onset-to-onset separation
+  (`planned_soa_ms`)
+- `presented`, `actual_onset_s`, and run-aborted status
+
+An event not reached before abort has `presented=False` and an empty actual time.
+An observed event with an unavailable timestamp has `presented=True` and an empty
+actual time. These software-flip records do not measure the panel's emitted-light
+onset or establish whether a participant recognized either target.
+
+Standard runs omit the optional AB result field and produce no AB event table.
+Their existing `events.csv`, fixation scoring, trigger scheduling, and export columns
+remain unchanged. Editable `.fpvsconfig` and portable project bundles preserve the
+AB settings and T2 source reference; bundles include the referenced image assets.
 
 ## Session mode
 

@@ -18,6 +18,7 @@ from PIL import Image, ImageOps
 from fpvs_studio.core.enums import StimulusModality
 from fpvs_studio.core.models import ImageResolution, StimulusSet
 from fpvs_studio.core.paths import (
+    filesystem_path,
     stimulus_normalized_dir,
     stimulus_normalized_images_root,
     to_project_relative_posix,
@@ -138,6 +139,7 @@ def scan_stimulus_sets_for_normalization(
 ) -> ImageNormalizationScan:
     """Scan selected stimulus sets for resolution and file-type consistency."""
 
+    project_root = filesystem_path(project_root)
     scans = tuple(
         _scan_stimulus_set(project_root=project_root, stimulus_set=stimulus_set)
         for stimulus_set in _unique_stimulus_sets(stimulus_sets)
@@ -173,6 +175,7 @@ def normalize_stimulus_sets(
 
     _validate_target_size(target_size)
 
+    project_root = filesystem_path(project_root)
     selected_sets = _unique_stimulus_sets(stimulus_sets)
     scan = scan_stimulus_sets_for_normalization(
         project_root=project_root,

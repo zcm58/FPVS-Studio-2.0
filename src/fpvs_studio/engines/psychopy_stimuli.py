@@ -28,6 +28,7 @@ from fpvs_studio.core.run_spec import (
     RunSpec,
     StimulusEvent,
     TextPresentationSpec,
+    event_presentation,
 )
 
 LOGGER = logging.getLogger(__name__)
@@ -372,6 +373,10 @@ def _populate_prepared_stimuli(
     run_spec: RunSpec,
 ) -> None:
     for event in run_spec.stimulus_sequence:
+        if event.is_blank:
+            if prepared_sequence is not None:
+                prepared_sequence.append(None)
+            continue
         render_key = stimulus_render_key(event, run_spec=run_spec)
         stimulus = stimuli.get(render_key)
         if stimulus is None:
@@ -496,8 +501,7 @@ def _prepare_stimulus(
 
 
 def _role_presentation(run_spec: RunSpec, event: StimulusEvent) -> RolePresentationSpec | None:
-    presentation = run_spec.presentation
-    return getattr(presentation, event.role) if presentation is not None else None
+    return event_presentation(run_spec, event)
 
 
 def _transform_value(role_spec: RolePresentationSpec | None) -> str:

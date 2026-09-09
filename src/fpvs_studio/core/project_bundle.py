@@ -21,6 +21,7 @@ from pydantic import Field, ValidationError, field_validator
 
 from fpvs_studio import __version__
 from fpvs_studio.core.compiler import CompileError, compile_session_plan
+from fpvs_studio.core.experiment_categories import require_valid_experiment_category
 from fpvs_studio.core.models import FPVSBaseModel, ProjectFile, validate_project_relative_path
 from fpvs_studio.core.paths import (
     MANIFEST_FILENAME,
@@ -296,6 +297,12 @@ def import_project_bundle(
             staged_project_root,
             project=project,
             role="oddball",
+        )
+        _validate_condition_role_source_dirs(
+            staged_project_root, project=project, role="t2",
+        )
+        _validate_condition_role_source_dirs(
+            staged_project_root, project=project, role="isi",
         )
         _validate_bundle_source(
             staged_project_root,
@@ -576,6 +583,10 @@ def _validate_bundle_source(
     manifest: StimulusManifest,
     refresh_hz: float,
 ) -> None:
+    try:
+        require_valid_experiment_category(project)
+    except ValueError as exc:
+        raise ProjectBundleError(str(exc)) from exc
     if not project_root.is_dir():
         raise ProjectBundleError(f"Project root does not exist: {project_root}")
     if manifest.project_id != project.meta.project_id:
@@ -629,16 +640,16 @@ def _validate_condition_role_source_dirs(
     project_root: Path,
     *,
     project: ProjectFile,
-    role: Literal["base", "oddball"],
+    role: Literal["base", "oddball", "t2", "isi"],
 ) -> None:
     stimulus_sets_by_id = {
         stimulus_set.set_id: stimulus_set for stimulus_set in project.stimulus_sets
     }
     set_ids = {
-        condition.base_stimulus_set_id if role == "base" else condition.oddball_stimulus_set_id
+        getattr(condition, f"{role}_stimulus_set_id")
         for condition in project.conditions
     }
-    for set_id in sorted(set_ids):
+    for set_id in sorted(set_ids - {None}):
         stimulus_set = stimulus_sets_by_id.get(set_id)
         if stimulus_set is None or stimulus_set.source_dir is None:
             continue

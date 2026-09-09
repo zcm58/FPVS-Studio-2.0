@@ -961,11 +961,18 @@ def build_trigger_events(
     stimulus_sequence: list[StimulusEvent],
     condition_trigger_code: int,
     oddball_trigger_code: int,
+    t2_trigger_code: int | None = None,
 ) -> list[TriggerEvent]:
     """Build frame-accurate condition and oddball trigger events."""
 
     if not stimulus_sequence:
         return []
+
+    if any(event.phase == "t2" for event in stimulus_sequence):
+        if t2_trigger_code is None:
+            raise CompileError("Attentional-blink T2 events require an explicit T2 marker.")
+        if t2_trigger_code in (condition_trigger_code, oddball_trigger_code):
+            raise CompileError("T2 marker must differ from condition-start and T1 markers.")
 
     trigger_events: list[TriggerEvent] = [
         TriggerEvent(
@@ -980,8 +987,14 @@ def build_trigger_events(
     trigger_events.extend(
         TriggerEvent(
             frame_index=event.on_start_frame,
-            code=validate_event_trigger_code(oddball_trigger_code, label="oddball_onset"),
-            label="oddball_onset",
+            code=validate_event_trigger_code(
+                t2_trigger_code if event.phase == "t2" else oddball_trigger_code,
+                label="t2_onset" if event.phase == "t2" else "oddball_onset",
+            ),
+            label=(
+                "t1_onset" if event.phase == "t1" else
+                "t2_onset" if event.phase == "t2" else "oddball_onset"
+            ),
         )
         for event in stimulus_sequence
         if event.role == "oddball"

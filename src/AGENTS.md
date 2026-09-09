@@ -9,10 +9,15 @@ package map.
 ## Stable v1 Invariants
 
 - The only built-in protocol template is `fpvs_6hz_every5_v1`.
-- V1 keeps base rate fixed at 6.0 Hz, oddball every 5th stimulus, and oddball
-  frequency at 1.2 Hz.
-- Users choose `continuous` or `blank_50` duty cycle; do not expose editable
-  base/oddball frequencies in v1 UI.
+- Experiment category is a locked project choice: FPVS-Oddball or Attentional-Blink;
+  FPVS is a disabled Coming soon placeholder. Valid projects cannot mix categories.
+- FPVS-Oddball defaults are 6.0 Hz and oddball every 5th stimulus (1.2 Hz); AB defaults
+  are 4.0 Hz and a target pair every fourth normal slot. Project-wide cadence is
+  editable through its core owner. See `docs/EXPERIMENT_CATEGORIES.md` for migration.
+- Image conditions support `continuous`, `blank_50`, and `sinusoidal` presentation.
+  The shared visual designer maps oddball cycles to existing protocol settings.
+  Attentional-Blink uses continuous images and compiles a T1/separator/T2 slot with
+  a dedicated T2 source. Only the AB category exposes the ISI editor.
 - Project-facing schemas must remain engine-neutral.
 - Generated stimulus variants belong under the active project folder in
   `stimuli/generated-variants/...`.

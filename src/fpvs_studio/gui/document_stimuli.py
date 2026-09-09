@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from fpvs_studio.core.enums import StimulusModality
-from fpvs_studio.core.models import ProjectFile, StimulusSet
+from fpvs_studio.core.models import Condition, ProjectFile, StimulusSet
 from fpvs_studio.gui.document_support import DocumentError, validated_copy
 from fpvs_studio.preprocessing.importer import (
     import_stimulus_source_directory,
@@ -19,7 +19,7 @@ from fpvs_studio.preprocessing.manifest import (
     upsert_manifest_set,
     write_stimulus_manifest,
 )
-from fpvs_studio.preprocessing.models import StimulusManifest
+from fpvs_studio.preprocessing.models import StimulusManifest, StimulusSetInspectionSummary
 from fpvs_studio.preprocessing.normalization import (
     COMPILER_READY_SUFFIXES,
     ImageNormalizationResult,
@@ -58,6 +58,7 @@ class DocumentStimulusMixin:
             role: str,
         ) -> StimulusSet: ...
         def get_stimulus_set(self, set_id: str) -> StimulusSet | None: ...
+        def get_condition(self, condition_id: str) -> Condition | None: ...
         def _replace_project(self, project: ProjectFile) -> None: ...
 
     def import_condition_stimulus_folder(
@@ -127,6 +128,80 @@ class DocumentStimulusMixin:
         self._replace_project(project)
         self._manifest = manifest
         write_stimulus_manifest(self._project_root, manifest)
+        self.manifest_changed.emit()
+
+    def apply_designer_source(
+        self,
+        condition_id: str,
+        *,
+        role: str,
+        stimulus_set: StimulusSet,
+        summary: StimulusSetInspectionSummary,
+    ) -> None:
+        """Attach an independently imported source; called on the GUI thread."""
+        fields = {
+            "base": "base_stimulus_set_id",
+            "t1": "oddball_stimulus_set_id",
+            "oddball": "oddball_stimulus_set_id",
+            "t2": "t2_stimulus_set_id",
+            "isi": "isi_stimulus_set_id",
+        }
+        if role not in fields:
+            raise DocumentError(f"Unknown designer source '{role}'.")
+        from fpvs_studio.core.enums import ExperimentCategory
+
+        if (
+            role in ("t1", "t2", "isi")
+            and self._project.experiment_category != ExperimentCategory.ATTENTIONAL_BLINK
+        ):
+            raise DocumentError("T1 and T2 images belong to Attentional-Blink experiments.")
+        condition = self.get_condition(condition_id)
+        if condition is None:
+            raise DocumentError(f"Unknown condition '{condition_id}'.")
+        if stimulus_set.image_count < 1:
+            raise DocumentError("The selected folder contains no supported images.")
+        previous_id = getattr(condition, fields[role])
+        updated = validated_copy(condition, **{fields[role]: stimulus_set.set_id})
+        conditions = [
+            updated if item.condition_id == condition_id else item
+            for item in self._project.conditions
+        ]
+        referenced = {
+            set_id
+            for item in conditions
+            for set_id in (
+                item.base_stimulus_set_id,
+                item.oddball_stimulus_set_id,
+                item.t2_stimulus_set_id,
+                item.isi_stimulus_set_id,
+            )
+            if set_id is not None
+        }
+        sets = [
+            item
+            for item in self._project.stimulus_sets
+            if item.set_id != stimulus_set.set_id
+            and (item.set_id != previous_id or item.set_id in referenced)
+        ]
+        project = validated_copy(
+            self._project, conditions=conditions, stimulus_sets=[*sets, stimulus_set]
+        )
+        manifest = upsert_manifest_set(
+            self._manifest or create_empty_manifest(project.meta.project_id),
+            inspection_summary_to_manifest_set(set_id=stimulus_set.set_id, summary=summary),
+        )
+        manifest = manifest.model_copy(
+            update={
+                "sets": [
+                    item
+                    for item in manifest.sets
+                    if item.set_id != previous_id or item.set_id in referenced
+                ]
+            }
+        )
+        write_stimulus_manifest(self._project_root, manifest)
+        self._manifest = manifest
+        self._replace_project(project)
         self.manifest_changed.emit()
 
     def materialize_assets(self) -> StimulusManifest:
@@ -325,7 +400,12 @@ class DocumentStimulusMixin:
         set_ids = {
             set_id
             for condition in self._project.conditions
-            for set_id in (condition.base_stimulus_set_id, condition.oddball_stimulus_set_id)
+            for set_id in (
+                condition.base_stimulus_set_id,
+                condition.oddball_stimulus_set_id,
+                condition.t2_stimulus_set_id,
+                condition.isi_stimulus_set_id,
+            )
         }
         return [
             stimulus_set

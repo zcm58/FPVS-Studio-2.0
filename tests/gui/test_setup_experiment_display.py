@@ -295,7 +295,19 @@ def test_setup_wizard_fpvs_rates_persist_and_report_exact_or_approximate_timing(
     window.resize(1120, 720)
     QApplication.processEvents()
     assert guide.shell.page_container.scroll_area.verticalScrollBar().maximum() == 0
+    qtbot.waitUntil(lambda: editor.height() >= editor.heightForWidth(editor.width()))
     _assert_visible_children_within_parent(editor)
+    for label in (
+        editor.refresh_verification_notice,
+        editor.timing_summary_label,
+        editor.timing_status_label,
+    ):
+        required = label.fontMetrics().boundingRect(
+            QRect(0, 0, max(1, label.contentsRect().width()), 1000),
+            Qt.TextFlag.TextWordWrap,
+            label.text(),
+        )
+        assert label.contentsRect().height() >= required.height(), label.objectName()
 
 
 def test_setup_wizard_blocks_impossible_sub_frame_base_rate(

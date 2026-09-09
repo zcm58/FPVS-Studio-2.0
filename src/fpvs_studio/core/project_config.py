@@ -23,12 +23,15 @@ from fpvs_studio import __version__
 from fpvs_studio.core.display_geometry import visual_angle_width_cm, visual_angle_width_px
 from fpvs_studio.core.enums import (
     DutyCycleMode,
+    ExperimentCategory,
     InterConditionMode,
     StimulusModality,
     StimulusVariant,
     TriggerBackendKind,
 )
+from fpvs_studio.core.experiment_categories import require_valid_experiment_category
 from fpvs_studio.core.models import (
+    AttentionalBlinkSettings,
     Condition,
     ConditionPresentationSettings,
     DisplaySettings,
@@ -45,6 +48,7 @@ from fpvs_studio.core.models import (
     TriggerSettings,
     validate_project_relative_path,
     validate_slug,
+    with_inferred_experiment_category,
 )
 from fpvs_studio.core.paths import (
     cache_dir,
@@ -119,6 +123,9 @@ class ProjectConfigCondition(FPVSBaseModel):
     trigger_code: StrictInt = Field(ge=0, le=255)
     base_stimulus_set_id: str
     oddball_stimulus_set_id: str
+    t2_stimulus_set_id: str | None = None
+    isi_stimulus_set_id: str | None = None
+    attentional_blink: AttentionalBlinkSettings | None = None
     stimulus_variant: StimulusVariant = StimulusVariant.ORIGINAL
     sequence_count: int = Field(gt=0)
     oddball_cycle_repeats_per_sequence: int = Field(ge=1)
@@ -135,6 +142,20 @@ class ProjectConfigCondition(FPVSBaseModel):
     @classmethod
     def validate_ids(cls, value: str) -> str:
         return validate_slug(value, field_name="condition or stimulus set id")
+
+    @model_validator(mode="before")
+    @classmethod
+    def preserve_legacy_isi_source(cls, value: object) -> object:
+        if isinstance(value, dict) and "isi_stimulus_set_id" not in value:
+            settings = value.get("attentional_blink")
+            if isinstance(settings, dict) and "isi_mode" not in settings:
+                value = {**value, "isi_stimulus_set_id": value.get("base_stimulus_set_id")}
+        return value
+
+    @field_validator("t2_stimulus_set_id", "isi_stimulus_set_id")
+    @classmethod
+    def validate_t2_id(cls, value: str | None) -> str | None:
+        return validate_slug(value, field_name="T2 stimulus set id") if value is not None else None
 
 
 class ProjectConfigStimulusSet(FPVSBaseModel):
@@ -319,6 +340,9 @@ class ProjectConfigFile(FPVSBaseModel):
     """Top-level Studio `.fpvsconfig` interchange file."""
 
     schema_version: Literal["1.2.0"] = "1.2.0"
+    experiment_category: ExperimentCategory = Field(
+        default=ExperimentCategory.FPVS_ODDBALL, frozen=True
+    )
     producer: ProjectConfigProducer = Field(default_factory=ProjectConfigProducer)
     project: ProjectConfigProject
     conditions: list[ProjectConfigCondition] = Field(default_factory=list)
@@ -333,6 +357,11 @@ class ProjectConfigFile(FPVSBaseModel):
     toolbox: ProjectConfigToolbox
     stimulus_provenance: ProjectConfigStimulusProvenance | None = None
     completed_session: ProjectConfigCompletedSession | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def infer_legacy_category(cls, value: object) -> object:
+        return with_inferred_experiment_category(value)
 
     @model_validator(mode="after")
     def validate_task_asset_inventory(self) -> ProjectConfigFile:
@@ -380,11 +409,13 @@ def export_project_config(
 ) -> ProjectConfigFile:
     """Build a setup or completed project config without mutating project state."""
 
+    _require_config_category(project)
     resolved_manifest = _resolve_manifest(project_root, manifest)
     session_plan = (
         _read_completed_session_plan(completed_session_dir) if completed_session_dir else None
     )
     return ProjectConfigFile(
+        experiment_category=project.experiment_category,
         project=ProjectConfigProject(
             project_id=project.meta.project_id,
             name=project.meta.name,
@@ -398,6 +429,12 @@ def export_project_config(
                 trigger_code=condition.trigger_code,
                 base_stimulus_set_id=condition.base_stimulus_set_id,
                 oddball_stimulus_set_id=condition.oddball_stimulus_set_id,
+                t2_stimulus_set_id=condition.t2_stimulus_set_id,
+                isi_stimulus_set_id=condition.isi_stimulus_set_id,
+                attentional_blink=(
+                    condition.attentional_blink.model_copy(deep=True)
+                    if condition.attentional_blink is not None else None
+                ),
                 stimulus_variant=condition.stimulus_variant,
                 sequence_count=condition.sequence_count,
                 oddball_cycle_repeats_per_sequence=(condition.oddball_cycle_repeats_per_sequence),
@@ -449,6 +486,7 @@ def export_project_config(
 def write_project_config(path: Path, config: ProjectConfigFile) -> None:
     """Write a `.fpvsconfig` file as UTF-8 JSON."""
 
+    _require_config_category(config)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(config.model_dump_json(indent=2, exclude_none=True), encoding="utf-8")
 
@@ -504,6 +542,7 @@ def read_project_config(path: Path) -> ProjectConfigFile:
 def create_project_from_config(parent_dir: Path, config: ProjectConfigFile) -> ProjectScaffold:
     """Create a new Studio project shell from a `.fpvsconfig` file."""
 
+    _require_config_category(config)
     decoded_task_assets = _decoded_task_assets(config)
     target_dir, project_id = _unique_import_project_dir(parent_dir, config.project.project_id)
     for folder in (
@@ -532,6 +571,7 @@ def create_project_from_config(parent_dir: Path, config: ProjectConfigFile) -> P
         destination.write_bytes(payload)
 
     project = ProjectFile(
+        experiment_category=config.experiment_category,
         meta=ProjectMeta(
             project_id=project_id,
             name=config.project.name,
@@ -553,6 +593,12 @@ def create_project_from_config(parent_dir: Path, config: ProjectConfigFile) -> P
                 instructions=condition.instructions,
                 base_stimulus_set_id=condition.base_stimulus_set_id,
                 oddball_stimulus_set_id=condition.oddball_stimulus_set_id,
+                t2_stimulus_set_id=condition.t2_stimulus_set_id,
+                isi_stimulus_set_id=condition.isi_stimulus_set_id,
+                attentional_blink=(
+                    condition.attentional_blink.model_copy(deep=True)
+                    if condition.attentional_blink is not None else None
+                ),
                 stimulus_variant=condition.stimulus_variant,
                 sequence_count=condition.sequence_count,
                 oddball_cycle_repeats_per_sequence=(condition.oddball_cycle_repeats_per_sequence),
@@ -576,6 +622,13 @@ def create_project_from_config(parent_dir: Path, config: ProjectConfigFile) -> P
     save_project_file(project, project_json_path(target_dir))
     write_stimulus_manifest(target_dir, create_empty_manifest(project.meta.project_id))
     return ProjectScaffold(project_root=target_dir, project=project)
+
+
+def _require_config_category(project: ProjectFile | ProjectConfigFile) -> None:
+    try:
+        require_valid_experiment_category(project)
+    except ValueError as exc:
+        raise ProjectConfigError(str(exc)) from exc
 
 
 def _task_image_references(project: ProjectFile) -> list[tuple[str, str]]:
@@ -858,8 +911,12 @@ def _placeholder_stimulus_sets(config: ProjectConfigFile) -> list[StimulusSet]:
         ]
     set_ids: list[str] = []
     for condition in config.conditions:
-        for set_id in (condition.base_stimulus_set_id, condition.oddball_stimulus_set_id):
-            if set_id not in set_ids:
+        for set_id in (
+            condition.base_stimulus_set_id, condition.oddball_stimulus_set_id,
+            condition.t2_stimulus_set_id,
+            condition.isi_stimulus_set_id,
+        ):
+            if set_id is not None and set_id not in set_ids:
                 set_ids.append(set_id)
     return [
         StimulusSet(

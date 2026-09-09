@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import json
+
+import pytest
+
 from fpvs_studio.core.condition_template_profiles import get_condition_template_profile
 from fpvs_studio.core.models import ProjectFile
 from fpvs_studio.core.paths import (
@@ -11,9 +15,65 @@ from fpvs_studio.core.paths import (
     project_json_path,
     stimulus_manifest_path,
 )
-from fpvs_studio.core.project_service import create_project
+from fpvs_studio.core.project_service import create_project, rename_project
 from fpvs_studio.core.serialization import load_project_file, read_json_file
 from fpvs_studio.preprocessing.models import StimulusManifest
+
+
+def test_rename_preserves_identity_files_and_legacy_payload(tmp_path):
+    scaffold = create_project(tmp_path, "Original name")
+    path = scaffold.project_root / "project.json"
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload["schema_version"] = "1.3.0"
+    payload.pop("experiment_category")
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    marker = scaffold.project_root / "runs" / "keep.txt"
+    marker.write_bytes(b"historical results")
+    renamed = rename_project(scaffold.project_root, "  Recognition – session 2  ")
+    actual = json.loads(path.read_text(encoding="utf-8"))
+    assert renamed.name == "Recognition – session 2"
+    payload["meta"]["name"] = renamed.name
+    payload["meta"]["updated_at"] = renamed.updated_at.isoformat()
+    assert actual == payload
+    assert marker.read_bytes() == b"historical results"
+    assert scaffold.project_root.name == "original-name"
+    assert renamed.project_id == scaffold.project.meta.project_id
+
+
+@pytest.mark.parametrize("name", ["", "  \t "])
+def test_rename_rejects_empty_names_without_writing(tmp_path, name):
+    scaffold = create_project(tmp_path, "Original")
+    path = scaffold.project_root / "project.json"
+    before = path.read_bytes()
+    with pytest.raises(ValueError, match="Enter a project name"):
+        rename_project(scaffold.project_root, name)
+    assert path.read_bytes() == before
+
+
+def test_rename_failed_replace_keeps_original_and_removes_temporary(tmp_path, monkeypatch):
+    scaffold = create_project(tmp_path, "Original")
+    path = scaffold.project_root / "project.json"
+    before = path.read_bytes()
+
+    def fail_replace(*args):
+        raise PermissionError("Project file is read-only")
+
+    monkeypatch.setattr("fpvs_studio.core.project_service.os.replace", fail_replace)
+    with pytest.raises(PermissionError):
+        rename_project(scaffold.project_root, "New name")
+    assert path.read_bytes() == before
+    assert not list(scaffold.project_root.glob(".rename-*.json"))
+
+
+def test_rename_same_name_is_no_op_and_missing_project_is_not_created(tmp_path):
+    scaffold = create_project(tmp_path, "Original")
+    path = scaffold.project_root / "project.json"
+    before = path.read_bytes()
+    rename_project(scaffold.project_root, " Original ")
+    assert path.read_bytes() == before
+    with pytest.raises(FileNotFoundError):
+        rename_project(tmp_path / "missing", "New name")
+    assert not (tmp_path / "missing").exists()
 
 
 def test_project_scaffolding_allows_templates_project_name_separate_from_app_templates(

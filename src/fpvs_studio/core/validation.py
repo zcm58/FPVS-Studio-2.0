@@ -16,6 +16,7 @@ from fpvs_studio.core.enums import (
     StimulusModality,
     ValidationSeverity,
 )
+from fpvs_studio.core.experiment_categories import validate_experiment_category
 from fpvs_studio.core.fixation_planning import (
     max_supported_color_changes,
     milliseconds_to_frames,
@@ -461,7 +462,7 @@ def condition_fixation_guidance(
 
 
 def condition_stimulus_repeat_guidance(project: ProjectFile) -> list[StimulusRepeatRoleGuidance]:
-    """Return condition-level base/oddball per-image repeat guidance."""
+    """Return per-image repeat guidance, including target-pair source exposure."""
 
     oddball_every_n = project.settings.protocol.oddball_every_n
     stimulus_sets = {item.set_id: item for item in project.stimulus_sets}
@@ -480,6 +481,14 @@ def condition_stimulus_repeat_guidance(project: ProjectFile) -> list[StimulusRep
             "base": condition.base_stimulus_set_id,
             "oddball": condition.oddball_stimulus_set_id,
         }
+        if condition.attentional_blink is not None:
+            if (condition.attentional_blink.isi_mode == "image"
+                    and condition.isi_stimulus_set_id is not None):
+                role_presentations["isi"] = oddball_presentations
+                role_set_ids["isi"] = condition.isi_stimulus_set_id
+            if condition.t2_stimulus_set_id is not None:
+                role_presentations["t2"] = oddball_presentations
+                role_set_ids["t2"] = condition.t2_stimulus_set_id
         for role, presentation_count in role_presentations.items():
             stimulus_set = stimulus_sets.get(role_set_ids[role])
             modality = stimulus_set.modality if stimulus_set is not None else StimulusModality.IMAGE
@@ -553,12 +562,75 @@ def validate_condition_repeat_cycle_consistency(project: ProjectFile) -> list[Va
     return issues
 
 
+def validate_attentional_blink_condition(
+    project: ProjectFile,
+    condition: Condition,
+    *,
+    refresh_hz: float | None = None,
+    require_ready_sources: bool = True,
+) -> list[str]:
+    """Validate the image-only target-pair extension before authoring or compilation."""
+    settings = condition.attentional_blink
+    if settings is None:
+        return []
+    from fpvs_studio.core.attentional_blink import (
+        SlotRole,
+        describe_attentional_blink,
+        preview_attentional_blink,
+    )
+
+    errors: list[str] = []
+    if condition.duty_cycle_mode != DutyCycleMode.CONTINUOUS:
+        errors.append("Attentional blink requires Continuous Images presentation.")
+    if project.settings.protocol.oddball_every_n < 2:
+        errors.append("Attentional blink needs at least one Base slot before the target pair.")
+    stimulus_sets = {item.set_id: item for item in project.stimulus_sets}
+    for role, set_id in (
+        ("Base", condition.base_stimulus_set_id),
+        ("T1", condition.oddball_stimulus_set_id),
+        ("T2", condition.t2_stimulus_set_id),
+        *(([("ISI", condition.isi_stimulus_set_id)]) if settings.isi_mode == "image" else []),
+    ):
+        stimulus_set = stimulus_sets.get(set_id) if set_id is not None else None
+        if stimulus_set is None:
+            errors.append(f"Choose a {role} image folder for attentional blink.")
+        elif stimulus_set.modality != StimulusModality.IMAGE:
+            errors.append(f"Attentional blink requires images for {role}, not words.")
+        elif require_ready_sources and (
+            stimulus_set.image_count <= 0 or stimulus_set.source_dir is None
+        ):
+            errors.append(f"The {role} image source must contain imported images.")
+        elif require_ready_sources and stimulus_set.resolution is None:
+            errors.append(f"The {role} image source needs a known uniform resolution.")
+    reserved_codes = {item.trigger_code for item in project.conditions}
+    reserved_codes.add(project.settings.triggers.oddball_trigger_code)
+    if settings.t2_trigger_code in reserved_codes:
+        errors.append("T2 marker must differ from the condition-start and T1/oddball markers.")
+    base_role: SlotRole = "base"
+    roles: tuple[SlotRole, ...] = (
+        (base_role,) * (project.settings.protocol.oddball_every_n - 1) + ("target_pair",)
+    )
+    try:
+        describe_attentional_blink(
+            roles, base_hz=project.settings.protocol.base_hz,
+            t1_ms=settings.t1_duration_ms, isi_ms=settings.isi_ms,
+        )
+        if refresh_hz is not None:
+            preview_attentional_blink(
+                roles, base_hz=project.settings.protocol.base_hz, refresh_hz=refresh_hz,
+                t1_ms=settings.t1_duration_ms, isi_ms=settings.isi_ms,
+            )
+    except ValueError as error:
+        errors.append(str(error))
+    return errors
+
+
 def validate_project(
     project: ProjectFile, *, refresh_hz: float | None = None
 ) -> ProjectValidationReport:
     """Validate cross-field project rules with user-friendly issues."""
 
-    issues: list[ValidationIssue] = []
+    issues = validate_experiment_category(project)
     stimulus_sets = {item.set_id: item for item in project.stimulus_sets}
     task_modules = {item.task_id: item for item in project.task_modules}
 
@@ -628,7 +700,7 @@ def validate_project(
     for row in condition_stimulus_repeat_guidance(project):
         if row.image_count <= 0:
             continue
-        role_label = "Base" if row.role == "base" else "Oddball"
+        role_label = {"base": "Base", "oddball": "Oddball", "t2": "T2", "isi": "ISI"}[row.role]
         item_label = "images" if row.modality == StimulusModality.IMAGE else "words"
         repeat_label = "image" if row.modality == StimulusModality.IMAGE else "word"
         repeat_range = (
@@ -665,6 +737,23 @@ def validate_project(
             )
 
     for condition in project.conditions:
+        issues.extend(
+            ValidationIssue(
+                location=f"conditions.{condition.condition_id}.attentional_blink",
+                message=message,
+            )
+            for message in validate_attentional_blink_condition(
+                project, condition, refresh_hz=refresh_hz
+            )
+        )
+        if (
+            condition.t2_stimulus_set_id is not None
+            and condition.t2_stimulus_set_id not in stimulus_sets
+        ):
+            issues.append(ValidationIssue(
+                location=f"conditions.{condition.condition_id}.t2_stimulus_set_id",
+                message=f"Condition '{condition.name}' references a missing T2 stimulus set.",
+            ))
         for phase_name, bindings in (
             ("pre_task_bindings", condition.pre_task_bindings),
             ("post_task_bindings", condition.post_task_bindings),

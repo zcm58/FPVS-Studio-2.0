@@ -13,6 +13,7 @@ public quickstart site lives in `../docs-site/` and is built with MkDocs.
 - Task scopes, skills, and verification routes: `agent/agent-index.md`
 - Product direction: `PRODUCT_SENSE.md` and `product-specs/index.md`
 - Design and GUI workflow: `DESIGN.md`, `FRONTEND.md`, and `GUI_WORKFLOW.md`
+- Experiment categories and legacy separation: `EXPERIMENT_CATEGORIES.md`
 - Packaging developer builds: `PACKAGING.md`
 - Execution planning: `PLANS.md`, `exec-plans/README.md`, and
   `exec-plans/plan-review-workflow.md`

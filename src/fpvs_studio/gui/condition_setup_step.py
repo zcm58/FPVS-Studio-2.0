@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QListWidget,
     QListWidgetItem,
+    QMessageBox,
     QPushButton,
     QSizePolicy,
     QSpinBox,
@@ -28,9 +29,16 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from fpvs_studio.core.enums import DutyCycleMode, StimulusModality, StimulusVariant
+from fpvs_studio.core.enums import (
+    DutyCycleMode,
+    ExperimentCategory,
+    StimulusModality,
+    StimulusVariant,
+)
+from fpvs_studio.core.experiment_categories import category_conflict_condition_ids
 from fpvs_studio.core.models import Condition, ConditionPresentationSettings, StimulusSet
 from fpvs_studio.core.paths import stimuli_dir
+from fpvs_studio.core.project_separation import SeparatedProjects, separate_legacy_mixed_project
 from fpvs_studio.core.validation import (
     StimulusRepeatRoleGuidance,
     condition_stimulus_repeat_guidance,
@@ -71,6 +79,7 @@ _SOURCE_ROW_MIN_WIDTH = (_SOURCE_CARD_MIN_WIDTH * 2) + PAGE_SECTION_GAP
 _SOURCE_HEADER_HEIGHT = 30
 _SOURCE_METRICS_HEIGHT = 56
 _INSTRUCTIONS_HEIGHT = 80
+_CONDITION_DETAILS_MIN_HEIGHT = 320
 _CONDITION_STEP_MIN_WIDTH = 840
 
 
@@ -352,7 +361,7 @@ class ConditionSetupStep(QWidget):
         list_layout.setContentsMargins(0, 0, 0, 0)
         list_layout.setSpacing(8)
         self.condition_list_hint = QLabel(
-            "Add a condition, then choose images or enter words.", list_panel
+            "Name your conditions. Build their image sequences in Design.", list_panel
         )
         self.condition_list_hint.setObjectName("setup_conditions_list_hint")
         self.condition_list_hint.setProperty("setupMetricLabel", "true")
@@ -367,6 +376,11 @@ class ConditionSetupStep(QWidget):
         action_grid.addWidget(self.duplicate_condition_button, 0, 1)
         action_grid.addWidget(self.create_control_condition_button, 1, 0)
         action_grid.addWidget(self.remove_condition_button, 1, 1)
+        self.separate_conditions_button = QPushButton("Separate oddball conditions...", self)
+        self.separate_conditions_button.setObjectName("setup_separate_conditions_button")
+        mark_secondary_action(self.separate_conditions_button)
+        self.separate_conditions_button.clicked.connect(self._separate_conditions)
+        action_grid.addWidget(self.separate_conditions_button, 2, 0, 1, 2)
         action_grid.setColumnStretch(0, 1)
         action_grid.setColumnStretch(1, 1)
         list_layout.addLayout(action_grid)
@@ -464,6 +478,7 @@ class ConditionSetupStep(QWidget):
         self.presentation_mode_help.setWordWrap(True)
         self.presentation_mode_help.setMinimumWidth(0)
         mode_row = QWidget(self)
+        self.presentation_mode_row = mode_row
         mode_layout = QVBoxLayout(mode_row)
         mode_layout.setContentsMargins(0, 0, 0, 0)
         mode_layout.setSpacing(2)
@@ -503,6 +518,7 @@ class ConditionSetupStep(QWidget):
         self.condition_details_section = QFrame(self)
         self.condition_details_section.setObjectName("setup_conditions_details_section")
         self.condition_details_section.setProperty("conditionDetailsSection", "true")
+        self.condition_details_section.setMinimumHeight(_CONDITION_DETAILS_MIN_HEIGHT)
         details_section_layout = QVBoxLayout(self.condition_details_section)
         details_section_layout.setContentsMargins(10, 4, 10, 4)
         details_section_layout.setSpacing(4)
@@ -670,6 +686,7 @@ class ConditionSetupStep(QWidget):
         detail_layout.addWidget(self.condition_details_section)
         detail_layout.addStretch(1)
         detail_layout.addWidget(sources_row)
+        sources_row.hide()
         detail_layout.addWidget(self.words_panel)
 
         workspace = QWidget(self)
@@ -745,6 +762,33 @@ class ConditionSetupStep(QWidget):
             if selected_condition_id is None and self.condition_list.count() > 0:
                 self.condition_list.setCurrentRow(0)
         self._refresh_editor()
+        conflicts = category_conflict_condition_ids(self._document.project)
+        can_separate = (
+            self._document.project.experiment_category == ExperimentCategory.ATTENTIONAL_BLINK
+            and any(
+                item.attentional_blink is not None for item in self._document.project.conditions
+            )
+            and bool(conflicts)
+        )
+        can_clear_unused_t2 = (
+            self._document.project.experiment_category == ExperimentCategory.FPVS_ODDBALL
+            and bool(conflicts)
+            and all(item.attentional_blink is None for item in self._document.project.conditions)
+        )
+        self.separate_conditions_button.setText(
+            "Clear unused T2 assignments..." if can_clear_unused_t2
+            else "Separate oddball conditions..."
+        )
+        self.separate_conditions_button.setVisible(can_separate or can_clear_unused_t2)
+        self.separate_conditions_button.setEnabled(self._active_task is None)
+        if conflicts:
+            self.condition_list_hint.setText(
+                "This older oddball experiment retains unused T2 assignments. "
+                "Clear them to continue."
+                if can_clear_unused_t2 else
+                "This older experiment contains incompatible conditions. "
+                "Separate them into their own experiment to continue."
+            )
 
     def flush_pending_edits(self) -> None:
         self._instructions_committer.flush()
@@ -769,7 +813,10 @@ class ConditionSetupStep(QWidget):
                 stimulus_set = self._document.get_condition_stimulus_set(
                     condition.condition_id, role
                 )
-                if self._stimulus_ready(stimulus_set):
+                if (
+                    stimulus_set.modality == StimulusModality.IMAGE
+                    or self._stimulus_ready(stimulus_set)
+                ):
                     continue
                 self._select_condition(condition.condition_id)
                 field: QWidget
@@ -789,12 +836,25 @@ class ConditionSetupStep(QWidget):
         self._refresh_editor()
 
     def _condition_status_text(self, condition: Condition) -> str:
+        if condition.condition_id in category_conflict_condition_ids(self._document.project):
+            return "Needs separation"
         base_set = self._document.get_condition_stimulus_set(condition.condition_id, "base")
         oddball_set = self._document.get_condition_stimulus_set(condition.condition_id, "oddball")
         if not is_guided_condition_name(condition.name):
             return "Needs name"
         elif not is_guided_trigger_code(condition.trigger_code):
             return "Needs trigger"
+        elif base_set.modality == StimulusModality.IMAGE:
+            return "Design configured" if (
+                self._stimulus_ready(base_set) and self._stimulus_ready(oddball_set)
+                and (
+                    condition.attentional_blink is None
+                    or condition.t2_stimulus_set_id is not None
+                    and self._stimulus_ready(
+                        self._document.get_condition_stimulus_set(condition.condition_id, "t2")
+                    )
+                )
+            ) else "Finish in Design"
         elif self._stimulus_ready(base_set) and self._stimulus_ready(oddball_set):
             return "Ready"
         else:
@@ -807,6 +867,13 @@ class ConditionSetupStep(QWidget):
     def _refresh_editor(self, *_args: object) -> None:
         condition = self._current_condition()
         enabled = condition is not None
+        ab = self._document.project.experiment_category == ExperimentCategory.ATTENTIONAL_BLINK
+        self.sources_row.hide()
+        self.modality_label.setVisible(not ab)
+        self.modality_combo.setVisible(not ab)
+        self.presentation_mode_label.setVisible(not ab)
+        self.presentation_mode_row.setVisible(not ab)
+        self.all_conditions_section.setVisible(not ab)
         for widget in (
             self.condition_name_edit,
             self.trigger_code_spin,
@@ -835,7 +902,7 @@ class ConditionSetupStep(QWidget):
         if condition is None:
             self.condition_scope_label.setText("Add your first condition")
             self.condition_scope_label.setToolTip("")
-            self.condition_list_hint.setText("Add a condition, then choose images or enter words.")
+            self.condition_list_hint.setText("Add a condition, then build its sequence in Design.")
             self.presentation_mode_help.setText("")
             self.presentation_mode_help.hide()
             with QSignalBlocker(self.condition_name_edit):
@@ -862,7 +929,7 @@ class ConditionSetupStep(QWidget):
                 self.oddball_words_edit.clear()
             self.base_words_count.setText("0 words")
             self.oddball_words_count.setText("0 words")
-            self.sources_row.setVisible(True)
+            self.sources_row.hide()
             self.words_panel.setVisible(False)
             self.presentation_summary_label.setText("No selection")
             self.task_summary_label.setText("No selection")
@@ -889,7 +956,7 @@ class ConditionSetupStep(QWidget):
             self.condition_list_hint.setText("Enter base and oddball words below, one per line.")
         else:
             self.condition_list_hint.setText(
-                "Choose base and oddball image folders for this condition."
+                "Choose image folders and build this condition's sequence in Design."
             )
         contrast_mode = condition.duty_cycle_mode == DutyCycleMode.SINUSOIDAL
         self.presentation_mode_help.setText(
@@ -921,7 +988,7 @@ class ConditionSetupStep(QWidget):
         self.base_words_count.setText(f"{base_set.word_count} words")
         self.oddball_words_count.setText(f"{oddball_set.word_count} words")
         word_mode = modality == StimulusModality.WORD
-        self.sources_row.setVisible(not word_mode)
+        self.sources_row.hide()
         self.words_panel.setVisible(word_mode)
         self.base_import_button.setEnabled(enabled and not word_mode)
         self.oddball_import_button.setEnabled(enabled and not word_mode)
@@ -1212,6 +1279,70 @@ class ConditionSetupStep(QWidget):
         )
         dialog.exec()
         self.refresh()
+
+    def _separate_conditions(self) -> None:
+        if self._active_task is not None:
+            return
+        self.flush_pending_edits()
+        if self._document.project.experiment_category == ExperimentCategory.FPVS_ODDBALL:
+            answer = QMessageBox.question(
+                self, "Clear unused T2 assignments",
+                "Remove unused T2 assignments from this FPVS-Oddball experiment? "
+                "The image files and all ordinary oddball settings will be preserved. "
+                "Save the experiment to keep this change.",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
+                QMessageBox.StandardButton.Cancel,
+            )
+            if answer == QMessageBox.StandardButton.Yes:
+                for condition in self._document.ordered_conditions():
+                    if (condition.t2_stimulus_set_id is not None
+                            or condition.isi_stimulus_set_id is not None):
+                        self._document.update_condition(
+                            condition.condition_id,
+                            t2_stimulus_set_id=None, isi_stimulus_set_id=None,
+                        )
+                self.refresh()
+            return
+        answer = QMessageBox.question(
+            self, "Separate experiment types",
+            "Create a separate FPVS-Oddball experiment with copies of the oddball conditions "
+            "and image files, and save this experiment with only its Attentional-Blink conditions? "
+            "Existing images and previous run records will be preserved.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
+            QMessageBox.StandardButton.Cancel,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        snapshot = self._document.project.model_copy(deep=True)
+        manifest = self._document.manifest
+        manifest = manifest.model_copy(deep=True) if manifest is not None else None
+        project_root = self._document.project_root
+        self._active_task = ProgressTask(
+            parent_widget=self,
+            label="Separating experiment conditions and preserving image files...",
+            callback=lambda: separate_legacy_mixed_project(project_root, snapshot, manifest),
+        )
+        self._active_task.succeeded.connect(self._on_separation_succeeded)
+        self._active_task.failed.connect(self._on_separation_failed)
+        self._active_task.finished.connect(self._on_materialization_finished)
+        self._active_task.start()
+
+    def _on_separation_failed(self, error: object) -> None:
+        _show_error_dialog(
+            self, "Could not separate experiments",
+            _coerce_exception(error),
+        )
+
+    def _on_separation_succeeded(self, result: object) -> None:
+        if not isinstance(result, SeparatedProjects):
+            raise TypeError("Unexpected experiment separation result.")
+        self._document.accept_separated_project(result.attentional_blink)
+        self.refresh()
+        QMessageBox.information(
+            self, "Experiments separated",
+            "This experiment now contains only Attentional-Blink conditions. "
+            f"The FPVS-Oddball experiment is saved at:\n{result.oddball_root}",
+        )
 
     def _apply_modality(self) -> None:
         condition_id = self.selected_condition_id()

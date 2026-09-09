@@ -90,7 +90,7 @@ def _patch_stimulus_factory(
 
 def _run_spec(*keys: str) -> SimpleNamespace:
     return SimpleNamespace(
-        stimulus_sequence=[SimpleNamespace(key=key) for key in keys],
+        stimulus_sequence=[SimpleNamespace(key=key, is_blank=False) for key in keys],
     )
 
 

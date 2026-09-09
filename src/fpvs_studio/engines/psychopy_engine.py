@@ -19,6 +19,7 @@ from PIL import Image
 from fpvs_studio.core.contrast_modulation import sinusoidal_contrast_envelope
 from fpvs_studio.core.enums import DutyCycleMode, EngineName, RunMode, StimulusModality
 from fpvs_studio.core.execution import (
+    AttentionalBlinkOnsetRecord,
     FixationTargetOnsetRecord,
     FrameIntervalRecord,
     ResponseRecord,
@@ -307,6 +308,10 @@ class PsychoPyEngine(PresentationEngine):
         raw_frame_intervals: list[float | None] = [None] * run_spec.display.total_frames
         raw_responses: list[tuple[str, int, float | None]] = []
         raw_fixation_target_onsets: list[tuple[int, int, float]] = []
+        ab_events = run_spec.stimulus_sequence if run_spec.attentional_blink is not None else []
+        ab_onset_indices = {event.on_start_frame: event.sequence_index for event in ab_events}
+        ab_onset_times: list[float | None] = [None] * len(ab_events)
+        first_stream_flip_time: float | None = None
         completed_frames = 0
         resources: PreparedConditionResources | None = None
         cleanup_report: StimulusCleanupReport | None = None
@@ -480,6 +485,14 @@ class PsychoPyEngine(PresentationEngine):
                         current_time_s = (
                             float(flip_time) if current_has_timestamp else run_clock_get_time()
                         )
+                        if frame_index == 0 and current_has_timestamp:
+                            first_stream_flip_time = current_time_s
+                        ab_index = ab_onset_indices.get(frame_index)
+                        if (
+                            ab_index is not None and current_has_timestamp
+                            and first_stream_flip_time is not None
+                        ):
+                            ab_onset_times[ab_index] = current_time_s - first_stream_flip_time
                         if (
                             target_onset_events
                             and current_has_timestamp
@@ -607,6 +620,22 @@ class PsychoPyEngine(PresentationEngine):
             )
             for event_index, frame_index, time_s in raw_fixation_target_onsets
         ]
+        attentional_blink_onsets: list[AttentionalBlinkOnsetRecord] | None = None
+        if run_spec.attentional_blink is not None:
+            attentional_blink_onsets = []
+            for event in ab_events:
+                if event.on_start_frame >= completed_frames:
+                    break
+                assert event.phase is not None and event.slot_index is not None
+                attentional_blink_onsets.append(
+                    AttentionalBlinkOnsetRecord(
+                        sequence_index=event.sequence_index,
+                        phase=event.phase,
+                        slot_index=event.slot_index,
+                        frame_index=event.on_start_frame,
+                        time_s=ab_onset_times[event.sequence_index],
+                    )
+                )
         (
             timing_max_interval_s,
             timing_first_bad_phase,
@@ -665,6 +694,7 @@ class PsychoPyEngine(PresentationEngine):
             runtime_metadata=runtime_metadata,
             frame_intervals=frame_intervals,
             fixation_target_onsets=fixation_target_onsets,
+            attentional_blink_onsets=attentional_blink_onsets,
             fixation_responses=[],
             response_log=response_log,
             trigger_log=[],
@@ -795,6 +825,9 @@ class PsychoPyEngine(PresentationEngine):
         draw_by_stimulus_identity: dict[int, Any] = {}
         prepared_draw_sequence: list[Any] = []
         for stimulus in prepared_sequence:
+            if stimulus is None:
+                prepared_draw_sequence.append(None)
+                continue
             stimulus_identity = id(stimulus)
             stimulus_draw = draw_by_stimulus_identity.get(stimulus_identity)
             if stimulus_draw is None:

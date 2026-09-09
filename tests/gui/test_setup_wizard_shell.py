@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
     QHeaderView,
     QLabel,
     QListWidget,
+    QMessageBox,
     QPushButton,
     QSizePolicy,
     QWidget,
@@ -26,7 +27,7 @@ from tests.gui.helpers import (
 )
 
 from fpvs_studio.gui.controller import StudioController
-from fpvs_studio.gui.design_system import COLOR_PAGE_BACKGROUND
+from fpvs_studio.gui.design_system import resolve_studio_theme
 
 
 def test_main_window_uses_home_and_setup_wizard_stack(
@@ -83,11 +84,13 @@ def test_setup_wizard_exists_and_uses_single_column_shell_with_steps(
     assert wizard.findChild(QLabel, "setup_wizard_progress_header") is None
     assert wizard.progress_steps.objectName() == "setup_wizard_progress_steps"
     assert wizard.step_status_badge.objectName() == "setup_wizard_ready_badge"
-    assert len(wizard.progress_steps.step_items) == 8
-    assert wizard.step_stack.count() == 8
+    assert len(wizard.progress_steps.step_items) == 9
+    assert wizard.step_stack.count() == 9
     assert wizard.project_step_surface.property("setupStepSurface") == "true"
     assert wizard.conditions_step_surface.property("setupStepSurface") == "true"
     assert wizard.conditions_step_surface.content.maximumWidth() == 1040
+    assert wizard.design_step_surface.property("setupStepSurface") == "true"
+    assert wizard.design_step_surface.content.maximumWidth() == 1400
     assert wizard.experiment_step_surface.property("setupStepSurface") == "true"
     assert wizard.fixation_step_surface.property("setupStepSurface") == "true"
     assert wizard.response_step_surface.property("setupStepSurface") == "true"
@@ -106,6 +109,7 @@ def test_setup_wizard_exists_and_uses_single_column_shell_with_steps(
     assert "Step 1 of 6" not in "\n".join(label.text() for label in wizard.findChildren(QLabel))
     assert "Project" in step_metadata_text
     assert "Conditions" in step_metadata_text
+    assert "Design" in step_metadata_text
     assert "Timing" in step_metadata_text
     assert "Image Size" in step_metadata_text
     assert "Session" in step_metadata_text
@@ -116,10 +120,10 @@ def test_setup_wizard_exists_and_uses_single_column_shell_with_steps(
     assert "Review" in step_metadata_text
     assert wizard.findChild(QWidget, "setup_wizard_step_1_project") is not None
     assert wizard.findChild(QWidget, "setup_wizard_step_2_conditions") is not None
-    assert wizard.findChild(QWidget, "setup_wizard_step_3_timing") is not None
-    assert wizard.findChild(QWidget, "setup_wizard_step_6_fixation") is not None
-    assert wizard.findChild(QWidget, "setup_wizard_step_7_response") is not None
-    assert wizard.findChild(QWidget, "setup_wizard_step_8_review") is not None
+    assert wizard.findChild(QWidget, "setup_wizard_step_4_timing") is not None
+    assert wizard.findChild(QWidget, "setup_wizard_step_7_fixation") is not None
+    assert wizard.findChild(QWidget, "setup_wizard_step_8_response") is not None
+    assert wizard.findChild(QWidget, "setup_wizard_step_9_review") is not None
     assert wizard.progress_steps.step_circles[0].property("setupProgressState") == "current"
     next_hint = wizard.findChild(QLabel, "setup_wizard_next_hint_label")
     assert next_hint is not None
@@ -157,6 +161,7 @@ def test_setup_wizard_exists_and_uses_single_column_shell_with_steps(
     for step_key in (
         "project",
         "conditions",
+        "design",
         "experiment",
         "image_size",
         "session",
@@ -190,9 +195,7 @@ def test_setup_wizard_exists_and_uses_single_column_shell_with_steps(
     assert wizard.step_content_anchor.isAncestorOf(wizard.content_stack)
     assert wizard.step_card.sizePolicy().verticalPolicy() == QSizePolicy.Policy.Expanding
     assert wizard.step_card.maximumHeight() <= 552
-    assert wizard.progress_panel_shell.sizePolicy().verticalPolicy() == (
-        QSizePolicy.Policy.Fixed
-    )
+    assert wizard.progress_panel_shell.sizePolicy().verticalPolicy() == (QSizePolicy.Policy.Fixed)
     progress_top = wizard.progress_panel_shell.mapTo(
         wizard.step_card,
         wizard.progress_panel_shell.rect().topLeft(),
@@ -221,6 +224,7 @@ def test_setup_wizard_compact_steps_do_not_clip_visible_content(
     for step_key in (
         "project",
         "conditions",
+        "design",
         "experiment",
         "image_size",
         "session",
@@ -235,17 +239,18 @@ def test_setup_wizard_compact_steps_do_not_clip_visible_content(
         _assert_visible_children_within_parent(wizard.step_stack.currentWidget())
         if step_key == "conditions":
             assert wizard.condition_setup_step.presentation_button.isVisible()
+        elif step_key == "design":
+            assert wizard.design_setup_step.width() >= 1000
         elif step_key == "image_size":
-            assert (
-                wizard.image_display_size_editor.configure_presentation_button.isVisible()
-            )
+            assert wizard.image_display_size_editor.configure_presentation_button.isVisible()
             assert wizard.image_display_size_editor.presentation_summary_label.isVisible()
         elif step_key == "fixation":
             assert wizard.fixation_schedule_editor.pre_stream_fixation_spin.isVisible()
             assert wizard.fixation_schedule_editor.pre_stream_fixation_note.isVisible()
 
-        frame_heights.append(wizard.step_card.height())
-        frame_tops.append(wizard.step_card.mapTo(wizard, wizard.step_card.rect().topLeft()).y())
+        if step_key != "design":
+            frame_heights.append(wizard.step_card.height())
+            frame_tops.append(wizard.step_card.mapTo(wizard, wizard.step_card.rect().topLeft()).y())
         progress_tops.append(
             wizard.progress_panel_shell.mapTo(
                 wizard.step_card,
@@ -320,8 +325,7 @@ def test_page_headers_use_home_left_alignment_and_non_home_center_alignment(
     assert home_launch_panel is not None
     assert home_hero_container is not None
     assert (
-        window.home_page.current_project_header.parentWidget().parentWidget()
-        is home_hero_container
+        window.home_page.current_project_header.parentWidget().parentWidget() is home_hero_container
     )
     assert (
         window.home_page.current_project_subtitle.parentWidget().parentWidget()
@@ -398,7 +402,10 @@ def test_switching_main_workflow_stack_keeps_outer_window_size_stable(
     assert window.objectName() == "studio_main_window"
     assert "QMainWindow#studio_main_window" in window.styleSheet()
     assert "QStackedWidget#main_stack" in window.styleSheet()
-    assert f"background-color: {COLOR_PAGE_BACKGROUND};" in window.styleSheet()
+    assert (
+        f"background-color: {resolve_studio_theme(window.palette()).page_background};"
+        in window.styleSheet()
+    )
     assert window.menuBar().isVisible()
     assert not window.statusBar().isVisible()
     assert window.minimumWidth() == 760
@@ -415,7 +422,7 @@ def test_switching_main_workflow_stack_keeps_outer_window_size_stable(
     assert window.minimumWidth() == 960
     assert window.minimumHeight() == 640
     assert window.width() == 1120
-    assert window.height() == 720
+    assert window.height() == 820
 
     window.show_home()
     QApplication.processEvents()
@@ -551,6 +558,7 @@ def test_edit_setup_stepper_can_jump_to_any_step(
 ) -> None:
     _, window = _open_created_project(controller, qtbot, tmp_path, "Editable Stepper Project")
     _prepare_compile_ready_project(window, tmp_path / "editable-stepper-assets")
+    qtbot.waitUntil(lambda: not window.setup_wizard_page.design_setup_step.is_busy())
     assert window.save_project() is True
 
     controller.open_project(window.document.project_root)
@@ -565,7 +573,7 @@ def test_edit_setup_stepper_can_jump_to_any_step(
     QApplication.processEvents()
 
     guide = reopened.setup_wizard_page
-    qtbot.mouseClick(guide.progress_steps.step_circles[6], Qt.MouseButton.LeftButton)
+    qtbot.mouseClick(guide.progress_steps.step_circles[7], Qt.MouseButton.LeftButton)
     assert guide.step_stack.currentWidget() is guide.response_step_surface
 
     qtbot.mouseClick(guide.progress_steps.step_circles[1], Qt.MouseButton.LeftButton)
@@ -595,3 +603,69 @@ def test_setup_wizard_refresh_skips_hidden_heavy_pages(
     guide.refresh()
 
     assert calls == {"assets": 0, "run": 0}
+
+
+def test_conditions_advance_to_design_without_image_sources(
+    qtbot, controller: StudioController, tmp_path: Path, monkeypatch
+) -> None:
+    document, window = _open_created_project(controller, qtbot, tmp_path, "Design Source Gate")
+    guide = window.setup_wizard_page
+    guide.project_overview_editor.project_description_edit.setPlainText("Source selection flow")
+    condition_id = document.create_condition(name="Object categories")
+    document.update_condition(condition_id, trigger_code=10)
+    guide.flush_pending_edits()
+    window.show_setup_wizard(step_key="conditions")
+    monkeypatch.setattr(
+        guide,
+        "_start_condition_image_readiness_scan",
+        lambda: (_ for _ in ()).throw(AssertionError("Conditions must not scan images")),
+    )
+    QApplication.processEvents()
+    assert guide.setup_wizard_next_button.isEnabled()
+    assert guide.first_incomplete_step_key() == "design"
+    qtbot.mouseClick(guide.setup_wizard_next_button, Qt.MouseButton.LeftButton)
+    QApplication.processEvents()
+    assert guide.step_stack.currentWidget() is guide.design_step_surface
+    assert guide.design_setup_step.selected_condition_id() == condition_id
+    assert not guide.setup_wizard_next_button.isEnabled()
+    assert "image sources" in guide.setup_wizard_next_hint_label.text()
+
+
+def test_invalid_pending_design_blocks_navigation_and_flush(
+    qtbot, controller: StudioController, tmp_path: Path, monkeypatch
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Pending Design Gate")
+    guide = window.setup_wizard_page
+    guide.open_wizard(step_key="design", allow_step_jumps=True)
+    monkeypatch.setattr(guide.design_setup_step, "has_pending_design", lambda: True)
+    monkeypatch.setattr(guide.design_setup_step, "apply_pending_design", lambda: False)
+    assert guide.flush_pending_edits() is False
+    guide._go_to_step_from_progress(0)
+    assert guide.step_stack.currentWidget() is guide.design_step_surface
+    guide._go_back()
+    assert guide.step_stack.currentWidget() is guide.design_step_surface
+    guide.open_wizard(step_key="review")
+    assert guide.step_stack.currentWidget() is guide.design_step_surface
+
+
+def test_return_home_can_discard_an_invalid_unapplied_design(
+    qtbot, controller: StudioController, tmp_path: Path, monkeypatch
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Discard Design")
+    guide = window.setup_wizard_page
+    guide.open_wizard(step_key="design")
+    discarded = []
+    returned = []
+    monkeypatch.setattr(guide.design_setup_step, "has_pending_design", lambda: True)
+    monkeypatch.setattr(guide.design_setup_step, "apply_pending_design", lambda: False)
+    monkeypatch.setattr(
+        guide.design_setup_step, "discard_pending_design", lambda: discarded.append(True) or True
+    )
+    monkeypatch.setattr(guide, "_on_return_home", lambda: returned.append(True))
+    monkeypatch.setattr(QMessageBox, "question", lambda *args: QMessageBox.StandardButton.No)
+    guide._return_home()
+    assert not discarded and not returned
+    monkeypatch.setattr(QMessageBox, "question", lambda *args: QMessageBox.StandardButton.Yes)
+    guide._return_home()
+    assert discarded == [True]
+    assert returned == [True]

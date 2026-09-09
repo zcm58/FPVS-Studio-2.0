@@ -10,6 +10,7 @@ from pathlib import Path
 
 from PySide6.QtCore import QSignalBlocker, Qt
 from PySide6.QtWidgets import (
+    QButtonGroup,
     QComboBox,
     QDialog,
     QDialogButtonBox,
@@ -20,17 +21,26 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QMessageBox,
     QPushButton,
+    QSizePolicy,
+    QStackedWidget,
     QVBoxLayout,
     QWidget,
 )
 
+from fpvs_studio.core.enums import ExperimentCategory
+from fpvs_studio.core.experiment_categories import experiment_category_label
 from fpvs_studio.core.models import ConditionTemplateProfile
 from fpvs_studio.core.paths import slugify_project_name, validate_project_id
-from fpvs_studio.gui.components import mark_error_text
+from fpvs_studio.gui.components import (
+    apply_dialog_theme,
+    mark_error_text,
+    mark_primary_action,
+    refresh_widget_style,
+)
 
 
 class CreateProjectDialog(QDialog):
-    """Collect the project name and parent directory for project scaffolding."""
+    """Choose a category before collecting project details and compatible templates."""
 
     def __init__(
         self,
@@ -40,10 +50,61 @@ class CreateProjectDialog(QDialog):
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
-        self.setWindowTitle("Create New Project")
+        self.setWindowTitle("Set Up a New Experiment")
         self.setModal(True)
-        self.resize(640, 180)
+        self.setMinimumSize(760, 390)
+        self.resize(800, 430)
         self._on_manage_templates = on_manage_templates
+        self._experiment_category: ExperimentCategory | None = None
+        self._condition_profiles: list[ConditionTemplateProfile] = []
+
+        self.category_stack = QStackedWidget(self)
+        self.category_stack.setObjectName("create_project_pages")
+        self.category_page = QWidget(self)
+        category_layout = QVBoxLayout(self.category_page)
+        category_layout.setContentsMargins(8, 8, 8, 8)
+        category_layout.setSpacing(20)
+        category_heading = QLabel("What kind of experiment are you creating?", self.category_page)
+        heading_font = category_heading.font()
+        heading_font.setPointSize(18)
+        heading_font.setBold(True)
+        category_heading.setFont(heading_font)
+        category_heading.setWordWrap(True)
+        category_layout.addWidget(category_heading)
+        category_layout.addStretch(1)
+        self.category_cards = QWidget(self.category_page)
+        self.category_cards.setFixedHeight(126)
+        category_row = QHBoxLayout(self.category_cards)
+        category_row.setContentsMargins(0, 0, 0, 0)
+        category_row.setSpacing(16)
+        self.category_button_group = QButtonGroup(self)
+        self.category_button_group.setExclusive(True)
+        self.category_buttons: dict[ExperimentCategory, QPushButton] = {}
+        choices = (
+            (ExperimentCategory.FPVS, "FPVS\nComing soon"),
+            (ExperimentCategory.FPVS_ODDBALL, "FPVS-Oddball\nBase images and oddballs"),
+            (ExperimentCategory.ATTENTIONAL_BLINK, "Attentional-Blink\nT1, separator and T2"),
+        )
+        for category, text in choices:
+            button = QPushButton(text, self.category_page)
+            button.setObjectName(f"experiment_category_{category.value}")
+            button.setMinimumWidth(210)
+            button.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+            button.setCheckable(True)
+            button.setEnabled(category != ExperimentCategory.FPVS)
+            button.setAccessibleName(text.replace("\n", ": "))
+            button.clicked.connect(
+                lambda _checked=False, selected=category: self.select_category(selected)
+            )
+            self.category_button_group.addButton(button)
+            self.category_buttons[category] = button
+            category_row.addWidget(button, 1)
+        category_layout.addWidget(self.category_cards)
+        category_layout.addStretch(1)
+        self.category_stack.addWidget(self.category_page)
+        self.details_page = QWidget(self)
+        self.category_summary_label = QLabel(self.details_page)
+        self.category_summary_label.setObjectName("create_project_category_summary")
 
         self.project_name_edit = QLineEdit(self)
         self.project_name_edit.setObjectName("project_name_edit")
@@ -88,14 +149,54 @@ class CreateProjectDialog(QDialog):
         self.button_box.setObjectName("create_project_button_box")
         self.button_box.accepted.connect(self.accept)
         self.button_box.rejected.connect(self.reject)
+        self.back_button = self.button_box.addButton("Back", QDialogButtonBox.ButtonRole.ActionRole)
+        self.back_button.clicked.connect(self._show_category_page)
+        self.back_button.setVisible(False)
+        ok_button = self.button_box.button(QDialogButtonBox.StandardButton.Ok)
+        assert ok_button is not None
+        mark_primary_action(ok_button)
+
+        details_layout = QVBoxLayout(self.details_page)
+        details_layout.addWidget(self.category_summary_label)
+        details_layout.addSpacing(12)
+        details_layout.addLayout(form_layout)
+        details_layout.addStretch(1)
+        self.category_stack.addWidget(self.details_page)
 
         layout = QVBoxLayout(self)
-        layout.addLayout(form_layout)
+        layout.setContentsMargins(24, 20, 24, 20)
+        layout.addWidget(self.category_stack, 1)
         layout.addWidget(self.button_box)
 
         self.set_condition_template_profiles(
             condition_template_profiles or [], preserve_selection=False
         )
+        self._update_project_name_validation()
+        apply_dialog_theme(self)
+
+    @property
+    def experiment_category(self) -> ExperimentCategory:
+        """Return the explicit category choice after the first setup page."""
+        if self._experiment_category is None:
+            raise ValueError("Choose an experiment category first.")
+        return self._experiment_category
+
+    def select_category(self, category: ExperimentCategory) -> None:
+        """Select one available category without creating or changing any project."""
+        if category == ExperimentCategory.FPVS:
+            return
+        self._experiment_category = category
+        for value, button in self.category_buttons.items():
+            button.setChecked(value == category)
+            button.setProperty("primaryActionRole", "true" if value == category else "false")
+            refresh_widget_style(button)
+        self.category_summary_label.setText(experiment_category_label(category))
+        self.set_condition_template_profiles(self._condition_profiles, preserve_selection=False)
+        self._update_project_name_validation()
+
+    def _show_category_page(self) -> None:
+        self.category_stack.setCurrentWidget(self.category_page)
+        self.back_button.setVisible(False)
         self._update_project_name_validation()
 
     @property
@@ -130,6 +231,12 @@ class CreateProjectDialog(QDialog):
     ) -> None:
         """Update selectable condition-template profiles in the dialog."""
 
+        self._condition_profiles = list(profiles)
+        profiles = [
+            profile
+            for profile in profiles
+            if profile.experiment_category == self._experiment_category
+        ]
         current_profile_id = self.condition_profile_id if preserve_selection else None
         with QSignalBlocker(self.condition_profile_combo):
             self.condition_profile_combo.clear()
@@ -154,6 +261,14 @@ class CreateProjectDialog(QDialog):
     def accept(self) -> None:
         """Validate the dialog fields before closing."""
 
+        if self.category_stack.currentWidget() is self.category_page:
+            if self._experiment_category is None:
+                return
+            self.category_stack.setCurrentWidget(self.details_page)
+            self.back_button.setVisible(True)
+            self._update_project_name_validation()
+            self.project_name_edit.setFocus()
+            return
         project_name = self.project_name
         parent_directory = self.project_root_edit.text().strip()
         if not project_name:
@@ -221,4 +336,8 @@ class CreateProjectDialog(QDialog):
         self.project_name_validation_label.setText(error or "")
         ok_button = self.button_box.button(QDialogButtonBox.StandardButton.Ok)
         if ok_button is not None:
-            ok_button.setEnabled(error is None)
+            choosing_category = self.category_stack.currentWidget() is self.category_page
+            ok_button.setText("Continue" if choosing_category else "Create Experiment")
+            ok_button.setEnabled(
+                self._experiment_category is not None if choosing_category else error is None
+            )

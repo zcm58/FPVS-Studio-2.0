@@ -23,7 +23,8 @@ from PySide6.QtWidgets import (
 )
 
 from fpvs_studio.core.contrast_modulation import SINUSOIDAL_NEUTRAL_BACKGROUND_COLOR
-from fpvs_studio.core.enums import DutyCycleMode
+from fpvs_studio.core.enums import DutyCycleMode, ExperimentCategory
+from fpvs_studio.core.experiment_categories import experiment_category_label
 from fpvs_studio.core.models import (
     ConditionDefaults,
     ConditionTemplateDefaults,
@@ -61,6 +62,11 @@ class ConditionTemplateProfileEditorDialog(QDialog):
         self.setModal(True)
         self.resize(760, 760)
         profile = initial_profile or self._default_profile()
+        self._experiment_category = profile.experiment_category
+        self._protocol_defaults = (
+            profile.defaults.protocol.model_copy(deep=True)
+            if profile.defaults.protocol is not None else None
+        )
 
         self.profile_id_edit = QLineEdit(self)
         self.profile_id_edit.setObjectName("condition_profile_id_edit")
@@ -71,6 +77,9 @@ class ConditionTemplateProfileEditorDialog(QDialog):
 
         profile_group = QGroupBox("Profile Metadata", self)
         profile_layout = QFormLayout(profile_group)
+        profile_layout.addRow(
+            "Experiment type", QLabel(experiment_category_label(self._experiment_category), self)
+        )
         profile_layout.addRow("Profile Id", self.profile_id_edit)
         profile_layout.addRow("Display Name", self.display_name_edit)
         profile_layout.addRow("Description", self.description_edit)
@@ -78,7 +87,10 @@ class ConditionTemplateProfileEditorDialog(QDialog):
         self.duty_cycle_combo = QComboBox(self)
         self.duty_cycle_combo.setObjectName("condition_profile_duty_cycle_combo")
         for mode in DutyCycleMode:
-            self.duty_cycle_combo.addItem(_duty_cycle_label(mode), userData=mode)
+            if self._experiment_category != ExperimentCategory.ATTENTIONAL_BLINK or (
+                mode == DutyCycleMode.CONTINUOUS
+            ):
+                self.duty_cycle_combo.addItem(_duty_cycle_label(mode), userData=mode)
         self.sequence_count_spin = QSpinBox(self)
         self.sequence_count_spin.setObjectName("condition_profile_sequence_count_spin")
         self.sequence_count_spin.setRange(1, 10000)
@@ -392,8 +404,10 @@ class ConditionTemplateProfileEditorDialog(QDialog):
             profile_id=self.profile_id_edit.text().strip(),
             display_name=self.display_name_edit.text().strip(),
             description=self.description_edit.text().strip(),
+            experiment_category=self._experiment_category,
             built_in=False,
             defaults=ConditionTemplateDefaults(
+                protocol=self._protocol_defaults,
                 condition=ConditionDefaults(
                     duty_cycle_mode=self.duty_cycle_combo.currentData(),
                     sequence_count=self.sequence_count_spin.value(),

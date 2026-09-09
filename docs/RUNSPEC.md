@@ -21,6 +21,13 @@ project.json + session settings -> compile_session_plan(...) -> SessionPlan
 SessionPlan -> runtime session flow -> engine.run_condition(RunSpec, ...)
 ```
 
+Both compilation entry points validate the entire project's locked experiment
+category before selecting conditions. FPVS-Oddball cannot contain active AB timing
+or T2 assignments; Attentional-Blink cannot contain ordinary oddball conditions.
+Selecting a compatible subset cannot bypass this check. FPVS remains an unsupported
+placeholder. See [Experiment categories](EXPERIMENT_CATEGORIES.md) for legacy
+classification and explicit separation. Compiled contract versions are unchanged.
+
 ## Why `RunSpec` is separate
 
 - runtime should not inspect editable project state during playback
@@ -74,6 +81,47 @@ separate `RunSpec` entries with each condition's resolved frame counts. The cont
 envelope is derived from that count, so 4, 5, 6, and other supported requested base
 rates do not require mode-specific tables.
 
+### Experimental attentional-blink slots
+
+`Condition.attentional_blink` enables the designer's custom within-slot target pair.
+It stores requested `t1_duration_ms`, `isi_ms`, and `t2_trigger_code`; the condition's
+`t2_stimulus_set_id` selects its T2 images. The project-wide base rate and oddball
+cadence still define the normal slots. T1 uses the existing Oddball pool, the one
+separator image uses the Base pool, and T2 uses its separately configured source.
+The separator fills the ISI; it is not a blank or another full-length normal slot.
+
+The designer defaults to 4 Hz and three Base slots followed by one target-pair slot.
+Each requested slot lasts 250 ms. With T1 = 50 ms and ISI = 50 ms, T2 automatically
+occupies the remaining 150 ms. This one-second cycle contains four slots but six
+image events. Its two target onsets are 100 ms apart (T1 duration + ISI).
+
+`core/attentional_blink.py` owns requested timing and whole-frame resolution; the
+compiler expands only the terminal oddball slot through
+`core/compiler_attentional_blink.py`. AB requires continuous image presentation.
+T1 and the separator must each have a finite positive requested duration and round
+half up to at least one frame. T2 takes the remaining slot frames and must also
+occupy at least one frame. The compiler rejects both requested overflow and frame
+rounding that leaves no T2 frame. It never stretches the normal slot to fit a pair.
+
+At 60 Hz the example compiles as follows; at 120 Hz every frame count doubles.
+
+| Event phase | Global slot index | Onset frame | Duration frames |
+| --- | --- | --- | --- |
+| `base` | 0 | 0 | 15 |
+| `base` | 1 | 15 | 15 |
+| `base` | 2 | 30 | 15 |
+| `t1` | 3 | 45 | 3 |
+| `separator` | 3 | 48 | 3 |
+| `t2` | 3 | 51 | 9 |
+
+`DisplayRunSpec.frames_per_stimulus` continues to mean frames per normal slot.
+`ConditionRunSpec.total_stimuli` counts the expanded image events; total stream frames
+remain cycle count × slots per cycle × frames per slot. Phase event indices are
+contiguous, and slot indices remain global across all repeated cycles. Standard
+conditions retain their existing event schedule. This experimental timing contract
+does not add a conventional RSVP lag model or automatically collect target-recognition
+responses; pre/post condition tasks remain owned by `SessionEntry`.
+
 ## Main fields
 
 ### `DisplayRunSpec`
@@ -118,10 +166,25 @@ Each event contains:
 - `on_start_frame`
 - `on_frames`
 - `off_frames`
+- optional AB `phase`: `base`, `t1`, `separator`, or `t2`
+- optional AB `slot_index`, shared by the three events in a target-pair slot
 
 Image events must carry `image_path` and no `text`. Word events must carry `text` and
 no `image_path`. Runtime preflight and playback treat any inconsistent modality/payload
 pair as an error.
+
+### `AttentionalBlinkRunSpec`
+
+`RunSpec.attentional_blink` is absent for standard conditions. When enabled it carries
+the requested T1 and ISI milliseconds, resolved `t1_frames`, `isi_frames`, `t2_frames`,
+the T2 marker code, and `t2_presentation`. Event roles remain `base` for Base/separator
+images and `oddball` for T1/T2; `phase` distinguishes the two targets. Each event has
+its own resolved `on_frames` and zero `off_frames`.
+
+Use `core.run_spec.event_presentation(run_spec, event)` to resolve presentation.
+T2 inherits the condition's Oddball transform/geometry rules but carries its own
+source resolution. Rendering, graphics-budget estimation, and deep asset preflight
+must use that T2 geometry instead of assuming every `oddball` event uses T1's source.
 
 ### Presentation specs
 
@@ -183,6 +246,12 @@ marker on the first stimulus onset frame and oddball markers on each oddball
 stimulus onset frame. Runtime and engines observe these frame markers while
 serial-port details stay behind the trigger backend boundary.
 
+For AB pairs, `t1_onset` retains the existing Oddball marker (55 by default, including
+the explicit nonstandard-code override). `t2_onset` uses the authored T2 code (56 by
+default). The separator has no target marker. T2's code must differ from T1 and all
+condition-start codes in the project. Runtime verifies one target marker at each
+compiled T1/T2 onset; marker delivery remains flip-locked.
+
 Normal event trigger codes must be integers from `1` through `255`. Code `0` is
 reserved for reset behavior and is not valid for `condition_start` or
 `oddball_onset` events.
@@ -195,6 +264,9 @@ next to each executed `RunSpec`.
 - `display_report.json` reflects compatibility of the compiled frame timing
 - `fixation_events.csv` preserves each compiled fixation event's frame window
   plus the realized hit/miss outcome
+- AB runs additionally write `attentional_blink_events.csv`; its planned/observed
+  timing fields and compact-export location are defined in
+  [Runtime execution](RUNTIME_EXECUTION.md#attentional-blink-event-exports)
 
 ## Asset resolution
 
@@ -219,7 +291,7 @@ frame timing as image stimuli.
 
 The compiler currently emits a seed-deterministic schedule:
 
-- oddball every 5th stimulus
+- oddball every project-selected Nth normal slot (every 5th by default)
 - manifest-backed variant resolution when available
 - sorted image paths or authored word-list order before scheduling
 - independently seeded role bags so every authored base entry and every authored
@@ -244,3 +316,15 @@ The compiler currently emits a seed-deterministic schedule:
 
 `RunSpec` must remain single-condition even as execution/export behavior gets
 richer around it.
+
+AB expansion preserves the existing Base/T1 selection bags and uses separately seeded,
+balanced ISI-image and T2 bags. Blank ISIs have no image selection. ISI selection
+does not change the ordinary Base-slot bag. It does not promise avoidance of image
+repeats across the independently selected Base/T1/separator/T2 phase boundaries.
+
+Image or blank ISI: `AttentionalBlinkRunSpec.isi_mode` records the choice, and
+`isi_presentation` carries independent ISI source geometry using Base presentation
+rules. A blank separator has `is_blank=true`, no image/text payload, and the same
+positive `on_frames` interval as an image separator. Engines skip image allocation
+and drawing for that phase while preserving background, fixation, timing and target
+markers. Preflight rejects blank flags on other phases or modes.

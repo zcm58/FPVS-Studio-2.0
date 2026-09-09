@@ -13,7 +13,7 @@ from fpvs_studio.core.enums import ProjectSchemaVersion
 from fpvs_studio.core.models import DEFAULT_FIXATION_TARGET_DURATION_MS, ProjectFile
 from fpvs_studio.core.presentation import legacy_project_presentation_settings
 
-CURRENT_SCHEMA_VERSION = ProjectSchemaVersion.V1_3
+CURRENT_SCHEMA_VERSION = ProjectSchemaVersion.V1_4
 
 
 def migrate_project_payload(payload: Mapping[str, Any]) -> ProjectFile:
@@ -24,6 +24,8 @@ def migrate_project_payload(payload: Mapping[str, Any]) -> ProjectFile:
         schema_version = schema_version.value
     if schema_version == CURRENT_SCHEMA_VERSION.value:
         return ProjectFile.model_validate(payload)
+    if schema_version == ProjectSchemaVersion.V1_3.value:
+        return ProjectFile.model_validate({**payload, "schema_version": CURRENT_SCHEMA_VERSION})
     if schema_version not in {
         ProjectSchemaVersion.V1.value,
         ProjectSchemaVersion.V1_1.value,

@@ -16,6 +16,7 @@ from fpvs_studio.core.paths import (
     GENERATED_VARIANTS_DIRNAME,
     MANIFEST_FILENAME,
     STIMULI_DIRNAME,
+    filesystem_path,
     resolve_project_relative_path,
     stimulus_variant_dirname,
     to_project_relative_posix,
@@ -173,6 +174,7 @@ def _resolve_filesystem_image_paths(
             ) from exc
         allowed_suffixes = SUPPORTED_DERIVED_SUFFIXES
 
+    source_dir = filesystem_path(source_dir)
     if source_dir.exists() and source_dir.is_dir():
         resolved = [
             to_project_relative_posix(project_root, path)

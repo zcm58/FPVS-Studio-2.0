@@ -27,6 +27,15 @@ class ProjectSchemaVersion(StrEnum):
     V1_1 = "1.1.0"
     V1_2 = "1.2.0"
     V1_3 = "1.3.0"
+    V1_4 = "1.4.0"
+
+
+class ExperimentCategory(StrEnum):
+    """Project-wide experiment categories, chosen when a project is created."""
+
+    FPVS = "fpvs"
+    FPVS_ODDBALL = "fpvs_oddball"
+    ATTENTIONAL_BLINK = "attentional_blink"
 
 
 class DutyCycleMode(StrEnum):

@@ -32,6 +32,7 @@ from PySide6.QtWidgets import (
 )
 
 from fpvs_studio.core.enums import (
+    ExperimentCategory,
     ImageGeometryMode,
     PresentationUnit,
     StimulusModality,
@@ -153,7 +154,12 @@ def condition_presentation_summary(document: ProjectDocument, condition_id: str)
 
     if base == oddball:
         return _role_summary(base)
-    return f"Base: {_role_summary(base)}; Oddball: {_role_summary(oddball)}"
+    target_label = (
+        "Targets (T1 & T2)"
+        if document.project.experiment_category == ExperimentCategory.ATTENTIONAL_BLINK
+        else "Oddball"
+    )
+    return f"Base: {_role_summary(base)}; {target_label}: {_role_summary(oddball)}"
 
 
 def _double_spin(
@@ -754,6 +760,7 @@ class PresentationSettingsDialog(QDialog):
         self.resize(1000, 640)
         self.setMinimumSize(900, 600)
         self._document = document
+        self._is_ab = document.project.experiment_category == ExperimentCategory.ATTENTIONAL_BLINK
         self._condition_id = condition_id
         self._project_draft = document.project.settings.presentation.model_copy(deep=True)
         condition = document.get_condition(condition_id) if condition_id else None
@@ -822,7 +829,10 @@ class PresentationSettingsDialog(QDialog):
                 self._editors[role] = editor
             self.editor_tabs.addTab(self._scroll_editor(common), "Condition")
             self.editor_tabs.addTab(self._scroll_editor(self._editors["base"]), "Base")
-            self.editor_tabs.addTab(self._scroll_editor(self._editors["oddball"]), "Oddball")
+            self.editor_tabs.addTab(
+                self._scroll_editor(self._editors["oddball"]),
+                "Targets (T1 & T2)" if self._is_ab else "Oddball",
+            )
 
         self.condition_lead_in_checkbox: QCheckBox | None = None
         self.condition_lead_in_spin: FiniteDoubleSpinBox | None = None
@@ -855,11 +865,14 @@ class PresentationSettingsDialog(QDialog):
         self.preview_role_combo = QComboBox(self)
         self.preview_role_combo.setObjectName("presentation_preview_role_combo")
         self.preview_role_combo.addItem("Base", "base")
-        self.preview_role_combo.addItem("Oddball", "oddball")
+        self.preview_role_combo.addItem("T1" if self._is_ab else "Oddball", "oddball")
+        if self._is_ab:
+            self.preview_role_combo.addItem("T2", "t2")
         self.preview_modality_combo = QComboBox(self)
         self.preview_modality_combo.setObjectName("presentation_preview_modality_combo")
         self.preview_modality_combo.addItem("Image", StimulusModality.IMAGE)
-        self.preview_modality_combo.addItem("Word", StimulusModality.WORD)
+        if not self._is_ab:
+            self.preview_modality_combo.addItem("Word", StimulusModality.WORD)
         if condition is not None:
             modality = document.get_condition_stimulus_set(
                 condition.condition_id,
@@ -1001,7 +1014,8 @@ class PresentationSettingsDialog(QDialog):
         return resolve_role_presentation(
             self._project_draft,
             presentation,
-            self.preview_role_combo.currentData(),
+            "oddball" if self.preview_role_combo.currentData() == "t2"
+            else self.preview_role_combo.currentData(),
         )
 
     def _on_draft_changed(self) -> None:

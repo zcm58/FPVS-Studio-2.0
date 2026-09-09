@@ -26,7 +26,7 @@ from fpvs_studio.core.condition_template_profiles import (
     SIXTY_HZ_BLANK_FIXATION_PROFILE_ID,
     STUDIO_DEFAULT_PROFILE_ID,
 )
-from fpvs_studio.core.enums import DutyCycleMode
+from fpvs_studio.core.enums import DutyCycleMode, ExperimentCategory
 from fpvs_studio.gui import controller as controller_module
 from fpvs_studio.gui.controller import StudioController
 from fpvs_studio.runtime.display_mode import NativeDisplayMode
@@ -59,9 +59,7 @@ def test_setup_wizard_surfaces_steps_and_keeps_shared_editors_available(
     blank_index = project_editor.condition_profile_combo.findData(
         SIXTY_HZ_BLANK_FIXATION_PROFILE_ID
     )
-    contrast_index = project_editor.condition_profile_combo.findData(
-        SINUSOIDAL_CONTRAST_PROFILE_ID
-    )
+    contrast_index = project_editor.condition_profile_combo.findData(SINUSOIDAL_CONTRAST_PROFILE_ID)
     assert contrast_index >= 0
     assert project_editor.condition_profile_combo.itemText(contrast_index) == (
         "Contrast Modulation"
@@ -142,7 +140,7 @@ def test_setup_wizard_surfaces_steps_and_keeps_shared_editors_available(
     assert not hasattr(dashboard.condition_setup_step, "variant_combo")
     assert dashboard.assets_page is window.assets_page
     assert dashboard.run_page is window.run_page
-    assert len(dashboard.progress_steps.step_items) == 8
+    assert len(dashboard.progress_steps.step_items) == 9
     step_metadata_text = "\n".join(item.toolTip() for item in dashboard.progress_steps.step_items)
     assert "Project" in step_metadata_text
     assert "Conditions" in step_metadata_text
@@ -162,9 +160,7 @@ def test_setup_project_contrast_profile_applies_required_background(
     _, window = _open_created_project(controller, qtbot, tmp_path, "Contrast Profile")
     dashboard = window.setup_wizard_page
     editor = dashboard.project_overview_editor
-    contrast_index = editor.condition_profile_combo.findData(
-        SINUSOIDAL_CONTRAST_PROFILE_ID
-    )
+    contrast_index = editor.condition_profile_combo.findData(SINUSOIDAL_CONTRAST_PROFILE_ID)
     assert contrast_index >= 0
 
     editor.condition_profile_combo.setCurrentIndex(contrast_index)
@@ -258,11 +254,12 @@ def test_project_template_profiles_are_cached_without_rebuilding_combo(
         lambda *args: rows_inserted.append(args)
     )
 
+    initial_reads = len(disk_reads)
     window.document.update_project_description("Refresh without changing template profiles.")
     guide.refresh()
     QApplication.processEvents()
 
-    assert len(disk_reads) == 1
+    assert len(disk_reads) == initial_reads
     assert rows_removed == []
     assert rows_inserted == []
 
@@ -321,14 +318,16 @@ def test_setup_wizard_navigation_has_no_conditions_advanced_editor(
     qtbot.mouseClick(guide.add_condition_button, Qt.MouseButton.LeftButton)
     assert information_prompts == []
     assert not next_button.isEnabled()
-    assert "name every condition" in guide.step_status_label.text().lower()
+    qtbot.waitUntil(lambda: "name every condition" in guide.step_status_label.text().lower())
 
     condition_id = guide.condition_setup_step.selected_condition_id()
     assert isinstance(condition_id, str)
     guide._document.update_condition(condition_id, name="Faces")
-    qtbot.waitUntil(lambda: "choose base images" in guide.step_status_label.text().lower())
+    qtbot.waitUntil(next_button.isEnabled)
+    qtbot.mouseClick(next_button, Qt.MouseButton.LeftButton)
+    assert guide.step_stack.currentWidget() is guide.design_step_surface
     assert not next_button.isEnabled()
-    assert "choose base images" in guide.step_status_label.text().lower()
+    assert "image sources" in guide.setup_wizard_next_hint_label.text().lower()
     assert guide.condition_setup_step.selected_condition_id() == condition_id
 
     base_dir = _write_image_directory(tmp_path / "wizard-condition-base")
@@ -349,7 +348,7 @@ def test_setup_wizard_navigation_has_no_conditions_advanced_editor(
 
     monkeypatch.setattr("fpvs_studio.gui.setup_wizard_page.ProgressTask", _ImmediateProgressTask)
     qtbot.mouseClick(next_button, Qt.MouseButton.LeftButton)
-    assert guide.step_stack.currentWidget() is guide.experiment_step_surface
+    qtbot.waitUntil(lambda: guide.step_stack.currentWidget() is guide.experiment_step_surface)
     assert guide.experiment_step_surface.content.objectName() == (
         "setup_wizard_experiment_settings_page"
     )
@@ -397,6 +396,8 @@ def test_setup_wizard_navigation_has_no_conditions_advanced_editor(
     assert guide.step_stack.currentWidget() is guide.image_size_step_surface
     qtbot.mouseClick(back_button, Qt.MouseButton.LeftButton)
     assert guide.step_stack.currentWidget() is guide.experiment_step_surface
+    qtbot.mouseClick(back_button, Qt.MouseButton.LeftButton)
+    assert guide.step_stack.currentWidget() is guide.design_step_surface
     qtbot.mouseClick(back_button, Qt.MouseButton.LeftButton)
     assert guide.step_stack.currentIndex() == 1
     assert guide.content_stack.currentWidget() is guide.guided_panel
@@ -559,9 +560,7 @@ def test_setup_footer_show_field_guides_description_and_missing_word_roles(
 
     long_name = "Familiar animal words and unfamiliar semantic category exemplars"
     condition_id = window.document.create_condition(name=long_name)
-    window.document.set_condition_stimulus_modality(
-        condition_id, modality=StimulusModality.WORD
-    )
+    window.document.set_condition_stimulus_modality(condition_id, modality=StimulusModality.WORD)
     other_id = window.document.create_condition(name="Object words")
     window.document.set_condition_stimulus_modality(other_id, modality=StimulusModality.WORD)
     window.document.update_condition_words(other_id, role="base", words=["table", "chair"])
@@ -598,3 +597,28 @@ def test_setup_footer_show_field_guides_description_and_missing_word_roles(
     assert not fix_button.isVisible()
     assert not hint.isVisible()
     assert guide.step_stack.currentWidget() is guide.conditions_step_surface
+
+
+def test_attentional_blink_project_shows_locked_category_and_matching_templates(
+    qtbot, controller: StudioController, tmp_path: Path
+) -> None:
+    document = controller.create_project(
+        parent_dir=tmp_path,
+        project_name="Attentional Blink Setup",
+        experiment_category=ExperimentCategory.ATTENTIONAL_BLINK,
+    )
+    assert document is not None
+    assert controller.main_window is not None
+    window = controller.main_window
+    qtbot.addWidget(window)
+    window.resize(1120, 720)
+    window.show_setup_wizard(step_key="project")
+    QApplication.processEvents()
+    editor = window.setup_wizard_page.project_overview_editor
+    assert isinstance(editor.experiment_category_value, QLabel)
+    assert editor.experiment_category_value.text() == "Attentional-Blink"
+    assert "fixed" in editor.experiment_category_value.toolTip().lower()
+    assert editor.condition_profile_combo.count() == 1
+    assert editor.condition_profile_combo.currentData() == "attentional-blink-v1"
+    assert document.project.experiment_category == ExperimentCategory.ATTENTIONAL_BLINK
+    assert_visible_children_within_parent(editor)

@@ -32,6 +32,12 @@ as PsychoPy. Runtime owns flow and calls engines through
   that step; it must not substitute a machine-dependent font path into the contract.
 - Engines apply compiled image/word transforms and geometry at presentation time. They
   must not write transformed stimulus assets or infer authoring inheritance.
+- Experimental attentional-blink playback expands a target-pair slot into contiguous
+  T1, Base-image separator, and T2 events. Engines follow each event's compiled onset
+  and duration; they do not divide the slot again. Resolve image geometry through
+  `core.run_spec.event_presentation`, including the separate T2 source resolution in
+  resource preparation and graphics-budget estimation. The full contract lives in
+  [RunSpec](RUNSPEC.md#experimental-attentional-blink-slots).
 - Engines apply sinusoidal contrast only when the explicit compiled image presentation
   mode requests it. The envelope is core-owned and frame-count-derived; engines must not
   infer it from the full-cycle on/off split or recompute it from a nominal frequency.

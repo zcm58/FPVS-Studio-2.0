@@ -10,10 +10,14 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
+from fpvs_studio.core.paths import filesystem_path
+
 
 def generate_rot180_png(source_path: Path, destination_path: Path) -> None:
     """Generate a 180-degree orientation-inverted PNG derivative."""
 
+    source_path = filesystem_path(source_path)
+    destination_path = filesystem_path(destination_path)
     destination_path.parent.mkdir(parents=True, exist_ok=True)
     with Image.open(source_path) as image:
         image.transpose(Image.Transpose.ROTATE_180).save(destination_path, format="PNG")
@@ -22,6 +26,8 @@ def generate_rot180_png(source_path: Path, destination_path: Path) -> None:
 def generate_phase_scrambled_png(source_path: Path, destination_path: Path, *, seed: int) -> None:
     """Generate a deterministic Fourier phase-scrambled PNG derivative."""
 
+    source_path = filesystem_path(source_path)
+    destination_path = filesystem_path(destination_path)
     destination_path.parent.mkdir(parents=True, exist_ok=True)
     rng = np.random.default_rng(seed)
 

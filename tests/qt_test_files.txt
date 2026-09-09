@@ -2,10 +2,14 @@ tests/gui/test_assets_run_launch.py
 tests/gui/test_components.py
 tests/gui/test_condition_task_dialog.py
 tests/gui/test_conditions_session_fixation.py
+tests/gui/test_design_setup_step.py
+tests/gui/test_experiment_categories_gui.py
+tests/gui/test_experiment_designer.py
 tests/gui/test_fixation_cross_data_dialog.py
 tests/gui/test_fixation_settings_page.py
 tests/gui/test_home_launch_surface.py
 tests/gui/test_image_resizer_page.py
+tests/gui/test_manage_projects_rename.py
 tests/gui/test_presentation_settings_dialog.py
 tests/gui/test_project_config_import_export.py
 tests/gui/test_run_page_launch.py

@@ -8,14 +8,17 @@ from typing import TYPE_CHECKING
 from fpvs_studio.core.condition_template_profiles import (
     apply_condition_defaults_to_condition,
     apply_condition_template_profile_to_settings,
+    require_profile_category,
 )
 from fpvs_studio.core.enums import (
     DutyCycleMode,
+    ExperimentCategory,
     StimulusModality,
     StimulusTransform,
     StimulusVariant,
 )
 from fpvs_studio.core.models import (
+    AttentionalBlinkSettings,
     Condition,
     ConditionDefaults,
     ConditionPresentationSettings,
@@ -30,6 +33,7 @@ from fpvs_studio.core.paths import (
 )
 from fpvs_studio.core.task_assets import copy_task_asset
 from fpvs_studio.core.task_models import TaskBinding, TaskModule
+from fpvs_studio.core.validation import validate_attentional_blink_condition
 from fpvs_studio.gui.document_support import (
     ConditionStimulusRow,
     DocumentError,
@@ -96,14 +100,24 @@ class DocumentConditionMixin:
         return None
 
     def get_condition_stimulus_set(self, condition_id: str, role: str) -> StimulusSet:
-        """Return the base or oddball stimulus set for one condition."""
+        """Return a condition's named image source, including its independent T2 pool."""
 
         condition = self.get_condition(condition_id)
         if condition is None:
             raise DocumentError(f"Unknown condition '{condition_id}'.")
-        set_id = (
-            condition.base_stimulus_set_id if role == "base" else condition.oddball_stimulus_set_id
-        )
+        set_id: str | None
+        if role == "base":
+            set_id = condition.base_stimulus_set_id
+        elif role in ("oddball", "t1"):
+            set_id = condition.oddball_stimulus_set_id
+        elif role in ("isi", "separator"):
+            set_id = condition.isi_stimulus_set_id
+        elif role == "t2":
+            set_id = condition.t2_stimulus_set_id
+        else:
+            raise DocumentError(f"Unknown stimulus role '{role}'.")
+        if set_id is None:
+            raise DocumentError(f"Choose the {role.upper()} image folder first.")
         stimulus_set = self.get_stimulus_set(set_id)
         if stimulus_set is None:
             raise DocumentError(f"Condition '{condition.name}' is missing its {role} stimulus set.")
@@ -126,6 +140,7 @@ class DocumentConditionMixin:
     ) -> None:
         """Snapshot one condition-template profile into project settings."""
 
+        require_profile_category(profile, self._project.experiment_category)
         settings = apply_condition_template_profile_to_settings(self._project.settings, profile)
         project = validated_copy(self._project, settings=settings)
         if apply_to_existing_conditions:
@@ -148,6 +163,11 @@ class DocumentConditionMixin:
         """Apply one condition-default snapshot to all conditions in project order."""
 
         resolved_defaults = defaults or self._project.settings.condition_defaults
+        if (
+            self._project.experiment_category == ExperimentCategory.ATTENTIONAL_BLINK
+            and resolved_defaults.duty_cycle_mode != DutyCycleMode.CONTINUOUS
+        ):
+            raise DocumentError("Attentional-Blink requires continuous target-pair presentation.")
         conditions = [
             apply_condition_defaults_to_condition(condition, resolved_defaults)
             for condition in self.ordered_conditions()
@@ -159,8 +179,11 @@ class DocumentConditionMixin:
         self._replace_project(project)
 
     def create_condition(self, *, name: str | None = None) -> str:
-        """Create one new condition plus dedicated base/oddball stimulus sets."""
+        """Create a condition with the sources required by its locked experiment type."""
 
+        if self._project.experiment_category == ExperimentCategory.FPVS:
+            raise DocumentError("FPVS is coming soon.")
+        ab = self._project.experiment_category == ExperimentCategory.ATTENTIONAL_BLINK
         ordered_conditions = self.ordered_conditions()
         defaults = self._project.settings.condition_defaults
         display_name = name or f"Condition {len(ordered_conditions) + 1}"
@@ -169,25 +192,41 @@ class DocumentConditionMixin:
         condition_id = self._unique_slug(display_name, existing_condition_ids)
         base_set_id = self._unique_slug(f"{condition_id}-base", existing_set_ids)
         oddball_set_id = self._unique_slug(
-            f"{condition_id}-oddball", existing_set_ids | {base_set_id}
+            f"{condition_id}-{'t1' if ab else 'oddball'}", existing_set_ids | {base_set_id}
+        )
+        t2_set_id = (
+            self._unique_slug(
+                f"{condition_id}-t2", existing_set_ids | {base_set_id, oddball_set_id}
+            )
+            if ab else None
         )
 
+        isi_set_id = self._unique_slug(f"{condition_id}-isi", existing_set_ids) if ab else None
         new_condition = Condition(
             condition_id=condition_id,
             name=display_name,
             base_stimulus_set_id=base_set_id,
             oddball_stimulus_set_id=oddball_set_id,
+            t2_stimulus_set_id=t2_set_id,
+            isi_stimulus_set_id=isi_set_id,
+            attentional_blink=AttentionalBlinkSettings() if ab else None,
             sequence_count=defaults.sequence_count,
             oddball_cycle_repeats_per_sequence=defaults.oddball_cycle_repeats_per_sequence,
-            duty_cycle_mode=defaults.duty_cycle_mode,
+            duty_cycle_mode=DutyCycleMode.CONTINUOUS if ab else defaults.duty_cycle_mode,
             trigger_code=len(ordered_conditions) + 1,
             order_index=len(ordered_conditions),
         )
         new_sets = [
             self._make_empty_stimulus_set(base_set_id, f"{display_name} Base"),
-            self._make_empty_stimulus_set(oddball_set_id, f"{display_name} Oddball"),
+            self._make_empty_stimulus_set(
+                oddball_set_id, f"{display_name} {'T1' if ab else 'Oddball'}"
+            ),
         ]
+        if t2_set_id is not None:
+            new_sets.append(self._make_empty_stimulus_set(t2_set_id, f"{display_name} T2"))
         conditions = [*ordered_conditions, new_condition]
+        if isi_set_id is not None:
+            new_sets.append(self._make_empty_stimulus_set(isi_set_id, f"{display_name} ISI"))
         project = validated_copy(
             self._project,
             conditions=self._reindex_conditions(conditions),
@@ -208,7 +247,12 @@ class DocumentConditionMixin:
         referenced_set_ids = {
             set_id
             for item in remaining_conditions
-            for set_id in (item.base_stimulus_set_id, item.oddball_stimulus_set_id)
+            for set_id in (
+                item.base_stimulus_set_id,
+                item.oddball_stimulus_set_id,
+                item.t2_stimulus_set_id,
+                item.isi_stimulus_set_id,
+            )
         }
         remaining_sets = [
             stimulus_set
@@ -243,12 +287,26 @@ class DocumentConditionMixin:
         oddball_set_id = self._unique_slug(
             f"{new_condition_id}-oddball", existing_set_ids | {base_set_id}
         )
+        t2_set_id = (
+            self._unique_slug(
+                f"{new_condition_id}-t2", existing_set_ids | {base_set_id, oddball_set_id}
+            )
+            if source_condition.t2_stimulus_set_id is not None
+            else None
+        )
+        isi_set_id = (
+            self._unique_slug(f"{new_condition_id}-isi", existing_set_ids)
+            if source_condition.isi_stimulus_set_id is not None else None
+        )
         duplicated_condition = source_condition.model_copy(
+            deep=True,
             update={
                 "condition_id": new_condition_id,
                 "name": copy_name,
                 "base_stimulus_set_id": base_set_id,
                 "oddball_stimulus_set_id": oddball_set_id,
+                "t2_stimulus_set_id": t2_set_id,
+                "isi_stimulus_set_id": isi_set_id,
                 "trigger_code": len(ordered_conditions) + 1,
                 "order_index": len(ordered_conditions),
             }
@@ -277,6 +335,10 @@ class DocumentConditionMixin:
                 self._make_empty_stimulus_set(base_set_id, f"{copy_name} Base"),
                 self._make_empty_stimulus_set(oddball_set_id, f"{copy_name} Oddball"),
             ]
+        if t2_set_id is not None:
+            new_sets.append(self._make_empty_stimulus_set(t2_set_id, f"{copy_name} T2"))
+        if isi_set_id is not None:
+            new_sets.append(self._make_empty_stimulus_set(isi_set_id, f"{copy_name} ISI"))
         project = validated_copy(
             self._project,
             conditions=self._reindex_conditions([*ordered_conditions, duplicated_condition]),
@@ -342,6 +404,7 @@ class DocumentConditionMixin:
                 deep=True,
             )
         control_condition = source_condition.model_copy(
+            deep=True,
             update={
                 "condition_id": new_condition_id,
                 "name": control_name,
@@ -388,6 +451,24 @@ class DocumentConditionMixin:
     def update_condition(self, condition_id: str, **updates: object) -> None:
         """Update one condition by id through Pydantic validation."""
 
+        ab = self._project.experiment_category == ExperimentCategory.ATTENTIONAL_BLINK
+        if "attentional_blink" in updates and (updates["attentional_blink"] is not None) != ab:
+            raise DocumentError("The design must match the locked experiment type.")
+        existing = self.get_condition(condition_id)
+        if (
+            ab and existing is not None and existing.attentional_blink is None
+            and updates.get("attentional_blink") is not None
+        ):
+            raise DocumentError("Separate this legacy FPVS-Oddball condition before continuing.")
+        if not ab and any(updates.get(field) is not None for field in (
+            "t2_stimulus_set_id", "isi_stimulus_set_id",
+        )):
+            raise DocumentError("T2 images are only available in Attentional-Blink experiments.")
+        if (
+            ab and updates.get("duty_cycle_mode", DutyCycleMode.CONTINUOUS)
+            != DutyCycleMode.CONTINUOUS
+        ):
+            raise DocumentError("Attentional-Blink uses continuous images with target-pair timing.")
         conditions: list[Condition] = []
         found = False
         for condition in self.ordered_conditions():
@@ -401,6 +482,54 @@ class DocumentConditionMixin:
             self._project,
             conditions=self._reindex_conditions(conditions),
         )
+        self._replace_project(project)
+
+    def apply_experiment_design(
+        self,
+        condition_id: str,
+        *,
+        base_hz: float,
+        slot_count: int,
+        attentional_blink: AttentionalBlinkSettings | None,
+    ) -> None:
+        """Apply one validated design and its project-wide cadence atomically."""
+        condition = self.get_condition(condition_id)
+        if condition is None:
+            raise DocumentError(f"Unknown condition '{condition_id}'.")
+        ab = self._project.experiment_category == ExperimentCategory.ATTENTIONAL_BLINK
+        if (attentional_blink is not None) != ab:
+            raise DocumentError("The design must match the locked experiment type.")
+        if ab and condition.attentional_blink is None:
+            raise DocumentError(
+                "Separate this FPVS-Oddball condition into its own experiment first."
+            )
+        protocol = validated_copy(
+            self._project.settings.protocol, base_hz=base_hz, oddball_every_n=slot_count
+        )
+        updated_condition = validated_copy(
+            condition,
+            attentional_blink=attentional_blink,
+            duty_cycle_mode=DutyCycleMode.CONTINUOUS
+            if attentional_blink
+            else condition.duty_cycle_mode,
+        )
+        project = validated_copy(
+            self._project,
+            settings=validated_copy(self._project.settings, protocol=protocol),
+            conditions=[
+                updated_condition if item.condition_id == condition_id else item
+                for item in self._project.conditions
+            ],
+        )
+        for candidate in project.conditions:
+            problems = validate_attentional_blink_condition(
+                project,
+                candidate,
+                refresh_hz=project.settings.display.preferred_refresh_hz,
+                require_ready_sources=False,
+            )
+            if problems:
+                raise DocumentError(f"{candidate.name}: {' '.join(problems)}")
         self._replace_project(project)
 
     def set_condition_task_flow(
@@ -541,6 +670,11 @@ class DocumentConditionMixin:
     ) -> None:
         """Switch an empty condition between image and word authoring modes."""
 
+        if (
+            self._project.experiment_category == ExperimentCategory.ATTENTIONAL_BLINK
+            and modality != StimulusModality.IMAGE
+        ):
+            raise DocumentError("Attentional-Blink designs use image sources.")
         condition = self.get_condition(condition_id)
         if condition is None:
             raise DocumentError(f"Unknown condition '{condition_id}'.")
@@ -548,6 +682,11 @@ class DocumentConditionMixin:
         oddball_set = self.get_condition_stimulus_set(condition_id, "oddball")
         if base_set.modality == modality and oddball_set.modality == modality:
             return
+        if condition.attentional_blink is not None or (
+            condition.t2_stimulus_set_id is not None
+            and self.get_condition_stimulus_set(condition_id, "t2").image_count > 0
+        ):
+            raise DocumentError("Attentional-blink designs use image sources.")
         if not self._condition_stimulus_sets_empty(base_set, oddball_set):
             raise DocumentError(
                 "Condition stimulus type can only be changed before images or words are added."

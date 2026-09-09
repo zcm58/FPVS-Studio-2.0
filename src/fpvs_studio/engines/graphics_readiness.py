@@ -17,7 +17,7 @@ from math import ceil, isfinite
 from typing import Any, Protocol, cast
 
 from fpvs_studio.core.enums import ImageGeometryMode, StimulusModality, StimulusTransform
-from fpvs_studio.core.run_spec import RunSpec, StimulusEvent
+from fpvs_studio.core.run_spec import RunSpec, StimulusEvent, event_presentation
 
 MEBIBYTE = 1024 * 1024
 _MIPMAP_NUMERATOR = 4
@@ -358,9 +358,7 @@ def image_render_key_for_event(event: StimulusEvent, *, run_spec: RunSpec) -> tu
 
     if event.stimulus_modality != StimulusModality.IMAGE:
         raise ValueError("Only image events have an image render key.")
-    role_spec = (
-        getattr(run_spec.presentation, event.role) if run_spec.presentation is not None else None
-    )
+    role_spec = event_presentation(run_spec, event)
     geometry = role_spec.image_geometry if role_spec is not None else None
     transform = role_spec.transform if role_spec is not None else StimulusTransform.NONE
     return (
@@ -474,16 +472,12 @@ def estimate_run_spec_image_memory(
     variants: list[ImageRenderMemorySpec] = []
     issues: list[str] = []
     for event in run_spec.stimulus_sequence:
-        if event.stimulus_modality != StimulusModality.IMAGE:
+        if event.is_blank or event.stimulus_modality != StimulusModality.IMAGE:
             continue
         if event.image_path is None:
             issues.append(f"Image event '{event.stimulus_id}' has no image path.")
             continue
-        role_spec = (
-            getattr(run_spec.presentation, event.role)
-            if run_spec.presentation is not None
-            else None
-        )
+        role_spec = event_presentation(run_spec, event)
         geometry = role_spec.image_geometry if role_spec is not None else None
         if geometry is None and decoded_dimensions is None:
             issues.append(
@@ -492,6 +486,7 @@ def estimate_run_spec_image_memory(
             continue
 
         compiled_size = geometry.source_resolution.as_tuple() if geometry is not None else None
+        source_size: tuple[int, int] | None
         if decoded_dimensions is None:
             assert compiled_size is not None
             source_size = compiled_size

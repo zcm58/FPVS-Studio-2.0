@@ -9,12 +9,15 @@ from __future__ import annotations
 from collections.abc import Mapping
 from math import isclose
 from pathlib import Path
+from typing import cast
 
 from PIL import Image
 
+from fpvs_studio.core.attentional_blink import SlotRole, preview_attentional_blink
 from fpvs_studio.core.contrast_modulation import is_sinusoidal_neutral_background
 from fpvs_studio.core.enums import DutyCycleMode, StimulusModality
-from fpvs_studio.core.run_spec import RunSpec
+from fpvs_studio.core.paths import resolve_project_relative_path
+from fpvs_studio.core.run_spec import RunSpec, event_presentation
 from fpvs_studio.core.session_plan import SessionPlan
 from fpvs_studio.core.task_models import (
     TaskItemModality,
@@ -142,6 +145,12 @@ def _validate_stimulus_timing(run_spec: RunSpec) -> None:
             "Run preflight failed because the compiled run contains no stimulus events."
         )
 
+    if run_spec.attentional_blink is not None:
+        _validate_attentional_blink_timing(run_spec)
+        return
+    if any(event.phase is not None or event.slot_index is not None for event in stimulus_sequence):
+        raise PreflightError("Attentional-blink event phases require compiled target-pair timing.")
+
     expected_start_frame = 0
     for expected_index, event in enumerate(stimulus_sequence):
         if event.sequence_index != expected_index:
@@ -170,9 +179,88 @@ def _validate_stimulus_timing(run_spec: RunSpec) -> None:
         )
 
 
+def _validate_attentional_blink_timing(run_spec: RunSpec) -> None:
+    timing = run_spec.attentional_blink
+    assert timing is not None
+    if (
+        run_spec.condition.stimulus_modality != StimulusModality.IMAGE
+        or run_spec.display.duty_cycle_mode != DutyCycleMode.CONTINUOUS
+        or run_spec.presentation is None
+        or run_spec.display.on_frames != run_spec.display.frames_per_stimulus
+        or run_spec.display.off_frames != 0
+        or not isclose(run_spec.display.duty_cycle, 1.0, rel_tol=0.0, abs_tol=1e-9)
+    ):
+        raise PreflightError("Attentional-blink playback requires continuous image presentation.")
+    slots = run_spec.condition.oddball_every_n
+    # Bound allocation before reconstructing a potentially malformed contract.
+    if not 1 <= slots <= 1000:
+        raise PreflightError("Attentional-blink cycles require between 1 and 1000 slots.")
+    roles = cast(tuple[SlotRole, ...], ("base",) * (slots - 1) + ("target_pair",))
+    try:
+        preview = preview_attentional_blink(
+            roles, refresh_hz=run_spec.display.refresh_hz,
+            base_hz=run_spec.condition.base_hz,
+            t1_ms=timing.requested_t1_duration_ms, isi_ms=timing.requested_isi_ms,
+        )
+    except ValueError as exc:
+        raise PreflightError(f"Attentional-blink timing is invalid: {exc}") from exc
+    if (timing.t1_frames, timing.isi_frames, timing.t2_frames) != (
+        preview.t1_frames, preview.isi_frames, preview.t2_frames,
+    ):
+        raise PreflightError("Attentional-blink frame durations do not match requested timing.")
+    repeats = run_spec.condition.total_oddball_cycles
+    if repeats < 1 or len(run_spec.stimulus_sequence) != repeats * len(preview.segments):
+        raise PreflightError("Attentional-blink event count does not match the compiled cycles.")
+    if run_spec.display.total_frames != repeats * preview.total_frames:
+        raise PreflightError(
+            "Attentional-blink cycles do not cover the compiled total frame count."
+        )
+    for index, event in enumerate(run_spec.stimulus_sequence):
+        repeat_index, segment_index = divmod(index, len(preview.segments))
+        segment = preview.segments[segment_index]
+        expected_role = "base" if segment.role in ("base", "separator") else "oddball"
+        if (
+            event.sequence_index != index
+            or event.is_blank != (segment.role == "separator" and timing.isi_mode == "blank")
+            or event.phase != segment.role
+            or event.role != expected_role
+            or event.stimulus_modality != StimulusModality.IMAGE
+            or event.slot_index != repeat_index * slots + segment.slot_index
+            or event.on_start_frame != repeat_index * preview.total_frames + segment.start_frame
+            or event.on_frames != segment.duration_frames
+            or event.off_frames != 0
+        ):
+            raise PreflightError(
+                f"Attentional-blink event {index} does not match its phase, slot, or frame timing."
+            )
+    for phase, label in (("t1", "t1_onset"), ("t2", "t2_onset")):
+        expected_frames = [
+            event.on_start_frame for event in run_spec.stimulus_sequence if event.phase == phase
+        ]
+        markers = [event for event in run_spec.trigger_events if event.label == label]
+        if sorted(event.frame_index for event in markers) != expected_frames:
+            raise PreflightError(f"Attentional-blink {label} markers do not match target onsets.")
+        if any(
+            (event.code != timing.t2_trigger_code if phase == "t2"
+             else event.code == timing.t2_trigger_code)
+            for event in markers
+        ):
+            raise PreflightError("Attentional-blink T1 and T2 marker codes must remain distinct.")
+    if any(
+        event.label == "condition_start" and event.code == timing.t2_trigger_code
+        for event in run_spec.trigger_events
+    ):
+        raise PreflightError("The T2 marker code must differ from the condition-start marker.")
+
+
 def _validate_stimulus_payloads(run_spec: RunSpec) -> None:
     stimulus_payloads: dict[str, tuple[StimulusModality, str | None, str | None]] = {}
     for event in run_spec.stimulus_sequence:
+        if event.is_blank:
+            if (run_spec.attentional_blink is None or event.phase != "separator"
+                    or event.image_path is not None or event.text is not None):
+                raise PreflightError("Invalid blank ISI payload.")
+            continue
         if event.stimulus_modality == StimulusModality.IMAGE:
             if event.image_path is None or event.text is not None:
                 raise PreflightError(
@@ -196,9 +284,9 @@ def _validate_stimulus_payloads(run_spec: RunSpec) -> None:
                 "Run preflight failed because a compiled stimulus id maps to multiple payloads."
             )
 
-        if run_spec.presentation is None:
+        role_presentation = event_presentation(run_spec, event)
+        if role_presentation is None:
             continue
-        role_presentation = getattr(run_spec.presentation, event.role)
         if event.stimulus_modality == StimulusModality.IMAGE:
             if role_presentation.image_geometry is None or role_presentation.text is not None:
                 raise PreflightError(
@@ -265,16 +353,14 @@ def _resolve_project_image_path(project_root: Path, image_path: str) -> Path:
             "Run preflight failed because an image stimulus path is not project-relative: "
             f"{image_path}"
         )
-    root = project_root.resolve()
-    absolute_path = (project_root / relative_path).resolve()
     try:
-        absolute_path.relative_to(root)
+        return resolve_project_relative_path(project_root, image_path)
     except ValueError as exc:
         raise PreflightError(
-            "Run preflight failed because an image stimulus path escapes the project root: "
+            "Run preflight failed because an image stimulus path is invalid or "
+            "escapes the project root: "
             f"{image_path}"
         ) from exc
-    return absolute_path
 
 
 def _validate_image_assets(
@@ -288,9 +374,9 @@ def _validate_image_assets(
         if event.stimulus_modality != StimulusModality.IMAGE or event.image_path is None:
             continue
         expected_resolutions = image_references.setdefault(event.image_path, set())
-        if run_spec.presentation is None:
+        role_presentation = event_presentation(run_spec, event)
+        if role_presentation is None:
             continue
-        role_presentation = getattr(run_spec.presentation, event.role)
         if role_presentation.image_geometry is None:
             continue
         source_resolution = role_presentation.image_geometry.source_resolution

@@ -74,11 +74,48 @@ evidence for its invariant unless the task changes that audit or boundary.
 
 ## Setup Design Verification
 
-The eight-step Setup flow and shared dialog acceptance sizes are documented in
+For Manage Projects renaming, start with `gui/manage_projects_dialog.py`, its
+controller bindings and `core/project_service.py`. Verify metadata-only persistence
+and open-document draft preservation with `tests/unit/test_project_service.py` and
+registered `tests/gui/test_manage_projects_rename.py`. The dialog fits `860x520`.
+
+The nine-step Setup flow and shared dialog acceptance sizes are documented in
 [GUI workflow](../GUI_WORKFLOW.md#setup-design-and-manual-acceptance). Use the GUI
 focused route for edits and the repo precommit tier for shared component changes.
-The active [setup design plan](../exec-plans/active/setup-ux-design-refinement.md)
-tracks implementation and the pending visible review.
+Current category and Design contracts are documented in
+[`EXPERIMENT_CATEGORIES.md`](../EXPERIMENT_CATEGORIES.md); implementation history is
+in the completed plans directory.
+
+For the 1120x820 Setup default and its image/blank ISI editor, read
+`tests/gui/test_design_setup_step.py` for full-window and source-choice coverage.
+For the shared visual editor embedded in Setup > Design, read
+[`VISUAL_EXPERIMENT_DESIGNER.md`](../VISUAL_EXPERIMENT_DESIGNER.md) and
+[`EXPERIMENT_CATEGORIES.md`](../EXPERIMENT_CATEGORIES.md). Category is fixed at creation;
+only Attentional-Blink exposes T1/ISI/T2. There are no mode tabs or masking controls.
+GUI owns interactions; `core/experiment_design.py` owns ordinary cycle mathematics
+and historical masking calculations that have no current GUI.
+`core/attentional_blink.py` and `core/compiler_attentional_blink.py` own custom AB timing
+and compound-slot compilation. AB sources, playback and onset exports follow the
+existing model/compiler/runtime/engine boundaries. The overview works without a
+preview display selection; achieved frames live under Timing & display details.
+`gui/design_setup_step.py` integrates condition selection, pending apply/discard,
+and worker-aware navigation around the shared `ExperimentDesignerWidget`. Folder
+imports immediately update sources; timing discard preserves those imports.
+`is_importing()` blocks navigation during source mutation; `is_busy()` also includes
+thumbnail decoding and protects condition disposal and editor teardown. Ordinary
+image/word features remain FPVS-Oddball. Legacy conflicts require explicit separation.
+Use GUI/core/compiler/runtime/engine focused verification and registered
+`tests/gui/test_experiment_designer.py`, `tests/gui/test_design_setup_step.py`,
+category and wizard modules for approved visible acceptance. Check the embedded
+`1000x600` isolated content budget and the complete `1120x820` wizard in both themes,
+plus the expanded `1448x1086` mockup size. Next applies the embedded design; the
+standalone editor retains its Apply action. Check numeric edits, navigation validity,
+source-folder hit targets, readable schematic tokens and proportional detail.
+
+For long Windows image paths, start with `core/paths.py` (`filesystem_path`, containment
+resolution and relative serialization), then the image I/O entry point. Keep namespace
+prefixes out of saved JSON. Core, preprocessing and compiler/runtime focused routes
+include the Windows path regression files.
 
 ## Planning Route
 

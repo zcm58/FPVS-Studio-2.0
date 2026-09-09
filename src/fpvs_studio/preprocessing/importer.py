@@ -14,6 +14,7 @@ from pathlib import Path
 from fpvs_studio.core.enums import StimulusModality, StimulusVariant
 from fpvs_studio.core.models import ProjectFile, StimulusSet
 from fpvs_studio.core.paths import (
+    filesystem_path,
     stimulus_manifest_path,
     stimulus_originals_dir,
     stimulus_variant_dirname,
@@ -59,6 +60,8 @@ def import_stimulus_source_directory(
 ) -> tuple[StimulusSetInspectionSummary, StimulusSet]:
     """Copy supported source images into a project and summarize the imported set."""
 
+    source_dir = filesystem_path(source_dir)
+    project_root = filesystem_path(project_root)
     destination_dir = stimulus_originals_dir(project_root, set_id)
     destination_dir.mkdir(parents=True, exist_ok=True)
 
@@ -83,6 +86,7 @@ def materialize_project_assets(
 ) -> StimulusManifest:
     """Inspect imported sources, generate deterministic derivatives, and persist the manifest."""
 
+    project_root = filesystem_path(project_root)
     requested_variants = variants or list(project.settings.supported_variants)
     existing_manifest = manifest or _load_or_create_manifest(project, project_root)
     working_manifest = existing_manifest

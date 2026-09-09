@@ -17,9 +17,23 @@ lazily only inside the engine package.
 - `src/fpvs_studio/assets/`: packaged release-facing static assets, including the
   licensed Open Sans face used by authored modular tasks.
 - `src/fpvs_studio/gui/`: PySide6 windows, dialogs, controllers, document binding,
-  Home/Setup workflows, and shared components/theme helpers. Setup composes eight
-  model-backed pages (Project, Conditions, Timing, Image Size, Session, Fixation,
+  Home/Setup workflows, and shared components/theme helpers. New-experiment Setup
+  starts with category alone, then project details. Setup composes nine
+  model-backed pages (Project, Conditions, Design, Timing, Image Size, Session, Fixation,
   Response, Review); shared dialog/form styling remains in `gui/components.py`.
+  Design embeds a shared category-specific visual editor. Setup's Next action applies
+  the draft through the existing navigation gate; the standalone host retains Apply.
+  The GUI separates a schematic stream overview from proportional target-pair timing.
+  `core/experiment_design.py`
+  owns oddball cycle descriptions and optional frame-based previews. Oddball Apply
+  uses existing protocol settings. `core/attentional_blink.py` owns requested and
+  resolved target-pair timing; `core/compiler_attentional_blink.py` expands those
+  pairs into executable frame events inside the existing normal-slot cadence.
+  ISI can use an independent image pool or an explicit blank event; preview and
+  engines consume that choice without changing slot timing.
+  Only the AB category exposes ISI; backward-masking prototype controls are removed.
+  Manage Projects routes metadata-only renaming through `core/project_service.py`;
+  the live document synchronizes the new name without saving other pending edits.
 - `src/fpvs_studio/core/`: editable models, validation, compilation, `RunSpec`,
   `SessionPlan`, reusable condition-task definitions, execution results, persistence,
   `.fpvsconfig` interchange, portable `.fpvsbundle` services, and other engine-neutral
@@ -31,6 +45,9 @@ lazily only inside the engine package.
 - `src/fpvs_studio/runtime/`: launch settings, preflight, session orchestration,
   participant history, fixation reporting and explicit-path Excel export, fixation
   scoring, trigger coordination, and execution exports.
+  Attentional-blink runs add phase onset records and event CSVs in full and compact
+  exports; timing ownership and clock origins are defined in `docs/RUNSPEC.md` and
+  `docs/RUNTIME_EXECUTION.md`.
 - `src/fpvs_studio/engines/`: presentation interface, lazy PsychoPy implementation,
   condition-local GPU-ready resource ownership, and Windows graphics-budget probing.
 - `src/fpvs_studio/triggers/`: optional hardware adapters used by runtime. Normal event
@@ -57,9 +74,9 @@ ProjectFile
   -> exporters -> project logs and optional detailed run artifacts
 ```
 
-`ProjectFile` uses schema `1.3.0`; `SessionPlan`, execution-result, and `.fpvsconfig`
+`ProjectFile` uses schema `1.4.0`; `SessionPlan`, execution-result, and `.fpvsconfig`
 contracts remain schema `1.2.0`, and the single-condition timed `RunSpec` remains schema
-`1.1.0`. Project loaders migrate schemas `1.0.0`, `1.1.0`, and `1.2.0` in memory;
+`1.1.0`. Project loaders migrate schemas `1.0.0` through `1.3.0` in memory;
 reading or launching an older project does not rewrite it. The `1.3.0` project migration
 enables fixation color changes, accuracy scoring, and the participant tutorial once,
 while a later current-schema save may preserve an explicit user opt-out. Compatibility
@@ -70,6 +87,12 @@ task requires a positive duration.
 Modular-task font selection is additive within the schema `1.2.0` compiled task/session
 contract: missing values resolve to Arial, and the selection never enters the `RunSpec`
 timed-frame contract.
+
+`ProjectFile.experiment_category` is immutable after creation. `core/experiment_categories.py`
+owns category labels and conflict checks; `core/project_separation.py` preserves legacy
+mixed designs in separate experiments after an explicit user action. Category inference,
+template compatibility and no-mixing boundaries are defined in
+[`EXPERIMENT_CATEGORIES.md`](docs/EXPERIMENT_CATEGORIES.md).
 
 - Compilation owns protocol scheduling, asset resolution, randomized session order,
   realized fixation target selection, presentation-setting inheritance, balanced
@@ -84,6 +107,9 @@ timed-frame contract.
   `QueryDisplayConfig` path; KDE Linux uses structured KScreen mode and VRR metadata,
   with XRandR used for X11. The GUI requests this combined verification, and runtime
   preflight repeats it once per session without changing compiled schedules.
+- `core/paths.py` owns Windows filesystem namespace adaptation. Image I/O uses
+  extended-length paths while manifests and compiled contracts retain project-relative
+  POSIX paths; containment checks and serialization normalize both filesystem forms.
 - Runtime owns machine launch options, session transitions, declarative pre/post task
   sequencing and validation, participant flow, fixation scoring, trigger I/O
   coordination, and result assembly. Task clocks and compiled Arial/Open Sans font

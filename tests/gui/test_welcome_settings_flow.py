@@ -35,7 +35,7 @@ from fpvs_studio.core.condition_template_profiles import (
     built_in_condition_template_profiles,
     list_condition_template_profiles,
 )
-from fpvs_studio.core.enums import DutyCycleMode, RunMode
+from fpvs_studio.core.enums import DutyCycleMode, ExperimentCategory, RunMode
 from fpvs_studio.core.execution import SessionExecutionSummary
 from fpvs_studio.core.paths import (
     APP_DATA_DIRNAME,
@@ -181,9 +181,7 @@ def test_welcome_window_action_buttons_are_centered(
         open_projects_button,
         root_folder_button,
     )
-    group_left = min(
-        button.mapTo(content_frame, button.rect().topLeft()).x() for button in buttons
-    )
+    group_left = min(button.mapTo(content_frame, button.rect().topLeft()).x() for button in buttons)
     group_right = max(
         button.mapTo(content_frame, button.rect().bottomRight()).x() for button in buttons
     )
@@ -882,10 +880,7 @@ def test_open_project_randomizes_session_seed_per_open_without_dirtying_document
     assert controller.main_window is not None
     qtbot.addWidget(controller.main_window)
     qtbot.waitUntil(
-        lambda: (
-            controller.main_window.document.project.settings.session.session_seed
-            == 111_111_111
-        )
+        lambda: controller.main_window.document.project.settings.session.session_seed == 111_111_111
     )
     assert controller.main_window.document.project.settings.session.session_seed == 111_111_111
     assert controller.main_window.document.dirty is False
@@ -895,10 +890,7 @@ def test_open_project_randomizes_session_seed_per_open_without_dirtying_document
     assert controller.main_window is not None
     qtbot.addWidget(controller.main_window)
     qtbot.waitUntil(
-        lambda: (
-            controller.main_window.document.project.settings.session.session_seed
-            == 222_222_222
-        )
+        lambda: controller.main_window.document.project.settings.session.session_seed == 222_222_222
     )
     assert controller.main_window.document.project.settings.session.session_seed == 222_222_222
     assert controller.main_window.document.dirty is False
@@ -947,10 +939,7 @@ def test_open_project_session_seed_skips_completed_prior_seed(
     assert controller.main_window is not None
     qtbot.addWidget(controller.main_window)
     qtbot.waitUntil(
-        lambda: (
-            controller.main_window.document.project.settings.session.session_seed
-            == 222_222_222
-        )
+        lambda: controller.main_window.document.project.settings.session.session_seed == 222_222_222
     )
     assert controller.main_window.document.project.settings.session.session_seed == 222_222_222
     assert controller.main_window.document.dirty is False
@@ -1719,6 +1708,8 @@ def test_create_project_dialog_defaults_to_continuous_image_timing(
 ) -> None:
     dialog = CreateProjectDialog(condition_template_profiles=built_in_condition_template_profiles())
     qtbot.addWidget(dialog)
+    dialog.select_category(ExperimentCategory.FPVS_ODDBALL)
+    dialog.accept()
     assert dialog.condition_profile_combo.itemText(0) == "Continuous Images"
     assert dialog.condition_profile_combo.itemData(0) == STUDIO_DEFAULT_PROFILE_ID
     assert dialog.condition_profile_combo.currentData() == STUDIO_DEFAULT_PROFILE_ID
@@ -1757,6 +1748,8 @@ def test_create_project_dialog_requires_available_image_timing(
 ) -> None:
     dialog = CreateProjectDialog(condition_template_profiles=[])
     qtbot.addWidget(dialog)
+    dialog.select_category(ExperimentCategory.FPVS_ODDBALL)
+    dialog.accept()
     messages: list[str] = []
     monkeypatch.setattr(
         "fpvs_studio.gui.create_project_dialog.QMessageBox.warning",
@@ -1778,6 +1771,8 @@ def test_create_project_dialog_allows_templates_project_name(
 ) -> None:
     dialog = CreateProjectDialog(condition_template_profiles=built_in_condition_template_profiles())
     qtbot.addWidget(dialog)
+    dialog.select_category(ExperimentCategory.FPVS_ODDBALL)
+    dialog.accept()
     messages: list[str] = []
     monkeypatch.setattr(
         "fpvs_studio.gui.create_project_dialog.QMessageBox.warning",
@@ -1807,13 +1802,15 @@ def test_create_project_dialog_manage_templates_refreshes_profile_options(qtbot)
         on_manage_templates=lambda: refreshed_profiles,
     )
     qtbot.addWidget(dialog)
+    dialog.select_category(ExperimentCategory.FPVS_ODDBALL)
+    dialog.accept()
     assert dialog.condition_profile_combo.count() == 1
 
     manage_button = dialog.findChild(QPushButton, "manage_condition_templates_button")
     assert manage_button is not None
     qtbot.mouseClick(manage_button, Qt.MouseButton.LeftButton)
 
-    assert dialog.condition_profile_combo.count() == 2
+    assert dialog.condition_profile_combo.count() == 3
 
 
 def test_condition_template_cache_reloads_after_file_change_and_manager_close(
@@ -1975,8 +1972,7 @@ def test_contrast_profile_editor_preserves_required_background_and_fits(
     QApplication.processEvents()
 
     assert [
-        dialog.duty_cycle_combo.itemText(index)
-        for index in range(dialog.duty_cycle_combo.count())
+        dialog.duty_cycle_combo.itemText(index) for index in range(dialog.duty_cycle_combo.count())
     ] == ["Continuous", "50% Blank", "Contrast Modulation"]
     assert dialog.duty_cycle_combo.currentData() == DutyCycleMode.SINUSOIDAL
     assert dialog.background_combo.currentData() == "#808080"
@@ -2095,6 +2091,8 @@ def test_create_project_flow_scaffolds_project_and_opens_main_window(
 ) -> None:
     dialog = CreateProjectDialog(condition_template_profiles=built_in_condition_template_profiles())
     qtbot.addWidget(dialog)
+    dialog.select_category(ExperimentCategory.FPVS_ODDBALL)
+    dialog.accept()
     dialog.project_name_edit.setText("Visual Oddball")
     dialog.project_root_edit.setText(str(tmp_path))
     dialog.condition_profile_combo.setCurrentIndex(0)
@@ -2136,3 +2134,68 @@ def test_open_existing_project_populates_gui_correctly(
         controller.main_window.setup_dashboard_page.project_overview_editor.project_root_value
     )
     assert project_root_value.text().endswith("opened-project")
+
+
+def test_creation_first_page_requires_explicit_category_and_hides_details(qtbot) -> None:
+    dialog = CreateProjectDialog(condition_template_profiles=built_in_condition_template_profiles())
+    qtbot.addWidget(dialog)
+    dialog.resize(760, 390)
+    dialog.show()
+    QApplication.processEvents()
+    ok_button = dialog.button_box.button(QDialogButtonBox.StandardButton.Ok)
+    assert ok_button is not None and not ok_button.isEnabled()
+    assert dialog.category_stack.currentWidget() is dialog.category_page
+    assert not dialog.project_name_edit.isVisible()
+    assert not dialog.project_root_edit.isVisible()
+    assert not dialog.condition_profile_combo.isVisible()
+    assert not dialog.category_buttons[ExperimentCategory.FPVS].isEnabled()
+    assert not any(button.isChecked() for button in dialog.category_buttons.values())
+    assert all(button.height() >= 120 for button in dialog.category_buttons.values())
+    dialog.accept()
+    assert dialog.category_stack.currentWidget() is dialog.category_page
+    assert_visible_children_within_parent(dialog)
+
+    qtbot.mouseClick(
+        dialog.category_buttons[ExperimentCategory.ATTENTIONAL_BLINK], Qt.MouseButton.LeftButton
+    )
+    assert dialog.experiment_category == ExperimentCategory.ATTENTIONAL_BLINK
+    qtbot.mouseClick(ok_button, Qt.MouseButton.LeftButton)
+    assert dialog.project_name_edit.isVisible()
+    assert dialog.category_stack.currentWidget() is dialog.details_page
+    assert dialog.condition_profile_combo.count() == 1
+    assert dialog.condition_profile_combo.currentData() == "attentional-blink-v1"
+    assert dialog.category_summary_label.text() == "Attentional-Blink"
+    assert_visible_children_within_parent(dialog)
+
+    qtbot.mouseClick(dialog.back_button, Qt.MouseButton.LeftButton)
+    qtbot.mouseClick(
+        dialog.category_buttons[ExperimentCategory.FPVS_ODDBALL], Qt.MouseButton.LeftButton
+    )
+    qtbot.mouseClick(ok_button, Qt.MouseButton.LeftButton)
+    assert dialog.condition_profile_combo.count() == 3
+    assert dialog.condition_profile_combo.findData("attentional-blink-v1") == -1
+    dialog.reject()
+    assert dialog.result() == QDialog.DialogCode.Rejected
+
+
+def test_create_dialog_forwards_selected_attentional_blink_category(
+    qtbot, controller: StudioController, monkeypatch
+) -> None:
+    def accept_ab(dialog: CreateProjectDialog) -> int:
+        dialog.select_category(ExperimentCategory.ATTENTIONAL_BLINK)
+        dialog.accept()
+        dialog.project_name_edit.setText("Target Recognition")
+        dialog.accept()
+        return int(dialog.result())
+
+    monkeypatch.setattr(CreateProjectDialog, "exec", accept_ab)
+    controller.show_create_project_dialog()
+    assert controller.main_window is not None
+    qtbot.addWidget(controller.main_window)
+    document = controller.main_window.document
+    assert document.project.experiment_category == ExperimentCategory.ATTENTIONAL_BLINK
+    assert document.project.settings.protocol.base_hz == 4.0
+    assert document.project.settings.protocol.oddball_every_n == 4
+    assert document.project.settings.condition_defaults.oddball_cycle_repeats_per_sequence == 146
+    persisted = load_project_file(document.project_root / "project.json")
+    assert persisted.experiment_category == ExperimentCategory.ATTENTIONAL_BLINK

@@ -11,6 +11,7 @@ import random
 from pathlib import Path
 
 from fpvs_studio.core.compiler_assets import load_manifest, resolve_stimulus_items
+from fpvs_studio.core.compiler_attentional_blink import compile_attentional_blink_sequence
 from fpvs_studio.core.compiler_conditions import (
     select_condition,
     select_conditions,
@@ -41,6 +42,7 @@ from fpvs_studio.core.compiler_tasks import (
     compile_condition_tasks,
     condition_tasks_replace_start_gate,
 )
+from fpvs_studio.core.experiment_categories import require_valid_experiment_category
 from fpvs_studio.core.fixation_planning import (
     max_supported_color_changes,
     milliseconds_to_frames,
@@ -83,6 +85,10 @@ def compile_run_spec(
 ) -> RunSpec:
     """Compile one project condition into a dedicated frame-based RunSpec."""
 
+    try:
+        require_valid_experiment_category(project)
+    except ValueError as exc:
+        raise CompileError(str(exc)) from exc
     condition = select_condition(project, condition_id)
     base_set, oddball_set = validate_selected_condition(
         project,
@@ -142,6 +148,18 @@ def compile_run_spec(
         random_seed=random_seed,
         text_height_values_by_role=text_height_values_by_role,
     )
+    attentional_blink = None
+    if condition.attentional_blink is not None:
+        stimulus_sequence, attentional_blink = compile_attentional_blink_sequence(
+            project,
+            condition,
+            stimulus_sequence,
+            base_set=base_set,
+            refresh_hz=refresh_hz,
+            project_root=project_root,
+            manifest=resolved_manifest,
+            random_seed=random_seed,
+        )
 
     fixation_settings = project.settings.fixation_task
     target_duration_frames = milliseconds_to_frames(
@@ -228,7 +246,7 @@ def compile_run_spec(
             oddball_every_n=protocol.oddball_every_n,
             oddball_hz=protocol.oddball_hz,
             total_oddball_cycles=total_oddball_cycles,
-            total_stimuli=total_stimuli,
+            total_stimuli=len(stimulus_sequence),
             stimulus_modality=base_set.modality,
             trigger_code=condition.trigger_code,
         ),
@@ -267,6 +285,7 @@ def compile_run_spec(
             realized_target_count=resolved_target_count if fixation_settings.enabled else 0,
         ),
         presentation=presentation,
+        attentional_blink=attentional_blink,
         pre_stream_fixation_frames=seconds_to_frames(
             resolve_pre_stream_fixation_seconds(
                 project.settings.presentation,
@@ -280,6 +299,7 @@ def compile_run_spec(
             stimulus_sequence=stimulus_sequence,
             condition_trigger_code=condition.trigger_code,
             oddball_trigger_code=_project_oddball_trigger_code(project),
+            t2_trigger_code=(attentional_blink.t2_trigger_code if attentional_blink else None),
         ),
     )
 
@@ -307,6 +327,10 @@ def compile_session_plan(
 ) -> SessionPlan:
     """Compile a multi-condition block-randomized session plan."""
 
+    try:
+        require_valid_experiment_category(project)
+    except ValueError as exc:
+        raise CompileError(str(exc)) from exc
     selected_conditions = select_conditions(project, condition_ids)
     if random_seed is None:
         random_seed = project.settings.session.session_seed

@@ -9,10 +9,14 @@ from pathlib import Path
 
 from PIL import Image
 
+from fpvs_studio.core.paths import filesystem_path
+
 
 def generate_grayscale_png(source_path: Path, destination_path: Path) -> None:
     """Generate a grayscale PNG derivative from a source image."""
 
+    source_path = filesystem_path(source_path)
+    destination_path = filesystem_path(destination_path)
     destination_path.parent.mkdir(parents=True, exist_ok=True)
     with Image.open(source_path) as image:
         image.convert("L").save(destination_path, format="PNG")

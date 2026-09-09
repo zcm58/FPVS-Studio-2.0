@@ -86,7 +86,7 @@ __all__ = [
 _COMPACT_HOME_MINIMUM_SIZE = (760, 520)
 _COMPACT_HOME_DEFAULT_SIZE = (1120, 720)
 _COMPACT_SETUP_MINIMUM_SIZE = (960, 640)
-_COMPACT_SETUP_DEFAULT_SIZE = (1120, 720)
+_COMPACT_SETUP_DEFAULT_SIZE = (1120, 820)
 _UTILITY_MINIMUM_SIZE = (960, 640)
 _UTILITY_DEFAULT_SIZE = (1120, 720)
 _AUTO_WORKSPACE_SIZE_TOLERANCE = 16
@@ -287,7 +287,8 @@ class StudioMainWindow(QMainWindow):
         return self._bundle_import_processing_page
 
     def show_home(self) -> None:
-        self.flush_pending_edits()
+        if not self.flush_pending_edits():
+            return
         self.home_page.refresh()
         self._set_home_chrome_visible(True, status_visible=False)
         self._apply_compact_window_size()
@@ -317,7 +318,8 @@ class StudioMainWindow(QMainWindow):
         )
 
     def show_image_resizer(self) -> None:
-        self.flush_pending_edits()
+        if not self.flush_pending_edits():
+            return
         self._set_home_chrome_visible(True)
         self._apply_utility_window_size()
         self.main_stack.setCurrentWidget(self.image_resizer_page)
@@ -325,9 +327,10 @@ class StudioMainWindow(QMainWindow):
     def _show_initial_workflow_surface(self) -> None:
         self.show_home()
 
-    def flush_pending_edits(self) -> None:
+    def flush_pending_edits(self) -> bool:
         if self._setup_wizard_page is not None:
-            self._setup_wizard_page.flush_pending_edits()
+            return self._setup_wizard_page.flush_pending_edits()
+        return True
 
     def _set_home_chrome_visible(
         self,
@@ -367,15 +370,18 @@ class StudioMainWindow(QMainWindow):
         self._apply_expanded_window_size(
             _COMPACT_SETUP_MINIMUM_SIZE,
             _COMPACT_SETUP_DEFAULT_SIZE,
+            prefer_default=(self.width(), self.height()) == _COMPACT_HOME_DEFAULT_SIZE,
         )
 
     def _apply_expanded_window_size(
         self,
         minimum_size: tuple[int, int],
         default_size: tuple[int, int],
+        *,
+        prefer_default: bool = False,
     ) -> None:
         needs_resize = (
-            self.width() < minimum_size[0] or self.height() < minimum_size[1]
+            prefer_default or self.width() < minimum_size[0] or self.height() < minimum_size[1]
         )
         compact_return_size = (self.width(), self.height())
         self.setMinimumSize(*minimum_size)
@@ -620,7 +626,8 @@ class StudioMainWindow(QMainWindow):
         )
 
     def save_project(self) -> bool:
-        self.flush_pending_edits()
+        if not self.flush_pending_edits():
+            return False
         try:
             self.document.save()
         except Exception as error:
@@ -633,7 +640,8 @@ class StudioMainWindow(QMainWindow):
             return
         if not self._ensure_session_seed_ready_for_launch():
             return
-        self.flush_pending_edits()
+        if not self.flush_pending_edits():
+            return
         try:
             refresh_hz = self._home_launch_refresh_hz()
             validation = self.document.validation_report(refresh_hz=refresh_hz)
@@ -857,7 +865,8 @@ class StudioMainWindow(QMainWindow):
         if self._active_bundle_export_task is not None:
             self.statusBar().showMessage("Project bundle export is already running.", 3000)
             return False
-        self.flush_pending_edits()
+        if not self.flush_pending_edits():
+            return False
         if bundle_project_name is None:
             options_dialog = BundleExportOptionsDialog(
                 current_project_name=self.document.project.meta.name,
@@ -1073,7 +1082,8 @@ class StudioMainWindow(QMainWindow):
         self.show_home()
 
     def export_group_summary(self) -> bool:
-        self.flush_pending_edits()
+        if not self.flush_pending_edits():
+            return False
         default_dir = logs_dir(self.document.project_root)
         if not default_dir.exists():
             default_dir = self.document.project_root
@@ -1095,7 +1105,8 @@ class StudioMainWindow(QMainWindow):
         return True
 
     def _export_config(self, *, include_completed: bool) -> bool:
-        self.flush_pending_edits()
+        if not self.flush_pending_edits():
+            return False
         default_name = project_config_filename(
             self.document.project.meta.name,
             completed=include_completed,
@@ -1134,8 +1145,17 @@ class StudioMainWindow(QMainWindow):
         return True
 
     def maybe_save_changes(self) -> bool:
-        self.flush_pending_edits()
-        if not self.document.dirty:
+        if self._setup_wizard_page is not None and (
+            self._setup_wizard_page.design_setup_step.is_busy()
+            or self._setup_wizard_page._condition_image_task_active()
+        ):
+            QMessageBox.information(
+                self, "Images are still loading",
+                "Wait for the image operation to finish before closing or changing experiments.",
+            )
+            return False
+        flushed = self.flush_pending_edits()
+        if flushed and not self.document.dirty:
             return True
         result = QMessageBox.question(
             self,

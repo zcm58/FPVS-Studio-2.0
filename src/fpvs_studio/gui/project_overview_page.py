@@ -25,6 +25,7 @@ from fpvs_studio.core.condition_template_profiles import (
     STUDIO_DEFAULT_PROFILE_ID,
 )
 from fpvs_studio.core.enums import DutyCycleMode
+from fpvs_studio.core.experiment_categories import experiment_category_label
 from fpvs_studio.core.models import ConditionTemplateProfile
 from fpvs_studio.gui.components import (
     PathValueLabel,
@@ -81,6 +82,11 @@ class ProjectOverviewEditor(QWidget):
         self.project_name_edit = QLineEdit(self)
         self.project_name_edit.setObjectName("project_name_edit")
         self.project_name_edit.editingFinished.connect(self._apply_project_name)
+        self.experiment_category_value = QLabel(self)
+        self.experiment_category_value.setObjectName("project_experiment_category")
+        self.experiment_category_value.setToolTip(
+            "Experiment category is fixed. Create a new experiment to use another category."
+        )
 
         self.project_description_edit = LeftToRightPlainTextEdit(self)
         self.project_description_edit.setObjectName("project_description_edit")
@@ -187,6 +193,7 @@ class ProjectOverviewEditor(QWidget):
         metadata_layout = QFormLayout()
         metadata_layout.setVerticalSpacing(6)
         metadata_layout.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
+        metadata_layout.addRow("Experiment Category", self.experiment_category_value)
         metadata_layout.addRow("Project Name", self.project_name_edit)
         metadata_layout.addRow("Description", self.project_description_edit)
         metadata_layout.addRow("Project Folder", self.project_root_value)
@@ -217,6 +224,9 @@ class ProjectOverviewEditor(QWidget):
 
     def refresh(self) -> None:
         project = self._document.project
+        self.experiment_category_value.setText(
+            experiment_category_label(project.experiment_category)
+        )
         with QSignalBlocker(self.project_name_edit):
             self.project_name_edit.setText(project.meta.name)
         if not self._description_committer.pending:
@@ -246,7 +256,11 @@ class ProjectOverviewEditor(QWidget):
         self._description_committer.flush()
 
     def _refresh_condition_profile_widgets(self) -> None:
-        profiles = self._load_condition_template_profiles()
+        profiles = [
+            profile
+            for profile in self._load_condition_template_profiles()
+            if profile.experiment_category == self._document.project.experiment_category
+        ]
         self._condition_profiles_by_id = {profile.profile_id: profile for profile in profiles}
         project = self._document.project
         selected_profile_id = project.settings.condition_profile_id

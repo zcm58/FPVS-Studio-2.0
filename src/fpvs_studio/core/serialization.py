@@ -11,6 +11,7 @@ from typing import TypeVar
 
 from pydantic import BaseModel
 
+from fpvs_studio.core.experiment_categories import require_valid_experiment_category
 from fpvs_studio.core.migrations import migrate_project_payload
 from fpvs_studio.core.models import ProjectFile
 
@@ -20,14 +21,17 @@ ModelT = TypeVar("ModelT", bound=BaseModel)
 def model_to_json(model: BaseModel, *, indent: int = 2) -> str:
     """Serialize a Pydantic model to formatted JSON."""
 
+    if isinstance(model, ProjectFile):
+        require_valid_experiment_category(model)
     return model.model_dump_json(indent=indent, exclude_none=True)
 
 
 def write_json_file(path: Path, model: BaseModel, *, indent: int = 2) -> None:
     """Write a model as UTF-8 JSON."""
 
+    payload = model_to_json(model, indent=indent)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(model_to_json(model, indent=indent), encoding="utf-8")
+    path.write_text(payload, encoding="utf-8")
 
 
 def read_json_file(path: Path, model_type: type[ModelT]) -> ModelT:

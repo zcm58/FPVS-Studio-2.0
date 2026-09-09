@@ -77,6 +77,7 @@ __all__ = [
     "StatusBadgeLabel",
     "apply_condition_template_details_header_style",
     "apply_dialog_theme",
+    "apply_experiment_designer_theme",
     "apply_error_text_style",
     "apply_fixation_settings_theme",
     "apply_home_page_theme",
@@ -1094,6 +1095,143 @@ def apply_dialog_theme(widget: QWidget) -> None:
     _apply_palette_stylesheet(widget, dialog_stylesheet)
 
 
+def experiment_role_colors(role: str, theme: StudioTheme) -> tuple[str, str, str]:
+    """Background, border and text for the designer's target identities."""
+    dark = QColor(theme.page_background).lightness() < 128
+    if role == "t1":
+        return ("#16494c", "#41b8bd", "#83dedf") if dark else ("#e7f7f6", "#208b8c", "#147476")
+    if role in ("t2", "target_pair", "oddball"):
+        return ("#463a24", "#d5a134", "#ffd16a") if dark else ("#fff4de", "#bb861e", "#825908")
+    return theme.surface_alt, theme.border, theme.text_secondary
+
+
+def experiment_designer_stylesheet(
+    theme: StudioTheme | QPalette | None = None, *, compact: bool = False
+) -> str:
+    """Quiet controls around the visual sequence workspace."""
+    resolved = _resolved_theme(theme)
+    body_size, meta_size = (13, 12) if compact else (16, 14)
+    return dialog_stylesheet(resolved) + f"""
+    QWidget#experiment_designer_widget QWidget {{ font-size: {body_size}px; }}
+    QWidget#experiment_designer_widget QLabel[designerRole="condition"] {{
+        background: transparent; border: none; padding: 0 12px;
+    }}
+    QWidget#experiment_designer_widget QLabel[designerRole="heading"] {{
+        font-size: 20px;
+        font-weight: 600;
+        color: {resolved.text_primary};
+        background: transparent;
+        border: none;
+    }}
+    QWidget#experiment_designer_widget QLabel[designerRole="secondary"] {{
+        font-size: {meta_size}px;
+        color: {resolved.text_secondary};
+        background: transparent;
+        border: none;
+    }}
+    QWidget#experiment_designer_widget QLabel[designerRole="sectionTitle"] {{
+        font-size: {15 if compact else 18}px;
+        font-weight: 600; background: transparent; border: none;
+    }}
+    QWidget#experiment_designer_widget QLabel[designerRole="sourceTitle"] {{
+        font-weight: 600; background: transparent; border: none;
+    }}
+    QWidget#experiment_designer_widget QFrame[designerPanel="true"],
+    QWidget#experiment_designer_widget QFrame[designerSourceCard="true"],
+    QWidget#experiment_designer_widget QFrame[designerControls="true"] {{
+        background: transparent;
+        border: none;
+    }}
+    QWidget#experiment_designer_widget QTabBar::tab {{
+        background: transparent; padding: 7px 20px; border: none;
+        border-bottom: 3px solid transparent; color: {resolved.text_secondary};
+    }}
+    QWidget#experiment_designer_widget QFrame[stimulusRole="t1"]
+    QLabel[designerRole="sourceTitle"] {{ color: {experiment_role_colors('t1', resolved)[2]}; }}
+    QWidget#experiment_designer_widget QFrame[stimulusRole="t2"]
+    QLabel[designerRole="sourceTitle"] {{ color: {experiment_role_colors('t2', resolved)[2]}; }}
+    QWidget#experiment_designer_widget QTabBar::tab:selected {{
+        border-bottom-color: #41b8bd; color: {resolved.text_primary}; font-weight: 600;
+    }}
+    QWidget#experiment_designer_widget QPushButton[primaryActionRole="true"] {{
+        background: #237f83; border-color: #329a9d; color: #ffffff;
+        min-height: 26px; padding: 6px 20px;
+    }}
+    QWidget#experiment_designer_widget QPushButton[primaryActionRole="true"]:hover {{
+        background: #2c9397;
+    }}
+    QWidget#experiment_designer_widget QPushButton[primaryActionRole="true"]:disabled {{
+        background: {resolved.surface_alt}; color: {resolved.disabled_text};
+        border-color: {resolved.border_soft};
+    }}
+    QWidget#experiment_designer_widget QLabel[designerRole="computed"] {{
+        color: {experiment_role_colors('t2', resolved)[2]}; font-size: 20px; font-weight: 600;
+        padding: 2px 4px; border: none; background: transparent;
+    }}
+    QWidget#experiment_designer_widget QLabel[designerRole="blankPreview"] {{
+        background: {resolved.surface_alt}; border: 1px solid {resolved.border};
+        border-radius: 6px; color: {resolved.text_secondary};
+    }}
+    QWidget#experiment_designer_widget QPushButton[designerIsiChoice] {{
+        min-height: 20px; padding: 2px 6px; border-radius: 0;
+        font-weight: 400; background: {resolved.surface_alt};
+        border: 1px solid {resolved.border}; color: {resolved.text_primary};
+    }}
+    QWidget#experiment_designer_widget QPushButton[designerIsiChoice="blank"] {{
+        border-top-left-radius: 5px; border-bottom-left-radius: 5px;
+    }}
+    QWidget#experiment_designer_widget QPushButton[designerIsiChoice="image"] {{
+        border-top-right-radius: 5px; border-bottom-right-radius: 5px;
+    }}
+    QWidget#experiment_designer_widget QPushButton[designerIsiChoice]:checked,
+    QWidget#experiment_designer_widget QPushButton[designerIsiChoice]:focus {{
+        border: 2px solid {resolved.focus_ring}; padding: 1px 5px;
+        background: {resolved.surface_elevated};
+    }}
+    QWidget#experiment_designer_widget QPushButton[designerIsiChoice]:disabled {{
+        color: {resolved.disabled_text};
+    }}
+    QWidget#experiment_designer_widget QPushButton[quietAction="true"] {{
+        background: transparent;
+        color: {resolved.text_secondary};
+        border: 1px solid transparent;
+        border-radius: 4px;
+        padding: 2px 7px;
+        min-height: 16px;
+        font-weight: 400;
+    }}
+    QWidget#experiment_designer_widget QPushButton[quietAction="true"]:hover,
+    QWidget#experiment_designer_widget QPushButton[quietAction="true"]:checked {{
+        background: {resolved.surface_alt};
+        color: {resolved.text_primary};
+    }}
+    QWidget#experiment_designer_widget QPushButton[quietAction="true"]:focus {{
+        border-color: {resolved.focus_ring};
+    }}
+    QWidget#experiment_designer_widget QPushButton[quietAction="true"]:disabled {{
+        color: {resolved.disabled_text};
+    }}
+    QWidget#experiment_designer_widget QPushButton[designerFolder="true"] {{
+        min-height: 20px; padding: 2px 12px; border-radius: 4px;
+        border: 1px solid {resolved.border}; background: {resolved.surface_alt};
+        font-weight: 400;
+    }}
+    QWidget#experiment_designer_widget QPushButton[designerPreview="true"] {{
+        min-height: 24px; padding: 4px 12px; font-weight: 400;
+    }}
+    """
+
+
+def apply_experiment_designer_theme(widget: QWidget) -> None:
+    widget.setProperty("studioDialog", "true")
+    _apply_palette_stylesheet(
+        widget,
+        lambda palette: experiment_designer_stylesheet(
+            palette, compact=bool(widget.property("designerCompact"))
+        ),
+    )
+
+
 def studio_theme_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
     theme = _resolved_theme(theme)
     color_page_background = theme.page_background
@@ -1917,6 +2055,12 @@ def setup_wizard_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
     QLabel#setup_wizard_next_hint_label {{
         color: {theme.text_secondary};
         font-size: {FONT_SIZE_META}px;
+    }}
+    QLabel#designer_step_count {{
+        color: {theme.text_secondary}; font-size: {FONT_SIZE_META}px;
+    }}
+    QWidget#setup_wizard_navigation_row[designerFooter="true"] {{
+        border-top: 1px solid {theme.border_soft}; padding-top: 8px;
     }}
     QPushButton#setup_wizard_condition_presentation_button,
     QPushButton#setup_wizard_condition_task_button,

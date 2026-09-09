@@ -31,6 +31,7 @@ from fpvs_studio.core.models import (
 )
 
 StimulusRole = Literal["base", "oddball"]
+AttentionalBlinkPhase = Literal["base", "t1", "separator", "t2"]
 STUDIO_WORD_FONT_NAME: Literal["Arial"] = "Arial"
 
 
@@ -167,6 +168,9 @@ class StimulusEvent(FPVSBaseModel):
     on_start_frame: int = Field(ge=0)
     on_frames: int = Field(ge=0)
     off_frames: int = Field(ge=0)
+    is_blank: bool = False
+    phase: AttentionalBlinkPhase | None = None
+    slot_index: int | None = Field(default=None, ge=0)
 
     @field_validator("stimulus_id")
     @classmethod
@@ -202,6 +206,10 @@ class StimulusEvent(FPVSBaseModel):
 
     @model_validator(mode="after")
     def validate_payload(self) -> StimulusEvent:
+        if self.is_blank:
+            if self.phase != "separator" or self.image_path is not None or self.text is not None:
+                raise ValueError("Only an ISI separator may be blank, without an image or text.")
+            return self
         if self.stimulus_modality == StimulusModality.IMAGE:
             if self.image_path is None:
                 raise ValueError("Image stimulus events require image_path.")
@@ -274,6 +282,20 @@ class TriggerEvent(FPVSBaseModel):
     label: str
 
 
+class AttentionalBlinkRunSpec(FPVSBaseModel):
+    """Resolved subdivision of each terminal oddball slot."""
+
+    requested_t1_duration_ms: float = Field(gt=0, allow_inf_nan=False)
+    requested_isi_ms: float = Field(gt=0, allow_inf_nan=False)
+    t1_frames: int = Field(gt=0)
+    isi_frames: int = Field(gt=0)
+    t2_frames: int = Field(gt=0)
+    t2_trigger_code: StrictInt = Field(ge=1, le=255)
+    isi_mode: Literal["image", "blank"] = "image"
+    isi_presentation: RolePresentationSpec | None = None
+    t2_presentation: RolePresentationSpec
+
+
 class RunSpec(FPVSBaseModel):
     """Compiled execution plan for one condition run."""
 
@@ -287,7 +309,20 @@ class RunSpec(FPVSBaseModel):
     display: DisplayRunSpec
     fixation: FixationStyleSpec
     presentation: ConditionPresentationSpec | None = None
+    attentional_blink: AttentionalBlinkRunSpec | None = None
     pre_stream_fixation_frames: int = Field(default=0, ge=0)
     stimulus_sequence: list[StimulusEvent] = Field(default_factory=list)
     fixation_events: list[FixationEvent] = Field(default_factory=list)
     trigger_events: list[TriggerEvent] = Field(default_factory=list)
+
+
+def event_presentation(run_spec: RunSpec, event: StimulusEvent) -> RolePresentationSpec | None:
+    """Resolve T2's source geometry while retaining Oddball authoring rules."""
+    if run_spec.presentation is None:
+        return None
+    if event.phase == "separator" and run_spec.attentional_blink is not None:
+        if run_spec.attentional_blink.isi_presentation is not None:
+            return run_spec.attentional_blink.isi_presentation
+    if event.phase == "t2" and run_spec.attentional_blink is not None:
+        return run_spec.attentional_blink.t2_presentation
+    return run_spec.presentation.base if event.role == "base" else run_spec.presentation.oddball

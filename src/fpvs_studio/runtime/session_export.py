@@ -31,6 +31,7 @@ PARTICIPANT_SUMMARY_FILENAME = "participant_summary.csv"
 PARTICIPANT_SUMMARY_XLSX_FILENAME = "participant_summary.xlsx"
 GROUP_SUMMARY_XLSX_FILENAME = "group_summary.xlsx"
 TASK_RESPONSES_FILENAME = "task_responses.csv"
+ATTENTIONAL_BLINK_EVENTS_FILENAME = "attentional_blink_events.csv"
 TASK_CHECKPOINT_DIRNAME = ".task-response-checkpoints"
 ADMIN_TEST_PARTICIPANT_IDS = frozenset({"0", "00"})
 SESSION_CONDITION_HISTORY_HEADER = [
@@ -371,6 +372,12 @@ def write_run_artifacts(output_dir: Path, run_spec: RunSpec, summary: RunExecuti
     if summary.runtime_metadata is not None:
         write_json_file(output_dir / "runtime_metadata.json", summary.runtime_metadata)
     write_json_file(output_dir / "display_report.json", _display_report_for_run(run_spec))
+    if run_spec.attentional_blink is not None:
+        _write_csv(
+            output_dir / ATTENTIONAL_BLINK_EVENTS_FILENAME,
+            ATTENTIONAL_BLINK_EVENTS_HEADER,
+            _attentional_blink_event_rows(run_spec, summary),
+        )
 
     _write_csv(
         output_dir / "events.csv",
@@ -525,6 +532,20 @@ def write_session_artifacts(
     output_dir.mkdir(parents=True, exist_ok=True)
     write_json_file(output_dir / "session_plan.json", session_plan)
     _write_execution_summary(output_dir / "session_summary.json", summary)
+    ab_results = {result.run_id: result for result in summary.run_results}
+    ab_entries = [
+        entry for entry in session_plan.ordered_entries()
+        if entry.run_spec.attentional_blink is not None and entry.run_id in ab_results
+    ]
+    if ab_entries:
+        _write_csv(
+            output_dir / ATTENTIONAL_BLINK_EVENTS_FILENAME,
+            ATTENTIONAL_BLINK_EVENTS_HEADER,
+            (
+                row for entry in ab_entries
+                for row in _attentional_blink_event_rows(entry.run_spec, ab_results[entry.run_id])
+            ),
+        )
     if summary.runtime_metadata is not None:
         write_json_file(output_dir / "runtime_metadata.json", summary.runtime_metadata)
 
@@ -756,8 +777,67 @@ def append_session_condition_history(
         if needs_header:
             writer.writerow(SESSION_CONDITION_HISTORY_HEADER)
         writer.writerows(_session_condition_history_rows(session_plan, summary))
+    _append_attentional_blink_events(project_root, session_plan, summary)
     write_participant_summary(project_root)
     return path
+
+
+ATTENTIONAL_BLINK_EVENTS_HEADER = [
+    "project_id", "session_id", "run_id", "condition_id", "participant_number",
+    "sequence_index", "slot_index", "phase", "image_path", "planned_onset_frame",
+    "duration_frames", "refresh_hz", "planned_onset_s", "planned_duration_ms",
+    "requested_t1_ms", "requested_isi_ms", "requested_t2_ms",
+    "achieved_t1_ms", "achieved_isi_ms", "achieved_t2_ms", "planned_soa_ms",
+    "presented", "actual_onset_s", "run_aborted",
+]
+
+
+def _attentional_blink_event_rows(
+    run_spec: RunSpec, summary: RunExecutionSummary,
+) -> Iterable[tuple[object, ...]]:
+    timing = run_spec.attentional_blink
+    if timing is None:
+        return
+    frame_ms = 1000.0 / run_spec.display.refresh_hz
+    onsets = {item.sequence_index: item for item in summary.attentional_blink_onsets or ()}
+    for event in run_spec.stimulus_sequence:
+        onset = onsets.get(event.sequence_index)
+        yield tuple(_task_csv_value(value) for value in (
+            run_spec.project_id, summary.session_id or "", run_spec.run_id,
+            run_spec.condition.condition_id, summary.participant_number or "",
+            event.sequence_index, event.slot_index, event.phase, event.image_path,
+            event.on_start_frame, event.on_frames, run_spec.display.refresh_hz,
+            event.on_start_frame / run_spec.display.refresh_hz, event.on_frames * frame_ms,
+            timing.requested_t1_duration_ms, timing.requested_isi_ms,
+            1000.0 / run_spec.condition.base_hz
+            - timing.requested_t1_duration_ms - timing.requested_isi_ms,
+            timing.t1_frames * frame_ms, timing.isi_frames * frame_ms, timing.t2_frames * frame_ms,
+            (timing.t1_frames + timing.isi_frames) * frame_ms,
+            onset is not None, onset.time_s if onset is not None else None, summary.aborted,
+        ))
+
+
+def _append_attentional_blink_events(
+    project_root: Path, session_plan: SessionPlan, summary: SessionExecutionSummary,
+) -> None:
+    """Preserve phase timing and observed onsets in both compact and full sessions."""
+    results = {result.run_id: result for result in summary.run_results}
+    entries = [
+        entry for entry in session_plan.ordered_entries()
+        if entry.run_spec.attentional_blink is not None and entry.run_spec.run_id in results
+    ]
+    if not entries:
+        return
+    path = logs_dir(project_root) / ATTENTIONAL_BLINK_EVENTS_FILENAME
+    needs_header = not path.is_file() or path.stat().st_size == 0
+    with path.open("a", encoding="utf-8", newline="") as handle:
+        writer = csv.writer(handle)
+        if needs_header:
+            writer.writerow(ATTENTIONAL_BLINK_EVENTS_HEADER)
+        for entry in entries:
+            writer.writerows(_attentional_blink_event_rows(
+                entry.run_spec, results[entry.run_spec.run_id],
+            ))
 
 
 def write_participant_summary(project_root: Path) -> Path:

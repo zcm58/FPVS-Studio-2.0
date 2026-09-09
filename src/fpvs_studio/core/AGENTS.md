@@ -30,6 +30,9 @@ This directory is the most important foundation in the repo. It should remain im
 - Use **Pydantic v2** for persisted models and validation.
 - Set `extra="forbid"` on persisted schemas unless there is a strong reason not to.
 - Include `schema_version` in persisted top-level files.
+- Project category is immutable after creation. Use `experiment_categories.py` for
+  homogeneous-category validation and `project_separation.py` for explicit legacy
+  recovery; see `docs/EXPERIMENT_CATEGORIES.md` from the repository root.
 - Keep model names explicit and stable.
 - Use enums instead of loose strings when possible.
 - Store persisted paths as project-relative strings, not absolute machine-local paths.
@@ -103,11 +106,14 @@ Implement friendly, explicit validation for:
 
 ## Timing representation
 
-For v1, keep protocol defaults explicit while allowing project-level edits:
+For FPVS-Oddball, keep protocol defaults explicit while allowing project-level edits:
 
 - `base_hz = 6.0`
 - `oddball_every_n = 5`
 - default `oddball_cycle_repeats_per_sequence = 146`
+
+Attentional-Blink defaults to `base_hz = 4.0`, `oddball_every_n = 4`, with the same
+sequence-repeat defaults. Its compound slot uses frame-based T1/separator/T2 timing.
 
 Represent timing in frames after display validation/compilation. Do not use sleep-based millisecond scheduling as a design primitive.
 
@@ -143,6 +149,6 @@ A minimal compiler in this phase should be able to:
 
 - No PySide6 imports here.
 - No PsychoPy imports here.
-- No direct filesystem writes except in explicit serializer, project-service,
+- No direct filesystem writes except in explicit serializer, project-service/separation,
   task-asset, config, and bundle modules.
 - No image manipulation code here.

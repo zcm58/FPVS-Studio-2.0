@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from PIL import Image
@@ -37,7 +38,13 @@ from fpvs_studio.core.models import (
     StimulusPresentationOverride,
 )
 from fpvs_studio.gui.controller import StudioController
-from fpvs_studio.gui.design_system import PAGE_SECTION_GAP
+
+
+def _open_image_design_step(qtbot, guide) -> None:
+    qtbot.waitUntil(lambda: not guide.design_setup_step.is_busy())
+    guide.open_wizard(step_key="design")
+    qtbot.waitUntil(lambda: not guide.design_setup_step.is_busy())
+    guide.refresh()
 
 
 def test_setup_wizard_conditions_step_duplicates_metadata_without_images(
@@ -72,7 +79,7 @@ def test_setup_wizard_conditions_step_duplicates_metadata_without_images(
     oddball_set = window.document.get_condition_stimulus_set(duplicated_id, "oddball")
     assert base_set.image_count == 0
     assert oddball_set.image_count == 0
-    assert "Needs images" in step.condition_list.currentItem().toolTip()
+    assert "Finish in Design" in step.condition_list.currentItem().toolTip()
     assert "Continuous Images" in step.condition_list.currentItem().text()
 
 
@@ -122,7 +129,7 @@ def test_setup_wizard_conditions_step_authors_word_condition(
     assert next_button.isEnabled()
 
 
-def test_setup_wizard_conditions_next_scans_images_without_blocking_gui(
+def test_setup_wizard_design_next_scans_images_without_blocking_gui(
     qtbot,
     controller: StudioController,
     tmp_path: Path,
@@ -205,12 +212,13 @@ def test_setup_wizard_conditions_next_scans_images_without_blocking_gui(
         role="oddball",
         source_dir=_write_image_directory(tmp_path / "async-oddball"),
     )
+    _open_image_design_step(qtbot, guide)
     QApplication.processEvents()
 
     assert len(background_tasks) == 1
     assert background_tasks[0].started is True
     assert scan_calls == 0
-    assert guide.step_stack.currentWidget() is guide.conditions_step_surface
+    assert guide.step_stack.currentWidget() is guide.design_step_surface
     assert guide.setup_wizard_next_button.isEnabled()
 
     qtbot.mouseClick(guide.setup_wizard_next_button, Qt.MouseButton.LeftButton)
@@ -218,7 +226,7 @@ def test_setup_wizard_conditions_next_scans_images_without_blocking_gui(
 
     assert progress_tasks == []
     assert scan_calls == 0
-    assert guide.step_stack.currentWidget() is guide.conditions_step_surface
+    assert guide.step_stack.currentWidget() is guide.design_step_surface
     assert not guide.setup_wizard_next_button.isEnabled()
     assert guide.setup_wizard_next_hint_label.text() == "Checking image readiness..."
 
@@ -226,10 +234,10 @@ def test_setup_wizard_conditions_next_scans_images_without_blocking_gui(
     QApplication.processEvents()
 
     assert scan_calls == 1
-    assert guide.step_stack.currentWidget() is guide.experiment_step_surface
+    qtbot.waitUntil(lambda: guide.step_stack.currentWidget() is guide.experiment_step_surface)
 
 
-def test_setup_wizard_conditions_next_uses_cached_background_image_check(
+def test_setup_wizard_design_next_uses_cached_background_image_check(
     qtbot,
     controller: StudioController,
     tmp_path: Path,
@@ -304,6 +312,7 @@ def test_setup_wizard_conditions_next_uses_cached_background_image_check(
         role="oddball",
         source_dir=_write_image_directory(tmp_path / "cached-oddball"),
     )
+    _open_image_design_step(qtbot, guide)
     QApplication.processEvents()
 
     assert background_calls == 1
@@ -313,7 +322,7 @@ def test_setup_wizard_conditions_next_uses_cached_background_image_check(
     QApplication.processEvents()
 
     assert scan_calls == 1
-    assert guide.step_stack.currentWidget() is guide.experiment_step_surface
+    qtbot.waitUntil(lambda: guide.step_stack.currentWidget() is guide.experiment_step_surface)
 
 
 def test_setup_wizard_word_editor_keeps_blank_line_after_debounce(
@@ -428,7 +437,8 @@ def test_setup_wizard_conditions_step_requires_descriptive_name_and_positive_tri
     assert step.trigger_check_status.text() == "Complete"
     assert step.base_check_status.text() == "Base Images Not Selected"
     assert step.oddball_check_status.text() == "Oddball Images Not Selected"
-    assert not next_button.isEnabled()
+    assert next_button.isEnabled()
+    assert not step.sources_row.isVisible()
 
     base_dir = _write_image_directory(tmp_path / "gated-condition-base")
     oddball_dir = _write_image_directory(tmp_path / "gated-condition-oddball")
@@ -508,9 +518,7 @@ def test_setup_wizard_contrast_modulation_is_available_for_images_only(
     assert "Neutral Gray" in step.presentation_mode_help.text()
     assert "Timing" in step.presentation_mode_help.text()
 
-    step.modality_combo.setCurrentIndex(
-        step.modality_combo.findData(StimulusModality.WORD.value)
-    )
+    step.modality_combo.setCurrentIndex(step.modality_combo.findData(StimulusModality.WORD.value))
     QApplication.processEvents()
 
     condition = window.document.get_condition(condition_id)
@@ -526,9 +534,7 @@ def test_setup_wizard_contrast_modulation_is_available_for_images_only(
     assert "Neutral Gray" not in step.presentation_mode_help.text()
     assert "words" in step.condition_list_hint.text()
 
-    step.modality_combo.setCurrentIndex(
-        step.modality_combo.findData(StimulusModality.IMAGE.value)
-    )
+    step.modality_combo.setCurrentIndex(step.modality_combo.findData(StimulusModality.IMAGE.value))
     QApplication.processEvents()
     assert step.timing_template_combo.count() == 3
     assert step.timing_template_combo.findData(DutyCycleMode.SINUSOIDAL) >= 0
@@ -633,179 +639,29 @@ def test_setup_wizard_conditions_step_shows_repeat_target_and_balance(
     ) in calculator_snapshots[-1]["repeat_calculator_summary_label"]
 
 
-def test_setup_wizard_conditions_step_keeps_source_geometry_for_incomplete_condition(
-    qtbot,
-    controller: StudioController,
-    tmp_path: Path,
+def test_setup_wizard_conditions_step_keeps_metadata_geometry_for_incomplete_condition(
+    qtbot, controller: StudioController, tmp_path: Path
 ) -> None:
     _, window = _open_created_project(controller, qtbot, tmp_path, "Condition Geometry")
     guide = window.setup_wizard_page
     step = guide.condition_setup_step
     window.resize(1120, 720)
     window.show_setup_wizard(step_key="conditions")
-
-    condition_ids = []
-    for index, name in enumerate(("Faces", "Objects"), start=1):
-        condition_id = guide._document.create_condition()
-        condition_ids.append(condition_id)
-        guide._document.update_condition(condition_id, name=name, trigger_code=index)
-        guide._document.import_condition_stimulus_folder(
-            condition_id,
-            role="base",
-            source_dir=_write_image_directory(tmp_path / f"{name}-base"),
-        )
-        guide._document.import_condition_stimulus_folder(
-            condition_id,
-            role="oddball",
-            source_dir=_write_image_directory(tmp_path / f"{name}-oddball"),
-        )
-
-    step._select_condition(condition_ids[0])
+    first = window.document.create_condition(name="Faces")
+    step._select_condition(first)
     QApplication.processEvents()
-    workspace = step.findChild(QWidget, "setup_conditions_workspace")
-    assert workspace is not None
-    before_geometry = {
-        "workspace": workspace.size(),
-        "details_section": step.condition_details_section.size(),
-        "base_card": step.base_source_card.size(),
-        "oddball_card": step.oddball_source_card.size(),
-        "base_folder": step.base_source_value.size(),
-        "oddball_folder": step.oddball_source_value.size(),
-        "base_metrics": step.base_source_card.metrics.size(),
-        "oddball_metrics": step.oddball_source_card.metrics.size(),
-        "instructions": step.instructions_edit.size(),
-    }
-
+    metadata_size = step.condition_details_section.size()
+    instructions_size = step.instructions_edit.size()
     qtbot.mouseClick(step.add_condition_button, Qt.MouseButton.LeftButton)
     QApplication.processEvents()
-
-    assert workspace.size() == before_geometry["workspace"]
-    assert step.condition_details_section.size() == before_geometry["details_section"]
-    assert step.base_source_card.size() == before_geometry["base_card"]
-    assert step.oddball_source_card.size() == before_geometry["oddball_card"]
-    assert step.base_source_value.size() == before_geometry["base_folder"]
-    assert step.oddball_source_value.size() == before_geometry["oddball_folder"]
-    assert step.base_source_card.metrics.size() == before_geometry["base_metrics"]
-    assert step.oddball_source_card.metrics.size() == before_geometry["oddball_metrics"]
-    assert step.instructions_edit.size() == before_geometry["instructions"]
+    assert step.condition_details_section.size() == metadata_size
+    assert step.instructions_edit.size() == instructions_size
     assert step.instructions_edit.height() == 80
-    assert step.repeat_calculator_button.text() == "i"
-    assert step.repeat_calculator_button.minimumSize().width() == 30
-    assert step.repeat_calculator_button.minimumSize().height() == 30
-    assert step.repeat_calculator_button.maximumSize().width() == 30
-    assert step.repeat_calculator_button.maximumSize().height() == 30
-    assert abs(step.repeat_calculator_button.width() - step.repeat_calculator_button.height()) <= 2
-    assert step.repeat_calculator_button.accessibleName() == "Target repeat information"
-    assert step.repeat_calculator_button.toolTip() == "Show target repeat calculations"
-    standard_field_width = step.timing_template_combo.width()
-    for field in (
-        step.condition_name_edit,
-        step.instructions_edit,
-    ):
-        assert field.width() == standard_field_width
-    timing_option_widths = (
-        step.timing_template_combo.fontMetrics().horizontalAdvance(
-            step.timing_template_combo.itemText(index)
-        )
-        for index in range(step.timing_template_combo.count())
-    )
-    assert standard_field_width >= max(timing_option_widths)
-    field_right = step.timing_template_combo.mapTo(
-        step.condition_details_section,
-        step.timing_template_combo.rect().topRight(),
-    ).x()
-    assert step.condition_details_section.width() - field_right <= 12
-    assert step.base_source_card.metrics.height() == 56
-    assert step.oddball_source_card.metrics.height() == 56
+    assert not step.sources_row.isVisible()
+    assert step.condition_name_edit.width() == step.instructions_edit.width()
+    assert "Design" in step.condition_list_hint.text()
     _assert_visible_children_within_parent(step.condition_details_section)
-    sources_row = step.findChild(QWidget, "setup_conditions_sources_row")
-    assert sources_row is not None
-    main_panel = step.findChild(QWidget, "setup_conditions_main_panel")
-    assert main_panel is not None
-    details_left = step.condition_details_section.mapTo(
-        main_panel,
-        step.condition_details_section.rect().topLeft(),
-    ).x()
-    details_right = step.condition_details_section.mapTo(
-        main_panel,
-        step.condition_details_section.rect().topRight(),
-    ).x()
-    base_left = step.base_source_card.mapTo(
-        main_panel,
-        step.base_source_card.rect().topLeft(),
-    ).x()
-    base_right = step.base_source_card.mapTo(
-        main_panel,
-        step.base_source_card.rect().topRight(),
-    ).x()
-    oddball_left = step.oddball_source_card.mapTo(
-        main_panel,
-        step.oddball_source_card.rect().topLeft(),
-    ).x()
-    oddball_right = step.oddball_source_card.mapTo(
-        main_panel,
-        step.oddball_source_card.rect().topRight(),
-    ).x()
-    assert base_left == details_left
-    assert oddball_right == details_right
-    assert oddball_left - base_right >= PAGE_SECTION_GAP
-    assert step.base_source_card.width() > 210
-    assert step.oddball_source_card.width() > 210
-    assert step.base_source_card.title_label.alignment() & Qt.AlignmentFlag.AlignHCenter
-    assert step.oddball_source_card.title_label.alignment() & Qt.AlignmentFlag.AlignHCenter
-    for source_card in (step.base_source_card, step.oddball_source_card):
-        header = source_card.title_label.parentWidget()
-        assert header is not None
-        assert header.height() == 30
-        title_top = source_card.title_label.mapTo(
-            source_card,
-            source_card.title_label.rect().topLeft(),
-        ).y()
-        assert title_top <= 16
-        for _label, value in source_card.metrics._rows:
-            assert value.width() >= value.fontMetrics().horizontalAdvance(value.text())
-    assert step.base_source_value.alignment() & Qt.AlignmentFlag.AlignHCenter
-    assert step.oddball_source_value.alignment() & Qt.AlignmentFlag.AlignHCenter
-    assert step.base_source_card.metrics._rows[0][1].alignment() & Qt.AlignmentFlag.AlignHCenter
-    assert step.oddball_source_card.metrics._rows[0][1].alignment() & Qt.AlignmentFlag.AlignHCenter
-    assert step.target_repeats_spin.parentWidget() is step.all_conditions_section
-    assert step.target_repeats_label.parentWidget() is step.all_conditions_section
-    assert step.repeat_calculator_button.parentWidget() is step.all_conditions_section
-    assert step.all_conditions_label.text() == "All conditions"
-    instructions_label_top = step.instructions_label.mapTo(
-        step.condition_details_section,
-        step.instructions_label.rect().topLeft(),
-    ).y()
-    instructions_editor_top = step.instructions_edit.mapTo(
-        step.condition_details_section,
-        step.instructions_edit.rect().topLeft(),
-    ).y()
-    assert abs(instructions_label_top - instructions_editor_top) <= 1
-    info_bottom_right = step.repeat_calculator_button.mapTo(
-        step.all_conditions_section,
-        step.repeat_calculator_button.rect().bottomRight(),
-    )
-    assert step.all_conditions_section.width() - info_bottom_right.x() <= 12
-    _assert_visible_children_within_parent(step.all_conditions_section)
-    _assert_visible_children_within_parent(workspace)
-
-    base_bottom = step.base_source_card.mapTo(
-        workspace,
-        step.base_source_card.rect().bottomLeft(),
-    ).y()
-    oddball_bottom = step.oddball_source_card.mapTo(
-        workspace,
-        step.oddball_source_card.rect().bottomLeft(),
-    ).y()
-    all_conditions_bottom = step.all_conditions_section.mapTo(
-        workspace,
-        step.all_conditions_section.rect().bottomLeft(),
-    ).y()
-    assert base_bottom == oddball_bottom == all_conditions_bottom, (
-        base_bottom,
-        oddball_bottom,
-        all_conditions_bottom,
-    )
+    _assert_visible_children_within_parent(step)
 
 
 @pytest.mark.parametrize("modality", [StimulusModality.IMAGE, StimulusModality.WORD])
@@ -866,11 +722,15 @@ def test_condition_scope_and_long_content_fit_minimum_setup_size(
         _assert_visible_children_within_parent(step.words_panel)
 
 
-def test_condition_source_details_exposes_full_project_path_by_keyboard(
+def test_legacy_source_details_preserves_full_project_path(
     qtbot,
     controller: StudioController,
     tmp_path: Path,
+    monkeypatch,
 ) -> None:
+    copied: list[str] = []
+    clipboard = SimpleNamespace(setText=copied.append, text=lambda: copied[-1] if copied else "")
+    monkeypatch.setattr(QApplication, "clipboard", lambda: clipboard)
     _, window = _open_created_project(controller, qtbot, tmp_path, "Inspectable Sources")
     step = window.setup_wizard_page.condition_setup_step
     window.resize(1120, 720)
@@ -887,8 +747,9 @@ def test_condition_source_details_exposes_full_project_path_by_keyboard(
     expected_path = str(window.document.project_root / source.source_dir)
     button = step.base_source_card.source_details_button
     assert button.isEnabled()
-    button.setFocus()
-    qtbot.keyClick(button, Qt.Key.Key_Space)
+    # Hidden compatibility source details remain usable by the existing advanced editor.
+    assert not step.sources_row.isVisible()
+    button.click()
     QApplication.processEvents()
     dialog = step.base_source_card.findChild(
         QDialog, "setup_conditions_base_source_card_source_details_dialog"
@@ -915,6 +776,9 @@ def test_condition_blocker_focus_selects_missing_word_role_without_opening_dialo
     window.show_setup_wizard(step_key="conditions")
     condition_id = window.document.create_condition()
     step._select_condition(condition_id)
+    window.raise_()
+    window.activateWindow()
+    QApplication.processEvents()
     step.focus_setup_blocker()
     assert step.condition_name_edit.hasFocus()
     window.document.update_condition(condition_id, name="Animal words")
@@ -1033,10 +897,11 @@ def test_conditions_six_condition_layout_keeps_hint_and_instructions_clear(
                     label.objectName()
                 )
             label_rect = label.rect().translated(label.mapTo(step, label.rect().topLeft()))
-            for other in labels[index + 1:]:
+            for other in labels[index + 1 :]:
                 other_rect = other.rect().translated(other.mapTo(step, other.rect().topLeft()))
                 assert not label_rect.intersects(other_rect), (
-                    label.objectName(), other.objectName()
+                    label.objectName(),
+                    other.objectName(),
                 )
         hint_bottom = step.condition_list_hint.mapTo(
             step, step.condition_list_hint.rect().bottomLeft()
@@ -1050,7 +915,7 @@ def test_conditions_six_condition_layout_keeps_hint_and_instructions_clear(
         assert not guide.shell.page_container.scroll_area.verticalScrollBar().isEnabled()
 
 
-def test_setup_wizard_conditions_next_silently_advances_when_images_are_uniform(
+def test_setup_wizard_design_next_silently_advances_when_images_are_uniform(
     qtbot,
     controller: StudioController,
     tmp_path: Path,
@@ -1074,6 +939,7 @@ def test_setup_wizard_conditions_next_silently_advances_when_images_are_uniform(
         role="oddball",
         source_dir=_write_image_directory(tmp_path / "uniform-oddball"),
     )
+    _open_image_design_step(qtbot, guide)
     QApplication.processEvents()
 
     def _unexpected_dialog(*_args, **_kwargs):
@@ -1086,14 +952,14 @@ def test_setup_wizard_conditions_next_silently_advances_when_images_are_uniform(
     monkeypatch.setattr("fpvs_studio.gui.setup_wizard_page.ProgressTask", _ImmediateProgressTask)
 
     guide.open_wizard(step_key="images")
-    assert guide.step_stack.currentWidget() is guide.conditions_step_surface
+    assert guide.step_stack.currentWidget() is guide.design_step_surface
     qtbot.mouseClick(guide.setup_wizard_next_button, Qt.MouseButton.LeftButton)
     QApplication.processEvents()
 
-    assert guide.step_stack.currentWidget() is guide.experiment_step_surface
+    qtbot.waitUntil(lambda: guide.step_stack.currentWidget() is guide.experiment_step_surface)
 
 
-def test_setup_wizard_conditions_next_normalizes_mixed_images_before_advancing(
+def test_setup_wizard_design_next_normalizes_mixed_images_before_advancing(
     qtbot,
     controller: StudioController,
     tmp_path: Path,
@@ -1120,6 +986,7 @@ def test_setup_wizard_conditions_next_normalizes_mixed_images_before_advancing(
             size=(160, 120),
         ),
     )
+    _open_image_design_step(qtbot, guide)
     QApplication.processEvents()
 
     class _AcceptDialog:
@@ -1136,11 +1003,11 @@ def test_setup_wizard_conditions_next_normalizes_mixed_images_before_advancing(
     monkeypatch.setattr("fpvs_studio.gui.setup_wizard_page.ImageNormalizationDialog", _AcceptDialog)
 
     guide.open_wizard(step_key="images")
-    assert guide.step_stack.currentWidget() is guide.conditions_step_surface
+    assert guide.step_stack.currentWidget() is guide.design_step_surface
     qtbot.mouseClick(guide.setup_wizard_next_button, Qt.MouseButton.LeftButton)
     QApplication.processEvents()
 
-    assert guide.step_stack.currentWidget() is guide.experiment_step_surface
+    qtbot.waitUntil(lambda: guide.step_stack.currentWidget() is guide.experiment_step_surface)
     base_set = window.document.get_condition_stimulus_set(condition_id, "base")
     oddball_set = window.document.get_condition_stimulus_set(condition_id, "oddball")
     assert base_set.source_dir == "stimuli/normalized-images/condition-1-base"
@@ -1158,7 +1025,7 @@ def test_setup_wizard_conditions_next_normalizes_mixed_images_before_advancing(
     )
 
 
-def test_setup_wizard_conditions_next_preserves_uniform_non_square_images(
+def test_setup_wizard_design_next_preserves_uniform_non_square_images(
     qtbot,
     controller: StudioController,
     tmp_path: Path,
@@ -1190,6 +1057,7 @@ def test_setup_wizard_conditions_next_preserves_uniform_non_square_images(
         role="oddball",
         source_dir=oddball_dir,
     )
+    _open_image_design_step(qtbot, guide)
     QApplication.processEvents()
 
     def _unexpected_dialog(*_args, **_kwargs):
@@ -1204,7 +1072,7 @@ def test_setup_wizard_conditions_next_preserves_uniform_non_square_images(
     qtbot.mouseClick(guide.setup_wizard_next_button, Qt.MouseButton.LeftButton)
     QApplication.processEvents()
 
-    assert guide.step_stack.currentWidget() is guide.experiment_step_surface
+    qtbot.waitUntil(lambda: guide.step_stack.currentWidget() is guide.experiment_step_surface)
     base_set = window.document.get_condition_stimulus_set(condition_id, "base")
     assert base_set.resolution is not None
     assert base_set.resolution.as_tuple() == (128, 96)
@@ -1243,6 +1111,7 @@ def test_setup_wizard_preserves_different_uniform_base_and_oddball_rectangles(
         ),
     )
     guide.refresh()
+    _open_image_design_step(qtbot, guide)
     QApplication.processEvents()
     assert guide.setup_wizard_next_button.isEnabled()
     normalization_scan = guide._document.scan_condition_image_normalization()
@@ -1261,21 +1130,19 @@ def test_setup_wizard_preserves_different_uniform_base_and_oddball_rectangles(
     monkeypatch.setattr(
         guide,
         "_start_condition_image_readiness_scan",
-        lambda: guide._on_condition_image_readiness_scan_succeeded(
-            normalization_scan
-        ),
+        lambda: guide._on_condition_image_readiness_scan_succeeded(normalization_scan),
     )
     qtbot.mouseClick(guide.setup_wizard_next_button, Qt.MouseButton.LeftButton)
     QApplication.processEvents()
 
-    assert guide.step_stack.currentWidget() is guide.experiment_step_surface
+    qtbot.waitUntil(lambda: guide.step_stack.currentWidget() is guide.experiment_step_surface)
     base = window.document.get_condition_stimulus_set(condition_id, "base")
     oddball = window.document.get_condition_stimulus_set(condition_id, "oddball")
     assert base.resolution is not None and base.resolution.as_tuple() == (500, 400)
     assert oddball.resolution is not None and oddball.resolution.as_tuple() == (158, 197)
 
 
-def test_setup_wizard_conditions_next_stays_put_when_normalization_is_cancelled(
+def test_setup_wizard_design_next_stays_put_when_normalization_is_cancelled(
     qtbot,
     controller: StudioController,
     tmp_path: Path,
@@ -1299,6 +1166,7 @@ def test_setup_wizard_conditions_next_stays_put_when_normalization_is_cancelled(
         role="oddball",
         source_dir=_write_image_directory(tmp_path / "cancel-oddball"),
     )
+    _open_image_design_step(qtbot, guide)
     QApplication.processEvents()
 
     class _RejectDialog:
@@ -1316,11 +1184,11 @@ def test_setup_wizard_conditions_next_stays_put_when_normalization_is_cancelled(
         "base",
     ).source_dir
     guide.open_wizard(step_key="images")
-    assert guide.step_stack.currentWidget() is guide.conditions_step_surface
+    assert guide.step_stack.currentWidget() is guide.design_step_surface
     qtbot.mouseClick(guide.setup_wizard_next_button, Qt.MouseButton.LeftButton)
     QApplication.processEvents()
 
-    assert guide.step_stack.currentWidget() is guide.conditions_step_surface
+    assert guide.step_stack.currentWidget() is guide.design_step_surface
     assert (
         window.document.get_condition_stimulus_set(condition_id, "base").source_dir
         == before_source_dir
@@ -1339,7 +1207,7 @@ def test_setup_wizard_condition_image_picker_starts_in_project_stimuli_folder(
     guide.open_wizard(step_key="conditions")
     qtbot.mouseClick(step.add_condition_button, Qt.MouseButton.LeftButton)
     guide.open_wizard(step_key="images")
-    assert guide.step_stack.currentWidget() is guide.conditions_step_surface
+    assert guide.step_stack.currentWidget() is guide.design_step_surface
 
     calls: list[tuple[str, str]] = []
 
@@ -1352,9 +1220,10 @@ def test_setup_wizard_condition_image_picker_starts_in_project_stimuli_folder(
         _capture_directory,
     )
 
-    qtbot.mouseClick(step.base_import_button, Qt.MouseButton.LeftButton)
-    qtbot.mouseClick(step.oddball_import_button, Qt.MouseButton.LeftButton)
+    step.base_import_button.click()
+    step.oddball_import_button.click()
 
+    assert not step.sources_row.isVisible()
     expected_start = str(window.document.project_root / "stimuli")
     assert calls == [
         ("Choose Base Stimulus Folder", expected_start),

@@ -19,7 +19,7 @@ from types import TracebackType
 from typing import cast
 
 from PySide6.QtCore import QObject, QSettings, QTimer, Slot
-from PySide6.QtWidgets import QApplication, QDialog, QFileDialog, QMessageBox, QWidget
+from PySide6.QtWidgets import QApplication, QDialog, QFileDialog, QInputDialog, QMessageBox, QWidget
 
 from fpvs_studio import __version__
 from fpvs_studio.core.condition_template_profiles import (
@@ -27,6 +27,7 @@ from fpvs_studio.core.condition_template_profiles import (
     list_condition_template_profiles,
     normalize_condition_template_profile_root,
 )
+from fpvs_studio.core.enums import ExperimentCategory
 from fpvs_studio.core.models import ConditionTemplateProfile
 from fpvs_studio.core.paths import (
     condition_template_library_path,
@@ -41,7 +42,7 @@ from fpvs_studio.core.project_bundle import (
     read_project_bundle_manifest,
 )
 from fpvs_studio.core.project_config import create_project_from_config, read_project_config
-from fpvs_studio.core.project_service import ProjectScaffold
+from fpvs_studio.core.project_service import ProjectScaffold, rename_project
 from fpvs_studio.core.serialization import load_project_file
 from fpvs_studio.gui.bundle_import_dialog import (
     BundleImportProgressDialog,
@@ -561,6 +562,7 @@ class StudioController(QObject):
             dialog.project_name,
             dialog.parent_directory,
             condition_profile_id=dialog.condition_profile_id,
+            experiment_category=dialog.experiment_category,
         )
 
     def show_open_project_dialog(self) -> None:
@@ -594,6 +596,7 @@ class StudioController(QObject):
         )
         dialog.open_requested.connect(lambda root: self._open_managed_project(dialog, root))
         dialog.delete_requested.connect(lambda root: self._delete_managed_project(dialog, root))
+        dialog.rename_requested.connect(lambda root: self._rename_managed_project(dialog, root))
         dialog.exec()
 
     def create_project(
@@ -602,6 +605,7 @@ class StudioController(QObject):
         parent_dir: Path,
         *,
         condition_profile_id: str | None = None,
+        experiment_category: ExperimentCategory = ExperimentCategory.FPVS_ODDBALL,
     ) -> ProjectDocument | None:
         """Scaffold and open a new project."""
 
@@ -624,6 +628,7 @@ class StudioController(QObject):
                 parent_dir=Path(parent_dir),
                 project_name=project_name,
                 condition_template_profile=condition_profile,
+                experiment_category=experiment_category,
             )
         except Exception as error:
             _show_error(self.main_window or self.welcome_window, "Create Project Error", error)
@@ -1118,6 +1123,7 @@ class StudioController(QObject):
             status_state="info" if is_current else "ready",
             can_open=not is_current,
             can_delete=not is_current,
+            can_rename=True,
         )
 
     def _open_managed_project(self, dialog: ManageProjectsDialog, project_root: str) -> None:
@@ -1129,6 +1135,39 @@ class StudioController(QObject):
     def _delete_managed_project(self, dialog: ManageProjectsDialog, project_root: str) -> None:
         self.delete_project(Path(project_root), parent=dialog)
         dialog.set_project_entries(self.load_manageable_project_entries())
+
+    def _rename_managed_project(self, dialog: ManageProjectsDialog, project_root: str) -> None:
+        root = Path(project_root)
+        current = (
+            self.main_window if self._current_project_root() == self._normalize_path(root) else None
+        )
+        if current is not None and not current.flush_pending_edits():
+            QMessageBox.information(
+                dialog, "Finish the current edit",
+                "Finish the current image operation or correct the pending design before renaming.",
+            )
+            return
+        try:
+            project = (
+                current.document.project if current else load_project_file(project_json_path(root))
+            )
+            name, accepted = QInputDialog.getText(
+                dialog, "Rename Project",
+                "Project name (the folder name stays the same):", text=project.meta.name,
+            )
+            if not accepted:
+                return
+            if current is not None:
+                current.document.rename_saved_project(name)
+            else:
+                rename_project(root, name)
+        except Exception as error:
+            _show_error(dialog, "Rename Project Error", error)
+            return
+        dialog.filter_edit.clear()
+        dialog.set_project_entries(
+            self.load_manageable_project_entries(), selected_root=project_root,
+        )
 
     def delete_project(self, project_root: Path, *, parent: QWidget | None = None) -> bool:
         """Move an existing FPVS project folder to the Recycle Bin after confirmation."""

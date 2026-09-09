@@ -24,7 +24,13 @@ from PySide6.QtWidgets import (
 
 from fpvs_studio.core.contrast_modulation import SINUSOIDAL_NEUTRAL_BACKGROUND_COLOR
 from fpvs_studio.core.display_geometry import visual_angle_width_cm, visual_angle_width_px
-from fpvs_studio.core.enums import DutyCycleMode, EngineName, ImageGeometryMode
+from fpvs_studio.core.enums import (
+    DutyCycleMode,
+    EngineName,
+    ExperimentCategory,
+    ImageGeometryMode,
+    StimulusModality,
+)
 from fpvs_studio.core.models import DisplayValidationReport
 from fpvs_studio.core.validation import (
     APPROVED_MONITOR_REFRESH_RATES_HZ,
@@ -53,6 +59,7 @@ from fpvs_studio.gui.window_helpers import (
     _RUNTIME_BACKGROUND_COLOR_PRESETS,
     _canonical_runtime_background_hex,
     _prefixed_object_name,
+    _set_form_row_visible,
     _show_error_dialog,
 )
 from fpvs_studio.gui.workers import ProgressTask
@@ -323,6 +330,19 @@ class DisplaySettingsEditor(QWidget):
         background_color = self._normalized_background_color()
         preferred_refresh = self._document.project.settings.display.preferred_refresh_hz or 60.0
         protocol = self._document.project.settings.protocol
+        ab = self._document.project.experiment_category == ExperimentCategory.ATTENTIONAL_BLINK
+        image_design = not any(
+            source.modality == StimulusModality.WORD
+            for source in self._document.project.stimulus_sets
+        )
+        _set_form_row_visible(self.form_layout, self.base_hz_spin, not image_design)
+        _set_form_row_visible(self.form_layout, self.oddball_every_n_spin, not image_design)
+        cadence_label = self.form_layout.labelForField(self.oddball_every_n_spin)
+        if isinstance(cadence_label, QLabel):
+            cadence_label.setText("Target pair every" if ab else "Oddball every")
+        summary_label = self.summary_layout.labelForField(self.summary_value_labels["oddball"])
+        if isinstance(summary_label, QLabel):
+            summary_label.setText("Target pair" if ab else "Oddball")
         self._sync_refresh_combo(preferred_refresh)
         with QSignalBlocker(self.base_hz_spin):
             self.base_hz_spin.setValue(protocol.base_hz)
@@ -368,17 +388,21 @@ class DisplaySettingsEditor(QWidget):
     def _refresh_timing_status(self) -> None:
         report = self.timing_report()
         protocol = self._document.project.settings.protocol
+        ab = self._document.project.experiment_category == ExperimentCategory.ATTENTIONAL_BLINK
+        cadence = "target pair" if ab else "oddball"
+        item = "slot" if ab else "stimulus"
         if report.frames_per_cycle is None:
             self.timing_summary_label.setText(
-                f"Requested: {protocol.base_hz:g} Hz base, {protocol.oddball_hz:g} Hz oddball."
+                f"Requested: {protocol.base_hz:g} Hz stream, "
+                f"{protocol.oddball_hz:g} Hz {cadence}."
             )
         else:
             frames_per_oddball = report.frames_per_cycle * protocol.oddball_every_n
             duration_text = self._condition_duration_text(report.frames_per_cycle)
             self.timing_summary_label.setText(
-                f"{report.frames_per_cycle} frames/stimulus; "
-                f"{frames_per_oddball} frames/oddball; "
-                f"requested oddball {protocol.oddball_hz:g} Hz; {duration_text}."
+                f"{report.frames_per_cycle} frames/{item}; "
+                f"{frames_per_oddball} frames/{cadence}; "
+                f"requested {cadence} {protocol.oddball_hz:g} Hz; {duration_text}."
             )
 
         verification_prefix = self._refresh_verification_prefix()
@@ -408,7 +432,7 @@ class DisplaySettingsEditor(QWidget):
             realized_oddball = report.realized_oddball_hz or protocol.oddball_hz
             self.timing_status_label.setText(
                 f"{verification_prefix}Approximate timing: whole-frame scheduling realizes "
-                f"{realized_base:.6g} Hz base and {realized_oddball:.6g} Hz oddball. "
+                f"{realized_base:.6g} Hz stream and {realized_oddball:.6g} Hz {cadence}. "
                 "Runtime QC reports dropped or late frames separately."
             )
             self.timing_status_label.setVisible(True)

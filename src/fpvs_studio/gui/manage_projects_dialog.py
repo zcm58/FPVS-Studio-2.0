@@ -1,4 +1,4 @@
-"""Project management dialog for opening or recycling known projects."""
+"""Project management dialog for opening, renaming or recycling known projects."""
 
 from __future__ import annotations
 
@@ -44,6 +44,7 @@ class ProjectManagementEntry:
     can_open: bool
     can_delete: bool
     guidance_text: str = ""
+    can_rename: bool = False
 
 
 class ManageProjectsDialog(QDialog):
@@ -51,6 +52,7 @@ class ManageProjectsDialog(QDialog):
 
     open_requested = Signal(str)
     delete_requested = Signal(str)
+    rename_requested = Signal(str)
 
     def __init__(
         self,
@@ -72,7 +74,7 @@ class ManageProjectsDialog(QDialog):
 
         self.project_card = SectionCard(
             title="Manage Projects",
-            subtitle="Open an existing project or move a project folder to the Recycle Bin.",
+            subtitle="Open, rename, or move a project to the Recycle Bin.",
             object_name="manage_projects_card",
             parent=self,
         )
@@ -152,6 +154,13 @@ class ManageProjectsDialog(QDialog):
         self.open_button.clicked.connect(self._request_open)
         action_row.addWidget(self.open_button)
 
+        self.rename_button = QPushButton("Rename...", self)
+        self.rename_button.setObjectName("manage_projects_rename_button")
+        self.rename_button.setToolTip("Change the project name; the folder stays in place.")
+        mark_secondary_action(self.rename_button)
+        self.rename_button.clicked.connect(self._request_rename)
+        action_row.addWidget(self.rename_button)
+
         self.copy_path_button = QPushButton("Copy Path", self)
         self.copy_path_button.setObjectName("manage_projects_copy_path_button")
         mark_secondary_action(self.copy_path_button)
@@ -175,7 +184,9 @@ class ManageProjectsDialog(QDialog):
         self.ensurePolished()
         self.set_project_entries(entries)
 
-    def set_project_entries(self, entries: list[ProjectManagementEntry]) -> None:
+    def set_project_entries(
+        self, entries: list[ProjectManagementEntry], *, selected_root: str | None = None,
+    ) -> None:
         """Replace the project list after controller-owned state changes."""
 
         self._entries = list(entries)
@@ -189,6 +200,10 @@ class ManageProjectsDialog(QDialog):
             item.setToolTip(root_key)
             self._items_by_root[root_key] = item
         self._apply_filter()
+        if selected_root is not None:
+            selected_item = self._items_by_root.get(selected_root)
+            if selected_item is not None and self.project_list.row(selected_item) >= 0:
+                self.project_list.setCurrentItem(selected_item)
 
     def _apply_filter(self, _filter_text: str = "") -> None:
         with QSignalBlocker(self.project_list):
@@ -236,6 +251,7 @@ class ManageProjectsDialog(QDialog):
         self.open_button.setEnabled(has_entry and entry.can_open if entry else False)
         self.delete_button.setEnabled(has_entry and entry.can_delete if entry else False)
         self.copy_path_button.setEnabled(has_entry)
+        self.rename_button.setEnabled(entry.can_rename if entry else False)
 
         if entry is None:
             self.status_badge.set_state("pending", "No Selection")
@@ -272,6 +288,11 @@ class ManageProjectsDialog(QDialog):
         entry = self._selected_entry()
         if entry is not None and entry.can_delete:
             self.delete_requested.emit(str(entry.root))
+
+    def _request_rename(self) -> None:
+        entry = self._selected_entry()
+        if entry is not None and entry.can_rename:
+            self.rename_requested.emit(str(entry.root))
 
     def _copy_selected_path(self) -> None:
         entry = self._selected_entry()

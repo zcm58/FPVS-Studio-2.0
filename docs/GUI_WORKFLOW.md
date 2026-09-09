@@ -34,21 +34,27 @@ The welcome window provides:
 without requiring a project to be open. Canceling either step leaves the configured
 root unchanged.
 
-Creating a project asks for:
-
-- project name
-- parent folder where the project root will be scaffolded
+Creating an experiment first asks only for its category: FPVS-Oddball or
+Attentional-Blink. FPVS is a disabled Coming soon choice. Name, parent folder and
+compatible template follow on a second page. Category is locked when the experiment
+is created; changing it requires a new experiment. See
+[Experiment categories](EXPERIMENT_CATEGORIES.md) for persistence and legacy separation.
 
 Opening projects reloads the configured FPVS Studio Root Folder and lists current FPVS
 project folders discovered beneath that root. Discovery excludes the reserved
 `.fpvs-studio` app-metadata subtree, including templates, staging files, and backups.
 Recent projects outside the configured root are not included. The dialog can open a
-project or move a project folder to the Windows Recycle Bin after an explicit Yes/No
-confirmation. The dialog includes a
+project, rename its display name, or move a project folder to the Windows Recycle Bin
+after an explicit Yes/No confirmation. **Rename...** pre-fills the selected name and
+saves only name/update-time metadata. Folder names, experiment IDs, stimuli and run
+records stay in place. The currently open project's title updates immediately, while
+other unsaved edits remain unsaved. Empty names are rejected; Cancel and failed writes
+preserve the original file. Renaming retains the selected project and clears the search
+filter so the new name remains visible. The dialog includes a
 compact project filter and can copy the selected project folder path. The currently
 open project is shown but cannot be deleted from its own open window. When a discovered
 folder contains an unreadable or incompatible `project.json`, the dialog keeps Open and
-Delete disabled and asks the user to verify the configured FPVS Studio Root Folder and
+Delete and Rename disabled and asks the user to verify the configured FPVS Studio Root Folder and
 the project's FPVS Studio version.
 
 Importing a new project from Welcome uses the same `.fpvsbundle` import workflow as
@@ -69,6 +75,43 @@ confirmation. Source-tree Windows and Linux runs additionally expose Experiment 
 Mode for explicit no-hardware verification launches; packaged builds hide it.
 
 ## Main Window
+
+### Experimental visual cycle designer
+
+Setup > **Design** embeds the native visual designer for the selected image condition.
+Its available controls follow the locked experiment category. FPVS-Oddball uses
+Base/Oddball sources; only Attentional-Blink exposes T1/ISI/T2. There are no mode tabs
+or backward-masking controls. The complete workflow is documented in
+[Visual FPVS Designer](VISUAL_EXPERIMENT_DESIGNER.md).
+
+The AB shelf contains Base, T1, T2 and optional ISI source cards with real thumbnails and
+separate folder buttons. Its default cycle has three Base slots and one target-pair
+slot at 4 Hz. The pair contains T1, an image or blank screen during the ISI, and T2.
+T1 and ISI are editable; T2 fills the remaining 250 ms slot. The default is
+50 + 50 + 150 ms. Equal-duration slots sit above the expanded proportional timing bar.
+Drag/click source tiles to add roles and use keyboard/context actions to move/remove.
+
+Folder imports run on workers and immediately update the condition using a fresh
+project-contained source set; old/new folders are never merged. Timing edits apply
+before leaving Design, switching conditions or saving, with all AB conditions
+validated against a changed project-wide cadence. Invalid edits stay visible for
+correction; explicitly discarding a draft preserves completed folder imports.
+Preview slowly uses a cancellable animation. Timing &
+display details opens a separate small dialog with requested/achieved frame timing
+and T2 marker; preview refresh is never treated as display measurement.
+
+Normal experimental playback supports the
+custom AB compound slot, dedicated T2 and ISI assets, and separate target onset records.
+Visible acceptance must cover both categories, both themes, realistic long names/paths,
+folder-picker cancellation, changed sources, invalid/sub-frame timing, draft switching,
+apply/discard, pending workers and preview stop/close. The nine-step wizard must fit
+`1120x820`. The optional standalone designer retains `1040x760` minimum and
+`1400x920` default dimensions bounded by available screen space.
+
+Registered GUI coverage is not a claim of visual acceptance until run in an approved
+visible environment.
+
+### Existing Home and Setup flow
 
 The authoring window is organized around two user-facing modes:
 
@@ -99,7 +142,7 @@ The authoring window is organized around two user-facing modes:
     workflows
 - `Setup Wizard`
   - in-window setup flow for new/incomplete projects and intentional edits
-  - ordered steps: Project, Conditions, Timing, Image Size, Session, Fixation, Response, Review
+  - ordered steps: Project, Conditions, Design, Timing, Image Size, Session, Fixation, Response, Review
   - `Next` is disabled until the active step is complete, with a compact footer hint
     naming the current blocker; Project and Conditions also offer `Show field` to
     focus the missing input, with image/word-specific source wording
@@ -112,7 +155,7 @@ The authoring window is organized around two user-facing modes:
     guided steps free of Advanced buttons and vertical scrolling
   - guided steps use a shared setup step surface for consistent width, margins,
     and alignment inside the wizard card
-  - all eight setup steps must fit inside the compact `1120x720` setup window
+  - all nine setup steps must fit inside the compact `1120x820` setup window
     without bottom clipping, visible child widgets outside their parent bounds,
     or required vertical scrolling
   - the wizard avoids generic footer/status copy; individual step cards should
@@ -122,9 +165,9 @@ The authoring window is organized around two user-facing modes:
     Conditions; the card uses a single-column form without a redundant readiness
     subsection, and template actions sit below the full-width image-timing selector so
     their labels remain visible at the compact setup size
-  - the Project image-timing selector is the default timing template for new
-    conditions; it is backed by condition-template profiles, defaults to Continuous
-    Images, and does not rewrite existing conditions unless the user explicitly applies
+  - Project displays the experiment category read-only. Its image-timing selector
+    contains compatible condition-template profiles, defaulting to Continuous Images
+    for FPVS-Oddball or Attentional-Blink for AB, and does not rewrite existing conditions unless the user explicitly applies
     the selected template to all conditions
   - Project exposes `Enable participant tutorial?`, which controls whether the
     participant sees the fixation response tutorial before the first condition; it is
@@ -133,10 +176,10 @@ The authoring window is organized around two user-facing modes:
     controls readable at the compact size; Image Size retains `Configure Presentation...`
     for the full draft-based presentation editor
   - Timing exposes an approved monitor-refresh dropdown (`59.94`, `60`,
-    `120`, `144`, or `240 Hz`), `Verify display`, project-wide base rate,
-    integer oddball cadence, derived oddball rate/frame counts/condition duration, and
+    `120`, `144`, or `240 Hz`), `Verify display`, derived rate/frame counts/condition duration, and
     presentation background (`Black`, `Dark Gray`, or `Neutral Gray`); Neutral Gray is
-    required when any image condition uses Contrast Modulation; setup requires a successful
+    required when any image condition uses Contrast Modulation. Image cadence is edited
+    in Design; Timing retains cadence fields for word conditions. Setup requires a successful
     PsychoPy fullscreen measurement before `Next`; a visible notice explains the
     fullscreen check before activation. Changing the dropdown clears the
     prior verification, and 59.94 Hz retains its visible requested-versus-realized
@@ -159,16 +202,19 @@ The authoring window is organized around two user-facing modes:
   - the Conditions step uses compact condition rows showing each condition's current
     timing template and a combined condition
     setup surface for condition list actions, name, trigger code, participant
-    instructions, modality, and base/oddball stimulus authoring; its frameless two-column
+    instructions, modality, and word-list authoring; its frameless two-column
     workspace separates an `All conditions` repeat target beneath the list from the
     `This condition` editor and participant instructions, uses one
     responsive field column whose minimum width is set by the Advanced Timing selector,
-    places repeat guidance behind a compact lower-right information action, and keeps
-    image source-card headings top-anchored above count/resolution summaries. Imported
-    image sets expose `Source details` with the full stored path and `Copy path`;
-    inspecting a source does not read files or start an image worker
+    places oddball repeat guidance behind a compact lower-right information action.
+    Image pools and timeline editing live in Design. AB hides modality, ordinary
+    presentation-mode choices and oddball repeat-balance controls, retaining names,
+    instructions, task bindings and appearance settings. Mixed legacy projects expose
+    an explicit separation action here and cannot advance until category conflicts
+    are resolved
   - each selected condition exposes a compact `Project defaults` / `Custom settings`
-    action for inherited condition, Base-role, and Oddball-role settings; the draft-based dialog supports
+    action for inherited condition and role settings; AB shares its target appearance
+    overrides between T1 and T2. The draft-based dialog supports
     reset-to-inherited controls and a live representative-stimulus preview
   - each selected condition also exposes `Pre/Post Tasks...` with a compact saved-flow
     summary; its reusable dialog keeps separate ordered pre-condition and post-condition
@@ -202,20 +248,20 @@ The authoring window is organized around two user-facing modes:
   - image geometry supports Exact Box, Contain, Cover, and Natural Aspect; word
     presentation supports fixed or balanced-randomized height in degrees or window
     height, fixed Arial rendering, opaque color, and authored position
-  - each selected image condition exposes an advanced presentation selector for
+  - each selected FPVS-Oddball image condition exposes an advanced presentation selector for
     Continuous Images, 50% Blank Between Images, or Contrast Modulation; word conditions
     expose only the first two, and changing the selection updates only that condition
-  - image conditions use the existing base/oddball image source cards; word conditions
+  - image conditions use the category-specific source shelf in Design; oddball word conditions
     use typed Base Words and Oddball Words editors with one word or short phrase per line
   - word editors save only non-empty lines while preserving the focused editor's
     in-progress blank line during debounce/refresh, so pressing Enter keeps the cursor
     on the new line
-  - Conditions shows project-wide Target Stimulus Repeats and per-condition base/oddball
+  - FPVS-Oddball Conditions shows project-wide Target Stimulus Repeats and per-condition base/oddball
     repeat-balance guidance; repeat-balance issues are warnings and do not block save
     or launch
   - raw image-folder import is permissive; folders with mixed or rectangular image
     sizes are not rejected at selection time
-  - when users leave Conditions, FPVS Studio checks selected condition images for mixed
+  - when users leave Design, FPVS Studio checks condition images for mixed
     sizes or unsupported runtime formats through a progress task; uniform rectangular
     sets are valid native inputs, while inconsistent folders can still be normalized to
     project-local PNG copies before moving on
@@ -226,8 +272,9 @@ The authoring window is organized around two user-facing modes:
     image-only paths and are disabled or skipped for word conditions
   - raw timing fields such as `Cycles / Repeat` are hidden from the guided workflow
     while the friendly per-condition timing-template choice remains available
-  - Conditions is complete when every condition has a descriptive name, trigger
-    code of 1 or higher, and configured base/oddball stimuli for its modality
+  - Conditions is complete when category conflicts are resolved and every condition
+    has a descriptive name, trigger code of 1 or higher and, for words, configured
+    Base/Oddball lists. Design requires all image pools and valid sequence timing
   - Fixation keeps color changes enabled and exposes schedule, capped target counts,
     timing, and the fixation-only lead-in shown after Space but before condition onset;
     new projects default to randomized 8–13 color changes per condition, a 300 ms color
@@ -618,7 +665,10 @@ For GUI coverage:
   plus important success, empty, busy, validation, and error states
 - keep tests organized by focused workflow instead of reading broad files:
   `test_setup_wizard_shell.py` for shell/layout, `test_setup_project_details.py` for
-  project details, `test_setup_conditions.py` for condition import/normalization,
+  project details, `test_setup_conditions.py` for condition identity and the Design
+  import/normalization handoff, `test_design_setup_step.py` and
+  `test_experiment_designer.py` for embedded editing, and
+  `test_experiment_categories_gui.py` for category-specific controls,
   `test_setup_experiment_display.py` for display/session/image-size settings,
   `test_setup_review.py` for review/return behavior, `test_home_launch_surface.py`
   for Home, `test_run_page_launch.py` for launch wiring, and
@@ -661,18 +711,22 @@ Its minimum/default size is `700x520` for packaged builds and `700x610` for sour
 Presentation (`900x600` minimum) and Pre/Post Tasks retain staged Apply/Cancel behavior.
 Native dropdown/spinner affordances and system file pickers remain available.
 
-Review uses factual summaries for project, conditions/task bindings, Timing, Image Size,
+Review uses factual summaries for project, conditions/task bindings, Design, Timing, Image Size,
 Session, and Fixation/Response, with effective tutorial status in Project. Edit actions
 follow ready-project step-jump permissions. Review's completion actions use the shared
 bottom navigation outside the summary frame: Return Home Without Saving on the left,
 Back and Save and Return Home on the right. Other steps retain Return Home, Back, and
 Next in that row. Saving returns Home with the existing nonmodal status-bar confirmation;
 returning without saving explains that edits remain in memory until the project closes.
+Design uses the task-specific Design your sequence header. Next applies a valid
+design draft before the existing image-readiness handoff; there is no second Apply
+button on that page. The source shelf, schematic stream and proportional target-pair
+detail follow [Visual Experiment Designer](VISUAL_EXPERIMENT_DESIGNER.md).
 Fixation displays the effective smallest count limit, identifies the limiting condition,
 and explains count adjustments caused by changed durations; full per-condition limits
 remain accessible in the tooltip.
 
-For visible acceptance on Windows, walk all eight steps at `1120x720` in both themes,
+For visible acceptance on Windows, walk all nine steps at `1120x820` in both themes,
 then repeat at the normal expanded size and available 125/150% scaling. Include long
 condition names and source paths, image and word conditions, missing-field recovery,
 verification busy/failure/verified states, and unequal condition durations. Inspect

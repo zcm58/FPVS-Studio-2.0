@@ -13,7 +13,8 @@ from pathlib import Path
 from typing import Any
 
 from fpvs_studio.core.contrast_modulation import SINUSOIDAL_NEUTRAL_BACKGROUND_COLOR
-from fpvs_studio.core.enums import DutyCycleMode, SchemaVersion
+from fpvs_studio.core.enums import DutyCycleMode, ExperimentCategory, SchemaVersion
+from fpvs_studio.core.experiment_categories import experiment_category_label
 from fpvs_studio.core.models import (
     DEFAULT_FIXATION_TARGET_COUNT_MAX,
     DEFAULT_FIXATION_TARGET_COUNT_MIN,
@@ -26,6 +27,7 @@ from fpvs_studio.core.models import (
     ConditionTemplateProfileLibrary,
     FixationTaskSettings,
     ProjectSettings,
+    ProtocolSettings,
 )
 from fpvs_studio.core.paths import (
     CONDITION_TEMPLATE_LIBRARY_FILENAME,
@@ -39,6 +41,7 @@ from fpvs_studio.core.serialization import write_json_file
 STUDIO_DEFAULT_PROFILE_ID = "studio-default-v1"
 SIXTY_HZ_BLANK_FIXATION_PROFILE_ID = "sixty-hz-blank50-fixation-v1"
 SINUSOIDAL_CONTRAST_PROFILE_ID = "sinusoidal-contrast-v1"
+ATTENTIONAL_BLINK_PROFILE_ID = "attentional-blink-v1"
 CONDITION_TEMPLATE_LIBRARY_SCHEMA_VERSION = SchemaVersion.V1_1
 
 
@@ -116,6 +119,19 @@ def built_in_condition_template_profiles() -> list[ConditionTemplateProfile]:
             ),
             duty_cycle_mode=DutyCycleMode.SINUSOIDAL,
             background_color=SINUSOIDAL_NEUTRAL_BACKGROUND_COLOR,
+        ),
+        ConditionTemplateProfile(
+            profile_id=ATTENTIONAL_BLINK_PROFILE_ID,
+            experiment_category=ExperimentCategory.ATTENTIONAL_BLINK,
+            display_name="Attentional-Blink",
+            description=(
+                "Four slots per second, with a T1 / separator / T2 target slot every fourth slot."
+            ),
+            built_in=True,
+            defaults=ConditionTemplateDefaults(
+                protocol=ProtocolSettings(base_hz=4.0, oddball_every_n=4),
+                fixation_task=_shared_fixation_defaults(),
+            ),
         ),
     ]
 
@@ -223,10 +239,18 @@ def save_condition_template_profile_library(
     return normalized
 
 
-def list_condition_template_profiles(root_dir: Path) -> list[ConditionTemplateProfile]:
+def list_condition_template_profiles(
+    root_dir: Path,
+    *,
+    experiment_category: ExperimentCategory | None = None,
+) -> list[ConditionTemplateProfile]:
     """Return all condition-template profiles from the app-level library."""
 
-    return load_condition_template_profile_library(root_dir).profiles
+    profiles = load_condition_template_profile_library(root_dir).profiles
+    return [
+        profile for profile in profiles
+        if experiment_category is None or profile.experiment_category == experiment_category
+    ]
 
 
 def get_condition_template_profile(root_dir: Path, profile_id: str) -> ConditionTemplateProfile:
@@ -291,9 +315,13 @@ def delete_condition_template_profile(
 def apply_condition_template_profile_to_settings(
     settings: ProjectSettings,
     profile: ConditionTemplateProfile,
+    *,
+    experiment_category: ExperimentCategory | None = None,
 ) -> ProjectSettings:
     """Apply one profile snapshot to project settings."""
 
+    if experiment_category is not None:
+        require_profile_category(profile, experiment_category)
     display_updates: dict[str, object] = {
         "preferred_refresh_hz": profile.defaults.display.preferred_refresh_hz
     }
@@ -309,8 +337,34 @@ def apply_condition_template_profile_to_settings(
             "display": display,
             "fixation_task": profile.defaults.fixation_task.model_copy(deep=True),
             "presentation": profile.defaults.presentation.model_copy(deep=True),
+            "protocol": (
+                profile.defaults.protocol.model_copy(deep=True)
+                if profile.defaults.protocol is not None
+                else settings.protocol.model_copy(deep=True)
+            ),
         }
     )
+
+
+def require_profile_category(
+    profile: ConditionTemplateProfile,
+    category: ExperimentCategory,
+) -> None:
+    """Reject templates that belong to another experiment category."""
+
+    if category == ExperimentCategory.FPVS:
+        raise ValueError("FPVS is coming soon; its templates cannot be applied.")
+    if profile.experiment_category != category:
+        raise ValueError(
+            f"Template '{profile.display_name}' belongs to "
+            f"{experiment_category_label(profile.experiment_category)}. Choose a "
+            f"{experiment_category_label(category)} template for this experiment."
+        )
+    if (
+        category == ExperimentCategory.ATTENTIONAL_BLINK
+        and profile.defaults.condition.duty_cycle_mode != DutyCycleMode.CONTINUOUS
+    ):
+        raise ValueError("Attentional-Blink templates require continuous image presentation.")
 
 
 def apply_condition_defaults_to_condition(

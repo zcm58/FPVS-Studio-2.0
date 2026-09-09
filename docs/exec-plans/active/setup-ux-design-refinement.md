@@ -333,6 +333,11 @@ Compare before/after; no percentage improvement is claimed without those observa
 
 ## Implementation Record
 
+The category overhaul adds a dedicated Design step, making the current workflow nine
+steps. Image-source authoring moves from Conditions to Design. Current ownership and
+acceptance are documented in [Experiment categories](../../EXPERIMENT_CATEGORIES.md);
+the earlier eight-step observations below describe the reviewed baseline.
+
 - Shared theme-aware validation and form controls now cover app-owned themed surfaces;
   added reusable dialog headers for Settings, Presentation, and Pre/Post Tasks.
 - Conditions separates global repeat targets from selected-condition fields and exposes
@@ -393,3 +398,57 @@ repeat the supplied Conditions case and check Review's footer in both themes.
 - Do not change project-description requirements, add autosave, or alter scientific
   contracts as part of this design review. The unrelated updater acceptance plan stays
   untouched.
+
+## ISI designer extension (2026-09-09)
+
+The user approved a taller Setup default for separate Base/T1/T2/ISI source controls.
+Current Setup acceptance is 1120x820, with an unframed Design page and image/blank
+ISI choice. See `../completed/attentional-blink-isi-sources.md`. Earlier 1120x720
+measurements above describe the preceding layout.
+
+Designer clarity follow-up: source order is Base, T1, ISI, T2; redundant source,
+cycle and timing frames are removed. Typed cadence/duration fields have no step
+arrows, and calculated T2 is plain text. The 68 registered designer checks pass,
+including entry/commit behavior, source order, both categories and both themes.
+
+## Designer Mockup Parity (2026-09-09)
+
+The user approved implementing the generated dark desktop mockup. This slice keeps
+the current timing, source-import and persistence owners. Setup > Design gets a
+task-specific header, visible source names and Blank screen/Image controls, a
+schematic target-pair overview connected to its proportional timing detail, and
+aligned numeric controls. Next remains the single primary action and applies the
+draft through the existing navigation gate; standalone editing retains Apply.
+
+1. Refine the shared source/timeline widgets and embedded layout; verify readable
+   T1 thumbnails, exact expanded proportions, source hit targets and keyboard entry.
+2. Integrate the Design-only header and footer hint; verify Next applies valid
+   drafts, invalid drafts stay on Design, and other wizard steps retain their shell.
+3. Run focused checks and approved visible Qt coverage in both themes at 1120x820
+   and the larger mockup size. Compare rendered screenshots with the mockup and
+   record any remaining limitations. Run precommit for shared component changes.
+
+Completed this slice: the shared designer now shows named sources and visible ISI
+choices, a readable schematic pair, its labeled proportional detail and automatic
+T2 explanation. Setup uses Design your sequence, a single Next action and anchored
+navigation. The workspace fills larger windows while retaining a bounded layout.
+
+Verification: 103 registered GUI checks passed across designer, Design integration,
+wizard shell and components (101 on the combined run, then two successful focused
+reruns after updating the wider Design expectation and a transient Windows clipboard
+lock). The safe suite passed 1205 tests with five unavailable-symlink skips. GUI and
+docs focused checks pass. Precommit reaches the pre-existing controller.py:373
+object-to-str return type error; no new mypy errors were reported.
+
+Visible screenshots cover 1120x820 and 1448x1086, image/blank ISI, a 15/50/185 ms
+target pair, both themes and actual project thumbnails. The reviewed project.json
+hash was unchanged. Timing inputs and the ruler do not overlap; Next applies a
+valid draft without saving it to disk and invalid timing remains editable.
+
+Implementation files: gui/experiment_designer_dialog.py,
+gui/experiment_designer_widgets.py, gui/design_setup_step.py,
+gui/setup_wizard_page.py and gui/components.py under src/fpvs_studio; registered
+coverage is in test_experiment_designer.py, test_design_setup_step.py and
+test_setup_wizard_shell.py under tests/gui. The canonical workflow is in
+VISUAL_EXPERIMENT_DESIGNER.md and GUI_WORKFLOW.md, with ownership and verification
+pointers updated in ARCHITECTURE.md and docs/agent/agent-index.md.

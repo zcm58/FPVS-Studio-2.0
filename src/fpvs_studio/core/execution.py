@@ -155,6 +155,17 @@ class FixationTargetOnsetRecord(FPVSBaseModel):
     time_s: float = Field(ge=0)
 
 
+class AttentionalBlinkOnsetRecord(FPVSBaseModel):
+    """Observed image onset, relative to the first stream flip when timestamped."""
+
+    sequence_index: int = Field(ge=0)
+    phase: Literal["base", "t1", "separator", "t2"]
+    slot_index: int = Field(ge=0)
+    frame_index: int = Field(ge=0)
+    # None preserves an unavailable flip timestamp rather than inventing one.
+    time_s: float | None = Field(default=None, ge=0, allow_inf_nan=False)
+
+
 class ResponseRecord(FPVSBaseModel):
     """One captured participant response during a run."""
 
@@ -284,6 +295,7 @@ class RunExecutionSummary(FPVSBaseModel):
     runtime_metadata: RuntimeMetadata | None = None
     frame_intervals: list[FrameIntervalRecord] = Field(default_factory=list)
     fixation_target_onsets: list[FixationTargetOnsetRecord] = Field(default_factory=list)
+    attentional_blink_onsets: list[AttentionalBlinkOnsetRecord] | None = None
     fixation_responses: list[FixationResponseRecord] = Field(default_factory=list)
     fixation_task_summary: FixationTaskSummary | None = None
     response_log: list[ResponseRecord] = Field(default_factory=list)

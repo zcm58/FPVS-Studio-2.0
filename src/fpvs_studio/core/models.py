@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import random
 import re
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from datetime import datetime, timezone
 from math import isfinite
 from typing import Literal
@@ -25,6 +25,7 @@ from pydantic import (
 from fpvs_studio.core.display_geometry import scaled_visual_angle_degrees
 from fpvs_studio.core.enums import (
     DutyCycleMode,
+    ExperimentCategory,
     ImageGeometryMode,
     InterConditionMode,
     PresentationUnit,
@@ -672,6 +673,15 @@ class StimulusSet(FPVSBaseModel):
         raise ValueError(f"Unsupported stimulus modality '{self.modality}'.")
 
 
+class AttentionalBlinkSettings(FPVSBaseModel):
+    """Within-slot target pair with an image or blank ISI."""
+
+    t1_duration_ms: float = Field(default=50.0, gt=0, allow_inf_nan=False)
+    isi_ms: float = Field(default=50.0, gt=0, allow_inf_nan=False)
+    isi_mode: Literal["image", "blank"] = "image"
+    t2_trigger_code: StrictInt = Field(default=56, ge=1, le=255)
+
+
 class Condition(FPVSBaseModel):
     """Editable condition definition."""
 
@@ -680,6 +690,9 @@ class Condition(FPVSBaseModel):
     instructions: str = ""
     base_stimulus_set_id: str
     oddball_stimulus_set_id: str
+    t2_stimulus_set_id: str | None = None
+    isi_stimulus_set_id: str | None = None
+    attentional_blink: AttentionalBlinkSettings | None = None
     stimulus_variant: StimulusVariant = StimulusVariant.ORIGINAL
     sequence_count: int = Field(gt=0)
     oddball_cycle_repeats_per_sequence: int = Field(default=146, ge=1)
@@ -714,6 +727,23 @@ class Condition(FPVSBaseModel):
     def validate_set_reference(cls, value: str) -> str:
         return validate_slug(value, field_name="stimulus set reference")
 
+    @model_validator(mode="before")
+    @classmethod
+    def preserve_legacy_isi_source(cls, value: object) -> object:
+        if isinstance(value, dict) and "isi_stimulus_set_id" not in value:
+            settings = value.get("attentional_blink")
+            if isinstance(settings, dict) and "isi_mode" not in settings:
+                value = {**value, "isi_stimulus_set_id": value.get("base_stimulus_set_id")}
+        return value
+
+    @field_validator("t2_stimulus_set_id", "isi_stimulus_set_id")
+    @classmethod
+    def validate_t2_set_reference(cls, value: str | None) -> str | None:
+        return (
+            validate_slug(value, field_name="T2 stimulus set reference")
+            if value is not None else None
+        )
+
     @model_validator(mode="after")
     def validate_unique_task_bindings(self) -> Condition:
         for label, bindings in (
@@ -736,16 +766,44 @@ class Condition(FPVSBaseModel):
         return self
 
 
+def with_inferred_experiment_category(value: object) -> object:
+    """Classify legacy project/config payloads without rewriting their conditions."""
+
+    if not isinstance(value, Mapping) or "experiment_category" in value:
+        return value
+    category = ExperimentCategory.FPVS_ODDBALL
+    conditions = value.get("conditions", [])
+    if isinstance(conditions, (list, tuple)):
+        for condition in conditions:
+            timing = (
+                condition.get("attentional_blink")
+                if isinstance(condition, Mapping)
+                else getattr(condition, "attentional_blink", None)
+            )
+            if timing is not None:
+                category = ExperimentCategory.ATTENTIONAL_BLINK
+                break
+    return {**value, "experiment_category": category}
+
+
 class ProjectFile(FPVSBaseModel):
     """Canonical editable project file."""
 
-    schema_version: ProjectSchemaVersion = ProjectSchemaVersion.V1_3
+    schema_version: ProjectSchemaVersion = ProjectSchemaVersion.V1_4
+    experiment_category: ExperimentCategory = Field(
+        default=ExperimentCategory.FPVS_ODDBALL, frozen=True
+    )
     meta: ProjectMeta
     settings: ProjectSettings = Field(default_factory=ProjectSettings)
     stimulus_sets: list[StimulusSet] = Field(default_factory=list)
     conditions: list[Condition] = Field(default_factory=list)
     task_modules: list[TaskModule] = Field(default_factory=list)
     manual_removed_electrodes: dict[str, list[str]] = Field(default_factory=dict)
+
+    @model_validator(mode="before")
+    @classmethod
+    def infer_legacy_category(cls, value: object) -> object:
+        return with_inferred_experiment_category(value)
 
     @field_validator("manual_removed_electrodes", mode="before")
     @classmethod
@@ -821,6 +879,7 @@ class ConditionTemplateDefaults(FPVSBaseModel):
     """Condition-template profile defaults."""
 
     condition: ConditionDefaults = Field(default_factory=ConditionDefaults)
+    protocol: ProtocolSettings | None = None
     display: ConditionTemplateDisplayDefaults = Field(
         default_factory=ConditionTemplateDisplayDefaults
     )
@@ -832,6 +891,7 @@ class ConditionTemplateProfile(FPVSBaseModel):
     """One reusable condition-template profile stored at the FPVS root."""
 
     profile_id: str
+    experiment_category: ExperimentCategory = ExperimentCategory.FPVS_ODDBALL
     display_name: str
     description: str = ""
     built_in: bool = False

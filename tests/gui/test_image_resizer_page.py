@@ -4,8 +4,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 from PIL import Image
 from PySide6.QtCore import QPoint, Qt
+from PySide6.QtGui import QColor, QPalette
 from PySide6.QtWidgets import QApplication, QWidget
 from tests.gui.helpers import (
     _assert_visible_children_within_parent,
@@ -15,6 +17,27 @@ from tests.gui.helpers import (
 )
 
 from fpvs_studio.gui.controller import StudioController
+from fpvs_studio.gui.image_resizer_page import ImageResizerPage
+
+
+@pytest.mark.parametrize("dark", [False, True])
+def test_return_home_stays_in_bottom_footer_when_resized(qtbot, dark):
+    returns = []
+    page = ImageResizerPage(on_return_home=lambda: returns.append(True))
+    qtbot.addWidget(page)
+    page.setPalette(QPalette(QColor("#202124" if dark else "#f4f7fb")))
+    page.show()
+    for width, height in ((960, 640), (1120, 720), (1120, 900)):
+        page.resize(width, height)
+        QApplication.processEvents()
+        button = page.return_home_button
+        assert button.parentWidget() is page
+        assert page.height() - button.geometry().bottom() == 17
+        assert button.x() == 32
+        assert button.y() > page.surface_frame.geometry().bottom()
+        _assert_visible_children_within_parent(page)
+    qtbot.mouseClick(page.return_home_button, Qt.MouseButton.LeftButton)
+    assert returns == [True]
 
 
 def test_tools_menu_exposes_in_window_image_resizer(

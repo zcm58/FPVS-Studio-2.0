@@ -10,6 +10,8 @@ from pathlib import Path
 
 from PySide6.QtCore import QObject, Signal
 
+from fpvs_studio.core.enums import ExperimentCategory
+from fpvs_studio.core.experiment_categories import category_conflict_condition_ids
 from fpvs_studio.core.models import (
     ConditionTemplateProfile,
     ProjectFile,
@@ -29,7 +31,7 @@ from fpvs_studio.core.project_config import (
     find_latest_completed_session_dir,
     write_project_config,
 )
-from fpvs_studio.core.project_service import create_project
+from fpvs_studio.core.project_service import create_project, rename_project
 from fpvs_studio.core.serialization import load_project_file, save_project_file
 from fpvs_studio.core.session_plan import SessionPlan
 from fpvs_studio.core.validation import validate_condition_repeat_cycle_consistency
@@ -139,6 +141,7 @@ class ProjectDocument(
         parent_dir: Path,
         project_name: str,
         condition_template_profile: ConditionTemplateProfile | None = None,
+        experiment_category: ExperimentCategory = ExperimentCategory.FPVS_ODDBALL,
     ) -> ProjectDocument:
         """Scaffold a new project and open it as a live document."""
 
@@ -146,6 +149,7 @@ class ProjectDocument(
             parent_dir,
             project_name,
             condition_template_profile=condition_template_profile,
+            experiment_category=experiment_category,
         )
         manifest = create_empty_manifest(scaffold.project.meta.project_id)
         return cls(
@@ -232,6 +236,16 @@ class ProjectDocument(
 
         meta = _validated_copy(self._project.meta, name=name)
         self._apply_project_update(meta=meta)
+
+    def rename_saved_project(self, name: str) -> None:
+        """Save only the name and keep unrelated in-memory edits unsaved."""
+        saved_meta = rename_project(self.project_root, name)
+        was_dirty = self.dirty
+        meta = _validated_copy(
+            self._project.meta, name=saved_meta.name, updated_at=saved_meta.updated_at,
+        )
+        self._apply_project_update(meta=meta)
+        self._set_dirty(was_dirty)
 
     def update_project_description(self, description: str) -> None:
         """Update the optional project description."""
@@ -438,6 +452,12 @@ class ProjectDocument(
         self.saved.emit()
         self.project_changed.emit()
 
+    def accept_separated_project(self, project: ProjectFile) -> None:
+        """Adopt the saved AB-only result of an explicit legacy separation."""
+        self._replace_project(project)
+        self._set_dirty(False)
+        self.saved.emit()
+
     def export_config_file(self, path: Path, *, include_completed: bool = False) -> None:
         """Export the current project as a Studio `.fpvsconfig` file."""
 
@@ -489,6 +509,14 @@ class ProjectDocument(
         self._replace_project(project)
 
     def _replace_project(self, project: ProjectFile) -> None:
+        if project.experiment_category != self._project.experiment_category:
+            raise DocumentError("Experiment type is locked. Create a new experiment to change it.")
+        old_conflicts = set(category_conflict_condition_ids(self._project))
+        if set(category_conflict_condition_ids(project)) - old_conflicts:
+            raise DocumentError(
+                "Conditions must match the experiment type. "
+                "Use separate experiments for FPVS-Oddball and Attentional-Blink."
+            )
         self._project = project
         self._last_session_plan = None
         self._image_normalization_scan_cache = None

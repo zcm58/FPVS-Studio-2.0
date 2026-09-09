@@ -254,6 +254,17 @@ def _conditions_have_assigned_assets(document: ProjectDocument, ordered_conditio
     return all(
         has_ready_stimuli(condition.base_stimulus_set_id)
         and has_ready_stimuli(condition.oddball_stimulus_set_id)
+        and (
+            condition.attentional_blink is None
+            or condition.t2_stimulus_set_id is not None
+            and has_ready_stimuli(condition.t2_stimulus_set_id)
+        )
+        and (
+            condition.attentional_blink is None
+            or condition.attentional_blink.isi_mode == "blank"
+            or condition.isi_stimulus_set_id is not None
+            and has_ready_stimuli(condition.isi_stimulus_set_id)
+        )
         for condition in ordered_conditions
     )
 
@@ -297,7 +308,7 @@ def _launcher_readiness_report(
     if not conditions_ready:
         status_summary = "Add at least one condition before launching."
     elif not assets_ready:
-        status_summary = "Assign all base and oddball stimulus sets before launching."
+        status_summary = "Finish the image sources in Design, or word lists in Conditions."
     elif blocking_issue_count > 0:
         status_summary = (
             f"Validation at {refresh_hz:.2f} Hz reports {blocking_issue_count} blocking issue(s)."
@@ -319,7 +330,7 @@ def _launcher_readiness_report(
     if assets_ready:
         readiness_items.append("Complete: Stimulus assignments present for all conditions.")
     else:
-        readiness_items.append("Needs setup: Assign base and oddball sets for each condition.")
+        readiness_items.append("Needs setup: Finish each condition's stimulus sources in Setup.")
 
     if blocking_issue_count > 0:
         readiness_items.append(

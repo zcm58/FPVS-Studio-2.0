@@ -575,7 +575,7 @@ def test_schema_1_1_migrates_to_empty_task_collections(sample_project) -> None:
 
     migrated = migrate_project_payload(payload)
 
-    assert migrated.schema_version.value == "1.3.0"
+    assert migrated.schema_version.value == "1.4.0"
     assert migrated.settings.fixation_task.enabled is True
     assert migrated.settings.fixation_task.accuracy_task_enabled is True
     assert migrated.settings.fixation_task.participant_tutorial_enabled is True
