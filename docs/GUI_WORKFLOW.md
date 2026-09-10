@@ -40,6 +40,15 @@ compatible template follow on a second page. Category is locked when the experim
 is created; changing it requires a new experiment. See
 [Experiment categories](EXPERIMENT_CATEGORIES.md) for persistence and legacy separation.
 
+The creation dialog has a `760x500` minimum and `800x500` default size. Its second
+page, **Name your experiment**, groups Project Name, Experiment Template and Save
+Location vertically. The selected template's description stays visible below its
+selector; changing the template or returning from Manage Templates refreshes it.
+Save Location remains editable and exposes the full path by tooltip. A **New folder**
+hint previews the project folder name beneath that location without creating files.
+Back sits at the lower left, with the standard Create Experiment/Cancel pair at the
+lower right. Keyboard navigation follows the field order.
+
 Opening projects reloads the configured FPVS Studio Root Folder and lists current FPVS
 project folders discovered beneath that root. Discovery excludes the reserved
 `.fpvs-studio` app-metadata subtree, including templates, staging files, and backups.
@@ -78,13 +87,20 @@ Mode for explicit no-hardware verification launches; packaged builds hide it.
 
 ### Experimental visual cycle designer
 
-Setup > **Design** embeds the native visual designer for the selected image condition.
+New Attentional-Blink experiments open a three-condition letter-stream designer in
+Setup > **Design**: shared digit/T1/T2 sources, editable onset-to-onset SOAs, and a
+labelled 20-character timeline. Default SOAs are 100/300/500 ms at 10 Hz, with 0/2/4
+intervening digits. Character Size edits native text height. Timing validates exact
+frame compatibility. The post-condition questionnaire button reuses the condition
+task editor. See [Experiment Categories](EXPERIMENT_CATEGORIES.md) for the current contract.
+
+For image experiments, Setup > **Design** embeds the visual designer for the selected condition.
 Its available controls follow the locked experiment category. FPVS-Oddball uses
-Base/Oddball sources; only Attentional-Blink exposes T1/ISI/T2. There are no mode tabs
+Base/Oddball sources; only legacy image-pair Attentional-Blink exposes T1/ISI/T2. There are no mode tabs
 or backward-masking controls. The complete workflow is documented in
 [Visual FPVS Designer](VISUAL_EXPERIMENT_DESIGNER.md).
 
-The AB shelf contains Base, T1, T2 and optional ISI source cards with real thumbnails and
+The legacy AB shelf contains Base, T1, T2 and optional ISI source cards with real thumbnails and
 separate folder buttons. Its default cycle has three Base slots and one target-pair
 slot at 4 Hz. The pair contains T1, an image or blank screen during the ISI, and T2.
 T1 and ISI are editable; T2 fills the remaining 250 ms slot. The default is
@@ -219,6 +235,15 @@ The authoring window is organized around two user-facing modes:
   - each selected condition also exposes `Pre/Post Tasks...` with a compact saved-flow
     summary; its reusable dialog keeps separate ordered pre-condition and post-condition
     module lists inside the existing Conditions workflow
+  - Pre/Post Tasks fits a `1100x720` minimum and `1120x760` default without scrolling
+    through settings. Modules stay on the left, the selected step occupies the center,
+    and the participant preview stays on the right. Empty phases explain how to add a
+    module. **Module settings** opens naming, occurrence, repetition and step-order
+    controls; **Back to step** returns to the selected step. Step settings use Content,
+    Text & layout, Response and, for choice grids, Choices pages. Questionnaires split
+    Question, Answers and Rules into focused pages. Lists, tables and text fields still
+    support their normal data navigation for long authored content. Full module, step
+    and question names are available through tooltips. Apply/Cancel remain in the footer
   - task modules can contain ordered instruction/content, study display, choice grid,
     questionnaire, raw-key response, and timed-feedback steps; whole modules and
     individual choice steps can repeat, and bindings can run on every, first, or last
@@ -275,7 +300,13 @@ The authoring window is organized around two user-facing modes:
   - Conditions is complete when category conflicts are resolved and every condition
     has a descriptive name, trigger code of 1 or higher and, for words, configured
     Base/Oddball lists. Design requires all image pools and valid sequence timing
-  - Fixation keeps color changes enabled and exposes schedule, capped target counts,
+  - Attentional-Blink exposes **Show fixation cross** in Fixation. Turning it off
+    disables fixation color changes, accuracy responses and the participant tutorial.
+    Appearance/task controls become inactive, the preview and Review show that the
+    cross is off, and any configured lead-in becomes a blank interval. The choice
+    applies to both letter-stream and legacy image-pair AB experiments and persists
+    with the project. Existing projects default to showing the cross.
+  - FPVS-Oddball Fixation keeps color changes enabled and exposes schedule, capped target counts,
     timing, and the fixation-only lead-in shown after Space but before condition onset;
     new projects default to randomized 8–13 color changes per condition, a 300 ms color
     change duration, and a two-second lead-in, while migrated legacy projects retain zero

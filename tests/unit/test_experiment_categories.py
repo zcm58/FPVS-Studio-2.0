@@ -146,8 +146,8 @@ def test_new_category_projects_persist_defaults_and_roundtrip_config(tmp_path, c
     project = scaffold.project
     assert load_project_file(scaffold.project_root / "project.json").experiment_category == category
     is_ab = category == ExperimentCategory.ATTENTIONAL_BLINK
-    assert project.settings.protocol.base_hz == (4 if is_ab else 6)
-    assert project.settings.protocol.oddball_every_n == (4 if is_ab else 5)
+    assert project.settings.protocol.base_hz == (10 if is_ab else 6)
+    assert project.settings.protocol.oddball_every_n == (20 if is_ab else 5)
     assert project.settings.condition_defaults.oddball_cycle_repeats_per_sequence == 146
     assert project.settings.condition_defaults.duty_cycle_mode == DutyCycleMode.CONTINUOUS
     config = export_project_config(project, None)
@@ -195,7 +195,7 @@ def test_templates_filter_and_refuse_cross_category_application(tmp_path):
     )
     assert list_condition_template_profiles(
         tmp_path, experiment_category=ExperimentCategory.ATTENTIONAL_BLINK
-    ) == [ab_profile]
+    ) == [p for p in profiles if p.experiment_category == ExperimentCategory.ATTENTIONAL_BLINK]
     oddball = build_starter_project("Oddball")
     with pytest.raises(ValueError, match="belongs to"):
         apply_condition_template_profile_to_settings(

@@ -29,6 +29,7 @@ from tests.gui.helpers import (
 
 from fpvs_studio import __version__
 from fpvs_studio.core.condition_template_profiles import (
+    ATTENTIONAL_BLINK_STREAM_PROFILE_ID,
     SINUSOIDAL_CONTRAST_PROFILE_ID,
     SIXTY_HZ_BLANK_FIXATION_PROFILE_ID,
     STUDIO_DEFAULT_PROFILE_ID,
@@ -37,6 +38,7 @@ from fpvs_studio.core.condition_template_profiles import (
 )
 from fpvs_studio.core.enums import DutyCycleMode, ExperimentCategory, RunMode
 from fpvs_studio.core.execution import SessionExecutionSummary
+from fpvs_studio.core.models import AttentionalBlinkStreamSettings
 from fpvs_studio.core.paths import (
     APP_DATA_DIRNAME,
     condition_template_library_path,
@@ -2162,8 +2164,8 @@ def test_creation_first_page_requires_explicit_category_and_hides_details(qtbot)
     qtbot.mouseClick(ok_button, Qt.MouseButton.LeftButton)
     assert dialog.project_name_edit.isVisible()
     assert dialog.category_stack.currentWidget() is dialog.details_page
-    assert dialog.condition_profile_combo.count() == 1
-    assert dialog.condition_profile_combo.currentData() == "attentional-blink-v1"
+    assert dialog.condition_profile_combo.count() == 2
+    assert dialog.condition_profile_combo.currentData() == "attentional-blink-letter-stream-v1"
     assert dialog.category_summary_label.text() == "Attentional-Blink"
     assert_visible_children_within_parent(dialog)
 
@@ -2194,8 +2196,14 @@ def test_create_dialog_forwards_selected_attentional_blink_category(
     qtbot.addWidget(controller.main_window)
     document = controller.main_window.document
     assert document.project.experiment_category == ExperimentCategory.ATTENTIONAL_BLINK
-    assert document.project.settings.protocol.base_hz == 4.0
-    assert document.project.settings.protocol.oddball_every_n == 4
+    assert document.project.settings.protocol.base_hz == 10.0
+    assert document.project.settings.protocol.oddball_every_n == 20
+    assert document.project.settings.condition_profile_id == ATTENTIONAL_BLINK_STREAM_PROFILE_ID
     assert document.project.settings.condition_defaults.oddball_cycle_repeats_per_sequence == 146
+    assert len(document.project.conditions) == 3
+    for condition, soa_ms in zip(document.project.conditions, (100.0, 300.0, 500.0), strict=True):
+        assert isinstance(condition.attentional_blink, AttentionalBlinkStreamSettings)
+        assert condition.attentional_blink.soa_ms == soa_ms
     persisted = load_project_file(document.project_root / "project.json")
     assert persisted.experiment_category == ExperimentCategory.ATTENTIONAL_BLINK
+    assert persisted.conditions == document.project.conditions

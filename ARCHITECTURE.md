@@ -31,7 +31,15 @@ lazily only inside the engine package.
   pairs into executable frame events inside the existing normal-slot cadence.
   ISI can use an independent image pool or an explicit blank event; preview and
   engines consume that choice without changing slot timing.
-  Only the AB category exposes ISI; backward-masking prototype controls are removed.
+  New AB letter streams use `gui/attentional_blink_stream_designer.py`, shared native
+  digit/target pools, and onset-to-onset SOAs. `core/attentional_blink_stream.py` owns
+  the exact character grid and seeded symbol sampling shared with the designer;
+  `core/compiler_attentional_blink_stream.py` compiles the resulting stream.
+  `core/attentional_blink_presets.py` assembles the three-condition study and questionnaire.
+  Only legacy AB image pairs expose ISI; both layouts retain separate persisted models.
+  Both AB layouts can hide the fixation cross through Setup > Fixation. The persisted
+  `FixationTaskSettings.show_cross` flag compiles into `FixationStyleSpec`; engines
+  skip cross preparation/drawing while preserving lead-in and stream frame timing.
   Manage Projects routes metadata-only renaming through `core/project_service.py`;
   the live document synchronizes the new name without saving other pending edits.
 - `src/fpvs_studio/core/`: editable models, validation, compilation, `RunSpec`,
@@ -74,9 +82,12 @@ ProjectFile
   -> exporters -> project logs and optional detailed run artifacts
 ```
 
-`ProjectFile` uses schema `1.4.0`; `SessionPlan`, execution-result, and `.fpvsconfig`
-contracts remain schema `1.2.0`, and the single-condition timed `RunSpec` remains schema
-`1.1.0`. Project loaders migrate schemas `1.0.0` through `1.3.0` in memory;
+Letter streams use `ProjectFile` schema `1.5.0` and `.fpvsconfig`/`RunSpec` schema
+`1.3.0`. Legacy projects/configs/runs retain `1.4.0`/`1.2.0`/`1.1.0`. `SessionPlan`
+and execution-result contracts remain `1.2.0`. New native-stream onset exports use
+`attentional_blink_stream_events_v1.csv`; legacy image exports retain their headers.
+Template-library `1.2.0` carries explicit layout identity in profile defaults.
+Project loaders migrate schemas `1.0.0` through `1.3.0` in memory;
 reading or launching an older project does not rewrite it. The `1.3.0` project migration
 enables fixation color changes, accuracy scoring, and the participant tutorial once,
 while a later current-schema save may preserve an explicit user opt-out. Compatibility

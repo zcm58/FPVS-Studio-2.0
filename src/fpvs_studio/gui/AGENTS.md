@@ -25,10 +25,12 @@ backend-driven.
   without enabling arbitrary step jumps.
 - New-experiment Setup asks only category first; name/folder/template follow. Category
   is locked after creation. FPVS is disabled Coming soon. Reuse the visual editor in
-  Design; only Attentional-Blink exposes T1/ISI/T2 controls. Core guards category rules.
+  Design; only legacy image-pair Attentional-Blink exposes ISI controls. New letter
+  streams expose shared character pools and onset-to-onset SOAs. Core guards category rules.
 - Keep condition modality authoring in Conditions. Image folders belong in Design;
-  word conditions keep typed base/oddball word-list editors in Conditions. AB is
-  image-only. See `docs/EXPERIMENT_CATEGORIES.md` for shared surfaces and legacy repair.
+  oddball word conditions keep typed base/oddball word-list editors in Conditions.
+  Native AB digit/T1/T2 sources belong in Design, with Character Size replacing Image
+  Size. See `docs/EXPERIMENT_CATEGORIES.md` for shared surfaces and legacy repair.
 - Present Contrast Modulation as the third image presentation mode alongside Continuous
   Images and 50% Blank Between Images. Do not offer it for word conditions, and expose
   Neutral Gray as the required project background without changing existing modes.

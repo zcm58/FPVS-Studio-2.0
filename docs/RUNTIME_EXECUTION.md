@@ -181,6 +181,9 @@ The PsychoPy implementation:
   base rates use their resolved cycle lengths without a nominal-frequency lookup
 - draws one of two pre-created fixation stimuli continuously on compiled `FixationEvent`
   windows; the secondary task never changes the FPVS or trigger schedule
+- when compiled `fixation.show_cross` is false, creates and draws no fixation stimuli,
+  including cache priming, lead-in and terminal offset; any lead-in duration remains
+  a blank interval, and stimulus/target/trigger timing is unchanged
 - polls response keys and escape
 - treats only PsychoPy's PTB and ioHub keyboard backends as timestamp-capable; for those
   backends, it converts each returned flip timestamp into the keyboard clock's time base
@@ -472,6 +475,18 @@ replace the authoritative artifacts under `runs/`, and runtime does not consume
 `.fpvsconfig` during playback.
 
 ### Attentional-blink event exports
+
+Native letter streams use a separate `attentional_blink_stream_events_v1.csv` in
+full run/session output and compact project logs. Its versioned rows add the actual
+character, `base`/`t1`/`t2` phase, cycle and slot, requested/achieved SOA, and planned
+plus observed timing. A missing flip timestamp stays unavailable. Session exports
+carry block/order context; individual run exports join to that context using `run_id`.
+The existing text cache and frame loop handle native events, and preflight verifies
+exact-grid exposures, complete cycles, digit/target roles, and condition/T1/T2 markers.
+Post-condition task responses retain their separate clocks and exports. The default
+Yes/No/Unsure question has neither a correctness label nor a recognition accuracy score.
+
+The following image-pair export contract remains unchanged for legacy AB designs.
 
 AB run results carry optional `RunExecutionSummary.attentional_blink_onsets` records.
 Each observed image onset includes its sequential event index, phase, global slot

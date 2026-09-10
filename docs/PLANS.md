@@ -36,6 +36,9 @@ luminance/RMS algorithm investigation instead of duplicating its scientific deci
 Completed plans are historical implementation notes. Read their directory only when
 the current contracts do not explain why a landed decision exists.
 
+Recent completion: [Attentional-Blink letter stream study](exec-plans/completed/attentional-blink-letter-stream-study.md).
+Also completed: [Attentional-Blink fixation visibility](exec-plans/completed/attentional-blink-fixation-visibility.md).
+
 Draft concrete future work in `planned/`. Move it to `active/` before implementing
 changes that affect user workflows, public contracts, or multiple layers. Keep small bug
 fixes and narrow refactors out of the planning system unless the work becomes

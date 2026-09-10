@@ -333,18 +333,23 @@ class PsychoPyEngine(PresentationEngine):
 
         try:
             window.color = run_spec.display.background_color
-            default_fixation_stim = create_fixation_stim(
-                visual=visual,
-                window=window,
-                run_spec=run_spec,
-                color=run_spec.fixation.default_color,
-            )
-            target_fixation_stim = create_fixation_stim(
-                visual=visual,
-                window=window,
-                run_spec=run_spec,
-                color=run_spec.fixation.target_color,
-            )
+            default_fixation_stim = None
+            target_fixation_stim = None
+            fixation_stimuli: tuple[Any, ...] = ()
+            if run_spec.fixation.show_cross:
+                default_fixation_stim = create_fixation_stim(
+                    visual=visual,
+                    window=window,
+                    run_spec=run_spec,
+                    color=run_spec.fixation.default_color,
+                )
+                target_fixation_stim = create_fixation_stim(
+                    visual=visual,
+                    window=window,
+                    run_spec=run_spec,
+                    color=run_spec.fixation.target_color,
+                )
+                fixation_stimuli = (default_fixation_stim, target_fixation_stim)
             graphics_context = self._graphics_readiness_before_preparation(
                 project_root,
                 run_spec,
@@ -354,7 +359,7 @@ class PsychoPyEngine(PresentationEngine):
                 window=window,
                 project_root=project_root,
                 run_spec=run_spec,
-                fixation_stimuli=(default_fixation_stim, target_fixation_stim),
+                fixation_stimuli=fixation_stimuli,
             )
             if not resources.ready:
                 raise RuntimeError("Condition graphics resources did not reach READY state.")
@@ -422,7 +427,10 @@ class PsychoPyEngine(PresentationEngine):
                         )
                         keyboard_clock_armed = True
 
-                    if warmup_frame_index >= blank_warmup_frames:
+                    if (
+                        warmup_frame_index >= blank_warmup_frames
+                        and default_fixation_stim is not None
+                    ):
                         default_fixation_stim.draw()
                     flip_time = flip()
                     pre_stream_qc_frames += 1
@@ -467,7 +475,8 @@ class PsychoPyEngine(PresentationEngine):
                         ) = frame_plan
                         if stimulus_draw is not None:
                             stimulus_draw()
-                        fixation_draw()
+                        if fixation_draw is not None:
+                            fixation_draw()
 
                         # Trigger writes are the only experiment callbacks on a timed
                         # flip; fixation timing uses the returned flip timestamp.
@@ -545,7 +554,8 @@ class PsychoPyEngine(PresentationEngine):
                         # This is an offset boundary, not another compiled frame. It
                         # removes a continuous final image and closes a final blank_50
                         # interval without changing the compiled cadence or triggers.
-                        default_fixation_stim.draw()
+                        if default_fixation_stim is not None:
+                            default_fixation_stim.draw()
                         terminal_flip_time = flip()
                         terminal_has_timestamp = terminal_flip_time is not None
                         terminal_time_s = (
@@ -835,8 +845,8 @@ class PsychoPyEngine(PresentationEngine):
                 draw_by_stimulus_identity[stimulus_identity] = stimulus_draw
             prepared_draw_sequence.append(stimulus_draw)
         contrast_draw_by_identity_and_frame: dict[tuple[int, int], Any] = {}
-        default_fixation_draw = default_fixation_stim.draw
-        target_fixation_draw = target_fixation_stim.draw
+        default_fixation_draw = default_fixation_stim.draw if run_spec.fixation.show_cross else None
+        target_fixation_draw = target_fixation_stim.draw if run_spec.fixation.show_cross else None
         target_onset_lookup: dict[int, list[FixationEvent]] = {}
         ordered_fixation_events = sorted(
             run_spec.fixation_events,

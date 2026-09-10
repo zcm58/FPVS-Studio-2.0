@@ -12,6 +12,9 @@ from pathlib import Path
 
 from fpvs_studio.core.compiler_assets import load_manifest, resolve_stimulus_items
 from fpvs_studio.core.compiler_attentional_blink import compile_attentional_blink_sequence
+from fpvs_studio.core.compiler_attentional_blink_stream import (
+    compile_attentional_blink_stream_sequence,
+)
 from fpvs_studio.core.compiler_conditions import (
     select_condition,
     select_conditions,
@@ -42,6 +45,7 @@ from fpvs_studio.core.compiler_tasks import (
     compile_condition_tasks,
     condition_tasks_replace_start_gate,
 )
+from fpvs_studio.core.enums import SchemaVersion
 from fpvs_studio.core.experiment_categories import require_valid_experiment_category
 from fpvs_studio.core.fixation_planning import (
     max_supported_color_changes,
@@ -55,9 +59,11 @@ from fpvs_studio.core.frame_validation import (
     frames_per_stimulus,
     on_off_frames,
 )
-from fpvs_studio.core.models import ProjectFile
+from fpvs_studio.core.models import AttentionalBlinkStreamSettings, ProjectFile
 from fpvs_studio.core.presentation import resolve_pre_stream_fixation_seconds
 from fpvs_studio.core.run_spec import (
+    AttentionalBlinkRunSpec,
+    AttentionalBlinkStreamRunSpec,
     ConditionRunSpec,
     DisplayRunSpec,
     FixationStyleSpec,
@@ -113,53 +119,49 @@ def compile_run_spec(
         base_set=base_set,
         oddball_set=oddball_set,
     )
-    text_height_values_by_role = None
-    if base_set.modality.value == "word":
-        text_height_values_by_role = build_interleaved_text_height_values(
-            {
-                "base": resolved_role_presentations["base"].text_height,
-                "oddball": resolved_role_presentations["oddball"].text_height,
-            },
-            total_stimuli=total_stimuli,
-            oddball_every_n=protocol.oddball_every_n,
-            random_seed=random_seed,
+    attentional_blink: AttentionalBlinkRunSpec | AttentionalBlinkStreamRunSpec | None = None
+    if isinstance(condition.attentional_blink, AttentionalBlinkStreamSettings):
+        stimulus_sequence, attentional_blink, presentation = (
+            compile_attentional_blink_stream_sequence(
+                project, condition, base_set=base_set, t1_set=oddball_set,
+                presentation=presentation, refresh_hz=refresh_hz,
+                total_cycles=total_oddball_cycles, random_seed=random_seed,
+            )
         )
-
-    base_stimuli = resolve_stimulus_items(
-        base_set,
-        variant=condition.stimulus_variant,
-        project_root=project_root,
-        manifest=resolved_manifest,
-    )
-    oddball_stimuli = resolve_stimulus_items(
-        oddball_set,
-        variant=condition.stimulus_variant,
-        project_root=project_root,
-        manifest=resolved_manifest,
-    )
-    stimulus_sequence = build_stimulus_sequence(
-        total_stimuli=total_stimuli,
-        frames_per_stimulus_value=frames_per_stimulus_value,
-        on_frames=on_frames,
-        off_frames=off_frames,
-        base_stimuli=base_stimuli,
-        oddball_stimuli=oddball_stimuli,
-        oddball_every_n=protocol.oddball_every_n,
-        random_seed=random_seed,
-        text_height_values_by_role=text_height_values_by_role,
-    )
-    attentional_blink = None
-    if condition.attentional_blink is not None:
-        stimulus_sequence, attentional_blink = compile_attentional_blink_sequence(
-            project,
-            condition,
-            stimulus_sequence,
-            base_set=base_set,
-            refresh_hz=refresh_hz,
-            project_root=project_root,
+    else:
+        text_height_values_by_role = None
+        if base_set.modality.value == "word":
+            text_height_values_by_role = build_interleaved_text_height_values(
+                {
+                    "base": resolved_role_presentations["base"].text_height,
+                    "oddball": resolved_role_presentations["oddball"].text_height,
+                },
+                total_stimuli=total_stimuli,
+                oddball_every_n=protocol.oddball_every_n,
+                random_seed=random_seed,
+            )
+        base_stimuli = resolve_stimulus_items(
+            base_set, variant=condition.stimulus_variant, project_root=project_root,
             manifest=resolved_manifest,
-            random_seed=random_seed,
         )
+        oddball_stimuli = resolve_stimulus_items(
+            oddball_set, variant=condition.stimulus_variant, project_root=project_root,
+            manifest=resolved_manifest,
+        )
+        stimulus_sequence = build_stimulus_sequence(
+            total_stimuli=total_stimuli,
+            frames_per_stimulus_value=frames_per_stimulus_value,
+            on_frames=on_frames, off_frames=off_frames,
+            base_stimuli=base_stimuli, oddball_stimuli=oddball_stimuli,
+            oddball_every_n=protocol.oddball_every_n, random_seed=random_seed,
+            text_height_values_by_role=text_height_values_by_role,
+        )
+        if condition.attentional_blink is not None:
+            stimulus_sequence, attentional_blink = compile_attentional_blink_sequence(
+                project, condition, stimulus_sequence, base_set=base_set,
+                refresh_hz=refresh_hz, project_root=project_root,
+                manifest=resolved_manifest, random_seed=random_seed,
+            )
 
     fixation_settings = project.settings.fixation_task
     target_duration_frames = milliseconds_to_frames(
@@ -231,6 +233,11 @@ def compile_run_spec(
     )
 
     return RunSpec(
+        schema_version=(
+            "1.3.0"
+            if isinstance(attentional_blink, AttentionalBlinkStreamRunSpec)
+            else SchemaVersion.V1_1.value
+        ),
         run_id=run_id or make_run_id(condition.condition_id),
         project_id=project.meta.project_id,
         project_name=project.meta.name,
@@ -267,6 +274,7 @@ def compile_run_spec(
             total_frames=total_frames,
         ),
         fixation=FixationStyleSpec(
+            show_cross=fixation_settings.show_cross,
             accuracy_task_enabled=fixation_settings.accuracy_task_enabled,
             participant_tutorial_enabled=(
                 fixation_settings.accuracy_task_enabled

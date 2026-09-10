@@ -369,7 +369,7 @@ class StudioController(QObject):
             EXPORT_MODE_FULL,
             type=str,
         )
-        if raw_export_mode in VALID_EXPORT_MODES:
+        if isinstance(raw_export_mode, str) and raw_export_mode in VALID_EXPORT_MODES:
             return raw_export_mode
         self.save_run_export_mode(EXPORT_MODE_FULL)
         return EXPORT_MODE_FULL

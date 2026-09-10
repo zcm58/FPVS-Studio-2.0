@@ -5,6 +5,11 @@ from __future__ import annotations
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING
 
+from fpvs_studio.core.attentional_blink_presets import (
+    is_attentional_blink_stream_project,
+    populate_attentional_blink_stream,
+)
+from fpvs_studio.core.attentional_blink_stream import validate_attentional_blink_stream_symbols
 from fpvs_studio.core.condition_template_profiles import (
     apply_condition_defaults_to_condition,
     apply_condition_template_profile_to_settings,
@@ -19,6 +24,7 @@ from fpvs_studio.core.enums import (
 )
 from fpvs_studio.core.models import (
     AttentionalBlinkSettings,
+    AttentionalBlinkStreamSettings,
     Condition,
     ConditionDefaults,
     ConditionPresentationSettings,
@@ -141,6 +147,11 @@ class DocumentConditionMixin:
         """Snapshot one condition-template profile into project settings."""
 
         require_profile_category(profile, self._project.experiment_category)
+        if self._project.conditions and (
+            is_attentional_blink_stream_project(self._project)
+            != (profile.defaults.attentional_blink_layout == "letter_stream")
+        ):
+            raise DocumentError("Choose a template for this experiment's existing design layout.")
         settings = apply_condition_template_profile_to_settings(self._project.settings, profile)
         project = validated_copy(self._project, settings=settings)
         if apply_to_existing_conditions:
@@ -183,6 +194,8 @@ class DocumentConditionMixin:
 
         if self._project.experiment_category == ExperimentCategory.FPVS:
             raise DocumentError("FPVS is coming soon.")
+        if is_attentional_blink_stream_project(self._project):
+            return self._create_stream_condition(name=name)
         ab = self._project.experiment_category == ExperimentCategory.ATTENTIONAL_BLINK
         ordered_conditions = self.ordered_conditions()
         defaults = self._project.settings.condition_defaults
@@ -235,6 +248,48 @@ class DocumentConditionMixin:
         self._replace_project(project)
         return condition_id
 
+    def _create_stream_condition(self, *, name: str | None) -> str:
+        """Add an SOA condition sharing the study's digit and target pools."""
+        project = self._project
+        ordered = self.ordered_conditions()
+        if ordered:
+            prototype = ordered[0]
+        else:
+            seeded = populate_attentional_blink_stream(
+                validated_copy(project, stimulus_sets=[], task_modules=[])
+            )
+            prototype = seeded.conditions[0]
+            existing_tasks = {task.task_id for task in project.task_modules}
+            project = validated_copy(
+                project, stimulus_sets=seeded.stimulus_sets,
+                task_modules=[*project.task_modules, *[
+                    task for task in seeded.task_modules if task.task_id not in existing_tasks
+                ]],
+            )
+        display_name = name or f"Condition {len(ordered) + 1}"
+        condition_id = self._unique_slug(display_name, {c.condition_id for c in ordered})
+        defaults = project.settings.condition_defaults
+        condition = validated_copy(
+            prototype, condition_id=condition_id, name=display_name,
+            sequence_count=defaults.sequence_count,
+            oddball_cycle_repeats_per_sequence=defaults.oddball_cycle_repeats_per_sequence,
+            order_index=len(ordered), trigger_code=self._next_stream_condition_trigger(),
+        )
+        self._replace_project(validated_copy(project, conditions=[*ordered, condition]))
+        return condition_id
+
+    def _next_stream_condition_trigger(self) -> int:
+        used = {c.trigger_code for c in self._project.conditions}
+        used.add(self._project.settings.triggers.oddball_trigger_code)
+        used.update(
+            c.attentional_blink.t2_trigger_code for c in self._project.conditions
+            if c.attentional_blink is not None
+        )
+        for code in range(1, 256):
+            if code not in used:
+                return code
+        raise DocumentError("No unused condition marker is available.")
+
     def remove_condition(self, condition_id: str) -> None:
         """Remove one condition and any unreferenced stimulus sets."""
 
@@ -283,6 +338,16 @@ class DocumentConditionMixin:
             copy_name = f"{source_condition.name} Copy {suffix}"
             suffix += 1
         new_condition_id = self._unique_slug(copy_name, existing_condition_ids)
+        if isinstance(source_condition.attentional_blink, AttentionalBlinkStreamSettings):
+            duplicate = validated_copy(
+                source_condition, condition_id=new_condition_id, name=copy_name,
+                trigger_code=self._next_stream_condition_trigger(),
+                order_index=len(ordered_conditions),
+            )
+            self._replace_project(validated_copy(
+                self._project, conditions=[*ordered_conditions, duplicate],
+            ))
+            return new_condition_id
         base_set_id = self._unique_slug(f"{new_condition_id}-base", existing_set_ids)
         oddball_set_id = self._unique_slug(
             f"{new_condition_id}-oddball", existing_set_ids | {base_set_id}
@@ -460,6 +525,14 @@ class DocumentConditionMixin:
             and updates.get("attentional_blink") is not None
         ):
             raise DocumentError("Separate this legacy FPVS-Oddball condition before continuing.")
+        if existing is not None and existing.attentional_blink is not None:
+            updated_ab = updates.get("attentional_blink", existing.attentional_blink)
+            layout = (
+                updated_ab.get("layout", "within_slot") if isinstance(updated_ab, dict)
+                else getattr(updated_ab, "layout", None)
+            )
+            if layout != existing.attentional_blink.layout:
+                raise DocumentError("The attentional-blink layout is fixed for this experiment.")
         if not ab and any(updates.get(field) is not None for field in (
             "t2_stimulus_set_id", "isi_stimulus_set_id",
         )):
@@ -496,6 +569,8 @@ class DocumentConditionMixin:
         condition = self.get_condition(condition_id)
         if condition is None:
             raise DocumentError(f"Unknown condition '{condition_id}'.")
+        if isinstance(condition.attentional_blink, AttentionalBlinkStreamSettings):
+            raise DocumentError("Edit this study in the letter-stream designer.")
         ab = self._project.experiment_category == ExperimentCategory.ATTENTIONAL_BLINK
         if (attentional_blink is not None) != ab:
             raise DocumentError("The design must match the locked experiment type.")
@@ -531,6 +606,70 @@ class DocumentConditionMixin:
             if problems:
                 raise DocumentError(f"{candidate.name}: {' '.join(problems)}")
         self._replace_project(project)
+
+    def apply_attentional_blink_stream_design(
+        self,
+        base_words: list[str],
+        t1_words: list[str],
+        t2_words: list[str],
+        soa_by_condition: dict[str, float],
+        *,
+        t1_color: str,
+        t2_color: str,
+    ) -> bool:
+        """Validate and save shared character pools and every SOA as one edit."""
+        conditions = self.ordered_conditions()
+        if not conditions or any(
+            not isinstance(c.attentional_blink, AttentionalBlinkStreamSettings) for c in conditions
+        ):
+            raise ValueError("This design requires an Attentional-Blink letter-stream study.")
+        if set(soa_by_condition) != {c.condition_id for c in conditions}:
+            raise ValueError("Provide an SOA for every condition in this study.")
+        validate_attentional_blink_stream_symbols(base_words, t1_words, t2_words)
+        words_by_set: dict[str, list[str]] = {}
+        updated_conditions: list[Condition] = []
+        for condition in conditions:
+            ab = condition.attentional_blink
+            assert isinstance(ab, AttentionalBlinkStreamSettings)
+            for set_id, words in (
+                (condition.base_stimulus_set_id, base_words),
+                (condition.oddball_stimulus_set_id, t1_words),
+                (condition.t2_stimulus_set_id, t2_words),
+            ):
+                if set_id is None or self.get_stimulus_set(set_id) is None:
+                    raise ValueError(f"{condition.name} is missing a character pool.")
+                if set_id in words_by_set and words_by_set[set_id] != words:
+                    raise ValueError("Use separate stimulus sets for different character roles.")
+                words_by_set[set_id] = words
+            updated_conditions.append(validated_copy(
+                condition,
+                name=(f"SOA {soa_by_condition[condition.condition_id]:g} ms"
+                      if condition.name == f"SOA {ab.soa_ms:g} ms" else condition.name),
+                attentional_blink=validated_copy(
+                    ab, soa_ms=soa_by_condition[condition.condition_id],
+                    t1_color=t1_color, t2_color=t2_color,
+                ),
+            ))
+        project = validated_copy(
+            self._project,
+            conditions=updated_conditions,
+            stimulus_sets=[
+                validated_copy(source, words=words_by_set[source.set_id])
+                if source.set_id in words_by_set else source
+                for source in self._project.stimulus_sets
+            ],
+        )
+        for candidate in project.conditions:
+            problems = validate_attentional_blink_condition(
+                project, candidate, refresh_hz=project.settings.display.preferred_refresh_hz,
+                require_ready_sources=True,
+            )
+            if problems:
+                raise ValueError(f"{candidate.name}: {' '.join(problems)}")
+        if project == self._project:
+            return False
+        self._replace_project(project)
+        return True
 
     def set_condition_task_flow(
         self,
@@ -670,14 +809,19 @@ class DocumentConditionMixin:
     ) -> None:
         """Switch an empty condition between image and word authoring modes."""
 
-        if (
-            self._project.experiment_category == ExperimentCategory.ATTENTIONAL_BLINK
-            and modality != StimulusModality.IMAGE
-        ):
-            raise DocumentError("Attentional-Blink designs use image sources.")
         condition = self.get_condition(condition_id)
         if condition is None:
             raise DocumentError(f"Unknown condition '{condition_id}'.")
+        if self._project.experiment_category == ExperimentCategory.ATTENTIONAL_BLINK:
+            required = (
+                StimulusModality.WORD
+                if isinstance(condition.attentional_blink, AttentionalBlinkStreamSettings)
+                else StimulusModality.IMAGE
+            )
+            if modality != required:
+                raise DocumentError(
+                    f"This attentional-blink layout requires {required.value} sources."
+                )
         base_set = self.get_condition_stimulus_set(condition_id, "base")
         oddball_set = self.get_condition_stimulus_set(condition_id, "oddball")
         if base_set.modality == modality and oddball_set.modality == modality:

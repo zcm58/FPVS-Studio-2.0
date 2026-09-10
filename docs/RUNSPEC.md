@@ -219,12 +219,18 @@ participant's Space gate and before stream frame zero. It is not part of
 inside it. The first image/word and condition-start trigger still begin together at
 stream frame zero.
 
+When `FixationStyleSpec.show_cross` is false, this lead-in is a blank interval of
+the same duration. The engine also omits the cross during stimulus playback and
+the terminal offset frame, including stimulus-resource priming.
+
 ### `FixationStyleSpec`
 
 The style spec now contains everything runtime/engines need to render the
 fixation task without consulting editable project models:
 
 - default and target colors
+- `show_cross` (defaults to true when absent from older files); false prohibits
+  fixation events, accuracy responses and the participant fixation tutorial
 - response keys
 - whether the participant fixation tutorial should run before the first condition
 - cross size in pixels
@@ -289,7 +295,18 @@ frame timing as image stimuli.
 
 ## v1 scheduling policy
 
-The compiler currently emits a seed-deterministic schedule:
+Native attentional-blink letter streams use `RunSpec` schema `1.3.0` and
+`AttentionalBlinkStreamRunSpec`. They compile directly to continuous WORD events
+with explicit `base`/`t1`/`t2` phases, absolute slot indices, zero-based cycle indices,
+and exactly equal whole-frame exposures. Requested and achieved SOA, target lag,
+target positions, cycle size, T2 presentation, and T2 marker are in the stream contract.
+T1 uses the resolved oddball presentation color; T2 has its own compiled color.
+Default markers are T1=55 and T2=56, distinct from the condition-start marker.
+Native streams use seeded random character sampling with adjacent-digit and
+same-pair-letter exclusions. They do not promise the balanced image-bag policy below.
+The layout and exact-grid defaults are defined in [Experiment Categories](EXPERIMENT_CATEGORIES.md).
+
+For ordinary FPVS-Oddball, the compiler emits a seed-deterministic schedule:
 
 - oddball every project-selected Nth normal slot (every 5th by default)
 - manifest-backed variant resolution when available

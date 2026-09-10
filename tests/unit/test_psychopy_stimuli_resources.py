@@ -88,10 +88,28 @@ def _patch_stimulus_factory(
     return created
 
 
-def _run_spec(*keys: str) -> SimpleNamespace:
+def _run_spec(*keys: str, show_cross: bool = True) -> SimpleNamespace:
     return SimpleNamespace(
         stimulus_sequence=[SimpleNamespace(key=key, is_blank=False) for key in keys],
+        fixation=SimpleNamespace(show_cross=show_cross),
     )
+
+
+def test_hidden_cross_resources_prime_and_release_only_stimuli(monkeypatch, tmp_path):
+    events = []
+    _patch_stimulus_factory(monkeypatch, events)
+    resources = prepare_condition_resources(
+        visual=object(), window=_FakeWindow(events), project_root=tmp_path,
+        run_spec=_run_spec("image-a", show_cross=False), fixation_stimuli=(),
+        gpu_sync=lambda: events.append("gpu-sync"),
+        delete_pixel_buffer=lambda buffer_id: None,
+        delete_display_list=lambda list_id: None,
+    )
+    assert events == ["prepare:image-a", "draw:image-a", "clear", "gpu-sync"]
+    assert resources.ready
+    assert not resources.fixation_stimuli
+    assert resources.fixation_stim is None
+    assert resources.release().succeeded
 
 
 def test_condition_resources_prime_fixation_sync_cleanup_and_release_idempotently(

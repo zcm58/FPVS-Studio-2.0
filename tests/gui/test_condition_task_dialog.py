@@ -7,12 +7,17 @@ from pathlib import Path
 import pytest
 from PIL import Image
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QColor, QPalette
 from PySide6.QtWidgets import (
     QAbstractScrollArea,
     QApplication,
+    QCheckBox,
     QDialog,
     QFileDialog,
+    QLabel,
+    QScrollArea,
     QTableWidgetItem,
+    QTabWidget,
     QWidget,
 )
 from tests.gui.helpers import (
@@ -82,6 +87,66 @@ def _assert_widget_within_parent(widget: QWidget) -> None:
     assert top_left.y() >= -1, widget.objectName()
     assert bottom_right.x() <= parent.width() + 1, widget.objectName()
     assert bottom_right.y() <= parent.height() + 1, widget.objectName()
+
+
+def _show_editor_control(dialog: ConditionTaskDialog, widget: QWidget, qtbot) -> None:
+    """Follow the same focused pages a user needs to reach an editor control."""
+
+    for phase in (dialog.pre_editor, dialog.post_editor):
+        if not phase.isAncestorOf(widget):
+            continue
+        dialog.phase_tabs.setCurrentWidget(phase)
+        module = phase.module_editor
+        if module.isAncestorOf(widget):
+            settings = module.settings_page.isAncestorOf(widget)
+            if module.module_settings_button.isChecked() != settings:
+                qtbot.mouseClick(module.module_settings_button, Qt.MouseButton.LeftButton)
+    for tabs in dialog.findChildren(QTabWidget):
+        for index in range(tabs.count()):
+            page = tabs.widget(index)
+            if page is widget or page.isAncestorOf(widget):
+                tabs.setCurrentIndex(index)
+                break
+    QApplication.processEvents()
+    assert widget.isVisible(), widget.objectName()
+
+
+def _assert_task_dialog_fits(dialog: ConditionTaskDialog) -> None:
+    QApplication.processEvents()
+    assert not dialog.findChildren(QScrollArea), "Task forms must use pages, not scrolling."
+    _assert_visible_non_scroll_children_within_parent(dialog)
+    for label in dialog.findChildren(QLabel):
+        if not label.isVisible() or not label.text():
+            continue
+        if label.wordWrap():
+            assert label.height() >= label.heightForWidth(label.width()), label.objectName()
+        else:
+            assert label.width() >= label.fontMetrics().horizontalAdvance(label.text()), (
+                label.objectName(),
+                label.text(),
+                label.width(),
+            )
+    for checkbox in dialog.findChildren(QCheckBox):
+        if checkbox.isVisible():
+            assert checkbox.width() >= checkbox.sizeHint().width(), checkbox.objectName()
+
+
+def _visit_task_step_pages(dialog: ConditionTaskDialog, module, qtbot) -> None:
+    """Check every available page without changing the authored task values."""
+
+    _show_editor_control(dialog, module.step_editor, qtbot)
+    editor = module.step_editor
+    for index in range(editor.editor_tabs.count()):
+        if not editor.editor_tabs.isTabVisible(index):
+            continue
+        editor.editor_tabs.setCurrentIndex(index)
+        _assert_task_dialog_fits(dialog)
+        questions = editor.questionnaire_editor
+        if questions.isVisible():
+            for question_index in range(questions.question_tabs.count()):
+                if questions.question_tabs.isTabVisible(question_index):
+                    questions.question_tabs.setCurrentIndex(question_index)
+                    _assert_task_dialog_fits(dialog)
 
 
 def test_task_model_adapter_preserves_unset_scoring_geometry_and_question_bounds() -> None:
@@ -328,8 +393,9 @@ def test_condition_task_dialog_apply_is_lossless_after_visiting_every_step(
     qtbot.addWidget(dialog)
     dialog.show()
     for row in range(3):
-        dialog.pre_editor.module_editor.step_list.setCurrentRow(row)
+        dialog.pre_editor.module_editor.step_selector.setCurrentIndex(row)
         QApplication.processEvents()
+        _visit_task_step_pages(dialog, dialog.pre_editor.module_editor, qtbot)
     qtbot.mouseClick(dialog.apply_button, Qt.MouseButton.LeftButton)
 
     rebuilt = next(item for item in document.project.task_modules if item.task_id == module.task_id)
@@ -497,7 +563,7 @@ def test_condition_task_dialog_cancel_keeps_model_and_disk_unchanged(
 
     dialog = ConditionTaskDialog(document, condition_id=condition_id, parent=window)
     qtbot.addWidget(dialog)
-    dialog.resize(1000, 640)
+    dialog.resize(1100, 720)
     dialog.show()
     QApplication.processEvents()
     dialog.pre_editor.add_kind_combo.setCurrentIndex(
@@ -505,6 +571,7 @@ def test_condition_task_dialog_cancel_keeps_model_and_disk_unchanged(
     )
     qtbot.mouseClick(dialog.pre_editor.add_button, Qt.MouseButton.LeftButton)
     editor = dialog.pre_editor.module_editor.step_editor
+    _show_editor_control(dialog, editor.add_image_item_button, qtbot)
     qtbot.mouseClick(editor.add_image_item_button, Qt.MouseButton.LeftButton)
     QApplication.processEvents()
 
@@ -543,7 +610,7 @@ def test_condition_task_dialog_applies_exact_group_repeat_and_asset_import(
     )
     dialog = ConditionTaskDialog(document, condition_id=condition_id, parent=window)
     qtbot.addWidget(dialog)
-    dialog.resize(1000, 640)
+    dialog.resize(1100, 720)
     dialog.show()
     QApplication.processEvents()
 
@@ -552,6 +619,7 @@ def test_condition_task_dialog_applies_exact_group_repeat_and_asset_import(
     )
     qtbot.mouseClick(dialog.pre_editor.add_button, Qt.MouseButton.LeftButton)
     module_editor = dialog.pre_editor.module_editor
+    _show_editor_control(dialog, module_editor.module_id_edit, qtbot)
     module_editor.module_id_edit.setText("creatine-recognition")
     module_editor.module_title_edit.setText("Creatine recognition")
     module_editor.module_repeat_count_spin.setValue(4)
@@ -561,6 +629,7 @@ def test_condition_task_dialog_applies_exact_group_repeat_and_asset_import(
     step_editor.step_id_edit.setText("recognition-choice")
     step_editor.prompt_edit.setPlainText("Select all 4")
     step_editor.layout_mode_combo.setCurrentIndex(step_editor.layout_mode_combo.findData("exact"))
+    _show_editor_control(dialog, step_editor.add_image_item_button, qtbot)
     qtbot.mouseClick(step_editor.add_image_item_button, Qt.MouseButton.LeftButton)
     table = step_editor.option_table
     table.setItem(0, 6, QTableWidgetItem("-3"))
@@ -570,6 +639,7 @@ def test_condition_task_dialog_applies_exact_group_repeat_and_asset_import(
     module_editor.add_step_kind_combo.setCurrentIndex(
         module_editor.add_step_kind_combo.findData("timed_feedback")
     )
+    _show_editor_control(dialog, module_editor.add_step_button, qtbot)
     qtbot.mouseClick(module_editor.add_step_button, Qt.MouseButton.LeftButton)
     feedback_editor = module_editor.step_editor
     feedback_editor.step_id_edit.setText("correct-feedback")
@@ -627,7 +697,7 @@ def test_condition_task_dialog_exposes_all_questionnaire_types_and_fits_minimum_
     condition_id = document.create_condition(name=condition_name)
     dialog = ConditionTaskDialog(document, condition_id=condition_id, parent=window)
     qtbot.addWidget(dialog)
-    dialog.resize(1000, 640)
+    dialog.resize(1100, 720)
     dialog.show()
     dialog.phase_tabs.setCurrentWidget(dialog.post_editor)
     QApplication.processEvents()
@@ -638,6 +708,7 @@ def test_condition_task_dialog_exposes_all_questionnaire_types_and_fits_minimum_
     qtbot.mouseClick(dialog.post_editor.add_button, Qt.MouseButton.LeftButton)
     assert not dialog.post_editor.module_editor.replaces_start_gate_checkbox.isVisible()
     questionnaire = dialog.post_editor.module_editor.step_editor.questionnaire_editor
+    _show_editor_control(dialog, questionnaire.add_button, qtbot)
     authored_kinds = {questionnaire.question_kind_combo.currentData()}
     for kind in (
         "multiple_choice",
@@ -663,22 +734,131 @@ def test_condition_task_dialog_exposes_all_questionnaire_types_and_fits_minimum_
         dialog.post_editor.module_editor.step_editor.submission_mode_combo.findData("explicit") >= 0
     )
     assert dialog.preview.isVisible()
-    assert condition_name in dialog.header.title_label.text()
+    assert dialog.header.title_label.text() == "Participant tasks"
+    assert condition_name in dialog.header.subtitle_label.text()
     assert dialog.header.title_label.wordWrap()
-    assert "Cancel leaves the condition unchanged" in dialog.header.subtitle_label.text()
+    assert any(
+        label.isVisible() and "only when you select Apply Tasks" in label.text()
+        for label in dialog.findChildren(QLabel)
+    )
     assert dialog.header.title_label.height() >= dialog.header.title_label.heightForWidth(
         dialog.header.title_label.width()
     )
-    editor_scroll = dialog.post_editor.findChild(
-        QAbstractScrollArea,
-        "condition_task_post_editor_scroll",
+    _visit_task_step_pages(dialog, dialog.post_editor.module_editor, qtbot)
+
+
+@pytest.mark.parametrize("size", [(1100, 720), (1120, 760)])
+@pytest.mark.parametrize("background", ["#f4f7fb", "#202124"])
+def test_task_dialog_pages_fit_all_task_and_question_kinds(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+    size: tuple[int, int],
+    background: str,
+) -> None:
+    document, window = _open_created_project(controller, qtbot, tmp_path, "Task Page Layout")
+    condition_id = document.create_condition(
+        name="Participant questionnaire after image recognition and confidence ratings"
     )
-    assert editor_scroll is not None
-    assert (
-        dialog.post_editor.module_editor.width()
-        <= editor_scroll.viewport().width() + 1
-    )
-    _assert_visible_non_scroll_children_within_parent(dialog)
+    dialog = ConditionTaskDialog(document, condition_id=condition_id, parent=window)
+    qtbot.addWidget(dialog)
+    palette = dialog.palette()
+    palette.setColor(QPalette.ColorRole.Window, QColor(background))
+    dialog.setPalette(palette)
+    dialog.resize(*size)
+    dialog.show()
+    _assert_task_dialog_fits(dialog)
+    assert (dialog.width(), dialog.height()) == size
+    assert dialog.pre_editor.empty_panel.isVisible()
+    assert not dialog.pre_editor.module_editor.isVisible()
+
+    dialog.phase_tabs.setCurrentWidget(dialog.post_editor)
+    phase = dialog.post_editor
+    for kind in (
+        "instruction",
+        "study",
+        "choice_grid",
+        "raw_key",
+        "timed_feedback",
+        "questionnaire",
+    ):
+        phase.add_kind_combo.setCurrentIndex(phase.add_kind_combo.findData(kind))
+        qtbot.mouseClick(phase.add_button, Qt.MouseButton.LeftButton)
+        module = phase.module_editor
+        _show_editor_control(dialog, module.module_title_edit, qtbot)
+        title = f"Participant recognition and confidence questionnaire - {kind}"
+        module.module_title_edit.setText(title)
+        assert title in phase.module_list.currentItem().toolTip()
+        assert not module.replaces_start_gate_checkbox.isVisible()
+        _assert_task_dialog_fits(dialog)
+
+        editor = module.step_editor
+        editor.title_edit.setText("Participant response after the complete recognition sequence")
+        if kind in {"study", "choice_grid"}:
+            _show_editor_control(dialog, editor.add_text_item_button, qtbot)
+            qtbot.mouseClick(editor.add_text_item_button, Qt.MouseButton.LeftButton)
+        _visit_task_step_pages(dialog, module, qtbot)
+        assert editor.title_edit.text() in module.step_list.currentItem().toolTip()
+        assert (dialog.width(), dialog.height()) == size
+
+        if kind == "questionnaire":
+            questionnaire = editor.questionnaire_editor
+            for question_kind in (
+                "single_choice",
+                "multiple_choice",
+                "short_text",
+                "long_text",
+                "numeric",
+                "rating",
+            ):
+                if question_kind != "single_choice":
+                    _show_editor_control(dialog, questionnaire.add_button, qtbot)
+                    questionnaire.add_kind_combo.setCurrentIndex(
+                        questionnaire.add_kind_combo.findData(question_kind)
+                    )
+                    qtbot.mouseClick(questionnaire.add_button, Qt.MouseButton.LeftButton)
+                _show_editor_control(dialog, questionnaire.question_prompt_edit, qtbot)
+                questionnaire.question_prompt_edit.setPlainText(
+                    "Did you notice any white letters during the previous sequence of numbers?"
+                )
+                assert questionnaire.question_kind_combo.currentData() == question_kind
+                assert questionnaire.question_prompt_edit.toPlainText() in (
+                    questionnaire.question_list.currentItem().toolTip()
+                )
+                _visit_task_step_pages(dialog, module, qtbot)
+
+    while phase.module_list.count():
+        qtbot.mouseClick(phase.remove_button, Qt.MouseButton.LeftButton)
+    _assert_task_dialog_fits(dialog)
+    assert phase.empty_panel.isVisible()
+    assert not phase.module_editor.isVisible()
+    assert dialog.preview._step is None
+
+
+def test_task_dialog_validation_stays_visible_and_recovers_without_scrolling(
+    qtbot,
+    controller: StudioController,
+    tmp_path: Path,
+) -> None:
+    document, window = _open_created_project(controller, qtbot, tmp_path, "Task Validation")
+    condition_id = document.create_condition(name="SOA 100 ms")
+    dialog = ConditionTaskDialog(document, condition_id=condition_id, parent=window)
+    qtbot.addWidget(dialog)
+    dialog.resize(1100, 720)
+    dialog.show()
+    qtbot.mouseClick(dialog.pre_editor.add_button, Qt.MouseButton.LeftButton)
+    module = dialog.pre_editor.module_editor
+    _show_editor_control(dialog, module.module_id_edit, qtbot)
+    original_id = module.module_id_edit.text()
+    module.module_id_edit.clear()
+    assert dialog.validation_label.isVisible()
+    assert dialog.validation_label.text()
+    assert not dialog.apply_button.isEnabled()
+    _assert_task_dialog_fits(dialog)
+    module.module_id_edit.setText(original_id)
+    assert not dialog.validation_label.isVisible()
+    assert dialog.apply_button.isEnabled()
+    _assert_task_dialog_fits(dialog)
 
 
 def test_task_participant_preview_caches_and_invalidates_image_rendering(
@@ -736,7 +916,7 @@ def test_task_participant_preview_caches_and_invalidates_image_rendering(
     assert preview._scaled_option_pixmaps == {}
 
 
-def test_conditions_step_opens_task_dialog_and_remains_eight_step_sized(
+def test_conditions_step_opens_task_dialog_and_remains_nine_step_sized(
     qtbot,
     controller: StudioController,
     tmp_path: Path,
@@ -756,7 +936,7 @@ def test_conditions_step_opens_task_dialog_and_remains_eight_step_sized(
         return int(QDialog.DialogCode.Rejected)
 
     monkeypatch.setattr(ConditionTaskDialog, "exec", capture)
-    window.resize(1120, 720)
+    window.resize(1120, 820)
     window.show_setup_wizard(step_key="conditions")
     step = window.setup_wizard_page.condition_setup_step
     step._select_condition(condition_id)
@@ -766,6 +946,6 @@ def test_conditions_step_opens_task_dialog_and_remains_eight_step_sized(
     assert step.task_summary_label.text() == "No pre/post tasks"
     qtbot.mouseClick(step.task_button, Qt.MouseButton.LeftButton)
     assert captures == [condition_id]
-    assert len(window.setup_wizard_page.progress_step_labels) == 8
+    assert len(window.setup_wizard_page.progress_step_labels) == 9
     _assert_widget_within_parent(step.task_button)
     _assert_widget_within_parent(step.task_summary_label)

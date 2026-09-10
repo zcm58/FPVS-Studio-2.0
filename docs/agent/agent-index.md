@@ -91,7 +91,13 @@ For the 1120x820 Setup default and its image/blank ISI editor, read
 For the shared visual editor embedded in Setup > Design, read
 [`VISUAL_EXPERIMENT_DESIGNER.md`](../VISUAL_EXPERIMENT_DESIGNER.md) and
 [`EXPERIMENT_CATEGORIES.md`](../EXPERIMENT_CATEGORIES.md). Category is fixed at creation;
-only Attentional-Blink exposes T1/ISI/T2. There are no mode tabs or masking controls.
+only legacy image-pair Attentional-Blink exposes T1/ISI/T2. New letter streams expose
+shared digit/T1/T2 pools, three SOAs, and a full-cycle onset bracket. Read
+`core/attentional_blink_presets.py`, `core/attentional_blink_stream.py`, and
+`gui/attentional_blink_stream_designer.py` for that route; native sizing uses
+  `gui/attentional_blink_character_size.py`. Registered
+`tests/gui/test_attentional_blink_stream_designer.py` covers the new setup workflow.
+There are no mode tabs or masking controls.
 GUI owns interactions; `core/experiment_design.py` owns ordinary cycle mathematics
 and historical masking calculations that have no current GUI.
 `core/attentional_blink.py` and `core/compiler_attentional_blink.py` own custom AB timing
@@ -111,6 +117,12 @@ category and wizard modules for approved visible acceptance. Check the embedded
 plus the expanded `1448x1086` mockup size. Next applies the embedded design; the
 standalone editor retains its Apply action. Check numeric edits, navigation validity,
 source-folder hit targets, readable schematic tokens and proportional detail.
+
+For AB fixation visibility, use `gui/fixation_settings_page.py`, the core fixation
+settings/RunSpec owners, and `engines/psychopy_engine.py` / `psychopy_stimuli.py`.
+`tests/gui/test_fixation_settings_page.py` covers both AB layouts and save/reopen;
+stream GUI tests cover visible/hidden layouts, and engine tests verify no cross
+resources or draws with unchanged character timing and triggers.
 
 For long Windows image paths, start with `core/paths.py` (`filesystem_path`, containment
 resolution and relative serialization), then the image I/O entry point. Keep namespace

@@ -124,6 +124,8 @@ class ExperimentDesignerWidget(QWidget):
         self._preview_timer.timeout.connect(self._advance_preview)
         protocol = document.project.settings.protocol
         settings = condition.attentional_blink or AttentionalBlinkSettings()
+        if not isinstance(settings, AttentionalBlinkSettings):
+            raise ValueError("Edit this letter-stream study in Setup > Design.")
         self.setObjectName("experiment_designer_widget")
         self.setProperty("designerCompact", True)
         self.setProperty("designerEmbedded", embedded)
@@ -483,7 +485,7 @@ class ExperimentDesignerWidget(QWidget):
             self.cycle_canvas.set_roles(["base"] * (protocol.oddball_every_n - 1) + [terminal])
             self.cycle_canvas.setCurrentRow(self.cycle_canvas.count() - 1)
             self.rate_spin.setValue(protocol.base_hz)
-            if condition.attentional_blink is not None:
+            if isinstance(condition.attentional_blink, AttentionalBlinkSettings):
                 self.target_spin.setValue(condition.attentional_blink.t1_duration_ms)
                 self.isi_spin.setValue(condition.attentional_blink.isi_ms)
                 self.t2_marker_spin.setValue(condition.attentional_blink.t2_trigger_code)

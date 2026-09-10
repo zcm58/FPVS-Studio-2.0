@@ -2218,13 +2218,16 @@ def test_psychopy_engine_omits_mixed_clock_domain_warmup_intervals(
     assert captured_warmup_intervals == []
 
 
+@pytest.mark.parametrize("show_cross", [True, False])
 def test_psychopy_engine_uses_final_warmup_frames_for_fixation_lead_in(
     monkeypatch,
     sample_project,
     sample_project_root,
+    show_cross,
 ) -> None:
     run_spec = _two_event_run_spec(sample_project, sample_project_root, duplicate_image=False)
     run_spec = run_spec.model_copy(update={"pre_stream_fixation_frames": 2})
+    run_spec.fixation.show_cross = show_cross
     run_spec.trigger_events = [
         TriggerEvent(frame_index=0, code=1, label="condition_start"),
         TriggerEvent(frame_index=1, code=55, label="oddball_onset"),
@@ -2253,8 +2256,8 @@ def test_psychopy_engine_uses_final_warmup_frames_for_fixation_lead_in(
     assert window._flip_index == 7
     shape_stims = captures["shape_stims"]
     assert isinstance(shape_stims, list)
-    assert len(shape_stims) == 2
-    assert [stim.draw_count for stim in shape_stims] == [6, 1]
+    assert len(shape_stims) == (2 if show_cross else 0)
+    assert [stim.draw_count for stim in shape_stims] == ([6, 1] if show_cross else [])
     assert summary.completed_frames == 2
     assert [record["frame_index"] for record in trigger_backend.records] == [0, 1]
     assert trigger_backend.records[0]["time_s"] == pytest.approx(0.1)

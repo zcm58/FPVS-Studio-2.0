@@ -14,10 +14,19 @@ from typing import cast
 from PIL import Image
 
 from fpvs_studio.core.attentional_blink import SlotRole, preview_attentional_blink
+from fpvs_studio.core.attentional_blink_stream import (
+    GRID_TOLERANCE,
+    preview_attentional_blink_stream,
+)
 from fpvs_studio.core.contrast_modulation import is_sinusoidal_neutral_background
 from fpvs_studio.core.enums import DutyCycleMode, StimulusModality
 from fpvs_studio.core.paths import resolve_project_relative_path
-from fpvs_studio.core.run_spec import RunSpec, event_presentation
+from fpvs_studio.core.run_spec import (
+    AttentionalBlinkRunSpec,
+    AttentionalBlinkStreamRunSpec,
+    RunSpec,
+    event_presentation,
+)
 from fpvs_studio.core.session_plan import SessionPlan
 from fpvs_studio.core.task_models import (
     TaskItemModality,
@@ -182,6 +191,9 @@ def _validate_stimulus_timing(run_spec: RunSpec) -> None:
 def _validate_attentional_blink_timing(run_spec: RunSpec) -> None:
     timing = run_spec.attentional_blink
     assert timing is not None
+    if isinstance(timing, AttentionalBlinkStreamRunSpec):
+        _validate_attentional_blink_stream_timing(run_spec, timing)
+        return
     if (
         run_spec.condition.stimulus_modality != StimulusModality.IMAGE
         or run_spec.display.duty_cycle_mode != DutyCycleMode.CONTINUOUS
@@ -233,6 +245,114 @@ def _validate_attentional_blink_timing(run_spec: RunSpec) -> None:
             raise PreflightError(
                 f"Attentional-blink event {index} does not match its phase, slot, or frame timing."
             )
+    _validate_attentional_blink_markers(run_spec, timing.t2_trigger_code)
+
+
+def _validate_attentional_blink_stream_timing(
+    run_spec: RunSpec, timing: AttentionalBlinkStreamRunSpec,
+) -> None:
+    """Reject malformed character streams before preparing any display resources."""
+
+    display = run_spec.display
+    condition = run_spec.condition
+    frames = timing.frames_per_item
+    slots = timing.cycle_slots
+    try:
+        preview = preview_attentional_blink_stream(
+            refresh_hz=display.refresh_hz, base_hz=condition.base_hz,
+            cycle_slots=slots, soa_ms=timing.requested_soa_ms,
+            t2_slot_index=timing.t2_slot_index,
+        )
+    except ValueError as exc:
+        raise PreflightError(f"Attentional-blink letter-stream timing is invalid: {exc}") from exc
+    if (
+        condition.stimulus_modality != StimulusModality.WORD
+        or display.duty_cycle_mode != DutyCycleMode.CONTINUOUS
+        or run_spec.presentation is None
+        or display.on_frames != frames
+        or display.frames_per_stimulus != frames
+        or display.off_frames != 0
+        or not isclose(display.duty_cycle, 1.0, rel_tol=0.0, abs_tol=1e-9)
+    ):
+        raise PreflightError(
+            "Attentional-blink letter streams require continuous text presentation."
+        )
+    if (
+        condition.oddball_every_n != slots
+        or frames != preview.frames_per_item
+        or timing.t1_slot_index != preview.description.t1_slot_index
+        or timing.lag != preview.description.lag
+        or not isclose(timing.achieved_soa_ms, preview.achieved_soa_ms,
+                       rel_tol=0.0, abs_tol=GRID_TOLERANCE)
+    ):
+        raise PreflightError(
+            "Attentional-blink SOA and item timing must match the exact frame grid."
+        )
+    repeats = condition.total_oddball_cycles
+    if (
+        repeats < 1
+        or len(run_spec.stimulus_sequence) != repeats * slots
+        or display.total_frames != repeats * slots * frames
+    ):
+        raise PreflightError("Attentional-blink letter streams must cover every complete cycle.")
+    previous_digit: str | None = None
+    t1_symbol: str | None = None
+    for index, event in enumerate(run_spec.stimulus_sequence):
+        cycle_index, slot_index = divmod(index, slots)
+        phase = preview.description.roles[slot_index]
+        if (
+            event.sequence_index != index
+            or event.slot_index != index
+            or event.cycle_index != cycle_index
+            or event.phase != phase
+            or event.role != ("base" if phase == "base" else "oddball")
+            or event.stimulus_modality != StimulusModality.WORD
+            or event.is_blank
+            or event.on_start_frame != index * frames
+            or event.on_frames != frames
+            or event.off_frames != 0
+        ):
+            raise PreflightError(
+                f"Attentional-blink stream event {index} has invalid phase, slot, or frame timing."
+            )
+        symbol = event.text or ""
+        allowed_symbols = "0123456789" if phase == "base" else "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+        if len(symbol) != 1 or symbol not in allowed_symbols:
+            raise PreflightError(
+                "Attentional-blink streams require single digits and uppercase letters."
+            )
+        if phase == "base":
+            if symbol == previous_digit:
+                raise PreflightError("Attentional-blink streams cannot repeat adjacent digits.")
+            previous_digit = symbol
+        else:
+            previous_digit = None
+            if phase == "t1":
+                t1_symbol = symbol
+            elif symbol == t1_symbol:
+                raise PreflightError(
+                    "Attentional-blink T1 and T2 letters must differ within each cycle."
+                )
+    _validate_attentional_blink_markers(run_spec, timing.t2_trigger_code)
+    starts = [event for event in run_spec.trigger_events if event.label == "condition_start"]
+    t1_codes = {event.code for event in run_spec.trigger_events if event.label == "t1_onset"}
+    if (
+        len(starts) != 1
+        or starts[0].frame_index != 0
+        or starts[0].code != condition.trigger_code
+        or len(t1_codes) != 1
+        or starts[0].code in t1_codes
+        or len({event.frame_index for event in run_spec.trigger_events})
+        != len(run_spec.trigger_events)
+        or any(event.label not in ("condition_start", "t1_onset", "t2_onset")
+               for event in run_spec.trigger_events)
+    ):
+        raise PreflightError(
+            "Attentional-blink stream markers need one condition start and distinct target codes."
+        )
+
+
+def _validate_attentional_blink_markers(run_spec: RunSpec, t2_trigger_code: int) -> None:
     for phase, label in (("t1", "t1_onset"), ("t2", "t2_onset")):
         expected_frames = [
             event.on_start_frame for event in run_spec.stimulus_sequence if event.phase == phase
@@ -241,13 +361,13 @@ def _validate_attentional_blink_timing(run_spec: RunSpec) -> None:
         if sorted(event.frame_index for event in markers) != expected_frames:
             raise PreflightError(f"Attentional-blink {label} markers do not match target onsets.")
         if any(
-            (event.code != timing.t2_trigger_code if phase == "t2"
-             else event.code == timing.t2_trigger_code)
+            (event.code != t2_trigger_code if phase == "t2"
+             else event.code == t2_trigger_code)
             for event in markers
         ):
             raise PreflightError("Attentional-blink T1 and T2 marker codes must remain distinct.")
     if any(
-        event.label == "condition_start" and event.code == timing.t2_trigger_code
+        event.label == "condition_start" and event.code == t2_trigger_code
         for event in run_spec.trigger_events
     ):
         raise PreflightError("The T2 marker code must differ from the condition-start marker.")
@@ -257,7 +377,8 @@ def _validate_stimulus_payloads(run_spec: RunSpec) -> None:
     stimulus_payloads: dict[str, tuple[StimulusModality, str | None, str | None]] = {}
     for event in run_spec.stimulus_sequence:
         if event.is_blank:
-            if (run_spec.attentional_blink is None or event.phase != "separator"
+            if (not isinstance(run_spec.attentional_blink, AttentionalBlinkRunSpec)
+                    or event.phase != "separator"
                     or event.image_path is not None or event.text is not None):
                 raise PreflightError("Invalid blank ISI payload.")
             continue

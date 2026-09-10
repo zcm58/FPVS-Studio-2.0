@@ -112,8 +112,13 @@ For FPVS-Oddball, keep protocol defaults explicit while allowing project-level e
 - `oddball_every_n = 5`
 - default `oddball_cycle_repeats_per_sequence = 146`
 
-Attentional-Blink defaults to `base_hz = 4.0`, `oddball_every_n = 4`, with the same
-sequence-repeat defaults. Its compound slot uses frame-based T1/separator/T2 timing.
+New Attentional-Blink letter streams default to 10 Hz, 20-character cycles and
+100/300/500 ms target SOAs. `attentional_blink_stream.py` owns the exact onset grid;
+`attentional_blink_presets.py` owns native digit/letter defaults and the block visibility
+question. These streams require exact whole frames per character, rejecting approximate
+refresh ratios. Existing within-slot image pairs retain 4 Hz/four-slot template defaults
+and frame-based T1/separator/T2 timing. See `docs/EXPERIMENT_CATEGORIES.md` for the
+layout and schema contracts. Sequence-repeat defaults remain unchanged.
 
 Represent timing in frames after display validation/compilation. Do not use sleep-based millisecond scheduling as a design primitive.
 

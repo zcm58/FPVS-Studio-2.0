@@ -25,6 +25,7 @@ from fpvs_studio.core.enums import (
     DutyCycleMode,
     ExperimentCategory,
     InterConditionMode,
+    ProjectSchemaVersion,
     StimulusModality,
     StimulusVariant,
     TriggerBackendKind,
@@ -32,6 +33,7 @@ from fpvs_studio.core.enums import (
 from fpvs_studio.core.experiment_categories import require_valid_experiment_category
 from fpvs_studio.core.models import (
     AttentionalBlinkSettings,
+    AttentionalBlinkStreamSettings,
     Condition,
     ConditionPresentationSettings,
     DisplaySettings,
@@ -73,6 +75,7 @@ from fpvs_studio.preprocessing.manifest import create_empty_manifest, write_stim
 from fpvs_studio.preprocessing.models import StimulusManifest, StimulusSetManifest
 
 CONFIG_SCHEMA_VERSION = "1.2.0"
+LETTER_STREAM_CONFIG_SCHEMA_VERSION = "1.3.0"
 PROJECT_CONFIG_SUFFIX = ".fpvsconfig"
 _CONFIG_FILENAME_RE = re.compile(r"[^a-z0-9]+")
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
@@ -125,7 +128,7 @@ class ProjectConfigCondition(FPVSBaseModel):
     oddball_stimulus_set_id: str
     t2_stimulus_set_id: str | None = None
     isi_stimulus_set_id: str | None = None
-    attentional_blink: AttentionalBlinkSettings | None = None
+    attentional_blink: AttentionalBlinkSettings | AttentionalBlinkStreamSettings | None = None
     stimulus_variant: StimulusVariant = StimulusVariant.ORIGINAL
     sequence_count: int = Field(gt=0)
     oddball_cycle_repeats_per_sequence: int = Field(ge=1)
@@ -148,7 +151,8 @@ class ProjectConfigCondition(FPVSBaseModel):
     def preserve_legacy_isi_source(cls, value: object) -> object:
         if isinstance(value, dict) and "isi_stimulus_set_id" not in value:
             settings = value.get("attentional_blink")
-            if isinstance(settings, dict) and "isi_mode" not in settings:
+            if (isinstance(settings, dict) and "isi_mode" not in settings
+                    and settings.get("layout", "within_slot") == "within_slot"):
                 value = {**value, "isi_stimulus_set_id": value.get("base_stimulus_set_id")}
         return value
 
@@ -339,7 +343,7 @@ class ProjectConfigTaskAsset(FPVSBaseModel):
 class ProjectConfigFile(FPVSBaseModel):
     """Top-level Studio `.fpvsconfig` interchange file."""
 
-    schema_version: Literal["1.2.0"] = "1.2.0"
+    schema_version: Literal["1.2.0", "1.3.0"] = "1.2.0"
     experiment_category: ExperimentCategory = Field(
         default=ExperimentCategory.FPVS_ODDBALL, frozen=True
     )
@@ -365,6 +369,9 @@ class ProjectConfigFile(FPVSBaseModel):
 
     @model_validator(mode="after")
     def validate_task_asset_inventory(self) -> ProjectConfigFile:
+        if any(isinstance(item.attentional_blink, AttentionalBlinkStreamSettings)
+               for item in self.conditions) and self.schema_version != "1.3.0":
+            raise ValueError("Letter-stream configs require schema 1.3.0.")
         referenced = {
             (task.task_id, path)
             for task in self.task_modules
@@ -415,6 +422,10 @@ def export_project_config(
         _read_completed_session_plan(completed_session_dir) if completed_session_dir else None
     )
     return ProjectConfigFile(
+        schema_version=(
+            "1.3.0" if any(isinstance(item.attentional_blink, AttentionalBlinkStreamSettings)
+                           for item in project.conditions) else "1.2.0"
+        ),
         experiment_category=project.experiment_category,
         project=ProjectConfigProject(
             project_id=project.meta.project_id,
@@ -528,10 +539,10 @@ def read_project_config(path: Path) -> ProjectConfigFile:
         raw_payload.setdefault("task_assets", [])
         raw_payload["schema_version"] = CONFIG_SCHEMA_VERSION
         raw_version = CONFIG_SCHEMA_VERSION
-    if raw_version != CONFIG_SCHEMA_VERSION:
+    if raw_version not in {CONFIG_SCHEMA_VERSION, LETTER_STREAM_CONFIG_SCHEMA_VERSION}:
         raise ProjectConfigError(
             "Unsupported project config schema version: "
-            f"{raw_version!r}. Expected {CONFIG_SCHEMA_VERSION!r}."
+            f"{raw_version!r}. Expected 1.2.0 or 1.3.0."
         )
     try:
         return ProjectConfigFile.model_validate(raw_payload)
@@ -571,6 +582,10 @@ def create_project_from_config(parent_dir: Path, config: ProjectConfigFile) -> P
         destination.write_bytes(payload)
 
     project = ProjectFile(
+        schema_version=(
+            ProjectSchemaVersion.V1_5 if config.schema_version == "1.3.0"
+            else ProjectSchemaVersion.V1_4
+        ),
         experiment_category=config.experiment_category,
         meta=ProjectMeta(
             project_id=project_id,

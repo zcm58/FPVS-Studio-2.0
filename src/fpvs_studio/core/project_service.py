@@ -11,8 +11,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from uuid import uuid4
 
+from fpvs_studio.core.attentional_blink_presets import populate_attentional_blink_stream
 from fpvs_studio.core.condition_template_profiles import (
-    ATTENTIONAL_BLINK_PROFILE_ID,
+    ATTENTIONAL_BLINK_STREAM_PROFILE_ID,
     apply_condition_template_profile_to_settings,
     built_in_condition_template_profiles,
 )
@@ -98,7 +99,7 @@ def build_starter_project(
     ):
         condition_template_profile = next(
             profile for profile in built_in_condition_template_profiles()
-            if profile.profile_id == ATTENTIONAL_BLINK_PROFILE_ID
+            if profile.profile_id == ATTENTIONAL_BLINK_STREAM_PROFILE_ID
         )
     template = get_template(template_id)
     project_id = slugify_project_name(project_name)
@@ -122,7 +123,7 @@ def build_starter_project(
             condition_template_profile,
             experiment_category=experiment_category,
         )
-    return ProjectFile(
+    project = ProjectFile(
         experiment_category=experiment_category,
         meta=ProjectMeta(
             project_id=project_id,
@@ -133,6 +134,13 @@ def build_starter_project(
         stimulus_sets=[],
         conditions=[],
     )
+    if (
+        experiment_category == ExperimentCategory.ATTENTIONAL_BLINK
+        and condition_template_profile is not None
+        and condition_template_profile.defaults.attentional_blink_layout == "letter_stream"
+    ):
+        return populate_attentional_blink_stream(project)
+    return project
 
 
 def create_project(

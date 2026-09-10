@@ -446,6 +446,7 @@ class ProtocolSettings(FPVSBaseModel):
 class FixationTaskSettings(FPVSBaseModel):
     """Project-level fixation-cross color-change task settings."""
 
+    show_cross: bool = True
     enabled: bool = True
     accuracy_task_enabled: bool = True
     participant_tutorial_enabled: bool = True
@@ -499,6 +500,12 @@ class FixationTaskSettings(FPVSBaseModel):
 
     @model_validator(mode="after")
     def validate_ranges(self) -> FixationTaskSettings:
+        if not self.show_cross and (
+            self.enabled or self.accuracy_task_enabled or self.participant_tutorial_enabled
+        ):
+            raise ValueError(
+                "Hidden fixation crosses cannot have color changes, responses or tutorials."
+            )
         if self.enabled and self.target_duration_ms <= 0:
             raise ValueError("Fixation target duration must be greater than 0 ms when enabled.")
         if self.accuracy_task_enabled and not self.enabled:
@@ -676,10 +683,27 @@ class StimulusSet(FPVSBaseModel):
 class AttentionalBlinkSettings(FPVSBaseModel):
     """Within-slot target pair with an image or blank ISI."""
 
+    layout: Literal["within_slot"] = "within_slot"
     t1_duration_ms: float = Field(default=50.0, gt=0, allow_inf_nan=False)
     isi_ms: float = Field(default=50.0, gt=0, allow_inf_nan=False)
     isi_mode: Literal["image", "blank"] = "image"
     t2_trigger_code: StrictInt = Field(default=56, ge=1, le=255)
+
+
+class AttentionalBlinkStreamSettings(FPVSBaseModel):
+    """Independent letter targets in a continuous digit stream."""
+
+    layout: Literal["letter_stream"] = "letter_stream"
+    soa_ms: float = Field(default=300.0, gt=0, allow_inf_nan=False)
+    t2_slot_index: int = Field(default=15, ge=1)
+    t1_color: str = "#FF0000"
+    t2_color: str = "#FFFFFF"
+    t2_trigger_code: StrictInt = Field(default=56, ge=1, le=255)
+
+    @field_validator("t1_color", "t2_color")
+    @classmethod
+    def validate_target_color(cls, value: str) -> str:
+        return validate_presentation_text_color(value)
 
 
 class Condition(FPVSBaseModel):
@@ -692,7 +716,7 @@ class Condition(FPVSBaseModel):
     oddball_stimulus_set_id: str
     t2_stimulus_set_id: str | None = None
     isi_stimulus_set_id: str | None = None
-    attentional_blink: AttentionalBlinkSettings | None = None
+    attentional_blink: AttentionalBlinkSettings | AttentionalBlinkStreamSettings | None = None
     stimulus_variant: StimulusVariant = StimulusVariant.ORIGINAL
     sequence_count: int = Field(gt=0)
     oddball_cycle_repeats_per_sequence: int = Field(default=146, ge=1)
@@ -732,7 +756,8 @@ class Condition(FPVSBaseModel):
     def preserve_legacy_isi_source(cls, value: object) -> object:
         if isinstance(value, dict) and "isi_stimulus_set_id" not in value:
             settings = value.get("attentional_blink")
-            if isinstance(settings, dict) and "isi_mode" not in settings:
+            if (isinstance(settings, dict) and "isi_mode" not in settings
+                    and settings.get("layout", "within_slot") == "within_slot"):
                 value = {**value, "isi_stimulus_set_id": value.get("base_stimulus_set_id")}
         return value
 
@@ -834,6 +859,9 @@ class ProjectFile(FPVSBaseModel):
 
     @model_validator(mode="after")
     def validate_unique_ids(self) -> ProjectFile:
+        if any(isinstance(item.attentional_blink, AttentionalBlinkStreamSettings)
+               for item in self.conditions) and self.schema_version != ProjectSchemaVersion.V1_5:
+            raise ValueError("Letter-stream projects require project schema 1.5.0.")
         set_ids = [item.set_id for item in self.stimulus_sets]
         if len(set_ids) != len(set(set_ids)):
             raise ValueError("Stimulus set ids must be unique.")
@@ -878,6 +906,7 @@ class ConditionTemplateDisplayDefaults(FPVSBaseModel):
 class ConditionTemplateDefaults(FPVSBaseModel):
     """Condition-template profile defaults."""
 
+    attentional_blink_layout: Literal["within_slot", "letter_stream"] = "within_slot"
     condition: ConditionDefaults = Field(default_factory=ConditionDefaults)
     protocol: ProtocolSettings | None = None
     display: ConditionTemplateDisplayDefaults = Field(
@@ -918,7 +947,7 @@ class ConditionTemplateProfile(FPVSBaseModel):
 class ConditionTemplateProfileLibrary(FPVSBaseModel):
     """Persisted app-level condition-template library."""
 
-    schema_version: SchemaVersion = SchemaVersion.V1_1
+    schema_version: SchemaVersion = SchemaVersion.V1_2
     profiles: list[ConditionTemplateProfile] = Field(default_factory=list)
 
     @model_validator(mode="after")

@@ -306,10 +306,15 @@ def prepare_condition_resources(
     cleanup report.
     """
 
-    prepared_fixation_stimuli = _normalize_fixation_stimuli(
-        fixation_stim=fixation_stim,
-        fixation_stimuli=fixation_stimuli,
-    )
+    if run_spec.fixation.show_cross:
+        prepared_fixation_stimuli = _normalize_fixation_stimuli(
+            fixation_stim=fixation_stim,
+            fixation_stimuli=fixation_stimuli,
+        )
+    else:
+        if fixation_stim is not None or fixation_stimuli:
+            raise ValueError("Hidden fixation crosses must not have prepared fixation stimuli.")
+        prepared_fixation_stimuli = ()
     resolved_gpu_sync = gpu_sync or synchronize_gpu
     resources = PreparedConditionResources(
         gpu_sync=resolved_gpu_sync,

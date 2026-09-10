@@ -22,7 +22,7 @@ def migrate_project_payload(payload: Mapping[str, Any]) -> ProjectFile:
     schema_version = payload.get("schema_version", ProjectSchemaVersion.V1.value)
     if isinstance(schema_version, ProjectSchemaVersion):
         schema_version = schema_version.value
-    if schema_version == CURRENT_SCHEMA_VERSION.value:
+    if schema_version in {CURRENT_SCHEMA_VERSION.value, ProjectSchemaVersion.V1_5.value}:
         return ProjectFile.model_validate(payload)
     if schema_version == ProjectSchemaVersion.V1_3.value:
         return ProjectFile.model_validate({**payload, "schema_version": CURRENT_SCHEMA_VERSION})

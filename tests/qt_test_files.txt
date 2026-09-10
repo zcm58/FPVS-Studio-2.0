@@ -1,7 +1,9 @@
 tests/gui/test_assets_run_launch.py
+tests/gui/test_attentional_blink_stream_designer.py
 tests/gui/test_components.py
 tests/gui/test_condition_task_dialog.py
 tests/gui/test_conditions_session_fixation.py
+tests/gui/test_create_project_dialog.py
 tests/gui/test_design_setup_step.py
 tests/gui/test_experiment_categories_gui.py
 tests/gui/test_experiment_designer.py

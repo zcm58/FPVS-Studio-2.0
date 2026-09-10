@@ -55,6 +55,8 @@ tests = [
   "tests/unit/test_experiment_categories.py",
   "tests/unit/test_attentional_blink.py",
   "tests/unit/test_attentional_blink_document.py",
+  "tests/unit/test_attentional_blink_stream_core.py",
+  "tests/unit/test_attentional_blink_presets.py",
   "tests/unit/test_windows_paths.py",
   "tests/unit/test_condition_tasks.py",
   "tests/unit/test_contrast_modulation.py",
@@ -69,12 +71,13 @@ tests = [
   "tests/unit/test_compiler.py",
   "tests/unit/test_compiler_fixation.py",
   "tests/unit/test_attentional_blink_compiler.py",
+  "tests/unit/test_attentional_blink_stream_core.py",
   "tests/unit/test_windows_image_paths.py",
   "tests/unit/test_contrast_modulation.py",
   "tests/unit/test_session_plan.py",
 ]
 full_tests = []
-include = ["src/fpvs_studio/core/compiler.py", "src/fpvs_studio/core/compiler_tasks.py", "src/fpvs_studio/core/run_spec.py", "src/fpvs_studio/core/session_plan.py", "tests/unit/test_compiler*.py", "tests/unit/test_contrast_modulation.py", "tests/unit/test_session_plan.py", "tests/unit/test_windows_image_paths.py"]
+include = ["src/fpvs_studio/core/compiler*.py", "src/fpvs_studio/core/attentional_blink_stream.py", "src/fpvs_studio/core/run_spec.py", "src/fpvs_studio/core/session_plan.py", "tests/unit/test_compiler*.py", "tests/unit/test_attentional_blink_stream_core.py", "tests/unit/test_contrast_modulation.py", "tests/unit/test_session_plan.py", "tests/unit/test_windows_image_paths.py"]
 manual_smoke = []
 
 [scopes."project-io"]
@@ -84,12 +87,13 @@ tests = [
   "tests/unit/test_project_bundle.py",
   "tests/unit/test_project_config.py",
   "tests/unit/test_project_service.py",
+  "tests/unit/test_attentional_blink_presets.py",
   "tests/unit/test_project_separation.py",
   "tests/unit/test_experiment_categories.py",
   "tests/unit/test_template_library.py",
 ]
 full_tests = []
-include = ["src/fpvs_studio/core/project*.py", "src/fpvs_studio/core/task_assets.py", "src/fpvs_studio/core/template_library.py", "src/fpvs_studio/core/condition_template_profiles.py", "tests/unit/test_project*.py", "tests/unit/test_experiment_categories.py", "tests/unit/test_template_library.py", "tests/unit/test_condition_template_profiles.py"]
+include = ["src/fpvs_studio/core/project*.py", "src/fpvs_studio/core/task_assets.py", "src/fpvs_studio/core/template_library.py", "src/fpvs_studio/core/condition_template_profiles.py", "src/fpvs_studio/core/attentional_blink_presets.py", "tests/unit/test_attentional_blink_presets.py", "tests/unit/test_project*.py", "tests/unit/test_experiment_categories.py", "tests/unit/test_template_library.py", "tests/unit/test_condition_template_profiles.py"]
 manual_smoke = []
 
 [scopes.preprocessing]
@@ -117,11 +121,12 @@ tests = [
   "tests/unit/test_runtime_participant_history.py",
   "tests/unit/test_runtime_preflight.py",
   "tests/unit/test_attentional_blink_runtime.py",
+  "tests/unit/test_attentional_blink_stream_runtime.py",
   "tests/unit/test_windows_image_paths.py",
   "tests/unit/test_runtime_tasks.py",
 ]
 full_tests = []
-include = ["src/fpvs_studio/runtime/**", "src/fpvs_studio/core/execution.py", "tests/unit/test_runtime_*.py", "tests/unit/test_windows_image_paths.py"]
+include = ["src/fpvs_studio/runtime/**", "src/fpvs_studio/core/execution.py", "tests/unit/test_runtime_*.py", "tests/unit/test_attentional_blink*_runtime.py", "tests/unit/test_windows_image_paths.py"]
 manual_smoke = []
 
 [scopes.engine]
@@ -129,6 +134,7 @@ checks = []
 tests = [
   "tests/unit/test_psychopy_engine.py",
   "tests/unit/test_attentional_blink_runtime.py",
+  "tests/unit/test_attentional_blink_stream_runtime.py",
   "tests/unit/test_psychopy_stimuli_resources.py",
   "tests/unit/test_graphics_readiness.py",
   "tests/unit/test_windows_graphics_budget.py",

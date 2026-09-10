@@ -237,6 +237,7 @@ class ProjectOverviewEditor(QWidget):
             self.participant_tutorial_checkbox.setChecked(
                 project.settings.fixation_task.participant_tutorial_enabled
             )
+        self.participant_tutorial_checkbox.setEnabled(project.settings.fixation_task.show_cross)
         self._sync_template_action_sizes()
 
     def _sync_template_action_sizes(self) -> None:

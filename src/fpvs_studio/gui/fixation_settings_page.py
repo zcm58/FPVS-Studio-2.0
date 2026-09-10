@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from fpvs_studio.core.enums import ExperimentCategory
 from fpvs_studio.core.validation import ConditionFixationGuidance
 from fpvs_studio.gui.animations import ButtonHoverAnimator
 from fpvs_studio.gui.components import (
@@ -236,6 +237,7 @@ class FixationCrossPreview(QWidget):
         self.target_color = _DEFAULT_TARGET_COLOR
         self.cross_size_px = 44
         self.line_width_px = 3
+        self.show_cross = True
 
     def set_preview_settings(
         self,
@@ -245,12 +247,14 @@ class FixationCrossPreview(QWidget):
         target_color: str,
         cross_size_px: int,
         line_width_px: int,
+        show_cross: bool = True,
     ) -> None:
         self.background_color = background_color
         self.base_color = base_color
         self.target_color = target_color
         self.cross_size_px = cross_size_px
         self.line_width_px = line_width_px
+        self.show_cross = show_cross
         self.update()
 
     def preview_state(self) -> tuple[str, str, str, int, int]:
@@ -267,6 +271,10 @@ class FixationCrossPreview(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         painter.fillRect(self.rect(), _preview_color(self.background_color, fallback="#000000"))
+        if not self.show_cross:
+            painter.setPen(QColor("#94a3b8"))
+            painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, "Fixation cross off")
+            return
 
         half_width = max(1, self.width() // 2)
         centers = (
@@ -339,6 +347,18 @@ class FixationSettingsEditor(QWidget):
         self.fixation_enabled_checkbox.setObjectName("fixation_enabled_checkbox")
         self.fixation_enabled_checkbox.stateChanged.connect(self._on_fixation_enabled_toggled)
         self.fixation_enabled_checkbox.setVisible(False)
+        self.show_cross_checkbox = QCheckBox("Show fixation cross", self)
+        self.show_cross_checkbox.setObjectName("show_fixation_cross_checkbox")
+        self.show_cross_checkbox.setToolTip(
+            "Show the cross before and during the stream. Turning this off also disables "
+            "fixation color changes, accuracy responses and the fixation tutorial."
+        )
+        self.show_cross_checkbox.toggled.connect(self._apply_cross_visibility)
+        self.cross_hidden_note = QLabel(
+            "Fixation cross is off. Enable it in Fixation to use its color-change task.", self
+        )
+        self.cross_hidden_note.setObjectName("fixation_cross_hidden_note")
+        self.cross_hidden_note.setWordWrap(True)
 
         self.fixation_accuracy_checkbox = QCheckBox(
             "Enable fixation accuracy task",
@@ -479,6 +499,7 @@ class FixationSettingsEditor(QWidget):
         enablement_layout.setSpacing(5 if compact else 6)
         if section_mode in {"all", "fixation"}:
             self.fixation_enabled_checkbox.setParent(self.fixation_panel)
+            enablement_layout.addWidget(self.show_cross_checkbox)
         if not compact:
             enablement_layout.addStretch(1)
 
@@ -570,6 +591,7 @@ class FixationSettingsEditor(QWidget):
         settings_column_layout.setContentsMargins(0, 0, 0, 0)
         settings_column_layout.setSpacing(section_spacing)
         settings_column_layout.addLayout(enablement_layout)
+        settings_column_layout.addWidget(self.cross_hidden_note)
         if section_mode in {"all", "fixation"}:
             settings_column_layout.addWidget(feasibility_card)
             settings_column_layout.addWidget(self.fixation_adjustment_label)
@@ -697,6 +719,12 @@ class FixationSettingsEditor(QWidget):
 
     def refresh(self) -> None:
         fixation = self._document.project.settings.fixation_task
+        self.show_cross_checkbox.setVisible(
+            self._document.project.experiment_category == ExperimentCategory.ATTENTIONAL_BLINK
+            and self._section_mode in {"all", "fixation"}
+        )
+        with QSignalBlocker(self.show_cross_checkbox):
+            self.show_cross_checkbox.setChecked(fixation.show_cross)
         current_counts = (
             fixation.changes_per_sequence,
             fixation.target_count_min,
@@ -707,7 +735,7 @@ class FixationSettingsEditor(QWidget):
             self._last_automatic_adjustment = None
             self.fixation_adjustment_label.setVisible(False)
         with QSignalBlocker(self.fixation_enabled_checkbox):
-            self.fixation_enabled_checkbox.setChecked(True)
+            self.fixation_enabled_checkbox.setChecked(fixation.show_cross)
         with QSignalBlocker(self.fixation_accuracy_checkbox):
             self.fixation_accuracy_checkbox.setChecked(fixation.accuracy_task_enabled)
         with QSignalBlocker(self.target_count_mode_combo):
@@ -758,7 +786,20 @@ class FixationSettingsEditor(QWidget):
         self._refresh_preview()
 
     def _update_fixation_visibility_state(self) -> None:
-        self.fixation_accuracy_checkbox.setEnabled(True)
+        show_cross = self._document.project.settings.fixation_task.show_cross
+        self.fixation_accuracy_checkbox.setEnabled(show_cross)
+        self.cross_hidden_note.setVisible(not show_cross)
+        self.pre_stream_fixation_note.setText(
+            (
+                "The fixation cross stays visible so participants can settle their gaze. "
+                if show_cross else "A blank screen is shown before the stream starts. "
+            )
+            + "The first stimulus and condition trigger still begin together at frame zero."
+        )
+        self.pre_stream_fixation_spin.setToolTip(
+            "Time after Space is pressed and before condition frame zero. "
+            + ("Shows the fixation cross." if show_cross else "Shows a blank screen.")
+        )
 
         show_fixation_sections = self._section_mode in {"all", "fixation"}
         for group, panel in (
@@ -770,13 +811,16 @@ class FixationSettingsEditor(QWidget):
             group.setEnabled(visible)
             panel.setVisible(visible)
             panel.setEnabled(visible)
+        self.fixation_behavior_panel.setEnabled(show_fixation_sections and show_cross)
+        self.target_duration_spin.setEnabled(show_cross)
+        self.min_gap_spin.setEnabled(show_cross)
 
         show_response_sections = self._section_mode in {"all", "response"}
         appearance_visible = show_response_sections
         self.fixation_appearance_group.setVisible(appearance_visible)
-        self.fixation_appearance_group.setEnabled(appearance_visible)
+        self.fixation_appearance_group.setEnabled(appearance_visible and show_cross)
         self.fixation_appearance_panel.setVisible(appearance_visible)
-        self.fixation_appearance_panel.setEnabled(appearance_visible)
+        self.fixation_appearance_panel.setEnabled(appearance_visible and show_cross)
 
         randomized_mode = self.target_count_mode_combo.currentData() == "randomized"
         if self._schedule_row_behavior == "hide":
@@ -821,7 +865,9 @@ class FixationSettingsEditor(QWidget):
         self.fixation_response_panel.setEnabled(show_response_sections)
         self.fixation_response_group.setVisible(show_response_sections)
         self.fixation_response_group.setEnabled(show_response_sections)
-        self.response_controls_group.setEnabled(show_response_sections and accuracy_enabled)
+        self.response_controls_group.setEnabled(
+            show_response_sections and accuracy_enabled and show_cross
+        )
         if not accuracy_enabled:
             self.response_key_popover.close()
 
@@ -952,7 +998,16 @@ class FixationSettingsEditor(QWidget):
             target_color=str(fixation.target_color),
             cross_size_px=fixation.cross_size_px,
             line_width_px=fixation.line_width_px,
+            show_cross=fixation.show_cross,
         )
+
+    def _apply_cross_visibility(self, checked: bool) -> None:
+        updates: dict[str, object] = {"show_cross": checked}
+        if not checked:
+            updates.update(
+                enabled=False, accuracy_task_enabled=False, participant_tutorial_enabled=False
+            )
+        self._document.update_fixation_settings(**updates)
 
     def _on_fixation_enabled_toggled(self) -> None:
         if not self.fixation_enabled_checkbox.isChecked():
@@ -1004,8 +1059,11 @@ class FixationSettingsEditor(QWidget):
                 self._normalized_target_count_values()
             )
             self._document.update_fixation_settings(
-                enabled=True,
-                accuracy_task_enabled=self.fixation_accuracy_checkbox.isChecked(),
+                enabled=self._document.project.settings.fixation_task.show_cross,
+                accuracy_task_enabled=(
+                    self._document.project.settings.fixation_task.show_cross
+                    and self.fixation_accuracy_checkbox.isChecked()
+                ),
                 target_count_mode=self.target_count_mode_combo.currentData(),
                 changes_per_sequence=self.changes_per_sequence_spin.value(),
                 target_count_min=target_count_min,

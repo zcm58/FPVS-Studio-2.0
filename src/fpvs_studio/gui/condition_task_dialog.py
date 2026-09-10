@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Literal
 
-from PySide6.QtCore import QRectF, QSize, Qt, Signal
+from PySide6.QtCore import QRectF, QSignalBlocker, QSize, Qt, Signal
 from PySide6.QtGui import (
     QColor,
     QFontDatabase,
@@ -34,14 +34,12 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QFormLayout,
     QGridLayout,
-    QGroupBox,
     QHBoxLayout,
     QLabel,
     QLineEdit,
     QListWidget,
     QListWidgetItem,
     QPushButton,
-    QScrollArea,
     QSizePolicy,
     QSpinBox,
     QStackedWidget,
@@ -425,7 +423,7 @@ class TaskParticipantPreview(QWidget):
         self._source_option_pixmaps: dict[int, QPixmap] = {}
         self._scaled_option_pixmaps: dict[int, QPixmap] = {}
         self._scaled_option_keys: dict[int, tuple[int, int, int]] = {}
-        self.setMinimumSize(270, 300)
+        self.setMinimumSize(250, 300)
 
     def sizeHint(self) -> QSize:  # noqa: N802
         return QSize(300, 400)
@@ -456,7 +454,9 @@ class TaskParticipantPreview(QWidget):
         painter.setFont(font)
 
         title_rect = QRectF(16, 12, self.width() - 32, 34)
-        painter.drawText(title_rect, Qt.AlignmentFlag.AlignCenter, step.title or "Untitled step")
+        painter.drawText(
+            title_rect, Qt.AlignmentFlag.AlignCenter | Qt.TextFlag.TextWordWrap, step.title
+        )
         prompt_rect = QRectF(18, 48, self.width() - 36, 64)
         painter.drawText(
             prompt_rect,
@@ -495,7 +495,7 @@ class TaskParticipantPreview(QWidget):
         painter.drawText(
             QRectF(10, self.height() - 28, self.width() - 20, 20),
             Qt.AlignmentFlag.AlignCenter,
-            "Authoring preview - runtime display remains fullscreen",
+            "Preview only · fullscreen at runtime",
         )
 
     def _paint_options(
@@ -931,13 +931,18 @@ class QuestionnaireEditor(QWidget):
 
         self.question_list = QListWidget(self)
         self.question_list.setObjectName("condition_task_question_list")
-        self.question_list.setMinimumHeight(130)
+        self.question_list.setFixedHeight(56)
+        self.question_list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.question_list.currentRowChanged.connect(self._load_selected)
 
         self.add_kind_combo = QComboBox(self)
         self.add_kind_combo.setObjectName("condition_task_add_question_kind_combo")
         for label, kind in _QUESTION_LABELS:
             self.add_kind_combo.addItem(label, kind)
+        self.add_kind_combo.setMinimumContentsLength(12)
+        self.add_kind_combo.setSizeAdjustPolicy(
+            QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
+        )
         self.add_button = QPushButton("Add Question", self)
         self.add_button.setObjectName("condition_task_add_question_button")
         self.add_button.clicked.connect(self._add_question)
@@ -968,7 +973,7 @@ class QuestionnaireEditor(QWidget):
         list_layout = QVBoxLayout(list_column)
         list_layout.setContentsMargins(0, 0, 0, 0)
         list_layout.setSpacing(6)
-        list_layout.addWidget(self.question_list, 1)
+        list_layout.addWidget(self.question_list)
         list_layout.addLayout(list_actions)
 
         self.question_id_edit = QLineEdit(self)
@@ -979,12 +984,12 @@ class QuestionnaireEditor(QWidget):
             self.question_kind_combo.addItem(label, kind)
         self.question_prompt_edit = QTextEdit(self)
         self.question_prompt_edit.setObjectName("condition_task_question_prompt_edit")
-        self.question_prompt_edit.setFixedHeight(72)
+        self.question_prompt_edit.setFixedHeight(64)
         self.required_checkbox = QCheckBox("Response required", self)
         self.required_checkbox.setObjectName("condition_task_question_required_checkbox")
         self.options_edit = QTextEdit(self)
         self.options_edit.setObjectName("condition_task_question_options_edit")
-        self.options_edit.setFixedHeight(84)
+        self.options_edit.setFixedHeight(72)
         self.options_edit.setPlaceholderText(
             "id | label | selectable/display-only | correct | optional score | "
             "optional project image path"
@@ -1041,23 +1046,35 @@ class QuestionnaireEditor(QWidget):
         self.branch_target_edit.setObjectName("condition_task_question_branch_target_edit")
         self.branch_target_edit.setPlaceholderText("optional target step ID")
 
-        self.question_form = QFormLayout()
-        self.question_form.setContentsMargins(0, 0, 0, 0)
-        self.question_form.setHorizontalSpacing(10)
-        self.question_form.setVerticalSpacing(6)
-        self.question_form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
-        self.question_form.addRow("Question ID", self.question_id_edit)
+        self.question_tabs = QTabWidget(self)
+        self.question_tabs.setObjectName("condition_task_question_tabs")
+        question_page = QWidget(self.question_tabs)
+        answers_page = QWidget(self.question_tabs)
+        rules_page = QWidget(self.question_tabs)
+        self.question_form = QFormLayout(question_page)
+        answers_form = QFormLayout(answers_page)
+        rules_form = QFormLayout(rules_page)
+        for form in (self.question_form, answers_form, rules_form):
+            form.setContentsMargins(8, 8, 8, 8)
+            form.setHorizontalSpacing(10)
+            form.setVerticalSpacing(6)
+            form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
+            form.setFormAlignment(Qt.AlignmentFlag.AlignTop)
         self.question_form.addRow("Response type", self.question_kind_combo)
         self.question_form.addRow("Prompt", self.question_prompt_edit)
         self.question_form.addRow("", self.required_checkbox)
         self.options_label = QLabel("Options", self)
-        self.question_form.addRow(self.options_label, self.options_edit)
-        self.question_form.addRow("", self.randomize_question_options_checkbox)
+        answers_form.addRow(self.options_label, self.options_edit)
+        self.options_edit.setToolTip(
+            "One option per line: ID | label | selectable or display-only | correct | "
+            "optional score | optional project image path"
+        )
+        answers_form.addRow(self.randomize_question_options_checkbox)
         self.selection_range_row = self._two_field_row(
             "Minimum", self.minimum_selections_spin, "Maximum", self.maximum_selections_spin
         )
         self.selection_range_label = QLabel("Selections", self)
-        self.question_form.addRow(self.selection_range_label, self.selection_range_row)
+        answers_form.addRow(self.selection_range_label, self.selection_range_row)
         self.value_range_row = self._three_field_row(
             "Min",
             self.minimum_value_spin,
@@ -1067,37 +1084,43 @@ class QuestionnaireEditor(QWidget):
             self.step_value_spin,
         )
         self.value_range_label = QLabel("Value range", self)
-        self.question_form.addRow(self.value_range_label, self.value_range_row)
+        answers_form.addRow(self.value_range_label, self.value_range_row)
         self.scale_labels_row = self._two_field_row(
-            "Minimum label",
+            "Minimum",
             self.minimum_label_edit,
-            "Maximum label",
+            "Maximum",
             self.maximum_label_edit,
         )
         self.scale_labels_label = QLabel("Scale labels", self)
-        self.question_form.addRow(self.scale_labels_label, self.scale_labels_row)
+        answers_form.addRow(self.scale_labels_label, self.scale_labels_row)
         self.text_limit_label = QLabel("Maximum characters", self)
-        self.question_form.addRow(self.text_limit_label, self.maximum_text_length_spin)
-        branch_row = self._two_field_row(
-            "If answer",
-            self.branch_operator_combo,
-            "value",
-            self.branch_match_edit,
+        answers_form.addRow(self.text_limit_label, self.maximum_text_length_spin)
+        rules_form.addRow("Question ID", self.question_id_edit)
+        rules_form.addRow("If answer", self.branch_operator_combo)
+        rules_form.addRow("Matches value", self.branch_match_edit)
+        rules_form.addRow("Go to step ID", self.branch_target_edit)
+        self.branch_target_edit.setToolTip(
+            "Leave empty to continue in the usual order. "
+            "Enter a step ID to route a matching answer."
         )
-        self.question_form.addRow("Conditional route", branch_row)
-        self.question_form.addRow("Then go to step ID", self.branch_target_edit)
+        self.question_tabs.addTab(question_page, "Question")
+        self.question_tabs.addTab(answers_page, "Answers")
+        self.question_tabs.addTab(rules_page, "Rules")
+        for spin in (
+            self.minimum_selections_spin,
+            self.maximum_selections_spin,
+            self.minimum_value_spin,
+            self.maximum_value_spin,
+            self.step_value_spin,
+        ):
+            spin.setMinimumWidth(0)
+            spin.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
 
-        editor_panel = QGroupBox("Selected question", self)
-        editor_panel.setObjectName("condition_task_selected_question_group")
-        editor_panel.setLayout(self.question_form)
-        # The questionnaire lives inside the module editor's vertical scroll area.
-        # Stack its list and editor so every field can shrink to the dialog's
-        # documented minimum width without introducing hidden horizontal overflow.
         content = QVBoxLayout(self)
         content.setContentsMargins(0, 0, 0, 0)
-        content.setSpacing(10)
+        content.setSpacing(8)
         content.addWidget(list_column)
-        content.addWidget(editor_panel)
+        content.addWidget(self.question_tabs, 1)
 
         for widget_signal in (
             self.question_id_edit.textChanged,
@@ -1120,6 +1143,7 @@ class QuestionnaireEditor(QWidget):
         ):
             widget_signal.connect(self._store_selected)
         self.question_kind_combo.currentIndexChanged.connect(self._refresh_type_fields)
+        self._refresh_type_fields()
         self._set_editor_enabled(False)
 
     @staticmethod
@@ -1219,6 +1243,7 @@ class QuestionnaireEditor(QWidget):
                 label = next(label for label, kind in _QUESTION_LABELS if kind == question.kind)
                 item = QListWidgetItem(f"{question.prompt or question.question_id}\n{label}")
                 item.setData(Qt.ItemDataRole.UserRole, question.question_id)
+                item.setToolTip(f"{question.prompt or question.question_id}\n{label}")
                 self.question_list.addItem(item)
             self.question_list.setCurrentRow(select_row)
         finally:
@@ -1305,6 +1330,7 @@ class QuestionnaireEditor(QWidget):
         item = self.question_list.item(row)
         label = next(label for label, item_kind in _QUESTION_LABELS if item_kind == kind)
         item.setText(f"{question.prompt or question.question_id}\n{label}")
+        item.setToolTip(f"{question.prompt or question.question_id}\n{label}")
         self._refresh_type_fields()
         if emit_changed:
             self.changed.emit()
@@ -1329,6 +1355,11 @@ class QuestionnaireEditor(QWidget):
         self.maximum_text_length_spin.setVisible(text)
 
     def _set_editor_enabled(self, enabled: bool) -> None:
+        self.question_tabs.setEnabled(enabled)
+        self.remove_button.setEnabled(enabled)
+        row = self.question_list.currentRow()
+        self.up_button.setEnabled(enabled and row > 0)
+        self.down_button.setEnabled(enabled and row < len(self._questions) - 1)
         for widget in (
             self.question_id_edit,
             self.question_kind_combo,
@@ -1404,7 +1435,7 @@ class TaskStepEditor(QWidget):
         self.prompt_geometry_row = prompt_geometry_row
         self.prompt_geometry_checkbox.toggled.connect(self._refresh_prompt_geometry)
 
-        common_group = QGroupBox("Module", self)
+        common_group = QWidget(self)
         common_group.setObjectName("condition_task_common_group")
         common_form = QFormLayout(common_group)
         common_form.setContentsMargins(10, 8, 10, 8)
@@ -1412,13 +1443,13 @@ class TaskStepEditor(QWidget):
         common_form.setVerticalSpacing(6)
         common_form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
         common_form.addRow("Stable ID", self.step_id_edit)
-        common_form.addRow("Module type", self.step_kind_combo)
+        common_form.addRow("Step type", self.step_kind_combo)
         common_form.addRow("Display title", self.title_edit)
         common_form.addRow("Font family", self.font_family_combo)
         common_form.addRow("Prompt / content", self.prompt_edit)
-        common_form.addRow("", self.prompt_geometry_checkbox)
+        common_form.addRow(self.prompt_geometry_checkbox)
         common_form.addRow("Prompt units", self.prompt_unit_combo)
-        common_form.addRow("Prompt geometry", prompt_geometry_row)
+        common_form.addRow(prompt_geometry_row)
 
         self.maximum_attempts_spin = QSpinBox(self)
         self.maximum_attempts_spin.setObjectName("condition_task_maximum_attempts_spin")
@@ -1427,12 +1458,12 @@ class TaskStepEditor(QWidget):
         self.retry_invalid_checkbox.setObjectName("condition_task_retry_invalid_checkbox")
         self.retry_incorrect_checkbox = QCheckBox("Retry incorrect responses", self)
         self.retry_incorrect_checkbox.setObjectName("condition_task_retry_incorrect_checkbox")
-        attempt_group = QGroupBox("Attempts and retries", self)
+        attempt_group = QWidget(self)
         attempt_group.setObjectName("condition_task_attempt_group")
         attempt_form = QFormLayout(attempt_group)
         attempt_form.addRow("Maximum attempts", self.maximum_attempts_spin)
-        attempt_form.addRow("", self.retry_invalid_checkbox)
-        attempt_form.addRow("", self.retry_incorrect_checkbox)
+        attempt_form.addRow(self.retry_invalid_checkbox)
+        attempt_form.addRow(self.retry_incorrect_checkbox)
 
         self.type_stack = QStackedWidget(self)
         self.type_stack.setObjectName("condition_task_type_stack")
@@ -1462,14 +1493,14 @@ class TaskStepEditor(QWidget):
         self.auto_advance_spin.setSuffix(" s")
         self.auto_advance_spin.setEnabled(False)
         self.auto_advance_checkbox.toggled.connect(self.auto_advance_spin.setEnabled)
-        self.advance_group = QGroupBox("Advance and timing", self)
+        self.advance_group = QWidget(self)
         self.advance_group.setObjectName("condition_task_advance_group")
         advance_form = QFormLayout(self.advance_group)
         advance_form.addRow("Primary continue key", self.continue_key_edit)
         advance_form.addRow("Additional accepted keys", self.advance_keys_edit)
-        advance_form.addRow("", self.timeout_checkbox)
+        advance_form.addRow(self.timeout_checkbox)
         advance_form.addRow("Timeout", self.timeout_spin)
-        advance_form.addRow("", self.auto_advance_checkbox)
+        advance_form.addRow(self.auto_advance_checkbox)
         advance_form.addRow("Auto-advance", self.auto_advance_spin)
         instruction_page = QWidget(self)
         instruction_layout = QVBoxLayout(instruction_page)
@@ -1532,7 +1563,7 @@ class TaskStepEditor(QWidget):
         self.repeat_count_spin.setObjectName("condition_task_repeat_count_spin")
         self.repeat_count_spin.setRange(1, 1000)
         self.one_choice_checkbox = QCheckBox(
-            "End each repetition after one valid selectable choice",
+            "End repetition after one valid choice",
             self,
         )
         self.one_choice_checkbox.setObjectName("condition_task_one_choice_checkbox")
@@ -1553,19 +1584,19 @@ class TaskStepEditor(QWidget):
         self.submission_mode_combo.setObjectName("condition_task_submission_mode_combo")
         self.submission_mode_combo.addItem("Complete immediately", "immediate")
         self.submission_mode_combo.addItem("Require a Submit action", "explicit")
-        common_form.addRow("Response completion", self.submission_mode_combo)
-        self.submission_mode_label = common_form.labelForField(self.submission_mode_combo)
+        attempt_form.insertRow(0, "Response completion", self.submission_mode_combo)
+        self.submission_mode_label = attempt_form.labelForField(self.submission_mode_combo)
         self.show_footer_checkbox = QCheckBox(
-            "Show participant key / response footer",
+            "Show response-key hints to the participant",
             self,
         )
         self.show_footer_checkbox.setObjectName("condition_task_show_footer_checkbox")
-        common_form.addRow("", self.show_footer_checkbox)
-        choice_behavior = QGroupBox("Choice behavior", self)
+        common_form.addRow(self.show_footer_checkbox)
+        choice_behavior = QWidget(self)
         choice_behavior.setObjectName("condition_task_choice_behavior_group")
         choice_form = QFormLayout(choice_behavior)
         choice_form.addRow("Repetitions", self.repeat_count_spin)
-        choice_form.addRow("", self.one_choice_checkbox)
+        choice_form.addRow(self.one_choice_checkbox)
         choice_form.addRow(
             "Selection limits",
             QuestionnaireEditor._two_field_row(
@@ -1575,8 +1606,8 @@ class TaskStepEditor(QWidget):
                 self.choice_maximum_spin,
             ),
         )
-        choice_form.addRow("", self.duplicate_choices_checkbox)
-        choice_form.addRow("", self.randomize_options_checkbox)
+        choice_form.addRow(self.duplicate_choices_checkbox)
+        choice_form.addRow(self.randomize_options_checkbox)
         feedback_note = QLabel(
             "Add a Timed Feedback step after this step for unconditional feedback. "
             "Set the module repeat count to repeat the complete choice + feedback group.",
@@ -1584,7 +1615,7 @@ class TaskStepEditor(QWidget):
         )
         feedback_note.setObjectName("condition_task_choice_feedback_note")
         feedback_note.setWordWrap(True)
-        choice_form.addRow("", feedback_note)
+        choice_form.addRow(feedback_note)
         self.choice_behavior_group = choice_behavior
 
         item_page = QWidget(self)
@@ -1608,7 +1639,6 @@ class TaskStepEditor(QWidget):
         item_layout.addWidget(exact_note)
         item_layout.addWidget(self.option_table)
         item_layout.addLayout(item_actions)
-        item_layout.addWidget(choice_behavior)
         self._add_type_page("study", item_page)
         self._type_pages["choice_grid"] = item_page
 
@@ -1644,14 +1674,25 @@ class TaskStepEditor(QWidget):
         feedback_form.addRow("Fixed duration", self.duration_spin)
         self._add_type_page("timed_feedback", feedback_page)
 
+        response_page = QWidget(self)
+        response_layout = QVBoxLayout(response_page)
+        response_layout.setContentsMargins(0, 0, 0, 0)
+        response_layout.addWidget(attempt_group)
+        response_layout.addWidget(self.advance_group)
+        response_layout.addStretch(1)
+        self.editor_tabs = QTabWidget(self)
+        self.editor_tabs.setObjectName("condition_task_step_editor_tabs")
+        self.editor_tabs.addTab(self.type_stack, "Content")
+        self.editor_tabs.addTab(common_group, "Text && layout")
+        self.editor_tabs.addTab(response_page, "Response")
+        self.editor_tabs.addTab(choice_behavior, "Choices")
+        for form in (common_form, attempt_form, advance_form, choice_form):
+            form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
+            form.setContentsMargins(10, 8, 10, 8)
+            form.setVerticalSpacing(8)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(8)
-        layout.addWidget(common_group)
-        layout.addWidget(attempt_group)
-        layout.addWidget(self.type_stack)
-        layout.addWidget(self.advance_group)
-        layout.addStretch(1)
+        layout.addWidget(self.editor_tabs)
 
         for widget_signal in (
             self.step_id_edit.textChanged,
@@ -1766,6 +1807,9 @@ class TaskStepEditor(QWidget):
         self._refresh_kind_page()
         self._refresh_layout_fields()
         self._refresh_prompt_geometry()
+        self.editor_tabs.setCurrentIndex(
+            0 if step.kind in {"study", "choice_grid", "questionnaire"} else 1
+        )
 
     def step(self) -> TaskStepDraft | None:
         self._store(emit_changed=False)
@@ -1847,7 +1891,7 @@ class TaskStepEditor(QWidget):
         page = self._type_pages.get(kind)
         if page is not None:
             self.type_stack.setCurrentWidget(page)
-        self.choice_behavior_group.setVisible(kind == "choice_grid")
+        self.editor_tabs.setTabVisible(3, kind == "choice_grid")
         timed_advance = kind in {"instruction", "study"}
         self.advance_group.setVisible(timed_advance)
         self.retry_incorrect_checkbox.setVisible(kind in {"choice_grid", "questionnaire"})
@@ -1876,6 +1920,9 @@ class TaskStepEditor(QWidget):
         spin.setRange(minimum, 1_000_000.0)
         spin.setDecimals(6)
         spin.setSingleStep(0.25)
+        spin.setButtonSymbols(QDoubleSpinBox.ButtonSymbols.NoButtons)
+        spin.setMinimumWidth(0)
+        spin.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
         return spin
 
 
@@ -1914,7 +1961,7 @@ class TaskModuleEditor(QWidget):
             "feedback repeated four times runs [choice, feedback] four times."
         )
         self.replaces_start_gate_checkbox = QCheckBox(
-            "This module replaces the standard condition start screen",
+            "Replace the standard condition start screen",
             self,
         )
         self.replaces_start_gate_checkbox.setObjectName(
@@ -1932,16 +1979,16 @@ class TaskModuleEditor(QWidget):
         module_form.addRow("Reusable module ID", self.module_id_edit)
         module_form.addRow("Module name", self.module_title_edit)
         module_form.addRow("Run this module", self.occurrence_combo)
-        module_form.addRow("Repeat complete module", self.module_repeat_count_spin)
-        module_form.addRow("", self.replaces_start_gate_checkbox)
+        module_form.addRow("Repeat module", self.module_repeat_count_spin)
+        module_form.addRow(self.replaces_start_gate_checkbox)
 
-        module_group = QGroupBox("Module binding", self)
+        module_group = QWidget(self)
         module_group.setObjectName("condition_task_module_binding_group")
         module_group.setLayout(module_form)
 
         self.step_list = QListWidget(self)
         self.step_list.setObjectName("condition_task_module_step_list")
-        self.step_list.setMinimumHeight(110)
+        self.step_list.setMinimumHeight(90)
         self.step_list.currentRowChanged.connect(self._load_selected_step)
         self.add_step_kind_combo = QComboBox(self)
         self.add_step_kind_combo.setObjectName("condition_task_add_step_kind_combo")
@@ -1975,26 +2022,52 @@ class TaskModuleEditor(QWidget):
         step_actions.addWidget(self.duplicate_step_button, 1, 0)
         step_actions.addWidget(self.step_up_button, 1, 1)
         step_actions.addWidget(self.step_down_button, 1, 2)
-        step_actions.addWidget(self.remove_step_button, 2, 0, 1, 3)
+        step_actions.addWidget(self.remove_step_button, 1, 3)
 
-        steps_group = QGroupBox("Ordered steps", self)
+        steps_group = QWidget(self)
         steps_group.setObjectName("condition_task_module_steps_group")
         steps_layout = QVBoxLayout(steps_group)
         steps_layout.setContentsMargins(8, 8, 8, 8)
         steps_layout.setSpacing(6)
+        steps_layout.addWidget(QLabel("Ordered steps", steps_group))
         steps_layout.addWidget(self.step_list)
         steps_layout.addLayout(step_actions)
 
         self.step_editor = TaskStepEditor(project_root, self)
         self.step_editor.changed.connect(self._store_selected_step)
 
+        self.step_selector = QComboBox(self)
+        self.step_selector.setObjectName("condition_task_step_selector")
+        self.step_selector.setMinimumContentsLength(15)
+        self.step_selector.setSizeAdjustPolicy(
+            QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
+        )
+        self.step_selector.currentIndexChanged.connect(self.step_list.setCurrentRow)
+        self.module_settings_button = QPushButton("Module settings", self)
+        self.module_settings_button.setObjectName("condition_task_module_settings_button")
+        self.module_settings_button.setCheckable(True)
+        mark_secondary_action(self.module_settings_button)
+        self.module_settings_button.toggled.connect(self._show_module_settings)
+        navigation = QHBoxLayout()
+        navigation.addWidget(QLabel("Step", self))
+        navigation.addWidget(self.step_selector, 1)
+        navigation.addWidget(self.module_settings_button)
+        self.module_pages = QStackedWidget(self)
+        self.module_pages.setObjectName("condition_task_module_pages")
+        self.edit_step_page = self.step_editor
+        self.settings_page = QWidget(self)
+        settings_layout = QVBoxLayout(self.settings_page)
+        settings_layout.setContentsMargins(0, 0, 0, 0)
+        settings_layout.setSpacing(8)
+        settings_layout.addWidget(module_group)
+        settings_layout.addWidget(steps_group, 1)
+        self.module_pages.addWidget(self.edit_step_page)
+        self.module_pages.addWidget(self.settings_page)
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(6, 6, 6, 6)
+        layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(8)
-        layout.addWidget(module_group)
-        layout.addWidget(steps_group)
-        layout.addWidget(self.step_editor)
-        layout.addStretch(1)
+        layout.addLayout(navigation)
+        layout.addWidget(self.module_pages, 1)
 
         for signal in (
             self.module_id_edit.textChanged,
@@ -2006,6 +2079,11 @@ class TaskModuleEditor(QWidget):
             signal.connect(self._store_module_header)
         self.setEnabled(False)
 
+    def _show_module_settings(self, checked: bool) -> None:
+        self.module_pages.setCurrentIndex(1 if checked else 0)
+        self.module_settings_button.setText("Back to step" if checked else "Module settings")
+        self.step_selector.setEnabled(not checked)
+
     def set_module(self, module: TaskModuleDraft | None) -> None:
         self._module = copy.deepcopy(module) if module is not None else None
         self._syncing = True
@@ -2015,6 +2093,7 @@ class TaskModuleEditor(QWidget):
                 self.module_id_edit.clear()
                 self.module_title_edit.clear()
                 self.step_list.clear()
+                self.step_selector.clear()
                 self.step_editor.set_step(None)
                 return
             self.module_id_edit.setText(module.module_id)
@@ -2120,12 +2199,16 @@ class TaskModuleEditor(QWidget):
         self._syncing = True
         try:
             self.step_list.clear()
-            for step in self._module.steps if self._module is not None else []:
+            with QSignalBlocker(self.step_selector):
+                self.step_selector.clear()
+            for index, step in enumerate(self._module.steps if self._module is not None else []):
                 label = next(label for label, kind in _MODULE_LABELS if kind == step.kind)
                 item = QListWidgetItem(f"{step.title or step.step_id}\n{label}")
                 item.setData(Qt.ItemDataRole.UserRole, step.step_id)
-                item.setToolTip(f"Stable ID: {step.step_id}")
+                item.setToolTip(f"{step.title or step.step_id}\nStable ID: {step.step_id}")
                 self.step_list.addItem(item)
+                with QSignalBlocker(self.step_selector):
+                    self.step_selector.addItem(f"{index + 1}. {step.title or label}", step.step_id)
             self.step_list.setCurrentRow(select_row)
         finally:
             self._syncing = False
@@ -2139,6 +2222,9 @@ class TaskModuleEditor(QWidget):
             if self._module is not None and 0 <= row < len(self._module.steps)
             else None
         )
+        with QSignalBlocker(self.step_selector):
+            self.step_selector.setCurrentIndex(row)
+        self.step_selector.setToolTip(step.title or step.step_id if step else "Select a step")
         self.step_editor.set_step(step)
         self.selection_changed.emit(copy.deepcopy(step))
 
@@ -2153,7 +2239,9 @@ class TaskModuleEditor(QWidget):
         label = next(label for label, kind in _MODULE_LABELS if kind == step.kind)
         item.setText(f"{step.title or step.step_id}\n{label}")
         item.setData(Qt.ItemDataRole.UserRole, step.step_id)
-        item.setToolTip(f"Stable ID: {step.step_id}")
+        item.setToolTip(f"{step.title or step.step_id}\nStable ID: {step.step_id}")
+        self.step_selector.setItemText(row, f"{row + 1}. {step.title or label}")
+        self.step_selector.setToolTip(step.title or step.step_id)
         self.selection_changed.emit(copy.deepcopy(step))
         self.changed.emit(copy.deepcopy(self._module))
 
@@ -2181,7 +2269,9 @@ class TaskPhaseEditor(QWidget):
 
         self.module_list = QListWidget(self)
         self.module_list.setObjectName(f"condition_task_{prefix}_module_list")
-        self.module_list.setMinimumWidth(220)
+        self.module_list.setMinimumWidth(0)
+        self.module_list.setTextElideMode(Qt.TextElideMode.ElideRight)
+        self.module_list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.module_list.currentRowChanged.connect(self._load_selected)
         self.add_kind_combo = QComboBox(self)
         self.add_kind_combo.setObjectName(f"condition_task_{prefix}_add_kind_combo")
@@ -2212,16 +2302,20 @@ class TaskPhaseEditor(QWidget):
         actions.setContentsMargins(0, 0, 0, 0)
         actions.setSpacing(6)
         actions.addWidget(self.add_kind_combo, 0, 0, 1, 2)
-        actions.addWidget(self.add_button, 0, 2)
-        actions.addWidget(self.duplicate_button, 1, 0)
-        actions.addWidget(self.up_button, 1, 1)
-        actions.addWidget(self.down_button, 1, 2)
-        actions.addWidget(self.remove_button, 2, 0, 1, 3)
+        actions.addWidget(self.add_button, 1, 0, 1, 2)
+        actions.addWidget(self.duplicate_button, 2, 0)
+        actions.addWidget(self.remove_button, 2, 1)
+        actions.addWidget(self.up_button, 3, 0)
+        actions.addWidget(self.down_button, 3, 1)
 
         list_panel = QWidget(self)
+        list_panel.setFixedWidth(200)
         list_layout = QVBoxLayout(list_panel)
         list_layout.setContentsMargins(0, 0, 0, 0)
         list_layout.setSpacing(6)
+        module_heading = QLabel("Modules", list_panel)
+        module_heading.setProperty("settingsSectionTitle", "true")
+        list_layout.addWidget(module_heading)
         list_layout.addWidget(self.module_list, 1)
         list_layout.addLayout(actions)
 
@@ -2236,17 +2330,27 @@ class TaskPhaseEditor(QWidget):
         )
         self.module_editor.changed.connect(self._store_selected)
         self.module_editor.selection_changed.connect(self.selection_changed)
-        scroll = QScrollArea(self)
-        scroll.setObjectName(f"condition_task_{prefix}_editor_scroll")
-        scroll.setWidgetResizable(True)
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        scroll.setWidget(self.module_editor)
+        self.editor_pages = QStackedWidget(self)
+        self.editor_pages.setObjectName(f"condition_task_{prefix}_editor_pages")
+        self.empty_panel = QWidget(self)
+        empty_layout = QVBoxLayout(self.empty_panel)
+        empty_layout.addStretch(1)
+        empty_header = DialogHeader(
+            f"No {prefix}-condition tasks yet",
+            "Choose a task type on the left and select Add Module. "
+            "You can add instructions, questions, or other participant responses.",
+            parent=self.empty_panel,
+        )
+        empty_layout.addWidget(empty_header)
+        empty_layout.addStretch(1)
+        self.editor_pages.addWidget(self.empty_panel)
+        self.editor_pages.addWidget(self.module_editor)
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(8, 8, 8, 8)
-        layout.setSpacing(10)
-        layout.addWidget(list_panel, 1)
-        layout.addWidget(scroll, 3)
+        layout.setSpacing(16)
+        layout.addWidget(list_panel)
+        layout.addWidget(self.editor_pages, 1)
 
     def set_modules(self, modules: list[TaskModuleDraft]) -> None:
         self._modules = copy.deepcopy(modules)
@@ -2273,6 +2377,7 @@ class TaskPhaseEditor(QWidget):
         module = TaskModuleDraft(module_id=module_id, title=label, steps=[step])
         self._modules.append(module)
         self._refresh_list(select_row=len(self._modules) - 1)
+        self.module_editor.module_settings_button.setChecked(False)
         self.changed.emit()
 
     def _duplicate_module(self) -> None:
@@ -2331,7 +2436,9 @@ class TaskPhaseEditor(QWidget):
                     f"{module.repeat_count}x · {len(module.steps)} {suffix}"
                 )
                 item.setData(Qt.ItemDataRole.UserRole, module.module_id)
-                item.setToolTip(f"Reusable module ID: {module.module_id}")
+                item.setToolTip(
+                    f"{module.title or module.module_id}\nReusable module ID: {module.module_id}"
+                )
                 self.module_list.addItem(item)
             self.module_list.setCurrentRow(select_row)
         finally:
@@ -2342,6 +2449,11 @@ class TaskPhaseEditor(QWidget):
         if self._syncing:
             return
         module = self._modules[row] if 0 <= row < len(self._modules) else None
+        self.editor_pages.setCurrentWidget(self.module_editor if module else self.empty_panel)
+        self.duplicate_button.setEnabled(module is not None)
+        self.remove_button.setEnabled(module is not None)
+        self.up_button.setEnabled(row > 0)
+        self.down_button.setEnabled(0 <= row < len(self._modules) - 1)
         self.module_editor.set_module(module)
         step = module.steps[0] if module is not None and module.steps else None
         self.selection_changed.emit(copy.deepcopy(step))
@@ -2360,7 +2472,9 @@ class TaskPhaseEditor(QWidget):
             f"{module.repeat_count}x · {len(module.steps)} {suffix}"
         )
         item.setData(Qt.ItemDataRole.UserRole, module.module_id)
-        item.setToolTip(f"Reusable module ID: {module.module_id}")
+        item.setToolTip(
+            f"{module.title or module.module_id}\nReusable module ID: {module.module_id}"
+        )
         self.changed.emit()
 
 
@@ -2854,16 +2968,15 @@ class ConditionTaskDialog(QDialog):
         self.setObjectName("condition_task_dialog")
         self.setWindowTitle(f"Pre/Post Tasks - {condition.name}")
         self.setModal(True)
-        self.resize(1100, 700)
-        self.setMinimumSize(1000, 640)
+        self.resize(1120, 760)
+        self.setMinimumSize(1100, 720)
         self._document = document
         self._condition_id = condition_id
         initial = condition_task_flow_from_document(document, condition_id)
 
         self.header = DialogHeader(
-            f"Participant tasks for {condition.name}",
-            "Arrange tasks before or after this condition. Apply Tasks keeps your edits; "
-            "Cancel leaves the condition unchanged.",
+            "Participant tasks",
+            f"{condition.name} · Arrange what participants see before or after this condition.",
             parent=self,
         )
         self.header.title_label.setObjectName("condition_task_dialog_header")
@@ -2892,8 +3005,9 @@ class ConditionTaskDialog(QDialog):
         self.phase_tabs.addTab(self.pre_editor, "Pre-condition")
         self.phase_tabs.addTab(self.post_editor, "Post-condition")
 
-        preview_group = QGroupBox("Participant preview", self)
+        preview_group = QWidget(self)
         preview_group.setObjectName("condition_task_preview_group")
+        preview_group.setFixedWidth(280)
         preview_layout = QVBoxLayout(preview_group)
         preview_layout.setContentsMargins(8, 8, 8, 8)
         preview_layout.setSpacing(6)
@@ -2904,14 +3018,17 @@ class ConditionTaskDialog(QDialog):
         )
         self.preview_summary.setObjectName("condition_task_preview_summary")
         self.preview_summary.setWordWrap(True)
+        preview_heading = QLabel("Participant preview", preview_group)
+        preview_heading.setProperty("settingsSectionTitle", "true")
+        preview_layout.addWidget(preview_heading)
         preview_layout.addWidget(self.preview, 1)
         preview_layout.addWidget(self.preview_summary)
 
         content = QHBoxLayout()
         content.setContentsMargins(0, 0, 0, 0)
-        content.setSpacing(10)
-        content.addWidget(self.phase_tabs, 4)
-        content.addWidget(preview_group, 2)
+        content.setSpacing(16)
+        content.addWidget(self.phase_tabs, 1)
+        content.addWidget(preview_group)
 
         self.validation_label = QLabel(self)
         self.validation_label.setObjectName("condition_task_validation_label")
@@ -2931,14 +3048,20 @@ class ConditionTaskDialog(QDialog):
         # not emit accepted(). Connect the authored Apply action directly.
         self.apply_button.clicked.connect(self.accept)
         self.button_box.rejected.connect(self.reject)
+        footer = QHBoxLayout()
+        footer_hint = QLabel("Changes are kept only when you select Apply Tasks.", self)
+        footer_hint.setProperty("dialogHelp", "true")
+        footer.setContentsMargins(0, 0, 0, 0)
+        footer.addWidget(footer_hint, 1)
+        footer.addWidget(self.button_box)
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 14, 16, 14)
-        layout.setSpacing(8)
+        layout.setContentsMargins(20, 18, 20, 18)
+        layout.setSpacing(14)
         layout.addWidget(self.header)
         layout.addLayout(content, 1)
         layout.addWidget(self.validation_label)
-        layout.addWidget(self.button_box)
+        layout.addLayout(footer)
 
         for editor in (self.pre_editor, self.post_editor):
             editor.selection_changed.connect(self._refresh_preview)
@@ -3017,5 +3140,6 @@ class ConditionTaskDialog(QDialog):
             details.append("exact geometry" if step.layout_mode == "exact" else "responsive grid")
             details.append(f"{len(step.options)} items")
         elif step.kind == "questionnaire":
-            details.append(f"{len(step.questions)} questions")
+            count = len(step.questions)
+            details.append(f"{count} {'question' if count == 1 else 'questions'}")
         self.preview_summary.setText(" · ".join(details))

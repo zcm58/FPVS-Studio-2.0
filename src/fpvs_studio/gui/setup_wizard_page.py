@@ -25,9 +25,11 @@ from PySide6.QtWidgets import (
 from fpvs_studio.core.enums import ExperimentCategory, StimulusModality
 from fpvs_studio.core.experiment_categories import category_conflict_condition_ids
 from fpvs_studio.core.frame_validation import FrameValidationError
-from fpvs_studio.core.models import ConditionTemplateProfile
+from fpvs_studio.core.models import AttentionalBlinkStreamSettings, ConditionTemplateProfile
 from fpvs_studio.core.validation import condition_fixation_guidance
 from fpvs_studio.gui.assets_pages import AssetsPage
+from fpvs_studio.gui.attentional_blink_character_size import AttentionalBlinkCharacterSizeEditor
+from fpvs_studio.gui.attentional_blink_stream_designer import is_letter_stream_project
 from fpvs_studio.gui.components import (
     PAGE_SECTION_GAP,
     NonHomePageShell,
@@ -237,7 +239,13 @@ class SetupWizardPage(QWidget):
             parent=self,
         )
         self.runtime_settings_editor.refresh_verification_changed.connect(self.schedule_refresh)
-        self.image_display_size_editor = ImageDisplaySizeEditor(document, parent=self)
+        self.image_display_size_editor = (
+            AttentionalBlinkCharacterSizeEditor(document, parent=self)
+            if is_letter_stream_project(document)
+            else ImageDisplaySizeEditor(document, parent=self)
+        )
+        if isinstance(self.image_display_size_editor, AttentionalBlinkCharacterSizeEditor):
+            self.image_display_size_editor.draft_changed.connect(self.schedule_refresh)
         self.session_structure_editor = SessionStructureEditor(
             document,
             title="Session",
@@ -295,7 +303,10 @@ class SetupWizardPage(QWidget):
         self.shell.page_container.header_layout.insertLayout(0, title_row)
 
         self.progress_steps = SetupProgressStepper(
-            tuple(title for _key, title in _WIZARD_STEPS),
+            tuple(
+                "Character Size" if key == "image_size" and is_letter_stream_project(document)
+                else title for key, title in _WIZARD_STEPS
+            ),
             parent=self,
         )
         self.progress_steps.step_requested.connect(self._go_to_step_from_progress)
@@ -570,7 +581,7 @@ class SetupWizardPage(QWidget):
         )
         self.image_size_settings_card = self._settings_step_card(
             self.image_display_size_editor,
-            title="Image Size",
+            title="Character Size" if is_letter_stream_project(self._document) else "Image Size",
             subtitle="Set the on-screen stimulus size and calibrate the viewing geometry.",
             object_name="setup_wizard_image_size_settings_card",
         )
@@ -925,6 +936,8 @@ class SetupWizardPage(QWidget):
         self._refresh_progress_steps()
         is_design = step_key == "design"
         self.shell.title_label.setText("Design your sequence" if is_design else "Setup Wizard")
+        if is_design and is_letter_stream_project(self._document):
+            self.shell.title_label.setText("Design your attentional blink study")
         self.shell.title_label.setAlignment(
             Qt.AlignmentFlag.AlignVCenter | (
                 Qt.AlignmentFlag.AlignLeft if is_design else Qt.AlignmentFlag.AlignHCenter
@@ -1141,6 +1154,7 @@ class SetupWizardPage(QWidget):
         display = project.settings.display
         protocol = project.settings.protocol
         is_ab = project.experiment_category == ExperimentCategory.ATTENTIONAL_BLINK
+        letter_stream = is_letter_stream_project(self._document)
         cadence_summary = (
             f"{protocol.base_hz:g} slots/s · target pair every {protocol.oddball_every_n} "
             f"({protocol.oddball_hz:g} Hz)"
@@ -1148,6 +1162,11 @@ class SetupWizardPage(QWidget):
             else f"{protocol.base_hz:g} Hz base · oddball every {protocol.oddball_every_n} "
             f"({protocol.oddball_hz:g} Hz)"
         )
+        if letter_stream:
+            cadence_summary = (
+                f"{protocol.base_hz:g} Hz digit stream · "
+                f"{protocol.oddball_hz:g} Hz target repetition"
+            )
         fixation = project.settings.fixation_task
         refresh_hz = self.runtime_settings_editor.current_refresh_hz()
         default_lead_in = project.settings.presentation.pre_stream_fixation_seconds
@@ -1183,6 +1202,13 @@ class SetupWizardPage(QWidget):
                     if conditions
                     else "No conditions",
                     f"Task flow: {pre_count} pre-condition, {post_count} post-condition bindings",
+                    *(
+                        ("SOA: " + ", ".join(
+                            f"{item.attentional_blink.soa_ms:g} ms" for item in conditions
+                            if isinstance(item.attentional_blink, AttentionalBlinkStreamSettings)
+                        ),)
+                        if letter_stream else ()
+                    ),
                 ),
             ),
             (
@@ -1196,7 +1222,7 @@ class SetupWizardPage(QWidget):
             ),
             (
                 "image_size",
-                "Image Size",
+                "Character Size" if letter_stream else "Image Size",
                 (
                     presentation_defaults_summary(project.settings.presentation.defaults),
                     f"Viewing distance: {display.viewing_distance_cm:g} cm · "
@@ -1215,8 +1241,12 @@ class SetupWizardPage(QWidget):
                 "response",
                 "Fixation and Response",
                 (
-                    f"Color changes: {'On' if fixation.enabled else 'Off'} · "
-                    f"default lead-in {default_lead_in:g} s",
+                    (
+                        f"Color changes: {'On' if fixation.enabled else 'Off'} · "
+                        f"default lead-in {default_lead_in:g} s"
+                        if fixation.show_cross else
+                        f"Fixation cross: Off · blank lead-in {default_lead_in:g} s"
+                    ),
                     f"Accuracy tracking: {'On' if fixation.accuracy_task_enabled else 'Off'}",
                     response,
                 ),
@@ -1287,6 +1317,10 @@ class SetupWizardPage(QWidget):
             return not self._design_setup_blocker()
         if step_key == "experiment":
             return self.runtime_settings_editor.timing_is_compatible()
+        if step_key == "image_size" and isinstance(
+            self.image_display_size_editor, AttentionalBlinkCharacterSizeEditor,
+        ):
+            return not self.image_display_size_editor.validation_message()
         if step_key in {"image_size", "session", "fixation"}:
             return True
         if step_key == "response":
@@ -1305,6 +1339,10 @@ class SetupWizardPage(QWidget):
             return self._design_setup_blocker()
         if step_key == "experiment":
             return self.runtime_settings_editor.timing_blocker()
+        if step_key == "image_size" and isinstance(
+            self.image_display_size_editor, AttentionalBlinkCharacterSizeEditor,
+        ):
+            return self.image_display_size_editor.validation_message()
         if step_key == "review":
             return self._readiness_report().status_label
         return "Step needs attention"

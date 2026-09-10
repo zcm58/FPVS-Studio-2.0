@@ -117,13 +117,13 @@ def test_condition_template_library_migrates_legacy_user_presentation_defaults(
         profile for profile in loaded.profiles if profile.profile_id == "legacy-user-profile"
     )
     presentation = legacy.defaults.presentation
-    assert loaded.schema_version.value == "1.1.0"
+    assert loaded.schema_version.value == "1.2.0"
     assert presentation.pre_stream_fixation_seconds == 0.0
     assert presentation.defaults.image_geometry.mode == ImageGeometryMode.NATURAL_ASPECT
     assert presentation.defaults.image_geometry.width_degrees == 5.0
     assert presentation.defaults.text_height.legacy_stimulus_width_fraction == 0.25
     rewritten = json.loads(library_path.read_text(encoding="utf-8"))
-    assert rewritten["schema_version"] == "1.1.0"
+    assert rewritten["schema_version"] == "1.2.0"
     assert (
         rewritten["profiles"][-1]["defaults"]["presentation"]["pre_stream_fixation_seconds"] == 0.0
     )

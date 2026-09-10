@@ -15,7 +15,6 @@ from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QFileDialog,
-    QFormLayout,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -32,9 +31,11 @@ from fpvs_studio.core.experiment_categories import experiment_category_label
 from fpvs_studio.core.models import ConditionTemplateProfile
 from fpvs_studio.core.paths import slugify_project_name, validate_project_id
 from fpvs_studio.gui.components import (
+    DialogHeader,
     apply_dialog_theme,
     mark_error_text,
     mark_primary_action,
+    mark_secondary_action,
     refresh_widget_style,
 )
 
@@ -52,8 +53,8 @@ class CreateProjectDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Set Up a New Experiment")
         self.setModal(True)
-        self.setMinimumSize(760, 390)
-        self.resize(800, 430)
+        self.setMinimumSize(760, 500)
+        self.resize(800, 500)
         self._on_manage_templates = on_manage_templates
         self._experiment_category: ExperimentCategory | None = None
         self._condition_profiles: list[ConditionTemplateProfile] = []
@@ -83,7 +84,7 @@ class CreateProjectDialog(QDialog):
         choices = (
             (ExperimentCategory.FPVS, "FPVS\nComing soon"),
             (ExperimentCategory.FPVS_ODDBALL, "FPVS-Oddball\nBase images and oddballs"),
-            (ExperimentCategory.ATTENTIONAL_BLINK, "Attentional-Blink\nT1, separator and T2"),
+            (ExperimentCategory.ATTENTIONAL_BLINK, "Attentional-Blink\nTwo targets in a stream"),
         )
         for category, text in choices:
             button = QPushButton(text, self.category_page)
@@ -103,11 +104,13 @@ class CreateProjectDialog(QDialog):
         category_layout.addStretch(1)
         self.category_stack.addWidget(self.category_page)
         self.details_page = QWidget(self)
-        self.category_summary_label = QLabel(self.details_page)
+        self.details_header = DialogHeader("Name your experiment", "", parent=self.details_page)
+        self.category_summary_label = self.details_header.subtitle_label
         self.category_summary_label.setObjectName("create_project_category_summary")
 
         self.project_name_edit = QLineEdit(self)
         self.project_name_edit.setObjectName("project_name_edit")
+        self.project_name_edit.setPlaceholderText("e.g. Visual Recognition Study")
         self.project_name_edit.textChanged.connect(self._update_project_name_validation)
         self.project_name_validation_label = QLabel(self)
         self.project_name_validation_label.setObjectName("project_name_validation_label")
@@ -116,6 +119,8 @@ class CreateProjectDialog(QDialog):
         self.project_name_validation_label.setVisible(False)
         self.project_root_edit = QLineEdit(self)
         self.project_root_edit.setObjectName("project_root_edit")
+        self.project_root_edit.setAccessibleName("Save location")
+        self.project_root_edit.textChanged.connect(self._update_folder_hint)
         self.project_root_browse_button = QPushButton("Browse...", self)
         self.project_root_browse_button.setObjectName("project_root_browse_button")
         self.project_root_browse_button.clicked.connect(self._browse_root_directory)
@@ -127,6 +132,11 @@ class CreateProjectDialog(QDialog):
         self.condition_profile_combo = QComboBox(self)
         self.condition_profile_combo.setObjectName("condition_profile_combo")
         self.condition_profile_combo.setPlaceholderText("Select an experiment template...")
+        self.condition_profile_combo.setMinimumContentsLength(22)
+        self.condition_profile_combo.setSizeAdjustPolicy(
+            QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
+        )
+        self.condition_profile_combo.currentIndexChanged.connect(self._update_template_description)
         self.manage_templates_button = QPushButton("Manage Templates...", self)
         self.manage_templates_button.setObjectName("manage_condition_templates_button")
         self.manage_templates_button.clicked.connect(self._manage_templates)
@@ -136,11 +146,16 @@ class CreateProjectDialog(QDialog):
         profile_layout.addWidget(self.condition_profile_combo, 1)
         profile_layout.addWidget(self.manage_templates_button)
 
-        form_layout = QFormLayout()
-        form_layout.addRow("Project Name", self.project_name_edit)
-        form_layout.addRow("", self.project_name_validation_label)
-        form_layout.addRow("Project Folder", root_layout)
-        form_layout.addRow("Experiment Template", profile_layout)
+        self.template_description_label = QLabel(self.details_page)
+        self.template_description_label.setObjectName("create_project_template_description")
+        self.folder_hint_label = QLabel(self.details_page)
+        self.folder_hint_label.setObjectName("create_project_folder_hint")
+        for label in (self.template_description_label, self.folder_hint_label):
+            label.setProperty("dialogHelp", "true")
+            label.setTextFormat(Qt.TextFormat.PlainText)
+            label.setWordWrap(True)
+            label.setMinimumWidth(0)
+            label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
 
         self.button_box = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel,
@@ -149,30 +164,76 @@ class CreateProjectDialog(QDialog):
         self.button_box.setObjectName("create_project_button_box")
         self.button_box.accepted.connect(self.accept)
         self.button_box.rejected.connect(self.reject)
-        self.back_button = self.button_box.addButton("Back", QDialogButtonBox.ButtonRole.ActionRole)
+        self.back_button = QPushButton("Back", self)
         self.back_button.clicked.connect(self._show_category_page)
         self.back_button.setVisible(False)
         ok_button = self.button_box.button(QDialogButtonBox.StandardButton.Ok)
         assert ok_button is not None
         mark_primary_action(ok_button)
+        for button in (
+            self.back_button, self.project_root_browse_button, self.manage_templates_button,
+            self.button_box.button(QDialogButtonBox.StandardButton.Cancel),
+        ):
+            assert button is not None
+            mark_secondary_action(button)
 
         details_layout = QVBoxLayout(self.details_page)
-        details_layout.addWidget(self.category_summary_label)
+        details_layout.setContentsMargins(8, 4, 8, 0)
+        details_layout.setSpacing(6)
+        details_layout.addWidget(self.details_header)
         details_layout.addSpacing(12)
-        details_layout.addLayout(form_layout)
+        details_layout.addWidget(self._field_label("Project Name", self.project_name_edit))
+        details_layout.addWidget(self.project_name_edit)
+        details_layout.addWidget(self.project_name_validation_label)
+        details_layout.addSpacing(12)
+        details_layout.addWidget(
+            self._field_label("Experiment Template", self.condition_profile_combo)
+        )
+        details_layout.addLayout(profile_layout)
+        details_layout.addWidget(self.template_description_label)
+        details_layout.addSpacing(12)
+        details_layout.addWidget(self._field_label("Save Location", self.project_root_edit))
+        details_layout.addLayout(root_layout)
+        details_layout.addWidget(self.folder_hint_label)
         details_layout.addStretch(1)
         self.category_stack.addWidget(self.details_page)
 
+        footer_layout = QHBoxLayout()
+        footer_layout.setContentsMargins(8, 0, 8, 0)
+        footer_layout.addWidget(self.back_button)
+        footer_layout.addStretch(1)
+        footer_layout.addWidget(self.button_box)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(24, 20, 24, 20)
+        layout.setSpacing(16)
         layout.addWidget(self.category_stack, 1)
-        layout.addWidget(self.button_box)
+        layout.addLayout(footer_layout)
+
+        tab_order = (
+            self.project_name_edit,
+            self.condition_profile_combo,
+            self.manage_templates_button,
+            self.project_root_edit,
+            self.project_root_browse_button,
+            self.back_button,
+            ok_button,
+            self.button_box.button(QDialogButtonBox.StandardButton.Cancel),
+        )
+        for current, following in zip(tab_order, tab_order[1:], strict=False):
+            assert current is not None and following is not None
+            self.setTabOrder(current, following)
 
         self.set_condition_template_profiles(
             condition_template_profiles or [], preserve_selection=False
         )
         self._update_project_name_validation()
         apply_dialog_theme(self)
+
+    def _field_label(self, text: str, buddy: QWidget) -> QLabel:
+        label = QLabel(text, self.details_page)
+        label.setProperty("settingsSectionTitle", "true")
+        label.setBuddy(buddy)
+        return label
 
     @property
     def experiment_category(self) -> ExperimentCategory:
@@ -222,6 +283,7 @@ class CreateProjectDialog(QDialog):
         """Prefill the parent directory field."""
 
         self.project_root_edit.setText(str(directory))
+        self.project_root_edit.setCursorPosition(0)
 
     def set_condition_template_profiles(
         self,
@@ -257,6 +319,33 @@ class CreateProjectDialog(QDialog):
                 self.condition_profile_combo.setCurrentIndex(
                     selected_index if selected_index >= 0 else -1
                 )
+        self._update_template_description()
+
+    def _update_template_description(self, _index: int = -1) -> None:
+        profile = next(
+            (
+                item for item in self._condition_profiles
+                if item.profile_id == self.condition_profile_id
+            ),
+            None,
+        )
+        description = profile.description if profile is not None else "Choose a starting template."
+        self.template_description_label.setText(description)
+        self.template_description_label.setToolTip(description)
+        self.condition_profile_combo.setToolTip(profile.display_name if profile else description)
+
+    def _update_folder_hint(self, _text: str = "") -> None:
+        folder = self.project_root_edit.text().strip()
+        self.project_root_edit.setToolTip(folder)
+        self.project_root_edit.setAccessibleDescription(folder)
+        name = self.project_name
+        if name and self._project_name_validation_error(name) is None:
+            slug = slugify_project_name(name)
+            self.folder_hint_label.setText(f"New folder: {slug}")
+            self.folder_hint_label.setToolTip(str(Path(folder) / slug) if folder else slug)
+        else:
+            self.folder_hint_label.setText("Studio creates a new experiment folder here.")
+            self.folder_hint_label.setToolTip("")
 
     def accept(self) -> None:
         """Validate the dialog fields before closing."""
@@ -314,6 +403,7 @@ class CreateProjectDialog(QDialog):
         )
         if directory:
             self.project_root_edit.setText(directory)
+            self.project_root_edit.setCursorPosition(0)
 
     def _manage_templates(self) -> None:
         if self._on_manage_templates is None:
@@ -334,6 +424,7 @@ class CreateProjectDialog(QDialog):
         error = self._project_name_validation_error(self.project_name_edit.text())
         self.project_name_validation_label.setVisible(error is not None)
         self.project_name_validation_label.setText(error or "")
+        self._update_folder_hint()
         ok_button = self.button_box.button(QDialogButtonBox.StandardButton.Ok)
         if ok_button is not None:
             choosing_category = self.category_stack.currentWidget() is self.category_page

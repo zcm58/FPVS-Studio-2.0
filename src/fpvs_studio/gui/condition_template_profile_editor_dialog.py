@@ -63,6 +63,11 @@ class ConditionTemplateProfileEditorDialog(QDialog):
         self.resize(760, 760)
         profile = initial_profile or self._default_profile()
         self._experiment_category = profile.experiment_category
+        self._attentional_blink_layout = profile.defaults.attentional_blink_layout
+        self._participant_tutorial_enabled = (
+            profile.defaults.fixation_task.participant_tutorial_enabled
+        )
+        self._show_cross = profile.defaults.fixation_task.show_cross
         self._protocol_defaults = (
             profile.defaults.protocol.model_copy(deep=True)
             if profile.defaults.protocol is not None else None
@@ -143,7 +148,7 @@ class ConditionTemplateProfileEditorDialog(QDialog):
 
         self.fixation_enabled_checkbox = QCheckBox("Fixation task enabled", self)
         self.fixation_enabled_checkbox.setObjectName("condition_profile_fixation_enabled_checkbox")
-        self.fixation_enabled_checkbox.setChecked(True)
+        self.fixation_enabled_checkbox.setChecked(profile.defaults.fixation_task.enabled)
         self.fixation_enabled_checkbox.setVisible(False)
         self.accuracy_enabled_checkbox = QCheckBox("Fixation accuracy scoring enabled", self)
         self.accuracy_enabled_checkbox.setObjectName("condition_profile_fixation_accuracy_checkbox")
@@ -332,8 +337,9 @@ class ConditionTemplateProfileEditorDialog(QDialog):
         self.background_combo.setCurrentIndex(background_index if background_index >= 0 else 0)
 
         fixation = profile.defaults.fixation_task
-        self.fixation_enabled_checkbox.setChecked(True)
+        self.fixation_enabled_checkbox.setChecked(fixation.enabled)
         self.accuracy_enabled_checkbox.setChecked(fixation.accuracy_task_enabled)
+        self.accuracy_enabled_checkbox.setEnabled(self._show_cross)
         self.changes_per_sequence_spin.setValue(fixation.changes_per_sequence)
         self.target_count_mode_combo.setCurrentIndex(
             self.target_count_mode_combo.findData(fixation.target_count_mode)
@@ -408,6 +414,7 @@ class ConditionTemplateProfileEditorDialog(QDialog):
             built_in=False,
             defaults=ConditionTemplateDefaults(
                 protocol=self._protocol_defaults,
+                attentional_blink_layout=self._attentional_blink_layout,
                 condition=ConditionDefaults(
                     duty_cycle_mode=self.duty_cycle_combo.currentData(),
                     sequence_count=self.sequence_count_spin.value(),
@@ -423,7 +430,9 @@ class ConditionTemplateProfileEditorDialog(QDialog):
                     defaults=self.presentation_editor.build_defaults(),
                 ),
                 fixation_task=FixationTaskSettings(
-                    enabled=True,
+                    show_cross=self._show_cross,
+                    enabled=self.fixation_enabled_checkbox.isChecked(),
+                    participant_tutorial_enabled=self._participant_tutorial_enabled,
                     accuracy_task_enabled=self.accuracy_enabled_checkbox.isChecked(),
                     changes_per_sequence=self.changes_per_sequence_spin.value(),
                     target_count_mode=self.target_count_mode_combo.currentData(),

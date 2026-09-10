@@ -28,7 +28,7 @@ from fpvs_studio.core.enums import (
     StimulusVariant,
     ValidationSeverity,
 )
-from fpvs_studio.core.models import ImageResolution
+from fpvs_studio.core.models import AttentionalBlinkStreamSettings, ImageResolution
 from fpvs_studio.gui.design_system import (
     CONTENT_MAX_WIDTHS,
     elide_middle,
@@ -261,6 +261,7 @@ def _conditions_have_assigned_assets(document: ProjectDocument, ordered_conditio
         )
         and (
             condition.attentional_blink is None
+            or isinstance(condition.attentional_blink, AttentionalBlinkStreamSettings)
             or condition.attentional_blink.isi_mode == "blank"
             or condition.isi_stimulus_set_id is not None
             and has_ready_stimuli(condition.isi_stimulus_set_id)

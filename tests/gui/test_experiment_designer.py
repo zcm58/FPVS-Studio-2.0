@@ -18,6 +18,10 @@ from PySide6.QtGui import (
 from PySide6.QtWidgets import QApplication, QDialog, QFileDialog, QLabel, QMenu, QPushButton
 from tests.gui.helpers import assert_visible_children_within_parent, write_image_directory
 
+from fpvs_studio.core.condition_template_profiles import (
+    ATTENTIONAL_BLINK_PROFILE_ID,
+    built_in_condition_template_profiles,
+)
 from fpvs_studio.core.enums import DutyCycleMode, ExperimentCategory
 from fpvs_studio.core.paths import filesystem_path
 from fpvs_studio.gui.components import apply_experiment_designer_theme
@@ -38,11 +42,21 @@ from fpvs_studio.gui.experiment_designer_widgets import (
 from fpvs_studio.preprocessing.importer import import_stimulus_source_directory
 
 
+def _legacy_ab_profile(category=ExperimentCategory.ATTENTIONAL_BLINK):
+    if category != ExperimentCategory.ATTENTIONAL_BLINK:
+        return None
+    return next(
+        profile for profile in built_in_condition_template_profiles()
+        if profile.profile_id == ATTENTIONAL_BLINK_PROFILE_ID
+    )
+
+
 @pytest.fixture
 def image_document(qtbot, tmp_path: Path) -> tuple[ProjectDocument, str]:
     document = ProjectDocument.create_new(
         parent_dir=tmp_path, project_name="Visual designer",
         experiment_category=ExperimentCategory.ATTENTIONAL_BLINK,
+        condition_template_profile=_legacy_ab_profile(),
     )
     document.update_display_settings(preferred_refresh_hz=120.0)
     condition_id = document.create_condition(
@@ -490,6 +504,7 @@ def test_folder_selection_attaches_the_correct_source_without_adding_slots(
     monkeypatch.setattr("fpvs_studio.gui.experiment_designer_dialog.BackgroundTask", ImmediateTask)
     document = ProjectDocument.create_new(
         parent_dir=tmp_path, project_name="Folder import", experiment_category=category,
+        condition_template_profile=_legacy_ab_profile(category),
     )
     condition_id = document.create_condition(name="Target source")
     role = "t2" if category == ExperimentCategory.ATTENTIONAL_BLINK else "oddball"
@@ -756,6 +771,7 @@ def test_fixed_category_designer_preserves_folder_hit_targets_and_geometry(
 ) -> None:
     document = ProjectDocument.create_new(
         parent_dir=tmp_path, project_name="Category design", experiment_category=category,
+        condition_template_profile=_legacy_ab_profile(category),
     )
     condition_id = document.create_condition(name="Familiar and unfamiliar natural object images")
     dialog = _open_designer(qtbot, monkeypatch, (document, condition_id), size=size)

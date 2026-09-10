@@ -4,9 +4,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 from PySide6.QtWidgets import QApplication, QLabel
 from tests.gui.helpers import configure_fixation_task
 
+from fpvs_studio.core.condition_template_profiles import built_in_condition_template_profiles
+from fpvs_studio.core.enums import ExperimentCategory
 from fpvs_studio.gui.document import ProjectDocument
 from fpvs_studio.gui.fixation_settings_page import FixationSettingsEditor
 
@@ -41,6 +44,53 @@ def test_fixation_settings_editor_uses_current_option_defaults(qtbot, tmp_path: 
     assert editor.target_count_min_spin.value() == 8
     assert editor.target_count_max_spin.value() == 13
     assert editor.target_duration_spin.value() == 300
+    assert editor.show_cross_checkbox.isHidden()
+
+
+@pytest.mark.parametrize("legacy_images", [False, True])
+def test_ab_cross_can_be_hidden_saved_and_shown_again(qtbot, tmp_path, legacy_images):
+    profile = next(
+        item for item in built_in_condition_template_profiles()
+        if item.profile_id == "attentional-blink-v1"
+    ) if legacy_images else None
+    document = ProjectDocument.create_new(
+        parent_dir=tmp_path, project_name="Optional fixation",
+        experiment_category=ExperimentCategory.ATTENTIONAL_BLINK,
+        condition_template_profile=profile,
+    )
+    document.update_fixation_settings(
+        enabled=True, accuracy_task_enabled=True, participant_tutorial_enabled=True
+    )
+    editor = FixationSettingsEditor(document, show_preview=True)
+    qtbot.addWidget(editor)
+    editor.show()
+    QApplication.processEvents()
+    assert editor.show_cross_checkbox.isVisible()
+    assert editor.show_cross_checkbox.isChecked()
+    editor.show_cross_checkbox.click()
+    fixation = document.project.settings.fixation_task
+    assert not fixation.show_cross
+    assert not fixation.enabled
+    assert not fixation.accuracy_task_enabled
+    assert not fixation.participant_tutorial_enabled
+    assert not editor.fixation_accuracy_checkbox.isEnabled()
+    assert not editor.fixation_behavior_panel.isEnabled()
+    assert not editor.cross_size_spin.isEnabled()
+    assert not editor.preview_widget.show_cross
+    assert editor.pre_stream_fixation_spin.isEnabled()
+    assert "blank screen" in editor.pre_stream_fixation_note.text()
+    editor.pre_stream_fixation_spin.setValue(0.5)
+    document.save()
+    reopened = ProjectDocument.open_existing(document.project_root)
+    assert not reopened.project.settings.fixation_task.show_cross
+    assert reopened.project.settings.presentation.pre_stream_fixation_seconds == 0.5
+    editor.show_cross_checkbox.click()
+    assert document.project.settings.fixation_task.show_cross
+    assert editor.cross_size_spin.isEnabled()
+    assert editor.preview_widget.show_cross
+    editor.fixation_accuracy_checkbox.setChecked(True)
+    assert document.project.settings.fixation_task.enabled
+    assert document.project.settings.fixation_task.accuracy_task_enabled
 
 
 def test_fixation_settings_editor_persists_fixed_mode_values(qtbot, tmp_path: Path) -> None:

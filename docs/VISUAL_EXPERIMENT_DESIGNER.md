@@ -1,12 +1,34 @@
 # Visual FPVS Experiment Designer
 
-Updated: 2026-09-09. The experimental branch implements a shared, category-specific
-image designer and custom within-slot attentional-blink playback. The primary editor
-is embedded in Setup > Design. Backward masking is historical research context and
+Updated: 2026-09-10. The experimental branch implements category-specific native
+letter-stream and image designers. New Attentional-Blink projects use 10 Hz digits
+and separate T1/T2 letters with 100/300/500 ms SOAs. Setup > Design shows shared
+character pools, condition SOAs, a full 20-character cycle, an onset bracket, and a
+quarter-speed illustration. Character Size edits native text height. The existing
+questionnaire editor is also accessible from Design. See
+[Experiment Categories](EXPERIMENT_CATEGORIES.md) for the current defaults, schema,
+questionnaire interpretation, and exact display-grid requirements.
+
+The digit field defines the available symbols, not their order. Native AB playback
+samples digits randomly without immediate repeats, including across cycle boundaries.
+The designer uses the same core sampler for its randomized example and draws a fresh
+cycle during the slowed preview. **Shuffle example** changes only the illustration;
+it does not edit the project or run seed. T1/T2 positions and SOAs stay fixed while
+symbol identities vary. The run seed makes experimental playback reproducible.
+
+T1 and T2 each have a color swatch with the current hex value. Select the swatch to
+open the visual color picker, choose a color or enter its exact hex value, then
+confirm. Cancel leaves the current color unchanged. Accepted choices update the
+timeline draft; Next applies them to all study conditions. If T2 is no longer white,
+update the post-condition question and participant instructions to match.
+
+The image workflow documented below remains available for FPVS-Oddball and legacy
+within-slot attentional-blink projects. Its primary editor is embedded in Setup > Design.
+Backward masking is historical research context and
 has no current GUI. Physical display/trigger verification remains separate from
 visible authoring checks.
 
-## Current Designer Workflow
+## Image Designer Workflow
 
 Choose FPVS-Oddball or Attentional-Blink when creating an experiment. The category
 is fixed for that experiment; see [Experiment Categories](EXPERIMENT_CATEGORIES.md)

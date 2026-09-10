@@ -452,3 +452,100 @@ coverage is in test_experiment_designer.py, test_design_setup_step.py and
 test_setup_wizard_shell.py under tests/gui. The canonical workflow is in
 VISUAL_EXPERIMENT_DESIGNER.md and GUI_WORKFLOW.md, with ownership and verification
 pointers updated in ARCHITECTURE.md and docs/agent/agent-index.md.
+
+## New-experiment dialog clarity (2026-09-10)
+
+The creation details page now uses the shared DialogHeader and vertical field groups
+for name, template and save location. The selected template description is visible,
+and an editable full-path field with tooltip is paired with a live new-folder name
+hint. Back is separated from Create/Cancel, and keyboard navigation follows the
+visible field order. The category-first choice and backend creation contracts remain
+unchanged. Minimum/default sizes are 760x500 and 800x500.
+
+Registered coverage in test_create_project_dialog.py exercises both sizes and themes,
+long content, full-value access, summary updates, keyboard order and cancellation.
+The manual smoke path is File > New Experiment, choose either available category,
+then inspect details, change the template and folder, and use Back/Cancel. Check the
+rendered description and destination hint before creating a new project.
+
+Verification for this slice: 19 selected visible GUI checks pass, along with GUI
+and docs focused verification, nine harness-documentation tests, and mypy for the
+changed dialog module. Rendered dark/light captures at both sizes show unclipped
+fields and actions. No PsychoPy playback or hardware triggers were used.
+
+## Participant-task editor pages (2026-09-10)
+
+The user requested no scrolling through the modular task dialog, no clipping and
+clearer visual hierarchy. This slice replaces the long nested form in
+`gui/condition_task_dialog.py` with focused pages within the existing dialog, budgeted
+for 1100x720 minimum and 1120x760 default. Module selection stays on the left and the
+participant preview on the right. Module settings and ordered steps occupy their own
+page; step content, text/layout, responses and choice behavior have separate pages.
+Questionnaire editing separates the question, answer options and routing rules.
+Empty phases replace disabled editor forms with a short instruction.
+
+The GUI retains draft objects, stable IDs, all task types, media staging, Apply/Cancel,
+and existing core validation. Core models, runtime and export contracts are outside
+this slice. Lists, tables and text editors retain data navigation for variable-length
+content; no whole-form scroll area remains. Existing registered task-dialog tests
+cover every task/question type, both sizes/themes, empty and validation states,
+page traversal before lossless Apply, cancellation and staged asset import.
+
+Verification: all 16 registered task-dialog checks pass, including the all-type
+layout matrix. GUI/docs focused checks and dialog-module mypy pass. Visible captures
+cover empty, question, answers and module-settings pages at both sizes in dark/light
+themes with a main-window parent. The repo precommit gate still stops at the existing
+`gui/controller.py:373` object-to-str return type error. No runtime or hardware check
+was needed for this GUI-only change.
+
+## Randomized digit illustration (2026-09-10)
+
+The user requested random digit order after the timeline misleadingly showed the
+typed pool in order. Playback already sampled digits randomly. The designer now
+uses the same core cycle sampler, labels the pool's random-order behavior, and
+offers Shuffle example without changing project state or the run seed. Slowed
+preview cycles draw new symbols while preserving target positions and avoiding
+adjacent repeated digits across cycle boundaries. The sampler was extracted from
+the compiler with exact seeded output preserved; no persisted setting was added.
+
+Verification covers golden pre/post-extraction sequences for all three default SOAs,
+custom unsorted/two-digit pools, repeat prevention, unchanged preview-only drafts,
+and default-size light/dark GUI layouts. Playback and timing remain compiled through
+the existing RunSpec contract.
+
+Results: 17 visible designer tests and 190 compiler-scope tests pass, with the
+compiler run using `PYTEST_ADDOPTS=--basetemp=build/ab-cmp-qa` to avoid Windows test
+staging path limits. GUI/docs focused checks and changed-module mypy pass; light/dark
+captures fit the 1120x820 wizard. Precommit still stops at the existing
+`gui/controller.py:373` return-type error. No hardware or PsychoPy session was launched.
+
+## Visual target color selection (2026-09-10)
+
+The user requested a visual hex editor using the FPVS Toolbox SNR Tool as reference.
+The native AB designer now uses shared `components.ColorPickerButton` controls for
+T1/T2: a color swatch beside the hex value opens Qt's visual color picker, with exact
+hex entry available. The Qt picker is used consistently to retain hex entry on Windows.
+Only accepted opaque colors update the timeline draft; Cancel leaves it untouched,
+and Next applies the existing shared condition settings. No schema, timing or runtime
+contract changes are involved. Source fields retain aligned tops at 1120x820.
+
+All 19 visible designer checks pass, including both colors, keyboard activation,
+Cancel, draft-only updates, all-condition save/reopen, and light/dark layouts at the
+documented sizes. Manual captures inspect the picker and full wizard in both themes,
+including real hex entry and confirmation. Changed-module mypy passes; precommit
+still stops at the existing `gui/controller.py:373` return-type error. The manual
+smoke path is Setup > Design > either target's color swatch; choose a color or type
+its hex value, confirm, then use Next. No PsychoPy session or hardware was launched.
+
+## SOA table cleanup (2026-09-10)
+
+Removed the native AB designer's display-timing column at the user's request.
+Condition names, SOA entries and between-target digit counts form a three-column
+table. SOA fields have a centered, inset cell layout; table padding no longer clips
+the entries. The sequence summary and accessible description use “0 digits between
+T1 and T2” wording. Actual display checks remain in Timing and compilation.
+Registered designer coverage checks the three columns, summary wording and field
+containment/vertical alignment in both themes at the documented wizard sizes.
+All 19 visible designer checks pass. Both 1120x820 captures show the fields fully
+inside their rows without scrolling. GUI/docs focused verification and changed-module
+type checking pass; the existing controller return-type error still blocks precommit.

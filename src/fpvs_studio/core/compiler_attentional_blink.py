@@ -13,7 +13,7 @@ from fpvs_studio.core.compiler_schedules import (
     build_balanced_shuffled_values,
 )
 from fpvs_studio.core.compiler_support import CompileError, namespaced_random_seed
-from fpvs_studio.core.models import Condition, ProjectFile, StimulusSet
+from fpvs_studio.core.models import AttentionalBlinkSettings, Condition, ProjectFile, StimulusSet
 from fpvs_studio.core.run_spec import AttentionalBlinkRunSpec, StimulusEvent
 from fpvs_studio.preprocessing.models import StimulusManifest
 
@@ -31,7 +31,7 @@ def compile_attentional_blink_sequence(
 ) -> tuple[list[StimulusEvent], AttentionalBlinkRunSpec]:
     """Keep the original role bags and add independently balanced separator/T2 bags."""
     settings = condition.attentional_blink
-    assert settings is not None
+    assert isinstance(settings, AttentionalBlinkSettings)
     t2_set = next(
         (item for item in project.stimulus_sets if item.set_id == condition.t2_stimulus_set_id),
         None,

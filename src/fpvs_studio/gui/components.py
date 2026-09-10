@@ -29,6 +29,7 @@ from PySide6.QtGui import (
 )
 from PySide6.QtWidgets import (
     QApplication,
+    QColorDialog,
     QDialog,
     QDialogButtonBox,
     QDoubleSpinBox,
@@ -63,6 +64,7 @@ PageContainer: Any
 SectionCard: Any
 
 __all__ = [
+    "ColorPickerButton",
     "DialogHeader",
     "LaunchSurfaceFrame",
     "FiniteDoubleSpinBox",
@@ -76,6 +78,7 @@ __all__ = [
     "SetupSourceCard",
     "StatusBadgeLabel",
     "apply_condition_template_details_header_style",
+    "apply_attentional_blink_stream_theme",
     "apply_dialog_theme",
     "apply_experiment_designer_theme",
     "apply_error_text_style",
@@ -116,6 +119,58 @@ __all__ = [
     "studio_theme_stylesheet",
     "welcome_window_stylesheet",
 ]
+
+
+class ColorPickerButton(QPushButton):
+    """A color swatch and hex value that open Qt's visual color editor."""
+
+    color_changed = Signal(str)
+
+    def __init__(self, color: str, *, title: str, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._color_hex = ""
+        self._dialog_title = title
+        self.setAccessibleName(title)
+        self.setToolTip("Choose a color visually or enter an exact hex value.")
+        self.setIconSize(QSize(20, 20))
+        self.setAutoDefault(False)
+        mark_secondary_action(self)
+        self.set_color(color)
+        self.clicked.connect(self._choose_color)
+
+    def color_hex(self) -> str:
+        return self._color_hex
+
+    def set_color(self, value: str) -> None:
+        color = QColor(value)
+        if not color.isValid() or color.alpha() != 255:
+            raise ValueError("Choose a valid opaque color.")
+        color_hex = color.name().upper()
+        if color_hex == self._color_hex:
+            return
+        self._color_hex = color_hex
+        self.setText(color_hex)
+        self.setAccessibleDescription(f"Current color {color_hex}. {self.toolTip()}")
+        ratio = self.devicePixelRatioF()
+        swatch = QPixmap(round(20 * ratio), round(20 * ratio))
+        swatch.setDevicePixelRatio(ratio)
+        swatch.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(swatch)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setPen(QColor("#555555" if color.lightness() > 127 else "#AAAAAA"))
+        painter.setBrush(color)
+        painter.drawRoundedRect(0, 0, 19, 19, 3, 3)
+        painter.end()
+        self.setIcon(QIcon(swatch))
+        self.color_changed.emit(color_hex)
+
+    def _choose_color(self) -> None:
+        color = QColorDialog.getColor(
+            QColor(self._color_hex), self, self._dialog_title,
+            QColorDialog.ColorDialogOption.DontUseNativeDialog,
+        )
+        if color.isValid():
+            self.set_color(color.name())
 
 
 class DialogHeader(QWidget):
@@ -1232,6 +1287,42 @@ def apply_experiment_designer_theme(widget: QWidget) -> None:
     )
 
 
+def attentional_blink_stream_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
+    """Flat source controls and a readable condition table for the AB study."""
+    resolved = _resolved_theme(theme)
+    return form_controls_stylesheet(resolved) + f"""
+    QWidget#ab_stream_designer QLabel[abTextRole="heading"] {{
+        font-size: 16px; font-weight: 600; color: {resolved.text_primary};
+    }}
+    QWidget#ab_stream_designer QLabel[abTextRole="source"] {{
+        font-weight: 600; color: {resolved.text_primary};
+    }}
+    QWidget#ab_stream_designer QLabel[abTextRole="secondary"] {{
+        color: {resolved.text_secondary}; font-size: 12px;
+    }}
+    QWidget#ab_stream_designer QTableWidget {{
+        background: {resolved.surface}; alternate-background-color: {resolved.surface_alt};
+        color: {resolved.text_primary}; border: 1px solid {resolved.border_soft};
+        border-radius: 5px; selection-background-color: {resolved.info_bg};
+        selection-color: {resolved.text_primary};
+    }}
+    QWidget#ab_stream_designer QTableWidget::item {{ padding: 0 8px; }}
+    QWidget#ab_stream_designer QHeaderView::section {{
+        background: {resolved.surface_alt}; color: {resolved.text_secondary};
+        padding: 7px 8px; border: none; font-weight: 500;
+    }}
+    QWidget#ab_stream_designer QLineEdit {{ padding: 3px 8px; }}
+    QLabel#ab_preview_symbol {{
+        background: #22262C; color: #FFFFFF; border-radius: 5px;
+        font-size: 28px; font-weight: 600; qproperty-alignment: AlignCenter;
+    }}
+    """
+
+
+def apply_attentional_blink_stream_theme(widget: QWidget) -> None:
+    _apply_palette_stylesheet(widget, attentional_blink_stream_stylesheet)
+
+
 def studio_theme_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
     theme = _resolved_theme(theme)
     color_page_background = theme.page_background
@@ -1883,6 +1974,9 @@ def fixation_settings_stylesheet(theme: StudioTheme | QPalette | None = None) ->
     QLabel[fixationSettingsSectionTitle="true"] {{
         color: {theme.text_primary};
         font-weight: 700;
+    }}
+    QFrame[fixationSettingsSection="true"] QLabel:disabled {{
+        color: {theme.disabled_text};
     }}
     """
 

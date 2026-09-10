@@ -14,6 +14,7 @@ from fpvs_studio.core.enums import (
     DutyCycleMode,
     PresentationUnit,
     StimulusModality,
+    TextHeightMode,
     ValidationSeverity,
 )
 from fpvs_studio.core.experiment_categories import validate_experiment_category
@@ -28,6 +29,8 @@ from fpvs_studio.core.frame_validation import (
     validate_sinusoidal_mode_frames,
 )
 from fpvs_studio.core.models import (
+    AttentionalBlinkSettings,
+    AttentionalBlinkStreamSettings,
     Condition,
     DisplayValidationReport,
     FixationTaskSettings,
@@ -129,6 +132,7 @@ class StimulusRepeatRoleGuidance:
     min_repeats_per_image: int
     max_repeats_per_image: int
     evenly_distributed: bool
+    balanced_schedule: bool = True
 
 
 def duration_based_fixation_change_cap(condition_duration_seconds: float) -> int:
@@ -228,6 +232,17 @@ def validate_fixation_settings(settings: FixationTaskSettings) -> list[Validatio
     """Return user-facing fixation-task validation issues."""
 
     issues: list[ValidationIssue] = []
+    if not settings.show_cross and (
+        settings.enabled or settings.accuracy_task_enabled or settings.participant_tutorial_enabled
+    ):
+        issues.append(
+            ValidationIssue(
+                location="settings.fixation_task.show_cross",
+                message=(
+                    "Hidden fixation crosses cannot have color changes, responses or tutorials."
+                ),
+            )
+        )
     if settings.enabled and settings.target_duration_ms <= 0:
         issues.append(
             ValidationIssue(
@@ -470,6 +485,9 @@ def condition_stimulus_repeat_guidance(project: ProjectFile) -> list[StimulusRep
     guidance_rows: list[StimulusRepeatRoleGuidance] = []
 
     for condition in sorted(project.conditions, key=lambda item: item.order_index):
+        balanced_schedule = not isinstance(
+            condition.attentional_blink, AttentionalBlinkStreamSettings
+        )
         oddball_presentations = (
             condition.oddball_cycle_repeats_per_sequence * condition.sequence_count
         )
@@ -482,7 +500,10 @@ def condition_stimulus_repeat_guidance(project: ProjectFile) -> list[StimulusRep
             "oddball": condition.oddball_stimulus_set_id,
         }
         if condition.attentional_blink is not None:
-            if (condition.attentional_blink.isi_mode == "image"
+            if isinstance(condition.attentional_blink, AttentionalBlinkStreamSettings):
+                role_presentations["base"] = oddball_presentations * (oddball_every_n - 2)
+            if (isinstance(condition.attentional_blink, AttentionalBlinkSettings)
+                    and condition.attentional_blink.isi_mode == "image"
                     and condition.isi_stimulus_set_id is not None):
                 role_presentations["isi"] = oddball_presentations
                 role_set_ids["isi"] = condition.isi_stimulus_set_id
@@ -507,6 +528,12 @@ def condition_stimulus_repeat_guidance(project: ProjectFile) -> list[StimulusRep
                 min_repeats = presentation_count // image_count
                 max_repeats = ceil(presentation_count / image_count)
                 evenly_distributed = presentation_count % image_count == 0
+                if not balanced_schedule:
+                    # Character streams sample with replacement; exact identities and
+                    # counts are part of the seeded compiled schedule, not this estimate.
+                    min_repeats = 0
+                    max_repeats = presentation_count
+                    evenly_distributed = False
             guidance_rows.append(
                 StimulusRepeatRoleGuidance(
                     condition_id=condition.condition_id,
@@ -520,6 +547,7 @@ def condition_stimulus_repeat_guidance(project: ProjectFile) -> list[StimulusRep
                     min_repeats_per_image=min_repeats,
                     max_repeats_per_image=max_repeats,
                     evenly_distributed=evenly_distributed,
+                    balanced_schedule=balanced_schedule,
                 )
             )
     return guidance_rows
@@ -573,6 +601,10 @@ def validate_attentional_blink_condition(
     settings = condition.attentional_blink
     if settings is None:
         return []
+    if isinstance(settings, AttentionalBlinkStreamSettings):
+        return _validate_attentional_blink_stream_condition(
+            project, condition, settings, refresh_hz=refresh_hz
+        )
     from fpvs_studio.core.attentional_blink import (
         SlotRole,
         describe_attentional_blink,
@@ -619,6 +651,75 @@ def validate_attentional_blink_condition(
             preview_attentional_blink(
                 roles, base_hz=project.settings.protocol.base_hz, refresh_hz=refresh_hz,
                 t1_ms=settings.t1_duration_ms, isi_ms=settings.isi_ms,
+            )
+    except ValueError as error:
+        errors.append(str(error))
+    return errors
+
+
+def _validate_attentional_blink_stream_condition(
+    project: ProjectFile,
+    condition: Condition,
+    settings: AttentionalBlinkStreamSettings,
+    *,
+    refresh_hz: float | None,
+) -> list[str]:
+    from fpvs_studio.core.attentional_blink_stream import (
+        describe_attentional_blink_stream,
+        preview_attentional_blink_stream,
+        validate_attentional_blink_stream_symbols,
+    )
+
+    errors: list[str] = []
+    if condition.duty_cycle_mode != DutyCycleMode.CONTINUOUS:
+        errors.append("Letter streams require continuous characters without blank frames.")
+    if condition.isi_stimulus_set_id is not None:
+        errors.append("Letter streams use intervening digits, not a separate ISI image source.")
+    stimulus_sets = {item.set_id: item for item in project.stimulus_sets}
+    pools: list[list[str]] = []
+    for role, set_id in (
+        ("Base", condition.base_stimulus_set_id),
+        ("T1", condition.oddball_stimulus_set_id),
+        ("T2", condition.t2_stimulus_set_id),
+    ):
+        source = stimulus_sets.get(set_id) if set_id else None
+        if source is None or source.modality != StimulusModality.WORD:
+            errors.append(f"Choose a native character pool for {role}.")
+        else:
+            pools.append(source.words)
+    if len(pools) == 3:
+        try:
+            validate_attentional_blink_stream_symbols(*pools)
+        except ValueError as error:
+            errors.append(str(error))
+    roles: tuple[PresentationRole, ...] = ("base", "oddball")
+    presentations = [
+        resolve_role_presentation(project.settings.presentation, condition.presentation, role)
+        for role in roles
+    ]
+    heights = [item.text_height for item in presentations]
+    if any(height.mode != TextHeightMode.FIXED for height in heights) or heights[0] != heights[1]:
+        errors.append(
+            "Letter streams require the same fixed character size for digits and targets."
+        )
+    reserved_codes = {item.trigger_code for item in project.conditions}
+    reserved_codes.add(project.settings.triggers.oddball_trigger_code)
+    if settings.t2_trigger_code in reserved_codes:
+        errors.append("T2 marker must differ from the condition-start and T1/oddball markers.")
+    protocol = project.settings.protocol
+    if any(item.trigger_code == project.settings.triggers.oddball_trigger_code
+           for item in project.conditions):
+        errors.append("Condition-start markers must differ from the T1 marker in letter streams.")
+    try:
+        describe_attentional_blink_stream(
+            base_hz=protocol.base_hz, cycle_slots=protocol.oddball_every_n,
+            soa_ms=settings.soa_ms, t2_slot_index=settings.t2_slot_index,
+        )
+        if refresh_hz is not None:
+            preview_attentional_blink_stream(
+                refresh_hz=refresh_hz, base_hz=protocol.base_hz,
+                cycle_slots=protocol.oddball_every_n, soa_ms=settings.soa_ms,
+                t2_slot_index=settings.t2_slot_index,
             )
     except ValueError as error:
         errors.append(str(error))
@@ -698,7 +799,7 @@ def validate_project(
     issues.extend(validate_condition_repeat_cycle_consistency(project))
     issues.extend(presentation_clipping_warnings(project))
     for row in condition_stimulus_repeat_guidance(project):
-        if row.image_count <= 0:
+        if row.image_count <= 0 or not row.balanced_schedule:
             continue
         role_label = {"base": "Base", "oddball": "Oddball", "t2": "T2", "isi": "ISI"}[row.role]
         item_label = "images" if row.modality == StimulusModality.IMAGE else "words"

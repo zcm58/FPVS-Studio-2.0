@@ -7,6 +7,26 @@ import pytest
 from fpvs_studio.core.models import FixationTaskSettings
 
 
+def test_fixation_visibility_defaults_preserve_existing_projects() -> None:
+    assert FixationTaskSettings.model_validate({}).show_cross
+    hidden = FixationTaskSettings(
+        show_cross=False, enabled=False, accuracy_task_enabled=False,
+        participant_tutorial_enabled=False,
+    )
+    assert not FixationTaskSettings.model_validate_json(hidden.model_dump_json()).show_cross
+
+
+@pytest.mark.parametrize(
+    "task_flag", ["enabled", "accuracy_task_enabled", "participant_tutorial_enabled"]
+)
+def test_hidden_cross_rejects_active_fixation_tasks(task_flag: str) -> None:
+    values = dict(show_cross=False, enabled=False, accuracy_task_enabled=False,
+                  participant_tutorial_enabled=False)
+    values[task_flag] = True
+    with pytest.raises(ValueError, match="Hidden fixation crosses"):
+        FixationTaskSettings.model_validate(values)
+
+
 def test_fixation_settings_reject_randomized_no_repeat_when_range_is_degenerate() -> None:
     with pytest.raises(
         ValueError,

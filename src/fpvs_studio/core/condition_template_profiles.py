@@ -42,7 +42,8 @@ STUDIO_DEFAULT_PROFILE_ID = "studio-default-v1"
 SIXTY_HZ_BLANK_FIXATION_PROFILE_ID = "sixty-hz-blank50-fixation-v1"
 SINUSOIDAL_CONTRAST_PROFILE_ID = "sinusoidal-contrast-v1"
 ATTENTIONAL_BLINK_PROFILE_ID = "attentional-blink-v1"
-CONDITION_TEMPLATE_LIBRARY_SCHEMA_VERSION = SchemaVersion.V1_1
+ATTENTIONAL_BLINK_STREAM_PROFILE_ID = "attentional-blink-letter-stream-v1"
+CONDITION_TEMPLATE_LIBRARY_SCHEMA_VERSION = SchemaVersion.V1_2
 
 
 def _shared_fixation_defaults() -> FixationTaskSettings:
@@ -121,9 +122,24 @@ def built_in_condition_template_profiles() -> list[ConditionTemplateProfile]:
             background_color=SINUSOIDAL_NEUTRAL_BACKGROUND_COLOR,
         ),
         ConditionTemplateProfile(
+            profile_id=ATTENTIONAL_BLINK_STREAM_PROFILE_ID,
+            experiment_category=ExperimentCategory.ATTENTIONAL_BLINK,
+            display_name="Digits & letter targets",
+            description="10 Hz digit stream with letter targets at 100, 300, and 500 ms SOAs.",
+            built_in=True,
+            defaults=ConditionTemplateDefaults(
+                attentional_blink_layout="letter_stream",
+                protocol=ProtocolSettings(base_hz=10.0, oddball_every_n=20),
+                display=ConditionTemplateDisplayDefaults(background_color="#000000"),
+                fixation_task=FixationTaskSettings(
+                    enabled=False, accuracy_task_enabled=False, participant_tutorial_enabled=False,
+                ),
+            ),
+        ),
+        ConditionTemplateProfile(
             profile_id=ATTENTIONAL_BLINK_PROFILE_ID,
             experiment_category=ExperimentCategory.ATTENTIONAL_BLINK,
-            display_name="Attentional-Blink",
+            display_name="Image pairs (legacy)",
             description=(
                 "Four slots per second, with a T1 / separator / T2 target slot every fourth slot."
             ),
@@ -151,7 +167,9 @@ def _normalize_library(
         *built_in_profiles.values(),
         *sorted(user_profiles.values(), key=lambda item: item.profile_id),
     ]
-    return ConditionTemplateProfileLibrary(profiles=ordered_profiles)
+    return ConditionTemplateProfileLibrary(
+        schema_version=CONDITION_TEMPLATE_LIBRARY_SCHEMA_VERSION, profiles=ordered_profiles
+    )
 
 
 def _migrate_library_payload(
@@ -164,6 +182,10 @@ def _migrate_library_payload(
         schema_version = schema_version.value
     if schema_version == CONDITION_TEMPLATE_LIBRARY_SCHEMA_VERSION.value:
         return ConditionTemplateProfileLibrary.model_validate(payload)
+    if schema_version == SchemaVersion.V1_1.value:
+        migrated = deepcopy(dict(payload))
+        migrated["schema_version"] = CONDITION_TEMPLATE_LIBRARY_SCHEMA_VERSION.value
+        return ConditionTemplateProfileLibrary.model_validate(migrated)
     if schema_version != SchemaVersion.V1.value:
         raise NotImplementedError(
             "Condition-template library migration from schema_version "
@@ -365,6 +387,12 @@ def require_profile_category(
         and profile.defaults.condition.duty_cycle_mode != DutyCycleMode.CONTINUOUS
     ):
         raise ValueError("Attentional-Blink templates require continuous image presentation.")
+    if profile.defaults.attentional_blink_layout == "letter_stream":
+        protocol = profile.defaults.protocol
+        if category != ExperimentCategory.ATTENTIONAL_BLINK:
+            raise ValueError("Letter-stream templates require the Attentional-Blink category.")
+        if protocol is None or protocol.base_hz != 10.0 or protocol.oddball_every_n != 20:
+            raise ValueError("Letter-stream templates require 10 Hz and a 20-character cycle.")
 
 
 def apply_condition_defaults_to_condition(

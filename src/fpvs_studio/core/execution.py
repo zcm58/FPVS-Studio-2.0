@@ -156,7 +156,7 @@ class FixationTargetOnsetRecord(FPVSBaseModel):
 
 
 class AttentionalBlinkOnsetRecord(FPVSBaseModel):
-    """Observed image onset, relative to the first stream flip when timestamped."""
+    """Observed stimulus onset, relative to the first stream flip when timestamped."""
 
     sequence_index: int = Field(ge=0)
     phase: Literal["base", "t1", "separator", "t2"]

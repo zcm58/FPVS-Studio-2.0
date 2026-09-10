@@ -10,7 +10,7 @@ from PySide6.QtCore import QPoint, Qt
 from PySide6.QtGui import QColor, QPalette
 from PySide6.QtWidgets import QAbstractSpinBox, QApplication, QLabel, QPushButton, QTabBar
 from tests.gui.helpers import assert_visible_children_within_parent
-from tests.gui.test_experiment_designer import _populate_sources
+from tests.gui.test_experiment_designer import _legacy_ab_profile, _populate_sources
 
 from fpvs_studio.core.enums import ExperimentCategory, StimulusModality
 from fpvs_studio.gui.design_setup_step import DesignSetupStep
@@ -22,6 +22,7 @@ from fpvs_studio.gui.experiment_designer_dialog import ExperimentDesignerWidget
 def _document(tmp_path, category=ExperimentCategory.ATTENTIONAL_BLINK):
     return ProjectDocument.create_new(
         parent_dir=tmp_path, project_name="Design step", experiment_category=category,
+        condition_template_profile=_legacy_ab_profile(category),
     )
 
 

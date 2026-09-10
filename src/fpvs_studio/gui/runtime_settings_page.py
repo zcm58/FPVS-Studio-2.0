@@ -22,6 +22,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from fpvs_studio.core.attentional_blink_presets import is_attentional_blink_stream_project
+from fpvs_studio.core.attentional_blink_stream import preview_attentional_blink_stream
 from fpvs_studio.core.contrast_modulation import SINUSOIDAL_NEUTRAL_BACKGROUND_COLOR
 from fpvs_studio.core.display_geometry import visual_angle_width_cm, visual_angle_width_px
 from fpvs_studio.core.enums import (
@@ -31,7 +33,7 @@ from fpvs_studio.core.enums import (
     ImageGeometryMode,
     StimulusModality,
 )
-from fpvs_studio.core.models import DisplayValidationReport
+from fpvs_studio.core.models import AttentionalBlinkStreamSettings, DisplayValidationReport
 from fpvs_studio.core.validation import (
     APPROVED_MONITOR_REFRESH_RATES_HZ,
     approved_monitor_refresh_rate,
@@ -298,7 +300,22 @@ class DisplaySettingsEditor(QWidget):
             )
             for mode in ordered_modes
         ]
-        return next((report for report in reports if not report.compatible), reports[0])
+        report = next((report for report in reports if not report.compatible), reports[0])
+        for condition in self._document.project.conditions:
+            settings = condition.attentional_blink
+            if isinstance(settings, AttentionalBlinkStreamSettings):
+                try:
+                    preview_attentional_blink_stream(
+                        refresh_hz=self.current_refresh_hz(), base_hz=protocol.base_hz,
+                        cycle_slots=protocol.oddball_every_n, soa_ms=settings.soa_ms,
+                        t2_slot_index=settings.t2_slot_index,
+                    )
+                except ValueError as error:
+                    return report.model_copy(update={
+                        "compatible": False, "errors": [str(error)],
+                        "frames_per_cycle": None, "timing_is_exact": False,
+                    })
+        return report
 
     def timing_is_compatible(self) -> bool:
         return self.timing_report().compatible and (
@@ -335,8 +352,11 @@ class DisplaySettingsEditor(QWidget):
             source.modality == StimulusModality.WORD
             for source in self._document.project.stimulus_sets
         )
-        _set_form_row_visible(self.form_layout, self.base_hz_spin, not image_design)
-        _set_form_row_visible(self.form_layout, self.oddball_every_n_spin, not image_design)
+        stream = is_attentional_blink_stream_project(self._document.project)
+        _set_form_row_visible(self.form_layout, self.base_hz_spin, not image_design and not stream)
+        _set_form_row_visible(
+            self.form_layout, self.oddball_every_n_spin, not image_design and not stream,
+        )
         cadence_label = self.form_layout.labelForField(self.oddball_every_n_spin)
         if isinstance(cadence_label, QLabel):
             cadence_label.setText("Target pair every" if ab else "Oddball every")
@@ -403,6 +423,18 @@ class DisplaySettingsEditor(QWidget):
                 f"{report.frames_per_cycle} frames/{item}; "
                 f"{frames_per_oddball} frames/{cadence}; "
                 f"requested {cadence} {protocol.oddball_hz:g} Hz; {duration_text}."
+            )
+        if is_attentional_blink_stream_project(self._document.project):
+            soas = ", ".join(
+                f"{condition.attentional_blink.soa_ms:g} ms"
+                for condition in self._document.project.conditions
+                if isinstance(condition.attentional_blink, AttentionalBlinkStreamSettings)
+            )
+            self.timing_summary_label.setText(
+                f"{protocol.base_hz:g} Hz character stream · SOAs {soas}. "
+                + (f"{report.frames_per_cycle} frames per character at {report.refresh_hz:g} Hz. "
+                   if report.frames_per_cycle is not None else "")
+                + "The stream uses equal whole-frame character durations."
             )
 
         verification_prefix = self._refresh_verification_prefix()

@@ -98,6 +98,10 @@ Even if the exporter is skeletal in this phase, define a stable shape for:
 - `responses.csv`
 - `frame_intervals.csv`
 - `trigger_log.csv`
+- `attentional_blink_stream_events_v1.csv` for native AB characters, including
+  symbol/phase/cycle, requested/achieved SOA and planned/observed onsets; retain legacy
+  image-pair event headers. Revalidate complete exact-grid character coverage and
+  target/condition markers in preflight before using the shared text frame loop.
 - `display_report.json`
 - detailed `task_responses.csv` and structured task results in full export mode
 - project-level `logs/task_responses.csv` in compact export mode

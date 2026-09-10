@@ -29,6 +29,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from fpvs_studio.core.attentional_blink_stream import describe_attentional_blink_stream
 from fpvs_studio.core.enums import (
     DutyCycleMode,
     ExperimentCategory,
@@ -36,7 +37,12 @@ from fpvs_studio.core.enums import (
     StimulusVariant,
 )
 from fpvs_studio.core.experiment_categories import category_conflict_condition_ids
-from fpvs_studio.core.models import Condition, ConditionPresentationSettings, StimulusSet
+from fpvs_studio.core.models import (
+    AttentionalBlinkStreamSettings,
+    Condition,
+    ConditionPresentationSettings,
+    StimulusSet,
+)
 from fpvs_studio.core.paths import stimuli_dir
 from fpvs_studio.core.project_separation import SeparatedProjects, separate_legacy_mixed_project
 from fpvs_studio.core.validation import (
@@ -447,6 +453,7 @@ class ConditionSetupStep(QWidget):
         presentation_row_layout.setSpacing(8)
         presentation_row_layout.addWidget(self.presentation_summary_label, 1)
         presentation_row_layout.addWidget(self.presentation_button)
+        self.appearance_row = presentation_row
         self.task_summary_label = QLabel(self)
         self.task_summary_label.setObjectName("setup_wizard_condition_task_summary")
         self.task_summary_label.setWordWrap(True)
@@ -539,15 +546,21 @@ class ConditionSetupStep(QWidget):
         self.instructions_label.setObjectName("setup_conditions_instructions_label")
         form.addRow("Condition Name", self.condition_name_edit)
         trigger_label = QLabel("Trigger Code", self)
+        self.trigger_label = trigger_label
         trigger_label.setBuddy(self.trigger_code_spin)
         form.addRow(trigger_label, identity_row)
-        form.addRow("Appearance", presentation_row)
+        self.appearance_label = QLabel("Appearance", self)
+        form.addRow(self.appearance_label, presentation_row)
         form.addRow("Participant Tasks", task_row)
         self.presentation_mode_label = QLabel("Presentation mode", self)
         self.presentation_mode_label.setBuddy(self.timing_template_combo)
         form.addRow(self.presentation_mode_label, mode_row)
         form.addRow(self.instructions_label, self.instructions_edit)
         details_section_layout.addLayout(form)
+        self.ab_stream_summary = QLabel(self)
+        self.ab_stream_summary.setObjectName("setup_ab_stream_summary")
+        self.ab_stream_summary.setWordWrap(True)
+        details_section_layout.addWidget(self.ab_stream_summary)
 
         self.all_conditions_section = QFrame(list_panel)
         self.all_conditions_section.setObjectName("setup_conditions_all_conditions_section")
@@ -745,13 +758,19 @@ class ConditionSetupStep(QWidget):
         with QSignalBlocker(self.condition_list):
             self.condition_list.clear()
             for condition in self._document.ordered_conditions():
+                settings = condition.attentional_blink
+                timing_label = (
+                    f"{self._document.project.settings.protocol.base_hz:g} Hz character stream"
+                    if isinstance(settings, AttentionalBlinkStreamSettings)
+                    else _timing_template_label(condition.duty_cycle_mode)
+                )
                 item = QListWidgetItem(
                     f"{condition.name}\n"
-                    f"{_timing_template_label(condition.duty_cycle_mode)} - "
+                    f"{timing_label} - "
                     f"{self._condition_status_text(condition)}"
                 )
                 item.setToolTip(
-                    f"{condition.name}\n{_timing_template_label(condition.duty_cycle_mode)}\n"
+                    f"{condition.name}\n{timing_label}\n"
                     f"{self._condition_status_text(condition)}"
                 )
                 item.setSizeHint(QSize(0, 48))
@@ -868,6 +887,14 @@ class ConditionSetupStep(QWidget):
         condition = self._current_condition()
         enabled = condition is not None
         ab = self._document.project.experiment_category == ExperimentCategory.ATTENTIONAL_BLINK
+        stream = condition is not None and isinstance(
+            condition.attentional_blink, AttentionalBlinkStreamSettings,
+        )
+        self.ab_stream_summary.setVisible(stream)
+        self.appearance_row.setVisible(not stream)
+        self.appearance_label.setVisible(not stream)
+        self.trigger_label.setText("T1 Trigger Code" if stream else "Trigger Code")
+        self.create_control_condition_button.setVisible(not stream)
         self.sources_row.hide()
         self.modality_label.setVisible(not ab)
         self.modality_combo.setVisible(not ab)
@@ -989,7 +1016,7 @@ class ConditionSetupStep(QWidget):
         self.oddball_words_count.setText(f"{oddball_set.word_count} words")
         word_mode = modality == StimulusModality.WORD
         self.sources_row.hide()
-        self.words_panel.setVisible(word_mode)
+        self.words_panel.setVisible(word_mode and not stream)
         self.base_import_button.setEnabled(enabled and not word_mode)
         self.oddball_import_button.setEnabled(enabled and not word_mode)
         self.create_control_condition_button.setToolTip(
@@ -1016,6 +1043,25 @@ class ConditionSetupStep(QWidget):
         self._set_checklist_statuses(named, trigger_ready, base_ready, oddball_ready)
         self._set_source_summary(base_set, role="base")
         self._set_source_summary(oddball_set, role="oddball")
+        if stream:
+            settings = condition.attentional_blink
+            assert isinstance(settings, AttentionalBlinkStreamSettings)
+            protocol = self._document.project.settings.protocol
+            description = describe_attentional_blink_stream(
+                base_hz=protocol.base_hz, cycle_slots=protocol.oddball_every_n,
+                soa_ms=settings.soa_ms, t2_slot_index=settings.t2_slot_index,
+            )
+            self.condition_list_hint.setText(
+                "Each condition uses the same digit and letter pools. "
+                "Change target separation and inspect the stream in Design."
+            )
+            self.ab_stream_summary.setText(
+                f"SOA {description.soa_ms:g} ms · {description.intervening_digits} digits "
+                f"between T1 and T2 · {description.item_ms:g} ms per character.\n\n"
+                "Design controls the shared character pools and target colors. "
+                "The post-condition questionnaire records whether any T2 letters were noticed; "
+                "it does not score individual target recognition."
+            )
 
     def _set_checklist_statuses(
         self,

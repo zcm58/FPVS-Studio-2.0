@@ -10,6 +10,11 @@ from fpvs_studio.core.experiment_categories import (
     category_conflict_condition_ids,
     experiment_category_label,
 )
+from fpvs_studio.core.models import AttentionalBlinkStreamSettings
+from fpvs_studio.gui.attentional_blink_stream_designer import (
+    AttentionalBlinkStreamDesigner,
+    is_letter_stream_project,
+)
 from fpvs_studio.gui.document import ProjectDocument
 from fpvs_studio.gui.experiment_designer_dialog import ExperimentDesignerWidget
 
@@ -27,13 +32,14 @@ class DesignSetupStep(QWidget):
         self._selected_id: str | None = None
         self._refreshing = False
         self._displayed_project = document.project
-        self.editor: ExperimentDesignerWidget | None = None
+        self.editor: ExperimentDesignerWidget | AttentionalBlinkStreamDesigner | None = None
         self.setObjectName("design_setup_step")
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(10)
         selector = QHBoxLayout()
-        selector.addWidget(QLabel("Condition", self))
+        self.condition_label = QLabel("Condition", self)
+        selector.addWidget(self.condition_label)
         self.condition_combo = QComboBox(self)
         self.condition_combo.setMinimumWidth(0)
         self.condition_combo.setAccessibleName("Condition to design")
@@ -119,6 +125,9 @@ class DesignSetupStep(QWidget):
             return False
         if condition_id == self._selected_id:
             return True
+        if isinstance(self.editor, AttentionalBlinkStreamDesigner):
+            self.editor.select_condition(condition_id)
+            return True
         if self.is_busy():
             self._show_message(
                 "Wait for the image folder to finish loading before changing conditions."
@@ -146,6 +155,10 @@ class DesignSetupStep(QWidget):
         self._refreshing = True
         try:
             conditions = self._document.ordered_conditions()
+            stream = is_letter_stream_project(self._document)
+            self.condition_label.setVisible(not stream)
+            self.condition_combo.setVisible(not stream)
+            self.category_label.setVisible(not stream)
             desired = self._selected_id
             if desired not in {condition.condition_id for condition in conditions}:
                 desired = conditions[0].condition_id if conditions else None
@@ -184,21 +197,32 @@ class DesignSetupStep(QWidget):
             self._show_message(self._category_message())
             return
         source = self._document.get_condition_stimulus_set(condition.condition_id, "base")
-        if source.modality == StimulusModality.WORD:
+        stream = isinstance(condition.attentional_blink, AttentionalBlinkStreamSettings)
+        if source.modality == StimulusModality.WORD and not stream:
             self._show_message(
                 "This condition uses word lists. Edit its words in Conditions and its "
                 "presentation rate in Timing. Image blocks are available for image conditions."
             )
             return
-        self.editor = ExperimentDesignerWidget(
-            self._document, condition_id=condition.condition_id, embedded=True, parent=self,
-        )
+        if stream:
+            self.editor = AttentionalBlinkStreamDesigner(
+                self._document, condition_id=condition.condition_id, parent=self,
+            )
+            self.editor.condition_selected.connect(self._stream_condition_selected)
+        else:
+            self.editor = ExperimentDesignerWidget(
+                self._document, condition_id=condition.condition_id, embedded=True, parent=self,
+            )
         self.editor_layout.addWidget(self.editor)
         self.editor.applied.connect(self.applied.emit)
         self.editor.draft_changed.connect(self.draft_changed.emit)
         self.editor.busy_changed.connect(self._editor_busy_changed)
         self.condition_combo.setEnabled(not self.editor.is_busy())
         self._displayed_project = self._document.project
+
+    def _stream_condition_selected(self, condition_id: str) -> None:
+        self._selected_id = condition_id
+        self._restore_selection()
 
     def _editor_busy_changed(self, busy: bool) -> None:
         self.condition_combo.setEnabled(not busy)

@@ -171,6 +171,7 @@ class StimulusEvent(FPVSBaseModel):
     is_blank: bool = False
     phase: AttentionalBlinkPhase | None = None
     slot_index: int | None = Field(default=None, ge=0)
+    cycle_index: int | None = Field(default=None, ge=0)
 
     @field_validator("stimulus_id")
     @classmethod
@@ -230,6 +231,7 @@ class StimulusEvent(FPVSBaseModel):
 class FixationStyleSpec(FPVSBaseModel):
     """Fixation rendering and response settings used during a run."""
 
+    show_cross: bool = True
     accuracy_task_enabled: bool = False
     participant_tutorial_enabled: bool = False
     default_color: str
@@ -285,6 +287,7 @@ class TriggerEvent(FPVSBaseModel):
 class AttentionalBlinkRunSpec(FPVSBaseModel):
     """Resolved subdivision of each terminal oddball slot."""
 
+    layout: Literal["within_slot"] = "within_slot"
     requested_t1_duration_ms: float = Field(gt=0, allow_inf_nan=False)
     requested_isi_ms: float = Field(gt=0, allow_inf_nan=False)
     t1_frames: int = Field(gt=0)
@@ -294,6 +297,31 @@ class AttentionalBlinkRunSpec(FPVSBaseModel):
     isi_mode: Literal["image", "blank"] = "image"
     isi_presentation: RolePresentationSpec | None = None
     t2_presentation: RolePresentationSpec
+
+
+class AttentionalBlinkStreamRunSpec(FPVSBaseModel):
+    """Independent target slots in an exactly timed, repeating character stream."""
+
+    layout: Literal["letter_stream"] = "letter_stream"
+    requested_soa_ms: float = Field(gt=0, allow_inf_nan=False)
+    achieved_soa_ms: float = Field(gt=0, allow_inf_nan=False)
+    lag: int = Field(ge=1)
+    frames_per_item: int = Field(gt=0)
+    cycle_slots: int = Field(ge=4, le=1000)
+    t1_slot_index: int = Field(ge=1)
+    t2_slot_index: int = Field(ge=2)
+    t2_trigger_code: StrictInt = Field(ge=1, le=255)
+    t2_presentation: RolePresentationSpec
+
+    @model_validator(mode="after")
+    def validate_target_positions(self) -> AttentionalBlinkStreamRunSpec:
+        if self.t2_slot_index - self.t1_slot_index != self.lag:
+            raise ValueError("Compiled target positions must match target lag.")
+        if self.t2_slot_index >= self.cycle_slots - 1:
+            raise ValueError("Compiled stream must retain digits after T2.")
+        if self.t2_presentation.text is None:
+            raise ValueError("Compiled letter streams require a text presentation for T2.")
+        return self
 
 
 class RunSpec(FPVSBaseModel):
@@ -309,18 +337,35 @@ class RunSpec(FPVSBaseModel):
     display: DisplayRunSpec
     fixation: FixationStyleSpec
     presentation: ConditionPresentationSpec | None = None
-    attentional_blink: AttentionalBlinkRunSpec | None = None
+    attentional_blink: AttentionalBlinkRunSpec | AttentionalBlinkStreamRunSpec | None = None
     pre_stream_fixation_frames: int = Field(default=0, ge=0)
     stimulus_sequence: list[StimulusEvent] = Field(default_factory=list)
     fixation_events: list[FixationEvent] = Field(default_factory=list)
     trigger_events: list[TriggerEvent] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_stream_schema(self) -> RunSpec:
+        if not self.fixation.show_cross and (
+            self.fixation_events
+            or self.fixation.accuracy_task_enabled
+            or self.fixation.participant_tutorial_enabled
+            or self.fixation.response_keys
+            or self.fixation.realized_target_count
+        ):
+            raise ValueError("Hidden fixation crosses cannot schedule fixation tasks or responses.")
+        if (isinstance(self.attentional_blink, AttentionalBlinkStreamRunSpec)
+                and self.schema_version != "1.3.0"):
+            raise ValueError("Letter-stream execution requires RunSpec schema 1.3.0.")
+        return self
 
 
 def event_presentation(run_spec: RunSpec, event: StimulusEvent) -> RolePresentationSpec | None:
     """Resolve T2's source geometry while retaining Oddball authoring rules."""
     if run_spec.presentation is None:
         return None
-    if event.phase == "separator" and run_spec.attentional_blink is not None:
+    if event.phase == "separator" and isinstance(
+        run_spec.attentional_blink, AttentionalBlinkRunSpec
+    ):
         if run_spec.attentional_blink.isi_presentation is not None:
             return run_spec.attentional_blink.isi_presentation
     if event.phase == "t2" and run_spec.attentional_blink is not None:

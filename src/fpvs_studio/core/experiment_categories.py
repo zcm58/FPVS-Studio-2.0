@@ -81,7 +81,7 @@ def validate_experiment_category(project: CategoryProject) -> list[ValidationIss
         )]
     conflicts = set(category_conflict_condition_ids(project))
     label = experiment_category_label(project.experiment_category)
-    return [
+    issues = [
         ValidationIssue(
             location=f"conditions.{condition.condition_id}.experiment_category",
             message=(
@@ -93,6 +93,19 @@ def validate_experiment_category(project: CategoryProject) -> list[ValidationIss
         for condition in project.conditions
         if condition.condition_id in conflicts
     ]
+    layouts = {
+        getattr(condition.attentional_blink, "layout", "within_slot")
+        for condition in project.conditions if condition.attentional_blink is not None
+    }
+    if len(layouts) > 1:
+        issues.append(ValidationIssue(
+            location="conditions.attentional_blink.layout",
+            message=(
+                "Letter-stream and within-slot attentional-blink designs must be in separate "
+                "experiments. Existing target schedules are preserved."
+            ),
+        ))
+    return issues
 
 
 def require_valid_experiment_category(project: CategoryProject) -> None:
