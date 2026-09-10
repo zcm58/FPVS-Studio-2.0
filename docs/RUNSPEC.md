@@ -22,7 +22,7 @@ SessionPlan -> runtime session flow -> engine.run_condition(RunSpec, ...)
 ```
 
 Both compilation entry points validate the entire project's locked experiment
-category before selecting conditions. FPVS-Oddball cannot contain active AB timing
+category before selecting conditions. FPVS Oddball Paradigm cannot contain active AB timing
 or T2 assignments; Attentional-Blink cannot contain ordinary oddball conditions.
 Selecting a compatible subset cannot bypass this check. FPVS remains an unsupported
 placeholder. See [Experiment categories](EXPERIMENT_CATEGORIES.md) for legacy
@@ -81,46 +81,13 @@ separate `RunSpec` entries with each condition's resolved frame counts. The cont
 envelope is derived from that count, so 4, 5, 6, and other supported requested base
 rates do not require mode-specific tables.
 
-### Experimental attentional-blink slots
+### Retired image-pair records
 
-`Condition.attentional_blink` enables the designer's custom within-slot target pair.
-It stores requested `t1_duration_ms`, `isi_ms`, and `t2_trigger_code`; the condition's
-`t2_stimulus_set_id` selects its T2 images. The project-wide base rate and oddball
-cadence still define the normal slots. T1 uses the existing Oddball pool, the one
-separator image uses the Base pool, and T2 uses its separately configured source.
-The separator fills the ISI; it is not a blank or another full-length normal slot.
-
-The designer defaults to 4 Hz and three Base slots followed by one target-pair slot.
-Each requested slot lasts 250 ms. With T1 = 50 ms and ISI = 50 ms, T2 automatically
-occupies the remaining 150 ms. This one-second cycle contains four slots but six
-image events. Its two target onsets are 100 ms apart (T1 duration + ISI).
-
-`core/attentional_blink.py` owns requested timing and whole-frame resolution; the
-compiler expands only the terminal oddball slot through
-`core/compiler_attentional_blink.py`. AB requires continuous image presentation.
-T1 and the separator must each have a finite positive requested duration and round
-half up to at least one frame. T2 takes the remaining slot frames and must also
-occupy at least one frame. The compiler rejects both requested overflow and frame
-rounding that leaves no T2 frame. It never stretches the normal slot to fit a pair.
-
-At 60 Hz the example compiles as follows; at 120 Hz every frame count doubles.
-
-| Event phase | Global slot index | Onset frame | Duration frames |
-| --- | --- | --- | --- |
-| `base` | 0 | 0 | 15 |
-| `base` | 1 | 15 | 15 |
-| `base` | 2 | 30 | 15 |
-| `t1` | 3 | 45 | 3 |
-| `separator` | 3 | 48 | 3 |
-| `t2` | 3 | 51 | 9 |
-
-`DisplayRunSpec.frames_per_stimulus` continues to mean frames per normal slot.
-`ConditionRunSpec.total_stimuli` counts the expanded image events; total stream frames
-remain cycle count × slots per cycle × frames per slot. Phase event indices are
-contiguous, and slot indices remain global across all repeated cycles. Standard
-conditions retain their existing event schedule. This experimental timing contract
-does not add a conventional RSVP lag model or automatically collect target-recognition
-responses; pre/post condition tasks remain owned by `SessionEntry`.
+`AttentionalBlinkRunSpec` and the old project settings remain decodable for historical
+records. Their within-slot T1/ISI/T2 design is unsupported: category validation blocks
+compilation, runtime preflight rejects old runs, and direct engine launch rejects them
+before opening a window. No image-pair compiler or ISI authoring route remains.
+Native character streams use `AttentionalBlinkStreamRunSpec` and onset-to-onset SOAs.
 
 ## Main fields
 
@@ -306,7 +273,7 @@ Native streams use seeded random character sampling with adjacent-digit and
 same-pair-letter exclusions. They do not promise the balanced image-bag policy below.
 The layout and exact-grid defaults are defined in [Experiment Categories](EXPERIMENT_CATEGORIES.md).
 
-For ordinary FPVS-Oddball, the compiler emits a seed-deterministic schedule:
+For ordinary FPVS Oddball Paradigm, the compiler emits a seed-deterministic schedule:
 
 - oddball every project-selected Nth normal slot (every 5th by default)
 - manifest-backed variant resolution when available

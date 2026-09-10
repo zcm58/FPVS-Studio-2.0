@@ -4,10 +4,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 from PySide6.QtCore import (
     QPoint,
     Qt,
 )
+from PySide6.QtGui import QColor, QPalette
 from PySide6.QtWidgets import (
     QApplication,
     QHeaderView,
@@ -79,13 +81,13 @@ def test_setup_wizard_exists_and_uses_single_column_shell_with_steps(
     _assert_setup_wizard_vertical_scrolling_disabled(wizard)
     assert wizard.shell.layout_mode == "single_column"
     assert wizard.shell.page_container.width_preset == "full"
-    assert wizard.shell.title_label.text() == "Setup Wizard"
+    assert wizard.shell.title_label.text() == "Set up your experiment"
     assert wizard.findChild(QListWidget, "setup_wizard_step_list") is None
     assert wizard.findChild(QLabel, "setup_wizard_progress_header") is None
     assert wizard.progress_steps.objectName() == "setup_wizard_progress_steps"
     assert wizard.step_status_badge.objectName() == "setup_wizard_ready_badge"
-    assert len(wizard.progress_steps.step_items) == 9
-    assert wizard.step_stack.count() == 9
+    assert len(wizard.progress_steps.step_items) == 8
+    assert wizard.step_stack.count() == 8
     assert wizard.project_step_surface.property("setupStepSurface") == "true"
     assert wizard.conditions_step_surface.property("setupStepSurface") == "true"
     assert wizard.conditions_step_surface.content.maximumWidth() == 1040
@@ -120,10 +122,10 @@ def test_setup_wizard_exists_and_uses_single_column_shell_with_steps(
     assert "Review" in step_metadata_text
     assert wizard.findChild(QWidget, "setup_wizard_step_1_project") is not None
     assert wizard.findChild(QWidget, "setup_wizard_step_2_conditions") is not None
-    assert wizard.findChild(QWidget, "setup_wizard_step_4_timing") is not None
-    assert wizard.findChild(QWidget, "setup_wizard_step_7_fixation") is not None
-    assert wizard.findChild(QWidget, "setup_wizard_step_8_response") is not None
-    assert wizard.findChild(QWidget, "setup_wizard_step_9_review") is not None
+    assert wizard.findChild(QWidget, "setup_wizard_step_4_timing_session") is not None
+    assert wizard.findChild(QWidget, "setup_wizard_step_6_fixation") is not None
+    assert wizard.findChild(QWidget, "setup_wizard_step_7_response") is not None
+    assert wizard.findChild(QWidget, "setup_wizard_step_8_review") is not None
     assert wizard.progress_steps.step_circles[0].property("setupProgressState") == "current"
     next_hint = wizard.findChild(QLabel, "setup_wizard_next_hint_label")
     assert next_hint is not None
@@ -164,7 +166,6 @@ def test_setup_wizard_exists_and_uses_single_column_shell_with_steps(
         "design",
         "experiment",
         "image_size",
-        "session",
         "fixation",
         "response",
         "review",
@@ -186,7 +187,7 @@ def test_setup_wizard_exists_and_uses_single_column_shell_with_steps(
     assert wizard.property("launchSurfaceRoot") == "true"
     assert wizard.step_card.property("launchSurfaceFrame") == "true"
     assert wizard.step_card.property("sectionCard") == "false"
-    assert wizard.step_card.property("wizardProjectStepFrame") == "false"
+    assert wizard.step_count_label.text() == "Step 1 of 8"
     assert 'QFrame[launchSurfaceFrame="true"]' in wizard.styleSheet()
     assert "QFrame#non_home_shell_content_frame" in wizard.styleSheet()
     assert "QWidget#page_container_scroll_content" in wizard.styleSheet()
@@ -194,7 +195,7 @@ def test_setup_wizard_exists_and_uses_single_column_shell_with_steps(
     assert wizard.step_card.isAncestorOf(wizard.step_content_anchor)
     assert wizard.step_content_anchor.isAncestorOf(wizard.content_stack)
     assert wizard.step_card.sizePolicy().verticalPolicy() == QSizePolicy.Policy.Expanding
-    assert wizard.step_card.maximumHeight() <= 552
+    assert wizard.step_card.maximumHeight() <= wizard.shell.page_container.scroll_area.height()
     assert wizard.progress_panel_shell.sizePolicy().verticalPolicy() == (QSizePolicy.Policy.Fixed)
     progress_top = wizard.progress_panel_shell.mapTo(
         wizard.step_card,
@@ -206,14 +207,19 @@ def test_setup_wizard_exists_and_uses_single_column_shell_with_steps(
     assert window.run_page.shell.footer_strip.isVisible() is False
 
 
+@pytest.mark.parametrize("dark", [False, True])
 def test_setup_wizard_compact_steps_do_not_clip_visible_content(
     qtbot,
+    qapp,
     controller: StudioController,
     tmp_path: Path,
+    dark: bool,
 ) -> None:
+    previous_palette = qapp.palette()
+    qapp.setPalette(QPalette(QColor("#202124" if dark else "#f4f7fb")))
     _, window = _open_created_project(controller, qtbot, tmp_path, "Setup No Clip")
     wizard = window.setup_wizard_page
-    window.resize(1120, 720)
+    window.resize(1120, 820)
     window.show_setup_wizard()
     QApplication.processEvents()
 
@@ -227,13 +233,16 @@ def test_setup_wizard_compact_steps_do_not_clip_visible_content(
         "design",
         "experiment",
         "image_size",
-        "session",
         "fixation",
         "response",
         "review",
     ):
         wizard.open_wizard(step_key=step_key)
         QApplication.processEvents()
+        assert wizard.step_count_label.text() == f"Step {wizard._active_step_index + 1} of 8"
+        assert wizard.step_count_label.isVisible()
+        assert wizard.shell.title_label.alignment() & Qt.AlignmentFlag.AlignLeft
+        assert "border-top" not in wizard.styleSheet()
         _assert_setup_wizard_vertical_scrolling_disabled(wizard)
         assert wizard.shell.page_container.scroll_area.verticalScrollBar().maximum() == 0
         _assert_visible_children_within_parent(wizard.step_stack.currentWidget())
@@ -248,9 +257,8 @@ def test_setup_wizard_compact_steps_do_not_clip_visible_content(
             assert wizard.fixation_schedule_editor.pre_stream_fixation_spin.isVisible()
             assert wizard.fixation_schedule_editor.pre_stream_fixation_note.isVisible()
 
-        if step_key != "design":
-            frame_heights.append(wizard.step_card.height())
-            frame_tops.append(wizard.step_card.mapTo(wizard, wizard.step_card.rect().topLeft()).y())
+        frame_heights.append(wizard.step_card.height())
+        frame_tops.append(wizard.step_card.mapTo(wizard, wizard.step_card.rect().topLeft()).y())
         progress_tops.append(
             wizard.progress_panel_shell.mapTo(
                 wizard.step_card,
@@ -282,6 +290,7 @@ def test_setup_wizard_compact_steps_do_not_clip_visible_content(
     assert len(set(progress_tops)) == 1
     assert len(set(back_button_lefts)) == 1
     assert progress_tops[0] <= 12
+    qapp.setPalette(previous_palette)
 
 
 def test_major_tabs_share_page_container_width_presets(
@@ -333,7 +342,7 @@ def test_page_headers_use_home_left_alignment_and_non_home_center_alignment(
     )
     assert window.home_page.current_project_header.alignment() & Qt.AlignmentFlag.AlignLeft
     assert window.home_page.current_project_subtitle.alignment() & Qt.AlignmentFlag.AlignLeft
-    assert window.setup_wizard_page.shell.title_label.alignment() & Qt.AlignmentFlag.AlignCenter
+    assert window.setup_wizard_page.shell.title_label.alignment() & Qt.AlignmentFlag.AlignLeft
     assert window.conditions_page.embedded is True
     assert window.assets_page.shell.title_label.alignment() & Qt.AlignmentFlag.AlignCenter
 
@@ -573,7 +582,7 @@ def test_edit_setup_stepper_can_jump_to_any_step(
     QApplication.processEvents()
 
     guide = reopened.setup_wizard_page
-    qtbot.mouseClick(guide.progress_steps.step_circles[7], Qt.MouseButton.LeftButton)
+    qtbot.mouseClick(guide.progress_steps.step_circles[6], Qt.MouseButton.LeftButton)
     assert guide.step_stack.currentWidget() is guide.response_step_surface
 
     qtbot.mouseClick(guide.progress_steps.step_circles[1], Qt.MouseButton.LeftButton)

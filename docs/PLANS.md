@@ -13,7 +13,6 @@ Use this page to find planning material before making feature-sized changes.
 
 Current implementation:
 
-- `exec-plans/active/setup-ux-design-refinement.md`
 - `exec-plans/active/bounded-updater-storage-and-clean-upgrades.md`
 
 Concrete planned work:
@@ -35,6 +34,10 @@ luminance/RMS algorithm investigation instead of duplicating its scientific deci
 
 Completed plans are historical implementation notes. Read their directory only when
 the current contracts do not explain why a landed decision exists.
+
+Recent completion: [Setup UX refinement](exec-plans/completed/setup-ux-design-refinement.md).
+
+Recent completion: [Retire Attentional-Blink image pairs](exec-plans/completed/retire-attentional-blink-image-pairs.md).
 
 Recent completion: [Attentional-Blink letter stream study](exec-plans/completed/attentional-blink-letter-stream-study.md).
 Also completed: [Attentional-Blink fixation visibility](exec-plans/completed/attentional-blink-fixation-visibility.md).

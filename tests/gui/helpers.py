@@ -89,8 +89,8 @@ def list_widget_text(list_widget: QListWidget) -> str:
 
 
 def assert_balanced_setup_stepper(wizard: Any) -> None:
-    assert wizard.progress_panel.maximumWidth() == 1120
-    assert wizard.progress_panel.width() <= 1120
+    assert wizard.progress_panel.maximumWidth() == 1400
+    assert wizard.progress_panel.width() <= min(1400, wizard.width())
     circle_centers: list[int] = []
     for circle, label in zip(
         wizard.progress_steps.step_circles,

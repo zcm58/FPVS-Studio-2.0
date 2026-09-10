@@ -17,15 +17,15 @@ backend-driven.
 - Preserve the Home/Setup Wizard workflow: Home is the returning-user launch surface;
   detailed setup widgets should be reached through the guided wizard, not new top-level
   tabs.
-- Keep the nine guided steps in order: Project, Conditions, Design, Timing, Image Size,
-  Session, Fixation, Response, Review. Budget all steps for `1120x820` without required
+- Keep the eight guided steps in order: Project, Conditions, Design, Timing & Session,
+  Image Size, Fixation, Response, Review. Budget all steps for `1120x820` without required
   scrolling. Timing retains the `experiment` navigation key for internal callers.
 - Preserve Home setup actions: ready projects expose `Edit Setup`, incomplete projects
   expose `Complete Setup`, and first-time setup opens at the earliest incomplete step
   without enabling arbitrary step jumps.
 - New-experiment Setup asks only category first; name/folder/template follow. Category
   is locked after creation. FPVS is disabled Coming soon. Reuse the visual editor in
-  Design; only legacy image-pair Attentional-Blink exposes ISI controls. New letter
+  Design; image-pair AB and its ISI editor are retired. Attentional-Blink letter
   streams expose shared character pools and onset-to-onset SOAs. Core guards category rules.
 - Keep condition modality authoring in Conditions. Image folders belong in Design;
   oddball word conditions keep typed base/oddball word-list editors in Conditions.

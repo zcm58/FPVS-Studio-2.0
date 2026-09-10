@@ -5,9 +5,9 @@ experiment. Supported values and behavior are:
 
 | Category | Authoring and playback |
 | --- | --- |
-| FPVS | Base-only concept; disabled Coming soon choice. Creation and compilation are blocked. |
-| FPVS-Oddball | Existing image/word oddball protocols, presentation modes, tasks and runtime behavior. |
-| Attentional-Blink | Continuous 10 Hz digit streams with letter targets at 100, 300, and 500 ms SOAs. Existing image-pair designs retain their within-slot ISI editor and playback. |
+| Standard FPVS | Base-only concept; disabled Coming soon choice. Creation and compilation are blocked. |
+| FPVS Oddball Paradigm | Existing image/word oddball protocols, presentation modes, tasks and runtime behavior. |
+| Attentional-Blink | Continuous 10 Hz digit streams with letter targets at 100, 300, and 500 ms SOAs. Image pairs are unsupported. |
 
 ## Creation and shared Setup
 
@@ -18,7 +18,7 @@ experiment is created and appears read-only on Project. Changing category requir
 creating a new experiment. Templates carry their own category and cannot change an
 experiment's category. Editing a template preserves that category and its cadence.
 
-The guided steps are Project, Conditions, Design, Timing, Image Size, Session,
+The guided steps are Project, Conditions, Design, Timing & Session, Image Size,
 Fixation, Response and Review, fitting `1120x820`. Character Size replaces Image Size
 for native letter streams. Conditions handles identity,
 participant instructions/tasks and existing oddball word lists. Design embeds the
@@ -26,6 +26,9 @@ shared visual image editor and image-folder selection for the selected condition
 Image intake/normalization occurs when advancing from Design. Word-list presentation
 rates remain editable in Timing. Shared display, session, fixation and response
 surfaces retain their existing ownership.
+
+The fixation cross is off by default. Users can enable it in Setup > Fixation;
+opening an existing project preserves its saved choice. Oddball defaults are unchanged.
 
 New AB experiments select **Digits & letter targets** and start with three conditions:
 
@@ -56,10 +59,11 @@ block reports, not target-identification accuracy or evidence of unconscious pro
 The repeating FPVS extension requires behavioral and physical timing validation.
 Both targets repeat at 0.5 Hz; different event markers do not separate their frequency tags.
 
-The **Image pairs (legacy)** template retains 4 Hz, four-slot creation and the
-T1/separator/T2 compound slot (50/50/150 ms by default). Existing saved projects keep
-their settings and image folders. Blank or image ISI remains available only there.
-An experiment cannot mix the letter-stream and within-slot layouts.
+Image-pair AB templates, including saved custom copies, are not offered or applicable.
+Old project and RunSpec records remain readable for identification, without rewriting
+or deleting their images. They cannot be saved, exported, compiled or run. Create a
+new **Digits & letter targets** experiment; timing and stimuli are never silently converted.
+Mixed projects containing retired image pairs cannot use the separation action.
 
 Design edits apply before switching conditions, leaving the step or saving. Invalid
 drafts remain visible for correction. Folder imports continue to use workers and
@@ -71,7 +75,7 @@ pages keep source counts current without starting hidden image jobs.
 ## Legacy projects and separation
 
 Project schema `1.4.0` adds category ownership. Older files without a category infer
-Attentional-Blink when any condition contains AB timing, otherwise FPVS-Oddball.
+Attentional-Blink when any condition contains AB timing, otherwise FPVS Oddball Paradigm.
 Opening migrates in memory without rewriting files. The old shared built-in template
 ID is not used to infer category.
 
@@ -80,8 +84,8 @@ block mixed projects at save, configuration export, bundle validation and compil
 including attempts to compile only a compatible subset. GUI edits cannot introduce
 another category or silently convert an old oddball condition into AB timing.
 
-For a mixed AB/oddball project, Conditions offers **Separate oddball conditions...**.
-After the user chooses this action, the backend creates a new sibling FPVS-Oddball
+For a mixed native letter-stream AB/oddball project, Conditions offers **Separate oddball conditions...**.
+After the user chooses this action, the backend creates a new sibling FPVS Oddball Paradigm
 experiment, copies project-contained image/task assets, and saves the original with
 only its AB conditions. Cadence and condition timing are retained. Source images and
 historical run records in the original are untouched; old runs are not attributed to
@@ -93,7 +97,7 @@ Missing populated folders, missing referenced manifest images and a manifest fro
 another project stop separation before creating files. Empty draft pools are allowed.
 Failed copies leave the original JSON intact and remove only their new destination.
 
-An old FPVS-Oddball project with only dormant T2 assignments offers **Clear unused
+An old FPVS Oddball Paradigm project with only dormant T2 assignments offers **Clear unused
 T2 assignments...** instead. Confirmation removes those unused associations while
 retaining every image file, source set and ordinary setting. Saving remains explicit.
 
@@ -109,7 +113,7 @@ retaining every image file, source set and ordinary setting. Saving remains expl
   `core/attentional_blink_stream.py` describes the exact character grid;
   `core/compiler_attentional_blink_stream.py` compiles native character events.
 - Letter streams use project schema `1.5.0`, `.fpvsconfig` and `RunSpec` `1.3.0`.
-  Legacy project and run versions remain supported without changing saved timing.
+  Legacy records remain decodable; retired image-pair layouts cannot run.
   Template-library schema `1.2.0` preserves explicit layout in custom profile copies.
 - The existing engine text cache and frame loop render character events. Runtime
   revalidates exact coverage and markers, and writes

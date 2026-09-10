@@ -288,7 +288,13 @@ def test_conditions_hide_oddball_word_editors_and_keep_questionnaire(qtbot, stre
     assert not step.presentation_button.isVisible()
     assert step.task_button.isVisible()
     assert "SOA 100 ms" in step.ab_stream_summary.text()
-    assert "post-condition questionnaire" in step.ab_stream_summary.text()
+    assert not step.ab_stream_summary.isVisible()
+    assert "target recognition" in step.task_button.toolTip()
+    assert step.condition_details_section.property("setupFlatSection") == "true"
+    assert step.trigger_code_spin.width() <= 160
+    assert step.add_condition_button.width() > step.duplicate_condition_button.width()
+    assert step.duplicate_condition_button.y() == step.remove_condition_button.y()
+    assert_visible_children_within_parent(step)
 
 
 def test_character_height_updates_native_text_not_image_width(qtbot, stream_document):
@@ -405,12 +411,34 @@ def test_all_stream_setup_steps_fit_default_window(
         wizard = window.setup_wizard_page
         for step_key in (
             "project", "conditions", "design", "experiment", "image_size",
-            "session", "fixation", "response", "review",
+            "fixation", "response", "review",
         ):
             wizard.open_wizard(step_key=step_key, allow_step_jumps=True)
             QApplication.processEvents()
             assert wizard._current_step_key() == step_key
             assert (window.width(), window.height()) == (1120, 820), step_key
+            assert wizard.step_count_label.text() == f"Step {wizard._active_step_index + 1} of 8"
+            assert wizard.step_count_label.isVisible()
+            assert wizard.shell.title_label.alignment() & Qt.AlignmentFlag.AlignLeft
+            assert "border-top" not in wizard.styleSheet()
+            for card in (
+                wizard.project_overview_editor.project_overview_card,
+                wizard.experiment_settings_card, wizard.image_size_settings_card,
+                wizard.session_settings_card, wizard.review_card,
+            ):
+                assert card.property("setupFlatSection") == "true"
+                if card.isVisible():
+                    assert card.title_label.isVisible() == (
+                        card in (wizard.experiment_settings_card, wizard.session_settings_card)
+                    )
+                    if card.subtitle_label is not None:
+                        assert not card.subtitle_label.isVisible()
+            surface = wizard.step_stack.currentWidget()
+            content = surface.content
+            assert abs(content.mapTo(surface, content.rect().center()).x()
+                       - surface.rect().center().x()) <= 2, step_key
+            assert abs(content.mapTo(surface, content.rect().center()).y()
+                       - surface.rect().center().y()) <= 2, step_key
             scroll = wizard.shell.page_container.scroll_area
             assert scroll.verticalScrollBar().maximum() == 0, step_key
             assert scroll.horizontalScrollBar().maximum() == 0, step_key
@@ -419,5 +447,14 @@ def test_all_stream_setup_steps_fit_default_window(
                 editor = wizard.image_display_size_editor
                 assert editor.character_height_edit.isVisible()
                 assert not editor.width_degrees_spin.isVisible()
+            if step_key == "review":
+                sections = {
+                    key: lines for key, _title, lines in wizard._review_checklist_sections()
+                }
+                assert "Digits and target letters" in sections["conditions"][0]
+                height = stream_document.project.settings.presentation.defaults.text_height
+                assert sections["image_size"][0] == (
+                    f"Character height: {height.values[0]:g} visual degrees"
+                )
     finally:
         qapp.setPalette(previous_palette)

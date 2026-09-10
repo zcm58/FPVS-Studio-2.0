@@ -12,6 +12,21 @@ from typing import Protocol
 from fpvs_studio.core.enums import ExperimentCategory
 from fpvs_studio.core.models import ValidationIssue
 
+RETIRED_IMAGE_PAIR_MESSAGE = (
+    "Image-pair attentional-blink designs are no longer supported. "
+    "Create a new Attentional-Blink experiment using Digits & letter targets. "
+    "The original project and image files have not been converted or deleted."
+)
+
+
+def has_retired_image_pair_design(project: CategoryProject) -> bool:
+    """Recognize saved image-pair settings without changing historical records."""
+    return any(
+        condition.attentional_blink is not None
+        and getattr(condition.attentional_blink, "layout", "within_slot") != "letter_stream"
+        for condition in project.conditions
+    )
+
 
 class CategoryCondition(Protocol):
     """Category-relevant fields shared by project and portable config conditions."""
@@ -46,8 +61,8 @@ def experiment_category_label(category: ExperimentCategory) -> str:
     """Return the user-facing name of an experiment category."""
 
     return {
-        ExperimentCategory.FPVS: "FPVS",
-        ExperimentCategory.FPVS_ODDBALL: "FPVS-Oddball",
+        ExperimentCategory.FPVS: "Standard FPVS",
+        ExperimentCategory.FPVS_ODDBALL: "FPVS Oddball Paradigm",
         ExperimentCategory.ATTENTIONAL_BLINK: "Attentional-Blink",
     }[category]
 
@@ -77,7 +92,10 @@ def validate_experiment_category(project: CategoryProject) -> list[ValidationIss
     if project.experiment_category == ExperimentCategory.FPVS:
         return [ValidationIssue(
             location="experiment_category",
-            message="FPVS is coming soon. Create an FPVS-Oddball or Attentional-Blink experiment.",
+            message=(
+                "Standard FPVS is coming soon. "
+                "Choose FPVS Oddball Paradigm or Attentional-Blink."
+            ),
         )]
     conflicts = set(category_conflict_condition_ids(project))
     label = experiment_category_label(project.experiment_category)
@@ -93,6 +111,11 @@ def validate_experiment_category(project: CategoryProject) -> list[ValidationIss
         for condition in project.conditions
         if condition.condition_id in conflicts
     ]
+    if has_retired_image_pair_design(project):
+        issues.append(ValidationIssue(
+            location="conditions.attentional_blink.layout",
+            message=RETIRED_IMAGE_PAIR_MESSAGE,
+        ))
     layouts = {
         getattr(condition.attentional_blink, "layout", "within_slot")
         for condition in project.conditions if condition.attentional_blink is not None

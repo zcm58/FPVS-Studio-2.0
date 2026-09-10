@@ -8,9 +8,9 @@ import json
 import pytest
 
 from fpvs_studio.core.enums import ExperimentCategory, StimulusVariant
-from fpvs_studio.core.models import AttentionalBlinkSettings
 from fpvs_studio.core.paths import slugify_project_name
 from fpvs_studio.core.project_separation import separate_legacy_mixed_project
+from fpvs_studio.core.project_service import build_starter_project
 from fpvs_studio.core.serialization import load_project_file
 from fpvs_studio.preprocessing.manifest import create_empty_manifest
 from fpvs_studio.preprocessing.models import (
@@ -25,22 +25,22 @@ from fpvs_studio.preprocessing.models import (
 @pytest.fixture
 def mixed_project(sample_project, sample_project_root):
     original = sample_project.conditions[0]
-    ab = original.model_copy(update={
-        "condition_id": "target-pairs",
-        "name": "Target pairs",
-        "attentional_blink": AttentionalBlinkSettings(),
-        "t2_stimulus_set_id": original.oddball_stimulus_set_id,
-    }, deep=True)
+    stream = build_starter_project(
+        "Letters", experiment_category=ExperimentCategory.ATTENTIONAL_BLINK,
+    )
+    ab = stream.conditions[0].model_copy(update={"condition_id": "target-letters"}, deep=True)
     project = sample_project.model_copy(update={
+        "schema_version": stream.schema_version,
         "experiment_category": ExperimentCategory.ATTENTIONAL_BLINK,
         "conditions": [ab, original],
+        "stimulus_sets": [*sample_project.stimulus_sets, *stream.stimulus_sets],
+        "task_modules": stream.task_modules,
     }, deep=True)
-    project.settings.protocol.base_hz = 4
-    project.settings.protocol.oddball_every_n = 4
+    project.settings.protocol = stream.settings.protocol.model_copy(deep=True)
     path = sample_project_root / "project.json"
     legacy = project.model_dump(mode="json")
     legacy.pop("experiment_category")
-    legacy["schema_version"] = "1.3.0"
+    legacy["schema_version"] = "1.5.0"
     path.write_text(json.dumps(legacy), encoding="utf-8")
     (sample_project_root / "logs").mkdir(exist_ok=True)
     (sample_project_root / "logs" / "old-run.txt").write_text("previous results")

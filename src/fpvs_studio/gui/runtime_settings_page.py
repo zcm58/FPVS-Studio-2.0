@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
     QFormLayout,
     QHBoxLayout,
     QLabel,
+    QLayout,
     QPushButton,
     QSizePolicy,
     QSpinBox,
@@ -43,6 +44,7 @@ from fpvs_studio.engines.registry import create_engine
 from fpvs_studio.gui.components import (
     SectionCard,
     apply_image_size_preview_dialog_theme,
+    configure_setup_form,
     mark_secondary_action,
     refresh_widget_style,
 )
@@ -122,8 +124,7 @@ class DisplaySettingsEditor(QWidget):
         mark_secondary_action(self.detect_refresh_button)
 
         self.refresh_verification_notice = QLabel(
-            "Verification briefly opens a fullscreen display check on the primary monitor. "
-            "Your experiment will not start.",
+            "Opens a brief fullscreen check; your experiment will not start.",
             self,
         )
         self.refresh_verification_notice.setObjectName(
@@ -196,6 +197,7 @@ class DisplaySettingsEditor(QWidget):
         )
         self.timing_status_label.setWordWrap(True)
         self.timing_status_label.setMinimumWidth(0)
+        self.timing_status_label.setMinimumHeight(34)
         self.timing_status_label.setProperty("statusBadge", "true")
 
         self.summary_value_labels: dict[str, QLabel] = {}
@@ -209,21 +211,27 @@ class DisplaySettingsEditor(QWidget):
         refresh_controls_layout = QHBoxLayout(refresh_controls)
         refresh_controls_layout.setContentsMargins(0, 0, 0, 0)
         refresh_controls_layout.setSpacing(8)
+        refresh_controls_layout.setSizeConstraint(QLayout.SizeConstraint.SetMinimumSize)
+        self.refresh_hz_combo.setMaximumWidth(240)
         refresh_controls_layout.addWidget(self.refresh_hz_combo, 1)
         refresh_controls_layout.addWidget(self.detect_refresh_button)
-        self.form_layout.addRow("Monitor refresh", refresh_controls)
+        refresh_controls_layout.addStretch(1)
+        self.runtime_background_color_combo.setMinimumWidth(240)
+        self.form_layout.addRow("Monitor refresh rate", refresh_controls)
         self.form_layout.addRow(self.refresh_verification_notice)
         self.form_layout.addRow("Base rate", self.base_hz_spin)
         self.form_layout.addRow("Oddball every", self.oddball_every_n_spin)
         self.form_layout.addRow("Background", self.runtime_background_color_combo)
         self.form_layout.addRow(self.contrast_background_note_label)
-        self.form_layout.addRow(self.timing_summary_label)
+        self.timing_summary_label.hide()
         self.form_layout.addRow(self.timing_status_label)
         if show_scope_label:
             self.form_layout.addRow("", self.runtime_background_scope_label)
         else:
             self.runtime_background_scope_label.setText("")
             self.runtime_background_scope_label.setVisible(False)
+
+        configure_setup_form(self.form_layout, stacked=True)
 
         self.summary_container = QWidget(self)
         self.summary_layout = QFormLayout(self.summary_container)
@@ -437,11 +445,13 @@ class DisplaySettingsEditor(QWidget):
                 + "The stream uses equal whole-frame character durations."
             )
 
+        self.refresh_hz_combo.setToolTip(self.timing_summary_label.text())
+        self.timing_summary_label.hide()
         verification_prefix = self._refresh_verification_prefix()
         if self._refresh_probe_task is not None:
             self.timing_status_label.setProperty("statusState", "info")
             self.timing_status_label.setText(
-                "Reading the active display mode and checking PsychoPy frame stability..."
+                "Checking display timing..."
             )
             self.timing_status_label.setVisible(True)
         elif report.errors:
@@ -455,7 +465,7 @@ class DisplaySettingsEditor(QWidget):
         elif self._require_refresh_verification and not self.refresh_is_verified():
             self.timing_status_label.setProperty("statusState", "warning")
             self.timing_status_label.setText(
-                "Verification required: choose Verify display before continuing."
+                "Verify this display to continue."
             )
             self.timing_status_label.setVisible(True)
         elif report.warnings:
@@ -464,8 +474,7 @@ class DisplaySettingsEditor(QWidget):
             realized_oddball = report.realized_oddball_hz or protocol.oddball_hz
             self.timing_status_label.setText(
                 f"{verification_prefix}Approximate timing: whole-frame scheduling realizes "
-                f"{realized_base:.6g} Hz stream and {realized_oddball:.6g} Hz {cadence}. "
-                "Runtime QC reports dropped or late frames separately."
+                f"{realized_base:.6g} Hz stream and {realized_oddball:.6g} Hz {cadence}."
             )
             self.timing_status_label.setVisible(True)
         elif verification_prefix:
@@ -478,16 +487,18 @@ class DisplaySettingsEditor(QWidget):
         refresh_widget_style(self.timing_status_label)
 
     def _refresh_verification_prefix(self) -> str:
+        self.timing_status_label.setToolTip("")
         if not self.refresh_is_verified() or self._refresh_verification is None:
             return ""
         verification = self._refresh_verification
         display_mode = verification.display_mode
-        return (
-            f"Verified: {display_mode.platform_name} mode {display_mode.status_text}; "
-            "PsychoPy observed "
-            f"{verification.psychopy_measured_hz:.3f} Hz; applied "
-            f"{verification.approved_hz:g} Hz. "
+        self.timing_status_label.setToolTip(
+            f"{display_mode.platform_name} mode {display_mode.status_text}; "
+            f"PsychoPy observed {verification.psychopy_measured_hz:.3f} Hz; "
+            f"applied {verification.approved_hz:g} Hz. "
+            "Runtime QC reports dropped or late frames separately."
         )
+        return f"Display verified at {verification.approved_hz:g} Hz. "
 
     def _sync_refresh_combo(self, preferred_refresh: float) -> None:
         with QSignalBlocker(self.refresh_hz_combo):
@@ -1011,6 +1022,7 @@ class ImageDisplaySizeEditor(QWidget):
         self.form_layout.addRow("Screen width (cm)", self.screen_width_spin)
         self.form_layout.addRow("Resolution width (px)", self.screen_width_px_spin)
         self.form_layout.addRow("Resolution height (px)", self.screen_height_px_spin)
+        configure_setup_form(self.form_layout)
 
         checkbox_row = QHBoxLayout()
         checkbox_row.setContentsMargins(0, 0, 0, 0)

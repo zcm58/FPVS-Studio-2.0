@@ -7,8 +7,10 @@ from PySide6.QtWidgets import QComboBox, QHBoxLayout, QLabel, QVBoxLayout, QWidg
 
 from fpvs_studio.core.enums import ExperimentCategory, StimulusModality
 from fpvs_studio.core.experiment_categories import (
+    RETIRED_IMAGE_PAIR_MESSAGE,
     category_conflict_condition_ids,
     experiment_category_label,
+    has_retired_image_pair_design,
 )
 from fpvs_studio.core.models import AttentionalBlinkStreamSettings
 from fpvs_studio.gui.attentional_blink_stream_designer import (
@@ -77,10 +79,12 @@ class DesignSetupStep(QWidget):
         self.status_label.setVisible(bool(message))
 
     def _category_message(self) -> str:
+        if has_retired_image_pair_design(self._document.project):
+            return RETIRED_IMAGE_PAIR_MESSAGE
         if self._document.project.experiment_category == ExperimentCategory.FPVS:
             return (
-                "FPVS design is coming soon. "
-                "Create an FPVS-Oddball or Attentional-Blink experiment."
+                "Standard FPVS design is coming soon. "
+                "Create an FPVS Oddball Paradigm or Attentional-Blink experiment."
             )
         if category_conflict_condition_ids(self._document.project):
             return (
@@ -193,7 +197,10 @@ class DesignSetupStep(QWidget):
         if condition is None:
             self._show_message(self._category_message())
             return
-        if condition_id in category_conflict_condition_ids(self._document.project):
+        if (
+            has_retired_image_pair_design(self._document.project)
+            or condition_id in category_conflict_condition_ids(self._document.project)
+        ):
             self._show_message(self._category_message())
             return
         source = self._document.get_condition_stimulus_set(condition.condition_id, "base")

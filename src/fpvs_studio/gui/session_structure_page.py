@@ -18,7 +18,7 @@ from PySide6.QtWidgets import (
 )
 
 from fpvs_studio.core.enums import InterConditionMode
-from fpvs_studio.gui.components import NonHomePageShell, SectionCard
+from fpvs_studio.gui.components import NonHomePageShell, SectionCard, configure_setup_form
 from fpvs_studio.gui.document import ProjectDocument
 from fpvs_studio.gui.window_helpers import (
     _prefixed_object_name,
@@ -72,13 +72,14 @@ class SessionStructureEditor(QWidget):
         self.generate_seed_button.setVisible(False)
 
         self.seed_help_label = QLabel(
-            "Condition order is randomized automatically for each launch.",
+            "Randomized",
             self,
         )
         self.seed_help_label.setObjectName(
             _prefixed_object_name(object_name_prefix, "random_order_seed_help_label")
         )
         self.seed_help_label.setWordWrap(True)
+        self.seed_help_label.setToolTip("A new condition order is generated for each launch.")
 
         self.inter_condition_mode_combo = QComboBox(self)
         self.inter_condition_mode_combo.setObjectName(
@@ -105,6 +106,7 @@ class SessionStructureEditor(QWidget):
             _prefixed_object_name(object_name_prefix, "continue_key_edit")
         )
         self.continue_key_edit.setEnabled(False)
+        self.continue_key_edit.setMaximumWidth(240)
 
         self.show_condition_title_checkbox = QCheckBox(
             "Keep condition names internal during experiment screens",
@@ -142,6 +144,8 @@ class SessionStructureEditor(QWidget):
             self.show_condition_title_checkbox,
         )
 
+        configure_setup_form(self.session_layout)
+
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
@@ -167,7 +171,7 @@ class SessionStructureEditor(QWidget):
     @staticmethod
     def _form_label(text: str) -> QLabel:
         label = QLabel(text)
-        label.setFixedWidth(132)
+        label.setMinimumWidth(132)
         label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         return label
 

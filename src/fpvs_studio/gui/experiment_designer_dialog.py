@@ -34,7 +34,10 @@ from fpvs_studio.core.attentional_blink import (
     preview_attentional_blink,
 )
 from fpvs_studio.core.enums import DutyCycleMode, ExperimentCategory
-from fpvs_studio.core.experiment_categories import category_conflict_condition_ids
+from fpvs_studio.core.experiment_categories import (
+    RETIRED_IMAGE_PAIR_MESSAGE,
+    category_conflict_condition_ids,
+)
 from fpvs_studio.core.experiment_design import describe_cycle, preview_cycle
 from fpvs_studio.core.models import AttentionalBlinkSettings, StimulusSet
 from fpvs_studio.core.run_spec import StimulusRole
@@ -93,18 +96,16 @@ class ExperimentDesignerWidget(QWidget):
         if condition_id in category_conflict_condition_ids(document.project):
             raise ValueError("Separate this condition into an experiment of the matching category.")
         if document.project.experiment_category == ExperimentCategory.FPVS:
-            raise ValueError("FPVS design is coming soon.")
+            raise ValueError("Standard FPVS design is coming soon.")
+        if document.project.experiment_category == ExperimentCategory.ATTENTIONAL_BLINK:
+            raise ValueError(RETIRED_IMAGE_PAIR_MESSAGE)
         self._embedded = embedded
         self._applying = False
         self._reported_busy = False
         self._reported_importing = False
         self._refresh_pending = False
         self._duty_cycle_mode = condition.duty_cycle_mode
-        self._mode = (
-            "attentional_blink"
-            if document.project.experiment_category == ExperimentCategory.ATTENTIONAL_BLINK
-            else "standard"
-        )
+        self._mode = "standard"
         self._changing = True
         self._task: BackgroundTask | None = None
         self._thumbnail_task: BackgroundTask | None = None

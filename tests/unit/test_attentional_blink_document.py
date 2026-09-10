@@ -8,13 +8,11 @@ import pytest
 from PIL import Image
 
 from fpvs_studio.core.enums import (
-    DutyCycleMode,
     ExperimentCategory,
     StimulusModality,
     StimulusVariant,
 )
 from fpvs_studio.core.models import AttentionalBlinkSettings, ProjectFile
-from fpvs_studio.core.serialization import load_project_file, save_project_file
 from fpvs_studio.gui.document_conditions import DocumentConditionMixin
 from fpvs_studio.gui.document_stimuli import DocumentStimulusMixin
 from fpvs_studio.gui.document_support import DocumentError, validated_copy
@@ -101,24 +99,6 @@ def test_t2_import_preserves_ab_timing_and_persists_manifest_and_reference(docum
     assert document.get_condition_stimulus_set("faces", "t1").set_id == "oddball-set"
 
 
-def test_apply_ab_saves_and_rejects_switch_to_oddball(document):
-    source = _attach_t2(document)
-    document.get_condition("faces").duty_cycle_mode = DutyCycleMode.BLANK_50
-    _apply_ab(document)
-    assert document._project.settings.protocol.base_hz == 4
-    assert document._project.settings.protocol.oddball_every_n == 4
-    assert document.get_condition("faces").duty_cycle_mode == DutyCycleMode.CONTINUOUS
-    path = document._project_root / "project.json"
-    save_project_file(document._project, path)
-    restored = load_project_file(path)
-    assert restored.conditions[0].attentional_blink == AttentionalBlinkSettings()
-    with pytest.raises(DocumentError, match="locked experiment type"):
-        document.apply_experiment_design("faces", base_hz=6, slot_count=5, attentional_blink=None)
-    assert document.get_condition("faces").attentional_blink == AttentionalBlinkSettings()
-    assert document.get_condition("faces").t2_stimulus_set_id == source.set_id
-    assert document.get_stimulus_set(source.set_id) is not None
-
-
 @pytest.mark.parametrize("case", ["missing_t2", "marker_collision", "overfull", "no_base_slot"])
 def test_invalid_ab_apply_is_atomic(document, case):
     if case != "missing_t2":
@@ -140,73 +120,20 @@ def test_invalid_ab_apply_is_atomic(document, case):
     assert document.replacements == replacements
 
 
-def test_global_cadence_change_cannot_invalidate_another_active_ab_condition(document):
-    _attach_t2(document)
-    _apply_ab(document)
-    document.update_condition("faces", attentional_blink=AttentionalBlinkSettings(isi_ms=120))
-    second_id = document.create_condition(name="Other target pairs")
-    second = document.get_condition(second_id)
-    second.base_stimulus_set_id = document.get_condition("faces").base_stimulus_set_id
-    second.oddball_stimulus_set_id = document.get_condition("faces").oddball_stimulus_set_id
-    second.t2_stimulus_set_id = document.get_condition("faces").t2_stimulus_set_id
-    before = document._project.model_copy(deep=True)
-    with pytest.raises(ValueError):
-        document.apply_experiment_design(
-            second_id,
-            base_hz=6,
-            slot_count=5,
-            attentional_blink=AttentionalBlinkSettings(),
-        )
-    assert document._project == before
-
-
-def test_apply_accepts_imported_sources_pending_normalization(document):
-    _attach_t2(document, mixed=True)
-    assert document.get_condition_stimulus_set("faces", "t2").resolution is None
-    _apply_ab(document)
-    assert document.get_condition("faces").attentional_blink is not None
-
-
-def test_duplicate_ab_uses_dedicated_empty_t2_set_and_copied_timing(document):
-    source = _attach_t2(document)
-    _apply_ab(document)
-    duplicate_id = document.duplicate_condition("faces")
-    duplicate = document.get_condition(duplicate_id)
-    assert duplicate.t2_stimulus_set_id != source.set_id
-    assert duplicate.attentional_blink == AttentionalBlinkSettings()
-    assert document.get_condition_stimulus_set(duplicate_id, "t2").image_count == 0
-    duplicate.attentional_blink.isi_ms = 70
-    assert document.get_condition("faces").attentional_blink.isi_ms == 50
-    document.remove_condition(duplicate_id)
-    assert document.get_stimulus_set(duplicate.t2_stimulus_set_id) is None
-    assert document.get_stimulus_set(source.set_id) is not None
-
-
 def test_remove_condition_keeps_t2_source_referenced_by_another_condition(document):
     source = _attach_t2(document)
-    other_id = document.create_condition(name="Other condition")
+    other_id = "other"
+    document._project.conditions.append(document.get_condition("faces").model_copy(
+        update={"condition_id": other_id}, deep=True,
+    ))
     document.get_condition(other_id).t2_stimulus_set_id = source.set_id
     document.remove_condition("faces")
     assert document.get_condition_stimulus_set(other_id, "t2").set_id == source.set_id
     assert (document._project_root / source.source_dir).is_dir()
 
 
-def test_control_condition_reuses_t2_source_with_independent_timing(document):
-    source = _attach_t2(document)
-    _apply_ab(document)
-    control_id = document.create_control_condition("faces", variant=StimulusVariant.GRAYSCALE)
-    control = document.get_condition(control_id)
-    assert control.t2_stimulus_set_id == source.set_id
-    assert control.attentional_blink == AttentionalBlinkSettings()
-    control.attentional_blink.t1_duration_ms = 70
-    assert document.get_condition("faces").attentional_blink.t1_duration_ms == 50
-
-
-@pytest.mark.parametrize("enabled", [True, False])
-def test_modality_switch_rejects_t2_images_even_before_ab_apply(document, enabled):
+def test_modality_switch_rejects_legacy_t2_images(document):
     _attach_t2(document)
-    if enabled:
-        _apply_ab(document)
     before = document._project.model_copy(deep=True)
     with pytest.raises(DocumentError, match="image sources"):
         document.set_condition_stimulus_modality("faces", modality=StimulusModality.WORD)
@@ -237,7 +164,10 @@ def test_replacing_t2_discards_only_unreferenced_model_and_manifest_entries(docu
 
 def test_replacing_t2_keeps_source_and_manifest_used_by_another_condition(document):
     original = _attach_t2(document)
-    other_id = document.create_condition(name="Other")
+    other_id = "other"
+    document._project.conditions.append(document.get_condition("faces").model_copy(
+        update={"condition_id": other_id}, deep=True,
+    ))
     document.get_condition(other_id).t2_stimulus_set_id = original.set_id
     replacement, summary = _source(document._project_root, set_id="replacement-t2")
     document.apply_designer_source("faces", role="t2", stimulus_set=replacement, summary=summary)
@@ -284,25 +214,6 @@ def test_source_apply_manifest_write_failure_preserves_document(document, monkey
     assert document.manifest_changed.count == 0
 
 
-def test_new_ab_condition_has_four_image_pools_and_no_oddball_mode_switch(document):
-    condition_id = document.create_condition(name="Short interval")
-    condition = document.get_condition(condition_id)
-    assert condition.attentional_blink == AttentionalBlinkSettings()
-    assert condition.duty_cycle_mode == DutyCycleMode.CONTINUOUS
-    sources = [
-        document.get_condition_stimulus_set(condition_id, role)
-        for role in ("base", "t1", "t2", "isi")
-    ]
-    assert len({source.set_id for source in sources}) == 4
-    assert all(source.modality == StimulusModality.IMAGE for source in sources)
-    with pytest.raises(DocumentError, match="image sources"):
-        document.set_condition_stimulus_modality(condition_id, modality=StimulusModality.WORD)
-    with pytest.raises(DocumentError, match="continuous"):
-        document.update_condition_timing_template(condition_id, DutyCycleMode.SINUSOIDAL)
-    with pytest.raises(DocumentError, match="locked"):
-        document.update_condition(condition_id, attentional_blink=None)
-
-
 def test_oddball_cannot_accept_ab_timing_or_target_pools(sample_project, sample_project_root):
     document = _Document(sample_project, sample_project_root)
     before = document._project.model_copy(deep=True)
@@ -322,4 +233,17 @@ def test_legacy_oddball_cannot_be_converted_through_generic_condition_update(doc
     before = document._project.model_copy(deep=True)
     with pytest.raises(DocumentError, match="Separate"):
         document.update_condition("faces", attentional_blink=AttentionalBlinkSettings())
+    assert document._project == before
+
+
+def test_retired_image_pair_creation_and_design_apply_are_blocked(document):
+    before = document._project.model_copy(deep=True)
+    with pytest.raises(DocumentError, match="no longer supported"):
+        document.create_condition(name="Image pair")
+    with pytest.raises(DocumentError, match="no longer supported"):
+        document.duplicate_condition("faces")
+    with pytest.raises(DocumentError, match="no longer supported"):
+        document.create_control_condition("faces", variant=StimulusVariant.ORIGINAL)
+    with pytest.raises(DocumentError, match="no longer supported"):
+        _apply_ab(document)
     assert document._project == before

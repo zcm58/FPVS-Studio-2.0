@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from fpvs_studio.core.condition_template_profiles import is_supported_condition_template
 from fpvs_studio.core.enums import ExperimentCategory
 from fpvs_studio.core.experiment_categories import experiment_category_label
 from fpvs_studio.core.models import ConditionTemplateProfile
@@ -82,8 +83,8 @@ class CreateProjectDialog(QDialog):
         self.category_button_group.setExclusive(True)
         self.category_buttons: dict[ExperimentCategory, QPushButton] = {}
         choices = (
-            (ExperimentCategory.FPVS, "FPVS\nComing soon"),
-            (ExperimentCategory.FPVS_ODDBALL, "FPVS-Oddball\nBase images and oddballs"),
+            (ExperimentCategory.FPVS, "Standard FPVS\nComing soon"),
+            (ExperimentCategory.FPVS_ODDBALL, "FPVS Oddball Paradigm\nBase images and oddballs"),
             (ExperimentCategory.ATTENTIONAL_BLINK, "Attentional-Blink\nTwo targets in a stream"),
         )
         for category, text in choices:
@@ -298,6 +299,7 @@ class CreateProjectDialog(QDialog):
             profile
             for profile in profiles
             if profile.experiment_category == self._experiment_category
+            and is_supported_condition_template(profile)
         ]
         current_profile_id = self.condition_profile_id if preserve_selection else None
         with QSignalBlocker(self.condition_profile_combo):

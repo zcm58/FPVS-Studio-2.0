@@ -151,7 +151,7 @@ def separate_legacy_mixed_project(
     temporary_original = root / f".project-separation-{uuid4().hex}.json"
     try:
         oddball_project.meta.project_id = project_id
-        oddball_project.meta.name = f"{project.meta.name} - FPVS-Oddball"
+        oddball_project.meta.name = f"{project.meta.name} - FPVS Oddball Paradigm"
         copied: set[str] = set()
         for source_root in source_roots:
             if not source_root.is_dir():

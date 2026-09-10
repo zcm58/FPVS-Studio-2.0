@@ -52,7 +52,7 @@ def _refresh_verification(
     )
 
 
-def test_setup_wizard_timing_image_size_and_session_have_separate_width_safe_pages(
+def test_setup_wizard_combines_timing_and_session_with_separate_image_size(
     qtbot,
     controller: StudioController,
     tmp_path: Path,
@@ -69,7 +69,7 @@ def test_setup_wizard_timing_image_size_and_session_have_separate_width_safe_pag
     assert "fullscreen" in editor.refresh_verification_notice.text()
     assert "will not start" in editor.refresh_verification_notice.text()
     assert not guide.image_display_size_editor.isVisible()
-    assert not guide.session_structure_editor.isVisible()
+    assert guide.session_structure_editor.isVisible()
     assert not editor.runtime_background_scope_label.isVisible()
     editor._on_refresh_detection_succeeded(
         _refresh_verification(60_000, 1_001, 59.94, 59.94)
@@ -79,7 +79,6 @@ def test_setup_wizard_timing_image_size_and_session_have_separate_width_safe_pag
     pages = (
         ("experiment", guide.experiment_step_surface, editor),
         ("image_size", guide.image_size_step_surface, guide.image_display_size_editor),
-        ("session", guide.session_step_surface, guide.session_structure_editor),
     )
     for width, height in ((1120, 720), (1180, 760)):
         window.resize(width, height)
@@ -88,6 +87,7 @@ def test_setup_wizard_timing_image_size_and_session_have_separate_width_safe_pag
             QApplication.processEvents()
             assert guide.step_stack.currentWidget() is surface
             assert page_editor.isVisible()
+            assert guide.session_structure_editor.isVisible() == (key == "experiment")
             assert all(
                 not other_editor.isVisible()
                 for other_key, _, other_editor in pages
@@ -104,6 +104,8 @@ def test_setup_wizard_timing_image_size_and_session_have_separate_width_safe_pag
                         label.text()
                     ), label.objectName()
 
+    guide.open_wizard(step_key="session")
+    assert guide.step_stack.currentWidget() is guide.experiment_step_surface
     session = guide.session_structure_editor
     assert session.block_count_spin.value() == 2
     session.block_count_spin.setValue(3)
@@ -232,7 +234,7 @@ def test_setup_wizard_fpvs_rates_persist_and_report_exact_or_approximate_timing(
         editor.refresh_hz_combo.itemData(index) for index in range(editor.refresh_hz_combo.count())
     ] == [59.94, 60.0, 120.0, 144.0, 240.0]
     assert editor.refresh_is_verified() is False
-    assert "Verification required" in editor.timing_status_label.text()
+    assert "Verify this display" in editor.timing_status_label.text()
     assert guide.setup_wizard_next_button.isEnabled() is False
 
     editor.detect_refresh_button.click()
@@ -245,9 +247,9 @@ def test_setup_wizard_fpvs_rates_persist_and_report_exact_or_approximate_timing(
     assert editor.current_refresh_hz() == 144.0
     assert editor.refresh_is_verified() is True
     assert editor.timing_report().timing_is_exact is True
-    assert "Windows mode 144.000 Hz (144/1)" in editor.timing_status_label.text()
-    assert "PsychoPy observed 143.920 Hz" in editor.timing_status_label.text()
-    assert "applied 144 Hz" in editor.timing_status_label.text()
+    assert "Windows mode 144.000 Hz (144/1)" in editor.timing_status_label.toolTip()
+    assert "PsychoPy observed 143.920 Hz" in editor.timing_status_label.toolTip()
+    assert "Display verified at 144 Hz" in editor.timing_status_label.text()
     assert "24 frames/stimulus" in editor.timing_summary_label.text()
     assert "144 frames/oddball" in editor.timing_summary_label.text()
     assert "condition 146.0 s" in editor.timing_summary_label.text()
@@ -267,7 +269,7 @@ def test_setup_wizard_fpvs_rates_persist_and_report_exact_or_approximate_timing(
         )
     )
     QApplication.processEvents()
-    assert "Linux mode 143.980 Hz (KScreen, DP-2)" in editor.timing_status_label.text()
+    assert "Linux mode 143.980 Hz (KScreen, DP-2)" in editor.timing_status_label.toolTip()
     assert guide.setup_wizard_next_button.isEnabled()
 
     editor.refresh_hz_combo.setCurrentIndex(editor.refresh_hz_combo.findData(59.94))
@@ -286,10 +288,10 @@ def test_setup_wizard_fpvs_rates_persist_and_report_exact_or_approximate_timing(
     assert report.realized_base_hz == pytest.approx(5.994)
     assert report.realized_oddball_hz == pytest.approx(0.999)
     assert editor.timing_status_label.isVisible()
-    assert "Windows mode 59.940 Hz (60000/1001)" in editor.timing_status_label.text()
-    assert "PsychoPy observed 59.998 Hz" in editor.timing_status_label.text()
+    assert "Windows mode 59.940 Hz (60000/1001)" in editor.timing_status_label.toolTip()
+    assert "PsychoPy observed 59.998 Hz" in editor.timing_status_label.toolTip()
     assert "whole-frame scheduling" in editor.timing_status_label.text()
-    assert "dropped or late frames" in editor.timing_status_label.text()
+    assert "dropped or late frames" in editor.timing_status_label.toolTip()
     assert guide.setup_wizard_next_button.isEnabled()
 
     window.resize(1120, 720)
@@ -299,7 +301,6 @@ def test_setup_wizard_fpvs_rates_persist_and_report_exact_or_approximate_timing(
     _assert_visible_children_within_parent(editor)
     for label in (
         editor.refresh_verification_notice,
-        editor.timing_summary_label,
         editor.timing_status_label,
     ):
         required = label.fontMetrics().boundingRect(
@@ -410,7 +411,7 @@ def test_setup_wizard_refresh_detection_busy_state_disables_controls(
     assert _DeferredProgressTask.active is not None
     assert editor.detect_refresh_button.isEnabled() is False
     assert editor.refresh_hz_combo.isEnabled() is False
-    assert "checking PsychoPy frame stability" in editor.timing_status_label.text()
+    assert "Checking display timing" in editor.timing_status_label.text()
     assert guide.setup_wizard_next_button.isEnabled() is False
 
     _DeferredProgressTask.active.succeeded.emit(_refresh_verification(60, 1, 60.0, 60.0))
@@ -515,7 +516,7 @@ def test_setup_wizard_experiment_image_size_controls_update_preview_and_review(
     assert not guide.step_title_label.isVisible()
     assert not guide.step_status_badge.isVisible()
     assert guide.step_card.property("launchSurfaceFrame") == "true"
-    assert guide.step_card.property("wizardProjectStepFrame") == "false"
+    assert guide.step_count_label.isVisible()
     assert not hasattr(guide.fixation_schedule_editor.fixation_panel, "title_label")
     assert guide.fixation_schedule_editor.fixation_panel.objectName() == "fixation_settings_panel"
     assert not guide.fixation_schedule_editor.fixation_enabled_checkbox.isVisible()
@@ -709,3 +710,67 @@ def test_full_screen_image_size_preview_edits_sync_with_experiment_page(
     assert window.document.project.settings.display.use_current_screen_resolution is True
     assert not dialog.screen_width_px_spin.isEnabled()
     assert not editor.screen_width_px_spin.isEnabled()
+
+
+@pytest.mark.parametrize("dark", [False, True])
+def test_timing_labels_are_grouped_and_design_recap_is_not_visible(
+    qtbot, qapp, controller, tmp_path, dark,
+):
+    from PySide6.QtGui import QColor, QPalette
+    from PySide6.QtWidgets import QFormLayout
+
+    from fpvs_studio.core.enums import ExperimentCategory
+
+    previous = qapp.palette()
+    qapp.setPalette(QPalette(QColor("#202124" if dark else "#f4f7fb")))
+    try:
+        document = controller.create_project(
+            parent_dir=tmp_path, project_name="Timing hierarchy",
+            experiment_category=ExperimentCategory.ATTENTIONAL_BLINK,
+        )
+        window = controller.main_window
+        qtbot.addWidget(window)
+        window.resize(1120, 820)
+        window.show_setup_wizard(step_key="experiment")
+        guide = window.setup_wizard_page
+        guide.open_wizard(step_key="experiment", allow_step_jumps=True)
+        window.show()
+        QApplication.processEvents()
+        editor = guide.runtime_settings_editor
+        assert editor.form_layout.rowWrapPolicy() == QFormLayout.RowWrapPolicy.WrapAllRows
+        assert editor.timing_summary_label.isHidden()
+        assert guide.experiment_settings_card.title_label.isVisible()
+        assert guide.experiment_settings_card.title_label.text() == "Display"
+        assert guide.session_settings_card.title_label.isVisible()
+        assert not guide.experiment_settings_card.subtitle_label.isVisible()
+        assert "Verify" in editor.timing_status_label.text()
+        assert not guide.setup_wizard_next_hint_label.isVisible()
+        assert "SOAs" in editor.refresh_hz_combo.toolTip()
+        assert guide.progress_step_labels[3].text() == "Timing & Session"
+        session = guide.session_structure_editor
+        assert session.session_layout.rowWrapPolicy() == QFormLayout.RowWrapPolicy.WrapAllRows
+        assert session.block_count_spin.width() == editor.refresh_hz_combo.width() == 240
+        label = session.session_layout.labelForField(session.block_count_spin)
+        assert label.mapTo(session, label.rect().bottomLeft()).y() < (
+            session.block_count_spin.mapTo(session, session.block_count_spin.rect().topLeft()).y()
+        )
+        for field in (editor.refresh_hz_combo.parentWidget(),
+                      editor.runtime_background_color_combo):
+            label = editor.form_layout.labelForField(field)
+            label_bottom = label.mapTo(editor, label.rect().bottomLeft())
+            field_top = field.mapTo(editor, field.rect().topLeft())
+            assert field_top.y() > label_bottom.y()
+            assert field_top.y() - label_bottom.y() <= 16
+            assert field_top.x() == label_bottom.x()
+        before = document.project.model_dump()
+        editor.refresh()
+        assert document.project.model_dump() == before
+        # Unsupported native character timing must still be actionable inline.
+        editor.refresh_hz_combo.setCurrentIndex(editor.refresh_hz_combo.findData(59.94))
+        QApplication.processEvents()
+        assert editor.timing_status_label.property("statusState") == "error"
+        assert editor.timing_status_label.isVisible()
+        assert not guide.setup_wizard_next_button.isEnabled()
+        _assert_visible_children_within_parent(editor)
+    finally:
+        qapp.setPalette(previous)

@@ -52,6 +52,7 @@ from fpvs_studio.core.validation import (
 from fpvs_studio.gui.components import (
     PAGE_SECTION_GAP,
     SetupSourceCard,
+    configure_setup_form,
     mark_compact_info_action,
     mark_destructive_action,
     mark_primary_action,
@@ -424,6 +425,7 @@ class ConditionSetupStep(QWidget):
         self.modality_combo.currentIndexChanged.connect(self._apply_modality)
         identity_row = QWidget(self)
         identity_row.setObjectName("setup_conditions_identity_row")
+        identity_row.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         identity_layout = QHBoxLayout(identity_row)
         identity_layout.setContentsMargins(0, 0, 0, 0)
         identity_layout.setSpacing(8)
@@ -466,6 +468,7 @@ class ConditionSetupStep(QWidget):
         self.task_button.clicked.connect(self._open_task_settings)
         mark_secondary_action(self.task_button)
         task_row = QWidget(self)
+        task_row.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         task_row_layout = QHBoxLayout(task_row)
         task_row_layout.setContentsMargins(0, 0, 0, 0)
         task_row_layout.setSpacing(8)
@@ -537,8 +540,8 @@ class ConditionSetupStep(QWidget):
         form = QFormLayout()
         form.setContentsMargins(0, 0, 0, 0)
         form.setHorizontalSpacing(14)
-        form.setVerticalSpacing(4)
-        form.setLabelAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
+        form.setVerticalSpacing(10)
+        form.setLabelAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
         self.target_repeats_label = QLabel("Target Stimulus Repeats", self)
         self.target_repeats_label.setObjectName("setup_conditions_target_repeats_label")
@@ -557,10 +560,11 @@ class ConditionSetupStep(QWidget):
         form.addRow(self.presentation_mode_label, mode_row)
         form.addRow(self.instructions_label, self.instructions_edit)
         details_section_layout.addLayout(form)
+        details_section_layout.addStretch(1)
         self.ab_stream_summary = QLabel(self)
         self.ab_stream_summary.setObjectName("setup_ab_stream_summary")
         self.ab_stream_summary.setWordWrap(True)
-        details_section_layout.addWidget(self.ab_stream_summary)
+        self.ab_stream_summary.hide()
 
         self.all_conditions_section = QFrame(list_panel)
         self.all_conditions_section.setObjectName("setup_conditions_all_conditions_section")
@@ -710,6 +714,23 @@ class ConditionSetupStep(QWidget):
         list_panel.setMinimumWidth(300)
         workspace_layout.addWidget(list_panel, 0)
         workspace_layout.addWidget(detail_panel, 1)
+        if document.project.experiment_category == ExperimentCategory.ATTENTIONAL_BLINK:
+            self.condition_details_section.setProperty("conditionDetailsSection", "false")
+            self.condition_details_section.setProperty("setupFlatSection", "true")
+            self.condition_details_section.setMinimumHeight(0)
+            details_section_layout.setContentsMargins(12, 0, 0, 0)
+            details_section_layout.setSpacing(12)
+            configure_setup_form(form, stacked=True)
+            self.trigger_code_spin.setMaximumWidth(160)
+            identity_layout.addStretch(1)
+            task_row_layout.setStretch(0, 0)
+            task_row_layout.addStretch(1)
+            action_grid.removeWidget(self.add_condition_button)
+            action_grid.removeWidget(self.duplicate_condition_button)
+            action_grid.removeWidget(self.remove_condition_button)
+            action_grid.addWidget(self.add_condition_button, 0, 0, 1, 2)
+            action_grid.addWidget(self.duplicate_condition_button, 1, 0)
+            action_grid.addWidget(self.remove_condition_button, 1, 1)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(workspace, 1)
@@ -765,8 +786,9 @@ class ConditionSetupStep(QWidget):
                     else _timing_template_label(condition.duty_cycle_mode)
                 )
                 item = QListWidgetItem(
-                    f"{condition.name}\n"
-                    f"{timing_label} - "
+                    f"{condition.name}\n" +
+                    ("" if isinstance(settings, AttentionalBlinkStreamSettings)
+                     else f"{timing_label} - ") +
                     f"{self._condition_status_text(condition)}"
                 )
                 item.setToolTip(
@@ -890,7 +912,7 @@ class ConditionSetupStep(QWidget):
         stream = condition is not None and isinstance(
             condition.attentional_blink, AttentionalBlinkStreamSettings,
         )
-        self.ab_stream_summary.setVisible(stream)
+        self.ab_stream_summary.hide()
         self.appearance_row.setVisible(not stream)
         self.appearance_label.setVisible(not stream)
         self.trigger_label.setText("T1 Trigger Code" if stream else "Trigger Code")
@@ -1052,9 +1074,9 @@ class ConditionSetupStep(QWidget):
                 soa_ms=settings.soa_ms, t2_slot_index=settings.t2_slot_index,
             )
             self.condition_list_hint.setText(
-                "Each condition uses the same digit and letter pools. "
-                "Change target separation and inspect the stream in Design."
+                "Conditions"
             )
+            self.condition_list_hint.setProperty("setupSourceTitle", "true")
             self.ab_stream_summary.setText(
                 f"SOA {description.soa_ms:g} ms · {description.intervening_digits} digits "
                 f"between T1 and T2 · {description.item_ms:g} ms per character.\n\n"
@@ -1062,6 +1084,11 @@ class ConditionSetupStep(QWidget):
                 "The post-condition questionnaire records whether any T2 letters were noticed; "
                 "it does not score individual target recognition."
             )
+            self.task_button.setToolTip(
+                "Edit tasks shown before or after this condition. The visibility question "
+                "records a block-level report, not individual target recognition."
+            )
+            self.condition_list.setToolTip("Edit target separation and shared symbols in Design.")
 
     def _set_checklist_statuses(
         self,
@@ -1333,7 +1360,7 @@ class ConditionSetupStep(QWidget):
         if self._document.project.experiment_category == ExperimentCategory.FPVS_ODDBALL:
             answer = QMessageBox.question(
                 self, "Clear unused T2 assignments",
-                "Remove unused T2 assignments from this FPVS-Oddball experiment? "
+                "Remove unused T2 assignments from this FPVS Oddball Paradigm experiment? "
                 "The image files and all ordinary oddball settings will be preserved. "
                 "Save the experiment to keep this change.",
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
@@ -1351,7 +1378,8 @@ class ConditionSetupStep(QWidget):
             return
         answer = QMessageBox.question(
             self, "Separate experiment types",
-            "Create a separate FPVS-Oddball experiment with copies of the oddball conditions "
+            "Create a separate FPVS Oddball Paradigm experiment with copies of the "
+            "oddball conditions "
             "and image files, and save this experiment with only its Attentional-Blink conditions? "
             "Existing images and previous run records will be preserved.",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
@@ -1387,7 +1415,7 @@ class ConditionSetupStep(QWidget):
         QMessageBox.information(
             self, "Experiments separated",
             "This experiment now contains only Attentional-Blink conditions. "
-            f"The FPVS-Oddball experiment is saved at:\n{result.oddball_root}",
+            f"The FPVS Oddball Paradigm experiment is saved at:\n{result.oddball_root}",
         )
 
     def _apply_modality(self) -> None:

@@ -22,6 +22,10 @@ from fpvs_studio.core.enums import (
     StimulusTransform,
     StimulusVariant,
 )
+from fpvs_studio.core.experiment_categories import (
+    RETIRED_IMAGE_PAIR_MESSAGE,
+    has_retired_image_pair_design,
+)
 from fpvs_studio.core.models import (
     AttentionalBlinkSettings,
     AttentionalBlinkStreamSettings,
@@ -193,10 +197,11 @@ class DocumentConditionMixin:
         """Create a condition with the sources required by its locked experiment type."""
 
         if self._project.experiment_category == ExperimentCategory.FPVS:
-            raise DocumentError("FPVS is coming soon.")
+            raise DocumentError("Standard FPVS is coming soon.")
         if is_attentional_blink_stream_project(self._project):
             return self._create_stream_condition(name=name)
-        ab = self._project.experiment_category == ExperimentCategory.ATTENTIONAL_BLINK
+        if self._project.experiment_category == ExperimentCategory.ATTENTIONAL_BLINK:
+            raise DocumentError(RETIRED_IMAGE_PAIR_MESSAGE)
         ordered_conditions = self.ordered_conditions()
         defaults = self._project.settings.condition_defaults
         display_name = name or f"Condition {len(ordered_conditions) + 1}"
@@ -205,41 +210,26 @@ class DocumentConditionMixin:
         condition_id = self._unique_slug(display_name, existing_condition_ids)
         base_set_id = self._unique_slug(f"{condition_id}-base", existing_set_ids)
         oddball_set_id = self._unique_slug(
-            f"{condition_id}-{'t1' if ab else 'oddball'}", existing_set_ids | {base_set_id}
+            f"{condition_id}-oddball", existing_set_ids | {base_set_id}
         )
-        t2_set_id = (
-            self._unique_slug(
-                f"{condition_id}-t2", existing_set_ids | {base_set_id, oddball_set_id}
-            )
-            if ab else None
-        )
-
-        isi_set_id = self._unique_slug(f"{condition_id}-isi", existing_set_ids) if ab else None
         new_condition = Condition(
             condition_id=condition_id,
             name=display_name,
             base_stimulus_set_id=base_set_id,
             oddball_stimulus_set_id=oddball_set_id,
-            t2_stimulus_set_id=t2_set_id,
-            isi_stimulus_set_id=isi_set_id,
-            attentional_blink=AttentionalBlinkSettings() if ab else None,
             sequence_count=defaults.sequence_count,
             oddball_cycle_repeats_per_sequence=defaults.oddball_cycle_repeats_per_sequence,
-            duty_cycle_mode=DutyCycleMode.CONTINUOUS if ab else defaults.duty_cycle_mode,
+            duty_cycle_mode=defaults.duty_cycle_mode,
             trigger_code=len(ordered_conditions) + 1,
             order_index=len(ordered_conditions),
         )
         new_sets = [
             self._make_empty_stimulus_set(base_set_id, f"{display_name} Base"),
             self._make_empty_stimulus_set(
-                oddball_set_id, f"{display_name} {'T1' if ab else 'Oddball'}"
+                oddball_set_id, f"{display_name} Oddball"
             ),
         ]
-        if t2_set_id is not None:
-            new_sets.append(self._make_empty_stimulus_set(t2_set_id, f"{display_name} T2"))
         conditions = [*ordered_conditions, new_condition]
-        if isi_set_id is not None:
-            new_sets.append(self._make_empty_stimulus_set(isi_set_id, f"{display_name} ISI"))
         project = validated_copy(
             self._project,
             conditions=self._reindex_conditions(conditions),
@@ -323,6 +313,9 @@ class DocumentConditionMixin:
 
     def duplicate_condition(self, condition_id: str) -> str:
         """Duplicate condition metadata with new empty base/oddball stimulus sets."""
+
+        if has_retired_image_pair_design(self._project):
+            raise DocumentError(RETIRED_IMAGE_PAIR_MESSAGE)
 
         source_condition = self.get_condition(condition_id)
         if source_condition is None:
@@ -421,6 +414,9 @@ class DocumentConditionMixin:
         name: str | None = None,
     ) -> str:
         """Create a file-backed or runtime-transformed control condition."""
+
+        if has_retired_image_pair_design(self._project):
+            raise DocumentError(RETIRED_IMAGE_PAIR_MESSAGE)
 
         if variant == StimulusVariant.ORIGINAL and transform in {
             None,
@@ -524,7 +520,9 @@ class DocumentConditionMixin:
             ab and existing is not None and existing.attentional_blink is None
             and updates.get("attentional_blink") is not None
         ):
-            raise DocumentError("Separate this legacy FPVS-Oddball condition before continuing.")
+            raise DocumentError(
+                "Separate this legacy FPVS Oddball Paradigm condition before continuing."
+            )
         if existing is not None and existing.attentional_blink is not None:
             updated_ab = updates.get("attentional_blink", existing.attentional_blink)
             layout = (
@@ -566,6 +564,8 @@ class DocumentConditionMixin:
         attentional_blink: AttentionalBlinkSettings | None,
     ) -> None:
         """Apply one validated design and its project-wide cadence atomically."""
+        if self._project.experiment_category == ExperimentCategory.ATTENTIONAL_BLINK:
+            raise DocumentError(RETIRED_IMAGE_PAIR_MESSAGE)
         condition = self.get_condition(condition_id)
         if condition is None:
             raise DocumentError(f"Unknown condition '{condition_id}'.")
@@ -576,7 +576,7 @@ class DocumentConditionMixin:
             raise DocumentError("The design must match the locked experiment type.")
         if ab and condition.attentional_blink is None:
             raise DocumentError(
-                "Separate this FPVS-Oddball condition into its own experiment first."
+                "Separate this FPVS Oddball Paradigm condition into its own experiment first."
             )
         protocol = validated_copy(
             self._project.settings.protocol, base_hz=base_hz, oddball_every_n=slot_count

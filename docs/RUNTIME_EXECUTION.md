@@ -114,14 +114,10 @@ Sinusoidal contrast runs additionally require image events and the compiled neut
 background; runtime rejects incompatible compiled copies instead of treating their
 full-cycle on/off timing as continuous presentation.
 
-Experimental attentional-blink runs use the compiled within-slot contract in
-[RunSpec](RUNSPEC.md#experimental-attentional-blink-slots). Preflight reconstructs
-the expected frame schedule from its requested durations and approved refresh rate,
-then checks phase order, global slot indices, event roles, durations, cycle coverage,
-and T1/T2 markers. It also checks the separate T2 source and presentation geometry.
-AB must use continuous images; invalid compiled copies do not silently become
-ordinary FPVS runs. The engine draws the expanded events at their compiled frame
-boundaries through the same prepared playback plan.
+Attentional-Blink runs use the native character-stream contract. Preflight checks
+its exact frame grid, target onsets and markers. Retired within-slot image-pair
+RunSpecs are rejected before asset/display checks, and the direct engine entry point
+also rejects them before opening a window. Historical records remain decodable.
 
 ## PsychoPy engine
 
@@ -486,7 +482,8 @@ exact-grid exposures, complete cycles, digit/target roles, and condition/T1/T2 m
 Post-condition task responses retain their separate clocks and exports. The default
 Yes/No/Unsure question has neither a correctness label nor a recognition accuracy score.
 
-The following image-pair export contract remains unchanged for legacy AB designs.
+The following image-pair export schema is retained for historical records only.
+New image-pair compilation and playback are blocked.
 
 AB run results carry optional `RunExecutionSummary.attentional_blink_onsets` records.
 Each observed image onset includes its sequential event index, phase, global slot

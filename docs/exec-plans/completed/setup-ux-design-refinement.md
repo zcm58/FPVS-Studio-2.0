@@ -1,6 +1,38 @@
 # Setup UX And Shared Visual Design Refinement
 
-Status: Active
+Status: Completed
+
+## Release completion (2026-09-10)
+
+Completed for 1.5.0. The final Setup has eight steps, combining Timing and Session,
+with frameless, centered content at 1120x820. Later dated implementation notes
+supersede earlier proposals. Focused visible checks passed; the final non-Qt
+precommit suite passed 1244 tests with five platform skips.
+
+## Shared frameless Setup layout (2026-09-10)
+
+The user selected the attentional-blink Design screen as the visual reference for
+every Setup step and requested removal of the bottom divider. All nine steps now
+share its left-aligned task heading, step count, transparent shell, progress position,
+and vertical content budget at 1120x820. Project, Timing, Size, Session, and Review
+outer settings cards are flattened; content is top-aligned with bounded form widths.
+Navigation, validation, draft application, and scientific settings stay unchanged.
+This replaces the older eight-step/1120x720 layout guidance below.
+
+Acceptance covers both themes and all nine steps for oddball and native AB projects,
+including fixation enabled/disabled, header/footer geometry, and navigation behavior.
+Visible checks use the user's existing authorization; no runtime is launched.
+
+Verification: the final six all-step light/dark layout cases pass for native AB
+(fixation on/off) and oddball, including shared left-edge alignment. The shell suite
+(17 checks), Timing/Size/Session suite (9), and isolated legacy Design Next/apply
+check pass. GUI/docs focused checks and mypy pass; the repo precommit run passed
+1306 unit tests with five Windows symlink skips. A combined Qt batch timed out during
+palette refresh and a legacy multi-size batch exited during Qt teardown; focused
+layout runs and visible captures were therefore isolated. This is not a claim that
+the complete combined Qt suite passed. Captures cover all nine steps in both themes
+at 1120x820. Manual review: open Setup, traverse the stepper, and check the frameless
+background, aligned heading/form, and bottom navigation without a divider.
 
 ## Implementation Approval (2026-09-05)
 
@@ -549,3 +581,95 @@ containment/vertical alignment in both themes at the documented wizard sizes.
 All 19 visible designer checks pass. Both 1120x820 captures show the fields fully
 inside their rows without scrolling. GUI/docs focused verification and changed-module
 type checking pass; the existing controller return-type error still blocks precommit.
+
+
+## Frameless Setup hierarchy refinement (2026-09-10, complete)
+
+Keep the accepted frameless shell. Center bounded forms horizontally while leaving
+wide Conditions/Design workspaces available. Remove duplicate page headings and
+non-actionable study recaps. Stack Project/Timing field labels with their controls;
+align the denser forms consistently. Keep current-step errors and verification status
+visible, with optional technical detail on the relevant control's tooltip. Conditions
+retains participant instructions and task editing; Design owns stream/SOA explanations.
+
+Acceptance: all nine steps at 1120x820, both themes, current validation states and
+supported categories; registered visible Qt checks plus GUI-focused/precommit checks.
+No experiment, timing, persistence or hardware behavior changes are intended.
+
+Implemented centered forms, shared field-label alignment, single task headings, and
+short verification states. Removed the Timing stream recap and duplicate Conditions
+guidance; optional technical detail lives in tooltips. Native AB Review now describes
+digits/target letters and character height instead of image presentation geometry.
+
+Verified all nine native AB steps at 1120x820 in light/dark themes with fixation both
+enabled and disabled (4 cases), plus both oddball layout cases. Project's 11 checks,
+Timing's 11 checks, native Conditions and Session checks pass; Timing's retained
+monitor-detail assertions now check tooltips. Earlier combined GUI batches stalled,
+so those results were discarded and the relevant modules/cases rerun independently.
+GUI-focused Ruff/compilation and changed-module mypy pass. Precommit checks passed,
+including mypy over 150 sources and 1244 non-Qt tests (5 Windows symlink skips); its
+changed-file input was filtered in-process to exclude the previously deleted legacy
+AB compiler because the existing driver still passes deleted paths to Ruff.
+The final Review-only copy change was then covered by the layout matrix, focused
+checks and mypy. The harness itself was not changed.
+
+Visible captures of all nine steps are retained in
+`build/setup-hierarchy-review/accepted-dark/` and `accepted-light/`. Verification used
+temporary projects and fake display checks; no participant experiment or hardware
+trigger was launched. Manual path: open Setup, inspect Project/Conditions/Timing,
+then the remaining steps; verify labels, field spacing and bottom navigation in both
+themes, and hover Timing controls to inspect optional technical details.
+
+## Combined Timing and Session, centered content (2026-09-10, complete)
+
+Combine Display and Session in one frameless two-column step. Keep the `experiment`
+navigation key and route existing `session` links to it. The wizard now has eight
+steps; Image/Character Size remains separate. Vertically center each step's natural
+content between the fixed progress indicator and footer, with no required scrolling
+at 1120x820. Preserve model bindings and display verification gates. Verify all eight
+steps in both themes/categories, navigation and Review links, combined-page validation,
+and repeat-count persistence using registered visible Qt tests and screenshots.
+
+Implemented in `gui/setup_wizard_page.py` using the existing editors and shared
+surface. Display and Session keep their internal field groups; all step content uses
+equal flexible space above/below its natural height. Headers, progress and navigation
+stay fixed. Updated step counts, navigation tests, Review's Session destination, and
+current architecture/GUI guidance. The existing session model and runtime are unchanged.
+
+All 22 focused visible Qt checks pass: the eight-step native AB matrix with fixation
+on/off in both themes (4), oddball layout matrix (2), combined-page validation (11),
+stepper navigation (2), forward/back flow and Review editing (3). Screenshots of all
+eight pages are retained in `build/combined-setup-review/dark/` and `light/` and were
+inspected at 1120x820. No real participant experiment or display probe was launched.
+GUI/docs focused checks, Ruff, compilation and mypy pass. Precommit's deleted-file
+input workaround remains the same as the preceding slice; no harness code changed.
+
+The first non-Qt run had 1243 passes and one bundle-import failure: the chosen test
+directory produced 261-character oddball paths. The unchanged test passed with a
+shorter temporary path, and the complete non-Qt suite then passed (1244 passes,
+5 Windows symlink-permission skips). Bundle path handling was not changed in this
+GUI task. Logs: `build/combined-setup-precommit.txt` and
+`build/combined-setup-unit-final.txt`. Temporary test projects/helpers were removed;
+the screenshots and logs remain.
+
+## Two-page polish only (2026-09-10, complete)
+
+Scope is limited to Timing & Session and native AB Conditions. In the combined
+page, both editor groups use stacked labels and 240 px primary inputs. The active
+Timing & Session caption retains its accent color with normal label weight so it
+fits without elision. In AB Conditions, remove the enclosing detail card, stack
+field labels, constrain the trigger field, keep task actions beside their summary,
+and use a full-width Add action above aligned Duplicate/Remove actions. Preserve
+participant text, settings, centered layout and all other Setup surfaces.
+
+Registered coverage checks both themes, combined-page validation and input widths,
+the complete step label, native condition actions and bounds. Screenshots are in
+`build/two-page-review/dark/` and `light/`. Temporary screenshot projects are isolated.
+
+Eight focused visible GUI cases pass, including the existing AB layout matrix to
+check that other pages retain their geometry. Both requested pages were inspected
+in both themes at 1120x820. GUI-focused Ruff/compilation and precommit checks pass
+(1244 non-Qt passes, 5 Windows symlink-permission skips). Precommit used the same
+deleted-file input filtering noted above and a short temporary directory; no harness
+or runtime changes. Temporary projects/helpers were removed; screenshots and
+`build/two-page-precommit.txt` are retained.

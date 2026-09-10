@@ -4,11 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
 from PySide6.QtWidgets import QApplication, QLabel
 from tests.gui.helpers import configure_fixation_task
 
-from fpvs_studio.core.condition_template_profiles import built_in_condition_template_profiles
 from fpvs_studio.core.enums import ExperimentCategory
 from fpvs_studio.gui.document import ProjectDocument
 from fpvs_studio.gui.fixation_settings_page import FixationSettingsEditor
@@ -47,19 +45,14 @@ def test_fixation_settings_editor_uses_current_option_defaults(qtbot, tmp_path: 
     assert editor.show_cross_checkbox.isHidden()
 
 
-@pytest.mark.parametrize("legacy_images", [False, True])
-def test_ab_cross_can_be_hidden_saved_and_shown_again(qtbot, tmp_path, legacy_images):
-    profile = next(
-        item for item in built_in_condition_template_profiles()
-        if item.profile_id == "attentional-blink-v1"
-    ) if legacy_images else None
+def test_ab_cross_can_be_hidden_saved_and_shown_again(qtbot, tmp_path):
     document = ProjectDocument.create_new(
         parent_dir=tmp_path, project_name="Optional fixation",
         experiment_category=ExperimentCategory.ATTENTIONAL_BLINK,
-        condition_template_profile=profile,
     )
+    assert not document.project.settings.fixation_task.show_cross
     document.update_fixation_settings(
-        enabled=True, accuracy_task_enabled=True, participant_tutorial_enabled=True
+        show_cross=True, enabled=True, accuracy_task_enabled=True, participant_tutorial_enabled=True
     )
     editor = FixationSettingsEditor(document, show_preview=True)
     qtbot.addWidget(editor)
@@ -77,6 +70,7 @@ def test_ab_cross_can_be_hidden_saved_and_shown_again(qtbot, tmp_path, legacy_im
     assert not editor.fixation_behavior_panel.isEnabled()
     assert not editor.cross_size_spin.isEnabled()
     assert not editor.preview_widget.show_cross
+    assert editor.findChild(QLabel, "fixation_cross_hidden_note") is None
     assert editor.pre_stream_fixation_spin.isEnabled()
     assert "blank screen" in editor.pre_stream_fixation_note.text()
     editor.pre_stream_fixation_spin.setValue(0.5)
@@ -91,6 +85,9 @@ def test_ab_cross_can_be_hidden_saved_and_shown_again(qtbot, tmp_path, legacy_im
     editor.fixation_accuracy_checkbox.setChecked(True)
     assert document.project.settings.fixation_task.enabled
     assert document.project.settings.fixation_task.accuracy_task_enabled
+    document.save()
+    reopened = ProjectDocument.open_existing(document.project_root)
+    assert reopened.project.settings.fixation_task.show_cross
 
 
 def test_fixation_settings_editor_persists_fixed_mode_values(qtbot, tmp_path: Path) -> None:

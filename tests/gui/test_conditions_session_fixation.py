@@ -311,7 +311,7 @@ def test_session_structure_uses_space_start_without_timed_break_controls(
     assert not page.session_seed_spin.isVisible()
     assert not page.generate_seed_button.isVisible()
     assert page.seed_help_label.text() == (
-        "Condition order is randomized automatically for each launch."
+        "Randomized"
     )
     assert not page.inter_condition_mode_combo.isVisible()
     assert not page.break_seconds_spin.isVisible()

@@ -9,7 +9,7 @@ from pydantic import ValidationError
 
 from fpvs_studio.core.compiler import CompileError, compile_run_spec, compile_session_plan
 from fpvs_studio.core.condition_template_profiles import (
-    ATTENTIONAL_BLINK_PROFILE_ID,
+    ATTENTIONAL_BLINK_STREAM_PROFILE_ID,
     apply_condition_template_profile_to_settings,
     built_in_condition_template_profiles,
     list_condition_template_profiles,
@@ -61,8 +61,8 @@ def test_project_category_is_frozen(sample_project, category):
 
 @pytest.mark.parametrize(
     ("category", "label"),
-    [(ExperimentCategory.FPVS, "FPVS"),
-     (ExperimentCategory.FPVS_ODDBALL, "FPVS-Oddball"),
+    [(ExperimentCategory.FPVS, "Standard FPVS"),
+     (ExperimentCategory.FPVS_ODDBALL, "FPVS Oddball Paradigm"),
      (ExperimentCategory.ATTENTIONAL_BLINK, "Attentional-Blink")],
 )
 def test_category_names(category, label):
@@ -191,7 +191,7 @@ def test_legacy_config_classification_and_mixed_import_guard(sample_project, tmp
 def test_templates_filter_and_refuse_cross_category_application(tmp_path):
     profiles = built_in_condition_template_profiles()
     ab_profile = next(
-        profile for profile in profiles if profile.profile_id == ATTENTIONAL_BLINK_PROFILE_ID
+        profile for profile in profiles if profile.profile_id == ATTENTIONAL_BLINK_STREAM_PROFILE_ID
     )
     assert list_condition_template_profiles(
         tmp_path, experiment_category=ExperimentCategory.ATTENTIONAL_BLINK

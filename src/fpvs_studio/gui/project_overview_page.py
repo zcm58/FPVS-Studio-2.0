@@ -23,6 +23,7 @@ from fpvs_studio.core.condition_template_profiles import (
     SINUSOIDAL_CONTRAST_PROFILE_ID,
     SIXTY_HZ_BLANK_FIXATION_PROFILE_ID,
     STUDIO_DEFAULT_PROFILE_ID,
+    is_supported_condition_template,
 )
 from fpvs_studio.core.enums import DutyCycleMode
 from fpvs_studio.core.experiment_categories import experiment_category_label
@@ -31,7 +32,7 @@ from fpvs_studio.gui.components import (
     PathValueLabel,
     SectionCard,
     apply_project_overview_theme,
-    create_setup_project_icon,
+    configure_setup_form,
 )
 from fpvs_studio.gui.document import ProjectDocument
 from fpvs_studio.gui.window_helpers import (
@@ -104,7 +105,7 @@ class ProjectOverviewEditor(QWidget):
         self.project_root_value = PathValueLabel(self)
         self.project_root_value.setObjectName("project_root_value")
         self.project_root_value.setWordWrap(False)
-        self.project_root_value.setMaximumHeight(34)
+        self.project_root_value.setFixedHeight(32)
         self.project_root_value.setSizePolicy(
             QSizePolicy.Policy.Expanding,
             QSizePolicy.Policy.Fixed,
@@ -128,7 +129,7 @@ class ProjectOverviewEditor(QWidget):
         )
         self.apply_profile_to_conditions_button.clicked.connect(self._apply_profile_to_conditions)
         self.apply_profile_to_conditions_button.setVisible(False)
-        self.participant_tutorial_checkbox = QCheckBox("Enable participant tutorial?", self)
+        self.participant_tutorial_checkbox = QCheckBox("Enable participant tutorial", self)
         self.participant_tutorial_checkbox.setObjectName("participant_tutorial_checkbox")
         self.participant_tutorial_checkbox.setToolTip(_PARTICIPANT_TUTORIAL_TOOLTIP)
         self.participant_tutorial_checkbox.stateChanged.connect(
@@ -168,28 +169,6 @@ class ProjectOverviewEditor(QWidget):
         )
         self.project_overview_card.title_label.setVisible(False)
 
-        header_row = QWidget(self.project_overview_card)
-        header_layout = QHBoxLayout(header_row)
-        header_layout.setContentsMargins(0, 0, 0, 0)
-        header_layout.setSpacing(12)
-        header_icon = create_setup_project_icon(header_row)
-        header_text = QWidget(header_row)
-        header_text_layout = QVBoxLayout(header_text)
-        header_text_layout.setContentsMargins(0, 0, 0, 0)
-        header_text_layout.setSpacing(4)
-        header_title = QLabel("Project Details", header_text)
-        header_title.setObjectName("project_overview_title")
-        header_subtitle = QLabel(
-            "Name the experiment and choose the default timing for new conditions.",
-            header_text,
-        )
-        header_subtitle.setObjectName("project_overview_subtitle")
-        header_subtitle.setWordWrap(True)
-        header_text_layout.addWidget(header_title)
-        header_text_layout.addWidget(header_subtitle)
-        header_layout.addWidget(header_icon, 0, Qt.AlignmentFlag.AlignTop)
-        header_layout.addWidget(header_text, 1)
-
         metadata_layout = QFormLayout()
         metadata_layout.setVerticalSpacing(6)
         metadata_layout.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
@@ -199,6 +178,7 @@ class ProjectOverviewEditor(QWidget):
         metadata_layout.addRow("Project Folder", self.project_root_value)
         metadata_layout.addRow("Experiment Template", condition_profile_group)
         metadata_layout.addRow(self.participant_tutorial_checkbox)
+        configure_setup_form(metadata_layout, stacked=True)
 
         form_panel = QWidget(self.project_overview_card)
         form_layout = QVBoxLayout(form_panel)
@@ -208,7 +188,6 @@ class ProjectOverviewEditor(QWidget):
         self.project_overview_card.card_layout.setContentsMargins(20, 14, 20, 14)
         self.project_overview_card.card_layout.setSpacing(8)
         self.project_overview_card.body_layout.setSpacing(8)
-        self.project_overview_card.body_layout.addWidget(header_row)
         self.project_overview_card.body_layout.addWidget(form_panel)
 
         layout = QVBoxLayout(self)
@@ -261,6 +240,7 @@ class ProjectOverviewEditor(QWidget):
             profile
             for profile in self._load_condition_template_profiles()
             if profile.experiment_category == self._document.project.experiment_category
+            and is_supported_condition_template(profile)
         ]
         self._condition_profiles_by_id = {profile.profile_id: profile for profile in profiles}
         project = self._document.project

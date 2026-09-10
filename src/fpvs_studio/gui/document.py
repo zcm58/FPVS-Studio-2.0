@@ -515,7 +515,7 @@ class ProjectDocument(
         if set(category_conflict_condition_ids(project)) - old_conflicts:
             raise DocumentError(
                 "Conditions must match the experiment type. "
-                "Use separate experiments for FPVS-Oddball and Attentional-Blink."
+                "Use separate experiments for FPVS Oddball Paradigm and Attentional-Blink."
             )
         self._project = project
         self._last_session_plan = None

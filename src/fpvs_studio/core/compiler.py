@@ -11,7 +11,6 @@ import random
 from pathlib import Path
 
 from fpvs_studio.core.compiler_assets import load_manifest, resolve_stimulus_items
-from fpvs_studio.core.compiler_attentional_blink import compile_attentional_blink_sequence
 from fpvs_studio.core.compiler_attentional_blink_stream import (
     compile_attentional_blink_stream_sequence,
 )
@@ -62,7 +61,6 @@ from fpvs_studio.core.frame_validation import (
 from fpvs_studio.core.models import AttentionalBlinkStreamSettings, ProjectFile
 from fpvs_studio.core.presentation import resolve_pre_stream_fixation_seconds
 from fpvs_studio.core.run_spec import (
-    AttentionalBlinkRunSpec,
     AttentionalBlinkStreamRunSpec,
     ConditionRunSpec,
     DisplayRunSpec,
@@ -119,7 +117,7 @@ def compile_run_spec(
         base_set=base_set,
         oddball_set=oddball_set,
     )
-    attentional_blink: AttentionalBlinkRunSpec | AttentionalBlinkStreamRunSpec | None = None
+    attentional_blink: AttentionalBlinkStreamRunSpec | None = None
     if isinstance(condition.attentional_blink, AttentionalBlinkStreamSettings):
         stimulus_sequence, attentional_blink, presentation = (
             compile_attentional_blink_stream_sequence(
@@ -156,12 +154,6 @@ def compile_run_spec(
             oddball_every_n=protocol.oddball_every_n, random_seed=random_seed,
             text_height_values_by_role=text_height_values_by_role,
         )
-        if condition.attentional_blink is not None:
-            stimulus_sequence, attentional_blink = compile_attentional_blink_sequence(
-                project, condition, stimulus_sequence, base_set=base_set,
-                refresh_hz=refresh_hz, project_root=project_root,
-                manifest=resolved_manifest, random_seed=random_seed,
-            )
 
     fixation_settings = project.settings.fixation_task
     target_duration_frames = milliseconds_to_frames(

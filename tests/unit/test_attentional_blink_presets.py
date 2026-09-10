@@ -12,7 +12,7 @@ from fpvs_studio.core.condition_template_profiles import (
     built_in_condition_template_profiles,
 )
 from fpvs_studio.core.enums import ExperimentCategory, ProjectSchemaVersion, StimulusModality
-from fpvs_studio.core.models import AttentionalBlinkSettings
+from fpvs_studio.core.models import AttentionalBlinkSettings, ConditionTemplateProfile
 from fpvs_studio.core.project_config import create_project_from_config, export_project_config
 from fpvs_studio.core.project_service import build_starter_project, create_project
 from fpvs_studio.core.serialization import load_project_file, save_project_file
@@ -41,6 +41,8 @@ def test_new_study_has_three_shared_native_streams_and_subjective_question(study
     assert study.schema_version == ProjectSchemaVersion.V1_5
     assert is_attentional_blink_stream_project(study)
     assert study.settings.protocol.base_hz == 10
+    assert not study.settings.fixation_task.show_cross
+    assert build_starter_project("Oddball").settings.fixation_task.show_cross
     assert study.settings.protocol.oddball_every_n == 20
     assert study.settings.condition_profile_id == ATTENTIONAL_BLINK_STREAM_PROFILE_ID
     assert [c.attentional_blink.soa_ms for c in study.conditions] == [100, 300, 500]
@@ -69,17 +71,18 @@ def test_new_study_has_three_shared_native_streams_and_subjective_question(study
             assert entry.post_tasks[0].task_id == study.task_modules[0].task_id
 
 
-def test_legacy_image_profile_still_creates_original_layout():
-    legacy = next(p for p in built_in_condition_template_profiles()
-                  if p.profile_id == ATTENTIONAL_BLINK_PROFILE_ID)
-    project = build_starter_project(
-        "Image pairs", experiment_category=ExperimentCategory.ATTENTIONAL_BLINK,
-        condition_template_profile=legacy,
+def test_legacy_image_profile_is_not_offered_and_creation_is_blocked():
+    assert all(p.profile_id != ATTENTIONAL_BLINK_PROFILE_ID
+               for p in built_in_condition_template_profiles())
+    legacy = ConditionTemplateProfile(
+        profile_id=ATTENTIONAL_BLINK_PROFILE_ID, display_name="Old image pairs",
+        experiment_category=ExperimentCategory.ATTENTIONAL_BLINK,
     )
-    assert project.schema_version == ProjectSchemaVersion.V1_4
-    assert project.settings.protocol.base_hz == 4
-    assert not project.conditions
-    assert not is_attentional_blink_stream_project(project)
+    with pytest.raises(ValueError, match="no longer supported"):
+        build_starter_project(
+            "Image pairs", experiment_category=ExperimentCategory.ATTENTIONAL_BLINK,
+            condition_template_profile=legacy,
+        )
 
 
 def test_study_saved_and_config_imported_without_character_loss(tmp_path):
@@ -88,6 +91,7 @@ def test_study_saved_and_config_imported_without_character_loss(tmp_path):
     )
     restored = load_project_file(scaffold.project_root / "project.json")
     assert restored == scaffold.project
+    assert not restored.settings.fixation_task.show_cross
     config = export_project_config(restored, project_root=scaffold.project_root)
     assert config.schema_version == "1.3.0"
     imported = create_project_from_config(tmp_path, config)
@@ -149,9 +153,11 @@ def test_add_duplicate_and_recreate_keep_stream_layout_and_shared_pools(study, t
 
 def test_stream_rejects_legacy_template_without_mutation(study):
     document = _Document(study, Path("unused"))
-    legacy = next(p for p in built_in_condition_template_profiles()
-                  if p.profile_id == ATTENTIONAL_BLINK_PROFILE_ID)
-    with pytest.raises(ValueError, match="layout"):
+    legacy = ConditionTemplateProfile(
+        profile_id=ATTENTIONAL_BLINK_PROFILE_ID, display_name="Old image pairs",
+        experiment_category=ExperimentCategory.ATTENTIONAL_BLINK,
+    )
+    with pytest.raises(ValueError, match="no longer supported"):
         document.apply_condition_template_profile(legacy)
     assert document._project == study
 

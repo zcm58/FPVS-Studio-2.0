@@ -18,10 +18,6 @@ from PySide6.QtGui import (
 from PySide6.QtWidgets import QApplication, QDialog, QFileDialog, QLabel, QMenu, QPushButton
 from tests.gui.helpers import assert_visible_children_within_parent, write_image_directory
 
-from fpvs_studio.core.condition_template_profiles import (
-    ATTENTIONAL_BLINK_PROFILE_ID,
-    built_in_condition_template_profiles,
-)
 from fpvs_studio.core.enums import DutyCycleMode, ExperimentCategory
 from fpvs_studio.core.paths import filesystem_path
 from fpvs_studio.gui.components import apply_experiment_designer_theme
@@ -40,29 +36,6 @@ from fpvs_studio.gui.experiment_designer_widgets import (
     SourceCard,
 )
 from fpvs_studio.preprocessing.importer import import_stimulus_source_directory
-
-
-def _legacy_ab_profile(category=ExperimentCategory.ATTENTIONAL_BLINK):
-    if category != ExperimentCategory.ATTENTIONAL_BLINK:
-        return None
-    return next(
-        profile for profile in built_in_condition_template_profiles()
-        if profile.profile_id == ATTENTIONAL_BLINK_PROFILE_ID
-    )
-
-
-@pytest.fixture
-def image_document(qtbot, tmp_path: Path) -> tuple[ProjectDocument, str]:
-    document = ProjectDocument.create_new(
-        parent_dir=tmp_path, project_name="Visual designer",
-        experiment_category=ExperimentCategory.ATTENTIONAL_BLINK,
-        condition_template_profile=_legacy_ab_profile(),
-    )
-    document.update_display_settings(preferred_refresh_hz=120.0)
-    condition_id = document.create_condition(
-        name="Object recognition with familiar and unfamiliar natural scenes"
-    )
-    return document, condition_id
 
 
 @pytest.fixture
@@ -354,9 +327,9 @@ def test_expanded_slot_widths_match_actual_durations(qtbot, durations, height) -
     assert canvas.active_phase is None
 
 
-def _open_designer(qtbot, monkeypatch, image_document, *, size=(1040, 760)):
+def _open_designer(qtbot, monkeypatch, oddball_document, *, size=(1040, 760)):
     monkeypatch.setattr(ExperimentDesignerWidget, "_load_thumbnails", lambda self: None)
-    document, condition_id = image_document
+    document, condition_id = oddball_document
     dialog = ExperimentDesignerWidget(document, condition_id=condition_id)
     _show_widget(qtbot, dialog, *size)
     dialog.closed.connect(dialog.hide)
@@ -378,50 +351,6 @@ def _populate_sources(document, condition_id: str, tmp_path: Path) -> None:
         document.apply_designer_source(
             condition_id, role=role, stimulus_set=stimulus_set, summary=summary,
         )
-
-
-def test_designer_opens_at_4hz_with_one_250ms_target_pair(
-    qtbot, monkeypatch, image_document
-) -> None:
-    document, _condition_id = image_document
-    before = document.project.model_copy(deep=True)
-    dialog = _open_designer(qtbot, monkeypatch, image_document)
-
-    assert not hasattr(dialog, "mode_tabs")
-    assert dialog.rate_spin.value() == 4.0
-    assert dialog.target_spin.value() == 50.0
-    assert dialog.isi_spin.value() == 50.0
-    assert "150" in dialog.t2_value.text()
-    assert dialog.cycle_canvas.roles() == ("base", "base", "base", "target_pair")
-    assert dialog.slot_canvas.durations == (50.0, 50.0, 150.0)
-    assert all(card.isVisible() for card in (
-        dialog.base_source, dialog.t1_source, dialog.t2_source,
-    ))
-    assert not dialog.timing_details.isVisible()
-    assert document.project == before
-
-
-def test_editable_isi_recalculates_t2_and_rejects_an_overfull_slot(
-    qtbot, monkeypatch, image_document
-) -> None:
-    document, _condition_id = image_document
-    before = document.project.model_copy(deep=True)
-    dialog = _open_designer(qtbot, monkeypatch, image_document)
-
-    dialog.isi_spin.setValue(75.0)
-    QApplication.processEvents()
-    assert "125" in dialog.t2_value.text()
-    assert dialog.slot_canvas.durations == (50.0, 75.0, 125.0)
-    dialog.isi_spin.setValue(225.0)
-    QApplication.processEvents()
-
-    assert dialog.status_label.isVisible()
-    assert dialog.status_label.text().strip()
-    assert not dialog.apply_button.isEnabled()
-    assert not dialog.preview_button.isEnabled()
-    assert document.project == before
-
-
 
 
 def test_standard_category_preserves_existing_protocol_until_apply(
@@ -447,40 +376,7 @@ def test_standard_category_preserves_existing_protocol_until_apply(
     assert document.project.conditions == before.conditions
 
 
-
-
-def test_apply_saves_ab_draft_and_retains_the_independent_t2_source(
-    qtbot, monkeypatch, image_document, tmp_path
-) -> None:
-    document, condition_id = image_document
-    _populate_sources(document, condition_id, tmp_path)
-    original_condition = document.get_condition(condition_id)
-    assert original_condition is not None
-    original_t2_id = original_condition.t2_stimulus_set_id
-    assert original_t2_id is not None
-    disk_before = document.project_file_path.read_bytes()
-    dialog = _open_designer(qtbot, monkeypatch, image_document)
-    dialog.target_spin.setValue(25.0)
-    dialog.isi_spin.setValue(75.0)
-    QApplication.processEvents()
-
-    assert dialog.apply_button.isEnabled()
-    qtbot.mouseClick(dialog.apply_button, Qt.MouseButton.LeftButton)
-
-    condition = document.get_condition(condition_id)
-    assert condition is not None
-    assert condition.attentional_blink is not None
-    assert condition.attentional_blink.t1_duration_ms == 25.0
-    assert condition.attentional_blink.isi_ms == 75.0
-    assert condition.t2_stimulus_set_id == original_t2_id
-    assert document.get_condition_stimulus_set(condition_id, "t2").image_count == 2
-    assert document.project.settings.protocol.base_hz == 4.0
-    assert document.project.settings.protocol.oddball_every_n == 4
-    assert document.project_file_path.read_bytes() == disk_before
-
-
-@pytest.mark.parametrize("category", [ExperimentCategory.FPVS_ODDBALL,
-                                      ExperimentCategory.ATTENTIONAL_BLINK])
+@pytest.mark.parametrize("category", [ExperimentCategory.FPVS_ODDBALL])
 def test_folder_selection_attaches_the_correct_source_without_adding_slots(
     qtbot, monkeypatch, tmp_path, category
 ) -> None:
@@ -504,7 +400,6 @@ def test_folder_selection_attaches_the_correct_source_without_adding_slots(
     monkeypatch.setattr("fpvs_studio.gui.experiment_designer_dialog.BackgroundTask", ImmediateTask)
     document = ProjectDocument.create_new(
         parent_dir=tmp_path, project_name="Folder import", experiment_category=category,
-        condition_template_profile=_legacy_ab_profile(category),
     )
     condition_id = document.create_condition(name="Target source")
     role = "t2" if category == ExperimentCategory.ATTENTIONAL_BLINK else "oddball"
@@ -579,12 +474,11 @@ def test_designer_import_preserves_long_filename_and_decodes_long_destination(
     assert decoded.pixelColor(0, 0) == QColor(20, 10, 5)
 
 
-def test_closing_discards_unapplied_ab_timing(qtbot, monkeypatch, image_document) -> None:
-    document, _condition_id = image_document
+def test_closing_discards_unapplied_oddball_timing(qtbot, monkeypatch, oddball_document) -> None:
+    document, _condition_id = oddball_document
     before = document.project.model_copy(deep=True)
-    dialog = _open_designer(qtbot, monkeypatch, image_document)
-    dialog.target_spin.setValue(35.0)
-    dialog.isi_spin.setValue(65.0)
+    dialog = _open_designer(qtbot, monkeypatch, oddball_document)
+    dialog.rate_spin.setValue(4.0)
     dialog.cycle_canvas.add_role("base")
 
     qtbot.mouseClick(dialog.close_button, Qt.MouseButton.LeftButton)
@@ -601,11 +495,11 @@ def _inject_thumbnails(dialog: ExperimentDesignerWidget, color="green") -> None:
 
 
 def test_slow_preview_stops_on_toggle_edit_and_window_close(
-    qtbot, monkeypatch, image_document, tmp_path
+    qtbot, monkeypatch, oddball_document, tmp_path
 ) -> None:
-    document, condition_id = image_document
+    document, condition_id = oddball_document
     _populate_sources(document, condition_id, tmp_path)
-    dialog = _open_designer(qtbot, monkeypatch, image_document)
+    dialog = _open_designer(qtbot, monkeypatch, oddball_document)
     _inject_thumbnails(dialog)
 
     qtbot.mouseClick(dialog.preview_button, Qt.MouseButton.LeftButton)
@@ -616,7 +510,7 @@ def test_slow_preview_stops_on_toggle_edit_and_window_close(
     assert not dialog._preview_timer.isActive()
     assert not dialog.preview_window.isVisible()
     qtbot.mouseClick(dialog.preview_button, Qt.MouseButton.LeftButton)
-    dialog.isi_spin.setValue(75.0)
+    dialog.rate_spin.setValue(4.0)
     assert not dialog._preview_timer.isActive()
     assert not dialog.preview_button.isChecked()
     qtbot.mouseClick(dialog.preview_button, Qt.MouseButton.LeftButton)
@@ -632,9 +526,9 @@ def test_slow_preview_stops_on_toggle_edit_and_window_close(
 
 
 def test_outdated_thumbnail_result_cannot_replace_the_current_source(
-    qtbot, monkeypatch, image_document
+    qtbot, monkeypatch, oddball_document
 ) -> None:
-    dialog = _open_designer(qtbot, monkeypatch, image_document)
+    dialog = _open_designer(qtbot, monkeypatch, oddball_document)
     _inject_thumbnails(dialog)
     original = dialog.t1_source.tile.pixmaps[0].cacheKey()
     image = QImage(40, 30, QImage.Format.Format_RGB32)
@@ -694,9 +588,9 @@ def test_standard_contrast_preview_discloses_modulation_omission(
 
 @pytest.mark.parametrize("close_method", ["request_close", "close"])
 def test_close_waits_for_both_import_and_thumbnail_tasks(
-    qtbot, monkeypatch, image_document, close_method
+    qtbot, monkeypatch, oddball_document, close_method
 ) -> None:
-    dialog = _open_designer(qtbot, monkeypatch, image_document)
+    dialog = _open_designer(qtbot, monkeypatch, oddball_document)
     monkeypatch.setattr(dialog, "_task", object())
     monkeypatch.setattr(dialog, "_thumbnail_task", object())
     dialog._refresh_preview()
@@ -715,18 +609,17 @@ def test_close_waits_for_both_import_and_thumbnail_tasks(
 
 
 def test_timing_details_are_optional_and_do_not_change_the_real_display(
-    qtbot, monkeypatch, image_document
+    qtbot, monkeypatch, oddball_document
 ) -> None:
-    document, _condition_id = image_document
+    document, _condition_id = oddball_document
     before = document.project.settings.display.model_copy(deep=True)
-    dialog = _open_designer(qtbot, monkeypatch, image_document)
+    dialog = _open_designer(qtbot, monkeypatch, oddball_document)
     qtbot.mouseClick(dialog.details_button, Qt.MouseButton.LeftButton)
     QApplication.processEvents()
 
     assert dialog.timing_details.isVisible()
     assert "Achieved" in dialog.details_summary_label.text()
-    assert "T1" in dialog.details_summary_label.text()
-    assert "T2" in dialog.details_summary_label.text()
+    assert "slot" in dialog.details_summary_label.text().lower()
     assert_visible_children_within_parent(dialog.timing_details)
     dialog.refresh_combo.setCurrentIndex(dialog.refresh_combo.findData(60.0))
     assert document.project.settings.display == before
@@ -737,9 +630,9 @@ def test_timing_details_are_optional_and_do_not_change_the_real_display(
 
 
 def test_source_failure_remains_visible_after_task_finishes(
-    qtbot, monkeypatch, image_document
+    qtbot, monkeypatch, oddball_document
 ) -> None:
-    dialog = _open_designer(qtbot, monkeypatch, image_document)
+    dialog = _open_designer(qtbot, monkeypatch, oddball_document)
     dialog._task_failed(ValueError("The selected folder contains no supported images."))
     dialog._import_finished()
 
@@ -748,9 +641,9 @@ def test_source_failure_remains_visible_after_task_finishes(
 
 
 def test_standalone_dialog_hosts_the_same_category_specific_editor(
-    qtbot, monkeypatch, image_document, tmp_path
+    qtbot, monkeypatch, oddball_document, tmp_path
 ) -> None:
-    document, condition_id = image_document
+    document, condition_id = oddball_document
     _populate_sources(document, condition_id, tmp_path)
     monkeypatch.setattr(ExperimentDesignerWidget, "_load_thumbnails", lambda self: None)
     dialog = ExperimentDesignerDialog(document, condition_id=condition_id)
@@ -763,7 +656,7 @@ def test_standalone_dialog_hosts_the_same_category_specific_editor(
 
 
 @pytest.mark.parametrize(
-    "category", [ExperimentCategory.FPVS_ODDBALL, ExperimentCategory.ATTENTIONAL_BLINK]
+    "category", [ExperimentCategory.FPVS_ODDBALL]
 )
 @pytest.mark.parametrize("size", [(1040, 760), (1400, 920)])
 def test_fixed_category_designer_preserves_folder_hit_targets_and_geometry(
@@ -771,7 +664,6 @@ def test_fixed_category_designer_preserves_folder_hit_targets_and_geometry(
 ) -> None:
     document = ProjectDocument.create_new(
         parent_dir=tmp_path, project_name="Category design", experiment_category=category,
-        condition_template_profile=_legacy_ab_profile(category),
     )
     condition_id = document.create_condition(name="Familiar and unfamiliar natural object images")
     dialog = _open_designer(qtbot, monkeypatch, (document, condition_id), size=size)

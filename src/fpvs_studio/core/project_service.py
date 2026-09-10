@@ -92,7 +92,9 @@ def build_starter_project(
 
     experiment_category = ExperimentCategory(experiment_category)
     if experiment_category == ExperimentCategory.FPVS:
-        raise ValueError("FPVS is coming soon. Choose FPVS-Oddball or Attentional-Blink.")
+        raise ValueError(
+            "Standard FPVS is coming soon. Choose FPVS Oddball Paradigm or Attentional-Blink."
+        )
     if (
         experiment_category == ExperimentCategory.ATTENTIONAL_BLINK
         and condition_template_profile is None
@@ -108,11 +110,11 @@ def build_starter_project(
         presentation=ProjectPresentationSettings(pre_stream_fixation_seconds=2.0),
         protocol=ProtocolSettings(
             base_hz=(
-                4.0 if experiment_category == ExperimentCategory.ATTENTIONAL_BLINK
+                10.0 if experiment_category == ExperimentCategory.ATTENTIONAL_BLINK
                 else template.base_hz
             ),
             oddball_every_n=(
-                4 if experiment_category == ExperimentCategory.ATTENTIONAL_BLINK
+                20 if experiment_category == ExperimentCategory.ATTENTIONAL_BLINK
                 else template.oddball_every_n
             ),
         ),

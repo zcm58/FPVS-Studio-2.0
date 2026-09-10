@@ -61,14 +61,12 @@ interaction.
   launch action.
 - Welcome and Home share the same launch-surface frame/styling so opening a ready
   project keeps a stable outer window and card treatment.
-- Setup Wizard is the guided setup/editing surface. Setup uses the compact
-  Welcome/Home-sized `1120x720` default window, with Image Resizer using the
-  same focused utility footprint instead of the larger workspace sizing. Wizard
-  steps are Project, Conditions, Timing, Image Size, Session, Fixation, Response, and
-  Review. Pages share the same setup step surface so content
-  width, margins, and vertical alignment stay consistent across steps. The shared
-  setup frame, top progress stepper, bottom navigation, and visible child widgets
-  must fit at `1120x720` without bottom clipping or required vertical scrolling.
+- Setup Wizard is the guided setup/editing surface at `1120x820`. Its eight steps are
+  Project, Conditions, Design, Timing & Session, Image Size (Character Size for native AB),
+  Fixation, Response, and Review. All steps share the Design page's frameless
+  shell, left-aligned task heading, step count, vertically centered content, and stable progress
+  stepper. Bottom navigation remains at the window edge with no divider. Forms retain
+  bounded readable widths. All steps must fit without clipping or required scrolling.
 - Conditions is a combined guided setup area for condition list/actions, names,
   triggers, instructions, modality selection, image-folder assignment, typed word-list
   authoring, control-condition creation, and image normalization. It uses compact list
@@ -114,8 +112,26 @@ interaction.
 - Add or update registered pytest-qt no-clipping coverage at the documented
   minimum/default size, with realistic long content and relevant dynamic states.
 - Setup Wizard layout changes must update compact no-clipping coverage in
-  `tests/gui/test_setup_wizard_shell.py` for all eight steps at `1120x720`.
+  `tests/gui/test_setup_wizard_shell.py` for all eight steps at `1120x820`, plus the
+  native AB matrix in `tests/gui/test_attentional_blink_stream_designer.py`.
 - Do not run Qt unless the user approves a safe visible environment. Use the optional
   `full` tier with explicit opt-in, and do not use offscreen execution.
 - Run `./scripts/verify.ps1 -Scope repo -Tier precommit` when GUI changes
   touch multiple layers.
+
+
+## Setup text hierarchy
+
+Use one task heading per step. Compact forms are horizontally centered at bounded
+widths; Conditions and Design keep their wider workspaces. Field labels belong close
+to their controls: Project and Timing use stacked labels, while denser forms align
+labels consistently against the input column. Shared form treatment lives in
+`components.configure_setup_form`; retain the frameless shell and bottom navigation.
+
+Visible descriptive text must help with the current field, explain a consequential
+action, or resolve a current error. Avoid repeating the page title, control label,
+completed state or another step's settings. Design owns stream rates and SOAs;
+Timing owns refresh selection, verification and background. Show a concise verification
+result and current errors inline; technical monitor observations remain in tooltips.
+Do not repeat Timing's inline blocker in the footer. Participant-authored instructions
+and actual validation rules are preserved.

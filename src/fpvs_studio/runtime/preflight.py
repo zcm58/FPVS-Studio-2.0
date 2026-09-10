@@ -9,17 +9,16 @@ from __future__ import annotations
 from collections.abc import Mapping
 from math import isclose
 from pathlib import Path
-from typing import cast
 
 from PIL import Image
 
-from fpvs_studio.core.attentional_blink import SlotRole, preview_attentional_blink
 from fpvs_studio.core.attentional_blink_stream import (
     GRID_TOLERANCE,
     preview_attentional_blink_stream,
 )
 from fpvs_studio.core.contrast_modulation import is_sinusoidal_neutral_background
 from fpvs_studio.core.enums import DutyCycleMode, StimulusModality
+from fpvs_studio.core.experiment_categories import RETIRED_IMAGE_PAIR_MESSAGE
 from fpvs_studio.core.paths import resolve_project_relative_path
 from fpvs_studio.core.run_spec import (
     AttentionalBlinkRunSpec,
@@ -194,58 +193,7 @@ def _validate_attentional_blink_timing(run_spec: RunSpec) -> None:
     if isinstance(timing, AttentionalBlinkStreamRunSpec):
         _validate_attentional_blink_stream_timing(run_spec, timing)
         return
-    if (
-        run_spec.condition.stimulus_modality != StimulusModality.IMAGE
-        or run_spec.display.duty_cycle_mode != DutyCycleMode.CONTINUOUS
-        or run_spec.presentation is None
-        or run_spec.display.on_frames != run_spec.display.frames_per_stimulus
-        or run_spec.display.off_frames != 0
-        or not isclose(run_spec.display.duty_cycle, 1.0, rel_tol=0.0, abs_tol=1e-9)
-    ):
-        raise PreflightError("Attentional-blink playback requires continuous image presentation.")
-    slots = run_spec.condition.oddball_every_n
-    # Bound allocation before reconstructing a potentially malformed contract.
-    if not 1 <= slots <= 1000:
-        raise PreflightError("Attentional-blink cycles require between 1 and 1000 slots.")
-    roles = cast(tuple[SlotRole, ...], ("base",) * (slots - 1) + ("target_pair",))
-    try:
-        preview = preview_attentional_blink(
-            roles, refresh_hz=run_spec.display.refresh_hz,
-            base_hz=run_spec.condition.base_hz,
-            t1_ms=timing.requested_t1_duration_ms, isi_ms=timing.requested_isi_ms,
-        )
-    except ValueError as exc:
-        raise PreflightError(f"Attentional-blink timing is invalid: {exc}") from exc
-    if (timing.t1_frames, timing.isi_frames, timing.t2_frames) != (
-        preview.t1_frames, preview.isi_frames, preview.t2_frames,
-    ):
-        raise PreflightError("Attentional-blink frame durations do not match requested timing.")
-    repeats = run_spec.condition.total_oddball_cycles
-    if repeats < 1 or len(run_spec.stimulus_sequence) != repeats * len(preview.segments):
-        raise PreflightError("Attentional-blink event count does not match the compiled cycles.")
-    if run_spec.display.total_frames != repeats * preview.total_frames:
-        raise PreflightError(
-            "Attentional-blink cycles do not cover the compiled total frame count."
-        )
-    for index, event in enumerate(run_spec.stimulus_sequence):
-        repeat_index, segment_index = divmod(index, len(preview.segments))
-        segment = preview.segments[segment_index]
-        expected_role = "base" if segment.role in ("base", "separator") else "oddball"
-        if (
-            event.sequence_index != index
-            or event.is_blank != (segment.role == "separator" and timing.isi_mode == "blank")
-            or event.phase != segment.role
-            or event.role != expected_role
-            or event.stimulus_modality != StimulusModality.IMAGE
-            or event.slot_index != repeat_index * slots + segment.slot_index
-            or event.on_start_frame != repeat_index * preview.total_frames + segment.start_frame
-            or event.on_frames != segment.duration_frames
-            or event.off_frames != 0
-        ):
-            raise PreflightError(
-                f"Attentional-blink event {index} does not match its phase, slot, or frame timing."
-            )
-    _validate_attentional_blink_markers(run_spec, timing.t2_trigger_code)
+    raise PreflightError(RETIRED_IMAGE_PAIR_MESSAGE)
 
 
 def _validate_attentional_blink_stream_timing(
@@ -631,6 +579,8 @@ def preflight_run_spec(
 ) -> None:
     """Validate one run spec before execution starts."""
 
+    if isinstance(run_spec.attentional_blink, AttentionalBlinkRunSpec):
+        raise PreflightError(RETIRED_IMAGE_PAIR_MESSAGE)
     strict_timing = _strict_timing_enabled(runtime_options)
     if strict_timing and not bool((runtime_options or {}).get("fullscreen", True)):
         raise PreflightError(

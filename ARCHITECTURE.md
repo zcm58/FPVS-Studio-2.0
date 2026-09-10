@@ -18,26 +18,21 @@ lazily only inside the engine package.
   licensed Open Sans face used by authored modular tasks.
 - `src/fpvs_studio/gui/`: PySide6 windows, dialogs, controllers, document binding,
   Home/Setup workflows, and shared components/theme helpers. New-experiment Setup
-  starts with category alone, then project details. Setup composes nine
-  model-backed pages (Project, Conditions, Design, Timing, Image Size, Session, Fixation,
+  starts with category alone, then project details. Setup composes eight
+  model-backed pages (Project, Conditions, Design, Timing & Session, Image Size, Fixation,
   Response, Review); shared dialog/form styling remains in `gui/components.py`.
   Design embeds a shared category-specific visual editor. Setup's Next action applies
   the draft through the existing navigation gate; the standalone host retains Apply.
-  The GUI separates a schematic stream overview from proportional target-pair timing.
-  `core/experiment_design.py`
-  owns oddball cycle descriptions and optional frame-based previews. Oddball Apply
-  uses existing protocol settings. `core/attentional_blink.py` owns requested and
-  resolved target-pair timing; `core/compiler_attentional_blink.py` expands those
-  pairs into executable frame events inside the existing normal-slot cadence.
-  ISI can use an independent image pool or an explicit blank event; preview and
-  engines consume that choice without changing slot timing.
+  `core/experiment_design.py` owns oddball cycle descriptions and frame previews;
+  Oddball Apply uses existing protocol settings. AB image pairs are retired, with
+  guards in category validation, authoring, runtime preflight and direct engine launch.
   New AB letter streams use `gui/attentional_blink_stream_designer.py`, shared native
   digit/target pools, and onset-to-onset SOAs. `core/attentional_blink_stream.py` owns
   the exact character grid and seeded symbol sampling shared with the designer;
   `core/compiler_attentional_blink_stream.py` compiles the resulting stream.
   `core/attentional_blink_presets.py` assembles the three-condition study and questionnaire.
-  Only legacy AB image pairs expose ISI; both layouts retain separate persisted models.
-  Both AB layouts can hide the fixation cross through Setup > Fixation. The persisted
+  Historical image-pair models remain decodable without an authoring or playback route.
+  AB letter streams can hide the fixation cross through Setup > Fixation. The persisted
   `FixationTaskSettings.show_cross` flag compiles into `FixationStyleSpec`; engines
   skip cross preparation/drawing while preserving lead-in and stream frame timing.
   Manage Projects routes metadata-only renaming through `core/project_service.py`;

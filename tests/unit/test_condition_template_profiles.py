@@ -324,3 +324,27 @@ def test_condition_template_built_ins_are_read_only(tmp_path) -> None:
 
     with pytest.raises(ValueError, match="cannot be deleted"):
         delete_condition_template_profile(tmp_path, built_in_profile.profile_id)
+
+
+def test_retired_custom_image_pair_profiles_are_preserved_but_not_offered(tmp_path):
+    from fpvs_studio.core.enums import ExperimentCategory
+
+    retired = ConditionTemplateProfile(
+        profile_id="saved-image-pairs", display_name="My old image pairs",
+        experiment_category=ExperimentCategory.ATTENTIONAL_BLINK,
+    )
+    save_condition_template_profile_library(
+        tmp_path, ConditionTemplateProfileLibrary(profiles=[retired]),
+    )
+    offered = list_condition_template_profiles(
+        tmp_path, experiment_category=ExperimentCategory.ATTENTIONAL_BLINK,
+    )
+    assert [item.display_name for item in offered] == ["Digits & letter targets"]
+    stored = load_condition_template_profile_library(tmp_path)
+    assert retired in stored.profiles
+    before = condition_template_library_path(tmp_path).read_bytes()
+    with pytest.raises(ValueError, match="no longer supported"):
+        upsert_condition_template_profile(tmp_path, retired)
+    assert condition_template_library_path(tmp_path).read_bytes() == before
+    with pytest.raises(KeyError):
+        get_condition_template_profile(tmp_path, retired.profile_id)

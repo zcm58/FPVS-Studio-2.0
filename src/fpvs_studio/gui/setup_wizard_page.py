@@ -22,7 +22,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from fpvs_studio.core.enums import ExperimentCategory, StimulusModality
+from fpvs_studio.core.enums import ExperimentCategory, PresentationUnit, StimulusModality
 from fpvs_studio.core.experiment_categories import category_conflict_condition_ids
 from fpvs_studio.core.frame_validation import FrameValidationError
 from fpvs_studio.core.models import AttentionalBlinkStreamSettings, ConditionTemplateProfile
@@ -37,6 +37,7 @@ from fpvs_studio.gui.components import (
     SetupProgressStepper,
     StatusBadgeLabel,
     apply_setup_wizard_theme,
+    configure_setup_form,
     mark_primary_action,
     mark_secondary_action,
     refresh_widget_style,
@@ -72,9 +73,8 @@ _WIZARD_STEPS: tuple[tuple[str, str], ...] = (
     ("project", "Project"),
     ("conditions", "Conditions"),
     ("design", "Design"),
-    ("experiment", "Timing"),
+    ("experiment", "Timing & Session"),
     ("image_size", "Image Size"),
-    ("session", "Session"),
     ("fixation", "Fixation"),
     ("response", "Response"),
     ("review", "Review"),
@@ -141,8 +141,6 @@ class _SetupStepSurface(_NaturalSizePanel):
         *,
         object_name: str,
         max_width: int = _SETUP_STEP_SURFACE_MAX_WIDTH,
-        center_vertically: bool = False,
-        fill_width: bool = False,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
@@ -157,22 +155,16 @@ class _SetupStepSurface(_NaturalSizePanel):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
-        if center_vertically:
-            layout.addStretch(1)
         row = QWidget(self)
         row_layout = QHBoxLayout(row)
         row_layout.setContentsMargins(0, 0, 0, 0)
         row_layout.setSpacing(0)
         row_layout.addStretch(1)
-        row_layout.addWidget(content)
+        row_layout.addWidget(content, 10000)
         row_layout.addStretch(1)
-        if fill_width:
-            row_layout.setStretch(0, 0)
-            row_layout.setStretch(1, 1)
-            row_layout.setStretch(2, 0)
+        layout.addStretch(1)
         layout.addWidget(row)
-        if center_vertically:
-            layout.addStretch(1)
+        layout.addStretch(1)
 
     def refresh(self) -> None:
         refresh = getattr(self.content, "refresh", None)
@@ -297,9 +289,9 @@ class SetupWizardPage(QWidget):
         title_row.setContentsMargins(12, 0, 12, 0)
         self.shell.page_container.header_layout.removeWidget(self.shell.title_label)
         title_row.addWidget(self.shell.title_label, 1)
-        self.design_step_count_label = QLabel("Step 3 of 9", self)
-        self.design_step_count_label.setObjectName("designer_step_count")
-        title_row.addWidget(self.design_step_count_label)
+        self.step_count_label = QLabel(self)
+        self.step_count_label.setObjectName("setup_wizard_step_count")
+        title_row.addWidget(self.step_count_label)
         self.shell.page_container.header_layout.insertLayout(0, title_row)
 
         self.progress_steps = SetupProgressStepper(
@@ -314,7 +306,7 @@ class SetupWizardPage(QWidget):
 
         progress_panel = QWidget(self)
         progress_panel.setObjectName("setup_wizard_progress_panel")
-        progress_panel.setMaximumWidth(1120)
+        progress_panel.setMaximumWidth(1400)
         progress_panel.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.progress_panel = progress_panel
         progress_layout = QVBoxLayout(progress_panel)
@@ -554,10 +546,15 @@ class SetupWizardPage(QWidget):
             self._refresh_timer.start()
 
     def _build_step_pages(self) -> None:
+        project_layout = self.project_overview_editor.layout()
+        assert project_layout is not None
+        project_layout.setAlignment(
+            self.project_overview_editor.project_overview_card, Qt.AlignmentFlag(0)
+        )
         self.project_step_surface = _SetupStepSurface(
             self.project_overview_editor,
             object_name="setup_wizard_project_surface",
-            center_vertically=True,
+            max_width=760,
             parent=self,
         )
         self.conditions_step_surface = _SetupStepSurface(
@@ -570,13 +567,12 @@ class SetupWizardPage(QWidget):
             self.design_setup_step,
             object_name="setup_wizard_design_surface",
             max_width=1400,
-            fill_width=True,
             parent=self,
         )
         self.experiment_step_surface = _SetupStepSurface(
             self._experiment_settings_step_page(),
             object_name="setup_wizard_experiment_surface",
-            center_vertically=True,
+            max_width=880,
             parent=self,
         )
         self.image_size_settings_card = self._settings_step_card(
@@ -588,25 +584,13 @@ class SetupWizardPage(QWidget):
         self.image_size_step_surface = _SetupStepSurface(
             self.image_size_settings_card,
             object_name="setup_wizard_image_size_surface",
-            center_vertically=True,
-            parent=self,
-        )
-        self.session_settings_card = self._settings_step_card(
-            self.session_structure_editor,
-            title="Session",
-            subtitle="Choose how often each condition runs. Order is randomized at launch.",
-            object_name="setup_wizard_session_settings_card",
-        )
-        self.session_step_surface = _SetupStepSurface(
-            self.session_settings_card,
-            object_name="setup_wizard_session_surface",
-            center_vertically=True,
+            max_width=760,
             parent=self,
         )
         self.fixation_step_surface = _SetupStepSurface(
             self.fixation_schedule_editor,
             object_name="setup_wizard_fixation_surface",
-            center_vertically=True,
+            max_width=_SETUP_STEP_WORKBENCH_SURFACE_MAX_WIDTH,
             parent=self,
         )
         self.response_step_surface = _SetupStepSurface(
@@ -618,7 +602,6 @@ class SetupWizardPage(QWidget):
         self.review_step_surface = _SetupStepSurface(
             self._review_step_page(),
             object_name="setup_wizard_review_surface",
-            center_vertically=True,
             parent=self,
         )
         self.step_stack.addWidget(self.project_step_surface)
@@ -626,32 +609,58 @@ class SetupWizardPage(QWidget):
         self.step_stack.addWidget(self.design_step_surface)
         self.step_stack.addWidget(self.experiment_step_surface)
         self.step_stack.addWidget(self.image_size_step_surface)
-        self.step_stack.addWidget(self.session_step_surface)
         self.step_stack.addWidget(self.fixation_step_surface)
         self.step_stack.addWidget(self.response_step_surface)
         self.step_stack.addWidget(self.review_step_surface)
+        for card in (
+            self.project_overview_editor.project_overview_card,
+            self.experiment_settings_card,
+            self.image_size_settings_card,
+            self.session_settings_card,
+            self.review_card,
+        ):
+            card.title_label.setVisible(
+                card in (self.experiment_settings_card, self.session_settings_card)
+            )
+            if card.subtitle_label is not None:
+                card.subtitle_label.hide()
+            card.setProperty("setupFlatSection", "true")
+            card.card_layout.setContentsMargins(0, 8, 0, 8)
+            refresh_widget_style(card)
 
     def _settings_step_card(
         self, editor: QWidget, *, title: str, subtitle: str, object_name: str
     ) -> SectionCard:
         card = SectionCard(title=title, subtitle=subtitle, object_name=object_name, parent=self)
         card.setMaximumWidth(_SETUP_STEP_SURFACE_MAX_WIDTH)
-        card.setMinimumWidth(680)
+        card.setMinimumWidth(0)
         card.body_layout.addWidget(editor)
         return card
 
     def _experiment_settings_step_page(self) -> QWidget:
         page = QWidget(self)
         page.setObjectName("setup_wizard_experiment_settings_page")
-        layout = QVBoxLayout(page)
+        layout = QHBoxLayout(page)
         layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(32)
         self.experiment_settings_card = self._settings_step_card(
             self.runtime_settings_editor,
-            title="Timing and Display",
+            title="Display",
             subtitle="Verify display timing and choose the experiment background.",
             object_name="setup_wizard_experiment_settings_card",
         )
-        layout.addWidget(self.experiment_settings_card)
+        self.session_settings_card = self._settings_step_card(
+            self.session_structure_editor,
+            title="Session",
+            subtitle="",
+            object_name="setup_wizard_session_settings_card",
+        )
+        configure_setup_form(self.session_structure_editor.session_layout, stacked=True)
+        self.session_structure_editor.block_count_spin.setFixedWidth(240)
+        self.session_structure_editor.seed_help_label.setMinimumHeight(30)
+        self.runtime_settings_editor.refresh_hz_combo.setFixedWidth(240)
+        layout.addWidget(self.experiment_settings_card, 1, Qt.AlignmentFlag.AlignTop)
+        layout.addWidget(self.session_settings_card, 1, Qt.AlignmentFlag.AlignTop)
         return page
 
     def _review_step_page(self) -> QWidget:
@@ -681,7 +690,7 @@ class SetupWizardPage(QWidget):
         self._review_summary_widgets: list[_ReviewSummaryWidgets] = []
         self.review_card.body_layout.addWidget(self.review_checklist_container)
 
-        layout.addWidget(self.review_card, 0, Qt.AlignmentFlag.AlignHCenter)
+        layout.addWidget(self.review_card)
         return page
 
     def _go_back(self) -> None:
@@ -935,21 +944,27 @@ class SetupWizardPage(QWidget):
 
         self._refresh_progress_steps()
         is_design = step_key == "design"
-        self.shell.title_label.setText("Design your sequence" if is_design else "Setup Wizard")
+        page_titles = {
+            "project": "Set up your experiment",
+            "conditions": "Configure your conditions",
+            "design": "Design your sequence",
+            "experiment": "Set your timing and session",
+            "image_size": "Set your character size" if is_letter_stream_project(self._document)
+            else "Set your image size",
+            "fixation": "Configure fixation",
+            "response": "Configure responses and appearance",
+            "review": "Review your experiment",
+        }
+        self.shell.title_label.setText(page_titles[step_key])
         if is_design and is_letter_stream_project(self._document):
             self.shell.title_label.setText("Design your attentional blink study")
         self.shell.title_label.setAlignment(
-            Qt.AlignmentFlag.AlignVCenter | (
-                Qt.AlignmentFlag.AlignLeft if is_design else Qt.AlignmentFlag.AlignHCenter
-            )
+            Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft
         )
-        self.design_step_count_label.setVisible(is_design)
-        self.progress_panel.setMaximumWidth(1400 if is_design else 1120)
+        self.step_count_label.setText(f"Step {self._active_step_index + 1} of {len(_WIZARD_STEPS)}")
         page_layout = self.shell.page_container.layout()
         assert page_layout is not None
-        page_layout.setSpacing(8 if is_design else PAGE_SECTION_GAP)
-        self.navigation_row.setProperty("designerFooter", is_design)
-        refresh_widget_style(self.navigation_row)
+        page_layout.setSpacing(8)
         self.step_title_label.setText(title)
         if step_key == "review":
             self._refresh_review_summary()
@@ -960,11 +975,6 @@ class SetupWizardPage(QWidget):
         self.step_status_badge.setVisible(False)
         self.step_status_label.setText(self._step_status_text(self._active_step_index))
         self.step_status_label.setVisible(False)
-        self.step_card.setProperty(
-            "wizardProjectStepFrame",
-            "true" if step_key == "design" else "false",
-        )
-        refresh_widget_style(self.step_card)
         self.setup_wizard_back_button.setEnabled(
             self._active_step_index > 0 and not condition_image_task_active
         )
@@ -981,7 +991,7 @@ class SetupWizardPage(QWidget):
             self._active_condition_image_task_hint()
             if condition_image_task_active
             else ""
-            if step_valid or step_key == "review"
+            if step_valid or step_key in {"review", "experiment"}
             else self._next_step_hint_text()
         )
         if is_design and step_valid and not condition_image_task_active:
@@ -1002,9 +1012,7 @@ class SetupWizardPage(QWidget):
         viewport_height = self.shell.page_container.scroll_area.viewport().height()
         if viewport_height <= 0:
             return
-        maximum = _SETUP_STEP_CARD_MAX_HEIGHT
-        if self._current_step_key() == "design":
-            maximum += 100 + max(0, self.height() - 800)
+        maximum = _SETUP_STEP_CARD_MAX_HEIGHT + 100 + max(0, self.height() - 800)
         viewport_height = min(viewport_height, maximum)
 
         card_margins = self.step_card.card_layout.contentsMargins()
@@ -1172,6 +1180,15 @@ class SetupWizardPage(QWidget):
         default_lead_in = project.settings.presentation.pre_stream_fixation_seconds
         modes = sorted({_timing_template_label(item.duty_cycle_mode) for item in conditions})
         mode_summary = modes[0] if len(modes) == 1 else f"Mixed presentation ({len(modes)} modes)"
+        size_summary = presentation_defaults_summary(project.settings.presentation.defaults)
+        if letter_stream:
+            mode_summary = "Digits and target letters"
+            height = project.settings.presentation.defaults.text_height
+            unit = (
+                "visual degrees" if height.unit == PresentationUnit.DEGREES
+                else "of screen height"
+            )
+            size_summary = f"Character height: {height.values[0]:g} {unit}"
         pre_count = sum(len(item.pre_task_bindings) for item in conditions)
         post_count = sum(len(item.post_task_bindings) for item in conditions)
         verified = (
@@ -1224,7 +1241,7 @@ class SetupWizardPage(QWidget):
                 "image_size",
                 "Character Size" if letter_stream else "Image Size",
                 (
-                    presentation_defaults_summary(project.settings.presentation.defaults),
+                    size_summary,
                     f"Viewing distance: {display.viewing_distance_cm:g} cm · "
                     f"{display.screen_width_px} × {display.screen_height_px} px",
                 ),
@@ -1321,7 +1338,7 @@ class SetupWizardPage(QWidget):
             self.image_display_size_editor, AttentionalBlinkCharacterSizeEditor,
         ):
             return not self.image_display_size_editor.validation_message()
-        if step_key in {"image_size", "session", "fixation"}:
+        if step_key in {"image_size", "fixation"}:
             return True
         if step_key == "response":
             return True
@@ -1436,6 +1453,7 @@ class SetupWizardPage(QWidget):
 
     def _step_index_for_key(self, step_key: str) -> int:
         aliases = {
+            "session": "experiment",
             "display": "experiment",
             "runtime": "experiment",
             "timing": "experiment",

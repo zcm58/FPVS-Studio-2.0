@@ -354,11 +354,6 @@ class FixationSettingsEditor(QWidget):
             "fixation color changes, accuracy responses and the fixation tutorial."
         )
         self.show_cross_checkbox.toggled.connect(self._apply_cross_visibility)
-        self.cross_hidden_note = QLabel(
-            "Fixation cross is off. Enable it in Fixation to use its color-change task.", self
-        )
-        self.cross_hidden_note.setObjectName("fixation_cross_hidden_note")
-        self.cross_hidden_note.setWordWrap(True)
 
         self.fixation_accuracy_checkbox = QCheckBox(
             "Enable fixation accuracy task",
@@ -591,7 +586,6 @@ class FixationSettingsEditor(QWidget):
         settings_column_layout.setContentsMargins(0, 0, 0, 0)
         settings_column_layout.setSpacing(section_spacing)
         settings_column_layout.addLayout(enablement_layout)
-        settings_column_layout.addWidget(self.cross_hidden_note)
         if section_mode in {"all", "fixation"}:
             settings_column_layout.addWidget(feasibility_card)
             settings_column_layout.addWidget(self.fixation_adjustment_label)
@@ -788,13 +782,9 @@ class FixationSettingsEditor(QWidget):
     def _update_fixation_visibility_state(self) -> None:
         show_cross = self._document.project.settings.fixation_task.show_cross
         self.fixation_accuracy_checkbox.setEnabled(show_cross)
-        self.cross_hidden_note.setVisible(not show_cross)
         self.pre_stream_fixation_note.setText(
-            (
-                "The fixation cross stays visible so participants can settle their gaze. "
-                if show_cross else "A blank screen is shown before the stream starts. "
-            )
-            + "The first stimulus and condition trigger still begin together at frame zero."
+            "Shows the fixation cross before the stream starts."
+            if show_cross else "Shows a blank screen before the stream starts."
         )
         self.pre_stream_fixation_spin.setToolTip(
             "Time after Space is pressed and before condition frame zero. "

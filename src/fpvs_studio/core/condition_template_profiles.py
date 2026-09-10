@@ -14,7 +14,10 @@ from typing import Any
 
 from fpvs_studio.core.contrast_modulation import SINUSOIDAL_NEUTRAL_BACKGROUND_COLOR
 from fpvs_studio.core.enums import DutyCycleMode, ExperimentCategory, SchemaVersion
-from fpvs_studio.core.experiment_categories import experiment_category_label
+from fpvs_studio.core.experiment_categories import (
+    RETIRED_IMAGE_PAIR_MESSAGE,
+    experiment_category_label,
+)
 from fpvs_studio.core.models import (
     DEFAULT_FIXATION_TARGET_COUNT_MAX,
     DEFAULT_FIXATION_TARGET_COUNT_MIN,
@@ -132,24 +135,20 @@ def built_in_condition_template_profiles() -> list[ConditionTemplateProfile]:
                 protocol=ProtocolSettings(base_hz=10.0, oddball_every_n=20),
                 display=ConditionTemplateDisplayDefaults(background_color="#000000"),
                 fixation_task=FixationTaskSettings(
+                    show_cross=False,
                     enabled=False, accuracy_task_enabled=False, participant_tutorial_enabled=False,
                 ),
             ),
         ),
-        ConditionTemplateProfile(
-            profile_id=ATTENTIONAL_BLINK_PROFILE_ID,
-            experiment_category=ExperimentCategory.ATTENTIONAL_BLINK,
-            display_name="Image pairs (legacy)",
-            description=(
-                "Four slots per second, with a T1 / separator / T2 target slot every fourth slot."
-            ),
-            built_in=True,
-            defaults=ConditionTemplateDefaults(
-                protocol=ProtocolSettings(base_hz=4.0, oddball_every_n=4),
-                fixation_task=_shared_fixation_defaults(),
-            ),
-        ),
     ]
+
+
+def is_supported_condition_template(profile: ConditionTemplateProfile) -> bool:
+    """Exclude retired AB layouts while keeping saved library records intact."""
+    return (
+        profile.experiment_category != ExperimentCategory.ATTENTIONAL_BLINK
+        or profile.defaults.attentional_blink_layout == "letter_stream"
+    )
 
 
 def _normalize_library(
@@ -271,7 +270,8 @@ def list_condition_template_profiles(
     profiles = load_condition_template_profile_library(root_dir).profiles
     return [
         profile for profile in profiles
-        if experiment_category is None or profile.experiment_category == experiment_category
+        if is_supported_condition_template(profile)
+        and (experiment_category is None or profile.experiment_category == experiment_category)
     ]
 
 
@@ -290,6 +290,8 @@ def upsert_condition_template_profile(
 ) -> ConditionTemplateProfileLibrary:
     """Create or update one user-defined condition-template profile."""
 
+    if not is_supported_condition_template(profile):
+        raise ValueError(RETIRED_IMAGE_PAIR_MESSAGE)
     normalized_profile = profile.model_copy(update={"built_in": False})
     library = load_condition_template_profile_library(root_dir)
     if any(
@@ -375,7 +377,9 @@ def require_profile_category(
     """Reject templates that belong to another experiment category."""
 
     if category == ExperimentCategory.FPVS:
-        raise ValueError("FPVS is coming soon; its templates cannot be applied.")
+        raise ValueError("Standard FPVS is coming soon; its templates cannot be applied.")
+    if not is_supported_condition_template(profile):
+        raise ValueError(RETIRED_IMAGE_PAIR_MESSAGE)
     if profile.experiment_category != category:
         raise ValueError(
             f"Template '{profile.display_name}' belongs to "

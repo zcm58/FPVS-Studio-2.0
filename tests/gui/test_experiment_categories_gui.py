@@ -8,25 +8,21 @@ from tests.gui.helpers import ImmediateProgressTask, open_created_project
 
 from fpvs_studio.core.condition_template_profiles import built_in_condition_template_profiles
 from fpvs_studio.core.enums import ExperimentCategory
-from fpvs_studio.core.models import AttentionalBlinkSettings
 from fpvs_studio.core.serialization import load_project_file
 from fpvs_studio.gui.condition_setup_step import ConditionSetupStep
 from fpvs_studio.gui.condition_template_profile_editor_dialog import (
     ConditionTemplateProfileEditorDialog,
 )
 from fpvs_studio.gui.document import ProjectDocument
-from fpvs_studio.gui.presentation_settings_dialog import PresentationSettingsDialog
 from fpvs_studio.gui.runtime_settings_page import DisplaySettingsEditor
 
 
 @pytest.fixture
-def ab_document(sample_project, sample_project_root):
-    project = sample_project.model_copy(update={
-        "experiment_category": ExperimentCategory.ATTENTIONAL_BLINK,
-    }, deep=True)
-    project.conditions[0].attentional_blink = AttentionalBlinkSettings()
-    project.conditions[0].t2_stimulus_set_id = project.conditions[0].oddball_stimulus_set_id
-    return ProjectDocument(project_root=sample_project_root, project=project)
+def ab_document(tmp_path):
+    return ProjectDocument.create_new(
+        parent_dir=tmp_path, project_name="Letter targets",
+        experiment_category=ExperimentCategory.ATTENTIONAL_BLINK,
+    )
 
 
 def test_ab_conditions_hide_oddball_only_choices_and_image_pickers(qtbot, ab_document):
@@ -47,7 +43,7 @@ def test_legacy_separation_cancel_preserves_document(qtbot, ab_document, monkeyp
         "condition_id": "old-oddball", "name": "Old oddball",
         "attentional_blink": None, "t2_stimulus_set_id": None,
     }, deep=True)
-    ab_document.project.conditions.append(legacy)
+    ab_document.project.conditions[:] = [ab_document.project.conditions[0], legacy]
     widget = ConditionSetupStep(ab_document)
     qtbot.addWidget(widget)
     widget.show()
@@ -67,7 +63,7 @@ def test_legacy_separation_adopts_saved_ab_experiment(qtbot, ab_document, monkey
         "condition_id": "old-oddball", "name": "Old oddball",
         "attentional_blink": None, "t2_stimulus_set_id": None,
     }, deep=True)
-    ab_document.project.conditions.append(legacy)
+    ab_document.project.conditions[:] = [ab_document.project.conditions[0], legacy]
     widget = ConditionSetupStep(ab_document)
     qtbot.addWidget(widget)
     widget.show()
@@ -122,19 +118,6 @@ def test_legacy_oddball_t2_cleanup_requires_explicit_choice(
     assert document.project.model_dump() == expected
 
 
-def test_ab_presentation_names_shared_target_appearance_and_previews_t2(qtbot, ab_document):
-    condition = ab_document.project.conditions[0]
-    condition.presentation.oddball.text_color = "#FF0000"
-    dialog = PresentationSettingsDialog(ab_document, condition_id=condition.condition_id)
-    qtbot.addWidget(dialog)
-    assert [dialog.editor_tabs.tabText(i) for i in range(dialog.editor_tabs.count())] == [
-        "Condition", "Base", "Targets (T1 & T2)",
-    ]
-    assert dialog.preview_role_combo.findText("T2") >= 0
-    assert dialog.preview_modality_combo.count() == 1
-    assert dialog._build_condition().oddball.text_color == "#FF0000"
-    dialog.preview_role_combo.setCurrentIndex(dialog.preview_role_combo.findText("T2"))
-    assert dialog._effective_preview_settings().text_color == "#FF0000"
 
 
 def test_ab_timing_uses_target_pair_language_and_design_owns_cadence(qtbot, ab_document):
@@ -144,7 +127,7 @@ def test_ab_timing_uses_target_pair_language_and_design_owns_cadence(qtbot, ab_d
     assert widget.base_hz_spin.isHidden()
     assert widget.oddball_every_n_spin.isHidden()
     assert "oddball" not in widget.timing_summary_label.text().casefold()
-    assert "target pair" in widget.timing_summary_label.text().casefold()
+    assert "10" in widget.timing_summary_label.text()
 
 
 def test_editing_ab_template_preserves_category_and_cadence(qtbot):
@@ -182,3 +165,38 @@ def test_changing_experiments_waits_for_image_workers(
     assert not window.maybe_save_changes()
     assert len(notices) == 1
     monkeypatch.setattr(owner, method, lambda: False)
+
+
+@pytest.mark.parametrize("dark", [False, True])
+def test_creation_names_categories_and_hides_injected_image_pair_templates(qtbot, dark):
+    from PySide6.QtGui import QColor, QPalette
+    from PySide6.QtWidgets import QApplication
+    from tests.gui.helpers import assert_visible_children_within_parent
+
+    from fpvs_studio.core.models import ConditionTemplateProfile
+    from fpvs_studio.gui.create_project_dialog import CreateProjectDialog
+
+    retired = ConditionTemplateProfile(
+        profile_id="old-pairs", display_name="Image pairs",
+        experiment_category=ExperimentCategory.ATTENTIONAL_BLINK,
+    )
+    dialog = CreateProjectDialog(
+        condition_template_profiles=[*built_in_condition_template_profiles(), retired],
+    )
+    qtbot.addWidget(dialog)
+    dialog.setPalette(QPalette(QColor("#202124" if dark else "#f4f7fb")))
+    dialog.resize(760, 500)
+    dialog.show()
+    QApplication.processEvents()
+    assert dialog.category_buttons[ExperimentCategory.FPVS].text() == "Standard FPVS\nComing soon"
+    assert not dialog.category_buttons[ExperimentCategory.FPVS].isEnabled()
+    oddball = dialog.category_buttons[ExperimentCategory.FPVS_ODDBALL]
+    assert oddball.text().splitlines()[0] == "FPVS Oddball Paradigm"
+    assert_visible_children_within_parent(dialog)
+    for button in dialog.category_buttons.values():
+        assert max(button.fontMetrics().horizontalAdvance(line)
+                   for line in button.text().splitlines()) + 12 <= button.width()
+    dialog.select_category(ExperimentCategory.ATTENTIONAL_BLINK)
+    assert dialog.condition_profile_combo.count() == 1
+    assert dialog.condition_profile_combo.currentText() == "Digits & letter targets"
+    assert_visible_children_within_parent(dialog)

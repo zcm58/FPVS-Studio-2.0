@@ -7,7 +7,7 @@ from PySide6.QtWidgets import QComboBox, QHBoxLayout, QLabel, QLineEdit, QWidget
 
 from fpvs_studio.core.enums import PresentationUnit, TextHeightMode
 from fpvs_studio.core.models import TextHeightScheduleSettings
-from fpvs_studio.gui.components import mark_error_text
+from fpvs_studio.gui.components import configure_setup_form, mark_error_text
 from fpvs_studio.gui.document import ProjectDocument
 from fpvs_studio.gui.runtime_settings_page import ImageDisplaySizeEditor
 
@@ -36,6 +36,7 @@ class AttentionalBlinkCharacterSizeEditor(ImageDisplaySizeEditor):
         row_layout.addWidget(self.character_unit_combo)
         row_layout.addStretch(1)
         self.form_layout.insertRow(0, "Character height", row)
+        configure_setup_form(self.form_layout)
         self.size_validation_label = QLabel(self)
         self.size_validation_label.setWordWrap(True)
         mark_error_text(self.size_validation_label)
@@ -62,6 +63,8 @@ class AttentionalBlinkCharacterSizeEditor(ImageDisplaySizeEditor):
             "The same fixed height is used for base digits, T1 and T2. "
             "Viewing geometry below determines the size in visual degrees."
         )
+        self.character_height_edit.setToolTip(self.presentation_summary_label.text())
+        self.presentation_summary_label.hide()
         height = self._document.project.settings.presentation.defaults.text_height
         if not self.character_height_edit.hasFocus():
             with QSignalBlocker(self.character_height_edit):

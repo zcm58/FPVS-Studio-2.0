@@ -159,7 +159,7 @@ def test_setup_wizard_review_summarizes_actual_settings_and_supports_editing(
         if item.edit_button.property("reviewStepKey") == "session"
     )
     qtbot.mouseClick(session_edit, Qt.MouseButton.LeftButton)
-    assert guide.step_stack.currentWidget() is guide.session_step_surface
+    assert guide.step_stack.currentWidget() is guide.experiment_step_surface
     guide.session_structure_editor.block_count_spin.setValue(3)
     guide.open_wizard(step_key="review")
     assert any(

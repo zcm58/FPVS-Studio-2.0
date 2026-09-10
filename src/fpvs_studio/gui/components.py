@@ -33,6 +33,7 @@ from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QDoubleSpinBox,
+    QFormLayout,
     QFrame,
     QGridLayout,
     QHBoxLayout,
@@ -197,6 +198,28 @@ class DialogHeader(QWidget):
             label.setMinimumWidth(0)
             label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
             layout.addWidget(label)
+
+
+def configure_setup_form(form: QFormLayout, *, stacked: bool = False) -> None:
+    """Keep field labels attached to their controls in the frameless Setup pages."""
+    form.setHorizontalSpacing(16)
+    form.setVerticalSpacing(8)
+    form.setLabelAlignment(
+        Qt.AlignmentFlag.AlignLeft if stacked
+        else Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+    )
+    if stacked:
+        form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapAllRows)
+    for row in range(form.rowCount()):
+        item = form.itemAt(row, QFormLayout.ItemRole.LabelRole)
+        label = item.widget() if item is not None else None
+        if isinstance(label, QLabel):
+            label.setProperty("setupMetricValue", "true")
+            label.setAlignment(form.labelAlignment())
+            field = form.itemAt(row, QFormLayout.ItemRole.FieldRole)
+            control = field.widget() if field is not None else None
+            if control is not None:
+                label.setBuddy(control)
 
 
 def create_double_spin_box(
@@ -1740,6 +1763,9 @@ def studio_theme_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
         color: {color_primary};
         font-weight: 700;
     }}
+    QLabel#setup_wizard_step_4_timing_session_label[setupProgressState="current"] {{
+        font-weight: 500;
+    }}
     QLabel[setupProgressLabel="true"][setupProgressState="complete"] {{
         color: {color_text_primary};
     }}
@@ -2068,7 +2094,8 @@ def section_card_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
         border-radius: {CARD_CORNER_RADIUS}px;
         background-color: {theme.surface};
     }}
-    QFrame#setup_wizard_current_step_card[wizardProjectStepFrame="true"] {{
+    QFrame#setup_wizard_current_step_card,
+    QFrame[setupFlatSection="true"] {{
         border: none;
         background-color: transparent;
     }}
@@ -2150,11 +2177,8 @@ def setup_wizard_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
         color: {theme.text_secondary};
         font-size: {FONT_SIZE_META}px;
     }}
-    QLabel#designer_step_count {{
+    QLabel#setup_wizard_step_count {{
         color: {theme.text_secondary}; font-size: {FONT_SIZE_META}px;
-    }}
-    QWidget#setup_wizard_navigation_row[designerFooter="true"] {{
-        border-top: 1px solid {theme.border_soft}; padding-top: 8px;
     }}
     QPushButton#setup_wizard_condition_presentation_button,
     QPushButton#setup_wizard_condition_task_button,

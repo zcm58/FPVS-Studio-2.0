@@ -26,6 +26,7 @@ from fpvs_studio.core.execution import (
     RunExecutionSummary,
     RuntimeMetadata,
 )
+from fpvs_studio.core.experiment_categories import RETIRED_IMAGE_PAIR_MESSAGE
 from fpvs_studio.core.paths import resolve_project_relative_path
 from fpvs_studio.core.run_spec import FixationEvent, RunSpec, TriggerEvent
 from fpvs_studio.engines.base import (
@@ -291,6 +292,11 @@ class PsychoPyEngine(PresentationEngine):
         runtime_options: Mapping[str, object] | None = None,
         trigger_backend: TriggerBackend | None = None,
     ) -> RunExecutionSummary:
+        if (
+            run_spec.attentional_blink is not None
+            and run_spec.attentional_blink.layout != "letter_stream"
+        ):
+            raise ValueError(RETIRED_IMAGE_PAIR_MESSAGE)
         self.open_session(runtime_options=runtime_options)
         self._aborted = False
         started_at = datetime.now(timezone.utc)

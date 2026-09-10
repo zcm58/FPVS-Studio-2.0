@@ -88,16 +88,14 @@ def test_setup_wizard_surfaces_steps_and_keeps_shared_editors_available(
     assert project_editor.apply_profile_to_conditions_button is not None
     assert project_editor.apply_profile_to_conditions_button.isVisible() is False
     assert project_editor.participant_tutorial_checkbox is not None
-    assert project_editor.participant_tutorial_checkbox.text() == "Enable participant tutorial?"
+    assert project_editor.participant_tutorial_checkbox.text() == "Enable participant tutorial"
     assert project_editor.participant_tutorial_checkbox.toolTip()
     assert project_editor.project_overview_card.maximumWidth() == 930
     assert project_editor.project_overview_card.title_label.text() == "Project Details"
     assert project_editor.project_overview_card.title_label.isVisible() is False
     setup_icon = project_editor.findChild(QLabel, "setup_project_icon")
-    assert setup_icon is not None
-    assert setup_icon.width() == 52
-    assert setup_icon.height() == 52
-    assert project_editor.findChild(QLabel, "project_overview_title").text() == "Project Details"
+    assert setup_icon is None
+    assert project_editor.findChild(QLabel, "project_overview_title") is None
     assert project_editor.findChild(QLabel, "project_overview_step_badge") is None
     assert project_editor.findChild(QWidget, "project_overview_checklist") is None
     assert project_editor.findChild(QWidget, "project_condition_profile_group") is not None
@@ -140,7 +138,7 @@ def test_setup_wizard_surfaces_steps_and_keeps_shared_editors_available(
     assert not hasattr(dashboard.condition_setup_step, "variant_combo")
     assert dashboard.assets_page is window.assets_page
     assert dashboard.run_page is window.run_page
-    assert len(dashboard.progress_steps.step_items) == 9
+    assert len(dashboard.progress_steps.step_items) == 8
     step_metadata_text = "\n".join(item.toolTip() for item in dashboard.progress_steps.step_items)
     assert "Project" in step_metadata_text
     assert "Conditions" in step_metadata_text
@@ -377,8 +375,6 @@ def test_setup_wizard_navigation_has_no_conditions_advanced_editor(
     qtbot.mouseClick(next_button, Qt.MouseButton.LeftButton)
     assert guide.step_stack.currentWidget() is guide.image_size_step_surface
     qtbot.mouseClick(next_button, Qt.MouseButton.LeftButton)
-    assert guide.step_stack.currentWidget() is guide.session_step_surface
-    qtbot.mouseClick(next_button, Qt.MouseButton.LeftButton)
     assert guide.step_stack.currentWidget() is guide.fixation_step_surface
     assert guide.fixation_step_surface.content is guide.fixation_schedule_editor
     assert guide.step_title_label.text() == "Fixation"
@@ -390,8 +386,6 @@ def test_setup_wizard_navigation_has_no_conditions_advanced_editor(
 
     qtbot.mouseClick(back_button, Qt.MouseButton.LeftButton)
     assert guide.step_stack.currentWidget() is guide.fixation_step_surface
-    qtbot.mouseClick(back_button, Qt.MouseButton.LeftButton)
-    assert guide.step_stack.currentWidget() is guide.session_step_surface
     qtbot.mouseClick(back_button, Qt.MouseButton.LeftButton)
     assert guide.step_stack.currentWidget() is guide.image_size_step_surface
     qtbot.mouseClick(back_button, Qt.MouseButton.LeftButton)
@@ -619,6 +613,6 @@ def test_attentional_blink_project_shows_locked_category_and_matching_templates(
     assert editor.experiment_category_value.text() == "Attentional-Blink"
     assert "fixed" in editor.experiment_category_value.toolTip().lower()
     assert editor.condition_profile_combo.count() == 1
-    assert editor.condition_profile_combo.currentData() == "attentional-blink-v1"
+    assert editor.condition_profile_combo.currentData() == "attentional-blink-letter-stream-v1"
     assert document.project.experiment_category == ExperimentCategory.ATTENTIONAL_BLINK
     assert_visible_children_within_parent(editor)
