@@ -18,6 +18,12 @@ py -3.10 -m venv .venv3.10
 The `engine` extra is included because lab builds should contain PsychoPy and runtime
 dependencies. The `packaging` extra installs PyInstaller.
 
+For release builds, compare native-library source paths in PyInstaller's
+`Analysis-00.toc` with the authenticated published baseline. Exclude unrelated
+application directories from the build process's `PATH`, while retaining verified
+native dependency paths. Package-version pins alone do not prevent PyInstaller from
+collecting support DLLs from another installed application.
+
 ## Version The App
 
 Before building a release candidate, update the package metadata version:

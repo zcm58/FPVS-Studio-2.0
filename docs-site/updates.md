@@ -34,9 +34,10 @@ place.
 ## Projects With Repeat Participant Sessions
 
 Repeat participant sessions are available in FPVS Studio **1.5.3 and later**.
-Update every computer that opens a project before enabling this setting; older
-builds do not recognize it. Existing projects keep repeat sessions disabled until
-you enable **Setup > Project > Allow repeat participant sessions** and save.
+Update every computer that shares a project before saving it in v1.5.3. Saved
+projects include the new setting even when it is disabled, and older builds do
+not recognize it. Existing projects keep repeat sessions disabled until you enable
+**Setup > Project > Allow repeat participant sessions** and save.
 
 See [Returning Participants](run-session.md#returning-participants) for the launch
 confirmation, separate session folders, and numbered CSV/Excel summaries.
