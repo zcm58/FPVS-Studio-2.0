@@ -54,6 +54,35 @@ def test_project_model_round_trip(tmp_path, sample_project) -> None:
     assert loaded.schema_version.value == "1.4.0"
 
 
+def test_repeated_participant_sessions_setting_round_trips(tmp_path, sample_project) -> None:
+    sample_project.settings.allow_repeated_participant_sessions = True
+    project_path = tmp_path / "project.json"
+
+    save_project_file(sample_project, project_path)
+    loaded = load_project_file(project_path)
+
+    assert loaded.settings.allow_repeated_participant_sessions is True
+
+
+@pytest.mark.parametrize("schema_version", ["1.0.0", "1.1.0", "1.2.0", "1.3.0", "1.4.0"])
+def test_existing_projects_default_to_single_participant_session_without_rewriting(
+    tmp_path,
+    sample_project,
+    schema_version: str,
+) -> None:
+    payload = sample_project.model_dump(mode="json")
+    payload["schema_version"] = schema_version
+    del payload["settings"]["allow_repeated_participant_sessions"]
+    original_payload = json.dumps(payload)
+    project_path = tmp_path / "project.json"
+    project_path.write_text(original_payload, encoding="utf-8")
+
+    loaded = load_project_file(project_path)
+
+    assert loaded.settings.allow_repeated_participant_sessions is False
+    assert project_path.read_text(encoding="utf-8") == original_payload
+
+
 def test_project_schema_version_does_not_expand_unrelated_contracts() -> None:
     assert ProjectSchemaVersion("1.3.0") is ProjectSchemaVersion.V1_3
     assert ProjectSchemaVersion("1.4.0") is ProjectSchemaVersion.V1_4

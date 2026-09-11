@@ -262,6 +262,47 @@ def test_project_config_round_trips_as_config_json(tmp_path, sample_project) -> 
     assert loaded == config
 
 
+@pytest.mark.parametrize("allow_repeated_sessions", [False, True])
+def test_project_config_preserves_participant_session_policy(
+    tmp_path,
+    sample_project,
+    allow_repeated_sessions: bool,
+) -> None:
+    sample_project.settings.allow_repeated_participant_sessions = allow_repeated_sessions
+    path = tmp_path / "sample.fpvsconfig"
+    config = export_project_config(sample_project, tmp_path / "source")
+
+    write_project_config(path, config)
+    loaded_config = read_project_config(path)
+    scaffold = create_project_from_config(tmp_path / "imported", loaded_config)
+    loaded_project = load_project_file(scaffold.project_root / "project.json")
+
+    assert loaded_config.project.allow_repeated_participant_sessions is allow_repeated_sessions
+    assert loaded_project.settings.allow_repeated_participant_sessions is allow_repeated_sessions
+
+
+@pytest.mark.parametrize("schema_version", ["1.0.0", "1.1.0", "1.2.0", "1.3.0"])
+def test_project_config_without_participant_session_policy_defaults_to_single_session(
+    tmp_path,
+    sample_project,
+    schema_version: str,
+) -> None:
+    path = tmp_path / "legacy.fpvsconfig"
+    payload = export_project_config(sample_project, tmp_path / "source").model_dump(mode="json")
+    payload["schema_version"] = schema_version
+    del payload["project"]["allow_repeated_participant_sessions"]
+    original_payload = json.dumps(payload)
+    path.write_text(original_payload, encoding="utf-8")
+
+    config = read_project_config(path)
+    scaffold = create_project_from_config(tmp_path / "imported", config)
+    loaded_project = load_project_file(scaffold.project_root / "project.json")
+
+    assert config.project.allow_repeated_participant_sessions is False
+    assert loaded_project.settings.allow_repeated_participant_sessions is False
+    assert path.read_text(encoding="utf-8") == original_payload
+
+
 def test_project_config_round_trips_presentation_defaults_and_condition_overrides(
     tmp_path,
     sample_project,

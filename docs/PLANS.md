@@ -37,6 +37,8 @@ the current contracts do not explain why a landed decision exists.
 
 Recent completion: [Editable Attentional Blink rate and v1.5.2](exec-plans/completed/attentional-blink-rate-v1.5.2.md).
 
+Recent completion: [Multi-session participant projects](exec-plans/completed/multi-session-participant-projects.md).
+
 Recent completion: [Patch updates and v1.5.1](exec-plans/completed/patch-updates-v1.5.1.md).
 
 Recent completion: [Setup UX refinement](exec-plans/completed/setup-ux-design-refinement.md).

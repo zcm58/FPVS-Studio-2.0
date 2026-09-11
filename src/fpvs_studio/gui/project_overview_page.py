@@ -135,6 +135,19 @@ class ProjectOverviewEditor(QWidget):
         self.participant_tutorial_checkbox.stateChanged.connect(
             self._apply_participant_tutorial_enabled
         )
+        self.repeat_participant_sessions_checkbox = QCheckBox(
+            "Allow repeat participant sessions", self,
+        )
+        self.repeat_participant_sessions_checkbox.setObjectName(
+            "allow_repeated_participant_sessions_checkbox"
+        )
+        self.repeat_participant_sessions_checkbox.setToolTip(
+            "Allow the same participant ID to return for Session 2, Session 3, and later "
+            "sessions. Previous session data is preserved."
+        )
+        self.repeat_participant_sessions_checkbox.toggled.connect(
+            self._apply_repeat_participant_sessions
+        )
 
         condition_profile_group = QWidget(self)
         condition_profile_group.setObjectName("project_condition_profile_group")
@@ -178,6 +191,7 @@ class ProjectOverviewEditor(QWidget):
         metadata_layout.addRow("Project Folder", self.project_root_value)
         metadata_layout.addRow("Experiment Template", condition_profile_group)
         metadata_layout.addRow(self.participant_tutorial_checkbox)
+        metadata_layout.addRow(self.repeat_participant_sessions_checkbox)
         configure_setup_form(metadata_layout, stacked=True)
 
         form_panel = QWidget(self.project_overview_card)
@@ -217,6 +231,10 @@ class ProjectOverviewEditor(QWidget):
                 project.settings.fixation_task.participant_tutorial_enabled
             )
         self.participant_tutorial_checkbox.setEnabled(project.settings.fixation_task.show_cross)
+        with QSignalBlocker(self.repeat_participant_sessions_checkbox):
+            self.repeat_participant_sessions_checkbox.setChecked(
+                project.settings.allow_repeated_participant_sessions
+            )
         self._sync_template_action_sizes()
 
     def _sync_template_action_sizes(self) -> None:
@@ -345,6 +363,13 @@ class ProjectOverviewEditor(QWidget):
             _show_error_dialog(self, "Condition Template Error", error)
             return
         self.refresh()
+
+    def _apply_repeat_participant_sessions(self, enabled: bool) -> None:
+        try:
+            self._document.update_allow_repeated_participant_sessions(enabled)
+        except Exception as error:
+            _show_error_dialog(self, "Participant Sessions Error", error)
+            self.refresh()
 
     def _apply_profile_to_conditions(self) -> None:
         profile_id = self._document.project.settings.condition_profile_id

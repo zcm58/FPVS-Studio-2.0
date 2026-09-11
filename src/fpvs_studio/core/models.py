@@ -581,6 +581,7 @@ class SessionSettings(FPVSBaseModel):
 class ProjectSettings(FPVSBaseModel):
     """Editable project-level settings."""
 
+    allow_repeated_participant_sessions: bool = False
     condition_profile_id: str | None = None
     condition_defaults: ConditionDefaults = Field(default_factory=ConditionDefaults)
     display: DisplaySettings = Field(default_factory=DisplaySettings)

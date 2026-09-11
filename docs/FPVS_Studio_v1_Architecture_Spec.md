@@ -106,7 +106,7 @@ current schema, an explicit user opt-out remains disabled on later loads.
       manifest.json
     runs/
       # written only when full run export mode is enabled
-      P<participant>/
+      P<participant>_session<NN>/
         session_plan.json
         session_summary.json
         run-001-condition-<n>/
@@ -121,6 +121,7 @@ current schema, an explicit user opt-out remains disabled on later loads.
         warnings.log
     cache/
     logs/
+      .participant-sessions/  # permanent visit reservations; full and compact mode
       session_condition_history.csv
       participant_summary.csv
       participant_summary.xlsx

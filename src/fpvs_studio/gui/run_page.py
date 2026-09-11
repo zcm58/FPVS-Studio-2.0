@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QObject, Qt, Signal
 from PySide6.QtGui import QIntValidator
 from PySide6.QtWidgets import (
     QApplication,
@@ -34,9 +34,11 @@ from fpvs_studio.core.session_plan import SessionPlan
 from fpvs_studio.gui import folder_actions
 from fpvs_studio.gui.components import (
     PAGE_SECTION_GAP,
+    DialogHeader,
     NonHomePageShell,
     SectionCard,
     StatusBadgeLabel,
+    apply_dialog_theme,
     mark_launch_action,
     mark_secondary_action,
 )
@@ -50,7 +52,7 @@ from fpvs_studio.gui.window_helpers import (
     _launcher_readiness_report,
     _set_list_items,
 )
-from fpvs_studio.gui.workers import ProgressTask
+from fpvs_studio.gui.workers import ProgressDialogFactory, ProgressTask
 
 TEST_MODE_PARTICIPANT_NUMBER = "0"
 
@@ -96,6 +98,110 @@ class LaunchTaskResult:
 
     session_plan: SessionPlan
     summary: LaunchSummary
+
+
+class ParticipantSessionConfirmationDialog(QDialog):
+    """Confirm a returning participant's next session while preserving earlier data."""
+
+    def __init__(
+        self, participant_number: str, session_number: int, parent: QWidget | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self.setObjectName("participant_session_confirmation_dialog")
+        self.setWindowTitle("Returning Participant")
+        self.setMinimumSize(600, 260)
+        self.resize(600, 260)
+        self.header = DialogHeader(
+            f"Start Session {session_number}",
+            f"Participant {participant_number} already has session data in this project. "
+            f"This visit will be recorded as Session {session_number}. "
+            "All previous session data will be preserved.",
+            parent=self,
+        )
+        self.button_box = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel,
+            parent=self,
+        )
+        self.start_button = self.button_box.button(QDialogButtonBox.StandardButton.Ok)
+        self.start_button.setText(f"Start Session {session_number}")
+        mark_launch_action(self.start_button)
+        self.button_box.accepted.connect(self.accept)
+        self.button_box.rejected.connect(self.reject)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(24, 20, 24, 20)
+        layout.setSpacing(16)
+        layout.addWidget(self.header)
+        layout.addStretch(1)
+        layout.addWidget(self.button_box)
+        apply_dialog_theme(self)
+
+
+class ParticipantSessionCheckTask(QObject):
+    """Preview runtime-owned visit history in a worker, then confirm on the GUI thread."""
+
+    confirmed = Signal(int)
+    failed = Signal(object)
+    finished = Signal()
+
+    def __init__(
+        self,
+        *,
+        parent_widget: QWidget,
+        participant_number: str,
+        allow_repeated_sessions: bool,
+        callback: Callable[[], int],
+        task_factory: Callable[..., ProgressTask] = ProgressTask,
+        dialog_factory: ProgressDialogFactory = QProgressDialog,
+    ) -> None:
+        super().__init__(parent_widget)
+        self._parent_widget = parent_widget
+        self._participant_number = participant_number
+        self._allow_repeated_sessions = allow_repeated_sessions
+        self._session_number: int | None = None
+        self._task = task_factory(
+            parent_widget=parent_widget,
+            label="Checking participant sessions: Please wait",
+            callback=callback,
+            dialog_factory=dialog_factory,
+            window_title="FPVS Studio",
+        )
+        self._task.succeeded.connect(self._on_succeeded)
+        self._task.failed.connect(self.failed)
+        self._task.finished.connect(self._on_finished)
+
+    def start(self) -> None:
+        self._task.start()
+
+    def _on_succeeded(self, result: object) -> None:
+        if not isinstance(result, int) or isinstance(result, bool) or result < 1:
+            self.failed.emit(
+                DocumentError("Participant history returned an invalid session number.")
+            )
+            return
+        self._session_number = result
+
+    def _on_finished(self) -> None:
+        session_number = self._session_number
+        if session_number is not None and session_number > 1:
+            if not self._allow_repeated_sessions:
+                QMessageBox.warning(
+                    self._parent_widget,
+                    "Participant Already Used",
+                    f"Participant {self._participant_number} already has session data. "
+                    "Previous data is preserved. To record another visit, enable "
+                    "Allow repeat participant sessions in Setup > Project, then launch again.",
+                )
+                session_number = None
+            else:
+                dialog = ParticipantSessionConfirmationDialog(
+                    self._participant_number, session_number, self._parent_widget,
+                )
+                if dialog.exec() != int(QDialog.DialogCode.Accepted):
+                    session_number = None
+        self.finished.emit()
+        if session_number is not None:
+            self.confirmed.emit(session_number)
+        self.deleteLater()
 
 
 class ParticipantNumberDialog(QDialog):
@@ -223,6 +329,7 @@ class ParticipantNumberDialog(QDialog):
             sex=self.sex_combo.currentData(),
             handedness=self.handedness_combo.currentData(),
             colorblind=self.colorblind_combo.currentData(),
+            manual_removed_electrodes=list(self.manual_removed_electrodes),
         )
 
     @property
@@ -519,6 +626,7 @@ class RunPage(QWidget):
         self._document = document
         self._active_launch_task: ProgressTask | None = None
         self._active_launch_participant_number: str | None = None
+        self._active_participant_session_check: ParticipantSessionCheckTask | None = None
         self._last_run_output_dir: str | None = None
 
         self.runtime_settings_editor = DisplaySettingsEditor(
@@ -708,7 +816,7 @@ class RunPage(QWidget):
         )
 
     def launch_session(self) -> None:
-        if self._active_launch_task is not None:
+        if self.is_launch_busy():
             return
         try:
             refresh_hz = self.current_refresh_hz()
@@ -722,6 +830,39 @@ class RunPage(QWidget):
         participant_details = self._collect_launch_participant_details()
         if participant_details is None:
             return
+        if self._document.experiment_test_mode_enabled:
+            self._launch_participant_session(participant_details, refresh_hz, None)
+            return
+        participant_number = participant_details.participant_number
+        check = ParticipantSessionCheckTask(
+            parent_widget=self,
+            participant_number=participant_number,
+            allow_repeated_sessions=self._document.project.settings.allow_repeated_participant_sessions,
+            callback=lambda: self._document.next_participant_session_number(participant_number),
+            task_factory=ProgressTask,
+            dialog_factory=_compat_progress_dialog,
+        )
+        self._active_participant_session_check = check
+        self._update_launch_buttons()
+        check.failed.connect(
+            lambda error: _show_runtime_error_dialog(
+                self, "Launch Blocked", _coerce_exception(error),
+            )
+        )
+        check.finished.connect(self._on_participant_session_check_finished)
+        check.confirmed.connect(
+            lambda number: self._launch_participant_session(participant_details, refresh_hz, number)
+        )
+        check.start()
+
+    def _on_participant_session_check_finished(self) -> None:
+        self._active_participant_session_check = None
+        self._update_launch_buttons()
+
+    def _launch_participant_session(
+        self, participant_details: ParticipantLaunchDetails, refresh_hz: float,
+        participant_session_number: int | None,
+    ) -> None:
         participant_number = participant_details.participant_number
         if not self._document.experiment_test_mode_enabled:
             try:
@@ -743,7 +884,11 @@ class RunPage(QWidget):
             return
         self._set_summary(
             session_plan,
-            extra_lines=["Status: launch checks queued."],
+            extra_lines=[
+                "Status: launch checks queued.",
+                *([f"Participant Session: {participant_session_number}"]
+                  if participant_session_number is not None else []),
+            ],
         )
         if (
             self._document.require_biosemi_recording_confirmation
@@ -757,6 +902,7 @@ class RunPage(QWidget):
                 session_plan,
                 participant_number=participant_number,
                 participant_metadata=participant_details.participant_metadata,
+                participant_session_number=participant_session_number,
                 display_index=None,
                 fullscreen=True,
             )
@@ -805,7 +951,7 @@ class RunPage(QWidget):
         self,
         status_report: LauncherReadinessReport | None = None,
     ) -> None:
-        is_busy = self._active_launch_task is not None
+        is_busy = self.is_launch_busy()
         if status_report is None:
             status_report = self._status_report()
         launch_ready = status_report.badge_state == "ready" or (
@@ -813,6 +959,14 @@ class RunPage(QWidget):
         )
         self.compile_button.setEnabled(not is_busy)
         self.launch_button.setEnabled(not is_busy and launch_ready)
+
+    def is_launch_busy(self) -> bool:
+        """Keep the owning window alive during participant checks and playback."""
+
+        return (
+            self._active_launch_task is not None
+            or self._active_participant_session_check is not None
+        )
 
     def _apply_launch_summary(
         self,
@@ -836,6 +990,8 @@ class RunPage(QWidget):
             if self._document.experiment_test_mode_enabled
             else f"Participant Number: {participant_value}"
         )
+        if not self._document.experiment_test_mode_enabled:
+            identity_line += f"\nParticipant Session: {summary.participant_session_number}"
         if summary.aborted:
             abort_reason = summary.abort_reason or "No abort reason was provided."
             extra_lines = [
@@ -922,31 +1078,7 @@ class RunPage(QWidget):
                 participant_number=TEST_MODE_PARTICIPANT_NUMBER,
                 selected_condition_ids=selection.selected_condition_ids,
             )
-        while True:
-            participant_details = _coerce_participant_launch_details(
-                self._prompt_participant_number()
-            )
-            if participant_details is None:
-                return None
-            participant_number = participant_details.participant_number
-
-            if not self._document.has_completed_session_for_participant(participant_number):
-                return participant_details
-
-            warning_text = (
-                f"Warning: logs indicate that {participant_number} has already "
-                "completed this study, "
-                f"but you entered {participant_number}. Do you wish to overwrite the existing data?"
-            )
-            answer = QMessageBox.question(
-                self,
-                "Participant Already Completed",
-                warning_text,
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                QMessageBox.StandardButton.No,
-            )
-            if answer == QMessageBox.StandardButton.Yes:
-                return participant_details
+        return _coerce_participant_launch_details(self._prompt_participant_number())
 
     def _refresh_summary(self) -> None:
         self._refresh_readiness_panel()

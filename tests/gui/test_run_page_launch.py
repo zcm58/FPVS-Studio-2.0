@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+from PySide6.QtCore import QThread
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -39,6 +41,8 @@ from fpvs_studio.gui.run_page import (
     BioSemiRecordingConfirmationDialog,
     ParticipantLaunchDetails,
     ParticipantNumberDialog,
+    ParticipantSessionCheckTask,
+    ParticipantSessionConfirmationDialog,
     TestModeLaunchConfirmationDialog,
     TestModeLaunchSelection,
 )
@@ -88,6 +92,7 @@ def test_participant_dialog_collects_and_prefills_manual_removed_electrodes(
 
     assert dialog.participant_number == "0007"
     assert dialog.manual_removed_electrodes == ("FT7", "P9", "OZ")
+    assert dialog.participant_metadata.manual_removed_electrodes == ["FT7", "P9", "OZ"]
 
 
 def test_background_color_control_is_run_tab_presets_only(
@@ -202,7 +207,10 @@ def test_run_page_readiness_and_launch_feedback_is_updated_on_launch(
     monkeypatch.setattr("fpvs_studio.gui.run_page.ProgressTask", _ImmediateProgressTask)
     monkeypatch.setattr(window.run_page, "_prompt_participant_number", lambda: "7")
 
-    def _fake_launch(project_root, session_plan, participant_number, launch_settings):
+    def _fake_launch(
+        project_root, session_plan, participant_number, launch_settings,
+        participant_session_number=None,
+    ):
         captures["participant_number"] = participant_number
         return SessionExecutionSummary(
             project_id=session_plan.project_id,
@@ -630,3 +638,185 @@ def test_run_page_surfaces_blocking_resolution_mismatch_warning(
 
     assert captured_errors == [("Launch Error", warning_message)]
     assert window.run_page._active_launch_task is None
+
+
+@pytest.mark.parametrize("surface", ["home", "run"])
+@pytest.mark.parametrize(
+    ("next_number", "allow_repeat", "accept_repeat", "expected_number"),
+    [(1, False, False, 1), (2, False, False, None),
+     (2, True, True, 2), (3, True, False, None)],
+)
+def test_numbered_participant_sessions_gate_both_launch_surfaces(
+    qtbot, controller, tmp_path, monkeypatch,
+    surface, next_number, allow_repeat, accept_repeat, expected_number,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Repeat Participant Sessions")
+    _prepare_compile_ready_project(window, tmp_path / "repeat-assets")
+    window.document.update_allow_repeated_participant_sessions(allow_repeat)
+    window.document.set_require_biosemi_recording_confirmation(False)
+    qtbot.waitUntil(lambda: window._session_seed_ready)
+    page = window if surface == "home" else window.run_page
+    captures = []
+    confirmations = []
+    warnings = []
+    monkeypatch.setattr("fpvs_studio.gui.main_window.ProgressTask", _ImmediateProgressTask)
+    monkeypatch.setattr("fpvs_studio.gui.run_page.ProgressTask", _ImmediateProgressTask)
+    monkeypatch.setattr(
+        page, "_prompt_participant_number",
+        lambda: ParticipantLaunchDetails(participant_number="00011"),
+    )
+    monkeypatch.setattr(
+        window.document, "next_participant_session_number", lambda _pid: next_number,
+    )
+    monkeypatch.setattr(window.document, "preflight_compiled_session", lambda _plan: None)
+
+    def _confirm(dialog):
+        confirmations.append(dialog.start_button.text())
+        return int(dialog.DialogCode.Accepted if accept_repeat else dialog.DialogCode.Rejected)
+
+    def _launch(plan, **kwargs):
+        captures.append(kwargs)
+        return SessionExecutionSummary(
+            project_id=plan.project_id, session_id=plan.session_id,
+            engine_name="stub", run_mode=RunMode.SESSION,
+            participant_number=kwargs["participant_number"],
+            participant_session_number=kwargs["participant_session_number"],
+            total_condition_count=plan.total_runs, completed_condition_count=plan.total_runs,
+        )
+
+    monkeypatch.setattr(ParticipantSessionConfirmationDialog, "exec", _confirm)
+    monkeypatch.setattr(window.document, "launch_compiled_session", _launch)
+    monkeypatch.setattr(
+        QMessageBox, "warning", lambda _parent, _title, text: warnings.append(text),
+    )
+    page.launch_session()
+
+    assert page._active_participant_session_check is None
+    if expected_number is None:
+        assert captures == []
+        assert window.document.project.manual_removed_electrodes == {}
+    else:
+        assert captures[0]["participant_number"] == "00011"
+        assert captures[0]["participant_session_number"] == expected_number
+        assert window.document.project.manual_removed_electrodes["00011"] == []
+        summary = (
+            window.statusBar().currentMessage() if surface == "home"
+            else page.summary_text.toPlainText()
+        )
+        assert (f"Session {expected_number}" in summary
+                or f"Participant Session: {expected_number}" in summary)
+    assert confirmations == (
+        [f"Start Session {next_number}"] if next_number > 1 and allow_repeat else []
+    )
+    if next_number > 1 and not allow_repeat:
+        assert len(warnings) == 1
+        assert "Setup > Project" in warnings[0]
+        assert "Previous data is preserved" in warnings[0]
+
+
+@pytest.mark.parametrize("session_number", [2, 123])
+def test_repeat_session_confirmation_fits_minimum_size(qtbot, session_number) -> None:
+    dialog = ParticipantSessionConfirmationDialog("00012345678901234567890", session_number)
+    qtbot.addWidget(dialog)
+    dialog.resize(600, 260)
+    dialog.show()
+    QApplication.processEvents()
+    assert dialog.size().width() == 600
+    assert dialog.size().height() == 260
+    _assert_visible_children_within_parent(dialog)
+    for label in (dialog.header.title_label, dialog.header.subtitle_label):
+        assert label.heightForWidth(label.width()) <= label.height()
+    assert dialog.start_button.width() >= dialog.start_button.sizeHint().width()
+    assert "All previous session data will be preserved" in dialog.header.subtitle_label.text()
+
+
+def test_participant_history_lookup_runs_off_gui_thread_and_finishes_before_confirmation(qtbot):
+    parent = QWidget()
+    qtbot.addWidget(parent)
+    confirmed = []
+    finished = []
+    callback_threads = []
+
+    def _lookup():
+        callback_threads.append(QThread.currentThread())
+        return 1
+
+    check = ParticipantSessionCheckTask(
+        parent_widget=parent, participant_number="0007", allow_repeated_sessions=False,
+        callback=_lookup,
+    )
+    check.finished.connect(lambda: finished.append(True))
+    check.confirmed.connect(lambda number: confirmed.append((number, bool(finished))))
+    check.start()
+    qtbot.waitUntil(lambda: bool(confirmed))
+    assert callback_threads[0] is not QApplication.instance().thread()
+    assert confirmed == [(1, True)]
+
+
+def test_participant_history_failure_stops_launch_and_restores_controls(
+    qtbot, controller, tmp_path, monkeypatch,
+):
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Unreadable Session History")
+    _prepare_compile_ready_project(window, tmp_path / "history-error-assets")
+    errors = []
+    monkeypatch.setattr("fpvs_studio.gui.run_page.ProgressTask", _ImmediateProgressTask)
+    monkeypatch.setattr(window.run_page, "_prompt_participant_number", lambda: "0007")
+
+    def _fail(_pid):
+        raise PermissionError("Session history cannot be read.")
+
+    monkeypatch.setattr(window.document, "next_participant_session_number", _fail)
+    monkeypatch.setattr(
+        "fpvs_studio.gui.run_page._show_runtime_error_dialog",
+        lambda _parent, title, error: errors.append((title, str(error))),
+    )
+    monkeypatch.setattr(
+        window.document, "launch_compiled_session",
+        lambda *_args, **_kwargs: pytest.fail("Unreadable history must stop launch"),
+    )
+    window.run_page.launch_session()
+    assert errors == [("Launch Blocked", "Session history cannot be read.")]
+    assert window.run_page._active_participant_session_check is None
+    assert window.run_page.compile_button.isEnabled()
+
+
+
+@pytest.mark.parametrize("surface", ["home", "run"])
+def test_pending_participant_check_prevents_close_handoff_and_second_launch(
+    qtbot, controller, tmp_path, monkeypatch, surface,
+):
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Participant Check Lifecycle")
+    _prepare_compile_ready_project(window, tmp_path / "check-lifecycle-assets")
+    window.document.set_require_biosemi_recording_confirmation(False)
+    qtbot.waitUntil(lambda: window._session_seed_ready)
+    page = window if surface == "home" else window.run_page
+    tasks = []
+    handoffs = []
+
+    class HeldProgressTask(_ImmediateProgressTask):
+        def start(self):
+            tasks.append(self)
+
+    monkeypatch.setattr("fpvs_studio.gui.main_window.ProgressTask", HeldProgressTask)
+    monkeypatch.setattr("fpvs_studio.gui.run_page.ProgressTask", HeldProgressTask)
+    monkeypatch.setattr(
+        page, "_prompt_participant_number",
+        lambda: ParticipantLaunchDetails(participant_number="0007"),
+    )
+    monkeypatch.setattr(window, "_on_request_manage_projects", lambda: handoffs.append("manage"))
+    monkeypatch.setattr(window, "_on_request_open_project", lambda: handoffs.append("open"))
+    page.launch_session()
+    assert window.is_launch_busy()
+    assert not window.maybe_save_changes()
+    assert not window.close()
+    assert window.isVisible()
+    window._request_open_project()
+    window._request_manage_projects()
+    window.launch_session()
+    page.launch_session()
+    assert len(tasks) == 1
+    assert handoffs == []
+    tasks[0].failed.emit(PermissionError("History unavailable"))
+    tasks[0].finished.emit()
+    assert not window.is_launch_busy()
+    assert page._active_participant_session_check is None

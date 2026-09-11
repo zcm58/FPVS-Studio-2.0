@@ -152,6 +152,8 @@ def test_session_export_captures_seed_and_runtime_logs(
             "participant_sex": "Female",
             "participant_handedness": "Right handed",
             "participant_colorblind": "Yes",
+            "participant_session_number": "1",
+            "manual_removed_electrodes": "",
         }
     ]
     assert all(row["participant_age"] == "72" for row in condition_history_rows)
@@ -421,16 +423,18 @@ def test_participant_summary_backfills_run_seeds_from_session_plan_for_legacy_hi
                 }
             )
 
+    original_history = history_path.read_bytes()
     summary_path = write_participant_summary(multi_condition_project_root)
     participant_summary_rows = _read_csv_rows(summary_path)
     with history_path.open("r", encoding="utf-8", newline="") as handle:
-        upgraded_header = next(csv.reader(handle))
-    upgraded_history_rows = _read_csv_rows(history_path)
+        preserved_header = next(csv.reader(handle))
+    preserved_history_rows = _read_csv_rows(history_path)
 
-    assert upgraded_header == SESSION_CONDITION_HISTORY_HEADER
-    assert upgraded_history_rows[0]["fixation_rt_scoring_source"] == ""
-    assert upgraded_history_rows[0]["graphics_readiness_status"] == ""
-    assert upgraded_history_rows[0]["condition_cache_unique_variant_count"] == ""
+    assert preserved_header == legacy_header
+    assert history_path.read_bytes() == original_history
+    assert "fixation_rt_scoring_source" not in preserved_history_rows[0]
+    assert "graphics_readiness_status" not in preserved_history_rows[0]
+    assert "condition_cache_unique_variant_count" not in preserved_history_rows[0]
     assert participant_summary_rows[0]["PID"] == "0040"
     assert participant_summary_rows[0]["Condition Display Order Seed"] == "77"
     assert participant_summary_rows[0]["Image Display Order Seeds"] == "; ".join(
@@ -522,7 +526,7 @@ def test_participant_summary_excludes_admin_test_participant_ids(tmp_path: Path)
     worksheet = workbook["Participant Summary"]
     assert worksheet.max_row == 2
     assert worksheet.freeze_panes == "A2"
-    assert worksheet.auto_filter.ref == "A1:O2"
+    assert worksheet.auto_filter.ref == "A1:P2"
     assert worksheet["A2"].value == "1"
 
 

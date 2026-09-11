@@ -117,7 +117,10 @@ def test_launch_collects_participant_prompt_before_backend_preflight(
         phase_trace.append("prompt")
         return "00042"
 
-    def _fake_launch(project_root, session_plan, participant_number, launch_settings):
+    def _fake_launch(
+        project_root, session_plan, participant_number, launch_settings,
+        participant_session_number=None,
+    ):
         phase_trace.append("launch")
         return SessionExecutionSummary(
             project_id=session_plan.project_id,
@@ -209,8 +212,11 @@ def test_launch_action_wires_runtime_launcher_with_backend_launch_settings(
             self.closed = True
             progress_events.append("closed")
 
-    def _fake_launch(project_root, session_plan, participant_number, launch_settings):
-        assert progress_events == ["created", "shown"]
+    def _fake_launch(
+        project_root, session_plan, participant_number, launch_settings,
+        participant_session_number=None,
+    ):
+        assert progress_events == ["created", "shown", "closed", "created", "shown"]
         captures["project_root"] = project_root
         captures["session_plan"] = session_plan
         captures["participant_number"] = participant_number
@@ -264,8 +270,10 @@ def test_launch_action_wires_runtime_launcher_with_backend_launch_settings(
 
     qtbot.waitUntil(lambda: "launch_settings" in captures)
     launch_settings = captures["launch_settings"]
-    assert len(progress_dialogs) == 1
-    progress_dialog = progress_dialogs[0]
+    assert len(progress_dialogs) == 2
+    assert progress_dialogs[0].label == "Checking participant sessions: Please wait"
+    assert progress_dialogs[0].closed
+    progress_dialog = progress_dialogs[1]
     qtbot.waitUntil(lambda: progress_dialog.closed)
     assert prompt_calls == 1
     assert captures["participant_number"] == participant_number
@@ -279,7 +287,9 @@ def test_launch_action_wires_runtime_launcher_with_backend_launch_settings(
     assert progress_dialog.minimum_duration == 0
     assert progress_dialog.shown is True
     assert progress_dialog.closed is True
-    assert progress_events == ["created", "shown", "closed"]
+    assert progress_events == [
+        "created", "shown", "closed", "created", "shown", "closed",
+    ]
     assert launch_settings.serial_port == "COM3"
     assert launch_settings.serial_enabled is True
     assert launch_settings.serial_baudrate == 57600
@@ -398,7 +408,10 @@ def test_launch_action_surfaces_abort_reason_when_runtime_aborts(
     warning_payloads: list[tuple[str, str]] = []
     opened_paths: list[str] = []
 
-    def _fake_launch(project_root, session_plan, participant_number, launch_settings):
+    def _fake_launch(
+        project_root, session_plan, participant_number, launch_settings,
+        participant_session_number=None,
+    ):
         return SessionExecutionSummary(
             project_id=session_plan.project_id,
             session_id=session_plan.session_id,
@@ -546,136 +559,6 @@ def test_launch_action_closes_progress_dialog_when_runtime_launch_raises(
     assert "launch_called" in events
     assert "closed" in events
     assert "error_dialog" in events
-
-
-def test_launch_action_duplicate_participant_yes_still_launches(
-    qtbot,
-    controller: StudioController,
-    tmp_path: Path,
-    monkeypatch,
-) -> None:
-    _, window = _open_created_project(controller, qtbot, tmp_path, "Duplicate Participant Yes")
-    _prepare_compile_ready_project(window, tmp_path / "launch-duplicate-yes")
-
-    captures: dict[str, object] = {}
-    prompt_calls = 0
-    warning_messages: list[str] = []
-
-    def _fake_launch(project_root, session_plan, participant_number, launch_settings):
-        captures["participant_number"] = participant_number
-        return SessionExecutionSummary(
-            project_id=session_plan.project_id,
-            session_id=session_plan.session_id,
-            engine_name="stub",
-            run_mode=RunMode.SESSION,
-            participant_number=participant_number,
-            random_seed=session_plan.random_seed,
-            started_at=datetime(2026, 3, 8, 10, 0, tzinfo=timezone.utc),
-            finished_at=datetime(2026, 3, 8, 10, 1, tzinfo=timezone.utc),
-            total_condition_count=session_plan.total_runs,
-            completed_condition_count=session_plan.total_runs,
-            output_dir="runs/00011_run2",
-        )
-
-    def _fake_prompt() -> str:
-        nonlocal prompt_calls
-        prompt_calls += 1
-        return "00011"
-
-    def _fake_question(_parent, _title, text, *_args, **_kwargs):
-        warning_messages.append(text)
-        return QMessageBox.StandardButton.Yes
-
-    monkeypatch.setattr(
-        window.document,
-        "prepare_session_launch",
-        lambda refresh_hz, engine_name="psychopy": window.document.compile_session(
-            refresh_hz=refresh_hz
-        ),
-    )
-    monkeypatch.setattr(window.run_page, "_prompt_participant_number", _fake_prompt)
-    monkeypatch.setattr(
-        window.document, "has_completed_session_for_participant", lambda value: value == "00011"
-    )
-    monkeypatch.setattr("fpvs_studio.gui.main_window.QMessageBox.question", _fake_question)
-    monkeypatch.setattr("fpvs_studio.gui.document.launch_session", _fake_launch)
-    monkeypatch.setattr(
-        "fpvs_studio.gui.main_window.QMessageBox.information",
-        lambda *args, **kwargs: QMessageBox.StandardButton.Ok,
-    )
-
-    window.run_page.launch_session()
-
-    assert prompt_calls == 1
-    qtbot.waitUntil(lambda: "participant_number" in captures)
-    assert captures["participant_number"] == "00011"
-    assert len(warning_messages) == 1
-    assert "already completed this study" in warning_messages[0]
-
-
-def test_launch_action_duplicate_participant_no_reprompts_until_new_value(
-    qtbot,
-    controller: StudioController,
-    tmp_path: Path,
-    monkeypatch,
-) -> None:
-    _, window = _open_created_project(controller, qtbot, tmp_path, "Duplicate Participant No")
-    _prepare_compile_ready_project(window, tmp_path / "launch-duplicate-no")
-
-    captures: dict[str, object] = {}
-    prompt_sequence = iter(["00011", "00011", "00012"])
-    prompt_calls = 0
-    warning_messages: list[str] = []
-
-    def _fake_launch(project_root, session_plan, participant_number, launch_settings):
-        captures["participant_number"] = participant_number
-        return SessionExecutionSummary(
-            project_id=session_plan.project_id,
-            session_id=session_plan.session_id,
-            engine_name="stub",
-            run_mode=RunMode.SESSION,
-            participant_number=participant_number,
-            random_seed=session_plan.random_seed,
-            started_at=datetime(2026, 3, 8, 10, 0, tzinfo=timezone.utc),
-            finished_at=datetime(2026, 3, 8, 10, 1, tzinfo=timezone.utc),
-            total_condition_count=session_plan.total_runs,
-            completed_condition_count=session_plan.total_runs,
-            output_dir="runs/00012",
-        )
-
-    def _fake_prompt() -> str:
-        nonlocal prompt_calls
-        prompt_calls += 1
-        return next(prompt_sequence)
-
-    def _fake_question(_parent, _title, text, *_args, **_kwargs):
-        warning_messages.append(text)
-        return QMessageBox.StandardButton.No
-
-    monkeypatch.setattr(
-        window.document,
-        "prepare_session_launch",
-        lambda refresh_hz, engine_name="psychopy": window.document.compile_session(
-            refresh_hz=refresh_hz
-        ),
-    )
-    monkeypatch.setattr(window.run_page, "_prompt_participant_number", _fake_prompt)
-    monkeypatch.setattr(
-        window.document, "has_completed_session_for_participant", lambda value: value == "00011"
-    )
-    monkeypatch.setattr("fpvs_studio.gui.main_window.QMessageBox.question", _fake_question)
-    monkeypatch.setattr("fpvs_studio.gui.document.launch_session", _fake_launch)
-    monkeypatch.setattr(
-        "fpvs_studio.gui.main_window.QMessageBox.information",
-        lambda *args, **kwargs: QMessageBox.StandardButton.Ok,
-    )
-
-    window.run_page.launch_session()
-
-    assert prompt_calls == 3
-    assert len(warning_messages) == 2
-    qtbot.waitUntil(lambda: "participant_number" in captures)
-    assert captures["participant_number"] == "00012"
 
 
 def test_launch_action_cancelled_participant_prompt_aborts_launch(

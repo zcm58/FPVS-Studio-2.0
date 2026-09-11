@@ -616,3 +616,33 @@ def test_attentional_blink_project_shows_locked_category_and_matching_templates(
     assert editor.condition_profile_combo.currentData() == "attentional-blink-letter-stream-v1"
     assert document.project.experiment_category == ExperimentCategory.ATTENTIONAL_BLINK
     assert_visible_children_within_parent(editor)
+
+
+
+def test_repeat_participant_sessions_setting_persists_and_fits_setup(qtbot, controller, tmp_path):
+    from fpvs_studio.core.serialization import load_project_file
+
+    _, window = _open_created_project(
+        controller, qtbot, tmp_path,
+        "Cognitive Decline Longitudinal Participant Follow-up Assessment Project",
+    )
+    window.resize(1120, 820)
+    window.show_setup_wizard(step_key="project")
+    wizard = window.setup_wizard_page
+    checkbox = wizard.project_overview_editor.repeat_participant_sessions_checkbox
+    assert not checkbox.isChecked()
+    assert checkbox.text() == "Allow repeat participant sessions"
+    checkbox.setChecked(True)
+    window.document.save()
+    saved = load_project_file(window.document.project_root / "project.json")
+    assert saved.settings.allow_repeated_participant_sessions
+    QApplication.processEvents()
+    assert window.size().width() == 1120
+    assert window.size().height() == 820
+    assert checkbox.isVisible()
+    assert checkbox.width() >= checkbox.sizeHint().width()
+    assert "Previous session data is preserved" in checkbox.toolTip()
+    assert_visible_children_within_parent(wizard.project_step_surface)
+    assert_setup_wizard_vertical_scrolling_disabled(wizard)
+    window.document.update_allow_repeated_participant_sessions(False)
+    assert not checkbox.isChecked()

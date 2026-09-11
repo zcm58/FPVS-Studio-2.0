@@ -60,6 +60,7 @@ from fpvs_studio.gui.run_page import (
     LaunchTaskResult,
     ParticipantLaunchDetails,
     ParticipantNumberDialog,
+    ParticipantSessionCheckTask,
     TestModeLaunchConfirmationDialog,
     TestModeLaunchSelection,
 )
@@ -167,6 +168,7 @@ class StudioMainWindow(QMainWindow):
         self._session_seed_task: BackgroundTask | None = None
         self._launch_after_session_seed_ready = False
         self._active_launch_task: ProgressTask | None = None
+        self._active_participant_session_check: ParticipantSessionCheckTask | None = None
         self._active_launch_participant_number: str | None = None
         self._apply_compact_window_size()
 
@@ -636,7 +638,7 @@ class StudioMainWindow(QMainWindow):
         return True
 
     def launch_session(self) -> None:
-        if self._active_launch_task is not None:
+        if self.is_launch_busy():
             return
         if not self._ensure_session_seed_ready_for_launch():
             return
@@ -654,8 +656,43 @@ class StudioMainWindow(QMainWindow):
         participant_details = self._collect_launch_participant_details()
         if participant_details is None:
             return
+        if self.document.experiment_test_mode_enabled:
+            self._launch_participant_session(participant_details, refresh_hz, None)
+            return
+        participant_number = participant_details.participant_number
+        check = ParticipantSessionCheckTask(
+            parent_widget=self,
+            participant_number=participant_number,
+            allow_repeated_sessions=self.document.project.settings.allow_repeated_participant_sessions,
+            callback=lambda: self.document.next_participant_session_number(participant_number),
+            task_factory=ProgressTask,
+        )
+        self._active_participant_session_check = check
+        self.launch_action.setEnabled(False)
+        check.failed.connect(
+            lambda error: _show_error_dialog(self, "Launch Blocked", _coerce_exception(error))
+        )
+        check.finished.connect(self._on_participant_session_check_finished)
+        check.confirmed.connect(
+            lambda number: self._launch_participant_session(participant_details, refresh_hz, number)
+        )
+        check.start()
+
+    def _on_participant_session_check_finished(self) -> None:
+        self._active_participant_session_check = None
+        self.launch_action.setEnabled(True)
+
+    def _launch_participant_session(
+        self, participant_details: ParticipantLaunchDetails, refresh_hz: float,
+        participant_session_number: int | None,
+    ) -> None:
         participant_number = participant_details.participant_number
         try:
+            if not self.document.experiment_test_mode_enabled:
+                self.document.update_manual_removed_electrodes(
+                    participant_number, participant_details.manual_removed_electrodes,
+                )
+                self.document.save()
             session_plan = self.document.compile_session(
                 refresh_hz=refresh_hz,
                 condition_ids=participant_details.selected_condition_ids,
@@ -675,6 +712,7 @@ class StudioMainWindow(QMainWindow):
                 session_plan,
                 participant_number=participant_number,
                 participant_metadata=participant_details.participant_metadata,
+                participant_session_number=participant_session_number,
                 display_index=None,
                 fullscreen=True,
             )
@@ -700,7 +738,9 @@ class StudioMainWindow(QMainWindow):
         return float(preferred_refresh if preferred_refresh is not None else 60.0)
 
     def _prompt_participant_number(self) -> ParticipantLaunchDetails | None:
-        dialog = ParticipantNumberDialog(self)
+        dialog = ParticipantNumberDialog(
+            self, manual_removed_electrodes=self.document.project.manual_removed_electrodes,
+        )
         if dialog.exec() != int(dialog.DialogCode.Accepted):
             return None
         return dialog.participant_details
@@ -732,29 +772,7 @@ class StudioMainWindow(QMainWindow):
                 participant_number=TEST_MODE_PARTICIPANT_NUMBER,
                 selected_condition_ids=selection.selected_condition_ids,
             )
-        while True:
-            participant_details = self._prompt_participant_number()
-            if participant_details is None:
-                return None
-            participant_number = participant_details.participant_number
-
-            if not self.document.has_completed_session_for_participant(participant_number):
-                return participant_details
-
-            warning_text = (
-                f"Warning: logs indicate that {participant_number} has already "
-                "completed this study, "
-                f"but you entered {participant_number}. Do you wish to overwrite the existing data?"
-            )
-            answer = QMessageBox.question(
-                self,
-                "Participant Already Completed",
-                warning_text,
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                QMessageBox.StandardButton.No,
-            )
-            if answer == QMessageBox.StandardButton.Yes:
-                return participant_details
+        return self._prompt_participant_number()
 
     def _ensure_session_seed_ready_for_launch(self) -> bool:
         if self._session_seed_ready:
@@ -808,12 +826,17 @@ class StudioMainWindow(QMainWindow):
             else "Output: Compact summary logs"
         )
         participant_value = summary.participant_number or participant_number
+        session_label = f"Session {summary.participant_session_number}"
+        session_line = (
+            "" if self.document.experiment_test_mode_enabled
+            else f"Participant {participant_value}, {session_label}\n\n"
+        )
         if summary.aborted:
             abort_reason = summary.abort_reason or "No abort reason was provided."
             QMessageBox.warning(
                 self,
                 "Launch Aborted",
-                "The experiment aborted.\n\n"
+                session_line + "The experiment aborted.\n\n"
                 f"Reason: {abort_reason}\n"
                 "Completed Conditions: "
                 f"{summary.completed_condition_count}/{summary.total_condition_count}\n"
@@ -828,7 +851,7 @@ class StudioMainWindow(QMainWindow):
                 (
                     "Experiment test launch aborted."
                     if self.document.experiment_test_mode_enabled
-                    else f"Runtime launch aborted for participant {participant_value}."
+                    else f"{session_label} aborted for participant {participant_value}."
                 ),
                 5000,
             )
@@ -836,21 +859,17 @@ class StudioMainWindow(QMainWindow):
         QMessageBox.information(
             self,
             "Launch Complete",
-            (
-                "The experiment finished. "
+            session_line + "The experiment finished. " + (
                 "Review run exports in the project runs folder."
-            )
-            if summary.output_dir
-            else (
-                "The experiment finished. "
-                "Review participant summary files in the project logs folder."
+                if summary.output_dir
+                else "Review participant summary files in the project logs folder."
             ),
         )
         self.statusBar().showMessage(
             (
                 "Experiment test launch completed."
                 if self.document.experiment_test_mode_enabled
-                else f"Runtime launch completed for participant {participant_value}."
+                else f"{session_label} completed for participant {participant_value}."
             ),
             5000,
         )
@@ -1145,6 +1164,8 @@ class StudioMainWindow(QMainWindow):
         return True
 
     def maybe_save_changes(self) -> bool:
+        if not self._allow_project_handoff_during_launch():
+            return False
         if self._setup_wizard_page is not None and (
             self._setup_wizard_page.design_setup_step.is_busy()
             or self._setup_wizard_page._condition_image_task_active()
@@ -1172,16 +1193,30 @@ class StudioMainWindow(QMainWindow):
             return False
         return True
 
-    def closeEvent(self, event: QCloseEvent) -> None:
-        if self._active_launch_task is not None:
-            QMessageBox.information(
-                self,
-                "Launch In Progress",
-                (
-                    "FPVS Studio is still running the experiment launch. "
-                    "Please wait for the launch to finish before closing."
-                ),
+    def is_launch_busy(self) -> bool:
+        """Inspect existing launch surfaces without constructing Setup or Run."""
+
+        return (
+            self._active_launch_task is not None
+            or self._active_participant_session_check is not None
+            or (
+                self._setup_wizard_page is not None
+                and self._setup_wizard_page.run_page.is_launch_busy()
             )
+        )
+
+    def _allow_project_handoff_during_launch(self) -> bool:
+        if not self.is_launch_busy():
+            return True
+        QMessageBox.information(
+            self, "Launch In Progress",
+            "Wait for the participant session check or experiment launch to finish "
+            "before closing or changing projects.",
+        )
+        return False
+
+    def closeEvent(self, event: QCloseEvent) -> None:
+        if not self._allow_project_handoff_during_launch():
             event.ignore()
             return
         if self._active_bundle_export_task is not None:
@@ -1227,6 +1262,8 @@ class StudioMainWindow(QMainWindow):
             self._on_request_open_project()
 
     def _request_manage_projects(self) -> None:
+        if not self._allow_project_handoff_during_launch():
+            return
         if not self._allow_project_handoff_during_fixation_load():
             return
         self._on_request_manage_projects()

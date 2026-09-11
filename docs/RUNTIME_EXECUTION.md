@@ -326,6 +326,43 @@ improve navigation without encoding data. When the selected filename does not al
 end in `.xlsx`, the writer appends `.xlsx` without replacing another suffix. It touches
 only that explicit destination and never rewrites project logs or summary artifacts.
 
+## Repeat participant sessions
+
+Setup > Project exposes `Allow repeat participant sessions`, persisted as
+`ProjectSettings.allow_repeated_participant_sessions` (false when omitted). The GUI
+blocks a reused PID until that project option is enabled. An enabled project confirms
+the next session number before launch. The same guard is used by Home and Run.
+
+Runtime owns visit identity through `participant_sessions.py`. Its read-only preview
+and authoritative reservation consider historical full summaries, condition history,
+legacy bare/P-prefixed folders and `_runN` suffixes, new numbered folders, and prior
+reservation markers. Aborted/partial visits count, and PID text retains leading zeros.
+After preflight, runtime exclusively creates a permanent reservation under
+`logs/.participant-sessions/P<PID>/session-N.json` before playback. A stale confirmed
+number or another launch's reservation blocks launch instead of replacing data.
+Failed or crashed launches can leave unused numbers; those numbers are never recycled.
+
+Each new full export uses `runs/P<PID>_session<NN>/` (for example,
+`P0012_session01` and `P0012_session02`) and exclusively creates its output folder.
+Compact exports use the same numbering without creating detailed run folders.
+Existing folders and raw historical recordings stay in place. New run/session results
+carry an optional positive `participant_session_number`; missing legacy values remain
+readable. Reporting and task-checkpoint identity distinguish participant session
+numbers even if a caller reuses the same compiled session plan. This does not change
+the compiled session ID, frame schedules, randomization, or fixation scoring.
+
+Reporting appends the numbered-session field while retaining the earlier columns.
+Participant and group summaries expose `Session Number`; historical visits receive
+deterministic inferred numbers when a summary is regenerated, without rewriting their
+raw recordings. New participant metadata also snapshots the reviewed manually removed
+electrodes. The project PID map remains the latest prefill, while an earlier visit's
+snapshot stays with that visit. Missing historical electrode snapshots stay unknown.
+CSV header migration and shared report writes hold an OS lock under
+`logs/.reporting.lock`; process exit releases ownership, and concurrent writers wait
+up to 30 seconds before reporting a timeout. Reading old history to regenerate a
+summary does not rewrite that history. A future append upgrades its header while
+preserving existing rows and column values.
+
 ## Exports
 
 Launch-time participant metadata:
@@ -335,7 +372,8 @@ Launch-time participant metadata:
 - Sex accepts only `Female` or `Male`; Handedness accepts only `Right handed`,
   `Left handed`, or `Ambidextrous`; colorblind status is a required `Yes` or `No`
   participant answer
-- Participant Number remains the required runtime identity and output-folder key
+- Participant Number remains the required participant identity; each visit also has
+  its own participant session number
 - when colorblind status is `Yes`, runtime uses the accessible fixation color preset
   of white `#FFFFFF` to vermillion `#D55E00` for both the participant tutorial and
   condition playback while leaving the authored project settings unchanged
@@ -362,7 +400,7 @@ Compact participant summary:
     than either compact summary output
   - one row per participant session
   - excludes admin/test participant IDs `0` and `00`
-  - includes PID, age, sex, handedness, colorblind status, session ID, condition
+  - includes PID, age, sex, handedness, colorblind status, session ID/number, condition
     display-order seed, image/stimulus display-order seeds, total targets, hits,
     false alarms, aborted Y/N, include-in-analysis Y/N, weighted mean accuracy, and
     weighted mean reaction time
@@ -395,7 +433,7 @@ Run export modes:
 
 - `Full runs folder`
   - default app setting
-  - writes the detailed `runs/P<participant>/` session folder and per-condition run
+  - writes the detailed `runs/P<participant>_session<NN>/` session folder and per-condition run
     folders
   - keeps the Run page `Open Run Folder` and `Copy Run Folder` actions available after
     launch

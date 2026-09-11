@@ -253,6 +253,14 @@ class ProjectDocument(
         meta = _validated_copy(self._project.meta, description=description)
         self._apply_project_update(meta=meta)
 
+    def update_allow_repeated_participant_sessions(self, enabled: bool) -> None:
+        """Set whether an existing participant may start another numbered session."""
+
+        settings = _validated_copy(
+            self._project.settings, allow_repeated_participant_sessions=enabled,
+        )
+        self._apply_project_update(settings=settings)
+
     def update_manual_removed_electrodes(
         self,
         participant_number: str,

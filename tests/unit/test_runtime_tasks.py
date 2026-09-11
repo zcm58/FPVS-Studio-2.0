@@ -1300,6 +1300,43 @@ def test_compact_session_persists_task_answers_under_logs_without_runs_folder(
     assert not (project_root / "logs" / ".task-response-checkpoints").exists()
 
 
+def test_repeated_compact_plan_keeps_numbered_answers_and_legacy_checkpoint(
+    sample_project, sample_project_root, tmp_path: Path,
+) -> None:
+    from fpvs_studio.runtime.session_export import compact_task_checkpoint_path
+
+    plan = compile_session_plan(
+        sample_project, refresh_hz=60.0, project_root=sample_project_root, random_seed=30,
+    )
+    post = _module(TaskStepSpec(
+        step_id="questions", kind=TaskStepKind.QUESTIONNAIRE,
+        questions=[TaskQuestion(
+            question_id="note", kind=TaskQuestionKind.SHORT_TEXT, prompt="Note",
+        )], random_seed=1,
+    )).model_copy(update={"phase": TaskPhase.POST_CONDITION})
+    plan = _session_with_tasks(plan, post=post)
+    root = tmp_path / "project"
+    legacy = compact_task_checkpoint_path(
+        root, participant_number="009", session_id=plan.session_id,
+    )
+    legacy.parent.mkdir(parents=True)
+    legacy.write_bytes(b"preserved legacy partial answers")
+    for number in (1, 2):
+        worker = RuntimeWorker(_TaskEngine([TaskEngineInput(text_value=f"answer {number}")]))
+        worker.execute_session(
+            root, plan, root / "runs" / "unused",
+            participant_number="009", participant_session_number=number,
+            runtime_options={"export_mode": "compact", "serial_enabled": False},
+        )
+    with (root / "logs" / "task_responses.csv").open(encoding="utf-8", newline="") as handle:
+        rows = list(csv.DictReader(handle))
+    assert [(row["participant_session_number"], row["text_value"]) for row in rows] == [
+        ("1", "answer 1"), ("2", "answer 2"),
+    ]
+    assert legacy.read_bytes() == b"preserved legacy partial answers"
+    assert not (root / "runs").exists()
+
+
 def test_session_task_order_and_full_exports_preserve_raw_checkpoint(
     sample_project,
     sample_project_root,

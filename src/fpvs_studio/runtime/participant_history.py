@@ -6,7 +6,9 @@ only; scoring, compilation, and export writing stay in adjacent runtime or core 
 from __future__ import annotations
 
 import csv
+import re
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from random import SystemRandom
 from typing import Protocol
@@ -35,6 +37,68 @@ class CompletedParticipantSessionRecord:
 
     output_label: str
     summary: SessionExecutionSummary
+
+
+@dataclass(frozen=True)
+class ParticipantSessionNumberSource:
+    """Evidence for one participant visit, including unnumbered historical exports."""
+
+    participant_number: str
+    output_label: str
+    occurred_at: str = ""
+    participant_session_number: int | None = None
+
+
+def infer_participant_session_numbers(sources: list[ParticipantSessionNumberSource]) -> list[int]:
+    """Assign deterministic legacy numbers while retaining explicit recorded numbers.
+
+    Legacy folder suffixes are evidence, not a unique identity: both ``1`` and
+    ``P1`` can hold separate sessions. Date order breaks those historical collisions.
+    """
+
+    assigned = [0] * len(sources)
+    occupied: dict[str, set[int]] = {}
+    for index, source in enumerate(sources):
+        if source.participant_session_number is not None:
+            assigned[index] = source.participant_session_number
+            occupied.setdefault(source.participant_number, set()).add(assigned[index])
+    unnumbered = sorted(
+        (index for index, number in enumerate(assigned) if not number),
+        key=lambda index: (
+            sources[index].occurred_at,
+            participant_session_number_from_output_label(
+                sources[index].output_label, sources[index].participant_number
+            ) or 1,
+            sources[index].output_label,
+            index,
+        ),
+    )
+    for index in unnumbered:
+        source = sources[index]
+        used = occupied.setdefault(source.participant_number, set())
+        number = participant_session_number_from_output_label(
+            source.output_label, source.participant_number
+        ) or 1
+        while number in used:
+            number += 1
+        assigned[index] = number
+        used.add(number)
+    return assigned
+
+
+def participant_session_history_identity(row: dict[str, str]) -> tuple[str, str, str, str]:
+    """Identify numbered visits and recover separate legacy compact export batches."""
+
+    output_dir = row.get("output_dir", "")
+    session_number = row.get("participant_session_number", "")
+    if not session_number and not output_dir and row.get("logged_at_utc"):
+        session_number = f"legacy-export:{row['logged_at_utc']}"
+    return (
+        row.get("participant_number", ""),
+        row.get("session_id", ""),
+        output_dir,
+        session_number,
+    )
 
 
 def find_completed_sessions_for_participant(
@@ -79,6 +143,21 @@ def resolve_next_participant_output_label(
 
 def _participant_output_label(participant_number: str) -> str:
     return f"{_PARTICIPANT_OUTPUT_PREFIX}{participant_number}"
+
+
+def participant_session_number_from_output_label(
+    output_label: str, participant_number: str
+) -> int | None:
+    """Read a visit number from current or legacy participant folder names."""
+
+    match = re.fullmatch(
+        rf"P?{re.escape(participant_number)}(?:(?:_run|_session)([0-9]+))?",
+        output_label,
+    )
+    if match is None:
+        return None
+    number = int(match.group(1) or "1")
+    return number if number > 0 else None
 
 
 def _participant_output_label_exists(
@@ -126,22 +205,36 @@ def generate_unused_session_seed(
 
 def _iter_session_history_summaries(
     project_root: Path,
+    *,
+    strict: bool = False,
 ) -> list[tuple[str, SessionExecutionSummary]]:
     discovered: list[tuple[str, SessionExecutionSummary]] = []
-    seen_session_ids: set[str] = set()
-    for output_label, summary in _iter_session_summaries(project_root):
+    seen_sessions: set[tuple[str | None, str, str | None, int | None]] = set()
+    for output_label, summary in _iter_session_summaries(project_root, strict=strict):
         discovered.append((output_label, summary))
-        seen_session_ids.add(summary.session_id)
+        seen_sessions.add(_session_identity(summary))
     for output_label, summary in _iter_session_condition_history_summaries(project_root):
-        if summary.session_id in seen_session_ids:
+        if summary.output_dir and _session_identity(summary) in seen_sessions:
             continue
         discovered.append((output_label, summary))
-        seen_session_ids.add(summary.session_id)
     return discovered
+
+
+def _session_identity(
+    summary: SessionExecutionSummary,
+) -> tuple[str | None, str, str | None, int | None]:
+    return (
+        summary.participant_number,
+        summary.session_id,
+        summary.output_dir,
+        summary.participant_session_number,
+    )
 
 
 def _iter_session_summaries(
     project_root: Path,
+    *,
+    strict: bool = False,
 ) -> list[tuple[str, SessionExecutionSummary]]:
     runs_root = runs_dir(project_root)
     if not runs_root.is_dir():
@@ -156,7 +249,12 @@ def _iter_session_summaries(
             continue
         try:
             summary = read_json_file(summary_path, SessionExecutionSummary)
-        except Exception:
+        except Exception as exc:
+            if strict:
+                raise ValueError(
+                    f"Could not read session history in '{entry.name}'. "
+                    "Repair or restore the history before launching another session."
+                ) from exc
             continue
         discovered.append((entry.name, summary))
     return discovered
@@ -170,22 +268,40 @@ def _iter_session_condition_history_summaries(
         return []
 
     with history_path.open("r", encoding="utf-8", newline="") as handle:
+        reader = csv.DictReader(handle)
+        if not reader.fieldnames or not {"session_id", "participant_number"}.issubset(
+            reader.fieldnames
+        ):
+            raise ValueError("Participant session history has an incompatible header.")
+        if len(set(reader.fieldnames)) != len(reader.fieldnames):
+            raise ValueError("Participant session history contains duplicate column names.")
+        raw_rows = list(reader)
+        if any(None in row for row in raw_rows):
+            raise ValueError("Participant session history contains malformed rows.")
         rows = [
             {str(key): "" if value is None else value for key, value in row.items() if key}
-            for row in csv.DictReader(handle)
+            for row in raw_rows
         ]
 
-    grouped_rows: dict[tuple[str, str, str], list[dict[str, str]]] = {}
+    grouped_rows: dict[tuple[str, str, str, str], list[dict[str, str]]] = {}
     for row in rows:
         session_id = row.get("session_id", "")
         participant_number = row.get("participant_number", "")
-        output_dir = row.get("output_dir", "")
         if not session_id:
-            continue
-        grouped_rows.setdefault((participant_number, session_id, output_dir), []).append(row)
+            raise ValueError("Participant session history contains a row without a session ID.")
+        if not participant_number:
+            raise ValueError("Participant session history contains a row without a participant ID.")
+        number_text = row.get("participant_session_number", "").strip()
+        if number_text and (
+            not number_text.isascii() or not number_text.isdigit() or int(number_text) < 1
+        ):
+            raise ValueError("Participant session history contains an invalid session number.")
+        grouped_rows.setdefault(participant_session_history_identity(row), []).append(row)
 
     summaries: list[tuple[str, SessionExecutionSummary]] = []
-    for (participant_number, session_id, output_dir), session_rows in grouped_rows.items():
+    for (
+        participant_number, session_id, output_dir, _visit_identity
+    ), session_rows in grouped_rows.items():
         first_row = session_rows[0]
         session_aborted = any(_csv_bool(row.get("session_aborted")) for row in session_rows)
         total_condition_count = len(session_rows)
@@ -206,12 +322,21 @@ def _iter_session_condition_history_summaries(
                     engine_name="history",
                     run_mode=RunMode.SESSION,
                     participant_number=participant_number or None,
+                    participant_session_number=_csv_int(first_row.get("participant_session_number")),
+                    started_at=_csv_datetime(
+                        first_row.get("session_started_at") or first_row.get("logged_at_utc")
+                    ),
+                    finished_at=_csv_datetime(first_row.get("session_finished_at")),
                     participant_metadata=ParticipantMetadata(
                         age=_csv_int(first_row.get("participant_age")),
                         sex=first_row.get("participant_sex") or None,
                         handedness=first_row.get("participant_handedness") or None,
                         colorblind=_csv_bool_or_none(
                             first_row.get("participant_colorblind")
+                        ),
+                        manual_removed_electrodes=(
+                            first_row["manual_removed_electrodes"].split(";")
+                            if first_row.get("manual_removed_electrodes") else None
                         ),
                     ),
                     random_seed=_csv_int(first_row.get("session_seed")),
@@ -256,5 +381,14 @@ def _csv_int(value: str | None) -> int | None:
         return None
     try:
         return int(value)
+    except ValueError:
+        return None
+
+
+def _csv_datetime(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value)
     except ValueError:
         return None

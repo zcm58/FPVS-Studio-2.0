@@ -184,6 +184,7 @@ class RuntimeWorker:
         output_dir: Path,
         *,
         participant_number: str,
+        participant_session_number: int | None = None,
         participant_metadata: ParticipantMetadata | None = None,
         runtime_options: Mapping[str, object] | None = None,
         relative_output_dir: str | None = None,
@@ -206,6 +207,7 @@ class RuntimeWorker:
                     project_root,
                     participant_number=participant_number,
                     session_id=session_plan.session_id,
+                    participant_session_number=participant_session_number,
                 )
             )
         )
@@ -250,6 +252,7 @@ class RuntimeWorker:
                     ).model_copy(
                         update={
                             "session_id": session_plan.session_id,
+                            "participant_session_number": participant_session_number,
                             "task_responses": list(pre_task_outcome.responses),
                             "task_flow_completed": False,
                             "task_flow_aborted": True,
@@ -294,6 +297,7 @@ class RuntimeWorker:
                     ).model_copy(
                         update={
                             "session_id": session_plan.session_id,
+                            "participant_session_number": participant_session_number,
                             "task_responses": list(pre_task_outcome.responses),
                             "task_flow_completed": False,
                             "output_dir": (
@@ -357,7 +361,8 @@ class RuntimeWorker:
                         warnings=(),
                     )
                 task_summary_update: dict[str, object] = {
-                    "task_responses": list(pre_task_outcome.responses)
+                    "task_responses": list(pre_task_outcome.responses),
+                    "participant_session_number": participant_session_number,
                 }
                 if run_summary.aborted and entry.post_tasks:
                     task_summary_update["task_flow_completed"] = False
@@ -447,6 +452,7 @@ class RuntimeWorker:
             engine_name=self._engine.engine_id,
             run_mode=_run_mode(),
             participant_number=participant_number,
+            participant_session_number=participant_session_number,
             participant_metadata=participant_metadata or ParticipantMetadata(),
             random_seed=session_plan.random_seed,
             started_at=run_results[0].started_at if run_results else None,

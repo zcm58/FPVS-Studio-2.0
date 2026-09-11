@@ -90,6 +90,19 @@ availability and persistence for both build types. Use the GUI focused route. Fo
 visible acceptance, open Settings at `700x610`, enable the option, reopen Settings to
 check persistence, and disable it again to restore ordinary launch checks.
 
+## Repeat Participant Sessions
+
+Start with `runtime/participant_sessions.py` for read-only next-number lookup and
+atomic reservation, `runtime/participant_history.py` for legacy/full/compact history,
+and `runtime/session_export.py` for session numbering in reports. Execution metadata
+owns `participant_session_number`; compiled timing and session seeds are unchanged.
+`ProjectSettings.allow_repeated_participant_sessions` is edited in Setup > Project;
+both Home and Run share the participant launch guard. Read
+[`Runtime execution`](../RUNTIME_EXECUTION.md#repeat-participant-sessions) and the
+launch section of [`GUI workflow`](../GUI_WORKFLOW.md). Use runtime/core/project-io
+and GUI focused routes, then repo precommit. GUI acceptance remains visible/manual
+unless an explicitly approved safe Qt environment is available.
+
 ## Attentional Blink Presentation Rate
 
 Setup > Design edits the shared rate through `gui/attentional_blink_stream_designer.py`

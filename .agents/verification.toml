@@ -119,6 +119,8 @@ tests = [
   "tests/unit/test_runtime_launcher_flow.py",
   "tests/unit/test_runtime_launch_settings.py",
   "tests/unit/test_runtime_participant_history.py",
+  "tests/unit/test_runtime_participant_sessions.py",
+  "tests/unit/test_runtime_reporting_lock.py",
   "tests/unit/test_runtime_preflight.py",
   "tests/unit/test_attentional_blink_runtime.py",
   "tests/unit/test_attentional_blink_stream_runtime.py",

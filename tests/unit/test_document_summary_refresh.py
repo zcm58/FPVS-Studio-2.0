@@ -6,6 +6,7 @@ import csv
 import os
 from pathlib import Path
 
+import pytest
 from openpyxl import load_workbook
 
 from fpvs_studio.core.compiler import compile_session_plan
@@ -13,6 +14,7 @@ from fpvs_studio.core.enums import RunMode
 from fpvs_studio.core.execution import SessionExecutionSummary
 from fpvs_studio.core.project_service import create_project
 from fpvs_studio.gui.document import ProjectDocument
+from fpvs_studio.gui.document_support import DocumentError
 from fpvs_studio.runtime.launcher import LaunchSettings
 from fpvs_studio.runtime.session_export import (
     SESSION_CONDITION_HISTORY_HEADER,
@@ -225,6 +227,57 @@ def test_document_compile_session_filters_conditions_without_persisting_selectio
     )
     assert document.dirty is False
     assert document.last_session_plan is session_plan
+
+
+@pytest.mark.parametrize("repeat_enabled", [False, True])
+def test_document_passes_confirmed_participant_session_to_runtime(
+    multi_condition_project, multi_condition_project_root, monkeypatch, repeat_enabled,
+) -> None:
+    document = ProjectDocument(
+        project_root=multi_condition_project_root,
+        project=multi_condition_project.model_copy(deep=True),
+    )
+    document.update_allow_repeated_participant_sessions(repeat_enabled)
+    plan = document.compile_session(refresh_hz=60.0)
+    expected = 2 if repeat_enabled else 1
+    captured = []
+
+    def _launch(_root, _plan, **kwargs):
+        captured.append(kwargs["participant_session_number"])
+        return SessionExecutionSummary(
+            project_id=plan.project_id, session_id=plan.session_id, engine_name="stub",
+            run_mode=RunMode.SESSION, participant_number="0007",
+            participant_session_number=expected,
+            total_condition_count=plan.total_runs, completed_condition_count=plan.total_runs,
+        )
+
+    monkeypatch.setattr("fpvs_studio.gui.document.launch_session", _launch)
+    monkeypatch.setattr(document, "refresh_participant_summary_if_stale", lambda: None)
+    summary = document.launch_compiled_session(
+        plan, participant_number="0007", participant_session_number=expected,
+        display_index=None,
+    )
+    assert captured == [expected]
+    assert summary.participant_session_number == expected
+
+
+def test_document_blocks_second_participant_session_when_project_disallows_repeats(
+    multi_condition_project, multi_condition_project_root, monkeypatch,
+) -> None:
+    document = ProjectDocument(
+        project_root=multi_condition_project_root,
+        project=multi_condition_project.model_copy(deep=True),
+    )
+    plan = document.compile_session(refresh_hz=60.0)
+    monkeypatch.setattr(
+        "fpvs_studio.gui.document.launch_session",
+        lambda *_args, **_kwargs: pytest.fail("Disabled repeats must never reach playback"),
+    )
+    with pytest.raises(DocumentError, match="Setup > Project"):
+        document.launch_compiled_session(
+            plan, participant_number="0007", participant_session_number=2,
+            display_index=None,
+        )
 
 
 def _write_history_rows(path: Path, rows: list[dict[str, str]]) -> None:

@@ -18,6 +18,8 @@ This phase should establish:
   launch screens
 - session export writers
 - participant and seed-history lookup
+- atomic participant visit reservation across full and compact exports, preserving
+  legacy and aborted output and numbering each execution separately from compilation
 - engine selection plumbing
 - real session execution flow against the engine seam
 
@@ -72,6 +74,8 @@ This phase should establish:
   regenerating summaries or changing project data, plus an explicit-path Excel writer
   for the already loaded typed result
 - preserve clear separation from GUI code
+- keep participant visit numbers and reviewed electrode snapshots in execution
+  metadata; never add repeat-visit bookkeeping to compiled timing contracts
 
 ## Restrictions
 

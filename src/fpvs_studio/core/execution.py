@@ -11,7 +11,11 @@ from typing import Literal
 from pydantic import Field, StrictBool, StrictInt, field_validator, model_validator
 
 from fpvs_studio.core.enums import RunMode, SchemaVersion
-from fpvs_studio.core.models import FPVSBaseModel, validate_project_relative_path
+from fpvs_studio.core.models import (
+    FPVSBaseModel,
+    normalize_manual_removed_electrodes,
+    validate_project_relative_path,
+)
 from fpvs_studio.core.task_models import TaskResponseRecord
 
 FixationOutcome = Literal["hit", "miss"]
@@ -53,6 +57,12 @@ class ParticipantMetadata(FPVSBaseModel):
     sex: str | None = Field(default=None, max_length=64)
     handedness: str | None = Field(default=None, max_length=64)
     colorblind: StrictBool | None = None
+    manual_removed_electrodes: list[str] | None = None
+
+    @field_validator("manual_removed_electrodes")
+    @classmethod
+    def validate_manual_removed_electrodes(cls, value: list[str] | None) -> list[str] | None:
+        return None if value is None else normalize_manual_removed_electrodes(value)
 
     @field_validator("sex")
     @classmethod
@@ -90,6 +100,7 @@ class ParticipantMetadata(FPVSBaseModel):
             and self.sex is None
             and self.handedness is None
             and self.colorblind is None
+            and self.manual_removed_electrodes is None
         )
 
 
@@ -280,6 +291,7 @@ class RunExecutionSummary(FPVSBaseModel):
     engine_name: str
     run_mode: RunMode
     participant_number: str | None = None
+    participant_session_number: StrictInt | None = Field(default=None, ge=1)
     participant_metadata: ParticipantMetadata = Field(default_factory=ParticipantMetadata)
     started_at: datetime | None = None
     finished_at: datetime | None = None
@@ -341,6 +353,7 @@ class SessionExecutionSummary(FPVSBaseModel):
     engine_name: str
     run_mode: RunMode
     participant_number: str | None = None
+    participant_session_number: StrictInt | None = Field(default=None, ge=1)
     participant_metadata: ParticipantMetadata = Field(default_factory=ParticipantMetadata)
     random_seed: int | None = Field(default=None, ge=0)
     started_at: datetime | None = None

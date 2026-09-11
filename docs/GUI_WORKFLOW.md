@@ -394,14 +394,32 @@ are normalized to stable uppercase labels and saved under that participant numbe
 the project's top-level `manual_removed_electrodes` map in `project.json`; an empty list
 records that the administrator reviewed the field and reported none removed. Returning
 participants prefill the saved list for review and correction.
-Participant Number remains the output-folder identity and duplicate-history lookup key;
+Setup > Project includes `Allow repeat participant sessions`, disabled by default for
+projects without an explicit setting. Both Home and Run check participant history in
+a worker after participant entry. A previously used PID, including an aborted visit,
+is blocked when repeat sessions are disabled. When enabled, the operator confirms
+`Start Session N`; declining returns to FPVS Studio without launching. Earlier visit data is
+preserved. Runtime checks the selected number again after preflight, so a competing
+launch cannot overwrite or silently change the confirmed visit. Session 1 is assigned
+to the first visit, and launch results show the assigned session number. Runtime
+numbering/report compatibility is documented in
+[Runtime execution](RUNTIME_EXECUTION.md#repeat-participant-sessions).
+The confirmation fits `600x260`; Setup remains `1120x820`. Visible acceptance should
+save/reopen the repeat-session checkbox, launch a fresh PID, repeat with accept and
+cancel, and confirm disabled reuse is blocked on both Home and Run. Check long PID
+text and a multi-digit session number, then verify full and compact exports and an
+aborted visit advance the next number. Active history checks/playback block closing
+or switching projects. Registered GUI tests cover these states; ordinary local
+verification excludes Qt execution.
+Participant Number remains the participant identity and duplicate-history lookup key;
 Sex is limited to `Female` or `Male`, and Handedness is limited to `Right handed`,
 `Left handed`, or `Ambidextrous`; colorblind status is a required `Yes` or `No`
 selection. When colorblind status is `Yes`, runtime uses the accessible fixation preset
 of white `#FFFFFF` to vermillion `#D55E00` for the participant tutorial and condition
 playback without changing the authored project colors. The age, sex, handedness, and
 colorblind fields are written as runtime participant metadata for the launched session.
-The manually removed electrode list remains editable project metadata and does not alter
+The manually removed electrode list remains editable project metadata, and each new
+visit stores a reviewed snapshot in its execution metadata. It does not alter
 `RunSpec`, `SessionPlan`, or playback behavior. Accepting the participant dialog persists
 its participant entry before compilation and before the Sophia Mode gate. Launch then
 compiles the session and runs routine preflight checks after participant details are

@@ -8,12 +8,15 @@ from __future__ import annotations
 import csv
 import hashlib
 import json
+import os
 from collections.abc import Iterable
 from datetime import datetime, timezone
 from pathlib import Path
+from tempfile import NamedTemporaryFile
 from typing import Any
+from zipfile import BadZipFile
 
-from openpyxl import Workbook  # type: ignore[import-untyped]
+from openpyxl import Workbook, load_workbook  # type: ignore[import-untyped]
 from openpyxl.styles import Alignment, Font, PatternFill  # type: ignore[import-untyped]
 from openpyxl.utils import get_column_letter  # type: ignore[import-untyped]
 
@@ -29,6 +32,12 @@ from fpvs_studio.core.serialization import read_json_file, write_json_file
 from fpvs_studio.core.session_plan import SessionEntry, SessionPlan
 from fpvs_studio.core.task_models import TaskResponseRecord
 from fpvs_studio.core.validation import validate_display_refresh
+from fpvs_studio.runtime.participant_history import (
+    ParticipantSessionNumberSource,
+    infer_participant_session_numbers,
+    participant_session_history_identity,
+)
+from fpvs_studio.runtime.reporting_lock import project_reporting_lock
 
 SESSION_CONDITION_HISTORY_FILENAME = "session_condition_history.csv"
 PARTICIPANT_SUMMARY_FILENAME = "participant_summary.csv"
@@ -94,6 +103,8 @@ SESSION_CONDITION_HISTORY_HEADER = [
     "accuracy_percent",
     "mean_rt_ms",
     "block_accuracy_percent",
+    "participant_session_number",
+    "manual_removed_electrodes",
 ]
 PARTICIPANT_SUMMARY_HEADER = [
     "PID",
@@ -111,6 +122,7 @@ PARTICIPANT_SUMMARY_HEADER = [
     "Include In Analysis",
     "Mean Accuracy Across All Conditions (%)",
     "Mean Reaction Time Across All Conditions (ms)",
+    "Session Number",
 ]
 PARTICIPANT_SUMMARY_XLSX_SHEET_NAME = "Participant Summary"
 GROUP_SUMMARY_XLSX_SHEET_NAME = "Group Summary"
@@ -134,12 +146,14 @@ GROUP_SUMMARY_HEADER = [
     "Mean Accuracy Across All Conditions (%)",
     "Mean Reaction Time Across All Conditions (ms)",
     "Generated At UTC",
+    "Session Number",
 ]
 _PARTICIPANT_SUMMARY_INTEGER_COLUMNS = frozenset(
     {
         "Total Targets",
         "Hits",
         "False Alarms",
+        "Session Number",
     }
 )
 _PARTICIPANT_SUMMARY_FLOAT_COLUMNS = frozenset(
@@ -207,10 +221,14 @@ def compact_task_checkpoint_path(
     *,
     participant_number: str,
     session_id: str,
+    participant_session_number: int | None = None,
 ) -> Path:
     """Return a contained, opaque checkpoint path for one compact-mode session."""
 
-    identity = f"{participant_number}\0{session_id}".encode()
+    identity_text = f"{participant_number}\0{session_id}"
+    if participant_session_number is not None:
+        identity_text += f"\0{participant_session_number}"
+    identity = identity_text.encode()
     filename = f"{hashlib.sha256(identity).hexdigest()[:24]}.jsonl"
     return logs_dir(project_root) / TASK_CHECKPOINT_DIRNAME / filename
 
@@ -325,6 +343,7 @@ COMPACT_TASK_RESPONSES_HEADER = [
     "session_aborted",
     "session_abort_reason",
     *TASK_RESPONSES_HEADER,
+    "participant_session_number",
 ]
 
 
@@ -334,6 +353,16 @@ def append_compact_task_responses(
     summary: SessionExecutionSummary,
 ) -> Path | None:
     """Append raw task answers to the compact, session-keyed research log."""
+
+    with project_reporting_lock(project_root):
+        return _append_compact_task_responses_unlocked(project_root, session_plan, summary)
+
+
+def _append_compact_task_responses_unlocked(
+    project_root: Path,
+    session_plan: SessionPlan,
+    summary: SessionExecutionSummary,
+) -> Path | None:
 
     responses = [
         response
@@ -346,6 +375,8 @@ def append_compact_task_responses(
     path = logs_dir(project_root) / TASK_RESPONSES_FILENAME
     path.parent.mkdir(parents=True, exist_ok=True)
     write_header = not path.is_file() or path.stat().st_size == 0
+    if not write_header:
+        _upgrade_csv_header(path, COMPACT_TASK_RESPONSES_HEADER)
     logged_at = datetime.now(timezone.utc).isoformat()
     prefix = (
         logged_at,
@@ -362,7 +393,10 @@ def append_compact_task_responses(
             writer.writerow(COMPACT_TASK_RESPONSES_HEADER)
         for response in responses:
             writer.writerow(
-                [_task_csv_value(value) for value in (*prefix, *_task_response_row(response))]
+                [_task_csv_value(value) for value in (
+                    *prefix, *_task_response_row(response),
+                    summary.participant_session_number or "",
+                )]
             )
         handle.flush()
     return path
@@ -585,6 +619,8 @@ def write_session_artifacts(
             "participant_sex",
             "participant_handedness",
             "participant_colorblind",
+            "participant_session_number",
+            "manual_removed_electrodes",
         ],
         [
             (
@@ -595,6 +631,8 @@ def write_session_artifacts(
                 summary.participant_metadata.sex or "",
                 summary.participant_metadata.handedness or "",
                 _participant_colorblind_value(summary.participant_metadata.colorblind),
+                summary.participant_session_number or "",
+                ";".join(summary.participant_metadata.manual_removed_electrodes or []),
             )
         ],
     )
@@ -795,6 +833,16 @@ def append_session_condition_history(
 ) -> Path:
     """Append project-level condition-history rows for one launched session."""
 
+    with project_reporting_lock(project_root):
+        return _append_session_condition_history_unlocked(project_root, session_plan, summary)
+
+
+def _append_session_condition_history_unlocked(
+    project_root: Path,
+    session_plan: SessionPlan,
+    summary: SessionExecutionSummary,
+) -> Path:
+
     path = logs_dir(project_root) / SESSION_CONDITION_HISTORY_FILENAME
     path.parent.mkdir(parents=True, exist_ok=True)
     if path.is_file() and path.stat().st_size > 0:
@@ -806,7 +854,7 @@ def append_session_condition_history(
             writer.writerow(SESSION_CONDITION_HISTORY_HEADER)
         writer.writerows(_session_condition_history_rows(session_plan, summary))
     _append_attentional_blink_events(project_root, session_plan, summary)
-    write_participant_summary(project_root)
+    _write_participant_summary_unlocked(project_root)
     return path
 
 
@@ -817,6 +865,7 @@ ATTENTIONAL_BLINK_EVENTS_HEADER = [
     "requested_t1_ms", "requested_isi_ms", "requested_t2_ms",
     "achieved_t1_ms", "achieved_isi_ms", "achieved_t2_ms", "planned_soa_ms",
     "presented", "actual_onset_s", "run_aborted",
+    "participant_session_number",
 ]
 
 ATTENTIONAL_BLINK_STREAM_EVENTS_HEADER = [
@@ -827,6 +876,7 @@ ATTENTIONAL_BLINK_STREAM_EVENTS_HEADER = [
     "achieved_stream_hz", "planned_onset_s", "planned_duration_ms", "requested_soa_ms",
     "achieved_soa_ms", "soa_frames", "target_lag", "intervening_digits", "presented",
     "actual_onset_s", "observed_pair_soa_ms", "run_aborted",
+    "participant_session_number",
 ]
 
 
@@ -852,6 +902,7 @@ def _attentional_blink_event_rows(
             timing.t1_frames * frame_ms, timing.isi_frames * frame_ms, timing.t2_frames * frame_ms,
             (timing.t1_frames + timing.isi_frames) * frame_ms,
             onset is not None, onset.time_s if onset is not None else None, summary.aborted,
+            summary.participant_session_number,
         ))
 
 
@@ -891,6 +942,7 @@ def _attentional_blink_stream_event_rows(
             timing.achieved_soa_ms, timing.lag * timing.frames_per_item, timing.lag,
             timing.lag - 1, onset is not None, onset.time_s if onset is not None else None,
             observed_soa_ms, summary.aborted,
+            summary.participant_session_number,
         ))
 
 
@@ -907,6 +959,8 @@ def _append_attentional_blink_events(
     if entries:
         path = logs_dir(project_root) / ATTENTIONAL_BLINK_EVENTS_FILENAME
         needs_header = not path.is_file() or path.stat().st_size == 0
+        if not needs_header:
+            _upgrade_csv_header(path, ATTENTIONAL_BLINK_EVENTS_HEADER)
         with path.open("a", encoding="utf-8", newline="") as handle:
             writer = csv.writer(handle)
             if needs_header:
@@ -924,11 +978,7 @@ def _append_attentional_blink_events(
         path = logs_dir(project_root) / ATTENTIONAL_BLINK_STREAM_EVENTS_FILENAME
         needs_header = not path.is_file() or path.stat().st_size == 0
         if not needs_header:
-            with path.open(encoding="utf-8", newline="") as handle:
-                if next(csv.reader(handle), []) != ATTENTIONAL_BLINK_STREAM_EVENTS_HEADER:
-                    raise ValueError(
-                        "Attentional-blink stream event export has an incompatible header."
-                    )
+            _upgrade_csv_header(path, ATTENTIONAL_BLINK_STREAM_EVENTS_HEADER)
         with path.open("a", encoding="utf-8", newline="") as handle:
             writer = csv.writer(handle)
             if needs_header:
@@ -942,11 +992,16 @@ def _append_attentional_blink_events(
 def write_participant_summary(project_root: Path) -> Path:
     """Write compact project-level participant/session summary CSV and XLSX files."""
 
+    with project_reporting_lock(project_root):
+        return _write_participant_summary_unlocked(project_root)
+
+
+def _write_participant_summary_unlocked(project_root: Path) -> Path:
+
     path = logs_dir(project_root) / PARTICIPANT_SUMMARY_FILENAME
     xlsx_path = logs_dir(project_root) / PARTICIPANT_SUMMARY_XLSX_FILENAME
     history_path = logs_dir(project_root) / SESSION_CONDITION_HISTORY_FILENAME
     if history_path.is_file() and history_path.stat().st_size > 0:
-        _upgrade_session_condition_history_header(history_path)
         history_rows = _read_csv_dict_rows(history_path)
     else:
         history_rows = []
@@ -968,6 +1023,15 @@ def refresh_participant_summary_if_stale(project_root: Path) -> Path | None:
     if not history_path.is_file() or history_path.stat().st_size == 0:
         return None
 
+    with project_reporting_lock(project_root):
+        return _refresh_participant_summary_if_stale_unlocked(project_root, history_path)
+
+
+def _refresh_participant_summary_if_stale_unlocked(
+    project_root: Path, history_path: Path,
+) -> Path | None:
+    log_root = logs_dir(project_root)
+
     history_mtime_ns = history_path.stat().st_mtime_ns
     summary_paths = (
         log_root / PARTICIPANT_SUMMARY_FILENAME,
@@ -975,20 +1039,35 @@ def refresh_participant_summary_if_stale(project_root: Path) -> Path | None:
     )
     if not any(_summary_output_is_stale(path, history_mtime_ns) for path in summary_paths):
         return None
-    return write_participant_summary(project_root)
+    return _write_participant_summary_unlocked(project_root)
 
 
 def _summary_output_is_stale(path: Path, history_mtime_ns: int) -> bool:
     if not path.is_file():
         return True
-    return path.stat().st_mtime_ns < history_mtime_ns
+    if path.stat().st_mtime_ns < history_mtime_ns:
+        return True
+    if path.suffix == ".csv":
+        with path.open(encoding="utf-8", newline="") as handle:
+            return next(csv.reader(handle), []) != PARTICIPANT_SUMMARY_HEADER
+    try:
+        workbook = load_workbook(path, read_only=True)
+        try:
+            worksheet = workbook[PARTICIPANT_SUMMARY_XLSX_SHEET_NAME]
+            header = list(next(worksheet.iter_rows(values_only=True), ()))
+            return header != PARTICIPANT_SUMMARY_HEADER
+        finally:
+            workbook.close()
+    except (OSError, ValueError, KeyError, BadZipFile):
+        return True
 
 
 def write_group_summary(project_root: Path, output_path: Path) -> Path:
     """Write a manual compact group-level summary workbook for the project."""
 
-    participant_summary_path = write_participant_summary(project_root)
-    participant_rows = _read_csv_dict_rows(participant_summary_path)
+    with project_reporting_lock(project_root):
+        participant_summary_path = _write_participant_summary_unlocked(project_root)
+        participant_rows = _read_csv_dict_rows(participant_summary_path)
     if not participant_rows:
         raise ValueError(
             "No participant summary rows are available. Run at least one participant "
@@ -1002,16 +1081,41 @@ def write_group_summary(project_root: Path, output_path: Path) -> Path:
 
 
 def _upgrade_session_condition_history_header(path: Path) -> None:
+    _upgrade_csv_header(path, SESSION_CONDITION_HISTORY_HEADER)
+
+
+def _upgrade_csv_header(path: Path, header: list[str]) -> None:
+    """Add compatible export fields with an atomic replacement of the old table."""
+
     with path.open("r", encoding="utf-8", newline="") as handle:
         reader = csv.DictReader(handle)
-        if reader.fieldnames == SESSION_CONDITION_HISTORY_HEADER:
+        if reader.fieldnames and len(set(reader.fieldnames)) != len(reader.fieldnames):
+            raise ValueError(
+                f"{path.name} has duplicate column names; existing data was preserved."
+            )
+        if reader.fieldnames == header:
             return
+        if not reader.fieldnames or any(column not in header for column in reader.fieldnames):
+            raise ValueError(
+                f"{path.name} has an incompatible header; existing data was preserved."
+            )
         rows = list(reader)
-    _write_csv(
-        path,
-        SESSION_CONDITION_HISTORY_HEADER,
-        ([row.get(column, "") for column in SESSION_CONDITION_HISTORY_HEADER] for row in rows),
-    )
+    if any(None in row for row in rows):
+        raise ValueError(f"{path.name} has malformed rows; existing data was preserved.")
+    temporary_path: Path | None = None
+    try:
+        with NamedTemporaryFile(
+            mode="w", encoding="utf-8", newline="", dir=path.parent,
+            prefix=f".{path.name}.", suffix=".tmp", delete=False,
+        ) as handle:
+            temporary_path = Path(handle.name)
+            writer = csv.writer(handle)
+            writer.writerow(header)
+            writer.writerows([row.get(column, "") for column in header] for row in rows)
+        os.replace(temporary_path, path)
+    finally:
+        if temporary_path is not None:
+            temporary_path.unlink(missing_ok=True)
 
 
 def _session_condition_history_rows(
@@ -1126,6 +1230,8 @@ def _session_condition_history_row(
         _float_value(fixation.accuracy_percent if fixation is not None else None),
         _float_value(fixation.mean_rt_ms if fixation is not None else None),
         _float_value(block_accuracy_percent),
+        summary.participant_session_number or "",
+        ";".join(summary.participant_metadata.manual_removed_electrodes or []),
     ]
 
 
@@ -1153,9 +1259,14 @@ def _block_accuracy_percentages(
 def _read_csv_dict_rows(path: Path) -> list[dict[str, str]]:
     with path.open("r", encoding="utf-8", newline="") as handle:
         reader = csv.DictReader(handle)
+        if reader.fieldnames and len(set(reader.fieldnames)) != len(reader.fieldnames):
+            raise ValueError(f"{path.name} contains duplicate column names.")
+        rows = list(reader)
+        if any(None in row for row in rows):
+            raise ValueError(f"{path.name} contains malformed rows.")
         return [
             {str(key): "" if value is None else value for key, value in row.items() if key}
-            for row in reader
+            for row in rows
         ]
 
 
@@ -1164,18 +1275,30 @@ def _participant_summary_rows(
     history_rows: list[dict[str, str]],
 ) -> list[list[object]]:
     grouped_rows = _participant_session_history_groups(history_rows)
+    groups = list(grouped_rows.values())
+    session_numbers = infer_participant_session_numbers([
+        ParticipantSessionNumberSource(
+            _first_non_blank(rows, "participant_number"),
+            Path(_first_non_blank(rows, "output_dir")).name,
+            _first_non_blank(rows, "session_started_at")
+            or _first_non_blank(rows, "session_finished_at")
+            or _first_non_blank(rows, "logged_at_utc"),
+            _csv_int(_first_non_blank(rows, "participant_session_number")),
+        )
+        for rows in groups
+    ])
     return [
-        _participant_summary_row(project_root, rows)
-        for rows in grouped_rows.values()
+        [*_participant_summary_row(project_root, rows), session_number]
+        for rows, session_number in zip(groups, session_numbers, strict=True)
     ]
 
 
 def _participant_session_history_groups(
     history_rows: list[dict[str, str]],
-) -> dict[tuple[str, str, str], list[dict[str, str]]]:
+) -> dict[tuple[str, str, str, str], list[dict[str, str]]]:
     """Group non-admin history rows by the participant-summary session identity."""
 
-    grouped_rows: dict[tuple[str, str, str], list[dict[str, str]]] = {}
+    grouped_rows: dict[tuple[str, str, str, str], list[dict[str, str]]] = {}
     for row in history_rows:
         if _is_admin_test_participant_id(row.get("participant_number", "")):
             continue
@@ -1186,14 +1309,10 @@ def _participant_session_history_groups(
     return grouped_rows
 
 
-def _participant_session_history_identity(row: dict[str, str]) -> tuple[str, str, str]:
+def _participant_session_history_identity(row: dict[str, str]) -> tuple[str, str, str, str]:
     """Return the participant-summary identity for one condition-history row."""
 
-    return (
-        row.get("participant_number", ""),
-        row.get("session_id", ""),
-        row.get("output_dir", ""),
-    )
+    return participant_session_history_identity(row)
 
 
 def _is_admin_test_participant_id(participant_number: str) -> bool:

@@ -22,7 +22,7 @@ from fpvs_studio.core.run_spec import RunSpec
 from fpvs_studio.core.session_plan import SessionPlan
 from fpvs_studio.engines.registry import create_engine
 from fpvs_studio.runtime.export_modes import EXPORT_MODE_FULL, VALID_EXPORT_MODES
-from fpvs_studio.runtime.participant_history import resolve_next_participant_output_label
+from fpvs_studio.runtime.participant_sessions import reserve_participant_session
 from fpvs_studio.runtime.preflight import preflight_run_spec, preflight_session_plan
 from fpvs_studio.runtime.run_worker import RuntimeWorker
 
@@ -198,6 +198,7 @@ def launch_session(
     session_plan: SessionPlan,
     *,
     participant_number: str,
+    participant_session_number: int | None = None,
     participant_metadata: ParticipantMetadata | Mapping[str, object] | None = None,
     launch_settings: LaunchSettings | None = None,
 ) -> SessionExecutionSummary:
@@ -208,9 +209,6 @@ def launch_session(
     runtime_options = settings.as_runtime_options()
     cleaned_participant_number = _validate_participant_number(participant_number)
     cleaned_participant_metadata = _validate_participant_metadata(participant_metadata)
-    output_label = resolve_next_participant_output_label(project_root, cleaned_participant_number)
-    output_dir = runs_dir(project_root) / output_label
-    relative_output_dir = to_project_relative_posix(project_root, output_dir)
     engine = create_engine(settings.engine_name)
     preflight_session_plan(
         project_root,
@@ -218,6 +216,15 @@ def launch_session(
         engine=engine,
         runtime_options=runtime_options,
     )
+    reservation = reserve_participant_session(
+        project_root,
+        cleaned_participant_number,
+        session_id=session_plan.session_id,
+        participant_session_number=participant_session_number,
+        create_output_directory=settings.export_mode == EXPORT_MODE_FULL,
+    )
+    output_dir = runs_dir(project_root) / reservation.output_label
+    relative_output_dir = to_project_relative_posix(project_root, output_dir)
     worker = RuntimeWorker(engine)
     return worker.execute_session(
         project_root,
@@ -226,5 +233,6 @@ def launch_session(
         runtime_options=runtime_options,
         relative_output_dir=relative_output_dir,
         participant_number=cleaned_participant_number,
+        participant_session_number=reservation.participant_session_number,
         participant_metadata=cleaned_participant_metadata,
     )

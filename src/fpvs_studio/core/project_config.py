@@ -105,12 +105,13 @@ class ProjectConfigProducer(FPVSBaseModel):
 
 
 class ProjectConfigProject(FPVSBaseModel):
-    """Project identity fields exported for setup handoff."""
+    """Project identity and participant-session policy exported for setup handoff."""
 
     project_id: str
     name: str
     template_id: str
     description: str = ""
+    allow_repeated_participant_sessions: bool = False
 
     @field_validator("project_id")
     @classmethod
@@ -432,6 +433,9 @@ def export_project_config(
             name=project.meta.name,
             template_id=project.meta.template_id,
             description=project.meta.description,
+            allow_repeated_participant_sessions=(
+                project.settings.allow_repeated_participant_sessions
+            ),
         ),
         conditions=[
             ProjectConfigCondition(
@@ -594,6 +598,9 @@ def create_project_from_config(parent_dir: Path, config: ProjectConfigFile) -> P
             description=config.project.description,
         ),
         settings=ProjectSettings(
+            allow_repeated_participant_sessions=(
+                config.project.allow_repeated_participant_sessions
+            ),
             display=_display_settings(config.display),
             presentation=config.presentation.model_copy(deep=True),
             protocol=_protocol_settings(config.protocol),

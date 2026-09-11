@@ -26,6 +26,7 @@ from fpvs_studio.gui.document_support import (
 )
 from fpvs_studio.runtime.launcher import LaunchSettings
 from fpvs_studio.runtime.participant_history import find_completed_sessions_for_participant
+from fpvs_studio.runtime.participant_sessions import resolve_next_participant_session_number
 
 
 def _document_dependency(name: str) -> Any:
@@ -147,6 +148,7 @@ class DocumentRuntimeMixin:
         *,
         participant_number: str,
         participant_metadata: ParticipantMetadata | None = None,
+        participant_session_number: int | None = None,
         display_index: int | None,
         fullscreen: bool = True,
         engine_name: str = EngineName.PSYCHOPY.value,
@@ -154,6 +156,16 @@ class DocumentRuntimeMixin:
         """Launch an already-prepared session plan through the runtime boundary."""
 
         try:
+            if (
+                not self._experiment_test_mode_enabled
+                and not self._project.settings.allow_repeated_participant_sessions
+            ):
+                if participant_session_number not in (None, 1):
+                    raise DocumentError(
+                        "Repeat participant sessions are disabled. Enable Allow repeat "
+                        "participant sessions in Setup > Project before launching again."
+                    )
+                participant_session_number = 1
             trigger_settings = self._project.settings.triggers
             launch_kwargs = {
                 "participant_number": participant_number,
@@ -179,6 +191,8 @@ class DocumentRuntimeMixin:
             }
             if participant_metadata is not None:
                 launch_kwargs["participant_metadata"] = participant_metadata
+            if participant_session_number is not None:
+                launch_kwargs["participant_session_number"] = participant_session_number
             summary = _document_dependency("launch_session")(
                 self._project_root,
                 session_plan,
@@ -195,6 +209,7 @@ class DocumentRuntimeMixin:
         refresh_hz: float,
         participant_number: str,
         participant_metadata: ParticipantMetadata | None = None,
+        participant_session_number: int | None = None,
         display_index: int | None,
         fullscreen: bool = True,
         engine_name: str = EngineName.PSYCHOPY.value,
@@ -209,11 +224,17 @@ class DocumentRuntimeMixin:
             session_plan,
             participant_number=participant_number,
             participant_metadata=participant_metadata,
+            participant_session_number=participant_session_number,
             display_index=display_index,
             fullscreen=fullscreen,
             engine_name=engine_name,
         )
         return session_plan, summary
+
+    def next_participant_session_number(self, participant_number: str) -> int:
+        """Preview the next session using runtime history; call from a GUI worker."""
+
+        return resolve_next_participant_session_number(self._project_root, participant_number)
 
     def has_completed_session_for_participant(self, participant_number: str) -> bool:
         """Return whether this project already contains completed runs for a participant."""

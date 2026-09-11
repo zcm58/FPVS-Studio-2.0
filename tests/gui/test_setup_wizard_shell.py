@@ -246,7 +246,14 @@ def test_setup_wizard_compact_steps_do_not_clip_visible_content(
         _assert_setup_wizard_vertical_scrolling_disabled(wizard)
         assert wizard.shell.page_container.scroll_area.verticalScrollBar().maximum() == 0
         _assert_visible_children_within_parent(wizard.step_stack.currentWidget())
-        if step_key == "conditions":
+        if step_key == "project":
+            checkbox = wizard.project_overview_editor.repeat_participant_sessions_checkbox
+            assert checkbox.isVisible()
+            assert checkbox.width() >= checkbox.sizeHint().width()
+            checkbox.setChecked(True)
+            QApplication.processEvents()
+            _assert_visible_children_within_parent(wizard.project_step_surface)
+        elif step_key == "conditions":
             assert wizard.condition_setup_step.presentation_button.isVisible()
         elif step_key == "design":
             assert wizard.design_setup_step.width() >= 1000

@@ -47,7 +47,7 @@ lazily only inside the engine package.
 - `src/fpvs_studio/tools/`: reserved for Studio-native utilities. Current Image Resizer
   UI remains under the GUI package and delegates to preprocessing.
 - `src/fpvs_studio/runtime/`: launch settings, preflight, session orchestration,
-  participant history, fixation reporting and explicit-path Excel export, fixation
+  participant history and atomic visit reservation, fixation reporting and explicit-path Excel export, fixation
   scoring, trigger coordination, and execution exports.
   Attentional-blink runs add phase onset records and event CSVs in full and compact
   exports; timing ownership and clock origins are defined in `docs/RUNSPEC.md` and
@@ -141,13 +141,20 @@ template compatibility and no-mixing boundaries are defined in
   fullscreen playback, compiled schedules, asset checks, timing QC, task flow, and test
   exports.
 - `ProjectFile` owns the per-participant `manual_removed_electrodes` authoring map saved
-  from the launch dialog; it remains outside compiled and runtime playback contracts.
+  from the launch dialog as the latest prefill. Each new execution snapshots the
+  reviewed list in participant metadata so repeat visits preserve their own setup.
+- `ProjectSettings.allow_repeated_participant_sessions` enables repeat visits in the
+  GUI. Runtime owns collision-safe `participant_session_number` reservation and
+  reporting identity across full/compact exports, independent of compiled sessions.
+  See [Runtime execution](docs/RUNTIME_EXECUTION.md#repeat-participant-sessions) for
+  compatibility rules.
 - Engines render compiled events and one neutral task step at a time; they do not own
   task sequencing, validation, compilation, session decisions, project persistence,
   or exports. Runtime image/word transforms and native geometry are compiled
   presentation properties and never create project assets.
-- Full export mode writes detailed artifacts under `runs/`. Compact mode keeps
-  project-level reporting under `logs/` without detailed run folders.
+- Full export mode writes each numbered visit under `runs/P<PID>_session<NN>/`.
+  Compact mode keeps reporting and visit reservations under `logs/` without detailed
+  run folders. Historical outputs remain in place.
 - GUI project-bundle import/export is implemented; its current workflow and contracts
   live in `docs/GUI_WORKFLOW.md` and `src/fpvs_studio/core/project_bundle.py`.
 

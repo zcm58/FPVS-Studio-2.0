@@ -234,9 +234,9 @@ def load_fixation_cross_data(project_root: Path) -> FixationCrossDataSummary | N
     session_groups = _participant_session_history_groups(history_rows)
 
     included_rows: list[dict[str, str]] = []
-    contributing_sessions: set[tuple[str, str, str]] = set()
+    contributing_sessions: set[tuple[str, str, str, str]] = set()
     condition_rows: dict[str, list[dict[str, str]]] = {}
-    condition_sessions: dict[str, set[tuple[str, str, str]]] = {}
+    condition_sessions: dict[str, set[tuple[str, str, str, str]]] = {}
     latest_condition_names: dict[str, str] = {}
 
     included_session_identities = {

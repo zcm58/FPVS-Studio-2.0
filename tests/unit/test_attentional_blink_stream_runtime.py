@@ -303,6 +303,36 @@ def test_stream_exports_are_versioned_joinable_and_keep_missing_observations_bla
     assert path.read_text(encoding="utf-8") == "incompatible,header\n"
 
 
+def test_repeated_compact_stream_visits_preserve_legacy_events_and_separate_new_rows(
+    monkeypatch, stream_project, tmp_path,
+):
+    plan = compile_session_plan(stream_project, refresh_hz=60.0, session_id="reused-plan")
+    run = plan.ordered_entries()[0].run_spec
+    result, _, _, _ = _play(monkeypatch, run, tmp_path)
+    summary = _session_summary(stream_project, plan, result)
+    append_session_condition_history(tmp_path, plan, summary)
+    path = tmp_path / "logs" / ATTENTIONAL_BLINK_STREAM_EVENTS_FILENAME
+    old_rows = _read_rows(path)
+    legacy_header = ATTENTIONAL_BLINK_STREAM_EVENTS_HEADER[:-1]
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=legacy_header)
+        writer.writeheader()
+        writer.writerows({column: row[column] for column in legacy_header} for row in old_rows)
+    for number in (2, 3):
+        numbered_run = result.model_copy(update={"participant_session_number": number})
+        numbered_summary = summary.model_copy(update={
+            "participant_session_number": number, "run_results": [numbered_run],
+        })
+        append_session_condition_history(tmp_path, plan, numbered_summary)
+    rows = _read_rows(path)
+    assert len(rows) == 120
+    assert rows[:40] == old_rows
+    assert {row["participant_session_number"] for row in rows[40:80]} == {"2"}
+    assert {row["participant_session_number"] for row in rows[80:]} == {"3"}
+    assert {row["session_id"] for row in rows} == {"reused-plan"}
+    assert not (tmp_path / "runs").exists()
+
+
 def test_abort_records_only_presented_characters_and_no_invented_soa(
     monkeypatch, stream_project, tmp_path,
 ):
