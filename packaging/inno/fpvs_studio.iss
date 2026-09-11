@@ -4,6 +4,12 @@
 #endif
 #define AppPublisher "FPVS Studio"
 #define AppExeName "FPVS Studio.exe"
+#ifndef AppIdGuid
+  #define AppIdGuid "C0EAFB18-1DC5-4C77-8FDB-F6C1E7874694"
+#else
+  // Only synthetic lifecycle fixtures override the application identity.
+  #define IsLifecycleFixture
+#endif
 #if VER < 0x06050000
   #error Inno Setup 6.5 or later is required for handle-bound SHA-256 cleanup.
 #endif
@@ -15,12 +21,15 @@
 #endif
 
 [Setup]
-AppId={{C0EAFB18-1DC5-4C77-8FDB-F6C1E7874694}
+AppId={{{#AppIdGuid}}
 AppName={#AppName}
 AppVersion={#AppVersion}
 AppVerName={#AppName} {#AppVersion}
 AppPublisher={#AppPublisher}
 DefaultDirName={localappdata}\Programs\{#AppName}
+#ifdef PatchFromVersion
+DisableDirPage=yes
+#endif
 DefaultGroupName={#AppName}
 DisableProgramGroupPage=yes
 OutputDir=..\..\dist\installer
@@ -33,7 +42,11 @@ ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 UninstallDisplayIcon={app}\{#AppExeName}
 SetupIconFile=..\..\src\fpvs_studio\assets\fpvs-studio.ico
+#ifdef IsLifecycleFixture
+CloseApplications=no
+#else
 CloseApplications=yes
+#endif
 UninstallLogMode=append
 
 [Languages]
@@ -43,26 +56,42 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Additional shortcuts:"; Flags: unchecked
 
 [Files]
+#ifdef PatchFromVersion
+Source: "{#PatchRoot}\payload\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#PatchRoot}\source-owned-files.txt"; Flags: dontcopy
+Source: "{#PatchRoot}\patch-payload-files.txt"; Flags: dontcopy
+Source: "{#PatchRoot}\patch-transaction.txt"; Flags: dontcopy
+#else
 Source: "{#BundleRoot}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+#endif
 Source: "{#OwnedInventoryRoot}\current-owned-files.txt"; DestDir: "{app}"; DestName: "fpvs-owned-files-v1.txt"; Flags: ignoreversion
 Source: "{#OwnedInventoryRoot}\current-owned-files.txt"; Flags: dontcopy
 Source: "{#OwnedInventoryRoot}\legacy-owned-files.txt"; Flags: dontcopy
 
 [Icons]
-Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExeName}"; WorkingDir: "{app}"
-Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExeName}"; WorkingDir: "{app}"; Tasks: desktopicon
+Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExeName}"; WorkingDir: "{app}"; Check: ShortcutsRequested
+Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExeName}"; WorkingDir: "{app}"; Tasks: desktopicon; Check: ShortcutsRequested
 
 [Run]
-Filename: "{app}\{#AppExeName}"; Description: "Launch {#AppName}"; Flags: nowait postinstall skipifsilent; Check: not RelaunchRequested
-Filename: "{app}\{#AppExeName}"; Flags: nowait skipifsilent; Check: RelaunchRequested
+Filename: "{app}\{#AppExeName}"; Description: "Launch {#AppName}"; Flags: nowait postinstall skipifsilent; Check: NormalLaunchRequested
 
 [Code]
 #include "owned_files.iss"
 #include "updater_cache.iss"
+#ifdef PatchFromVersion
+#include "patch_upgrade.iss"
+#endif
+
+function RelaunchRequested: Boolean; forward;
 
 function PrepareToInstall(var NeedsRestart: Boolean): String;
 begin
   try
+#ifdef PatchFromVersion
+    Result := PatchPrepare;
+    if Result <> '' then
+      Exit;
+#endif
     Result := OwnedPrepareUpgrade;
   except
     Result := 'Could not safely prepare the application upgrade: ' + GetExceptionMessage;
@@ -70,13 +99,29 @@ begin
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
+var
+  ResultCode: Integer;
 begin
+  // Inno has committed here. Relaunch only after obsolete metadata is reconciled.
   if CurStep = ssPostInstall then begin
+#ifdef PatchFromVersion
+    if not PatchVerifyInstalledTarget then
+      Exit;
+#endif
     try
       OwnedReconcileAfterSuccess;
     except
       Log('Ownership cleanup remains pending: ' + GetExceptionMessage);
     end;
+#ifdef PatchFromVersion
+    PatchFinish;
+#else
+    OwnedRemoveRecoveredPatchMarker;
+#endif
+    if RelaunchRequested and (not WizardSilent) then
+      if not Exec(OwnedTarget(ExpandConstant('{app}'), '{#AppExeName}'), '', ExpandConstant('{app}'),
+        SW_SHOWNORMAL, ewNoWait, ResultCode) then
+        Log('Application relaunch failed: ' + IntToStr(ResultCode));
   end;
 end;
 
@@ -94,7 +139,9 @@ begin
       Log('Nonfatal ownership-journal uninstall cleanup error: ' + GetExceptionMessage);
     end;
     try
+#ifndef IsLifecycleFixture
       UpdateCleanupCacheOnUninstall;
+#endif
     except
       Log('Nonfatal update-cache uninstall cleanup error: ' + GetExceptionMessage);
     end;
@@ -103,5 +150,23 @@ end;
 
 function RelaunchRequested: Boolean;
 begin
-  Result := Pos('/RELAUNCH=1', Uppercase(GetCmdTail)) > 0;
+  Result := (Pos('/RELAUNCH=1', Uppercase(GetCmdTail)) > 0) and
+    (Pos('/NOLAUNCH=1', Uppercase(GetCmdTail)) = 0);
+#ifdef PatchFromVersion
+  Result := Result and (not PatchVerificationFailed);
+#endif
+end;
+
+function NormalLaunchRequested: Boolean;
+begin
+  Result := (not RelaunchRequested) and
+    (Pos('/NOLAUNCH=1', Uppercase(GetCmdTail)) = 0);
+#ifdef PatchFromVersion
+  Result := Result and (not PatchVerificationFailed);
+#endif
+end;
+
+function ShortcutsRequested: Boolean;
+begin
+  Result := Pos('/NOSHORTCUTS=1', Uppercase(GetCmdTail)) = 0;
 end;

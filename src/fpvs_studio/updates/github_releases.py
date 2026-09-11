@@ -21,6 +21,7 @@ from fpvs_studio.updates.models import (
     UpdateCheckResult,
     UpdateError,
 )
+from fpvs_studio.updates.patches import select_patch_update
 from fpvs_studio.updates.validation import (
     MAX_INSTALLER_SIZE_BYTES,
     installer_matches_version,
@@ -50,6 +51,8 @@ def check_for_updates(
         fetch_release_metadata(releases_api_url, cancel_event=cancel_event),
         current_version=current_version,
         include_prereleases=include_prereleases,
+        resolve_patches=True,
+        cancel_event=cancel_event,
     )
 
 
@@ -116,6 +119,8 @@ def select_update_from_releases(
     *,
     current_version: str,
     include_prereleases: bool | None = None,
+    resolve_patches: bool = False,
+    cancel_event: Event | None = None,
 ) -> UpdateCheckResult:
     """Select the newest eligible release and compare it with the installed version."""
 
@@ -139,7 +144,7 @@ def select_update_from_releases(
         )
 
     latest = candidates[0]
-    return UpdateCheckResult(
+    result = UpdateCheckResult(
         current_version=current_version,
         latest_version=str(latest.version),
         update_available=latest.version > current,
@@ -148,6 +153,9 @@ def select_update_from_releases(
         installer_asset=latest.installer_asset if latest.version > current else None,
         is_prerelease=latest.is_prerelease,
     )
+    if resolve_patches and result.update_available:
+        return select_patch_update(result, latest.assets, cancel_event=cancel_event)
+    return result
 
 
 def summarize_release_notes(body: str) -> str:
@@ -192,6 +200,9 @@ def _iter_candidate_releases(
             body=body if isinstance(body, str) else "",
             installer_asset=asset,
             is_prerelease=is_prerelease,
+            assets=tuple(item for item in release.get("assets", []) if isinstance(item, dict))
+            if isinstance(release.get("assets"), list)
+            else (),
         )
 
 

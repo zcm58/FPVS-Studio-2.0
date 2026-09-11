@@ -1,7 +1,10 @@
 param(
     [string]$InnoCompiler,
     [switch]$SkipSmoke,
-    [string]$BuildLabel
+    [switch]$AllowVisibleGui,
+    [string]$BuildLabel,
+    [string[]]$BaselineInventory = @(),
+    [string[]]$BaselineInventorySha256 = @()
 )
 
 $ErrorActionPreference = "Stop"
@@ -69,7 +72,7 @@ function Invoke-PackagedSmoke {
     if (-not (Test-Path -LiteralPath $SmokePackagedAppScript)) {
         throw "Packaged app smoke script was not found: $SmokePackagedAppScript"
     }
-    & $SmokePackagedAppScript -ExePath $BundleExePath
+    & $SmokePackagedAppScript -ExePath $BundleExePath -AllowVisibleGui:$AllowVisibleGui
 }
 
 function Resolve-InnoCompiler {
@@ -128,6 +131,9 @@ function Resolve-InnoCompiler {
 
 Push-Location $RepoRoot
 try {
+    if ($BaselineInventory.Count -ne $BaselineInventorySha256.Count) {
+        throw "Supply one authenticated BaselineInventorySha256 for every BaselineInventory."
+    }
     if (-not (Test-Path -LiteralPath $SpecPath)) {
         throw "Inno Setup script was not found: $SpecPath"
     }
@@ -162,6 +168,46 @@ try {
     if (-not (Test-Path -LiteralPath $installerPath)) {
         throw "Expected installer was not created: $installerPath"
     }
+
+    $patchScript = Join-Path $PSScriptRoot "build_patch.py"
+    $patchBuilds = @()
+    for ($index = 0; $index -lt $BaselineInventory.Count; $index++) {
+        $patchRoot = Join-Path $InventoryOutputDir "patch-$index"
+        Remove-PackagingOutput -RepoRoot $RepoRoot -TargetPath $patchRoot
+        Invoke-Native -File $Python -Arguments @(
+            $patchScript, "prepare",
+            "--baseline-inventory", ([System.IO.Path]::GetFullPath($BaselineInventory[$index])),
+            "--source-inventory-sha256", $BaselineInventorySha256[$index],
+            "--bundle-root", $BundleRoot,
+            "--target-inventory", (Join-Path $InventoryOutputDir "current-owned-files.txt"),
+            "--target-version", $appVersion,
+            "--output-dir", $patchRoot
+        )
+        $patchBuild = Join-Path $patchRoot "patch-build.json"
+        $patch = Get-Content -LiteralPath $patchBuild -Raw | ConvertFrom-Json
+        Invoke-Native -File $isccPath -Arguments @(
+            "/DAppVersion=$appVersion",
+            "/DBundleRoot=$BundleRoot",
+            "/DOwnedInventoryRoot=$InventoryOutputDir",
+            "/DPatchFromVersion=$($patch.from_version)",
+            "/DPatchRoot=$patchRoot",
+            "/DPatchSourceSHA256=$($patch.source_inventory_sha256)",
+            "/DPatchTargetSHA256=$($patch.target_inventory_sha256)",
+            "/DPatchTransactionSHA256=$($patch.transaction_sha256)",
+            "/O$InstallerOutputDir",
+            "/F$([System.IO.Path]::GetFileNameWithoutExtension($patch.asset_name))",
+            $SpecPath
+        )
+        $patchBuilds += $patchBuild
+    }
+    $manifestArguments = @(
+        $patchScript, "manifest", "--target-version", $appVersion,
+        "--installer-dir", $InstallerOutputDir
+    )
+    foreach ($patchBuild in $patchBuilds) {
+        $manifestArguments += @("--patch-build", $patchBuild)
+    }
+    Invoke-Native -File $Python -Arguments $manifestArguments
 
     Write-Output ""
     Write-Output "FPVS Studio installer built successfully:"

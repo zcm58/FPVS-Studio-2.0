@@ -972,7 +972,9 @@ def test_failed_update_stays_recoverable_and_does_not_quit(
 
 
 @pytest.mark.parametrize("size", [(680, 600), (760, 620)])
-@pytest.mark.parametrize("state", ["available", "unverifiable", "busy", "canceling", "error"])
+@pytest.mark.parametrize(
+    "state", ["available", "patch", "full-required", "unverifiable", "busy", "canceling", "error"]
+)
 def test_update_dialog_long_content_fits_minimum_and_default_sizes(
     qtbot, tmp_path, deferred_updates, size, state,
 ) -> None:
@@ -990,6 +992,19 @@ def test_update_dialog_long_content_fits_minimum_and_default_sizes(
     if state == "unverifiable":
         assert result.installer_asset is not None
         result = replace(result, installer_asset=replace(result.installer_asset, sha256=None))
+    elif state == "patch":
+        assert result.installer_asset is not None
+        result = replace(
+            result,
+            installer_asset=replace(result.installer_asset, kind="patch", size_bytes=12_500_000),
+        )
+    elif state == "full-required":
+        result = replace(
+            result,
+            selection_reason=(
+                "The installed files do not match the patch. A full update is required."
+            ),
+        )
     dialog = UpdateDialog(auto_check=False, initial_result=result, lifecycle=lifecycle)
     qtbot.addWidget(dialog)
     dialog.resize(*size)
@@ -1005,6 +1020,13 @@ def test_update_dialog_long_content_fits_minimum_and_default_sizes(
 
     assert dialog.width() == size[0]
     assert dialog.height() == size[1]
+    if state == "patch":
+        assert "Patch (12.5 MB)" in dialog.status_label.text()
+        assert dialog.download_button.isEnabled()
+    elif state == "full-required":
+        assert "Full installer" in dialog.status_label.text()
+        assert result.selection_reason in dialog.status_label.text()
+        assert dialog.download_button.isEnabled()
     assert_visible_children_within_parent(dialog)
     for button in (
         dialog.check_button, dialog.download_button, dialog.install_button,

@@ -10,6 +10,8 @@ no-follow file operations and the shared OS cache lock. `downloader.py` coordina
 explicit transfers, and `installer.py` owns the final guarded launch. Release
 identity rules are shared through `validation.py`. The cache/installer protocol and
 remaining Windows acceptance checks are documented in `docs/PACKAGING.md`.
+`patches.py` owns authenticated release JSON and read-only installed-baseline
+verification. Keep patch application and recovery in the shared Inno installer.
 
 ## Requirements
 
@@ -17,6 +19,9 @@ remaining Windows acceptance checks are documented in `docs/PACKAGING.md`.
   `src/fpvs_studio/gui/`.
 - Do not import PsychoPy or runtime engine modules.
 - Treat GitHub Releases as release metadata, not as arbitrary executable input.
+- Prefer a smaller direct patch only after its release metadata and installed baseline
+  bytes are verified. Preserve full installers and an explicit selection reason when
+  no compatible patch exists. Never treat invalid metadata as valid fallback input.
 - Keep update downloads in user-writable cache or temp folders, never in the install
   directory or project folders.
 - Use HTTPS release and asset URLs only.

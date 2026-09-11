@@ -27,8 +27,8 @@ cross-layer behavior require it.
 | `runtime` | Launch, preflight, modular-task sequencing, session flow, participant history, scoring, or exports | `src/fpvs_studio/runtime/AGENTS.md` and `docs/RUNTIME_EXECUTION.md` |
 | `engine` | Presentation interface, PsychoPy rendering, modular task screens, frame timing, or display screens | `src/fpvs_studio/engines/AGENTS.md`, `docs/ENGINE_INTERFACE.md`, and `docs/RUNSPEC.md` |
 | `triggers` | Trigger contracts, serial hardware adapters, marker writes, or trigger logs | `src/fpvs_studio/triggers/AGENTS.md` and the trigger sections of `docs/RUNTIME_EXECUTION.md` |
-| `updates` | Release checks, bounded cache/locking, verified installer downloads/launch, or update GUI shutdown coordination | `src/fpvs_studio/updates/AGENTS.md` and `docs/PACKAGING.md` |
-| `packaging` | Versioning, PyInstaller, Inno Setup, owned-file upgrade reconciliation, branding, isolated beta/executable builds, or packaged smoke | `packaging/AGENTS.md`, `docs/PACKAGING.md`, and `pyproject.toml` |
+| `updates` | Release checks, direct patch selection, bounded cache/locking, verified downloads/launch, or update GUI shutdown coordination | `src/fpvs_studio/updates/AGENTS.md` and `docs/PACKAGING.md` |
+| `packaging` | Versioning, PyInstaller, Inno Setup, sparse patches, owned-file upgrade reconciliation, branding, isolated beta/executable builds, or packaged smoke | `packaging/AGENTS.md`, `docs/PACKAGING.md`, and `pyproject.toml` |
 
 Run a route with:
 
@@ -71,6 +71,24 @@ workflow is separate.
 
 Read a selected skill completely before acting. A passing skill audit is sufficient
 evidence for its invariant unless the task changes that audit or boundary.
+
+## Patch Updates
+
+Start with `updates/patches.py` for authenticated direct-patch selection and baseline
+file verification. `scripts/build_patch.py` generates sparse payloads and release JSON;
+`packaging/inno/patch_upgrade.iss` validates and applies them through the shared installer.
+Use updates/packaging focused routes, then repo precommit. Native lifecycle acceptance
+uses `scripts/check_patch_installer_lifecycle.py` with isolated synthetic app identities.
+Exact release steps and recovery limits live in `docs/PACKAGING.md#direct-patch-releases`.
+
+## Settings Test Mode
+
+Experiment Test Mode is available in source and installed Windows/Linux builds through
+Settings > Local experiment testing. Start with `gui/controller.py` and
+`gui/settings_dialog.py`; registered `tests/gui/test_welcome_settings_flow.py` covers
+availability and persistence for both build types. Use the GUI focused route. For
+visible acceptance, open Settings at `700x610`, enable the option, reopen Settings to
+check persistence, and disable it again to restore ordinary launch checks.
 
 ## Setup Design Verification
 

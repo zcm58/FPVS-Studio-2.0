@@ -6,6 +6,7 @@ import shutil
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
 from PySide6.QtCore import QMimeData, QObject, QPoint, QPointF, QRect, Qt, QUrl, Signal
 from PySide6.QtGui import QDragEnterEvent, QDropEvent
 from PySide6.QtWidgets import (
@@ -1401,22 +1402,17 @@ def test_settings_dialog_sophia_mode_ticker_checkbox_triggers_callback(
     assert captured_values == [False]
 
 
-def test_experiment_test_mode_availability_is_cross_platform_and_source_only(
+@pytest.mark.parametrize("platform", ["win32", "linux", "darwin"])
+@pytest.mark.parametrize("frozen", [False, True])
+def test_experiment_test_mode_availability_in_source_and_installed_builds(
     monkeypatch,
+    platform: str,
+    frozen: bool,
 ) -> None:
-    monkeypatch.delattr(controller_module.sys, "frozen", raising=False)
-    monkeypatch.setattr(controller_module.sys, "platform", "win32")
-    assert controller_module.experiment_test_mode_available() is True
-
-    monkeypatch.setattr(controller_module.sys, "platform", "linux")
-    assert controller_module.experiment_test_mode_available() is True
-
-    monkeypatch.setattr(controller_module.sys, "platform", "darwin")
-    assert controller_module.experiment_test_mode_available() is False
-
-    monkeypatch.setattr(controller_module.sys, "platform", "win32")
-    monkeypatch.setattr(controller_module.sys, "frozen", True, raising=False)
-    assert controller_module.experiment_test_mode_available() is False
+    monkeypatch.setattr(
+        controller_module, "sys", SimpleNamespace(platform=platform, frozen=frozen)
+    )
+    assert controller_module.experiment_test_mode_available() is (platform != "darwin")
 
 
 def test_settings_dialog_experiment_test_mode_is_explicit_and_fits(
@@ -1445,7 +1441,7 @@ def test_settings_dialog_experiment_test_mode_is_explicit_and_fits(
     assert "bypasses connected-display refresh verification" in checkbox.toolTip()
     assert "replaces participant collection" in checkbox.toolTip()
     assert "runtime timing QC" in checkbox.toolTip()
-    assert "source-tree Windows and Linux" in checkbox.toolTip()
+    assert "including installed builds" in checkbox.toolTip()
     assert checkbox.isChecked() is False
     assert checkbox.width() >= checkbox.fontMetrics().horizontalAdvance(checkbox.text())
     assert_visible_children_within_parent(dialog)
@@ -1554,16 +1550,20 @@ def test_file_settings_action_persists_sophia_ticker_toggle_to_current_document(
     assert window.document.show_sophia_mode_ticker is True
 
 
+@pytest.mark.parametrize("platform", ["win32", "linux"])
+@pytest.mark.parametrize("frozen", [False, True])
 def test_file_settings_action_persists_experiment_test_mode(
     qtbot,
     controller: StudioController,
     tmp_path: Path,
     monkeypatch,
+    platform: str,
+    frozen: bool,
 ) -> None:
     monkeypatch.setattr(
         controller_module,
-        "experiment_test_mode_available",
-        lambda: True,
+        "sys",
+        SimpleNamespace(platform=platform, frozen=frozen),
     )
     _, window = _open_created_project(controller, qtbot, tmp_path, "Test Mode Project")
     assert controller.experiment_test_mode_enabled() is False
@@ -1584,6 +1584,14 @@ def test_file_settings_action_persists_experiment_test_mode(
     assert controller.experiment_test_mode_enabled() is True
     assert window.document.experiment_test_mode_enabled is True
     assert window.document.require_biosemi_recording_confirmation is False
+
+    assert controller._settings.value(
+        controller_module._EXPERIMENT_TEST_MODE_KEY, False, type=bool
+    ) is True
+    controller.set_experiment_test_mode_enabled(False)
+    assert controller.experiment_test_mode_enabled() is False
+    assert window.document.experiment_test_mode_enabled is False
+    assert window.document.require_biosemi_recording_confirmation is True
 
 
 def test_experiment_test_mode_migrates_legacy_preference_and_is_ignored_when_unavailable(
@@ -1621,7 +1629,7 @@ def test_experiment_test_mode_migrates_legacy_preference_and_is_ignored_when_una
     try:
         controller.set_experiment_test_mode_enabled(True)
     except ValueError as error:
-        assert "source-tree Windows and Linux runs" in str(error)
+        assert "only on Windows and Linux" in str(error)
     else:
         raise AssertionError("Unavailable experiment test mode was enabled")
 

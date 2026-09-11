@@ -2,7 +2,7 @@
 setlocal
 
 set "SCRIPT_DIR=%~dp0"
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%SCRIPT_DIR%build_release.ps1"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%SCRIPT_DIR%build_release.ps1" %*
 set "BUILD_EXIT=%ERRORLEVEL%"
 
 echo.

@@ -485,8 +485,8 @@ default and writes detailed `runs/` folders after launch; compact mode skips tho
 folders and keeps only project-level summary logs. Settings also exposes default-on
 Sophia Mode, which requires administrators to confirm that BioSemi recording is active
 by typing `Confirm` before launch can continue. Settings can hide the Sophia Mode Home
-ticker independently, without disabling that confirmation gate. In source-tree Windows
-and Linux runs, Settings also exposes Experiment Test Mode with a detailed tooltip that
+ticker independently, without disabling that confirmation gate. In source and installed builds on Windows
+and Linux, Settings also exposes Experiment Test Mode with a detailed tooltip that
 names every skipped hardware/participant check and every timing behavior that remains.
 Moving a project to the Recycle Bin remains a controller-owned filesystem operation
 guarded by `project.json` validation, confirmation, a post-action path check, and a disk
@@ -657,7 +657,7 @@ Current honest behavior:
   are not exposed in the current GUI
 - GUI startup itself still does not initialize PsychoPy
 - runtime launch settings keep presentation and timing-QC policies explicit
-- source-only Experiment Test Mode on Windows and Linux composes those explicit settings
+- Experiment Test Mode in source and installed builds on Windows and Linux composes those settings
   to disable serial and connected-refresh checks while preserving fullscreen playback,
   compilation, asset checks, timing QC, task flow, and exports; its per-launch selector
   defaults to all conditions and may instead compile one condition without changing its

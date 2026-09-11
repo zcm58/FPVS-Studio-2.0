@@ -97,10 +97,9 @@ def _condition_template_library_signature(root_dir: Path) -> tuple[int, int, int
 
 
 def experiment_test_mode_available() -> bool:
-    """Return whether source-mode experiment verification is supported on this host."""
+    """Return whether local experiment testing is supported on this host."""
 
-    supported_platform = sys.platform.startswith("linux") or sys.platform.startswith("win")
-    return supported_platform and not bool(getattr(sys, "frozen", False))
+    return sys.platform.startswith("linux") or sys.platform.startswith("win")
 
 
 class StudioController(QObject):
@@ -434,7 +433,7 @@ class StudioController(QObject):
             self.main_window.document.set_show_sophia_mode_ticker(enabled)
 
     def experiment_test_mode_enabled(self) -> bool:
-        """Return the explicit no-hardware launch preference for development testing."""
+        """Return the explicit no-hardware launch preference for local testing."""
 
         if not experiment_test_mode_available():
             return False
@@ -455,12 +454,12 @@ class StudioController(QObject):
         )
 
     def set_experiment_test_mode_enabled(self, enabled: bool) -> None:
-        """Persist the cross-platform source-mode launch preference."""
+        """Persist the cross-platform local test launch preference."""
 
         enabled = bool(enabled)
         if enabled and not experiment_test_mode_available():
             raise ValueError(
-                "Experiment test mode is available only in source-tree Windows and Linux runs."
+                "Experiment test mode is available only on Windows and Linux."
             )
         self._settings.setValue(_EXPERIMENT_TEST_MODE_KEY, enabled)
         self._settings.remove(_LEGACY_LINUX_DEVELOPMENT_TEST_MODE_KEY)

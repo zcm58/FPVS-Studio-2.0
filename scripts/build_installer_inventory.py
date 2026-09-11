@@ -40,6 +40,7 @@ PROTECTED_TOP_LEVEL = frozenset(
         "stimuli",
         CURRENT_MANIFEST_NAME,
         PENDING_MANIFEST_NAME,
+        "fpvs-patch-transaction-v1.txt",
     }
 )
 WINDOWS_DEVICE = re.compile(r"(?:con|prn|aux|nul|clock\$|com[1-9¹²³]|lpt[1-9¹²³])\Z", re.I)

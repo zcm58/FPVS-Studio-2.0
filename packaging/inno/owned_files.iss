@@ -66,6 +66,7 @@ var
   OwnedCurrentPaths: TStringList;
   OwnedPreviousRecords: TStringList;
   OwnedPreparedRoot: String;
+  OwnedPriorManifestHash: String;
   OwnedRootGuards: TOwnedHandles;
 
 function OwnedNewList: TStringList;
@@ -261,7 +262,8 @@ begin
   end;
   if (Top = '.fpvs-studio') or (Top = 'cache') or (Top = 'logs') or
     (Top = 'project.json') or (Top = 'runs') or (Top = 'stimuli') or
-    (Top = OwnedCurrentName) or (Top = OwnedPendingName) then
+    (Top = OwnedCurrentName) or (Top = OwnedPendingName) or
+    (Top = 'fpvs-patch-transaction-v1.txt') then
     Exit;
   if (Pos('/', Path) = 0) and (Copy(Top, 1, 5) = 'unins') then
     Exit;
@@ -639,6 +641,7 @@ begin
   OwnedCurrentPaths := nil;
   OwnedPreviousRecords := nil;
   OwnedPreparedRoot := '';
+  OwnedPriorManifestHash := '';
 end;
 
 function OwnedPrepareUpgrade: String;
@@ -678,6 +681,7 @@ begin
         Result := 'The existing application ownership manifest is invalid. No files were replaced.';
         Exit;
       end;
+      OwnedHashFile(Path, OwnedPriorManifestHash);
       OwnedAddObsolete(Previous);
     end
     else if OwnedHashFile(OwnedTarget(Root, '{#AppExeName}'), Hash) then begin
@@ -708,6 +712,72 @@ begin
   finally
     Previous.Free;
     Legacy.Free;
+  end;
+end;
+
+procedure OwnedRemoveRecoveredPatchMarker;
+var
+  Handle: THandle;
+  Guards: TOwnedHandles;
+  Missing: Boolean;
+  Info: TOwnedFileInfo;
+  Lines: TStringList;
+  Stream: THandleStream;
+  Data: AnsiString;
+  CurrentHash, SourceHash, TargetHash, Marker, MarkerText: String;
+  DeleteFlag: Byte;
+begin
+  if OwnedPreparedRoot = '' then
+    Exit;
+  Marker := OwnedTarget(OwnedPreparedRoot, 'fpvs-patch-transaction-v1.txt');
+  if not OwnedOpenRegular(Marker, True, Handle, Guards, Missing) then
+    Exit;
+  Lines := TStringList.Create;
+  try
+    if (not OwnedGetFileInfo(Handle, Info)) or (Info.SizeHigh <> 0) or
+      (Info.SizeLow > 2048) then
+      Exit;
+    // Parse through the deletion handle. Reopening without share-delete would fail.
+    SetLength(Data, Info.SizeLow);
+    Stream := THandleStream.Create(Handle);
+    try
+      if Info.SizeLow > 0 then
+        Stream.ReadBuffer(Data, Info.SizeLow);
+    finally
+      Stream.Free;
+    end;
+    MarkerText := Utf8Decode(Data);
+    if (Length(MarkerText) > 0) and (MarkerText[1] = #$FEFF) then
+      Delete(MarkerText, 1, 1);
+    Lines.Text := MarkerText;
+    if Lines.Count <> 5 then
+      Exit;
+    if (Lines[0] <> 'FPVS-STUDIO-PATCH-TRANSACTION-1') or
+      (Copy(Lines[1], 1, 5) <> 'from=') or
+      (not OwnedValidVersion(Copy(Lines[1], 6, Length(Lines[1])))) or
+      (Copy(Lines[2], 1, 3) <> 'to=') or
+      (not OwnedValidVersion(Copy(Lines[2], 4, Length(Lines[2])))) or
+      (Copy(Lines[3], 1, 7) <> 'source=') or
+      (Copy(Lines[4], 1, 7) <> 'target=') then
+      Exit;
+    SourceHash := Copy(Lines[3], 8, Length(Lines[3]));
+    TargetHash := Copy(Lines[4], 8, Length(Lines[4]));
+    if (not OwnedValidHash(SourceHash)) or (not OwnedValidHash(TargetHash)) then
+      Exit;
+    if not OwnedHashFile(OwnedTarget(OwnedPreparedRoot, OwnedCurrentName), CurrentHash) then
+      Exit;
+    // A full repair may retire only a transaction bound to its prior or target inventory.
+    // A similarly named unknown file or unrelated fingerprint remains untouched.
+    if (SourceHash <> OwnedPriorManifestHash) and (TargetHash <> OwnedPriorManifestHash) and
+      (SourceHash <> CurrentHash) and (TargetHash <> CurrentHash) then
+      Exit;
+    DeleteFlag := 1;
+    if not OwnedSetDisposition(Handle, 4, DeleteFlag, 1) then
+      Log('Ownership: completed patch-recovery marker remains for retry.');
+  finally
+    Lines.Free;
+    OwnedCloseHandle(Handle);
+    OwnedReleaseGuards(Guards);
   end;
 end;
 

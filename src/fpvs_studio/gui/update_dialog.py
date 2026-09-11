@@ -356,8 +356,18 @@ class UpdateDialog(QDialog):
             asset = result.installer_asset
             verified_asset = asset is not None and asset.sha256 is not None
             if verified_asset:
+                assert asset is not None
+                download_kind = "Patch" if asset.kind == "patch" else "Full installer"
+                download_size = (
+                    f" ({asset.size_bytes / 1_000_000:.1f} MB)"
+                    if asset.size_bytes is not None else ""
+                )
+                selection = f"{download_kind}{download_size}."
+                if result.selection_reason:
+                    selection += f" {result.selection_reason}"
                 self.status_label.setText(
-                    "A new FPVS Studio version is available. Updates replace app files only; "
+                    f"A new FPVS Studio version is available. {selection}\n\n"
+                    "Updates replace app files only; "
                     "projects, templates, settings, run history, and logs stay outside the "
                     "install folder."
                 )

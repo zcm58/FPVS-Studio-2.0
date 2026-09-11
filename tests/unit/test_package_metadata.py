@@ -321,7 +321,9 @@ def test_installer_build_validates_bundle_and_runs_packaged_smoke() -> None:
 
 
 def test_release_wrapper_forwards_explicit_inno_compiler_path() -> None:
-    assert "& $BuildInstallerScript -InnoCompiler $InnoCompiler" in BUILD_RELEASE_TEXT
+    assert "& $BuildInstallerScript -BuildLabel $BuildLabel -InnoCompiler $InnoCompiler" in (
+        BUILD_RELEASE_TEXT
+    )
 
 
 def test_build_stages_share_safe_labeled_paths_before_resolving_python() -> None:
@@ -339,9 +341,9 @@ def test_build_stages_share_safe_labeled_paths_before_resolving_python() -> None
     assert "& $BuildExeScript -SkipInstall -BuildLabel $BuildLabel" in BUILD_RELEASE_TEXT
     assert "& $BuildExeScript -BuildLabel $BuildLabel" in BUILD_RELEASE_TEXT
     assert "& $BuildInstallerScript -BuildLabel $BuildLabel" in BUILD_RELEASE_TEXT
-    assert "& $BuildInstallerScript -InnoCompiler $InnoCompiler -BuildLabel $BuildLabel" in (
-        BUILD_RELEASE_TEXT
-    )
+    assert "-BaselineInventory $BaselineInventory" in BUILD_RELEASE_TEXT
+    assert "-BaselineInventorySha256 $BaselineInventorySha256" in BUILD_RELEASE_TEXT
+    assert "-SkipSmoke:$SkipSmoke -AllowVisibleGui:$AllowVisibleGui" in BUILD_RELEASE_TEXT
     assert "[System.IO.FileAttributes]::ReparsePoint" in BUILD_PATHS_TEXT
     assert "Remove-Item -LiteralPath $target -Recurse -Force" in BUILD_PATHS_TEXT
     assert BUILD_PATHS_TEXT.index("Get-ChildItem -LiteralPath $directory") < (

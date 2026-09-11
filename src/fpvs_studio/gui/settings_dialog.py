@@ -160,7 +160,7 @@ class AppSettingsDialog(QDialog):
             developer_layout = QVBoxLayout(developer)
             developer_layout.setContentsMargins(16, 12, 16, 12)
             developer_layout.setSpacing(10)
-            developer_title = QLabel("Development", developer)
+            developer_title = QLabel("Local experiment testing", developer)
             developer_title.setProperty("settingsSectionTitle", "true")
             developer_layout.addWidget(developer_title)
             self.experiment_test_mode_checkbox = QCheckBox(
@@ -173,7 +173,7 @@ class AppSettingsDialog(QDialog):
                 "bypasses connected-display refresh verification, and replaces participant "
                 "collection with an explicit test-launch acknowledgement. Fullscreen "
                 "presentation remains enabled, along with compiled timing validation and "
-                "runtime timing QC. Available only in source-tree Windows and Linux runs."
+                "runtime timing QC. Available on Windows and Linux, including installed builds."
             )
             self.experiment_test_mode_checkbox.setChecked(experiment_test_mode_enabled)
             self.experiment_test_mode_checkbox.toggled.connect(

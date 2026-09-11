@@ -222,6 +222,28 @@ def locked_cache(
         raise UpdateError(f"Could not access the update cache: {error}") from error
 
 
+@contextmanager
+def guarded_read_path(path: Path, *, cancel_event: Event | None = None) -> Iterator[BinaryIO]:
+    """Read an installed file without following links or creating cache bookkeeping.
+
+    Reuse the updater's directory pins and no-write/delete file guard. This helper
+    never writes to the installation and does not acquire or create a cache lock.
+    """
+
+    parent = validate_cache_path(path.parent)
+    with ExitStack() as stack:
+        directories = []
+        for directory in (*reversed(parent.parents), parent):
+            check_cancel(cancel_event)
+            info = directory.lstat()
+            if _is_reparse(info) or not stat.S_ISDIR(info.st_mode):
+                raise UpdateError("The installed application contains a linked directory.")
+            stack.enter_context(_pin_directory(directory, info))
+            directories.append((directory, info))
+        with CacheDirectory(parent, directories).open_file(path.name) as source:
+            yield source
+
+
 def _acquire_lock(stream: BinaryIO) -> None:
     try:
         if sys.platform == "win32":

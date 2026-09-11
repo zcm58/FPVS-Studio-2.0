@@ -5,6 +5,7 @@
 
 const
   UpdateInstallerPrefix = 'fpvs-studio-setup-';
+  UpdatePatchPrefix = 'fpvs-studio-patch-';
 
 type
   TUpdateLockOverlapped = record
@@ -24,14 +25,28 @@ function UpdateUnlockFile(Handle: THandle; Reserved, Low, High: Cardinal;
 
 function UpdateInstallerName(const Name: String): Boolean;
 var
-  LowerName, Version: String;
+  LowerName, Version, SourceVersion: String;
+  Separator: Integer;
 begin
   Result := False;
   if Length(Name) > 200 then
     Exit;
   LowerName := Lowercase(Name);
-  if (Copy(LowerName, 1, Length(UpdateInstallerPrefix)) <> UpdateInstallerPrefix) or
-    (Copy(LowerName, Length(LowerName) - 3, 4) <> '.exe') then
+  if Copy(LowerName, Length(LowerName) - 3, 4) <> '.exe' then
+    Exit;
+  if Copy(LowerName, 1, Length(UpdatePatchPrefix)) = UpdatePatchPrefix then begin
+    Version := Copy(LowerName, Length(UpdatePatchPrefix) + 1,
+      Length(LowerName) - Length(UpdatePatchPrefix) - 4);
+    Separator := Pos('-to-', Version);
+    if Separator < 2 then
+      Exit;
+    SourceVersion := Copy(Version, 1, Separator - 1);
+    Version := Copy(Version, Separator + 4, Length(Version));
+    Result := (SourceVersion <> Version) and (Pos('-to-', Version) = 0) and
+      OwnedValidVersion(SourceVersion) and OwnedValidVersion(Version);
+    Exit;
+  end;
+  if Copy(LowerName, 1, Length(UpdateInstallerPrefix)) <> UpdateInstallerPrefix then
     Exit;
   Version := Copy(LowerName, Length(UpdateInstallerPrefix) + 1,
     Length(LowerName) - Length(UpdateInstallerPrefix) - 4);

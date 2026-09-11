@@ -8,6 +8,7 @@ from threading import Event
 from fpvs_studio.updates.cache import verified_installer
 from fpvs_studio.updates.cache_io import check_cancel, locked_cache, validate_cache_path
 from fpvs_studio.updates.models import DownloadedInstaller, UpdateError
+from fpvs_studio.updates.patches import require_running_patch_baseline
 from fpvs_studio.updates.validation import validate_asset_identity
 
 
@@ -41,8 +42,14 @@ def launch_installer(
         with verified_installer(cache, downloaded.asset, cancel_event=cancel_event):
             check_cancel(cancel_event)
             command = [str(path)]
+            if downloaded.asset.kind == "patch":
+                install_root = require_running_patch_baseline(
+                    downloaded.asset, cancel_event=cancel_event
+                )
+                command.append(f"/DIR={install_root}")
             if relaunch_after_install:
                 command.append("/RELAUNCH=1")
+            check_cancel(cancel_event)
             try:
                 return subprocess.Popen(command, close_fds=True)
             except OSError as error:

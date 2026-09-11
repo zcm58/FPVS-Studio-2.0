@@ -11,11 +11,16 @@ from urllib.parse import unquote, urlparse
 
 from packaging.version import InvalidVersion, Version
 
-from fpvs_studio.updates.models import InstallerAsset, UpdateError
+from fpvs_studio.updates.models import InstallerAsset, UpdateError, normalize_sha256
 
 RELEASE_REPOSITORY = "zcm58/FPVS-Studio-2.0"
 INSTALLER_ASSET_PATTERN = re.compile(
     r"FPVS-Studio-Setup-(?P<version>[0-9][A-Za-z0-9.+_-]*)\.exe", re.IGNORECASE | re.ASCII
+)
+PATCH_ASSET_PATTERN = re.compile(
+    r"FPVS-Studio-Patch-(?P<source>[0-9][A-Za-z0-9.+_-]*?)-to-"
+    r"(?P<version>[0-9][A-Za-z0-9.+_-]*)\.exe",
+    re.ASCII,
 )
 # This published tag used the shorter filename. Never infer other version aliases.
 _PUBLISHED_FILENAME_ALIASES = {Version("0.9.9.10"): Version("0.9.10")}
@@ -43,10 +48,15 @@ def parse_release_version(tag_name: str) -> Version:
 def installer_filename_version(name: str) -> Version | None:
     """Recognize only a single, versioned installer basename, not a path or stream."""
 
-    match = INSTALLER_ASSET_PATTERN.fullmatch(name)
+    match = INSTALLER_ASSET_PATTERN.fullmatch(name) or PATCH_ASSET_PATTERN.fullmatch(name)
     if match is None or len(name) > 200:
         return None
     try:
+        if "source" in match.groupdict():
+            if parse_release_version(match.group("source")) >= parse_release_version(
+                match.group("version")
+            ):
+                return None
         return parse_release_version(match.group("version"))
     except UpdateError:
         return None
@@ -55,7 +65,11 @@ def installer_filename_version(name: str) -> Version | None:
 def installer_matches_version(name: str, version: Version) -> bool:
     filename_version = installer_filename_version(name)
     return filename_version is not None and (
-        filename_version == version or filename_version == _PUBLISHED_FILENAME_ALIASES.get(version)
+        filename_version == version
+        or (
+            INSTALLER_ASSET_PATTERN.fullmatch(name) is not None
+            and filename_version == _PUBLISHED_FILENAME_ALIASES.get(version)
+        )
     )
 
 
@@ -65,7 +79,43 @@ def validate_asset_identity(asset: InstallerAsset, *, require_digest: bool = Tru
     filename_version = installer_filename_version(asset.name)
     if filename_version is None:
         raise UpdateError("The selected update asset has an invalid Windows installer filename.")
-    parsed = urlparse(asset.download_url)
+    version = validate_release_asset_url(asset.name, asset.download_url, asset.version)
+    if not installer_matches_version(asset.name, version):
+        raise UpdateError("The installer filename does not match the selected release version.")
+    patch = PATCH_ASSET_PATTERN.fullmatch(asset.name)
+    if asset.kind == "patch":
+        if (
+            patch is None
+            or asset.from_version != patch.group("source")
+            or asset.source_inventory_sha256 is None
+            or normalize_sha256(asset.source_inventory_sha256) != asset.source_inventory_sha256
+        ):
+            raise UpdateError("The patch has an invalid source installation identity.")
+    elif (
+        asset.kind != "full"
+        or patch is not None
+        or asset.from_version is not None
+        or asset.source_inventory_sha256 is not None
+    ):
+        raise UpdateError("The update asset has an invalid installer kind.")
+    if (
+        not isinstance(asset.size_bytes, int)
+        or isinstance(asset.size_bytes, bool)
+        or not 0 < asset.size_bytes <= MAX_INSTALLER_SIZE_BYTES
+    ):
+        raise UpdateError("The release has no supported, bounded installer size.")
+    if require_digest and asset.sha256 is None:
+        raise UpdateError(
+            "This release has no valid GitHub SHA-256 digest. "
+            "Use the release page instead of the in-app installer."
+        )
+    return version
+
+
+def validate_release_asset_url(name: str, url: str, version: str | None) -> Version:
+    """Bind a metadata or executable asset URL to the selected repository and version."""
+
+    parsed = urlparse(url)
     if parsed.scheme != "https":
         raise UpdateError("Installer downloads require an HTTPS URL.")
     if (
@@ -79,24 +129,13 @@ def validate_asset_identity(asset: InstallerAsset, *, require_digest: bool = Tru
     if not parsed.path.startswith(prefix):
         raise UpdateError("The installer must be a published FPVS Studio GitHub release asset.")
     parts = parsed.path[len(prefix) :].split("/")
-    if len(parts) != 2 or unquote(parts[1]) != asset.name:
+    if len(parts) != 2 or unquote(parts[1]) != name:
         raise UpdateError("The installer URL does not match the selected release asset.")
     tag_version = parse_release_version(unquote(parts[0]))
-    version = parse_release_version(asset.version) if asset.version is not None else tag_version
-    if tag_version != version or not installer_matches_version(asset.name, version):
+    selected_version = parse_release_version(version) if version is not None else tag_version
+    if tag_version != selected_version:
         raise UpdateError("The installer filename does not match the selected release version.")
-    if (
-        not isinstance(asset.size_bytes, int)
-        or isinstance(asset.size_bytes, bool)
-        or not 0 < asset.size_bytes <= MAX_INSTALLER_SIZE_BYTES
-    ):
-        raise UpdateError("The release has no supported, bounded installer size.")
-    if require_digest and asset.sha256 is None:
-        raise UpdateError(
-            "This release has no valid GitHub SHA-256 digest. "
-            "Use the release page instead of the in-app installer."
-        )
-    return version
+    return selected_version
 
 
 def validate_response_url(response: object) -> None:

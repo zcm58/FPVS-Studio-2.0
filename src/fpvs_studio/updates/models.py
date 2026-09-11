@@ -44,6 +44,9 @@ class InstallerAsset:
     sha256: str | None = None
     version: str | None = None
     asset_id: int | None = None
+    kind: str = "full"
+    from_version: str | None = None
+    source_inventory_sha256: str | None = None
 
     def __post_init__(self) -> None:
         # Keep an unverifiable release visible to the GUI, but disable its download.
@@ -61,6 +64,11 @@ class UpdateCheckResult:
     release_notes_summary: str
     installer_asset: InstallerAsset | None
     is_prerelease: bool
+    selection_reason: str = ""
+
+    @property
+    def download_kind(self) -> str:
+        return "full" if self.installer_asset is None else self.installer_asset.kind
 
     @property
     def installer_asset_name(self) -> str | None:
@@ -85,6 +93,7 @@ class CandidateRelease:
     body: str
     installer_asset: InstallerAsset | None
     is_prerelease: bool
+    assets: tuple[dict[str, object], ...] = ()
 
 
 @dataclass(frozen=True)

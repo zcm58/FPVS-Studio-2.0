@@ -5,8 +5,8 @@ belong in the focused documents routed by `docs/agent/agent-index.md`.
 
 ## Application Shape
 
-FPVS Studio is a Windows-focused PySide6 authoring application with a source-only
-experiment test mode supported on Windows and Linux development hosts. The GUI edits
+FPVS Studio is a Windows-focused PySide6 authoring application with local
+experiment test mode available in source and installed builds on Windows and Linux. The GUI edits
 project models and compiles engine-neutral execution contracts. Runtime coordinates
 sessions; presentation is isolated behind an engine interface, with PsychoPy loaded
 lazily only inside the engine package.
@@ -58,11 +58,13 @@ lazily only inside the engine package.
   unless the user explicitly enables and records
   `allow_nonstandard_oddball_trigger_code`.
 - `src/fpvs_studio/updates/`: GUI-neutral GitHub Releases checking, bounded updater
-  cache ownership/locking, cancelable checksum-verified downloads, and explicit
-  verified installer-launch helpers.
+  cache ownership/locking, cancelable checksum-verified downloads, compatible direct-patch selection, and
+  explicit verified installer-launch helpers. `updates/patches.py` authenticates
+  patch metadata and installed baseline bytes; installer mutation stays in Inno.
 - `tests/`: unit, integration, and registered pytest-qt coverage.
 - `packaging/`: PyInstaller/Inno configuration, published legacy ownership inventory,
-  and release assets for Windows builds. Installer-owned file reconciliation remains
+  and release assets for Windows builds. Patch payloads are generated from authenticated
+  baseline inventories and the complete target bundle. Installer-owned file reconciliation remains
   here, separate from project data and the runtime updater cache.
 
 Every source package has a nested `AGENTS.md`; read the one governing files you edit.

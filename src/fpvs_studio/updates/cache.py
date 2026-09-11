@@ -154,7 +154,9 @@ def _cleanup_locked(
                 cache.regular_info(entry.name)
                 asset = _read_receipt(cache, entry.name)
                 version = validate_asset_identity(asset)
-                if version > current:
+                if version > current and (
+                    asset.kind != "patch" or asset.from_version == str(current)
+                ):
                     candidates.append((version, asset))
                 else:
                     _remove_best_effort(cache, entry.name, removed, warnings)
@@ -244,6 +246,9 @@ def _read_receipt(cache: CacheDirectory, name: str) -> InstallerAsset:
             sha256=data.get("sha256"),
             version=data["version"],
             asset_id=asset_id,
+            kind=data.get("kind", "full"),
+            from_version=data.get("from_version"),
+            source_inventory_sha256=data.get("source_inventory_sha256"),
         )
         validate_asset_identity(asset)
         return asset

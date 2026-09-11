@@ -157,6 +157,7 @@ tests = [
   "tests/unit/test_update_cache.py",
   "tests/unit/test_update_check.py",
   "tests/unit/test_update_download.py",
+  "tests/unit/test_update_patch.py",
 ]
 full_tests = []
 include = ["src/fpvs_studio/updates/**", "src/fpvs_studio/gui/update_dialog.py", "src/fpvs_studio/gui/update_lifecycle.py", "tests/unit/test_update_*.py"]
@@ -169,7 +170,8 @@ tests = [
   "tests/unit/test_installer_inventory.py",
   "tests/unit/test_legacy_installer_inventory.py",
   "tests/unit/test_package_metadata.py",
+  "tests/unit/test_patch_packaging.py",
 ]
 full_tests = []
-include = ["packaging/**", "scripts/build_*.ps1", "scripts/build_installer_inventory.py", "scripts/refresh_legacy_installer_inventory.py", "scripts/check_installer_compile.py", "scripts/check_installer_tree.py", "scripts/smoke_packaged_app.ps1", "src/fpvs_studio/app/**", "src/fpvs_studio/__init__.py", "tests/unit/test_app_main.py", "tests/unit/test_package_metadata.py", "tests/unit/test_*installer_inventory.py", "pyproject.toml"]
+include = ["packaging/**", "scripts/build_*.ps1", "scripts/build_installer_inventory.py", "scripts/build_patch.py", "scripts/check_patch_installer_lifecycle.py", "scripts/refresh_legacy_installer_inventory.py", "scripts/check_installer_compile.py", "scripts/check_installer_tree.py", "scripts/smoke_packaged_app.ps1", "src/fpvs_studio/app/**", "src/fpvs_studio/__init__.py", "tests/unit/test_app_main.py", "tests/unit/test_package_metadata.py", "tests/unit/test_*installer_inventory.py", "tests/unit/test_patch_packaging.py", "pyproject.toml"]
 manual_smoke = ["Build and launch the packaged application when packaging inputs or startup wiring changes."]

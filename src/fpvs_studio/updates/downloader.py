@@ -33,6 +33,7 @@ from fpvs_studio.updates.models import (
     UpdateError,
     UpdateIntegrityError,
 )
+from fpvs_studio.updates.patches import require_running_patch_baseline
 from fpvs_studio.updates.validation import (
     managed_response,
     validate_asset_identity,
@@ -60,6 +61,8 @@ def download_installer(
 
     check_cancel(cancel_event)
     validate_asset_identity(asset)
+    if asset.kind == "patch":
+        require_running_patch_baseline(asset, cancel_event=cancel_event)
     target_dir = destination_dir if destination_dir is not None else default_update_cache_dir()
     with locked_cache(target_dir, cancel_event=cancel_event) as cache:
         prune_for_download(cache, asset, cancel_event)

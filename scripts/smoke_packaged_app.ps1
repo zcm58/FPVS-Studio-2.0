@@ -1,9 +1,17 @@
 param(
     [string]$ExePath,
+    [switch]$AllowVisibleGui,
     [int]$TimeoutSeconds = 180
 )
 
 $ErrorActionPreference = "Stop"
+
+if (-not $AllowVisibleGui) {
+    throw "Packaged GUI verification requires user approval for a visible session. Pass -AllowVisibleGui after approval."
+}
+if ($env:QT_QPA_PLATFORM -in @("offscreen", "minimal")) {
+    throw "Packaged GUI verification requires the native visible Qt platform."
+}
 
 $RepoRoot = Split-Path -Parent $PSScriptRoot
 if (-not $ExePath) {
@@ -21,10 +29,17 @@ if (Test-Path -LiteralPath $ReportPath) {
     Remove-Item -LiteralPath $ReportPath -Force
 }
 
-$process = Start-Process -FilePath $ExePath -ArgumentList @(
-    "--packaged-smoke-output",
-    $ReportPath
-) -PassThru -WindowStyle Hidden
+$previousQtOptIn = $env:FPVS_ALLOW_QT_TESTS
+try {
+    $env:FPVS_ALLOW_QT_TESTS = "1"
+    $process = Start-Process -FilePath $ExePath -ArgumentList @(
+        "--packaged-smoke-output",
+        ('"' + $ReportPath + '"')
+    ) -PassThru
+}
+finally {
+    $env:FPVS_ALLOW_QT_TESTS = $previousQtOptIn
+}
 
 if (-not $process.WaitForExit($TimeoutSeconds * 1000)) {
     Stop-Process -Id $process.Id -Force

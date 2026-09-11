@@ -1,7 +1,11 @@
 param(
     [switch]$SkipInstall,
+    [switch]$SkipSmoke,
+    [switch]$AllowVisibleGui,
     [string]$InnoCompiler,
-    [string]$BuildLabel
+    [string]$BuildLabel,
+    [string[]]$BaselineInventory = @(),
+    [string[]]$BaselineInventorySha256 = @()
 )
 
 $ErrorActionPreference = "Stop"
@@ -32,12 +36,9 @@ try {
 
     Write-Output ""
     Write-Output "Building FPVS Studio installer..."
-    if ($InnoCompiler) {
-        & $BuildInstallerScript -InnoCompiler $InnoCompiler -BuildLabel $BuildLabel
-    }
-    else {
-        & $BuildInstallerScript -BuildLabel $BuildLabel
-    }
+    & $BuildInstallerScript -BuildLabel $BuildLabel -InnoCompiler $InnoCompiler `
+        -SkipSmoke:$SkipSmoke -AllowVisibleGui:$AllowVisibleGui `
+        -BaselineInventory $BaselineInventory -BaselineInventorySha256 $BaselineInventorySha256
     if ($LASTEXITCODE -ne 0) {
         throw "Command failed with exit code ${LASTEXITCODE}: $BuildInstallerScript"
     }

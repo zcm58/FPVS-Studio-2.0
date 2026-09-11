@@ -32,8 +32,8 @@ This phase should establish:
   neutral-gray presentation background
 - query the primary/default configured display mode through the platform adapter before
   launch, preserving exact Windows rational selection and KDE Linux VRR rejection
-- honor an explicit `verify_refresh_rate=false` runtime option for source-only
-  cross-platform experiment verification without weakening normal launch defaults
+- honor an explicit `verify_refresh_rate=false` runtime option for explicit
+  local experiment testing in source and installed builds without weakening normal launch defaults
 - leave full image decoding to preprocessing/manual deep preflight or engine stimulus
   preparation; routine participant launch preflight must not decode the whole image set
 - when serial output is enabled, open the configured port before `engine.open_session`

@@ -3,15 +3,16 @@
 Status: Planned
 
 The user endorsed this direction on 2026-09-05 and requested a separate future
-execution plan. Implementation has not started. Move this plan to `active/` when
-the work is scheduled; this document does not change current launch behavior.
+execution plan. The v1.5.1 patch-update work opens the existing Settings test-mode
+option to installed builds. The broader Rehearse action and output-provenance work
+below remains planned; this document does not change current launch behavior.
 
 ## Problem And Intended Outcome
 
 Experiment Test Mode can already launch one condition or the full session, but
-`gui/controller.py:experiment_test_mode_available()` excludes packaged builds.
-Researchers using the installer therefore cannot access the same rehearsal workflow
-available in a source checkout. Checking instructions, appearance, responses, and
+`gui/controller.py:experiment_test_mode_available()` previously excluded packaged
+builds; v1.5.1 removes that restriction. A dedicated rehearsal workflow remains
+future work. Checking instructions, appearance, responses, and
 pre/post tasks is an ordinary authoring activity.
 
 Provide a visible **Rehearse** action in installed and source builds. It must explain
@@ -24,7 +25,7 @@ It is an authoring check, with an explicit distinction from acquisition readines
 
 ## Existing Owners And Evidence
 
-- `src/fpvs_studio/gui/controller.py`: source-only availability and app preference.
+- `src/fpvs_studio/gui/controller.py`: platform availability and app preference.
 - `src/fpvs_studio/gui/run_page.py`: existing scope selector, acknowledgment, and
   participant/test launch coordination.
 - `src/fpvs_studio/gui/main_window.py`: Home launch entry point and completion UX.

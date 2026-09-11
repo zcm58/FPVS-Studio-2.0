@@ -13,6 +13,7 @@ Use this page to find planning material before making feature-sized changes.
 
 Current implementation:
 
+- `exec-plans/active/patch-updates-v1.5.1.md`
 - `exec-plans/active/bounded-updater-storage-and-clean-upgrades.md`
 
 Concrete planned work:

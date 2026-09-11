@@ -15,6 +15,9 @@ settings, templates, or runtime/session contracts.
   installer builds.
 - Keep `scripts/build_release.ps1` and `scripts/build_release.cmd` as thin convenience
   wrappers over the executable and installer scripts; do not duplicate stage logic there.
+- Generate direct patch payloads with `scripts/build_patch.py` from authenticated
+  baseline inventories and the complete target bundle. Use the shared Inno script's
+  patch mode; preserve the complete target ownership manifest and full installer.
 - Keep build outputs under ignored `build/` and `dist/` paths.
 - Keep packaging dependencies in the `packaging` optional dependency group.
 - Keep app-version changes centralized in `pyproject.toml`; `src/fpvs_studio/__init__.py`

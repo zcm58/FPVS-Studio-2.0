@@ -31,7 +31,7 @@ The PyInstaller spec includes package metadata in the bundled app.
 The package distribution name is `fpvs-studio`; the GUI and executable still use the
 display name `FPVS Studio`.
 
-For the current release package, use the PEP 440-compatible package version `1.5.0`.
+For the current release package, use the PEP 440-compatible package version `1.5.1`.
 The GitHub Release title can use a friendlier beta label, but the release tag and
 installer filename must use the exact package version.
 
@@ -143,13 +143,13 @@ through the explicit `-InnoCompiler` argument or its Windows uninstall registrat
 For the normal release build, run the one-step wrapper:
 
 ```powershell
-.\scripts\build_release.ps1
+.\scripts\build_release.ps1 -AllowVisibleGui
 ```
 
 Or double-click:
 
 ```text
-scripts\build_release.cmd
+scripts\build_release.cmd -AllowVisibleGui
 ```
 
 The wrapper builds the PyInstaller bundle first, then builds the setup EXE from that
@@ -161,13 +161,13 @@ packages such as `hatchling` instead of failing and needing a second run.
 When iterating after dependencies are already installed, use:
 
 ```powershell
-.\scripts\build_release.ps1 -SkipInstall
+.\scripts\build_release.ps1 -SkipInstall -AllowVisibleGui
 ```
 
 If Inno Setup is installed somewhere custom:
 
 ```powershell
-.\scripts\build_release.ps1 -InnoCompiler "C:\Path\To\ISCC.exe"
+.\scripts\build_release.ps1 -AllowVisibleGui -InnoCompiler "C:\Path\To\ISCC.exe"
 ```
 
 The individual commands remain available when you need to run only one stage. Build the
@@ -180,13 +180,13 @@ PyInstaller bundle first:
 Then build the setup EXE:
 
 ```powershell
-.\scripts\build_installer.ps1
+.\scripts\build_installer.ps1 -AllowVisibleGui
 ```
 
 Expected output for the current package:
 
 ```text
-dist\installer\FPVS-Studio-Setup-1.5.0.exe
+dist\installer\FPVS-Studio-Setup-1.5.1.exe
 ```
 
 The installer build validates that the PyInstaller bundle has an `_internal` folder and
@@ -201,19 +201,19 @@ needed by packaged launch are present.
 To run that smoke check against an existing bundle:
 
 ```powershell
-.\scripts\smoke_packaged_app.ps1
+.\scripts\smoke_packaged_app.ps1 -AllowVisibleGui
 ```
 
 To run it against the installed app:
 
 ```powershell
-.\scripts\smoke_packaged_app.ps1 -ExePath "$env:LOCALAPPDATA\Programs\FPVS Studio\FPVS Studio.exe"
+.\scripts\smoke_packaged_app.ps1 -AllowVisibleGui -ExePath "$env:LOCALAPPDATA\Programs\FPVS Studio\FPVS Studio.exe"
 ```
 
 If Inno Setup is installed somewhere custom:
 
 ```powershell
-.\scripts\build_installer.ps1 -InnoCompiler "C:\Path\To\ISCC.exe"
+.\scripts\build_installer.ps1 -AllowVisibleGui -InnoCompiler "C:\Path\To\ISCC.exe"
 ```
 
 For advanced local iteration only, after you have already run the packaged smoke check
@@ -284,12 +284,90 @@ release check is:
 
 - install on a Windows x64-compatible machine without system Python
 - launch FPVS Studio from the Start Menu or Desktop shortcut
-- run `.\scripts\smoke_packaged_app.ps1 -ExePath "$env:LOCALAPPDATA\Programs\FPVS Studio\FPVS Studio.exe"`
+- run `.\scripts\smoke_packaged_app.ps1 -AllowVisibleGui -ExePath "$env:LOCALAPPDATA\Programs\FPVS Studio\FPVS Studio.exe"`
 - create/open a project
 - open `Tools > Image Resizer`
 - run the PsychoPy test launch path
 - install a newer setup EXE over the older installed app and confirm settings, projects,
   condition templates, `runs/`, and `logs/` remain intact
+
+## Direct Patch Releases
+
+v1.5.1 adds patch-aware updating. Earlier app versions still select the full installer;
+therefore every release retains `FPVS-Studio-Setup-<version>.exe`. A manually downloaded
+patch can bootstrap an exact earlier installation. Patches use the same Inno application
+identity and installation folder, without reinstalling unchanged dependencies.
+
+`build_release.ps1` builds one complete target bundle, its full installer, optional
+patch installers, and `FPVS-Studio-Update-<version>.json`. Set the version in
+`pyproject.toml` first. For each supported baseline provide the exact ownership manifest
+extracted from its authenticated published installer and the manifest's SHA-256. Preserve
+published bundles/installers and dependency versions; rebuilding an old source tag does
+not establish an identical baseline. Runtime dependencies should remain pinned to the
+preserved build environment when producing a small application fix.
+
+```powershell
+.\scripts\build_release.ps1 -SkipInstall -AllowVisibleGui `
+  -BuildLabel release-1.5.1 `
+  -BaselineInventory build/release-1.5.1-baseline/published-v1.5.0-current-owned-files.txt `
+  -BaselineInventorySha256 cb5fd3551a6259e8d6d293cad341d8eb1bc0a0f5a08ef05d74f9720e5059a277
+```
+
+`-SkipInstall` preserves the current environment and requires its installed FPVS Studio
+metadata to match the release version. Refresh the editable app metadata separately with
+`python -m pip install --no-deps -e .` when needed. Multiple baselines use matching ordered
+arrays of manifest paths and hashes. `-AllowVisibleGui` requires an approved native
+Windows session for packaged checks; offscreen execution is rejected. `-SkipSmoke` may
+stage artifacts while that check is pending, but does not establish release acceptance.
+
+Upload the generated full installer, every patch installer, and update JSON to the same
+GitHub release, initially as a draft. Example assets:
+
+```text
+FPVS-Studio-Setup-1.5.1.exe
+FPVS-Studio-Patch-1.5.0-to-1.5.1.exe
+FPVS-Studio-Update-1.5.1.json
+```
+
+Publish only after all assets are present and their GitHub sizes/SHA-256 digests match
+local artifacts. Do not replace published bytes under an existing version. The JSON
+contains `schema_version: 1`, `target_version`, `platform: "windows-x64"`, and `patches`.
+Each entry binds `from_version`, `source_inventory_sha256`, `asset_name`, `size_bytes`,
+and `sha256`. Full installer metadata continues to come directly from GitHub. The app
+fetches the bounded JSON through the same trusted GitHub/CDN boundary and verifies its
+GitHub digest before using it. Invalid or tampered metadata is an error, not an implicit
+permission to run a different file.
+
+Only frozen Windows x64 installations can select a patch. The app verifies the exact
+installed ownership-manifest bytes and hashes every baseline application file using
+no-follow handles. It chooses a direct patch only when smaller than the full installer.
+A missing, modified, or incompatible baseline selects the full installer with an explicit
+reason. It does not chain patches. File checks run in cancelable workers before selection,
+before download/reuse, and again before installer launch. Patch cache receipts retain
+source and target identity; stale or incompatible patch payloads are pruned by existing
+bounded-cache policy.
+
+`build_patch.py` generates only changed and added target files while retaining the full
+target ownership inventory. The patch's Inno mode independently verifies registration,
+source version, manifest identity, and baseline bytes before writes. Unknown files at
+new payload paths block the patch. Path checks reject unsafe aliases, links, and protected
+project-data names. A verified transaction marker supports rerunning the same patch
+after a known partial installation; unknown/corrupt states require full-installer repair.
+Target files and the installed inventory must verify before successful handoff. A
+post-copy verification failure returns exit code 12, displays a repair message, retains
+the marker, and suppresses relaunch. Windows may already record the target version;
+rerun the same downloaded patch to repair a known state, or use the full installer
+when bytes are unrecognized. Do not depend on the application being able to start
+after an interrupted update. Obsolete owned files are reconciled
+before automatic relaunch. This is a recoverable changed-file update, not an atomic
+whole-directory swap or a guarantee of automatic rollback after power loss.
+
+Verification includes updater/packaging focused routes, registered GUI coverage, native
+Inno compilation, and `scripts/check_patch_installer_lifecycle.py`. The lifecycle harness
+uses synthetic bundles and unique test application identities beneath `build/`; it skips
+shortcuts, application launch, production app closing, and production updater-cache hooks.
+Never treat `/DIR` alone as isolation when running a production installer: its AppId and
+uninstall registration still belong to the user's installed application.
 
 ## In-App Update Flow
 
@@ -297,7 +375,9 @@ Installed users can use `File > Check for Updates`. FPVS Studio also runs one si
 startup check after the Welcome window appears. The app checks GitHub Releases, compares
 the installed `fpvs_studio.__version__` with the latest eligible release tag, shows the
 current and latest versions plus a short release-notes summary, and downloads the
-matching `FPVS-Studio-Setup-*.exe` asset only after the user chooses `Download Update`.
+selected full or compatible direct-patch installer only after the user chooses
+`Download Update`. Starting with v1.5.1, the dialog names the download type and size;
+patch selection and installation rules are below.
 Manual update-check failures show a clear try-again-later message. Startup checks stay
 silent unless an update is available.
 
