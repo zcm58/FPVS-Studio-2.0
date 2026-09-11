@@ -38,26 +38,30 @@ New AB experiments select **Digits & letter targets** and start with three condi
 | 300 ms | 3 | 2 | 13 | 16 |
 | 500 ms | 5 | 4 | 11 | 16 |
 
-Slots are numbered from one. Each native character lasts 100 ms, without blank gaps.
-The 20-character cycle lasts two seconds, with four digits after T2. Shared sources
+Slots are numbered from one. At the default 10 Hz, each native character lasts 100 ms,
+without blank gaps. The 20-character cycle lasts two seconds, with four digits after T2. Shared sources
 are digits 2–9 and separate uppercase letter pools for T1/T2. T1 defaults to red,
 T2 and digits to white, on black. Seeded sampling avoids adjacent repeated digits
 and identical letters within a target pair. Sampling is not per-character balanced.
 The fixation detection task is disabled for this preset. Existing cycle-repeat and
 session defaults are preserved; two seconds is the cycle length, not a recording block.
 
-Design shows shared character sources, editable SOAs, intervening-digit counts, and
+Design shows a shared editable presentation rate, character sources, SOAs, intervening-digit counts, and
 a full-cycle timeline with labelled T1/T2 and an onset-to-onset bracket. A quarter-speed
 preview illustrates the sequence. Native text height is edited in Character Size;
-Timing checks the selected display's exact 10 Hz frame grid. A 60 Hz display uses six
-frames per character; 120/240 Hz also fit. 59.94/144 Hz are rejected for this layout,
-without silently rounding or alternating character durations.
+Timing checks the selected display's exact frame grid at the authored presentation
+rate. Rate edits retain authored SOAs, which must span whole character intervals.
+At the default 10 Hz, a 60 Hz display uses six frames per character; 120/240 Hz also
+fit, while 59.94/144 Hz do not. Other positive finite rates are supported when exact:
+7.5 Hz uses eight frames at 60 Hz, and 12 Hz uses twelve frames at 144 Hz. Timing is
+never silently rounded or alternated between character durations.
 
 The shared post-condition questionnaire asks whether any white letters were noticed,
 with Yes/No/Unsure answers after each completed condition entry. These are subjective
 block reports, not target-identification accuracy or evidence of unconscious processing.
 The repeating FPVS extension requires behavioral and physical timing validation.
-Both targets repeat at 0.5 Hz; different event markers do not separate their frequency tags.
+Both targets repeat at the presentation rate divided by 20 (0.5 Hz by default);
+different event markers do not separate their frequency tags.
 
 Image-pair AB templates, including saved custom copies, are not offered or applicable.
 Old project and RunSpec records remain readable for identification, without rewriting

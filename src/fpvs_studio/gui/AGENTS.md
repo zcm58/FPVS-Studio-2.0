@@ -26,7 +26,8 @@ backend-driven.
 - New-experiment Setup asks only category first; name/folder/template follow. Category
   is locked after creation. FPVS is disabled Coming soon. Reuse the visual editor in
   Design; image-pair AB and its ISI editor are retired. Attentional-Blink letter
-  streams expose shared character pools and onset-to-onset SOAs. Core guards category rules.
+  streams expose a shared presentation rate, character pools and onset-to-onset SOAs.
+  Rate/source/SOA drafts apply atomically; core guards category and exact timing rules.
 - Keep condition modality authoring in Conditions. Image folders belong in Design;
   oddball word conditions keep typed base/oddball word-list editors in Conditions.
   Native AB digit/T1/T2 sources belong in Design, with Character Size replacing Image

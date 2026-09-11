@@ -433,7 +433,7 @@ class ConditionPresentationSettings(FPVSBaseModel):
 class ProtocolSettings(FPVSBaseModel):
     """Project-wide editable FPVS presentation cadence."""
 
-    base_hz: float = Field(default=6.0, gt=0)
+    base_hz: float = Field(default=6.0, gt=0, allow_inf_nan=False)
     oddball_every_n: int = Field(default=5, ge=1)
 
     @property

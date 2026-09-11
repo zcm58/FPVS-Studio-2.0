@@ -80,7 +80,7 @@ class LetterStreamTimeline(QWidget):
             painter.setPen(QColor(theme.text_muted))
             painter.drawText(
                 self.rect(), Qt.AlignmentFlag.AlignCenter,
-                "Enter valid character pools and SOAs to preview the stream.",
+                "Enter a valid rate, character pools and SOAs to preview the stream.",
             )
             painter.end()
             return
@@ -133,7 +133,8 @@ class LetterStreamTimeline(QWidget):
         )
         painter.setPen(QColor(theme.text_muted))
         painter.drawText(
-            QRectF(8, 2, 360, 25), Qt.AlignmentFlag.AlignLeft, "Each tile is one 100 ms character"
+            QRectF(8, 2, 360, 25), Qt.AlignmentFlag.AlignLeft,
+            f"Each tile is one {self.description.item_ms:g} ms character",
         )
         painter.end()
 
@@ -173,7 +174,20 @@ class AttentionalBlinkStreamDesigner(QWidget):
         self.heading_label = self._label("Digits and target letters", "heading")
         heading.addWidget(self.heading_label)
         heading.addStretch(1)
-        self.rate_label = self._label("10 Hz  ·  100 ms per character", "secondary")
+        self.rate_caption = self._label("Presentation rate (Hz)", "secondary")
+        self.rate_edit = QLineEdit(self)
+        self.rate_edit.setObjectName("ab_presentation_rate")
+        self.rate_edit.setAccessibleName("Presentation rate in Hz")
+        self.rate_edit.setMaximumWidth(100)
+        self.rate_edit.setToolTip(
+            "Characters per second for all conditions. Enter a positive number. "
+            "SOAs remain unchanged and must span whole characters; playback also "
+            "requires whole display frames per character."
+        )
+        self.rate_caption.setBuddy(self.rate_edit)
+        heading.addWidget(self.rate_caption)
+        heading.addWidget(self.rate_edit)
+        self.rate_label = self._label("100 ms per character", "secondary")
         heading.addWidget(self.rate_label)
         layout.addLayout(heading)
         pools = QHBoxLayout()
@@ -300,6 +314,7 @@ class AttentionalBlinkStreamDesigner(QWidget):
         self.preview_timer = QTimer(self)
         self.preview_timer.timeout.connect(self._advance_preview)
         for field in (
+            self.rate_edit,
             self.base_edit,
             self.t1_edit,
             self.t2_edit,
@@ -318,6 +333,7 @@ class AttentionalBlinkStreamDesigner(QWidget):
 
     def _snapshot(self) -> tuple[object, ...]:
         return (
+            self.rate_edit.text(),
             self.base_edit.text(),
             self.t1_edit.text(),
             self.t2_edit.text(),
@@ -341,6 +357,7 @@ class AttentionalBlinkStreamDesigner(QWidget):
                 self._stop_preview()
                 return
             self._condition_ids = [condition.condition_id for condition in conditions]
+            self.rate_edit.setText(str(self._document.project.settings.protocol.base_hz))
             self.soa_edits.clear()
             self.condition_table.setRowCount(len(conditions))
             first = conditions[0]
@@ -365,7 +382,7 @@ class AttentionalBlinkStreamDesigner(QWidget):
                 item = QTableWidgetItem(condition.name)
                 item.setToolTip(condition.name)
                 self.condition_table.setItem(row, 0, item)
-                edit = QLineEdit(f"{settings.soa_ms:g}", self.condition_table)
+                edit = QLineEdit(str(settings.soa_ms), self.condition_table)
                 edit.setAccessibleName(f"{condition.name} SOA in milliseconds")
                 edit.setAlignment(Qt.AlignmentFlag.AlignCenter)
                 edit.textChanged.connect(self._draft_edited)
@@ -395,6 +412,12 @@ class AttentionalBlinkStreamDesigner(QWidget):
         self._update_preview()
         self.condition_selected.emit(self._selected_id)
 
+    def _base_hz(self) -> float:
+        try:
+            return float(self.rate_edit.text())
+        except ValueError:
+            raise ValueError("Enter a presentation rate in Hz greater than zero.") from None
+
     def _description(self, condition_id: str) -> AttentionalBlinkStreamDescription:
         condition = self._document.get_condition(condition_id)
         if condition is None:
@@ -403,7 +426,7 @@ class AttentionalBlinkStreamDesigner(QWidget):
         assert isinstance(settings, AttentionalBlinkStreamSettings)
         protocol = self._document.project.settings.protocol
         return describe_attentional_blink_stream(
-            base_hz=protocol.base_hz,
+            base_hz=self._base_hz(),
             cycle_slots=protocol.oddball_every_n,
             soa_ms=float(self.soa_edits[condition_id].text()),
             t2_slot_index=settings.t2_slot_index,
@@ -457,9 +480,20 @@ class AttentionalBlinkStreamDesigner(QWidget):
             digit_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
             self.condition_table.setItem(row, 2, digit_item)
         if message:
+            self.rate_label.setText("Timing needs correction")
+            self.cycle_summary.clear()
             return
         description = self._description(self._selected_id)
         self.timeline.description = description
+        preview_available = self._preview_interval_ms() is not None
+        self.preview_button.setEnabled(preview_available)
+        self.preview_button.setToolTip(
+            "" if preview_available else
+            "This rate is outside the animated preview's timing range. "
+            "The static timeline remains available."
+        )
+        if not preview_available:
+            self.preview_caption.setText(self.preview_button.toolTip())
         self._preview_cycles = iter_attentional_blink_stream_cycles(
             description,
             base_words=_characters(self.base_edit.text()),
@@ -473,6 +507,8 @@ class AttentionalBlinkStreamDesigner(QWidget):
         self.timeline.update()
         self.timeline.setAccessibleName(
             f"{description.cycle_slots} characters. "
+            f"Presentation rate {description.base_hz:g} Hz; "
+            f"{description.item_ms:g} milliseconds per character. "
             f"T1 in position {description.t1_slot_index + 1}; "
             f"T2 in position {description.t2_slot_index + 1}. "
             f"SOA {description.soa_ms:g} milliseconds; "
@@ -480,7 +516,7 @@ class AttentionalBlinkStreamDesigner(QWidget):
             " Digit order is randomized without immediate repeats."
         )
         self.rate_label.setText(
-            f"{description.base_hz:g} Hz  ·  {description.item_ms:g} ms per character"
+            f"{description.item_ms:g} ms per character"
         )
         self.cycle_summary.setText(
             f"{description.cycle_slots} characters · {description.cycle_ms / 1000:g} s · "
@@ -516,6 +552,7 @@ class AttentionalBlinkStreamDesigner(QWidget):
                 {key: float(edit.text()) for key, edit in self.soa_edits.items()},
                 t1_color=self.t1_color_button.color_hex(),
                 t2_color=self.t2_color_button.color_hex(),
+                base_hz=self._base_hz(),
             )
         except ValueError as error:
             self.validation_label.setText(str(error))
@@ -527,13 +564,23 @@ class AttentionalBlinkStreamDesigner(QWidget):
         self.applied.emit()
         return True
 
+    def _preview_interval_ms(self) -> int | None:
+        interval = self.timeline.description.item_ms * 4
+        # QTimer accepts positive signed 32-bit milliseconds for this animation.
+        return round(interval) if 1 <= interval <= 2_147_483_647 else None
+
     def _toggle_preview(self, checked: bool) -> None:
         if not checked:
             self._stop_preview()
             return
+        interval = self._preview_interval_ms()
+        if interval is None:
+            self._stop_preview()
+            self.preview_caption.setText(self.preview_button.toolTip())
+            return
         self._preview_index = -1
         self._advance_preview()
-        self.preview_timer.start(round(self.timeline.description.item_ms * 4))
+        self.preview_timer.start(interval)
 
     def _shuffle_example(self) -> None:
         self._stop_preview()

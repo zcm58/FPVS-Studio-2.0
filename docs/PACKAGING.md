@@ -31,7 +31,7 @@ The PyInstaller spec includes package metadata in the bundled app.
 The package distribution name is `fpvs-studio`; the GUI and executable still use the
 display name `FPVS Studio`.
 
-For the current release package, use the PEP 440-compatible package version `1.5.1`.
+For the current release package, use the PEP 440-compatible package version `1.5.2`.
 The GitHub Release title can use a friendlier beta label, but the release tag and
 installer filename must use the exact package version.
 
@@ -186,7 +186,7 @@ Then build the setup EXE:
 Expected output for the current package:
 
 ```text
-dist\installer\FPVS-Studio-Setup-1.5.1.exe
+dist\installer\FPVS-Studio-Setup-1.5.2.exe
 ```
 
 The installer build validates that the PyInstaller bundle has an `_internal` folder and
@@ -308,9 +308,9 @@ preserved build environment when producing a small application fix.
 
 ```powershell
 .\scripts\build_release.ps1 -SkipInstall -AllowVisibleGui `
-  -BuildLabel release-1.5.1 `
-  -BaselineInventory build/release-1.5.1-baseline/published-v1.5.0-current-owned-files.txt `
-  -BaselineInventorySha256 cb5fd3551a6259e8d6d293cad341d8eb1bc0a0f5a08ef05d74f9720e5059a277
+  -BuildLabel release-1.5.2 `
+  -BaselineInventory build/release-1.5.2-baseline/published-v1.5.1-current-owned-files.txt `
+  -BaselineInventorySha256 9961840684982e9c4ff1f1cce253a6a50250ed40777da77babf46b9e84f85073
 ```
 
 `-SkipInstall` preserves the current environment and requires its installed FPVS Studio
@@ -324,9 +324,9 @@ Upload the generated full installer, every patch installer, and update JSON to t
 GitHub release, initially as a draft. Example assets:
 
 ```text
-FPVS-Studio-Setup-1.5.1.exe
-FPVS-Studio-Patch-1.5.0-to-1.5.1.exe
-FPVS-Studio-Update-1.5.1.json
+FPVS-Studio-Setup-1.5.2.exe
+FPVS-Studio-Patch-1.5.1-to-1.5.2.exe
+FPVS-Studio-Update-1.5.2.json
 ```
 
 Publish only after all assets are present and their GitHub sizes/SHA-256 digests match

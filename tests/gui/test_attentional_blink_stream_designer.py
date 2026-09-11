@@ -90,6 +90,89 @@ def test_shared_edits_stay_drafts_until_next_and_invalid_soa_is_blocked(qtbot, s
     ]
 
 
+def test_rate_edit_updates_preview_and_applies_without_changing_soas(qtbot, stream_document):
+    step, editor = _editor(qtbot, stream_document)
+    before = stream_document.project.model_dump(mode="json")
+    soa_text = {key: edit.text() for key, edit in editor.soa_edits.items()}
+    editor.preview_button.setChecked(True)
+    editor.rate_edit.setText("20")
+    assert not editor.preview_timer.isActive()
+    assert not editor.validation_message()
+    assert editor.has_pending_design()
+    assert stream_document.project.model_dump(mode="json") == before
+    editor.refresh()
+    assert editor.rate_edit.text() == "20"
+    assert {key: edit.text() for key, edit in editor.soa_edits.items()} == soa_text
+    assert editor.timeline.description.base_hz == 20
+    assert editor.rate_label.text() == "50 ms per character"
+    assert "20 Hz" in editor.timeline.accessibleName()
+    assert "20 characters · 1 s · 1 Hz" in editor.cycle_summary.text()
+    editor.preview_button.setChecked(True)
+    assert editor.preview_timer.interval() == 200
+    editor.preview_button.setChecked(False)
+    assert step.apply_pending_design()
+    assert stream_document.project.settings.protocol.base_hz == 20
+    assert not editor.has_pending_design()
+    assert [item.attentional_blink.soa_ms for item in stream_document.ordered_conditions()] == [
+        100, 300, 500,
+    ]
+    stream_document.save()
+    reopened = ProjectDocument.open_existing(stream_document.project_root)
+    _, restored_editor = _editor(qtbot, reopened)
+    assert float(restored_editor.rate_edit.text()) == 20
+    assert restored_editor.timeline.description.base_hz == 20
+
+
+def test_fractional_rate_and_soas_reopen_without_precision_loss(qtbot, stream_document):
+    step, editor = _editor(qtbot, stream_document)
+    editor.rate_edit.setText("7.5")
+    assert "whole multiple" in editor.validation_message()
+    for edit, lag in zip(editor.soa_edits.values(), (1, 3, 5), strict=True):
+        edit.setText(str(lag * 1000 / 7.5))
+    assert not editor.validation_message()
+    assert step.apply_pending_design()
+    stream_document.save()
+    reopened = ProjectDocument.open_existing(stream_document.project_root)
+    _, restored_editor = _editor(qtbot, reopened)
+    assert float(restored_editor.rate_edit.text()) == 7.5
+    assert not restored_editor.validation_message()
+    assert not restored_editor.has_pending_design()
+    for condition in reopened.ordered_conditions():
+        assert float(restored_editor.soa_edits[condition.condition_id].text()) == (
+            condition.attentional_blink.soa_ms
+        )
+
+
+@pytest.mark.parametrize("text", ["", "letters", "0", "-1", "nan", "inf", "7.5"])
+def test_invalid_rate_draft_cannot_apply_or_start_preview(qtbot, stream_document, text):
+    step, editor = _editor(qtbot, stream_document)
+    before = stream_document.project.model_dump(mode="json")
+    editor.rate_edit.setText(text)
+    assert editor.validation_message()
+    assert not editor.preview_button.isEnabled()
+    assert not editor.timeline.isEnabled()
+    assert not step.apply_pending_design()
+    assert stream_document.project.model_dump(mode="json") == before
+    editor.rate_edit.setText("10.0")
+    assert not editor.validation_message()
+    assert not editor.has_pending_design()
+
+
+@pytest.mark.parametrize("rate", [1e-6, 1e4, 1e-305])
+def test_extreme_rate_keeps_static_timeline_without_unsafe_animation(qtbot, stream_document, rate):
+    _, editor = _editor(qtbot, stream_document)
+    editor.rate_edit.setText(str(rate))
+    for edit in editor.soa_edits.values():
+        edit.setText(str(1000 / rate))
+    assert not editor.validation_message()
+    assert editor.timeline.isEnabled()
+    assert not editor.preview_button.isEnabled()
+    assert "outside the animated preview" in editor.preview_caption.text()
+    editor.preview_button.setChecked(True)
+    assert not editor.preview_timer.isActive()
+    assert not editor.preview_button.isChecked()
+
+
 @pytest.mark.parametrize(
     ("role", "initial", "selected"),
     [("t1", "#FF0000", "#12ABCD"), ("t2", "#FFFFFF", "#76CD12")],
@@ -367,7 +450,7 @@ def test_stream_design_fits_wizard_in_both_themes(
             assert field.height() >= field.minimumSizeHint().height()
         assert editor.timeline.slot_rect(19).right() <= editor.timeline.width()
         for label in (
-            editor.rate_label, editor.cycle_summary, editor.separation_label,
+            editor.rate_caption, editor.rate_label, editor.cycle_summary, editor.separation_label,
             editor.base_order_label, editor.timeline_title,
         ):
             assert label.width() >= label.fontMetrics().horizontalAdvance(label.text())
@@ -382,6 +465,18 @@ def test_stream_design_fits_wizard_in_both_themes(
             editor.preview_caption.width()
         )
         assert window.setup_wizard_page.progress_step_labels[4].text() == "Character Size"
+        assert editor.rate_edit.isVisible()
+        assert editor.rate_edit.height() >= editor.rate_edit.minimumSizeHint().height()
+        for rate in (0.5, 7.5):
+            editor.rate_edit.setText(str(rate))
+            for edit, lag in zip(editor.soa_edits.values(), (1, 3, 5), strict=True):
+                edit.setText(str(lag * 1000 / rate))
+            QApplication.processEvents()
+            assert not editor.validation_message()
+            assert_visible_children_within_parent(step)
+            for label in (editor.rate_caption, editor.rate_label, editor.cycle_summary,
+                          editor.separation_label):
+                assert label.width() >= label.fontMetrics().horizontalAdvance(label.text())
         editor.base_edit.setText("2")
         QApplication.processEvents()
         assert editor.validation_label.isVisible()

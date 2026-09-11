@@ -23,6 +23,7 @@ from fpvs_studio.core.models import (
     Condition,
     FixationTaskSettings,
     ProjectFile,
+    ProtocolSettings,
     StimulusSet,
 )
 from fpvs_studio.core.project_config import (
@@ -117,6 +118,70 @@ def test_exact_refresh_schedule(refresh, frames, soa):
 def test_unsupported_exact_refresh_rejected(refresh):
     with pytest.raises(ValueError, match="cannot display exact"):
         preview_attentional_blink_stream(refresh_hz=refresh)
+
+
+@pytest.mark.parametrize("rate", [0, -1, float("nan"), float("inf"), -float("inf")])
+def test_protocol_and_stream_reject_nonpositive_or_nonfinite_rate(rate):
+    with pytest.raises(ValidationError):
+        ProtocolSettings(base_hz=rate)
+    with pytest.raises(ValueError, match="finite and greater than zero"):
+        describe_attentional_blink_stream(base_hz=rate)
+
+
+@pytest.mark.parametrize("rate,soa,refresh,frames,lag", [
+    (0.5, 6000, 60, 120, 3),
+    (7.5, 400, 60, 8, 3),
+    (12, 250, 144, 12, 3),
+    (20, 300, 60, 3, 6),
+    (60, 50, 60, 1, 3),
+])
+def test_custom_stream_rate_compiles_exact_frames_and_soa(
+    stream_project, rate, soa, refresh, frames, lag,
+):
+    stream_project.settings.protocol.base_hz = rate
+    stream_project.conditions[0].attentional_blink.soa_ms = soa
+    assert validate_project(stream_project, refresh_hz=refresh).is_valid
+    run = compile_run_spec(stream_project, refresh_hz=refresh, random_seed=47)
+    assert run.condition.base_hz == rate
+    assert run.condition.oddball_hz == rate / 20
+    assert run.display.frames_per_stimulus == frames
+    assert run.display.total_frames == 80 * frames
+    timing = run.attentional_blink
+    assert isinstance(timing, AttentionalBlinkStreamRunSpec)
+    assert timing.frames_per_item == frames
+    assert timing.requested_soa_ms == timing.achieved_soa_ms == soa
+    assert timing.lag == lag
+    assert timing.t1_slot_index == 15 - lag
+    assert [event.on_start_frame for event in run.stimulus_sequence] == list(
+        range(0, 80 * frames, frames)
+    )
+    assert {event.on_frames for event in run.stimulus_sequence} == {frames}
+    assert {event.off_frames for event in run.stimulus_sequence} == {0}
+    for cycle in range(4):
+        events = [event for event in run.stimulus_sequence if event.cycle_index == cycle]
+        t1 = next(event for event in events if event.phase == "t1")
+        t2 = next(event for event in events if event.phase == "t2")
+        assert (t2.on_start_frame - t1.on_start_frame) * 1000 / refresh == soa
+    restored = RunSpec.model_validate_json(run.model_dump_json())
+    assert restored == run
+
+
+@pytest.mark.parametrize("rate,soa,error", [
+    (7.5, 300, "SOA must be a whole multiple"),
+    (12, 300, "SOA must be a whole multiple"),
+    (7, 1000, "cannot display exact"),
+    (80, 25, "faster than|cannot display exact"),
+])
+def test_custom_stream_rate_rejects_incompatible_soa_or_display_without_rounding(
+    stream_project, rate, soa, error,
+):
+    stream_project.settings.protocol.base_hz = rate
+    stream_project.conditions[0].attentional_blink.soa_ms = soa
+    assert not validate_project(stream_project, refresh_hz=60).is_valid
+    with pytest.raises(CompileError, match=error):
+        compile_run_spec(stream_project, refresh_hz=60)
+    assert stream_project.settings.protocol.base_hz == rate
+    assert stream_project.conditions[0].attentional_blink.soa_ms == soa
 
 
 @pytest.mark.parametrize("soa", [0, 50, 250, 1500, float("nan"), float("inf")])
@@ -242,9 +307,12 @@ def test_invalid_symbol_pools_rejected(base, t1, t2):
         validate_attentional_blink_stream_symbols(base, t1, t2)
 
 
+@pytest.mark.parametrize("rate,soa", [(10, 300), (7.5, 400), (20, 300)])
 def test_stream_project_and_config_roundtrip_preserve_schema_and_no_isi_source(
-    stream_project, tmp_path
+    stream_project, tmp_path, rate, soa,
 ):
+    stream_project.settings.protocol.base_hz = rate
+    stream_project.conditions[0].attentional_blink.soa_ms = soa
     path = tmp_path / "project.json"
     save_project_file(stream_project, path)
     loaded = load_project_file(path)
@@ -257,6 +325,7 @@ def test_stream_project_and_config_roundtrip_preserve_schema_and_no_isi_source(
     restored = read_project_config(config_path)
     imported = create_project_from_config(tmp_path / "imported", restored).project
     assert imported.schema_version == ProjectSchemaVersion.V1_5
+    assert imported.settings.protocol.base_hz == rate
     assert imported.conditions[0].attentional_blink == (
         stream_project.conditions[0].attentional_blink
     )

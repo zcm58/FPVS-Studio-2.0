@@ -27,7 +27,8 @@ lazily only inside the engine package.
   Oddball Apply uses existing protocol settings. AB image pairs are retired, with
   guards in category validation, authoring, runtime preflight and direct engine launch.
   New AB letter streams use `gui/attentional_blink_stream_designer.py`, shared native
-  digit/target pools, and onset-to-onset SOAs. `core/attentional_blink_stream.py` owns
+  digit/target pools, an editable project-wide presentation rate, and onset-to-onset
+  SOAs. `core/attentional_blink_stream.py` owns
   the exact character grid and seeded symbol sampling shared with the designer;
   `core/compiler_attentional_blink_stream.py` compiles the resulting stream.
   `core/attentional_blink_presets.py` assembles the three-condition study and questionnaire.

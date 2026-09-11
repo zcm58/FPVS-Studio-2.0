@@ -90,6 +90,13 @@ availability and persistence for both build types. Use the GUI focused route. Fo
 visible acceptance, open Settings at `700x610`, enable the option, reopen Settings to
 check persistence, and disable it again to restore ordinary launch checks.
 
+## Attentional Blink Presentation Rate
+
+Setup > Design edits the shared rate through `gui/attentional_blink_stream_designer.py`
+and the atomic `gui/document_conditions.py` apply method. Core owns exact character,
+SOA, and display-frame compatibility in `core/attentional_blink_stream.py`. Use GUI/core
+focused checks and the visible acceptance path in `docs/GUI_WORKFLOW.md`.
+
 ## Setup Design Verification
 
 For Manage Projects renaming, start with `gui/manage_projects_dialog.py`, its

@@ -12,7 +12,8 @@ package map.
 - Experiment category is a locked project choice: FPVS Oddball Paradigm or Attentional-Blink;
   Standard FPVS is a disabled Coming soon placeholder. Valid projects cannot mix categories.
 - FPVS Oddball Paradigm defaults are 6.0 Hz and oddball every 5th stimulus (1.2 Hz).
-  Attentional-Blink uses 10 Hz digit/letter streams with 100/300/500 ms SOAs.
+  Attentional-Blink defaults to 10 Hz digit/letter streams with 100/300/500 ms SOAs;
+  the shared presentation rate is editable in Design with exact frame/SOA validation.
   See `docs/EXPERIMENT_CATEGORIES.md` for defaults and migration.
 - Oddball image conditions support `continuous`, `blank_50`, and `sinusoidal`.
   The visual designer maps oddball cycles to existing protocol settings. AB image

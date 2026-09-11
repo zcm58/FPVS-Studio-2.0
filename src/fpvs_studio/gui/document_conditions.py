@@ -616,8 +616,9 @@ class DocumentConditionMixin:
         *,
         t1_color: str,
         t2_color: str,
+        base_hz: float | None = None,
     ) -> bool:
-        """Validate and save shared character pools and every SOA as one edit."""
+        """Validate and save the shared rate, character pools and SOAs as one edit."""
         conditions = self.ordered_conditions()
         if not conditions or any(
             not isinstance(c.attentional_blink, AttentionalBlinkStreamSettings) for c in conditions
@@ -652,6 +653,14 @@ class DocumentConditionMixin:
             ))
         project = validated_copy(
             self._project,
+            settings=validated_copy(
+                self._project.settings,
+                protocol=validated_copy(
+                    self._project.settings.protocol,
+                    base_hz=(self._project.settings.protocol.base_hz
+                             if base_hz is None else base_hz),
+                ),
+            ),
             conditions=updated_conditions,
             stimulus_sets=[
                 validated_copy(source, words=words_by_set[source.set_id])

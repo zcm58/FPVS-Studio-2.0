@@ -110,11 +110,15 @@ def _play(monkeypatch, run, root, *, missing_flips=None, key_batches=None):
     return summary, captures, triggers, timed_draws
 
 
-@pytest.mark.parametrize("soa_ms,lag", [(100.0, 1), (300.0, 3), (500.0, 5)])
+@pytest.mark.parametrize("rate,soa_ms,lag,frames", [
+    (10, 100, 1, 6), (10, 300, 3, 6), (10, 500, 5, 6),
+    (7.5, 400, 3, 8), (12, 250, 3, 5), (20, 300, 6, 3),
+])
 @pytest.mark.parametrize("show_cross", [True, False])
 def test_native_stream_preflight_and_fake_playback_preserve_every_character(
-    monkeypatch, stream_project, tmp_path, soa_ms, lag, show_cross,
+    monkeypatch, stream_project, tmp_path, rate, soa_ms, lag, frames, show_cross,
 ):
+    stream_project.settings.protocol.base_hz = rate
     stream_project.settings.fixation_task.show_cross = show_cross
     stream_project.settings.fixation_task.participant_tutorial_enabled = False
     stream_project.settings.presentation.pre_stream_fixation_seconds = 2 / 60
@@ -123,23 +127,25 @@ def test_native_stream_preflight_and_fake_playback_preserve_every_character(
     memory = estimate_run_spec_image_memory(run, decoded_dimensions={})
     assert memory.complete and memory.unique_image_variant_count == 0
     summary, captures, triggers, draws = _play(monkeypatch, run, tmp_path)
-    assert summary.completed_frames == 240
+    assert summary.completed_frames == 40 * frames
     assert not summary.aborted
     assert not captures["image_stims"]
     assert len(captures["shape_stims"]) == (2 if show_cross else 0)
-    assert len(draws) == 240
+    assert len(draws) == 40 * frames
     for event in run.stimulus_sequence:
         segment = draws[event.on_start_frame:event.on_start_frame + event.on_frames]
-        assert len(segment) == 6
+        assert len(segment) == frames
         assert all(stimulus.text == event.text for stimulus in segment)
         color = "#FF0000" if event.phase == "t1" else "#FFFFFF"
         assert all(stimulus.color == color for stimulus in segment)
     assert [record["frame_index"] for record in triggers.records] == [
-        0, (15 - lag) * 6, 90, 120 + (15 - lag) * 6, 210,
+        0, (15 - lag) * frames, 15 * frames, (35 - lag) * frames, 35 * frames,
     ]
     onsets = summary.attentional_blink_onsets
     assert len(onsets) == 40
-    assert [onset.time_s for onset in onsets] == pytest.approx([index / 10 for index in range(40)])
+    assert [onset.time_s for onset in onsets] == pytest.approx(
+        [index / rate for index in range(40)]
+    )
     assert summary.runtime_metadata.condition_cache_cleanup_succeeded
 
 

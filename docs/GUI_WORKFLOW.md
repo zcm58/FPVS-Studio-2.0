@@ -108,11 +108,27 @@ Mode for explicit no-hardware verification launches; packaged builds hide it.
 ### Experimental visual cycle designer
 
 New Attentional-Blink experiments open a three-condition letter-stream designer in
-Setup > **Design**: shared digit/T1/T2 sources, editable onset-to-onset SOAs, and a
+Setup > **Design**: a shared **Presentation rate (Hz)** field, digit/T1/T2 sources,
+editable onset-to-onset SOAs, and a
 labelled 20-character timeline. Default SOAs are 100/300/500 ms at 10 Hz, with 0/2/4
 intervening digits. Character Size edits native text height. Timing validates exact
 frame compatibility. The post-condition questionnaire button reuses the condition
 task editor. See [Experiment Categories](EXPERIMENT_CATEGORIES.md) for the current contract.
+
+The rate accepts positive finite decimal values and stays a draft until Next/Apply.
+Rate, character sources, colors and SOAs are validated and saved together. Existing
+SOAs are preserved when the rate changes; incompatible values stay visible for
+correction. The timeline, character duration, cycle duration and quarter-speed preview
+follow the draft rate. Editable decimal SOAs retain full precision when reopened.
+Extremely slow/fast rates outside the animation timer's range retain a static timeline
+with an explanation; this does not change the authored rate or runtime validation.
+
+Visible acceptance at `1120x820`, in both themes: open an AB study, enter 20 Hz,
+confirm 50 ms characters and unchanged SOAs, apply and reopen to confirm persistence.
+Then try 7.5 Hz with SOAs `133.33333333333334`, `400`, and `666.6666666666666` ms;
+confirm the fractional values survive reopening. Enter zero or an incompatible SOA
+and verify that the error remains visible, preview stops, and the saved project is
+unchanged. Display timing remains subject to the existing exact-frame check.
 
 For image experiments, Setup > **Design** embeds the visual designer for the selected condition.
 FPVS Oddball Paradigm uses Base/Oddball sources and a repeating image cycle.

@@ -121,6 +121,68 @@ def test_shared_edit_updates_all_conditions_atomically_and_round_trips(study, tm
     assert load_project_file(tmp_path / "project.json") == document._project
 
 
+@pytest.mark.parametrize("rate", [0.5, 7.5, 12.0, 20.0])
+def test_shared_rate_and_soa_edit_persists_exact_compiled_timing(study, tmp_path, rate):
+    document = _Document(study, tmp_path)
+    intervals = {
+        condition.condition_id: lag * 1000 / rate
+        for condition, lag in zip(study.conditions, (1, 3, 5), strict=True)
+    }
+    assert document.apply_attentional_blink_stream_design(
+        ["2", "3"], ["A", "B"], ["C", "D"], intervals,
+        t1_color="#FF0000", t2_color="#FFFFFF", base_hz=rate,
+    )
+    assert document.replacements == 1
+    assert document._project.settings.protocol.base_hz == rate
+    save_project_file(document._project, tmp_path / "project.json")
+    restored = load_project_file(tmp_path / "project.json")
+    assert restored == document._project
+    for condition in restored.conditions:
+        spec = compile_run_spec(restored, condition_id=condition.condition_id, refresh_hz=60)
+        assert spec.condition.base_hz == rate
+        assert all(event.on_frames == 60 / rate for event in spec.stimulus_sequence)
+        first_cycle = spec.stimulus_sequence[:20]
+        t1 = next(event for event in first_cycle if event.phase == "t1")
+        t2 = next(event for event in first_cycle if event.phase == "t2")
+        assert (t2.on_start_frame - t1.on_start_frame) * 1000 / 60 == pytest.approx(
+            intervals[condition.condition_id]
+        )
+
+
+def test_rate_only_edit_preserves_authored_soas_and_condition_tasks(study, tmp_path):
+    document = _Document(study, tmp_path)
+    intervals = {condition.condition_id: condition.attentional_blink.soa_ms
+                 for condition in study.conditions}
+    sources = [source.words for source in study.stimulus_sets]
+    assert document.apply_attentional_blink_stream_design(
+        *sources, intervals, t1_color="#FF0000", t2_color="#FFFFFF", base_hz=20,
+    )
+    assert document._project.conditions == study.conditions
+    assert document._project.task_modules == study.task_modules
+    assert document._project.stimulus_sets == study.stimulus_sets
+    assert document._project.settings.protocol.base_hz == 20
+    assert document._project.settings.protocol.oddball_every_n == 20
+
+
+@pytest.mark.parametrize("rate", [0, -1, float("nan"), float("inf"), 7.5, 40])
+def test_invalid_rate_edit_leaves_all_project_state_unchanged(study, rate):
+    study.settings.display.preferred_refresh_hz = 60
+    document = _Document(study, Path("unused"))
+    # 7.5 Hz keeps incompatible old SOAs; 40 Hz uses valid lags but fractional frames.
+    intervals = {
+        condition.condition_id: (lag * 1000 / rate if rate == 40
+                                 else condition.attentional_blink.soa_ms)
+        for condition, lag in zip(study.conditions, (1, 3, 5), strict=True)
+    }
+    with pytest.raises(ValueError):
+        document.apply_attentional_blink_stream_design(
+            ["2", "3"], ["A", "B"], ["C", "D"], intervals,
+            t1_color="#123456", t2_color="#FFFFFF", base_hz=rate,
+        )
+    assert document._project == study
+    assert document.replacements == 0
+
+
 @pytest.mark.parametrize("invalid", ["off_grid", "missing_condition", "same_targets", "bad_color"])
 def test_invalid_shared_edit_does_not_mutate_project(study, invalid):
     document = _Document(study, Path("unused"))
