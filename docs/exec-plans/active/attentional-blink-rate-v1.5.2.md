@@ -35,14 +35,19 @@ Build and publish v1.5.2 with a full installer, a direct v1.5.1 patch, and updat
   rate tests: 24 passed. Packaging focused: 168 passed. GUI non-Qt checks, docs
   hygiene and nine docs tests passed.
 - Repository precommit passed Ruff, compilation, mypy, repository audits, and all
-  1,353 non-Qt unit tests, with five Windows symlink permission skips. The process
-  used `PYTEST_ADDOPTS=--basetemp=build/ut152` to avoid known Windows temporary-path
-  limits without changing the harness. Evidence: `build/release-1.5.2/precommit.log`.
+  1,356 non-Qt unit tests, with five Windows symlink permission skips. The final process
+  used `PYTEST_ADDOPTS=--basetemp=build/u152b` to avoid known Windows temporary-path
+  limits without changing the harness. Evidence: `build/release-1.5.2/precommit-final.log`.
 - The v1.5.1 baseline matches published GitHub assets and all 8,030 owned files.
   Its exact inventory SHA-256 is
   `9961840684982e9c4ff1f1cce253a6a50250ed40777da77babf46b9e84f85073`.
 - Only FPVS Studio metadata changed in the build environment, from 1.5.1 to 1.5.2;
-  runtime dependencies were retained. Isolated release artifact build is running.
+  runtime dependencies were retained.
+- The initial candidate passed extracted patch/full equivalence, but remained a
+  draft. A final review found that the SOA error suggested too few digits for
+  non-terminating decimal intervals (7.5/12 Hz). The error now gives sufficient
+  precision; a regression reuses its actual suggested interval successfully.
+  All 66 core-stream tests passed. The unpublished candidate is being rebuilt.
 - Registered GUI coverage includes rate drafts, fractional SOA persistence, invalid
   input, extreme-rate preview behavior, and both-theme wizard geometry. Visible Qt
   tests and packaged GUI smoke remain unrun without approval for a safe visible

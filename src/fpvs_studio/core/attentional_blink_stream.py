@@ -163,7 +163,7 @@ def describe_attentional_blink_stream(
     lag = round(lag_value)
     if lag < 1 or not isclose(lag_value, lag, rel_tol=0, abs_tol=GRID_TOLERANCE):
         raise ValueError(
-            f"SOA must be a whole multiple of {1000.0 / base_hz:g} ms at {base_hz:g} Hz. "
+            f"SOA must be a whole multiple of {1000.0 / base_hz:.15g} ms at {base_hz:g} Hz. "
             "Targets cannot fall between character onsets."
         )
     if not isinstance(t2_slot_index, int) or not 1 <= t2_slot_index < cycle_slots - 1:

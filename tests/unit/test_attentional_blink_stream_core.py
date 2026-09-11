@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from itertools import islice
 
 import pytest
@@ -188,6 +189,25 @@ def test_custom_stream_rate_rejects_incompatible_soa_or_display_without_rounding
 def test_invalid_grid_or_missing_context_rejected(soa):
     with pytest.raises(ValueError):
         describe_attentional_blink_stream(soa_ms=soa)
+
+
+@pytest.mark.parametrize("rate", [10, 7.5, 12])
+def test_suggested_soa_interval_can_be_entered_as_an_exact_onset_lag(rate):
+    with pytest.raises(ValueError, match="whole multiple") as error:
+        describe_attentional_blink_stream(base_hz=rate, soa_ms=500 / rate)
+    match = re.search(r"whole multiple of ([\d.e+-]+) ms", str(error.value))
+    assert match is not None
+    suggested_interval = match.group(1)
+    if rate == 10:
+        assert suggested_interval == "100"
+    description = describe_attentional_blink_stream(
+        base_hz=rate, soa_ms=float(suggested_interval),
+    )
+    assert description.lag == 1
+    preview = preview_attentional_blink_stream(
+        refresh_hz=60, base_hz=rate, soa_ms=float(suggested_interval),
+    )
+    assert preview.achieved_soa_ms == pytest.approx(float(suggested_interval))
 
 
 @pytest.mark.parametrize("soa", [100, 300, 500])
