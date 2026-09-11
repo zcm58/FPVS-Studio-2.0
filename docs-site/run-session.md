@@ -30,8 +30,27 @@ The participant details prompt asks for:
 - Handedness
 
 Participant Number must use digits only, such as `0012`. If FPVS Studio finds a
-previous completed session for the same participant number, it warns you before
-continuing.
+previous session for that participant number, it checks whether the project allows
+repeat visits. Keep the same number, including any leading zeros, at each visit.
+
+## Returning Participants
+
+For a study in which participants return more than once:
+
+1. Open **Setup > Project**.
+2. Enable **Allow repeat participant sessions** and save the project.
+3. Launch the experiment with the participant's existing Participant Number.
+4. Review the proposed session number and choose **Start Session 2** (or the next
+   available number).
+
+FPVS Studio assigns Session 1 to a participant's first visit and a separate number
+to each later visit. These numeric labels distinguish visits without changing the
+participant ID. If repeat sessions are disabled, an already-used participant number
+is blocked until you correct the number or enable repeat sessions for the project.
+
+Earlier session data stays in place. Aborted or interrupted sessions keep their
+allocated number, so a later launch uses a new number. Canceling the repeat-session
+confirmation does not start a session.
 
 ## During Playback
 
@@ -52,10 +71,13 @@ run files.
 
 ## Outputs
 
-Detailed session and run outputs are saved inside the project folder under:
+With full run exports enabled, each session has its own folder inside the project.
+For participant `1`, the first two session folders are:
 
 ```text
 runs\
+  P1_session01\
+  P1_session02\
 ```
 
 Project-level history and summaries are saved under:
@@ -70,10 +92,16 @@ Useful summary files include:
 - `logs\participant_summary.xlsx`
 - `logs\participant_summary.csv`
 
+The participant summary CSV and Excel workbook include both **PID** and
+**Session Number**. Use the pair to identify a visit, for example PID `1`, Session
+Number `2`. The condition history CSV records these as `participant_number` and
+`participant_session_number` for new sessions. Compact export mode keeps the
+project-level logs and summaries without creating detailed session folders.
+
 You can also create a group-level workbook from the app with:
 
 ```text
-File > Export Group Summary...
+File > Export > Group Summary...
 ```
 
 Keep the whole project folder, including `runs\` and `logs\`, when archiving or

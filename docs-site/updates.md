@@ -31,6 +31,16 @@ Run the new installer over the existing installation. Your projects, templates,
 run history, and logs are stored outside the install folder and should remain in
 place.
 
+## Projects With Repeat Participant Sessions
+
+Repeat participant sessions are available in FPVS Studio **1.5.3 and later**.
+Update every computer that opens a project before enabling this setting; older
+builds do not recognize it. Existing projects keep repeat sessions disabled until
+you enable **Setup > Project > Allow repeat participant sessions** and save.
+
+See [Returning Participants](run-session.md#returning-participants) for the launch
+confirmation, separate session folders, and numbered CSV/Excel summaries.
+
 ## If the Check Fails
 
 If the in-app check cannot reach GitHub, try again later or open the releases
