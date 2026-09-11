@@ -13,7 +13,6 @@ Use this page to find planning material before making feature-sized changes.
 
 Current implementation:
 
-- `exec-plans/active/attentional-blink-rate-v1.5.2.md`
 - `exec-plans/active/bounded-updater-storage-and-clean-upgrades.md`
 
 Concrete planned work:
@@ -35,6 +34,8 @@ luminance/RMS algorithm investigation instead of duplicating its scientific deci
 
 Completed plans are historical implementation notes. Read their directory only when
 the current contracts do not explain why a landed decision exists.
+
+Recent completion: [Editable Attentional Blink rate and v1.5.2](exec-plans/completed/attentional-blink-rate-v1.5.2.md).
 
 Recent completion: [Patch updates and v1.5.1](exec-plans/completed/patch-updates-v1.5.1.md).
 

@@ -1,6 +1,6 @@
 # Editable Attentional Blink Rate And v1.5.2
 
-Status: Active
+Status: Completed
 
 ## Outcome
 
@@ -43,12 +43,36 @@ Build and publish v1.5.2 with a full installer, a direct v1.5.1 patch, and updat
   `9961840684982e9c4ff1f1cce253a6a50250ed40777da77babf46b9e84f85073`.
 - Only FPVS Studio metadata changed in the build environment, from 1.5.1 to 1.5.2;
   runtime dependencies were retained.
-- The initial candidate passed extracted patch/full equivalence, but remained a
-  draft. A final review found that the SOA error suggested too few digits for
-  non-terminating decimal intervals (7.5/12 Hz). The error now gives sufficient
-  precision; a regression reuses its actual suggested interval successfully.
-  All 66 core-stream tests passed. The unpublished candidate is being rebuilt.
+- SOA validation messages give sufficient precision for non-terminating decimal
+  intervals (7.5/12 Hz); a regression reuses the actual suggested interval
+  successfully. All 66 core-stream tests passed.
+- Final installers were rebuilt from source commit
+  `97f3c57a551d3f6234496edae341a9ed569c73e9`. All four changed modules embedded in
+  the executable match their source code, and all 8,030 extracted full-installer
+  files match the final bundle. The sparse patch has 11 changed/added files and
+  eight removals, retaining 8,019 files and reconstructing the exact full target.
+  Evidence: `build/release-1.5.2/embedded-module-verification.json` and
+  `build/release-1.5.2-artifact-verification/verify-5q_plpfm/report.json`.
+- Published [v1.5.2](https://github.com/zcm58/FPVS-Studio-2.0/releases/tag/v1.5.2)
+  as the latest stable release. The public tag points to the verified source commit;
+  all three GitHub asset sizes and SHA-256 digests match the final local artifacts.
+  Release notes: "Added editable presentation rates for Attentional Blink experiments."
+  Evidence: `build/release-1.5.2/published-release.json`.
+- Public updater verification passed using production metadata, manifest validation,
+  and baseline file hashing. The authenticated v1.5.1 installation selects the patch;
+  v1.5.0 and unregistered/source installations select the full installer; v1.5.2
+  reports no newer update. Only installation discovery used the extracted baseline
+  fixture. No application or installer was launched.
+  Evidence: `build/release-1.5.2-artifact-verification/live-ykd3zvgu/live-update-verification.json`.
 - Registered GUI coverage includes rate drafts, fractional SOA persistence, invalid
   input, extreme-rate preview behavior, and both-theme wizard geometry. Visible Qt
   tests and packaged GUI smoke remain unrun without approval for a safe visible
   session; manual acceptance steps are in `docs/GUI_WORKFLOW.md`.
+
+## Published Artifacts
+
+| Asset | Bytes | SHA-256 |
+| --- | ---: | --- |
+| `FPVS-Studio-Setup-1.5.2.exe` | 259,071,415 | `795ca89b6a73dc21b2bb0b96a6b100727f903ce2d371045792579c680854b10a` |
+| `FPVS-Studio-Patch-1.5.1-to-1.5.2.exe` | 27,614,361 | `2383a3c7867cc28449134d4024effaf2ae17448756c1c4138e73a3ece564ac35` |
+| `FPVS-Studio-Update-1.5.2.json` | 435 | `e083f2531be0079283700ba9c7b64cc939f0d55886b638f0d47caed455f72d90` |
