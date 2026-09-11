@@ -1,6 +1,6 @@
 # Patch Updates And v1.5.1
 
-Status: Active
+Status: Completed
 
 ## Authorized Outcome
 
@@ -44,8 +44,10 @@ The release note is exactly:
 ## Progress
 
 - Test-mode source-only restriction removed; focused GUI/docs and mypy passed.
-- Earlier repo precommit reported seven bundle-path failures, 1,237 passes and five
-  Windows symlink skips. Reassess separately from patch updater regressions.
+- Final repo precommit passed Ruff, compilation, mypy, and repository audits, then
+  reported seven existing Windows temporary-path failures in bundle tests, 1,313
+  passes, and five symlink permission skips. The short-path run below passes all
+  seven affected tests; no unrelated project-bundle behavior was changed.
 - Published v1.5.0 installer authenticated against GitHub asset digest; all 8,030
   retained bundle files and exact manifest bytes match its extracted payload.
 - Updater backend: 226 non-Qt tests passed, four existing Windows symlink skips.
@@ -55,7 +57,30 @@ The release note is exactly:
   Evidence: `build/patch-installer-lifecycle/native-3qoui7w1/report.json`.
 - Full non-Qt suite with short `--basetemp=build/ut151`: 1,320 passed, five symlink
   permission skips. This avoids the default harness's Windows temporary-path limit.
-- v1.5.1 executable and installer artifact verification is in progress. Visible Qt
-  approval is pending. Per the repository default, unapproved Qt checks remain skipped
-  and will be reported; the user has explicitly authorized publication. Artifact integrity
-  and native installer acceptance remain required before publication.
+- All 13 changed GUI/updater modules embedded in the executable match the final
+  source. Only the FPVS Studio package version changed in the retained build
+  environment; runtime dependency versions were preserved.
+- Extracted final installers verified without execution: the full installer matches
+  all 8,030 target files. The patch replaces/adds 12 files, removes eight obsolete
+  owned files, and retains 8,018 files to reproduce the identical target bundle.
+  Evidence: `build/release-1.5.1-artifact-verification/verify-7obgck74/report.json`.
+- Published [v1.5.1](https://github.com/zcm58/FPVS-Studio-2.0/releases/tag/v1.5.1)
+  on 2026-09-11 from `5ae59b4bb4e9b8ddcb96b1643497be74dd92ff49`. Public latest
+  release, tag target, exact release note, and all three GitHub asset sizes/digests
+  verified. The full installer is 259,056,966 bytes; the direct patch is 27,615,178
+  bytes. The update manifest is 435 bytes.
+- Production updater functions read the public release and authenticated JSON,
+  verified all 8,030 extracted v1.5.0 baseline files, and selected the direct patch.
+  The existing full-only selection chose the full installer. Only runtime-root
+  detection was redirected to the extracted baseline; no installation was changed.
+  Evidence: `build/release-1.5.1/public-updater-verification.json`.
+- Visible Qt tests and the packaged GUI smoke were not run because approval for a
+  safe visible session was not received. Registered coverage and manual acceptance
+  steps are present, but visible layout and packaged interaction remain unverified.
+  No production installer or experiment was executed during release preparation.
+
+## Published Artifact SHA-256
+
+- Full installer: `abac838eb7c8d8dc52fbd626a10a04654382c484690b44da3333277150d1386b`
+- Direct patch: `cd45069685588a15e91dc30537c4069e701128702ed72e20d3a84468562ca2ea`
+- Update manifest: `fbd663a3f543408a5291d5452ad7117e5028913b8881cc310ef14bf5810f152a`
