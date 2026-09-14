@@ -2,6 +2,27 @@
 
 Status: Active
 
+## Installed Updater Repair (2026-09-11)
+
+- The user reported the packaged updater showing `Current version: None` and
+  `expected string or bytes-like object`; source execution worked. The installed
+  copy still has complete 1.4.0 metadata alongside an empty historical
+  `fpvs_studio-1.3.0.dist-info/licenses` directory. Read-only reproduction with the
+  legacy metadata lookup returned `None` and raised the exact reported TypeError.
+- With the app closed, verified the historical directory contained only the empty
+  `licenses` directory and that the repair paths contained no reparse points.
+  Reversibly renamed `_internal/fpvs_studio-1.3.0.dist-info` to
+  `fpvs_studio-1.3.0.dist-info.disabled` in the user's installation. No files were
+  deleted or application binaries changed. The legacy lookup now returns `1.4.0`.
+- The current backend, using that installed version, successfully checked live
+  GitHub metadata and selected `FPVS-Studio-Setup-1.5.2.exe`. Updater focused checks
+  passed (226 tests, four Windows symlink-permission skips); packaging focused
+  checks passed (168 tests), including the existing frozen-version regression.
+  The source resolver already contains the 1.4.1 correction; no source fix was needed.
+- Reopening the packaged app and using File > Check for Updates remains the visible
+  confirmation step. No Qt app, installer, or uninstaller was executed. This repair
+  does not complete the outstanding installer lifecycle acceptance checks.
+
 ## Installed Version Regression (2026-09-05)
 
 - The user installed the 1.4.0 candidate and reported `FPVS Studio version None`.

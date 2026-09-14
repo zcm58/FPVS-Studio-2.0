@@ -17,7 +17,7 @@ lazily only inside the engine package.
 - `src/fpvs_studio/support/`: GUI-neutral bug-report and feature-request contracts, queued
   application diagnostics, bounded OS-local drafts, and an opt-in HTTPS client.
   The native File > Report a Bug dialog uses app-owned background jobs; online
-  submission is disabled until the service is explicitly configured.
+  submission defaults to the verified production endpoint and requires explicit user action.
   The independent Cloudflare backend is in private `zcm58/FPVS-Studio-Feedback`.
   See `docs/BUG_REPORTING.md` for the wire contract and activation.
 - `src/fpvs_studio/assets/`: packaged release-facing static assets, including the
