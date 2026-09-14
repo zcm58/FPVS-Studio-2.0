@@ -26,6 +26,11 @@ email into different invocations. The minute schedule rotates four background ph
 The desktop HTTP client now identifies FPVS Studio explicitly, avoiding Cloudflare's
 rejection of Python's generic user-agent. Support checks passed (30 tests, one
 permission skip); repo precommit passed (1,440 tests, seven permission skips).
+Service source and these desktop changes are committed and pushed. As of 14:09 UTC,
+manual delivery and revised CPU tests pass, but Cloudflare's automatic schedule has
+not executed despite reapplying it and waiting through the propagation window.
+Production intake/delivery and local desktop activation remain disabled. The
+separate service deployment record owns this remaining rollout blocker.
 The earlier desktop-only deferral below records the original implementation stage;
 it does not override this later authorization. Visible desktop geometry and a
 packaged release remain separate acceptance work, so this plan remains active.
