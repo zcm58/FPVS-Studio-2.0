@@ -8,7 +8,8 @@ import types
 from fpvs_studio.app.main import main
 
 
-def test_main_lazily_delegates_to_gui_runner(monkeypatch) -> None:
+def test_main_lazily_delegates_to_gui_runner(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr("fpvs_studio.support.diagnostics.support_directory", lambda: tmp_path)
     captures: dict[str, object] = {}
     fake_module = types.ModuleType("fpvs_studio.gui.application")
 

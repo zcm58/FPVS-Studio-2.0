@@ -5,6 +5,7 @@ orchestration remain in backend services beneath this handoff."""
 
 from __future__ import annotations
 
+import logging
 import sys
 from collections.abc import Sequence
 
@@ -18,9 +19,19 @@ def main(argv: Sequence[str] | None = None) -> int:
 
         return run_packaged_smoke(args)
 
-    from fpvs_studio.gui.application import run_gui_app
+    from fpvs_studio.support.diagnostics import start_diagnostic_logging
 
-    return run_gui_app(args if argv is not None else None)
+    diagnostic_logging = start_diagnostic_logging()
+    try:
+        from fpvs_studio.gui.application import run_gui_app
+
+        return run_gui_app(args if argv is not None else None)
+    except Exception:
+        logging.getLogger(__name__).exception("Application stopped unexpectedly")
+        raise
+    finally:
+        if diagnostic_logging is not None:
+            diagnostic_logging.close()
 
 
 if __name__ == "__main__":

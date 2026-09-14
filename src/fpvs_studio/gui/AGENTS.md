@@ -47,6 +47,10 @@ backend-driven.
 - Keep runtime launch messaging honest about fullscreen display verification and
   timing-QC behavior.
 - Surface user-facing errors clearly, but keep the application recoverable.
+- File > Report a Bug and Request a Feature use the app-owned coordinator and GUI-neutral
+  support package. Keep service activation outside project settings. Report draft
+  persistence may use `finish_on_shutdown` jobs; network operations must remain
+  cancelable. See `docs/BUG_REPORTING.md` for the offline workflow and API contract.
 - Route updater work through the application-owned `update_lifecycle.py` coordinator.
   Keep offline startup cache housekeeping independent of root-folder setup and metadata
   checks. Dialog close/app quit must cancel or defer teardown until worker threads really

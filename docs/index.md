@@ -19,6 +19,7 @@ public quickstart site lives in `../docs-site/` and is built with MkDocs.
   `exec-plans/plan-review-workflow.md`
 - Quality, reliability, and security: `QUALITY_SCORE.md`, `RELIABILITY.md`, and
   `SECURITY.md`
+- Desktop bug reports and future service connection: `BUG_REPORTING.md`
 
 ## Runtime Contracts
 

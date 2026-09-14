@@ -81,6 +81,18 @@ Use updates/packaging focused routes, then repo precommit. Native lifecycle acce
 uses `scripts/check_patch_installer_lifecycle.py` with isolated synthetic app identities.
 Exact release steps and recovery limits live in `docs/PACKAGING.md#direct-patch-releases`.
 
+## Bug Reporting
+
+For File > Report a Bug or Request a Feature, begin with `support/AGENTS.md`, `docs/BUG_REPORTING.md`,
+`gui/report_bug_dialog.py`, and `gui/bug_report_controller.py`. Support owns the
+reviewed payload and OS-local drafts; the GUI owns interactions and delegates
+work through the existing app-owned task lifecycle. Online reporting is opt-in
+and requires the separate Cloudflare service; never enable it as part of a test.
+Run the GUI scope, `tests/unit/test_support_reports.py` and
+`tests/unit/test_support_client.py`, then repo precommit for startup/lifecycle
+changes. Registered Qt coverage is `tests/gui/test_report_bug_dialog.py`.
+Visible acceptance and later service setup are in `docs/BUG_REPORTING.md`.
+
 ## Settings Test Mode
 
 Experiment Test Mode is available in source and installed Windows/Linux builds through

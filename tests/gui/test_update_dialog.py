@@ -75,6 +75,8 @@ def test_main_window_file_menu_groups_actions(
         "Settings...",
         "---",
         "Check for Updates",
+        "Report a Bug...",
+        "Request a Feature...",
         "About",
     ]
     assert [action.text() for action in window.import_menu.actions()] == [
@@ -499,6 +501,23 @@ def _downloaded_fixture(tmp_path: Path) -> DownloadedInstaller:
         sha256=asset.sha256,
         asset=asset,
     )
+
+
+def test_shutdown_flushes_bounded_local_persistence(qtbot, deferred_updates) -> None:
+    lifecycle, jobs, quit_calls = deferred_updates
+    writes = []
+    lifecycle.shutdown_started.connect(lambda: lifecycle.start_task(
+        lambda _progress, _cancel: writes.append("saved"), finish_on_shutdown=True,
+    ))
+    lifecycle._about_to_quit()  # Includes direct exit with no earlier jobs.
+    assert lifecycle.has_active_jobs
+    assert not jobs[0].cancel_event.is_set()
+    qtbot.waitUntil(lambda: jobs[0].is_running)
+    jobs[0].run_callback()
+    assert writes == ["saved"]
+    assert quit_calls == []
+    jobs[0].finish()
+    qtbot.waitUntil(lambda: quit_calls == ["quit"])
 
 
 @pytest.mark.parametrize("metadata", ["missing-asset", "missing-digest", "invalid-digest"])

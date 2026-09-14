@@ -49,6 +49,10 @@ def test_backend_imports_do_not_pull_in_optional_gui_or_engine_dependencies() ->
     importlib.import_module("fpvs_studio.runtime.fixation")
     importlib.import_module("fpvs_studio.runtime.preflight")
     importlib.import_module("fpvs_studio.preprocessing.importer")
+    importlib.import_module("fpvs_studio.support.models")
+    importlib.import_module("fpvs_studio.support.storage")
+    importlib.import_module("fpvs_studio.support.diagnostics")
+    importlib.import_module("fpvs_studio.support.client")
 
     assert all(
         module_name != "psychopy"

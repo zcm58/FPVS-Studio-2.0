@@ -521,6 +521,12 @@ class StudioMainWindow(QMainWindow):
         self.check_updates_action = QAction("Check for Updates", self)
         self.check_updates_action.setObjectName("check_updates_action")
         self.check_updates_action.triggered.connect(self.show_update_dialog)
+        self.report_bug_action = QAction("Report a Bug...", self)
+        self.report_bug_action.setObjectName("report_bug_action")
+        self.report_bug_action.triggered.connect(self.show_bug_report)
+        self.request_feature_action = QAction("Request a Feature...", self)
+        self.request_feature_action.setObjectName("request_feature_action")
+        self.request_feature_action.triggered.connect(self._show_feature_request)
         self.tutorials_action = QAction("Tutorials", self)
         self.tutorials_action.setObjectName("tutorials_action")
         self.tutorials_action.triggered.connect(self.open_tutorials)
@@ -566,6 +572,8 @@ class StudioMainWindow(QMainWindow):
         self.file_menu.addAction(self.settings_action)
         self.file_menu.addSeparator()
         self.file_menu.addAction(self.check_updates_action)
+        self.file_menu.addAction(self.report_bug_action)
+        self.file_menu.addAction(self.request_feature_action)
         self.file_menu.addAction(self.tutorials_action)
         self.file_menu.addAction(self.about_action)
         self.view_menu.addAction(self.fixation_cross_data_action)
@@ -613,6 +621,16 @@ class StudioMainWindow(QMainWindow):
     def show_update_dialog(self) -> None:
         dialog = UpdateDialog(parent=self, on_before_install=self.maybe_save_changes)
         dialog.exec()
+
+    def _show_feature_request(self) -> None:
+        from fpvs_studio.gui.bug_report_controller import show_feature_request
+
+        show_feature_request()
+
+    def show_bug_report(self) -> None:
+        from fpvs_studio.gui.bug_report_controller import show_bug_report
+
+        show_bug_report()
 
     def open_tutorials(self) -> None:
         QDesktopServices.openUrl(QUrl(_TUTORIALS_URL))

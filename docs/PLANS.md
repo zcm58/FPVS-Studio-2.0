@@ -13,6 +13,7 @@ Use this page to find planning material before making feature-sized changes.
 
 Current implementation:
 
+- [Cloudflare bug reporting: desktop implementation](exec-plans/active/cloudflare-bug-reporting.md)
 - `exec-plans/active/bounded-updater-storage-and-clean-upgrades.md`
 
 Concrete planned work:

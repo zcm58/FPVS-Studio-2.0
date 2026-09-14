@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import traceback
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -73,6 +74,9 @@ def _show_error_dialog(parent: QWidget | None, title: str, error: Exception) -> 
     dialog.setDetailedText(
         "".join(traceback.format_exception(type(error), error, error.__traceback__))
     )
+    if not isinstance(error, (ValueError, FileNotFoundError)):
+        logging.getLogger(__name__).error("%s", title,
+                                         exc_info=(type(error), error, error.__traceback__))
     dialog.exec()
 
 

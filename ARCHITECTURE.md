@@ -14,6 +14,11 @@ lazily only inside the engine package.
 ## Package Map
 
 - `src/fpvs_studio/app/`: thin application entry points and startup wiring.
+- `src/fpvs_studio/support/`: GUI-neutral bug-report and feature-request contracts, queued
+  application diagnostics, bounded OS-local drafts, and an opt-in HTTPS client.
+  The native File > Report a Bug dialog uses app-owned background jobs; online
+  submission is disabled until the service is explicitly configured.
+  See `docs/BUG_REPORTING.md` for the wire contract and separate Cloudflare setup.
 - `src/fpvs_studio/assets/`: packaged release-facing static assets, including the
   licensed Open Sans face used by authored modular tasks.
 - `src/fpvs_studio/gui/`: PySide6 windows, dialogs, controllers, document binding,

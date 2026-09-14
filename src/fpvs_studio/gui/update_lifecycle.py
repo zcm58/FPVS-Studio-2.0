@@ -85,6 +85,7 @@ class UpdateJob(QObject):
         self.callback = callback
         self.cancel_event = Event()
         self.keep_success_on_cancel = keep_success_on_cancel
+        self.finish_on_shutdown = False
         self._outcome = _WorkerOutcome()
         self._thread: QThread | None = None
         self._worker: _UpdateWorker | None = None
@@ -180,8 +181,10 @@ class UpdateLifecycle(QObject):
         *,
         keep_success_on_cancel: bool = False,
         on_committed_success: Callable[[], None] | None = None,
+        finish_on_shutdown: bool = False,
     ) -> UpdateJob:
-        if self._shutdown_requested:
+        # Reserved for bounded local persistence, never network/update work.
+        if self._shutdown_requested and not finish_on_shutdown:
             raise RuntimeError("FPVS Studio is closing; no updater work can be started.")
         self._hold_application_open()
         job = UpdateJob(
@@ -190,6 +193,7 @@ class UpdateLifecycle(QObject):
             keep_success_on_cancel=keep_success_on_cancel,
         )
         self._jobs.add(job)
+        job.finish_on_shutdown = finish_on_shutdown
         if on_committed_success is not None:
             self._committed_callbacks[job] = on_committed_success
         job.finished.connect(self._job_finished)
@@ -225,7 +229,8 @@ class UpdateLifecycle(QObject):
             self._shutdown_requested = True
             self.shutdown_started.emit()
         for job in tuple(self._jobs):
-            job.cancel()
+            if not job.finish_on_shutdown:
+                job.cancel()
         if not self._jobs:
             self._schedule_quit()
 
@@ -271,8 +276,7 @@ class UpdateLifecycle(QObject):
     def _about_to_quit(self) -> None:
         # QApplication.exit() can bypass the Quit event filter. run_gui_app keeps an
         # event loop available in that case until these jobs have really finished.
-        if self._jobs:
-            self.request_shutdown()
+        self.request_shutdown()
 
     def _schedule_quit(self) -> None:
         if not self._quit_scheduled:
