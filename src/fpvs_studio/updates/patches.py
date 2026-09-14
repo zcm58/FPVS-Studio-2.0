@@ -6,7 +6,6 @@ import hashlib
 import json
 import logging
 import os
-import platform
 import re
 import sys
 import time
@@ -62,18 +61,55 @@ _PROTECTED = {
 }
 
 
-def installed_patch_root() -> Path | None:
-    """Only a running frozen Windows x64 application can identify a patch baseline."""
-
-    if (
-        sys.platform != "win32"
-        or not getattr(sys, "frozen", False)
-        or platform.machine().lower() not in {"amd64", "x86_64"}
-        or sys.maxsize <= 2**32
-    ):
+def _windows_process_executable() -> Path | None:
+    """Read the executable and effective architecture from Windows, not Python hints."""
+    if sys.platform != "win32":
+        _LOG.info("Patch unavailable: process is not running on Windows")
         return None
-    executable = Path(sys.executable)
+    import ctypes
+    from ctypes import wintypes
+
+    try:
+        kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel.GetCurrentProcess.argtypes = []
+        kernel.GetCurrentProcess.restype = wintypes.HANDLE
+        kernel.IsWow64Process2.argtypes = [
+            wintypes.HANDLE,
+            ctypes.POINTER(wintypes.USHORT),
+            ctypes.POINTER(wintypes.USHORT),
+        ]
+        kernel.IsWow64Process2.restype = wintypes.BOOL
+        kernel.GetModuleFileNameW.argtypes = [wintypes.HMODULE, wintypes.LPWSTR, wintypes.DWORD]
+        kernel.GetModuleFileNameW.restype = wintypes.DWORD
+        process_machine, native_machine = wintypes.USHORT(), wintypes.USHORT()
+        if not kernel.IsWow64Process2(
+            kernel.GetCurrentProcess(), ctypes.byref(process_machine), ctypes.byref(native_machine)
+        ):
+            _LOG.warning("Patch process architecture lookup failed: %s", ctypes.get_last_error())
+            return None
+        # UNKNOWN means native execution. x64 emulation on ARM64 is also an
+        # x64-compatible process; native ARM64 and 32-bit Python are not.
+        if (process_machine.value or native_machine.value) != 0x8664:
+            _LOG.info("Patch unavailable: process architecture is not x64")
+            return None
+        buffer = ctypes.create_unicode_buffer(32768)
+        length = kernel.GetModuleFileNameW(None, buffer, len(buffer))
+        if not 0 < length < len(buffer):
+            _LOG.warning("Patch process executable lookup failed or returned a truncated path")
+            return None
+        return Path(buffer.value)
+    except (AttributeError, OSError):
+        _LOG.warning("Patch process identity API unavailable", exc_info=True)
+        return None
+
+
+def installed_patch_root() -> Path | None:
+    """Require the actual x64 executable to match the registered installation."""
+    executable = _windows_process_executable()
+    if executable is None:
+        return None
     if executable.name.casefold() != "fpvs studio.exe":
+        _LOG.info("Patch unavailable: process is not the installed FPVS Studio executable")
         return None
     # A portable copy can contain valid inventory bytes, but Inno must update the
     # same per-user registered installation. Match its explicit 64-bit view.
@@ -89,15 +125,25 @@ def installed_patch_root() -> Path | None:
             location, location_type = winreg.QueryValueEx(registration, "InstallLocation")
             version, version_type = winreg.QueryValueEx(registration, "DisplayVersion")
     except OSError:
+        _LOG.info("Patch unavailable: per-user installation registration could not be read")
         return None
     if (
         location_type != winreg.REG_SZ
         or version_type != winreg.REG_SZ
         or not isinstance(location, str)
         or not isinstance(version, str)
-        or Path(location) != executable.parent
-        or version != __version__
     ):
+        _LOG.info("Patch unavailable: installation registration has invalid value types")
+        return None
+    if Path(location) != executable.parent:
+        _LOG.info("Patch unavailable: executable directory differs from installation registration")
+        return None
+    if version != __version__:
+        _LOG.info(
+            "Patch unavailable: registered version %r differs from running version %r",
+            version,
+            __version__,
+        )
         return None
     return executable.parent
 

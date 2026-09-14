@@ -37,7 +37,7 @@ The PyInstaller spec includes package metadata in the bundled app.
 The package distribution name is `fpvs-studio`; the GUI and executable still use the
 display name `FPVS Studio`.
 
-For the current release package, use the PEP 440-compatible package version `1.6.0`.
+For the current release package, use the PEP 440-compatible package version `1.6.1`.
 The GitHub Release title can use a friendlier beta label, but the release tag and
 installer filename must use the exact package version.
 
@@ -192,7 +192,7 @@ Then build the setup EXE:
 Expected output for the current package:
 
 ```text
-dist\installer\FPVS-Studio-Setup-1.6.0.exe
+dist\installer\FPVS-Studio-Setup-1.6.1.exe
 ```
 
 The installer build validates that the PyInstaller bundle has an `_internal` folder and
@@ -344,7 +344,11 @@ fetches the bounded JSON through the same trusted GitHub/CDN boundary and verifi
 GitHub digest before using it. Invalid or tampered metadata is an error, not an implicit
 permission to run a different file.
 
-Only frozen Windows x64 installations can select a patch. The app verifies the exact
+Only registered Windows x64 installations can select a patch. Windows supplies the
+running executable path and effective process architecture; the executable must be
+`FPVS Studio.exe` in the exact per-user registered directory with the running version.
+Source Python processes are ineligible. Eligibility failures are recorded in the app log.
+The app verifies the exact
 installed ownership-manifest bytes and hashes every baseline application file using
 no-follow handles. It chooses a direct patch only when smaller than the full installer.
 A missing, modified, or incompatible baseline selects the full installer with an explicit

@@ -2,6 +2,30 @@
 
 Status: Active
 
+## Patch Eligibility Investigation (2026-09-14)
+
+- The user reports that the installed 1.5.3 updater selects the full 1.6.0 installer
+  with the unregistered/unsupported reason, including after restarting the app.
+  Read-only checks confirm the visible updater belongs to the installed executable,
+  its published binary hash matches, the per-user registration is correct, and all
+  installed baseline files match the authenticated 1.5.3-to-1.6.0 patch inventory.
+- Separate frozen diagnostics, including a worker-thread probe after GUI imports,
+  pass the original eligibility guard. The exact failing condition inside the user's
+  original running updater has not been reproduced; do not claim a proven root cause.
+- Source now obtains executable identity and effective x64 architecture from Windows
+  APIs instead of mutable Python hints. Exact registration and full baseline hashing
+  remain mandatory. Logs distinguish API, executable, registration, and version failures.
+  Regression coverage checks native/emulated architecture, failed/truncated API results,
+  source-process exclusion, and registration mismatches.
+- Updater focused verification passes (238 tests, four Windows symlink-permission
+  skips); repo precommit passes (1,452 tests, seven symlink-permission skips), including
+  Ruff, compilation, mypy, and repository/documentation audits.
+  Existing download/install/restart behavior is shared by patches and full
+  installers. The original installed 1.5.3 executable and published 1.6.0 release are
+  unchanged; source changes cannot be loaded by its Check Again button. A rebuilt
+  candidate and installed end-to-end acceptance remain necessary before claiming this
+  user's failure resolved.
+
 ## Installed Updater Repair (2026-09-11)
 
 - The user reported the packaged updater showing `Current version: None` and

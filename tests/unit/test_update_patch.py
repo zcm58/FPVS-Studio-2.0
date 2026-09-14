@@ -556,39 +556,103 @@ def test_patch_requires_exact_registered_windows_install(tmp_path, monkeypatch, 
             executable=str(tmp_path / "FPVS Studio.exe"),
         ),
     )
-    monkeypatch.setattr(patches, "platform", SimpleNamespace(machine=lambda: "AMD64"))
+    monkeypatch.setattr(
+        patches, "_windows_process_executable", lambda: tmp_path / "FPVS Studio.exe"
+    )
     monkeypatch.setattr(patches, "__version__", BASE)
     assert patches.installed_patch_root() == (tmp_path if change is None else None)
     assert calls == [(1, patches._UNINSTALL_KEY, 0, 6)]
 
 
-@pytest.mark.parametrize(
-    "platform_name,machine,frozen",
-    [
-        ("linux", "x86_64", True),
-        ("win32", "ARM64", True),
-        ("win32", "AMD64", False),
-    ],
-)
-def test_unsupported_platform_never_reads_install_registration(
-    tmp_path, monkeypatch, platform_name, machine, frozen
-):
+@pytest.mark.parametrize("executable", [None, "python.exe", "pythonw.exe", "renamed.exe"])
+def test_unsupported_process_never_reads_install_registration(tmp_path, monkeypatch, executable):
     monkeypatch.setattr(
         patches,
-        "sys",
-        SimpleNamespace(
-            platform=platform_name,
-            frozen=frozen,
-            maxsize=2**63,
-            executable=str(tmp_path / "FPVS Studio.exe"),
-        ),
+        "_windows_process_executable",
+        lambda: tmp_path / executable if executable else None,
     )
-    monkeypatch.setattr(patches, "platform", SimpleNamespace(machine=lambda: machine))
     monkeypatch.setitem(
         sys.modules,
         "winreg",
         SimpleNamespace(
-            OpenKey=lambda *_a: pytest.fail("unsupported build must not read registry"),
+            OpenKey=lambda *_a: pytest.fail("unsupported process must not read registry"),
         ),
     )
     assert patches.installed_patch_root() is None
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows process identity")
+def test_native_process_identity_ignores_mutable_python_hints(monkeypatch):
+    expected = patches._windows_process_executable()
+    assert expected is not None
+    monkeypatch.setattr(
+        patches,
+        "sys",
+        SimpleNamespace(platform="win32", executable="wrong.exe", frozen=False, maxsize=1),
+    )
+    assert patches._windows_process_executable() == expected
+    assert (
+        patches.installed_patch_root() is None
+    )  # This test runs in Python, not the installed app.
+
+
+@pytest.mark.parametrize(
+    "process_machine,native_machine,architecture_ok,path_result,eligible",
+    [
+        (0, 0x8664, True, "normal", True),
+        (0x8664, 0xAA64, True, "normal", True),
+        (0, 0xAA64, True, "normal", False),
+        (0x014C, 0x8664, True, "normal", False),
+        (0, 0x014C, True, "normal", False),
+        (0, 0x8664, False, "normal", False),
+        (0, 0x8664, True, "empty", False),
+        (0, 0x8664, True, "truncated", False),
+    ],
+)
+def test_native_process_identity_api_results(
+    monkeypatch, tmp_path, process_machine, native_machine, architecture_ok, path_result, eligible
+):
+    import ctypes
+    from ctypes import wintypes
+
+    executable = tmp_path / "FPVS Studio.exe"
+
+    def architecture(_handle, process, native):
+        ctypes.cast(process, ctypes.POINTER(wintypes.USHORT))[0] = process_machine
+        ctypes.cast(native, ctypes.POINTER(wintypes.USHORT))[0] = native_machine
+        return architecture_ok
+
+    def filename(_module, buffer, capacity):
+        buffer.value = str(executable)
+        return {"normal": len(str(executable)), "empty": 0, "truncated": capacity}[path_result]
+
+    kernel = SimpleNamespace(
+        GetCurrentProcess=lambda: 123,
+        IsWow64Process2=architecture,
+        GetModuleFileNameW=filename,
+    )
+    monkeypatch.setattr(ctypes, "WinDLL", lambda *_a, **_kw: kernel, raising=False)
+    monkeypatch.setattr(ctypes, "get_last_error", lambda: 5, raising=False)
+    monkeypatch.setattr(patches, "sys", SimpleNamespace(platform="win32"))
+    assert patches._windows_process_executable() == (executable if eligible else None)
+
+
+def test_native_process_identity_unavailable_api(monkeypatch):
+    import ctypes
+
+    monkeypatch.setattr(ctypes, "WinDLL", lambda *_a, **_kw: SimpleNamespace(), raising=False)
+    monkeypatch.setattr(patches, "sys", SimpleNamespace(platform="win32"))
+    assert patches._windows_process_executable() is None
+
+
+def test_native_process_identity_skips_windows_api_on_other_platforms(monkeypatch):
+    import ctypes
+
+    monkeypatch.setattr(
+        ctypes,
+        "WinDLL",
+        lambda *_a, **_kw: pytest.fail("Windows API on non-Windows"),
+        raising=False,
+    )
+    monkeypatch.setattr(patches, "sys", SimpleNamespace(platform="linux"))
+    assert patches._windows_process_executable() is None
