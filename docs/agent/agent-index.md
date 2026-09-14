@@ -27,7 +27,7 @@ cross-layer behavior require it.
 | `runtime` | Launch, preflight, modular-task sequencing, session flow, participant history, scoring, or exports | `src/fpvs_studio/runtime/AGENTS.md` and `docs/RUNTIME_EXECUTION.md` |
 | `engine` | Presentation interface, PsychoPy rendering, modular task screens, frame timing, or display screens | `src/fpvs_studio/engines/AGENTS.md`, `docs/ENGINE_INTERFACE.md`, and `docs/RUNSPEC.md` |
 | `triggers` | Trigger contracts, serial hardware adapters, marker writes, or trigger logs | `src/fpvs_studio/triggers/AGENTS.md` and the trigger sections of `docs/RUNTIME_EXECUTION.md` |
-| `updates` | Release checks, direct patch selection, bounded cache/locking, verified downloads/launch, or update GUI shutdown coordination | `src/fpvs_studio/updates/AGENTS.md` and `docs/PACKAGING.md` |
+| `updates` | Independent updater protocol/staging, release and repair selection, bounded cache/locking, verified downloads/launch, or update GUI shutdown coordination | `src/fpvs_studio/updates/AGENTS.md` and `docs/PACKAGING.md` |
 | `packaging` | Versioning, PyInstaller, Inno Setup, sparse patches, owned-file upgrade reconciliation, branding, isolated beta/executable builds, or packaged smoke | `packaging/AGENTS.md`, `docs/PACKAGING.md`, and `pyproject.toml` |
 
 Run a route with:
@@ -72,14 +72,29 @@ workflow is separate.
 Read a selected skill completely before acting. A passing skill audit is sufficient
 evidence for its invariant unless the task changes that audit or boundary.
 
-## Patch Updates
+## Independent Updater And Patches
 
-Start with `updates/patches.py` for authenticated direct-patch selection and baseline
-file verification. `scripts/build_patch.py` generates sparse payloads and release JSON;
-`packaging/inno/patch_upgrade.iss` validates and applies them through the shared installer.
-Use updates/packaging focused routes, then repo precommit. Native lifecycle acceptance
-uses `scripts/check_patch_installer_lifecycle.py` with isolated synthetic app identities.
-Exact release steps and recovery limits live in `docs/PACKAGING.md#direct-patch-releases`.
+Start with `updates/helper_client.py`, `helper_protocol.py`, `helper_service.py`, and
+`helper_runtime.py` for the separate process, private handoff, registered installation,
+bounded helper staging, and install/restart ownership. `updater_main.py` is the independent
+entry; `gui/update_dialog.py` remains Studio's update surface, while `gui/updater_window.py`
+provides standalone Update & Repair and installation progress. `UpdatePhase` reports
+status and an explicit installation-committed state through the existing worker lifecycle.
+
+`updates/patches.py` authenticates patch candidates and the installed inventory without
+scanning payload files at discovery/download. Keep complete baseline/target verification
+and mutation in `packaging/inno/patch_upgrade.iss`. The retained Python verifier uses
+reusable Windows bindings and scoped directory pins in `updates/cache_io.py`.
+`scripts/build_patch.py` generates sparse payloads and release JSON; the lightweight
+helper build is `scripts/build_updater.ps1`. Build, cache, repair, and release contracts
+live in [Packaging](../PACKAGING.md#independent-updater-build-and-installation).
+
+Use updates/gui/packaging focused routes, then repo precommit. The updates route includes
+`tests/unit/test_update_helper.py` and `test_updater_main.py`; registered GUI coverage
+stays in `tests/gui/test_update_dialog.py`. Native lifecycle acceptance uses
+`scripts/check_patch_installer_lifecycle.py` with isolated synthetic app identities.
+See the completed independent-updater execution plan for implementation evidence and release acceptance; source
+checks do not establish an installed update or clean-PC repair result.
 
 ## Bug Reporting
 

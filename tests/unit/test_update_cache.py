@@ -24,6 +24,39 @@ from fpvs_studio.updates.cache_io import LOCK_FILENAME, locked_cache
 from fpvs_studio.updates.models import InstallerAsset, UpdateCacheBusy, UpdateCancelled, UpdateError
 
 
+@pytest.mark.skipif(sys.platform != "win32", reason="Native Windows handle bindings")
+def test_guarded_reads_reuse_api_binding_but_read_fresh_files(tmp_path, monkeypatch):
+    import ctypes
+
+    from fpvs_studio.updates import cache_io
+
+    original = ctypes.WinDLL
+    loads = []
+
+    def counted_load(name, **kwargs):
+        loads.append(name)
+        return original(name, **kwargs)
+
+    cache_io._windows_file_api.cache_clear()
+    monkeypatch.setattr(ctypes, "WinDLL", counted_load)
+    try:
+        folder = tmp_path / "nested"
+        folder.mkdir()
+        for index in range(8):
+            path = folder / f"file-{index}.txt"
+            path.write_bytes(b"first")
+            with cache_io.guarded_read_path(path) as source:
+                assert source.read() == b"first"
+            path.write_bytes(b"updated")
+            with cache_io.guarded_read_path(path) as source:
+                assert source.read() == b"updated"
+        # The frozen loader probes the filesystem on each WinDLL construction.
+        # A baseline contains thousands of files with multiple ancestor handles.
+        assert loads == ["kernel32"]
+    finally:
+        cache_io._windows_file_api.cache_clear()
+
+
 def _cached(cache: Path, version: str, payload: bytes = b"installer") -> Path:
     name = f"FPVS-Studio-Setup-{version}.exe"
     asset = InstallerAsset(

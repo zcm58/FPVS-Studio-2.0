@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import json
 import time
-from collections.abc import Iterable, Sequence
+from collections.abc import Callable, Iterable, Sequence
+from dataclasses import replace
+from pathlib import Path
 from threading import Event
 from typing import Any
 from urllib.error import HTTPError, URLError
@@ -20,8 +22,9 @@ from fpvs_studio.updates.models import (
     InstallerAsset,
     UpdateCheckResult,
     UpdateError,
+    UpdatePhase,
 )
-from fpvs_studio.updates.patches import select_patch_update
+from fpvs_studio.updates.patches import select_patch_candidate, select_patch_update
 from fpvs_studio.updates.validation import (
     MAX_INSTALLER_SIZE_BYTES,
     installer_matches_version,
@@ -44,6 +47,7 @@ def check_for_updates(
     releases_api_url: str = DEFAULT_RELEASES_API_URL,
     include_prereleases: bool | None = None,
     cancel_event: Event | None = None,
+    phase_callback: Callable[[UpdatePhase], None] | None = None,
 ) -> UpdateCheckResult:
     """Fetch GitHub Releases and return the newest eligible update state."""
 
@@ -53,6 +57,7 @@ def check_for_updates(
         include_prereleases=include_prereleases,
         resolve_patches=True,
         cancel_event=cancel_event,
+        phase_callback=phase_callback,
     )
 
 
@@ -114,6 +119,55 @@ def fetch_release_metadata(
     return [item for item in decoded if isinstance(item, dict)]
 
 
+def check_update_candidate(
+    *,
+    current_version: str,
+    install_root: Path | None,
+    repair: bool = False,
+    force_full: bool = False,
+    cancel_event: Event | None = None,
+    phase_callback: Callable[[UpdatePhase], None] | None = None,
+) -> UpdateCheckResult:
+    """Independent helper discovery without scanning application payload files."""
+    releases = fetch_release_metadata(DEFAULT_RELEASES_API_URL, cancel_event=cancel_event)
+    current = _parse_version(current_version)
+    result = select_update_from_releases(releases, current_version=current_version)
+    if repair:
+        latest = select_update_from_releases(
+            releases, current_version="0.0.0", include_prereleases=current.is_prerelease
+        )
+        if _parse_version(latest.latest_version) < current:
+            raise UpdateError("No current or newer published installer is available for repair.")
+        result = replace(
+            latest,
+            current_version=current_version,
+            selection_reason="Full installer selected for repair or reinstallation.",
+        )
+    if not result.update_available or repair or force_full:
+        return result
+    if phase_callback is not None:
+        phase_callback(UpdatePhase("Update found. Checking available packages...", result))
+    latest_release = next(
+        (
+            candidate
+            for candidate in _iter_candidate_releases(
+                releases, include_prereleases=current.is_prerelease
+            )
+            if str(candidate.version) == result.latest_version
+        ),
+        None,
+    )
+    if latest_release is None:
+        return result
+    return select_patch_candidate(
+        result,
+        latest_release.assets,
+        install_root=install_root,
+        cancel_event=cancel_event,
+        phase_callback=phase_callback,
+    )
+
+
 def select_update_from_releases(
     releases: Sequence[dict[str, Any]],
     *,
@@ -121,6 +175,7 @@ def select_update_from_releases(
     include_prereleases: bool | None = None,
     resolve_patches: bool = False,
     cancel_event: Event | None = None,
+    phase_callback: Callable[[UpdatePhase], None] | None = None,
 ) -> UpdateCheckResult:
     """Select the newest eligible release and compare it with the installed version."""
 
@@ -154,7 +209,11 @@ def select_update_from_releases(
         is_prerelease=latest.is_prerelease,
     )
     if resolve_patches and result.update_available:
-        return select_patch_update(result, latest.assets, cancel_event=cancel_event)
+        if phase_callback is not None:
+            phase_callback(UpdatePhase("Update found. Checking patch availability...", result))
+        return select_patch_update(
+            result, latest.assets, cancel_event=cancel_event, phase_callback=phase_callback
+        )
     return result
 
 

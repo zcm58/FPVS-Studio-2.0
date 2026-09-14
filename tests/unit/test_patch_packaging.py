@@ -100,6 +100,29 @@ def test_patch_payload_reconstructs_exact_target(inputs: dict, tmp_path: Path) -
     assert result["source_inventory_sha256"] == inputs["source_inventory_sha256"]
 
 
+@pytest.mark.parametrize("previous_updater", [None, b"previous helper", b"target helper"])
+def test_patch_ownership_includes_added_changed_or_retained_independent_updater(
+    inputs: dict, tmp_path: Path, previous_updater: bytes | None
+) -> None:
+    relative = "Updater/FPVS Studio Updater.exe"
+    if previous_updater is not None:
+        _write_tree(tmp_path / "source", {relative: previous_updater})
+    _write_tree(inputs["bundle_root"], {relative: b"target helper"})
+    _manifest(tmp_path / "source", inputs["baseline_inventory"], "1.5.0")
+    inputs["source_inventory_sha256"] = inventory.sha256_file(inputs["baseline_inventory"])
+    _manifest(inputs["bundle_root"], inputs["target_inventory"], "1.5.1")
+
+    patch.prepare_patch(**inputs)
+
+    _, target, _ = patch.current_inventory(inputs["target_inventory"])
+    assert target.files[relative] == (hashlib.sha256(b"target helper").hexdigest(),)
+    payload = inputs["output_dir"] / "payload" / relative
+    if previous_updater == b"target helper":
+        assert not payload.exists()
+    else:
+        assert payload.read_bytes() == b"target helper"
+
+
 def test_wrong_authenticated_baseline_refused_before_output(inputs: dict) -> None:
     inputs["source_inventory_sha256"] = "0" * 64
     with pytest.raises(inventory.InventoryError, match="authenticated SHA-256"):

@@ -8,7 +8,9 @@ import re
 import runpy
 import shutil
 import subprocess
+import sys
 from pathlib import Path
+from types import ModuleType, SimpleNamespace
 
 import pytest
 from PIL import ImageFont
@@ -262,6 +264,26 @@ def test_uninstall_cache_uses_backend_lock_and_strict_filename_matching() -> Non
     assert "OwnedReadAccess or OwnedDeleteAccess, 0, 0, OwnedOpenExisting" in INNO_CACHE_TEXT
     assert "DelTree(" not in INNO_CACHE_TEXT
     assert "RemoveDir(Root)" in INNO_CACHE_TEXT
+
+
+def test_uninstall_helper_cache_reuses_pinned_lock_protocol_and_strict_names() -> None:
+    helper_matcher = INNO_CACHE_TEXT.split("function UpdateHelperOwnedName(", 1)[1].split(
+        "function UpdateOwnedPayloadName(", 1
+    )[0]
+    assert "Name <> Lowercase(Name)" in helper_matcher
+    assert "Copy(Name, 1, 8) <> 'updater-'" in helper_matcher
+    assert "Length(Stem) = 68" in helper_matcher
+    assert "OwnedValidHash(Copy(Stem, 1, 64))" in helper_matcher
+    assert "Length(Stem) = 37" in helper_matcher
+    assert "UpdateHexUuid(Copy(Stem, 1, 32))" in helper_matcher
+    assert "UpdateOwnedPayloadName(FindRec.Name, Helpers)" in INNO_CACHE_TEXT
+    assert "UpdateDeleteCachePayload(Root, FindRec.Name, Helpers)" in INNO_CACHE_TEXT
+    cleanup = INNO_CACHE_TEXT.split("procedure UpdateCleanupCacheOnUninstall;", 1)[1]
+    assert r"ExpandConstant('{localappdata}\FPVS Studio\updates')), False)" in cleanup
+    assert r"ExpandConstant('{localappdata}\FPVS Studio\updater-helper')), True)" in cleanup
+    assert "UpdateRemoveQuiescentCache(RemoveBackslashUnlessRoot(" in cleanup
+    assert r"ExpandConstant('{localappdata}\FPVS Studio\updater-install'))" in cleanup
+    assert "FindFirst(" not in cleanup
 
 
 def test_pending_journal_bounds_are_checked_before_temporary_creation() -> None:
@@ -518,3 +540,127 @@ def test_packaged_smoke_checks_runtime_dependency_imports() -> None:
     assert '"psychopy.visual.backends.glfwbackend"' in GUI_PACKAGED_SMOKE_TEXT
     assert '"psychtoolbox"' in GUI_PACKAGED_SMOKE_TEXT
     assert '"sounddevice"' in GUI_PACKAGED_SMOKE_TEXT
+
+
+def _evaluate_updater_spec(monkeypatch: pytest.MonkeyPatch, modules: list[str]) -> dict:
+    """Execute the spec graph checks with a simulated PyInstaller analysis, without Qt."""
+    hooks = ModuleType("PyInstaller.utils.hooks")
+    hooks.copy_metadata = lambda distribution: [(distribution, "metadata")]  # type: ignore[attr-defined]
+    for name, module in (
+        ("PyInstaller", ModuleType("PyInstaller")),
+        ("PyInstaller.utils", ModuleType("PyInstaller.utils")),
+        ("PyInstaller.utils.hooks", hooks),
+    ):
+        monkeypatch.setitem(sys.modules, name, module)
+    calls: dict = {}
+
+    def analysis(entries: list[str], **kwargs: object) -> SimpleNamespace:
+        calls["analysis"] = (entries, kwargs)
+        return SimpleNamespace(
+            pure=[(name, "fixture.py", "PYMODULE") for name in modules],
+            binaries=[
+                ("python310.dll", "fixture", "BINARY"),
+                ("icuuc.dll", "foreign", "BINARY"),
+                ("icudt78.dll", "foreign", "BINARY"),
+                ("PySide6/Qt6Core.dll", "fixture", "BINARY"),
+            ],
+            scripts=[
+                ("pyi_rth_pyside6", "fixture", "PYSOURCE"),
+                ("updater_main", "fixture", "PYSOURCE"),
+            ],
+            datas=kwargs["datas"],
+        )
+
+    def executable(*args: object, **kwargs: object) -> None:
+        calls["exe"] = (args, kwargs)
+
+    result = runpy.run_path(
+        str(REPO_ROOT / "packaging" / "pyinstaller" / "fpvs_updater.spec"),
+        init_globals={
+            "SPECPATH": str(REPO_ROOT / "packaging" / "pyinstaller"),
+            "Analysis": analysis,
+            "PYZ": lambda pure: pure,
+            "EXE": executable,
+        },
+    )
+    return {"calls": calls, "result": result}
+
+
+def test_updater_is_self_contained_windowed_and_keeps_a_narrow_dependency_graph(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    actual = _evaluate_updater_spec(
+        monkeypatch,
+        ["fpvs_studio", "fpvs_studio.updates.models", "fpvs_studio.gui.updater_window"],
+    )
+    entries, analysis = actual["calls"]["analysis"]
+    assert entries == [str(REPO_ROOT / "src" / "fpvs_studio" / "updater_main.py")]
+    assert analysis["datas"][0] == ("fpvs-studio", "metadata")
+    arguments, options = actual["calls"]["exe"]
+    assert options["name"] == "FPVS Studio Updater"
+    assert options["console"] is False
+    assert options.get("exclude_binaries", False) is False
+    assert arguments[2] == [
+        ("python310.dll", "fixture", "BINARY"),
+        ("PySide6/Qt6Core.dll", "fixture", "BINARY"),
+    ]
+    assert arguments[3] == analysis["datas"]
+    assert arguments[1] == [("updater_main", "fixture", "PYSOURCE")]
+    assert analysis["runtime_hooks"] == [
+        str(REPO_ROOT / "packaging" / "pyinstaller" / "updater_qt_runtime.py")
+    ]
+    assert "coll" not in actual["result"]
+
+
+@pytest.mark.parametrize(
+    "module",
+    ["psychopy.visual", "numpy", "fpvs_studio.runtime.preflight", "fpvs_studio.gui.controller"],
+)
+def test_updater_build_fails_when_it_collects_studio_runtime_dependencies(
+    monkeypatch: pytest.MonkeyPatch, module: str
+) -> None:
+    with pytest.raises(RuntimeError, match="Updater collected Studio/runtime dependencies"):
+        _evaluate_updater_spec(monkeypatch, ["fpvs_studio.updates.models", module])
+
+
+def test_updater_runtime_hook_configures_qt_without_importing_it(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(sys, "_MEIPASS", str(tmp_path), raising=False)
+    for name in ("PATH", "QT_PLUGIN_PATH", "QML2_IMPORT_PATH"):
+        monkeypatch.setenv(name, "before-hook")
+    loaded = set(sys.modules)
+    runpy.run_path(str(REPO_ROOT / "packaging" / "pyinstaller" / "updater_qt_runtime.py"))
+    assert os.environ["QT_PLUGIN_PATH"] == str(tmp_path / "PySide6" / "plugins")
+    assert os.environ["QML2_IMPORT_PATH"] == str(tmp_path / "PySide6" / "qml")
+    assert os.environ["PATH"] == str(tmp_path) + os.pathsep + "before-hook"
+    assert not any(name.startswith("PySide6") for name in set(sys.modules) - loaded)
+
+
+def test_installer_builds_and_checks_updater_before_final_ownership_inventory() -> None:
+    script = (REPO_ROOT / "scripts" / "build_updater.ps1").read_text(encoding="utf-8")
+    assert script.index("Get-PackagingBuildPaths") < script.index("Resolve-RepoPython")
+    assert 'Join-Path $BuildPaths.BundleRoot "Updater"' in script
+    assert '"pyinstaller-updater"' in script
+    assert '"--packaging-check"' in script
+    assert "-WindowStyle Hidden" in script
+    assert "$report.version -ne $appVersion" in script
+    assert "$report.frozen -ne $true" in script
+    assert "$report.gui_loaded -ne $false" in script
+    assert "$report.protocol_version -ne 1" in script
+    assert "[switch]$AllowVisibleGui" in script
+    assert '"--gui-smoke"' in script
+    assert "$guiReport.passed -ne $true" in script
+    assert "$guiReport.installer -ne $false" in script
+    assert "$guiReport.network -ne $false" in script
+    assert "$guiReport.standalone_repair -ne $true" in script
+    assert "$guiReport.repair_after_failure -ne $true" in script
+    assert "Remove-Item" not in script
+    assert "bundle version does not match pyproject.toml" in BUILD_INSTALLER_TEXT
+    assert BUILD_INSTALLER_TEXT.index("& $BuildUpdaterScript -BuildLabel $BuildLabel") < (
+        BUILD_INSTALLER_TEXT.index("Invoke-Native -File $Python -Arguments @(")
+    )
+    assert 'Name: "{group}\\FPVS Studio Update & Repair"' in INNO_SCRIPT_TEXT
+    assert "Check: UpdaterShortcutRequested" in INNO_SCRIPT_TEXT
+    assert "Result := ShortcutsRequested and FileExists" in INNO_SCRIPT_TEXT
+    assert "(Pos('/NOLAUNCH=1', Uppercase(GetCmdTail)) = 0)" in INNO_SCRIPT_TEXT

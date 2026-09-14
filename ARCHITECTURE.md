@@ -65,12 +65,25 @@ lazily only inside the engine package.
   unless the user explicitly enables and records
   `allow_nonstandard_oddball_trigger_code`.
 - `src/fpvs_studio/updates/`: GUI-neutral GitHub Releases checking, bounded updater
-  cache ownership/locking, cancelable checksum-verified downloads, compatible direct-patch selection, and
-  explicit verified installer-launch helpers. `updates/patches.py` authenticates
-  patch metadata and installed baseline bytes; installer mutation stays in Inno.
+  cache ownership/locking, checksum-verified downloads, and independent updater
+  coordination. Studio's GUI calls `helper_client.py` over bounded private subprocess
+  pipes; `helper_service.py` owns check/download and the accepted installation handoff,
+  while `helper_runtime.py` owns registration, staging, process identity, installation
+  locking, and restart. `patches.py` selects authenticated patch candidates without
+  scanning installed payload files. Inno owns final baseline verification, replacement,
+  recovery, and target verification. The retained full Python verifier uses scoped
+  directory pins and reusable Windows bindings. Typed phase events keep progress and
+  installation commitment separate from GUI presentation.
+- `src/fpvs_studio/updater_main.py`: independent entry for backend pipe operations,
+  the managed install-progress window, and standalone Update & Repair. Its GUI reuses
+  `gui/update_dialog.py`, `gui/updater_window.py`, and the existing worker lifecycle;
+  its minimal one-file bundle excludes Studio's authoring/runtime/engine dependencies.
 - `tests/`: unit, integration, and registered pytest-qt coverage.
 - `packaging/`: PyInstaller/Inno configuration, published legacy ownership inventory,
-  and release assets for Windows builds. Patch payloads are generated from authenticated
+  and release assets for Windows builds. The ordinary installer bundles the independent
+  updater under `Updater/` and supplies a Start Menu Update & Repair entry. The updater
+  runs from guarded user-local staging so setup can replace its installed executable.
+  Patch payloads are generated from authenticated
   baseline inventories and the complete target bundle. Installer-owned file reconciliation remains
   here, separate from project data and the runtime updater cache.
 
@@ -176,6 +189,9 @@ template compatibility and no-mixing boundaries are defined in
 - App-level template profiles live at
   `<FPVS Studio Root>/.fpvs-studio/templates/`, outside experiment projects.
 - Project-facing paths remain project-relative POSIX strings.
+- The independent updater imports no runtime or experiment engine. Studio saves through
+  its existing GUI callback before accepting a handoff; the helper never edits projects.
+  Installer/download trust, private IPC, and recovery rules live in `docs/PACKAGING.md`.
 
 ## Source-of-Truth Documents
 

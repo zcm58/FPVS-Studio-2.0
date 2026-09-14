@@ -133,6 +133,125 @@ def _select(release, current=BASE):
     return select_update_from_releases([release], current_version=current, resolve_patches=True)
 
 
+def _check_candidate(monkeypatch, release, root, current=BASE, **kwargs):
+    monkeypatch.setattr(github_releases, "fetch_release_metadata", lambda *_a, **_k: [release])
+    return github_releases.check_update_candidate(
+        current_version=current, install_root=root, **kwargs
+    )
+
+
+@pytest.mark.parametrize("change", ["modified", "missing"])
+def test_fast_candidate_reads_inventory_without_scanning_payload(fixture, monkeypatch, change):
+    root, asset, document, release = fixture
+    dependency = root / "_internal" / "keep.dll"
+    if change == "modified":
+        dependency.write_bytes(b"payload compatibility is checked by the native installer")
+    else:
+        dependency.unlink()
+    _serve_manifest(monkeypatch, document, release)
+    monkeypatch.setattr(
+        patches, "verify_patch_baseline", lambda *_a, **_k: pytest.fail("Unexpected baseline scan")
+    )
+    monkeypatch.setattr(
+        patches, "installed_patch_root", lambda: pytest.fail("Unexpected running-app lookup")
+    )
+    opened = []
+    original = patches.CacheDirectory.open_file
+
+    def open_inventory(directory, name, **kwargs):
+        opened.append(name)
+        assert name == patches.INVENTORY_NAME
+        return original(directory, name, **kwargs)
+
+    monkeypatch.setattr(patches.CacheDirectory, "open_file", open_inventory)
+    phases = []
+    result = _check_candidate(monkeypatch, release, root, phase_callback=phases.append)
+    assert result.installer_asset == asset
+    assert opened == [patches.INVENTORY_NAME]
+    assert "Compatibility is checked during installation" in result.selection_reason
+    assert all("Verifying installed files" not in phase.text for phase in phases)
+
+
+@pytest.mark.parametrize("change", ["missing", "digest", "version"])
+def test_candidate_inventory_mismatch_selects_full_without_payload_scan(
+    fixture, monkeypatch, change
+):
+    root, _, document, release = fixture
+    inventory = root / patches.INVENTORY_NAME
+    if change == "missing":
+        inventory.unlink()
+    elif change == "digest":
+        inventory.write_bytes(b"an unauthenticated inventory")
+    else:
+        raw = inventory.read_bytes().replace(b"version=1.5.0", b"version=1.4.0")
+        inventory.write_bytes(raw)
+        document["patches"][0]["source_inventory_sha256"] = _hash(raw)
+    _serve_manifest(monkeypatch, document, release)
+    monkeypatch.setattr(
+        patches, "verify_patch_baseline", lambda *_a, **_k: pytest.fail("Unexpected baseline scan")
+    )
+    result = _check_candidate(monkeypatch, release, root)
+    assert result.download_kind == "full"
+    assert result.installer_asset.name == f"FPVS-Studio-Setup-{TARGET}.exe"
+    assert "full installer is required" in result.selection_reason
+
+
+def test_explicit_repair_offers_full_installer_for_current_version(fixture, monkeypatch):
+    root, _, _, release = fixture
+    result = _check_candidate(monkeypatch, release, root, current=TARGET, repair=True)
+    assert result.current_version == result.latest_version == TARGET
+    assert result.update_available
+    assert result.download_kind == "full"
+    assert result.installer_asset.name == f"FPVS-Studio-Setup-{TARGET}.exe"
+    assert "repair" in result.selection_reason
+
+
+def test_explicit_repair_never_offers_older_release(fixture, monkeypatch):
+    root, _, _, release = fixture
+    with pytest.raises(UpdateError, match="No current or newer published installer"):
+        _check_candidate(monkeypatch, release, root, current="2.0.0", repair=True)
+
+
+def test_check_reports_discovered_release_before_baseline_hashing(fixture, monkeypatch):
+    _, asset, document, release = fixture
+    _serve_manifest(monkeypatch, document, release)
+    phases = []
+    original = patches.verify_patch_baseline
+
+    def verify(*args, **kwargs):
+        assert phases[-1].result.latest_version == TARGET
+        assert "Verifying installed files" in phases[-1].text
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(patches, "verify_patch_baseline", verify)
+    result = select_update_from_releases(
+        [release], current_version=BASE, resolve_patches=True, phase_callback=phases.append
+    )
+    assert result.installer_asset == asset
+    assert "Checking patch availability" in phases[0].text
+
+
+def test_download_reports_baseline_check_before_network_transfer(fixture, tmp_path, monkeypatch):
+    _, asset, _, _ = fixture
+    phases = []
+    original = downloader.require_running_patch_baseline
+
+    def verify(*args, **kwargs):
+        assert "before downloading" in phases[-1].text
+        return original(*args, **kwargs)
+
+    def transfer(*args, **kwargs):
+        assert phases[-1].text == "Downloading and verifying the update..."
+        return Response(PATCH_BYTES, asset.download_url)
+
+    monkeypatch.setattr(downloader, "require_running_patch_baseline", verify)
+    monkeypatch.setattr(downloader, "urlopen", transfer)
+    downloaded = download_installer(
+        asset, destination_dir=tmp_path / "cache", phase_callback=phases.append
+    )
+    assert downloaded.path.read_bytes() == PATCH_BYTES
+
+
 def test_authenticated_patch_selection_checks_real_retained_files(fixture, monkeypatch):
     root, asset, document, release = fixture
     response, _ = _serve_manifest(monkeypatch, document, release)
@@ -190,8 +309,11 @@ def test_source_build_never_fetches_patch_manifest(fixture, monkeypatch):
         "missing_asset",
     ],
 )
-def test_untrusted_manifest_or_patch_identity_fails_closed(fixture, monkeypatch, change):
-    _, _, document, release = fixture
+@pytest.mark.parametrize("candidate_only", [False, True], ids=["baseline", "candidate"])
+def test_untrusted_manifest_or_patch_identity_fails_closed(
+    fixture, monkeypatch, change, candidate_only
+):
+    root, _, document, release = fixture
     row = document["patches"][0]
     if change == "target":
         document["target_version"] = "9.0.0"
@@ -215,7 +337,10 @@ def test_untrusted_manifest_or_patch_identity_fails_closed(fixture, monkeypatch,
         release["assets"].pop()
     _serve_manifest(monkeypatch, document, release)
     with pytest.raises(UpdateError):
-        _select(release)
+        if candidate_only:
+            _check_candidate(monkeypatch, release, root)
+        else:
+            _select(release)
 
 
 @pytest.mark.parametrize("change", ["digest", "size", "url", "id", "overflow", "truncated"])
@@ -285,6 +410,126 @@ def test_changed_base_blocks_patch_download_before_network_or_cache_write(fixtur
     with pytest.raises(UpdateIntegrityError, match="Check for updates again"):
         download_installer(asset, destination_dir=cache)
     assert not cache.exists()
+
+
+@pytest.mark.parametrize("payload", [PATCH_BYTES, b"evil!"], ids=["valid", "wrong-sha256"])
+def test_deferred_patch_download_starts_transfer_and_still_verifies_package(
+    fixture, tmp_path, monkeypatch, payload
+):
+    root, asset, _, _ = fixture
+    (root / "_internal" / "keep.dll").write_bytes(b"modified installed dependency")
+    monkeypatch.setattr(
+        downloader,
+        "require_running_patch_baseline",
+        lambda *_a, **_k: pytest.fail("Download must not scan installed files"),
+    )
+    cache = tmp_path / "cache"
+    phases = []
+    transfers = []
+
+    def transfer(request, **kwargs):
+        transfers.append(request.full_url)
+        assert phases[-1].text == "Downloading and verifying the update..."
+        return Response(payload, asset.download_url)
+
+    monkeypatch.setattr(downloader, "urlopen", transfer)
+    if payload == PATCH_BYTES:
+        downloaded = download_installer(
+            asset, destination_dir=cache, phase_callback=phases.append, verify_patch_files=False
+        )
+        assert downloaded.path.read_bytes() == PATCH_BYTES
+        assert downloaded.sha256 == asset.sha256
+    else:
+        with pytest.raises(UpdateIntegrityError, match="SHA-256"):
+            download_installer(
+                asset,
+                destination_dir=cache,
+                phase_callback=phases.append,
+                verify_patch_files=False,
+            )
+        assert not any(recognized_cache_entry(path.name) for path in cache.iterdir())
+    assert transfers == [asset.download_url]
+    assert all("Verifying installed files" not in phase.text for phase in phases)
+
+
+@pytest.mark.parametrize("kind", ["patch", "full"])
+def test_managed_launch_passes_registered_root_and_leaves_restart_to_helper(
+    fixture, tmp_path, monkeypatch, kind
+):
+    root, patch_asset, _, release = fixture
+    asset = (
+        patch_asset
+        if kind == "patch"
+        else select_update_from_releases([release], current_version=BASE).installer_asset
+    )
+    payload = PATCH_BYTES if kind == "patch" else b"full installer"
+    monkeypatch.setattr(
+        downloader, "urlopen", lambda *_a, **_k: Response(payload, asset.download_url)
+    )
+    downloaded = download_installer(
+        asset, destination_dir=tmp_path / "cache", verify_patch_files=False
+    )
+    (root / "_internal" / "keep.dll").write_bytes(b"native setup must check this change")
+    monkeypatch.setattr(
+        installer,
+        "require_running_patch_baseline",
+        lambda *_a, **_k: pytest.fail("Managed launch must defer the baseline scan to setup"),
+    )
+    calls = []
+    process = object()
+    monkeypatch.setattr(
+        installer.subprocess,
+        "Popen",
+        lambda command, **kwargs: calls.append((command, kwargs)) or process,
+    )
+    assert (
+        launch_installer(downloaded, install_root=root, managed=True, verify_patch_files=False)
+        is process
+    )
+    assert len(calls) == 1
+    command, options = calls[0]
+    assert command == [
+        str(downloaded.path),
+        f"/DIR={root}",
+        "/VERYSILENT",
+        "/SUPPRESSMSGBOXES",
+        "/NORESTART",
+        "/NOCLOSEAPPLICATIONS",
+        "/NOLAUNCH=1",
+    ]
+    assert options["close_fds"] is True
+    assert options["env"]["PYINSTALLER_RESET_ENVIRONMENT"] == "1"
+    downloaded.path.write_bytes(b"evil!" if kind == "patch" else b"evil installer")
+    with pytest.raises(UpdateIntegrityError, match="SHA-256"):
+        launch_installer(downloaded, install_root=root, managed=True, verify_patch_files=False)
+    assert len(calls) == 1
+
+
+@pytest.mark.parametrize(
+    "managed,with_root,expected",
+    [
+        (False, False, "Deferred patch verification requires"),
+        (False, True, "Deferred patch verification requires"),
+        (True, False, "requires a registered installation directory"),
+    ],
+)
+def test_deferred_launch_requires_managed_mode_and_registered_root(
+    fixture, tmp_path, monkeypatch, managed, with_root, expected
+):
+    root, asset, _, _ = fixture
+    monkeypatch.setattr(
+        downloader, "urlopen", lambda *_a, **_k: Response(PATCH_BYTES, asset.download_url)
+    )
+    downloaded = download_installer(
+        asset, destination_dir=tmp_path / "cache", verify_patch_files=False
+    )
+    with pytest.raises(UpdateError, match=expected):
+        launch_installer(
+            downloaded,
+            install_root=root if with_root else None,
+            managed=managed,
+            verify_patch_files=False,
+        )
 
 
 def test_launch_rechecks_baseline_and_passes_actual_install_directory(
@@ -419,14 +664,14 @@ def test_base_hash_cancellation_propagates_without_full_fallback(fixture, monkey
     _, _, document, release = fixture
     _serve_manifest(monkeypatch, document, release)
     event = Event()
-    original = patches.guarded_read_path
+    original = patches.CacheDirectory.open_file
 
-    def cancel_file_read(path, **kwargs):
-        if path.name == "keep.dll":
+    def cancel_file_read(directory, name, **kwargs):
+        if name == "keep.dll":
             event.set()
-        return original(path, **kwargs)
+        return original(directory, name, **kwargs)
 
-    monkeypatch.setattr(patches, "guarded_read_path", cancel_file_read)
+    monkeypatch.setattr(patches.CacheDirectory, "open_file", cancel_file_read)
     with pytest.raises(UpdateCancelled):
         select_update_from_releases(
             [release], current_version=BASE, resolve_patches=True, cancel_event=event

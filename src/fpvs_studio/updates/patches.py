@@ -9,7 +9,8 @@ import os
 import re
 import sys
 import time
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
+from contextlib import ExitStack
 from dataclasses import replace
 from pathlib import Path, PureWindowsPath
 from threading import Event
@@ -17,13 +18,19 @@ from urllib.error import URLError
 from urllib.request import Request, urlopen
 
 from fpvs_studio import __version__
-from fpvs_studio.updates.cache_io import check_cancel, guarded_read_path
+from fpvs_studio.updates.cache_io import (
+    CacheDirectory,
+    check_cancel,
+    guarded_read_directory,
+    guarded_read_path,
+)
 from fpvs_studio.updates.models import (
     InstallerAsset,
     UpdateCancelled,
     UpdateCheckResult,
     UpdateError,
     UpdateIntegrityError,
+    UpdatePhase,
     normalize_sha256,
 )
 from fpvs_studio.updates.validation import (
@@ -153,6 +160,7 @@ def select_patch_update(
     assets: Sequence[dict[str, object]],
     *,
     cancel_event: Event | None = None,
+    phase_callback: Callable[[UpdatePhase], None] | None = None,
 ) -> UpdateCheckResult:
     """Choose the smallest authenticated compatible patch, with an explicit full reason."""
 
@@ -183,6 +191,10 @@ def select_patch_update(
         if (asset.size_bytes or 0) >= (full.size_bytes or 0):
             continue
         try:
+            if phase_callback is not None:
+                phase_callback(
+                    UpdatePhase("Verifying installed files for the smaller patch...", result)
+                )
             verify_patch_baseline(asset, root, result.current_version, cancel_event=cancel_event)
         except UpdateCancelled:
             raise
@@ -220,6 +232,83 @@ def require_running_patch_baseline(
             "Check for updates again to select the full installer."
         ) from error
     return root
+
+
+def select_patch_candidate(
+    result: UpdateCheckResult,
+    assets: Sequence[dict[str, object]],
+    *,
+    install_root: Path | None,
+    cancel_event: Event | None = None,
+    phase_callback: Callable[[UpdatePhase], None] | None = None,
+) -> UpdateCheckResult:
+    """Choose a download candidate; Inno performs full compatibility checks at install."""
+    check_cancel(cancel_event)
+    if install_root is None:
+        return replace(result, selection_reason="A full installer is available for this build.")
+    name = f"FPVS-Studio-Update-{result.latest_version}.json"
+    matching = [item for item in assets if item.get("name") == name]
+    if not matching:
+        return replace(result, selection_reason="This release provides a full installer.")
+    if len(matching) != 1:
+        raise UpdateIntegrityError("The release has ambiguous patch metadata assets.")
+    if phase_callback is not None:
+        phase_callback(UpdatePhase("Checking available patch metadata...", result))
+    document = _fetch_manifest(matching[0], result.latest_version, cancel_event)
+    candidates = _parse_manifest(document, assets, result.latest_version)
+    full = result.installer_asset
+    if full is None or full.sha256 is None:
+        return result
+    candidates = sorted(
+        (
+            candidate
+            for candidate in candidates
+            if candidate.from_version == result.current_version
+            and (candidate.size_bytes or 0) < (full.size_bytes or 0)
+        ),
+        key=lambda candidate: candidate.size_bytes or 0,
+    )
+    for candidate in candidates:
+        try:
+            _read_baseline_inventory(candidate, install_root, result.current_version, cancel_event)
+        except UpdateCancelled:
+            raise
+        except (UpdateError, OSError) as error:
+            _LOG.info("update_patch_inventory_incompatible", extra={"reason": str(error)})
+            continue
+        return replace(
+            result,
+            installer_asset=candidate,
+            selection_reason=(
+                "Smaller patch available. Compatibility is checked during installation."
+            ),
+        )
+    return replace(result, selection_reason="A full installer is required for this installation.")
+
+
+def _read_baseline_inventory(
+    asset: InstallerAsset, root: Path, version: str, cancel_event: Event | None
+) -> list[str]:
+    started = time.monotonic()
+    with guarded_read_path(root / INVENTORY_NAME, cancel_event=cancel_event) as source:
+        raw = bytearray()
+        while True:
+            _checkpoint(cancel_event, started, MAX_PATCH_METADATA_SECONDS)
+            chunk = source.read(_HASH_CHUNK)
+            if not chunk:
+                break
+            raw.extend(chunk)
+            if len(raw) > MAX_INVENTORY_BYTES:
+                raise UpdateIntegrityError("the installed inventory is too large.")
+    if hashlib.sha256(raw).hexdigest() != asset.source_inventory_sha256:
+        raise UpdateIntegrityError("the installed inventory does not match the patch baseline.")
+    try:
+        lines = raw.decode("utf-8-sig").splitlines()
+    except UnicodeError as error:
+        raise UpdateIntegrityError("the installed inventory is unreadable.") from error
+    if lines[:3] != ["FPVS-STUDIO-OWNED-FILES-1", "kind=current", f"version={version}"]:
+        raise UpdateIntegrityError("the installed inventory has a different version.")
+    return lines
 
 
 def _unique_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
@@ -396,50 +485,62 @@ def verify_patch_baseline(
         or not 0 < len(lines) - 3 <= MAX_INVENTORY_FILES
     ):
         raise UpdateIntegrityError("the installed inventory has an invalid version or format.")
-    seen: set[str] = set()
-    total = 0
-    for line in lines[3:]:
-        _checkpoint(cancel_event, started, MAX_BASE_SECONDS)
-        pieces = line.split("|")
-        if len(pieces) != 2 or normalize_sha256(pieces[1]) != pieces[1]:
-            raise UpdateIntegrityError("the installed inventory contains an invalid file record.")
-        relative, expected = pieces
-        _validate_relative_path(relative)
-        if relative.casefold() in seen:
-            raise UpdateIntegrityError("the installed inventory contains a duplicate path.")
-        seen.add(relative.casefold())
-        with guarded_read_path(root / relative, cancel_event=cancel_event) as source:
-            before = os.fstat(source.fileno())
-            if total + before.st_size > MAX_BASE_BYTES:
-                raise UpdateIntegrityError("the installed patch baseline exceeds its size limit.")
-            digest = hashlib.sha256()
-            count = 0
-            while True:
-                _checkpoint(cancel_event, started, MAX_BASE_SECONDS)
-                chunk = source.read(_HASH_CHUNK)
-                _checkpoint(cancel_event, started, MAX_BASE_SECONDS)
-                if not chunk:
-                    break
-                count += len(chunk)
-                total += len(chunk)
-                if count > before.st_size or total > MAX_BASE_BYTES:
-                    raise UpdateIntegrityError(
-                        "an installed file changed during patch verification."
-                    )
-                digest.update(chunk)
-            after = os.fstat(source.fileno())
-            if (
-                count != before.st_size
-                or digest.hexdigest() != expected
-                or (before.st_size, before.st_mtime_ns, before.st_ctime_ns)
-                != (after.st_size, after.st_mtime_ns, after.st_ctime_ns)
-            ):
+    with ExitStack() as parent_guards:
+        seen: set[str] = set()
+        total = 0
+        directory: CacheDirectory | None = None
+        for line in lines[3:]:
+            _checkpoint(cancel_event, started, MAX_BASE_SECONDS)
+            pieces = line.split("|")
+            if len(pieces) != 2 or normalize_sha256(pieces[1]) != pieces[1]:
                 raise UpdateIntegrityError(
-                    "an installed application file differs from the patch baseline."
+                    "the installed inventory contains an invalid file record."
                 )
-    if "fpvs studio.exe" not in seen:
-        raise UpdateIntegrityError("the patch baseline has no application executable.")
-    _checkpoint(cancel_event, started, MAX_BASE_SECONDS)
+            relative, expected = pieces
+            _validate_relative_path(relative)
+            if relative.casefold() in seen:
+                raise UpdateIntegrityError("the installed inventory contains a duplicate path.")
+            seen.add(relative.casefold())
+            path = root / relative
+            if directory is None or directory.path != path.parent:
+                parent_guards.close()
+                directory = parent_guards.enter_context(
+                    guarded_read_directory(path.parent, cancel_event=cancel_event)
+                )
+            with directory.open_file(path.name) as source:
+                before = os.fstat(source.fileno())
+                if total + before.st_size > MAX_BASE_BYTES:
+                    raise UpdateIntegrityError(
+                        "the installed patch baseline exceeds its size limit."
+                    )
+                digest = hashlib.sha256()
+                count = 0
+                while True:
+                    _checkpoint(cancel_event, started, MAX_BASE_SECONDS)
+                    chunk = source.read(_HASH_CHUNK)
+                    _checkpoint(cancel_event, started, MAX_BASE_SECONDS)
+                    if not chunk:
+                        break
+                    count += len(chunk)
+                    total += len(chunk)
+                    if count > before.st_size or total > MAX_BASE_BYTES:
+                        raise UpdateIntegrityError(
+                            "an installed file changed during patch verification."
+                        )
+                    digest.update(chunk)
+                after = os.fstat(source.fileno())
+                if (
+                    count != before.st_size
+                    or digest.hexdigest() != expected
+                    or (before.st_size, before.st_mtime_ns, before.st_ctime_ns)
+                    != (after.st_size, after.st_mtime_ns, after.st_ctime_ns)
+                ):
+                    raise UpdateIntegrityError(
+                        "an installed application file differs from the patch baseline."
+                    )
+        if "fpvs studio.exe" not in seen:
+            raise UpdateIntegrityError("the patch baseline has no application executable.")
+        _checkpoint(cancel_event, started, MAX_BASE_SECONDS)
 
 
 def _validate_relative_path(value: str) -> None:

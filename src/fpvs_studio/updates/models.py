@@ -84,6 +84,15 @@ class UpdateCheckResult:
 
 
 @dataclass(frozen=True)
+class UpdatePhase:
+    """Worker status, optionally carrying discovered release details before hashing."""
+
+    text: str
+    result: UpdateCheckResult | None = None
+    install_committed: bool = False
+
+
+@dataclass(frozen=True)
 class CandidateRelease:
     """Normalized GitHub Release metadata used during selection."""
 

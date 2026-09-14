@@ -2,6 +2,48 @@
 
 Status: Active
 
+## Independent updater implementation (2026-09-14)
+
+The [separate updater implementation](../completed/independent-updater.md) is complete
+and owns the current check/download/handoff workflow. It retains this plan's bounded
+cache and native installer protections while moving full baseline checks to Inno at
+installation time. The latency investigation below records the preceding implementation;
+its Python verifier remains available but is no longer used for normal candidate checks
+or downloads. Outstanding installed/clean-PC release acceptance remains separate.
+
+## Packaged Patch Verification Latency (2026-09-14)
+
+- The user confirms v1.6.0 eventually finds the v1.6.1 patch after about two minutes,
+  and reports a similar delay before downloading. Nonblocking stack samples from the
+  running packaged process show startup/manual checks hashing baseline files, repeatedly
+  loading ctypes kernel32 bindings through PyInstaller filesystem probes. A later sample
+  during download shows the same path while closing directory handles.
+- Reuse the Windows API bindings; retain fresh file handles, identity checks, and hashes.
+  Keep only the current directory's ancestor pins across successive file reads, releasing
+  them on parent changes, cancellation, or completion. This bounds open handles by path
+  depth and preserves validation before each read; it never caches eligibility results.
+- Report discovered release details before hashing completes. Worker phase events distinguish
+  patch lookup, installed-file verification, cache reuse, and actual download. Actions stay
+  disabled until the final verified result; existing save/install/restart behavior remains.
+- Add loader-construction, fresh-read, cancellation, phase-order, and registered minimum/default
+  dialog coverage. Measure the complete published bundle using the actual PyInstaller ctypes
+  hook. Existing released binaries remain unchanged; a later build is needed for these changes.
+- Manual checks now cancel a pending/running silent startup scan, whose worker drains
+  normally without opening a duplicate prompt. Cache housekeeping is independent.
+- A read-only comparison of all 7,058 published 1.6.1 bundle files, running under source
+  Python with the actual PyInstaller ctypes hook enabled, took 148.422 seconds with
+  the published reader and 47.625 seconds with reusable bindings/scoped directory pins.
+  Both runs checked every file hash. This measures the reader change, not an installed
+  end-to-end update or network download. Evidence: ignored
+  `build/updater-performance/full-baseline-benchmark.json`.
+- Updates focused: 241 passed, four Windows symlink-permission skips. GUI source checks
+  pass; registered phase/geometry and startup-cancellation tests are added but not run.
+  Final repo precommit passes with 1,455 tests and seven symlink-permission skips,
+  plus Ruff, compilation, mypy, and repository/documentation audits.
+  Visible acceptance: open File > Check for Updates at 680x600 and 760x620, confirm the
+  latest version appears during verification with actions disabled, then check the
+  installed-file and transfer statuses during Download Update. No installer is launched.
+
 ## Patch Eligibility Investigation (2026-09-14)
 
 - The user reports that the installed 1.5.3 updater selects the full 1.6.0 installer

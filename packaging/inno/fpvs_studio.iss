@@ -4,6 +4,7 @@
 #endif
 #define AppPublisher "FPVS Studio"
 #define AppExeName "FPVS Studio.exe"
+#define UpdaterExeName "Updater\FPVS Studio Updater.exe"
 #ifndef AppIdGuid
   #define AppIdGuid "C0EAFB18-1DC5-4C77-8FDB-F6C1E7874694"
 #else
@@ -70,6 +71,7 @@ Source: "{#OwnedInventoryRoot}\legacy-owned-files.txt"; Flags: dontcopy
 
 [Icons]
 Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExeName}"; WorkingDir: "{app}"; Check: ShortcutsRequested
+Name: "{group}\FPVS Studio Update & Repair"; Filename: "{app}\{#UpdaterExeName}"; WorkingDir: "{app}"; Check: UpdaterShortcutRequested
 Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExeName}"; WorkingDir: "{app}"; Tasks: desktopicon; Check: ShortcutsRequested
 
 [Run]
@@ -169,4 +171,9 @@ end;
 function ShortcutsRequested: Boolean;
 begin
   Result := Pos('/NOSHORTCUTS=1', Uppercase(GetCmdTail)) = 0;
+end;
+
+function UpdaterShortcutRequested: Boolean;
+begin
+  Result := ShortcutsRequested and FileExists(ExpandConstant('{app}') + '\{#UpdaterExeName}');
 end;

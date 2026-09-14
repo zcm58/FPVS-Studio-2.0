@@ -103,7 +103,29 @@ begin
   end;
 end;
 
-procedure UpdateDeleteCachePayload(const Root, Name: String);
+function UpdateHelperOwnedName(const Name: String): Boolean;
+var
+  Stem: String;
+begin
+  Result := False;
+  if (Name <> Lowercase(Name)) or (Copy(Name, 1, 8) <> 'updater-') then
+    Exit;
+  Stem := Copy(Name, 9, Length(Name) - 8);
+  if (Length(Stem) = 68) and (Copy(Stem, 65, 4) = '.exe') then
+    Result := OwnedValidHash(Copy(Stem, 1, 64))
+  else if (Length(Stem) = 37) and (Copy(Stem, 33, 5) = '.part') then
+    Result := UpdateHexUuid(Copy(Stem, 1, 32));
+end;
+
+function UpdateOwnedPayloadName(const Name: String; Helpers: Boolean): Boolean;
+begin
+  if Helpers then
+    Result := UpdateHelperOwnedName(Name)
+  else
+    Result := UpdateCacheOwnedName(Name);
+end;
+
+procedure UpdateDeleteCachePayload(const Root, Name: String; Helpers: Boolean);
 var
   Path: String;
   Handle: THandle;
@@ -111,7 +133,7 @@ var
   Missing: Boolean;
   DeleteFlag: Byte;
 begin
-  if not UpdateCacheOwnedName(Name) then
+  if not UpdateOwnedPayloadName(Name, Helpers) then
     Exit;
   Path := OwnedTarget(Root, Name);
   if SameText(Path, ExpandFileName(ParamStr(0))) then begin
@@ -181,17 +203,15 @@ begin
   end;
 end;
 
-procedure UpdateCleanupCacheOnUninstall;
+procedure UpdateCleanupCacheRoot(const Root: String; Helpers: Boolean);
 var
-  Root, LockPath: String;
+  LockPath: String;
   Guards: TOwnedHandles;
   LockHandle: THandle;
   Info: TOwnedFileInfo;
   Overlapped: TUpdateLockOverlapped;
   FindRec: TFindRec;
 begin
-  // Production Windows has one canonical cache; never search user temp/project trees.
-  Root := RemoveBackslashUnlessRoot(ExpandConstant('{localappdata}\FPVS Studio\updates'));
   if not DirExists(Root) then
     Exit;
   if not OwnedGuardDirectories(Root, False, Guards) then begin
@@ -228,9 +248,9 @@ begin
           try
             repeat
               if ((FindRec.Attributes and (OwnedDirectoryAttribute or OwnedReparseAttribute)) = 0) and
-                UpdateCacheOwnedName(FindRec.Name) then begin
+                UpdateOwnedPayloadName(FindRec.Name, Helpers) then begin
                 try
-                  UpdateDeleteCachePayload(Root, FindRec.Name);
+                  UpdateDeleteCachePayload(Root, FindRec.Name, Helpers);
                 except
                   Log('Update cache: nonfatal cleanup error: ' + GetExceptionMessage);
                 end;
@@ -251,4 +271,29 @@ begin
   end;
   UpdateRemoveQuiescentCache(Root);
   // Unknown files remain; a busy cleanup may retain small lock metadata. Never recurse.
+end;
+
+procedure UpdateCleanupCacheOnUninstall;
+begin
+  // These exact app-owned roots are independent of project and temporary trees.
+  try
+    UpdateCleanupCacheRoot(RemoveBackslashUnlessRoot(
+      ExpandConstant('{localappdata}\FPVS Studio\updates')), False);
+  except
+    Log('Update cache: nonfatal payload cleanup error: ' + GetExceptionMessage);
+  end;
+  try
+    UpdateCleanupCacheRoot(RemoveBackslashUnlessRoot(
+      ExpandConstant('{localappdata}\FPVS Studio\updater-helper')), True);
+  except
+    Log('Update cache: nonfatal helper cleanup error: ' + GetExceptionMessage);
+  end;
+  try
+    // The installation coordinator stores only its lock here. Never enumerate or
+    // remove payloads; unknown files prevent removal of the containing directory.
+    UpdateRemoveQuiescentCache(RemoveBackslashUnlessRoot(
+      ExpandConstant('{localappdata}\FPVS Studio\updater-install')));
+  except
+    Log('Update cache: nonfatal installation lock cleanup error: ' + GetExceptionMessage);
+  end;
 end;

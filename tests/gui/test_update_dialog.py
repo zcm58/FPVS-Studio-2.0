@@ -21,12 +21,15 @@ from fpvs_studio.gui.controller import StudioController
 from fpvs_studio.gui.main_window import _TUTORIALS_URL
 from fpvs_studio.gui.update_dialog import UpdateDialog
 from fpvs_studio.gui.update_lifecycle import UpdateJob, UpdateLifecycle
+from fpvs_studio.gui.updater_window import ApplyUpdateDialog, UpdaterWindow
 from fpvs_studio.updates.models import (
     CacheCleanupResult,
     DownloadedInstaller,
     InstallerAsset,
     UpdateCancelled,
     UpdateCheckResult,
+    UpdateError,
+    UpdatePhase,
 )
 
 
@@ -763,7 +766,8 @@ def test_install_prompt_interruption_cannot_start_a_hidden_launch(
 ) -> None:
     lifecycle, jobs, _quit_calls = deferred_updates
     parent = QWidget()
-    qtbot.addWidget(parent)
+    if interruption != "destroy":
+        qtbot.addWidget(parent)
     dialog = UpdateDialog(
         parent=parent, auto_check=False, initial_result=_available_update(), lifecycle=lifecycle
     )
@@ -946,6 +950,36 @@ def test_housekeeping_failure_does_not_prompt_or_block_other_startup_work(
     assert controller._startup_update_job is not None
 
 
+@pytest.mark.parametrize("startup_running", [False, True])
+def test_manual_check_supersedes_pending_or_running_startup_scan(
+    qapp, qtbot, monkeypatch, deferred_updates, startup_running,
+) -> None:
+    lifecycle, jobs, _quit_calls = deferred_updates
+    controller = StudioController(qapp)
+    controller._startup_update_check_callback = _available_update
+    monkeypatch.setattr(UpdateDialog, "exec", lambda _self: pytest.fail("No duplicate prompt"))
+    startup = None
+    if startup_running:
+        controller._start_startup_update_check()
+        startup = jobs[-1]
+        qtbot.waitUntil(lambda: startup.is_running)
+    dialog = UpdateDialog(auto_check=False, check_callback=_available_update, lifecycle=lifecycle)
+    qtbot.addWidget(dialog)
+    dialog.start_update_check()
+    manual = jobs[-1]
+    qtbot.waitUntil(lambda: manual.is_running)
+    if startup is not None:
+        assert startup.cancel_event.is_set()
+        startup.finish(value=_available_update())
+    count = len(jobs)
+    controller._start_startup_update_check()  # Previously queued startup timer.
+    assert len(jobs) == count
+    assert not manual.cancel_event.is_set()
+    manual.run_callback()
+    manual.finish()
+    assert dialog.download_button.isEnabled()
+
+
 def test_canceled_startup_metadata_check_cannot_open_a_late_prompt(
     qapp, qtbot, monkeypatch, deferred_updates,
 ) -> None:
@@ -992,10 +1026,25 @@ def test_failed_update_stays_recoverable_and_does_not_quit(
 
 @pytest.mark.parametrize("size", [(680, 600), (760, 620)])
 @pytest.mark.parametrize(
-    "state", ["available", "patch", "full-required", "unverifiable", "busy", "canceling", "error"]
+    "state",
+    [
+        "available",
+        "patch",
+        "full-required",
+        "unverifiable",
+        "busy",
+        "canceling",
+        "error",
+        "checking-files",
+        "download-files",
+    ],
 )
 def test_update_dialog_long_content_fits_minimum_and_default_sizes(
-    qtbot, tmp_path, deferred_updates, size, state,
+    qtbot,
+    tmp_path,
+    deferred_updates,
+    size,
+    state,
 ) -> None:
     lifecycle, jobs, _quit_calls = deferred_updates
     full_notes = (
@@ -1028,7 +1077,21 @@ def test_update_dialog_long_content_fits_minimum_and_default_sizes(
     qtbot.addWidget(dialog)
     dialog.resize(*size)
     dialog.show()
-    if state in {"busy", "canceling"}:
+    if state in {"checking-files", "download-files"}:
+        if state == "checking-files":
+            dialog.start_update_check()
+        else:
+            dialog.start_download()
+        qtbot.waitUntil(lambda: jobs[-1].is_running)
+        status = "Verifying installed files before downloading the patch..."
+        jobs[-1].progress_changed.emit(UpdatePhase(status, result), None)
+        assert dialog.status_label.text() == status
+        assert not dialog.download_button.isEnabled()
+        assert not dialog.install_button.isEnabled()
+        assert dialog.progress_bar.isVisible()
+        if state == "checking-files":
+            assert dialog.latest_version_label.text() == f"Latest version: {result.latest_version}"
+    elif state in {"busy", "canceling"}:
         dialog.start_download()
         qtbot.waitUntil(lambda: jobs[-1].is_running)
         if state == "canceling":
@@ -1036,6 +1099,9 @@ def test_update_dialog_long_content_fits_minimum_and_default_sizes(
     elif state == "error":
         dialog._handle_task_error(RuntimeError(full_notes), "install")
     qtbot.waitUntil(lambda: dialog.close_button.width() > 0)
+    # A close request changes wrapped status text after the previous layout.
+    # Drain its queued layout request before measuring the new content.
+    qtbot.wait(1)
 
     assert dialog.width() == size[0]
     assert dialog.height() == size[1]
@@ -1048,8 +1114,11 @@ def test_update_dialog_long_content_fits_minimum_and_default_sizes(
         assert dialog.download_button.isEnabled()
     assert_visible_children_within_parent(dialog)
     for button in (
-        dialog.check_button, dialog.download_button, dialog.install_button,
-        dialog.close_button, dialog.release_notes_button,
+        dialog.check_button,
+        dialog.download_button,
+        dialog.install_button,
+        dialog.close_button,
+        dialog.release_notes_button,
     ):
         assert button.width() >= button.fontMetrics().horizontalAdvance(button.text()) + 20
     for label in dialog.findChildren(QLabel):
@@ -1117,3 +1186,124 @@ def test_application_starts_cache_work_before_root_setup_and_drains_on_failure(m
     assert calls.count("event-loop") == 2
     assert "cancel" in calls
     assert not lifecycle.has_active_jobs
+
+
+@pytest.mark.parametrize("size", [(680, 660), (760, 680)])
+def test_standalone_repair_uses_registered_version_and_full_installer(
+    qtbot, deferred_updates, monkeypatch, size
+):
+    lifecycle, jobs, _ = deferred_updates
+    result = replace(_available_update(), current_version="0.9.0b2")
+    checks = []
+
+    def check(**kwargs):
+        checks.append(kwargs)
+        return result
+
+    monkeypatch.setattr("fpvs_studio.gui.updater_window.check_update", check)
+    window = UpdaterWindow(auto_check=False, lifecycle=lifecycle)
+    qtbot.addWidget(window)
+    window.resize(*size)
+    window.show()
+    window.start_repair_check()
+    qtbot.waitUntil(lambda: bool(jobs) and jobs[-1]._started)
+    assert not window.repair_button.isEnabled()
+    jobs[-1].run_callback()
+    jobs[-1].finish()
+    assert checks[-1]["repair"] is True
+    assert checks[-1]["force_full"] is True
+    assert window.current_version_label.text() == "Current version: 0.9.0b2"
+    assert "repair" in window.status_label.text()
+    assert window.download_button.text() == "Download Full Installer"
+    assert window.download_button.isEnabled()
+    assert window.repair_button.isEnabled()
+    assert not window.progress_bar.isVisible()
+    qtbot.wait(1)
+    assert_visible_children_within_parent(window)
+    window.start_update_check()
+    qtbot.waitUntil(lambda: jobs[-1]._started)
+    jobs[-1].run_callback()
+    jobs[-1].finish()
+    assert checks[-1]["repair"] is False
+    assert window.download_button.text() == "Download Update"
+
+
+def test_standalone_handoff_does_not_claim_to_be_studio(qtbot, deferred_updates, monkeypatch):
+    lifecycle, _, _ = deferred_updates
+    calls = []
+    monkeypatch.setattr(
+        "fpvs_studio.gui.updater_window.HelperClient.launch_install",
+        lambda _self, downloaded, **kwargs: calls.append(kwargs),
+    )
+    window = UpdaterWindow(auto_check=False, lifecycle=lifecycle)
+    qtbot.addWidget(window)
+    window._installer_launcher(object(), Event())
+    assert calls[0]["parent_pid"] is None
+
+
+@pytest.mark.parametrize("size", [(620, 340), (700, 380)])
+def test_apply_progress_failure_keeps_repair_and_complete_error_accessible(
+    qtbot, deferred_updates, size
+):
+    lifecycle, jobs, _ = deferred_updates
+    window = ApplyUpdateDialog(lambda _progress, _cancel: None, lifecycle=lifecycle)
+    qtbot.addWidget(window)
+    window.resize(*size)
+    window.show()
+    qtbot.waitUntil(lambda: bool(jobs) and jobs[-1]._started)
+    error = "Target verification failed. " + "FPVS-Studio-long-file-name.dll " * 60
+    jobs[-1].finish(error=UpdateError(error))
+    assert window.details_label.toPlainText() == error
+    assert window.repair_button.isVisible()
+    assert window.close_button.isEnabled()
+    assert not window.progress_bar.isVisible()
+    qtbot.wait(1)
+    assert_visible_children_within_parent(window)
+
+
+def test_apply_late_cancel_cannot_hide_installer_failure(qtbot, deferred_updates):
+    lifecycle, jobs, _ = deferred_updates
+
+    def apply(progress, cancel):
+        # Model setup committing before the GUI sees its queued status signal.
+        progress(UpdatePhase("Installing FPVS Studio...", install_committed=True), None)
+        cancel.set()
+        raise UpdateError("The installer did not complete (exit code 12).")
+
+    window = ApplyUpdateDialog(apply, lifecycle=lifecycle)
+    qtbot.addWidget(window)
+    window.show()
+    qtbot.waitUntil(lambda: bool(jobs) and jobs[-1]._started)
+    jobs[-1].run_callback()
+    jobs[-1].finish()
+    assert "could not be completed" in window.status_label.text()
+    assert "exit code 12" in window.details_label.toPlainText()
+    assert window.repair_button.isVisible()
+
+
+def test_apply_close_before_deferred_start_does_not_launch(qtbot, deferred_updates):
+    lifecycle, jobs, _ = deferred_updates
+    window = ApplyUpdateDialog(
+        lambda _progress, _cancel: pytest.fail("A dismissed helper must not install"),
+        lifecycle=lifecycle,
+    )
+    qtbot.addWidget(window)
+    window.show()
+    window.reject()
+    qtbot.wait(10)
+    assert not jobs
+
+
+def test_apply_cancel_waits_for_worker_before_close(qtbot, deferred_updates):
+    lifecycle, jobs, _ = deferred_updates
+    window = ApplyUpdateDialog(lambda _progress, _cancel: None, lifecycle=lifecycle)
+    qtbot.addWidget(window)
+    window.show()
+    qtbot.waitUntil(lambda: bool(jobs) and jobs[-1]._started)
+    window.close()
+    assert window.isVisible()
+    assert jobs[-1].cancel_event.is_set()
+    jobs[-1].finish(error=UpdateCancelled("Canceled before launch"))
+    assert "canceled before installation" in window.status_label.text()
+    window.close()
+    assert not window.isVisible()

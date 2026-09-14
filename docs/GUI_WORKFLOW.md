@@ -539,10 +539,12 @@ and Linux, Settings also exposes Experiment Test Mode with a detailed tooltip th
 names every skipped hardware/participant check and every timing behavior that remains.
 Moving a project to the Recycle Bin remains a controller-owned filesystem operation
 guarded by `project.json` validation, confirmation, a post-action path check, and a disk
-refresh of the manage list after each attempt. `Check for Updates` queries GitHub
-Releases without blocking the GUI, shows current/latest versions and release notes,
-downloads and verifies the matching Windows installer with progress, and supports
-this-launch-only `Remind Me Later`. A newer release without a trusted installer SHA-256
+refresh of the manage list after each attempt. `Check for Updates` delegates to the
+independent updater through `HelperClient`, without blocking the GUI. It shows
+current/latest versions, release notes, and the candidate patch/full installer, downloads
+and verifies the package with progress, and supports this-launch-only `Remind Me Later`.
+Discovery and download do not scan installed payload files; final patch compatibility
+belongs to the native installer. A newer release without a trusted installer SHA-256
 digest is still shown as available, with an explanation that in-app installation is
 unavailable and a release-page link; it is not reported as up to date. Manual
 update-check failures show a clear try-again-later message. A silent startup metadata
@@ -557,17 +559,35 @@ that requested them. Close, window X, and Escape cancel a busy operation and kee
 dialog responsive in `Canceling...` until the worker thread really finishes. Incomplete
 downloads are discarded and retries start from zero. Application quit and last-window
 closure also cancel outstanding jobs and defer final exit without a GUI-thread wait;
-parent-window destruction cannot destroy a running updater thread. Cache checks,
-download hashing/reuse, and final installer verification/launch run in workers. The
+parent-window destruction cannot destroy a running updater thread. Cache checks run in
+workers; helper subprocesses own release/download work and installation coordination. The
 Install action becomes available only after the download worker thread finishes;
 confirmation and any project Save prompt run on the GUI thread before the final
-verification/launch worker starts. A successful installer launch commits the handoff:
-a late cancellation cannot undo it, and FPVS Studio quits only after that worker ends.
+handoff worker starts. The staged helper authenticates the package and the registered
+Studio process, then requires explicit acceptance of its ready nonce. Studio quits only
+after acceptance and local worker completion. The helper waits for that identified
+process to exit, installs under a separate installation lock, and restarts Studio once
+after successful setup. It never force-closes Studio or edits project data. A canceled
+or failed handoff keeps Studio open; setup failure opens the repair path without restart.
 
 The update dialog has a `680x600` minimum and `760x620` default size. Its action grid
 keeps long button labels visible at both sizes. Versions and status text wrap; release
 notes and error details use an intentionally bounded, selectable preview with the full
-value in a tooltip, and the full release page remains available by button. The Home
+value in a tooltip, and the full release page remains available by button.
+
+The bundled **FPVS Studio Update & Repair** Start Menu entry uses the same dialog in a
+separate process, at a `680x660` minimum and `760x680` default. Its full-installer repair
+action supports the currently installed version and requires all Studio windows to close
+before installation. It works independently of Studio's authoring/runtime dependencies.
+The managed install-progress dialog has a `620x340` minimum and `700x380` default. It
+shows waiting, package verification, installing, restart, cancellation, or failure states;
+long error details remain accessible in a read-only scrolling field. Cancel is available
+before setup begins and disabled after explicit installation commitment. Late cancellation
+cannot turn a failed installation into a false cancellation message. Failure exposes
+**Open Update & Repair**; successful installation closes the progress window after restart.
+Helper staging, trust, locks, and native installation contracts are in `docs/PACKAGING.md`.
+
+The Home
 page keeps full project descriptions in project data but shows a
 bounded preview under the project title to avoid launch-surface clipping. The `Tools`
 menu exposes standalone utilities such as Image Resizer; these utilities may use
@@ -610,9 +630,12 @@ preprocessing services but must not silently mutate the active project.
 - Project management lives in `src/fpvs_studio/gui/manage_projects_dialog.py`; it uses
   shared component-layer cards, path labels, status badges, and button role helpers while
   leaving project discovery and deletion side effects in the controller.
-- In-app update presentation lives in `src/fpvs_studio/gui/update_dialog.py`; release
-  parsing, version comparison, installer download, and installer launch helpers stay in
-  `src/fpvs_studio/updates/`.
+- In-app update presentation lives in `src/fpvs_studio/gui/update_dialog.py` and calls
+  `updates/helper_client.py` through workers. `gui/updater_window.py` owns standalone
+  Update & Repair and managed install progress, reusing the existing component layer.
+  `src/fpvs_studio/updater_main.py` selects backend pipe, standalone, or apply mode.
+  Protocol, staging, registered identity, package trust, and installation coordination
+  stay in `updates/helper_*`; complete patch checks and file replacement remain in Inno.
 - App-owned updater worker/cancellation lifetime lives in
   `src/fpvs_studio/gui/update_lifecycle.py`; `application.py` owns startup and the final
   asynchronous shutdown drain. These contain no cache-retention or installer-trust rules.
@@ -772,7 +795,7 @@ Local handoff must document a visible manual smoke path for the changed workflow
 state whether registered Qt coverage was not run or ran in an explicitly approved
 visible environment.
 
-Updater visible/manual smoke (pending an approved visible Windows session):
+Updater visible/manual smoke (run only in an approved visible Windows session):
 
 1. Open `File > Check for Updates` and inspect the `680x600` minimum and `760x620`
    default sizes with long versions, release notes, and error details. Check every action
@@ -788,13 +811,23 @@ Updater visible/manual smoke (pending an approved visible Windows session):
    or hidden updater job may remain; temporary root-picker transitions must not quit.
 4. Stub installer launch and confirmation/save prompts. Confirm that neither hashing nor
    launching occurs on the GUI thread, Install stays disabled until download-thread
-   completion, declining/canceling never launches, and a committed fake launch quits only
+   completion, declining/canceling never launches, and an accepted fake handoff quits only
    after its worker finishes. Closing/destroying a prompt must not start a hidden launch.
+5. With offline service callbacks, inspect **Update & Repair** at `680x660` and `760x680`.
+   Check same-version full repair, unavailable metadata, package progress, and all button
+   labels without clipping. Close before deferred startup and while work is pending.
+6. Exercise the independent apply dialog at `620x340` and `700x380` with fake callbacks.
+   Check long failure details, waiting/cancellation, success, and the repair transition.
+   Simulate setup commitment before the GUI receives its phase signal, then cancel and
+   return a failed setup result: it must show failure/repair and never claim cancellation
+   before installation. Do not execute a real installer for this GUI check.
 
 The registered updater module contains deterministic fake-worker cases for these paths;
 source/lint/compilation checks do not validate real Qt event delivery or visible layout.
 Actual installer/upgrade lifecycle checks remain separately documented in
 `docs/PACKAGING.md`; this smoke must not launch a real installer or clean a real cache.
+The completed independent-updater plan records verification performed and remaining installed
+or clean-PC acceptance; implementing these surfaces does not establish those results.
 
 ## Setup Design And Manual Acceptance
 

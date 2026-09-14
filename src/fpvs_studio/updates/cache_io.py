@@ -12,8 +12,9 @@ import logging
 import os
 import stat
 import sys
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import ExitStack, contextmanager
+from functools import cache
 from pathlib import Path
 from threading import Event
 from typing import BinaryIO
@@ -70,7 +71,7 @@ def validate_cache_path(path: Path) -> Path:
 
 
 class CacheDirectory:
-    """A pinned cache root; instances are valid only inside ``locked_cache``."""
+    """A pinned directory, valid only while its owning guard context is open."""
 
     def __init__(self, path: Path, directories: list[tuple[Path, os.stat_result]]) -> None:
         self.path = path
@@ -230,7 +231,21 @@ def guarded_read_path(path: Path, *, cancel_event: Event | None = None) -> Itera
     never writes to the installation and does not acquire or create a cache lock.
     """
 
-    parent = validate_cache_path(path.parent)
+    with guarded_read_directory(path.parent, cancel_event=cancel_event) as directory:
+        with directory.open_file(path.name) as source:
+            yield source
+
+
+@contextmanager
+def guarded_read_directory(
+    path: Path, *, cancel_event: Event | None = None
+) -> Iterator[CacheDirectory]:
+    """Keep one directory's ancestry pinned while reading successive files.
+
+    Each file still validates all pinned directory identities and gets its own
+    no-write/delete guard. The pins are released when this context exits.
+    """
+    parent = validate_cache_path(path)
     with ExitStack() as stack:
         directories = []
         for directory in (*reversed(parent.parents), parent):
@@ -240,8 +255,7 @@ def guarded_read_path(path: Path, *, cancel_event: Event | None = None) -> Itera
                 raise UpdateError("The installed application contains a linked directory.")
             stack.enter_context(_pin_directory(directory, info))
             directories.append((directory, info))
-        with CacheDirectory(parent, directories).open_file(path.name) as source:
-            yield source
+        yield CacheDirectory(parent, directories)
 
 
 def _acquire_lock(stream: BinaryIO) -> None:
@@ -321,7 +335,13 @@ def _pin_directory(path: Path, expected: os.stat_result) -> Iterator[None]:
             _LOG.warning("update_cache_directory_close_failed", exc_info=True)
 
 
-def _windows_open(path: Path, access: int, share: int, disposition: int, flags: int) -> int:
+@cache
+def _windows_file_api() -> tuple[Callable[..., int], Callable[..., int]]:
+    """Bind once; frozen ctypes otherwise probes the filesystem for every handle.
+
+    Only API bindings are retained. File handles, directory identities and file
+    contents are still acquired and checked afresh on every guarded read.
+    """
     import ctypes
     from ctypes import wintypes
 
@@ -337,6 +357,16 @@ def _windows_open(path: Path, access: int, share: int, disposition: int, flags: 
         wintypes.HANDLE,
     ]
     create.restype = wintypes.HANDLE
+    close = kernel.CloseHandle
+    close.argtypes = [wintypes.HANDLE]
+    close.restype = wintypes.BOOL
+    return create, close
+
+
+def _windows_open(path: Path, access: int, share: int, disposition: int, flags: int) -> int:
+    import ctypes
+
+    create, _close = _windows_file_api()
     handle = create(str(path), access, share, None, disposition, flags, None)
     if handle == ctypes.c_void_p(-1).value:
         raise ctypes.WinError(ctypes.get_last_error())
@@ -345,11 +375,7 @@ def _windows_open(path: Path, access: int, share: int, disposition: int, flags: 
 
 def _windows_close(handle: int) -> None:
     import ctypes
-    from ctypes import wintypes
 
-    kernel = ctypes.WinDLL("kernel32", use_last_error=True)
-    close = kernel.CloseHandle
-    close.argtypes = [wintypes.HANDLE]
-    close.restype = wintypes.BOOL
+    _create, close = _windows_file_api()
     if not close(handle):
         raise ctypes.WinError(ctypes.get_last_error())

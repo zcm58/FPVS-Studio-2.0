@@ -159,11 +159,13 @@ tests = [
   "tests/unit/test_update_cache.py",
   "tests/unit/test_update_check.py",
   "tests/unit/test_update_download.py",
+  "tests/unit/test_update_helper.py",
   "tests/unit/test_update_patch.py",
+  "tests/unit/test_updater_main.py",
 ]
 full_tests = []
-include = ["src/fpvs_studio/updates/**", "src/fpvs_studio/gui/update_dialog.py", "src/fpvs_studio/gui/update_lifecycle.py", "tests/unit/test_update_*.py"]
-manual_smoke = ["Use File > Check for Updates in a visible Studio window when update presentation or installer handoff changes."]
+include = ["src/fpvs_studio/updates/**", "src/fpvs_studio/updater_main.py", "src/fpvs_studio/gui/update_dialog.py", "src/fpvs_studio/gui/update_lifecycle.py", "src/fpvs_studio/gui/updater_window.py", "tests/unit/test_update_*.py", "tests/unit/test_updater_main.py"]
+manual_smoke = ["Use File > Check for Updates and the standalone Update & Repair surface with controlled callbacks in an approved visible Windows session; inspect documented minimum/default sizes and accepted/canceled installer handoff states."]
 
 [scopes.packaging]
 checks = []

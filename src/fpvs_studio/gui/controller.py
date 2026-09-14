@@ -72,7 +72,7 @@ from fpvs_studio.runtime.export_modes import (
     VALID_EXPORT_MODES,
 )
 from fpvs_studio.updates.downloader import cleanup_update_cache
-from fpvs_studio.updates.github_releases import check_for_updates
+from fpvs_studio.updates.helper_client import HelperClient
 from fpvs_studio.updates.models import UpdateCheckResult
 
 _SETTINGS_ORGANIZATION = "FPVS Studio"
@@ -124,9 +124,11 @@ class StudioController(QObject):
         self._startup_cache_job: UpdateJob | None = None
         self._startup_cache_cleanup_callback = cleanup_update_cache
         self._startup_update_check_started = False
+        self._startup_update_check_superseded = False
         self._startup_update_job: UpdateJob | None = None
+        self._update_lifecycle.manual_check_requested.connect(self._cancel_startup_update_check)
         self._startup_update_check_callback: Callable[[Event], UpdateCheckResult] = (
-            lambda cancel: check_for_updates(cancel_event=cancel)
+            lambda cancel: HelperClient().check(__version__, cancel_event=cancel)
         )
         self._active_import_bundle_task: BackgroundTask | None = None
         self._import_bundle_progress_bridge: ProgressSignalBridge | None = None
@@ -174,13 +176,26 @@ class StudioController(QObject):
         QTimer.singleShot(0, self._start_startup_update_check)
 
     def _start_startup_update_check(self) -> None:
-        if self._startup_update_job is not None or self._update_lifecycle.is_shutting_down:
+        if (
+            self._startup_update_job is not None
+            or self._startup_update_check_superseded
+            or self._update_lifecycle.is_shutting_down
+        ):
             return
         check_callback = self._startup_update_check_callback
         job = self._update_lifecycle.start_task(lambda _progress, cancel: check_callback(cancel))
         job.finished.connect(self._handle_startup_update_check_finished)
         self.destroyed.connect(job.cancel)
         self._startup_update_job = job
+
+    @Slot()
+    def _cancel_startup_update_check(self) -> None:
+        # A manual request takes priority over the silent startup scan. Its worker
+        # drains through the normal cancellation path and cannot open a second prompt.
+        self._startup_update_check_started = True
+        self._startup_update_check_superseded = True
+        if self._startup_update_job is not None:
+            self._startup_update_job.cancel()
 
     def start_update_cache_housekeeping(self) -> None:
         """Schedule offline, app-cache-only startup work before root-folder onboarding."""

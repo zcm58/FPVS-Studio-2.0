@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from collections.abc import Callable
 from threading import Event
 
@@ -36,10 +37,13 @@ from fpvs_studio.gui.update_lifecycle import (
     UpdateTaskResult,
     update_lifecycle,
 )
-from fpvs_studio.updates.downloader import download_installer
-from fpvs_studio.updates.github_releases import check_for_updates
-from fpvs_studio.updates.installer import launch_installer
-from fpvs_studio.updates.models import DownloadedInstaller, InstallerAsset, UpdateCheckResult
+from fpvs_studio.updates.helper_client import HelperClient
+from fpvs_studio.updates.models import (
+    DownloadedInstaller,
+    InstallerAsset,
+    UpdateCheckResult,
+    UpdatePhase,
+)
 
 _LOGGER = logging.getLogger(__name__)
 _MINIMUM_SIZE = (680, 600)
@@ -47,8 +51,10 @@ _DEFAULT_SIZE = (760, 620)
 _PROGRESS_MAXIMUM = 1000
 
 
-def _check_update(cancel_event: Event) -> UpdateCheckResult:
-    return check_for_updates(cancel_event=cancel_event)
+def _check_update(progress: ProgressReporter, cancel_event: Event) -> UpdateCheckResult:
+    return HelperClient().check(
+        __version__, cancel_event=cancel_event, phase_callback=lambda phase: progress(phase, None)
+    )
 
 
 def _download_update(
@@ -56,11 +62,18 @@ def _download_update(
     progress: ProgressReporter,
     cancel_event: Event,
 ) -> DownloadedInstaller:
-    return download_installer(asset, progress_callback=progress, cancel_event=cancel_event)
+    return HelperClient().download(
+        asset,
+        progress_callback=progress,
+        cancel_event=cancel_event,
+        phase_callback=lambda phase: progress(phase, None),
+    )
 
 
 def _launch_update(downloaded: DownloadedInstaller, cancel_event: Event) -> object:
-    return launch_installer(downloaded, cancel_event=cancel_event)
+    return HelperClient().launch_install(
+        downloaded, parent_pid=os.getpid(), cancel_event=cancel_event
+    )
 
 
 class UpdateDialog(QDialog):
@@ -71,7 +84,8 @@ class UpdateDialog(QDialog):
         *,
         parent: QWidget | None = None,
         auto_check: bool = True,
-        check_callback: Callable[[Event], UpdateCheckResult] = _check_update,
+        check_callback: Callable[[Event], UpdateCheckResult] | None = None,
+        check_task: UpdateCallback | None = None,
         download_callback: Callable[
             [InstallerAsset, ProgressReporter, Event],
             DownloadedInstaller,
@@ -89,6 +103,7 @@ class UpdateDialog(QDialog):
         self.resize(*_DEFAULT_SIZE)
 
         self._check_callback = check_callback
+        self._check_task = check_task
         self._download_callback = download_callback
         self._installer_launcher = installer_launcher
         self._on_before_install = on_before_install
@@ -208,7 +223,16 @@ class UpdateDialog(QDialog):
         self._set_busy_state("Checking GitHub Releases...")
         self.progress_bar.setVisible(False)
         check_callback = self._check_callback
-        self._start_task("check", lambda _progress, cancel: check_callback(cancel))
+        self._lifecycle.manual_check_requested.emit()
+        self._start_task(
+            "check",
+            self._check_task
+            or (
+                _check_update
+                if check_callback is None
+                else lambda _progress, cancel: check_callback(cancel)
+            ),
+        )
 
     def show_update_result(self, result: UpdateCheckResult) -> None:
         """Populate the dialog from an already-completed update check."""
@@ -273,7 +297,7 @@ class UpdateDialog(QDialog):
         if downloaded is None:
             return
         installer_launcher = self._installer_launcher
-        self._set_busy_state("Verifying the installer before launch...")
+        self._set_busy_state("Preparing FPVS Studio Updater. Studio will close when it is ready...")
         self.progress_bar.setRange(0, 0)
         self.progress_bar.setVisible(True)
         self._start_task(
@@ -307,9 +331,8 @@ class UpdateDialog(QDialog):
         kind = self._task_kind
         self._job = None
         self._task_kind = None
-        if (
-            not isinstance(outcome, UpdateTaskResult)
-            and (self._close_pending or self._lifecycle.is_shutting_down)
+        if not isinstance(outcome, UpdateTaskResult) and (
+            self._close_pending or self._lifecycle.is_shutting_down
         ):
             super().done(self._close_result)
             return
@@ -342,6 +365,7 @@ class UpdateDialog(QDialog):
             return
         self._result = result
         self._downloaded_installer = None
+        self.progress_bar.setVisible(False)
         self.current_version_label.setText(f"Current version: {result.current_version}")
         self.latest_version_label.setText(f"Latest version: {result.latest_version}")
         self.release_notes_button.setEnabled(result.release_url is not None)
@@ -360,7 +384,8 @@ class UpdateDialog(QDialog):
                 download_kind = "Patch" if asset.kind == "patch" else "Full installer"
                 download_size = (
                     f" ({asset.size_bytes / 1_000_000:.1f} MB)"
-                    if asset.size_bytes is not None else ""
+                    if asset.size_bytes is not None
+                    else ""
                 )
                 selection = f"{download_kind}{download_size}."
                 if result.selection_reason:
@@ -407,9 +432,7 @@ class UpdateDialog(QDialog):
         self.progress_bar.setValue(_PROGRESS_MAXIMUM)
 
     def _handle_task_error(self, error: object, kind: str | None = None) -> None:
-        _LOGGER.warning(
-            "Updater operation failed", extra={"operation": kind, "error": str(error)}
-        )
+        _LOGGER.warning("Updater operation failed", extra={"operation": kind, "error": str(error)})
         if kind == "download":
             message = "The update download could not be completed. Retry starts a new download."
         elif kind == "install":
@@ -432,6 +455,16 @@ class UpdateDialog(QDialog):
     @Slot(object, object)
     def _handle_download_progress(self, downloaded: object, total: object) -> None:
         if self._close_pending or self._job is None:
+            return
+        if isinstance(downloaded, UpdatePhase):
+            self.status_label.setText(downloaded.text)
+            result = downloaded.result
+            if result is not None and self._task_kind == "check":
+                self.current_version_label.setText(f"Current version: {result.current_version}")
+                self.latest_version_label.setText(f"Latest version: {result.latest_version}")
+                self._set_notes_text(result.release_notes_summary)
+            self.progress_bar.setRange(0, 0)
+            self.progress_bar.setVisible(True)
             return
         if isinstance(downloaded, int) and isinstance(total, int) and total > 0:
             # Qt widgets accept signed 32-bit integers, but supported downloads can

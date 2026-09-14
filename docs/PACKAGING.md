@@ -1,8 +1,8 @@
 # Packaging FPVS Studio
 
 This guide is for developer builds of the Windows executable bundle and installer. End
-users should only interact with the installed `FPVS Studio.exe`, not the source tree or
-Python environment.
+users use the installed `FPVS Studio.exe` and its bundled Update & Repair tool; neither
+requires the source tree or a system Python environment.
 
 ## Build Environment
 
@@ -37,7 +37,7 @@ The PyInstaller spec includes package metadata in the bundled app.
 The package distribution name is `fpvs-studio`; the GUI and executable still use the
 display name `FPVS Studio`.
 
-For the current release package, use the PEP 440-compatible package version `1.6.1`.
+For the current release package, use the PEP 440-compatible package version `1.7.0`.
 The GitHub Release title can use a friendlier beta label, but the release tag and
 installer filename must use the exact package version.
 
@@ -86,6 +86,66 @@ When iterating after dependencies are already installed, use:
 ```powershell
 .\scripts\build_exe.ps1 -SkipInstall
 ```
+
+## Independent Updater Build And Installation
+
+`scripts/build_installer.ps1` builds the independent updater before generating the final
+ownership inventory. The existing `build_release.ps1` wrapper inherits this step through
+the installer stage; `build_exe.ps1` alone continues to build Studio. The helper is included
+in both the complete installer and any patch payload whose target changes it:
+
+```text
+dist\<BuildLabel>\FPVS Studio\Updater\FPVS Studio Updater.exe
+```
+
+For lightweight updater iteration without rebuilding Studio or executing an installer:
+
+```powershell
+.\scripts\build_updater.ps1 -BuildLabel independent-updater-dev
+```
+
+This uses the existing packaging environment, requires source and installed package
+metadata to agree, and isolates output under `build/independent-updater-dev/` and
+`dist/independent-updater-dev/`. The automatic `--packaging-check` diagnostic writes its
+report under `build/<BuildLabel>/pyinstaller-updater/`; it checks the frozen version,
+protocol, and absence of GUI imports without a window, network request, or installation.
+It does not replace visible GUI or installed update acceptance. Restricted Windows
+sandboxes may prevent the one-file bootloader from extracting its own temporary runtime;
+run this bounded diagnostic in the approved ordinary Windows execution context when needed.
+In a user-approved safe visible session, `-AllowVisibleGui` additionally runs the bounded
+`--gui-smoke` mode; the installer build forwards that opt-in to the helper stage.
+
+`packaging/pyinstaller/fpvs_updater.spec` builds a one-file helper with its own Python,
+PySide6, and package metadata. It excludes authoring, runtime, PsychoPy, and scientific
+dependencies, so damage to Studio's `_internal` directory does not prevent the helper
+from starting. It does not compile Studio on the user's machine. The ordinary Inno
+installer supplies the **FPVS Studio Update & Repair** Start Menu shortcut when the
+helper is present and shortcuts have not been disabled.
+
+Studio's `HelperClient` and the Start Menu entry stage the helper outside the installation
+before running it. `%LOCALAPPDATA%\FPVS Studio\updater-helper` contains a flat set of
+content-addressed executables, with no more than two recognized completed helper payloads.
+Old locked helpers may remain within that bound; abandoned partials must be removed before
+another copy is added. Staged bytes are rehashed under a no-write/delete guard through
+process creation. This lets setup replace `Updater/FPVS Studio Updater.exe` while the
+independent staged process continues to monitor it. Staging cleanup remains separate from
+the installer-download cache and never visits project directories. Inno uninstall uses
+the same guarded lock/file protocol to remove only recognized inactive helper payloads
+and partials; active, linked, or unknown files remain untouched. It removes the helper
+directory only if empty and cleans the installation-lock directory only when unlocked
+and empty, without enumerating or deleting arbitrary contents.
+
+Independent launches use PyInstaller's public environment-reset flag, giving each helper
+its own temporary runtime even when it starts another copy of the same staged executable.
+`updates/process_launch.py` removes inherited bundle paths from the child's runtime
+environment and resets/restores Windows DLL search around process creation. This keeps
+native setup and restarted Studio independent of the retiring helper's bundled libraries.
+
+The implementation's acceptance record is the completed
+[independent updater plan](exec-plans/completed/independent-updater.md). Validation and the
+installed/clean-PC acceptance scenarios are tracked there; this implementation task
+does not change the version or publish a release. Preserve previously published artifacts
+and use isolated build labels until a new release is explicitly requested.
 
 ## Smoke Test
 
@@ -192,7 +252,7 @@ Then build the setup EXE:
 Expected output for the current package:
 
 ```text
-dist\installer\FPVS-Studio-Setup-1.6.1.exe
+dist\installer\FPVS-Studio-Setup-1.7.0.exe
 ```
 
 The installer build validates that the PyInstaller bundle has an `_internal` folder and
@@ -344,18 +404,23 @@ fetches the bounded JSON through the same trusted GitHub/CDN boundary and verifi
 GitHub digest before using it. Invalid or tampered metadata is an error, not an implicit
 permission to run a different file.
 
-Only registered Windows x64 installations can select a patch. Windows supplies the
-running executable path and effective process architecture; the executable must be
-`FPVS Studio.exe` in the exact per-user registered directory with the running version.
-Source Python processes are ineligible. Eligibility failures are recorded in the app log.
-The app verifies the exact
-installed ownership-manifest bytes and hashes every baseline application file using
-no-follow handles. It chooses a direct patch only when smaller than the full installer.
-A missing, modified, or incompatible baseline selects the full installer with an explicit
-reason. It does not chain patches. File checks run in cancelable workers before selection,
-before download/reuse, and again before installer launch. Patch cache receipts retain
-source and target identity; stale or incompatible patch payloads are pruned by existing
-bounded-cache policy.
+The independent helper reads the exact per-user Windows installation registration rather
+than treating its own package version as Studio's installed version. For discovery it
+authenticates the release JSON and installed ownership-inventory bytes, then offers a
+smaller direct patch whose source version matches. It does not hash installed payload
+files during discovery or download. Missing or incompatible inventory selects the full
+installer with an explicit reason. A candidate is described as requiring compatibility
+checks during installation; changes to installed payload files are detected by native
+setup before mutation. Patches are not chained. Patch cache receipts retain source and
+target identity; stale or incompatible payloads follow the existing bounded-cache policy.
+
+The older direct backend API retains its complete Python baseline verifier for callers
+that request it. Its reads reuse Windows API bindings and keep the current directory's
+ancestor pins between adjacent files, while every file receives fresh identity/hash
+checks. These latency improvements remain, but the independent workflow no longer
+repeats those scans at discovery/download/launch. Typed phase events distinguish metadata,
+package transfer/verification, waiting for Studio, installation, and restart. Manual checks
+cancel the pending or running silent startup check through the shared lifecycle.
 
 `build_patch.py` generates only changed and added target files while retaining the full
 target ownership inventory. The patch's Inno mode independently verifies registration,
@@ -382,12 +447,14 @@ uninstall registration still belong to the user's installed application.
 ## In-App Update Flow
 
 Installed users can use `File > Check for Updates`. FPVS Studio also runs one silent
-startup check after the Welcome window appears. The app checks GitHub Releases, compares
-the installed `fpvs_studio.__version__` with the latest eligible release tag, shows the
-current and latest versions plus a short release-notes summary, and downloads the
-selected full or compatible direct-patch installer only after the user chooses
-`Download Update`. Starting with v1.5.1, the dialog names the download type and size;
-patch selection and installation rules are below.
+startup check after the Welcome window appears. Both routes call `HelperClient` from
+the existing app-owned worker lifecycle. A private helper process checks GitHub Releases
+and returns current/latest versions, notes, and a candidate package type/size without a
+full installation scan. The helper downloads the selected package only after the user
+chooses `Download Update`, verifying its GitHub SHA-256 and size as part of transfer/reuse.
+Source development uses the same entry in a separate Python process; packaged Studio
+requires the bundled helper. A source process cannot identify itself as the installed
+Studio process for an installation handoff.
 Manual update-check failures show a clear try-again-later message. Startup checks stay
 silent unless an update is available.
 
@@ -430,19 +497,45 @@ and promotion. Competing attempts report that the cache is busy. Canceled or int
 downloads are discarded; a retry starts from zero. Uninstall cleans only recognized
 app-owned cache files under the same lock, and removes the cache directory only if empty.
 
-On `Install and Restart`, FPVS Studio asks for final confirmation, saves the open project
-through its existing GUI callback, verifies the downloaded file in a background worker,
-launches the Inno installer with `/RELAUNCH=1`, and exits after that worker has finished. The
-installer remains responsible for replacing app files and relaunching FPVS Studio. User
-projects, app settings, condition templates, run history, and logs remain outside the
-install folder during updates. Normal first-time installer runs still show the standard
-launch checkbox on the final page.
+On `Install and Restart`, Studio asks for final confirmation and saves through its existing
+GUI callback. The staged helper reacquires the official GitHub asset identity, verifies
+cached bytes, and pins a Windows process handle for the exact registered Studio executable.
+Private messages have a versioned, bounded schema. The helper sends a fresh ready nonce;
+Studio must accept that nonce before the helper can proceed. Studio exits only after its
+handoff worker finishes successfully. An early EOF, cancellation, or missing acceptance
+cannot start setup.
+
+The helper holds a separate `%LOCALAPPDATA%\FPVS Studio\updater-install` lock through
+the bounded process wait, final registration/other-instance check, installation, and
+restart. It never terminates Studio. Managed setup receives `/DIR=<registered root>`,
+`/VERYSILENT`, `/SUPPRESSMSGBOXES`, `/NORESTART`, `/NOCLOSEAPPLICATIONS`, and `/NOLAUNCH=1`.
+Inno owns replacement, complete patch baseline/target verification, and recovery. The
+helper waits for setup's exit code and checks expected registration before restarting
+Studio once. Exit 12 or any failed install prevents restart and exposes Update & Repair.
+The installation-committed phase is explicit; a late cancellation cannot misreport a
+failed mutation as cancellation before installation. Once setup starts, cancellation
+cannot terminate it.
+
+The standalone **Update & Repair** window works without opening Studio. It derives the
+installed version from registration and offers an explicit full installer, including
+same-version reinstallation; older versions are rejected. The full repair path remains
+available when a patch is incompatible or Studio cannot start. It requires a registered
+installation; first installation uses the full installer normally. All Studio instances
+must be closed before standalone installation. User projects, settings, templates, run
+history, and logs remain outside the install folder. Ordinary manual installer runs
+retain their standard launch checkbox; only managed updates delegate restart to the helper.
 
 Closing an update dialog through its button, Escape, or the window close control requests
 cancellation and defers teardown until updater work finishes. Application quit similarly
 cancels/finishes app-owned updater jobs without destroying running Qt threads or blocking
 the GUI thread. Metadata checks, hashing, cache housekeeping, and download I/O all stay
 off the GUI thread. Startup never downloads an installer or launches setup automatically.
+Network work uses cancellation checkpoints and bounded socket reads. For private pipe
+workers, cancellation or EOF also starts an eight-second watchdog for stalled DNS; it
+exits the unaccepted worker while its bootloader remains alive to clean temporary files.
+The client closes input and allows that cleanup before forced termination as a last resort.
+Acceptance atomically disarms this watchdog before installation can begin. The standalone
+window's local check/download workers still wait for their network call to return on cancel.
 
 ### Updater And Upgrade Acceptance
 
@@ -450,6 +543,12 @@ Run the focused `updates`, `gui`, and `packaging` verification scopes, then repo
 precommit. Ordinary local verification uses temporary files and mocked network/process
 operations; it does not run an installer, uninstall an application, or execute Qt.
 Registered Qt coverage requires a separately approved safe visible environment.
+The updates route includes `test_update_helper.py` for IPC, staging, registration, locks,
+and handoff, plus `test_updater_main.py` for the GUI-free diagnostic entry. Candidate
+selection and deferred-download/managed-launch checks remain in `test_update_patch.py`.
+The registered `tests/gui/test_update_dialog.py` covers standalone repair and apply
+progress, including commitment and cancellation. See
+[GUI workflow](GUI_WORKFLOW.md#gui-implementation-map) for ownership and acceptance sizes.
 
 A safe native syntax check compiles the actual Inno script against a tiny,
 non-executable synthetic bundle, without running the resulting setup:

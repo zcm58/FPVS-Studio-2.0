@@ -32,6 +32,7 @@ from fpvs_studio.updates.models import (
     InstallerAsset,
     UpdateError,
     UpdateIntegrityError,
+    UpdatePhase,
 )
 from fpvs_studio.updates.patches import require_running_patch_baseline
 from fpvs_studio.updates.validation import (
@@ -52,6 +53,8 @@ def download_installer(
     destination_dir: Path | None = None,
     progress_callback: ProgressCallback | None = None,
     cancel_event: Event | None = None,
+    phase_callback: Callable[[UpdatePhase], None] | None = None,
+    verify_patch_files: bool = True,
 ) -> DownloadedInstaller:
     """Prune, reuse or transfer, verify and promote under one exclusive cache lock.
 
@@ -61,13 +64,19 @@ def download_installer(
 
     check_cancel(cancel_event)
     validate_asset_identity(asset)
-    if asset.kind == "patch":
+    if asset.kind == "patch" and verify_patch_files:
+        if phase_callback is not None:
+            phase_callback(UpdatePhase("Verifying installed files before downloading the patch..."))
         require_running_patch_baseline(asset, cancel_event=cancel_event)
+    if phase_callback is not None:
+        phase_callback(UpdatePhase("Preparing the update download..."))
     target_dir = destination_dir if destination_dir is not None else default_update_cache_dir()
     with locked_cache(target_dir, cancel_event=cancel_event) as cache:
         prune_for_download(cache, asset, cancel_event)
         check_cancel(cancel_event)
         if cache.regular_info(asset.name) is not None:
+            if phase_callback is not None:
+                phase_callback(UpdatePhase("Verifying the previously downloaded update..."))
             try:
                 with verified_installer(cache, asset, cancel_event=cancel_event) as existing:
                     _emit_progress(progress_callback, existing.size_bytes, asset.size_bytes)
@@ -79,6 +88,8 @@ def download_installer(
                 # Metadata from this request, not a receipt or size alone, governs reuse.
                 cache.remove(asset.name)
                 cache.remove(receipt_name(asset.name))
+        if phase_callback is not None:
+            phase_callback(UpdatePhase("Downloading and verifying the update..."))
         return _download_locked(cache, asset, progress_callback, cancel_event)
 
 

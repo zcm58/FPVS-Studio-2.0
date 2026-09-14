@@ -20,6 +20,7 @@ $BundleExePath = Join-Path $BundleRoot "FPVS Studio.exe"
 $BundleInternalPath = Join-Path $BundleRoot "_internal"
 $InstallerOutputDir = $BuildPaths.InstallerRoot
 $SmokePackagedAppScript = Join-Path $PSScriptRoot "smoke_packaged_app.ps1"
+$BuildUpdaterScript = Join-Path $PSScriptRoot "build_updater.ps1"
 $InventoryScript = Join-Path $PSScriptRoot "build_installer_inventory.py"
 $LegacyInventoryPath = Join-Path $RepoRoot "packaging\inventory\published-legacy-inventory.json"
 $InventoryOutputDir = $BuildPaths.InventoryRoot
@@ -65,6 +66,12 @@ function Assert-BundleInput {
     $metadataPath = Join-Path $metadataDirs[0].FullName "METADATA"
     if (-not (Test-Path -LiteralPath $metadataPath)) {
         throw "Bundled fpvs-studio metadata was missing: $metadataPath"
+    }
+    $metadataVersion = Select-String -LiteralPath $metadataPath -Pattern '^Version: (.+)$' |
+        Select-Object -First 1
+    if ($null -eq $metadataVersion -or
+        $metadataVersion.Matches[0].Groups[1].Value.Trim() -ne (Get-AppVersion)) {
+        throw "The Studio bundle version does not match pyproject.toml; rebuild it before adding the updater."
     }
 }
 
@@ -138,6 +145,11 @@ try {
         throw "Inno Setup script was not found: $SpecPath"
     }
     Assert-BundleInput
+    Write-Output "Building the independent FPVS Studio updater before final bundle inventory..."
+    & $BuildUpdaterScript -BuildLabel $BuildLabel -AllowVisibleGui:$AllowVisibleGui
+    if ($LASTEXITCODE -ne 0) {
+        throw "Command failed with exit code ${LASTEXITCODE}: $BuildUpdaterScript"
+    }
     if (-not $SkipSmoke) {
         Write-Output "Running packaged app smoke check before installer build..."
         Invoke-PackagedSmoke

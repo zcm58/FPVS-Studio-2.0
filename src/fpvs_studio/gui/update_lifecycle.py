@@ -15,9 +15,9 @@ from typing import cast
 from PySide6.QtCore import QEvent, QObject, Qt, QThread, QTimer, Signal, Slot
 from PySide6.QtWidgets import QApplication
 
-from fpvs_studio.updates.models import UpdateCancelled
+from fpvs_studio.updates.models import UpdateCancelled, UpdatePhase
 
-ProgressReporter = Callable[[int, int | None], None]
+ProgressReporter = Callable[[int | UpdatePhase, int | None], None]
 UpdateCallback = Callable[[ProgressReporter, Event], object]
 
 
@@ -63,7 +63,7 @@ class _UpdateWorker(QObject):
         finally:
             self.finished.emit()
 
-    def _report_progress(self, downloaded: int, total: int | None) -> None:
+    def _report_progress(self, downloaded: int | UpdatePhase, total: int | None) -> None:
         if not self._cancel_event.is_set():
             self.progress_changed.emit(downloaded, total)
 
@@ -144,6 +144,7 @@ class UpdateLifecycle(QObject):
     """Keep updater jobs alive and make Quit/last-window shutdown cancellation-safe."""
 
     shutdown_started = Signal()
+    manual_check_requested = Signal()
     idle = Signal()
 
     def __init__(
