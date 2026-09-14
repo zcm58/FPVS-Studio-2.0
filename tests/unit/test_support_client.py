@@ -71,8 +71,12 @@ def draft():
     )
 
 
-def test_disabled_by_default_and_rejects_other_origins(monkeypatch):
+def test_production_default_explicit_disable_and_rejects_other_origins(monkeypatch):
     monkeypatch.delenv("FPVS_REPORT_SERVICE_URL", raising=False)
+    client = ReportClient.configured()
+    assert client.enabled
+    assert client.origin == SERVICE_ORIGIN
+    monkeypatch.setenv("FPVS_REPORT_SERVICE_URL", "")
     client = ReportClient.configured()
     assert not client.enabled
     with pytest.raises(ReportServiceError, match="not connected"):

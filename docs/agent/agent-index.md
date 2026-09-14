@@ -86,8 +86,8 @@ Exact release steps and recovery limits live in `docs/PACKAGING.md#direct-patch-
 For File > Report a Bug or Request a Feature, begin with `support/AGENTS.md`, `docs/BUG_REPORTING.md`,
 `gui/report_bug_dialog.py`, and `gui/bug_report_controller.py`. Support owns the
 reviewed payload and OS-local drafts; the GUI owns interactions and delegates
-work through the existing app-owned task lifecycle. Online reporting is opt-in
-and requires the separate Cloudflare service in private `zcm58/FPVS-Studio-Feedback`;
+work through the existing app-owned task lifecycle. Online reporting requires explicit submission and defaults to the approved endpoint
+of the separate Cloudflare service in private `zcm58/FPVS-Studio-Feedback`;
 never enable it as part of a test. That repository owns deployment and operations.
 Run the GUI scope, `tests/unit/test_support_reports.py` and
 `tests/unit/test_support_client.py`, then repo precommit for startup/lifecycle

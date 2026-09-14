@@ -79,7 +79,7 @@ class ReportClient:
 
     @classmethod
     def configured(cls) -> ReportClient:
-        return cls(os.environ.get("FPVS_REPORT_SERVICE_URL", "").strip())
+        return cls(os.environ.get("FPVS_REPORT_SERVICE_URL", SERVICE_ORIGIN).strip())
 
     @property
     def enabled(self) -> bool:

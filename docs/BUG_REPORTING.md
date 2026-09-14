@@ -91,28 +91,20 @@ emails, participant tags, and credentials are redacted best-effort. Users review
 the final text because redaction cannot guarantee removal of every sensitive value.
 No project models, stimuli, participant CSVs, or arbitrary attachments are collected.
 
-## Activation after separate Cloudflare setup
+## Production activation
 
-Do not enable online reporting until the service below has passed staging tests.
-The desktop makes no Cloudflare account, DNS, repository, or subscription changes.
-The desktop already includes the client; no GUI redesign is needed for activation.
+The Cloudflare service passed automatic queue delivery acceptance on 2026-09-14.
+FPVS Studio now defaults to `https://reports.zack-murphy.com`; users still explicitly
+review and submit each report. Opening a dialog does not upload its contents.
+No account, DNS or subscription changes are performed by the desktop.
 
-Set the launching process environment variable:
-
-```text
-FPVS_REPORT_SERVICE_URL=https://reports.zack-murphy.com
-```
-
-Restart FPVS Studio after configuring it. Empty/unset disables online submission.
-Other origins, HTTP, URL credentials, paths, and redirects are rejected. This is a
-deployment setting, not a project setting or user-facing server-address field.
-It can be set in the installed application's launch environment during the later
-Cloudflare/toolbox setup. No GitHub tokens or Turnstile secrets belong in the app.
+An explicitly empty `FPVS_REPORT_SERVICE_URL` disables online submission. When set
+to a nonempty value it must exactly equal the approved HTTPS origin. Other origins,
+HTTP, URL credentials, paths, and redirects are rejected. Restart FPVS Studio after
+changing the launch environment. No GitHub or Turnstile secrets belong in the app.
 Tests inject a fake transport instead of allowing alternate production URLs.
-
-The future backend must implement this client contract exactly, or adapt the client
-and its fake-service tests together before activation. Server acceptance still needs
-independent testing; fake transport tests do not prove Cloudflare is deployed.
+Existing installed builds need an updated release or the approved endpoint in their
+launch environment; changing source does not update already installed applications.
 
 ## Version 1 wire contract
 
@@ -220,4 +212,4 @@ Manual visible acceptance in both themes and at 125%/150% Windows scaling:
    Open the report from File twice and verify preservation of the existing draft.
 5. With a test service only, test browser failure/expiry, cancellation, quota failure,
    lost upload response, pending/submitted receipts, and quit during a draft write.
-6. With the variable unset, Submit remains disabled and no browser/network opens.
+6. With the variable explicitly empty, Submit remains disabled and no browser/network opens.

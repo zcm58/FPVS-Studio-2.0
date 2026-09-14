@@ -21,16 +21,17 @@ and separate email retries. Full payloads expire after 14 days; receipt metadata
 after 30 days. Backend source, migrations, tests and operations belong in the
 separate repository. Its README and deployment log are the deployment authority.
 
-CPU acceptance now separates intake, cleanup, authentication, issue delivery and
-email into different invocations. The minute schedule rotates four background phases.
-The desktop HTTP client now identifies FPVS Studio explicitly, avoiding Cloudflare's
-rejection of Python's generic user-agent. Support checks passed (30 tests, one
-permission skip); repo precommit passed (1,440 tests, seven permission skips).
-Service source and these desktop changes are committed and pushed. As of 14:09 UTC,
-manual delivery and revised CPU tests pass, but Cloudflare's automatic schedule has
-not executed despite reapplying it and waiting through the propagation window.
-Production intake/delivery and local desktop activation remain disabled. The
-separate service deployment record owns this remaining rollout blocker.
+Queue rollout (2026-09-14): staging issue #6 and production issue #7 were created
+and emailed automatically after normal verified submissions. The staging recovery
+job reconciled issue #5 without another create and removed expired intents.
+Queue messages carry identifiers only; authentication, issue and email remain
+separate invocations. A generation-checked five-minute maintenance chain handles
+cleanup and recovery, with Cron retained as a secondary fallback. Workers Free
+remains in use. The separate service README documents retention, retries and the
+operator restart procedure after a queue outage longer than its 24-hour retention.
+Production intake/delivery are enabled. Desktop configuration now defaults to the
+approved production endpoint, with an explicitly empty environment override to
+disable it. Source activation requires an updated release for existing installations.
 The earlier desktop-only deferral below records the original implementation stage;
 it does not override this later authorization. Visible desktop geometry and a
 packaged release remain separate acceptance work, so this plan remains active.
