@@ -35,7 +35,9 @@ class _NoRedirect(HTTPRedirectHandler):
 
 
 def http_transport(method: str, url: str, data: bytes | None, headers: dict[str, str]) -> bytes:
-    request = Request(url, data=data, headers=headers, method=method)
+    request = Request(
+        url, data=data, headers={"User-Agent": "FPVS-Studio/1.0", **headers}, method=method
+    )
     try:
         with build_opener(_NoRedirect()).open(request, timeout=10) as response:
             if response.headers.get_content_type() != "application/json":

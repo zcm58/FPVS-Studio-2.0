@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+from email.message import Message
+from io import BytesIO
 from threading import Event
 
 import pytest
@@ -14,8 +16,26 @@ from fpvs_studio.support.client import (
     ReportClient,
     ReportServiceError,
     _NoRedirect,
+    http_transport,
 )
 from fpvs_studio.support.models import Draft, Intent, Report
+
+
+def test_http_transport_identifies_application_without_changing_auth(monkeypatch):
+    response = BytesIO(b"{}")
+    response.headers = Message()
+    response.headers["Content-Type"] = "application/json"
+
+    class Opener:
+        def open(self, request, timeout):
+            assert request.get_header("User-agent") == "FPVS-Studio/1.0"
+            assert request.get_header("Authorization") == "Bearer synthetic"
+            assert timeout == 10
+            return response
+
+    monkeypatch.setattr("fpvs_studio.support.client.build_opener", lambda *_: Opener())
+    headers = {"Authorization": "Bearer synthetic"}
+    assert http_transport("GET", SERVICE_ORIGIN, None, headers) == b"{}"
 
 
 def intent():

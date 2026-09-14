@@ -4,6 +4,32 @@ Status: Active
 
 Date: 2026-09-12
 
+## Service integration (2026-09-14)
+
+The user subsequently authorized Cloudflare provisioning and direct email
+notifications to `zmurphy@abe.msstate.edu`. The independent service repository is
+now `zcm58/FPVS-Studio-Feedback` (private), with a GitHub App installed on that
+repository only and Issues write/metadata read permissions. No paid plan was added.
+Workers, D1, Turnstile and restricted email delivery are provisioned. The sending
+domain is `reports.zack-murphy.com`; apex/www website records remain intact.
+
+Staging has created a synthetic bug issue and feature issue; both notification
+emails were accepted, and the user confirmed the bug notification arrived.
+The service enforces both desktop wire variants, independent capability roles,
+transactional quotas, receipt deduplication, uncertain GitHub reconciliation,
+and separate email retries. Full payloads expire after 14 days; receipt metadata
+after 30 days. Backend source, migrations, tests and operations belong in the
+separate repository. Its README and deployment log are the deployment authority.
+
+CPU acceptance now separates intake, cleanup, authentication, issue delivery and
+email into different invocations. The minute schedule rotates four background phases.
+The desktop HTTP client now identifies FPVS Studio explicitly, avoiding Cloudflare's
+rejection of Python's generic user-agent. Support checks passed (30 tests, one
+permission skip); repo precommit passed (1,440 tests, seven permission skips).
+The earlier desktop-only deferral below records the original implementation stage;
+it does not override this later authorization. Visible desktop geometry and a
+packaged release remain separate acceptance work, so this plan remains active.
+
 ## Desktop implementation (2026-09-14)
 
 Feature-request extension: implemented File > Request a Feature with a single
@@ -49,23 +75,21 @@ The user requested a plan for Cloudflare hosting using their existing
 `zack-murphy.com` domain and selected descriptions and text error logs only.
 The user also explicitly requested a new native GUI surface reached through
 **File > Report a Bug...**; this is a required deliverable of the feature.
-On 2026-09-14 the user authorized desktop implementation. Cloudflare provisioning,
-the service repository, DNS, and deployment are deferred to a separate setup task.
-Implement local reporting and the client contract first; online submission remains
-explicitly disabled until the reporting service is configured and verified.
+On 2026-09-14 the user first authorized desktop implementation and then the separate
+service setup described above. Online submission remains explicitly configured
+through the launcher environment after service acceptance.
 
 Use Workers Free, D1 Free, and Turnstile Free. Do not enable R2, a paid Workers
-subscription, outgoing email infrastructure, screenshots, or arbitrary file uploads.
+subscription, paid email infrastructure, screenshots, or arbitrary file uploads.
 This replaces the earlier R2 suggestion because bounded text diagnostics fit D1.
 The target is zero incremental hosting cost on the free plans, not guaranteed
 availability under unlimited traffic. Existing domain renewal costs are separate.
 
-Proposed defaults, pending account inspection when implementation begins:
+Selected deployment configuration:
 
 - Public submission and verification host: `reports.zack-murphy.com`.
-- Private GitHub repository: `zcm58/fpvs-studio-reports`, containing the small
-  service's code and incoming issues. This repository does not yet exist as part
-  of this work; confirm its name and visibility before provisioning.
+- Private GitHub repository: `zcm58/FPVS-Studio-Feedback`, containing the small
+  service's code and incoming issues.
 - GitHub App installed only on that repository, with Issues read/write and the
   required metadata access. No repository Contents write permission or webhooks.
 - Native FPVS Studio report editor, with a short system-browser verification step.

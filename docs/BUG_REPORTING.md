@@ -14,7 +14,7 @@ in the separate app-local `support/feature-drafts/` directory. Bug drafts stay
 independent. Receipt locking, cancellation, browser verification and explicit
 status checks reuse the existing reporting protocol.
 
-The future `/v1/reports` endpoint must accept this feature payload variant:
+The `/v1/reports` endpoint accepts this feature payload variant:
 `schema_version: "1"`, `kind: "feature"`, `report_id`, `created_at`, `app_version`,
 and `description` (the text box). No other fields are sent. Bug payloads omit `kind`
 and retain their existing bytes. Intent hashes bind the exact payload and kind.
@@ -181,17 +181,26 @@ as pending GitHub issue creation. Submitted becomes Done. The service never retu
 a private GitHub URL as the user's receipt link. Cancellation does not retract bytes
 already sent, so receipt checks remain necessary after interrupted uploads.
 
-## Future service work
+## Cloudflare service ownership
 
-Cloudflare Workers Free, D1, Turnstile, the private GitHub App/repository, rate limits,
-the outbox, and server-side retention remain in the active execution plan. No R2 or
-paid subscription is needed for this text-only design. Keep reports on the dedicated
-subdomain without modifying the homepage or mail DNS.
+The independent service lives in the private
+[`zcm58/FPVS-Studio-Feedback`](https://github.com/zcm58/FPVS-Studio-Feedback)
+repository. Its README and deployment log own live configuration, migrations,
+acceptance evidence and rollback. It uses Workers Free, D1, Turnstile, a GitHub
+App restricted to that repository, and email notifications to
+`zmurphy@abe.msstate.edu`. No R2 or paid subscription was enabled. Sending-domain
+records belong under `reports.zack-murphy.com`; existing website records are preserved.
 
-Full server logs and optional email are planned to expire after 14 days; D1 recovery
+Full submitted logs and optional reply email expire after 14 days; D1 recovery
 history may retain deleted data for seven additional days. GitHub descriptions and
 a bounded reviewed error excerpt have a separate lifetime until manually removed.
-These policies must be deployed and tested before enabling the desktop connection.
+The server shares a 100-report daily limit across bugs and features, with separate
+transactional intent and storage limits. Background cleanup, GitHub authentication, issue creation and
+email run in rotating minute phases to keep CPU work bounded. Email retry cannot
+create a second issue. A received receipt may remain pending during external failures.
+
+The HTTP client identifies itself as `FPVS-Studio/1.0`; Cloudflare rejected Python's
+default user-agent during live integration. No Cloudflare security rules were weakened.
 
 ## Verification and visible acceptance
 
