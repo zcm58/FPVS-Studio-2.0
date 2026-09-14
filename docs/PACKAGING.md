@@ -142,10 +142,11 @@ environment and resets/restores Windows DLL search around process creation. This
 native setup and restarted Studio independent of the retiring helper's bundled libraries.
 
 The implementation's acceptance record is the completed
-[independent updater plan](exec-plans/completed/independent-updater.md). Validation and the
-installed/clean-PC acceptance scenarios are tracked there; this implementation task
-does not change the version or publish a release. Preserve previously published artifacts
-and use isolated build labels until a new release is explicitly requested.
+[independent updater plan](exec-plans/completed/independent-updater.md). The completed
+[v1.7.0 release record](exec-plans/completed/release-1.7.0.md) documents published assets,
+direct patches from 1.5.3/1.6.0/1.6.1, packaged smoke checks, and payload/hash audits.
+Clean-PC acceptance and installation over a user's working copy remain unperformed.
+Preserve previously published artifacts and use isolated build labels for later candidates.
 
 ## Smoke Test
 

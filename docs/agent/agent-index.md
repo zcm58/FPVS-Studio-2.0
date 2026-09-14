@@ -93,8 +93,9 @@ Use updates/gui/packaging focused routes, then repo precommit. The updates route
 `tests/unit/test_update_helper.py` and `test_updater_main.py`; registered GUI coverage
 stays in `tests/gui/test_update_dialog.py`. Native lifecycle acceptance uses
 `scripts/check_patch_installer_lifecycle.py` with isolated synthetic app identities.
-See the completed independent-updater execution plan for implementation evidence and release acceptance; source
-checks do not establish an installed update or clean-PC repair result.
+See the completed independent-updater execution plan for implementation evidence and the
+[v1.7.0 release record](../exec-plans/completed/release-1.7.0.md) for published artifact
+acceptance; source checks do not establish an installed update or clean-PC repair result.
 
 ## Bug Reporting
 
