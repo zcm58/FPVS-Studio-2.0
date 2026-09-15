@@ -96,12 +96,15 @@ def collect_packaged_smoke_report() -> dict[str, Any]:
     patch_dialog.close()
 
     toggled: list[bool] = []
+    pilot_toggled: list[bool] = []
     settings = AppSettingsDialog(
         fpvs_root_dir=Path(psychopy_user_dirs["LOCALAPPDATA"]),
         experiment_test_mode_available=experiment_test_mode_available(),
         on_experiment_test_mode_changed=toggled.append,
+        attentional_blink_pilot_mode_available=experiment_test_mode_available(),
+        on_attentional_blink_pilot_mode_changed=pilot_toggled.append,
     )
-    settings.resize(700, 610)
+    settings.resize(700, 680)
     settings.show()
     app.processEvents()
     checkbox = settings.experiment_test_mode_checkbox
@@ -110,6 +113,17 @@ def collect_packaged_smoke_report() -> dict[str, Any]:
         checkbox.setChecked(True)
         checkbox.setChecked(False)
     test_mode_toggle_ok = toggled == [True, False]
+    pilot = settings.attentional_blink_pilot_mode_checkbox
+    pilot_mode_visible = pilot is not None and pilot.isVisible() and pilot.isEnabled()
+    pilot_mode_fits = (
+        pilot is not None
+        and pilot.width() >= pilot.fontMetrics().horizontalAdvance(pilot.text()) + 24
+        and settings.rect().contains(pilot.mapTo(settings, pilot.rect().bottomRight()))
+    )
+    if pilot is not None:
+        pilot.setChecked(True)
+        pilot.setChecked(False)
+    pilot_mode_toggle_ok = pilot_toggled == [True, False]
     settings.close()
     app.processEvents()
     dist_info_count_ok = len(dist_info_names) == 1
@@ -127,6 +141,9 @@ def collect_packaged_smoke_report() -> dict[str, Any]:
             and patch_copy_ok
             and test_mode_visible
             and test_mode_toggle_ok
+            and pilot_mode_visible
+            and pilot_mode_fits
+            and pilot_mode_toggle_ok
         ),
         "app_version": __version__,
         "metadata_version": metadata_version,
@@ -140,6 +157,9 @@ def collect_packaged_smoke_report() -> dict[str, Any]:
         "patch_copy_ok": patch_copy_ok,
         "test_mode_visible": test_mode_visible,
         "test_mode_toggle_ok": test_mode_toggle_ok,
+        "pilot_mode_visible": pilot_mode_visible,
+        "pilot_mode_fits": pilot_mode_fits,
+        "pilot_mode_toggle_ok": pilot_mode_toggle_ok,
         "psychopy_user_dirs": psychopy_user_dirs,
         "runtime_dependencies_ok": runtime_dependencies_ok,
         "runtime_dependency_report": runtime_dependency_report,

@@ -17,6 +17,10 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from fpvs_studio.core.attentional_blink_presets import (
+    RECALL_TASK_ID,
+    is_attentional_blink_stream_project,
+)
 from fpvs_studio.core.models import ConditionTemplateProfile
 from fpvs_studio.gui.components import (
     PAGE_SECTION_GAP,
@@ -295,7 +299,9 @@ class HomePage(QWidget):
         metrics_layout.setHorizontalSpacing(0)
         metrics_layout.setVerticalSpacing(0)
         self._add_metric(metrics_layout, 0, "Conditions", self.condition_count_value)
-        self._add_metric(metrics_layout, 1, "Blocks", self.block_count_value)
+        self.block_count_label = self._add_metric(
+            metrics_layout, 1, "Blocks", self.block_count_value
+        )
         self._add_metric(metrics_layout, 2, "Fixation Cross", self.fixation_task_value)
         self._add_metric(metrics_layout, 3, "Accuracy Tracking", self.accuracy_task_value)
         for column in range(4):
@@ -419,10 +425,26 @@ class HomePage(QWidget):
         )
 
         self.condition_count_value.setText(str(len(ordered_conditions)))
-        self.block_count_value.setText(str(session_settings.block_count))
+        burst_mode = (
+            is_attentional_blink_stream_project(project)
+            and session_settings.randomize_across_blocks
+        )
+        self.block_count_label.setText("Bursts" if burst_mode else "Blocks")
+        count = session_settings.block_count * (len(ordered_conditions) if burst_mode else 1)
+        self.block_count_value.setText(str(count))
+        self.block_count_value.setToolTip(
+            f"{session_settings.block_count} bursts per SOA, in randomized order."
+            if burst_mode else ""
+        )
         self.fixation_task_value.setText("Enabled" if fixation_settings.enabled else "Disabled")
+        recall_enabled = any(
+            binding.task_id == RECALL_TASK_ID
+            for condition in ordered_conditions
+            for binding in condition.post_task_bindings
+        )
         self.accuracy_task_value.setText(
-            "Enabled" if fixation_settings.accuracy_task_enabled else "Disabled"
+            "T1/T2 recall" if recall_enabled
+            else "Enabled" if fixation_settings.accuracy_task_enabled else "Disabled"
         )
         self._refresh_sophia_mode_ticker()
         self._set_status_indicator(report)
@@ -495,7 +517,7 @@ class HomePage(QWidget):
         column: int,
         label_text: str,
         value_widget: QLabel,
-    ) -> None:
+    ) -> QLabel:
         metric_cell = QFrame(self)
         metric_cell.setObjectName("home_metric_cell")
         cell_layout = QVBoxLayout(metric_cell)
@@ -509,6 +531,7 @@ class HomePage(QWidget):
         cell_layout.addWidget(row_label)
         cell_layout.addWidget(value_widget)
         layout.addWidget(metric_cell, 0, column)
+        return row_label
 
     def _new_value_label(
         self,

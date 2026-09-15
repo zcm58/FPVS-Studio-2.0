@@ -27,6 +27,7 @@ from PySide6.QtWidgets import (
 )
 
 from fpvs_studio import __version__
+from fpvs_studio.core.enums import ExperimentCategory
 from fpvs_studio.core.models import ConditionTemplateProfile
 from fpvs_studio.core.paths import logs_dir
 from fpvs_studio.core.project_bundle import (
@@ -42,6 +43,7 @@ from fpvs_studio.core.project_bundle import (
 from fpvs_studio.core.project_config import PROJECT_CONFIG_SUFFIX, project_config_filename
 from fpvs_studio.gui import folder_actions
 from fpvs_studio.gui.animations import ButtonHoverAnimator
+from fpvs_studio.gui.attentional_blink_data_dialog import AttentionalBlinkDataDialog
 from fpvs_studio.gui.bundle_export_dialog import BundleExportOptionsDialog
 from fpvs_studio.gui.components import apply_studio_theme
 from fpvs_studio.gui.document import ProjectDocument
@@ -161,6 +163,7 @@ class StudioMainWindow(QMainWindow):
         self._bundle_export_result_page: BundleExportResultPage | None = None
         self._bundle_import_processing_page: BundleImportProcessingPage | None = None
         self._fixation_cross_data_dialog: FixationCrossDataDialog | None = None
+        self._attentional_blink_data_dialog: AttentionalBlinkDataDialog | None = None
         self._on_load_condition_template_profiles = on_load_condition_template_profiles
         self._on_manage_condition_templates = on_manage_condition_templates
         self._deferred_open_tasks_started = False
@@ -545,9 +548,14 @@ class StudioMainWindow(QMainWindow):
         self.image_resizer_action = QAction("Image Resizer", self)
         self.image_resizer_action.setObjectName("image_resizer_action")
         self.image_resizer_action.triggered.connect(self.show_image_resizer)
-        self.fixation_cross_data_action = QAction("Fixation Task Accuracy...", self)
+        accuracy_label = (
+            "T1 and T2 Accuracy..."
+            if self.document.project.experiment_category == ExperimentCategory.ATTENTIONAL_BLINK
+            else "Fixation Task Accuracy..."
+        )
+        self.fixation_cross_data_action = QAction(accuracy_label, self)
         self.fixation_cross_data_action.setObjectName("fixation_cross_data_action")
-        self.fixation_cross_data_action.triggered.connect(self.show_fixation_cross_data)
+        self.fixation_cross_data_action.triggered.connect(self.show_task_accuracy)
 
     def _create_menu_and_toolbar(self) -> None:
         self.file_menu = self.menuBar().addMenu("File")
@@ -579,6 +587,24 @@ class StudioMainWindow(QMainWindow):
         self.view_menu.addAction(self.fixation_cross_data_action)
         self.tools_menu.addAction(self.image_resizer_action)
 
+    def show_task_accuracy(self) -> None:
+        if self.document.project.experiment_category == ExperimentCategory.ATTENTIONAL_BLINK:
+            self.show_attentional_blink_data()
+        else:
+            self.show_fixation_cross_data()
+
+    def show_attentional_blink_data(self) -> None:
+        dialog = self._attentional_blink_data_dialog
+        if dialog is None:
+            dialog = AttentionalBlinkDataDialog(
+                project_root=self.document.project_root, parent=self,
+            )
+            self._attentional_blink_data_dialog = dialog
+        dialog.show()
+        dialog.raise_()
+        dialog.activateWindow()
+        dialog.start_loading()
+
     def show_fixation_cross_data(self) -> None:
         dialog = self._fixation_cross_data_dialog
         if dialog is None:
@@ -593,6 +619,17 @@ class StudioMainWindow(QMainWindow):
         dialog.start_loading()
 
     def _allow_project_handoff_during_fixation_load(self) -> bool:
+        ab_dialog = self._attentional_blink_data_dialog
+        if ab_dialog is not None and ab_dialog.is_busy:
+            QMessageBox.information(
+                self, "T1 and T2 Accuracy",
+                "Wait for the accuracy data load or Excel export to finish before "
+                "closing or changing projects.",
+            )
+            ab_dialog.show()
+            ab_dialog.raise_()
+            ab_dialog.activateWindow()
+            return False
         dialog = self._fixation_cross_data_dialog
         if dialog is None or not dialog.is_busy:
             return True
@@ -759,6 +796,8 @@ class StudioMainWindow(QMainWindow):
         dialog = ParticipantNumberDialog(
             self, manual_removed_electrodes=self.document.project.manual_removed_electrodes,
         )
+        if self.document.attentional_blink_pilot_mode_enabled:
+            dialog.setWindowTitle("Pilot Study — Participant Details (No EEG Hardware)")
         if dialog.exec() != int(dialog.DialogCode.Accepted):
             return None
         return dialog.participant_details

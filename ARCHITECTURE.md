@@ -32,12 +32,16 @@ lazily only inside the engine package.
   `core/experiment_design.py` owns oddball cycle descriptions and frame previews;
   Oddball Apply uses existing protocol settings. AB image pairs are retired, with
   guards in category validation, authoring, runtime preflight and direct engine launch.
-  New AB letter streams use `gui/attentional_blink_stream_designer.py`, shared native
-  digit/target pools, an editable project-wide presentation rate, and onset-to-onset
+  New AB bursts use `gui/attentional_blink_stream_designer.py`, shared native
+  letter/digit pools, editable bursts per SOA and presentation rate, and onset-to-onset
   SOAs. `core/attentional_blink_stream.py` owns
   the exact character grid and seeded symbol sampling shared with the designer;
   `core/compiler_attentional_blink_stream.py` compiles the resulting stream.
-  `core/attentional_blink_presets.py` assembles the three-condition study and questionnaire.
+  `core/attentional_blink_presets.py` assembles the three-condition burst study and
+  two typed recall questions submitted with Enter/Next. New sessions shuffle all
+  repeated bursts as one session block; every recall burst requires Space, and
+  compiled answer keys refer to each entry's actual targets. Existing native studies
+  retain their saved character pools and blockwise session behavior.
   Historical image-pair models remain decodable without an authoring or playback route.
   AB letter streams can hide the fixation cross through Setup > Fixation. The persisted
   `FixationTaskSettings.show_cross` flag compiles into `FixationStyleSpec`; engines
@@ -56,7 +60,12 @@ lazily only inside the engine package.
   participant history and atomic visit reservation, fixation reporting and explicit-path Excel export, fixation
   scoring, trigger coordination, and execution exports.
   Attentional-blink runs add phase onset records and event CSVs in full and compact
-  exports; timing ownership and clock origins are defined in `docs/RUNSPEC.md` and
+  exports; `runtime/attentional_blink_report.py` owns incremental burst records,
+  independent T1/T2 scoring summaries and dedicated Excel export. View selects
+  T1 and T2 Accuracy for AB, or Fixation Task Accuracy for other categories. The AB
+  dialog shows SOA summaries with recorded trigger codes and chronological bursts
+  through that read-only service, including identified test sessions and their accuracy.
+  Timing ownership and clock origins are defined in `docs/RUNSPEC.md` and
   `docs/RUNTIME_EXECUTION.md`.
 - `src/fpvs_studio/engines/`: presentation interface, lazy PsychoPy implementation,
   condition-local GPU-ready resource ownership, and Windows graphics-budget probing.
@@ -265,3 +274,9 @@ File length is evidence, not an architecture rule. Split a module only when it m
 responsibilities, forces broad context reads, or prevents focused testing. Current
 measured candidates and constraints live in
 `docs/exec-plans/tech-debt-tracker.md`.
+
+
+AB-only Pilot Study Mode is an app preference owned by the GUI document/controller.
+It retains standard demographics and visit rules while selecting local testing hardware
+options. Runtime checkpoints pilot identity and demographics alongside each burst;
+the accuracy GUI and Excel expose them. See `docs/RUNTIME_EXECUTION.md`.

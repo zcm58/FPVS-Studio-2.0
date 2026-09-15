@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
     QApplication,
@@ -25,10 +26,12 @@ from tests.gui.helpers import (
     _prepare_compile_ready_project,
 )
 
-from fpvs_studio.core.enums import RunMode
+from fpvs_studio.core.enums import ExperimentCategory, RunMode
 from fpvs_studio.core.execution import SessionExecutionSummary
 from fpvs_studio.core.session_plan import SessionPlan
 from fpvs_studio.gui.controller import StudioController
+from fpvs_studio.gui.document import ProjectDocument
+from fpvs_studio.gui.home_page import HomePage
 from fpvs_studio.gui.run_page import (
     TEST_MODE_PARTICIPANT_NUMBER,
     ParticipantLaunchDetails,
@@ -59,6 +62,30 @@ def _assert_button_contents_fit(button: QPushButton) -> None:
     assert contents.width() >= required_width
     assert contents.height() >= required_height
     assert button.rect().contains(contents)
+
+
+def test_ab_home_shows_total_bursts_and_recall_tracking(qtbot, tmp_path: Path) -> None:
+    document = ProjectDocument.create_new(
+        parent_dir=tmp_path,
+        project_name="Attentional Blink burst recall",
+        experiment_category=ExperimentCategory.ATTENTIONAL_BLINK,
+    )
+    page = HomePage(document, load_condition_template_profiles=lambda: [])
+    qtbot.addWidget(page)
+    page.resize(1120, 720)
+    page.show()
+    QApplication.processEvents()
+    assert page.block_count_label.text() == "Bursts"
+    assert page.block_count_value.text() == "72"
+    assert page.accuracy_task_value.text() == "T1/T2 recall"
+    assert page.fixation_task_value.text() == "Disabled"
+    assert "24 bursts per SOA" in page.block_count_value.toolTip()
+    document.project.settings.session.block_count = 20
+    page.refresh()
+    assert page.block_count_value.text() == "60"
+    _assert_visible_children_within_parent(page)
+    for label in (page.block_count_label, page.block_count_value, page.accuracy_task_value):
+        assert label.width() >= label.fontMetrics().horizontalAdvance(label.text())
 
 
 def test_ready_project_reopens_to_home_launch_surface(
@@ -805,3 +832,32 @@ def test_home_launch_surface_shows_only_essential_project_session_metadata(
     assert subtitle_label.toolTip() == long_description
     assert subtitle_label.maximumHeight() <= subtitle_label.fontMetrics().lineSpacing() * 2 + 4
     _assert_visible_children_within_parent(launch_panel)
+
+
+def test_pilot_collects_standard_demographics_on_both_launch_surfaces(qtbot, tmp_path, monkeypatch):
+    from fpvs_studio.core.execution import ParticipantMetadata
+    from fpvs_studio.core.project_service import build_starter_project
+    from fpvs_studio.gui.main_window import StudioMainWindow
+    from fpvs_studio.gui.run_page import RunPage
+
+    project = build_starter_project(
+        "Pilot", experiment_category=ExperimentCategory.ATTENTIONAL_BLINK
+    )
+    document = ProjectDocument(project_root=tmp_path, project=project)
+    document.set_experiment_test_mode_enabled(True)
+    document.set_attentional_blink_pilot_mode_enabled(True)
+    details = ParticipantLaunchDetails(
+        participant_number="0042",
+        participant_metadata=ParticipantMetadata(
+            age=23, sex="Female", handedness="Right handed", colorblind=False
+        ),
+    )
+    for surface in (StudioMainWindow(document=document), RunPage(document=document)):
+        qtbot.addWidget(surface)
+        monkeypatch.setattr(surface, "_prompt_participant_number", lambda: details)
+        monkeypatch.setattr(
+            surface,
+            "_confirm_test_mode_launch",
+            lambda: pytest.fail("Pilot must collect demographics"),
+        )
+        assert surface._collect_launch_participant_details() == details

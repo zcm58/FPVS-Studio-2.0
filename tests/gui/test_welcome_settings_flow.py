@@ -1927,7 +1927,7 @@ def test_manage_condition_templates_dialog_renders_hierarchical_details(
     assert "Template Name: Continuous Images" in details_text
     assert "Built-in: Yes" in details_text
     assert "Display Refresh Rate: Not Set" in details_text
-    assert "Display Resolution: Full Screen (1920 × 1080)" in details_text
+    assert "Display Resolution: Full Screen (1920 Ã— 1080)" in details_text
     assert "Fixation Cross: Enabled" in details_text
     assert "Fixation Cross Accuracy Task: Enabled" in details_text
     assert "Total cross color changes in each condition: 8 to 13" in details_text
@@ -2215,3 +2215,39 @@ def test_create_dialog_forwards_selected_attentional_blink_category(
     persisted = load_project_file(document.project_root / "project.json")
     assert persisted.experiment_category == ExperimentCategory.ATTENTIONAL_BLINK
     assert persisted.conditions == document.project.conditions
+
+
+def test_pilot_settings_toggle_and_layout(qtbot, tmp_path):
+    values = []
+    dialog = AppSettingsDialog(
+        fpvs_root_dir=tmp_path,
+        experiment_test_mode_available=True,
+        attentional_blink_pilot_mode_available=True,
+        on_attentional_blink_pilot_mode_changed=values.append,
+    )
+    qtbot.addWidget(dialog)
+    dialog.resize(700, 680)
+    dialog.show()
+    QApplication.processEvents()
+    checkbox = dialog.attentional_blink_pilot_mode_checkbox
+    assert checkbox is not None and not checkbox.isChecked()
+    assert checkbox.width() >= checkbox.fontMetrics().horizontalAdvance(checkbox.text())
+    assert_visible_children_within_parent(dialog)
+    checkbox.setChecked(True)
+    assert values == [True]
+
+
+def test_pilot_preference_persists_and_is_applied_when_opening_ab(controller, qtbot, tmp_path):
+    from fpvs_studio.core.enums import ExperimentCategory
+    from fpvs_studio.core.project_service import create_project
+    from fpvs_studio.gui.document import ProjectDocument
+
+    assert controller.attentional_blink_pilot_mode_enabled() is False
+    controller.set_attentional_blink_pilot_mode_enabled(True)
+    assert controller._settings.value("launch/attentional_blink_pilot_mode", False, type=bool)
+    scaffold = create_project(
+        tmp_path, "Pilot", experiment_category=ExperimentCategory.ATTENTIONAL_BLINK
+    )
+    controller._open_document(ProjectDocument.open_existing(scaffold.project_root))
+    qtbot.addWidget(controller.main_window)
+    assert controller.main_window.document.attentional_blink_pilot_mode_enabled

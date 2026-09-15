@@ -1047,6 +1047,8 @@ class RunPage(QWidget):
             self,
             manual_removed_electrodes=self._document.project.manual_removed_electrodes,
         )
+        if self._document.attentional_blink_pilot_mode_enabled:
+            dialog.setWindowTitle("Pilot Study — Participant Details (No EEG Hardware)")
         if dialog.exec() != int(QDialog.DialogCode.Accepted):
             return None
         return dialog.participant_details

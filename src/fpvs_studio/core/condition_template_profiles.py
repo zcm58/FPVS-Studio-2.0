@@ -29,6 +29,7 @@ from fpvs_studio.core.models import (
     ConditionTemplateProfile,
     ConditionTemplateProfileLibrary,
     FixationTaskSettings,
+    ProjectPresentationSettings,
     ProjectSettings,
     ProtocolSettings,
 )
@@ -127,12 +128,16 @@ def built_in_condition_template_profiles() -> list[ConditionTemplateProfile]:
         ConditionTemplateProfile(
             profile_id=ATTENTIONAL_BLINK_STREAM_PROFILE_ID,
             experiment_category=ExperimentCategory.ATTENTIONAL_BLINK,
-            display_name="Digits & letter targets",
-            description="10 Hz digit stream with letter targets at 100, 300, and 500 ms SOAs.",
+            display_name="Five-second digit recall",
+            description=(
+                "10 Hz letter bursts with green T1 and white T2 digits at 100/300/500 ms SOAs."
+            ),
             built_in=True,
             defaults=ConditionTemplateDefaults(
                 attentional_blink_layout="letter_stream",
-                protocol=ProtocolSettings(base_hz=10.0, oddball_every_n=20),
+                condition=ConditionDefaults(sequence_count=1, oddball_cycle_repeats_per_sequence=1),
+                protocol=ProtocolSettings(base_hz=10.0, oddball_every_n=50),
+                presentation=ProjectPresentationSettings(pre_stream_fixation_seconds=0.0),
                 display=ConditionTemplateDisplayDefaults(background_color="#000000"),
                 fixation_task=FixationTaskSettings(
                     show_cross=False,
@@ -395,8 +400,9 @@ def require_profile_category(
         protocol = profile.defaults.protocol
         if category != ExperimentCategory.ATTENTIONAL_BLINK:
             raise ValueError("Letter-stream templates require the Attentional-Blink category.")
-        if protocol is None or protocol.base_hz != 10.0 or protocol.oddball_every_n != 20:
-            raise ValueError("Letter-stream templates require 10 Hz and a 20-character cycle.")
+        if (protocol is None or protocol.base_hz != 10.0
+                or protocol.oddball_every_n not in (20, 50)):
+            raise ValueError("Letter-stream templates require 10 Hz and 20 or 50 characters.")
 
 
 def apply_condition_defaults_to_condition(

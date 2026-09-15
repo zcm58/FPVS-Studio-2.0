@@ -60,7 +60,7 @@ class AttentionalBlinkCharacterSizeEditor(ImageDisplaySizeEditor):
         self.preview_value_label.hide()
         self.configure_presentation_button.hide()
         self.presentation_summary_label.setText(
-            "The same fixed height is used for base digits, T1 and T2. "
+            "The same fixed height is used for distractors, T1 and T2. "
             "Viewing geometry below determines the size in visual degrees."
         )
         self.character_height_edit.setToolTip(self.presentation_summary_label.text())

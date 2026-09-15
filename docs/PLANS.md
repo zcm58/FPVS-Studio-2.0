@@ -13,6 +13,8 @@ Use this page to find planning material before making feature-sized changes.
 
 Current implementation:
 
+- [Attentional Blink pilot mode and release](exec-plans/active/attentional-blink-pilot-release.md)
+
 - [Cloudflare bug reporting: desktop implementation](exec-plans/active/cloudflare-bug-reporting.md)
 - `exec-plans/active/bounded-updater-storage-and-clean-upgrades.md`
 
@@ -37,6 +39,12 @@ Completed plans are historical implementation notes. Read their directory only w
 the current contracts do not explain why a landed decision exists.
 
 Recent completion: [Multi-session release v1.5.3](exec-plans/completed/multi-session-release-v1.5.3.md).
+
+Recent completion: [Attentional Blink burst recall study](exec-plans/completed/attentional-blink-burst-recall.md).
+
+Recent completion: [Typed Attentional Blink recall and readiness gates](exec-plans/completed/attentional-blink-typed-recall.md).
+
+Recent completion: [Category-aware accuracy view](exec-plans/completed/category-aware-accuracy-view.md).
 
 Recent completion: [Editable Attentional Blink rate and v1.5.2](exec-plans/completed/attentional-blink-rate-v1.5.2.md).
 

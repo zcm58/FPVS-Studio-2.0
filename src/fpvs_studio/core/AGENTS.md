@@ -112,13 +112,18 @@ For FPVS Oddball Paradigm, keep protocol defaults explicit while allowing projec
 - `oddball_every_n = 5`
 - default `oddball_cycle_repeats_per_sequence = 146`
 
-New Attentional-Blink letter streams default to 10 Hz, 20-character cycles and
-100/300/500 ms target SOAs. `attentional_blink_stream.py` owns the exact onset grid;
-`attentional_blink_presets.py` owns native digit/letter defaults and the block visibility
-question. These streams require exact whole frames per character, rejecting approximate
+New Attentional-Blink studies default to five-second 10 Hz letter bursts with a green
+T1 digit and a different white T2 digit at 100/300/500 ms SOAs (codes 1/3/5). The
+default 24 bursts per SOA are shuffled together; `SessionSettings.block_count` retains
+the authored repeats and `randomize_across_blocks` selects the new session-wide order.
+`attentional_blink_stream.py` owns the exact onset grid;
+`attentional_blink_presets.py` owns the native pools and two-question recall task.
+`compiler_tasks.py` resolves correct options from the actual compiled target pair.
+Existing saved digit streams and blockwise session settings retain their behavior.
+These streams require exact whole frames per character, rejecting approximate
 refresh ratios. Retired image-pair records remain decodable, but category validation
 blocks their saving, export and compilation; runtime rejects old compiled copies. See `docs/EXPERIMENT_CATEGORIES.md` for the
-layout and schema contracts. Sequence-repeat defaults remain unchanged.
+layout and schema contracts. Each new recall burst contains exactly one target pair.
 
 Represent timing in frames after display validation/compilation. Do not use sleep-based millisecond scheduling as a design primitive.
 

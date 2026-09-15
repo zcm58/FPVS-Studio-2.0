@@ -63,6 +63,14 @@ This phase should establish:
   artifacts under `runs/` only when full run export mode is enabled
 - checkpoint experimental task responses incrementally, preserve partial responses on
   abort, and keep raw task answers out of application logs and summary workbooks
+- `attentional_blink_report.py` checkpoints native burst targets and per-question
+  answers before proceeding, including in compact mode. Its read-only query returns
+  immutable burst rows and separate T1/T2 SOA denominators; completed stream answers
+  remain included after a later task/session abort. Test IDs 0/00 are included and
+  explicitly marked in GUI/CSV/Excel. Typed recall uses the compiled exact answer
+  after trimming surrounding whitespace for scoring while preserving raw text.
+  Its explicit Excel export contains SOA, participant/session, and burst
+  tables. Raw recall answers stay out of general participant/group summaries.
 - regenerate the compact project-level `logs/participant_summary.xlsx` and companion
   `logs/participant_summary.csv` after session exports so researchers have one
   spreadsheet-friendly participant/session summary
@@ -114,6 +122,13 @@ Even if the exporter is skeletal in this phase, define a stable shape for:
 - project-level `logs/participant_summary.xlsx`
 - manual group summary workbook exports, defaulting to `group_summary.xlsx`
 - manual fixation task accuracy workbook exports to a user-selected `.xlsx` path
+- `logs/attentional_blink_bursts_v1.jsonl` is the append-only source for latest native
+  recall burst records in full/compact modes; `attentional_blink_bursts_v1.csv` is its
+  session-finalized companion. Full mode additionally writes per-run/session JSON and
+  CSV. An interrupted final journal write produces a visible query warning; refuse
+  further append until that unfinished line is explicitly repaired, preserving all
+  existing data. `session_finalized=False` identifies live/interrupted checkpoints.
+- manual attentional blink accuracy workbook exports to a user-selected `.xlsx` path
 - app-selected run export mode: full writes detailed `runs/` artifacts, compact writes
   only project-level summary logs
 - full task sessions write `task_responses.csv` and per-run append-only
@@ -121,3 +136,8 @@ Even if the exporter is skeletal in this phase, define a stable shape for:
   without creating a `runs/` folder
 
 Use simple, explicit writer utilities and keep them easy to test.
+
+
+AB pilot launches retain full participant metadata and explicit pilot identity in
+runtime metadata and incremental burst records. Dedicated CSV/Excel exports flatten
+the demographics; older journals remain readable. See `docs/RUNTIME_EXECUTION.md`.

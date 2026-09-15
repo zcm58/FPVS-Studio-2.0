@@ -330,3 +330,65 @@ def _make_summary_outputs_older_than_history(summary_path: Path, history_path: P
 def _read_summary_rows(path: Path) -> list[dict[str, str]]:
     with path.open("r", encoding="utf-8", newline="") as handle:
         return list(csv.DictReader(handle))
+
+
+@pytest.mark.parametrize("category", ["attentional_blink", "fpvs_oddball"])
+@pytest.mark.parametrize("test_mode", [False, True])
+def test_pilot_launch_is_ab_only_and_keeps_participant_details(
+    tmp_path, monkeypatch, category, test_mode
+):
+    from fpvs_studio.core.enums import ExperimentCategory
+    from fpvs_studio.core.execution import ParticipantMetadata
+    from fpvs_studio.core.project_service import build_starter_project
+
+    project = build_starter_project("Pilot mode", experiment_category=ExperimentCategory(category))
+    document = ProjectDocument(project_root=tmp_path, project=project)
+    original = project.model_dump(mode="json")
+    document.set_experiment_test_mode_enabled(test_mode)
+    document.set_attentional_blink_pilot_mode_enabled(True)
+    pilot = category == "attentional_blink"
+    assert document.attentional_blink_pilot_mode_enabled is pilot
+    assert document.experiment_test_mode_enabled is (test_mode and not pilot)
+    assert document.local_testing_enabled is (test_mode or pilot)
+    assert document.require_biosemi_recording_confirmation is (not (test_mode or pilot))
+    assert not document.dirty
+    assert project.model_dump(mode="json") == original
+    # Launch settings are independent of compilation; use the existing compiled fixture shape.
+    plan = compile_session_plan(project, refresh_hz=60.0, random_seed=19) if pilot else None
+    if pilot:
+        captured = {}
+
+        def launch(_root, _plan, **kwargs):
+            captured.update(kwargs)
+            return SessionExecutionSummary(
+                project_id=project.meta.project_id,
+                session_id=_plan.session_id,
+                engine_name="stub",
+                run_mode=RunMode.SESSION,
+                participant_number="0042",
+                total_condition_count=_plan.total_runs,
+                completed_condition_count=0,
+            )
+
+        monkeypatch.setattr("fpvs_studio.gui.document.launch_session", launch)
+        monkeypatch.setattr(document, "refresh_participant_summary_if_stale", lambda: None)
+        metadata = ParticipantMetadata(
+            age=22, sex="Male", handedness="Right handed", colorblind=False
+        )
+        document.launch_compiled_session(
+            plan, participant_number="0042", participant_metadata=metadata, display_index=None
+        )
+        settings = captured["launch_settings"]
+        assert settings.pilot_mode is True
+        assert (
+            settings.serial_enabled
+            is settings.verify_refresh_rate
+            is settings.verify_graphics_memory
+            is False
+        )
+        assert settings.fullscreen is settings.strict_timing is True
+        assert captured["participant_number"] == "0042"
+        assert captured["participant_metadata"] == metadata
+        assert captured["participant_session_number"] == 1
+    document.set_attentional_blink_pilot_mode_enabled(False)
+    assert document.experiment_test_mode_enabled is test_mode

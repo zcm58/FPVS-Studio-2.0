@@ -122,28 +122,65 @@ Mode for explicit no-hardware verification launches; packaged builds hide it.
 
 ### Experimental visual cycle designer
 
-New Attentional-Blink experiments open a three-condition letter-stream designer in
-Setup > **Design**: a shared **Presentation rate (Hz)** field, digit/T1/T2 sources,
-editable onset-to-onset SOAs, and a
-labelled 20-character timeline. Default SOAs are 100/300/500 ms at 10 Hz, with 0/2/4
-intervening digits. Character Size edits native text height. Timing validates exact
+New Attentional-Blink experiments open a three-condition burst designer in
+Setup > **Design**: shared **Presentation rate (Hz)** and **Bursts per SOA** fields,
+letter distractor/T1 digit/T2 digit sources, editable onset-to-onset SOAs, and a
+labelled target-focused timeline. Default SOAs are 100/300/500 ms at 10 Hz, with 0/2/4
+intervening letters. The default 24 bursts per SOA yields 120 seconds of EEG per SOA
+and 72 bursts in a shuffled session. Home shows the total burst count and T1/T2
+recall tracking; Timing & Session uses the same persisted burst count.
+Character Size edits native text height. Timing validates exact
 frame compatibility. The post-condition questionnaire button reuses the condition
 task editor. See [Experiment Categories](EXPERIMENT_CATEGORIES.md) for the current contract.
 
 The rate accepts positive finite decimal values and stays a draft until Next/Apply.
-Rate, character sources, colors and SOAs are validated and saved together. Existing
+Rate, burst count, character sources, colors and SOAs are validated and saved together. Existing
 SOAs are preserved when the rate changes; incompatible values stay visible for
 correction. The timeline, character duration, cycle duration and quarter-speed preview
-follow the draft rate. Editable decimal SOAs retain full precision when reopened.
+follow the draft rate. New burst studies keep their five-second duration when the
+rate changes. Editable decimal SOAs retain full precision when reopened.
 Extremely slow/fast rates outside the animation timer's range retain a static timeline
 with an explanation; this does not change the authored rate or runtime validation.
 
 Visible acceptance at `1120x820`, in both themes: open an AB study, enter 20 Hz,
-confirm 50 ms characters and unchanged SOAs, apply and reopen to confirm persistence.
-Then try 7.5 Hz with SOAs `133.33333333333334`, `400`, and `666.6666666666666` ms;
-confirm the fractional values survive reopening. Enter zero or an incompatible SOA
+confirm 50 ms characters, 100 characters per five-second burst and unchanged SOAs.
+Change bursts per SOA to 20; confirm 100 seconds per SOA and 60 total bursts.
+Apply, save and reopen to confirm persistence in Design, Timing & Session and Home.
+On a saved legacy native study, 7.5 Hz with SOAs `133.33333333333334`, `400`, and
+`666.6666666666666` ms remains supported when frame-compatible; new five-second
+bursts reject rates that cannot represent their duration and target positions exactly.
+Enter zero or an incompatible SOA
 and verify that the error remains visible, preview stops, and the saved project is
 unchanged. Display timing remains subject to the existing exact-frame check.
+
+### Attentional Blink accuracy
+
+**View > T1 and T2 Accuracy...** loads the active AB project's saved burst
+records through a worker. The compact SOA summary shows recorded condition trigger
+codes, correct/answered counts, and separate T1 and T2 accuracy percentages; the
+chronological table retains participant, visit, burst number, targets, responses,
+correctness, EEG time and incomplete/aborted state. **Export Excel...** writes the
+loaded data to the chosen workbook path using the same backend summary.
+The default SOA/trigger rows are 100 ms / 1, 300 ms / 3 and 500 ms / 5. Historical
+custom codes are shown from recorded data. Other experiment categories retain
+**View > Fixation Task Accuracy...**. Tools contains Image Resizer.
+Test sessions (participant IDs `0`/`00`) record and display accuracy and are marked
+in the burst table and workbook. The SOA summary includes their completed answers.
+
+New recall tasks accept typed answers, submitted with Enter or **Next**. Before
+every burst, the participant sees "Press space when you're ready to continue."
+and must press Space. In a visible presentation check, submit T1 with Enter and
+T2 with Next, verify Enter cannot start the next burst, then use Space to continue.
+
+Visible acceptance: open the dialog at its `920x600` minimum and `1080x680` default
+in both themes. Exercise no-data, populated, loading, export and error states.
+Verify long participant/session names remain accessible, table scrolling exposes
+all columns, and buttons fit. Confirm a partially answered burst retains T1 when
+the participant aborts at T2, then inspect its workbook row. Registered Qt tests
+cover these surfaces; they require an approved visible environment to run locally.
+Open an AB project, trigger the T1 and T2 Accuracy View item, and confirm its
+three SOA rows and codes. Open an Oddball project and confirm the same View menu
+position opens Fixation Task Accuracy. Check all seven summary columns at both sizes.
 
 For image experiments, Setup > **Design** embeds the visual designer for the selected condition.
 FPVS Oddball Paradigm uses Base/Oddball sources and a repeating image cycle.
@@ -360,7 +397,7 @@ The authoring window is organized around two user-facing modes:
   - Review presents its summaries in a card, with `Save and Return Home` and
     `Return Home Without Saving` in the bottom navigation alongside Back;
     returning without saving always asks for confirmation
-- `View > Fixation Task Accuracy...`
+- `View > Fixation Task Accuracy...` for FPVS / FPVS Oddball projects
   - opens a compact view of the active project's pooled fixation-task results
   - loads `logs/session_condition_history.csv` in the background through the runtime
     reporting boundary, keeping log parsing and aggregation out of GUI widgets
@@ -469,7 +506,8 @@ import, inspection, or materialization actions.
 
 The top-level menu order is `File`, `View`, `Tools`. The `File` menu groups
 manage-projects, `Import` and `Export` submenus, settings, and help/update actions with
-native separators. `View` starts with `Fixation Task Accuracy...`; the action is disabled
+native separators. `View` offers `T1 and T2 Accuracy...` for Attentional Blink and
+`Fixation Task Accuracy...` for other categories; the action is disabled
 with other project actions during bundle processing. `Import > Project Bundle...` first
 shows a review dialog with bundle identity, manifest file count/size, the receiving
 project path, collision-safe naming guidance, and included/excluded content. Confirming
@@ -861,3 +899,19 @@ Settings, Presentation, and Pre/Post Tasks at their documented sizes; check keyb
 focus and popup controls. Save/reopen to verify persistence, and confirm Cancel leaves
 staged dialogs unchanged. The implementation's registered Qt coverage is separate from
 this manual review and is not run by ordinary local verification.
+
+
+### Attentional Blink Pilot Study Mode
+
+For an open AB study on Windows/Linux, Settings > Enable Pilot Study Mode
+(Attentional Blink) enables local pilots with the standard participant number, age,
+sex, handedness and colorblindness form. It defaults off, persists for this computer,
+and takes precedence over Test Mode only in AB. Other categories retain Test Mode's
+existing behavior. The participant dialog identifies a pilot without EEG hardware.
+Repeat-visit rules still apply to entered participant numbers.
+
+Pilot uses null triggers, skips Sophia recording confirmation and connected-display
+refresh/graphics verification, and preserves fullscreen playback and compiled timing.
+T1/T2 accuracy includes pilots; Bursts over time marks them Pilot. Hover the participant
+cell for demographics; Export Excel includes flat demographics and Pilot columns.
+The Settings minimum/default is 700 x 680 when Pilot is available (otherwise unchanged).

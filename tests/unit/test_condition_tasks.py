@@ -54,6 +54,41 @@ def _instruction_module(task_id: str = "memory-intro") -> TaskModule:
     )
 
 
+def test_short_text_answer_key_and_next_label_roundtrip_and_legacy_defaults() -> None:
+    module = TaskModule(
+        task_id="typed-recall", name="Typed recall",
+        steps=[TaskStep(
+            step_id="recall", kind=TaskStepKind.QUESTIONNAIRE,
+            submit_label="Next", submission_mode=TaskSubmissionMode.EXPLICIT,
+            questions=[TaskQuestion(
+                question_id="answer", kind=TaskQuestionKind.SHORT_TEXT,
+                prompt="What number?", correct_text="3", max_text_length=32,
+            )],
+        )],
+    )
+    restored = TaskModule.model_validate_json(module.model_dump_json())
+    assert restored == module
+    assert restored.steps[0].questions[0].correct_text == "3"
+    payload = module.model_dump()
+    del payload["steps"][0]["submit_label"]
+    del payload["steps"][0]["questions"][0]["correct_text"]
+    legacy = TaskModule.model_validate(payload)
+    assert legacy.steps[0].submit_label == "Submit"
+    assert legacy.steps[0].questions[0].correct_text is None
+
+
+def test_short_text_answer_key_rejects_blank_or_wrong_question_kind() -> None:
+    with pytest.raises(ValidationError, match="may not be blank"):
+        TaskQuestion(question_id="answer", kind=TaskQuestionKind.SHORT_TEXT,
+                     prompt="What number?", correct_text=" ")
+    with pytest.raises(ValidationError, match="Only short-text"):
+        TaskQuestion(question_id="answer", kind=TaskQuestionKind.LONG_TEXT,
+                     prompt="What number?", correct_text="3")
+    with pytest.raises(ValidationError, match="may not be blank"):
+        TaskStep(step_id="ready", kind=TaskStepKind.INSTRUCTION,
+                 text="Ready", continue_key="space", submit_label=" ")
+
+
 def test_task_models_support_exact_creatine_geometry_and_questionnaire() -> None:
     module = TaskModule(
         task_id="creatine-images",

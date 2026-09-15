@@ -52,7 +52,9 @@ def test_tools_menu_exposes_in_window_image_resizer(
         "View",
         "Tools",
     ]
-    assert [action.text() for action in window.tools_menu.actions()] == ["Image Resizer"]
+    assert [action.text() for action in window.tools_menu.actions()] == [
+        "Image Resizer",
+    ]
 
     window.image_resizer_action.trigger()
 

@@ -147,8 +147,10 @@ def test_new_category_projects_persist_defaults_and_roundtrip_config(tmp_path, c
     assert load_project_file(scaffold.project_root / "project.json").experiment_category == category
     is_ab = category == ExperimentCategory.ATTENTIONAL_BLINK
     assert project.settings.protocol.base_hz == (10 if is_ab else 6)
-    assert project.settings.protocol.oddball_every_n == (20 if is_ab else 5)
-    assert project.settings.condition_defaults.oddball_cycle_repeats_per_sequence == 146
+    assert project.settings.protocol.oddball_every_n == (50 if is_ab else 5)
+    assert project.settings.condition_defaults.oddball_cycle_repeats_per_sequence == (
+        1 if is_ab else 146
+    )
     assert project.settings.condition_defaults.duty_cycle_mode == DutyCycleMode.CONTINUOUS
     config = export_project_config(project, None)
     config_path = tmp_path / "portable.fpvsconfig"

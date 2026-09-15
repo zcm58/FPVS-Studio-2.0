@@ -21,10 +21,11 @@ from fpvs_studio.core.execution import (
     SessionExecutionSummary,
     TriggerRecord,
 )
-from fpvs_studio.core.run_spec import RunSpec
+from fpvs_studio.core.run_spec import AttentionalBlinkStreamRunSpec, RunSpec
 from fpvs_studio.core.session_plan import SessionEntry, SessionPlan
 from fpvs_studio.core.task_models import TaskResponseRecord
 from fpvs_studio.engines.base import PresentationEngine
+from fpvs_studio.runtime.attentional_blink_report import AttentionalBlinkSessionRecorder
 from fpvs_studio.runtime.export_modes import EXPORT_MODE_FULL
 from fpvs_studio.runtime.fixation import build_fixation_task_summary, score_fixation_responses
 from fpvs_studio.runtime.preflight import PreflightError
@@ -199,6 +200,12 @@ class RuntimeWorker:
         run_results: list[RunExecutionSummary] = []
         abort_reason: str | None = None
         ordered_entries = session_plan.ordered_entries()
+        blink_recorder = AttentionalBlinkSessionRecorder(
+            project_root, session_plan, participant_number=participant_number,
+            participant_session_number=participant_session_number,
+            participant_metadata=participant_metadata,
+            pilot_mode=bool((runtime_options or {}).get("pilot_mode", False)),
+        )
         compact_task_checkpoint = (
             None
             if write_detailed_exports
@@ -227,8 +234,11 @@ class RuntimeWorker:
                 if abort_reason is not None:
                     break
                 _validate_configured_display_resolution(self._engine, entry.run_spec)
-                task_checkpoint = compact_task_checkpoint or TaskResponseCheckpoint(
-                    output_dir / entry.run_id / "task_responses.jsonl"
+                blink_recorder.start_entry(entry)
+                task_checkpoint = TaskResponseCheckpoint(
+                    compact_task_checkpoint.path if compact_task_checkpoint is not None
+                    else output_dir / entry.run_id / "task_responses.jsonl",
+                    on_response=blink_recorder.record_response,
                 )
                 pre_task_outcome = run_task_modules(
                     self._engine,
@@ -367,6 +377,7 @@ class RuntimeWorker:
                 if run_summary.aborted and entry.post_tasks:
                     task_summary_update["task_flow_completed"] = False
                 run_summary = run_summary.model_copy(update=task_summary_update)
+                blink_recorder.update_run(run_summary)
                 if not run_summary.aborted:
                     post_task_outcome = run_task_modules(
                         self._engine,
@@ -467,6 +478,9 @@ class RuntimeWorker:
             run_results=run_results,
             output_dir=relative_output_dir if write_detailed_exports else None,
         )
+        blink_recorder.finish(
+            session_summary, output_dir=output_dir if write_detailed_exports else None,
+        )
         if write_detailed_exports:
             write_session_artifacts(
                 output_dir,
@@ -531,6 +545,7 @@ class RuntimeWorker:
                 )
         runtime_metadata = runtime_metadata.model_copy(
             update={
+                "pilot_mode": bool((runtime_options or {}).get("pilot_mode", False)),
                 "fixation_rt_scoring_source": _fixation_rt_scoring_source(
                     run_spec,
                     scored_fixation_responses,
@@ -580,7 +595,11 @@ class RuntimeWorker:
             body="\n\n".join(body_parts),
             countdown_seconds=None,
             continue_key=continue_key,
-            continue_prompt="Press Space to begin.",
+            continue_prompt=(
+                "Press space when you're ready to continue."
+                if isinstance(entry.run_spec.attentional_blink, AttentionalBlinkStreamRunSpec)
+                else "Press Space to begin."
+            ),
         )
 
     def _show_run_start(
@@ -593,7 +612,11 @@ class RuntimeWorker:
             body=run_spec.condition.instructions_text,
             countdown_seconds=None,
             continue_key="space",
-            continue_prompt="Press Space to begin.",
+            continue_prompt=(
+                "Press space when you're ready to continue."
+                if isinstance(run_spec.attentional_blink, AttentionalBlinkStreamRunSpec)
+                else "Press Space to begin."
+            ),
         )
 
     def _show_participant_tutorial(self, run_spec: RunSpec) -> _TutorialOutcome:

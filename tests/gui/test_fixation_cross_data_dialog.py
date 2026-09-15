@@ -145,11 +145,13 @@ def test_view_menu_order_and_action_load_active_project(
     assert [action.text() for action in window.view_menu.actions()] == [
         "Fixation Task Accuracy..."
     ]
+    assert [action.text() for action in window.tools_menu.actions()] == ["Image Resizer"]
 
     window.fixation_cross_data_action.trigger()
 
     dialog = window._fixation_cross_data_dialog
     assert dialog is not None
+    assert window._attentional_blink_data_dialog is None
     assert dialog.isVisible()
     assert dialog.windowTitle() == "Fixation Task Accuracy — FPVS Studio"
     assert dialog.data_card.title_label.text() == "Fixation Task Accuracy"

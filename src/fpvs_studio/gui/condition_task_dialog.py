@@ -188,6 +188,7 @@ class TaskQuestionDraft:
     minimum_label: str = ""
     maximum_label: str = ""
     maximum_text_length: int = 2_000
+    correct_text: str | None = None
     branch_operator: str = "equals"
     branch_match_value: str = ""
     branch_target_step_id: str = ""
@@ -224,6 +225,7 @@ class TaskStepDraft:
     allow_duplicate_choices_across_repeats: bool = True
     randomize_options: bool = False
     submission_mode: str = "immediate"
+    submit_label: str = "Submit"
     show_footer: bool = True
     require_response: bool = False
     options: list[TaskOptionDraft] = field(default_factory=list)
@@ -2610,6 +2612,7 @@ def _step_to_draft(step: TaskStep) -> TaskStepDraft:
                 minimum_label=question.min_label or "",
                 maximum_label=question.max_label or "",
                 maximum_text_length=question.max_text_length,
+                correct_text=question.correct_text,
                 branch_operator=branch_operator,
                 branch_match_value=branch_value,
                 branch_target_step_id=branch_target,
@@ -2648,6 +2651,7 @@ def _step_to_draft(step: TaskStep) -> TaskStepDraft:
         allow_duplicate_choices_across_repeats=(step.allow_duplicate_selections_across_repeats),
         randomize_options=step.randomize_options,
         submission_mode=step.submission_mode.value,
+        submit_label=step.submit_label,
         show_footer=step.show_footer,
         require_response=step.require_response,
         options=options,
@@ -2819,6 +2823,7 @@ def _step_from_draft(step: TaskStepDraft) -> TaskStep:
         retry_on_incorrect=step.retry_on_incorrect,
         randomize_options=step.randomize_options,
         submission_mode=TaskSubmissionMode(step.submission_mode),
+        submit_label=step.submit_label,
         show_footer=step.show_footer,
         require_response=step.require_response,
         min_selections=minimum,
@@ -2893,6 +2898,7 @@ def _question_from_draft(question: TaskQuestionDraft) -> TaskQuestion:
         min_label=question.minimum_label or None,
         max_label=question.maximum_label or None,
         max_text_length=question.maximum_text_length,
+        correct_text=question.correct_text if kind == TaskQuestionKind.SHORT_TEXT else None,
     )
 
 

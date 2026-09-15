@@ -273,13 +273,14 @@ class TaskQuestion(TaskBaseModel):
     min_label: str | None = None
     max_label: str | None = None
     max_text_length: int = Field(default=2_000, ge=1, le=MAX_TASK_RESPONSE_TEXT_CHARS)
+    correct_text: str | None = Field(default=None, max_length=MAX_TASK_RESPONSE_TEXT_CHARS)
 
     @field_validator("question_id")
     @classmethod
     def validate_question_id(cls, value: str) -> str:
         return validate_task_slug(value, field_name="question_id")
 
-    @field_validator("prompt", "min_label", "max_label")
+    @field_validator("prompt", "min_label", "max_label", "correct_text")
     @classmethod
     def validate_text_fields(cls, value: str | None, info: object) -> str | None:
         if value is None:
@@ -288,7 +289,7 @@ class TaskQuestion(TaskBaseModel):
         return _clean_task_text(
             value,
             field_name=field_name,
-            allow_blank=field_name != "prompt",
+            allow_blank=field_name not in {"prompt", "correct_text"},
         )
 
     @field_validator("min_value", "max_value", "step")
@@ -300,6 +301,8 @@ class TaskQuestion(TaskBaseModel):
 
     @model_validator(mode="after")
     def validate_question_shape(self) -> TaskQuestion:
+        if self.correct_text is not None and self.kind != TaskQuestionKind.SHORT_TEXT:
+            raise ValueError("Only short-text questions may define correct_text.")
         option_ids = [option.option_id for option in self.options]
         if len(option_ids) != len(set(option_ids)):
             raise ValueError("Task question option ids must be unique.")
@@ -403,6 +406,7 @@ class TaskStep(TaskBaseModel):
     layout_mode: TaskLayoutMode = TaskLayoutMode.RESPONSIVE_GRID
     columns: int | None = Field(default=None, ge=1)
     submission_mode: TaskSubmissionMode = TaskSubmissionMode.IMMEDIATE
+    submit_label: str = Field(default="Submit", max_length=64)
     items: list[TaskDisplayItem] = Field(default_factory=list)
     questions: list[TaskQuestion] = Field(default_factory=list)
     continue_key: str | None = None
@@ -429,6 +433,11 @@ class TaskStep(TaskBaseModel):
     @classmethod
     def validate_text(cls, value: str, info: object) -> str:
         return _clean_task_text(value, field_name=getattr(info, "field_name", "Task text"))
+
+    @field_validator("submit_label")
+    @classmethod
+    def validate_submit_label(cls, value: str) -> str:
+        return _clean_task_text(value, field_name="Submit label", allow_blank=False)
 
     @field_validator("continue_key")
     @classmethod

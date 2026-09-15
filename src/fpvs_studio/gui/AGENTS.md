@@ -27,7 +27,12 @@ backend-driven.
   is locked after creation. FPVS is disabled Coming soon. Reuse the visual editor in
   Design; image-pair AB and its ISI editor are retired. Attentional-Blink letter
   streams expose a shared presentation rate, character pools and onset-to-onset SOAs.
-  Rate/source/SOA drafts apply atomically; core guards category and exact timing rules.
+  New burst studies expose Bursts per SOA in Design and Timing & Session, with EEG time
+  and total burst count in Design. Rate/source/SOA/burst-count drafts apply atomically;
+  core guards five-second burst timing and category rules. Legacy stream pools remain
+  unchanged. View > T1 and T2 Accuracy reads runtime-owned SOA/trigger summaries and
+  chronological burst records, with worker-backed Excel export and busy-close guards.
+  Other categories retain View > Fixation Task Accuracy.
 - Keep condition modality authoring in Conditions. Image folders belong in Design;
   oddball word conditions keep typed base/oddball word-list editors in Conditions.
   Native AB digit/T1/T2 sources belong in Design, with Character Size replacing Image
@@ -88,3 +93,8 @@ backend-driven.
   `./scripts/verify.ps1 -Scope gui -Tier focused` plus a visible manual
   smoke path locally. Run the optional `full` Qt tier only when the user approves a
   safe visible environment; GitHub does not run it automatically.
+
+
+AB-only Pilot Study Mode is an app Settings preference, defaults off and takes
+precedence over Test Mode for AB. Reuse the standard demographics/visit flow; document
+launch settings alone select local hardware checks. See `docs/GUI_WORKFLOW.md`.

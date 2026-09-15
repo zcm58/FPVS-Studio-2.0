@@ -135,9 +135,18 @@ unless an explicitly approved safe Qt environment is available.
 ## Attentional Blink Presentation Rate
 
 Setup > Design edits the shared rate through `gui/attentional_blink_stream_designer.py`
-and the atomic `gui/document_conditions.py` apply method. Core owns exact character,
-SOA, and display-frame compatibility in `core/attentional_blink_stream.py`. Use GUI/core
-focused checks and the visible acceptance path in `docs/GUI_WORKFLOW.md`.
+and the atomic `gui/document_conditions.py` apply method, alongside **Bursts per SOA**.
+Core owns exact five-second burst, character, SOA and display-frame compatibility in
+`core/attentional_blink_stream.py`. `core/attentional_blink_presets.py` owns the new
+24-bursts-per-SOA default and the two typed Enter/Next recall questions.
+`compiler_tasks.py` derives answer keys from each compiled target pair; the session
+compiler requires Space before every recall burst. `runtime/attentional_blink_report.py`
+owns the burst journal, typed SOA summaries and Excel export;
+`gui/attentional_blink_data_dialog.py` exposes saved SOA/trigger results from
+View > T1 and T2 Accuracy, including accuracy for identified test sessions.
+`gui/main_window.py` selects that view for AB and Fixation Task Accuracy for other categories.
+Use GUI/core/compiler/runtime focused checks and the visible acceptance path in
+`docs/GUI_WORKFLOW.md`; shared changes also need repo precommit.
 
 ## Setup Design Verification
 
@@ -158,8 +167,8 @@ For the 1120x820 Setup default and its oddball image editor, read
 For the shared visual editor embedded in Setup > Design, read
 [`VISUAL_EXPERIMENT_DESIGNER.md`](../VISUAL_EXPERIMENT_DESIGNER.md) and
 [`EXPERIMENT_CATEGORIES.md`](../EXPERIMENT_CATEGORIES.md). Category is fixed at creation;
-image pairs and their ISI editor are retired. Attentional-Blink letter streams expose
-shared digit/T1/T2 pools, three SOAs, and a full-cycle onset bracket. Read
+image pairs and their ISI editor are retired. Attentional-Blink streams expose
+shared distractor/T1/T2 pools, three SOAs, burst count and an onset bracket. Read
 `core/attentional_blink_presets.py`, `core/attentional_blink_stream.py`, and
 `gui/attentional_blink_stream_designer.py` for that route; native sizing uses
   `gui/attentional_blink_character_size.py`. Registered

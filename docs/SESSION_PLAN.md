@@ -27,7 +27,7 @@ SessionPlan -> runtime preflight -> runtime session flow -> engine
 
 When `condition_ids` is omitted, compilation includes every project condition. Passing
 a subset limits the compiled pool, but does not change session semantics: every selected
-condition still appears once per configured block, and its normal pre/post task
+condition still appears once per configured repetition, and its normal pre/post task
 bindings, timing, validation, preflight, and execution/export contracts remain in
 force. The GUI uses this input only for an accepted Experiment Test Mode launch; its
 selector defaults to all conditions and is not persisted in `ProjectFile` or app
@@ -89,7 +89,13 @@ Represents one randomized block in the session:
 - randomized `condition_order`
 - compiled `entries`
 
-Each block contains each selected condition exactly once.
+Ordinary sessions contain each selected condition exactly once per block.
+With `SessionSettings.randomize_across_blocks=True`, core repeats the selected
+condition pool `block_count` times and shuffles the whole pool into a single
+compiled block. New AB burst studies use this mode: authored `block_count` is
+**Bursts per SOA**, while the compiled plan's `block_count` is one. Each entry
+is one five-second burst, and `global_order_index + 1` identifies its chronological
+burst number. Saved sessions default this additive setting to false.
 
 ### `SessionPlan`
 
@@ -108,8 +114,9 @@ Top-level session fields:
 
 The current v1 policy is:
 
-- all selected conditions appear exactly once per block
-- each block gets its own randomized order
+- ordinary sessions include each selected condition once per randomized block
+- sessions opting into randomization across blocks shuffle the complete balanced
+  repeated pool; this removes three-condition block boundaries from AB burst order
 - current Studio GUI/runtime behavior does not honor legacy fixed-order settings
 - session compilation stores the random order seed for reproducibility
 - the same project + same seed + same refresh rate produces the same block
@@ -121,6 +128,8 @@ The current v1 policy is:
   the whole condition with balanced seeded jitter and minimum-gap buffers
 - task option randomization uses a task-specific deterministic seed namespace and
   records stable item/option ids in the compiled task spec
+- AB recall answer keys are resolved from the actual T1/T2 events for each entry;
+  exactly one target pair is required for the built-in recall task
 
 ## Runtime responsibilities
 
@@ -134,6 +143,11 @@ Runtime consumes `SessionPlan` and:
 - normally shows a Space-required start screen before a condition run, using generic
   headings such as `Condition 1 of 4`; a pre-task binding may explicitly replace this
   gate when the authored workflow already contains its own reminder/acknowledgement
+- every AB recall entry requires Space before its burst, including entries with
+  pre-task bindings that would ordinarily replace the start gate; the prompt is
+  "Press space when you're ready to continue."
+- new AB recall tasks ask for typed answers on two separate screens, each submitted
+  with Enter or Next; there are no extra pauses after each three-condition group
 - iterates `SessionEntry.run_spec` in order
 - executes compiled pre-tasks before the optional condition start gate and post-tasks
   immediately after the timed stream, before fixation feedback or block/session

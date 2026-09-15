@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
@@ -47,18 +48,23 @@ class TaskFlowOutcome:
 class TaskResponseCheckpoint:
     """Append-only response journal that preserves partial data on abort or failure."""
 
-    def __init__(self, path: Path | None) -> None:
+    def __init__(
+        self, path: Path | None, *,
+        on_response: Callable[[TaskResponseRecord], None] | None = None,
+    ) -> None:
         self._path = path
+        self._on_response = on_response
 
     @property
     def path(self) -> Path | None:
         return self._path
 
     def append(self, record: TaskResponseRecord) -> None:
-        if self._path is None:
-            return
-        self._path.parent.mkdir(parents=True, exist_ok=True)
-        append_task_response_checkpoint(self._path, record)
+        if self._path is not None:
+            self._path.parent.mkdir(parents=True, exist_ok=True)
+            append_task_response_checkpoint(self._path, record)
+        if self._on_response is not None:
+            self._on_response(record)
 
     def discard(self) -> None:
         """Remove a finalized temporary journal and its empty private directory."""
@@ -153,10 +159,10 @@ def _run_module_once(
                 step_repetition_index=step_repeat_index,
                 response_start_index=response_start_index + len(responses),
                 selection_history=selection_history,
+                checkpoint=checkpoint,
             )
             for record in rendered:
                 responses.append(record)
-                checkpoint.append(record)
                 if record.valid and record.question_id is not None:
                     answer_lookup[record.question_id] = _measure_value(record)
                 if record.aborted:
@@ -237,6 +243,7 @@ def _run_step(
     step_repetition_index: int,
     response_start_index: int,
     selection_history: dict[tuple[str, str, str | None], set[str]],
+    checkpoint: TaskResponseCheckpoint,
 ) -> list[TaskResponseRecord]:
     if step.kind == TaskStepKind.QUESTIONNAIRE:
         records: list[TaskResponseRecord] = []
@@ -275,6 +282,7 @@ def _run_step(
                     forbidden_ids=forbidden_ids,
                 )
                 records.append(record)
+                checkpoint.append(record)
                 if record.aborted or not _should_retry(step, record, attempt_index):
                     break
             if records[-1].aborted or (question.required and not records[-1].valid):
@@ -311,6 +319,7 @@ def _run_step(
             forbidden_ids=forbidden_ids,
         )
         records.append(record)
+        checkpoint.append(record)
         if record.aborted or not _should_retry(step, record, attempt_index):
             break
     return records
@@ -361,6 +370,7 @@ def _resolved_step(
         minimum_selections=step.min_selections,
         maximum_selections=step.max_selections,
         submission_mode=step.submission_mode.value,
+        submit_label=step.submit_label,
         prompt_position_px=_prompt_position_px(step, run_spec=run_spec),
         prompt_height_px=_prompt_height_px(step, run_spec=run_spec),
         show_footer=step.show_footer,
@@ -420,6 +430,7 @@ def _resolved_question_step(
         numeric_step=question.step,
         maximum_text_length=question.max_text_length,
         submission_mode=step.submission_mode.value,
+        submit_label=step.submit_label,
         question_id=question.question_id,
         prompt_position_px=_prompt_position_px(step, run_spec=run_spec),
         prompt_height_px=_prompt_height_px(step, run_spec=run_spec),
@@ -905,6 +916,12 @@ def _score_response(
     *,
     question: TaskQuestion | None,
 ) -> tuple[bool | None, float | None]:
+    if question is not None and question.correct_text is not None:
+        response_text = result.text_value
+        if result.aborted or result.timed_out or response_text is None or not response_text.strip():
+            return None, None
+        text_correct = response_text.strip() == question.correct_text.strip()
+        return text_correct, float(text_correct)
     if question is None:
         candidates: list[Any] = [item for item in step.items if item.selectable]
         selected_ids = set(result.selected_option_ids)

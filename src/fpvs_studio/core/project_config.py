@@ -215,6 +215,7 @@ class ProjectConfigSession(FPVSBaseModel):
     block_count: int = Field(ge=1)
     session_seed: int = Field(ge=0)
     randomize_conditions_per_block: bool = True
+    randomize_across_blocks: bool = False
     inter_condition_mode: InterConditionMode = InterConditionMode.MANUAL_CONTINUE
     inter_condition_break_seconds: float = Field(ge=0)
     continue_key: str = "space"
@@ -807,6 +808,7 @@ def _session_config(session: SessionSettings) -> ProjectConfigSession:
         block_count=session.block_count,
         session_seed=session.session_seed,
         randomize_conditions_per_block=session.randomize_conditions_per_block,
+        randomize_across_blocks=session.randomize_across_blocks,
         inter_condition_mode=session.inter_condition_mode,
         inter_condition_break_seconds=session.inter_condition_break_seconds,
         continue_key=session.continue_key,
@@ -1001,6 +1003,7 @@ def _session_settings(config: ProjectConfigSession) -> SessionSettings:
         block_count=config.block_count,
         session_seed=config.session_seed,
         randomize_conditions_per_block=config.randomize_conditions_per_block,
+        randomize_across_blocks=config.randomize_across_blocks,
         inter_condition_mode=config.inter_condition_mode,
         inter_condition_break_seconds=config.inter_condition_break_seconds,
         continue_key=config.continue_key,

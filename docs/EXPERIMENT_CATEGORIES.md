@@ -7,7 +7,7 @@ experiment. Supported values and behavior are:
 | --- | --- |
 | Standard FPVS | Base-only concept; disabled Coming soon choice. Creation and compilation are blocked. |
 | FPVS Oddball Paradigm | Existing image/word oddball protocols, presentation modes, tasks and runtime behavior. |
-| Attentional-Blink | Continuous 10 Hz digit streams with letter targets at 100, 300, and 500 ms SOAs. Image pairs are unsupported. |
+| Attentional-Blink | Five-second bursts of white letters, green T1 digits and white T2 digits at 100, 300, and 500 ms SOAs. Image pairs are unsupported. |
 
 ## Creation and shared Setup
 
@@ -30,43 +30,53 @@ surfaces retain their existing ownership.
 The fixation cross is off by default. Users can enable it in Setup > Fixation;
 opening an existing project preserves its saved choice. Oddball defaults are unchanged.
 
-New AB experiments select **Digits & letter targets** and start with three conditions:
+New AB experiments start with three conditions:
 
-| SOA, onset to onset | Target lag | Intervening digits | T1 slot | T2 slot |
-| --- | --- | --- | --- | --- |
-| 100 ms | 1 | 0 | 15 | 16 |
-| 300 ms | 3 | 2 | 13 | 16 |
-| 500 ms | 5 | 4 | 11 | 16 |
+| SOA, onset to onset | Target lag | Intervening letters | T1 slot | T2 slot | Condition trigger |
+| --- | --- | --- | --- | --- | --- |
+| 100 ms | 1 | 0 | 30 | 31 | 1 |
+| 300 ms | 3 | 2 | 28 | 31 | 3 |
+| 500 ms | 5 | 4 | 26 | 31 | 5 |
 
 Slots are numbered from one. At the default 10 Hz, each native character lasts 100 ms,
-without blank gaps. The 20-character cycle lasts two seconds, with four digits after T2. Shared sources
-are digits 2–9 and separate uppercase letter pools for T1/T2. T1 defaults to red,
-T2 and digits to white, on black. Seeded sampling avoids adjacent repeated digits
-and identical letters within a target pair. Sampling is not per-character balanced.
-The fixation detection task is disabled for this preset. Existing cycle-repeat and
-session defaults are preserved; two seconds is the cycle length, not a recording block.
+without blank gaps. A burst contains 50 characters and exactly one T1/T2 pair.
+T1 is green, T2 and the letter distractors are white, and the background is black.
+Each burst draws new target identities; T1 and T2 must differ. Seeded sampling
+avoids adjacent repeated distractors. Target sampling is not per-digit balanced.
+Fixation detection is disabled. The preset uses 24 bursts per SOA, giving 120 seconds
+of EEG per SOA and 72 bursts (360 seconds of stimulus presentation) overall.
+Response time is additional. **Bursts per SOA** is editable in the GUI.
 
-Design shows a shared editable presentation rate, character sources, SOAs, intervening-digit counts, and
-a full-cycle timeline with labelled T1/T2 and an onset-to-onset bracket. A quarter-speed
+Design shows a shared editable presentation rate, character sources, SOAs, intervening-letter counts, and
+a target-focused timeline with labelled T1/T2 and an onset-to-onset bracket. A quarter-speed
 preview illustrates the sequence. Native text height is edited in Character Size;
 Timing checks the selected display's exact frame grid at the authored presentation
 rate. Rate edits retain authored SOAs, which must span whole character intervals.
+New burst studies retain five seconds when the rate changes; the burst and target
+positions must still fall on an exact character grid.
 At the default 10 Hz, a 60 Hz display uses six frames per character; 120/240 Hz also
-fit, while 59.94/144 Hz do not. Other positive finite rates are supported when exact:
-7.5 Hz uses eight frames at 60 Hz, and 12 Hz uses twelve frames at 144 Hz. Timing is
+fit, while 59.94/144 Hz do not. Other positive finite rates are supported when exact
+for the display, burst duration and authored SOAs. Timing is
 never silently rounded or alternated between character durations.
 
-The shared post-condition questionnaire asks whether any white letters were noticed,
-with Yes/No/Unsure answers after each completed condition entry. These are subjective
-block reports, not target-identification accuracy or evidence of unconscious processing.
-The repeating FPVS extension requires behavioral and physical timing validation.
-Both targets repeat at the presentation rate divided by 20 (0.5 Hz by default);
-different event markers do not separate their frequency tags.
+The balanced pool of bursts is shuffled across the whole session. Each burst is
+one compiled session entry, followed by **What was the green number?** and
+**What was the second number?** Correct answers come from that entry's actual
+compiled target digits. Participants type each answer and submit with Enter or
+**Next**. Every burst requires Space at the readiness screen. Runtime records and
+scores the two answers independently, including in Experiment Test Mode.
+The chronological burst number remains available for learning-over-time analyses.
+See [runtime reporting](RUNTIME_EXECUTION.md#attentional-blink-recall-results)
+for files, partial responses and Excel export.
+
+Existing saved native studies retain their digit distractors, letter targets,
+timing, tasks and session settings. They are not silently converted to the new
+burst preset. Physical display and trigger timing require hardware validation.
 
 Image-pair AB templates, including saved custom copies, are not offered or applicable.
 Old project and RunSpec records remain readable for identification, without rewriting
 or deleting their images. They cannot be saved, exported, compiled or run. Create a
-new **Digits & letter targets** experiment; timing and stimuli are never silently converted.
+new Attentional-Blink experiment; timing and stimuli are never silently converted.
 Mixed projects containing retired image pairs cannot use the separation action.
 
 Design edits apply before switching conditions, leaving the step or saving. Invalid
@@ -113,7 +123,7 @@ retaining every image file, source set and ordinary setting. Saving remains expl
   and `project_bundle.py` propagate category through supported creation/interchange.
 - `core/project_separation.py` owns explicit legacy separation and rollback.
 - GUI creation, document bindings and the shared designer enforce the same rules.
-- `core/attentional_blink_presets.py` assembles the default study and visibility task.
+- `core/attentional_blink_presets.py` assembles the default burst study and recall task.
   `core/attentional_blink_stream.py` describes the exact character grid;
   `core/compiler_attentional_blink_stream.py` compiles native character events.
 - Letter streams use project schema `1.5.0`, `.fpvsconfig` and `RunSpec` `1.3.0`.

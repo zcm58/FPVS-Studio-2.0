@@ -125,6 +125,7 @@ class ProjectDocument(
         self._require_biosemi_recording_confirmation = True
         self._show_sophia_mode_ticker = False
         self._experiment_test_mode_enabled = False
+        self._attentional_blink_pilot_mode_enabled = False
         self._last_session_plan: SessionPlan | None = None
         self._image_normalization_scan_cache: (
             tuple[
@@ -210,7 +211,7 @@ class ProjectDocument(
         """Return whether GUI launches require the BioSemi recording safety check."""
 
         return (
-            self._require_biosemi_recording_confirmation and not self._experiment_test_mode_enabled
+            self._require_biosemi_recording_confirmation and not self.local_testing_enabled
         )
 
     @property
@@ -223,7 +224,22 @@ class ProjectDocument(
     def experiment_test_mode_enabled(self) -> bool:
         """Return whether launches use the explicit no-hardware verification mode."""
 
-        return self._experiment_test_mode_enabled
+        return self._experiment_test_mode_enabled and not self.attentional_blink_pilot_mode_enabled
+
+    @property
+    def attentional_blink_pilot_mode_enabled(self) -> bool:
+        """Apply the app pilot preference only to attentional-blink experiments."""
+
+        return (
+            self._attentional_blink_pilot_mode_enabled
+            and self._project.experiment_category == ExperimentCategory.ATTENTIONAL_BLINK
+        )
+
+    @property
+    def local_testing_enabled(self) -> bool:
+        """Return whether this launch explicitly skips local hardware checks."""
+
+        return self.experiment_test_mode_enabled or self.attentional_blink_pilot_mode_enabled
 
     @property
     def last_session_plan(self) -> SessionPlan | None:
@@ -411,6 +427,15 @@ class ProjectDocument(
         if self._experiment_test_mode_enabled == enabled:
             return
         self._experiment_test_mode_enabled = enabled
+        self.project_changed.emit()
+
+    def set_attentional_blink_pilot_mode_enabled(self, enabled: bool) -> None:
+        """Set the app-only pilot preference without editing the project."""
+
+        enabled = bool(enabled)
+        if self._attentional_blink_pilot_mode_enabled == enabled:
+            return
+        self._attentional_blink_pilot_mode_enabled = enabled
         self.project_changed.emit()
 
     def _generate_unused_session_seed(self) -> int:

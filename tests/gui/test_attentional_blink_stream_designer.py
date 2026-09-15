@@ -27,6 +27,22 @@ def stream_document(tmp_path):
     )
 
 
+@pytest.fixture
+def legacy_stream_document(stream_document):
+    project = stream_document.project
+    project.settings.session.randomize_across_blocks = False
+    project.settings.protocol.oddball_every_n = 20
+    for condition in project.conditions:
+        condition.post_task_bindings = []
+        condition.attentional_blink.t2_slot_index = 15
+    stream_document.apply_attentional_blink_stream_design(
+        list("23456789"), list("ABCDEFG"), list("ABCDEFG"),
+        {item.condition_id: item.attentional_blink.soa_ms for item in project.conditions},
+        t1_color="#FF0000", t2_color="#FFFFFF",
+    )
+    return stream_document
+
+
 def _editor(qtbot, document):
     step = DesignSetupStep(document)
     qtbot.addWidget(step)
@@ -37,26 +53,66 @@ def _editor(qtbot, document):
     return step, step.editor
 
 
+def test_burst_count_is_atomic_configurable_and_persists(qtbot, stream_document):
+    step, editor = _editor(qtbot, stream_document)
+    before = stream_document.project.model_dump(mode="json")
+    editor.bursts_per_soa_spin.setValue(20)
+    assert editor.burst_summary.text() == "100 s EEG per SOA · 60 total bursts"
+    assert stream_document.project.model_dump(mode="json") == before
+    soa = next(iter(editor.soa_edits.values()))
+    soa.setText("250")
+    assert not step.apply_pending_design()
+    assert stream_document.project.model_dump(mode="json") == before
+    soa.setText("100")
+    assert step.apply_pending_design()
+    assert stream_document.project.settings.session.block_count == 20
+    assert stream_document.project.settings.session.randomize_across_blocks
+    stream_document.save()
+    reopened = ProjectDocument.open_existing(stream_document.project_root)
+    _, restored = _editor(qtbot, reopened)
+    assert restored.bursts_per_soa_spin.value() == 20
+    assert restored.burst_summary.text() == "100 s EEG per SOA · 60 total bursts"
+
+
+def test_burst_rate_preserves_five_seconds_and_rejects_partial_character_grid(
+    qtbot, stream_document,
+):
+    step, editor = _editor(qtbot, stream_document)
+    editor.rate_edit.setText("20")
+    assert editor.timeline.description.cycle_ms == 5000
+    assert editor.timeline.description.t2_slot_index == 60
+    assert editor.timeline.description.cycle_slots == 100
+    assert step.apply_pending_design()
+    assert stream_document.project.settings.protocol.oddball_every_n == 100
+    before = stream_document.project.model_dump(mode="json")
+    editor.rate_edit.setText("7.5")
+    assert "character boundaries" in editor.validation_message()
+    assert not step.apply_pending_design()
+    assert stream_document.project.model_dump(mode="json") == before
+
+
 def test_three_soas_show_core_target_positions_and_intervening_digits(qtbot, stream_document):
     step, editor = _editor(qtbot, stream_document)
     assert not step.condition_combo.isVisible()
-    assert not editor.findChildren(QSpinBox)
+    assert editor.findChildren(QSpinBox) == [editor.bursts_per_soa_spin]
+    assert editor.bursts_per_soa_spin.value() == 24
+    assert editor.burst_summary.text() == "120 s EEG per SOA · 72 total bursts"
     assert editor.condition_table.rowCount() == 3
     assert editor.condition_table.columnCount() == 3
-    for row, (soa, t1, count) in enumerate(((100, 14, 0), (300, 12, 2), (500, 10, 4))):
+    for row, (soa, t1, count) in enumerate(((100, 29, 0), (300, 27, 2), (500, 25, 4))):
         editor.condition_table.selectRow(row)
         assert editor.timeline.description.soa_ms == soa
         assert editor.timeline.description.t1_slot_index == t1
-        assert editor.timeline.description.t2_slot_index == 15
+        assert editor.timeline.description.t2_slot_index == 30
         assert editor.timeline.description.intervening_digits == count
         assert editor.condition_table.item(row, 2).text() == str(count)
-        assert f"{count} digits between T1 and T2" in editor.separation_label.text()
-        assert f"{count} digits between T1 and T2" in editor.timeline.accessibleName()
-        assert len(editor.timeline.symbols) == 20
-        assert all(symbol.isdigit() for symbol in editor.timeline.symbols[16:])
-        assert editor.timeline.symbols[t1].isalpha()
-        assert editor.timeline.symbols[15].isalpha()
-        assert editor.timeline.symbols[t1] != editor.timeline.symbols[15]
+        assert f"{count} distractors between targets" in editor.separation_label.text()
+        assert f"{count} distractors between T1 and T2" in editor.timeline.accessibleName()
+        assert len(editor.timeline.symbols) == 50
+        assert all(symbol.isalpha() for symbol in editor.timeline.symbols[31:])
+        assert editor.timeline.symbols[t1].isdigit()
+        assert editor.timeline.symbols[30].isdigit()
+        assert editor.timeline.symbols[t1] != editor.timeline.symbols[30]
         assert (
             step.selected_condition_id() == stream_document.ordered_conditions()[row].condition_id
         )
@@ -67,7 +123,7 @@ def test_shared_edits_stay_drafts_until_next_and_invalid_soa_is_blocked(qtbot, s
     before = stream_document.project.model_dump(mode="json")
     condition = stream_document.ordered_conditions()[1]
     editor.soa_edits[condition.condition_id].setText("250")
-    editor.base_edit.setText("2 4 6 8")
+    editor.base_edit.setText("A B C D")
     assert "whole multiple of 100 ms" in editor.validation_message()
     assert not editor.preview_button.isEnabled()
     assert not step.apply_pending_design()
@@ -78,7 +134,7 @@ def test_shared_edits_stay_drafts_until_next_and_invalid_soa_is_blocked(qtbot, s
     assert step.apply_pending_design()
     for item in stream_document.ordered_conditions():
         assert stream_document.get_condition_stimulus_set(item.condition_id, "base").words == list(
-            "2468"
+            "ABCD"
         )
     assert not step.has_pending_design()
     stream_document.save()
@@ -106,7 +162,7 @@ def test_rate_edit_updates_preview_and_applies_without_changing_soas(qtbot, stre
     assert editor.timeline.description.base_hz == 20
     assert editor.rate_label.text() == "50 ms per character"
     assert "20 Hz" in editor.timeline.accessibleName()
-    assert "20 characters · 1 s · 1 Hz" in editor.cycle_summary.text()
+    assert "100 characters · 5 s" in editor.cycle_summary.text()
     editor.preview_button.setChecked(True)
     assert editor.preview_timer.interval() == 200
     editor.preview_button.setChecked(False)
@@ -123,7 +179,8 @@ def test_rate_edit_updates_preview_and_applies_without_changing_soas(qtbot, stre
     assert restored_editor.timeline.description.base_hz == 20
 
 
-def test_fractional_rate_and_soas_reopen_without_precision_loss(qtbot, stream_document):
+def test_fractional_rate_and_soas_reopen_without_precision_loss(qtbot, legacy_stream_document):
+    stream_document = legacy_stream_document
     step, editor = _editor(qtbot, stream_document)
     editor.rate_edit.setText("7.5")
     assert "whole multiple" in editor.validation_message()
@@ -159,7 +216,10 @@ def test_invalid_rate_draft_cannot_apply_or_start_preview(qtbot, stream_document
 
 
 @pytest.mark.parametrize("rate", [1e-6, 1e4, 1e-305])
-def test_extreme_rate_keeps_static_timeline_without_unsafe_animation(qtbot, stream_document, rate):
+def test_extreme_rate_keeps_static_timeline_without_unsafe_animation(
+    qtbot, legacy_stream_document, rate,
+):
+    stream_document = legacy_stream_document
     _, editor = _editor(qtbot, stream_document)
     editor.rate_edit.setText(str(rate))
     for edit in editor.soa_edits.values():
@@ -175,7 +235,7 @@ def test_extreme_rate_keeps_static_timeline_without_unsafe_animation(qtbot, stre
 
 @pytest.mark.parametrize(
     ("role", "initial", "selected"),
-    [("t1", "#FF0000", "#12ABCD"), ("t2", "#FFFFFF", "#76CD12")],
+    [("t1", "#00FF00", "#12ABCD"), ("t2", "#FFFFFF", "#76CD12")],
 )
 def test_visual_target_color_picker_preserves_drafts_and_saves_all_conditions(
     qtbot, monkeypatch, stream_document, role, initial, selected,
@@ -229,7 +289,7 @@ def test_visual_target_color_picker_preserves_drafts_and_saves_all_conditions(
     assert not step.has_pending_design()
     stream_document.save()
     reopened = ProjectDocument.open_existing(stream_document.project_root)
-    expected = {"t1": "#FF0000", "t2": "#FFFFFF", role: selected}
+    expected = {"t1": "#00FF00", "t2": "#FFFFFF", role: selected}
     for condition in reopened.ordered_conditions():
         assert condition.attentional_blink.t1_color == expected["t1"]
         assert condition.attentional_blink.t2_color == expected["t2"]
@@ -253,13 +313,13 @@ def test_preview_tracks_roles_and_stops_when_design_is_hidden(qtbot, stream_docu
 
 def test_randomized_examples_use_playback_rules_without_editing_project(qtbot, stream_document):
     _step, editor = _editor(qtbot, stream_document)
-    editor.base_edit.setText("8642")
+    editor.base_edit.setText("DCBA")
     snapshot = editor._snapshot()
     project = stream_document.project.model_dump(mode="json")
     description = editor.timeline.description
     expected = next(iter_attentional_blink_stream_cycles(
         description,
-        base_words=list("8642"),
+        base_words=list("DCBA"),
         t1_words=list(editor.t1_edit.text()),
         t2_words=list(editor.t2_edit.text()),
         random_seed=0,
@@ -269,9 +329,9 @@ def test_randomized_examples_use_playback_rules_without_editing_project(qtbot, s
     assert "Random order" in editor.base_order_label.text()
     assert "not their presentation order" in editor.base_edit.toolTip()
     base_positions = [index for index, role in enumerate(description.roles) if role == "base"]
-    assert all(original[index] in "8642" for index in base_positions)
+    assert all(original[index] in "DCBA" for index in base_positions)
     assert [original[index] for index in base_positions] != [
-        "8642"[index % 4] for index in base_positions
+        "DCBA"[index % 4] for index in base_positions
     ]
     editor.preview_button.setChecked(True)
     qtbot.mouseClick(editor.shuffle_button, Qt.MouseButton.LeftButton)
@@ -372,7 +432,7 @@ def test_conditions_hide_oddball_word_editors_and_keep_questionnaire(qtbot, stre
     assert step.task_button.isVisible()
     assert "SOA 100 ms" in step.ab_stream_summary.text()
     assert not step.ab_stream_summary.isVisible()
-    assert "target recognition" in step.task_button.toolTip()
+    assert "score T1 and T2 recall separately" in step.task_button.toolTip()
     assert step.condition_details_section.property("setupFlatSection") == "true"
     assert step.trigger_code_spin.width() <= 160
     assert step.add_condition_button.width() > step.duplicate_condition_button.width()
@@ -448,10 +508,13 @@ def test_stream_design_fits_wizard_in_both_themes(
             assert field_rect.top() >= cell_rect.top() + 2
             assert field_rect.bottom() <= cell_rect.bottom() - 2
             assert field.height() >= field.minimumSizeHint().height()
-        assert editor.timeline.slot_rect(19).right() <= editor.timeline.width()
+        visible = editor.timeline.visible_slots()
+        assert editor.timeline.slot_rect(visible.stop - 1).right() <= editor.timeline.width()
+        assert editor.timeline.description.t1_slot_index in visible
+        assert editor.timeline.description.t2_slot_index in visible
         for label in (
             editor.rate_caption, editor.rate_label, editor.cycle_summary, editor.separation_label,
-            editor.base_order_label, editor.timeline_title,
+            editor.base_order_label, editor.timeline_title, editor.burst_count_label,
         ):
             assert label.width() >= label.fontMetrics().horizontalAdvance(label.text())
         assert editor.shuffle_button.isVisible()
@@ -467,7 +530,7 @@ def test_stream_design_fits_wizard_in_both_themes(
         assert window.setup_wizard_page.progress_step_labels[4].text() == "Character Size"
         assert editor.rate_edit.isVisible()
         assert editor.rate_edit.height() >= editor.rate_edit.minimumSizeHint().height()
-        for rate in (0.5, 7.5):
+        for rate in (10, 20):
             editor.rate_edit.setText(str(rate))
             for edit, lag in zip(editor.soa_edits.values(), (1, 3, 5), strict=True):
                 edit.setText(str(lag * 1000 / rate))
@@ -546,7 +609,7 @@ def test_all_stream_setup_steps_fit_default_window(
                 sections = {
                     key: lines for key, _title, lines in wizard._review_checklist_sections()
                 }
-                assert "Digits and target letters" in sections["conditions"][0]
+                assert "Letter distractors and target digits" in sections["conditions"][0]
                 height = stream_document.project.settings.presentation.defaults.text_height
                 assert sections["image_size"][0] == (
                     f"Character height: {height.values[0]:g} visual degrees"

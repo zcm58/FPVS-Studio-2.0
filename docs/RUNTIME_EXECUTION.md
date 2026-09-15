@@ -508,6 +508,61 @@ remain portable. They never contain participant task responses. A config does no
 replace the authoritative artifacts under `runs/`, and runtime does not consume
 `.fpvsconfig` during playback.
 
+### Attentional Blink recall results
+
+`core.execution.AttentionalBlinkBurstRecord` is the versioned record for one burst
+and its two answers. `runtime.attentional_blink_report` owns recording, read-only
+queries and the explicit Excel writer; engines continue to return neutral task
+input and actual stimulus onset times.
+
+New studies bind `ab-recall` after each five-second entry. Core resolves
+`t1-recall` and `t2-recall` text answer keys from that entry's actual compiled
+target pair. Runtime scores them independently through the ordinary task scorer.
+The participant types a digit or **unsure** on each separate screen, then presses
+Enter or clicks **Next**. Raw text is preserved; scoring compares the trimmed text
+with the expected digit. Saved single-choice recall tasks remain supported.
+An explicit unknown answer counts as incorrect; missing, invalid or aborted
+answers have null correctness and are excluded from that target's denominator.
+Each SOA summary shows its separate T1/T2 answer counts. T2 recall is unconditional
+on T1 correctness; the individual records support additional analyses.
+
+Both full and compact modes write the durable
+`logs/attentional_blink_bursts_v1.jsonl` journal. It checkpoints target identities
+and SOA before presentation, completed stream timing before the questions, and
+each answer before the next question. `load_attentional_blink_data(project_root)`
+reads the latest complete checkpoint per participant, visit, session and run
+without modifying the project. This preserves T1 after a T2 abort and allows
+inspection of interrupted sessions. An incomplete final journal write is reported
+to the researcher; malformed records are not silently accepted.
+
+Finalization regenerates `logs/attentional_blink_bursts_v1.csv` with one row per
+burst. Full mode also writes session and per-run CSV/JSON copies. Generic
+`task_responses.csv`/`.jsonl` exports remain available. The dedicated burst record
+contains participant/visit/session/run identity, session/run seeds, condition and
+trigger code, requested/achieved/observed SOA, presented digits, both responses,
+correctness, response times, and completion/abort state.
+
+`burst_number` is the one-based chronological entry number within the session;
+`soa_repetition` counts entries within that SOA. `cumulative_stimulus_s` records
+EEG stream time only, excluding response screens and breaks. Session/run start
+timestamps retain their separate wall-clock meaning. Missing observed SOA means
+actual target onset timestamps were unavailable; compiled timing is not used as
+a substitute for physical measurement.
+
+View > **T1 and T2 Accuracy...** shows SOA summaries and chronological
+burst records. `write_attentional_blink_accuracy_xlsx(summary, output_path)` exports
+**Accuracy by SOA**, **Participant SOA**, **Bursts** and **Read me** worksheets.
+The pooled SOA rates are descriptive and answer-weighted; participant/visit rows
+and individual bursts preserve the repeated-measure structure for analysis.
+The GUI and workbook SOA summaries show sorted condition trigger codes from the
+recorded bursts, including custom codes or multiple codes recorded at one SOA.
+The View action continues to open Fixation Task Accuracy for non-AB categories.
+Completed streams with valid answers remain eligible when a later answer/session
+is aborted. Test IDs `0`/`00` are included in accuracy and explicitly identified in
+the GUI and CSV/Excel exports, including records from older journals. General
+fixation-report inclusion flags do not change this dedicated
+recall report. Raw answers stay out of general participant summary workbooks.
+
 ### Attentional-blink event exports
 
 Native letter streams use a separate `attentional_blink_stream_events_v1.csv` in
@@ -633,3 +688,15 @@ Use this manual checklist when validating a real lab rig:
   a BDF marker confirms marker delivery, but neither proves when the panel emitted light
 - if a photodiode becomes available later, validate software flip/trigger alignment and
   panel latency on the intended display before making photon-onset claims
+
+
+### AB pilot execution identity
+
+`LaunchSettings.pilot_mode` is runtime-only and is copied to `RuntimeMetadata.pilot_mode`.
+The AB-only GUI preference selects the same local hardware options as explicit testing
+while retaining the normal demographic and participant visit flow. Every AB burst
+checkpoint adds `is_pilot_session` and a `ParticipantMetadata` snapshot, so even a
+partial pilot retains demographics and answered targets in compact mode. Old journal
+rows default to non-pilot with empty demographics. Dedicated CSV/Excel output flattens
+metadata into participant columns; JSON retains the typed nested structure. Pilot
+does not change accuracy inclusion or the reserved test-ID convention.

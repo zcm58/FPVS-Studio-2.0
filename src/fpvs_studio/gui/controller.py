@@ -83,6 +83,7 @@ _RUN_EXPORT_MODE_KEY = "exports/run_export_mode"
 _BIOSEMI_RECORDING_CONFIRMATION_KEY = "launch/require_biosemi_recording_confirmation"
 _SOPHIA_MODE_TICKER_KEY = "launch/show_sophia_mode_ticker"
 _EXPERIMENT_TEST_MODE_KEY = "launch/experiment_test_mode"
+_AB_PILOT_MODE_KEY = "launch/attentional_blink_pilot_mode"
 _LEGACY_LINUX_DEVELOPMENT_TEST_MODE_KEY = "launch/linux_development_test_mode"
 _MAX_RECENT_PROJECTS = 8
 _LOGGER = logging.getLogger(__name__)
@@ -482,6 +483,24 @@ class StudioController(QObject):
         if self.main_window is not None:
             self.main_window.document.set_experiment_test_mode_enabled(enabled)
 
+    def attentional_blink_pilot_mode_enabled(self) -> bool:
+        """Return the app preference for local AB pilots with demographics."""
+
+        return experiment_test_mode_available() and bool(
+            self._settings.value(_AB_PILOT_MODE_KEY, False, type=bool)
+        )
+
+    def set_attentional_blink_pilot_mode_enabled(self, enabled: bool) -> None:
+        """Persist pilot mode and update the open document's effective launch mode."""
+
+        enabled = bool(enabled)
+        if enabled and not experiment_test_mode_available():
+            raise ValueError("Pilot study mode is available only on Windows and Linux.")
+        self._settings.setValue(_AB_PILOT_MODE_KEY, enabled)
+        self._settings.sync()
+        if self.main_window is not None:
+            self.main_window.document.set_attentional_blink_pilot_mode_enabled(enabled)
+
     def ensure_fpvs_root_configured(self) -> bool:
         """Require a valid FPVS Studio root folder before normal workflows are shown."""
 
@@ -691,6 +710,14 @@ class StudioController(QObject):
             experiment_test_mode_available=experiment_test_mode_available(),
             experiment_test_mode_enabled=self.experiment_test_mode_enabled(),
             on_experiment_test_mode_changed=self.set_experiment_test_mode_enabled,
+            attentional_blink_pilot_mode_available=(
+                experiment_test_mode_available()
+                and self.main_window is not None
+                and self.main_window.document.project.experiment_category
+                == ExperimentCategory.ATTENTIONAL_BLINK
+            ),
+            attentional_blink_pilot_mode_enabled=self.attentional_blink_pilot_mode_enabled(),
+            on_attentional_blink_pilot_mode_changed=self.set_attentional_blink_pilot_mode_enabled,
             parent=parent,
         )
         dialog.exec()
@@ -702,6 +729,9 @@ class StudioController(QObject):
         )
         document.set_show_sophia_mode_ticker(self.show_sophia_mode_ticker())
         document.set_experiment_test_mode_enabled(self.experiment_test_mode_enabled())
+        document.set_attentional_blink_pilot_mode_enabled(
+            self.attentional_blink_pilot_mode_enabled()
+        )
         self.record_recent_project_root(document.project_root)
         previous_window = self.main_window
         self.main_window = StudioMainWindow(

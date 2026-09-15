@@ -269,8 +269,13 @@ and exactly equal whole-frame exposures. Requested and achieved SOA, target lag,
 target positions, cycle size, T2 presentation, and T2 marker are in the stream contract.
 T1 uses the resolved oddball presentation color; T2 has its own compiled color.
 Default markers are T1=55 and T2=56, distinct from the condition-start marker.
-Native streams use seeded random character sampling with adjacent-digit and
-same-pair-letter exclusions. They do not promise the balanced image-bag policy below.
+Native streams use seeded random character sampling with adjacent-distractor and
+same-pair-target exclusions. They support letter distractors with digit targets
+and the legacy inverse arrangement. They do not promise the balanced image-bag policy below.
+New burst runs contain exactly one target pair in five seconds (50 characters at
+10 Hz), with condition markers 1/3/5 for 100/300/500 ms SOAs. Recall questions are
+compiled onto the surrounding `SessionEntry`, not the timed `RunSpec`. Participant
+response time separates successive bursts and is not a periodic target frequency.
 The layout and exact-grid defaults are defined in [Experiment Categories](EXPERIMENT_CATEGORIES.md).
 
 For ordinary FPVS Oddball Paradigm, the compiler emits a seed-deterministic schedule:

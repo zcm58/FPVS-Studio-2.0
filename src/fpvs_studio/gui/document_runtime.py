@@ -40,9 +40,15 @@ class DocumentRuntimeMixin:
         _project: ProjectFile
         _project_root: Path
         _session_export_mode: str
-        _experiment_test_mode_enabled: bool
         _last_session_plan: SessionPlan | None
         session_plan_changed: Any
+
+        @property
+        def experiment_test_mode_enabled(self) -> bool: ...
+        @property
+        def attentional_blink_pilot_mode_enabled(self) -> bool: ...
+        @property
+        def local_testing_enabled(self) -> bool: ...
 
         def ensure_unused_session_seed_for_launch(self) -> int: ...
         def refresh_participant_summary_if_stale(self) -> Path | None: ...
@@ -157,7 +163,7 @@ class DocumentRuntimeMixin:
 
         try:
             if (
-                not self._experiment_test_mode_enabled
+                not self.experiment_test_mode_enabled
                 and not self._project.settings.allow_repeated_participant_sessions
             ):
                 if participant_session_number not in (None, 1):
@@ -174,7 +180,7 @@ class DocumentRuntimeMixin:
                     fullscreen=fullscreen,
                     display_index=display_index,
                     serial_enabled=(
-                        not self._experiment_test_mode_enabled
+                        not self.local_testing_enabled
                         and trigger_settings.enabled
                         and trigger_settings.backend == TriggerBackendKind.SERIAL
                     ),
@@ -183,8 +189,9 @@ class DocumentRuntimeMixin:
                     serial_pulse_width_ms=trigger_settings.pulse_width_ms,
                     serial_reset_code=trigger_settings.reset_code,
                     serial_reset_delay_ms=trigger_settings.reset_delay_ms,
-                    verify_refresh_rate=not self._experiment_test_mode_enabled,
-                    verify_graphics_memory=not self._experiment_test_mode_enabled,
+                    verify_refresh_rate=not self.local_testing_enabled,
+                    verify_graphics_memory=not self.local_testing_enabled,
+                    pilot_mode=self.attentional_blink_pilot_mode_enabled,
                     completion_screen_seconds=0.5,
                     export_mode=self._session_export_mode,
                 ),

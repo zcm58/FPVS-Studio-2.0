@@ -53,6 +53,7 @@ class LaunchSettings:
     completion_screen_seconds: float = 0.5
     windowed_size_px: tuple[int, int] = (1280, 720)
     export_mode: str = EXPORT_MODE_FULL
+    pilot_mode: bool = False
 
     def as_runtime_options(self) -> dict[str, object]:
         """Return a generic engine-facing runtime options mapping."""
@@ -65,6 +66,8 @@ class LaunchSettings:
 
 
 def _validate_launch_settings(settings: LaunchSettings) -> None:
+    if not isinstance(settings.pilot_mode, bool):
+        raise LaunchSettingsError("pilot_mode must be a boolean.")
     if settings.display_index is not None:
         if not isinstance(settings.display_index, int) or settings.display_index < 0:
             raise LaunchSettingsError("display_index must be None or a non-negative integer.")

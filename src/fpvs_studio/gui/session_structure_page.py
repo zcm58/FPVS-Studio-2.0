@@ -177,6 +177,14 @@ class SessionStructureEditor(QWidget):
 
     def refresh(self) -> None:
         session = self._document.project.settings.session
+        count_label = self.session_layout.labelForField(self.block_count_spin)
+        assert isinstance(count_label, QLabel)
+        count_label.setText(
+            "Bursts per SOA" if session.randomize_across_blocks else "Repeats per condition"
+        )
+        self.seed_help_label.setText(
+            "All bursts shuffled together" if session.randomize_across_blocks else "Randomized"
+        )
         with QSignalBlocker(self.block_count_spin):
             self.block_count_spin.setValue(session.block_count)
         with QSignalBlocker(self.session_seed_spin):

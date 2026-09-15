@@ -17,6 +17,8 @@ from fpvs_studio.core.compiler_support import namespaced_random_seed
 STREAM_BASE_HZ = 10.0
 STREAM_CYCLE_SLOTS = 20
 DEFAULT_STREAM_SOAS = (100.0, 300.0, 500.0)
+BURST_DURATION_SECONDS = 5.0
+BURST_T2_ONSET_SECONDS = 3.0
 GRID_TOLERANCE = 1e-9
 StreamSlotRole = Literal["base", "t1", "t2"]
 
@@ -26,18 +28,38 @@ def validate_attentional_blink_stream_symbols(
 ) -> None:
     """Reject ambiguous source pools before a preview or executable schedule."""
 
+    letter_distractors = bool(base_words) and all(
+        len(value) == 1 and "A" <= value <= "Z" for value in base_words
+    )
+    base_alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ" if letter_distractors else "0123456789"
+    target_alphabet = "0123456789" if letter_distractors else "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
     if len(set(base_words)) < 2 or any(
-        len(value) != 1 or value not in "0123456789" for value in base_words
+        len(value) != 1 or value not in base_alphabet for value in base_words
     ):
-        raise ValueError("The base stream needs at least two different single digits (0-9).")
+        raise ValueError("The base stream needs at least two different single letters or digits.")
     for label, words in (("T1", t1_words), ("T2", t2_words)):
-        if not words or any(len(value) != 1 or not "A" <= value <= "Z" for value in words):
-            raise ValueError(f"{label} needs a pool of single uppercase letters (A-Z).")
+        if not words or any(len(value) != 1 or value not in target_alphabet for value in words):
+            target_label = "digits (0-9)" if letter_distractors else "uppercase letters (A-Z)"
+            raise ValueError(f"{label} needs a pool of single {target_label}.")
     for label, words in (("Base", base_words), ("T1", t1_words), ("T2", t2_words)):
         if len(set(words)) != len(words):
             raise ValueError(f"{label} character pools must not contain duplicate entries.")
     if any(not any(t2 != t1 for t2 in t2_words) for t1 in t1_words):
-        raise ValueError("Every T1 letter needs a different available T2 letter.")
+        raise ValueError("Every T1 character needs a different available T2 character.")
+
+
+def attentional_blink_burst_grid(base_hz: float) -> tuple[int, int]:
+    """Return exact slots for a five-second burst with T2 at three seconds."""
+    if not isfinite(base_hz) or base_hz <= 0:
+        raise ValueError("Stream rate must be finite and greater than zero.")
+    values = (base_hz * BURST_DURATION_SECONDS, base_hz * BURST_T2_ONSET_SECONDS)
+    if any(not isfinite(value) or not isclose(value, round(value), rel_tol=0,
+                                              abs_tol=GRID_TOLERANCE) for value in values):
+        raise ValueError(
+            "Presentation rate must place the five-second burst end and the three-second "
+            "T2 onset exactly on character boundaries."
+        )
+    return round(values[0]), round(values[1])
 
 
 @dataclass(frozen=True)
@@ -80,7 +102,7 @@ def iter_attentional_blink_stream_cycles(
     t2_words: Sequence[str],
     random_seed: int,
 ) -> Iterator[tuple[str, ...]]:
-    """Sample reproducible cycles without adjacent repeated digits or matching targets.
+    """Sample reproducible cycles without adjacent repeated distractors or matching targets.
 
     Sampling continues across cycle boundaries. Character pools specify available
     symbols, not presentation order; each draw uses the remaining eligible symbols.
@@ -149,7 +171,7 @@ def describe_attentional_blink_stream(
     soa_ms: float = 300.0,
     t2_slot_index: int = 15,
 ) -> AttentionalBlinkStreamDescription:
-    """Validate the onset grid and retain digits both before T1 and after T2."""
+    """Validate the onset grid and retain distractors both before T1 and after T2."""
 
     if not isfinite(base_hz) or base_hz <= 0:
         raise ValueError("Stream rate must be finite and greater than zero.")
@@ -167,10 +189,10 @@ def describe_attentional_blink_stream(
             "Targets cannot fall between character onsets."
         )
     if not isinstance(t2_slot_index, int) or not 1 <= t2_slot_index < cycle_slots - 1:
-        raise ValueError("T2 must leave at least one digit after it in each cycle.")
+        raise ValueError("T2 must leave at least one distractor after it in each cycle.")
     t1_slot_index = t2_slot_index - lag
     if t1_slot_index < 1:
-        raise ValueError("SOA must leave at least one digit before T1 in each cycle.")
+        raise ValueError("SOA must leave at least one distractor before T1 in each cycle.")
     roles: list[StreamSlotRole] = ["base"] * cycle_slots
     roles[t1_slot_index] = "t1"
     roles[t2_slot_index] = "t2"

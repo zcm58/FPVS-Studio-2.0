@@ -111,6 +111,7 @@ def test_runtime_launcher_dispatches_runspec_to_registered_engine(
         "completion_screen_seconds": 0.5,
         "windowed_size_px": (1280, 720),
         "export_mode": "full",
+        "pilot_mode": False,
     }
     assert summary.output_dir == "runs/faces-run"
     assert summary.participant_number == PARTICIPANT_NUMBER

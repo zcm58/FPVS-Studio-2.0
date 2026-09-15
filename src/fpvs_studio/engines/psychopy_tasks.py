@@ -81,8 +81,15 @@ def render_task_step(
 
     call_on_flip = getattr(window, "callOnFlip", None)
     reset_task_clock = getattr(task_clock, "reset", None)
+
+    def reset_text_input() -> None:
+        if text_box is not None:
+            text_box.text = ""
+            submitted_from_text_box[0] = False
+
     if callable(call_on_flip):
         call_on_flip(keyboard.clearEvents)
+        call_on_flip(reset_text_input)
         keyboard_clock = getattr(keyboard, "clock", None)
         reset_keyboard_clock = getattr(keyboard_clock, "reset", None)
         if callable(reset_keyboard_clock):
@@ -91,6 +98,7 @@ def render_task_step(
             call_on_flip(reset_task_clock)
     else:
         keyboard.clearEvents()
+        reset_text_input()
         keyboard_clock = getattr(keyboard, "clock", None)
         reset_keyboard_clock = getattr(keyboard_clock, "reset", None)
         if callable(reset_keyboard_clock):
@@ -275,6 +283,8 @@ def render_task_step(
                     displayed_item_ids=displayed_item_ids,
                 )
     finally:
+        if step.response_kind in _EDITABLE_TEXT_RESPONSE_KINDS:
+            keyboard.clearEvents()
         if text_box is not None:
             if hasattr(text_box, "hasFocus"):
                 text_box.hasFocus = False
@@ -518,16 +528,6 @@ def _draw_step(
             ).draw()
     if text_box is not None:
         text_box.draw()
-        visual.TextStim(
-            window,
-            text="Submit",
-            font=step.font_family,
-            units="pix",
-            height=max(20.0, window_height * 0.027),
-            pos=_text_submit_position(window),
-            color="white",
-            autoLog=False,
-        ).draw()
     elif step.response_kind in _TEXT_RESPONSE_KINDS:
         display_value = response_text
         if step.response_kind == "numeric" and not display_value:
@@ -542,6 +542,28 @@ def _draw_step(
             height=max(22.0, window_height * 0.03),
             pos=(0, -window_height * 0.14),
             wrapWidth=_window_width(window) * 0.82,
+            color="white",
+            autoLog=False,
+        ).draw()
+    if step.response_kind in _EDITABLE_TEXT_RESPONSE_KINDS:
+        button_width, button_height = _text_submit_size(window)
+        visual.Rect(
+            window,
+            units="pix",
+            width=button_width,
+            height=button_height,
+            pos=_text_submit_position(window),
+            lineColor="white",
+            fillColor=None,
+            autoLog=False,
+        ).draw()
+        visual.TextStim(
+            window,
+            text=step.submit_label,
+            font=step.font_family,
+            units="pix",
+            height=max(20.0, window_height * 0.027),
+            pos=_text_submit_position(window),
             color="white",
             autoLog=False,
         ).draw()
@@ -937,9 +959,12 @@ def _footer_text(step: ResolvedTaskStep) -> str:
             return "Select the requested option(s). Press Escape to abort."
         return f"Select option(s), then press {step.submit_key.title()}. Press Escape to abort."
     if step.response_kind == "long_text":
-        return "Type your response, then select Submit. Press Escape to abort."
+        return f"Type your response, then select {step.submit_label}. Press Escape to abort."
     if step.response_kind == "short_text":
-        return "Type your response, then press Return or select Submit. Press Escape to abort."
+        return (
+            f"Type your response, then press Enter or select {step.submit_label}. "
+            "Press Escape to abort."
+        )
     if step.response_kind in _TEXT_RESPONSE_KINDS:
         return f"Type your response, then press {step.submit_key.title()}. Press Escape to abort."
     if step.response_kind in _CHOICE_RESPONSE_KINDS:

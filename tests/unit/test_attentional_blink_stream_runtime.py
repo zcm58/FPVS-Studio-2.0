@@ -149,6 +149,41 @@ def test_native_stream_preflight_and_fake_playback_preserve_every_character(
     assert summary.runtime_metadata.condition_cache_cleanup_succeeded
 
 
+@pytest.mark.parametrize("soa_ms,code", [(100, 1), (300, 3), (500, 5)])
+def test_default_burst_fake_playback_is_five_seconds_with_green_and_white_digits(
+    monkeypatch, tmp_path, soa_ms, code,
+):
+    project = build_starter_project(
+        "Burst playback", experiment_category=ExperimentCategory.ATTENTIONAL_BLINK,
+    )
+    condition = next(c for c in project.conditions if c.attentional_blink.soa_ms == soa_ms)
+    run = compile_run_spec(
+        project, condition_id=condition.condition_id, refresh_hz=60.0, random_seed=41,
+    )
+    _preflight(run, tmp_path)
+    summary, _, triggers, draws = _play(monkeypatch, run, tmp_path)
+    assert summary.completed_frames == 300
+    assert not summary.aborted
+    assert len(draws) == 300
+    assert run.pre_stream_fixation_frames == 0
+    targets = {}
+    for event in run.stimulus_sequence:
+        expected_color = "#00FF00" if event.phase == "t1" else "#FFFFFF"
+        segment = draws[event.on_start_frame:event.on_start_frame + event.on_frames]
+        assert len(segment) == 6
+        assert all(stimulus.text == event.text and stimulus.color == expected_color
+                   for stimulus in segment)
+        if event.phase == "base":
+            assert event.text.isalpha()
+        else:
+            assert event.text.isdigit()
+            assert event.phase not in targets
+            targets[event.phase] = event
+    assert targets["t1"].text != targets["t2"].text
+    assert (targets["t2"].on_start_frame - targets["t1"].on_start_frame) / 60 == soa_ms / 1000
+    assert [record["code"] for record in triggers.records] == [code, 55, 56]
+
+
 def test_identical_letter_in_different_target_roles_does_not_share_color_cache(stream_project):
     run = _compile(stream_project)
     t1 = next(event for event in run.stimulus_sequence if event.phase == "t1")
@@ -180,17 +215,25 @@ def test_preflight_rejects_corrupted_stream_events(stream_project, tmp_path, fie
 
 
 @pytest.mark.parametrize("kind", ["bad_digit", "bad_letter", "same_targets", "adjacent_digits"])
-def test_preflight_validates_actual_character_rules(stream_project, tmp_path, kind):
+@pytest.mark.parametrize("letter_distractors", [False, True])
+def test_preflight_validates_actual_character_rules(
+    stream_project, tmp_path, kind, letter_distractors,
+):
+    if letter_distractors:
+        stream_project.stimulus_sets[0].words = list("ABCDEFGHJKL")
+        stream_project.stimulus_sets[1].words = list("23456789")
     run = _compile(stream_project)
     if kind == "bad_digit":
-        run.stimulus_sequence[0].text = "A"
+        run.stimulus_sequence[0].text = "3" if letter_distractors else "A"
     elif kind == "bad_letter":
-        run.stimulus_sequence[12].text = "7"
+        run.stimulus_sequence[12].text = "A" if letter_distractors else "7"
     elif kind == "same_targets":
         run.stimulus_sequence[15].text = run.stimulus_sequence[12].text
     else:
         run.stimulus_sequence[1].text = run.stimulus_sequence[0].text
-    with pytest.raises(PreflightError, match="single digits|letters must differ|adjacent digits"):
+    with pytest.raises(
+        PreflightError, match="single digits|symbols must differ|adjacent distractors",
+    ):
         _preflight(run, tmp_path)
 
 
@@ -365,7 +408,7 @@ def test_default_study_questionnaire_follows_every_completed_condition_and_joins
 
         def render_task_step(self, step, project_root):
             sequence.append(("question", step.prompt))
-            return TaskEngineInput(selected_item_ids=("yes",), reaction_time_s=0.5)
+            return TaskEngineInput(text_value="2", reaction_time_s=0.5)
 
     captures = {}
     summary = RuntimeWorker(QuestionnaireEngine(captures)).execute_session(
@@ -374,23 +417,26 @@ def test_default_study_questionnaire_follows_every_completed_condition_and_joins
     )
     assert not summary.aborted
     assert len(summary.run_results) == 6
-    assert [kind for kind, _ in sequence] == ["stream", "question"] * 6
+    assert [kind for kind, _ in sequence] == ["stream", "question", "question"] * 6
     assert {prompt for kind, prompt in sequence if kind == "question"} == {
-        "Did you notice any white letters during that sequence?"
+        "What was the green number?", "What was the second number?",
     }
     entries = {entry.run_id: entry for entry in plan.ordered_entries()}
     for result in summary.run_results:
-        assert len(result.task_responses) == 1
-        response = result.task_responses[0]
+        assert len(result.task_responses) == 2
         entry = entries[result.run_id]
-        assert response.phase == TaskPhase.POST_CONDITION
-        assert response.run_id == result.run_id
-        assert response.condition_id == entry.condition_id
-        assert response.block_index == entry.block_index
-        assert response.selected_option_ids == ["yes"]
-        assert response.correct is None and response.score is None
+        for response, phase in zip(result.task_responses, ("t1", "t2"), strict=True):
+            target = next(e.text for e in entry.run_spec.stimulus_sequence if e.phase == phase)
+            assert response.phase == TaskPhase.POST_CONDITION
+            assert response.run_id == result.run_id
+            assert response.condition_id == entry.condition_id
+            assert response.block_index == entry.block_index
+            assert response.text_value == "2"
+            assert response.selected_option_ids == []
+            assert response.correct is (target == "2")
+            assert response.score == int(target == "2")
     responses = _read_rows(tmp_path / "logs" / "task_responses.csv")
-    assert len(responses) == 6
+    assert len(responses) == 12
     assert all(row["participant_number"] == "0042" for row in responses)
     assert {row["run_id"] for row in responses} == set(entries)
 

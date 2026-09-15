@@ -1077,16 +1077,18 @@ class ConditionSetupStep(QWidget):
                 "Conditions"
             )
             self.condition_list_hint.setProperty("setupSourceTitle", "true")
+            recall_help = (
+                "Two questions after each burst record and score T1 and T2 recall separately."
+                if any(item.task_id == "ab-recall" for item in condition.post_task_bindings)
+                else "The saved participant questions are preserved for this condition."
+            )
             self.ab_stream_summary.setText(
-                f"SOA {description.soa_ms:g} ms · {description.intervening_digits} digits "
+                f"SOA {description.soa_ms:g} ms · {description.intervening_digits} distractors "
                 f"between T1 and T2 · {description.item_ms:g} ms per character.\n\n"
-                "Design controls the shared character pools and target colors. "
-                "The post-condition questionnaire records whether any T2 letters were noticed; "
-                "it does not score individual target recognition."
+                "Design controls the shared character pools and target colors. " + recall_help
             )
             self.task_button.setToolTip(
-                "Edit tasks shown before or after this condition. The visibility question "
-                "records a block-level report, not individual target recognition."
+                "Edit tasks shown before or after this condition. " + recall_help
             )
             self.condition_list.setToolTip("Edit target separation and shared symbols in Design.")
 

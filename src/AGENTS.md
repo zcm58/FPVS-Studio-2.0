@@ -12,7 +12,8 @@ package map.
 - Experiment category is a locked project choice: FPVS Oddball Paradigm or Attentional-Blink;
   Standard FPVS is a disabled Coming soon placeholder. Valid projects cannot mix categories.
 - FPVS Oddball Paradigm defaults are 6.0 Hz and oddball every 5th stimulus (1.2 Hz).
-  Attentional-Blink defaults to 10 Hz digit/letter streams with 100/300/500 ms SOAs;
+  Attentional-Blink defaults to five-second 10 Hz letter streams with green/white
+  digit targets, 100/300/500 ms SOAs and post-burst target recall;
   the shared presentation rate is editable in Design with exact frame/SOA validation.
   See `docs/EXPERIMENT_CATEGORIES.md` for defaults and migration.
 - Oddball image conditions support `continuous`, `blank_50`, and `sinusoidal`.
@@ -29,8 +30,8 @@ package map.
   Uniform rectangles are supported, and a condition's base and oddball sets may use
   different source resolutions because playback size is controlled by compiled role
   geometry.
-- The fixation task is the only behavioral task in v1 and must not alter FPVS
-  base/oddball scheduling.
+- Behavioral tasks, including fixation detection and post-burst target recall, must
+  not alter FPVS base/oddball scheduling.
 
 ## Layer Guardrails
 

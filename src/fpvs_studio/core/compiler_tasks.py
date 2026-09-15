@@ -6,15 +6,18 @@ import hashlib
 import random
 from pathlib import Path, PurePosixPath
 
+from fpvs_studio.core.attentional_blink_presets import RECALL_QUESTION_PHASES, RECALL_TASK_ID
 from fpvs_studio.core.compiler_support import CompileError
 from fpvs_studio.core.models import Condition, ProjectFile
 from fpvs_studio.core.paths import resolve_project_relative_path
+from fpvs_studio.core.run_spec import RunSpec
 from fpvs_studio.core.task_models import (
     TaskBinding,
     TaskModule,
     TaskModuleSpec,
     TaskOccurrence,
     TaskPhase,
+    TaskQuestionKind,
     TaskStep,
     TaskStepSpec,
 )
@@ -32,6 +35,7 @@ def compile_condition_tasks(
     session_seed: int,
     run_id: str,
     project_root: Path | None,
+    run_spec: RunSpec | None = None,
 ) -> list[TaskModuleSpec]:
     """Compile the applicable task bindings for one concrete session entry."""
 
@@ -71,7 +75,43 @@ def compile_condition_tasks(
                 project_root=project_root,
             )
         )
+    if phase == TaskPhase.POST_CONDITION:
+        for compiled_module in compiled:
+            if compiled_module.task_id == RECALL_TASK_ID:
+                if run_spec is None:
+                    raise CompileError("Target number recall requires the compiled burst targets.")
+                _resolve_attentional_blink_recall(compiled_module, run_spec)
     return compiled
+
+
+def _resolve_attentional_blink_recall(module: TaskModuleSpec, run_spec: RunSpec) -> None:
+    """Score each recall question against the one target actually presented this burst."""
+    targets: dict[str, str] = {}
+    for phase in RECALL_QUESTION_PHASES.values():
+        events = [event for event in run_spec.stimulus_sequence if event.phase == phase]
+        if len(events) != 1 or events[0].text is None:
+            raise CompileError("Target number recall requires exactly one T1/T2 pair per burst.")
+        targets[phase] = events[0].text
+    for step in module.steps:
+        for question in step.questions:
+            target_phase = RECALL_QUESTION_PHASES.get(question.question_id)
+            if target_phase is None:
+                continue
+            expected = targets[target_phase]
+            if question.kind == TaskQuestionKind.SHORT_TEXT:
+                question.correct_text = expected
+                continue
+            if (question.kind != TaskQuestionKind.SINGLE_CHOICE
+                    or not any(option.selectable and option.option_id == expected
+                               for option in question.options)):
+                raise CompileError(
+                    f"Recall question '{question.question_id}' must offer the presented "
+                    f"target '{expected}' as a single-choice option or use a short-text answer."
+                )
+            for option in question.options:
+                if option.selectable:
+                    option.correct = option.option_id == expected
+                    option.score = float(option.correct)
 
 
 def condition_tasks_replace_start_gate(

@@ -49,13 +49,17 @@ class AppSettingsDialog(QDialog):
         experiment_test_mode_available: bool = False,
         experiment_test_mode_enabled: bool = False,
         on_experiment_test_mode_changed: Callable[[bool], None] | None = None,
+        attentional_blink_pilot_mode_available: bool = False,
+        attentional_blink_pilot_mode_enabled: bool = False,
+        on_attentional_blink_pilot_mode_changed: Callable[[bool], None] | None = None,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self.setObjectName("fpvs_root_settings_dialog")
         self.setWindowTitle("Settings")
         self.setModal(True)
-        self.setMinimumSize(700, 610 if experiment_test_mode_available else 520)
+        minimum_height = 610 if experiment_test_mode_available else 520
+        self.setMinimumSize(700, 680 if attentional_blink_pilot_mode_available else minimum_height)
         self.resize(self.minimumSize())
 
         self._on_show_root_folder_setup = on_show_root_folder_setup
@@ -68,6 +72,7 @@ class AppSettingsDialog(QDialog):
             on_sophia_mode_ticker_enabled_changed
         )
         self._on_experiment_test_mode_changed = on_experiment_test_mode_changed
+        self._on_attentional_blink_pilot_mode_changed = on_attentional_blink_pilot_mode_changed
 
         self.header = DialogHeader(
             "Settings",
@@ -152,6 +157,7 @@ class AppSettingsDialog(QDialog):
         participant_layout.addWidget(self.sophia_mode_ticker_checkbox)
 
         self.experiment_test_mode_checkbox: QCheckBox | None = None
+        self.attentional_blink_pilot_mode_checkbox: QCheckBox | None = None
         developer: QFrame | None = None
         if experiment_test_mode_available:
             developer = QFrame(self)
@@ -180,6 +186,28 @@ class AppSettingsDialog(QDialog):
                 self._set_experiment_test_mode_enabled
             )
             developer_layout.addWidget(self.experiment_test_mode_checkbox)
+            if attentional_blink_pilot_mode_available:
+                self.attentional_blink_pilot_mode_checkbox = QCheckBox(
+                    "Enable Pilot Study Mode (Attentional Blink)", self,
+                )
+                pilot = self.attentional_blink_pilot_mode_checkbox
+                pilot.setObjectName("attentional_blink_pilot_mode_checkbox")
+                pilot.setToolTip(
+                    "Collects full participant demographics and saves T1/T2 accuracy without "
+                    "EEG hardware. Skips Sophia Mode, display refresh and graphics-memory "
+                    "checks; fullscreen playback and timing records remain enabled. "
+                    "Takes precedence over Test Mode for attentional-blink studies only."
+                )
+                pilot.setChecked(attentional_blink_pilot_mode_enabled)
+                pilot.toggled.connect(self._set_attentional_blink_pilot_mode_enabled)
+                developer_layout.addWidget(pilot)
+                pilot_help = QLabel(
+                    "Pilot runs collect demographics and T1/T2 accuracy without EEG hardware. "
+                    "For this study, Pilot Mode takes precedence over Test Mode.", developer,
+                )
+                pilot_help.setWordWrap(True)
+                pilot_help.setProperty("dialogHelp", "true")
+                developer_layout.addWidget(pilot_help)
 
         self.button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Close, parent=self)
         self.button_box.setObjectName("settings_button_box")
@@ -238,6 +266,10 @@ class AppSettingsDialog(QDialog):
         if self._on_sophia_mode_ticker_enabled_changed is None:
             return
         self._on_sophia_mode_ticker_enabled_changed(bool(checked))
+
+    def _set_attentional_blink_pilot_mode_enabled(self, checked: bool) -> None:
+        if self._on_attentional_blink_pilot_mode_changed is not None:
+            self._on_attentional_blink_pilot_mode_changed(bool(checked))
 
     def _set_experiment_test_mode_enabled(self, checked: bool) -> None:
         if self._on_experiment_test_mode_changed is None:

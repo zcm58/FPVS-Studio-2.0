@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QPushButton,
     QSizePolicy,
+    QSpinBox,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -23,6 +24,7 @@ from PySide6.QtWidgets import (
 
 from fpvs_studio.core.attentional_blink_stream import (
     AttentionalBlinkStreamDescription,
+    attentional_blink_burst_grid,
     describe_attentional_blink_stream,
     iter_attentional_blink_stream_cycles,
     validate_attentional_blink_stream_symbols,
@@ -62,14 +64,22 @@ class LetterStreamTimeline(QWidget):
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.description = describe_attentional_blink_stream()
         self.symbols: tuple[str, ...] = ()
-        self.t1_color = "#FF0000"
+        self.t1_color = "#00FF00"
         self.t2_color = "#FFFFFF"
         self.active_index: int | None = None
 
+    def visible_slots(self) -> range:
+        """Keep the target neighborhood readable for a full five-second burst."""
+        description = self.description
+        count = min(description.cycle_slots, max(15, description.lag + 9))
+        start = max(0, min(description.t1_slot_index - 4, description.cycle_slots - count))
+        return range(start, start + count)
+
     def slot_rect(self, index: int) -> QRectF:
-        count = self.description.cycle_slots
+        visible = self.visible_slots()
+        count = len(visible)
         width = (self.width() - 16) / count
-        return QRectF(8 + index * width + 1, 54, width - 3, 60)
+        return QRectF(8 + (index - visible.start) * width + 1, 54, width - 3, 60)
 
     def paintEvent(self, event: QPaintEvent) -> None:  # noqa: N802
         del event
@@ -89,7 +99,8 @@ class LetterStreamTimeline(QWidget):
         character_font = QFont(self.font())
         character_font.setPointSize(20)
         character_font.setBold(True)
-        for index, role in enumerate(self.description.roles):
+        for index in self.visible_slots():
+            role = self.description.roles[index]
             rect = self.slot_rect(index)
             target = role != "base"
             painter.setBrush(QColor("#22262C"))
@@ -134,7 +145,8 @@ class LetterStreamTimeline(QWidget):
         painter.setPen(QColor(theme.text_muted))
         painter.drawText(
             QRectF(8, 2, 360, 25), Qt.AlignmentFlag.AlignLeft,
-            f"Each tile is one {self.description.item_ms:g} ms character",
+            f"Characters {self.visible_slots().start + 1}–{self.visible_slots().stop} "
+            f"of {self.description.cycle_slots}",
         )
         painter.end()
 
@@ -171,7 +183,7 @@ class AttentionalBlinkStreamDesigner(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(6)
         heading = QHBoxLayout()
-        self.heading_label = self._label("Digits and target letters", "heading")
+        self.heading_label = self._label("Stream design", "heading")
         heading.addWidget(self.heading_label)
         heading.addStretch(1)
         self.rate_caption = self._label("Presentation rate (Hz)", "secondary")
@@ -190,17 +202,32 @@ class AttentionalBlinkStreamDesigner(QWidget):
         self.rate_label = self._label("100 ms per character", "secondary")
         heading.addWidget(self.rate_label)
         layout.addLayout(heading)
+        self.burst_count_label = self._label("Bursts per SOA", "source")
+        self.bursts_per_soa_spin = QSpinBox(self)
+        self.bursts_per_soa_spin.setObjectName("ab_bursts_per_soa")
+        self.bursts_per_soa_spin.setRange(1, 1000)
+        self.bursts_per_soa_spin.setMaximumWidth(80)
+        self.bursts_per_soa_spin.setAccessibleName("Bursts per SOA")
+        self.bursts_per_soa_spin.setToolTip(
+            "How many bursts to present for each SOA. All bursts are shuffled together. "
+            "24 five-second bursts provide 120 seconds of EEG per SOA; answers add time."
+        )
+        self.burst_count_label.setBuddy(self.bursts_per_soa_spin)
+        heading.addWidget(self.burst_count_label)
+        heading.addWidget(self.bursts_per_soa_spin)
+        self.burst_summary = self._label("", "secondary")
+        self.burst_summary.setWordWrap(True)
         pools = QHBoxLayout()
         pools.setSpacing(20)
         self.base_edit = QLineEdit(self)
         self.t1_edit = QLineEdit(self)
         self.t2_edit = QLineEdit(self)
-        self.t1_color_button = ColorPickerButton("#FF0000", title="Choose T1 color", parent=self)
+        self.t1_color_button = ColorPickerButton("#00FF00", title="Choose T1 color", parent=self)
         self.t2_color_button = ColorPickerButton("#FFFFFF", title="Choose T2 color", parent=self)
         for role, title, field, color in (
-            ("base", "Base stream · digits", self.base_edit, None),
-            ("t1", "T1 · first letter", self.t1_edit, self.t1_color_button),
-            ("t2", "T2 · second letter", self.t2_edit, self.t2_color_button),
+            ("base", "Distractor characters", self.base_edit, None),
+            ("t1", "T1 · first target", self.t1_edit, self.t1_color_button),
+            ("t2", "T2 · second target", self.t2_edit, self.t2_color_button),
         ):
             column = QVBoxLayout()
             column.setSpacing(5)
@@ -216,32 +243,35 @@ class AttentionalBlinkStreamDesigner(QWidget):
                 )
                 column.addWidget(self.base_order_label)
                 field.setToolTip(
-                    "These are the available digits, not their presentation order. "
-                    "Playback samples them randomly, with no immediately repeated digit."
+                    "These are the available characters, not their presentation order. "
+                    "Playback samples them randomly, with no immediately repeated distractor."
                 )
             else:
                 row = QHBoxLayout()
                 row.addWidget(self._label("Color", "secondary"))
                 color.setObjectName(f"ab_{role}_color")
-                if role == "t2":
-                    color.setToolTip(
-                        "Choose a color visually or enter an exact hex value. "
-                        "If you change white T2, also "
-                        "update its post-condition question and participant instructions."
-                    )
+                color.setToolTip(
+                    "Choose a color visually or enter an exact hex value. "
+                    "Changing a target color also requires updating its recall question "
+                    "and participant instructions."
+                )
                 row.addWidget(color)
                 row.addStretch(1)
                 column.addLayout(row)
             pools.addLayout(column, 1)
         layout.addLayout(pools)
         self.condition_heading = self._label(
-            "Conditions · select one to inspect its sequence", "source"
+            "Conditions · select an SOA", "source"
         )
-        layout.addWidget(self.condition_heading)
+        condition_heading = QHBoxLayout()
+        condition_heading.addWidget(self.condition_heading)
+        condition_heading.addStretch(1)
+        condition_heading.addWidget(self.burst_summary)
+        layout.addLayout(condition_heading)
         self.condition_table = QTableWidget(0, 3, self)
         self.condition_table.setObjectName("ab_stream_conditions")
         self.condition_table.setHorizontalHeaderLabels(
-            ["Condition", "SOA (ms)", "Digits between T1 and T2"]
+            ["Condition", "SOA (ms)", "Distractors between T1 and T2"]
         )
         self.condition_table.verticalHeader().hide()
         self.condition_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
@@ -264,11 +294,11 @@ class AttentionalBlinkStreamDesigner(QWidget):
         self.condition_table.currentCellChanged.connect(self._selection_changed)
         layout.addWidget(self.condition_table)
         timeline_heading = QHBoxLayout()
-        self.timeline_title = self._label("Example cycle · randomized", "heading")
+        self.timeline_title = self._label("Target neighborhood · randomized", "heading")
         timeline_heading.addWidget(self.timeline_title)
         timeline_heading.addStretch(1)
         self.cycle_summary = self._label(
-            "20 characters · 2 s · 0.5 Hz target repetition", "secondary"
+            "", "secondary"
         )
         timeline_heading.addWidget(self.cycle_summary)
         layout.addLayout(timeline_heading)
@@ -299,9 +329,9 @@ class AttentionalBlinkStreamDesigner(QWidget):
         )
         self.preview_caption.setWordWrap(True)
         preview_row.addWidget(self.preview_caption, 1)
-        self.question_button = QPushButton("Post-condition question…", self)
+        self.question_button = QPushButton("Recall questions…", self)
         self.question_button.setToolTip(
-            "Edit the existing participant tasks and visibility question for this condition."
+            "Inspect the participant recall questions and other tasks for this condition."
         )
         mark_secondary_action(self.question_button)
         self.question_button.clicked.connect(self._edit_question)
@@ -322,6 +352,7 @@ class AttentionalBlinkStreamDesigner(QWidget):
             field.textChanged.connect(self._draft_edited)
         for color_button in (self.t1_color_button, self.t2_color_button):
             color_button.color_changed.connect(self._draft_edited)
+        self.bursts_per_soa_spin.valueChanged.connect(self._draft_edited)
         apply_attentional_blink_stream_theme(self)
         self.refresh()
 
@@ -334,6 +365,7 @@ class AttentionalBlinkStreamDesigner(QWidget):
     def _snapshot(self) -> tuple[object, ...]:
         return (
             self.rate_edit.text(),
+            self.bursts_per_soa_spin.value(),
             self.base_edit.text(),
             self.t1_edit.text(),
             self.t2_edit.text(),
@@ -358,6 +390,11 @@ class AttentionalBlinkStreamDesigner(QWidget):
                 return
             self._condition_ids = [condition.condition_id for condition in conditions]
             self.rate_edit.setText(str(self._document.project.settings.protocol.base_hz))
+            session = self._document.project.settings.session
+            self.bursts_per_soa_spin.setValue(session.block_count)
+            self.burst_count_label.setText(
+                "Bursts per SOA" if session.randomize_across_blocks else "Repeats per SOA"
+            )
             self.soa_edits.clear()
             self.condition_table.setRowCount(len(conditions))
             first = conditions[0]
@@ -425,11 +462,14 @@ class AttentionalBlinkStreamDesigner(QWidget):
         settings = condition.attentional_blink
         assert isinstance(settings, AttentionalBlinkStreamSettings)
         protocol = self._document.project.settings.protocol
+        cycle_slots, t2_slot = protocol.oddball_every_n, settings.t2_slot_index
+        if self._document.project.settings.session.randomize_across_blocks:
+            cycle_slots, t2_slot = attentional_blink_burst_grid(self._base_hz())
         return describe_attentional_blink_stream(
             base_hz=self._base_hz(),
-            cycle_slots=protocol.oddball_every_n,
+            cycle_slots=cycle_slots,
             soa_ms=float(self.soa_edits[condition_id].text()),
-            t2_slot_index=settings.t2_slot_index,
+            t2_slot_index=t2_slot,
         )
 
     def validation_message(self) -> str:
@@ -482,6 +522,7 @@ class AttentionalBlinkStreamDesigner(QWidget):
         if message:
             self.rate_label.setText("Timing needs correction")
             self.cycle_summary.clear()
+            self.burst_summary.clear()
             return
         description = self._description(self._selected_id)
         self.timeline.description = description
@@ -512,20 +553,26 @@ class AttentionalBlinkStreamDesigner(QWidget):
             f"T1 in position {description.t1_slot_index + 1}; "
             f"T2 in position {description.t2_slot_index + 1}. "
             f"SOA {description.soa_ms:g} milliseconds; "
-            f"{description.intervening_digits} digits between T1 and T2."
-            " Digit order is randomized without immediate repeats."
+            f"{description.intervening_digits} distractors between T1 and T2."
+            " Distractors and distinct targets are randomized for each burst."
         )
         self.rate_label.setText(
             f"{description.item_ms:g} ms per character"
         )
         self.cycle_summary.setText(
-            f"{description.cycle_slots} characters · {description.cycle_ms / 1000:g} s · "
-            f"{description.pair_hz:g} Hz target repetition"
+            f"{description.cycle_slots} characters · {description.cycle_ms / 1000:g} s"
+        )
+        repeats = self.bursts_per_soa_spin.value()
+        seconds = description.cycle_ms / 1000 * repeats
+        self.burst_summary.setText(
+            f"{seconds:g} s EEG per SOA · {repeats * len(self._condition_ids)} total bursts"
+            if self._document.project.settings.session.randomize_across_blocks
+            else f"{repeats * len(self._condition_ids)} total condition presentations"
         )
         self.separation_label.setText(
             f"T1 onset → T2 onset: {description.soa_ms:g} ms  ·  "
-            f"{description.intervening_digits} digits between T1 and T2  ·  "
-            f"Each letter is shown for {description.item_ms:g} ms"
+            f"{description.intervening_digits} distractors between targets  ·  "
+            f"{description.item_ms:g} ms per character"
         )
 
     def has_pending_design(self) -> bool:
@@ -553,6 +600,7 @@ class AttentionalBlinkStreamDesigner(QWidget):
                 t1_color=self.t1_color_button.color_hex(),
                 t2_color=self.t2_color_button.color_hex(),
                 base_hz=self._base_hz(),
+                bursts_per_soa=self.bursts_per_soa_spin.value(),
             )
         except ValueError as error:
             self.validation_label.setText(str(error))
@@ -601,7 +649,7 @@ class AttentionalBlinkStreamDesigner(QWidget):
             f'<span style="color:{color}">{self.timeline.symbols[self._preview_index]}</span>'
         )
         self.preview_caption.setText(
-            f"{'Base digit' if role == 'base' else role.upper()} · "
+            f"{'Distractor' if role == 'base' else role.upper()} · "
             f"character {self._preview_index + 1} of {len(self.timeline.symbols)} · "
             "¼ speed illustration, not a display timing test"
         )

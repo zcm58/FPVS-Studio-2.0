@@ -114,6 +114,7 @@ tests = [
   "tests/unit/test_runtime_display_refresh.py",
   "tests/unit/test_runtime_fixation.py",
   "tests/unit/test_runtime_fixation_report.py",
+  "tests/unit/test_runtime_attentional_blink_report.py",
   "tests/unit/test_runtime_launcher_export.py",
   "tests/unit/test_runtime_launcher_feedback_abort.py",
   "tests/unit/test_runtime_launcher_flow.py",
@@ -134,6 +135,7 @@ manual_smoke = []
 [scopes.engine]
 checks = []
 tests = [
+  "tests/unit/test_psychopy_recall_input.py",
   "tests/unit/test_psychopy_engine.py",
   "tests/unit/test_attentional_blink_runtime.py",
   "tests/unit/test_attentional_blink_stream_runtime.py",
@@ -143,7 +145,7 @@ tests = [
   "tests/unit/test_runtime_tasks.py",
 ]
 full_tests = ["tests/integration/test_psychopy_engine.py"]
-include = ["src/fpvs_studio/engines/**", "tests/unit/test_psychopy_engine.py", "tests/unit/test_psychopy_stimuli_resources.py", "tests/unit/test_graphics_readiness.py", "tests/unit/test_windows_graphics_budget.py", "tests/unit/test_runtime_tasks.py", "tests/integration/test_psychopy_engine.py"]
+include = ["src/fpvs_studio/engines/**", "tests/unit/test_psychopy_engine.py", "tests/unit/test_psychopy_recall_input.py", "tests/unit/test_psychopy_stimuli_resources.py", "tests/unit/test_graphics_readiness.py", "tests/unit/test_windows_graphics_budget.py", "tests/unit/test_runtime_tasks.py", "tests/integration/test_psychopy_engine.py"]
 manual_smoke = ["Run a short experiment on the intended presentation machine when engine playback changes."]
 
 [scopes.triggers]

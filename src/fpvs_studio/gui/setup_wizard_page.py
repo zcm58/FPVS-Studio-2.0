@@ -1172,7 +1172,9 @@ class SetupWizardPage(QWidget):
         )
         if letter_stream:
             cadence_summary = (
-                f"{protocol.base_hz:g} Hz digit stream · "
+                f"{protocol.base_hz:g} Hz · 5 s bursts · one T1/T2 pair per burst"
+                if session.randomize_across_blocks else
+                f"{protocol.base_hz:g} Hz character stream · "
                 f"{protocol.oddball_hz:g} Hz target repetition"
             )
         fixation = project.settings.fixation_task
@@ -1182,7 +1184,10 @@ class SetupWizardPage(QWidget):
         mode_summary = modes[0] if len(modes) == 1 else f"Mixed presentation ({len(modes)} modes)"
         size_summary = presentation_defaults_summary(project.settings.presentation.defaults)
         if letter_stream:
-            mode_summary = "Digits and target letters"
+            mode_summary = (
+                "Letter distractors and target digits" if session.randomize_across_blocks
+                else "Character distractors and targets"
+            )
             height = project.settings.presentation.defaults.text_height
             unit = (
                 "visual degrees" if height.unit == PresentationUnit.DEGREES
@@ -1250,7 +1255,12 @@ class SetupWizardPage(QWidget):
                 "session",
                 "Session",
                 (
-                    f"{session.block_count} repeats per condition · randomized order",
+                    (
+                        f"{session.block_count} bursts per SOA · "
+                        f"{session.block_count * len(conditions)} total · all shuffled together"
+                        if session.randomize_across_blocks
+                        else f"{session.block_count} repeats per condition · randomized order"
+                    ),
                     *self._review_timing_estimate_lines(),
                 ),
             ),

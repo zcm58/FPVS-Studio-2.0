@@ -9,7 +9,10 @@ from fpvs_studio.core.attentional_blink_presets import (
     is_attentional_blink_stream_project,
     populate_attentional_blink_stream,
 )
-from fpvs_studio.core.attentional_blink_stream import validate_attentional_blink_stream_symbols
+from fpvs_studio.core.attentional_blink_stream import (
+    attentional_blink_burst_grid,
+    validate_attentional_blink_stream_symbols,
+)
 from fpvs_studio.core.condition_template_profiles import (
     apply_condition_defaults_to_condition,
     apply_condition_template_profile_to_settings,
@@ -617,8 +620,9 @@ class DocumentConditionMixin:
         t1_color: str,
         t2_color: str,
         base_hz: float | None = None,
+        bursts_per_soa: int | None = None,
     ) -> bool:
-        """Validate and save the shared rate, character pools and SOAs as one edit."""
+        """Validate and save rate, burst count, character pools and SOAs as one edit."""
         conditions = self.ordered_conditions()
         if not conditions or any(
             not isinstance(c.attentional_blink, AttentionalBlinkStreamSettings) for c in conditions
@@ -627,6 +631,12 @@ class DocumentConditionMixin:
         if set(soa_by_condition) != {c.condition_id for c in conditions}:
             raise ValueError("Provide an SOA for every condition in this study.")
         validate_attentional_blink_stream_symbols(base_words, t1_words, t2_words)
+        protocol = self._project.settings.protocol
+        rate = protocol.base_hz if base_hz is None else base_hz
+        burst_grid = (
+            attentional_blink_burst_grid(rate)
+            if self._project.settings.session.randomize_across_blocks else None
+        )
         words_by_set: dict[str, list[str]] = {}
         updated_conditions: list[Condition] = []
         for condition in conditions:
@@ -649,6 +659,7 @@ class DocumentConditionMixin:
                 attentional_blink=validated_copy(
                     ab, soa_ms=soa_by_condition[condition.condition_id],
                     t1_color=t1_color, t2_color=t2_color,
+                    t2_slot_index=ab.t2_slot_index if burst_grid is None else burst_grid[1],
                 ),
             ))
         project = validated_copy(
@@ -657,8 +668,15 @@ class DocumentConditionMixin:
                 self._project.settings,
                 protocol=validated_copy(
                     self._project.settings.protocol,
-                    base_hz=(self._project.settings.protocol.base_hz
-                             if base_hz is None else base_hz),
+                    base_hz=rate,
+                    oddball_every_n=(
+                        protocol.oddball_every_n if burst_grid is None else burst_grid[0]
+                    ),
+                ),
+                session=validated_copy(
+                    self._project.settings.session,
+                    block_count=(self._project.settings.session.block_count
+                                 if bursts_per_soa is None else bursts_per_soa),
                 ),
             ),
             conditions=updated_conditions,

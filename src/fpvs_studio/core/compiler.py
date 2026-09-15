@@ -10,6 +10,7 @@ from __future__ import annotations
 import random
 from pathlib import Path
 
+from fpvs_studio.core.attentional_blink_presets import RECALL_TASK_ID
 from fpvs_studio.core.compiler_assets import load_manifest, resolve_stimulus_items
 from fpvs_studio.core.compiler_attentional_blink_stream import (
     compile_attentional_blink_stream_sequence,
@@ -325,7 +326,7 @@ def compile_session_plan(
     condition_ids: list[str] | None = None,
     manifest: StimulusManifest | None = None,
 ) -> SessionPlan:
-    """Compile a multi-condition block-randomized session plan."""
+    """Compile repeated conditions with blockwise or session-wide seeded randomization."""
 
     try:
         require_valid_experiment_category(project)
@@ -352,12 +353,20 @@ def compile_session_plan(
 
     blocks: list[SessionBlock] = []
     global_order_index = 0
-    for block_index in range(project.settings.session.block_count):
+    repetition_count = project.settings.session.block_count
+    shuffle_all = project.settings.session.randomize_across_blocks
+    compiled_block_count = 1 if shuffle_all else repetition_count
+    occurrences: dict[str, int] = {}
+    for block_index in range(compiled_block_count):
         block_conditions = list(selected_conditions)
+        if shuffle_all:
+            block_conditions *= repetition_count
         session_rng.shuffle(block_conditions)
 
         entries: list[SessionEntry] = []
         for index_within_block, condition in enumerate(block_conditions):
+            occurrence_index = occurrences.get(condition.condition_id, 0)
+            occurrences[condition.condition_id] = occurrence_index + 1
             run_id = make_session_run_id(
                 global_order_index=global_order_index,
                 condition_id=condition.condition_id,
@@ -394,8 +403,8 @@ def compile_session_plan(
                     project,
                     condition,
                     phase=TaskPhase.PRE_CONDITION,
-                    block_index=block_index,
-                    block_count=project.settings.session.block_count,
+                    block_index=occurrence_index,
+                    block_count=repetition_count,
                     session_seed=random_seed,
                     run_id=run_id,
                     project_root=project_root,
@@ -404,11 +413,12 @@ def compile_session_plan(
                     project,
                     condition,
                     phase=TaskPhase.POST_CONDITION,
-                    block_index=block_index,
-                    block_count=project.settings.session.block_count,
+                    block_index=occurrence_index,
+                    block_count=repetition_count,
                     session_seed=random_seed,
                     run_id=run_id,
                     project_root=project_root,
+                    run_spec=run_spec,
                 )
             except CompileError as exc:
                 raise CompileError(
@@ -426,10 +436,13 @@ def compile_session_plan(
                     run_spec=run_spec,
                     pre_tasks=pre_tasks,
                     post_tasks=post_tasks,
-                    show_condition_start_gate=not condition_tasks_replace_start_gate(
-                        condition,
-                        block_index=block_index,
-                        block_count=project.settings.session.block_count,
+                    show_condition_start_gate=(
+                        any(task.task_id == RECALL_TASK_ID for task in post_tasks)
+                        or not condition_tasks_replace_start_gate(
+                            condition,
+                            block_index=occurrence_index,
+                            block_count=repetition_count,
+                        )
                     ),
                 )
             )
@@ -451,7 +464,7 @@ def compile_session_plan(
         project_name=project.meta.name,
         random_seed=random_seed,
         refresh_hz=refresh_hz,
-        block_count=project.settings.session.block_count,
+        block_count=compiled_block_count,
         transition=compile_transition_spec(project),
         blocks=blocks,
         total_runs=global_order_index,

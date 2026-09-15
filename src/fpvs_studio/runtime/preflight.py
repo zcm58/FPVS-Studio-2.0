@@ -243,7 +243,11 @@ def _validate_attentional_blink_stream_timing(
         or display.total_frames != repeats * slots * frames
     ):
         raise PreflightError("Attentional-blink letter streams must cover every complete cycle.")
-    previous_digit: str | None = None
+    first_symbol = run_spec.stimulus_sequence[0].text or ""
+    letter_distractors = len(first_symbol) == 1 and "A" <= first_symbol <= "Z"
+    base_symbols = "ABCDEFGHIJKLMNOPQRSTUVWXYZ" if letter_distractors else "0123456789"
+    target_symbols = "0123456789" if letter_distractors else "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    previous_distractor: str | None = None
     t1_symbol: str | None = None
     for index, event in enumerate(run_spec.stimulus_sequence):
         cycle_index, slot_index = divmod(index, slots)
@@ -264,22 +268,24 @@ def _validate_attentional_blink_stream_timing(
                 f"Attentional-blink stream event {index} has invalid phase, slot, or frame timing."
             )
         symbol = event.text or ""
-        allowed_symbols = "0123456789" if phase == "base" else "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+        allowed_symbols = base_symbols if phase == "base" else target_symbols
         if len(symbol) != 1 or symbol not in allowed_symbols:
             raise PreflightError(
                 "Attentional-blink streams require single digits and uppercase letters."
             )
         if phase == "base":
-            if symbol == previous_digit:
-                raise PreflightError("Attentional-blink streams cannot repeat adjacent digits.")
-            previous_digit = symbol
+            if symbol == previous_distractor:
+                raise PreflightError(
+                    "Attentional-blink streams cannot repeat adjacent distractors."
+                )
+            previous_distractor = symbol
         else:
-            previous_digit = None
+            previous_distractor = None
             if phase == "t1":
                 t1_symbol = symbol
             elif symbol == t1_symbol:
                 raise PreflightError(
-                    "Attentional-blink T1 and T2 letters must differ within each cycle."
+                    "Attentional-blink T1 and T2 symbols must differ within each cycle."
                 )
     _validate_attentional_blink_markers(run_spec, timing.t2_trigger_code)
     starts = [event for event in run_spec.trigger_events if event.label == "condition_start"]

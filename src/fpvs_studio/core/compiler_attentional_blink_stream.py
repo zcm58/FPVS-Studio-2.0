@@ -1,4 +1,4 @@
-"""Compile seeded digits and independent letter targets onto the shared frame grid."""
+"""Compile seeded distractors and independent character targets onto the shared frame grid."""
 
 from __future__ import annotations
 
@@ -32,7 +32,7 @@ def compile_attentional_blink_stream_sequence(
     total_cycles: int,
     random_seed: int,
 ) -> tuple[list[StimulusEvent], AttentionalBlinkStreamRunSpec, ConditionPresentationSpec]:
-    """Use equal character durations, distinct targets, and no adjacent repeated digits."""
+    """Use equal character durations, distinct targets, and no repeated adjacent distractors."""
 
     settings = condition.attentional_blink
     assert isinstance(settings, AttentionalBlinkStreamSettings)

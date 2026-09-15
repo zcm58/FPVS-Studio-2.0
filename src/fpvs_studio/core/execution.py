@@ -8,7 +8,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from pydantic import Field, StrictBool, StrictInt, field_validator, model_validator
+from pydantic import ConfigDict, Field, StrictBool, StrictInt, field_validator, model_validator
 
 from fpvs_studio.core.enums import RunMode, SchemaVersion
 from fpvs_studio.core.models import (
@@ -121,6 +121,7 @@ class RuntimeMetadata(FPVSBaseModel):
     # Retained in the v1 export schema for compatibility with existing artifacts.
     # Runtime control flow must not depend on this historical field.
     test_mode: bool = False
+    pilot_mode: bool = False
     timing_qc_expected_interval_s: float | None = Field(default=None, gt=0)
     timing_qc_threshold_interval_s: float | None = Field(default=None, gt=0)
     timing_qc_warmup_frames: int | None = Field(default=None, ge=0)
@@ -277,6 +278,62 @@ class TriggerRecord(FPVSBaseModel):
         if not cleaned:
             raise ValueError("Trigger labels and backend names may not be blank.")
         return cleaned
+
+
+class AttentionalBlinkBurstRecord(FPVSBaseModel):
+    """One AB recall burst, including partial responses and its execution identity."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    schema_version: Literal["1.0"] = "1.0"
+    project_id: str
+    participant_number: str | None = None
+    participant_session_number: int | None = Field(default=None, ge=1)
+    session_id: str
+    run_id: str
+    condition_id: str
+    condition_name: str
+    session_seed: int = Field(ge=0)
+    run_seed: int = Field(ge=0)
+    session_started_at: datetime | None = None
+    run_started_at: datetime | None = None
+    burst_number: int = Field(ge=1)
+    soa_repetition: int = Field(ge=1)
+    condition_trigger_code: int = Field(ge=1, le=255)
+    requested_soa_ms: float = Field(gt=0, allow_inf_nan=False)
+    achieved_soa_ms: float = Field(gt=0, allow_inf_nan=False)
+    observed_soa_ms: float | None = Field(default=None, ge=0, allow_inf_nan=False)
+    t1_target: str
+    t2_target: str
+    t1_response: str | None = None
+    t2_response: str | None = None
+    t1_correct: bool | None = None
+    t2_correct: bool | None = None
+    t1_rt_ms: float | None = Field(default=None, ge=0, allow_inf_nan=False)
+    t2_rt_ms: float | None = Field(default=None, ge=0, allow_inf_nan=False)
+    t1_valid: bool = False
+    t2_valid: bool = False
+    t1_timed_out: bool = False
+    t2_timed_out: bool = False
+    t1_aborted: bool = False
+    t2_aborted: bool = False
+    planned_duration_s: float = Field(gt=0, allow_inf_nan=False)
+    completed_stimulus_s: float = Field(default=0, ge=0, allow_inf_nan=False)
+    cumulative_stimulus_s: float = Field(default=0, ge=0, allow_inf_nan=False)
+    stimulus_completed: bool = False
+    recall_completed: bool = False
+    run_aborted: bool = False
+    session_aborted: bool = False
+    session_finalized: bool = False
+    included_in_accuracy: bool = False
+    is_pilot_session: bool = False
+    participant_metadata: ParticipantMetadata = Field(default_factory=ParticipantMetadata)
+
+    @property
+    def is_test_session(self) -> bool:
+        """Keep administrative test identity visible without duplicating persisted state."""
+
+        return self.participant_number in {"0", "00"}
 
 
 class RunExecutionSummary(FPVSBaseModel):

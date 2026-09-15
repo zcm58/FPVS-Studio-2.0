@@ -665,6 +665,7 @@ def _validate_attentional_blink_stream_condition(
     refresh_hz: float | None,
 ) -> list[str]:
     from fpvs_studio.core.attentional_blink_stream import (
+        attentional_blink_burst_grid,
         describe_attentional_blink_stream,
         preview_attentional_blink_stream,
         validate_attentional_blink_stream_symbols,
@@ -711,6 +712,21 @@ def _validate_attentional_blink_stream_condition(
            for item in project.conditions):
         errors.append("Condition-start markers must differ from the T1 marker in letter streams.")
     try:
+        if any(binding.task_id == "ab-recall" for binding in condition.post_task_bindings):
+            burst_slots, burst_t2_slot = attentional_blink_burst_grid(protocol.base_hz)
+            if (protocol.oddball_every_n != burst_slots
+                    or settings.t2_slot_index != burst_t2_slot
+                    or condition.sequence_count != 1
+                    or condition.oddball_cycle_repeats_per_sequence != 1):
+                errors.append(
+                    "Target number recall requires one five-second burst with one target pair "
+                    "and T2 at three seconds. Apply the burst design to update its timing."
+                )
+            if len(pools) == 3 and any(
+                len(symbol) != 1 or symbol not in "0123456789"
+                for pool in pools[1:] for symbol in pool
+            ):
+                errors.append("Target number recall requires digit targets and letter distractors.")
         describe_attentional_blink_stream(
             base_hz=protocol.base_hz, cycle_slots=protocol.oddball_every_n,
             soa_ms=settings.soa_ms, t2_slot_index=settings.t2_slot_index,

@@ -265,6 +265,23 @@ def test_task_model_adapter_preserves_unset_scoring_geometry_and_question_bounds
     assert instruction.duration_seconds is None
 
 
+def test_typed_recall_next_label_and_answer_key_survive_task_editor_roundtrip():
+    module = TaskModule(
+        task_id="ab-recall", name="Target recall", steps=[TaskStep(
+            step_id="t1-recall", kind=TaskStepKind.QUESTIONNAIRE,
+            submit_label="Next", questions=[TaskQuestion(
+                question_id="t1-recall", kind=TaskQuestionKind.SHORT_TEXT,
+                prompt="What was the green number?", required=True,
+                max_text_length=32, correct_text="3",
+            )],
+        )],
+    )
+    draft = _module_to_draft(module, TaskBinding(task_id=module.task_id))
+    assert draft.steps[0].submit_label == "Next"
+    assert draft.steps[0].questions[0].correct_text == "3"
+    assert _module_from_draft(draft) == module
+
+
 def test_pre_task_binding_start_gate_replacement_roundtrips(tmp_path: Path) -> None:
     module = TaskModule(
         task_id="condition-reminder",

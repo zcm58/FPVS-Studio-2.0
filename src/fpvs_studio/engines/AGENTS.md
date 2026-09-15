@@ -29,6 +29,9 @@ play compiled runs end to end.
 - Render one compiled, engine-neutral condition-task step and return neutral input;
   runtime remains responsible for module order, repeats, response validation,
   branching, scoring, and persistence.
+- Text task screens use the resolved submit label (Submit by default, Next for burst
+  recall), accept Enter for short text, and expose the same visible click control
+  with native or keyboard text input. Clear prior input between questions and gates.
 - Render runtime-owned end-of-condition fixation feedback screens without moving scoring/session decisions into the engine.
 - Render single fixation tutorial practice attempts while runtime owns tutorial
   sequencing, reset rules, and participant-facing summary text.

@@ -339,7 +339,7 @@ def test_retired_custom_image_pair_profiles_are_preserved_but_not_offered(tmp_pa
     offered = list_condition_template_profiles(
         tmp_path, experiment_category=ExperimentCategory.ATTENTIONAL_BLINK,
     )
-    assert [item.display_name for item in offered] == ["Digits & letter targets"]
+    assert [item.display_name for item in offered] == ["Five-second digit recall"]
     stored = load_condition_template_profile_library(tmp_path)
     assert retired in stored.profiles
     before = condition_template_library_path(tmp_path).read_bytes()

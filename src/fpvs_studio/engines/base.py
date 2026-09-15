@@ -94,6 +94,7 @@ class ResolvedTaskStep:
     repeat_index: int = 0
     question_id: str | None = None
     font_family: str = "Arial"
+    submit_label: str = "Submit"
 
 
 @dataclass(frozen=True)

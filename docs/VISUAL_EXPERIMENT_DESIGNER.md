@@ -1,16 +1,16 @@
 # Visual FPVS Experiment Designer
 
-Updated: 2026-09-10. The experimental branch implements category-specific native
-letter-stream and image designers. New Attentional-Blink projects use 10 Hz digits
-and separate T1/T2 letters with 100/300/500 ms SOAs. Setup > Design shows shared
-character pools, condition SOAs, a full 20-character cycle, an onset bracket, and a
+Updated: 2026-09-15. Category-specific native stream and image designers share Setup.
+New Attentional-Blink projects use five-second bursts of white letters with green
+T1 and white T2 digits at 100/300/500 ms SOAs. Setup > Design shows shared
+character pools, bursts per SOA, condition SOAs, a target-focused timeline, an onset bracket, and a
 quarter-speed illustration. Character Size edits native text height. The existing
 questionnaire editor is also accessible from Design. See
 [Experiment Categories](EXPERIMENT_CATEGORIES.md) for the current defaults, schema,
-questionnaire interpretation, and exact display-grid requirements.
+recall scoring, and exact display-grid requirements.
 
-The digit field defines the available symbols, not their order. Native AB playback
-samples digits randomly without immediate repeats, including across cycle boundaries.
+The distractor field defines available symbols, not their order. Native AB playback
+samples distractors randomly without immediate repeats, including across cycle boundaries.
 The designer uses the same core sampler for its randomized example and draws a fresh
 cycle during the slowed preview. **Shuffle example** changes only the illustration;
 it does not edit the project or run seed. T1/T2 positions and SOAs stay fixed while
@@ -20,7 +20,10 @@ T1 and T2 each have a color swatch with the current hex value. Select the swatch
 open the visual color picker, choose a color or enter its exact hex value, then
 confirm. Cancel leaves the current color unchanged. Accepted choices update the
 timeline draft; Next applies them to all study conditions. If T2 is no longer white,
-update the post-condition question and participant instructions to match.
+update the post-burst question and participant instructions to match. The default
+24 bursts per SOA yields 120 seconds of EEG per SOA, with two separately scored
+recall questions after each burst. Existing saved native studies retain their
+authored distractor/target types and timing.
 
 Image design is available only for **FPVS Oddball Paradigm**. **Standard FPVS** is
 a disabled Coming soon placeholder. Attentional-Blink image pairs and their ISI editor
