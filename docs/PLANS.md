@@ -13,8 +13,6 @@ Use this page to find planning material before making feature-sized changes.
 
 Current implementation:
 
-- [Attentional Blink pilot mode and release](exec-plans/active/attentional-blink-pilot-release.md)
-
 - [Cloudflare bug reporting: desktop implementation](exec-plans/active/cloudflare-bug-reporting.md)
 - `exec-plans/active/bounded-updater-storage-and-clean-upgrades.md`
 
@@ -37,6 +35,8 @@ luminance/RMS algorithm investigation instead of duplicating its scientific deci
 
 Completed plans are historical implementation notes. Read their directory only when
 the current contracts do not explain why a landed decision exists.
+
+Recent completion: [Attentional Blink pilot mode and release v1.8.0](exec-plans/completed/attentional-blink-pilot-release.md).
 
 Recent completion: [Multi-session release v1.5.3](exec-plans/completed/multi-session-release-v1.5.3.md).
 

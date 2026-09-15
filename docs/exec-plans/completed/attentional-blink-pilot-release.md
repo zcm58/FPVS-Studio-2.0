@@ -1,6 +1,6 @@
 # Attentional Blink pilot mode and release
 
-Status: active
+Status: completed
 
 ## Accepted workflow
 
@@ -50,22 +50,28 @@ its ordinary participant/fixation workflow. Settings fits at 700 x 680.
   five Python/Tk support files absent from 1.7.0 match 1.5.1/1.5.2; the rest match 1.7.0.
 - Full installer: 300,750,293 bytes, SHA-256
   `a36b222fde4984238eb223823afa1df2cdf8b57f08832f400ed475e6e330dbaa`.
-- GitHub draft release ID 389305186 has eight assets, all checked against GitHub
-  sizes and SHA-256 digests. It remains a draft while explicit visible-session approval
-  is pending. No physical EEG/display timing check or installed upgrade was run.
+- [GitHub release v1.8.0](https://github.com/zcm58/FPVS-Studio-2.0/releases/tag/v1.8.0)
+  (ID 389305186) is published as the latest stable release with eight assets. All
+  public sizes and SHA-256 digests match the verified local files.
+- The production updater fetched the live manifest and validated its digest, selecting
+  the correct direct patch for all six authenticated installed-baseline inventories.
+  Pre-updater and unregistered installations select the full installer; version 1.8.0
+  reports no update.
 - The GUI fixture clears the pilot preference between tests so it cannot leak
   between registered GUI cases. This test-only cleanup does not change bundled code.
 
-## Remaining release acceptance
+## Skipped checks
 
-Run the approved native pilot GUI tests, packaged Studio smoke (including the Pilot
-checkbox), and updater GUI smoke. Then publish the draft and verify live public
-asset hashes and patch selection. The user's async visible-check question is pending;
-elapsed time is not approval.
+On 2026-09-15 the user explicitly instructed: "skip the visible gui checks, just
+publish the release to master". Native pilot GUI tests, packaged Studio GUI smoke
+and updater GUI smoke were skipped under that instruction. No GUI pass is claimed.
+Physical EEG/display timing and an installed upgrade were not run; artifact
+reconstruction and updater selection checks do not establish those outcomes.
 
 ## Retained evidence
 
-This local task keeps build, source, native, artifact, and GitHub draft reports under
+This local task keeps build, source, native, artifact, GitHub publication, live updater
+selection and explicit GUI-check waiver reports under
 `C:/Users/zcm58/Documents/Codex/2026-09-15/fix-x20/work/release-1.8.0/`.
 The canonical bundle/installers remain in the main checkout's ignored
 `build/release-1.8.0/` and `dist/release-1.8.0/` directories. Hash-verified deliverable
