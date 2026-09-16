@@ -18,6 +18,8 @@ Current implementation:
 
 Concrete planned work:
 
+- [Private experiment and condition library](exec-plans/planned/private-experiment-library.md):
+  Phase 1 delivers whole projects; Phase 2 adds conditions with editable import setup.
 - `exec-plans/planned/restore-tutorials-file-menu-entry.md`
 - `exec-plans/planned/luminance-rms-equalization-investigation.md`
 
