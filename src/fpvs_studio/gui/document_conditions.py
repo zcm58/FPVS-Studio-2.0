@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING
+from uuid import uuid4
 
 from fpvs_studio.core.attentional_blink_presets import (
     is_attentional_blink_stream_project,
@@ -50,6 +51,7 @@ from fpvs_studio.core.validation import validate_attentional_blink_condition
 from fpvs_studio.gui.document_support import (
     ConditionStimulusRow,
     DocumentError,
+    StimulusTypeChangeRequiresConfirmation,
     validated_copy,
 )
 
@@ -833,8 +835,9 @@ class DocumentConditionMixin:
         condition_id: str,
         *,
         modality: StimulusModality,
+        clear_existing: bool = False,
     ) -> None:
-        """Switch an empty condition between image and word authoring modes."""
+        """Switch modality, requiring confirmation to detach populated sources."""
 
         condition = self.get_condition(condition_id)
         if condition is None:
@@ -858,48 +861,59 @@ class DocumentConditionMixin:
             and self.get_condition_stimulus_set(condition_id, "t2").image_count > 0
         ):
             raise DocumentError("Attentional-blink designs use image sources.")
-        if not self._condition_stimulus_sets_empty(base_set, oddball_set):
-            raise DocumentError(
+        if not clear_existing and not self._condition_stimulus_sets_empty(base_set, oddball_set):
+            raise StimulusTypeChangeRequiresConfirmation(
                 "Condition stimulus type can only be changed before images or words are added."
             )
-        updated_sets: list[StimulusSet] = []
-        for stimulus_set in self._project.stimulus_sets:
-            if stimulus_set.set_id not in {
-                condition.base_stimulus_set_id,
-                condition.oddball_stimulus_set_id,
-            }:
-                updated_sets.append(stimulus_set)
-                continue
+        # Fresh identities avoid altering shared sources or reselecting retained image
+        # folders/manifest entries when the user later switches back to images.
+        new_sets: list[StimulusSet] = []
+        for role, stimulus_set in (("base", base_set), ("oddball", oddball_set)):
+            set_id = f"{condition_id}-{role}-{uuid4().hex}"
             if modality == StimulusModality.IMAGE:
-                updated_sets.append(
-                    self._make_empty_stimulus_set(stimulus_set.set_id, stimulus_set.name)
-                )
+                new_sets.append(self._make_empty_stimulus_set(set_id, stimulus_set.name))
             else:
-                updated_sets.append(
+                new_sets.append(
                     StimulusSet(
-                        set_id=stimulus_set.set_id,
+                        set_id=set_id,
                         name=stimulus_set.name,
                         modality=StimulusModality.WORD,
                         source_dir=None,
                         words=[],
                     )
                 )
-        updated_conditions = self._project.conditions
+        updated_condition = condition.model_copy(update={
+            "base_stimulus_set_id": new_sets[0].set_id,
+            "oddball_stimulus_set_id": new_sets[1].set_id,
+        })
         if (
             modality == StimulusModality.WORD
             and condition.duty_cycle_mode == DutyCycleMode.SINUSOIDAL
         ):
-            continuous_condition = condition.model_copy(
+            updated_condition = updated_condition.model_copy(
                 update={"duty_cycle_mode": DutyCycleMode.CONTINUOUS}
             )
-            updated_conditions = [
-                continuous_condition if item.condition_id == condition_id else item
-                for item in self._project.conditions
-            ]
+        updated_conditions = [
+            updated_condition if item.condition_id == condition_id else item
+            for item in self._project.conditions
+        ]
+        referenced = {
+            set_id
+            for item in updated_conditions
+            for set_id in (
+                item.base_stimulus_set_id, item.oddball_stimulus_set_id,
+                item.t2_stimulus_set_id, item.isi_stimulus_set_id,
+            )
+        }
+        previous_ids = {base_set.set_id, oddball_set.set_id}
+        updated_sets = [
+            item for item in self._project.stimulus_sets
+            if item.set_id not in previous_ids or item.set_id in referenced
+        ]
         project = validated_copy(
             self._project,
             conditions=updated_conditions,
-            stimulus_sets=updated_sets,
+            stimulus_sets=[*updated_sets, *new_sets],
         )
         self._replace_project(project)
 

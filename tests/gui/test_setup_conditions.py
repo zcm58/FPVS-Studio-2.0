@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
     QDialog,
     QFileDialog,
     QLabel,
+    QMessageBox,
     QPushButton,
     QTextEdit,
     QWidget,
@@ -355,16 +356,21 @@ def test_setup_wizard_word_editor_keeps_blank_line_after_debounce(
     assert step.base_words_edit.textCursor().blockNumber() == 1
 
 
-def test_setup_wizard_blocks_populated_modality_switch(
+@pytest.mark.parametrize("source", [StimulusModality.IMAGE, StimulusModality.WORD])
+@pytest.mark.parametrize("accept", [False, True])
+def test_setup_wizard_confirms_populated_modality_switch(
     qtbot,
     controller: StudioController,
     tmp_path: Path,
     monkeypatch,
+    source: StimulusModality,
+    accept: bool,
 ) -> None:
-    _, window = _open_created_project(controller, qtbot, tmp_path, "Word Switch Block")
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Stimulus Type Switch")
     guide = window.setup_wizard_page
     step = guide.condition_setup_step
     guide.open_wizard(step_key="conditions")
+    window.resize(1120, 820)
     errors: list[str] = []
     monkeypatch.setattr(
         "fpvs_studio.gui.condition_setup_step._show_error_dialog",
@@ -374,20 +380,57 @@ def test_setup_wizard_blocks_populated_modality_switch(
     qtbot.mouseClick(step.add_condition_button, Qt.MouseButton.LeftButton)
     condition_id = step.selected_condition_id()
     assert isinstance(condition_id, str)
-    step.modality_combo.setCurrentIndex(step.modality_combo.findData(StimulusModality.WORD.value))
-    step.base_words_edit.setPlainText("cat")
-    step.flush_pending_edits()
+    if source == StimulusModality.WORD:
+        step.modality_combo.setCurrentIndex(step.modality_combo.findData(source.value))
+        step.base_words_edit.setPlainText("cat")
+        step.oddball_words_edit.setPlainText("chair")
+        # Switch before the debounce timers commit either word list.
+    else:
+        for role in ("base", "oddball"):
+            window.document.import_condition_stimulus_folder(
+                condition_id, role=role,
+                source_dir=_write_image_directory(tmp_path / role),
+            )
+    target = StimulusModality.WORD if source == StimulusModality.IMAGE else StimulusModality.IMAGE
+    prompts: list[str] = []
 
-    step.modality_combo.setCurrentIndex(step.modality_combo.findData(StimulusModality.IMAGE.value))
+    def confirm(_parent, _title, text, buttons, default):
+        prompts.append(text)
+        assert buttons == QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        assert default == QMessageBox.StandardButton.No
+        for role in ("base", "oddball"):
+            current = window.document.get_condition_stimulus_set(condition_id, role)
+            assert current.modality == source
+            assert current.image_count > 0 or current.word_count > 0
+        return QMessageBox.StandardButton.Yes if accept else QMessageBox.StandardButton.No
+
+    monkeypatch.setattr("fpvs_studio.gui.condition_setup_step.QMessageBox.warning", confirm)
+    step.modality_combo.setCurrentIndex(step.modality_combo.findData(target.value))
     QApplication.processEvents()
 
-    assert errors == [
-        "Condition stimulus type can only be changed before images or words are added."
+    assert errors == []
+    source_label = "images" if source == StimulusModality.IMAGE else "words"
+    target_label = "words" if source == StimulusModality.IMAGE else "images"
+    assert prompts == [
+        f"Warning: changing your stimuli type from {source_label} to {target_label} "
+        "will clear previous selections for this condition. "
+        "Are you sure you want to continue?"
     ]
-    assert (
-        window.document.get_condition_stimulus_set(condition_id, "base").modality
-        == StimulusModality.WORD
-    )
+    expected = target if accept else source
+    assert step.modality_combo.currentData() == expected.value
+    assert step.words_panel.isVisible() == (expected == StimulusModality.WORD)
+    for role in ("base", "oddball"):
+        current = window.document.get_condition_stimulus_set(condition_id, role)
+        assert current.modality == expected
+        if accept:
+            assert current.image_count == current.word_count == 0
+        elif source == StimulusModality.WORD:
+            assert current.words == (["cat"] if role == "base" else ["chair"])
+        else:
+            assert current.image_count == 3
+    assert not step._base_words_committer.pending
+    assert not step._oddball_words_committer.pending
+    _assert_visible_children_within_parent(step)
 
 
 def test_setup_wizard_conditions_step_requires_descriptive_name_and_positive_trigger(

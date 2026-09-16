@@ -64,6 +64,7 @@ from fpvs_studio.gui.condition_task_dialog import (
 )
 from fpvs_studio.gui.control_condition_dialog import ControlConditionDialog
 from fpvs_studio.gui.document import ProjectDocument
+from fpvs_studio.gui.document_support import StimulusTypeChangeRequiresConfirmation
 from fpvs_studio.gui.presentation_settings_dialog import (
     PresentationSettingsDialog,
     condition_presentation_summary,
@@ -1427,7 +1428,27 @@ class ConditionSetupStep(QWidget):
         modality_value = self.modality_combo.currentData()
         try:
             modality = StimulusModality(str(modality_value))
-            self._document.set_condition_stimulus_modality(condition_id, modality=modality)
+            self.flush_pending_edits()
+            try:
+                self._document.set_condition_stimulus_modality(condition_id, modality=modality)
+            except StimulusTypeChangeRequiresConfirmation:
+                previous = self._document.get_condition_stimulus_set(condition_id, "base").modality
+                labels = {StimulusModality.IMAGE: "images", StimulusModality.WORD: "words"}
+                answer = QMessageBox.warning(
+                    self,
+                    "Change Stimulus Type",
+                    f"Warning: changing your stimuli type from {labels[previous]} to "
+                    f"{labels[modality]} will clear previous selections for this condition. "
+                    "Are you sure you want to continue?",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                    QMessageBox.StandardButton.No,
+                )
+                if answer != QMessageBox.StandardButton.Yes:
+                    self.refresh()
+                    return
+                self._document.set_condition_stimulus_modality(
+                    condition_id, modality=modality, clear_existing=True,
+                )
         except Exception as error:
             _show_error_dialog(self, "Condition Error", error)
             self.refresh()

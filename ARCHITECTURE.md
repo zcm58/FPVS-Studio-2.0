@@ -27,6 +27,8 @@ lazily only inside the engine package.
   starts with category alone, then project details. Setup composes eight
   model-backed pages (Project, Conditions, Design, Timing & Session, Image Size, Fixation,
   Response, Review); shared dialog/form styling remains in `gui/components.py`.
+  Conditions confirms populated image/word switches before the document replaces only
+  the selected condition's source associations; see `docs/GUI_WORKFLOW.md`.
   Design embeds a shared category-specific visual editor. Setup's Next action applies
   the draft through the existing navigation gate; the standalone host retains Apply.
   `core/experiment_design.py` owns oddball cycle descriptions and frame previews;

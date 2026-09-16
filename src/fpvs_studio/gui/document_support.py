@@ -31,6 +31,10 @@ class DocumentError(ValueError):
     """Raised when a GUI-facing document action cannot complete."""
 
 
+class StimulusTypeChangeRequiresConfirmation(DocumentError):
+    """Changing modality would clear the selected condition's stimulus lists."""
+
+
 LaunchSummary = SessionExecutionSummary
 ModelT = TypeVar("ModelT", bound=BaseModel)
 

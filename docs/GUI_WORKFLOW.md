@@ -304,6 +304,11 @@ The authoring window is organized around two user-facing modes:
     `This condition` editor and participant instructions, uses one
     responsive field column whose minimum width is set by the Advanced Timing selector,
     places oddball repeat guidance behind a compact lower-right information action.
+    Changing a populated condition between Images and Words shows a Yes/No warning
+    (No by default). Yes clears that condition's base/oddball selections and opens
+    empty lists of the chosen type; No restores the selector and keeps the selections.
+    Pending word edits are committed before confirmation. Other conditions sharing
+    the sources and image files on disk are preserved. Empty conditions switch directly.
     Image pools and timeline editing live in Design. AB hides modality, ordinary
     presentation-mode choices and oddball repeat-balance controls, retaining names,
     instructions, task bindings and appearance settings. Mixed legacy projects expose

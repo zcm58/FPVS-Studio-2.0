@@ -150,6 +150,11 @@ Use GUI/core/compiler/runtime focused checks and the visible acceptance path in
 
 ## Setup Design Verification
 
+For Conditions stimulus-type switching, read `gui/condition_setup_step.py` and
+`gui/document_conditions.py`. Safe regressions are in `tests/unit/test_condition_modality.py`;
+Yes/No, pending word edits and layout coverage are registered in
+`tests/gui/test_setup_conditions.py`. Use GUI focused checks and repo precommit.
+
 For Manage Projects renaming, start with `gui/manage_projects_dialog.py`, its
 controller bindings and `core/project_service.py`. Verify metadata-only persistence
 and open-document draft preservation with `tests/unit/test_project_service.py` and
