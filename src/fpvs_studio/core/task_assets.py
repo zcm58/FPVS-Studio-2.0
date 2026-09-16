@@ -11,13 +11,31 @@ from fpvs_studio.core.paths import (
     resolve_project_relative_path,
     validate_project_relative_path,
 )
-from fpvs_studio.core.task_models import validate_task_slug
+from fpvs_studio.core.task_models import TaskModule, validate_task_slug
 
 SUPPORTED_TASK_ASSET_SUFFIXES = frozenset({".jpg", ".jpeg", ".png"})
 
 
 class TaskAssetError(ValueError):
     """Raised when task media cannot be copied safely into a project."""
+
+
+def task_image_references(task: TaskModule) -> list[str]:
+    """Return authored image paths in display order, including questionnaire options."""
+
+    return [
+        path
+        for step in task.steps
+        for path in [
+            *(item.image_path for item in step.items if item.image_path is not None),
+            *(
+                option.image_path
+                for question in step.questions
+                for option in question.options
+                if option.image_path is not None
+            ),
+        ]
+    ]
 
 
 def copy_task_asset(

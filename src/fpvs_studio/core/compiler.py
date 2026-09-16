@@ -43,7 +43,9 @@ from fpvs_studio.core.compiler_support import (
 )
 from fpvs_studio.core.compiler_tasks import (
     compile_condition_tasks,
+    compile_modifier_baseline,
     condition_tasks_replace_start_gate,
+    resolve_modifier_baseline,
 )
 from fpvs_studio.core.enums import SchemaVersion
 from fpvs_studio.core.experiment_categories import require_valid_experiment_category
@@ -333,6 +335,7 @@ def compile_session_plan(
     except ValueError as exc:
         raise CompileError(str(exc)) from exc
     selected_conditions = select_conditions(project, condition_ids)
+    baseline_requirements = resolve_modifier_baseline(project, selected_conditions)
     if random_seed is None:
         random_seed = project.settings.session.session_seed
     session_identifier = session_id or make_session_id(project.meta.project_id, random_seed)
@@ -408,6 +411,8 @@ def compile_session_plan(
                     session_seed=random_seed,
                     run_id=run_id,
                     project_root=project_root,
+                    run_spec=run_spec,
+                    global_order_index=global_order_index,
                 )
                 post_tasks = compile_condition_tasks(
                     project,
@@ -419,7 +424,13 @@ def compile_session_plan(
                     run_id=run_id,
                     project_root=project_root,
                     run_spec=run_spec,
+                    global_order_index=global_order_index,
                 )
+                if global_order_index == 0 and baseline_requirements:
+                    pre_tasks.insert(0, compile_modifier_baseline(
+                        project, baseline_requirements, condition=condition,
+                        session_seed=random_seed, run_id=run_id, project_root=project_root,
+                    ))
             except CompileError as exc:
                 raise CompileError(
                     f"Condition '{condition.name}' (id '{condition.condition_id}') "
@@ -442,6 +453,7 @@ def compile_session_plan(
                             condition,
                             block_index=occurrence_index,
                             block_count=repetition_count,
+                            global_order_index=global_order_index,
                         )
                     ),
                 )

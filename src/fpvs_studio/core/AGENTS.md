@@ -19,6 +19,8 @@ This directory is the most important foundation in the repo. It should remain im
 - template metadata
 - app-level condition-template profile storage under the configured FPVS Studio root
   in `.fpvs-studio/templates/`
+- condition modifier grouping/factories in `condition_modifiers.py`; local preset
+  persistence and staged project media intake in `modifier_presets.py`
 - JSON serialization
 - validation
 - project scaffolding helpers
@@ -160,5 +162,5 @@ A minimal compiler in this phase should be able to:
 - No PySide6 imports here.
 - No PsychoPy imports here.
 - No direct filesystem writes except in explicit serializer, project-service/separation,
-  task-asset, config, and bundle modules.
+  task-asset, modifier-preset, config, and bundle modules.
 - No image manipulation code here.

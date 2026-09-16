@@ -112,9 +112,9 @@ def _duty_cycle_label(mode: DutyCycleMode) -> str:
 
 def _timing_template_label(mode: DutyCycleMode) -> str:
     return {
-        DutyCycleMode.CONTINUOUS: "Continuous Images",
-        DutyCycleMode.BLANK_50: "50% Blank Between Images",
-        DutyCycleMode.SINUSOIDAL: "Contrast Modulation",
+        DutyCycleMode.CONTINUOUS: "Continuous Display",
+        DutyCycleMode.BLANK_50: "50% Blank",
+        DutyCycleMode.SINUSOIDAL: "Sinusoidal Contrast Modulation",
     }[mode]
 
 
@@ -142,14 +142,14 @@ def _sync_timing_template_combo(
 
     if modality == StimulusModality.IMAGE:
         guidance = (
-            "Contrast Modulation is available for image conditions and requires "
+            "Sinusoidal Contrast Modulation is available for image conditions and requires "
             "Neutral Gray (#808080) in Experiment settings."
         )
     else:
         guidance = (
-            "Word conditions support Continuous Images and 50% Blank Between Images. "
-            "Switching an image condition to Words resets Contrast Modulation to "
-            "Continuous Images."
+            "Word conditions support Continuous Display and 50% Blank. "
+            "Switching an image condition to Words resets Sinusoidal Contrast Modulation to "
+            "Continuous Display."
         )
     combo.setToolTip(guidance)
     combo.setAccessibleName("Presentation mode")

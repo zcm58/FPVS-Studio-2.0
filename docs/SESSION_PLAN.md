@@ -68,14 +68,26 @@ Oddball presentation rules and its pre-stream fixation frame count, so session r
 does not inspect editable project presentation settings.
 
 Task modules are project-owned, ordered declarative workflows. Conditions bind them
-to pre- or post-condition phases with one of three occurrence scopes: every session
-entry, the first occurrence of that condition, or its last occurrence. Compilation
+to pre- or post-condition phases with four occurrence scopes: every session
+entry, the first occurrence of that condition, its last occurrence, or the first
+entry of the entire compiled session. The latter is evaluated after ordering and
+condition selection. Counting modules carry optional typed settings; compilation
+generates their ordinary screens and links the load start/report realization. See
+[Cognitive Load FPVS](COGNITIVE_LOAD_FPVS.md). Compilation
 resolves each applicable binding into `TaskModuleSpec` and records deterministic item
 and questionnaire-option order without changing the embedded `RunSpec`. Each
 `TaskStep` also carries a closed Arial/Open Sans font-family choice into its
 `TaskStepSpec`; omitted values default to Arial so existing projects retain their
 rendering. This is an additive field in the existing schema `1.2.0` task/session
 contract, not a schema bump or a change to the `RunSpec` frame contract.
+
+Project-owned condition modifiers group those ordered bindings. Selected counting
+assignments request one compatible baseline, injected into the first actual entry
+without persisted baseline bindings on no-load conditions. Linked image-memory
+modules share validated target identities and independently seeded task order.
+Compiled provenance identifies the modifier and session baseline; neither operation
+changes the existing FPVS or fixation RNG streams. Legacy standalone task bindings
+retain their previous occurrence behavior. See [Condition modifiers](CONDITION_MODIFIERS.md).
 
 Each module contains ordered task steps and may repeat as a group. This group repeat
 keeps workflows such as Creatine's choice-grid then timed-feedback pair interleaved.

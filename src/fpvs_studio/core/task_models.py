@@ -74,6 +74,122 @@ class TaskOccurrence(str, Enum):
     EVERY_ENTRY = "every_entry"
     FIRST_OCCURRENCE = "first_occurrence"
     LAST_OCCURRENCE = "last_occurrence"
+    FIRST_SESSION_ENTRY = "first_session_entry"
+
+
+class BackwardCountingRole(str, Enum):
+    """Where one reusable counting module participates in the task flow."""
+
+    BASELINE = "baseline"
+    LOAD_START = "load_start"
+    LOAD_REPORT = "load_report"
+
+
+class BackwardCountingConfig(TaskBaseModel):
+    """Authored counting settings; a load report inherits its linked start settings."""
+
+    role: BackwardCountingRole
+    link_id: str = "backward-counting-load"
+    subtraction_step: int = Field(default=13, gt=0, strict=True)
+    duration_seconds: float = Field(default=120.0, gt=0, allow_inf_nan=False)
+    start_min: int = Field(default=1000, ge=1, le=2**53 - 1, strict=True)
+    start_max: int = Field(default=9999, ge=1, le=2**53 - 1, strict=True)
+    instructions: str | None = Field(default=None, max_length=MAX_TASK_TEXT_CHARS)
+    endpoint_prompt: str | None = Field(default=None, max_length=MAX_TASK_TEXT_CHARS)
+
+    @field_validator("link_id")
+    @classmethod
+    def validate_link_id(cls, value: str) -> str:
+        return validate_task_slug(value, field_name="Counting link id")
+
+    @model_validator(mode="after")
+    def validate_start_range(self) -> BackwardCountingConfig:
+        if self.start_max < self.start_min:
+            raise ValueError("Counting start maximum must be at least the start minimum.")
+        return self
+
+
+class BackwardCountingSpec(BackwardCountingConfig):
+    """Realized counting settings shared by the start and report of one run."""
+
+    start_number: int = Field(ge=1, le=2**53 - 1, strict=True)
+
+    @model_validator(mode="after")
+    def validate_start_number(self) -> BackwardCountingSpec:
+        if not self.start_min <= self.start_number <= self.start_max:
+            raise ValueError("Realized counting start must lie inside the configured range.")
+        return self
+
+
+class BackwardCountingResult(TaskBaseModel):
+    """Endpoint-derived estimate, not a record of observed intermediate subtractions."""
+
+    role: BackwardCountingRole
+    link_id: str
+    start_number: int
+    subtraction_step: int = Field(gt=0)
+    interval_seconds: float = Field(gt=0, allow_inf_nan=False)
+    interval_completed: bool = False
+    endpoint: int | None = None
+    estimated_steps: float | None = Field(default=None, allow_inf_nan=False)
+    subtraction_remainder: int | None = None
+    steps_per_second: float | None = Field(default=None, allow_inf_nan=False)
+    baseline_steps_per_second: float | None = Field(default=None, allow_inf_nan=False)
+    baseline_rate_ratio: float | None = Field(default=None, allow_inf_nan=False)
+    observed_interval_seconds: float | None = Field(default=None, ge=0, allow_inf_nan=False)
+    duration_basis: Literal["planned"] = "planned"
+
+
+class ConditionModifierKind(str, Enum):
+    BACKWARD_COUNTING = "backward_counting"
+    IMAGE_MEMORY = "image_memory"
+
+
+class ModifierProvenance(TaskBaseModel):
+    modifier_id: str
+    name: str
+    kind: ConditionModifierKind
+    session_baseline: bool = False
+    requested_modifier_ids: list[str] = Field(default_factory=list)
+
+
+class ImageMemoryRole(str, Enum):
+    STUDY = "study"
+    RECOGNITION = "recognition"
+
+
+class ImageMemoryConfig(TaskBaseModel):
+    """Identity links authored study/recognition screens without duplicating their items."""
+
+    role: ImageMemoryRole
+    link_id: str
+
+    @field_validator("link_id")
+    @classmethod
+    def validate_link_id(cls, value: str) -> str:
+        return validate_task_slug(value, field_name="Memory link id")
+
+
+class ImageMemorySpec(ImageMemoryConfig):
+    target_item_ids: list[str]
+    foil_item_ids: list[str]
+    study_order: list[str]
+    recognition_order: list[str]
+    image_paths: dict[str, str]
+    random_seed: int = Field(ge=0)
+    study_duration_seconds: float | None = Field(default=None, gt=0, allow_inf_nan=False)
+
+
+class ImageMemoryResult(ImageMemoryConfig):
+    target_item_ids: list[str]
+    foil_item_ids: list[str]
+    study_order: list[str]
+    recognition_order: list[str]
+    image_paths: dict[str, str]
+    target_count: Literal[4] = 4
+    targets_selected: int | None = Field(default=None, ge=0, le=4)
+    exact_set_correct: bool | None = None
+    completed: bool = False
 
 
 class TaskStepKind(str, Enum):
@@ -686,6 +802,8 @@ class TaskModule(TaskBaseModel):
     name: str
     repeat_count: int = Field(default=1, ge=1)
     steps: list[TaskStep] = Field(default_factory=list)
+    backward_counting: BackwardCountingConfig | None = None
+    image_memory: ImageMemoryConfig | None = None
 
     @field_validator("task_id")
     @classmethod
@@ -699,6 +817,15 @@ class TaskModule(TaskBaseModel):
 
     @model_validator(mode="after")
     def validate_steps(self) -> TaskModule:
+        if self.image_memory is not None:
+            if self.backward_counting is not None or self.repeat_count != 1:
+                raise ValueError("Image-memory modules have one activity and run once.")
+            if not self.steps:
+                return self
+        if self.backward_counting is not None:
+            if self.steps or self.repeat_count != 1:
+                raise ValueError("Backward-counting modules generate their own steps and run once.")
+            return self
         step_ids = [step.step_id for step in self.steps]
         if not self.steps:
             raise ValueError("Task modules require at least one step.")
@@ -824,6 +951,9 @@ class TaskModuleSpec(TaskBaseModel):
     random_seed: int = Field(ge=0)
     repeat_count: int = Field(default=1, ge=1)
     steps: list[TaskStepSpec]
+    backward_counting: BackwardCountingSpec | None = None
+    image_memory: ImageMemorySpec | None = None
+    modifier: ModifierProvenance | None = None
 
     @model_validator(mode="after")
     def validate_repeat_capacity(self) -> TaskModuleSpec:
@@ -919,6 +1049,9 @@ class TaskResponseRecord(TaskBaseModel):
     score: float | None = None
     timed_out: bool = False
     aborted: bool = False
+    backward_counting: BackwardCountingResult | None = None
+    image_memory: ImageMemoryResult | None = None
+    modifier: ModifierProvenance | None = None
 
     @field_validator("task_id", "step_id", "condition_id")
     @classmethod

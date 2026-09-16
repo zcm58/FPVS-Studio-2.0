@@ -64,6 +64,7 @@ def experiment_category_label(category: ExperimentCategory) -> str:
         ExperimentCategory.FPVS: "Standard FPVS",
         ExperimentCategory.FPVS_ODDBALL: "FPVS Oddball Paradigm",
         ExperimentCategory.ATTENTIONAL_BLINK: "Attentional-Blink",
+        ExperimentCategory.COGNITIVE_LOAD_FPVS: "Cognitive Load FPVS",
     }[category]
 
 

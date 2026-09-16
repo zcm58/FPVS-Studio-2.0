@@ -491,6 +491,20 @@ JSON/JSONL research record retains the raw value. Raw task responses are deliber
 absent from participant/group summaries, condition-history rows, project files,
 templates, configs, and portable project bundles.
 
+Backward-counting modules additionally attach typed start/decrement/endpoint,
+interval completion and duration, estimated steps, remainder, rate and eligible
+baseline-rate comparison to those records. See [Cognitive Load FPVS](COGNITIVE_LOAD_FPVS.md)
+for interpretation and abort semantics. These estimates do not verify intermediate
+arithmetic or change FPVS frame/trigger scheduling.
+
+Condition modifiers add grouping/session-baseline provenance and typed image-memory
+records to the same task responses. Recognition records target/foil identity, both
+orders, image paths, selected targets out of four, exact-set correctness, completion,
+and RT. Incomplete responses remain unscored; study and partial selections survive
+abort checkpoints. Existing compact CSV headers are migrated before appending new
+columns. See [Condition modifiers](CONDITION_MODIFIERS.md) for the workflow and
+project/preset ownership boundaries.
+
 Run and session `events.csv` exports include neutral stimulus columns:
 `stimulus_modality`, `stimulus_id`, `stimulus_value`, `image_path`, and `text`.
 `stimulus_value` is a spreadsheet convenience field derived from `image_path` for image

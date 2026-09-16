@@ -23,6 +23,10 @@ def model_to_json(model: BaseModel, *, indent: int = 2) -> str:
 
     if isinstance(model, ProjectFile):
         require_valid_experiment_category(model)
+        if not model.condition_modifiers:
+            return model.model_dump_json(
+                indent=indent, exclude_none=True, exclude={"condition_modifiers"},
+            )
     return model.model_dump_json(indent=indent, exclude_none=True)
 
 

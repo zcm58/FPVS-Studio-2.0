@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QFileDialog,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -75,8 +76,8 @@ class CreateProjectDialog(QDialog):
         category_layout.addWidget(category_heading)
         category_layout.addStretch(1)
         self.category_cards = QWidget(self.category_page)
-        self.category_cards.setFixedHeight(126)
-        category_row = QHBoxLayout(self.category_cards)
+        self.category_cards.setFixedHeight(252)
+        category_row = QGridLayout(self.category_cards)
         category_row.setContentsMargins(0, 0, 0, 0)
         category_row.setSpacing(16)
         self.category_button_group = QButtonGroup(self)
@@ -86,8 +87,12 @@ class CreateProjectDialog(QDialog):
             (ExperimentCategory.FPVS, "Standard FPVS\nComing soon"),
             (ExperimentCategory.FPVS_ODDBALL, "FPVS Oddball Paradigm\nBase images and oddballs"),
             (ExperimentCategory.ATTENTIONAL_BLINK, "Attentional-Blink\nTwo targets in a stream"),
+            (
+                ExperimentCategory.COGNITIVE_LOAD_FPVS,
+                "Cognitive Load FPVS\nImages with backward counting",
+            ),
         )
-        for category, text in choices:
+        for index, (category, text) in enumerate(choices):
             button = QPushButton(text, self.category_page)
             button.setObjectName(f"experiment_category_{category.value}")
             button.setMinimumWidth(210)
@@ -100,7 +105,7 @@ class CreateProjectDialog(QDialog):
             )
             self.category_button_group.addButton(button)
             self.category_buttons[category] = button
-            category_row.addWidget(button, 1)
+            category_row.addWidget(button, index // 2, index % 2)
         category_layout.addWidget(self.category_cards)
         category_layout.addStretch(1)
         self.category_stack.addWidget(self.category_page)

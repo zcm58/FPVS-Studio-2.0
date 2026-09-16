@@ -11,6 +11,7 @@ import copy
 import csv
 import io
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Literal
@@ -52,8 +53,16 @@ from PySide6.QtWidgets import (
 )
 
 from fpvs_studio.assets import bundled_task_font_path
+from fpvs_studio.core.backward_counting import (
+    create_backward_counting_baseline_task,
+    create_backward_counting_report_task,
+    create_backward_counting_start_task,
+)
 from fpvs_studio.core.enums import PresentationUnit
 from fpvs_studio.core.task_models import (
+    BackwardCountingConfig,
+    BackwardCountingRole,
+    ImageMemoryConfig,
     TaskBinding,
     TaskBranchOperator,
     TaskBranchRule,
@@ -136,6 +145,12 @@ _OCCURRENCE_LABELS = (
     ("Every condition occurrence", "every_entry"),
     ("First occurrence in the session", "first_occurrence"),
     ("Last occurrence in the session", "last_occurrence"),
+    ("First entry of the whole session", "first_session_entry"),
+)
+_COUNTING_LIBRARY = (
+    ("Counting baseline", "baseline", create_backward_counting_baseline_task),
+    ("Counting load start", "load_start", create_backward_counting_start_task),
+    ("Counting end report", "load_report", create_backward_counting_report_task),
 )
 _IMAGE_SUFFIXES = frozenset({".jpeg", ".jpg", ".png"})
 
@@ -244,6 +259,8 @@ class TaskModuleDraft:
     replaces_condition_start_gate: bool = False
     repeat_count: int = 1
     steps: list[TaskStepDraft] = field(default_factory=list)
+    backward_counting: BackwardCountingConfig | None = None
+    image_memory: ImageMemoryConfig | None = None
 
 
 @dataclass
@@ -1988,6 +2005,48 @@ class TaskModuleEditor(QWidget):
         module_group.setObjectName("condition_task_module_binding_group")
         module_group.setLayout(module_form)
 
+        self.counting_group = QWidget(self)
+        self.counting_group.setObjectName("condition_task_counting_group")
+        counting_form = QFormLayout(self.counting_group)
+        counting_form.setContentsMargins(0, 0, 0, 0)
+        counting_form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
+        self.counting_description = QLabel(self.counting_group)
+        self.counting_description.setWordWrap(True)
+        counting_form.addRow(self.counting_description)
+        self.counting_link_edit = QLineEdit(self.counting_group)
+        self.counting_link_edit.setObjectName("condition_task_counting_link")
+        self.counting_link_edit.setToolTip(
+            "Use the same counting link for a load start and its end report."
+        )
+        counting_form.addRow("Counting link", self.counting_link_edit)
+        self.counting_step_spin = QDoubleSpinBox(self.counting_group)
+        self.counting_step_spin.setObjectName("condition_task_counting_step")
+        self.counting_step_spin.setDecimals(0)
+        self.counting_step_spin.setRange(1, 2**53 - 1)
+        counting_form.addRow("Subtract each time", self.counting_step_spin)
+        self.counting_duration_spin = QDoubleSpinBox(self.counting_group)
+        self.counting_duration_spin.setObjectName("condition_task_counting_duration")
+        self.counting_duration_spin.setRange(0.001, 86_400.0)
+        self.counting_duration_spin.setDecimals(3)
+        self.counting_duration_spin.setSuffix(" s")
+        counting_form.addRow("Baseline duration", self.counting_duration_spin)
+        self.counting_duration_label = counting_form.labelForField(self.counting_duration_spin)
+        self.counting_min_spin = QDoubleSpinBox(self.counting_group)
+        self.counting_min_spin.setObjectName("condition_task_counting_min")
+        self.counting_min_spin.setDecimals(0)
+        self.counting_min_spin.setRange(1, 2**53 - 1)
+        self.counting_max_spin = QDoubleSpinBox(self.counting_group)
+        self.counting_max_spin.setObjectName("condition_task_counting_max")
+        self.counting_max_spin.setDecimals(0)
+        self.counting_max_spin.setRange(1, 2**53 - 1)
+        counting_form.addRow("Lowest start number", self.counting_min_spin)
+        counting_form.addRow("Highest start number", self.counting_max_spin)
+        self.counting_settings_fields = (
+            self.counting_step_spin, self.counting_min_spin, self.counting_max_spin,
+        )
+        self.counting_form = counting_form
+        self.counting_group.hide()
+
         self.step_list = QListWidget(self)
         self.step_list.setObjectName("condition_task_module_step_list")
         self.step_list.setMinimumHeight(90)
@@ -2027,6 +2086,7 @@ class TaskModuleEditor(QWidget):
         step_actions.addWidget(self.remove_step_button, 1, 3)
 
         steps_group = QWidget(self)
+        self.steps_group = steps_group
         steps_group.setObjectName("condition_task_module_steps_group")
         steps_layout = QVBoxLayout(steps_group)
         steps_layout.setContentsMargins(8, 8, 8, 8)
@@ -2051,7 +2111,8 @@ class TaskModuleEditor(QWidget):
         mark_secondary_action(self.module_settings_button)
         self.module_settings_button.toggled.connect(self._show_module_settings)
         navigation = QHBoxLayout()
-        navigation.addWidget(QLabel("Step", self))
+        self.step_label = QLabel("Step", self)
+        navigation.addWidget(self.step_label)
         navigation.addWidget(self.step_selector, 1)
         navigation.addWidget(self.module_settings_button)
         self.module_pages = QStackedWidget(self)
@@ -2062,6 +2123,7 @@ class TaskModuleEditor(QWidget):
         settings_layout.setContentsMargins(0, 0, 0, 0)
         settings_layout.setSpacing(8)
         settings_layout.addWidget(module_group)
+        settings_layout.addWidget(self.counting_group)
         settings_layout.addWidget(steps_group, 1)
         self.module_pages.addWidget(self.edit_step_page)
         self.module_pages.addWidget(self.settings_page)
@@ -2077,11 +2139,18 @@ class TaskModuleEditor(QWidget):
             self.occurrence_combo.currentIndexChanged,
             self.module_repeat_count_spin.valueChanged,
             self.replaces_start_gate_checkbox.toggled,
+            self.counting_link_edit.textChanged,
+            self.counting_step_spin.valueChanged,
+            self.counting_duration_spin.valueChanged,
+            self.counting_min_spin.valueChanged,
+            self.counting_max_spin.valueChanged,
         ):
             signal.connect(self._store_module_header)
         self.setEnabled(False)
 
     def _show_module_settings(self, checked: bool) -> None:
+        if self._module is not None and self._module.backward_counting is not None:
+            checked = True
         self.module_pages.setCurrentIndex(1 if checked else 0)
         self.module_settings_button.setText("Back to step" if checked else "Module settings")
         self.step_selector.setEnabled(not checked)
@@ -2105,6 +2174,48 @@ class TaskModuleEditor(QWidget):
             self.replaces_start_gate_checkbox.setChecked(
                 module.replaces_condition_start_gate if self._allow_replaces_start_gate else False
             )
+            counting = module.backward_counting
+            self.counting_group.setVisible(counting is not None)
+            self.steps_group.setVisible(counting is None)
+            self.module_repeat_count_spin.setEnabled(counting is None)
+            self.step_label.setVisible(counting is None)
+            self.step_selector.setVisible(counting is None)
+            self.module_settings_button.setVisible(counting is None)
+            if counting is not None:
+                baseline = counting.role == BackwardCountingRole.BASELINE
+                report = counting.role == BackwardCountingRole.LOAD_REPORT
+                self.counting_link_edit.setText(counting.link_id)
+                self.counting_step_spin.setMaximum(max(2**53 - 1, counting.subtraction_step))
+                self.counting_step_spin.setValue(counting.subtraction_step)
+                self.counting_duration_spin.setMaximum(max(86_400.0, counting.duration_seconds))
+                self.counting_duration_spin.setValue(counting.duration_seconds)
+                self.counting_min_spin.setValue(counting.start_min)
+                self.counting_max_spin.setValue(counting.start_max)
+                self.counting_duration_spin.setVisible(baseline)
+                self.counting_duration_label.setVisible(baseline)
+                for field in self.counting_settings_fields:
+                    field.setVisible(not report)
+                    self.counting_form.labelForField(field).setVisible(not report)
+                description = {
+                    BackwardCountingRole.BASELINE: (
+                        "Show a random starting number, run a timed baseline, then ask for "
+                        "the final number. Attach this module before every condition so it "
+                        "runs before the first randomized entry."
+                    ),
+                    BackwardCountingRole.LOAD_START: (
+                        "Show a random starting number before FPVS. Counting lasts for the "
+                        "condition's duration. Add a matching Counting end report after it."
+                    ),
+                    BackwardCountingRole.LOAD_REPORT: (
+                        "Ask for the final number immediately after FPVS. The matching "
+                        "start supplies the starting number and subtraction step."
+                    ),
+                }
+                self.counting_description.setText(description[counting.role])
+                self.module_settings_button.setChecked(True)
+                self._show_module_settings(True)
+            else:
+                self._show_module_settings(self.module_settings_button.isChecked())
         finally:
             self._syncing = False
         self._refresh_step_list(select_row=0 if module and module.steps else -1)
@@ -2131,6 +2242,17 @@ class TaskModuleEditor(QWidget):
         self._module.replaces_condition_start_gate = (
             self._allow_replaces_start_gate and self.replaces_start_gate_checkbox.isChecked()
         )
+        if self._module.backward_counting is not None:
+            self._module.backward_counting = self._module.backward_counting.model_copy(
+                update={
+                    "link_id": self.counting_link_edit.text().strip(),
+                    "subtraction_step": int(self.counting_step_spin.value()),
+                    "duration_seconds": self.counting_duration_spin.value(),
+                    "start_min": int(self.counting_min_spin.value()),
+                    "start_max": int(self.counting_max_spin.value()),
+                },
+                deep=True,
+            )
         if emit_changed:
             self.changed.emit(copy.deepcopy(self._module))
 
@@ -2279,6 +2401,10 @@ class TaskPhaseEditor(QWidget):
         self.add_kind_combo.setObjectName(f"condition_task_{prefix}_add_kind_combo")
         for label, kind in _MODULE_LABELS:
             self.add_kind_combo.addItem(label, kind)
+        self.add_kind_combo.insertSeparator(self.add_kind_combo.count())
+        for label, role, _factory in _COUNTING_LIBRARY:
+            if (prefix == "post") == (role == "load_report"):
+                self.add_kind_combo.addItem(label, f"counting:{role}")
         self.add_button = QPushButton("Add Module", self)
         self.add_button.setObjectName(f"condition_task_{prefix}_add_button")
         self.add_button.clicked.connect(self._add_module)
@@ -2373,13 +2499,27 @@ class TaskPhaseEditor(QWidget):
             f"{kind.replace('_', '-')}-module",
             existing,
         )
-        step_id = _unique_id(kind.replace("_", "-"), set())
-        label = next(label for label, item_kind in _MODULE_LABELS if item_kind == kind)
-        step = _new_task_step_draft(step_id=step_id, kind=kind, title=label)
-        module = TaskModuleDraft(module_id=module_id, title=label, steps=[step])
+        if kind.startswith("counting:"):
+            role = kind.removeprefix("counting:")
+            factory = next(factory for _label, value, factory in _COUNTING_LIBRARY if value == role)
+            core_module = factory(task_id=module_id)
+            binding = TaskBinding(
+                task_id=module_id,
+                occurrence=(
+                    TaskOccurrence.FIRST_SESSION_ENTRY
+                    if role == "baseline" else TaskOccurrence.EVERY_ENTRY
+                ),
+                replaces_condition_start_gate=role == "load_start",
+            )
+            module = _module_to_draft(core_module, binding)
+        else:
+            step_id = _unique_id(kind.replace("_", "-"), set())
+            label = next(label for label, item_kind in _MODULE_LABELS if item_kind == kind)
+            step = _new_task_step_draft(step_id=step_id, kind=kind, title=label)
+            module = TaskModuleDraft(module_id=module_id, title=label, steps=[step])
         self._modules.append(module)
         self._refresh_list(select_row=len(self._modules) - 1)
-        self.module_editor.module_settings_button.setChecked(False)
+        self.module_editor.module_settings_button.setChecked(module.backward_counting is not None)
         self.changed.emit()
 
     def _duplicate_module(self) -> None:
@@ -2435,7 +2575,8 @@ class TaskPhaseEditor(QWidget):
                 suffix = "step" if len(module.steps) == 1 else "steps"
                 item = QListWidgetItem(
                     f"{module.title or module.module_id}\n"
-                    f"{module.repeat_count}x · {len(module.steps)} {suffix}"
+                    + ("Backward counting" if module.backward_counting is not None
+                       else f"{module.repeat_count}x · {len(module.steps)} {suffix}")
                 )
                 item.setData(Qt.ItemDataRole.UserRole, module.module_id)
                 item.setToolTip(
@@ -2471,7 +2612,8 @@ class TaskPhaseEditor(QWidget):
         item = self.module_list.item(row)
         item.setText(
             f"{module.title or module.module_id}\n"
-            f"{module.repeat_count}x · {len(module.steps)} {suffix}"
+            + ("Backward counting" if module.backward_counting is not None
+               else f"{module.repeat_count}x · {len(module.steps)} {suffix}")
         )
         item.setData(Qt.ItemDataRole.UserRole, module.module_id)
         item.setToolTip(
@@ -2538,6 +2680,11 @@ def _module_to_draft(module: TaskModule, binding: TaskBinding) -> TaskModuleDraf
         replaces_condition_start_gate=binding.replaces_condition_start_gate,
         repeat_count=module.repeat_count,
         steps=[_step_to_draft(step) for step in module.steps],
+        backward_counting=(
+            module.backward_counting.model_copy(deep=True)
+            if module.backward_counting is not None else None
+        ),
+        image_memory=module.image_memory.model_copy(deep=True) if module.image_memory else None,
     )
 
 
@@ -2779,6 +2926,11 @@ def _module_from_draft(module: TaskModuleDraft) -> TaskModule:
         name=module.title,
         repeat_count=module.repeat_count,
         steps=[_step_from_draft(step) for step in module.steps],
+        backward_counting=(
+            BackwardCountingConfig.model_validate(module.backward_counting.model_dump())
+            if module.backward_counting is not None else None
+        ),
+        image_memory=module.image_memory.model_copy(deep=True) if module.image_memory else None,
     )
 
 
@@ -2966,6 +3118,9 @@ class ConditionTaskDialog(QDialog):
         *,
         condition_id: str,
         parent: QWidget | None = None,
+        defer_apply: bool = False,
+        staged_validator: Callable[[list[TaskModule], list[TaskBinding], list[TaskBinding]], None]
+        | None = None,
     ) -> None:
         super().__init__(parent)
         condition = document.get_condition(condition_id)
@@ -2978,7 +3133,28 @@ class ConditionTaskDialog(QDialog):
         self.setMinimumSize(1100, 720)
         self._document = document
         self._condition_id = condition_id
+        self._defer_apply = defer_apply
+        self._staged_validator = staged_validator
+        self.staged_result: tuple[
+            list[TaskModule], list[TaskBinding], list[TaskBinding], list[tuple[Path, str]]
+        ] | None = None
         initial = condition_task_flow_from_document(document, condition_id)
+        bound_ids = {module.module_id for module in [*initial.pre_modules, *initial.post_modules]}
+        other_bound_ids = {
+            binding.task_id
+            for other in document.project.conditions
+            if other.condition_id != condition_id
+            for binding in [*other.pre_task_bindings, *other.post_task_bindings]
+        }
+        self.update_shared_checkbox = QCheckBox(
+            "Apply shared module edits to all bound conditions", self
+        )
+        self.update_shared_checkbox.setObjectName("condition_task_update_shared")
+        self.update_shared_checkbox.setToolTip(
+            "A reusable module has one shared definition. Enable this to update its "
+            "settings everywhere it is used. Condition bindings keep their own order."
+        )
+        self.update_shared_checkbox.setVisible(bool(bound_ids & other_bound_ids))
 
         self.header = DialogHeader(
             "Participant tasks",
@@ -3066,12 +3242,14 @@ class ConditionTaskDialog(QDialog):
         layout.setSpacing(14)
         layout.addWidget(self.header)
         layout.addLayout(content, 1)
+        layout.addWidget(self.update_shared_checkbox)
         layout.addWidget(self.validation_label)
         layout.addLayout(footer)
 
         for editor in (self.pre_editor, self.post_editor):
             editor.selection_changed.connect(self._refresh_preview)
             editor.changed.connect(self._validate_draft)
+        self.update_shared_checkbox.toggled.connect(self._validate_draft)
         self.phase_tabs.currentChanged.connect(self._refresh_active_preview)
         apply_dialog_theme(self)
         self._refresh_active_preview()
@@ -3093,11 +3271,21 @@ class ConditionTaskDialog(QDialog):
                 self.draft(),
                 project_root=self._document.project_root,
             )
+            if self._defer_apply:
+                if self._staged_validator is not None:
+                    self._staged_validator(modules, pre_bindings, post_bindings)
+                self.staged_result = (
+                    modules, pre_bindings, post_bindings,
+                    [(item.source, item.relative_target) for item in asset_copies],
+                )
+                super().accept()
+                return
             self._document.set_condition_task_flow(
                 self._condition_id,
                 modules=modules,
                 pre_bindings=pre_bindings,
                 post_bindings=post_bindings,
+                update_shared_modules=self.update_shared_checkbox.isChecked(),
                 asset_copies=[
                     (copy_item.source, copy_item.relative_target) for copy_item in asset_copies
                 ],
@@ -3109,12 +3297,14 @@ class ConditionTaskDialog(QDialog):
             return
         super().accept()
 
-    def _validate_draft(self) -> None:
+    def _validate_draft(self, *_args: object) -> None:
         try:
-            build_condition_task_models(
+            modules, pre_bindings, post_bindings, _copies = build_condition_task_models(
                 self.draft(),
                 project_root=self._document.project_root,
             )
+            if self._staged_validator is not None:
+                self._staged_validator(modules, pre_bindings, post_bindings)
         except Exception as error:
             self.validation_label.setText(str(error))
             self.validation_label.setVisible(True)
@@ -3137,6 +3327,15 @@ class ConditionTaskDialog(QDialog):
     def _refresh_preview(self, step: TaskStepDraft | None) -> None:
         self.preview.set_step(step)
         if step is None:
+            editor = self.pre_editor if self.phase_tabs.currentIndex() == 0 else self.post_editor
+            module = editor.module_editor.module()
+            if module is not None and module.backward_counting is not None:
+                self.preview_summary.setText(
+                    "Counting screens are prepared for each session. Starting numbers "
+                    "are drawn from the configured range; the final-number response "
+                    "is saved with its matching start."
+                )
+                return
             self.preview_summary.setText(
                 "Select a module step to preview its participant-facing content."
             )

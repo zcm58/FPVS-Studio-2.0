@@ -261,6 +261,24 @@ def _task_csv_value(value: object) -> object:
     return f"'{value}" if visible_prefix.startswith(("=", "+", "-", "@")) else value
 
 
+BACKWARD_COUNTING_FIELDS = [
+    "role", "link_id", "start_number", "subtraction_step", "interval_seconds",
+    "duration_basis", "observed_interval_seconds", "interval_completed", "endpoint",
+    "estimated_steps", "subtraction_remainder", "steps_per_second",
+    "baseline_steps_per_second", "baseline_rate_ratio",
+]
+
+
+MODIFIER_FIELDS = [
+    "modifier_id", "name", "kind", "session_baseline", "requested_modifier_ids",
+]
+IMAGE_MEMORY_FIELDS = [
+    "role", "link_id", "target_item_ids", "foil_item_ids", "study_order",
+    "recognition_order", "image_paths", "target_count", "targets_selected",
+    "exact_set_correct", "completed",
+]
+
+
 TASK_RESPONSES_HEADER = [
     "response_index",
     "task_id",
@@ -291,7 +309,25 @@ TASK_RESPONSES_HEADER = [
     "score",
     "timed_out",
     "aborted",
+    *[f"backward_counting_{field}" for field in BACKWARD_COUNTING_FIELDS],
+    "modifier_id",
+    *[f"modifier_{field}" for field in MODIFIER_FIELDS[1:]],
+    *[f"image_memory_{field}" for field in IMAGE_MEMORY_FIELDS],
 ]
+
+
+def _task_detail_values(record: object, fields: list[str]) -> tuple[object, ...]:
+    model_dump = getattr(record, "model_dump", None)
+    payload = model_dump(mode="json") if callable(model_dump) else {}
+    values: list[object] = []
+    for field in fields:
+        value = payload.get(field)
+        if isinstance(value, list):
+            value = ";".join(str(item) for item in value)
+        elif isinstance(value, dict):
+            value = json.dumps(value, ensure_ascii=False, sort_keys=True)
+        values.append("" if value is None else _task_csv_value(value))
+    return tuple(values)
 
 
 def _task_response_row(response: TaskResponseRecord) -> tuple[object, ...]:
@@ -299,6 +335,10 @@ def _task_response_row(response: TaskResponseRecord) -> tuple[object, ...]:
     option_order = response.realized_option_order
     phase = response.phase
     response_kind = response.response_kind
+    counting = (
+        response.backward_counting.model_dump(mode="json")
+        if response.backward_counting is not None else {}
+    )
     return (
         response.response_index,
         response.task_id,
@@ -331,6 +371,10 @@ def _task_response_row(response: TaskResponseRecord) -> tuple[object, ...]:
         response.score if response.score is not None else "",
         response.timed_out,
         response.aborted,
+        *(counting.get(field) if counting.get(field) is not None else ""
+          for field in BACKWARD_COUNTING_FIELDS),
+        *_task_detail_values(response.modifier, MODIFIER_FIELDS),
+        *_task_detail_values(response.image_memory, IMAGE_MEMORY_FIELDS),
     )
 
 

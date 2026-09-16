@@ -192,6 +192,9 @@ def test_creation_names_categories_and_hides_injected_image_pair_templates(qtbot
     assert not dialog.category_buttons[ExperimentCategory.FPVS].isEnabled()
     oddball = dialog.category_buttons[ExperimentCategory.FPVS_ODDBALL]
     assert oddball.text().splitlines()[0] == "FPVS Oddball Paradigm"
+    cognitive_load = dialog.category_buttons[ExperimentCategory.COGNITIVE_LOAD_FPVS]
+    assert cognitive_load.isEnabled()
+    assert cognitive_load.text().splitlines()[0] == "Cognitive Load FPVS"
     assert_visible_children_within_parent(dialog)
     for button in dialog.category_buttons.values():
         assert max(button.fontMetrics().horizontalAdvance(line)
@@ -200,3 +203,25 @@ def test_creation_names_categories_and_hides_injected_image_pair_templates(qtbot
     assert dialog.condition_profile_combo.count() == 1
     assert dialog.condition_profile_combo.currentText() == "Digits & letter targets"
     assert_visible_children_within_parent(dialog)
+
+
+def test_cognitive_load_uses_image_design_and_shared_condition_pairs(qtbot, tmp_path):
+    from fpvs_studio.gui.design_setup_step import DesignSetupStep
+    from fpvs_studio.gui.experiment_designer_dialog import ExperimentDesignerWidget
+
+    document = ProjectDocument.create_new(
+        parent_dir=tmp_path,
+        project_name="Cognitive Load FPVS",
+        experiment_category=ExperimentCategory.COGNITIVE_LOAD_FPVS,
+    )
+    conditions = ConditionSetupStep(document)
+    qtbot.addWidget(conditions)
+    conditions.resize(1000, 560)
+    conditions.show()
+    assert conditions.condition_list.count() == 6
+    assert not conditions.task_button.isHidden()
+    assert not conditions.modality_combo.isHidden()
+    designer = DesignSetupStep(document)
+    qtbot.addWidget(designer)
+    assert isinstance(designer.editor, ExperimentDesignerWidget)
+    assert designer.category_label.text() == "Cognitive Load FPVS"

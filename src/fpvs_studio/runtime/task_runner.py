@@ -11,6 +11,8 @@ from fpvs_studio.core.display_geometry import visual_angle_width_px
 from fpvs_studio.core.enums import PresentationUnit
 from fpvs_studio.core.run_spec import RunSpec
 from fpvs_studio.core.task_models import (
+    ImageMemoryResult,
+    ImageMemoryRole,
     TaskBranchOperator,
     TaskDisplayItem,
     TaskModuleSpec,
@@ -31,6 +33,7 @@ from fpvs_studio.engines.base import (
     ResolvedTaskStep,
     TaskEngineInput,
 )
+from fpvs_studio.runtime.backward_counting import BackwardCountingSession
 from fpvs_studio.runtime.session_export import append_task_response_checkpoint
 
 _MAX_BRANCH_TRANSITIONS_MULTIPLIER = 20
@@ -88,11 +91,13 @@ def run_task_modules(
     global_order_index: int,
     response_start_index: int = 0,
     checkpoint: TaskResponseCheckpoint | None = None,
+    backward_counting: BackwardCountingSession | None = None,
 ) -> TaskFlowOutcome:
     """Execute compiled modules in order, preserving module-level repeat semantics."""
 
     responses: list[TaskResponseRecord] = []
     checkpoint = checkpoint or TaskResponseCheckpoint(None)
+    backward_counting = backward_counting or BackwardCountingSession()
     for module in modules:
         validate_task_module_repeat_capacity(module)
         selection_history: dict[tuple[str, str, str | None], set[str]] = {}
@@ -107,6 +112,7 @@ def run_task_modules(
                 module_repeat_index=module_repeat_index,
                 response_start_index=response_start_index + len(responses),
                 checkpoint=checkpoint,
+                backward_counting=backward_counting,
                 selection_history=selection_history,
             )
             responses.extend(outcome.responses)
@@ -130,6 +136,7 @@ def _run_module_once(
     module_repeat_index: int,
     response_start_index: int,
     checkpoint: TaskResponseCheckpoint,
+    backward_counting: BackwardCountingSession,
     selection_history: dict[tuple[str, str, str | None], set[str]],
 ) -> TaskFlowOutcome:
     responses: list[TaskResponseRecord] = []
@@ -160,6 +167,7 @@ def _run_module_once(
                 response_start_index=response_start_index + len(responses),
                 selection_history=selection_history,
                 checkpoint=checkpoint,
+                backward_counting=backward_counting,
             )
             for record in rendered:
                 responses.append(record)
@@ -244,6 +252,7 @@ def _run_step(
     response_start_index: int,
     selection_history: dict[tuple[str, str, str | None], set[str]],
     checkpoint: TaskResponseCheckpoint,
+    backward_counting: BackwardCountingSession,
 ) -> list[TaskResponseRecord]:
     if step.kind == TaskStepKind.QUESTIONNAIRE:
         records: list[TaskResponseRecord] = []
@@ -281,6 +290,7 @@ def _run_step(
                     question=question,
                     forbidden_ids=forbidden_ids,
                 )
+                record = backward_counting.record(module, record)
                 records.append(record)
                 checkpoint.append(record)
                 if record.aborted or not _should_retry(step, record, attempt_index):
@@ -318,6 +328,7 @@ def _run_step(
             response_index=response_start_index + len(records),
             forbidden_ids=forbidden_ids,
         )
+        record = backward_counting.record(module, record)
         records.append(record)
         checkpoint.append(record)
         if record.aborted or not _should_retry(step, record, attempt_index):
@@ -761,6 +772,24 @@ def _response_record(
         forbidden_ids=forbidden_ids,
     )
     correct, score = _score_response(step, result, question=question)
+    memory = None
+    if module.image_memory is not None:
+        spec = module.image_memory
+        scored = valid and spec.role == ImageMemoryRole.RECOGNITION
+        selected_ids = set(result.selected_option_ids)
+        target_ids = set(spec.target_item_ids)
+        targets_selected = len(selected_ids & target_ids) if scored else None
+        exact_set_correct = selected_ids == target_ids if scored else None
+        memory = ImageMemoryResult(
+            role=spec.role, link_id=spec.link_id,
+            target_item_ids=spec.target_item_ids, foil_item_ids=spec.foil_item_ids,
+            study_order=spec.study_order, recognition_order=spec.recognition_order,
+            image_paths=spec.image_paths,
+            targets_selected=targets_selected, exact_set_correct=exact_set_correct,
+            completed=valid,
+        )
+        correct = exact_set_correct
+        score = float(targets_selected) if targets_selected is not None else None
     return TaskResponseRecord(
         response_index=response_index,
         task_id=module.task_id,
@@ -791,6 +820,8 @@ def _response_record(
         score=score,
         timed_out=result.timed_out,
         aborted=result.aborted,
+        modifier=module.modifier,
+        image_memory=memory,
     )
 
 
@@ -898,6 +929,8 @@ def _response_is_valid(
 
 
 def _numeric_step_aligned(value: float, *, minimum: float, step: float) -> bool:
+    if step == 1 and float(minimum).is_integer():
+        return float(value).is_integer()
     offset_steps = (value - minimum) / step
     return abs(offset_steps - round(offset_steps)) <= 1e-9
 

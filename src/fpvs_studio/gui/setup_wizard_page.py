@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 from math import ceil
+from pathlib import Path
 
 from PySide6.QtCore import QEvent, QSize, Qt, QTimer
 from PySide6.QtGui import QResizeEvent
@@ -141,6 +142,7 @@ class _SetupStepSurface(_NaturalSizePanel):
         *,
         object_name: str,
         max_width: int = _SETUP_STEP_SURFACE_MAX_WIDTH,
+        expand_vertical: bool = False,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
@@ -148,9 +150,12 @@ class _SetupStepSurface(_NaturalSizePanel):
         self.setProperty("setupStepSurface", "true")
         self.content = content
         self.setMinimumHeight(_SETUP_STEP_SURFACE_MIN_HEIGHT)
-        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        vertical_policy = (
+            QSizePolicy.Policy.Expanding if expand_vertical else QSizePolicy.Policy.Preferred
+        )
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, vertical_policy)
         content.setMaximumWidth(max_width)
-        content.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        content.setSizePolicy(QSizePolicy.Policy.Expanding, vertical_policy)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -162,9 +167,13 @@ class _SetupStepSurface(_NaturalSizePanel):
         row_layout.addStretch(1)
         row_layout.addWidget(content, 10000)
         row_layout.addStretch(1)
-        layout.addStretch(1)
-        layout.addWidget(row)
-        layout.addStretch(1)
+        if expand_vertical:
+            layout.setContentsMargins(0, 16, 0, 16)
+            layout.addWidget(row, 1)
+        else:
+            layout.addStretch(1)
+            layout.addWidget(row)
+            layout.addStretch(1)
 
     def refresh(self) -> None:
         refresh = getattr(self.content, "refresh", None)
@@ -181,6 +190,7 @@ class SetupWizardPage(QWidget):
         *,
         load_condition_template_profiles: Callable[[], list[ConditionTemplateProfile]],
         manage_condition_templates: Callable[[], list[ConditionTemplateProfile]],
+        load_fpvs_root_dir: Callable[[], Path | None] | None = None,
         on_return_home: Callable[[], None] | None = None,
         on_save_project: Callable[[], bool] | None = None,
         parent: QWidget | None = None,
@@ -205,7 +215,9 @@ class SetupWizardPage(QWidget):
         self._refresh_timer.timeout.connect(self.refresh)
 
         self.conditions_page = ConditionsPage(document, embedded=True, parent=self)
-        self.condition_setup_step = ConditionSetupStep(document, self)
+        self.condition_setup_step = ConditionSetupStep(
+            document, self, load_fpvs_root_dir=load_fpvs_root_dir,
+        )
         self.design_setup_step = DesignSetupStep(document, parent=self)
         self.design_setup_step.setMinimumWidth(1000)
         self.design_setup_step.applied.connect(self.schedule_refresh)
@@ -561,6 +573,7 @@ class SetupWizardPage(QWidget):
             self.condition_setup_step,
             object_name="setup_wizard_conditions_surface",
             max_width=_SETUP_STEP_WORKBENCH_SURFACE_MAX_WIDTH,
+            expand_vertical=True,
             parent=self,
         )
         self.design_step_surface = _SetupStepSurface(

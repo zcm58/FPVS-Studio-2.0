@@ -20,6 +20,7 @@ from typing import Literal
 from pydantic import Field, StrictInt, ValidationError, field_validator, model_validator
 
 from fpvs_studio import __version__
+from fpvs_studio.core.condition_modifiers import ConditionModifier
 from fpvs_studio.core.display_geometry import visual_angle_width_cm, visual_angle_width_px
 from fpvs_studio.core.enums import (
     DutyCycleMode,
@@ -76,6 +77,7 @@ from fpvs_studio.preprocessing.models import StimulusManifest, StimulusSetManife
 
 CONFIG_SCHEMA_VERSION = "1.2.0"
 LETTER_STREAM_CONFIG_SCHEMA_VERSION = "1.3.0"
+MODIFIER_CONFIG_SCHEMA_VERSION: Literal["1.4.0"] = "1.4.0"
 PROJECT_CONFIG_SUFFIX = ".fpvsconfig"
 _CONFIG_FILENAME_RE = re.compile(r"[^a-z0-9]+")
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
@@ -345,7 +347,7 @@ class ProjectConfigTaskAsset(FPVSBaseModel):
 class ProjectConfigFile(FPVSBaseModel):
     """Top-level Studio `.fpvsconfig` interchange file."""
 
-    schema_version: Literal["1.2.0", "1.3.0"] = "1.2.0"
+    schema_version: Literal["1.2.0", "1.3.0", "1.4.0"] = "1.2.0"
     experiment_category: ExperimentCategory = Field(
         default=ExperimentCategory.FPVS_ODDBALL, frozen=True
     )
@@ -354,6 +356,7 @@ class ProjectConfigFile(FPVSBaseModel):
     conditions: list[ProjectConfigCondition] = Field(default_factory=list)
     stimulus_sets: list[ProjectConfigStimulusSet] = Field(default_factory=list)
     task_modules: list[TaskModule] = Field(default_factory=list)
+    condition_modifiers: list[ConditionModifier] = Field(default_factory=list)
     task_assets: list[ProjectConfigTaskAsset] = Field(default_factory=list)
     display: ProjectConfigDisplay
     presentation: ProjectPresentationSettings = Field(default_factory=ProjectPresentationSettings)
@@ -372,8 +375,11 @@ class ProjectConfigFile(FPVSBaseModel):
     @model_validator(mode="after")
     def validate_task_asset_inventory(self) -> ProjectConfigFile:
         if any(isinstance(item.attentional_blink, AttentionalBlinkStreamSettings)
-               for item in self.conditions) and self.schema_version != "1.3.0":
-            raise ValueError("Letter-stream configs require schema 1.3.0.")
+               for item in self.conditions) and self.schema_version not in {"1.3.0", "1.4.0"}:
+            raise ValueError("Letter-stream configs require schema 1.3.0 or newer.")
+        if (self.condition_modifiers or any(task.image_memory for task in self.task_modules)):
+            if self.schema_version != MODIFIER_CONFIG_SCHEMA_VERSION:
+                raise ValueError("Condition modifiers require config schema 1.4.0.")
         referenced = {
             (task.task_id, path)
             for task in self.task_modules
@@ -425,7 +431,9 @@ def export_project_config(
     )
     return ProjectConfigFile(
         schema_version=(
-            "1.3.0" if any(isinstance(item.attentional_blink, AttentionalBlinkStreamSettings)
+            MODIFIER_CONFIG_SCHEMA_VERSION if project.condition_modifiers
+            or any(task.image_memory for task in project.task_modules)
+            else "1.3.0" if any(isinstance(item.attentional_blink, AttentionalBlinkStreamSettings)
                            for item in project.conditions) else "1.2.0"
         ),
         experiment_category=project.experiment_category,
@@ -480,6 +488,7 @@ def export_project_config(
             for stimulus_set in project.stimulus_sets
         ],
         task_modules=[task.model_copy(deep=True) for task in project.task_modules],
+        condition_modifiers=[item.model_copy(deep=True) for item in project.condition_modifiers],
         task_assets=_portable_task_assets(project, project_root),
         display=_display_config(project.settings.display),
         presentation=project.settings.presentation.model_copy(deep=True),
@@ -504,7 +513,13 @@ def write_project_config(path: Path, config: ProjectConfigFile) -> None:
 
     _require_config_category(config)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(config.model_dump_json(indent=2, exclude_none=True), encoding="utf-8")
+    path.write_text(
+        config.model_dump_json(
+            indent=2, exclude_none=True,
+            exclude={"condition_modifiers"} if not config.condition_modifiers else set(),
+        ),
+        encoding="utf-8",
+    )
 
 
 def read_project_config(path: Path) -> ProjectConfigFile:
@@ -544,7 +559,9 @@ def read_project_config(path: Path) -> ProjectConfigFile:
         raw_payload.setdefault("task_assets", [])
         raw_payload["schema_version"] = CONFIG_SCHEMA_VERSION
         raw_version = CONFIG_SCHEMA_VERSION
-    if raw_version not in {CONFIG_SCHEMA_VERSION, LETTER_STREAM_CONFIG_SCHEMA_VERSION}:
+    if raw_version not in {
+        CONFIG_SCHEMA_VERSION, LETTER_STREAM_CONFIG_SCHEMA_VERSION, MODIFIER_CONFIG_SCHEMA_VERSION,
+    }:
         raise ProjectConfigError(
             "Unsupported project config schema version: "
             f"{raw_version!r}. Expected 1.2.0 or 1.3.0."
@@ -588,7 +605,8 @@ def create_project_from_config(parent_dir: Path, config: ProjectConfigFile) -> P
 
     project = ProjectFile(
         schema_version=(
-            ProjectSchemaVersion.V1_5 if config.schema_version == "1.3.0"
+            ProjectSchemaVersion.V1_6 if config.schema_version == MODIFIER_CONFIG_SCHEMA_VERSION
+            else ProjectSchemaVersion.V1_5 if config.schema_version == "1.3.0"
             else ProjectSchemaVersion.V1_4
         ),
         experiment_category=config.experiment_category,
@@ -641,6 +659,7 @@ def create_project_from_config(parent_dir: Path, config: ProjectConfigFile) -> P
             for index, condition in enumerate(config.conditions)
         ],
         task_modules=[task.model_copy(deep=True) for task in config.task_modules],
+        condition_modifiers=[item.model_copy(deep=True) for item in config.condition_modifiers],
     )
     save_project_file(project, project_json_path(target_dir))
     write_stimulus_manifest(target_dir, create_empty_manifest(project.meta.project_id))

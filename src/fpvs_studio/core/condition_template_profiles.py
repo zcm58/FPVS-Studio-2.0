@@ -47,6 +47,7 @@ SIXTY_HZ_BLANK_FIXATION_PROFILE_ID = "sixty-hz-blank50-fixation-v1"
 SINUSOIDAL_CONTRAST_PROFILE_ID = "sinusoidal-contrast-v1"
 ATTENTIONAL_BLINK_PROFILE_ID = "attentional-blink-v1"
 ATTENTIONAL_BLINK_STREAM_PROFILE_ID = "attentional-blink-letter-stream-v1"
+COGNITIVE_LOAD_PROFILE_ID = "cognitive-load-fpvs-v1"
 CONDITION_TEMPLATE_LIBRARY_SCHEMA_VERSION = SchemaVersion.V1_2
 
 
@@ -124,6 +125,24 @@ def built_in_condition_template_profiles() -> list[ConditionTemplateProfile]:
             ),
             duty_cycle_mode=DutyCycleMode.SINUSOIDAL,
             background_color=SINUSOIDAL_NEUTRAL_BACKGROUND_COLOR,
+        ),
+        ConditionTemplateProfile(
+            profile_id=COGNITIVE_LOAD_PROFILE_ID,
+            experiment_category=ExperimentCategory.COGNITIVE_LOAD_FPVS,
+            display_name="Cognitive Load FPVS",
+            description="Three image conditions, each with and without backward counting.",
+            built_in=True,
+            defaults=ConditionTemplateDefaults(
+                condition=ConditionDefaults(
+                    sequence_count=1, oddball_cycle_repeats_per_sequence=108,
+                ),
+                protocol=ProtocolSettings(base_hz=6.0, oddball_every_n=5),
+                presentation=ProjectPresentationSettings(pre_stream_fixation_seconds=0.0),
+                fixation_task=FixationTaskSettings(
+                    show_cross=True,
+                    enabled=False, accuracy_task_enabled=False, participant_tutorial_enabled=False,
+                ),
+            ),
         ),
         ConditionTemplateProfile(
             profile_id=ATTENTIONAL_BLINK_STREAM_PROFILE_ID,

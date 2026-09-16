@@ -33,6 +33,7 @@ from fpvs_studio.core.task_models import (
     TaskItemModality,
     TaskLayoutMode,
     TaskModule,
+    TaskOccurrence,
     TaskOption,
     TaskQuestion,
     TaskQuestionKind,
@@ -40,6 +41,7 @@ from fpvs_studio.core.task_models import (
     TaskStepKind,
     TaskSubmissionMode,
 )
+from fpvs_studio.gui.condition_modifier_dialog import ConditionModifierDialog
 from fpvs_studio.gui.condition_task_dialog import (
     ConditionTaskDialog,
     ConditionTaskFlowDraft,
@@ -147,6 +149,129 @@ def _visit_task_step_pages(dialog: ConditionTaskDialog, module, qtbot) -> None:
                 if questions.question_tabs.isTabVisible(question_index):
                     questions.question_tabs.setCurrentIndex(question_index)
                     _assert_task_dialog_fits(dialog)
+
+
+@pytest.mark.parametrize("role", ["baseline", "load_start", "load_report"])
+def test_counting_library_modules_are_configurable_without_steps(
+    qtbot, controller, tmp_path, role,
+):
+    document, window = _open_created_project(controller, qtbot, tmp_path, "Counting Library")
+    condition_id = document.create_condition(name="Placeholder")
+    dialog = ConditionTaskDialog(document, condition_id=condition_id, parent=window)
+    qtbot.addWidget(dialog)
+    dialog.resize(1100, 720)
+    dialog.show()
+    phase = dialog.post_editor if role == "load_report" else dialog.pre_editor
+    dialog.phase_tabs.setCurrentWidget(phase)
+    phase.add_kind_combo.setCurrentIndex(phase.add_kind_combo.findData(f"counting:{role}"))
+    phase.add_button.click()
+    editor = phase.module_editor
+    assert editor.steps_group.isHidden()
+    assert editor.step_selector.isHidden()
+    assert editor.counting_group.isVisible()
+    assert editor.counting_duration_spin.isVisible() == (role == "baseline")
+    assert editor.counting_step_spin.isVisible() == (role != "load_report")
+    editor.counting_link_edit.setText("counting-study-pair")
+    if role != "load_report":
+        editor.counting_step_spin.setValue(7)
+        editor.counting_min_spin.setValue(1053)
+        editor.counting_max_spin.setValue(2053)
+    if role == "baseline":
+        editor.counting_duration_spin.setValue(45)
+    _assert_task_dialog_fits(dialog)
+    modules, pre, post, copies = build_condition_task_models(
+        dialog.draft(), project_root=document.project_root,
+    )
+    module = modules[0]
+    assert module.steps == []
+    assert module.backward_counting.role.value == role
+    assert module.backward_counting.link_id == "counting-study-pair"
+    assert copies == []
+    if role != "load_report":
+        assert module.backward_counting.subtraction_step == 7
+        assert module.backward_counting.start_min == 1053
+        assert module.backward_counting.start_max == 2053
+    if role == "baseline":
+        assert module.backward_counting.duration_seconds == 45
+        assert pre[0].occurrence == TaskOccurrence.FIRST_SESSION_ENTRY
+    if role == "load_start":
+        assert pre[0].replaces_condition_start_gate
+    if role == "load_report":
+        assert len(post) == 1
+    binding = (pre or post)[0]
+    assert _module_from_draft(_module_to_draft(module, binding)) == module
+    before = document.project.model_dump()
+    dialog.reject()
+    assert document.project.model_dump() == before
+
+
+def test_counting_invalid_range_stays_a_draft(qtbot, controller, tmp_path):
+    document, window = _open_created_project(controller, qtbot, tmp_path, "Counting Validation")
+    condition_id = document.create_condition(name="Placeholder")
+    before = document.project.model_dump()
+    dialog = ConditionTaskDialog(document, condition_id=condition_id, parent=window)
+    qtbot.addWidget(dialog)
+    dialog.resize(1100, 720)
+    dialog.show()
+    phase = dialog.pre_editor
+    phase.add_kind_combo.setCurrentIndex(phase.add_kind_combo.findData("counting:baseline"))
+    phase.add_button.click()
+    phase.module_editor.counting_min_spin.setValue(99999)
+    assert not dialog.apply_button.isEnabled()
+    assert dialog.validation_label.isVisible()
+    _assert_task_dialog_fits(dialog)
+    assert document.project.model_dump() == before
+    phase.module_editor.counting_max_spin.setValue(100000)
+    assert dialog.apply_button.isEnabled()
+
+
+def test_shared_counting_baseline_edits_require_explicit_all_conditions_choice(
+    qtbot, tmp_path,
+):
+    from fpvs_studio.core.enums import ExperimentCategory
+    from fpvs_studio.gui.document import ProjectDocument
+
+    document = ProjectDocument.create_new(
+        parent_dir=tmp_path, project_name="Shared Counting",
+        experiment_category=ExperimentCategory.COGNITIVE_LOAD_FPVS,
+    )
+    # Keep this legacy-editor regression independent of the new grouped starter.
+    legacy = document.project.model_copy(deep=True)
+    baseline_id = legacy.condition_modifiers[0].baseline_task_id
+    assert baseline_id is not None
+    legacy.condition_modifiers = []
+    for condition in legacy.conditions:
+        condition.pre_task_bindings.insert(0, TaskBinding(
+            task_id=baseline_id, occurrence=TaskOccurrence.FIRST_SESSION_ENTRY,
+        ))
+    document.apply_condition_modifier_project(legacy)
+    condition_id = document.project.conditions[0].condition_id
+    dialog = ConditionTaskDialog(document, condition_id=condition_id)
+    qtbot.addWidget(dialog)
+    dialog.resize(1100, 720)
+    dialog.show()
+    assert dialog.update_shared_checkbox.isVisible()
+    editor = dialog.pre_editor.module_editor
+    editor.counting_duration_spin.setValue(60)
+    before = document.project.model_dump()
+    dialog.apply_button.click()
+    assert document.project.model_dump() == before
+    assert "shared" in dialog.validation_label.text()
+    dialog.update_shared_checkbox.setChecked(True)
+    _assert_task_dialog_fits(dialog)
+    assert dialog.apply_button.isEnabled()
+    dialog.apply_button.click()
+    assert dialog.result() == QDialog.DialogCode.Accepted
+    baseline = next(
+        module for module in document.project.task_modules
+        if module.backward_counting is not None
+        and module.backward_counting.role.value == "baseline"
+    )
+    assert baseline.backward_counting.duration_seconds == 60
+    assert all(
+        any(binding.task_id == baseline.task_id for binding in condition.pre_task_bindings)
+        for condition in document.project.conditions
+    )
 
 
 def test_task_model_adapter_preserves_unset_scoring_geometry_and_question_bounds() -> None:
@@ -933,7 +1058,7 @@ def test_task_participant_preview_caches_and_invalidates_image_rendering(
     assert preview._scaled_option_pixmaps == {}
 
 
-def test_conditions_step_opens_task_dialog_and_remains_nine_step_sized(
+def test_conditions_step_opens_modifier_dialog_and_remains_eight_step_sized(
     qtbot,
     controller: StudioController,
     tmp_path: Path,
@@ -948,11 +1073,11 @@ def test_conditions_step_opens_task_dialog_and_remains_nine_step_sized(
     condition_id = document.create_condition(name="Condition Tasks")
     captures: list[str] = []
 
-    def capture(dialog: ConditionTaskDialog) -> int:
+    def capture(dialog: ConditionModifierDialog) -> int:
         captures.append(dialog._condition_id)
         return int(QDialog.DialogCode.Rejected)
 
-    monkeypatch.setattr(ConditionTaskDialog, "exec", capture)
+    monkeypatch.setattr(ConditionModifierDialog, "exec", capture)
     window.resize(1120, 820)
     window.show_setup_wizard(step_key="conditions")
     step = window.setup_wizard_page.condition_setup_step
@@ -960,9 +1085,9 @@ def test_conditions_step_opens_task_dialog_and_remains_nine_step_sized(
     QApplication.processEvents()
 
     assert step.task_button.isVisible()
-    assert step.task_summary_label.text() == "No pre/post tasks"
+    assert step.task_summary_label.text() == "No modifiers"
     qtbot.mouseClick(step.task_button, Qt.MouseButton.LeftButton)
     assert captures == [condition_id]
-    assert len(window.setup_wizard_page.progress_step_labels) == 9
+    assert len(window.setup_wizard_page.progress_step_labels) == 8
     _assert_widget_within_parent(step.task_button)
     _assert_widget_within_parent(step.task_summary_label)

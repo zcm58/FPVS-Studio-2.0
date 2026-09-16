@@ -81,7 +81,7 @@ def test_setup_wizard_conditions_step_duplicates_metadata_without_images(
     assert base_set.image_count == 0
     assert oddball_set.image_count == 0
     assert "Finish in Design" in step.condition_list.currentItem().toolTip()
-    assert "Continuous Images" in step.condition_list.currentItem().text()
+    assert "Continuous Display" in step.condition_list.currentItem().text()
 
 
 def test_setup_wizard_conditions_step_authors_word_condition(
@@ -450,7 +450,7 @@ def test_setup_wizard_conditions_step_requires_descriptive_name_and_positive_tri
     condition_id = step.selected_condition_id()
     assert isinstance(condition_id, str)
     assert "Needs name" in step.condition_list.currentItem().toolTip()
-    assert "Continuous Images" in step.condition_list.currentItem().text()
+    assert "Continuous Display" in step.condition_list.currentItem().text()
     assert not guide.step_status_label.isVisible()
     assert not step.base_source_card.status_badge.isVisible()
     assert not step.oddball_source_card.status_badge.isVisible()
@@ -525,7 +525,7 @@ def test_setup_wizard_condition_timing_template_updates_selected_condition_only(
     assert second_condition is not None
     assert first_condition.duty_cycle_mode == DutyCycleMode.CONTINUOUS
     assert second_condition.duty_cycle_mode == DutyCycleMode.BLANK_50
-    assert "50% Blank Between Images" in step.condition_list.currentItem().text()
+    assert "50% Blank" in step.condition_list.currentItem().text()
 
 
 def test_setup_wizard_contrast_modulation_is_available_for_images_only(
@@ -545,9 +545,9 @@ def test_setup_wizard_contrast_modulation_is_available_for_images_only(
         step.timing_template_combo.itemText(index)
         for index in range(step.timing_template_combo.count())
     ] == [
-        "Continuous Images",
-        "50% Blank Between Images",
-        "Contrast Modulation",
+        "Continuous Display",
+        "50% Blank",
+        "Sinusoidal Contrast Modulation",
     ]
     sinusoidal_index = step.timing_template_combo.findData(DutyCycleMode.SINUSOIDAL)
     assert sinusoidal_index >= 0
@@ -570,10 +570,10 @@ def test_setup_wizard_contrast_modulation_is_available_for_images_only(
     assert [
         step.timing_template_combo.itemText(index)
         for index in range(step.timing_template_combo.count())
-    ] == ["Continuous Images", "50% Blank Between Images"]
+    ] == ["Continuous Display", "50% Blank"]
     assert step.timing_template_combo.findData(DutyCycleMode.SINUSOIDAL) == -1
     assert step.timing_template_combo.currentData() == DutyCycleMode.CONTINUOUS
-    assert "resets Contrast Modulation" in step.timing_template_combo.toolTip()
+    assert "resets Sinusoidal Contrast Modulation" in step.timing_template_combo.toolTip()
     assert "Neutral Gray" not in step.presentation_mode_help.text()
     assert "words" in step.condition_list_hint.text()
 
@@ -699,7 +699,7 @@ def test_setup_wizard_conditions_step_keeps_metadata_geometry_for_incomplete_con
     QApplication.processEvents()
     assert step.condition_details_section.size() == metadata_size
     assert step.instructions_edit.size() == instructions_size
-    assert step.instructions_edit.height() == 80
+    assert step.instructions_edit.height() >= 80
     assert not step.sources_row.isVisible()
     assert step.condition_name_edit.width() == step.instructions_edit.width()
     assert "Design" in step.condition_list_hint.text()
@@ -717,7 +717,7 @@ def test_condition_scope_and_long_content_fit_minimum_setup_size(
     _, window = _open_created_project(controller, qtbot, tmp_path, "Condition Scope")
     guide = window.setup_wizard_page
     step = guide.condition_setup_step
-    window.resize(1120, 720)
+    window.resize(1120, 820)
     window.show_setup_wizard(step_key="conditions")
     assert step.target_repeats_spin.isEnabled()
     step.target_repeats_spin.setValue(10000)
@@ -742,7 +742,7 @@ def test_condition_scope_and_long_content_fit_minimum_setup_size(
     QApplication.processEvents()
 
     assert window.size().width() == 1120
-    assert window.size().height() == 720
+    assert window.size().height() == 820
     assert step.condition_scope_label.text() == "This condition"
     assert step.condition_scope_label.toolTip() == long_name.strip()
     assert long_name.strip() in step.condition_list.currentItem().toolTip()
@@ -838,7 +838,7 @@ def test_condition_blocker_focus_selects_missing_word_role_without_opening_dialo
     assert "words" in step.condition_list_hint.text()
 
 
-@pytest.mark.parametrize("window_size", [(1092, 738), (1120, 720)])
+@pytest.mark.parametrize("window_size", [(1120, 820), (1120, 960), (1448, 1086)])
 @pytest.mark.parametrize(
     ("modality", "mode"),
     [
@@ -847,7 +847,7 @@ def test_condition_blocker_focus_selects_missing_word_role_without_opening_dialo
         (StimulusModality.WORD, DutyCycleMode.CONTINUOUS),
     ],
 )
-def test_conditions_six_condition_layout_keeps_hint_and_instructions_clear(
+def test_conditions_six_condition_layout_expands_with_aligned_panels(
     qtbot,
     controller: StudioController,
     tmp_path: Path,
@@ -908,8 +908,9 @@ def test_conditions_six_condition_layout_keeps_hint_and_instructions_clear(
         assert (window.width(), window.height()) == window_size
         assert step.condition_list.count() == 6
         assert step.instructions_edit.toPlainText() == instructions
-        assert step.instructions_edit.height() == 80
-        assert step.condition_list_hint.text().startswith("Review this condition")
+        assert step.instructions_edit.height() >= 80
+        assert not step.condition_list_hint.isVisible()
+        assert step.condition_list_hint.text() == ""
         assert step.words_panel.isVisible() == (modality == StimulusModality.WORD)
         trigger_edit = step.trigger_code_spin.lineEdit()
         assert trigger_edit is not None
@@ -946,11 +947,20 @@ def test_conditions_six_condition_layout_keeps_hint_and_instructions_clear(
                     label.objectName(),
                     other.objectName(),
                 )
-        hint_bottom = step.condition_list_hint.mapTo(
-            step, step.condition_list_hint.rect().bottomLeft()
-        ).y()
         list_top = step.condition_list.mapTo(step, step.condition_list.rect().topLeft()).y()
-        assert hint_bottom < list_top
+        details_top = step.condition_details_section.mapTo(
+            step, step.condition_details_section.rect().topLeft()
+        ).y()
+        assert abs(list_top - details_top) <= 1
+        surface = guide.conditions_step_surface
+        content_top = step.mapTo(surface, step.rect().topLeft()).y()
+        assert abs(content_top - 16) <= 1
+        assert abs(surface.height() - step.height() - 32) <= 2
+        assert step.condition_list.height() >= 300
+        if modality == StimulusModality.WORD and window_size[1] >= 960:
+            assert step.base_words_edit.height() > 124
+            assert step.oddball_words_edit.height() > 124
+            assert step.instructions_edit.height() > 80
         instructions_bottom = step.instructions_edit.mapTo(
             step.condition_details_section, step.instructions_edit.rect().bottomLeft()
         ).y()

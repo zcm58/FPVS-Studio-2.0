@@ -744,6 +744,7 @@ class StudioController(QObject):
             on_request_settings=self.show_settings_dialog,
             on_load_condition_template_profiles=self._load_condition_template_profiles,
             on_manage_condition_templates=self._show_condition_template_manager,
+            on_load_fpvs_root_dir=self.load_fpvs_root_dir,
         )
         if (
             self.welcome_window is not None

@@ -29,6 +29,7 @@ class ProjectSchemaVersion(StrEnum):
     V1_3 = "1.3.0"
     V1_4 = "1.4.0"
     V1_5 = "1.5.0"
+    V1_6 = "1.6.0"
 
 
 class ExperimentCategory(StrEnum):
@@ -37,6 +38,7 @@ class ExperimentCategory(StrEnum):
     FPVS = "fpvs"
     FPVS_ODDBALL = "fpvs_oddball"
     ATTENTIONAL_BLINK = "attentional_blink"
+    COGNITIVE_LOAD_FPVS = "cognitive_load_fpvs"
 
 
 class DutyCycleMode(StrEnum):

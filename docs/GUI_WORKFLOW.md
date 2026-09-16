@@ -120,6 +120,10 @@ Mode for explicit no-hardware verification launches; packaged builds hide it.
 
 ## Main Window
 
+Cognitive Load FPVS creation, placeholder replacement, reusable backward-counting
+task controls and visible acceptance are documented in
+[Cognitive Load FPVS](COGNITIVE_LOAD_FPVS.md).
+
 ### Experimental visual cycle designer
 
 New Attentional-Blink experiments open a three-condition burst designer in
@@ -304,6 +308,13 @@ The authoring window is organized around two user-facing modes:
     `This condition` editor and participant instructions, uses one
     responsive field column whose minimum width is set by the Advanced Timing selector,
     places oddball repeat guidance behind a compact lower-right information action.
+    Conditions fills the available height with a 16-pixel inset above and below.
+    The condition list, instructions and word editors grow with the window. Ready
+    conditions omit the list hint so the list and editor share the same top edge;
+    incomplete and legacy-repair guidance remains visible when needed.
+    Visible acceptance: use six populated conditions at 1120x820, then enlarge to
+    1120x960 and 1448x1086. Check aligned list/editor tops, growing text editors,
+    the three image-mode labels and two word-mode labels, and no page scrolling.
     Changing a populated condition between Images and Words shows a Yes/No warning
     (No by default). Yes clears that condition's base/oddball selections and opens
     empty lists of the chosen type; No restores the selector and keeps the selections.
@@ -318,13 +329,16 @@ The authoring window is organized around two user-facing modes:
     action for inherited condition and role settings; AB shares its target appearance
     overrides between T1 and T2. The draft-based dialog supports
     reset-to-inherited controls and a live representative-stimulus preview
-  - each selected condition also exposes `Pre/Post Tasks...` with a compact saved-flow
-    summary; its reusable dialog keeps separate ordered pre-condition and post-condition
-    module lists inside the existing Conditions workflow
-  - Pre/Post Tasks fits a `1100x720` minimum and `1120x760` default without scrolling
-    through settings. Modules stay on the left, the selected step occupies the center,
-    and the participant preview stays on the right. Empty phases explain how to add a
-    module. **Module settings** opens naming, occurrence, repetition and step-order
+  - each selected condition exposes `FPVS Condition Modifiers` with a saved-flow
+    summary. The dialog groups counting or memory across before/during/after FPVS,
+    with Overview, Settings, Participant preview, explicit condition assignments,
+    and a Built-in / My presets library. Local preset saves and project Apply are
+    separate actions. See [Condition modifiers](CONDITION_MODIFIERS.md).
+  - The modifier dialog fits a `1100x720` minimum and `1120x760` default. The existing
+    advanced task editor remains available for custom pre/post steps. Its modules
+    stay on the left, selected step occupies the center, and preview stays on the
+    right. Empty phases explain how to add a module. **Module settings** opens
+    naming, occurrence, repetition and step-order
     controls; **Back to step** returns to the selected step. Step settings use Content,
     Text & layout, Response and, for choice grids, Choices pages. Questionnaires split
     Question, Answers and Rules into focused pages. Lists, tables and text fields still
@@ -360,7 +374,7 @@ The authoring window is organized around two user-facing modes:
     presentation supports fixed or balanced-randomized height in degrees or window
     height, fixed Arial rendering, opaque color, and authored position
   - each selected FPVS Oddball Paradigm image condition exposes an advanced presentation selector for
-    Continuous Images, 50% Blank Between Images, or Contrast Modulation; word conditions
+    Continuous Display, 50% Blank, or Sinusoidal Contrast Modulation; word conditions
     expose only the first two, and changing the selection updates only that condition
   - image conditions use the category-specific source shelf in Design; oddball word conditions
     use typed Base Words and Oddball Words editors with one word or short phrase per line
@@ -878,7 +892,7 @@ The shared component owner supplies theme-aware form fields, keyboard focus stat
 validation text, dialog headers, and button roles. Settings groups preferences into
 Workspace, Participant runs, and Development; preferences still save immediately.
 Its minimum/default size is `700x520` for packaged builds and `700x610` for source runs.
-Presentation (`900x600` minimum) and Pre/Post Tasks retain staged Apply/Cancel behavior.
+Presentation (`900x600` minimum) and FPVS Condition Modifiers retain staged Apply/Cancel behavior.
 Native dropdown/spinner affordances and system file pickers remain available.
 
 Review uses factual summaries for project, conditions/task bindings, Design, Timing, Image Size,
@@ -900,7 +914,7 @@ For visible acceptance on Windows, walk all eight steps at `1120x820` in both th
 then repeat at the normal expanded size and available 125/150% scaling. Include long
 condition names and source paths, image and word conditions, missing-field recovery,
 verification busy/failure/verified states, and unequal condition durations. Inspect
-Settings, Presentation, and Pre/Post Tasks at their documented sizes; check keyboard
+Settings, Presentation, and FPVS Condition Modifiers at their documented sizes; check keyboard
 focus and popup controls. Save/reopen to verify persistence, and confirm Cancel leaves
 staged dialogs unchanged. The implementation's registered Qt coverage is separate from
 this manual review and is not run by ordinary local verification.

@@ -700,6 +700,13 @@ class DocumentConditionMixin:
         self._replace_project(project)
         return True
 
+    def apply_condition_modifier_project(self, project: ProjectFile) -> None:
+        """Publish the validated modifier draft after its worker has committed media."""
+
+        if project.meta.project_id != self._project.meta.project_id:
+            raise DocumentError("Modifier edits belong to a different project.")
+        self._replace_project(project)
+
     def set_condition_task_flow(
         self,
         condition_id: str,
@@ -708,6 +715,7 @@ class DocumentConditionMixin:
         pre_bindings: list[TaskBinding],
         post_bindings: list[TaskBinding],
         asset_copies: list[tuple[Path, str]] | None = None,
+        update_shared_modules: bool = False,
     ) -> None:
         """Apply one condition's task flow and deferred media intake atomically.
 
@@ -748,12 +756,13 @@ class DocumentConditionMixin:
             and task_id in existing_by_id
             and module_by_id[task_id] != existing_by_id[task_id]
         )
-        if conflicting_shared_ids:
+        if conflicting_shared_ids and not update_shared_modules:
             shared = ", ".join(conflicting_shared_ids)
             raise DocumentError(
                 "These reusable task module IDs are also bound to another condition "
-                f"and cannot be changed here: {shared}. Use a new module ID to make "
-                "a condition-specific copy."
+                f"and need an explicit shared edit: {shared}. Enable 'Apply shared module "
+                "edits to all bound conditions', or use a new module ID to make a "
+                "condition-specific copy."
             )
         updated_modules: list[TaskModule] = []
         consumed: set[str] = set()

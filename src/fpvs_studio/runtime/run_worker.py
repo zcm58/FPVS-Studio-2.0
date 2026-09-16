@@ -26,6 +26,7 @@ from fpvs_studio.core.session_plan import SessionEntry, SessionPlan
 from fpvs_studio.core.task_models import TaskResponseRecord
 from fpvs_studio.engines.base import PresentationEngine
 from fpvs_studio.runtime.attentional_blink_report import AttentionalBlinkSessionRecorder
+from fpvs_studio.runtime.backward_counting import BackwardCountingSession
 from fpvs_studio.runtime.export_modes import EXPORT_MODE_FULL
 from fpvs_studio.runtime.fixation import build_fixation_task_summary, score_fixation_responses
 from fpvs_studio.runtime.preflight import PreflightError
@@ -200,6 +201,7 @@ class RuntimeWorker:
         run_results: list[RunExecutionSummary] = []
         abort_reason: str | None = None
         ordered_entries = session_plan.ordered_entries()
+        backward_counting = BackwardCountingSession()
         blink_recorder = AttentionalBlinkSessionRecorder(
             project_root, session_plan, participant_number=participant_number,
             participant_session_number=participant_session_number,
@@ -248,6 +250,7 @@ class RuntimeWorker:
                     block_index=entry.block_index,
                     global_order_index=entry.global_order_index,
                     checkpoint=task_checkpoint,
+                    backward_counting=backward_counting,
                 )
                 if pre_task_outcome.aborted:
                     run_summary = _build_start_aborted_summary(
@@ -377,6 +380,9 @@ class RuntimeWorker:
                 if run_summary.aborted and entry.post_tasks:
                     task_summary_update["task_flow_completed"] = False
                 run_summary = run_summary.model_copy(update=task_summary_update)
+                run_summary = backward_counting.finish_run(
+                    run_summary, entry.run_spec, checkpoint=task_checkpoint.append,
+                )
                 blink_recorder.update_run(run_summary)
                 if not run_summary.aborted:
                     post_task_outcome = run_task_modules(
@@ -388,6 +394,7 @@ class RuntimeWorker:
                         global_order_index=entry.global_order_index,
                         response_start_index=len(run_summary.task_responses),
                         checkpoint=task_checkpoint,
+                        backward_counting=backward_counting,
                     )
                     update: dict[str, object] = {
                         "task_responses": [

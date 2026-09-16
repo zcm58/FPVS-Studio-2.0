@@ -137,6 +137,7 @@ class StudioMainWindow(QMainWindow):
         on_request_settings: Callable[[], None],
         on_load_condition_template_profiles: Callable[[], list[ConditionTemplateProfile]],
         on_manage_condition_templates: Callable[[], list[ConditionTemplateProfile]],
+        on_load_fpvs_root_dir: Callable[[], Path | None] | None = None,
     ) -> None:
         super().__init__()
         self.setObjectName("studio_main_window")
@@ -166,6 +167,7 @@ class StudioMainWindow(QMainWindow):
         self._attentional_blink_data_dialog: AttentionalBlinkDataDialog | None = None
         self._on_load_condition_template_profiles = on_load_condition_template_profiles
         self._on_manage_condition_templates = on_manage_condition_templates
+        self._on_load_fpvs_root_dir = on_load_fpvs_root_dir
         self._deferred_open_tasks_started = False
         self._session_seed_ready = False
         self._session_seed_task: BackgroundTask | None = None
@@ -221,6 +223,7 @@ class StudioMainWindow(QMainWindow):
                 self.document,
                 load_condition_template_profiles=self._on_load_condition_template_profiles,
                 manage_condition_templates=self._on_manage_condition_templates,
+                load_fpvs_root_dir=self._on_load_fpvs_root_dir,
                 on_return_home=self.show_home,
                 on_save_project=self.save_project,
                 parent=self,

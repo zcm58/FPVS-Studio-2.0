@@ -12,8 +12,10 @@ from pathlib import Path
 from uuid import uuid4
 
 from fpvs_studio.core.attentional_blink_presets import populate_attentional_blink_stream
+from fpvs_studio.core.cognitive_load_presets import populate_cognitive_load_fpvs
 from fpvs_studio.core.condition_template_profiles import (
     ATTENTIONAL_BLINK_STREAM_PROFILE_ID,
+    COGNITIVE_LOAD_PROFILE_ID,
     apply_condition_template_profile_to_settings,
     built_in_condition_template_profiles,
 )
@@ -44,6 +46,9 @@ from fpvs_studio.core.paths import (
 )
 from fpvs_studio.core.serialization import save_project_file
 from fpvs_studio.core.template_library import DEFAULT_TEMPLATE_ID, get_template
+from fpvs_studio.preprocessing.cognitive_load_placeholders import (
+    create_cognitive_load_placeholder_images,
+)
 from fpvs_studio.preprocessing.manifest import create_empty_manifest, write_stimulus_manifest
 
 
@@ -96,12 +101,18 @@ def build_starter_project(
             "Standard FPVS is coming soon. Choose FPVS Oddball Paradigm or Attentional-Blink."
         )
     if (
-        experiment_category == ExperimentCategory.ATTENTIONAL_BLINK
+        experiment_category in {
+            ExperimentCategory.ATTENTIONAL_BLINK, ExperimentCategory.COGNITIVE_LOAD_FPVS,
+        }
         and condition_template_profile is None
     ):
         condition_template_profile = next(
             profile for profile in built_in_condition_template_profiles()
-            if profile.profile_id == ATTENTIONAL_BLINK_STREAM_PROFILE_ID
+            if profile.profile_id == (
+                ATTENTIONAL_BLINK_STREAM_PROFILE_ID
+                if experiment_category == ExperimentCategory.ATTENTIONAL_BLINK
+                else COGNITIVE_LOAD_PROFILE_ID
+            )
         )
     template = get_template(template_id)
     project_id = slugify_project_name(project_name)
@@ -142,6 +153,8 @@ def build_starter_project(
         and condition_template_profile.defaults.attentional_blink_layout == "letter_stream"
     ):
         return populate_attentional_blink_stream(project)
+    if experiment_category == ExperimentCategory.COGNITIVE_LOAD_FPVS:
+        return populate_cognitive_load_fpvs(project)
     return project
 
 
@@ -163,6 +176,8 @@ def create_project(
         experiment_category=experiment_category,
     )
     target_dir = project_dir(parent_dir, project.meta.project_id)
+    if (experiment_category == ExperimentCategory.COGNITIVE_LOAD_FPVS and target_dir.exists()):
+        raise FileExistsError(f"Project folder already exists: {target_dir}")
     for folder in (
         target_dir,
         stimuli_dir(target_dir),
@@ -175,6 +190,9 @@ def create_project(
     ):
         folder.mkdir(parents=True, exist_ok=True)
 
+    if experiment_category == ExperimentCategory.COGNITIVE_LOAD_FPVS:
+        create_cognitive_load_placeholder_images(project, target_dir)
+    else:
+        write_stimulus_manifest(target_dir, create_empty_manifest(project.meta.project_id))
     save_project_file(project, project_json_path(target_dir))
-    write_stimulus_manifest(target_dir, create_empty_manifest(project.meta.project_id))
     return ProjectScaffold(project_root=target_dir, project=project)

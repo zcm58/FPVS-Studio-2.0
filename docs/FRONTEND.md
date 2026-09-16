@@ -64,7 +64,7 @@ interaction.
 - Setup Wizard is the guided setup/editing surface at `1120x820`. Its eight steps are
   Project, Conditions, Design, Timing & Session, Image Size (Character Size for native AB),
   Fixation, Response, and Review. All steps share the Design page's frameless
-  shell, left-aligned task heading, step count, vertically centered content, and stable progress
+  shell, left-aligned task heading, step count, and stable progress
   stepper. Bottom navigation remains at the window edge with no divider. Forms retain
   bounded readable widths. All steps must fit without clipping or required scrolling.
 - Conditions is a combined guided setup area for condition list/actions, names,
@@ -72,13 +72,18 @@ interaction.
   authoring, control-condition creation, and image normalization. It uses compact list
   rows and source cards, separating `All conditions` repeat settings from
   `This condition` fields. Image sources have keyboard-accessible full-path details
-  and copy. Raw image-folder selection is permissive; uniform rectangular sets are valid native inputs, while inconsistent
+  and copy. Conditions uses the available vertical space for its list, instructions
+  and word editors; other compact steps retain centered content. Ready Conditions
+  has aligned list/editor tops without a routine hint above the list. See
+  [GUI workflow](GUI_WORKFLOW.md) for mode labels and sizing acceptance.
+  Raw image-folder selection is permissive; uniform rectangular sets are valid native inputs, while inconsistent
   dimensions within a set are handled by the guided normalization flow before leaving
   Conditions. Control-condition creation and normalization stay image-only paths. A
-  condition-level `Pre/Post Tasks...` dialog authors reusable ordered participant-task
-  modules and neutral questionnaire workflows while preserving the eight-step wizard;
-  task media is staged until Apply and then stored under the active project's
-  `stimuli/task-assets/<task-id>/` folder.
+  condition-level `FPVS Condition Modifiers` dialog groups participant activities
+  and exposes local presets while preserving the eight-step wizard. The existing
+  detailed task editor remains available for custom screens and questionnaires;
+  task media is staged until Apply and stored beneath the active project's
+  `stimuli/task-assets/<task-id>/`. See `CONDITION_MODIFIERS.md`.
 - Fixation and Response are split guided setup areas: Fixation handles color-change
   schedule/timing, while Response handles accuracy tracking, response key/window,
   appearance, and preview.
@@ -94,7 +99,7 @@ interaction.
   templates, run export mode, Sophia Mode, and Experiment Test Mode in source and installed builds on
   Windows and Linux. These preferences are persisted with `QSettings`
   and remain outside project files. Shared dialog headers and form-control styles
-  also cover the staged Presentation and Pre/Post Tasks editors; Settings retains
+  also cover the staged Presentation and Condition Modifiers editors; Settings retains
   immediate saving. See [GUI workflow](GUI_WORKFLOW.md#setup-design-and-manual-acceptance)
   for minimum sizes and the visible acceptance path.
 - The current Setup Wizard does not expose Advanced buttons; dense/internal support

@@ -36,6 +36,10 @@ luminance/RMS algorithm investigation instead of duplicating its scientific deci
 Completed plans are historical implementation notes. Read their directory only when
 the current contracts do not explain why a landed decision exists.
 
+Recent completion: [FPVS Condition Modifiers](exec-plans/completed/fpvs-condition-modifiers.md).
+
+Recent completion: [Cognitive Load FPVS](exec-plans/completed/cognitive-load-fpvs.md).
+
 Recent completion: [Attentional Blink pilot mode and release v1.8.0](exec-plans/completed/attentional-blink-pilot-release.md).
 
 Recent completion: [Multi-session release v1.5.3](exec-plans/completed/multi-session-release-v1.5.3.md).

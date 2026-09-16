@@ -9,7 +9,8 @@ package map.
 ## Stable v1 Invariants
 
 - The only built-in protocol template is `fpvs_6hz_every5_v1`.
-- Experiment category is a locked project choice: FPVS Oddball Paradigm or Attentional-Blink;
+- Experiment category is a locked project choice: FPVS Oddball Paradigm, Cognitive Load FPVS,
+  or Attentional-Blink;
   Standard FPVS is a disabled Coming soon placeholder. Valid projects cannot mix categories.
 - FPVS Oddball Paradigm defaults are 6.0 Hz and oddball every 5th stimulus (1.2 Hz).
   Attentional-Blink defaults to five-second 10 Hz letter streams with green/white
@@ -24,6 +25,8 @@ package map.
   `stimuli/generated-variants/...`.
 - App-level condition-template profiles belong under the configured FPVS Studio
   root in `.fpvs-studio/templates/`, outside the top-level experiment folder list.
+- Local condition-modifier presets use the same template root, with complete copied
+  media and no live dependency from applied projects; see `docs/CONDITION_MODIFIERS.md`.
 - Persist project-facing paths as project-relative POSIX-style strings in JSON.
 - Supported source image formats are `.jpg`, `.jpeg`, and `.png`.
 - Launchable image stimulus sets must each resolve to a known, uniform resolution.

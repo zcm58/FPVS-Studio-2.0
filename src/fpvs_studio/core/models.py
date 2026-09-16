@@ -22,6 +22,7 @@ from pydantic import (
     model_validator,
 )
 
+from fpvs_studio.core.condition_modifiers import ConditionModifier, validate_condition_modifiers
 from fpvs_studio.core.display_geometry import scaled_visual_angle_degrees
 from fpvs_studio.core.enums import (
     DutyCycleMode,
@@ -825,6 +826,7 @@ class ProjectFile(FPVSBaseModel):
     stimulus_sets: list[StimulusSet] = Field(default_factory=list)
     conditions: list[Condition] = Field(default_factory=list)
     task_modules: list[TaskModule] = Field(default_factory=list)
+    condition_modifiers: list[ConditionModifier] = Field(default_factory=list)
     manual_removed_electrodes: dict[str, list[str]] = Field(default_factory=dict)
 
     @model_validator(mode="before")
@@ -862,8 +864,14 @@ class ProjectFile(FPVSBaseModel):
     @model_validator(mode="after")
     def validate_unique_ids(self) -> ProjectFile:
         if any(isinstance(item.attentional_blink, AttentionalBlinkStreamSettings)
-               for item in self.conditions) and self.schema_version != ProjectSchemaVersion.V1_5:
+               for item in self.conditions) and self.schema_version not in {
+                   ProjectSchemaVersion.V1_5, ProjectSchemaVersion.V1_6,
+               }:
             raise ValueError("Letter-stream projects require project schema 1.5.0.")
+        if (self.condition_modifiers or any(task.image_memory for task in self.task_modules)) and (
+            self.schema_version != ProjectSchemaVersion.V1_6
+        ):
+            raise ValueError("Condition modifiers and image memory require project schema 1.6.0.")
         set_ids = [item.set_id for item in self.stimulus_sets]
         if len(set_ids) != len(set(set_ids)):
             raise ValueError("Stimulus set ids must be unique.")
@@ -873,6 +881,7 @@ class ProjectFile(FPVSBaseModel):
         task_ids = [item.task_id for item in self.task_modules]
         if len(task_ids) != len(set(task_ids)):
             raise ValueError("Task module ids must be unique.")
+        validate_condition_modifiers(self)
         return self
 
 

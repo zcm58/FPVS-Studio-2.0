@@ -7,6 +7,7 @@ experiment. Supported values and behavior are:
 | --- | --- |
 | Standard FPVS | Base-only concept; disabled Coming soon choice. Creation and compilation are blocked. |
 | FPVS Oddball Paradigm | Existing image/word oddball protocols, presentation modes, tasks and runtime behavior. |
+| Cognitive Load FPVS | Three paired image conditions with/without backward counting, a session-first baseline and reusable pre/post modules; see [Cognitive Load FPVS](COGNITIVE_LOAD_FPVS.md). |
 | Attentional-Blink | Five-second bursts of white letters, green T1 digits and white T2 digits at 100, 300, and 500 ms SOAs. Image pairs are unsupported. |
 
 ## Creation and shared Setup

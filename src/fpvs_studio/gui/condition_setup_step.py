@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from pathlib import Path
 
 from PySide6.QtCore import QSignalBlocker, QSize, Qt
@@ -58,9 +59,9 @@ from fpvs_studio.gui.components import (
     mark_primary_action,
     mark_secondary_action,
 )
-from fpvs_studio.gui.condition_task_dialog import (
-    ConditionTaskDialog,
-    condition_task_summary,
+from fpvs_studio.gui.condition_modifier_dialog import (
+    ConditionModifierDialog,
+    condition_modifier_summary,
 )
 from fpvs_studio.gui.control_condition_dialog import ControlConditionDialog
 from fpvs_studio.gui.document import ProjectDocument
@@ -329,10 +330,13 @@ class ConditionSetupStep(QWidget):
         self,
         document: ProjectDocument,
         parent: QWidget | None = None,
+        *,
+        load_fpvs_root_dir: Callable[[], Path | None] | None = None,
     ) -> None:
         super().__init__(parent)
         self.setMinimumWidth(_CONDITION_STEP_MIN_WIDTH)
         self._document = document
+        self._load_fpvs_root_dir = load_fpvs_root_dir
         self._pending_instruction_condition_id: str | None = None
         self._pending_base_words_condition_id: str | None = None
         self._pending_oddball_words_condition_id: str | None = None
@@ -461,7 +465,7 @@ class ConditionSetupStep(QWidget):
         self.task_summary_label.setObjectName("setup_wizard_condition_task_summary")
         self.task_summary_label.setWordWrap(True)
         self.task_summary_label.setMinimumWidth(0)
-        self.task_button = QPushButton("Pre/Post Tasks...", self)
+        self.task_button = QPushButton("FPVS Condition Modifiers…", self)
         self.task_button.setObjectName("setup_wizard_condition_task_button")
         self.task_button.setToolTip(
             "Configure reusable participant tasks before or after this condition."
@@ -514,7 +518,7 @@ class ConditionSetupStep(QWidget):
         mark_compact_info_action(self.repeat_calculator_button)
         self.instructions_edit = QTextEdit(self)
         self.instructions_edit.setObjectName("setup_wizard_condition_instructions_edit")
-        self.instructions_edit.setFixedHeight(_INSTRUCTIONS_HEIGHT)
+        self.instructions_edit.setMinimumHeight(_INSTRUCTIONS_HEIGHT)
         _configure_detail_field_widths(
             self.timing_template_combo,
             self.condition_name_edit,
@@ -555,13 +559,12 @@ class ConditionSetupStep(QWidget):
         form.addRow(trigger_label, identity_row)
         self.appearance_label = QLabel("Appearance", self)
         form.addRow(self.appearance_label, presentation_row)
-        form.addRow("Participant Tasks", task_row)
+        form.addRow("Modifiers", task_row)
         self.presentation_mode_label = QLabel("Presentation mode", self)
         self.presentation_mode_label.setBuddy(self.timing_template_combo)
         form.addRow(self.presentation_mode_label, mode_row)
         form.addRow(self.instructions_label, self.instructions_edit)
-        details_section_layout.addLayout(form)
-        details_section_layout.addStretch(1)
+        details_section_layout.addLayout(form, 1)
         self.ab_stream_summary = QLabel(self)
         self.ab_stream_summary.setObjectName("setup_ab_stream_summary")
         self.ab_stream_summary.setWordWrap(True)
@@ -654,21 +657,19 @@ class ConditionSetupStep(QWidget):
 
         self.words_panel = QFrame(self)
         self.words_panel.setObjectName("setup_conditions_words_panel")
-        self.words_panel.setFixedHeight(_SOURCE_CARD_HEIGHT)
+        self.words_panel.setMinimumHeight(_SOURCE_CARD_HEIGHT)
         words_layout = QHBoxLayout(self.words_panel)
         words_layout.setContentsMargins(0, 0, 0, 0)
         words_layout.setSpacing(PAGE_SECTION_GAP)
         self.base_words_edit = QTextEdit(self.words_panel)
         self.base_words_edit.setObjectName("setup_wizard_base_words_edit")
         self.base_words_edit.setMinimumHeight(96)
-        self.base_words_edit.setMaximumHeight(124)
         self.base_words_edit.setPlaceholderText("One base word or short phrase per line")
         self.base_words_count = QLabel("0 words", self.words_panel)
         self.base_words_count.setObjectName("setup_wizard_base_words_count")
         self.oddball_words_edit = QTextEdit(self.words_panel)
         self.oddball_words_edit.setObjectName("setup_wizard_oddball_words_edit")
         self.oddball_words_edit.setMinimumHeight(96)
-        self.oddball_words_edit.setMaximumHeight(124)
         self.oddball_words_edit.setPlaceholderText("One oddball word or short phrase per line")
         self.oddball_words_count = QLabel("0 words", self.words_panel)
         self.oddball_words_count.setObjectName("setup_wizard_oddball_words_count")
@@ -701,11 +702,10 @@ class ConditionSetupStep(QWidget):
         detail_layout.setContentsMargins(0, 0, 0, 0)
         detail_layout.setSpacing(8)
 
-        detail_layout.addWidget(self.condition_details_section)
-        detail_layout.addStretch(1)
+        detail_layout.addWidget(self.condition_details_section, 2)
         detail_layout.addWidget(sources_row)
         sources_row.hide()
-        detail_layout.addWidget(self.words_panel)
+        detail_layout.addWidget(self.words_panel, 1)
 
         workspace = QWidget(self)
         workspace.setObjectName("setup_conditions_workspace")
@@ -831,6 +831,7 @@ class ConditionSetupStep(QWidget):
                 "This older experiment contains incompatible conditions. "
                 "Separate them into their own experiment to continue."
             )
+            self.condition_list_hint.show()
 
     def flush_pending_edits(self) -> None:
         self._instructions_committer.flush()
@@ -908,6 +909,7 @@ class ConditionSetupStep(QWidget):
 
     def _refresh_editor(self, *_args: object) -> None:
         condition = self._current_condition()
+        self.condition_list_hint.show()
         enabled = condition is not None
         ab = self._document.project.experiment_category == ExperimentCategory.ATTENTIONAL_BLINK
         stream = condition is not None and isinstance(
@@ -999,9 +1001,8 @@ class ConditionSetupStep(QWidget):
         self.condition_scope_label.setToolTip(condition.name)
         self.condition_scope_label.setAccessibleDescription(f"Editing {condition.name}")
         if base_ready and oddball_ready:
-            self.condition_list_hint.setText(
-                "Review this condition, or add another to your experiment."
-            )
+            self.condition_list_hint.clear()
+            self.condition_list_hint.hide()
         elif modality == StimulusModality.WORD:
             self.condition_list_hint.setText("Enter base and oddball words below, one per line.")
         else:
@@ -1061,7 +1062,7 @@ class ConditionSetupStep(QWidget):
         )
         self.presentation_button.setAccessibleDescription(presentation_summary)
         self.task_summary_label.setText(
-            condition_task_summary(self._document, condition.condition_id)
+            condition_modifier_summary(self._document, condition.condition_id)
         )
         self._set_checklist_statuses(named, trigger_ready, base_ready, oddball_ready)
         self._set_source_summary(base_set, role="base")
@@ -1078,6 +1079,7 @@ class ConditionSetupStep(QWidget):
                 "Conditions"
             )
             self.condition_list_hint.setProperty("setupSourceTitle", "true")
+            self.condition_list_hint.show()
             recall_help = (
                 "Two questions after each burst record and score T1 and T2 recall separately."
                 if any(item.task_id == "ab-recall" for item in condition.post_task_bindings)
@@ -1348,9 +1350,10 @@ class ConditionSetupStep(QWidget):
         condition_id = self.selected_condition_id()
         if condition_id is None:
             return
-        dialog = ConditionTaskDialog(
+        dialog = ConditionModifierDialog(
             self._document,
             condition_id=condition_id,
+            fpvs_root=self._load_fpvs_root_dir() if self._load_fpvs_root_dir else None,
             parent=self,
         )
         dialog.exec()

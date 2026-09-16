@@ -14,6 +14,8 @@ public quickstart site lives in `../docs-site/` and is built with MkDocs.
 - Product direction: `PRODUCT_SENSE.md` and `product-specs/index.md`
 - Design and GUI workflow: `DESIGN.md`, `FRONTEND.md`, and `GUI_WORKFLOW.md`
 - Experiment categories and legacy separation: `EXPERIMENT_CATEGORIES.md`
+- Cognitive Load FPVS and reusable backward counting: `COGNITIVE_LOAD_FPVS.md`
+- Condition modifiers, memory workflows, and local presets: `CONDITION_MODIFIERS.md`
 - Packaging developer builds: `PACKAGING.md`
 - Execution planning: `PLANS.md`, `exec-plans/README.md`, and
   `exec-plans/plan-review-workflow.md`

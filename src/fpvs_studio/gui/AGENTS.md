@@ -37,8 +37,8 @@ backend-driven.
   oddball word conditions keep typed base/oddball word-list editors in Conditions.
   Native AB digit/T1/T2 sources belong in Design, with Character Size replacing Image
   Size. See `docs/EXPERIMENT_CATEGORIES.md` for shared surfaces and legacy repair.
-- Present Contrast Modulation as the third image presentation mode alongside Continuous
-  Images and 50% Blank Between Images. Do not offer it for word conditions, and expose
+- Present Sinusoidal Contrast Modulation as the third image presentation mode alongside
+  Continuous Display and 50% Blank. Do not offer it for word conditions, and expose
   Neutral Gray as the required project background without changing existing modes.
 - Do not reintroduce Setup Wizard Advanced buttons or generic footer/status copy
   without an explicit workflow plan.

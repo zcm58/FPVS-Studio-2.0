@@ -113,6 +113,8 @@ def render_task_step(
                 return _task_input(
                     step,
                     aborted=True,
+                    selected_item_ids=tuple(selected_item_ids),
+                    text_value=response_text or None,
                     reaction_time_s=elapsed_s,
                     displayed_item_ids=displayed_item_ids,
                 )
@@ -154,6 +156,8 @@ def render_task_step(
                     step,
                     aborted=True,
                     key="escape",
+                    selected_item_ids=tuple(selected_item_ids),
+                    text_value=response_text or None,
                     reaction_time_s=float(task_clock.getTime()),
                     displayed_item_ids=displayed_item_ids,
                 )
@@ -164,7 +168,7 @@ def render_task_step(
                 click_button = click["button"]
                 click_position = click["position"]
                 if click_button is not None:
-                    if step.response_kind in _EDITABLE_TEXT_RESPONSE_KINDS and _point_in_box(
+                    if _has_submit_control(step) and _point_in_box(
                         click_position,
                         box_position=_text_submit_position(window),
                         size=_text_submit_size(window),
@@ -545,7 +549,7 @@ def _draw_step(
             color="white",
             autoLog=False,
         ).draw()
-    if step.response_kind in _EDITABLE_TEXT_RESPONSE_KINDS:
+    if _has_submit_control(step):
         button_width, button_height = _text_submit_size(window)
         visual.Rect(
             window,
@@ -631,7 +635,11 @@ def _handle_keys(
             key_duration = _optional_float(getattr(key, "duration", None))
             continue
         continue_keys = step.allowed_keys or (step.continue_key,)
-        if step.response_kind in {"continue", "none"} and key_name in continue_keys:
+        if (
+            step.response_kind in {"continue", "none"}
+            and not (step.response_kind == "none" and step.duration_s is not None)
+            and key_name in continue_keys
+        ):
             submitted_key = key_name
             key_rt = _optional_float(getattr(key, "rt", None))
             key_duration = _optional_float(getattr(key, "duration", None))
@@ -830,6 +838,12 @@ def _point_in_box(
     )
 
 
+def _has_submit_control(step: ResolvedTaskStep) -> bool:
+    return step.response_kind in _EDITABLE_TEXT_RESPONSE_KINDS or (
+        step.response_kind in _CHOICE_RESPONSE_KINDS and step.submission_mode == "explicit"
+    )
+
+
 def _text_submit_position(window: Any) -> tuple[float, float]:
     return (0.0, -_window_height(window) * 0.32)
 
@@ -940,6 +954,8 @@ def _text_for_key(key_name: str) -> str | None:
 
 
 def _is_numeric_step_aligned(value: float, *, minimum: float, step: float) -> bool:
+    if step == 1 and float(minimum).is_integer():
+        return float(value).is_integer()
     offset_steps = (value - minimum) / step
     return abs(offset_steps - round(offset_steps)) <= 1e-9
 

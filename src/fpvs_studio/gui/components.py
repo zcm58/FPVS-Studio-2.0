@@ -1173,6 +1173,35 @@ def apply_dialog_theme(widget: QWidget) -> None:
     _apply_palette_stylesheet(widget, dialog_stylesheet)
 
 
+def condition_modifier_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
+    """Keep modifier labels and image lists readable across native palette changes."""
+    theme = _resolved_theme(theme)
+    return dialog_stylesheet(theme) + f"""
+    QDialog[conditionModifiersDialog="true"] QLabel {{
+        color: {theme.text_primary};
+    }}
+    QDialog[conditionModifiersDialog="true"] QLabel[errorText="true"] {{
+        color: {theme.error_text};
+    }}
+    QDialog[conditionModifiersDialog="true"] QListWidget {{
+        color: {theme.text_primary};
+        background-color: {theme.surface};
+        border: 1px solid {theme.border_soft};
+        border-radius: 6px;
+    }}
+    QDialog[conditionModifiersDialog="true"] QListWidget::item:selected {{
+        color: {theme.selected_text};
+        background-color: {theme.primary};
+    }}
+    """
+
+
+def apply_condition_modifier_theme(widget: QWidget) -> None:
+    widget.setProperty("studioDialog", "true")
+    widget.setProperty("conditionModifiersDialog", "true")
+    _apply_palette_stylesheet(widget, condition_modifier_stylesheet)
+
+
 def experiment_role_colors(role: str, theme: StudioTheme) -> tuple[str, str, str]:
     """Background, border and text for the designer's target identities."""
     dark = QColor(theme.page_background).lightness() < 128

@@ -28,7 +28,8 @@ lazily only inside the engine package.
   model-backed pages (Project, Conditions, Design, Timing & Session, Image Size, Fixation,
   Response, Review); shared dialog/form styling remains in `gui/components.py`.
   Conditions confirms populated image/word switches before the document replaces only
-  the selected condition's source associations; see `docs/GUI_WORKFLOW.md`.
+  the selected condition's source associations. Its list and text editors expand
+  vertically within the shared wizard surface; see `docs/GUI_WORKFLOW.md`.
   Design embeds a shared category-specific visual editor. Setup's Next action applies
   the draft through the existing navigation gate; the standalone host retains Apply.
   `core/experiment_design.py` owns oddball cycle descriptions and frame previews;
@@ -127,11 +128,27 @@ Modular-task font selection is additive within the schema `1.2.0` compiled task/
 contract: missing values resolve to Arial, and the selection never enters the `RunSpec`
 timed-frame contract.
 
+Condition modifiers use project schema `1.6.0` and config schema `1.4.0`, retaining
+the existing `RunSpec` and bundle envelope. `core/condition_modifiers.py` owns
+workflow grouping, factories, and draft assignment changes that preserve unaffected
+condition bindings; `core/modifier_presets.py` owns independent local
+presets and staged project media intake. Existing condition bindings remain the
+task execution order. Compilation resolves selected session baselines and linked
+memory targets outside FPVS timing; runtime scores the existing response contracts.
+See [Condition modifiers](docs/CONDITION_MODIFIERS.md) for authoring and compatibility.
+
 `ProjectFile.experiment_category` is immutable after creation. `core/experiment_categories.py`
 owns category labels and conflict checks; `core/project_separation.py` preserves legacy
 mixed designs in separate experiments after an explicit user action. Category inference,
 template compatibility and no-mixing boundaries are defined in
 [`EXPERIMENT_CATEGORIES.md`](docs/EXPERIMENT_CATEGORIES.md).
+
+Cognitive Load FPVS uses ordinary image RunSpecs with three matched load/no-load
+pairs. `core/cognitive_load_presets.py` owns scaffolding; `core/backward_counting.py`
+and task contracts own reusable baseline/start/endpoint modules. Compilation realizes
+seeded starting numbers and a session-first baseline outside FPVS frames; runtime
+owns endpoint estimates and task-response checkpoints. Details and acceptance are in
+[`COGNITIVE_LOAD_FPVS.md`](docs/COGNITIVE_LOAD_FPVS.md).
 
 - Compilation owns protocol scheduling, asset resolution, randomized session order,
   realized fixation target selection, presentation-setting inheritance, balanced

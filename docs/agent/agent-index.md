@@ -119,6 +119,23 @@ availability and persistence for both build types. Use the GUI focused route. Fo
 visible acceptance, open Settings at `700x610`, enable the option, reopen Settings to
 check persistence, and disable it again to restore ordinary launch checks.
 
+## Cognitive Load FPVS
+
+For **FPVS Condition Modifiers**, start with `core/condition_modifiers.py`,
+`core/modifier_presets.py`, and [Condition modifiers](../CONDITION_MODIFIERS.md).
+Add/remove actions default to the current condition; `apply_modifier_draft` preserves
+unchanged shared assignments when applying the dialog draft.
+The existing task compiler/runner owns execution; grouped workflows do not add a
+third task phase or change FPVS timing. Use core/compiler/project-io/runtime/engine
+focused routes, GUI registered coverage, then repo precommit.
+
+For Cognitive Load FPVS, begin with `core/cognitive_load_presets.py`,
+`core/backward_counting.py`, `core/compiler_tasks.py` and
+[`Cognitive Load FPVS`](../COGNITIVE_LOAD_FPVS.md). The preset reuses ordinary image
+conditions; the library modules also work in other oddball projects. Use core,
+compiler, runtime and project-io focused routes, GUI registered coverage, then repo
+precommit. Task estimates and clocks never enter the `RunSpec` frame contract.
+
 ## Repeat Participant Sessions
 
 Start with `runtime/participant_sessions.py` for read-only next-number lookup and
@@ -154,6 +171,9 @@ For Conditions stimulus-type switching, read `gui/condition_setup_step.py` and
 `gui/document_conditions.py`. Safe regressions are in `tests/unit/test_condition_modality.py`;
 Yes/No, pending word edits and layout coverage are registered in
 `tests/gui/test_setup_conditions.py`. Use GUI focused checks and repo precommit.
+For Conditions spacing and mode labels, also read `gui/setup_wizard_page.py` and
+`gui/window_helpers.py`. Registered layout coverage checks aligned ready-state panels
+and vertical growth at 1120x820, 1120x960 and 1448x1086; other compact steps stay centered.
 
 For Manage Projects renaming, start with `gui/manage_projects_dialog.py`, its
 controller bindings and `core/project_service.py`. Verify metadata-only persistence
