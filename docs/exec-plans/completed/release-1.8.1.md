@@ -1,6 +1,6 @@
 # COM3 trigger fix release 1.8.1
 
-Status: Active
+Status: Completed
 
 ## Authorized scope
 
@@ -44,3 +44,34 @@ The user explicitly requested no tests and immediate publication. Automated test
 packaged Studio GUI smoke, installed upgrade, physical display and BioSemi trigger
 checks are deferred. Build-time metadata checks and artifact/hash verification
 remain enabled; they do not establish physical trigger delivery.
+
+## Published result
+
+- `codex/experiment-library` was fast-forwarded into master. Final release source and
+  annotated tag `v1.8.1` identify `abca7afa483c5f98a5584c957df6854260e12879`.
+- [Release v1.8.1](https://github.com/zcm58/FPVS-Studio-2.0/releases/tag/v1.8.1)
+  (ID 391099788) is the latest stable release. Its body exactly matches the requested
+  sentence. Public GitHub metadata verifies all six asset sizes and digests.
+- Final outputs are in `dist/release-1.8.1-final/`; build metadata is in
+  `build/release-1.8.1-final/`, with retained evidence and release helpers in
+  `build/release-1.8.1/`. The initial `dist/release-1.8.1/` candidate was superseded
+  before publication and is not the released binary.
+- The extracted full installer contains 7,985 owned files. The only patch, from
+  1.8.0, replaces/adds 18 files, removes eight obsolete files, and retains 7,967;
+  reconstruction matches every full-installer target hash.
+- All 59 changed packaged application modules match compiled committed source.
+  All 493 native-library input entries match the authenticated published 1.8.0
+  baseline. No dependency upgrades were introduced.
+- Source syntax compilation and the build's updater metadata diagnostic passed.
+  The anonymously downloaded live update manifest has the expected SHA-256 and
+  advertises exactly the 1.8.0 baseline. Tests, GUI smoke, installed updater selection,
+  installed upgrade, and physical BioSemi/ActiView verification remain unrun.
+
+| Artifact | Bytes | SHA-256 |
+| --- | ---: | --- |
+| `FPVS-Studio-Setup-1.8.1.exe` | 300899031 | `02ad389e5726e047ff1e619795591f1bf3bdfde3d82d78c89f2343ff3de411be` |
+| `FPVS-Studio-Patch-1.8.0-to-1.8.1.exe` | 72274282 | `65aca110899e0a92d8a5cf8050ae1904ed7138e7e30144a781d294fe84efbd0d` |
+| `FPVS-Studio-Update-1.8.1.json` | 435 | `12144ee3c50cc71656e85c93f68fc768e5d6ff760ee1a4b481a637199a51d94e` |
+
+Each artifact also has a published `.sha256` companion file. No other patch
+baseline was built or advertised for this release.
