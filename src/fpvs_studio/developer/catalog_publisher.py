@@ -22,6 +22,7 @@ import urllib.parse
 import urllib.request
 import zipfile
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 from threading import Event
 from typing import Any, TypeGuard
@@ -36,6 +37,7 @@ MAX_PREPARATION_REPORT_BYTES = 16 * 1024 * 1024
 MAX_BUNDLE_MANIFEST_BYTES = 16 * 1024 * 1024
 MAX_CATALOG_COMMIT_ATTEMPTS = 3
 MAX_GUI_ERROR_CHARS = 1024
+ABANDONED_UPLOAD_SECONDS = 300
 VERSION_PATTERN = r"\d+(?:\.\d+)*(?:(?:a|b|rc)\d+)?(?:\.post\d+)?(?:\.dev\d+)?(?:\+[a-z0-9.-]+)?"
 
 
@@ -338,6 +340,8 @@ class GitHubPublisher:
                 raw = response.read(8 * MAX_JSON_BYTES + 1)
                 if len(raw) > 8 * MAX_JSON_BYTES:
                     raise PublishError("GitHub response exceeded its size limit.")
+                if method == "DELETE" and response.status == 204 and not raw:
+                    return None
                 return json.loads(raw)
         except urllib.error.HTTPError as error:
             raise GitHubApiError(method, error.code) from None
@@ -363,6 +367,12 @@ class GitHubPublisher:
 
 def verify_asset(asset: dict, bundle: PreparedBundle) -> int:
     entry = bundle.entry
+    if asset.get("state") == "starter":
+        raise PublishError(
+            "GitHub upload is incomplete, so no checksum is available. "
+            "Wait five minutes after the upload stops, then retry the same bundle. "
+            "Only abandoned uploads on unpublished drafts can be recovered automatically."
+        )
     if (
         asset.get("name") != entry["filename"]
         or asset.get("size") != entry["size_bytes"]
@@ -374,6 +384,52 @@ def verify_asset(asset: dict, bundle: PreparedBundle) -> int:
             f"GitHub asset lacks the exact expected SHA-256/size: {entry['filename']}"
         )
     return int(asset["id"])
+
+
+def recover_draft_upload(
+    api: GitHubPublisher, release: dict, asset: dict, bundle: PreparedBundle,
+    existing: dict, cancel_event: Event | None,
+) -> dict | None:
+    """Remove only a stale, uncatalogued starter after rechecking remote identity."""
+    asset_id = asset.get("id")
+    if not positive_integer(asset_id, 2**53 - 1) or any(
+        item.get("asset_id") == asset_id for item in existing["items"]
+    ):
+        raise PublishError("Refusing to replace a catalogued or unidentified release asset.")
+    current_release = api.request("GET", f"{REPO_PATH}/releases/{release['id']}")
+    if (
+        not isinstance(current_release, dict)
+        or current_release.get("id") != release["id"]
+        or current_release.get("tag_name") != release["tag_name"]
+        or current_release.get("draft") is not True
+    ):
+        raise PublishError("Release changed or was published; its assets were not replaced.")
+    current = api.request("GET", f"{REPO_PATH}/releases/assets/{asset_id}")
+    if (
+        not isinstance(current, dict)
+        or current.get("id") != asset_id
+        or current.get("name") != bundle.path.name
+    ):
+        raise PublishError("Release asset identity changed; its upload was not replaced.")
+    if current.get("state") != "starter":
+        verify_asset(current, bundle)
+        return current
+    try:
+        updated = datetime.fromisoformat(current["updated_at"].replace("Z", "+00:00"))
+        age = (datetime.now(timezone.utc) - updated).total_seconds()
+    except (KeyError, AttributeError, TypeError, ValueError):
+        age = 0
+    if (
+        age < ABANDONED_UPLOAD_SECONDS
+        or current.get("digest") is not None
+        or type(current.get("size")) is not int
+        or current["size"] not in (0, bundle.entry["size_bytes"])
+    ):
+        verify_asset(current, bundle)
+    check_cancellation(cancel_event)
+    if api.request("DELETE", f"{REPO_PATH}/releases/assets/{asset_id}") is not None:
+        raise PublishError("Incomplete upload removal was not confirmed; retry the same bundle.")
+    return None
 
 
 def merge_catalog(existing: dict, entries: list[dict]) -> dict:
@@ -455,7 +511,22 @@ def publish(
         )
     by_name = {asset["name"]: asset for asset in assets}
     for bundle in bundles:
+        # Check retained bytes before removing an abandoned remote upload.
+        if (
+            bundle.path.stat().st_size != bundle.entry["size_bytes"]
+            or file_sha256(bundle.path, cancel_event) != bundle.entry["sha256"]
+        ):
+            raise PublishError("A local bundle changed after verification.")
         if bundle.path.name in by_name:
+            existing_asset = by_name[bundle.path.name]
+            if release["draft"] and existing_asset.get("state") == "starter":
+                recovered = recover_draft_upload(
+                    api, release, existing_asset, bundle, existing, cancel_event,
+                )
+                if recovered is None:
+                    del by_name[bundle.path.name]
+                    continue
+                by_name[bundle.path.name] = recovered
             verify_asset(by_name[bundle.path.name], bundle)
         elif not release["draft"]:
             raise PublishError(

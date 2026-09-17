@@ -183,6 +183,15 @@ Studio reports an uncertain outcome and preserves the bundle for recovery. Reope
 publisher to retry an in-session prepared publication. Do not regenerate different
 bytes under an already used version or release tag.
 
+An interrupted GitHub upload can leave an incomplete `starter` asset without a
+checksum. Retry can recover this placeholder after its last update is at least five
+minutes old: Studio rehashes the retained bundle, rechecks the release and asset,
+removes only the matching uncatalogued placeholder on an unpublished draft, and
+uploads the same bytes. Recent uploads, published releases, catalogued assets, and
+completed assets with missing or mismatched hashes are never replaced automatically.
+The replacement must pass the normal size/SHA-256 checks before release or catalog
+publication. See [GitHub's failed-upload behavior](https://docs.github.com/en/rest/releases/assets#upload-a-release-asset).
+
 The bundled publisher fetches the current online catalog, merges existing experiments, and updates
 it using GitHub's file SHA. A concurrent change causes a bounded refetch/merge retry;
 conflicting changes to the same published version are refused. GUI publication does

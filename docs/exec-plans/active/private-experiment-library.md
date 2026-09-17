@@ -650,6 +650,21 @@ The developer publishing follow-up adds the bundled, password-gated upload GUI d
   Enter activation, restart gating in source/frozen paths and ordinary settings.
 - [ ] Visible Qt/manual GUI acceptance: Library, creation and developer publishing
   geometry/keyboard/lifecycle cases registered; execution remains unrun.
+- [x] September 17 incomplete-upload recovery: reproduced the real Cognitive Load
+  asset stuck in GitHub `starter` state with no digest. Exact retry previously stopped
+  at the generic checksum check. Retry now rehashes local bytes and rechecks remote
+  identities before removing an uncatalogued draft starter older than five minutes.
+  It preserves published/completed assets, validates replacement digests, and handles
+  GitHub's empty HTTP 204 deletion response. Regression coverage includes recent
+  uploads, invalid timestamps, local edits, publication/asset races and cancellation.
+- [x] Recovered and published the retained 37,010,425-byte Cognitive Load FPVS 1.0.0
+  bundle without regenerating it. GitHub's digest matched the prepared SHA-256;
+  catalog commit `70f8fab55f8672b7a459b438a2e90e5b8adee6fb` contains the experiment.
+  The enrolled researcher client listed and downloaded the bundle with the same hash.
+  A second publication with every non-GET request blocked confirmed an idempotent retry.
+  Library focused: 161 passed, one Windows symlink skip. Precommit: Ruff, compilation,
+  full source mypy, repo/docs audits and 1,877 unit tests passed, eight symlink skips.
+  No GUI execution, installer rebuild or second physical machine check was performed.
 - [ ] New installer, second physical machine, Linux native keyring, display scaling,
   representative large archive, and physical recording acceptance remain unrun.
 - [ ] Phase 2 individual-condition implementation remains deferred.

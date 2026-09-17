@@ -9,6 +9,7 @@ import sys
 import tempfile
 import unittest
 import zipfile
+from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
 
@@ -42,7 +43,14 @@ class FakeGitHub:
 
     def request(self, method, path, *, payload=None, upload=None):
         self.calls.append((method, path))
+        if method == "DELETE":
+            self.assets = []
+            return None
         if method == "GET":
+            if path == publisher.REPO_PATH + "/releases/45":
+                return dict(self.release)
+            if path == publisher.REPO_PATH + "/releases/assets/123":
+                return dict(self.assets[0])
             return {
                 "full_name": publisher.REPOSITORY,
                 "private": self.private,
@@ -241,6 +249,104 @@ class PublishCatalogTests(unittest.TestCase):
         with self.assertRaisesRegex(publisher.PublishError, "exact expected SHA-256"):
             publisher.publish(api, "test-v1", [self.bundle], self.catalog)
         self.assertEqual([call[0] for call in api.calls], ["GET"])
+
+    def starter_api(self, *, draft=True):
+        api = FakeGitHub(self.bundle, existing=True, draft=draft)
+        api.assets[0].update(
+            state="starter", digest=None, updated_at="2000-01-01T00:00:00Z",
+        )
+        return api
+
+    def test_retry_reuploads_abandoned_draft_starter_and_verifies(self):
+        api = self.starter_api()
+        result = publisher.publish(api, "test-v1", [self.bundle], self.catalog)
+        self.assertEqual(result["items"][0]["sha256"], self.bundle.entry["sha256"])
+        self.assertEqual([call[0] for call in api.calls],
+                         ["GET", "GET", "GET", "DELETE", "POST", "PATCH"])
+        self.assertEqual(api.assets[0]["state"], "uploaded")
+
+    def test_recent_or_unidentified_starter_is_not_deleted(self):
+        for timestamp in (datetime.now(timezone.utc).isoformat(), None, "bad-date"):
+            with self.subTest(timestamp=timestamp):
+                api = self.starter_api()
+                api.assets[0]["updated_at"] = timestamp
+                with self.assertRaisesRegex(publisher.PublishError, "incomplete"):
+                    publisher.publish(api, "test-v1", [self.bundle], self.catalog)
+                self.assertNotIn("DELETE", [call[0] for call in api.calls])
+
+    def test_published_or_catalogued_starter_is_never_deleted(self):
+        for draft, catalogued in ((False, False), (True, True)):
+            with self.subTest(draft=draft, catalogued=catalogued):
+                api = self.starter_api(draft=draft)
+                catalog = self.catalog
+                if catalogued:
+                    catalog = {**catalog, "items": [{**self.bundle.entry, "asset_id": 123}]}
+                with self.assertRaises(publisher.PublishError):
+                    publisher.publish(api, "test-v1", [self.bundle], catalog)
+                self.assertNotIn("DELETE", [call[0] for call in api.calls])
+
+    def test_changed_local_bundle_never_deletes_starter(self):
+        api = self.starter_api()
+        self.path.write_bytes(b"changed")
+        with self.assertRaisesRegex(publisher.PublishError, "local bundle changed"):
+            publisher.publish(api, "test-v1", [self.bundle], self.catalog)
+        self.assertNotIn("DELETE", [call[0] for call in api.calls])
+
+    def test_starter_completed_before_recovery_is_used_without_deleting(self):
+        api = self.starter_api()
+        request = api.request
+
+        def completed(method, path, **kwargs):
+            if method == "GET" and path.endswith("/releases/assets/123"):
+                api.assets = [api.asset()]
+            return request(method, path, **kwargs)
+
+        api.request = completed
+        publisher.publish(api, "test-v1", [self.bundle], self.catalog)
+        self.assertNotIn("DELETE", [call[0] for call in api.calls])
+        self.assertNotIn("POST", [call[0] for call in api.calls])
+
+    def test_release_published_before_recovery_is_not_modified(self):
+        api = self.starter_api()
+        request = api.request
+
+        def published(method, path, **kwargs):
+            if method == "GET" and path.endswith("/releases/45"):
+                api.release["draft"] = False
+            return request(method, path, **kwargs)
+
+        api.request = published
+        with self.assertRaises(publisher.PublishError):
+            publisher.publish(api, "test-v1", [self.bundle], self.catalog)
+        self.assertNotIn("DELETE", [call[0] for call in api.calls])
+
+    def test_recovery_rechecks_asset_identity_and_cancellation(self):
+        from threading import Event
+
+        for cancel_before_delete in (False, True):
+            with self.subTest(cancel=cancel_before_delete):
+                api = self.starter_api()
+                request = api.request
+                cancel = Event()
+
+                def changed(
+                    method, path, *, request=request, cancel=cancel,
+                    cancel_before_delete=cancel_before_delete, **kwargs,
+                ):
+                    result = request(method, path, **kwargs)
+                    if method == "GET" and path.endswith("/releases/assets/123"):
+                        if cancel_before_delete:
+                            cancel.set()
+                        else:
+                            result["id"] = 999
+                    return result
+
+                api.request = changed
+                with self.assertRaises(publisher.PublishError):
+                    publisher.publish(
+                        api, "test-v1", [self.bundle], self.catalog, cancel_event=cancel,
+                    )
+                self.assertNotIn("DELETE", [call[0] for call in api.calls])
 
     def test_public_repository_is_rejected_before_writes(self):
         api = FakeGitHub(self.bundle, private=False)
@@ -557,6 +663,14 @@ def test_cancel_before_http_request_never_opens_network(monkeypatch):
     cancel.set()
     with pytest.raises(publisher.CatalogCancelled):
         api.request("GET", "/user")
+
+
+def test_delete_asset_accepts_github_no_content_response(monkeypatch):
+    api = publisher.GitHubPublisher("synthetic-token")
+    response = io.BytesIO(b"")
+    response.status = 204
+    monkeypatch.setattr(api._opener, "open", lambda *args, **kwargs: response)
+    assert api.request("DELETE", publisher.REPO_PATH + "/releases/assets/123") is None
 
 
 def test_upload_and_validation_check_cancellation(tmp_path):
