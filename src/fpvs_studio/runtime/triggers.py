@@ -12,7 +12,7 @@ from fpvs_studio.core.execution import TriggerRecord, TriggerStatus
 from fpvs_studio.core.trigger_codes import validate_event_trigger_code
 from fpvs_studio.triggers.base import TriggerBackend
 from fpvs_studio.triggers.null_backend import NullBackend
-from fpvs_studio.triggers.serial_backend import SerialBackend
+from fpvs_studio.triggers.serial_backend import SerialBackend, resolve_serial_port
 
 LOGGER = logging.getLogger(__name__)
 
@@ -28,9 +28,13 @@ class LoggedTriggerBackend(TriggerBackend):
     """Wrap a trigger backend and retain execution-time trigger records."""
 
     def __init__(
-        self, backend: TriggerBackend | None = None, *, backend_name: str = "null"
+        self, backend: TriggerBackend, *, backend_name: str
     ) -> None:
-        self._backend = backend or NullBackend()
+        if backend is None:
+            raise ValueError("A trigger backend must be explicitly supplied.")
+        if (backend_name == "null") != isinstance(backend, NullBackend):
+            raise ValueError("Trigger backend name must match its actual null/serial output.")
+        self._backend = backend
         self._backend_name = backend_name
         self._raw_records: list[_RawTriggerAttempt] = []
 
@@ -147,10 +151,8 @@ class LoggedNullBackend(LoggedTriggerBackend):
 
 
 def _build_serial_backend(options: Mapping[str, object]) -> SerialBackend:
-    serial_port = options.get("serial_port")
-    port = serial_port.strip() if isinstance(serial_port, str) else "COM3"
     return SerialBackend(
-        port,
+        resolve_serial_port(options.get("serial_port")),
         _positive_int_option(options, "serial_baudrate", default=115200),
         pulse_width_ms=_non_negative_int_option(
             options,
@@ -172,7 +174,6 @@ def build_trigger_backend(
     """Create the runtime trigger backend wrapper and any launch warnings."""
 
     options = runtime_options or {}
-    serial_port = options.get("serial_port")
     serial_enabled = options.get("serial_enabled", True)
     test_mode = options.get("experiment_test_mode", False)
     pilot_mode = options.get("pilot_mode", False)
@@ -183,8 +184,6 @@ def build_trigger_backend(
             "Serial trigger output is required for recording. Null output is only allowed "
             "in Experiment Test Mode or Pilot Study Mode."
         )
-    if isinstance(serial_port, str) and not serial_port.strip():
-        raise ValueError("serial_port may not be blank when provided.")
     if serial_enabled:
         return LoggedTriggerBackend(_build_serial_backend(options), backend_name="serial"), []
     return LoggedNullBackend(), []

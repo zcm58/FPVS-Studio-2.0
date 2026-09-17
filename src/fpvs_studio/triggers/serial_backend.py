@@ -14,12 +14,22 @@ class SerialBackendError(RuntimeError):
     """Raised when BioSemi serial trigger output cannot be performed."""
 
 
+def resolve_serial_port(port: object) -> str:
+    """Use COM3 for an unset port; preserve explicitly configured device names."""
+
+    if port is None:
+        return "COM3"
+    if not isinstance(port, str):
+        raise ValueError("Serial trigger port must be a string or None.")
+    return port.strip() or "COM3"
+
+
 class SerialBackend(TriggerBackend):
     """Write single-byte trigger markers to a configured serial port."""
 
     def __init__(
         self,
-        port: str = "COM3",
+        port: str | None = "COM3",
         baudrate: int = 115200,
         *,
         pulse_width_ms: int = 10,
@@ -27,7 +37,7 @@ class SerialBackend(TriggerBackend):
         reset_delay_ms: int = 5,
         serial_module: ModuleType | Any | None = None,
     ) -> None:
-        self._port = port
+        self._port = resolve_serial_port(port)
         self._baudrate = baudrate
         self._pulse_width_ms = pulse_width_ms
         self._reset_code = reset_code

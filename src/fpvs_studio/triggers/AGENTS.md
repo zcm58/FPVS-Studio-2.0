@@ -15,6 +15,9 @@ adapter scaffolding.
   for explicit manual reset and must not be emitted for condition or oddball events.
 - Keep unavailable hardware behavior explicit; do not add silent fallbacks that hide
   failed trigger emission.
+- Resolve unset/blank serial-port configuration to `COM3`, while preserving an
+  explicit nonempty port. This is a configuration default, never a retry/fallback
+  after a port fails to open or write.
 - Let backend open/write failures propagate to runtime so they can abort and export a
   clear error record. Runtime owns the pre-run serial-open check and trigger logs.
 

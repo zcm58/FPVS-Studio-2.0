@@ -292,6 +292,11 @@ class PsychoPyEngine(PresentationEngine):
         runtime_options: Mapping[str, object] | None = None,
         trigger_backend: TriggerBackend | None = None,
     ) -> RunExecutionSummary:
+        if trigger_backend is None:
+            raise ValueError(
+                "Runtime must supply a connected trigger backend before playback. "
+                "Test and pilot launches must supply an explicit log-only backend."
+            )
         if (
             run_spec.attentional_blink is not None
             and run_spec.attentional_blink.layout != "letter_stream"
@@ -486,15 +491,14 @@ class PsychoPyEngine(PresentationEngine):
 
                         # Trigger writes are the only experiment callbacks on a timed
                         # flip; fixation timing uses the returned flip timestamp.
-                        if trigger_backend is not None:
-                            for trigger_event in trigger_events:
-                                call_on_flip(
-                                    self._emit_trigger,
-                                    trigger_backend,
-                                    trigger_event.code,
-                                    trigger_event.label,
-                                    frame_index,
-                                )
+                        for trigger_event in trigger_events:
+                            call_on_flip(
+                                self._emit_trigger,
+                                trigger_backend,
+                                trigger_event.code,
+                                trigger_event.label,
+                                frame_index,
+                            )
                         flip_time = flip()
                         current_has_timestamp = flip_time is not None
                         current_time_s = (

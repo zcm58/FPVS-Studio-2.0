@@ -228,6 +228,14 @@ The PsychoPy implementation:
 - serial-port execution writes single-byte marker codes to the configured COM port and
   baudrate
 
+Unset, null, blank and whitespace-only port settings resolve to `COM3`; explicit
+nonempty ports are preserved. This also repairs the empty port stored by early
+Library bundles without requiring those projects to be reimported. The shared
+serial adapter owns resolution, and launch options record the resolved port.
+The logged wrapper requires an explicit backend and a matching backend name;
+omitting a backend cannot silently construct null output. The PsychoPy playback
+entry point also rejects a missing backend before opening its session.
+
 Project trigger settings such as COM port, baudrate, pulse width, reset code, and reset
 delay are mapped into runtime-only launch options. They are not stored in `RunSpec` or
 `SessionPlan`. The BioSemi serial backend writes exactly one byte per normal event with

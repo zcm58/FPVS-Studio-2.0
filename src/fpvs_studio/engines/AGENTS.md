@@ -37,6 +37,8 @@ play compiled runs end to end.
   sequencing, reset rules, and participant-facing summary text.
 - Keep trigger emission flip-locked through `window.callOnFlip(...)`; exported trigger
   timestamps should come from the run clock after warmup, not from warmup timing.
+- Require an explicit runtime-provided trigger backend before condition playback;
+  missing backends are errors. Test/pilot runs receive an explicit log-only backend.
 - Record strict timing misses as runtime metadata quality-control fields instead of
   aborting playback unless runtime policy changes.
 - Poll `escape` only as an abort signal; condition-task semantics stay in runtime/core.

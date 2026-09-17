@@ -25,6 +25,7 @@ from fpvs_studio.runtime.export_modes import EXPORT_MODE_FULL, VALID_EXPORT_MODE
 from fpvs_studio.runtime.participant_sessions import reserve_participant_session
 from fpvs_studio.runtime.preflight import preflight_run_spec, preflight_session_plan
 from fpvs_studio.runtime.run_worker import RuntimeWorker
+from fpvs_studio.triggers.serial_backend import resolve_serial_port
 
 
 class LaunchSettingsError(ValueError):
@@ -60,6 +61,7 @@ class LaunchSettings:
         """Return a generic engine-facing runtime options mapping."""
 
         options = asdict(self)
+        options["serial_port"] = resolve_serial_port(self.serial_port)
         engine_name = options["engine_name"]
         if isinstance(engine_name, EngineName):
             options["engine_name"] = engine_name.value
@@ -122,8 +124,10 @@ def _validate_launch_settings(settings: LaunchSettings) -> None:
     if settings.export_mode not in VALID_EXPORT_MODES:
         valid_values = "', '".join(sorted(VALID_EXPORT_MODES))
         raise LaunchSettingsError(f"export_mode must be one of '{valid_values}'.")
-    if settings.serial_port is not None and not settings.serial_port.strip():
-        raise LaunchSettingsError("serial_port may not be blank when provided.")
+    try:
+        resolve_serial_port(settings.serial_port)
+    except ValueError as exc:
+        raise LaunchSettingsError(str(exc)) from exc
     if not isinstance(settings.serial_baudrate, int) or settings.serial_baudrate <= 0:
         raise LaunchSettingsError("serial_baudrate must be a positive integer.")
     if (
