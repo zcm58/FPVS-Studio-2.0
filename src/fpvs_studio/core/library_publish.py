@@ -105,8 +105,8 @@ def _clean_inventory(
     clean = project.model_copy(deep=True)
     clean.manual_removed_electrodes = {}
     clean.settings.display.monitor_name = None
-    # Empty persists through exclude_none serialization; None restores default COM3.
-    clean.settings.triggers.serial_port = ""
+    # Library experiments use COM3 until local serial-port editing is available.
+    clean.settings.triggers.serial_port = "COM3"
     clean.settings.condition_profile_id = None
     referenced_sets = {
         set_id

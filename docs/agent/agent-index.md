@@ -122,6 +122,9 @@ check persistence, and disable it again to restore ordinary launch checks.
 
 ## Cognitive Load FPVS
 
+For Library downloads, the publisher applies the temporary COM3 bundle policy;
+see [Experiment Library](../EXPERIMENT_LIBRARY.md) before changing port handling.
+
 For **FPVS Condition Modifiers**, start with `core/condition_modifiers.py`,
 `core/modifier_presets.py`, and [Condition modifiers](../CONDITION_MODIFIERS.md).
 Add/remove actions default to the current condition; `apply_modifier_draft` preserves

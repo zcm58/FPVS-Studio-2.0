@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import zipfile
 from threading import Event
 
@@ -34,6 +35,7 @@ from fpvs_studio.preprocessing.manifest import (
     write_stimulus_manifest,
 )
 from fpvs_studio.preprocessing.models import DerivedImageRecord
+from fpvs_studio.runtime.launcher import LaunchSettings, _validate_launch_settings
 
 
 def _ready_project(project_root, project):
@@ -141,7 +143,7 @@ def test_publishing_copies_only_declared_content_and_sanitizes_project(
     imported = import_project_bundle(bundle_path, tmp_path / "receiver")
     assert imported.project.manual_removed_electrodes == {}
     assert imported.project.settings.display.monitor_name is None
-    assert imported.project.settings.triggers.serial_port == ""
+    assert imported.project.settings.triggers.serial_port == "COM3"
     assert imported.project.settings.condition_profile_id is None
     assert imported.project.conditions == project.conditions
     assert imported.project.task_modules == project.task_modules
@@ -199,6 +201,48 @@ def test_publisher_sanitizes_existing_bundle_and_keeps_ordinary_export_behavior(
         import_project_bundle(clean, tmp_path / "clean-import").project.manual_removed_electrodes
         == {}
     )
+
+
+@pytest.mark.parametrize("serial_port", [None, "", "COM91"])
+@pytest.mark.parametrize("source_kind", ["project", "bundle"])
+def test_library_bundle_uses_com3_and_preserves_source_port(
+    tmp_path, sample_project, sample_project_root, serial_port, source_kind
+):
+    sample_project.settings.triggers.serial_port = serial_port
+    _ready_project(sample_project_root, sample_project)
+    before = _snapshot(sample_project_root)
+    source = sample_project_root
+    if source_kind == "bundle":
+        source = tmp_path / "ordinary.fpvsbundle"
+        export_project_bundle(sample_project_root, source)
+        source_bytes = source.read_bytes()
+        ordinary = import_project_bundle(source, tmp_path / "ordinary-import")
+        # Existing serialization omits None and restores the model's COM3 default.
+        assert ordinary.project.settings.triggers.serial_port == (
+            "COM3" if serial_port is None else serial_port
+        )
+
+    clean = tmp_path / "clean.fpvsbundle"
+    report = prepare_library_bundle(source, clean)
+    with zipfile.ZipFile(clean) as archive:
+        bundled_project = json.loads(archive.read("project.json"))
+    assert bundled_project["settings"]["triggers"]["serial_port"] == "COM3"
+    imported = import_project_bundle(clean, tmp_path / "clean-import")
+
+    assert imported.project.settings.triggers.serial_port == "COM3"
+    assert "settings.triggers.serial_port" in report.sanitized_fields
+    assert _snapshot(sample_project_root) == before
+    assert sample_project.settings.triggers.serial_port == serial_port
+    if source_kind == "bundle":
+        assert source.read_bytes() == source_bytes
+    # Both test-mode and recording launch validation accept the imported port.
+    for serial_enabled in (False, True):
+        _validate_launch_settings(
+            LaunchSettings(
+                serial_enabled=serial_enabled,
+                serial_port=imported.project.settings.triggers.serial_port,
+            )
+        )
 
 
 def test_publisher_enforces_github_asset_limit(

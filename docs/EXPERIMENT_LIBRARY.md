@@ -32,6 +32,10 @@ open, the current Save/Discard/Cancel and launch-state guards run before the han
 The import reuses the normal display-settings review and opens the local project.
 Review Setup, including display geometry, timing and desired triggers, before use.
 Ordinary production preflight and hardware checks still apply.
+Newly prepared Library bundles explicitly use `COM3` until a serial-port editor is
+added. This temporary publishing policy replaces the source port even when it is
+blank, unset or customized; it does not change ordinary local bundle exports or
+previously downloaded projects.
 
 Cancel or Escape during a download waits for the active read to stop; no import starts
 after cancellation. During Library project extraction, **Cancel setup** requests cleanup
@@ -225,7 +229,10 @@ Preparation includes referenced stimulus sets, original and declared derived ima
 authored word lists, task media and the complete project's tasks/modifiers. It omits
 unrelated media and files outside the declared asset closure, including logs, runs,
 caches, receipt folders and credentials. It clears participant electrode selections,
-the source monitor name, serial-port selection and app-local condition-profile identity.
+the source monitor name and app-local condition-profile identity. Every Library
+bundle sets `settings.triggers.serial_port` to `COM3`, including preparation from an
+existing bundle. Serial-port editing in the GUI is deferred; the source project or
+archive remains unchanged.
 Untyped derivative provenance containing credential keys or machine-local paths is
 rejected. Review authored instructions, descriptions and images before publishing a real
 study: automatic field sanitation cannot determine whether free text or pixels identify

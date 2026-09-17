@@ -17,7 +17,8 @@ lazily only inside the engine package.
 - `src/fpvs_studio/library/`: GUI-neutral experiment catalog, device enrollment,
   native protected credential storage, and bounded verified bundle downloads.
   The Library dialog uses app-owned jobs and the existing reviewed project importer;
-  `core/library_publish.py` prepares clean publishable whole-project copies.
+  `core/library_publish.py` prepares clean publishable whole-project copies with
+  the current fixed COM3 serial-port policy.
   Private content and the independent Cloudflare service live in
   `zcm58/FPVS-Studio-Library`. See `docs/EXPERIMENT_LIBRARY.md`.
 - `src/fpvs_studio/developer/`: bundled maintainer tools, enabled by a password-gated

@@ -42,6 +42,39 @@ must return within its timeout before shutdown can finish. Confirmed completion 
 not be reported as rolled back. Run GUI/Library/packaging/docs focused and precommit;
 visible Qt, actual installed launch and new content publication remain separate checks.
 
+## Temporary Library Serial Port Policy (September 17, 2026)
+
+After a downloaded Cognitive Load experiment failed launch validation because clean
+publishing had cleared its port to an empty string, the user required all Library
+bundles to use `COM3` for now. Clean preparation explicitly writes that value for
+both source-project and existing-bundle inputs, replacing blank, unset and customized
+ports. Ordinary bundle export preserves authored settings, and preparation leaves
+its source unchanged. A serial-port GUI editor remains deferred. Runtime validation,
+production hardware checks, compiled contracts and serial enablement are unchanged.
+Published assets and previously imported projects require separate updates; source
+changes do not rewrite those independent copies.
+
+- [x] Set the clean publishing port to `COM3` and update the publishing contract.
+- [x] Add source-project/existing-bundle regressions for blank, unset and customized
+  ports, source immutability, ordinary export preservation, and test/recording launch
+  settings validation without Qt or hardware.
+- [x] Regression file: 15 tests passed; docs focused: 9 passed. Precommit passed
+  Ruff, compilation, mypy (192 files) and repository audits, with 1,874 unit tests
+  passing and 8 Windows symlink skips. Its one sandbox-denied named-pipe test passed
+  on an isolated unsandboxed rerun (1,875 passing total). Library focused runs had
+  158 passes/one skip and intermittent import-staging rename `WinError 5` failures
+  in different new parameter cases, including outside the sandbox; all those cases
+  passed in the regression-only and precommit runs. No runtime/GUI launch was run.
+- [x] Rebuilt all three currently published v1.0.0 archives as v1.0.1 under
+  `build/c3ready`. Verified original release SHA-256 values, ordinary import/compile,
+  explicit COM3, unchanged remaining project fields and byte-identical stimulus/task
+  payloads. Retained preparation evidence in `build/com3-preparation-results.json`.
+- [ ] Publish the prepared v1.0.1 archives and withdraw the three defective v1.0.0
+  catalog entries after publication verification. Automatic approval review rejected
+  the upload because it requires explicit authorization for experiment-content
+  publication to `zcm58/FPVS-Studio-Library`. No remote mutation occurred; exact
+  prepared bytes are retained for approval. Previously imported projects are unchanged.
+
 ## Purpose And Confirmed Decisions
 
 Provide an Experiment Library inside FPVS Studio. A researcher can browse complete
