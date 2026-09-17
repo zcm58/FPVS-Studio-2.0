@@ -21,6 +21,13 @@ Enrollment is stored for the current OS user on that computer. Other user profil
 enroll separately. The code itself is not retained as the device credential. Search
 by title, description, or category; select a result to see its complete description,
 version, download size, file count, extracted size, and minimum Studio version.
+Each opening or Refresh fetches current availability. The service matches catalog
+entries to uploaded assets on live, published GitHub releases using asset ID,
+filename, size and SHA-256. Deleted releases/assets, drafts and incomplete or changed
+uploads are excluded even if their catalog metadata remains. GitHub failures show
+an error; they never masquerade as an empty library. Downloads recheck availability
+in case the selected asset was deleted after browsing. Existing local copies remain
+unchanged. Available versions are not collapsed into a latest-only listing.
 Experiments requiring a newer Studio version remain visible with an explanation and
 a disabled setup action. List titles may elide; a tooltip and the scrollable plain-text
 details expose their complete values.

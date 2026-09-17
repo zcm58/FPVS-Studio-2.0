@@ -75,6 +75,34 @@ changes do not rewrite those independent copies.
   publication to `zcm58/FPVS-Studio-Library`. No remote mutation occurred; exact
   prepared bytes are retained for approval. Previously imported projects are unchanged.
 
+## Live download availability follow-up (September 17, 2026)
+
+The user requested that opening the Library show only experiments currently
+available from GitHub. A live comparison reproduced four catalog entries but only
+one remaining release asset (Cognitive Load FPVS 1.0.1). Deleting releases had left
+their approved metadata in the catalog. Fix this in the private service so existing
+desktop clients benefit without a new build or catalog rewrite.
+
+- [x] Add a failing endpoint regression for deletion between two catalog requests.
+- [x] Intersect validated catalog entries with uncached, published GitHub release
+  assets by ID, filename, uploaded state, size and SHA-256 on browse and download.
+- [x] Preserve catalog allowlisting, withdrawal, all available versions and local
+  project independence. Errors and bounded-scan limits cannot return partial lists.
+- [x] Service tests: 20 passed; syntax checks and Wrangler deployment dry run passed.
+- [x] Committed/pushed private service `d376009` and deployed Worker version
+  `4d7cc33c-e042-4fee-8d43-8c25b5586f21`. Two live desktop-client catalog reads
+  matched GitHub: only Cognitive Load FPVS 1.0.1 remained. A deleted-demo download
+  was rejected; the remaining 37,010,419-byte archive downloaded and matched SHA-256
+  `c19473efe0b721cae1d4ba6ad1669d0c2dc392612b47588366218994838d33b1`.
+  The isolated test download was cleaned, without touching project/user-cache data.
+  Studio docs focused checks passed (9 tests). No installer rebuild was needed.
+
+The service owns this behavior in `src/github.js`; Studio already refreshes on
+opening and explicit Refresh. Tests cover stale selections, deletion/restoration,
+draft/incomplete/mismatched assets, pagination, upstream failures and scan bounds.
+No GUI surface or project content changes are required. GUI/hardware execution is
+outside this service change.
+
 ## Purpose And Confirmed Decisions
 
 Provide an Experiment Library inside FPVS Studio. A researcher can browse complete

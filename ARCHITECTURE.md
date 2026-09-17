@@ -20,7 +20,8 @@ lazily only inside the engine package.
   `core/library_publish.py` prepares clean publishable whole-project copies with
   the current fixed COM3 serial-port policy.
   Private content and the independent Cloudflare service live in
-  `zcm58/FPVS-Studio-Library`. See `docs/EXPERIMENT_LIBRARY.md`.
+  `zcm58/FPVS-Studio-Library`; that service checks live release-asset availability
+  for each browse/download. See `docs/EXPERIMENT_LIBRARY.md`.
 - `src/fpvs_studio/developer/`: bundled maintainer tools, enabled by a password-gated
   app preference in Settings > Advanced. `mode.py` snapshots activation at startup;
   enabling/disabling requires restart. `library_publisher.py` owns prepared copies;
