@@ -16,36 +16,31 @@ acceptance must be reported separately from source/service verification.
 
 ## Developer publishing follow-up (September 17, 2026)
 
-The user requested a private GUI for preparing and publishing whole experiments.
-Use a dedicated source-checkout launcher on the maintainer's PC. Normal launches hide
-the action, and the standard frozen build excludes the developer publisher modules.
-This controls exposure; write authorization remains with the maintainer's GitHub
-account. The private publishing helper verifies `zcm58` and write access to the private
-Library repository. Researcher invitation/device credentials cannot publish.
+The latest user request supersedes the source-only launcher design. Ship developer
+features in ordinary builds, off by default. Settings > Advanced > Enable developer
+mode accepts the requested password `developer` and saves an app-level preference.
+Both enabling and disabling take effect only after a full restart; the running
+controller keeps its startup snapshot. No project or execution contract stores this.
 
-1. Open the current experiment in the developer launch and choose File > Export >
-   Publish to Experiment Library. Verify access in a worker; collect title, stable
-   study ID, version, description and minimum Studio version.
-2. Save pending edits explicitly before preparing a clean bundle through the existing
-   core owner. Review its counts, size, checksum, exclusions and sanitized fields.
-3. Publish only after the user selects the final Publish action. The private helper
-   uploads/verifies an immutable Release asset, then updates `catalog.json` on `main`
-   with a compare-and-swap commit. Preserve concurrent catalog additions and retry a
-   failed publication using the exact prepared bundle.
-4. Keep work off the UI thread using the app-owned lifecycle. Cancellation drains
-   preparation/subprocess work. Never claim an interrupted upload was rolled back;
-   retain its prepared files for retry and report uncertain remote completion.
+1. Add General/Advanced Settings tabs with inline masked password entry, incorrect
+   password feedback, cancel, and a restart-required status. Existing test/pilot modes
+   retain their current availability and behavior.
+2. Include publishing code in the app package. Move the existing canonical GitHub
+   publisher from the private checkout into Studio and make the private CLI a thin
+   wrapper; source and installed GUI use the same API in app-owned workers.
+3. Preserve clean preparation, explicit review/publish, owner/write authorization,
+   immutable assets/catalog merge, and exact retained retry. GitHub credentials come
+   from existing noninteractive Git credentials or GH_TOKEN, never the developer
+   password or lab invitation. No service write endpoint or embedded GitHub secret.
+4. Remove the separate-checkout launch requirement. Verify default-off, password
+   rejection, enable/disable persistence and restart gating, frozen module inclusion,
+   canonical publisher tests, cancellation and ordinary settings regression.
 
-The desktop adapter never reads or stores GitHub tokens. The locally installed private
-helper continues to use the maintainer's existing Git credential helper. No new Worker
-write endpoint, shared publisher secret, end-user developer toggle, or condition import
-is needed. The service's read-only App remains confined to downloads.
-
-Acceptance: normal/frozen entry-point absence, owner/write-access denial, source-safe
-preparation and review, immutable retry, concurrent catalog preservation, honest failure
-and cancellation, and registered visible geometry/lifecycle tests. Run Library, GUI,
-packaging and docs focused routes plus precommit; verify real account access read-only.
-Visible GUI and actual new content publication remain separate explicit checks.
+The password is a convenience gate for developer features, not repository authorization.
+Cancellation is cooperative between API requests and upload reads; a blocked request
+must return within its timeout before shutdown can finish. Confirmed completion must
+not be reported as rolled back. Run GUI/Library/packaging/docs focused and precommit;
+visible Qt, actual installed launch and new content publication remain separate checks.
 
 ## Purpose And Confirmed Decisions
 
@@ -532,7 +527,7 @@ ordinary production preflight remains mandatory. Report unperformed checks expli
 Resolve remaining operational choices before wider lab rollout and packaged acceptance.
 No automatic content updates, arbitrary repository selector, public marketplace,
 Git LFS client, or cross-project asset sharing is included in the first delivery.
-The developer publishing follow-up adds the source-only upload GUI described above.
+The developer publishing follow-up adds the bundled, password-gated upload GUI described above.
 
 ## Planning Verification And Progress
 
@@ -598,6 +593,28 @@ The developer publishing follow-up adds the source-only upload GUI described abo
   43 adapter tests also pass with a deliberately long repository-local basetemp.
   The private helper's 31 mocked tests passed; launcher `-Check` and 13-scope harness
   validation passed. No Worker code or deployment changed.
+- [x] Bundled developer mode supersedes the source-only launcher: Settings now has
+  General/Advanced tabs, masked password entry, rejection/cancel feedback, and a
+  restart-required preference for both enabling and disabling. Controller startup
+  snapshots activation; existing Test/Pilot Mode behavior remains unchanged.
+- [x] Moved the canonical publisher and its mocked tests into Studio; the private
+  CLI delegates to the package. Standard Windows/Linux module discovery includes
+  developer tools. GUI workers call the API directly with cooperative cancellation,
+  bounded requests and preserved owner/write checks. Removed the obsolete launcher
+  and its local desktop shortcut. No service deployment or new upload was needed.
+- [x] Read-only bundled acceptance: PublisherService verified `zcm58` access with the
+  frozen flag set, without a helper checkout or child Python process. Existing demo
+  retry verified two items in ten GET requests with all writes blocked and no catalog
+  change. This is a source-level frozen-path check, not an actual installed launch.
+- [x] Bundled-mode verification: Library focused 153 passed/one Windows symlink skip;
+  packaging focused 181 passed; docs focused 9 passed; GUI Ruff/compilation passed.
+  Canonical publisher coverage now has 34 mocked tests in Studio, and the private
+  CLI wrapper test passed. Final precommit passed Ruff, compilation, full source mypy
+  (192 files), repository audits and 1,869 unit tests, with 8 Windows symlink skips
+  (`--basetemp=build/dm7`). The initial audit caught migrated CLI print statements;
+  structured JSON output and logged CLI errors now follow Studio's conventions.
+  Registered Qt cases cover General/Advanced geometry, password rejection/cancel,
+  Enter activation, restart gating in source/frozen paths and ordinary settings.
 - [ ] Visible Qt/manual GUI acceptance: Library, creation and developer publishing
   geometry/keyboard/lifecycle cases registered; execution remains unrun.
 - [ ] New installer, second physical machine, Linux native keyring, display scaling,

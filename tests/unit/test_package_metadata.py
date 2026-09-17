@@ -167,6 +167,8 @@ def test_studio_spec_collects_secure_library_backend_for_linux_only(
     developer_modules = [
         "fpvs_studio.developer",
         "fpvs_studio.developer.library_publisher",
+        "fpvs_studio.developer.catalog_publisher",
+        "fpvs_studio.developer.mode",
         "fpvs_studio.gui.library_publisher_controller",
         "fpvs_studio.gui.library_publisher_dialog",
     ]
@@ -187,9 +189,9 @@ def test_studio_spec_collects_secure_library_backend_for_linux_only(
 
     def analysis(_entries: list[str], **kwargs: object) -> SimpleNamespace:
         if "hiddenimports" in kwargs:
-            assert "fpvs_studio.developer" in kwargs["excludes"]
-            assert "fpvs_studio.gui.library_publisher_controller" in kwargs["excludes"]
-            assert "fpvs_studio.gui.library_publisher_dialog" in kwargs["excludes"]
+            assert "fpvs_studio.developer" not in kwargs["excludes"]
+            assert "fpvs_studio.gui.library_publisher_controller" not in kwargs["excludes"]
+            assert "fpvs_studio.gui.library_publisher_dialog" not in kwargs["excludes"]
         return SimpleNamespace(pure=[], scripts=[], binaries=[], zipfiles=[], datas=kwargs["datas"])
 
     result = runpy.run_path(
@@ -206,7 +208,7 @@ def test_studio_spec_collects_secure_library_backend_for_linux_only(
     assert (("keyring", "metadata") in result["datas"]) == (platform == "linux")
     assert (("SecretStorage", "metadata") in result["datas"]) == (platform == "linux")
     assert "fpvs_studio.library.client" in result["hiddenimports"]
-    assert not set(developer_modules).intersection(result["hiddenimports"])
+    assert set(developer_modules).issubset(result["hiddenimports"])
 
 
 def test_bundled_open_sans_font_and_license_are_packaged_assets() -> None:

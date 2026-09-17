@@ -20,7 +20,6 @@ from fpvs_studio.developer import library_publisher as publisher
 from fpvs_studio.developer.library_publisher import (
     PublicationRequest,
     PublisherCancelled,
-    PublisherConfig,
     PublisherError,
     PublisherService,
 )
@@ -68,17 +67,12 @@ def report():
 
 @pytest.fixture
 def configured(tmp_path, monkeypatch):
-    root = tmp_path / "service"
-    (root / "scripts").mkdir(parents=True)
-    (root / ".git").mkdir()
-    (root / "scripts" / "publish-catalog.py").write_text("# Test fixture, never executed\n")
     # Core validates an imported copy inside this workspace; keep that nested path
     # independent of pytest's potentially long repository-local basetemp.
     with tempfile.TemporaryDirectory(prefix="dp-", dir=tempfile.gettempdir()) as name:
         temporary = Path(name)
         monkeypatch.setattr(publisher.tempfile, "gettempdir", lambda: str(temporary))
-        monkeypatch.setenv(publisher.PUBLISHER_ENV, str(root))
-        yield PublisherService(PublisherConfig(root)), temporary
+        yield PublisherService(), temporary
 
 
 @pytest.fixture
@@ -91,40 +85,11 @@ def prepared(configured, tmp_path, monkeypatch):
 
     monkeypatch.setattr(publisher, "prepare_library_bundle", fake_prepare)
     result = service.prepare(tmp_path / "source", request())
-    return service, result, temporary
-
-
-def test_configuration_is_hidden_without_opt_in_or_in_frozen_build(configured, monkeypatch):
-    service, _ = configured
-    assert publisher.get_publisher_config() == service.config
-    monkeypatch.delenv(publisher.PUBLISHER_ENV)
-    assert publisher.get_publisher_config() is None
-    monkeypatch.setenv(publisher.PUBLISHER_ENV, str(service.config.repository_root))
-    monkeypatch.setattr(publisher.sys, "frozen", True, raising=False)
-    assert publisher.get_publisher_config() is None
-    with pytest.raises(PublisherError, match="source checkout"):
-        PublisherService(service.config)
-
-
-def test_configuration_is_hidden_outside_a_source_checkout(configured, monkeypatch, tmp_path):
+    monkeypatch.setattr(publisher, "_api", lambda cancel: None)
     monkeypatch.setattr(
-        publisher, "__file__", str(tmp_path / "src/fpvs_studio/developer/module.py")
+        publisher.catalog_publisher, "load_prepared", lambda directory, **kwargs: [result]
     )
-    assert publisher.get_publisher_config() is None
-
-
-@pytest.mark.parametrize("configured_value", ["relative/path", "C:/missing/publisher-checkout"])
-def test_invalid_explicit_configuration_is_actionable(configured, monkeypatch, configured_value):
-    monkeypatch.setenv(publisher.PUBLISHER_ENV, configured_value)
-    with pytest.raises(PublisherError, match="FPVS_LIBRARY_PUBLISHER_REPO"):
-        publisher.get_publisher_config()
-
-
-def test_missing_publisher_script_never_falls_back(configured):
-    service, _ = configured
-    (service.config.repository_root / "scripts/publish-catalog.py").unlink()
-    with pytest.raises(PublisherError, match="publish-catalog.py"):
-        publisher.get_publisher_config()
+    return service, result, temporary
 
 
 @pytest.mark.parametrize(
@@ -148,52 +113,17 @@ def test_publication_request_validates_before_preparation(changes):
         valid.title = "changed"
 
 
-def test_access_checks_remote_before_running_the_private_script(configured, monkeypatch):
+def test_access_uses_bundled_owner_check_without_a_checkout(configured, monkeypatch):
     service, _ = configured
-    calls = []
+    sentinel = object()
+    monkeypatch.setattr(publisher, "_api", lambda cancel: sentinel)
 
-    def run(command, root, **kwargs):
-        calls.append(command)
-        if command[0] == "git":
-            return b"git@github.com:zcm58/FPVS-Studio-Library.git\n"
-        return json.dumps(
-            dict(login="zcm58", repository=publisher.REPOSITORY, can_publish=True)
-        ).encode()
+    def access(api):
+        assert api is sentinel
+        return dict(login="zcm58", repository=publisher.REPOSITORY, can_publish=True)
 
-    monkeypatch.setattr(publisher, "_run", run)
-    assert service.check_access().repository == publisher.REPOSITORY
-    assert calls[0] == [
-        "git",
-        "-C",
-        str(service.config.repository_root),
-        "remote",
-        "get-url",
-        "origin",
-    ]
-    assert calls[1] == [
-        publisher.sys.executable,
-        str(service.config.repository_root / "scripts/publish-catalog.py"),
-        "--check-access",
-    ]
-
-
-@pytest.mark.parametrize(
-    "remote",
-    [
-        b"https://github.com/other/library.git",
-        b"https://user:PRIVATE@github.com/zcm58/FPVS-Studio-Library.git",
-    ],
-)
-def test_wrong_or_credential_bearing_remote_prevents_helper_execution(
-    configured, monkeypatch, remote
-):
-    service, _ = configured
-    calls = []
-    monkeypatch.setattr(publisher, "_run", lambda *args, **kwargs: calls.append(args[0]) or remote)
-    with pytest.raises(PublisherError, match="origin") as error:
-        service.check_access()
-    assert len(calls) == 1
-    assert "PRIVATE" not in str(error.value)
+    monkeypatch.setattr(publisher.catalog_publisher, "check_access", access)
+    assert service.check_access().login == "zcm58"
 
 
 def test_preparation_preserves_source_and_writes_reviewed_metadata(
@@ -252,24 +182,21 @@ def test_failed_or_canceled_preparation_removes_only_generated_workspace(
 
 def test_publish_failure_retains_exact_preparation_for_retry(prepared, monkeypatch):
     service, publication, _ = prepared
-    monkeypatch.setattr(service, "_validated_root", lambda cancel: service.config.repository_root)
     calls = []
 
-    def run(command, *args, **kwargs):
-        calls.append(command)
+    def run(api, tag, bundles, **kwargs):
+        calls.append((tag, bundles))
         if len(calls) == 1:
             raise PublisherError("Publishing was not confirmed.")
-        return json.dumps(
-            dict(
-                login="zcm58",
-                repository=publisher.REPOSITORY,
-                can_publish=True,
-                tag=publication.request.release_tag,
-                catalog_commit="a" * 40,
-            )
-        ).encode()
+        return dict(
+            login="zcm58",
+            repository=publisher.REPOSITORY,
+            can_publish=True,
+            tag=publication.request.release_tag,
+            catalog_commit="a" * 40,
+        )
 
-    monkeypatch.setattr(publisher, "_run", run)
+    monkeypatch.setattr(publisher.catalog_publisher, "publish_online", run)
     before = publication.bundle_path.read_bytes(), publication.metadata_path.read_bytes()
     with pytest.raises(PublisherError, match="Remote state may have changed"):
         service.publish(publication)
@@ -277,7 +204,7 @@ def test_publish_failure_retains_exact_preparation_for_retry(prepared, monkeypat
     result = service.publish(publication)
     assert result.catalog_commit == "a" * 40
     assert calls[0] == calls[1]
-    assert "--publish-online" in calls[1]
+    assert calls[1][0] == publication.request.release_tag
     assert publication.directory.exists()
 
 
@@ -293,7 +220,6 @@ def test_publish_failure_retains_exact_preparation_for_retry(prepared, monkeypat
 )
 def test_invalid_publish_confirmation_cannot_claim_success(prepared, monkeypatch, changes):
     service, publication, _ = prepared
-    monkeypatch.setattr(service, "_validated_root", lambda cancel: service.config.repository_root)
     result = dict(
         login="zcm58",
         repository=publisher.REPOSITORY,
@@ -302,7 +228,7 @@ def test_invalid_publish_confirmation_cannot_claim_success(prepared, monkeypatch
         catalog_commit="a" * 40,
     )
     monkeypatch.setattr(
-        publisher, "_run", lambda *args, **kwargs: json.dumps({**result, **changes}).encode()
+        publisher.catalog_publisher, "publish_online", lambda *args, **kwargs: {**result, **changes}
     )
     with pytest.raises(PublisherError, match="Remote state may have changed"):
         service.publish(publication)
@@ -313,7 +239,11 @@ def test_invalid_publish_confirmation_cannot_claim_success(prepared, monkeypatch
 def test_changed_prepared_bytes_cannot_be_published(prepared, monkeypatch, target):
     service, publication, _ = prepared
     getattr(publication, target).write_bytes(b"changed")
-    monkeypatch.setattr(publisher, "_run", lambda *args, **kwargs: pytest.fail("must not execute"))
+    monkeypatch.setattr(
+        publisher.catalog_publisher,
+        "publish_online",
+        lambda *args, **kwargs: pytest.fail("must not execute"),
+    )
     with pytest.raises(PublisherError, match="changed"):
         service.publish(publication)
 
@@ -332,7 +262,11 @@ def test_discard_refuses_foreign_directory_or_added_user_file(prepared, tmp_path
 def test_unreviewed_extra_metadata_prevents_publishing(prepared, monkeypatch):
     service, publication, _ = prepared
     (publication.directory / "another-item.json").write_text("{}")
-    monkeypatch.setattr(publisher, "_run", lambda *args, **kwargs: pytest.fail("must not execute"))
+    monkeypatch.setattr(
+        publisher.catalog_publisher,
+        "publish_online",
+        lambda *args, **kwargs: pytest.fail("must not execute"),
+    )
     with pytest.raises(PublisherError, match="unrecognized"):
         service.publish(publication)
 
@@ -341,156 +275,44 @@ def test_precancel_publish_retains_payload_without_execution(prepared, monkeypat
     service, publication, _ = prepared
     cancel = Event()
     cancel.set()
-    monkeypatch.setattr(publisher, "_run", lambda *args, **kwargs: pytest.fail("must not execute"))
+    monkeypatch.setattr(
+        publisher.catalog_publisher,
+        "publish_online",
+        lambda *args, **kwargs: pytest.fail("must not execute"),
+    )
     with pytest.raises(PublisherCancelled, match="Remote state may have changed"):
         service.publish(publication, cancel_event=cancel)
     assert publication.bundle_path.exists()
 
 
-class FakeProcess:
-    def __init__(self, *, returncode=0):
-        self.returncode = returncode
-        self.terminated = False
-        self.waited = False
-
-    def poll(self):
-        return self.returncode
-
-    def terminate(self):
-        self.terminated = True
-        self.returncode = -15
-
-    def wait(self, timeout):
-        self.waited = True
-        return self.returncode
-
-
-def test_subprocess_uses_hidden_shell_free_launch_without_tokens(configured, monkeypatch):
-    service, _ = configured
-    handles = []
-    monkeypatch.setenv("GH_TOKEN", "PRIVATE-TOKEN")
-
-    def popen(command, **kwargs):
-        assert "PRIVATE-TOKEN" not in repr(command)
-        assert kwargs["shell"] is False
-        assert kwargs["stdin"] == subprocess.DEVNULL
-        assert kwargs["creationflags"] == getattr(subprocess, "CREATE_NO_WINDOW", 0)
-        assert kwargs["cwd"] == service.config.repository_root
-        assert "env" not in kwargs  # Credentials stay inherited; adapter never reads them.
-        handles.extend([kwargs["stdout"], kwargs["stderr"]])
-        kwargs["stdout"].write(b'{"ok":true}')
-        kwargs["stdout"].flush()
-        return FakeProcess()
-
-    monkeypatch.setattr(publisher.subprocess, "Popen", popen)
-    assert (
-        publisher._run(
-            ["python", "script.py"], service.config.repository_root, cancel_event=None, timeout=30
-        )
-        == b'{"ok":true}'
-    )
-    assert all(handle.closed for handle in handles)
-
-
-@pytest.mark.parametrize("mode", ["stdout", "stderr", "cancel", "timeout", "nonzero"])
-def test_subprocess_failures_are_bounded_sanitized_and_cleanup(configured, monkeypatch, mode):
-    service, _ = configured
-    cancel = Event()
-    process = FakeProcess(returncode=1 if mode == "nonzero" else None)
-    handles = []
-
-    def popen(command, **kwargs):
-        handles.extend([kwargs["stdout"], kwargs["stderr"]])
-        if mode in ("stdout", "stderr"):
-            kwargs[mode].write(b"x" * (publisher._OUTPUT_LIMIT + 1))
-            kwargs[mode].flush()
-        if mode == "cancel":
-            cancel.set()
-        if mode == "nonzero":
-            kwargs["stderr"].write(b"PRIVATE-TOKEN")
-            kwargs["stderr"].flush()
-        return process
-
-    monkeypatch.setattr(publisher.subprocess, "Popen", popen)
-    with pytest.raises(PublisherError, match="Remote state may have changed") as error:
-        publisher._run(
-            ["python", "script.py"],
-            service.config.repository_root,
-            cancel_event=cancel,
-            timeout=0 if mode == "timeout" else 30,
-            publishing=True,
-        )
-    assert "PRIVATE-TOKEN" not in str(error.value)
-    assert mode == "nonzero" or (process.terminated and process.waited)
-    assert all(handle.closed for handle in handles)
-
-
 @pytest.mark.parametrize(
-    "output, expected",
+    "exception",
     [
-        (
-            b'{"error":"This version already has different bytes. Choose a new version."}',
-            "Choose a new version",
-        ),
-        (b"PRIVATE-TOKEN", "Publisher access check failed"),
-        (b'{"error":42}', "Publisher access check failed"),
-        (b'["PRIVATE-TOKEN"]', "Publisher access check failed"),
-        (json.dumps({"error": "x" * 1025}).encode(), "Publisher access check failed"),
-        (b'{"error":"PRIVATE-TOKEN\\n"}', "Publisher access check failed"),
+        OSError("PRIVATE-TOKEN"),
+        ValueError("PRIVATE-TOKEN"),
+        subprocess.TimeoutExpired("PRIVATE-TOKEN", 30),
     ],
 )
-def test_only_bounded_structured_helper_errors_reach_the_gui(
-    configured, monkeypatch, output, expected
-):
-    service, _ = configured
-
-    def popen(command, **kwargs):
-        kwargs["stdout"].write(output)
-        kwargs["stdout"].flush()
-        kwargs["stderr"].write(b"PRIVATE-TOKEN")
-        kwargs["stderr"].flush()
-        return FakeProcess(returncode=1)
-
-    monkeypatch.setattr(publisher.subprocess, "Popen", popen)
-    with pytest.raises(PublisherError, match=expected) as error:
-        publisher._run(
-            ["python", "script.py"],
-            service.config.repository_root,
-            cancel_event=None,
-            timeout=30,
-        )
-    assert "PRIVATE-TOKEN" not in str(error.value)
-
-
-def test_invalid_json_after_publish_preserves_uncertain_result(prepared, monkeypatch):
+def test_external_errors_never_expose_credentials(prepared, monkeypatch, exception):
     service, publication, _ = prepared
-    monkeypatch.setattr(service, "_validated_root", lambda cancel: service.config.repository_root)
-    monkeypatch.setattr(publisher, "_run", lambda *args, **kwargs: b"not JSON")
-    with pytest.raises(PublisherError, match="Remote state may have changed"):
+
+    def fail(*args, **kwargs):
+        raise exception
+
+    monkeypatch.setattr(publisher.catalog_publisher, "publish_online", fail)
+    with pytest.raises(PublisherError, match="Remote state may have changed") as error:
         service.publish(publication)
-    assert publication.directory.exists()
+    assert "PRIVATE-TOKEN" not in str(error.value)
+    assert publication.bundle_path.exists()
 
 
-def test_stubborn_process_is_killed_and_reaped():
-    class StubbornProcess(FakeProcess):
-        def __init__(self):
-            super().__init__(returncode=None)
-            self.killed = False
-            self.wait_calls = 0
+def test_api_cancellation_retains_exact_preparation(prepared, monkeypatch):
+    service, publication, _ = prepared
 
-        def terminate(self):
-            self.terminated = True
+    def fail(*args, **kwargs):
+        raise publisher.catalog_publisher.CatalogCancelled("canceled")
 
-        def wait(self, timeout):
-            self.wait_calls += 1
-            if not self.killed:
-                raise subprocess.TimeoutExpired("safe-helper", timeout)
-            self.returncode = -9
-            return self.returncode
-
-        def kill(self):
-            self.killed = True
-
-    process = StubbornProcess()
-    publisher._stop(process)
-    assert process.terminated and process.killed and process.wait_calls == 2
+    monkeypatch.setattr(publisher.catalog_publisher, "publish_online", fail)
+    with pytest.raises(PublisherCancelled, match="Remote state may have changed"):
+        service.publish(publication)
+    assert publication.bundle_path.exists()

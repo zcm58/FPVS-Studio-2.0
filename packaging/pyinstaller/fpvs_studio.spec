@@ -71,16 +71,7 @@ def _is_host_icu_binary(binary: tuple[str, str, str]) -> bool:
     return name == "icuuc.dll" or (name.startswith("icudt") and name.endswith(".dll"))
 
 
-developer_only_modules = (
-    "fpvs_studio.developer",
-    "fpvs_studio.gui.library_publisher_controller",
-    "fpvs_studio.gui.library_publisher_dialog",
-)
-hiddenimports = [
-    module for module in _collect_submodules("fpvs_studio")
-    if not any(module == prefix or module.startswith(prefix + ".")
-               for prefix in developer_only_modules)
-]
+hiddenimports = _collect_submodules("fpvs_studio")
 hiddenimports += _collect_submodules("serial")
 hiddenimports += _collect_submodules("psychopy.visual")
 if sys.platform.startswith("linux"):
@@ -149,7 +140,6 @@ a = Analysis(
         "PyQt5",
         "PyQt6",
         "PySide2",
-        *developer_only_modules,
     ],
     noarchive=False,
 )

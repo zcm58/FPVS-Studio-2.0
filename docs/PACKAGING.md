@@ -25,11 +25,13 @@ and its package metadata only on Linux. A supported installed Linux environment 
 provide an unlocked desktop keyring; verify enrollment/disconnect in the packaged app.
 No plaintext credential fallback is allowed. See [Experiment Library](EXPERIMENT_LIBRARY.md).
 
-The Library publisher is available only through the explicit source developer launcher.
-The Studio spec filters `fpvs_studio.developer` and the two `gui.library_publisher_*`
-modules from discovery and excludes them from analysis. Public GUI wiring checks the
-frozen/source gate before lazy imports. The private publishing script and maintainer
-credentials are never bundled. Normal installer users retain Library download access.
+Standard builds include `fpvs_studio.developer` and the publishing GUI modules.
+Settings > Advanced controls the default-off developer preference; a password is
+required to enable it and both enabling/disabling require restart. Updates retain the
+existing per-user QSettings store. The bundled publisher uses app-owned workers and
+needs no external Python or service checkout. Publishing still requires the owner's
+noninteractive Git credentials (or explicit GH_TOKEN); credentials are never bundled.
+See [developer publishing](EXPERIMENT_LIBRARY.md#developer-publishing-in-studio).
 
 For release builds, compare native-library source paths in PyInstaller's
 `Analysis-00.toc` with the authenticated published baseline. Exclude unrelated

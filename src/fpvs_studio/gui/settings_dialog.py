@@ -17,7 +17,9 @@ from PySide6.QtWidgets import (
     QGridLayout,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QPushButton,
+    QTabWidget,
     QVBoxLayout,
     QWidget,
 )
@@ -53,6 +55,9 @@ class AppSettingsDialog(QDialog):
         attentional_blink_pilot_mode_available: bool = False,
         attentional_blink_pilot_mode_enabled: bool = False,
         on_attentional_blink_pilot_mode_changed: Callable[[bool], None] | None = None,
+        developer_mode_active: bool = False,
+        developer_mode_requested: bool = False,
+        on_developer_mode_changed: Callable[[bool, str], bool] | None = None,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
@@ -61,8 +66,12 @@ class AppSettingsDialog(QDialog):
         self.setModal(True)
         minimum_height = 610 if experiment_test_mode_available else 520
         self.setMinimumSize(700, 680 if attentional_blink_pilot_mode_available else minimum_height)
+        self.setMinimumHeight(self.minimumHeight() + 40)
         self.resize(self.minimumSize())
 
+        self._developer_mode_active = developer_mode_active
+        self._developer_mode_requested = developer_mode_requested
+        self._on_developer_mode_changed = on_developer_mode_changed
         self._on_show_root_folder_setup = on_show_root_folder_setup
         self._on_manage_condition_templates = on_manage_condition_templates
         self._on_show_library = on_show_library
@@ -245,13 +254,108 @@ class AppSettingsDialog(QDialog):
         layout.setContentsMargins(24, 20, 24, 20)
         layout.setSpacing(12)
         layout.addWidget(self.header)
-        layout.addWidget(workspace)
-        layout.addWidget(participant)
+        self.tabs = QTabWidget(self)
+        self.tabs.setObjectName("settings_tabs")
+        general = QWidget(self.tabs)
+        general_layout = QVBoxLayout(general)
+        general_layout.setContentsMargins(0, 8, 0, 0)
+        general_layout.setSpacing(12)
+        general_layout.addWidget(workspace)
+        general_layout.addWidget(participant)
         if developer is not None:
-            layout.addWidget(developer)
-        layout.addStretch(1)
+            general_layout.addWidget(developer)
+        general_layout.addStretch(1)
+        self.tabs.addTab(general, "General")
+        advanced = QWidget(self.tabs)
+        advanced_layout = QVBoxLayout(advanced)
+        advanced_layout.setContentsMargins(16, 16, 16, 16)
+        advanced_layout.setSpacing(12)
+        self.developer_mode_checkbox = QCheckBox("Enable developer mode", advanced)
+        self.developer_mode_checkbox.setObjectName("developer_mode_checkbox")
+        self.developer_mode_checkbox.setChecked(developer_mode_requested)
+        self.developer_mode_checkbox.setEnabled(on_developer_mode_changed is not None)
+        self.developer_mode_checkbox.toggled.connect(self._toggle_developer_mode)
+        advanced_layout.addWidget(self.developer_mode_checkbox)
+        help_label = QLabel(
+            "Enables developer tools, including publishing experiments to the Library. "
+            "Changes take effect after restarting FPVS Studio. "
+            "Publishing also requires your GitHub account's write access.", advanced,
+        )
+        help_label.setWordWrap(True)
+        advanced_layout.addWidget(help_label)
+        self.developer_password_row = QWidget(advanced)
+        password_layout = QHBoxLayout(self.developer_password_row)
+        password_layout.setContentsMargins(0, 0, 0, 0)
+        self.developer_password = QLineEdit(self.developer_password_row)
+        self.developer_password.setObjectName("developer_password")
+        self.developer_password.setEchoMode(QLineEdit.EchoMode.Password)
+        self.developer_password.setPlaceholderText("Developer password")
+        self.developer_password.setAccessibleName("Developer password")
+        password_layout.addWidget(self.developer_password, 1)
+        self.developer_enable_button = QPushButton("Enable", self.developer_password_row)
+        self.developer_enable_button.setAutoDefault(False)
+        mark_secondary_action(self.developer_enable_button)
+        self.developer_enable_button.clicked.connect(self._enable_developer_mode)
+        password_layout.addWidget(self.developer_enable_button)
+        self.developer_cancel_button = QPushButton("Cancel", self.developer_password_row)
+        self.developer_cancel_button.setAutoDefault(False)
+        mark_secondary_action(self.developer_cancel_button)
+        self.developer_cancel_button.clicked.connect(self._cancel_developer_unlock)
+        password_layout.addWidget(self.developer_cancel_button)
+        self.developer_password_row.hide()
+        advanced_layout.addWidget(self.developer_password_row)
+        self.developer_status = QLabel(advanced)
+        self.developer_status.setObjectName("developer_mode_status")
+        self.developer_status.setWordWrap(True)
+        advanced_layout.addWidget(self.developer_status)
+        advanced_layout.addStretch(1)
+        self.tabs.addTab(advanced, "Advanced")
+        self._refresh_developer_status()
+        layout.addWidget(self.tabs, 1)
         layout.addLayout(footer_layout)
         apply_dialog_theme(self)
+
+    def _refresh_developer_status(self) -> None:
+        if self._developer_mode_requested != self._developer_mode_active:
+            state = "enable" if self._developer_mode_requested else "disable"
+            self.developer_status.setText(
+                f"Restart required. Close and reopen FPVS Studio to {state} developer mode."
+            )
+        else:
+            state = "enabled" if self._developer_mode_active else "disabled"
+            self.developer_status.setText(f"Developer mode is {state} for this session.")
+
+    def _toggle_developer_mode(self, enabled: bool) -> None:
+        self.developer_password.clear()
+        self.developer_password_row.setVisible(enabled and not self._developer_mode_requested)
+        self.developer_enable_button.setDefault(enabled and not self._developer_mode_requested)
+        if enabled and not self._developer_mode_requested:
+            self.developer_status.setText("Enter the developer password to enable this setting.")
+            self.developer_password.setFocus()
+        elif not enabled:
+            if self._on_developer_mode_changed is not None:
+                self._on_developer_mode_changed(False, "")
+            self._developer_mode_requested = False
+            self._refresh_developer_status()
+
+    def _enable_developer_mode(self) -> None:
+        if not self.developer_password_row.isVisible():
+            return
+        password = self.developer_password.text()
+        self.developer_password.clear()
+        if self._on_developer_mode_changed is None or not self._on_developer_mode_changed(
+            True, password
+        ):
+            self.developer_status.setText("Incorrect developer password. Try again or cancel.")
+            self.developer_password.setFocus()
+            return
+        self._developer_mode_requested = True
+        self.developer_enable_button.setDefault(False)
+        self.developer_password_row.hide()
+        self._refresh_developer_status()
+
+    def _cancel_developer_unlock(self) -> None:
+        self.developer_mode_checkbox.setChecked(False)
 
     def _show_root_folder_setup(self) -> None:
         if self._on_show_root_folder_setup is None:

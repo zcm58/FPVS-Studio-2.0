@@ -133,31 +133,28 @@ No updater staging directory, installed program file or downloaded script partic
 
 ## Developer publishing in Studio
 
-The source-only developer launcher exposes **File > Export > Publish to Experiment
-Library...** for an open experiment. Normal launches omit this action. Standard
-PyInstaller builds exclude the developer adapter and publishing dialog/controller;
-setting the launcher environment variable cannot enable them in an installed app.
+Developer tools ship in both source and installed builds and default to disabled.
+Open **Settings > Advanced**, select **Enable developer mode**, enter `developer`,
+and select **Enable**. Close and reopen FPVS Studio before the publishing action
+appears under **File > Export**. Disabling also requires a restart. The Advanced tab
+shows the saved preference and whether a restart is pending; incorrect passwords or
+canceling an unlock never enable it. No automatic restart interrupts unsaved work.
 
-On the configured maintainer PC, use the **FPVS Studio Developer** shortcut or run:
+`developer/enabled` is a per-user app preference in the existing QSettings store. The
+controller captures it once at startup, so project switches cannot activate a pending
+change. It persists through normal updates without becoming project/bundle data.
+No developer launcher, source checkout, external publisher script, or Python install
+is needed by the packaged GUI. The old environment-variable opt-in is no longer used.
 
-```powershell
-./scripts/start_library_developer.ps1
-```
-
-The launcher defaults to the private checkout at `build/experiment-library-service`.
-Use `-LibraryRepository 'X:\path\FPVS-Studio-Library'` for an explicit alternate checkout.
-`-Check` checks the local setup without opening Qt or publishing. The opt-in
-`FPVS_LIBRARY_PUBLISHER_REPO` variable applies only to the launched process; no global
-developer setting, project field or download invitation enables publishing.
-
-Visibility is a convenience boundary. Before uploading, the private helper checks the
-authenticated GitHub user is `zcm58`, the repository is the expected private Library,
-and the account has write access. It uses the maintainer's existing Git credential
-helper or explicitly configured `GH_TOKEN`. Studio does not collect, store or log a
-GitHub token; the helper runs locally and keeps its credential in memory. The download
-service and its read-only GitHub App cannot publish, and lab invitation codes grant
-download access only. Anyone with control of the maintainer's OS account or GitHub
-credentials has that account's authority; hiding a menu is not an authentication system.
+The requested password is a convenience gate, not GitHub authorization. Before uploading,
+the bundled publisher verifies GitHub user `zcm58`, the fixed private repository,
+and write permission. It obtains a credential from the maintainer's existing
+noninteractive Git credential helper (Git must be installed and signed in on a publishing
+machine), or an explicitly configured `GH_TOKEN`. No GitHub credential is bundled,
+saved in settings, collected by the developer-password field or written into projects.
+The download service's read-only App and researcher invitation/device credentials
+cannot publish. A different account knowing the developer password gains the interface,
+not repository write permission.
 
 1. Open the experiment and select **Publish to Experiment Library...**. Wait for the
    account check, then enter its Library title, stable study ID, version, description
@@ -174,12 +171,15 @@ credentials has that account's authority; hiding a menu is not an authentication
 Keep the same study ID and increase the version for a revised experiment. Fields lock
 after preparation so Publish cannot send different metadata from the reviewed bundle.
 Failed publications retain their prepared files and can retry the same payload.
+Cancellation checks run between requests and during hashing/upload reads. An active
+network request may take its timeout (30 seconds, or 120 seconds for uploads) to return;
+credential lookup has a 30-second timeout. App shutdown waits for the worker.
 Stopping an upload does not guarantee GitHub rolled back requests already received;
 Studio reports an uncertain outcome and preserves the bundle for recovery. Reopen the
 publisher to retry an in-session prepared publication. Do not regenerate different
 bytes under an already used version or release tag.
 
-The helper fetches the current online catalog, merges existing experiments, and updates
+The bundled publisher fetches the current online catalog, merges existing experiments, and updates
 it using GitHub's file SHA. A concurrent change causes a bounded refetch/merge retry;
 conflicting changes to the same published version are refused. GUI publication does
 not modify the service checkout's working files. Run `git pull --ff-only origin main`
@@ -246,7 +246,9 @@ Library service repository.
 
 ### Uploading and making an experiment visible
 
-The maintainer needs write access to the private
+For command-line publishing, use the Studio Python environment; the private repository
+script delegates to `fpvs_studio.developer.catalog_publisher`. The GUI does not need
+this checkout. The maintainer needs write access to the private
 [`FPVS-Studio-Library` repository](https://github.com/zcm58/FPVS-Studio-Library).
 On this development computer its checkout is `build/experiment-library-service` inside
 the Studio checkout. On another computer, clone that private repository and adjust
@@ -331,9 +333,9 @@ with controlled clients/importers; it does not access the live service.
 | Welcome with four project actions | 760×520 | 1120×720 |
 | Create Project, all three pages | 760×500 | 800×500 |
 | Developer publisher | 860×680 | 940×760 |
-| Settings with Library access | 700×564 | Minimum |
-| Settings with local Test Mode | 700×654 | Minimum |
-| Settings with AB Pilot Mode | 700×724 | Minimum |
+| Settings with Library access | 700×604 | Minimum |
+| Settings with local Test Mode | 700×694 | Minimum |
+| Settings with AB Pilot Mode | 700×764 | Minimum |
 
 In an approved visible session, check both themes, display scaling, long titles and
 descriptions, empty/error/disconnected/busy states, keyboard navigation, and all controls
@@ -343,7 +345,9 @@ bundle import/export remains available independently of the Library.
 Check **View > Experiment Library...**, both Create Project choices, and Back from
 details to category to source choice. Confirm a Library selection does not create a
 blank project and cancelling either path leaves existing projects unchanged.
-In the developer launch, check access denial, long descriptions/inventories, Prepare,
+In both source and installed builds, verify Advanced defaults off, wrong-password and
+cancel handling, persistence across updates, and enable/disable requiring restart.
+With developer mode active, check access denial, long descriptions/inventories, Prepare,
 review, final Publish, immutable retry, cancellation and close/app quit while work is
 active. Confirm normal launches and packaged builds omit the publishing surface. Tests
 mock remote writes; a real new experiment is published only by an explicit Publish.

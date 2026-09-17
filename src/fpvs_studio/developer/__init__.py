@@ -1,1 +1,1 @@
-"""Explicit source-checkout maintainer tools, excluded from installed Studio builds."""
+"""Bundled developer tools enabled through restart-scoped app preferences."""

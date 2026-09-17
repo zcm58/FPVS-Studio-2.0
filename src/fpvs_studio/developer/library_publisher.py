@@ -1,17 +1,14 @@
-"""Source-only adapter to the private repository's authoritative publisher script."""
+"""Prepared publication ownership and worker-facing access to the bundled publisher."""
 
 from __future__ import annotations
 
 import hashlib
 import json
-import os
 import re
 import shutil
 import stat
 import subprocess
-import sys
 import tempfile
-import time
 from dataclasses import dataclass
 from pathlib import Path
 from threading import Event
@@ -20,14 +17,10 @@ from packaging.version import InvalidVersion, Version
 
 from fpvs_studio.core.library_publish import LibraryBundlePreparation, prepare_library_bundle
 from fpvs_studio.core.project_bundle import ProjectBundleCancelled, ProjectBundleError
+from fpvs_studio.developer import catalog_publisher
 
 REPOSITORY = "zcm58/FPVS-Studio-Library"
-PUBLISHER_ENV = "FPVS_LIBRARY_PUBLISHER_REPO"
-_SCRIPT = Path("scripts/publish-catalog.py")
-_OUTPUT_LIMIT = 64 * 1024
 _REPORT_LIMIT = 16 * 1024 * 1024
-_ACCESS_TIMEOUT = 60.0
-_PUBLISH_TIMEOUT = 30 * 60.0
 
 
 class PublisherError(Exception):
@@ -36,11 +29,6 @@ class PublisherError(Exception):
 
 class PublisherCancelled(PublisherError):
     """An operation was canceled; publication may already have changed remote state."""
-
-
-@dataclass(frozen=True)
-class PublisherConfig:
-    repository_root: Path
 
 
 @dataclass(frozen=True)
@@ -107,48 +95,11 @@ class PublicationResult:
     catalog_commit: str
 
 
-def _source_checkout() -> bool:
-    root = Path(__file__).resolve().parents[3]
-    return (
-        not getattr(sys, "frozen", False)
-        and (root / "pyproject.toml").is_file()
-        and (root / ".git").exists()
-    )
-
-
 def _no_links(path: Path) -> None:
     for part in (*reversed(path.parents), path):
         info = part.lstat()
         if stat.S_ISLNK(info.st_mode) or getattr(info, "st_file_attributes", 0) & 0x400:
             raise PublisherError("Publisher paths cannot contain links or Windows reparse points.")
-
-
-def _validate_config(config: PublisherConfig) -> Path:
-    root = config.repository_root
-    if not root.is_absolute():
-        raise PublisherError(f"{PUBLISHER_ENV} must be an absolute private repository path.")
-    try:
-        _no_links(root)
-        _no_links(root / _SCRIPT)
-        if not root.is_dir() or not (root / ".git").exists() or not (root / _SCRIPT).is_file():
-            raise PublisherError("The configured publisher must be a Library service Git checkout.")
-    except OSError:
-        raise PublisherError(
-            f"Set {PUBLISHER_ENV} to the private Library checkout containing {_SCRIPT.as_posix()}."
-        ) from None
-    return root
-
-
-def get_publisher_config() -> PublisherConfig | None:
-    """Cheap source gate and local path validation only; never run a process on the GUI thread."""
-    if not _source_checkout():
-        return None
-    configured = os.environ.get(PUBLISHER_ENV, "").strip()
-    if not configured:
-        return None
-    config = PublisherConfig(Path(configured))
-    _validate_config(config)
-    return config
 
 
 def _check_cancel(cancel_event: Event | None, *, publishing: bool = False) -> None:
@@ -161,16 +112,6 @@ def _check_cancel(cancel_event: Event | None, *, publishing: bool = False) -> No
         )
 
 
-def _stop(process: subprocess.Popen[bytes]) -> None:
-    if process.poll() is None:
-        process.terminate()
-        try:
-            process.wait(timeout=2)
-        except subprocess.TimeoutExpired:
-            process.kill()
-            process.wait(timeout=2)
-
-
 def _uncertain(message: str) -> str:
     return (
         message + " Remote state may have changed; prepared files are retained for an exact retry."
@@ -179,105 +120,17 @@ def _uncertain(message: str) -> str:
     )
 
 
-def _run(
-    command: list[str],
-    root: Path,
-    *,
-    cancel_event: Event | None,
-    timeout: float,
-    publishing: bool = False,
-) -> bytes:
-    """Capture helper output in temporary handles; no pipes, reader threads or raw logging."""
-    _check_cancel(cancel_event, publishing=publishing)
-    with tempfile.TemporaryFile() as stdout, tempfile.TemporaryFile() as stderr:
-        try:
-            process = subprocess.Popen(
-                command,
-                cwd=root,
-                shell=False,
-                stdin=subprocess.DEVNULL,
-                stdout=stdout,
-                stderr=stderr,
-                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-            )
-        except OSError:
-            raise PublisherError(
-                "Could not start the publisher. Check Python, Git and the configured checkout."
-            ) from None
-        deadline = time.monotonic() + timeout
-        pause = Event()
-        try:
-            while True:
-                _check_cancel(cancel_event, publishing=publishing)
-                if any(
-                    os.fstat(handle.fileno()).st_size > _OUTPUT_LIMIT for handle in (stdout, stderr)
-                ):
-                    raise PublisherError("Publisher output exceeded its safe limit.")
-                if time.monotonic() >= deadline:
-                    raise PublisherError(
-                        "Publisher timed out; retry after checking repository access."
-                    )
-                if process.poll() is not None:
-                    break
-                pause.wait(0.05)
-            _check_cancel(cancel_event, publishing=publishing)
-            stdout.seek(0)
-            output = stdout.read(_OUTPUT_LIMIT + 1)
-            if len(output) > _OUTPUT_LIMIT:
-                raise PublisherError("Publisher output exceeded its safe limit.")
-            if process.returncode != 0:
-                raise PublisherError(
-                    _failure_message(
-                        output,
-                        "Publishing was not confirmed."
-                        if publishing
-                        else "Publisher access check failed. Configure noninteractive "
-                        "GitHub credentials with private repository write access.",
-                    )
-                )
-            return output
-        except PublisherCancelled:
-            raise
-        except (PublisherError, OSError) as error:
-            message = (
-                str(error) if isinstance(error, PublisherError) else "Publisher storage failed."
-            )
-            raise PublisherError(_uncertain(message) if publishing else message) from None
-        finally:
-            try:
-                _stop(process)
-            except (OSError, subprocess.TimeoutExpired):
-                message = "The publisher helper could not be stopped. Check it before retrying."
-                raise PublisherError(_uncertain(message) if publishing else message) from None
+def _api(cancel_event: Event | None) -> catalog_publisher.GitHubPublisher:
+    _check_cancel(cancel_event)
+    token = catalog_publisher.maintainer_token()
+    _check_cancel(cancel_event)
+    return catalog_publisher.GitHubPublisher(token, cancel_event=cancel_event)
 
 
-def _failure_message(raw: bytes, fallback: str) -> str:
-    """Only the private helper's bounded error contract may become UI text."""
-    try:
-        result = json.loads(raw)
-        message = result.get("error") if isinstance(result, dict) else None
-        if (
-            isinstance(message, str)
-            and 0 < len(message) <= 1024
-            and message.strip()
-            and all(ord(character) >= 32 for character in message)
-        ):
-            return message
-    except (ValueError, UnicodeError, RecursionError):
-        pass
-    return fallback
-
-
-def _json_result(raw: bytes) -> dict[str, object]:
-    try:
-        result = json.loads(raw)
-        if not isinstance(result, dict):
-            raise ValueError("not an object")
-        return result
-    except (ValueError, UnicodeError, RecursionError):
-        raise PublisherError(
-            "The publisher returned invalid confirmation data. No success was confirmed."
-        ) from None
+def _publisher_error(error: Exception) -> str:
+    if isinstance(error, catalog_publisher.PublishError):
+        return " ".join(str(error).split())[:1024]
+    return "Publishing could not finish. Check GitHub credentials, network and file access."
 
 
 def _metadata_bytes(
@@ -300,42 +153,9 @@ def _metadata_bytes(
 
 
 class PublisherService:
-    def __init__(self, config: PublisherConfig) -> None:
-        if not _source_checkout():
-            raise PublisherError(
-                "Developer publishing is available only from a Studio source checkout."
-            )
-        self.config = config
-        _validate_config(config)
+    def __init__(self) -> None:
         self._prepared: dict[Path, PreparedPublication] = {}
         self._directories: dict[Path, tuple[int, int]] = {}
-
-    def _validated_root(self, cancel_event: Event | None) -> Path:
-        root = _validate_config(self.config)
-        remote = _run(
-            ["git", "-C", str(root), "remote", "get-url", "origin"],
-            root,
-            cancel_event=cancel_event,
-            timeout=_ACCESS_TIMEOUT,
-        )
-        try:
-            url = remote.decode("utf-8").strip().lower()
-        except UnicodeError:
-            raise PublisherError("The publisher checkout has an invalid GitHub remote.") from None
-        expected = REPOSITORY.lower()
-        allowed = {
-            f"https://github.com/{expected}",
-            f"https://github.com/{expected}.git",
-            f"git@github.com:{expected}",
-            f"git@github.com:{expected}.git",
-            f"ssh://git@github.com/{expected}",
-            f"ssh://git@github.com/{expected}.git",
-        }
-        if url not in allowed:
-            raise PublisherError(
-                f"Publisher origin must point to the private {REPOSITORY} repository."
-            )
-        return root
 
     @staticmethod
     def _access(result: dict[str, object]) -> PublisherAccess:
@@ -350,14 +170,17 @@ class PublisherService:
         return PublisherAccess(login="zcm58", repository=REPOSITORY)
 
     def check_access(self, *, cancel_event: Event | None = None) -> PublisherAccess:
-        root = self._validated_root(cancel_event)
-        raw = _run(
-            [sys.executable, str(root / _SCRIPT), "--check-access"],
-            root,
-            cancel_event=cancel_event,
-            timeout=_ACCESS_TIMEOUT,
-        )
-        return self._access(_json_result(raw))
+        try:
+            return self._access(catalog_publisher.check_access(_api(cancel_event)))
+        except catalog_publisher.CatalogCancelled:
+            raise PublisherCancelled("Publisher access check canceled.") from None
+        except (
+            catalog_publisher.PublishError,
+            OSError,
+            ValueError,
+            subprocess.TimeoutExpired,
+        ) as error:
+            raise PublisherError(_publisher_error(error)) from None
 
     def prepare(
         self,
@@ -442,25 +265,12 @@ class PublisherService:
     ) -> PublicationResult:
         _check_cancel(cancel_event, publishing=True)
         self._verify_prepared(prepared, cancel_event)
-        root = self._validated_root(cancel_event)
         tag = prepared.request.release_tag
         try:
-            raw = _run(
-                [
-                    sys.executable,
-                    str(root / _SCRIPT),
-                    "--publish-online",
-                    "--tag",
-                    tag,
-                    "--bundle-directory",
-                    str(prepared.directory),
-                ],
-                root,
-                cancel_event=cancel_event,
-                timeout=_PUBLISH_TIMEOUT,
-                publishing=True,
-            )
-            result = _json_result(raw)
+            bundles = catalog_publisher.load_prepared(prepared.directory, cancel_event=cancel_event)
+            api = _api(cancel_event)
+            _check_cancel(cancel_event, publishing=True)
+            result = catalog_publisher.publish_online(api, tag, bundles, cancel_event=cancel_event)
             self._access(result)
             commit = result.get("catalog_commit")
             if (
@@ -470,8 +280,17 @@ class PublisherService:
             ):
                 raise PublisherError("GitHub catalog publication was not confirmed.")
             return PublicationResult(REPOSITORY, tag, commit)
+        except catalog_publisher.CatalogCancelled:
+            raise PublisherCancelled(_uncertain("Publishing stopped.")) from None
         except PublisherCancelled:
             raise
+        except (
+            catalog_publisher.PublishError,
+            OSError,
+            ValueError,
+            subprocess.TimeoutExpired,
+        ) as error:
+            raise PublisherError(_uncertain(_publisher_error(error))) from None
         except PublisherError as error:
             raise PublisherError(_uncertain(str(error))) from None
 

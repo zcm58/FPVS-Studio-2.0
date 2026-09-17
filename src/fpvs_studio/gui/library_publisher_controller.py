@@ -1,4 +1,4 @@
-"""Application-owned jobs for the source-only Experiment Library publisher."""
+"""Application-owned jobs for the bundled Experiment Library publisher."""
 
 from __future__ import annotations
 
@@ -317,5 +317,5 @@ class LibraryPublisherController(QObject):
             return str(error)
         _LOGGER.error("Developer Library publishing failed (%s)", type(error).__name__)
         return (
-            "Publishing could not finish. Check the developer repository configuration and retry."
+            "Publishing could not finish. Check GitHub access and retry."
         )

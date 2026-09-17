@@ -18,7 +18,6 @@ from fpvs_studio.developer.library_publisher import (
     PublicationResult,
     PublisherAccess,
     PublisherCancelled,
-    PublisherConfig,
     PublisherError,
 )
 from fpvs_studio.gui import controller as studio_module
@@ -402,32 +401,15 @@ def test_edit_after_uncertain_publish_retains_original_and_requires_new_version(
     assert not any(call[0] == "discard" for call in service.calls)
 
 
-@pytest.mark.parametrize("frozen,configured", [(True, True), (False, False)])
-def test_normal_publisher_gate_does_not_call_developer_code(
-    monkeypatch, frozen, configured
-) -> None:
-    from fpvs_studio.developer import library_publisher as backend
-
-    monkeypatch.setattr(studio_module.sys, "frozen", frozen, raising=False)
-    monkeypatch.setenv("FPVS_LIBRARY_PUBLISHER_REPO", "configured" if configured else "")
-    monkeypatch.setattr(
-        backend,
-        "get_publisher_config",
-        lambda: pytest.fail("Normal/frozen application must not load developer publishing"),
-    )
-    assert studio_module._library_publisher_config() is None
-
-
 @pytest.mark.parametrize("enabled", [False, True])
-def test_publisher_export_menu_is_source_only_and_saves_at_prepare(
+def test_publisher_export_menu_follows_startup_mode_and_saves_at_prepare(
     controller,
     qtbot,
     tmp_path,
     monkeypatch,
     enabled,
 ) -> None:
-    config = PublisherConfig(tmp_path) if enabled else None
-    monkeypatch.setattr(studio_module, "_library_publisher_config", lambda: config)
+    controller._developer_mode.active = enabled
     document, window = open_created_project(controller, qtbot, tmp_path)
     action = window.publish_library_action
     if not enabled:
@@ -468,9 +450,7 @@ def test_publisher_export_action_respects_existing_guards(
     monkeypatch,
     busy,
 ) -> None:
-    monkeypatch.setattr(
-        studio_module, "_library_publisher_config", lambda: PublisherConfig(tmp_path)
-    )
+    controller._developer_mode.active = True
     _document, window = open_created_project(controller, qtbot, tmp_path)
     seen = []
     window._on_request_library_publish = lambda: seen.append(True)
@@ -485,25 +465,6 @@ def test_publisher_export_action_respects_existing_guards(
     window.publish_library_action.trigger()
     assert seen == []
     assert not controller._can_publish_from(window)
-
-
-def test_publisher_changed_checkout_error_is_nonblocking(
-    controller, qtbot, tmp_path, monkeypatch
-) -> None:
-    from fpvs_studio.developer import library_publisher as backend
-
-    monkeypatch.setattr(
-        studio_module, "_library_publisher_config", lambda: PublisherConfig(tmp_path)
-    )
-    _document, window = open_created_project(controller, qtbot, tmp_path)
-
-    def removed_checkout(config):
-        raise PublisherError("The configured checkout is no longer available.")
-
-    monkeypatch.setattr(backend, "PublisherService", removed_checkout)
-    window.publish_library_action.trigger()
-    assert "no longer available" in window.statusBar().currentMessage()
-    assert controller._library_publisher_controller is None
 
 
 def test_prepare_failure_stays_editable_and_can_retry(qapp, qtbot, monkeypatch, tmp_path) -> None:
@@ -521,13 +482,28 @@ def test_prepare_failure_stays_editable_and_can_retry(qapp, qtbot, monkeypatch, 
     assert not any(call[0] == "publish" for call in service.calls)
 
 
-def test_invalid_optional_publisher_config_does_not_block_project(
-    controller, qtbot, tmp_path, monkeypatch,
-) -> None:
-    def invalid_config():
-        raise PublisherError("Invalid configured developer checkout.")
+@pytest.mark.parametrize("frozen", [False, True])
+def test_pending_developer_setting_does_not_enable_until_restart(
+    controller, qtbot, tmp_path, monkeypatch, frozen
+):
+    from fpvs_studio.developer.mode import DeveloperMode
 
-    monkeypatch.setattr(studio_module, "_library_publisher_config", invalid_config)
+    monkeypatch.setattr(studio_module.sys, "frozen", frozen, raising=False)
+    controller._settings.remove("developer/enabled")
+    controller._developer_mode = DeveloperMode(controller._settings)
+    assert controller._developer_mode.configure(True, "developer")
     _document, window = open_created_project(controller, qtbot, tmp_path)
     assert window.publish_library_action is None
-    assert "Developer publishing is unavailable" in window.statusBar().currentMessage()
+    controller._developer_mode = DeveloperMode(controller._settings)
+    controller._open_document(window.document)
+    qtbot.addWidget(controller.main_window)
+    assert controller.main_window.publish_library_action is not None
+    assert controller._developer_mode.configure(False)
+    controller._open_document(controller.main_window.document)
+    qtbot.addWidget(controller.main_window)
+    assert controller.main_window.publish_library_action is not None
+    controller._developer_mode = DeveloperMode(controller._settings)
+    controller._open_document(controller.main_window.document)
+    qtbot.addWidget(controller.main_window)
+    assert controller.main_window.publish_library_action is None
+    controller._settings.remove("developer/enabled")

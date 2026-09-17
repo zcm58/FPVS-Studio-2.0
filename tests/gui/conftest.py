@@ -42,6 +42,7 @@ def _clear_fpvs_root_setting() -> None:
         "FPVS Studio",
         "FPVS Studio",
     )
+    settings.remove("developer/enabled")
     settings.remove("paths/fpvs_root_dir")
     settings.remove(controller_module._BIOSEMI_RECORDING_CONFIRMATION_KEY)
     settings.remove(controller_module._SOPHIA_MODE_TICKER_KEY)
@@ -52,6 +53,7 @@ def _clear_fpvs_root_setting() -> None:
     settings.remove(controller_module._RECENT_PROJECT_ROOTS_KEY)
     settings.sync()
     yield
+    settings.remove("developer/enabled")
     settings.remove("paths/fpvs_root_dir")
     settings.remove(controller_module._BIOSEMI_RECORDING_CONFIRMATION_KEY)
     settings.remove(controller_module._SOPHIA_MODE_TICKER_KEY)

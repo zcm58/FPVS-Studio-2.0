@@ -70,7 +70,7 @@ acceptance path are in [Experiment Library](EXPERIMENT_LIBRARY.md).
 
 Library minimum/default sizes are `900x640` / `1040x760`. Welcome has four project
 actions at `760x520` minimum and `1120x720` default. Settings with Library access uses
-`700x564`, `700x654` with Test Mode, or `700x724` with AB Pilot Mode; these are also
+`700x604`, `700x694` with Test Mode, or `700x764` with AB Pilot Mode; these are also
 its default sizes. Check long content and every connection/progress state in both
 themes. Registered Qt coverage remains opt-in in an approved visible environment.
 
@@ -549,14 +549,19 @@ and materialization still surface invalid or inconsistent source details before 
 launch. Word stimulus rows are shown for readiness context but cannot use image-folder
 import, inspection, or materialization actions.
 
-The source-only developer launcher adds **File > Export > Publish to Experiment
-Library...** for the current experiment. Its modal surface checks maintainer access,
-saves pending edits before preparing, shows a clean-bundle review, and publishes only
-when the user selects the final action. App-owned workers prepare, upload and commit
+**Settings > Advanced > Enable developer mode** accepts the developer password and
+saves an app preference. Close and reopen Studio to apply enabling or disabling; no
+project switch activates a pending change. General retains the ordinary workspace,
+participant, Test Mode and AB Pilot Mode controls. The Advanced tab provides masked
+password entry, inline incorrect-password feedback, Cancel and restart-required status.
+
+With developer mode active, **File > Export > Publish to Experiment Library...** checks
+maintainer access, saves pending edits before preparing, shows a clean-bundle review,
+and publishes only on the final action. App-owned workers prepare, upload and commit
 the online catalog; failures preserve the exact payload for retry. Minimum/default
-sizes are `860x680` / `940x760`. Normal launches omit the action, and standard packaged
-builds exclude its modules. See [developer publishing](EXPERIMENT_LIBRARY.md#developer-publishing-in-studio)
-for authorization, cancellation, recovery and the launcher.
+sizes are `860x680` / `940x760`. Both source and standard packaged builds include the
+feature. See [developer publishing](EXPERIMENT_LIBRARY.md#developer-publishing-in-studio)
+for authorization, cancellation and recovery.
 
 The top-level menu order is `File`, `View`, `Tools`. The `File` menu groups
 manage-projects, `Import` and `Export` submenus, settings, and help/update actions with
@@ -969,4 +974,5 @@ Pilot uses null triggers, skips Sophia recording confirmation and connected-disp
 refresh/graphics verification, and preserves fullscreen playback and compiled timing.
 T1/T2 accuracy includes pilots; Bursts over time marks them Pilot. Hover the participant
 cell for demographics; Export Excel includes flat demographics and Pilot columns.
-The Settings minimum/default is 700 x 680 when Pilot is available (otherwise unchanged).
+Settings with Pilot and Library access uses 700 x 764 minimum/default; the tab bar
+adds 40 pixels to the previous single-page layout.
