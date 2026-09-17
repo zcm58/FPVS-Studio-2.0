@@ -187,6 +187,7 @@ def test_creation_names_categories_and_hides_injected_image_pair_templates(qtbot
     dialog.setPalette(QPalette(QColor("#202124" if dark else "#f4f7fb")))
     dialog.resize(760, 500)
     dialog.show()
+    dialog.manual_button.click()
     QApplication.processEvents()
     assert dialog.category_buttons[ExperimentCategory.FPVS].text() == "Standard FPVS\nComing soon"
     assert not dialog.category_buttons[ExperimentCategory.FPVS].isEnabled()

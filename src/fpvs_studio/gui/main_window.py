@@ -571,7 +571,6 @@ class StudioMainWindow(QMainWindow):
         self.tools_menu = self.menuBar().addMenu("Tools")
         self.menuBar().setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.file_menu.addAction(self.manage_projects_action)
-        self.file_menu.addAction(self.library_action)
         self.file_menu.addSeparator()
         self.import_menu = QMenu("Import", self.file_menu)
         self.import_menu.setObjectName("file_import_menu")
@@ -593,6 +592,8 @@ class StudioMainWindow(QMainWindow):
         self.file_menu.addAction(self.request_feature_action)
         self.file_menu.addAction(self.tutorials_action)
         self.file_menu.addAction(self.about_action)
+        self.view_menu.addAction(self.library_action)
+        self.view_menu.addSeparator()
         self.view_menu.addAction(self.fixation_cross_data_action)
         self.tools_menu.addAction(self.image_resizer_action)
 

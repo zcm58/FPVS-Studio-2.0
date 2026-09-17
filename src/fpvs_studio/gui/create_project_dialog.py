@@ -43,7 +43,7 @@ from fpvs_studio.gui.components import (
 
 
 class CreateProjectDialog(QDialog):
-    """Choose a category before collecting project details and compatible templates."""
+    """Choose Library setup or collect a manual category and project details."""
 
     def __init__(
         self,
@@ -60,9 +60,40 @@ class CreateProjectDialog(QDialog):
         self._on_manage_templates = on_manage_templates
         self._experiment_category: ExperimentCategory | None = None
         self._condition_profiles: list[ConditionTemplateProfile] = []
+        self.from_library = False
 
         self.category_stack = QStackedWidget(self)
         self.category_stack.setObjectName("create_project_pages")
+        self.source_page = QWidget(self)
+        source_layout = QVBoxLayout(self.source_page)
+        source_layout.setContentsMargins(8, 8, 8, 8)
+        source_layout.setSpacing(20)
+        source_layout.addWidget(DialogHeader(
+            "Start a new experiment",
+            "Build an experiment yourself or download a complete project from your lab.",
+            parent=self.source_page,
+        ))
+        source_layout.addStretch(1)
+        source_choices = QHBoxLayout()
+        source_choices.setSpacing(16)
+        self.manual_button = QPushButton("Create manually", self.source_page)
+        self.manual_button.setObjectName("create_experiment_manually")
+        self.manual_button.setToolTip("Choose an experiment category, name and starting template.")
+        self.manual_button.clicked.connect(self._show_category_page)
+        self.library_button = QPushButton("Download from library", self.source_page)
+        self.library_button.setObjectName("create_experiment_from_library")
+        self.library_button.setToolTip(
+            "Browse complete experiments and set up an editable local copy."
+        )
+        self.library_button.clicked.connect(self._choose_library)
+        for button in (self.manual_button, self.library_button):
+            button.setMinimumHeight(96)
+            button.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+            mark_secondary_action(button)
+            source_choices.addWidget(button, 1)
+        source_layout.addLayout(source_choices)
+        source_layout.addStretch(1)
+        self.category_stack.addWidget(self.source_page)
         self.category_page = QWidget(self)
         category_layout = QVBoxLayout(self.category_page)
         category_layout.setContentsMargins(8, 8, 8, 8)
@@ -171,7 +202,7 @@ class CreateProjectDialog(QDialog):
         self.button_box.accepted.connect(self.accept)
         self.button_box.rejected.connect(self.reject)
         self.back_button = QPushButton("Back", self)
-        self.back_button.clicked.connect(self._show_category_page)
+        self.back_button.clicked.connect(self._go_back)
         self.back_button.setVisible(False)
         ok_button = self.button_box.button(QDialogButtonBox.StandardButton.Ok)
         assert ok_button is not None
@@ -243,7 +274,7 @@ class CreateProjectDialog(QDialog):
 
     @property
     def experiment_category(self) -> ExperimentCategory:
-        """Return the explicit category choice after the first setup page."""
+        """Return the explicit category selected for manual setup."""
         if self._experiment_category is None:
             raise ValueError("Choose an experiment category first.")
         return self._experiment_category
@@ -252,19 +283,37 @@ class CreateProjectDialog(QDialog):
         """Select one available category without creating or changing any project."""
         if category == ExperimentCategory.FPVS:
             return
+        if self.category_stack.currentWidget() is self.source_page:
+            self._show_category_page()
+        preserve_selection = category == self._experiment_category
         self._experiment_category = category
         for value, button in self.category_buttons.items():
             button.setChecked(value == category)
             button.setProperty("primaryActionRole", "true" if value == category else "false")
             refresh_widget_style(button)
         self.category_summary_label.setText(experiment_category_label(category))
-        self.set_condition_template_profiles(self._condition_profiles, preserve_selection=False)
+        self.set_condition_template_profiles(
+            self._condition_profiles, preserve_selection=preserve_selection,
+        )
         self._update_project_name_validation()
 
     def _show_category_page(self) -> None:
+        self.from_library = False
         self.category_stack.setCurrentWidget(self.category_page)
-        self.back_button.setVisible(False)
         self._update_project_name_validation()
+
+    def _go_back(self) -> None:
+        previous = (
+            self.category_page
+            if self.category_stack.currentWidget() is self.details_page
+            else self.source_page
+        )
+        self.category_stack.setCurrentWidget(previous)
+        self._update_project_name_validation()
+
+    def _choose_library(self) -> None:
+        self.from_library = True
+        super().accept()
 
     @property
     def project_name(self) -> str:
@@ -357,6 +406,8 @@ class CreateProjectDialog(QDialog):
     def accept(self) -> None:
         """Validate the dialog fields before closing."""
 
+        if self.category_stack.currentWidget() is self.source_page:
+            return
         if self.category_stack.currentWidget() is self.category_page:
             if self._experiment_category is None:
                 return
@@ -434,7 +485,10 @@ class CreateProjectDialog(QDialog):
         self._update_folder_hint()
         ok_button = self.button_box.button(QDialogButtonBox.StandardButton.Ok)
         if ok_button is not None:
+            choosing_source = self.category_stack.currentWidget() is self.source_page
             choosing_category = self.category_stack.currentWidget() is self.category_page
+            self.back_button.setVisible(not choosing_source)
+            ok_button.setVisible(not choosing_source)
             ok_button.setText("Continue" if choosing_category else "Create Experiment")
             ok_button.setEnabled(
                 self._experiment_category is not None if choosing_category else error is None

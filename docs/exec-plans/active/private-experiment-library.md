@@ -123,7 +123,10 @@ this feature must work with today's recording checks.
 
 ### Phase 1: Whole projects
 
-1. Open **Experiment Library...** from Welcome or File.
+1. Open **View > Experiment Library...** or **Create Project > Download from library**.
+   Create Project first offers manual creation or Library download; manual creation
+   continues through category and project details. A Library selection creates no blank
+   project, and Back retains a manual draft.
 2. On first use, enter the invitation code and an optional friendly computer label.
    Later opens use the locally protected device credential. Settings offers connection
    status and **Disconnect this computer**. No Git, CLI, or GitHub login is required.
@@ -379,7 +382,7 @@ need a new ProjectFile schema or a change to the existing bundle envelope.
   presentation, paths, task assets, and preprocessing manifest services.
 - `gui/library_dialog.py` and `gui/library_controller.py`: view state and
   orchestration through the existing app-owned job coordinator. Register only small
-  entry-point hooks in Welcome, File, and Settings in Phase 1; add Conditions in Phase 2.
+  entry-point hooks in View, Create Project, and Settings in Phase 1; add Conditions in Phase 2.
 - Network staging belongs in a bounded OS-local Library cache, separate from updater
   cache, install folders, and editable projects. Start with one transfer at a time,
   discard partials on failure/cancel, and verify hash/size before import. Keep at most one
@@ -512,7 +515,7 @@ is included in the first delivery.
   with `PYTEST_ADDOPTS=--basetemp=build/plib16` passed all 146 tests in 18.10 seconds.
   This establishes the short-path baseline, not a fix for long-path import behavior.
 - [x] Final docs focused passed (9 harness-doc tests); diff and plan links reviewed.
-- [x] Phase 1 source implementation: experiment-only Library in Welcome/File/Settings,
+- [x] Phase 1 source implementation: experiment-only Library in View/Create Project/Settings,
   OS-protected device credentials, verified bounded download cache, asynchronous manifest
   review, existing new-project setup, cooperative cancellation, and clean publishing.
 - [x] Cleanup: archived six detached/unused worktrees with verified history bundles and
@@ -532,7 +535,18 @@ is included in the first delivery.
   1,795 passed, 8 environment skips, and one sandbox-denied Windows named-pipe test;
   the named-pipe test passed on its isolated unsandboxed rerun (1,796 passing total).
   Service: 15 Node tests, 12 publisher tests, and Wrangler dry-build passed.
-- [ ] Visible Qt/manual GUI acceptance: 28 Library cases registered, execution unrun.
+- [x] September 17 navigation follow-up: replaced the Welcome Library button and File
+  entry with View > Experiment Library and a manual-or-Library source page in Create
+  Project. Preserved draft navigation and import guards; documented the maintainer's
+  preparation, metadata, release upload and catalog publication steps.
+- [x] Navigation follow-up verification: GUI focused, docs focused (9 tests), Ruff,
+  compilation, full source mypy and repository audits passed. Full non-Qt suite passed
+  with 1,796 tests and 8 Windows symlink skips using `--basetemp=build/n2`. The initial
+  longer `build/nav17-a51d86` root caused four publishing-validation failures; all nine
+  publisher tests passed with `build/n1` before the full short-path rerun. This remains
+  a Windows path-length limitation, not a long-path fix. Added source-choice, Back,
+  keyboard activation, cancellation, Welcome/Home routing and View-menu Qt coverage.
+- [ ] Visible Qt/manual GUI acceptance: Library and creation cases registered, execution unrun.
 - [ ] New installer, second physical machine, Linux native keyring, display scaling,
   representative large archive, and physical recording acceptance remain unrun.
 - [ ] Phase 2 individual-condition implementation remains deferred.

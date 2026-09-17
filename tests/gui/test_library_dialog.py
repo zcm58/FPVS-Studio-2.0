@@ -15,6 +15,7 @@ from fpvs_studio.core.project_bundle import ProjectBundleCancelled, ProjectBundl
 from fpvs_studio.core.project_service import create_project
 from fpvs_studio.gui import library_controller as library_module
 from fpvs_studio.gui.bundle_import_dialog import BundleImportProgressDialog
+from fpvs_studio.gui.create_project_dialog import CreateProjectDialog
 from fpvs_studio.gui.library_controller import LibraryController
 from fpvs_studio.gui.library_dialog import LibraryDialog
 from fpvs_studio.gui.settings_dialog import AppSettingsDialog
@@ -383,8 +384,8 @@ def test_library_review_uses_prepared_manifest_without_gui_file_io(
     assert manifest is prepared and seen == [prepared]
 
 
-@pytest.mark.parametrize("size", [(760, 600), (1120, 720)])
-def test_welcome_library_entry_layout_and_busy(qtbot, size) -> None:
+@pytest.mark.parametrize("size", [(760, 520), (1120, 720)])
+def test_welcome_four_actions_layout_and_busy(qtbot, size) -> None:
     welcome = WelcomeWindow()
     qtbot.addWidget(welcome)
     welcome.resize(*size)
@@ -392,14 +393,47 @@ def test_welcome_library_entry_layout_and_busy(qtbot, size) -> None:
     QApplication.processEvents()
     assert (welcome.width(), welcome.height()) == size
     assert_visible_children_within_parent(welcome)
-    with qtbot.waitSignal(welcome.library_requested):
-        welcome.library_button.click()
+    assert welcome.findChild(QPushButton, "welcome_experiment_library") is None
+    with qtbot.waitSignal(welcome.create_requested):
+        welcome.create_button.click()
     welcome.set_import_busy(True)
-    assert not welcome.library_button.isEnabled()
+    assert not welcome.create_button.isEnabled()
     welcome.set_import_busy(False)
+    assert welcome.create_button.isEnabled()
 
 
-def test_settings_library_entry_and_main_file_action(controller, qtbot, tmp_path) -> None:
+@pytest.mark.parametrize("entry", ["welcome", "existing_project"])
+@pytest.mark.parametrize("download", [False, True])
+def test_new_experiment_library_route_and_cancel(
+    controller, qtbot, tmp_path, monkeypatch, entry, download
+) -> None:
+    called = []
+    if entry == "existing_project":
+        _document, window = open_created_project(controller, qtbot, tmp_path)
+        launch = window.home_page.new_project_button.click
+    else:
+        launch = controller.welcome_window.create_button.click
+
+    def choose_source(dialog: CreateProjectDialog) -> int:
+        qtbot.addWidget(dialog)
+        assert dialog.category_stack.currentWidget() is dialog.source_page
+        if download:
+            dialog.library_button.click()
+        else:
+            dialog.reject()
+        return int(dialog.result())
+
+    monkeypatch.setattr(CreateProjectDialog, "exec", choose_source)
+    monkeypatch.setattr(controller, "show_library", lambda: called.append("library"))
+    monkeypatch.setattr(
+        controller, "create_project",
+        lambda *args, **kwargs: pytest.fail("This route must not scaffold an empty project"),
+    )
+    launch()
+    assert called == (["library"] if download else [])
+
+
+def test_settings_library_entry_and_main_view_action(controller, qtbot, tmp_path) -> None:
     called = []
     dialog = AppSettingsDialog(
         fpvs_root_dir=tmp_path,
@@ -415,6 +449,9 @@ def test_settings_library_entry_and_main_file_action(controller, qtbot, tmp_path
     assert called == [True]
     assert not dialog.isVisible()
     _document, window = open_created_project(controller, qtbot, tmp_path)
+    assert window.library_action not in window.file_menu.actions()
+    assert window.view_menu.actions()[0] is window.library_action
+    assert window.view_menu.actions()[1].isSeparator()
     window._on_request_library = lambda: called.append(True)
     window.library_action.trigger()
     assert called == [True, True]

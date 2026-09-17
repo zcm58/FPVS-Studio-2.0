@@ -55,8 +55,8 @@ configurations remain blocking for timing-sensitive playback.
 
 ### Experiment Library
 
-Welcome's **Experiment Library** and **File > Experiment Library...** open the same
-whole-project browser. **Settings > Experiment Library / Manage Access...** exposes its
+**View > Experiment Library...** and **Create Project > Download from library** open
+the same whole-project browser. **Settings > Experiment Library / Manage Access...** exposes its
 lab-code enrollment and device-disconnect controls. Search/select an experiment, then
 **Download and set up experiment** verifies its archive and reuses the normal
 destination review, new-folder import and display-settings flow. Imported projects are
@@ -68,8 +68,8 @@ Library jobs use the application-owned coordinator. Close/Escape/cancel drain tr
 until review/import completion. Details, access/storage boundaries and the full visible
 acceptance path are in [Experiment Library](EXPERIMENT_LIBRARY.md).
 
-Library minimum/default sizes are `900x640` / `1040x760`. Welcome now fits its fifth
-action at `760x600` minimum and `1120x720` default. Settings with Library access uses
+Library minimum/default sizes are `900x640` / `1040x760`. Welcome has four project
+actions at `760x520` minimum and `1120x720` default. Settings with Library access uses
 `700x564`, `700x654` with Test Mode, or `700x724` with AB Pilot Mode; these are also
 its default sizes. Check long content and every connection/progress state in both
 themes. Registered Qt coverage remains opt-in in an approved visible environment.
@@ -86,20 +86,22 @@ The welcome window provides:
 - `Create Project`
 - `Import New Project`
 - `Open Existing Project`
-- `Experiment Library`
 - `Change Root Folder...`
 
 `Change Root Folder...` reopens the guided root-folder setup and native folder picker
 without requiring a project to be open. Canceling either step leaves the configured
 root unchanged.
 
-Creating an experiment first asks only for its category: FPVS Oddball Paradigm or
-Attentional-Blink. Standard FPVS is a disabled Coming soon choice. Name, parent folder and
-compatible template follow on a second page. Category is locked when the experiment
+Creating an experiment first offers **Create manually** or **Download from library**.
+Downloading opens the Library without creating a blank project. Manual creation next
+asks for a category: FPVS Oddball Paradigm, Attentional-Blink, or Cognitive Load FPVS.
+Standard FPVS is a disabled Coming soon choice. Name, parent folder and compatible
+template follow on the details page. Back returns through category to the source choice
+while retaining the manual draft. Category is locked when the experiment
 is created; changing it requires a new experiment. See
 [Experiment categories](EXPERIMENT_CATEGORIES.md) for persistence and legacy separation.
 
-The creation dialog has a `760x500` minimum and `800x500` default size. Its second
+The creation dialog has a `760x500` minimum and `800x500` default size. Its final
 page, **Name your experiment**, groups Project Name, Experiment Template and Save
 Location vertically. The selected template's description stays visible below its
 selector; changing the template or returning from Manage Templates refreshes it.
@@ -549,8 +551,9 @@ import, inspection, or materialization actions.
 
 The top-level menu order is `File`, `View`, `Tools`. The `File` menu groups
 manage-projects, `Import` and `Export` submenus, settings, and help/update actions with
-native separators. `View` offers `T1 and T2 Accuracy...` for Attentional Blink and
-`Fixation Task Accuracy...` for other categories; the action is disabled
+native separators. `View` starts with `Experiment Library...`, then a separator and
+`T1 and T2 Accuracy...` for Attentional Blink or `Fixation Task Accuracy...` for other
+categories. These actions are disabled
 with other project actions during bundle processing. `Import > Project Bundle...` first
 shows a review dialog with bundle identity, manifest file count/size, the receiving
 project path, collision-safe naming guidance, and included/excluded content. Confirming

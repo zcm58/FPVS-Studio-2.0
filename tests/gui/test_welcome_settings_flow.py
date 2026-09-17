@@ -2146,11 +2146,12 @@ def test_open_existing_project_populates_gui_correctly(
     assert project_root_value.text().endswith("opened-project")
 
 
-def test_creation_first_page_requires_explicit_category_and_hides_details(qtbot) -> None:
+def test_creation_manual_category_page_requires_explicit_category_and_hides_details(qtbot) -> None:
     dialog = CreateProjectDialog(condition_template_profiles=built_in_condition_template_profiles())
     qtbot.addWidget(dialog)
     dialog.resize(760, 390)
     dialog.show()
+    dialog.manual_button.click()
     QApplication.processEvents()
     ok_button = dialog.button_box.button(QDialogButtonBox.StandardButton.Ok)
     assert ok_button is not None and not ok_button.isEnabled()

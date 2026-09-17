@@ -7,7 +7,11 @@ The Library never runs an experiment automatically or updates an existing experi
 
 ## Desktop workflow
 
-Open **Experiment Library** from Welcome or **File > Experiment Library...**.
+Open **View > Experiment Library...** in the main window, or choose **Create Project >
+Download from library** from Welcome or Home. Create Project also offers **Create
+manually**, followed by the existing category, template, name and folder steps. Back
+returns through those steps without discarding a manual draft. Selecting the Library
+opens the browser without creating an empty project; cancelling leaves projects intact.
 **Settings > Experiment Library / Manage Access...** opens the same connection controls.
 Enter the lab invitation code and a friendly computer name, then select **Connect**.
 No GitHub account, Git installation, installer, administrator rights, or application
@@ -135,14 +139,31 @@ copy, validates the clean export by importing it, and reports SHA-256 and invent
 The source remains unchanged; existing outputs are never overwritten.
 
 ```powershell
-.\.venv3.10\Scripts\python scripts/prepare_library_bundle.py "X:\Studies\Example" "build\library-review\example-1.0.0.fpvsbundle" --dry-run
-.\.venv3.10\Scripts\python scripts/prepare_library_bundle.py "X:\Studies\Example" "build\library-review\example-1.0.0.fpvsbundle" --metadata "build\library-review\example-1.0.0.json"
+# Run from the FPVS Studio source checkout. Replace the source and study values.
+$studioRepo = (Get-Location).Path
+$python = Join-Path $studioRepo '.venv3.10\Scripts\python.exe'
+$sourceProject = 'X:\Studies\Example'
+$itemId = 'example-study'
+$version = '1.0.0'
+$tag = "$itemId-v$version"
+$bundleDir = Join-Path $studioRepo "build\library-publications\$itemId-$version"
+$bundle = Join-Path $bundleDir "$itemId-$version.fpvsbundle"
+$metadata = Join-Path $bundleDir "$itemId-$version.json"
+
+& $python scripts\prepare_library_bundle.py $sourceProject $bundle --dry-run
+if ($LASTEXITCODE -ne 0) { throw 'Bundle review failed.' }
+
+# Review the inventory above before creating the publication files.
+& $python scripts\prepare_library_bundle.py $sourceProject $bundle --metadata $metadata
+if ($LASTEXITCODE -ne 0) { throw 'Bundle preparation failed.' }
 ```
 
 `--minimum-studio-version X.Y.Z` overrides the current Studio version in review metadata.
 `--dry-run` still compiles, imports and hashes a temporary bundle, then removes it; it
 does not write the output bundle. The destination's parent may be created, and an
 explicit `--metadata` path writes the review JSON even with `--dry-run`.
+Use a new output directory for each publication. Do not save dry-run JSON there: the
+publisher reads every `*.json` in the selected directory and rejects dry-run reports.
 
 Preparation includes referenced stimulus sets, original and declared derived images,
 authored word lists, task media and the complete project's tasks/modifiers. It omits
@@ -167,6 +188,69 @@ and setup, not a validated research protocol. Both preparation tools only write 
 files. Upload and catalog publication are separate maintainer operations in the private
 Library service repository.
 
+### Uploading and making an experiment visible
+
+The maintainer needs write access to the private
+[`FPVS-Studio-Library` repository](https://github.com/zcm58/FPVS-Studio-Library).
+On this development computer its checkout is `build/experiment-library-service` inside
+the Studio checkout. On another computer, clone that private repository and adjust
+`$libraryRepo` below. The publisher uses `GH_TOKEN` or Git's configured credential helper;
+the deployed service's read-only GitHub App key is not a publishing credential.
+
+The preparation report already contains the title, category, minimum Studio version,
+SHA-256, compressed size, counts and inventory. Add these four publishing fields while
+preserving the generated values:
+
+```powershell
+$report = Get-Content -LiteralPath $metadata -Raw | ConvertFrom-Json
+$report | Add-Member -NotePropertyMembers @{
+    item_id = $itemId
+    version = $version
+    asset_name = Split-Path $bundle -Leaf
+    summary = 'Describe the experiment, included stimuli, and setup the user should review.'
+}
+$report | ConvertTo-Json -Depth 20 |
+    Set-Content -LiteralPath $metadata -Encoding UTF8
+```
+
+Use a stable lowercase, hyphenated `item_id` for one study. Use a new version, filename
+and release tag when its content changes. Published item/version pairs are immutable.
+The minimum Studio version defaults to the exporting checkout's version; preparation
+does not infer compatibility from the study's features. The current publisher also
+limits each preparation report to 1 MiB, which can constrain large asset inventories.
+
+In a clean Library checkout, update `main`, preview the release, then publish:
+
+```powershell
+$libraryRepo = Join-Path $studioRepo 'build\experiment-library-service'
+Set-Location $libraryRepo
+git switch main
+if ($LASTEXITCODE -ne 0) { throw 'Switch the Library checkout to main before publishing.' }
+git pull --ff-only origin main
+if ($LASTEXITCODE -ne 0) { throw 'Update the Library checkout before publishing.' }
+
+& $python scripts\publish-catalog.py --tag $tag --bundle-directory $bundleDir --dry-run
+if ($LASTEXITCODE -ne 0) { throw 'Publication review failed.' }
+
+& $python scripts\publish-catalog.py --tag $tag --bundle-directory $bundleDir
+if ($LASTEXITCODE -ne 0) { throw 'Publishing failed; do not commit the catalog.' }
+
+git diff -- catalog.json
+git add -- catalog.json
+git commit -m "Publish $itemId $version"
+git push origin main
+```
+
+The publisher uploads a draft release, checks GitHub's asset digests and sizes, publishes
+the release, and updates the local `catalog.json` while retaining existing experiments.
+Review that diff before committing. Uploading an asset alone does not list it: users
+see the experiment after the catalog reaches `main` and they refresh or reopen the
+Library. All authorized devices see the same catalog. New machines enroll with the
+lab's current invitation code; already enrolled machines keep their device credential.
+Publishing compatible content requires no Worker redeployment or Studio update.
+Previously downloaded projects remain independent copies and are not changed by later
+publications.
+
 ## Verification and visible acceptance
 
 ```powershell
@@ -178,7 +262,7 @@ Library service repository.
 ```
 
 Windows archive tests may need a short explicit temporary root, for example
-`PYTEST_ADDOPTS=--basetemp=build/libtest`, when the host lacks long-path support.
+`PYTEST_ADDOPTS=--basetemp=build/t1`, when the host lacks long-path support.
 This workaround is not proof that arbitrary long paths work. Backend tests cover
 credentials, enrollment retry, cache safety, bounds, corrupt transfers and publishing;
 service tests run in their owning repository. Ordinary verification excludes Qt before
@@ -188,7 +272,8 @@ with controlled clients/importers; it does not access the live service.
 | Surface | Minimum | Default |
 | --- | --- | --- |
 | Experiment Library | 900×640 | 1040×760 |
-| Welcome with Library action | 760×600 | 1120×720 |
+| Welcome with four project actions | 760×520 | 1120×720 |
+| Create Project, all three pages | 760×500 | 800×500 |
 | Settings with Library access | 700×564 | Minimum |
 | Settings with local Test Mode | 700×654 | Minimum |
 | Settings with AB Pilot Mode | 700×724 | Minimum |
@@ -198,6 +283,9 @@ descriptions, empty/error/disconnected/busy states, keyboard navigation, and all
 at these sizes. Exercise root-picker and Save cancellation, download Cancel/Close/Escape,
 extraction cancellation, late commit, app quit and a revoked credential. Existing local
 bundle import/export remains available independently of the Library.
+Check **View > Experiment Library...**, both Create Project choices, and Back from
+details to category to source choice. Confirm a Library selection does not create a
+blank project and cancelling either path leaves existing projects unchanged.
 
 Release acceptance requires two separate machine/user profiles with different Studio
 roots: enroll, list the same fixtures, install, inspect/edit Setup, disconnect networking,

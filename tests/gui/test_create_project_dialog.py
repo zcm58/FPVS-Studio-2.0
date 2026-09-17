@@ -1,4 +1,4 @@
-"""Registered Qt coverage for the compact new-experiment details page."""
+"""Registered Qt coverage for new-experiment source choice and manual setup."""
 
 from __future__ import annotations
 
@@ -30,6 +30,88 @@ def _assert_details_fit(dialog: CreateProjectDialog) -> None:
             assert label.width() >= label.fontMetrics().horizontalAdvance(label.text()), (
                 label.objectName()
             )
+
+
+@pytest.mark.parametrize("size", [(760, 500), (800, 500)])
+@pytest.mark.parametrize("background", ["#f4f7fb", "#202124"])
+def test_creation_source_choice_fits_and_requires_an_explicit_route(
+    qtbot, size, background
+) -> None:
+    dialog = CreateProjectDialog()
+    qtbot.addWidget(dialog)
+    palette = dialog.palette()
+    palette.setColor(QPalette.ColorRole.Window, QColor(background))
+    dialog.setPalette(palette)
+    dialog.resize(*size)
+    dialog.show()
+    _assert_details_fit(dialog)
+    assert (dialog.width(), dialog.height()) == size
+    assert dialog.category_stack.currentWidget() is dialog.source_page
+    assert not dialog.from_library
+    assert not dialog.back_button.isVisible()
+    ok_button = dialog.button_box.button(QDialogButtonBox.StandardButton.Ok)
+    assert ok_button is not None and not ok_button.isVisible()
+    assert not dialog.project_name_edit.isVisible()
+    for button, text in (
+        (dialog.manual_button, "Create manually"),
+        (dialog.library_button, "Download from library"),
+    ):
+        assert button.isVisible() and button.isEnabled()
+        assert button.text() == text
+        assert button.width() >= button.sizeHint().width()
+    dialog.accept()
+    assert dialog.result() == QDialog.DialogCode.Rejected
+    assert dialog.category_stack.currentWidget() is dialog.source_page
+    dialog.manual_button.setFocus()
+    qtbot.keyClick(dialog.manual_button, Qt.Key.Key_Tab)
+    assert dialog.focusWidget() is dialog.library_button
+
+
+@pytest.mark.parametrize("key", [None, Qt.Key.Key_Space, Qt.Key.Key_Return])
+def test_creation_library_choice_needs_no_manual_fields(qtbot, tmp_path, key) -> None:
+    dialog = CreateProjectDialog()
+    qtbot.addWidget(dialog)
+    dialog.set_parent_directory(tmp_path)
+    dialog.show()
+    dialog.library_button.setFocus()
+    if key is None:
+        qtbot.mouseClick(dialog.library_button, Qt.MouseButton.LeftButton)
+    else:
+        qtbot.keyClick(dialog.library_button, key)
+    assert dialog.result() == QDialog.DialogCode.Accepted
+    assert dialog.from_library
+    assert dialog.project_name == ""
+    assert dialog.condition_profile_id is None
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_creation_back_navigation_preserves_manual_draft(qtbot, tmp_path) -> None:
+    dialog = CreateProjectDialog(condition_template_profiles=built_in_condition_template_profiles())
+    qtbot.addWidget(dialog)
+    dialog.set_parent_directory(tmp_path)
+    dialog.show()
+    dialog.manual_button.click()
+    assert dialog.category_stack.currentWidget() is dialog.category_page
+    assert dialog.back_button.isVisible()
+    dialog.select_category(ExperimentCategory.ATTENTIONAL_BLINK)
+    dialog.accept()
+    dialog.project_name_edit.setText("Recognition Study")
+    dialog.condition_profile_combo.setCurrentIndex(1)
+    selected_profile = dialog.condition_profile_id
+    dialog.back_button.click()
+    assert dialog.category_stack.currentWidget() is dialog.category_page
+    dialog.back_button.click()
+    assert dialog.category_stack.currentWidget() is dialog.source_page
+    assert not dialog.back_button.isVisible()
+    dialog.manual_button.click()
+    dialog.accept()
+    assert dialog.category_stack.currentWidget() is dialog.details_page
+    assert dialog.project_name == "Recognition Study"
+    assert dialog.parent_directory == tmp_path
+    assert dialog.condition_profile_id == selected_profile
+    assert not dialog.from_library
+    dialog.reject()
+    assert list(tmp_path.iterdir()) == []
 
 
 @pytest.mark.parametrize("size", [(760, 500), (800, 500)])
@@ -118,7 +200,7 @@ def test_creation_summaries_follow_name_template_and_category(qtbot) -> None:
     assert dialog.template_description_label.text() == selected.description
     qtbot.mouseClick(dialog.back_button, Qt.MouseButton.LeftButton)
     assert dialog.category_stack.currentWidget() is dialog.category_page
-    assert not dialog.back_button.isVisible()
+    assert dialog.back_button.isVisible()
     dialog.select_category(ExperimentCategory.FPVS_ODDBALL)
     dialog.accept()
     selected = next(

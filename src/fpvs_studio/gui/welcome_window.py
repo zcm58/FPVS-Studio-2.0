@@ -36,12 +36,11 @@ class WelcomeWindow(QWidget):
     project_bundle_dropped = Signal(object)
     manage_projects_requested = Signal()
     root_folder_setup_requested = Signal()
-    library_requested = Signal()
 
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle("FPVS Studio")
-        self.setMinimumSize(760, 600)
+        self.setMinimumSize(760, 520)
         self.resize(1120, 720)
         self.setAcceptDrops(True)
         self._import_busy = False
@@ -123,12 +122,6 @@ class WelcomeWindow(QWidget):
             self.root_folder_setup_requested.emit
         )
         self.action_layout.addWidget(self.root_folder_setup_button, 1, 1)
-        self.library_button = QPushButton("Experiment Library", self.hero_container)
-        self.library_button.setObjectName("welcome_experiment_library")
-        mark_welcome_action(self.library_button, "secondary")
-        self.library_button.setMinimumHeight(52)
-        self.library_button.clicked.connect(self.library_requested.emit)
-        self.action_layout.addWidget(self.library_button, 2, 0)
         hero_layout.addWidget(
             self.action_container,
             0,
@@ -167,7 +160,6 @@ class WelcomeWindow(QWidget):
             self.import_project_button,
             self.manage_projects_button,
             self.root_folder_setup_button,
-            self.library_button,
         ):
             button.setEnabled(not self._import_busy)
         self.bundle_drop_hint_label.setText(
@@ -205,7 +197,6 @@ class WelcomeWindow(QWidget):
             self.import_project_button,
             self.manage_projects_button,
             self.root_folder_setup_button,
-            self.library_button,
         )
         for button in action_buttons:
             refresh_widget_style(button)
@@ -248,16 +239,15 @@ class WelcomeWindow(QWidget):
                 self.import_project_button,
                 self.manage_projects_button,
                 self.root_folder_setup_button,
-                self.library_button,
             )
             for button in buttons:
                 self.action_layout.removeWidget(button)
             if columns == 2:
-                positions = ((0, 0), (0, 1), (1, 0), (1, 1), (2, 0))
+                positions = ((0, 0), (0, 1), (1, 0), (1, 1))
                 self.action_layout.setVerticalSpacing(12)
                 self.action_layout.setContentsMargins(0, 10, 0, 0)
             else:
-                positions = ((0, 0), (1, 0), (2, 0), (3, 0), (4, 0))
+                positions = ((0, 0), (1, 0), (2, 0), (3, 0))
                 self.action_layout.setVerticalSpacing(4)
                 self.action_layout.setContentsMargins(0, 4, 0, 0)
             for button, (row, column) in zip(buttons, positions, strict=True):

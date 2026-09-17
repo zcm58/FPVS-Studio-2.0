@@ -173,7 +173,6 @@ class StudioController(QObject):
             self.welcome_window.root_folder_setup_requested.connect(
                 self.show_root_folder_setup
             )
-            self.welcome_window.library_requested.connect(self.show_library)
         self.welcome_window.show()
         self.welcome_window.raise_()
         self.welcome_window.activateWindow()
@@ -583,7 +582,7 @@ class StudioController(QObject):
         return None
 
     def show_create_project_dialog(self) -> None:
-        """Collect new-project inputs and scaffold a project when confirmed."""
+        """Choose manual experiment creation or open the Experiment Library."""
 
         if not self.ensure_fpvs_root_configured():
             return
@@ -599,6 +598,9 @@ class StudioController(QObject):
         )
         dialog.set_parent_directory(self._projects_parent_dir)
         if dialog.exec() != dialog.DialogCode.Accepted:
+            return
+        if dialog.from_library:
+            self.show_library()
             return
         self.create_project(
             dialog.project_name,

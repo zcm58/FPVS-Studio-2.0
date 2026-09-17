@@ -30,7 +30,8 @@ lazily only inside the engine package.
   licensed Open Sans face used by authored modular tasks.
 - `src/fpvs_studio/gui/`: PySide6 windows, dialogs, controllers, document binding,
   Home/Setup workflows, and shared components/theme helpers. New-experiment Setup
-  starts with category alone, then project details. Setup composes eight
+  starts with manual creation or Library download. Manual creation asks for category,
+  then project details; Library downloads reuse bundle import. Setup composes eight
   model-backed pages (Project, Conditions, Design, Timing & Session, Image Size, Fixation,
   Response, Review); shared dialog/form styling remains in `gui/components.py`.
   Conditions confirms populated image/word switches before the document replaces only
