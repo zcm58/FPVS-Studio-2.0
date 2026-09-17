@@ -53,6 +53,29 @@ configurations remain blocking for timing-sensitive playback.
 
 ## Welcome Flow
 
+### Experiment Library
+
+Welcome's **Experiment Library** and **File > Experiment Library...** open the same
+whole-project browser. **Settings > Experiment Library / Manage Access...** exposes its
+lab-code enrollment and device-disconnect controls. Search/select an experiment, then
+**Download and set up experiment** verifies its archive and reuses the normal
+destination review, new-folder import and display-settings flow. Imported projects are
+independent editable copies; Setup and production preflight remain required. Individual
+condition imports are deferred to Phase 2.
+
+Library jobs use the application-owned coordinator. Close/Escape/cancel drain transfers;
+**Cancel setup** cooperatively stops extraction before commit. The cache lease lasts
+until review/import completion. Details, access/storage boundaries and the full visible
+acceptance path are in [Experiment Library](EXPERIMENT_LIBRARY.md).
+
+Library minimum/default sizes are `900x640` / `1040x760`. Welcome now fits its fifth
+action at `760x600` minimum and `1120x720` default. Settings with Library access uses
+`700x564`, `700x654` with Test Mode, or `700x724` with AB Pilot Mode; these are also
+its default sizes. Check long content and every connection/progress state in both
+themes. Registered Qt coverage remains opt-in in an approved visible environment.
+
+### Local project entry points
+
 If no valid FPVS Studio Root Folder is configured, FPVS Studio first shows a
 `Set Up FPVS Studio` dialog explaining the root folder before opening the native
 folder picker. Canceling the picker returns to the setup dialog; choosing
@@ -63,6 +86,7 @@ The welcome window provides:
 - `Create Project`
 - `Import New Project`
 - `Open Existing Project`
+- `Experiment Library`
 - `Change Root Folder...`
 
 `Change Root Folder...` reopens the guided root-folder setup and native folder picker

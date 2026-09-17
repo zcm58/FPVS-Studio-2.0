@@ -159,6 +159,41 @@ def test_pyinstaller_rejects_path_resolved_host_icu_dlls() -> None:
     assert "a.binaries = [" in PYINSTALLER_SPEC_TEXT
 
 
+@pytest.mark.parametrize("platform", ["win32", "linux"])
+def test_studio_spec_collects_secure_library_backend_for_linux_only(
+    monkeypatch: pytest.MonkeyPatch, platform: str,
+) -> None:
+    hooks = ModuleType("PyInstaller.utils.hooks")
+    hooks.collect_submodules = lambda package: [package]  # type: ignore[attr-defined]
+    hooks.collect_data_files = lambda package: []  # type: ignore[attr-defined]
+    hooks.collect_dynamic_libs = lambda package: []  # type: ignore[attr-defined]
+    hooks.copy_metadata = lambda package: [(package, "metadata")]  # type: ignore[attr-defined]
+    for name, module in (
+        ("PyInstaller", ModuleType("PyInstaller")),
+        ("PyInstaller.utils", ModuleType("PyInstaller.utils")),
+        ("PyInstaller.utils.hooks", hooks),
+    ):
+        monkeypatch.setitem(sys.modules, name, module)
+    monkeypatch.setattr(sys, "platform", platform)
+
+    def analysis(_entries: list[str], **kwargs: object) -> SimpleNamespace:
+        return SimpleNamespace(pure=[], scripts=[], binaries=[], zipfiles=[], datas=kwargs["datas"])
+
+    result = runpy.run_path(
+        str(REPO_ROOT / "packaging" / "pyinstaller" / "fpvs_studio.spec"),
+        init_globals={
+            "SPECPATH": str(REPO_ROOT / "packaging" / "pyinstaller"),
+            "Analysis": analysis,
+            "PYZ": lambda pure: pure,
+            "EXE": lambda *args, **kwargs: None,
+            "COLLECT": lambda *args, **kwargs: None,
+        },
+    )
+    assert ("keyring.backends.SecretService" in result["hiddenimports"]) == (platform == "linux")
+    assert (("keyring", "metadata") in result["datas"]) == (platform == "linux")
+    assert (("SecretStorage", "metadata") in result["datas"]) == (platform == "linux")
+
+
 def test_bundled_open_sans_font_and_license_are_packaged_assets() -> None:
     font_path = bundled_task_font_path("Open Sans")
 

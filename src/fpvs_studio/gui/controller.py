@@ -16,7 +16,7 @@ from ctypes import wintypes
 from pathlib import Path
 from threading import Event
 from types import TracebackType
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 from PySide6.QtCore import QObject, QSettings, QTimer, Slot
 from PySide6.QtWidgets import QApplication, QDialog, QFileDialog, QInputDialog, QMessageBox, QWidget
@@ -37,6 +37,7 @@ from fpvs_studio.core.paths import (
 from fpvs_studio.core.project_bundle import (
     PROJECT_BUNDLE_SUFFIX,
     BundleImportStage,
+    ProjectBundleCancelled,
     ProjectBundleManifest,
     import_project_bundle,
     read_project_bundle_manifest,
@@ -74,6 +75,9 @@ from fpvs_studio.runtime.export_modes import (
 from fpvs_studio.updates.downloader import cleanup_update_cache
 from fpvs_studio.updates.helper_client import HelperClient
 from fpvs_studio.updates.models import UpdateCheckResult
+
+if TYPE_CHECKING:
+    from fpvs_studio.gui.library_controller import LibraryController
 
 _SETTINGS_ORGANIZATION = "FPVS Studio"
 _SETTINGS_APPLICATION = "FPVS Studio"
@@ -132,6 +136,10 @@ class StudioController(QObject):
             lambda cancel: HelperClient().check(__version__, cancel_event=cancel)
         )
         self._active_import_bundle_task: BackgroundTask | None = None
+        self._library_import_job: UpdateJob | None = None
+        self._library_import_finished: Callable[[Path | None], None] | None = None
+        self._library_import_result: Path | None = None
+        self._library_controller: LibraryController | None = None
         self._import_bundle_progress_bridge: ProgressSignalBridge | None = None
         self._import_bundle_processing_window: StudioMainWindow | None = None
         self._import_bundle_processing_dialog: BundleImportProgressDialog | None = None
@@ -165,6 +173,7 @@ class StudioController(QObject):
             self.welcome_window.root_folder_setup_requested.connect(
                 self.show_root_folder_setup
             )
+            self.welcome_window.library_requested.connect(self.show_library)
         self.welcome_window.show()
         self.welcome_window.raise_()
         self.welcome_window.activateWindow()
@@ -697,6 +706,7 @@ class StudioController(QObject):
             fpvs_root_dir=root_dir,
             on_show_root_folder_setup=self.show_root_folder_setup,
             on_manage_condition_templates=self._show_condition_template_manager,
+            on_show_library=self.show_library,
             detailed_run_exports_enabled=self.detailed_run_exports_enabled(),
             on_detailed_run_exports_changed=self.set_detailed_run_exports_enabled,
             biosemi_recording_confirmation_required=(
@@ -722,6 +732,31 @@ class StudioController(QObject):
         )
         dialog.exec()
 
+    def show_library(self) -> None:
+        """Open the app-owned Experiment Library without changing the current project."""
+        if self._active_import_bundle_task is not None or self._library_import_job is not None:
+            return
+        if self._library_controller is None:
+            from fpvs_studio.gui.library_controller import LibraryController
+
+            self._library_controller = LibraryController(
+                self._app, import_bundle=self._import_library_bundle,
+            )
+        self._library_controller.show()
+
+    def _import_library_bundle(
+        self, path: Path, manifest: ProjectBundleManifest, finished: Callable[[Path | None], None],
+    ) -> None:
+        window = self.main_window
+        if window is not None and (
+            not window._allow_project_handoff_during_launch()
+            or not window._allow_project_handoff_during_fixation_load()
+            or not window.maybe_save_changes()
+        ):
+            finished(None)
+            return
+        self.import_project_bundle_file(path, on_finished=finished, review_manifest=manifest)
+
     def _open_document(self, document: ProjectDocument) -> None:
         document.set_session_export_mode(self.load_run_export_mode())
         document.set_require_biosemi_recording_confirmation(
@@ -742,6 +777,7 @@ class StudioController(QObject):
             on_request_import_project_config=self.show_import_project_config_dialog,
             on_request_import_project_bundle=self.show_import_project_bundle_dialog,
             on_request_settings=self.show_settings_dialog,
+            on_request_library=self.show_library,
             on_load_condition_template_profiles=self._load_condition_template_profiles,
             on_manage_condition_templates=self._show_condition_template_manager,
             on_load_fpvs_root_dir=self.load_fpvs_root_dir,
@@ -870,19 +906,35 @@ class StudioController(QObject):
             )
             return
 
-    def import_project_bundle_file(self, bundle_path: object) -> None:
+    def import_project_bundle_file(
+        self, bundle_path: object, *, on_finished: Callable[[Path | None], None] | None = None,
+        review_manifest: ProjectBundleManifest | None = None,
+    ) -> None:
         """Import a known `.fpvsbundle` path without opening the file picker."""
 
+        started = False
+        try:
+            started = self._import_project_bundle_file(
+                bundle_path, on_finished=on_finished, review_manifest=review_manifest,
+            )
+        finally:
+            if not started and on_finished is not None:
+                on_finished(None)
+
+    def _import_project_bundle_file(
+        self, bundle_path: object, *, on_finished: Callable[[Path | None], None] | None,
+        review_manifest: ProjectBundleManifest | None,
+    ) -> bool:
         root_dir, parent = self._prepare_project_bundle_import()
         if root_dir is None:
-            return
+            return False
         if not isinstance(bundle_path, (str, os.PathLike)):
             QMessageBox.warning(
                 parent,
                 "Import FPVS Studio Project",
                 "Choose a valid local FPVS Studio project bundle.",
             )
-            return
+            return False
         resolved_bundle_path = Path(bundle_path)
         if resolved_bundle_path.suffix.lower() != PROJECT_BUNDLE_SUFFIX:
             QMessageBox.warning(
@@ -890,35 +942,42 @@ class StudioController(QObject):
                 "Import FPVS Studio Project",
                 "Choose an FPVS Studio project bundle with a .fpvsbundle extension.",
             )
-            return
+            return False
         result, manifest = self._show_project_bundle_import_review(
             resolved_bundle_path,
             root_dir,
             parent,
+            manifest=review_manifest,
         )
         if result == BundleImportReviewDialog.CHOOSE_ANOTHER_RESULT:
-            self.show_import_project_bundle_dialog()
-            return
+            if on_finished is None:
+                self.show_import_project_bundle_dialog()
+            return False
         if result != int(QDialog.DialogCode.Accepted) or manifest is None:
-            return
+            return False
         self._start_project_bundle_import(
             resolved_bundle_path,
             root_dir,
             parent,
             project_name=manifest.project.name,
+            on_finished=on_finished,
         )
+        return True
 
     def _show_project_bundle_import_review(
         self,
         bundle_path: Path,
         root_dir: Path,
         parent: QWidget | None,
+        *,
+        manifest: ProjectBundleManifest | None = None,
     ) -> tuple[int, ProjectBundleManifest | None]:
-        try:
-            manifest = read_project_bundle_manifest(bundle_path)
-        except Exception as error:
-            _show_error(parent, "Import FPVS Studio Project Error", error)
-            return int(QDialog.DialogCode.Rejected), None
+        if manifest is None:
+            try:
+                manifest = read_project_bundle_manifest(bundle_path)
+            except Exception as error:
+                _show_error(parent, "Import FPVS Studio Project Error", error)
+                return int(QDialog.DialogCode.Rejected), None
         dialog = BundleImportReviewDialog(
             bundle_path=bundle_path,
             root_dir=root_dir,
@@ -928,7 +987,9 @@ class StudioController(QObject):
         return dialog.exec(), manifest
 
     def _prepare_project_bundle_import(self) -> tuple[Path | None, QWidget | None]:
-        if self._active_import_bundle_task is not None:
+        if self._update_lifecycle.is_shutting_down:
+            return None, None
+        if self._active_import_bundle_task is not None or self._library_import_job is not None:
             if self.main_window is not None:
                 self.main_window.statusBar().showMessage(
                     "Project bundle import is already running.",
@@ -952,6 +1013,7 @@ class StudioController(QObject):
         parent: QWidget | None,
         *,
         project_name: str,
+        on_finished: Callable[[Path | None], None] | None = None,
     ) -> None:
         task_parent = parent or self.main_window or self.welcome_window
         if task_parent is None:
@@ -967,8 +1029,11 @@ class StudioController(QObject):
                 bundle_path=bundle_path,
                 root_dir=root_dir,
             )
-        else:
-            progress_dialog = BundleImportProgressDialog(parent=self.welcome_window)
+        if self.main_window is None or on_finished is not None:
+            progress_dialog = BundleImportProgressDialog(
+                parent=task_parent,
+                on_cancel=self._cancel_library_import if on_finished is not None else None,
+            )
             progress_dialog.set_context(
                 project_name=project_name,
                 bundle_path=bundle_path,
@@ -978,6 +1043,21 @@ class StudioController(QObject):
             if self.welcome_window is not None:
                 self.welcome_window.set_import_busy(True)
             progress_dialog.start()
+
+        if on_finished is not None:
+            self._library_import_finished = on_finished
+            self._library_import_result = None
+            job = self._update_lifecycle.start_task(
+                lambda _progress, cancel: import_project_bundle(
+                    bundle_path, root_dir,
+                    progress_callback=progress_bridge.stage_changed.emit,
+                    cancel_event=cancel,
+                ),
+                keep_success_on_cancel=True,
+            )
+            self._library_import_job = job
+            job.finished.connect(self._library_import_done)
+            return
 
         def _import_bundle() -> ProjectScaffold:
             return import_project_bundle(
@@ -992,6 +1072,33 @@ class StudioController(QObject):
         task.failed.connect(self._on_import_project_bundle_failed)
         task.finished.connect(self._on_import_project_bundle_finished)
         task.start()
+
+    def _cancel_library_import(self) -> None:
+        if self._library_import_job is not None:
+            self._library_import_job.cancel()
+
+    def _library_import_done(self, result: object) -> None:
+        outcome = cast(UpdateTaskResult, result)
+        try:
+            if self._update_lifecycle.is_shutting_down:
+                self._finish_project_bundle_import_processing(restore_previous=True)
+                if isinstance(outcome.value, ProjectScaffold) and outcome.error is None:
+                    self._library_import_result = outcome.value.project_root
+            elif outcome.cancelled or isinstance(outcome.error, ProjectBundleCancelled):
+                self._finish_project_bundle_import_processing(restore_previous=True)
+            elif outcome.error is not None:
+                self._on_import_project_bundle_failed(outcome.error)
+            else:
+                self._on_import_project_bundle_succeeded(outcome.value)
+        finally:
+            callback = self._library_import_finished
+            project_root = self._library_import_result
+            self._library_import_job = None
+            self._library_import_finished = None
+            self._library_import_result = None
+            self._on_import_project_bundle_finished()
+            if callback is not None:
+                callback(project_root)
 
     @Slot(str)
     def _on_import_project_bundle_stage_changed(self, stage: str) -> None:
@@ -1011,6 +1118,8 @@ class StudioController(QObject):
         try:
             if not isinstance(result, ProjectScaffold):
                 raise TypeError("FPVS Studio received an unexpected bundle import result.")
+            if self._library_import_finished is not None:
+                self._library_import_result = result.project_root
             if window is not None:
                 window.set_bundle_import_stage("complete")
             if progress_dialog is not None:

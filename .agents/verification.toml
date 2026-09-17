@@ -92,6 +92,7 @@ checks = []
 tests = [
   "tests/unit/test_condition_template_profiles.py",
   "tests/unit/test_project_bundle.py",
+  "tests/unit/test_library_publish.py",
   "tests/unit/test_project_config.py",
   "tests/unit/test_project_service.py",
   "tests/unit/test_cognitive_load_presets.py",
@@ -102,8 +103,31 @@ tests = [
   "tests/unit/test_modifier_presets.py",
 ]
 full_tests = []
-include = ["src/fpvs_studio/core/project*.py", "src/fpvs_studio/core/task_assets.py", "src/fpvs_studio/core/template_library.py", "src/fpvs_studio/core/condition_template_profiles.py", "src/fpvs_studio/core/attentional_blink_presets.py", "src/fpvs_studio/core/modifier_presets.py", "tests/unit/test_modifier_presets.py", "tests/unit/test_attentional_blink_presets.py", "tests/unit/test_project*.py", "tests/unit/test_experiment_categories.py", "tests/unit/test_template_library.py", "tests/unit/test_condition_template_profiles.py"]
+include = ["src/fpvs_studio/core/project*.py", "src/fpvs_studio/core/library_publish.py", "src/fpvs_studio/core/task_assets.py", "src/fpvs_studio/core/template_library.py", "src/fpvs_studio/core/condition_template_profiles.py", "src/fpvs_studio/core/attentional_blink_presets.py", "src/fpvs_studio/core/modifier_presets.py", "tests/unit/test_modifier_presets.py", "tests/unit/test_attentional_blink_presets.py", "tests/unit/test_project*.py", "tests/unit/test_library_publish.py", "tests/unit/test_experiment_categories.py", "tests/unit/test_template_library.py", "tests/unit/test_condition_template_profiles.py"]
 manual_smoke = []
+
+[scopes.library]
+checks = []
+tests = [
+  "tests/unit/test_library_client.py",
+  "tests/unit/test_library_cache.py",
+  "tests/unit/test_library_credentials.py",
+  "tests/unit/test_library_publish.py",
+]
+full_tests = []
+include = [
+  "src/fpvs_studio/library/**",
+  "src/fpvs_studio/core/library_publish.py",
+  "src/fpvs_studio/gui/library_*.py",
+  "scripts/prepare_library_bundle.py",
+  "scripts/create_library_test_bundles.py",
+  "tests/unit/test_library_*.py",
+  "tests/gui/test_library_dialog.py",
+]
+manual_smoke = [
+  "Enroll two machine/user profiles and install a whole project from the Experiment Library; inspect Setup and reopen offline.",
+  "Use an approved visible session to check cancellation, revocation, and dialog sizes documented in docs/EXPERIMENT_LIBRARY.md.",
+]
 
 [scopes.preprocessing]
 checks = []

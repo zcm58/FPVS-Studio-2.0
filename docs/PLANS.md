@@ -13,13 +13,12 @@ Use this page to find planning material before making feature-sized changes.
 
 Current implementation:
 
+- [Experiment Library: Phase 1 whole projects](exec-plans/active/private-experiment-library.md)
 - [Cloudflare bug reporting: desktop implementation](exec-plans/active/cloudflare-bug-reporting.md)
 - `exec-plans/active/bounded-updater-storage-and-clean-upgrades.md`
 
 Concrete planned work:
 
-- [Private experiment and condition library](exec-plans/planned/private-experiment-library.md):
-  Phase 1 delivers whole projects; Phase 2 adds conditions with editable import setup.
 - `exec-plans/planned/restore-tutorials-file-menu-entry.md`
 - `exec-plans/planned/luminance-rms-equalization-investigation.md`
 

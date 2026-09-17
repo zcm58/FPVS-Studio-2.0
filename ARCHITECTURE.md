@@ -14,6 +14,12 @@ lazily only inside the engine package.
 ## Package Map
 
 - `src/fpvs_studio/app/`: thin application entry points and startup wiring.
+- `src/fpvs_studio/library/`: GUI-neutral experiment catalog, device enrollment,
+  native protected credential storage, and bounded verified bundle downloads.
+  The Library dialog uses app-owned jobs and the existing reviewed project importer;
+  `core/library_publish.py` prepares clean publishable whole-project copies.
+  Private content and the independent Cloudflare service live in
+  `zcm58/FPVS-Studio-Library`. See `docs/EXPERIMENT_LIBRARY.md`.
 - `src/fpvs_studio/support/`: GUI-neutral bug-report and feature-request contracts, queued
   application diagnostics, bounded OS-local drafts, and an opt-in HTTPS client.
   The native File > Report a Bug dialog uses app-owned background jobs; online

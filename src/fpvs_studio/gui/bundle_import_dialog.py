@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 from typing import cast
 
@@ -195,7 +196,9 @@ class BundleImportReviewDialog(QDialog):
 class BundleImportProgressDialog(QDialog):
     """Show the embedded import progress page when no project window exists yet."""
 
-    def __init__(self, *, parent: QWidget | None = None) -> None:
+    def __init__(
+        self, *, parent: QWidget | None = None, on_cancel: Callable[[], None] | None = None,
+    ) -> None:
         super().__init__(parent)
         self.setObjectName("bundle_import_progress_dialog")
         self.setWindowTitle("Importing FPVS Studio Project")
@@ -204,11 +207,18 @@ class BundleImportProgressDialog(QDialog):
         self.setMinimumSize(940, 600)
         self.resize(1040, 680)
         self._import_active = False
+        self._on_cancel = on_cancel
 
         self.page = BundleImportProcessingPage(parent=self)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self.page)
+        self.cancel_button = QPushButton("Cancel setup", self)
+        self.cancel_button.setAutoDefault(False)
+        mark_secondary_action(self.cancel_button)
+        self.cancel_button.setVisible(on_cancel is not None)
+        self.cancel_button.clicked.connect(self._cancel)
+        layout.addWidget(self.cancel_button, 0, Qt.AlignmentFlag.AlignRight)
         apply_studio_theme(self)
 
     def set_context(
@@ -245,6 +255,19 @@ class BundleImportProgressDialog(QDialog):
 
     def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802
         if self._import_active:
+            self._cancel()
             event.ignore()
             return
         super().closeEvent(event)
+
+    def reject(self) -> None:
+        if self._import_active:
+            self._cancel()
+            return
+        super().reject()
+
+    def _cancel(self) -> None:
+        if self._on_cancel is not None and self._import_active:
+            self._on_cancel()
+            self.cancel_button.setEnabled(False)
+            self.cancel_button.setText("Finishing cancellation…")

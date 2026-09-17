@@ -15,6 +15,7 @@ import zipfile
 from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
+from threading import Event
 from typing import Literal
 
 from pydantic import Field, ValidationError, field_validator
@@ -29,6 +30,7 @@ from fpvs_studio.core.paths import (
     STIMULI_DIRNAME,
     app_data_dir,
     cache_dir,
+    filesystem_path,
     logs_dir,
     project_dir,
     project_json_path,
@@ -75,6 +77,15 @@ BundleImportProgressCallback = Callable[[BundleImportStage], None]
 
 class ProjectBundleError(ValueError):
     """Raised when a project bundle cannot be created, read, or imported safely."""
+
+
+class ProjectBundleCancelled(ProjectBundleError):
+    """The caller cancelled a bundle operation before its final commit."""
+
+
+def _check_cancelled(cancel_event: Event | None) -> None:
+    if cancel_event is not None and cancel_event.is_set():
+        raise ProjectBundleCancelled("Project bundle operation cancelled.")
 
 
 def project_bundle_filename(project_name: str) -> str:
@@ -147,12 +158,14 @@ def export_project_bundle(
     project_name: str | None = None,
     refresh_hz: float | None = None,
     progress_callback: BundleExportProgressCallback | None = None,
+    cancel_event: Event | None = None,
 ) -> ProjectBundleManifest:
     """Validate and write a portable `.fpvsbundle` for one saved project."""
 
-    project_root = Path(project_root)
-    bundle_path = Path(bundle_path)
+    project_root = filesystem_path(Path(project_root))
+    bundle_path = filesystem_path(Path(bundle_path))
     _notify_export_progress(progress_callback, "validate")
+    _check_cancelled(cancel_event)
     project = _load_project_for_bundle(project_root)
     manifest = _load_manifest_for_bundle(project_root)
     payload_overrides: dict[str, bytes] = {}
@@ -172,6 +185,7 @@ def export_project_bundle(
         project=project,
         manifest=manifest,
         refresh_hz=validation_refresh_hz,
+        cancel_event=cancel_event,
     )
     _notify_export_progress(progress_callback, "stimuli")
     relative_paths = _collect_bundle_file_paths(project_root)
@@ -180,6 +194,7 @@ def export_project_bundle(
             project_root,
             relative_path,
             payload_override=payload_overrides.get(relative_path),
+            cancel_event=cancel_event,
         )
         for relative_path in relative_paths
     ]
@@ -207,6 +222,7 @@ def export_project_bundle(
         bundle_path,
         bundle_manifest,
         payload_overrides=payload_overrides,
+        cancel_event=cancel_event,
     )
     _notify_export_progress(progress_callback, "complete")
     return bundle_manifest
@@ -272,6 +288,7 @@ def import_project_bundle(
     fpvs_root_dir: Path,
     *,
     progress_callback: BundleImportProgressCallback | None = None,
+    cancel_event: Event | None = None,
 ) -> ProjectScaffold:
     """Import a `.fpvsbundle` into a new project folder under the FPVS Studio root."""
 
@@ -279,20 +296,25 @@ def import_project_bundle(
     fpvs_root_dir = Path(fpvs_root_dir)
     staging_parent = app_data_dir(fpvs_root_dir) / IMPORT_STAGING_DIRNAME
     stage_dir = staging_parent / f"bundle-{uuid.uuid4().hex}"
-    staged_project_root = stage_dir / "project"
+    staged_project_root = filesystem_path(stage_dir / "project")
     try:
         _notify_import_progress(progress_callback, "verify")
+        _check_cancelled(cancel_event)
         staged_project_root.mkdir(parents=True, exist_ok=False)
-        bundle_manifest = _extract_bundle_to_staging(bundle_path, staged_project_root)
+        bundle_manifest = _extract_bundle_to_staging(
+            bundle_path, staged_project_root, cancel_event=cancel_event,
+        )
         project = _load_project_for_bundle(staged_project_root)
         manifest = read_stimulus_manifest(staged_project_root)
         _notify_import_progress(progress_callback, "base")
+        _check_cancelled(cancel_event)
         _validate_condition_role_source_dirs(
             staged_project_root,
             project=project,
             role="base",
         )
         _notify_import_progress(progress_callback, "oddball")
+        _check_cancelled(cancel_event)
         _validate_condition_role_source_dirs(
             staged_project_root,
             project=project,
@@ -309,8 +331,10 @@ def import_project_bundle(
             project=project,
             manifest=manifest,
             refresh_hz=bundle_manifest.validation.refresh_hz,
+            cancel_event=cancel_event,
         )
         _notify_import_progress(progress_callback, "project")
+        _check_cancelled(cancel_event)
         target_dir, project_id = _unique_import_project_dir(
             fpvs_root_dir,
             project.meta.project_id,
@@ -326,7 +350,9 @@ def import_project_bundle(
         if target_dir.exists():
             raise ProjectBundleError(f"Imported project target already exists: {target_dir}")
         target_dir.parent.mkdir(parents=True, exist_ok=True)
-        shutil.move(str(staged_project_root), str(target_dir))
+        _check_cancelled(cancel_event)
+        # This rename is the commit boundary; later cancellation cannot undo a project.
+        staged_project_root.rename(filesystem_path(target_dir))
         _notify_import_progress(progress_callback, "complete")
         return ProjectScaffold(project_root=target_dir, project=project)
     except ProjectBundleError:
@@ -334,8 +360,8 @@ def import_project_bundle(
     except Exception as exc:
         raise ProjectBundleError(f"Unable to import project bundle: {bundle_path}") from exc
     finally:
-        if stage_dir.exists():
-            shutil.rmtree(stage_dir, ignore_errors=True)
+        if filesystem_path(stage_dir).exists():
+            shutil.rmtree(filesystem_path(stage_dir), ignore_errors=True)
 
 
 def _notify_import_progress(
@@ -369,6 +395,8 @@ def _load_manifest_for_bundle(project_root: Path) -> StimulusManifest:
 def _extract_bundle_to_staging(
     bundle_path: Path,
     staged_project_root: Path,
+    *,
+    cancel_event: Event | None = None,
 ) -> ProjectBundleManifest:
     try:
         with zipfile.ZipFile(bundle_path, mode="r") as archive:
@@ -392,7 +420,10 @@ def _extract_bundle_to_staging(
                 )
             _validate_bundle_resource_limits(archive, bundle_manifest)
             for record in bundle_manifest.files:
-                _extract_verified_record(archive, record, staged_project_root)
+                _check_cancelled(cancel_event)
+                _extract_verified_record(
+                    archive, record, staged_project_root, cancel_event=cancel_event,
+                )
             return bundle_manifest
     except ProjectBundleError:
         raise
@@ -551,6 +582,8 @@ def _extract_verified_record(
     archive: zipfile.ZipFile,
     record: ProjectBundleFileRecord,
     staged_project_root: Path,
+    *,
+    cancel_event: Event | None = None,
 ) -> None:
     destination_path = _staged_destination_path(staged_project_root, record.path)
     destination_path.parent.mkdir(parents=True, exist_ok=True)
@@ -558,6 +591,7 @@ def _extract_verified_record(
     size = 0
     with archive.open(record.path, mode="r") as source, destination_path.open("wb") as target:
         for chunk in iter(lambda: source.read(65536), b""):
+            _check_cancelled(cancel_event)
             size += len(chunk)
             if size > record.size_bytes or size > MAX_BUNDLE_FILE_BYTES:
                 raise ProjectBundleError(f"Project bundle file size mismatch: {record.path}")
@@ -582,7 +616,9 @@ def _validate_bundle_source(
     project: ProjectFile,
     manifest: StimulusManifest,
     refresh_hz: float,
+    cancel_event: Event | None = None,
 ) -> None:
+    _check_cancelled(cancel_event)
     try:
         require_valid_experiment_category(project)
     except ValueError as exc:
@@ -594,6 +630,7 @@ def _validate_bundle_source(
             "Stimulus manifest project_id does not match project.json project_id."
         )
     for stimulus_set in project.stimulus_sets:
+        _check_cancelled(cancel_event)
         if stimulus_set.source_dir is None:
             continue
         source_dir = _resolve_existing_relative_dir(project_root, stimulus_set.source_dir)
@@ -604,10 +641,12 @@ def _validate_bundle_source(
     for manifest_set in manifest.sets:
         _resolve_existing_relative_dir(project_root, manifest_set.source_dir)
         for asset in manifest_set.assets:
+            _check_cancelled(cancel_event)
             _resolve_existing_relative_file(project_root, asset.source.relative_path)
             for derivative in asset.derivatives:
                 _resolve_existing_relative_file(project_root, derivative.relative_path)
     for task in project.task_modules:
+        _check_cancelled(cancel_event)
         prefix = f"stimuli/task-assets/{task.task_id}/"
         for step in task.steps:
             task_paths = [
@@ -626,6 +665,7 @@ def _validate_bundle_source(
                     )
                 _resolve_existing_relative_file(project_root, task_path)
     try:
+        _check_cancelled(cancel_event)
         compile_session_plan(
             project,
             refresh_hz=refresh_hz,
@@ -634,6 +674,7 @@ def _validate_bundle_source(
         )
     except CompileError as exc:
         raise ProjectBundleError(f"Project did not pass bundle compile validation: {exc}") from exc
+    _check_cancelled(cancel_event)
 
 
 def _validate_condition_role_source_dirs(
@@ -696,7 +737,9 @@ def _file_record(
     relative_path: str,
     *,
     payload_override: bytes | None = None,
+    cancel_event: Event | None = None,
 ) -> ProjectBundleFileRecord:
+    _check_cancelled(cancel_event)
     if payload_override is not None:
         return ProjectBundleFileRecord(
             path=relative_path,
@@ -707,7 +750,7 @@ def _file_record(
     return ProjectBundleFileRecord(
         path=relative_path,
         size_bytes=path.stat().st_size,
-        sha256=_sha256_file(path),
+        sha256=_sha256_file(path, cancel_event=cancel_event),
     )
 
 
@@ -717,6 +760,7 @@ def _write_bundle_archive(
     bundle_manifest: ProjectBundleManifest,
     *,
     payload_overrides: dict[str, bytes],
+    cancel_event: Event | None = None,
 ) -> None:
     _validate_bundle_manifest_resource_limits(bundle_manifest)
     manifest_payload = bundle_manifest.model_dump_json(
@@ -736,18 +780,23 @@ def _write_bundle_archive(
         with zipfile.ZipFile(temp_path, mode="w", compression=zipfile.ZIP_DEFLATED) as archive:
             archive.writestr(BUNDLE_MANIFEST_FILENAME, manifest_payload)
             for record in bundle_manifest.files:
+                _check_cancelled(cancel_event)
                 payload_override = payload_overrides.get(record.path)
                 if payload_override is None:
-                    archive.write(
-                        _resolve_existing_relative_file(project_root, record.path),
-                        arcname=record.path,
-                    )
+                    source_path = _resolve_existing_relative_file(project_root, record.path)
+                    info = zipfile.ZipInfo.from_file(source_path, arcname=record.path)
+                    info.compress_type = zipfile.ZIP_DEFLATED
+                    with source_path.open("rb") as source, archive.open(info, "w") as target:
+                        for chunk in iter(lambda: source.read(65536), b""):
+                            _check_cancelled(cancel_event)
+                            target.write(chunk)
                 else:
                     archive.writestr(record.path, payload_override)
         with zipfile.ZipFile(temp_path, mode="r") as archive:
             _validate_archive_member_count(archive)
             written_manifest = _read_bundle_manifest_from_archive(archive)
             _validate_bundle_resource_limits(archive, written_manifest)
+        _check_cancelled(cancel_event)
         temp_path.replace(bundle_path)
     except Exception:
         if temp_path.exists():
@@ -755,10 +804,11 @@ def _write_bundle_archive(
         raise
 
 
-def _sha256_file(path: Path) -> str:
+def _sha256_file(path: Path, *, cancel_event: Event | None = None) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
         for chunk in iter(lambda: handle.read(65536), b""):
+            _check_cancelled(cancel_event)
             digest.update(chunk)
     return digest.hexdigest()
 

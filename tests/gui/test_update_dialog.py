@@ -71,6 +71,7 @@ def test_main_window_file_menu_groups_actions(
 
     assert menu_entries == [
         "Manage Projects...",
+        "Experiment Library...",
         "---",
         "Import",
         "Export",

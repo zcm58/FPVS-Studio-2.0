@@ -39,6 +39,7 @@ class AppSettingsDialog(QDialog):
         fpvs_root_dir: Path,
         on_show_root_folder_setup: Callable[[QWidget], Path | None] | None = None,
         on_manage_condition_templates: Callable[[], object] | None = None,
+        on_show_library: Callable[[], None] | None = None,
         detailed_run_exports_enabled: bool = True,
         on_detailed_run_exports_changed: Callable[[bool], None] | None = None,
         biosemi_recording_confirmation_required: bool = True,
@@ -64,6 +65,7 @@ class AppSettingsDialog(QDialog):
 
         self._on_show_root_folder_setup = on_show_root_folder_setup
         self._on_manage_condition_templates = on_manage_condition_templates
+        self._on_show_library = on_show_library
         self._on_detailed_run_exports_changed = on_detailed_run_exports_changed
         self._on_biosemi_recording_confirmation_required_changed = (
             on_biosemi_recording_confirmation_required_changed
@@ -104,6 +106,18 @@ class AppSettingsDialog(QDialog):
         self.manage_templates_button.clicked.connect(self._manage_condition_templates)
         workspace_actions.addWidget(self.manage_templates_button, 1)
         workspace_layout.addLayout(workspace_actions)
+        self.library_button = QPushButton("Experiment Library / Manage Access...", self)
+        self.library_button.setObjectName("settings_experiment_library")
+        self.library_button.setToolTip(
+            "Connect with a lab access code or disconnect this computer."
+        )
+        mark_secondary_action(self.library_button)
+        self.library_button.setVisible(on_show_library is not None)
+        self.library_button.clicked.connect(self._show_library)
+        workspace_layout.addWidget(self.library_button)
+        if on_show_library is not None:
+            self.setMinimumHeight(self.minimumHeight() + 44)
+            self.resize(self.minimumSize())
         participant = QFrame(self)
         participant.setObjectName("settings_participant_section")
         participant.setProperty("settingsSection", "true")
@@ -245,6 +259,11 @@ class AppSettingsDialog(QDialog):
         updated_root = self._on_show_root_folder_setup(self)
         if updated_root is not None:
             self.root_folder_setup_button.setToolTip(str(updated_root))
+
+    def _show_library(self) -> None:
+        if self._on_show_library is not None:
+            self.accept()
+            self._on_show_library()
 
     def _manage_condition_templates(self) -> None:
         if self._on_manage_condition_templates is None:

@@ -1,8 +1,18 @@
 # Private Experiment And Condition Library
 
-Status: Planned
+Status: Active
 
 Date: 2026-09-16
+
+## Phase 1 implementation authorization
+
+The user authorized Phase 1 implementation, private GitHub/service setup, two test
+bundles, and commit/push on `codex/experiment-library`. Phase 2 remains deferred.
+The user selected a temporary reusable test enrollment code, replacing
+single-use invitations for this test deployment only. Devices still receive separate
+revocable credentials; the shared code is configured server-side and can be disabled.
+Old worktrees are archived before removal. Installed cross-machine and visible GUI
+acceptance must be reported separately from source/service verification.
 
 ## Purpose And Confirmed Decisions
 
@@ -10,8 +20,7 @@ Provide an Experiment Library inside FPVS Studio. A researcher can browse comple
 experiments or reusable conditions, download the selected version, and have Studio
 install its editable settings and stimuli in the appropriate local project.
 
-The user requested repository investigation and an execution plan, not implementation
-or remote provisioning. During planning, the user confirmed:
+During planning, the user confirmed:
 
 - Library content lives in a private GitHub repository.
 - Researchers must not need GitHub accounts.
@@ -21,9 +30,9 @@ or remote provisioning. During planning, the user confirmed:
 - Phase 2 may require manual setup so users can choose their desired condition trigger
   code and other relevant settings before adding a condition to their experiment.
 
-All technical choices below are proposals. Move this plan to `active/` when selected
-for implementation. No GitHub repository, GitHub App, Cloudflare service, or invitation
-has been created by this planning task.
+Phase 1 implementation and remote provisioning are now authorized. The private
+`zcm58/FPVS-Studio-Library` repository has been created. Phase 2 technical choices remain
+planning context until separately approved; track Phase 1 verification below.
 
 ## Phase Boundaries
 
@@ -107,7 +116,7 @@ Important findings:
 The active updater plan retains separate installed-system acceptance work. The active
 feedback plan documents a separate Cloudflare/GitHub App service. Neither plan authorizes
 changing those services or reusing their credentials. The planned
-[lab-independent recording setup](lab-independent-recording-setup.md) remains separate;
+[lab-independent recording setup](../planned/lab-independent-recording-setup.md) remains separate;
 this feature must work with today's recording checks.
 
 ## Researcher Workflow
@@ -359,7 +368,7 @@ need a new ProjectFile schema or a change to the existing bundle envelope.
 
 ## Ownership And Implementation Boundaries
 
-- Phase 1 `src/fpvs_studio/library/` (proposed): GUI-neutral service/catalog contracts, credential
+- Phase 1 `src/fpvs_studio/library/`: GUI-neutral service/catalog contracts, credential
   adapter, HTTPS client, bounded download cache, and transfer validation. It must not
   import Qt, runtime, engines, or installer code. Add its own concise `AGENTS.md`.
 - `core/project_bundle.py`: the one archive owner; Phase 1 adds the optional cancellation
@@ -368,7 +377,7 @@ need a new ProjectFile schema or a change to the existing bundle envelope.
 - Phase 2 `core/condition_bundle.py` (proposed): dependency closure, editable compatibility preview,
   identity remapping, project merge, and scoped transaction/recovery. Reuse core models,
   presentation, paths, task assets, and preprocessing manifest services.
-- Proposed `gui/library_dialog.py` and `gui/library_controller.py`: view state and
+- `gui/library_dialog.py` and `gui/library_controller.py`: view state and
   orchestration through the existing app-owned job coordinator. Register only small
   entry-point hooks in Welcome, File, and Settings in Phase 1; add Conditions in Phase 2.
 - Network staging belongs in a bounded OS-local Library cache, separate from updater
@@ -474,14 +483,18 @@ ordinary production preflight remains mandatory. Report unperformed checks expli
 
 ## Open Operational Choices
 
-- Final repository/service names, endpoint domain, maintainer access, and initial packages.
+- Resolved for the test deployment: private `zcm58/FPVS-Studio-Library`, service
+  `fpvs-studio-library.fpvs-studio-zcm58.workers.dev`, and two synthetic demo projects.
+  GitHub App access is restricted to Contents read on that repository; deployment
+  credentials and the App key remain outside source and client builds.
 - Representative archive sizes and expected simultaneous readers; these determine whether
   GitHub's per-asset limit and the chosen Cloudflare plan suit the actual experiments.
 - Invitation lifetime, quotas, admin credential rotation, and service backup/recovery owner.
-- Linux credential-store packaging and supported installed environments.
+- Linux native keyring and supported installed-environment acceptance (packaging
+  explicitly includes the Secret Service backend and its required metadata).
 
-These do not block drafting the phased plan. Resolve them before live
-provisioning and packaged acceptance. No automatic content updates, arbitrary repository
+Resolve remaining operational choices before wider lab rollout and packaged acceptance.
+No automatic content updates, arbitrary repository
 selector, public marketplace, Git LFS client, upload GUI, or cross-project asset sharing
 is included in the first delivery.
 
@@ -499,8 +512,30 @@ is included in the first delivery.
   with `PYTEST_ADDOPTS=--basetemp=build/plib16` passed all 146 tests in 18.10 seconds.
   This establishes the short-path baseline, not a fix for long-path import behavior.
 - [x] Final docs focused passed (9 harness-doc tests); diff and plan links reviewed.
-- [ ] Implementation, service provisioning, visible GUI tests, and installed two-machine
-  acceptance have not started.
+- [x] Phase 1 source implementation: experiment-only Library in Welcome/File/Settings,
+  OS-protected device credentials, verified bounded download cache, asynchronous manifest
+  review, existing new-project setup, cooperative cancellation, and clean publishing.
+- [x] Cleanup: archived six detached/unused worktrees with verified history bundles and
+  their complete working files under `build/worktree-recovery-20260917`; only the main
+  checkout remains registered. Existing stash retained. Created `codex/experiment-library`.
+- [x] Private GitHub repository, read-only App, Cloudflare Worker/D1, encrypted service
+  secrets, and the two synthetic Release assets deployed. The failed browser-download
+  key was revoked; only the supplied active App key remains.
+- [x] Live service acceptance on September 17, 2026: two separate native Windows
+  credential targets enrolled, reloaded credentials, each listed and downloaded both
+  bundles, imported independent projects, disconnected/revoked, and reopened/compiled
+  the local projects without further network requests. Invalid code, absent/invalid
+  credentials and revoked credentials were rejected. Test credentials were removed.
+  Local evidence: `build/lsm-2110eb/acceptance.json` (ignored verification artifact).
+- [x] Local checks: valid 13-scope harness; focused docs/Library/GUI/packaging routes;
+  changed-file Ruff/compilation, full source mypy, GC and docs audits. Safe unit suite:
+  1,795 passed, 8 environment skips, and one sandbox-denied Windows named-pipe test;
+  the named-pipe test passed on its isolated unsandboxed rerun (1,796 passing total).
+  Service: 15 Node tests, 12 publisher tests, and Wrangler dry-build passed.
+- [ ] Visible Qt/manual GUI acceptance: 28 Library cases registered, execution unrun.
+- [ ] New installer, second physical machine, Linux native keyring, display scaling,
+  representative large archive, and physical recording acceptance remain unrun.
+- [ ] Phase 2 individual-condition implementation remains deferred.
 
 The plan follows the repository's compact-map and explicit-owner approach described in
 [harness engineering](https://openai.com/index/harness-engineering/): keep boundaries,

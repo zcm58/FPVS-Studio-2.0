@@ -281,6 +281,7 @@ def test_checked_in_verification_config_is_valid() -> None:
         "docs",
         "engine",
         "gui",
+        "library",
         "packaging",
         "preprocessing",
         "project-io",
@@ -291,6 +292,11 @@ def test_checked_in_verification_config_is_valid() -> None:
     }
     assert "tests/unit/test_qt_test_registry.py" in scopes["repo"].tests
     assert scopes["gui"].full_tests == ("tests/gui",)
+    assert "tests/unit/test_library_client.py" in scopes["library"].tests
+    assert "tests/unit/test_library_cache.py" in scopes["library"].tests
+    assert "tests/unit/test_library_credentials.py" in scopes["library"].tests
+    assert "tests/unit/test_library_publish.py" in scopes["library"].tests
+    assert "tests/unit/test_library_publish.py" in scopes["project-io"].tests
     assert scopes["engine"].full_tests == (
         "tests/integration/test_psychopy_engine.py",
     )

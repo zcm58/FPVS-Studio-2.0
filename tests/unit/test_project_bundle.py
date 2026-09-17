@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import zipfile
 from pathlib import Path
+from threading import Event
 
 import pytest
 
@@ -14,6 +15,7 @@ from fpvs_studio.core.project_bundle import (
     BUNDLE_MANIFEST_FILENAME,
     IMPORT_STAGING_DIRNAME,
     PROJECT_BUNDLE_SUFFIX,
+    ProjectBundleCancelled,
     ProjectBundleError,
     export_project_bundle,
     import_project_bundle,
@@ -467,3 +469,75 @@ def test_import_project_bundle_rejects_unsafe_compression_ratio(
     staging_root = app_data_dir(target_root) / IMPORT_STAGING_DIRNAME
     assert staging_root.is_dir()
     assert list(staging_root.iterdir()) == []
+
+
+@pytest.mark.parametrize("cancel_stage", ["verify", "base", "oddball", "project"])
+def test_cancelled_bundle_import_leaves_existing_projects_unchanged(
+    tmp_path, sample_project, sample_project_root, cancel_stage,
+) -> None:
+    _save_bundle_ready_project(sample_project_root, sample_project)
+    bundle_path = tmp_path / "sample.fpvsbundle"
+    export_project_bundle(sample_project_root, bundle_path)
+    receiver = tmp_path / "receiver"
+    existing = receiver / sample_project.meta.project_id
+    existing.mkdir(parents=True)
+    marker = existing / "keep.txt"
+    marker.write_bytes(b"existing project")
+    cancel_event = Event()
+
+    def progress(stage):
+        if stage == cancel_stage:
+            cancel_event.set()
+
+    with pytest.raises(ProjectBundleCancelled, match="cancelled"):
+        import_project_bundle(
+            bundle_path, receiver, progress_callback=progress, cancel_event=cancel_event,
+        )
+
+    assert marker.read_bytes() == b"existing project"
+    assert list(existing.iterdir()) == [marker]
+    assert not (receiver / f"{sample_project.meta.project_id}-from-bundle").exists()
+    staging = app_data_dir(receiver) / IMPORT_STAGING_DIRNAME
+    assert not staging.exists() or list(staging.iterdir()) == []
+
+
+def test_bundle_import_cancels_during_payload_extraction(
+    tmp_path, sample_project, sample_project_root, monkeypatch,
+) -> None:
+    _save_bundle_ready_project(sample_project_root, sample_project)
+    bundle_path = tmp_path / "sample.fpvsbundle"
+    export_project_bundle(sample_project_root, bundle_path)
+    cancel_event = Event()
+    original_read = zipfile.ZipExtFile.read
+
+    def cancelling_read(handle, size=-1):
+        payload = original_read(handle, size)
+        if handle.name.endswith(".png"):
+            cancel_event.set()
+        return payload
+
+    monkeypatch.setattr(zipfile.ZipExtFile, "read", cancelling_read)
+    receiver = tmp_path / "receiver"
+    with pytest.raises(ProjectBundleCancelled):
+        import_project_bundle(bundle_path, receiver, cancel_event=cancel_event)
+    assert not (receiver / sample_project.meta.project_id).exists()
+    assert list((app_data_dir(receiver) / IMPORT_STAGING_DIRNAME).iterdir()) == []
+
+
+def test_cancelled_bundle_export_preserves_previous_destination(
+    tmp_path, sample_project, sample_project_root,
+) -> None:
+    _save_bundle_ready_project(sample_project_root, sample_project)
+    bundle_path = tmp_path / "sample.fpvsbundle"
+    bundle_path.write_bytes(b"previous export")
+    cancel_event = Event()
+
+    def progress(stage):
+        if stage == "write":
+            cancel_event.set()
+
+    with pytest.raises(ProjectBundleCancelled):
+        export_project_bundle(sample_project_root, bundle_path,
+                              progress_callback=progress, cancel_event=cancel_event)
+    assert bundle_path.read_bytes() == b"previous export"
+    assert not bundle_path.with_name(f".{bundle_path.name}.tmp").exists()

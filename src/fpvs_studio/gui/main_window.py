@@ -138,6 +138,7 @@ class StudioMainWindow(QMainWindow):
         on_load_condition_template_profiles: Callable[[], list[ConditionTemplateProfile]],
         on_manage_condition_templates: Callable[[], list[ConditionTemplateProfile]],
         on_load_fpvs_root_dir: Callable[[], Path | None] | None = None,
+        on_request_library: Callable[[], None] | None = None,
     ) -> None:
         super().__init__()
         self.setObjectName("studio_main_window")
@@ -148,6 +149,7 @@ class StudioMainWindow(QMainWindow):
         self._on_request_import_project_config = on_request_import_project_config
         self._on_request_import_project_bundle = on_request_import_project_bundle
         self._on_request_settings = on_request_settings
+        self._on_request_library = on_request_library
         self.setWindowTitle("FPVS Studio Beta")
         self._auto_workspace_sized = False
         self._auto_workspace_return_size: tuple[int, int] | None = None
@@ -524,6 +526,9 @@ class StudioMainWindow(QMainWindow):
         self.settings_action = QAction("Settings...", self)
         self.settings_action.setObjectName("settings_action")
         self.settings_action.triggered.connect(self._request_settings)
+        self.library_action = QAction("Experiment Library...", self)
+        self.library_action.setObjectName("experiment_library_action")
+        self.library_action.triggered.connect(self._request_library)
         self.check_updates_action = QAction("Check for Updates", self)
         self.check_updates_action.setObjectName("check_updates_action")
         self.check_updates_action.triggered.connect(self.show_update_dialog)
@@ -566,6 +571,7 @@ class StudioMainWindow(QMainWindow):
         self.tools_menu = self.menuBar().addMenu("Tools")
         self.menuBar().setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.file_menu.addAction(self.manage_projects_action)
+        self.file_menu.addAction(self.library_action)
         self.file_menu.addSeparator()
         self.import_menu = QMenu("Import", self.file_menu)
         self.import_menu.setObjectName("file_import_menu")
@@ -1063,6 +1069,7 @@ class StudioMainWindow(QMainWindow):
             self.export_group_summary_action,
             self.save_project_action,
             self.settings_action,
+            self.library_action,
             self.fixation_cross_data_action,
             self.image_resizer_action,
             self.launch_action,
@@ -1342,6 +1349,10 @@ class StudioMainWindow(QMainWindow):
 
     def _request_settings(self) -> None:
         self._on_request_settings()
+
+    def _request_library(self) -> None:
+        if self._on_request_library is not None and self._allow_project_handoff_during_launch():
+            self._on_request_library()
 
     def _update_window_title(self, *_args: object) -> None:
         dirty_prefix = "*" if self.document.dirty else ""

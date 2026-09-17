@@ -18,6 +18,13 @@ py -3.10 -m venv .venv3.10
 The `engine` extra is included because lab builds should contain PsychoPy and runtime
 dependencies. The `packaging` extra installs PyInstaller.
 
+Experiment Library access uses Windows Credential Manager without a Python keyring
+dependency. On Linux, the declared `keyring` and `SecretStorage` dependencies provide
+the explicitly selected Secret Service backend. The Studio spec includes that backend
+and its package metadata only on Linux. A supported installed Linux environment must
+provide an unlocked desktop keyring; verify enrollment/disconnect in the packaged app.
+No plaintext credential fallback is allowed. See [Experiment Library](EXPERIMENT_LIBRARY.md).
+
 For release builds, compare native-library source paths in PyInstaller's
 `Analysis-00.toc` with the authenticated published baseline. Exclude unrelated
 application directories from the build process's `PATH`, while retaining verified

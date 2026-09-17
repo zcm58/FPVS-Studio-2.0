@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path, PureWindowsPath
 
 from PyInstaller.utils.hooks import (
@@ -74,6 +75,9 @@ hiddenimports = []
 hiddenimports += _collect_submodules("fpvs_studio")
 hiddenimports += _collect_submodules("serial")
 hiddenimports += _collect_submodules("psychopy.visual")
+if sys.platform.startswith("linux"):
+    # Library credentials deliberately select Secret Service instead of backend discovery.
+    hiddenimports += ["keyring.backends.SecretService", "secretstorage"]
 hiddenimports += [
     "psychopy",
     "psychopy.core",
@@ -111,6 +115,10 @@ for distribution in (
     "pydantic",
 ):
     datas += _copy_metadata(distribution)
+
+if sys.platform.startswith("linux"):
+    datas += _copy_metadata("keyring")
+    datas += _copy_metadata("SecretStorage")
 
 binaries = []
 for package in (
