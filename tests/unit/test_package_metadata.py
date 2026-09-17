@@ -164,7 +164,16 @@ def test_studio_spec_collects_secure_library_backend_for_linux_only(
     monkeypatch: pytest.MonkeyPatch, platform: str,
 ) -> None:
     hooks = ModuleType("PyInstaller.utils.hooks")
-    hooks.collect_submodules = lambda package: [package]  # type: ignore[attr-defined]
+    developer_modules = [
+        "fpvs_studio.developer",
+        "fpvs_studio.developer.library_publisher",
+        "fpvs_studio.gui.library_publisher_controller",
+        "fpvs_studio.gui.library_publisher_dialog",
+    ]
+    hooks.collect_submodules = (  # type: ignore[attr-defined]
+        lambda package: [package, "fpvs_studio.library.client", *developer_modules]
+        if package == "fpvs_studio" else [package]
+    )
     hooks.collect_data_files = lambda package: []  # type: ignore[attr-defined]
     hooks.collect_dynamic_libs = lambda package: []  # type: ignore[attr-defined]
     hooks.copy_metadata = lambda package: [(package, "metadata")]  # type: ignore[attr-defined]
@@ -177,6 +186,10 @@ def test_studio_spec_collects_secure_library_backend_for_linux_only(
     monkeypatch.setattr(sys, "platform", platform)
 
     def analysis(_entries: list[str], **kwargs: object) -> SimpleNamespace:
+        if "hiddenimports" in kwargs:
+            assert "fpvs_studio.developer" in kwargs["excludes"]
+            assert "fpvs_studio.gui.library_publisher_controller" in kwargs["excludes"]
+            assert "fpvs_studio.gui.library_publisher_dialog" in kwargs["excludes"]
         return SimpleNamespace(pure=[], scripts=[], binaries=[], zipfiles=[], datas=kwargs["datas"])
 
     result = runpy.run_path(
@@ -192,6 +205,8 @@ def test_studio_spec_collects_secure_library_backend_for_linux_only(
     assert ("keyring.backends.SecretService" in result["hiddenimports"]) == (platform == "linux")
     assert (("keyring", "metadata") in result["datas"]) == (platform == "linux")
     assert (("SecretStorage", "metadata") in result["datas"]) == (platform == "linux")
+    assert "fpvs_studio.library.client" in result["hiddenimports"]
+    assert not set(developer_modules).intersection(result["hiddenimports"])
 
 
 def test_bundled_open_sans_font_and_license_are_packaged_assets() -> None:

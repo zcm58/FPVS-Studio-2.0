@@ -14,6 +14,39 @@ revocable credentials; the shared code is configured server-side and can be disa
 Old worktrees are archived before removal. Installed cross-machine and visible GUI
 acceptance must be reported separately from source/service verification.
 
+## Developer publishing follow-up (September 17, 2026)
+
+The user requested a private GUI for preparing and publishing whole experiments.
+Use a dedicated source-checkout launcher on the maintainer's PC. Normal launches hide
+the action, and the standard frozen build excludes the developer publisher modules.
+This controls exposure; write authorization remains with the maintainer's GitHub
+account. The private publishing helper verifies `zcm58` and write access to the private
+Library repository. Researcher invitation/device credentials cannot publish.
+
+1. Open the current experiment in the developer launch and choose File > Export >
+   Publish to Experiment Library. Verify access in a worker; collect title, stable
+   study ID, version, description and minimum Studio version.
+2. Save pending edits explicitly before preparing a clean bundle through the existing
+   core owner. Review its counts, size, checksum, exclusions and sanitized fields.
+3. Publish only after the user selects the final Publish action. The private helper
+   uploads/verifies an immutable Release asset, then updates `catalog.json` on `main`
+   with a compare-and-swap commit. Preserve concurrent catalog additions and retry a
+   failed publication using the exact prepared bundle.
+4. Keep work off the UI thread using the app-owned lifecycle. Cancellation drains
+   preparation/subprocess work. Never claim an interrupted upload was rolled back;
+   retain its prepared files for retry and report uncertain remote completion.
+
+The desktop adapter never reads or stores GitHub tokens. The locally installed private
+helper continues to use the maintainer's existing Git credential helper. No new Worker
+write endpoint, shared publisher secret, end-user developer toggle, or condition import
+is needed. The service's read-only App remains confined to downloads.
+
+Acceptance: normal/frozen entry-point absence, owner/write-access denial, source-safe
+preparation and review, immutable retry, concurrent catalog preservation, honest failure
+and cancellation, and registered visible geometry/lifecycle tests. Run Library, GUI,
+packaging and docs focused routes plus precommit; verify real account access read-only.
+Visible GUI and actual new content publication remain separate explicit checks.
+
 ## Purpose And Confirmed Decisions
 
 Provide an Experiment Library inside FPVS Studio. A researcher can browse complete
@@ -497,9 +530,9 @@ ordinary production preflight remains mandatory. Report unperformed checks expli
   explicitly includes the Secret Service backend and its required metadata).
 
 Resolve remaining operational choices before wider lab rollout and packaged acceptance.
-No automatic content updates, arbitrary repository
-selector, public marketplace, Git LFS client, upload GUI, or cross-project asset sharing
-is included in the first delivery.
+No automatic content updates, arbitrary repository selector, public marketplace,
+Git LFS client, or cross-project asset sharing is included in the first delivery.
+The developer publishing follow-up adds the source-only upload GUI described above.
 
 ## Planning Verification And Progress
 
@@ -546,7 +579,27 @@ is included in the first delivery.
   publisher tests passed with `build/n1` before the full short-path rerun. This remains
   a Windows path-length limitation, not a long-path fix. Added source-choice, Back,
   keyboard activation, cancellation, Welcome/Home routing and View-menu Qt coverage.
-- [ ] Visible Qt/manual GUI acceptance: Library and creation cases registered, execution unrun.
+- [x] Developer publishing follow-up: source-only launcher and desktop shortcut, optional
+  File > Export action, owner/write-access check, save/prepare/review/publish flow,
+  app-owned cancellable workers and exact retry of retained files. Standard frozen
+  builds explicitly exclude the developer adapter and publisher GUI modules.
+- [x] Private helper: bounded JSON access/publication results, immutable asset checks,
+  remote catalog merge with file-SHA conflict retry, and exact-commit confirmation.
+  It does not use invitation/device credentials or add a Worker write endpoint.
+- [x] Read-only developer acceptance: launcher configuration and real desktop-adapter
+  access check succeeded for `zcm58`. Replayed the two existing demo publications with
+  all non-GET requests blocked: 10 reads, two verified items, unchanged catalog at
+  `f02e44fc6fb0ba644d5884815f49403fed9f1242`. No new content was uploaded this follow-up.
+- [x] Developer follow-up verification: Library focused (123 passed, one Windows
+  symlink skip), packaging focused (181 passed), docs focused (9 passed), GUI focused,
+  Ruff/compilation, full source mypy and repository audits passed. Final precommit:
+  1,839 passed, 8 Windows symlink skips with `--basetemp=build/d6`. The initial fixture
+  inherited a long nested pytest path; it now uses a scoped OS-temp directory and all
+  43 adapter tests also pass with a deliberately long repository-local basetemp.
+  The private helper's 31 mocked tests passed; launcher `-Check` and 13-scope harness
+  validation passed. No Worker code or deployment changed.
+- [ ] Visible Qt/manual GUI acceptance: Library, creation and developer publishing
+  geometry/keyboard/lifecycle cases registered; execution remains unrun.
 - [ ] New installer, second physical machine, Linux native keyring, display scaling,
   representative large archive, and physical recording acceptance remain unrun.
 - [ ] Phase 2 individual-condition implementation remains deferred.

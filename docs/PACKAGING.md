@@ -25,6 +25,12 @@ and its package metadata only on Linux. A supported installed Linux environment 
 provide an unlocked desktop keyring; verify enrollment/disconnect in the packaged app.
 No plaintext credential fallback is allowed. See [Experiment Library](EXPERIMENT_LIBRARY.md).
 
+The Library publisher is available only through the explicit source developer launcher.
+The Studio spec filters `fpvs_studio.developer` and the two `gui.library_publisher_*`
+modules from discovery and excludes them from analysis. Public GUI wiring checks the
+frozen/source gate before lazy imports. The private publishing script and maintainer
+credentials are never bundled. Normal installer users retain Library download access.
+
 For release builds, compare native-library source paths in PyInstaller's
 `Analysis-00.toc` with the authenticated published baseline. Exclude unrelated
 application directories from the build process's `PATH`, while retaining verified

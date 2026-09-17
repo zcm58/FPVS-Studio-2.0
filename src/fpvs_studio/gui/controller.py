@@ -77,7 +77,9 @@ from fpvs_studio.updates.helper_client import HelperClient
 from fpvs_studio.updates.models import UpdateCheckResult
 
 if TYPE_CHECKING:
+    from fpvs_studio.developer.library_publisher import PublisherConfig
     from fpvs_studio.gui.library_controller import LibraryController
+    from fpvs_studio.gui.library_publisher_controller import LibraryPublisherController
 
 _SETTINGS_ORGANIZATION = "FPVS Studio"
 _SETTINGS_APPLICATION = "FPVS Studio"
@@ -91,6 +93,17 @@ _AB_PILOT_MODE_KEY = "launch/attentional_blink_pilot_mode"
 _LEGACY_LINUX_DEVELOPMENT_TEST_MODE_KEY = "launch/linux_development_test_mode"
 _MAX_RECENT_PROJECTS = 8
 _LOGGER = logging.getLogger(__name__)
+
+
+def _library_publisher_config() -> PublisherConfig | None:
+    """Leave source-only publishing modules untouched in ordinary installations."""
+    if getattr(sys, "frozen", False) or not os.environ.get(
+        "FPVS_LIBRARY_PUBLISHER_REPO", ""
+    ).strip():
+        return None
+    from fpvs_studio.developer.library_publisher import get_publisher_config
+
+    return get_publisher_config()
 
 
 def _condition_template_library_signature(root_dir: Path) -> tuple[int, int, int] | None:
@@ -140,6 +153,8 @@ class StudioController(QObject):
         self._library_import_finished: Callable[[Path | None], None] | None = None
         self._library_import_result: Path | None = None
         self._library_controller: LibraryController | None = None
+        self._publisher_config: PublisherConfig | None = None
+        self._library_publisher_controller: LibraryPublisherController | None = None
         self._import_bundle_progress_bridge: ProgressSignalBridge | None = None
         self._import_bundle_processing_window: StudioMainWindow | None = None
         self._import_bundle_processing_dialog: BundleImportProgressDialog | None = None
@@ -759,6 +774,41 @@ class StudioController(QObject):
             return
         self.import_project_bundle_file(path, on_finished=finished, review_manifest=manifest)
 
+    def show_library_publisher(self) -> None:
+        """Show the source-only publisher with the current experiment's save contract."""
+        window = self.main_window
+        if window is None or self._publisher_config is None or not self._can_publish_from(window):
+            return
+        if self._library_publisher_controller is None:
+            from fpvs_studio.developer.library_publisher import PublisherError, PublisherService
+            from fpvs_studio.gui.library_publisher_controller import LibraryPublisherController
+
+            try:
+                service = PublisherService(self._publisher_config)
+            except PublisherError as error:
+                window.statusBar().showMessage(str(error))
+                return
+            self._library_publisher_controller = LibraryPublisherController(
+                self._app, service=service,
+            )
+        self._library_publisher_controller.show(
+            project_root=window.document.project_root,
+            title=window.document.project.meta.name,
+            item_id=window.document.project.meta.project_id,
+            save_project=lambda: self._can_publish_from(window) and window.save_project(),
+        )
+
+    def _can_publish_from(self, window: StudioMainWindow) -> bool:
+        return (
+            self.main_window is window
+            and self._active_import_bundle_task is None
+            and self._library_import_job is None
+            and window._active_bundle_export_task is None
+            and not window._bundle_import_processing_active
+            and window._allow_project_handoff_during_launch()
+            and window._allow_project_handoff_during_fixation_load()
+        )
+
     def _open_document(self, document: ProjectDocument) -> None:
         document.set_session_export_mode(self.load_run_export_mode())
         document.set_require_biosemi_recording_confirmation(
@@ -771,6 +821,16 @@ class StudioController(QObject):
         )
         self.record_recent_project_root(document.project_root)
         previous_window = self.main_window
+        publisher_notice = ""
+        try:
+            self._publisher_config = _library_publisher_config()
+        except Exception as error:
+            self._publisher_config = None
+            _LOGGER.error("Developer publisher configuration is invalid (%s)", type(error).__name__)
+            publisher_notice = (
+                "Developer publishing is unavailable. Check FPVS_LIBRARY_PUBLISHER_REPO "
+                "and reopen the experiment."
+            )
         self.main_window = StudioMainWindow(
             document=document,
             on_request_new_project=self.show_create_project_dialog,
@@ -780,6 +840,9 @@ class StudioController(QObject):
             on_request_import_project_bundle=self.show_import_project_bundle_dialog,
             on_request_settings=self.show_settings_dialog,
             on_request_library=self.show_library,
+            on_request_library_publish=(
+                self.show_library_publisher if self._publisher_config is not None else None
+            ),
             on_load_condition_template_profiles=self._load_condition_template_profiles,
             on_manage_condition_templates=self._show_condition_template_manager,
             on_load_fpvs_root_dir=self.load_fpvs_root_dir,
@@ -790,6 +853,8 @@ class StudioController(QObject):
         ):
             self.main_window.setGeometry(self.welcome_window.geometry())
         self._show_opened_main_window(previous_window)
+        if publisher_notice:
+            self.main_window.statusBar().showMessage(publisher_notice)
 
     def _show_opened_main_window(self, previous_window: StudioMainWindow | None) -> None:
         target_window = self.main_window

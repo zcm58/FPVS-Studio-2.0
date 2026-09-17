@@ -131,7 +131,63 @@ lease while the existing importer reads the archive, preventing another Studio p
 from replacing the payload. The imported project refers only to its own copied files.
 No updater staging directory, installed program file or downloaded script participates.
 
-## Preparing complete projects for publication
+## Developer publishing in Studio
+
+The source-only developer launcher exposes **File > Export > Publish to Experiment
+Library...** for an open experiment. Normal launches omit this action. Standard
+PyInstaller builds exclude the developer adapter and publishing dialog/controller;
+setting the launcher environment variable cannot enable them in an installed app.
+
+On the configured maintainer PC, use the **FPVS Studio Developer** shortcut or run:
+
+```powershell
+./scripts/start_library_developer.ps1
+```
+
+The launcher defaults to the private checkout at `build/experiment-library-service`.
+Use `-LibraryRepository 'X:\path\FPVS-Studio-Library'` for an explicit alternate checkout.
+`-Check` checks the local setup without opening Qt or publishing. The opt-in
+`FPVS_LIBRARY_PUBLISHER_REPO` variable applies only to the launched process; no global
+developer setting, project field or download invitation enables publishing.
+
+Visibility is a convenience boundary. Before uploading, the private helper checks the
+authenticated GitHub user is `zcm58`, the repository is the expected private Library,
+and the account has write access. It uses the maintainer's existing Git credential
+helper or explicitly configured `GH_TOKEN`. Studio does not collect, store or log a
+GitHub token; the helper runs locally and keeps its credential in memory. The download
+service and its read-only GitHub App cannot publish, and lab invitation codes grant
+download access only. Anyone with control of the maintainer's OS account or GitHub
+credentials has that account's authority; hiding a menu is not an authentication system.
+
+1. Open the experiment and select **Publish to Experiment Library...**. Wait for the
+   account check, then enter its Library title, stable study ID, version, description
+   and minimum Studio version.
+2. Prepare the bundle. Pending editor changes must save successfully first. Preparation
+   copies through the existing clean publishing exporter, without uploading. Review the
+   file counts, archive size, checksum, included/excluded paths and sanitized settings.
+3. Select **Publish** after reviewing that exact bundle. The worker uploads/verifies
+   its immutable Release asset, then commits the merged `catalog.json` directly to
+   GitHub `main`. No manual metadata editing, Git commit or push is needed in this flow.
+4. Success is shown only after catalog publication is confirmed. Researchers can then
+   refresh the Library. A newer publication never changes an already installed copy.
+
+Keep the same study ID and increase the version for a revised experiment. Fields lock
+after preparation so Publish cannot send different metadata from the reviewed bundle.
+Failed publications retain their prepared files and can retry the same payload.
+Stopping an upload does not guarantee GitHub rolled back requests already received;
+Studio reports an uncertain outcome and preserves the bundle for recovery. Reopen the
+publisher to retry an in-session prepared publication. Do not regenerate different
+bytes under an already used version or release tag.
+
+The helper fetches the current online catalog, merges existing experiments, and updates
+it using GitHub's file SHA. A concurrent change causes a bounded refetch/merge retry;
+conflicting changes to the same published version are refused. GUI publication does
+not modify the service checkout's working files. Run `git pull --ff-only origin main`
+there before subsequent manual repository work. The Contents API requires repository
+write access and the current file SHA for replacement; see
+[GitHub's Contents API](https://docs.github.com/en/rest/repos/contents?apiVersion=2026-03-10#create-or-update-file-contents).
+
+## Preparing complete projects for publication from the command line
 
 Use the explicit preparation tool rather than uploading an ordinary export without
 review. It accepts a saved project directory or existing `.fpvsbundle`, creates a staged
@@ -216,8 +272,8 @@ $report | ConvertTo-Json -Depth 20 |
 Use a stable lowercase, hyphenated `item_id` for one study. Use a new version, filename
 and release tag when its content changes. Published item/version pairs are immutable.
 The minimum Studio version defaults to the exporting checkout's version; preparation
-does not infer compatibility from the study's features. The current publisher also
-limits each preparation report to 1 MiB, which can constrain large asset inventories.
+does not infer compatibility from the study's features. Preparation reports may be up
+to 16 MiB; the published catalog retains its separate 1 MiB bound.
 
 In a clean Library checkout, update `main`, preview the release, then publish:
 
@@ -274,6 +330,7 @@ with controlled clients/importers; it does not access the live service.
 | Experiment Library | 900×640 | 1040×760 |
 | Welcome with four project actions | 760×520 | 1120×720 |
 | Create Project, all three pages | 760×500 | 800×500 |
+| Developer publisher | 860×680 | 940×760 |
 | Settings with Library access | 700×564 | Minimum |
 | Settings with local Test Mode | 700×654 | Minimum |
 | Settings with AB Pilot Mode | 700×724 | Minimum |
@@ -286,6 +343,10 @@ bundle import/export remains available independently of the Library.
 Check **View > Experiment Library...**, both Create Project choices, and Back from
 details to category to source choice. Confirm a Library selection does not create a
 blank project and cancelling either path leaves existing projects unchanged.
+In the developer launch, check access denial, long descriptions/inventories, Prepare,
+review, final Publish, immutable retry, cancellation and close/app quit while work is
+active. Confirm normal launches and packaged builds omit the publishing surface. Tests
+mock remote writes; a real new experiment is published only by an explicit Publish.
 
 Release acceptance requires two separate machine/user profiles with different Studio
 roots: enroll, list the same fixtures, install, inspect/edit Setup, disconnect networking,

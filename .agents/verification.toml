@@ -113,20 +113,26 @@ tests = [
   "tests/unit/test_library_cache.py",
   "tests/unit/test_library_credentials.py",
   "tests/unit/test_library_publish.py",
+  "tests/unit/test_developer_library_publisher.py",
 ]
 full_tests = []
 include = [
   "src/fpvs_studio/library/**",
+  "src/fpvs_studio/developer/**",
   "src/fpvs_studio/core/library_publish.py",
   "src/fpvs_studio/gui/library_*.py",
   "scripts/prepare_library_bundle.py",
   "scripts/create_library_test_bundles.py",
+  "scripts/start_library_developer.ps1",
   "tests/unit/test_library_*.py",
+  "tests/unit/test_developer_library_publisher.py",
   "tests/gui/test_library_dialog.py",
+  "tests/gui/test_library_publisher_dialog.py",
 ]
 manual_smoke = [
   "Enroll two machine/user profiles and install a whole project from the Experiment Library; inspect Setup and reopen offline.",
   "Use an approved visible session to check cancellation, revocation, and dialog sizes documented in docs/EXPERIMENT_LIBRARY.md.",
+  "In the source-only developer launch, open File > Export > Publish to Experiment Library; review a prepared bundle, test cancellation/retry, and confirm the action is absent from normal launches.",
 ]
 
 [scopes.preprocessing]

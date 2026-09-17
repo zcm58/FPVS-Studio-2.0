@@ -20,6 +20,11 @@ lazily only inside the engine package.
   `core/library_publish.py` prepares clean publishable whole-project copies.
   Private content and the independent Cloudflare service live in
   `zcm58/FPVS-Studio-Library`. See `docs/EXPERIMENT_LIBRARY.md`.
+- `src/fpvs_studio/developer/`: source-only, explicitly enabled maintainer tools. The
+  Library publisher prepares through core, then runs the private checkout's canonical
+  publishing helper in a bounded worker subprocess. The helper owns GitHub credentials,
+  owner/write authorization, release uploads and atomic online catalog publication.
+  Standard frozen builds exclude this package and its publisher GUI modules.
 - `src/fpvs_studio/support/`: GUI-neutral bug-report and feature-request contracts, queued
   application diagnostics, bounded OS-local drafts, and an opt-in HTTPS client.
   The native File > Report a Bug dialog uses app-owned background jobs; online

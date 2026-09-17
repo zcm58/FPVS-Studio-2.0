@@ -549,6 +549,15 @@ and materialization still surface invalid or inconsistent source details before 
 launch. Word stimulus rows are shown for readiness context but cannot use image-folder
 import, inspection, or materialization actions.
 
+The source-only developer launcher adds **File > Export > Publish to Experiment
+Library...** for the current experiment. Its modal surface checks maintainer access,
+saves pending edits before preparing, shows a clean-bundle review, and publishes only
+when the user selects the final action. App-owned workers prepare, upload and commit
+the online catalog; failures preserve the exact payload for retry. Minimum/default
+sizes are `860x680` / `940x760`. Normal launches omit the action, and standard packaged
+builds exclude its modules. See [developer publishing](EXPERIMENT_LIBRARY.md#developer-publishing-in-studio)
+for authorization, cancellation, recovery and the launcher.
+
 The top-level menu order is `File`, `View`, `Tools`. The `File` menu groups
 manage-projects, `Import` and `Export` submenus, settings, and help/update actions with
 native separators. `View` starts with `Experiment Library...`, then a separator and
