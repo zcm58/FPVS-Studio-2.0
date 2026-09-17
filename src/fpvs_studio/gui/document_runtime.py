@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any, cast
 from pydantic import ValidationError
 
 from fpvs_studio.core.compiler import CompileError, compile_session_plan
-from fpvs_studio.core.enums import EngineName, TriggerBackendKind
+from fpvs_studio.core.enums import EngineName
 from fpvs_studio.core.execution import ParticipantMetadata
 from fpvs_studio.core.models import ProjectFile, ProjectValidationReport
 from fpvs_studio.core.session_plan import SessionPlan
@@ -179,11 +179,9 @@ class DocumentRuntimeMixin:
                     engine_name=engine_name,
                     fullscreen=fullscreen,
                     display_index=display_index,
-                    serial_enabled=(
-                        not self.local_testing_enabled
-                        and trigger_settings.enabled
-                        and trigger_settings.backend == TriggerBackendKind.SERIAL
-                    ),
+                    # Persisted legacy flags cannot disable EEG recording output.
+                    serial_enabled=not self.local_testing_enabled,
+                    experiment_test_mode=self.experiment_test_mode_enabled,
                     serial_port=trigger_settings.serial_port,
                     serial_baudrate=trigger_settings.baudrate,
                     serial_pulse_width_ms=trigger_settings.pulse_width_ms,

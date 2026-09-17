@@ -95,6 +95,9 @@ This phase should establish:
 - Do not move session randomization or compilation logic out of core and into runtime.
 - Do not add null-trigger fallback after a configured serial backend fails to open or
   write.
+- Normal launches default to serial output. Null output requires an explicit
+  `experiment_test_mode` or `pilot_mode` runtime flag; `serial_enabled=false` alone
+  must be rejected. Legacy project disabled/null flags cannot suppress GUI recording.
 
 ## Export guidance
 

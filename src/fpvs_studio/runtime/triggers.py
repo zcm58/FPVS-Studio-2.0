@@ -173,7 +173,16 @@ def build_trigger_backend(
 
     options = runtime_options or {}
     serial_port = options.get("serial_port")
-    serial_enabled = bool(options.get("serial_enabled", False))
+    serial_enabled = options.get("serial_enabled", True)
+    test_mode = options.get("experiment_test_mode", False)
+    pilot_mode = options.get("pilot_mode", False)
+    if not all(isinstance(value, bool) for value in (serial_enabled, test_mode, pilot_mode)):
+        raise ValueError("Serial output and test-mode flags must be booleans.")
+    if not serial_enabled and not (test_mode or pilot_mode):
+        raise ValueError(
+            "Serial trigger output is required for recording. Null output is only allowed "
+            "in Experiment Test Mode or Pilot Study Mode."
+        )
     if isinstance(serial_port, str) and not serial_port.strip():
         raise ValueError("serial_port may not be blank when provided.")
     if serial_enabled:

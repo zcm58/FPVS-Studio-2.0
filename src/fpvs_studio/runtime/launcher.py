@@ -38,7 +38,7 @@ class LaunchSettings:
     engine_name: str | EngineName = EngineName.PSYCHOPY
     fullscreen: bool = True
     display_index: int | None = None
-    serial_enabled: bool = False
+    serial_enabled: bool = True
     serial_port: str | None = "COM3"
     serial_baudrate: int = 115200
     serial_pulse_width_ms: int = 10
@@ -54,6 +54,7 @@ class LaunchSettings:
     windowed_size_px: tuple[int, int] = (1280, 720)
     export_mode: str = EXPORT_MODE_FULL
     pilot_mode: bool = False
+    experiment_test_mode: bool = False
 
     def as_runtime_options(self) -> dict[str, object]:
         """Return a generic engine-facing runtime options mapping."""
@@ -68,6 +69,8 @@ class LaunchSettings:
 def _validate_launch_settings(settings: LaunchSettings) -> None:
     if not isinstance(settings.pilot_mode, bool):
         raise LaunchSettingsError("pilot_mode must be a boolean.")
+    if not isinstance(settings.experiment_test_mode, bool):
+        raise LaunchSettingsError("experiment_test_mode must be a boolean.")
     if settings.display_index is not None:
         if not isinstance(settings.display_index, int) or settings.display_index < 0:
             raise LaunchSettingsError("display_index must be None or a non-negative integer.")
@@ -75,6 +78,11 @@ def _validate_launch_settings(settings: LaunchSettings) -> None:
         raise LaunchSettingsError("fullscreen must be a boolean.")
     if not isinstance(settings.serial_enabled, bool):
         raise LaunchSettingsError("serial_enabled must be a boolean.")
+    if not settings.serial_enabled and not (settings.experiment_test_mode or settings.pilot_mode):
+        raise LaunchSettingsError(
+            "Serial trigger output is required for recording. Null output is only allowed "
+            "in Experiment Test Mode or Pilot Study Mode."
+        )
     if not isinstance(settings.strict_timing, bool):
         raise LaunchSettingsError("strict_timing must be a boolean.")
     if not isinstance(settings.strict_timing_warmup, bool):

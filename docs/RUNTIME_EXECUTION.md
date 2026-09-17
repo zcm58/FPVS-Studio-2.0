@@ -219,8 +219,12 @@ The PsychoPy implementation:
 - the `oddball_onset` marker code is locked to `55`; a nonstandard oddball marker code
   is only valid when the project or `.fpvsconfig` explicitly records
   `allow_nonstandard_oddball_trigger_code=true` in response to user direction
-- raw runtime launch settings can still disable serial output and use the logged null
-  backend when `serial_enabled` is false
+- normal GUI launches always enable serial output, regardless of legacy project
+  `triggers.enabled` or `triggers.backend` values; the configured port and baudrate
+  remain in use
+- runtime launch settings default to serial output. `serial_enabled=false` requires
+  explicit `experiment_test_mode=true` or `pilot_mode=true`; otherwise launch fails
+  before playback. Missing/busy ports or failed writes never select null output
 - serial-port execution writes single-byte marker codes to the configured COM port and
   baudrate
 
@@ -638,8 +642,8 @@ In the current v1 runtime:
 - GUI launch fixes PsychoPy playback to fullscreen presentation
 - session order is randomized within each block using the current random order seed
 - every condition waits for the participant to press Space before playback starts
-- trigger output follows the project's trigger settings; new projects default to
-  BioSemi-compatible serial output on `COM3`, and oddball onset output is locked to
+- recording launches always use BioSemi-compatible serial output with the project's
+  port and baudrate (new projects default to `COM3`); oddball onset output is locked to
   marker code `55` unless the project records an explicit nonstandard-code override
 - completion screens retain the explicit 0.5-second auto-dismiss duration
 - GUI launches use report-only timing misses, a `1.5`-frame-interval miss threshold,
@@ -657,12 +661,13 @@ saved in the project or app settings and has no dedicated compiled field; the re
 ordinary `SessionPlan` records only the compiled entries. Production launches continue
 to compile all conditions. The document launch adapter keeps the authored trigger
 settings unchanged while creating `LaunchSettings` with `serial_enabled=false`,
+`experiment_test_mode=true`,
 `verify_refresh_rate=false`, and
 `verify_graphics_memory=false`. Fullscreen playback, compilation, asset preflight,
 condition/task flow, frame timing, timing warmup/QC, and normal test exports remain
 active, but the result does not claim graphics-hardware qualification. The preference
-is unavailable in packaged builds and is not persisted in ProjectFile, RunSpec, or
-SessionPlan.
+is available in source and installed builds and is not persisted in ProjectFile,
+RunSpec, or SessionPlan.
 
 Compilation, session flow, scoring, and export behavior remain independent of the
 retired runtime mode gate; test behavior is composed only from explicit launch options.
