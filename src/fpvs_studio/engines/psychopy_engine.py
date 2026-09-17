@@ -297,6 +297,16 @@ class PsychoPyEngine(PresentationEngine):
                 "Runtime must supply a connected trigger backend before playback. "
                 "Test and pilot launches must supply an explicit log-only backend."
             )
+        options = runtime_options or {}
+        if not trigger_backend.emits_hardware_triggers and not (
+            options.get("experiment_test_mode") is True or options.get("pilot_mode") is True
+        ):
+            raise ValueError(
+                "Recording playback requires a hardware trigger backend. Log-only output "
+                "is permitted only in explicit Experiment Test Mode or Pilot Study Mode."
+            )
+        if not run_spec.trigger_events:
+            raise ValueError("Condition playback requires a compiled trigger schedule.")
         if (
             run_spec.attentional_blink is not None
             and run_spec.attentional_blink.layout != "letter_stream"

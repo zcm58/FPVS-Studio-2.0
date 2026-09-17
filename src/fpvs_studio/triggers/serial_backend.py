@@ -45,6 +45,10 @@ class SerialBackend(TriggerBackend):
         self._serial_module = serial_module
         self._connection: Any | None = None
 
+    @property
+    def emits_hardware_triggers(self) -> bool:
+        return True
+
     def connect(self) -> None:
         if self._connection is not None:
             return

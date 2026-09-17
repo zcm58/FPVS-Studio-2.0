@@ -32,11 +32,16 @@ class LoggedTriggerBackend(TriggerBackend):
     ) -> None:
         if backend is None:
             raise ValueError("A trigger backend must be explicitly supplied.")
-        if (backend_name == "null") != isinstance(backend, NullBackend):
+        expected_name = "serial" if backend.emits_hardware_triggers else "null"
+        if backend_name != expected_name:
             raise ValueError("Trigger backend name must match its actual null/serial output.")
         self._backend = backend
         self._backend_name = backend_name
         self._raw_records: list[_RawTriggerAttempt] = []
+
+    @property
+    def emits_hardware_triggers(self) -> bool:
+        return self._backend.emits_hardware_triggers
 
     @property
     def backend_name(self) -> str:

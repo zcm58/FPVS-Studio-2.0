@@ -11,6 +11,12 @@ from abc import ABC, abstractmethod
 class TriggerBackend(ABC):
     """Minimal trigger backend interface."""
 
+    @property
+    def emits_hardware_triggers(self) -> bool:
+        """Require hardware adapters to explicitly declare physical output."""
+
+        return False
+
     @abstractmethod
     def connect(self) -> None:
         """Open or initialize backend resources."""

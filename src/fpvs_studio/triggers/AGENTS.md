@@ -8,6 +8,8 @@ adapter scaffolding.
 ## Requirements
 
 - Keep trigger backends runtime-facing and hardware-adapter focused.
+- Hardware adapters must explicitly report `emits_hardware_triggers=True`; the base
+  contract defaults to false and runtime wrappers preserve the underlying capability.
 - Keep trigger planning in compiled core contracts and trigger logging/export behavior
   in runtime.
 - Do not push serial-port or hardware-only settings into `RunSpec` or `SessionPlan`.

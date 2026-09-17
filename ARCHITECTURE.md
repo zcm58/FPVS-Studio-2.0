@@ -214,6 +214,8 @@ owns endpoint estimates and task-response checkpoints. Details and acceptance ar
   task sequencing, validation, compilation, session decisions, project persistence,
   or exports. Runtime image/word transforms and native geometry are compiled
   presentation properties and never create project assets.
+  The trigger backend contract declares physical-output capability; playback rejects
+  log-only backends outside explicit test/pilot launches and empty trigger schedules.
 - Full export mode writes each numbered visit under `runs/P<PID>_session<NN>/`.
   Compact mode keeps reporting and visit reservations under `logs/` without detailed
   run folders. Historical outputs remain in place.

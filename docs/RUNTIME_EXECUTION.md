@@ -235,6 +235,11 @@ serial adapter owns resolution, and launch options record the resolved port.
 The logged wrapper requires an explicit backend and a matching backend name;
 omitting a backend cannot silently construct null output. The PsychoPy playback
 entry point also rejects a missing backend before opening its session.
+The shared backend contract defaults `emits_hardware_triggers` to false; the serial
+adapter explicitly reports true and logging wrappers preserve that capability.
+Playback independently rejects a log-only backend unless an explicit boolean test or
+pilot flag is true, including callers that bypass runtime's factory. Preflight and
+playback also reject an empty trigger schedule instead of silently running without markers.
 
 Project trigger settings such as COM port, baudrate, pulse width, reset code, and reset
 delay are mapped into runtime-only launch options. They are not stored in `RunSpec` or

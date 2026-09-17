@@ -413,6 +413,8 @@ def _validate_fixation_timing(run_spec: RunSpec) -> None:
 
 
 def _validate_trigger_timing(run_spec: RunSpec) -> None:
+    if not run_spec.trigger_events:
+        raise PreflightError("Run preflight failed because the compiled trigger schedule is empty.")
     for trigger_event in run_spec.trigger_events:
         if trigger_event.frame_index >= run_spec.display.total_frames:
             raise PreflightError(

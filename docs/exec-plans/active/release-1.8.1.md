@@ -28,6 +28,18 @@ remain explicit hardware-free exceptions. No hardware fallback is permitted.
 
 ## Verification boundary
 
+The final source review additionally found that direct engine callers could pass an
+explicit null backend without test/pilot options, and ordinary FPVS preflight accepted
+an empty trigger schedule. Both entry points now reject those states. Backend hardware
+capability is explicit and preserved by logging wrappers; undeclared adapters default
+to log-only. The initial candidate is superseded before publication and rebuilt.
+
+Git history locates saved project flag selection and the null runtime default in
+`2f4fd77` (v0.9.5). Library commit `bfbcd46` cleared only the serial port, leaving
+enabled/backend flags unchanged; that separate blank-port problem was changed to COM3
+in `42a3216`. The affected machine's project/settings were not available, so the exact
+source of its disabled flag is not proven by the screenshot alone.
+
 The user explicitly requested no tests and immediate publication. Automated tests,
 packaged Studio GUI smoke, installed upgrade, physical display and BioSemi trigger
 checks are deferred. Build-time metadata checks and artifact/hash verification
