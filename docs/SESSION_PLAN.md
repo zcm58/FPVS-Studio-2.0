@@ -38,6 +38,20 @@ validates the full project before it offers the test-mode selector.
 
 ## Main models
 
+### Compilation input preparation
+
+`compiler_inputs.py` owns validation, presentation resolution, manifest presence/absence,
+and stimulus pools for one compilation call. `compiler_tasks.py` similarly indexes task
+definitions, checks contained task assets and streams each unique image hash once.
+Linked memory tasks share one seeded realization per entry across pre/post phases.
+These preparation objects never persist into a plan or survive to the next launch.
+
+Every entry still receives independently realized schedules and mutable run/task models;
+copying prepared presentation values prevents one run's edits from affecting another.
+The public single-run compiler still performs validation. Preflight and later compilation
+calls recheck inputs. Whole-plan seeded parity and bounded file-work regressions live in
+`tests/unit/test_compiler_preparation.py`; use the compiler focused verification route.
+
 ### `InterConditionTransitionSpec`
 
 Captures the session-level transition policy applied before each compiled run.

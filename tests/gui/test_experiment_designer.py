@@ -431,6 +431,26 @@ def test_folder_selection_attaches_the_correct_source_without_adding_slots(
     assert dialog.cycle_canvas.roles() == before_roles
     assert dialog._task is None
 
+    first_source = document.get_condition_stimulus_set(condition_id, role)
+    replacement = write_image_directory(tmp_path / "replacement-source", count=1)
+    (replacement / "stimulus-01.png").rename(replacement / "replacement.png")
+    monkeypatch.setattr(QFileDialog, "getExistingDirectory", lambda *_args: str(replacement))
+    _physical_click(qtbot, card.folder_button)
+
+    second_source = document.get_condition_stimulus_set(condition_id, role)
+    assert second_source.set_id != first_source.set_id
+    assert second_source.image_count == card.source_count == 1
+    assert document.manifest is not None
+    manifest_set = next(
+        item for item in document.manifest.sets if item.set_id == second_source.set_id
+    )
+    assert [Path(asset.source.relative_path).name for asset in manifest_set.assets] == [
+        "replacement.png"
+    ]
+    assert len(list((document.project_root / first_source.source_dir).glob("*.png"))) == 3
+    assert dialog.cycle_canvas.roles() == before_roles
+    assert dialog._task is None
+
 
 @pytest.mark.parametrize("use_manifest_paths", [True, False])
 def test_designer_import_preserves_long_filename_and_decodes_long_destination(

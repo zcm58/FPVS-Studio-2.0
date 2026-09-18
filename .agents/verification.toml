@@ -35,7 +35,7 @@ manual_smoke = []
 
 [scopes.gui]
 checks = []
-tests = []
+tests = ["tests/unit/test_preprocessing_import.py"]
 full_tests = ["tests/gui"]
 include = ["src/fpvs_studio/gui/**", "tests/gui/**"]
 manual_smoke = [
@@ -72,6 +72,7 @@ manual_smoke = []
 [scopes.compiler]
 checks = []
 tests = [
+  "tests/unit/test_compiler_preparation.py",
   "tests/unit/test_compiler.py",
   "tests/unit/test_compiler_fixation.py",
   "tests/unit/test_attentional_blink_compiler.py",
@@ -90,6 +91,7 @@ manual_smoke = []
 [scopes."project-io"]
 checks = []
 tests = [
+  "tests/unit/test_serialization.py",
   "tests/unit/test_condition_template_profiles.py",
   "tests/unit/test_project_bundle.py",
   "tests/unit/test_library_publish.py",
@@ -103,7 +105,7 @@ tests = [
   "tests/unit/test_modifier_presets.py",
 ]
 full_tests = []
-include = ["src/fpvs_studio/core/project*.py", "src/fpvs_studio/core/library_publish.py", "src/fpvs_studio/core/task_assets.py", "src/fpvs_studio/core/template_library.py", "src/fpvs_studio/core/condition_template_profiles.py", "src/fpvs_studio/core/attentional_blink_presets.py", "src/fpvs_studio/core/modifier_presets.py", "tests/unit/test_modifier_presets.py", "tests/unit/test_attentional_blink_presets.py", "tests/unit/test_project*.py", "tests/unit/test_library_publish.py", "tests/unit/test_experiment_categories.py", "tests/unit/test_template_library.py", "tests/unit/test_condition_template_profiles.py"]
+include = ["src/fpvs_studio/core/project*.py", "src/fpvs_studio/core/serialization.py", "src/fpvs_studio/core/library_publish.py", "src/fpvs_studio/core/task_assets.py", "src/fpvs_studio/core/template_library.py", "src/fpvs_studio/core/condition_template_profiles.py", "src/fpvs_studio/core/attentional_blink_presets.py", "src/fpvs_studio/core/modifier_presets.py", "tests/unit/test_serialization.py", "tests/unit/test_modifier_presets.py", "tests/unit/test_attentional_blink_presets.py", "tests/unit/test_project*.py", "tests/unit/test_library_publish.py", "tests/unit/test_experiment_categories.py", "tests/unit/test_template_library.py", "tests/unit/test_condition_template_profiles.py"]
 manual_smoke = []
 
 [scopes.library]
@@ -141,6 +143,7 @@ manual_smoke = [
 [scopes.preprocessing]
 checks = []
 tests = [
+  "tests/unit/test_preprocessing_import.py",
   "tests/unit/test_preprocessing_assets.py",
   "tests/unit/test_preprocessing_inspection.py",
   "tests/unit/test_preprocessing_normalization.py",
@@ -153,6 +156,7 @@ manual_smoke = []
 [scopes.runtime]
 checks = []
 tests = [
+  "tests/unit/test_runtime_result_durability.py",
   "tests/unit/test_runtime_display_refresh.py",
   "tests/unit/test_runtime_fixation.py",
   "tests/unit/test_runtime_fixation_report.py",

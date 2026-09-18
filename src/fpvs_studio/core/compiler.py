@@ -11,22 +11,20 @@ import random
 from pathlib import Path
 
 from fpvs_studio.core.attentional_blink_presets import RECALL_TASK_ID
-from fpvs_studio.core.compiler_assets import load_manifest, resolve_stimulus_items
 from fpvs_studio.core.compiler_attentional_blink_stream import (
     compile_attentional_blink_stream_sequence,
 )
 from fpvs_studio.core.compiler_conditions import (
     select_condition,
     select_conditions,
-    validate_selected_condition,
 )
 from fpvs_studio.core.compiler_fixation import (
     build_fixation_events,
     resolve_realized_target_count,
 )
+from fpvs_studio.core.compiler_inputs import CompilationInputs
 from fpvs_studio.core.compiler_presentation import (
     build_interleaved_text_height_values,
-    compile_condition_presentation,
 )
 from fpvs_studio.core.compiler_schedules import (
     build_stimulus_sequence,
@@ -42,6 +40,7 @@ from fpvs_studio.core.compiler_support import (
     make_session_run_id,
 )
 from fpvs_studio.core.compiler_tasks import (
+    TaskCompilationInputs,
     compile_condition_tasks,
     compile_modifier_baseline,
     condition_tasks_replace_start_gate,
@@ -61,7 +60,7 @@ from fpvs_studio.core.frame_validation import (
     frames_per_stimulus,
     on_off_frames,
 )
-from fpvs_studio.core.models import AttentionalBlinkStreamSettings, ProjectFile
+from fpvs_studio.core.models import AttentionalBlinkStreamSettings, Condition, ProjectFile
 from fpvs_studio.core.presentation import resolve_pre_stream_fixation_seconds
 from fpvs_studio.core.run_spec import (
     AttentionalBlinkStreamRunSpec,
@@ -72,7 +71,6 @@ from fpvs_studio.core.run_spec import (
 )
 from fpvs_studio.core.session_plan import SessionBlock, SessionEntry, SessionPlan
 from fpvs_studio.core.task_models import TaskPhase
-from fpvs_studio.core.template_library import get_template
 from fpvs_studio.core.trigger_codes import validate_oddball_trigger_code_policy
 from fpvs_studio.preprocessing.models import StimulusManifest
 
@@ -97,14 +95,24 @@ def compile_run_spec(
     except ValueError as exc:
         raise CompileError(str(exc)) from exc
     condition = select_condition(project, condition_id)
-    base_set, oddball_set = validate_selected_condition(
-        project,
-        condition,
-        refresh_hz=refresh_hz,
+    return _compile_prepared_run(
+        CompilationInputs(project, refresh_hz=refresh_hz, project_root=project_root,
+                          manifest=manifest),
+        condition, random_seed=random_seed, run_id=run_id,
+        realized_target_count=realized_target_count,
     )
 
-    resolved_manifest = load_manifest(project_root, manifest)
-    template = get_template(project.meta.template_id)
+
+def _compile_prepared_run(
+    inputs: CompilationInputs, condition: Condition, *, random_seed: int,
+    run_id: str | None, realized_target_count: int | None,
+) -> RunSpec:
+    project, refresh_hz = inputs.project, inputs.refresh_hz
+    prepared = inputs.condition(condition)
+    base_set, oddball_set = prepared.base_set, prepared.oddball_set
+    # Resolve even word-only launches once, preserving manifest errors at this boundary.
+    _ = inputs.manifest
+    template = inputs.template
     protocol = project.settings.protocol
     frames_per_stimulus_value = frames_per_stimulus(refresh_hz, protocol.base_hz)
     on_frames, off_frames = on_off_frames(
@@ -114,12 +122,8 @@ def compile_run_spec(
     total_oddball_cycles = condition.oddball_cycle_repeats_per_sequence * condition.sequence_count
     total_stimuli = total_oddball_cycles * protocol.oddball_every_n
     total_frames = total_stimuli * frames_per_stimulus_value
-    presentation, resolved_role_presentations = compile_condition_presentation(
-        project_presentation=project.settings.presentation,
-        condition=condition,
-        base_set=base_set,
-        oddball_set=oddball_set,
-    )
+    presentation = prepared.presentation.model_copy(deep=True)
+    resolved_role_presentations = prepared.role_presentations
     attentional_blink: AttentionalBlinkStreamRunSpec | None = None
     if isinstance(condition.attentional_blink, AttentionalBlinkStreamSettings):
         stimulus_sequence, attentional_blink, presentation = (
@@ -141,14 +145,8 @@ def compile_run_spec(
                 oddball_every_n=protocol.oddball_every_n,
                 random_seed=random_seed,
             )
-        base_stimuli = resolve_stimulus_items(
-            base_set, variant=condition.stimulus_variant, project_root=project_root,
-            manifest=resolved_manifest,
-        )
-        oddball_stimuli = resolve_stimulus_items(
-            oddball_set, variant=condition.stimulus_variant, project_root=project_root,
-            manifest=resolved_manifest,
-        )
+        base_stimuli = inputs.stimulus_items(base_set, condition.stimulus_variant)
+        oddball_stimuli = inputs.stimulus_items(oddball_set, condition.stimulus_variant)
         stimulus_sequence = build_stimulus_sequence(
             total_stimuli=total_stimuli,
             frames_per_stimulus_value=frames_per_stimulus_value,
@@ -339,8 +337,11 @@ def compile_session_plan(
     if random_seed is None:
         random_seed = project.settings.session.session_seed
     session_identifier = session_id or make_session_id(project.meta.project_id, random_seed)
-    resolved_manifest = load_manifest(project_root, manifest)
+    inputs = CompilationInputs(project, refresh_hz=refresh_hz, project_root=project_root,
+                               manifest=manifest)
+    _ = inputs.manifest
     session_rng = random.Random(random_seed)
+    task_inputs = TaskCompilationInputs(project, project_root)
     fixation_settings = project.settings.fixation_task
     protocol = project.settings.protocol
     try:
@@ -392,16 +393,14 @@ def compile_session_plan(
                     previous_count=previous_realized_target_count,
                     max_supported_count=max_supported_count,
                 )
-                run_spec = compile_run_spec(
-                    project,
-                    refresh_hz=refresh_hz,
-                    condition_id=condition.condition_id,
-                    project_root=project_root,
+                run_spec = _compile_prepared_run(
+                    inputs, condition,
                     random_seed=run_random_seed,
                     run_id=run_id,
                     realized_target_count=realized_target_count,
-                    manifest=resolved_manifest,
                 )
+                # Only the current entry shares a linked pre/post realization.
+                task_inputs.memory_pairs.clear()
                 pre_tasks = compile_condition_tasks(
                     project,
                     condition,
@@ -413,6 +412,7 @@ def compile_session_plan(
                     project_root=project_root,
                     run_spec=run_spec,
                     global_order_index=global_order_index,
+                    inputs=task_inputs,
                 )
                 post_tasks = compile_condition_tasks(
                     project,
@@ -425,11 +425,13 @@ def compile_session_plan(
                     project_root=project_root,
                     run_spec=run_spec,
                     global_order_index=global_order_index,
+                    inputs=task_inputs,
                 )
                 if global_order_index == 0 and baseline_requirements:
                     pre_tasks.insert(0, compile_modifier_baseline(
                         project, baseline_requirements, condition=condition,
                         session_seed=random_seed, run_id=run_id, project_root=project_root,
+                        inputs=task_inputs,
                     ))
             except CompileError as exc:
                 raise CompileError(

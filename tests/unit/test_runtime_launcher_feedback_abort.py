@@ -56,7 +56,10 @@ def test_session_launch_shows_condition_feedback_with_accuracy_and_mean_rt_when_
             multi_condition_project_root,
             session_plan,
             participant_number=PARTICIPANT_NUMBER,
-            launch_settings=LaunchSettings(engine_name="stub-feedback"),
+            launch_settings=LaunchSettings(
+                experiment_test_mode=True, serial_enabled=False,
+                engine_name="stub-feedback",
+            ),
         )
     finally:
         unregister_engine("stub-feedback")
@@ -96,7 +99,10 @@ def test_session_launch_skips_condition_feedback_when_accuracy_task_disabled(
             multi_condition_project_root,
             session_plan,
             participant_number=PARTICIPANT_NUMBER,
-            launch_settings=LaunchSettings(engine_name="stub-no-feedback"),
+            launch_settings=LaunchSettings(
+                experiment_test_mode=True, serial_enabled=False,
+                engine_name="stub-no-feedback",
+            ),
         )
     finally:
         unregister_engine("stub-no-feedback")
@@ -126,6 +132,7 @@ def test_session_launch_aborts_cleanly_when_inter_block_break_is_cancelled(
             session_plan,
             participant_number=PARTICIPANT_NUMBER,
             launch_settings=LaunchSettings(
+                experiment_test_mode=True, serial_enabled=False,
                 engine_name="stub-block-break-abort",
             ),
         )
@@ -179,7 +186,10 @@ def test_session_launch_exports_timing_violation_status_from_run_result(
             sample_project_root,
             session_plan,
             participant_number=PARTICIPANT_NUMBER,
-            launch_settings=LaunchSettings(engine_name="stub-timing-violation"),
+            launch_settings=LaunchSettings(
+                experiment_test_mode=True, serial_enabled=False,
+                engine_name="stub-timing-violation",
+            ),
         )
     finally:
         unregister_engine("stub-timing-violation")

@@ -175,7 +175,10 @@ def test_memory_session_exports_keep_provenance_and_partial_data(
     output = root / "runs" / "P007_session01"
     summary = RuntimeWorker(engine).execute_session(
         root, plan, output, participant_number="007", participant_session_number=1,
-        runtime_options={"serial_enabled": False, "export_mode": mode},
+        runtime_options={
+            "serial_enabled": False, "export_mode": mode,
+            "experiment_test_mode": True,
+        },
         relative_output_dir="runs/P007_session01",
     )
     assert summary.aborted is (abort_stage is not None)
@@ -251,7 +254,10 @@ def test_compiled_session_baseline_records_modifier_identity_on_no_load_first_en
     )
     summary = RuntimeWorker(engine).execute_session(
         root, plan, root / "runs" / "unused", participant_number="007",
-        runtime_options={"serial_enabled": False, "export_mode": "compact"},
+        runtime_options={
+            "serial_enabled": False, "export_mode": "compact",
+            "experiment_test_mode": True,
+        },
     )
     assert not summary.aborted
     baseline_rows = summary.run_results[0].task_responses
@@ -288,7 +294,10 @@ def test_memory_factory_compilation_and_runtime_share_realized_targets(
         TaskEngineInput(selected_item_ids=tuple(study.target_item_ids), reaction_time_s=1.3))
     summary = RuntimeWorker(engine).execute_session(
         root, plan, root / "runs" / "unused", participant_number="007",
-        runtime_options={"serial_enabled": False, "export_mode": "compact"},
+        runtime_options={
+            "serial_enabled": False, "export_mode": "compact",
+            "experiment_test_mode": True,
+        },
     )
     assert not summary.aborted
     assert [item.item_id for item in engine.steps[0].items] == study.study_order

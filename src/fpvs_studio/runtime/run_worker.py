@@ -5,6 +5,7 @@ above the engine seam, not ProjectFile compilation or PsychoPy-specific renderin
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -34,6 +35,9 @@ from fpvs_studio.runtime.session_export import (
     append_compact_task_responses,
     append_session_condition_history,
     compact_task_checkpoint_path,
+    write_compact_run_checkpoint,
+    write_compact_session_checkpoint,
+    write_participant_summary,
     write_run_artifacts,
     write_session_artifacts,
 )
@@ -48,6 +52,7 @@ from fpvs_studio.runtime.triggers import (
 )
 
 _TUTORIAL_REQUIRED_SUCCESSES = 3
+LOGGER = logging.getLogger(__name__)
 _TUTORIAL_TARGET_DELAY_SECONDS = 1.0
 _TUTORIAL_MISS_COOLDOWN_SECONDS = 5.0
 _TUTORIAL_REMINDER_MISS_THRESHOLD = 5
@@ -221,6 +226,44 @@ class RuntimeWorker:
             )
         )
 
+        def session_result(
+            results: list[RunExecutionSummary], reason: str | None,
+        ) -> SessionExecutionSummary:
+            return SessionExecutionSummary(
+                project_id=session_plan.project_id,
+                session_id=session_plan.session_id,
+                engine_name=self._engine.engine_id,
+                run_mode=_run_mode(),
+                participant_number=participant_number,
+                participant_session_number=participant_session_number,
+                participant_metadata=participant_metadata or ParticipantMetadata(),
+                random_seed=session_plan.random_seed,
+                started_at=results[0].started_at if results else None,
+                finished_at=results[-1].finished_at if results else None,
+                total_condition_count=session_plan.total_runs,
+                completed_condition_count=sum(0 if result.aborted else 1 for result in results),
+                aborted=reason is not None,
+                abort_reason=reason,
+                warnings=warnings,
+                runtime_metadata=_pick_session_runtime_metadata(results),
+                realized_block_orders=[
+                    list(block.condition_order) for block in session_plan.blocks
+                ],
+                run_results=results,
+                output_dir=relative_output_dir if write_detailed_exports else None,
+            )
+
+        compact_run_paths: set[Path] = set()
+
+        def checkpoint_results(results: list[RunExecutionSummary]) -> None:
+            if not write_detailed_exports:
+                compact_run_paths.add(
+                    write_compact_run_checkpoint(project_root, results[-1]),
+                )
+
+        execution_error: Exception | None = None
+        running_post_tasks = False
+
         try:
             self._engine.open_session(runtime_options=runtime_options)
             session_open = True
@@ -377,12 +420,16 @@ class RuntimeWorker:
                     "task_responses": list(pre_task_outcome.responses),
                     "participant_session_number": participant_session_number,
                 }
-                if run_summary.aborted and entry.post_tasks:
+                if not run_summary.aborted or entry.post_tasks:
                     task_summary_update["task_flow_completed"] = False
                 run_summary = run_summary.model_copy(update=task_summary_update)
+                run_results.append(run_summary)
+                checkpoint_results(run_results)
+                running_post_tasks = True
                 run_summary = backward_counting.finish_run(
                     run_summary, entry.run_spec, checkpoint=task_checkpoint.append,
                 )
+                run_results[-1] = run_summary
                 blink_recorder.update_run(run_summary)
                 if not run_summary.aborted:
                     post_task_outcome = run_task_modules(
@@ -397,6 +444,7 @@ class RuntimeWorker:
                         backward_counting=backward_counting,
                     )
                     update: dict[str, object] = {
+                        "task_flow_completed": not post_task_outcome.aborted,
                         "task_responses": [
                             *run_summary.task_responses,
                             *post_task_outcome.responses,
@@ -421,9 +469,11 @@ class RuntimeWorker:
                     run_summary = run_summary.model_copy(update=update)
                     if post_task_outcome.aborted:
                         abort_reason = post_abort_reason
-                previous_feedback_summary = _latest_fixation_task_summary(run_results)
+                running_post_tasks = False
+                previous_feedback_summary = _latest_fixation_task_summary(run_results[:-1])
                 warnings.extend(run_summary.warnings)
-                run_results.append(run_summary)
+                run_results[-1] = run_summary
+                checkpoint_results(run_results)
                 if write_detailed_exports:
                     write_run_artifacts(run_output_dir, entry.run_spec, run_summary)
 
@@ -459,47 +509,68 @@ class RuntimeWorker:
                 )
                 if completion_aborted:
                     abort_reason = "Session aborted while showing the completion screen."
+        except Exception as exc:
+            execution_error = exc
+            if running_post_tasks:
+                run_results[-1] = run_results[-1].model_copy(update={
+                    "task_flow_completed": False,
+                    "task_flow_aborted": True,
+                    "task_abort_stage": "post_condition",
+                    "task_abort_reason": f"{type(exc).__name__}: {exc}",
+                })
         finally:
-            if session_open:
-                self._engine.close_session()
-            trigger_backend.close()
+            try:
+                if session_open:
+                    self._engine.close_session()
+            except Exception as exc:
+                if execution_error is None:
+                    execution_error = exc
+                else:
+                    LOGGER.exception("Engine cleanup also failed after session interruption.")
+            finally:
+                try:
+                    trigger_backend.close()
+                except Exception as exc:
+                    if execution_error is None:
+                        execution_error = exc
+                    else:
+                        LOGGER.exception("Runtime cleanup also failed after session interruption.")
 
-        session_summary = SessionExecutionSummary(
-            project_id=session_plan.project_id,
-            session_id=session_plan.session_id,
-            engine_name=self._engine.engine_id,
-            run_mode=_run_mode(),
-            participant_number=participant_number,
-            participant_session_number=participant_session_number,
-            participant_metadata=participant_metadata or ParticipantMetadata(),
-            random_seed=session_plan.random_seed,
-            started_at=run_results[0].started_at if run_results else None,
-            finished_at=run_results[-1].finished_at if run_results else None,
-            total_condition_count=session_plan.total_runs,
-            completed_condition_count=sum(0 if result.aborted else 1 for result in run_results),
-            aborted=abort_reason is not None,
-            abort_reason=abort_reason,
-            warnings=warnings,
-            runtime_metadata=_pick_session_runtime_metadata(run_results),
-            realized_block_orders=[list(block.condition_order) for block in session_plan.blocks],
-            run_results=run_results,
-            output_dir=relative_output_dir if write_detailed_exports else None,
-        )
-        blink_recorder.finish(
-            session_summary, output_dir=output_dir if write_detailed_exports else None,
-        )
-        if write_detailed_exports:
-            write_session_artifacts(
-                output_dir,
-                session_plan,
-                session_summary,
-                project_root=project_root,
+        if execution_error is not None:
+            abort_reason = (
+                f"Session interrupted: {type(execution_error).__name__}: {execution_error}"
             )
-        else:
-            append_session_condition_history(project_root, session_plan, session_summary)
-            append_compact_task_responses(project_root, session_plan, session_summary)
-            if compact_task_checkpoint is not None:
-                compact_task_checkpoint.discard()
+        session_summary = session_result(run_results, abort_reason)
+        try:
+            compact_summary_path = (
+                None if write_detailed_exports
+                else write_compact_session_checkpoint(project_root, session_summary)
+            )
+            if write_detailed_exports:
+                write_session_artifacts(output_dir, session_plan, session_summary)
+            append_session_condition_history(
+                project_root, session_plan, session_summary, refresh_reports=False,
+            )
+            if not write_detailed_exports:
+                append_compact_task_responses(project_root, session_plan, session_summary)
+            blink_recorder.finish(
+                session_summary, output_dir=output_dir if write_detailed_exports else None,
+            )
+            write_participant_summary(project_root)
+            if execution_error is None:
+                if compact_summary_path is not None:
+                    compact_summary_path.unlink(missing_ok=True)
+                for path in compact_run_paths:
+                    path.unlink(missing_ok=True)
+                if compact_task_checkpoint is not None:
+                    compact_task_checkpoint.discard()
+        except Exception as export_error:
+            if execution_error is not None:
+                LOGGER.exception("Result finalization also failed after session interruption.")
+                raise execution_error from export_error
+            raise
+        if execution_error is not None:
+            raise execution_error
         return session_summary
 
     def _finalize_run_summary(

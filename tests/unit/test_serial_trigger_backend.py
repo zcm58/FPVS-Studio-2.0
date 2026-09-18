@@ -173,6 +173,8 @@ def test_runtime_selects_logged_serial_backend_when_port_is_configured(monkeypat
     created: dict[str, object] = {}
 
     class _FakeSerialBackend(TriggerBackend):
+        emits_hardware_triggers = True
+
         def __init__(
             self,
             port: str = "COM3",
@@ -242,7 +244,9 @@ def test_runtime_selects_logged_serial_backend_when_port_is_configured(monkeypat
 
 
 def test_runtime_uses_null_backend_when_serial_output_is_disabled() -> None:
-    backend, warnings = build_trigger_backend({"serial_enabled": False, "serial_port": "COM3"})
+    backend, warnings = build_trigger_backend(
+        {"serial_enabled": False, "serial_port": "COM3", "experiment_test_mode": True},
+    )
 
     backend.connect()
     backend.send_trigger(1, frame_index=0, label="condition_start", time_s=0.0)
@@ -257,6 +261,8 @@ def test_runtime_uses_default_serial_port_when_enabled_without_explicit_port(mon
     created: dict[str, object] = {}
 
     class _FakeSerialBackend(TriggerBackend):
+        emits_hardware_triggers = True
+
         def __init__(
             self,
             port: str = "COM3",
@@ -294,6 +300,8 @@ def test_runtime_uses_default_serial_port_when_enabled_without_explicit_port(mon
 
 def test_runtime_records_error_and_reraises_serial_write_failures() -> None:
     class _FailingBackend(TriggerBackend):
+        emits_hardware_triggers = True
+
         def connect(self) -> None:
             return None
 
@@ -346,6 +354,8 @@ def test_serial_prevalidated_hot_path_skips_revalidation(monkeypatch) -> None:
 
 def test_logged_prevalidated_hot_path_defers_model_materialization(monkeypatch) -> None:
     class _RecordingBackend(TriggerBackend):
+        emits_hardware_triggers = True
+
         def __init__(self) -> None:
             self.sent: list[tuple[int, int | None, str | None, float | None]] = []
 

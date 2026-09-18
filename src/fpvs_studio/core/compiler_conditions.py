@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 from fpvs_studio.core.compiler_support import CompileError
 from fpvs_studio.core.contrast_modulation import is_sinusoidal_neutral_background
 from fpvs_studio.core.enums import DutyCycleMode, StimulusModality
@@ -69,10 +71,12 @@ def validate_selected_condition(
     condition: Condition,
     *,
     refresh_hz: float,
+    stimulus_sets: Mapping[str, StimulusSet] | None = None,
 ) -> tuple[StimulusSet, StimulusSet]:
     """Validate the specific condition being compiled."""
 
-    stimulus_sets = {item.set_id: item for item in project.stimulus_sets}
+    if stimulus_sets is None:
+        stimulus_sets = {item.set_id: item for item in project.stimulus_sets}
     ab_errors = validate_attentional_blink_condition(project, condition, refresh_hz=refresh_hz)
     if ab_errors:
         raise CompileError("; ".join(ab_errors))

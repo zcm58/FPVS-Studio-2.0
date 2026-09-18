@@ -58,11 +58,11 @@ def test_rename_failed_replace_keeps_original_and_removes_temporary(tmp_path, mo
     def fail_replace(*args):
         raise PermissionError("Project file is read-only")
 
-    monkeypatch.setattr("fpvs_studio.core.project_service.os.replace", fail_replace)
+    monkeypatch.setattr("fpvs_studio.core.serialization.os.replace", fail_replace)
     with pytest.raises(PermissionError):
         rename_project(scaffold.project_root, "New name")
     assert path.read_bytes() == before
-    assert not list(scaffold.project_root.glob(".rename-*.json"))
+    assert not list(scaffold.project_root.glob(".project.json.*.tmp"))
 
 
 def test_rename_same_name_is_no_op_and_missing_project_is_not_created(tmp_path):

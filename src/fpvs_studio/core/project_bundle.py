@@ -8,6 +8,7 @@ source of truth plus stimulus assets. The bundle manifest validates archive inte
 from __future__ import annotations
 
 import hashlib
+import io
 import re
 import shutil
 import uuid
@@ -50,6 +51,7 @@ from fpvs_studio.core.serialization import (
     load_project_file,
     model_to_json,
     read_json_file,
+    replace_file_atomically,
     save_project_file,
 )
 from fpvs_studio.preprocessing.manifest import read_stimulus_manifest, write_stimulus_manifest
@@ -189,15 +191,6 @@ def export_project_bundle(
     )
     _notify_export_progress(progress_callback, "stimuli")
     relative_paths = _collect_bundle_file_paths(project_root)
-    records = [
-        _file_record(
-            project_root,
-            relative_path,
-            payload_override=payload_overrides.get(relative_path),
-            cancel_event=cancel_event,
-        )
-        for relative_path in relative_paths
-    ]
     bundle_manifest = ProjectBundleManifest(
         project=ProjectBundleProject(
             project_id=project.meta.project_id,
@@ -214,13 +207,14 @@ def export_project_bundle(
                 "payload_files_hashed",
             ],
         ),
-        files=records,
+        files=[],
     )
     _notify_export_progress(progress_callback, "write")
-    _write_bundle_archive(
+    bundle_manifest = _write_bundle_archive(
         project_root,
         bundle_path,
         bundle_manifest,
+        relative_paths=relative_paths,
         payload_overrides=payload_overrides,
         cancel_event=cancel_event,
     )
@@ -522,17 +516,21 @@ def _validate_bundle_manifest_resource_limits(
 
     total_size = 0
     for record in records:
-        if record.size_bytes > MAX_BUNDLE_FILE_BYTES:
-            raise ProjectBundleError(
-                "Project bundle file exceeds the "
-                f"{MAX_BUNDLE_FILE_BYTES:,}-byte limit: {record.path}"
-            )
         total_size += record.size_bytes
-        if total_size > MAX_BUNDLE_TOTAL_UNCOMPRESSED_BYTES:
-            raise ProjectBundleError(
-                "Project bundle expands beyond the total uncompressed-size limit "
-                f"of {MAX_BUNDLE_TOTAL_UNCOMPRESSED_BYTES:,} bytes."
-            )
+        _validate_payload_size(record.path, record.size_bytes, total_size)
+
+
+def _validate_payload_size(path: str, size: int, total_size: int) -> None:
+    if size > MAX_BUNDLE_FILE_BYTES:
+        raise ProjectBundleError(
+            "Project bundle file exceeds the "
+            f"{MAX_BUNDLE_FILE_BYTES:,}-byte limit: {path}"
+        )
+    if total_size > MAX_BUNDLE_TOTAL_UNCOMPRESSED_BYTES:
+        raise ProjectBundleError(
+            "Project bundle expands beyond the total uncompressed-size limit "
+            f"of {MAX_BUNDLE_TOTAL_UNCOMPRESSED_BYTES:,} bytes."
+        )
 
 
 def _validate_archive_entry_resource_limits(
@@ -732,85 +730,79 @@ def _collect_bundle_file_paths(project_root: Path) -> list[str]:
     return sorted(set(paths), key=str.lower)
 
 
-def _file_record(
-    project_root: Path,
-    relative_path: str,
-    *,
-    payload_override: bytes | None = None,
-    cancel_event: Event | None = None,
-) -> ProjectBundleFileRecord:
-    _check_cancelled(cancel_event)
-    if payload_override is not None:
-        return ProjectBundleFileRecord(
-            path=relative_path,
-            size_bytes=len(payload_override),
-            sha256=hashlib.sha256(payload_override).hexdigest(),
-        )
-    path = _resolve_existing_relative_file(project_root, relative_path)
-    return ProjectBundleFileRecord(
-        path=relative_path,
-        size_bytes=path.stat().st_size,
-        sha256=_sha256_file(path, cancel_event=cancel_event),
-    )
-
-
 def _write_bundle_archive(
     project_root: Path,
     bundle_path: Path,
     bundle_manifest: ProjectBundleManifest,
     *,
+    relative_paths: list[str],
     payload_overrides: dict[str, bytes],
     cancel_event: Event | None = None,
-) -> None:
-    _validate_bundle_manifest_resource_limits(bundle_manifest)
-    manifest_payload = bundle_manifest.model_dump_json(
-        indent=2,
-        exclude_none=True,
-    ).encode("utf-8")
-    if len(manifest_payload) > MAX_BUNDLE_MANIFEST_BYTES:
+) -> ProjectBundleManifest:
+    """Record hashes from the same bounded reads that supply archive payload bytes."""
+
+    if len(relative_paths) > MAX_BUNDLE_PAYLOAD_FILES:
         raise ProjectBundleError(
-            "Project bundle file exceeds the "
-            f"{MAX_BUNDLE_MANIFEST_BYTES:,}-byte limit: {BUNDLE_MANIFEST_FILENAME}"
+            "Project bundle contains too many payload files "
+            f"({len(relative_paths):,}; limit {MAX_BUNDLE_PAYLOAD_FILES:,})."
         )
     bundle_path.parent.mkdir(parents=True, exist_ok=True)
-    temp_path = bundle_path.with_name(f".{bundle_path.name}.tmp")
-    if temp_path.exists():
-        temp_path.unlink()
+    temp_path = bundle_path.with_name(f".{bundle_path.name}.{uuid.uuid4().hex}.tmp")
+    created = False
     try:
-        with zipfile.ZipFile(temp_path, mode="w", compression=zipfile.ZIP_DEFLATED) as archive:
-            archive.writestr(BUNDLE_MANIFEST_FILENAME, manifest_payload)
-            for record in bundle_manifest.files:
+        with zipfile.ZipFile(temp_path, mode="x", compression=zipfile.ZIP_DEFLATED) as archive:
+            created = True
+            records: list[ProjectBundleFileRecord] = []
+            total_size = 0
+            for relative_path in relative_paths:
                 _check_cancelled(cancel_event)
-                payload_override = payload_overrides.get(record.path)
+                payload_override = payload_overrides.get(relative_path)
                 if payload_override is None:
-                    source_path = _resolve_existing_relative_file(project_root, record.path)
-                    info = zipfile.ZipInfo.from_file(source_path, arcname=record.path)
-                    info.compress_type = zipfile.ZIP_DEFLATED
-                    with source_path.open("rb") as source, archive.open(info, "w") as target:
-                        for chunk in iter(lambda: source.read(65536), b""):
-                            _check_cancelled(cancel_event)
-                            target.write(chunk)
+                    source_path = _resolve_existing_relative_file(project_root, relative_path)
+                    info = zipfile.ZipInfo.from_file(source_path, arcname=relative_path)
                 else:
-                    archive.writestr(record.path, payload_override)
+                    info = zipfile.ZipInfo(relative_path)
+                    info.file_size = len(payload_override)
+                _validate_payload_size(relative_path, info.file_size, total_size + info.file_size)
+                info.compress_type = zipfile.ZIP_DEFLATED
+                digest, size = hashlib.sha256(), 0
+                source_handle = (
+                    source_path.open("rb") if payload_override is None
+                    else io.BytesIO(payload_override)
+                )
+                with source_handle as source, archive.open(info, "w", force_zip64=True) as target:
+                    for chunk in iter(lambda: source.read(65536), b""):
+                        _check_cancelled(cancel_event)
+                        size += len(chunk)
+                        _validate_payload_size(relative_path, size, total_size + size)
+                        target.write(chunk)
+                        digest.update(chunk)
+                total_size += size
+                records.append(ProjectBundleFileRecord(
+                    path=relative_path, size_bytes=size, sha256=digest.hexdigest(),
+                ))
+            bundle_manifest = bundle_manifest.model_copy(update={"files": records})
+            _validate_bundle_manifest_resource_limits(bundle_manifest)
+            manifest_payload = bundle_manifest.model_dump_json(
+                indent=2, exclude_none=True,
+            ).encode("utf-8")
+            if len(manifest_payload) > MAX_BUNDLE_MANIFEST_BYTES:
+                raise ProjectBundleError(
+                    "Project bundle file exceeds the "
+                    f"{MAX_BUNDLE_MANIFEST_BYTES:,}-byte limit: {BUNDLE_MANIFEST_FILENAME}"
+                )
+            archive.writestr(BUNDLE_MANIFEST_FILENAME, manifest_payload)
         with zipfile.ZipFile(temp_path, mode="r") as archive:
             _validate_archive_member_count(archive)
             written_manifest = _read_bundle_manifest_from_archive(archive)
             _validate_bundle_resource_limits(archive, written_manifest)
         _check_cancelled(cancel_event)
-        temp_path.replace(bundle_path)
+        replace_file_atomically(temp_path, bundle_path)
+        return bundle_manifest
     except Exception:
-        if temp_path.exists():
-            temp_path.unlink()
+        if created:
+            temp_path.unlink(missing_ok=True)
         raise
-
-
-def _sha256_file(path: Path, *, cancel_event: Event | None = None) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(65536), b""):
-            _check_cancelled(cancel_event)
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def _unique_import_project_dir(parent_dir: Path, source_project_id: str) -> tuple[Path, str]:

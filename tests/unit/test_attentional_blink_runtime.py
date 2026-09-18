@@ -1,6 +1,7 @@
 """Previously compiled image-pair artifacts cannot bypass retirement checks."""
 
 import pytest
+from tests.unit.test_psychopy_engine import _RecordingTriggerBackend
 
 from fpvs_studio.core.compiler import compile_run_spec
 from fpvs_studio.core.run_spec import AttentionalBlinkRunSpec
@@ -34,4 +35,7 @@ def test_direct_engine_call_cannot_open_a_window_for_image_pairs(
     engine = PsychoPyEngine()
     monkeypatch.setattr(engine, "open_session", lambda **kwargs: pytest.fail("Window opened"))
     with pytest.raises(ValueError, match="Image-pair.*no longer supported"):
-        engine.run_condition(retired_run, tmp_path)
+        engine.run_condition(
+            retired_run, tmp_path, runtime_options={"experiment_test_mode": True},
+            trigger_backend=_RecordingTriggerBackend(),
+        )

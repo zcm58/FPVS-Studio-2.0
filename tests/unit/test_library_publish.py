@@ -240,6 +240,7 @@ def test_library_bundle_uses_com3_and_preserves_source_port(
         _validate_launch_settings(
             LaunchSettings(
                 serial_enabled=serial_enabled,
+                experiment_test_mode=not serial_enabled,
                 serial_port=imported.project.settings.triggers.serial_port,
             )
         )

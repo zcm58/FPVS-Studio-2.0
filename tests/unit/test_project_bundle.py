@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import hashlib
 import zipfile
+from contextlib import contextmanager
 from pathlib import Path
 from threading import Event
 
@@ -396,7 +398,7 @@ def test_export_project_bundle_rejects_resource_limit_without_replacing_destinat
         export_project_bundle(sample_project_root, bundle_path)
 
     assert bundle_path.read_bytes() == b"existing bundle"
-    assert not (tmp_path / ".existing.fpvsbundle.tmp").exists()
+    assert not list(tmp_path.glob(".existing.fpvsbundle.*.tmp"))
 
 
 def test_export_project_bundle_rejects_unsafe_compression_ratio(
@@ -414,7 +416,7 @@ def test_export_project_bundle_rejects_unsafe_compression_ratio(
         export_project_bundle(sample_project_root, bundle_path)
 
     assert not bundle_path.exists()
-    assert not (tmp_path / ".sample.fpvsbundle.tmp").exists()
+    assert not list(tmp_path.glob(".sample.fpvsbundle.*.tmp"))
 
 
 @pytest.mark.parametrize(
@@ -540,4 +542,93 @@ def test_cancelled_bundle_export_preserves_previous_destination(
         export_project_bundle(sample_project_root, bundle_path,
                               progress_callback=progress, cancel_event=cancel_event)
     assert bundle_path.read_bytes() == b"previous export"
-    assert not bundle_path.with_name(f".{bundle_path.name}.tmp").exists()
+    assert not list(tmp_path.glob(f".{bundle_path.name}.*.tmp"))
+
+
+def test_export_hashes_the_bytes_copied_after_source_changes(
+    tmp_path, sample_project, sample_project_root,
+) -> None:
+    _save_bundle_ready_project(sample_project_root, sample_project)
+    sidecar = sample_project_root / "stimuli" / "notes.txt"
+    sidecar.write_bytes(b"before")
+    destination = tmp_path / "changed.fpvsbundle"
+
+    def change_at_write(stage):
+        if stage == "write":
+            sidecar.write_bytes(b"after!")
+
+    manifest = export_project_bundle(
+        sample_project_root, destination, progress_callback=change_at_write,
+    )
+    record = next(record for record in manifest.files if record.path == "stimuli/notes.txt")
+    assert record.sha256 == hashlib.sha256(b"after!").hexdigest()
+    imported = import_project_bundle(destination, tmp_path / "receiver")
+    assert (imported.project_root / "stimuli" / "notes.txt").read_bytes() == b"after!"
+
+
+def test_export_reads_each_payload_once_and_records_exact_sizes(
+    tmp_path, sample_project, sample_project_root, monkeypatch,
+) -> None:
+    _save_bundle_ready_project(sample_project_root, sample_project)
+    sidecar = sample_project_root / "stimuli" / "notes.txt"
+    sidecar.write_bytes(b"unchanged source")
+    original_open = Path.open
+    reads = []
+
+    def count_reads(path, mode="r", *args, **kwargs):
+        if path == sidecar and mode == "rb":
+            reads.append(path)
+        return original_open(path, mode, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", count_reads)
+    destination = tmp_path / "single-pass.fpvsbundle"
+    manifest = export_project_bundle(sample_project_root, destination)
+    assert len(reads) == 1
+    with zipfile.ZipFile(destination) as archive:
+        for record in manifest.files:
+            payload = archive.read(record.path)
+            assert len(payload) == record.size_bytes
+            assert hashlib.sha256(payload).hexdigest() == record.sha256
+
+
+@pytest.mark.parametrize("failure", ["cancel", "read"])
+def test_export_failure_during_stream_preserves_destination_and_cleans_owned_temp(
+    tmp_path, sample_project, sample_project_root, monkeypatch, failure,
+) -> None:
+    _save_bundle_ready_project(sample_project_root, sample_project)
+    sidecar = sample_project_root / "stimuli" / "notes.txt"
+    sidecar.write_bytes(b"x" * 200_000)
+    destination = tmp_path / "existing.fpvsbundle"
+    destination.write_bytes(b"previous bundle")
+    unrelated_temp = tmp_path / ".existing.fpvsbundle.unrelated.tmp"
+    unrelated_temp.write_bytes(b"unrelated work")
+    cancel = Event()
+    original_open = Path.open
+    reads = []
+
+    class InterruptedReader:
+        def __init__(self, handle):
+            self.handle = handle
+
+        def read(self, size):
+            reads.append(size)
+            if len(reads) == 2:
+                if failure == "read":
+                    raise OSError("source became unavailable")
+                cancel.set()
+            return self.handle.read(size)
+
+    @contextmanager
+    def interrupt_read(path, mode="r", *args, **kwargs):
+        with original_open(path, mode, *args, **kwargs) as handle:
+            yield InterruptedReader(handle) if path == sidecar and mode == "rb" else handle
+
+    monkeypatch.setattr(Path, "open", interrupt_read)
+    expected = ProjectBundleCancelled if failure == "cancel" else OSError
+    with pytest.raises(expected):
+        export_project_bundle(sample_project_root, destination, cancel_event=cancel)
+
+    assert len(reads) == 2
+    assert destination.read_bytes() == b"previous bundle"
+    assert list(tmp_path.glob(".existing.fpvsbundle.*.tmp")) == [unrelated_temp]
+    assert unrelated_temp.read_bytes() == b"unrelated work"

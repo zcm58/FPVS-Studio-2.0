@@ -106,7 +106,10 @@ def _execute(root, plan, engine, mode):
     output = root / "runs" / "P007_session01"
     return RuntimeWorker(engine).execute_session(
         root, plan, output, participant_number="007", participant_session_number=1,
-        runtime_options={"serial_enabled": False, "export_mode": mode},
+        runtime_options={
+            "serial_enabled": False, "export_mode": mode,
+            "experiment_test_mode": True,
+        },
         relative_output_dir="runs/P007_session01",
     )
 

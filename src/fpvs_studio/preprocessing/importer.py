@@ -7,14 +7,19 @@ construction, or runtime launch behavior."""
 from __future__ import annotations
 
 import shutil
+import tempfile
 from collections.abc import Callable
 from hashlib import sha256
 from pathlib import Path
+from uuid import uuid4
+
+from PIL import Image
 
 from fpvs_studio.core.enums import StimulusModality, StimulusVariant
 from fpvs_studio.core.models import ProjectFile, StimulusSet
 from fpvs_studio.core.paths import (
     filesystem_path,
+    resolve_project_relative_path,
     stimulus_manifest_path,
     stimulus_originals_dir,
     stimulus_variant_dirname,
@@ -27,6 +32,7 @@ from fpvs_studio.preprocessing.controls import (
 from fpvs_studio.preprocessing.grayscale import generate_grayscale_png
 from fpvs_studio.preprocessing.inspection import (
     SUPPORTED_SOURCE_SUFFIXES,
+    ImageInspectionError,
     inspect_source_directory,
     summary_to_stimulus_set,
 )
@@ -50,6 +56,25 @@ from fpvs_studio.preprocessing.models import (
 PHASE_SCRAMBLE_POLICY = "fft-amplitude-preserved-noise-phase-v1"
 
 
+def import_fresh_stimulus_source_directory(
+    *,
+    source_dir: Path,
+    project_root: Path,
+    set_id_prefix: str,
+    set_name: str,
+    strict: bool = True,
+) -> tuple[StimulusSetInspectionSummary, StimulusSet]:
+    """Import a new independent pool without changing any existing stimulus set."""
+
+    return import_stimulus_source_directory(
+        source_dir=source_dir,
+        project_root=project_root,
+        set_id=f"{set_id_prefix}-{uuid4().hex[:12]}",
+        set_name=set_name,
+        strict=strict,
+    )
+
+
 def import_stimulus_source_directory(
     *,
     source_dir: Path,
@@ -58,23 +83,46 @@ def import_stimulus_source_directory(
     set_name: str,
     strict: bool = True,
 ) -> tuple[StimulusSetInspectionSummary, StimulusSet]:
-    """Copy supported source images into a project and summarize the imported set."""
+    """Validate staged source copies and publish them as one new stimulus set."""
 
     source_dir = filesystem_path(source_dir)
     project_root = filesystem_path(project_root)
     destination_dir = stimulus_originals_dir(project_root, set_id)
-    destination_dir.mkdir(parents=True, exist_ok=True)
-
-    summary = inspect_source_directory(
-        source_dir,
-        relative_prefix=to_project_relative_posix(project_root, destination_dir),
-        strict=strict,
+    relative_prefix = to_project_relative_posix(project_root, destination_dir)
+    destination_dir = filesystem_path(
+        resolve_project_relative_path(project_root, relative_prefix)
     )
-    for item in source_dir.iterdir():
-        if item.is_file() and item.suffix.lower() in SUPPORTED_SOURCE_SUFFIXES:
-            shutil.copy2(item, destination_dir / item.name)
+    if destination_dir.exists():
+        raise FileExistsError(f"Stimulus source destination already exists: {destination_dir}")
+    if not source_dir.is_dir():
+        raise ImageInspectionError(f"Source directory does not exist: {source_dir}")
+    source_files = sorted(item for item in source_dir.iterdir() if item.is_file())
+    unsupported = [
+        item.name for item in source_files if item.suffix.lower() not in SUPPORTED_SOURCE_SUFFIXES
+    ]
+    if strict and unsupported:
+        raise ImageInspectionError(
+            "Unsupported source image files found: " + ", ".join(sorted(unsupported))
+        )
 
-    return summary, summary_to_stimulus_set(set_id=set_id, name=set_name, summary=summary)
+    destination_dir.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix=".import-", dir=destination_dir.parent) as temporary:
+        staging = filesystem_path(Path(temporary))
+        for item in source_files:
+            if item.suffix.lower() in SUPPORTED_SOURCE_SUFFIXES:
+                copied = staging / item.name
+                shutil.copy2(item, copied)
+                with Image.open(copied) as image:
+                    image.load()
+        summary = inspect_source_directory(
+            staging,
+            relative_prefix=relative_prefix,
+            strict=strict,
+        ).model_copy(update={"unsupported_files": sorted(unsupported)})
+        stimulus_set = summary_to_stimulus_set(set_id=set_id, name=set_name, summary=summary)
+        staging.rename(destination_dir)
+
+    return summary, stimulus_set
 
 
 def materialize_project_assets(

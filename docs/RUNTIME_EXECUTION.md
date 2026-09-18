@@ -500,6 +500,27 @@ Per run, full export mode:
 - `task_responses.jsonl` (append-only partial-response checkpoint)
 - `warnings.log`
 
+Compact sessions checkpoint each completed run beneath
+`logs/.task-response-checkpoints/` before post-condition tasks and feedback, and
+update that run's checkpoint after its task flow completes. These atomic `.run.json`
+files retain neutral execution results without raw task answers; task answers remain
+in the existing incremental task journal. Each run is written independently, so later
+bursts do not repeatedly rewrite all previous runs. A final `.session.json` checkpoint
+records session completion or explicit interruption. Successful finalization removes
+the checkpoints only after research tables and derived summaries have been written.
+Interrupted or failed exports retain them for recovery; the runtime still raises the
+original presentation or cleanup error if subsequent finalization also fails.
+
+Numbered condition-history, task-response and AB-event commits are retry-safe under
+the project reporting lock. They identify an execution by participant, visit and
+session, plus run/response/event identity, rather than by the compiled session ID alone.
+Atomic table replacement preserves legacy unnumbered rows and prior row order.
+Derived participant CSV/XLSX generation happens after research commits; an unavailable
+workbook is reported as an export error without undoing completed results. Retrying
+the same numbered commit or regenerating summaries does not duplicate research rows.
+Workbook replacements preserve the previous file on write failure. Historical session
+plans are read for seed backfill only when the corresponding CSV seed is missing.
+
 Task response exports contain stable task/step/question ids, realized option order,
 module and step repetition, retry attempt, raw value, RT, mouse details, validity,
 timeout/abort state, and optional correctness/score. Participant-entered text that

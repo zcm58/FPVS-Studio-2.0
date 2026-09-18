@@ -73,6 +73,17 @@ workflow is separate.
 Read a selected skill completely before acting. A passing skill audit is sufficient
 evidence for its invariant unless the task changes that audit or boundary.
 
+## Backend Reliability And Compilation Efficiency
+
+For backend reliability or compilation-efficiency regressions, start with
+`core/serialization.py`, `core/compiler_inputs.py`, `core/compiler_tasks.py`,
+`preprocessing/importer.py`, and `runtime/session_export.py` as appropriate.
+Contracts remain in [SessionPlan](../SESSION_PLAN.md),
+[GUI workflow](../GUI_WORKFLOW.md), and [Runtime execution](../RUNTIME_EXECUTION.md).
+Use compiler/project-io/preprocessing/runtime focused routes; the GUI route includes
+safe non-Qt source-adoption coverage. `test_import_boundaries.py` enforces internal
+dependency restrictions through the repo route. Cross-layer changes require precommit.
+
 ## Independent Updater And Patches
 
 Start with `updates/helper_client.py`, `helper_protocol.py`, `helper_service.py`, and

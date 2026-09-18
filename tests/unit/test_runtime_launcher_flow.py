@@ -74,6 +74,7 @@ def test_runtime_launcher_dispatches_runspec_to_registered_engine(
             run_spec,
             participant_number=PARTICIPANT_NUMBER,
             launch_settings=LaunchSettings(
+                experiment_test_mode=True, serial_enabled=False,
                 engine_name="stub",
             ),
         )
@@ -97,6 +98,7 @@ def test_runtime_launcher_dispatches_runspec_to_registered_engine(
         "fullscreen": True,
         "display_index": None,
         "serial_enabled": False,
+        "experiment_test_mode": True,
         "serial_port": "COM3",
         "serial_baudrate": 115200,
         "serial_pulse_width_ms": 10,
@@ -212,7 +214,10 @@ def test_launch_run_records_hardware_timestamp_fixation_scoring_source(
             sample_project_root,
             run_spec,
             participant_number=PARTICIPANT_NUMBER,
-            launch_settings=LaunchSettings(engine_name="stub-hardware-timestamps"),
+            launch_settings=LaunchSettings(
+                experiment_test_mode=True, serial_enabled=False,
+                engine_name="stub-hardware-timestamps",
+            ),
         )
     finally:
         unregister_engine("stub-hardware-timestamps")
@@ -278,7 +283,10 @@ def test_launch_session_runs_all_entries_with_stub_engine_and_reuses_session_win
             multi_condition_project_root,
             session_plan,
             participant_number=PARTICIPANT_NUMBER,
-            launch_settings=LaunchSettings(engine_name="stub-session"),
+            launch_settings=LaunchSettings(
+                experiment_test_mode=True, serial_enabled=False,
+                engine_name="stub-session",
+            ),
         )
     finally:
         unregister_engine("stub-session")
@@ -343,6 +351,7 @@ def test_launch_session_keeps_condition_titles_internal_on_transition_screens(
             session_plan,
             participant_number=PARTICIPANT_NUMBER,
             launch_settings=LaunchSettings(
+                experiment_test_mode=True, serial_enabled=False,
                 engine_name="stub-hidden-condition-titles",
             ),
         )
@@ -384,7 +393,10 @@ def test_launch_session_runs_participant_tutorial_once_before_first_transition(
             multi_condition_project_root,
             session_plan,
             participant_number=PARTICIPANT_NUMBER,
-            launch_settings=LaunchSettings(engine_name="stub-tutorial"),
+            launch_settings=LaunchSettings(
+                experiment_test_mode=True, serial_enabled=False,
+                engine_name="stub-tutorial",
+            ),
         )
     finally:
         unregister_engine("stub-tutorial")
@@ -437,6 +449,7 @@ def test_launch_session_uses_accessible_fixation_colors_for_colorblind_participa
             participant_number=PARTICIPANT_NUMBER,
             participant_metadata=ParticipantMetadata(colorblind=True),
             launch_settings=LaunchSettings(
+                experiment_test_mode=True, serial_enabled=False,
                 engine_name="stub-accessible-fixation",
             ),
         )
@@ -481,6 +494,7 @@ def test_launch_session_keeps_authored_fixation_colors_when_colorblind_is_no(
             participant_number=PARTICIPANT_NUMBER,
             participant_metadata=ParticipantMetadata(colorblind=False),
             launch_settings=LaunchSettings(
+                experiment_test_mode=True, serial_enabled=False,
                 engine_name="stub-standard-fixation",
             ),
         )
@@ -519,7 +533,10 @@ def test_launch_session_skips_participant_tutorial_when_disabled(
             multi_condition_project_root,
             session_plan,
             participant_number=PARTICIPANT_NUMBER,
-            launch_settings=LaunchSettings(engine_name="stub-no-tutorial"),
+            launch_settings=LaunchSettings(
+                experiment_test_mode=True, serial_enabled=False,
+                engine_name="stub-no-tutorial",
+            ),
         )
     finally:
         unregister_engine("stub-no-tutorial")
@@ -556,7 +573,10 @@ def test_launch_session_tutorial_miss_keeps_total_hit_progress_before_condition_
             multi_condition_project_root,
             session_plan,
             participant_number=PARTICIPANT_NUMBER,
-            launch_settings=LaunchSettings(engine_name="stub-tutorial-miss"),
+            launch_settings=LaunchSettings(
+                experiment_test_mode=True, serial_enabled=False,
+                engine_name="stub-tutorial-miss",
+            ),
         )
     finally:
         unregister_engine("stub-tutorial-miss")
@@ -604,7 +624,10 @@ def test_launch_session_tutorial_shows_reminder_after_repeated_misses(
             multi_condition_project_root,
             session_plan,
             participant_number=PARTICIPANT_NUMBER,
-            launch_settings=LaunchSettings(engine_name="stub-tutorial-reminder"),
+            launch_settings=LaunchSettings(
+                experiment_test_mode=True, serial_enabled=False,
+                engine_name="stub-tutorial-reminder",
+            ),
         )
     finally:
         unregister_engine("stub-tutorial-reminder")
@@ -652,6 +675,7 @@ def test_launch_session_tutorial_researcher_check_allows_continuing_after_ten_mi
             session_plan,
             participant_number=PARTICIPANT_NUMBER,
             launch_settings=LaunchSettings(
+                experiment_test_mode=True, serial_enabled=False,
                 engine_name="stub-tutorial-researcher-check",
             ),
         )
@@ -698,7 +722,10 @@ def test_launch_session_aborts_before_playback_when_tutorial_attempt_aborts(
             multi_condition_project_root,
             session_plan,
             participant_number=PARTICIPANT_NUMBER,
-            launch_settings=LaunchSettings(engine_name="stub-tutorial-abort"),
+            launch_settings=LaunchSettings(
+                experiment_test_mode=True, serial_enabled=False,
+                engine_name="stub-tutorial-abort",
+            ),
         )
     finally:
         unregister_engine("stub-tutorial-abort")
@@ -725,19 +752,28 @@ def test_launch_session_reuses_participant_number_with_incremented_output_labels
             multi_condition_project_root,
             session_plan,
             participant_number=PARTICIPANT_NUMBER,
-            launch_settings=LaunchSettings(engine_name="stub-participant-folders"),
+            launch_settings=LaunchSettings(
+                experiment_test_mode=True, serial_enabled=False,
+                engine_name="stub-participant-folders",
+            ),
         )
         summary_2 = launch_session(
             multi_condition_project_root,
             session_plan,
             participant_number=PARTICIPANT_NUMBER,
-            launch_settings=LaunchSettings(engine_name="stub-participant-folders"),
+            launch_settings=LaunchSettings(
+                experiment_test_mode=True, serial_enabled=False,
+                engine_name="stub-participant-folders",
+            ),
         )
         summary_3 = launch_session(
             multi_condition_project_root,
             session_plan,
             participant_number=PARTICIPANT_NUMBER,
-            launch_settings=LaunchSettings(engine_name="stub-participant-folders"),
+            launch_settings=LaunchSettings(
+                experiment_test_mode=True, serial_enabled=False,
+                engine_name="stub-participant-folders",
+            ),
         )
     finally:
         unregister_engine("stub-participant-folders")
@@ -779,7 +815,10 @@ def test_session_launch_ignores_legacy_fixed_break_transition_path(
             multi_condition_project_root,
             session_plan,
             participant_number=PARTICIPANT_NUMBER,
-            launch_settings=LaunchSettings(engine_name="stub-fixed-break"),
+            launch_settings=LaunchSettings(
+                experiment_test_mode=True, serial_enabled=False,
+                engine_name="stub-fixed-break",
+            ),
         )
     finally:
         unregister_engine("stub-fixed-break")
@@ -813,7 +852,10 @@ def test_session_launch_forces_space_transition_key(
             multi_condition_project_root,
             session_plan,
             participant_number=PARTICIPANT_NUMBER,
-            launch_settings=LaunchSettings(engine_name="stub-manual"),
+            launch_settings=LaunchSettings(
+                experiment_test_mode=True, serial_enabled=False,
+                engine_name="stub-manual",
+            ),
         )
     finally:
         unregister_engine("stub-manual")
@@ -843,7 +885,10 @@ def test_single_run_launch_aborts_before_playback_when_start_screen_is_cancelled
             sample_project_root,
             run_spec,
             participant_number=PARTICIPANT_NUMBER,
-            launch_settings=LaunchSettings(engine_name="stub-start-abort"),
+            launch_settings=LaunchSettings(
+                experiment_test_mode=True, serial_enabled=False,
+                engine_name="stub-start-abort",
+            ),
         )
     finally:
         unregister_engine("stub-start-abort")
@@ -873,7 +918,10 @@ def test_session_launch_inserts_manual_inter_block_break_between_non_final_block
             multi_condition_project_root,
             session_plan,
             participant_number=PARTICIPANT_NUMBER,
-            launch_settings=LaunchSettings(engine_name="stub-block-break"),
+            launch_settings=LaunchSettings(
+                experiment_test_mode=True, serial_enabled=False,
+                engine_name="stub-block-break",
+            ),
         )
     finally:
         unregister_engine("stub-block-break")
@@ -905,7 +953,10 @@ def test_session_launch_passes_condition_instructions_to_transition_screens(
             multi_condition_project_root,
             session_plan,
             participant_number=PARTICIPANT_NUMBER,
-            launch_settings=LaunchSettings(engine_name="stub-instructions"),
+            launch_settings=LaunchSettings(
+                experiment_test_mode=True, serial_enabled=False,
+                engine_name="stub-instructions",
+            ),
         )
     finally:
         unregister_engine("stub-instructions")
@@ -934,7 +985,10 @@ def test_session_launch_preserves_instruction_text_verbatim(
             multi_condition_project_root,
             session_plan,
             participant_number=PARTICIPANT_NUMBER,
-            launch_settings=LaunchSettings(engine_name="stub-verbatim"),
+            launch_settings=LaunchSettings(
+                experiment_test_mode=True, serial_enabled=False,
+                engine_name="stub-verbatim",
+            ),
         )
     finally:
         unregister_engine("stub-verbatim")
@@ -966,7 +1020,10 @@ def test_session_launch_preflight_rejects_missing_assets_before_engine_run(
                 sample_project_root,
                 session_plan,
                 participant_number=PARTICIPANT_NUMBER,
-                launch_settings=LaunchSettings(engine_name="stub-preflight"),
+                launch_settings=LaunchSettings(
+                    experiment_test_mode=True, serial_enabled=False,
+                    engine_name="stub-preflight",
+                ),
             )
     finally:
         unregister_engine("stub-preflight")
@@ -994,7 +1051,10 @@ def test_session_launch_preflight_rejects_invalid_timing_before_engine_run(
                 sample_project_root,
                 session_plan,
                 participant_number=PARTICIPANT_NUMBER,
-                launch_settings=LaunchSettings(engine_name="stub-invalid"),
+                launch_settings=LaunchSettings(
+                    experiment_test_mode=True, serial_enabled=False,
+                    engine_name="stub-invalid",
+                ),
             )
     finally:
         unregister_engine("stub-invalid")
@@ -1025,6 +1085,7 @@ def test_session_launch_blocks_when_detected_resolution_differs_from_project_set
                 session_plan,
                 participant_number=PARTICIPANT_NUMBER,
                 launch_settings=LaunchSettings(
+                experiment_test_mode=True, serial_enabled=False,
                     engine_name="stub-resolution-mismatch",
                 ),
             )
@@ -1092,6 +1153,8 @@ def test_launch_run_exports_aborted_summary_when_serial_write_fails(
     sample_project_root,
 ) -> None:
     class _FailingWriteSerialBackend(TriggerBackend):
+        emits_hardware_triggers = True
+
         def __init__(self, *_args: object, **_kwargs: object) -> None:
             return None
 
@@ -1165,7 +1228,10 @@ def test_session_launch_allows_detected_resolution_when_project_uses_current_scr
             sample_project_root,
             session_plan,
             participant_number=PARTICIPANT_NUMBER,
-            launch_settings=LaunchSettings(engine_name="stub-current-resolution"),
+            launch_settings=LaunchSettings(
+                experiment_test_mode=True, serial_enabled=False,
+                engine_name="stub-current-resolution",
+            ),
         )
     finally:
         unregister_engine("stub-current-resolution")
@@ -1192,7 +1258,10 @@ def test_launch_run_uses_session_mode_without_mode_gate(
             sample_project_root,
             run_spec,
             participant_number=PARTICIPANT_NUMBER,
-            launch_settings=LaunchSettings(engine_name="stub-session-mode"),
+            launch_settings=LaunchSettings(
+                experiment_test_mode=True, serial_enabled=False,
+                engine_name="stub-session-mode",
+            ),
         )
     finally:
         unregister_engine("stub-session-mode")

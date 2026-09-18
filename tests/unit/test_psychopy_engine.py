@@ -470,7 +470,9 @@ def _two_cycle_image_run_spec(
     )
     run_spec.stimulus_sequence = [first_event, second_event]
     run_spec.fixation_events = []
-    run_spec.trigger_events = []
+    run_spec.trigger_events = [
+        event for event in run_spec.trigger_events if event.label == "condition_start"
+    ]
     run_spec.display.total_frames = 2 * run_spec.display.frames_per_stimulus
     return run_spec.model_copy(update={"pre_stream_fixation_frames": 0})
 
@@ -859,8 +861,8 @@ def test_psychopy_engine_preloads_unique_images_before_playback_flip(
         engine.run_condition(
             run_spec,
             sample_project_root,
-            runtime_options={"timing_warmup_frames": 0},
-            trigger_backend=None,
+            runtime_options={"experiment_test_mode": True, "timing_warmup_frames": 0},
+            trigger_backend=_RecordingTriggerBackend(),
         )
     finally:
         engine.close_session()
@@ -911,10 +913,11 @@ def test_psychopy_engine_blocks_on_post_upload_gate_before_first_condition_flip(
                 run_spec,
                 sample_project_root,
                 runtime_options={
+                    "experiment_test_mode": True,
                     "timing_warmup_frames": 0,
                     "verify_graphics_memory": True,
                 },
-                trigger_backend=None,
+                trigger_backend=_RecordingTriggerBackend(),
             )
     finally:
         engine.close_session()
@@ -962,10 +965,11 @@ def test_psychopy_engine_runs_and_reports_when_graphics_telemetry_is_unverified(
                 run_spec,
                 sample_project_root,
                 runtime_options={
+                    "experiment_test_mode": True,
                     "timing_warmup_frames": 0,
                     "verify_graphics_memory": True,
                 },
-                trigger_backend=None,
+                trigger_backend=_RecordingTriggerBackend(),
             )
     finally:
         engine.close_session()
@@ -1027,8 +1031,8 @@ def test_psychopy_engine_reuses_prepared_stimulus_within_condition(
         engine.run_condition(
             run_spec,
             sample_project_root,
-            runtime_options={"timing_warmup_frames": 0},
-            trigger_backend=None,
+            runtime_options={"experiment_test_mode": True, "timing_warmup_frames": 0},
+            trigger_backend=_RecordingTriggerBackend(),
         )
     finally:
         engine.close_session()
@@ -1062,8 +1066,8 @@ def test_psychopy_engine_applies_frequency_agnostic_sinusoidal_contrast_per_cycl
         engine.run_condition(
             run_spec,
             sample_project_root,
-            runtime_options={"timing_warmup_frames": 0},
-            trigger_backend=None,
+            runtime_options={"experiment_test_mode": True, "timing_warmup_frames": 0},
+            trigger_backend=_RecordingTriggerBackend(),
         )
     finally:
         engine.close_session()
@@ -1125,8 +1129,8 @@ def test_psychopy_engine_keeps_existing_image_modes_at_full_contrast(
         engine.run_condition(
             run_spec,
             sample_project_root,
-            runtime_options={"timing_warmup_frames": 0},
-            trigger_backend=None,
+            runtime_options={"experiment_test_mode": True, "timing_warmup_frames": 0},
+            trigger_backend=_RecordingTriggerBackend(),
         )
     finally:
         engine.close_session()
@@ -1207,8 +1211,8 @@ def test_psychopy_engine_prepares_and_draws_word_stimuli(
         engine.run_condition(
             run_spec,
             sample_project_root,
-            runtime_options={"timing_warmup_frames": 0},
-            trigger_backend=None,
+            runtime_options={"experiment_test_mode": True, "timing_warmup_frames": 0},
+            trigger_backend=_RecordingTriggerBackend(),
         )
     finally:
         engine.close_session()
@@ -1239,8 +1243,8 @@ def test_psychopy_engine_releases_word_stimuli_after_playback_error(
             engine.run_condition(
                 run_spec,
                 sample_project_root,
-                runtime_options={"timing_warmup_frames": 0},
-                trigger_backend=None,
+                runtime_options={"experiment_test_mode": True, "timing_warmup_frames": 0},
+                trigger_backend=_RecordingTriggerBackend(),
             )
     finally:
         engine.close_session()
@@ -1273,8 +1277,8 @@ def test_psychopy_engine_releases_prepared_stimuli_when_priming_fails(
             engine.run_condition(
                 run_spec,
                 sample_project_root,
-                runtime_options={"timing_warmup_frames": 0},
-                trigger_backend=None,
+                runtime_options={"experiment_test_mode": True, "timing_warmup_frames": 0},
+                trigger_backend=_RecordingTriggerBackend(),
             )
     finally:
         engine.close_session()
@@ -1303,8 +1307,8 @@ def test_psychopy_engine_invalidates_session_when_stimulus_construction_fails(
         engine.run_condition(
             run_spec,
             sample_project_root,
-            runtime_options={"timing_warmup_frames": 0},
-            trigger_backend=None,
+            runtime_options={"experiment_test_mode": True, "timing_warmup_frames": 0},
+            trigger_backend=_RecordingTriggerBackend(),
         )
 
     window = captures["window"]
@@ -1343,10 +1347,11 @@ def test_psychopy_engine_sizes_images_from_visual_angle_without_changing_aspect_
             run_spec,
             sample_project_root,
             runtime_options={
+                "experiment_test_mode": True,
                 "fullscreen": False,
                 "timing_warmup_frames": 0,
             },
-            trigger_backend=None,
+            trigger_backend=_RecordingTriggerBackend(),
         )
     finally:
         engine.close_session()
@@ -1391,8 +1396,8 @@ def test_psychopy_engine_applies_runtime_image_transforms_at_preload(
         engine.run_condition(
             run_spec,
             sample_project_root,
-            runtime_options={"timing_warmup_frames": 0},
-            trigger_backend=None,
+            runtime_options={"experiment_test_mode": True, "timing_warmup_frames": 0},
+            trigger_backend=_RecordingTriggerBackend(),
         )
     finally:
         engine.close_session()
@@ -1456,8 +1461,8 @@ def test_psychopy_engine_applies_word_transform_and_resolves_height_fraction(
         engine.run_condition(
             run_spec,
             Path.cwd(),
-            runtime_options={"timing_warmup_frames": 0},
-            trigger_backend=None,
+            runtime_options={"experiment_test_mode": True, "timing_warmup_frames": 0},
+            trigger_backend=_RecordingTriggerBackend(),
         )
     finally:
         engine.close_session()
@@ -1500,8 +1505,8 @@ def test_psychopy_engine_preloads_distinct_text_height_render_variants(
         engine.run_condition(
             run_spec,
             Path.cwd(),
-            runtime_options={"timing_warmup_frames": 0},
-            trigger_backend=None,
+            runtime_options={"experiment_test_mode": True, "timing_warmup_frames": 0},
+            trigger_backend=_RecordingTriggerBackend(),
         )
     finally:
         engine.close_session()
@@ -1547,8 +1552,8 @@ def test_psychopy_engine_prioritizes_legacy_width_fraction_for_word_height(
         engine.run_condition(
             run_spec,
             Path.cwd(),
-            runtime_options={"timing_warmup_frames": 0},
-            trigger_backend=None,
+            runtime_options={"experiment_test_mode": True, "timing_warmup_frames": 0},
+            trigger_backend=_RecordingTriggerBackend(),
         )
     finally:
         engine.close_session()
@@ -1596,8 +1601,8 @@ def test_psychopy_engine_resolves_text_degrees_for_height_and_signed_position(
         engine.run_condition(
             run_spec,
             Path.cwd(),
-            runtime_options={"timing_warmup_frames": 0},
-            trigger_backend=None,
+            runtime_options={"experiment_test_mode": True, "timing_warmup_frames": 0},
+            trigger_backend=_RecordingTriggerBackend(),
         )
     finally:
         engine.close_session()
@@ -1696,10 +1701,11 @@ def test_psychopy_engine_uses_same_display_size_for_different_square_resolutions
             run_spec,
             sample_project_root,
             runtime_options={
+                "experiment_test_mode": True,
                 "fullscreen": False,
                 "timing_warmup_frames": 0,
             },
-            trigger_backend=None,
+            trigger_backend=_RecordingTriggerBackend(),
         )
     finally:
         engine.close_session()
@@ -1775,8 +1781,8 @@ def test_psychopy_engine_resolves_native_image_geometry_modes(
         engine.run_condition(
             run_spec,
             sample_project_root,
-            runtime_options={"timing_warmup_frames": 0},
-            trigger_backend=None,
+            runtime_options={"experiment_test_mode": True, "timing_warmup_frames": 0},
+            trigger_backend=_RecordingTriggerBackend(),
         )
     finally:
         engine.close_session()
@@ -1827,8 +1833,8 @@ def test_psychopy_engine_rejects_compiled_source_resolution_drift(
             engine.run_condition(
                 run_spec,
                 sample_project_root,
-                runtime_options={"timing_warmup_frames": 0},
-                trigger_backend=None,
+                runtime_options={"experiment_test_mode": True, "timing_warmup_frames": 0},
+                trigger_backend=_RecordingTriggerBackend(),
             )
     finally:
         engine.close_session()
@@ -1883,8 +1889,8 @@ def test_psychopy_engine_cover_crops_centrally_in_memory_and_preserves_alpha(
         engine.run_condition(
             run_spec,
             sample_project_root,
-            runtime_options={"timing_warmup_frames": 0},
-            trigger_backend=None,
+            runtime_options={"experiment_test_mode": True, "timing_warmup_frames": 0},
+            trigger_backend=_RecordingTriggerBackend(),
         )
     finally:
         engine.close_session()
@@ -1919,7 +1925,7 @@ def test_psychopy_engine_emits_compiled_triggers_on_presentation_flip(
         engine.run_condition(
             run_spec,
             sample_project_root,
-            runtime_options={"timing_warmup_frames": 0},
+            runtime_options={"experiment_test_mode": True, "timing_warmup_frames": 0},
             trigger_backend=trigger_backend,
         )
     finally:
@@ -1970,7 +1976,7 @@ def test_psychopy_engine_terminal_offset_closes_continuous_and_blank_final_frame
         summary = engine.run_condition(
             run_spec,
             sample_project_root,
-            runtime_options={"timing_warmup_frames": 0},
+            runtime_options={"experiment_test_mode": True, "timing_warmup_frames": 0},
             trigger_backend=trigger_backend,
         )
     finally:
@@ -2014,8 +2020,8 @@ def test_psychopy_engine_terminal_offset_captures_final_frame_response(
         summary = engine.run_condition(
             run_spec,
             sample_project_root,
-            runtime_options={"timing_warmup_frames": 0},
-            trigger_backend=None,
+            runtime_options={"experiment_test_mode": True, "timing_warmup_frames": 0},
+            trigger_backend=_RecordingTriggerBackend(),
         )
     finally:
         engine.close_session()
@@ -2046,7 +2052,7 @@ def test_psychopy_engine_keeps_trigger_flip_callback_exclusive_and_records_fixat
         summary = engine.run_condition(
             run_spec,
             sample_project_root,
-            runtime_options={"timing_warmup_frames": 0},
+            runtime_options={"experiment_test_mode": True, "timing_warmup_frames": 0},
             trigger_backend=trigger_backend,
         )
     finally:
@@ -2097,7 +2103,8 @@ def test_psychopy_engine_does_not_invent_fixation_onset_when_clock_conversion_is
         summary = engine.run_condition(
             run_spec,
             sample_project_root,
-            runtime_options={"timing_warmup_frames": 0},
+            runtime_options={"experiment_test_mode": True, "timing_warmup_frames": 0},
+            trigger_backend=_RecordingTriggerBackend(),
         )
     finally:
         engine.close_session()
@@ -2130,7 +2137,8 @@ def test_psychopy_engine_event_keyboard_backend_forces_frame_timestamp_fallback(
         summary = engine.run_condition(
             run_spec,
             sample_project_root,
-            runtime_options={"timing_warmup_frames": 0},
+            runtime_options={"experiment_test_mode": True, "timing_warmup_frames": 0},
+            trigger_backend=_RecordingTriggerBackend(),
         )
     finally:
         engine.close_session()
@@ -2164,6 +2172,7 @@ def test_psychopy_engine_trigger_timestamps_exclude_warmup_period(
             run_spec,
             sample_project_root,
             runtime_options={
+                "experiment_test_mode": True,
                 "timing_warmup_frames": 3,
                 "strict_timing": False,
             },
@@ -2210,7 +2219,10 @@ def test_psychopy_engine_omits_mixed_clock_domain_warmup_intervals(
         engine.run_condition(
             run_spec,
             sample_project_root,
-            runtime_options={"timing_warmup_frames": 3, "strict_timing": False},
+            runtime_options={
+                "experiment_test_mode": True, "timing_warmup_frames": 3, "strict_timing": False,
+            },
+            trigger_backend=_RecordingTriggerBackend(),
         )
     finally:
         engine.close_session()
@@ -2245,7 +2257,9 @@ def test_psychopy_engine_uses_final_warmup_frames_for_fixation_lead_in(
         summary = engine.run_condition(
             run_spec,
             sample_project_root,
-            runtime_options={"timing_warmup_frames": 4, "strict_timing": False},
+            runtime_options={
+                "experiment_test_mode": True, "timing_warmup_frames": 4, "strict_timing": False,
+            },
             trigger_backend=trigger_backend,
         )
     finally:
@@ -2280,8 +2294,10 @@ def test_two_second_lead_in_uses_final_half_of_default_warmup_at_sixty_hz(
         summary = engine.run_condition(
             run_spec,
             sample_project_root,
-            runtime_options={"timing_warmup_frames": 240, "strict_timing": False},
-            trigger_backend=None,
+            runtime_options={
+                "experiment_test_mode": True, "timing_warmup_frames": 240, "strict_timing": False,
+            },
+            trigger_backend=_RecordingTriggerBackend(),
         )
     finally:
         engine.close_session()
@@ -2316,8 +2332,10 @@ def test_psychopy_engine_reports_long_lead_in_as_actual_pre_stream_qc_frames(
         summary = engine.run_condition(
             run_spec,
             sample_project_root,
-            runtime_options={"timing_warmup_frames": 240, "strict_timing": False},
-            trigger_backend=None,
+            runtime_options={
+                "experiment_test_mode": True, "timing_warmup_frames": 240, "strict_timing": False,
+            },
+            trigger_backend=_RecordingTriggerBackend(),
         )
     finally:
         engine.close_session()
@@ -2353,7 +2371,9 @@ def test_psychopy_engine_blank_warmup_escape_aborts_before_stream_and_triggers(
         summary = engine.run_condition(
             run_spec,
             sample_project_root,
-            runtime_options={"timing_warmup_frames": 4, "strict_timing": False},
+            runtime_options={
+                "experiment_test_mode": True, "timing_warmup_frames": 4, "strict_timing": False,
+            },
             trigger_backend=trigger_backend,
         )
     finally:
@@ -2390,7 +2410,7 @@ def test_psychopy_engine_uses_compiled_trigger_events_not_stimulus_roles(
         engine.run_condition(
             run_spec,
             sample_project_root,
-            runtime_options={"timing_warmup_frames": 0},
+            runtime_options={"experiment_test_mode": True, "timing_warmup_frames": 0},
             trigger_backend=trigger_backend,
         )
     finally:
@@ -2421,11 +2441,12 @@ def test_psychopy_engine_releases_condition_stimuli_after_timing_violation(
             run_spec,
             sample_project_root,
             runtime_options={
+                "experiment_test_mode": True,
                 "strict_timing": True,
                 "timing_warmup_frames": 0,
                 "timing_miss_threshold_multiplier": 1.5,
             },
-            trigger_backend=None,
+            trigger_backend=_RecordingTriggerBackend(),
         )
     finally:
         engine.close_session()
@@ -2452,8 +2473,8 @@ def test_psychopy_engine_releases_condition_stimuli_after_playback_error(
             engine.run_condition(
                 run_spec,
                 sample_project_root,
-                runtime_options={"timing_warmup_frames": 0},
-                trigger_backend=None,
+                runtime_options={"experiment_test_mode": True, "timing_warmup_frames": 0},
+                trigger_backend=_RecordingTriggerBackend(),
             )
     finally:
         engine.close_session()
@@ -2479,7 +2500,7 @@ def test_psychopy_engine_invalidates_session_after_flip_failure_with_queued_trig
         engine.run_condition(
             run_spec,
             sample_project_root,
-            runtime_options={"timing_warmup_frames": 0},
+            runtime_options={"experiment_test_mode": True, "timing_warmup_frames": 0},
             trigger_backend=trigger_backend,
         )
 
@@ -2511,7 +2532,7 @@ def test_psychopy_engine_rejects_multiple_trigger_bytes_on_one_flip_before_frame
         engine.run_condition(
             run_spec,
             sample_project_root,
-            runtime_options={"timing_warmup_frames": 0},
+            runtime_options={"experiment_test_mode": True, "timing_warmup_frames": 0},
             trigger_backend=trigger_backend,
         )
 
@@ -2539,7 +2560,7 @@ def test_psychopy_engine_invalidates_session_after_trigger_callback_failure(
         engine.run_condition(
             run_spec,
             sample_project_root,
-            runtime_options={"timing_warmup_frames": 0},
+            runtime_options={"experiment_test_mode": True, "timing_warmup_frames": 0},
             trigger_backend=_FailingTriggerBackend(),
         )
 
@@ -2574,7 +2595,8 @@ def test_psychopy_engine_closes_session_when_cleanup_barrier_fails(
         engine.run_condition(
             run_spec,
             sample_project_root,
-            runtime_options={"timing_warmup_frames": 0},
+            runtime_options={"experiment_test_mode": True, "timing_warmup_frames": 0},
+            trigger_backend=_RecordingTriggerBackend(),
         )
 
     window = captures["window"]
@@ -2603,15 +2625,15 @@ def test_psychopy_engine_does_not_reuse_stimuli_between_condition_runs(
         engine.run_condition(
             run_spec,
             sample_project_root,
-            runtime_options={"timing_warmup_frames": 0},
-            trigger_backend=None,
+            runtime_options={"experiment_test_mode": True, "timing_warmup_frames": 0},
+            trigger_backend=_RecordingTriggerBackend(),
         )
         first_condition_stim = _image_stims(captures)[0]
         engine.run_condition(
             run_spec,
             sample_project_root,
-            runtime_options={"timing_warmup_frames": 0},
-            trigger_backend=None,
+            runtime_options={"experiment_test_mode": True, "timing_warmup_frames": 0},
+            trigger_backend=_RecordingTriggerBackend(),
         )
         second_condition_stim = _image_stims(captures)[1]
     finally:
@@ -2645,13 +2667,14 @@ def test_psychopy_engine_strict_timing_keeps_stable_intervals_running(
             run_spec,
             sample_project_root,
             runtime_options={
+                "experiment_test_mode": True,
                 "fullscreen": True,
                 "strict_timing": True,
                 "strict_timing_warmup": True,
                 "timing_warmup_frames": warmup_frames,
                 "timing_miss_threshold_multiplier": 1.5,
             },
-            trigger_backend=None,
+            trigger_backend=_RecordingTriggerBackend(),
         )
     finally:
         engine.close_session()
@@ -2689,13 +2712,14 @@ def test_psychopy_engine_strict_timing_tolerates_single_early_warmup_miss(
             run_spec,
             sample_project_root,
             runtime_options={
+                "experiment_test_mode": True,
                 "fullscreen": True,
                 "strict_timing": True,
                 "strict_timing_warmup": True,
                 "timing_warmup_frames": warmup_frames,
                 "timing_miss_threshold_multiplier": 1.5,
             },
-            trigger_backend=None,
+            trigger_backend=_RecordingTriggerBackend(),
         )
     finally:
         engine.close_session()
@@ -2733,12 +2757,13 @@ def test_psychopy_engine_strict_timing_flags_post_settle_warmup_misses(
             run_spec,
             sample_project_root,
             runtime_options={
+                "experiment_test_mode": True,
                 "fullscreen": True,
                 "strict_timing": True,
                 "timing_warmup_frames": warmup_frames,
                 "timing_miss_threshold_multiplier": 1.5,
             },
-            trigger_backend=None,
+            trigger_backend=_RecordingTriggerBackend(),
         )
     finally:
         engine.close_session()
@@ -2781,13 +2806,14 @@ def test_psychopy_engine_softened_warmup_does_not_abort_before_run_phase(
             run_spec,
             sample_project_root,
             runtime_options={
+                "experiment_test_mode": True,
                 "fullscreen": True,
                 "strict_timing": True,
                 "strict_timing_warmup": False,
                 "timing_warmup_frames": warmup_frames,
                 "timing_miss_threshold_multiplier": 1.5,
             },
-            trigger_backend=None,
+            trigger_backend=_RecordingTriggerBackend(),
         )
     finally:
         engine.close_session()
@@ -2827,13 +2853,14 @@ def test_psychopy_engine_strict_timing_flags_run_phase_miss_without_aborting(
             run_spec,
             sample_project_root,
             runtime_options={
+                "experiment_test_mode": True,
                 "fullscreen": True,
                 "strict_timing": True,
                 "strict_timing_warmup": False,
                 "timing_warmup_frames": warmup_frames,
                 "timing_miss_threshold_multiplier": 1.5,
             },
-            trigger_backend=None,
+            trigger_backend=_RecordingTriggerBackend(),
         )
     finally:
         engine.close_session()
@@ -2878,11 +2905,12 @@ def test_psychopy_engine_logs_playback_timing_diagnostic(
             run_spec,
             sample_project_root,
             runtime_options={
+                "experiment_test_mode": True,
                 "fullscreen": False,
                 "strict_timing": False,
                 "timing_warmup_frames": warmup_frames,
             },
-            trigger_backend=None,
+            trigger_backend=_RecordingTriggerBackend(),
         )
     finally:
         engine.close_session()
@@ -2921,11 +2949,12 @@ def test_psychopy_engine_uses_psychopy_warning_channel_for_timing_diagnostic(
             run_spec,
             sample_project_root,
             runtime_options={
+                "experiment_test_mode": True,
                 "fullscreen": False,
                 "strict_timing": False,
                 "timing_warmup_frames": 0,
             },
-            trigger_backend=None,
+            trigger_backend=_RecordingTriggerBackend(),
         )
     finally:
         engine.close_session()

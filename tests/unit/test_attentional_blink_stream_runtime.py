@@ -102,7 +102,8 @@ def _play(monkeypatch, run, root, *, missing_flips=None, key_batches=None):
     triggers = _RecordingTriggerBackend()
     try:
         summary = engine.run_condition(
-            run, root, runtime_options={"timing_warmup_frames": 2}, trigger_backend=triggers,
+            run, root, runtime_options={"timing_warmup_frames": 2, "experiment_test_mode": True},
+            trigger_backend=triggers,
         )
     finally:
         engine.close_session()
@@ -413,7 +414,9 @@ def test_default_study_questionnaire_follows_every_completed_condition_and_joins
     captures = {}
     summary = RuntimeWorker(QuestionnaireEngine(captures)).execute_session(
         tmp_path, plan, tmp_path / "runs" / "session", participant_number="0042",
-        runtime_options={"export_mode": "compact", "serial_enabled": False},
+        runtime_options={
+            "export_mode": "compact", "serial_enabled": False, "experiment_test_mode": True,
+        },
     )
     assert not summary.aborted
     assert len(summary.run_results) == 6

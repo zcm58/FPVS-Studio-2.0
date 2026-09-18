@@ -9,7 +9,7 @@ from fpvs_studio.core.enums import StimulusModality
 from fpvs_studio.core.models import Condition, ProjectFile, StimulusSet
 from fpvs_studio.gui.document_support import DocumentError, validated_copy
 from fpvs_studio.preprocessing.importer import (
-    import_stimulus_source_directory,
+    import_fresh_stimulus_source_directory,
     materialize_project_assets,
 )
 from fpvs_studio.preprocessing.inspection import inspect_source_directory, summary_to_stimulus_set
@@ -73,20 +73,16 @@ class DocumentStimulusMixin:
         stimulus_set = self.get_condition_stimulus_set(condition_id, role)
         if stimulus_set.modality != StimulusModality.IMAGE:
             raise DocumentError("Image folders can only be imported for image-based conditions.")
-        _, imported_set = import_stimulus_source_directory(
+        summary, imported_set = import_fresh_stimulus_source_directory(
             source_dir=Path(source_dir),
             project_root=self._project_root,
-            set_id=stimulus_set.set_id,
+            set_id_prefix=f"{condition_id}-{role}",
             set_name=stimulus_set.name,
             strict=False,
         )
-        updated_sets = [
-            imported_set if item.set_id == imported_set.set_id else item
-            for item in self._project.stimulus_sets
-        ]
-        project = validated_copy(self._project, stimulus_sets=updated_sets)
-        self._replace_project(project)
-        self._update_manifest_for_stimulus_set(imported_set.set_id)
+        self.apply_designer_source(
+            condition_id, role=role, stimulus_set=imported_set, summary=summary,
+        )
         return imported_set
 
     def refresh_stimulus_inspection(self) -> None:
@@ -177,14 +173,20 @@ class DocumentStimulusMixin:
             )
             if set_id is not None
         }
-        sets = [
-            item
-            for item in self._project.stimulus_sets
-            if item.set_id != stimulus_set.set_id
-            and (item.set_id != previous_id or item.set_id in referenced)
-        ]
+        sets = []
+        replaced = False
+        for item in self._project.stimulus_sets:
+            if item.set_id == stimulus_set.set_id:
+                continue
+            if item.set_id == previous_id and item.set_id not in referenced:
+                sets.append(stimulus_set)
+                replaced = True
+            else:
+                sets.append(item)
+        if not replaced:
+            sets.append(stimulus_set)
         project = validated_copy(
-            self._project, conditions=conditions, stimulus_sets=[*sets, stimulus_set]
+            self._project, conditions=conditions, stimulus_sets=sets
         )
         manifest = upsert_manifest_set(
             self._manifest or create_empty_manifest(project.meta.project_id),
@@ -339,32 +341,6 @@ class DocumentStimulusMixin:
         write_stimulus_manifest(self._project_root, manifest)
         self.manifest_changed.emit()
         return result
-
-    def _update_manifest_for_stimulus_set(self, set_id: str) -> None:
-        stimulus_set = self.get_stimulus_set(set_id)
-        if stimulus_set is None:
-            return
-        if stimulus_set.modality != StimulusModality.IMAGE:
-            return
-        if stimulus_set.source_dir is None:
-            raise ValueError(f"Image stimulus set '{stimulus_set.name}' is missing source_dir.")
-        source_dir = self._project_root / Path(stimulus_set.source_dir)
-        summary = inspect_source_directory(
-            source_dir,
-            relative_prefix=stimulus_set.source_dir,
-            strict=False,
-        )
-        manifest = self._manifest or create_empty_manifest(self._project.meta.project_id)
-        manifest = upsert_manifest_set(
-            manifest,
-            inspection_summary_to_manifest_set(
-                set_id=set_id,
-                summary=summary,
-            ),
-        )
-        self._manifest = manifest
-        write_stimulus_manifest(self._project_root, manifest)
-        self.manifest_changed.emit()
 
     def _sync_stimulus_sets_from_manifest(
         self,

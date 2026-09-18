@@ -171,6 +171,7 @@ def test_same_compiled_plan_produces_distinct_visits_and_preserves_first_session
     captures: dict[str, object] = {}
     register_engine("stub-visits", lambda: StubEngine(captures))
     settings = LaunchSettings(
+        experiment_test_mode=True, serial_enabled=False,
         engine_name="stub-visits", export_mode=export_mode, verify_refresh_rate=False
     )
     try:

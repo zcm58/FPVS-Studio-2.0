@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import random
+from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
 from fpvs_studio.core.attentional_blink_presets import RECALL_QUESTION_PHASES, RECALL_TASK_ID
@@ -40,6 +41,46 @@ from fpvs_studio.core.task_models import (
 SUPPORTED_TASK_IMAGE_SUFFIXES = frozenset({".jpg", ".jpeg", ".png"})
 
 
+@dataclass(frozen=True)
+class _ImageMemoryPair:
+    study: TaskStep
+    recognition: TaskStep
+    spec: ImageMemorySpec
+
+
+class TaskCompilationInputs:
+    """Indexes and media checks owned only by the current compilation invocation."""
+
+    def __init__(self, project: ProjectFile, project_root: Path | None) -> None:
+        self.project_root = project_root
+        self.modules = {module.task_id: module for module in project.task_modules}
+        self.owners = {
+            task_id: modifier for modifier in project.condition_modifiers
+            for task_id in modifier_task_ids(modifier)
+        }
+        self._assets: dict[tuple[str, str], Path] = {}
+        self._hashes: dict[Path, str] = {}
+        self.memory_pairs: dict[tuple[str, str, str, int, int, int, int], _ImageMemoryPair] = {}
+
+    def asset(self, task_id: str, image_path: str) -> Path:
+        key = (task_id, image_path)
+        if key not in self._assets:
+            self._assets[key] = _validate_task_asset(
+                task_id=task_id, image_path=image_path, project_root=self.project_root,
+            )
+        return self._assets[key]
+
+    def asset_hash(self, task_id: str, image_path: str) -> str:
+        path = self.asset(task_id, image_path)
+        if path not in self._hashes:
+            digest = hashlib.sha256()
+            with path.open("rb") as handle:
+                for chunk in iter(lambda: handle.read(65_536), b""):
+                    digest.update(chunk)
+            self._hashes[path] = digest.hexdigest()
+        return self._hashes[path]
+
+
 def compile_condition_tasks(
     project: ProjectFile,
     condition: Condition,
@@ -52,10 +93,13 @@ def compile_condition_tasks(
     project_root: Path | None,
     run_spec: RunSpec | None = None,
     global_order_index: int = 0,
+    inputs: TaskCompilationInputs | None = None,
 ) -> list[TaskModuleSpec]:
     """Compile the applicable task bindings for one concrete session entry."""
 
-    modules = {module.task_id: module for module in project.task_modules}
+    if inputs is None:
+        inputs = TaskCompilationInputs(project, project_root)
+    modules = inputs.modules
     bindings = (
         condition.pre_task_bindings
         if phase == TaskPhase.PRE_CONDITION
@@ -84,26 +128,25 @@ def compile_condition_tasks(
             task_id=module.task_id,
         )
         counting_spec = _compile_backward_counting(
-            module, project=project, condition=condition, phase=phase,
+            module, inputs=inputs, condition=condition, phase=phase,
             block_index=block_index, block_count=block_count,
             global_order_index=global_order_index, session_seed=session_seed,
             run_id=run_id, run_spec=run_spec,
         )
         memory_spec, memory_steps = _compile_image_memory(
-            module, project=project, condition=condition, phase=phase,
+            module, inputs=inputs, condition=condition, phase=phase,
             block_index=block_index, block_count=block_count,
             global_order_index=global_order_index, session_seed=session_seed,
-            run_id=run_id, project_root=project_root,
+            run_id=run_id,
         )
-        owner = next((modifier for modifier in project.condition_modifiers
-                      if module.task_id in modifier_task_ids(modifier)), None)
+        owner = inputs.owners.get(module.task_id)
         compiled.append(
             _compile_task_module(
                 module,
                 phase=phase,
                 occurrence=binding.occurrence,
                 random_seed=task_seed,
-                project_root=project_root,
+                inputs=inputs,
                 counting_spec=counting_spec,
                 memory_spec=memory_spec,
                 source_steps=memory_steps,
@@ -189,7 +232,7 @@ def _binding_applies(
 def _compile_backward_counting(
     module: TaskModule,
     *,
-    project: ProjectFile,
+    inputs: TaskCompilationInputs,
     condition: Condition,
     phase: TaskPhase,
     block_index: int,
@@ -219,7 +262,7 @@ def _compile_backward_counting(
             raise CompileError(
                 f"Backward-counting {config.role.value} requires {expected_phase.value}."
             )
-        modules = {task.task_id: task for task in project.task_modules}
+        modules = inputs.modules
         matched: dict[BackwardCountingRole, list[BackwardCountingConfig]] = {
             BackwardCountingRole.LOAD_START: [], BackwardCountingRole.LOAD_REPORT: [],
         }
@@ -329,11 +372,15 @@ def resolve_modifier_baseline(
 def compile_modifier_baseline(
     project: ProjectFile, requirements: list[ConditionModifier], *, condition: Condition,
     session_seed: int, run_id: str, project_root: Path | None,
+    inputs: TaskCompilationInputs | None = None,
 ) -> TaskModuleSpec:
+    if inputs is None:
+        inputs = TaskCompilationInputs(project, project_root)
     owner = requirements[0]
-    module = next(task for task in project.task_modules if task.task_id == owner.baseline_task_id)
+    assert owner.baseline_task_id is not None
+    module = inputs.modules[owner.baseline_task_id]
     counting = _compile_backward_counting(
-        module, project=project, condition=condition, phase=TaskPhase.PRE_CONDITION,
+        module, inputs=inputs, condition=condition, phase=TaskPhase.PRE_CONDITION,
         block_index=0, block_count=1, global_order_index=0, session_seed=session_seed,
         run_id=run_id, run_spec=None,
     )
@@ -346,14 +393,14 @@ def compile_modifier_baseline(
         random_seed=_task_seed(session_seed=session_seed, run_id=run_id,
                               phase=TaskPhase.PRE_CONDITION, binding_index=0,
                               task_id=module.task_id),
-        project_root=project_root, counting_spec=counting, modifier=provenance,
+        inputs=inputs, counting_spec=counting, modifier=provenance,
     )
 
 
 def _compile_image_memory(
-    module: TaskModule, *, project: ProjectFile, condition: Condition, phase: TaskPhase,
+    module: TaskModule, *, inputs: TaskCompilationInputs, condition: Condition, phase: TaskPhase,
     block_index: int, block_count: int, global_order_index: int,
-    session_seed: int, run_id: str, project_root: Path | None,
+    session_seed: int, run_id: str,
 ) -> tuple[ImageMemorySpec | None, list[TaskStep] | None]:
     config = module.image_memory
     if config is None:
@@ -362,7 +409,39 @@ def _compile_image_memory(
                       else TaskPhase.POST_CONDITION)
     if phase != expected_phase:
         raise CompileError(f"Image-memory {config.role.value} requires {expected_phase.value}.")
-    modules = {task.task_id: task for task in project.task_modules}
+    pair_key = (condition.condition_id, run_id, config.link_id, block_index, block_count,
+                global_order_index, session_seed)
+    if pair_key not in inputs.memory_pairs:
+        inputs.memory_pairs[pair_key] = _prepare_image_memory_pair(
+            inputs, condition, link_id=config.link_id, block_index=block_index,
+            block_count=block_count, global_order_index=global_order_index,
+            session_seed=session_seed, run_id=run_id,
+        )
+    pair = inputs.memory_pairs[pair_key]
+    original = pair.study if config.role == ImageMemoryRole.STUDY else pair.recognition
+    order = (pair.spec.study_order if config.role == ImageMemoryRole.STUDY
+             else pair.spec.recognition_order)
+    item_map = {item.item_id: item for item in original.items}
+    realized_items = []
+    for item_id, slot in zip(order, original.items, strict=True):
+        geometry = (
+            slot.model_dump(include={"x", "y", "width", "height", "unit"})
+            if original.layout_mode == TaskLayoutMode.EXACT else {}
+        )
+        realized_items.append(item_map[item_id].model_copy(update=geometry, deep=True))
+    realized = original.model_copy(update={
+        "items": realized_items,
+        "randomize_options": False,
+    }, deep=True)
+    return pair.spec.model_copy(update={"role": config.role}, deep=True), [realized]
+
+
+def _prepare_image_memory_pair(
+    inputs: TaskCompilationInputs, condition: Condition, *, link_id: str,
+    block_index: int, block_count: int, global_order_index: int,
+    session_seed: int, run_id: str,
+) -> _ImageMemoryPair:
+    modules = inputs.modules
     linked: dict[ImageMemoryRole, TaskModule] = {}
     for bindings, role in ((condition.pre_task_bindings, ImageMemoryRole.STUDY),
                            (condition.post_task_bindings, ImageMemoryRole.RECOGNITION)):
@@ -374,7 +453,7 @@ def _compile_image_memory(
             candidate = modules.get(binding.task_id)
             if candidate is None or candidate.image_memory is None:
                 continue
-            if (candidate.image_memory.link_id != config.link_id
+            if (candidate.image_memory.link_id != link_id
                     or candidate.image_memory.role != role):
                 continue
             if role in linked:
@@ -403,11 +482,7 @@ def _compile_image_memory(
         for item in task.steps[0].items:
             if item.image_path is None:
                 raise CompileError("Remember four images requires actual target and foil images.")
-            _validate_task_asset(task_id=task.task_id, image_path=item.image_path,
-                                 project_root=project_root)
-            assert project_root is not None
-            path = resolve_project_relative_path(project_root, item.image_path)
-            hashes[(role, item.item_id)] = hashlib.sha256(path.read_bytes()).hexdigest()
+            hashes[(role, item.item_id)] = inputs.asset_hash(task.task_id, item.image_path)
             if role == ImageMemoryRole.RECOGNITION:
                 image_paths[item.item_id] = item.image_path
     if any(hashes[(ImageMemoryRole.STUDY, target)] !=
@@ -415,32 +490,19 @@ def _compile_image_memory(
         raise CompileError("Memory targets must contain identical images in study and recognition.")
     if len({hashes[(ImageMemoryRole.RECOGNITION, item.item_id)] for item in report.items}) != 8:
         raise CompileError("Memory targets and foils must be eight distinct image files.")
-    seed_data = f"image-memory:{session_seed}:{run_id}:{config.link_id}".encode()
+    seed_data = f"image-memory:{session_seed}:{run_id}:{link_id}".encode()
     seed = int.from_bytes(hashlib.sha256(seed_data).digest()[:8], "big")
     rng = random.Random(seed)
     study_order = list(targets)
     recognition_order = [item.item_id for item in report.items]
     rng.shuffle(study_order)
     rng.shuffle(recognition_order)
-    original = study if config.role == ImageMemoryRole.STUDY else report
-    order = study_order if config.role == ImageMemoryRole.STUDY else recognition_order
-    item_map = {item.item_id: item for item in original.items}
-    realized_items = []
-    for item_id, slot in zip(order, original.items, strict=True):
-        geometry = (
-            slot.model_dump(include={"x", "y", "width", "height", "unit"})
-            if original.layout_mode == TaskLayoutMode.EXACT else {}
-        )
-        realized_items.append(item_map[item_id].model_copy(update=geometry, deep=True))
-    realized = original.model_copy(update={
-        "items": realized_items,
-        "randomize_options": False,
-    }, deep=True)
-    return ImageMemorySpec(
-        role=config.role, link_id=config.link_id, target_item_ids=targets, foil_item_ids=foils,
+    spec = ImageMemorySpec(
+        role=ImageMemoryRole.STUDY, link_id=link_id, target_item_ids=targets, foil_item_ids=foils,
         study_order=study_order, recognition_order=recognition_order, image_paths=image_paths,
         random_seed=seed, study_duration_seconds=study.duration_seconds,
-    ), [realized]
+    )
+    return _ImageMemoryPair(study, report, spec)
 
 
 def _task_seed(
@@ -461,7 +523,7 @@ def _compile_task_module(
     phase: TaskPhase,
     occurrence: TaskOccurrence,
     random_seed: int,
-    project_root: Path | None,
+    inputs: TaskCompilationInputs,
     counting_spec: BackwardCountingSpec | None = None,
     memory_spec: ImageMemorySpec | None = None,
     source_steps: list[TaskStep] | None = None,
@@ -475,7 +537,7 @@ def _compile_task_module(
             step,
             task_id=module.task_id,
             random_seed=rng.randrange(2**31),
-            project_root=project_root,
+            inputs=inputs,
         )
         for step in source_steps
     ]
@@ -498,17 +560,13 @@ def _compile_task_step(
     *,
     task_id: str,
     random_seed: int,
-    project_root: Path | None,
+    inputs: TaskCompilationInputs,
 ) -> TaskStepSpec:
     rng = random.Random(random_seed)
     items = [item.model_copy(deep=True) for item in step.items]
     for item in items:
         if item.image_path is not None:
-            _validate_task_asset(
-                task_id=task_id,
-                image_path=item.image_path,
-                project_root=project_root,
-            )
+            inputs.asset(task_id, item.image_path)
     if step.randomize_options:
         rng.shuffle(items)
 
@@ -518,11 +576,7 @@ def _compile_task_step(
         options = [option.model_copy(deep=True) for option in question.options]
         for option in options:
             if option.image_path is not None:
-                _validate_task_asset(
-                    task_id=task_id,
-                    image_path=option.image_path,
-                    project_root=project_root,
-                )
+                inputs.asset(task_id, option.image_path)
         if question.randomize_options or step.randomize_options:
             rng.shuffle(options)
         questions.append(question.model_copy(update={"options": options}, deep=True))
@@ -548,7 +602,7 @@ def _validate_task_asset(
     task_id: str,
     image_path: str,
     project_root: Path | None,
-) -> None:
+) -> Path:
     path = PurePosixPath(image_path)
     required_prefix = ("stimuli", "task-assets", task_id)
     if path.parts[:3] != required_prefix or len(path.parts) < 4:
@@ -570,3 +624,4 @@ def _validate_task_asset(
         raise CompileError(f"Unsafe task asset path '{image_path}': {exc}") from exc
     if not resolved.is_file():
         raise CompileError(f"Task asset is missing or is not a file: {image_path}")
+    return resolved

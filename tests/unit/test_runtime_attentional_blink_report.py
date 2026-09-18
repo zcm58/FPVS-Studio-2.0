@@ -97,7 +97,7 @@ def _execute(tmp_path, plan, engine, *, mode="compact", participant="0042", visi
         participant_number=participant,
         participant_session_number=visit,
         runtime_options={
-            "export_mode": mode, "serial_enabled": False,
+            "export_mode": mode, "serial_enabled": False, "experiment_test_mode": True,
             "verify_refresh_rate": participant not in {"0", "00"},
             "verify_graphics_memory": participant not in {"0", "00"},
         },
@@ -214,7 +214,7 @@ def test_questionnaire_crash_checkpoints_first_answer_before_second_question(tmp
     row = report.bursts[0]
     assert row.t1_correct is True and row.t1_response == f" {row.t1_target} "
     assert row.t2_correct is None and row.t2_response is None
-    assert not row.session_finalized
+    assert row.session_finalized and row.session_aborted
     assert row.requested_soa_ms in {100, 300, 500}
     assert row.participant_number == "0042" and row.participant_session_number == 1
     checkpoint = next((tmp_path / "logs" / ".task-response-checkpoints").glob("*.jsonl"))

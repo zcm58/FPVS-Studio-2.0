@@ -114,6 +114,8 @@ def test_launch_session_allows_windowed_mode_when_strict_timing_disabled(
             participant_number=PARTICIPANT_NUMBER,
             launch_settings=LaunchSettings(
                 engine_name="stub-windowed-allowed",
+                experiment_test_mode=True,
+                serial_enabled=False,
                 fullscreen=False,
                 strict_timing=False,
             ),

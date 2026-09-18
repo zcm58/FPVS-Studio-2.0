@@ -127,6 +127,22 @@ folder contains an unreadable or incompatible `project.json`, the dialog keeps O
 Delete and Rename disabled and asks the user to verify the configured FPVS Studio Root Folder and
 the project's FPVS Studio version.
 
+Ordinary project saves, stimulus-manifest saves, template-library saves and metadata-only
+renames use the shared atomic UTF-8 writer. It flushes a unique sibling temporary file
+before replacing the destination; a failed write or replacement preserves the previous
+file. This is single-file atomicity, not a project/manifest transaction.
+Brief Windows replacement locks retry the same atomic operation for at most 150 ms;
+persistent access failures still surface and never fall back to truncating the file.
+
+Changing a condition's image folder stages a fresh independent pool through preprocessing.
+Copied images are decoded and inspected before the selected condition adopts the new set;
+old filenames cannot merge into the replacement. Other conditions sharing the previous
+set remain unchanged, and old source files are retained. Failed copy/inspection removes
+only owned staging; a later manifest-adoption failure preserves the old document/manifest
+and may retain the completed unreferenced pool. Design and other source-selection routes
+share this intake operation. Non-Qt coverage is `tests/unit/test_preprocessing_import.py`;
+registered designer coverage also checks repeated replacement.
+
 Importing a new project from Welcome uses the same `.fpvsbundle` import workflow as
 `File > Import > Project Bundle...`. Dropping a local `.fpvsbundle` file onto the
 Welcome window starts that project-import workflow for the dropped bundle. The Welcome
@@ -611,6 +627,13 @@ an indeterminate activity spinner, and staged validation/stimulus/write status. 
 successful export stays on a persistent completion page showing the bundle path,
 packaged-file count, exclusions, and `Copy Path`, `Open Folder`, and `Done` actions;
 `Done` restores the previous authoring surface.
+
+Bundle payload hashes and sizes are computed from the exact bytes streamed into the
+temporary ZIP; its manifest is written after payloads. This removes a separate hashing
+read pass and prevents a hash/copy mismatch if source bytes change between phases.
+Limits and cancellation remain enforced during streaming. The existing destination is
+replaced only after archive checks pass; failures remove only the current operation's
+unique temporary archive. Export does not claim a multi-file snapshot during external edits.
 `Export > FPVS Toolbox Config...`
 writes a JSON-backed `.fpvsconfig` setup handoff with project title, condition trigger
 mapping, display/session settings, modular-task definitions and media, and

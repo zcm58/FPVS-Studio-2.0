@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import csv
 import hashlib
+import io
 import json
 import os
 from collections.abc import Iterable
@@ -28,7 +29,12 @@ from fpvs_studio.core.run_spec import (
     AttentionalBlinkStreamRunSpec,
     RunSpec,
 )
-from fpvs_studio.core.serialization import read_json_file, write_json_file
+from fpvs_studio.core.serialization import (
+    atomic_text_write,
+    read_json_file,
+    replace_file_atomically,
+    write_json_file,
+)
 from fpvs_studio.core.session_plan import SessionEntry, SessionPlan
 from fpvs_studio.core.task_models import TaskResponseRecord
 from fpvs_studio.core.validation import validate_display_refresh
@@ -174,11 +180,61 @@ _GROUP_SUMMARY_FLOAT_COLUMNS = _PARTICIPANT_SUMMARY_FLOAT_COLUMNS
 
 def _write_csv(path: Path, header: Iterable[str], rows: Iterable[Iterable[object]] = ()) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.writer(handle)
-        writer.writerow(list(header))
-        for row in rows:
-            writer.writerow(list(row))
+    temporary_path: Path | None = None
+    try:
+        with NamedTemporaryFile(
+            mode="w", encoding="utf-8", newline="", dir=path.parent,
+            prefix=f".{path.name}.", suffix=".tmp", delete=False,
+        ) as handle:
+            temporary_path = Path(handle.name)
+            writer = csv.writer(handle)
+            writer.writerow(list(header))
+            writer.writerows(rows)
+            handle.flush()
+            os.fsync(handle.fileno())
+        replace_file_atomically(temporary_path, path)
+    finally:
+        if temporary_path is not None:
+            temporary_path.unlink(missing_ok=True)
+
+
+def _commit_numbered_rows(
+    path: Path, header: list[str], rows: Iterable[Iterable[object]], *, identity: tuple[str, ...],
+) -> None:
+    """Atomically replace numbered execution rows; retain unnumbered legacy batches.
+
+    The caller holds the project reporting lock. A numbered visit is the execution
+    identity; a compiled session ID alone is deliberately never enough to replace data.
+    """
+
+    incoming_buffer = io.StringIO(newline="")
+    writer = csv.writer(incoming_buffer)
+    writer.writerow(header)
+    writer.writerows(rows)
+    incoming_buffer.seek(0)
+    incoming = list(csv.DictReader(incoming_buffer))
+    existing: list[dict[str, str]] = []
+    if path.is_file() and path.stat().st_size:
+        _upgrade_csv_header(path, header)
+        existing = _read_csv_dict_rows(path)
+    replacements = {
+        tuple(row.get(column, "") for column in identity): row
+        for row in incoming if row.get("participant_session_number")
+    }
+    replacement_keys = set(replacements)
+    committed: list[dict[str, str]] = []
+    for row in existing:
+        key = tuple(row.get(column, "") for column in identity)
+        if row.get("participant_session_number") and key in replacement_keys:
+            replacement = replacements.pop(key, None)
+            if replacement is not None:
+                committed.append(replacement)
+        else:
+            committed.append(row)
+    committed.extend(replacements.values())
+    committed.extend(row for row in incoming if not row.get("participant_session_number"))
+    _write_csv(path, header, ([row.get(column, "") for column in header]
+                              for row in committed))
 
 
 def _write_warnings(path: Path, warnings: list[str]) -> None:
@@ -197,11 +253,7 @@ def _write_execution_summary(path: Path, summary: object) -> None:
     for run_result in payload.get("run_results", []):
         if isinstance(run_result, dict):
             run_result.pop("task_responses", None)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        json.dumps(payload, indent=2, ensure_ascii=False),
-        encoding="utf-8",
-    )
+    atomic_text_write(path, json.dumps(payload, indent=2, ensure_ascii=False))
 
 
 def append_task_response_checkpoint(path: Path, response: object) -> None:
@@ -214,6 +266,7 @@ def append_task_response_checkpoint(path: Path, response: object) -> None:
         handle.write(json.dumps(payload, ensure_ascii=False))
         handle.write("\n")
         handle.flush()
+        os.fsync(handle.fileno())
 
 
 def compact_task_checkpoint_path(
@@ -231,6 +284,35 @@ def compact_task_checkpoint_path(
     identity = identity_text.encode()
     filename = f"{hashlib.sha256(identity).hexdigest()[:24]}.jsonl"
     return logs_dir(project_root) / TASK_CHECKPOINT_DIRNAME / filename
+
+
+def write_compact_session_checkpoint(
+    project_root: Path, summary: SessionExecutionSummary,
+) -> Path:
+    """Keep completed execution results recoverable until all final exports succeed."""
+
+    task_path = compact_task_checkpoint_path(
+        project_root, participant_number=summary.participant_number or "",
+        session_id=summary.session_id,
+        participant_session_number=summary.participant_session_number,
+    )
+    path = task_path.with_suffix(".session.json")
+    _write_execution_summary(path, summary)
+    return path
+
+
+def write_compact_run_checkpoint(project_root: Path, summary: RunExecutionSummary) -> Path:
+    """Checkpoint only the current run, avoiding repeated writes of all previous runs."""
+
+    task_path = compact_task_checkpoint_path(
+        project_root, participant_number=summary.participant_number or "",
+        session_id=summary.session_id or "",
+        participant_session_number=summary.participant_session_number,
+    )
+    run_key = hashlib.sha256(summary.run_id.encode()).hexdigest()[:16]
+    path = task_path.with_suffix(f".{run_key}.run.json")
+    _write_execution_summary(path, summary)
+    return path
 
 
 def _display_report_for_run(run_spec: RunSpec) -> DisplayValidationReport:
@@ -417,10 +499,6 @@ def _append_compact_task_responses_unlocked(
         return None
 
     path = logs_dir(project_root) / TASK_RESPONSES_FILENAME
-    path.parent.mkdir(parents=True, exist_ok=True)
-    write_header = not path.is_file() or path.stat().st_size == 0
-    if not write_header:
-        _upgrade_csv_header(path, COMPACT_TASK_RESPONSES_HEADER)
     logged_at = datetime.now(timezone.utc).isoformat()
     prefix = (
         logged_at,
@@ -431,18 +509,14 @@ def _append_compact_task_responses_unlocked(
         summary.aborted,
         summary.abort_reason or "",
     )
-    with path.open("a", encoding="utf-8", newline="") as handle:
-        writer = csv.writer(handle)
-        if write_header:
-            writer.writerow(COMPACT_TASK_RESPONSES_HEADER)
-        for response in responses:
-            writer.writerow(
-                [_task_csv_value(value) for value in (
-                    *prefix, *_task_response_row(response),
-                    summary.participant_session_number or "",
-                )]
-            )
-        handle.flush()
+    _commit_numbered_rows(
+        path, COMPACT_TASK_RESPONSES_HEADER,
+        ([_task_csv_value(value) for value in (
+            *prefix, *_task_response_row(response), summary.participant_session_number or "",
+        )] for response in responses),
+        identity=("project_id", "participant_number", "participant_session_number", "session_id",
+                  "run_id", "response_index"),
+    )
     return path
 
 
@@ -874,11 +948,16 @@ def append_session_condition_history(
     project_root: Path,
     session_plan: SessionPlan,
     summary: SessionExecutionSummary,
+    *,
+    refresh_reports: bool = True,
 ) -> Path:
     """Append project-level condition-history rows for one launched session."""
 
     with project_reporting_lock(project_root):
-        return _append_session_condition_history_unlocked(project_root, session_plan, summary)
+        path = _append_session_condition_history_unlocked(project_root, session_plan, summary)
+    if refresh_reports:
+        write_participant_summary(project_root)
+    return path
 
 
 def _append_session_condition_history_unlocked(
@@ -888,17 +967,13 @@ def _append_session_condition_history_unlocked(
 ) -> Path:
 
     path = logs_dir(project_root) / SESSION_CONDITION_HISTORY_FILENAME
-    path.parent.mkdir(parents=True, exist_ok=True)
-    if path.is_file() and path.stat().st_size > 0:
-        _upgrade_session_condition_history_header(path)
-    needs_header = not path.is_file() or path.stat().st_size == 0
-    with path.open("a", encoding="utf-8", newline="") as handle:
-        writer = csv.writer(handle)
-        if needs_header:
-            writer.writerow(SESSION_CONDITION_HISTORY_HEADER)
-        writer.writerows(_session_condition_history_rows(session_plan, summary))
+    _commit_numbered_rows(
+        path, SESSION_CONDITION_HISTORY_HEADER,
+        _session_condition_history_rows(session_plan, summary),
+        identity=("project_id", "participant_number", "participant_session_number", "session_id",
+                  "run_id"),
+    )
     _append_attentional_blink_events(project_root, session_plan, summary)
-    _write_participant_summary_unlocked(project_root)
     return path
 
 
@@ -1002,17 +1077,14 @@ def _append_attentional_blink_events(
     ]
     if entries:
         path = logs_dir(project_root) / ATTENTIONAL_BLINK_EVENTS_FILENAME
-        needs_header = not path.is_file() or path.stat().st_size == 0
-        if not needs_header:
-            _upgrade_csv_header(path, ATTENTIONAL_BLINK_EVENTS_HEADER)
-        with path.open("a", encoding="utf-8", newline="") as handle:
-            writer = csv.writer(handle)
-            if needs_header:
-                writer.writerow(ATTENTIONAL_BLINK_EVENTS_HEADER)
-            for entry in entries:
-                writer.writerows(_attentional_blink_event_rows(
-                    entry.run_spec, results[entry.run_spec.run_id],
-                ))
+        _commit_numbered_rows(
+            path, ATTENTIONAL_BLINK_EVENTS_HEADER,
+            (row for entry in entries for row in _attentional_blink_event_rows(
+                entry.run_spec, results[entry.run_spec.run_id],
+            )),
+            identity=("project_id", "participant_number", "participant_session_number",
+                      "session_id", "run_id", "sequence_index"),
+        )
     stream_entries = [
         entry for entry in session_plan.ordered_entries()
         if isinstance(entry.run_spec.attentional_blink, AttentionalBlinkStreamRunSpec)
@@ -1020,17 +1092,14 @@ def _append_attentional_blink_events(
     ]
     if stream_entries:
         path = logs_dir(project_root) / ATTENTIONAL_BLINK_STREAM_EVENTS_FILENAME
-        needs_header = not path.is_file() or path.stat().st_size == 0
-        if not needs_header:
-            _upgrade_csv_header(path, ATTENTIONAL_BLINK_STREAM_EVENTS_HEADER)
-        with path.open("a", encoding="utf-8", newline="") as handle:
-            writer = csv.writer(handle)
-            if needs_header:
-                writer.writerow(ATTENTIONAL_BLINK_STREAM_EVENTS_HEADER)
-            for entry in stream_entries:
-                writer.writerows(_attentional_blink_stream_event_rows(
-                    entry.run_spec, results[entry.run_spec.run_id], entry=entry,
-                ))
+        _commit_numbered_rows(
+            path, ATTENTIONAL_BLINK_STREAM_EVENTS_HEADER,
+            (row for entry in stream_entries for row in _attentional_blink_stream_event_rows(
+                entry.run_spec, results[entry.run_spec.run_id], entry=entry,
+            )),
+            identity=("project_id", "participant_number", "participant_session_number",
+                      "session_id", "run_id", "sequence_index"),
+        )
 
 
 def write_participant_summary(project_root: Path) -> Path:
@@ -1156,7 +1225,7 @@ def _upgrade_csv_header(path: Path, header: list[str]) -> None:
             writer = csv.writer(handle)
             writer.writerow(header)
             writer.writerows([row.get(column, "") for column in header] for row in rows)
-        os.replace(temporary_path, path)
+        replace_file_atomically(temporary_path, path)
     finally:
         if temporary_path is not None:
             temporary_path.unlink(missing_ok=True)
@@ -1428,7 +1497,23 @@ def _write_participant_summary_xlsx(path: Path, rows: list[list[object]]) -> Non
         integer_columns=_PARTICIPANT_SUMMARY_INTEGER_COLUMNS,
         float_columns=_PARTICIPANT_SUMMARY_FLOAT_COLUMNS,
     )
-    workbook.save(path)
+    _save_workbook_atomically(workbook, path)
+
+
+def _save_workbook_atomically(workbook: Any, path: Path) -> None:
+    temporary_path: Path | None = None
+    try:
+        with NamedTemporaryFile(dir=path.parent, prefix=f".{path.name}.", suffix=".tmp",
+                                delete=False) as handle:
+            temporary_path = Path(handle.name)
+        workbook.save(temporary_path)
+        with temporary_path.open("r+b") as handle:
+            os.fsync(handle.fileno())
+        replace_file_atomically(temporary_path, path)
+    finally:
+        workbook.close()
+        if temporary_path is not None:
+            temporary_path.unlink(missing_ok=True)
 
 
 def _write_group_summary_xlsx(
@@ -1596,9 +1681,9 @@ def _image_display_order_seed_text(
     project_root: Path,
     rows: list[dict[str, str]],
 ) -> str:
-    plan_seed_lookup = _session_plan_run_seed_lookup(
-        project_root,
-        _first_non_blank(rows, "output_dir"),
+    plan_seed_lookup = (
+        _session_plan_run_seed_lookup(project_root, _first_non_blank(rows, "output_dir"))
+        if any(row.get("run_id") and not row.get("run_seed") for row in rows) else {}
     )
     parts: list[str] = []
     seen_run_ids: set[str] = set()

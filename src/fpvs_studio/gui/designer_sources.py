@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-from uuid import uuid4
 
 from PySide6.QtCore import QSize, Qt
 from PySide6.QtGui import QImage, QImageReader
@@ -12,10 +11,9 @@ from fpvs_studio.core.models import StimulusSet
 from fpvs_studio.core.paths import (
     filesystem_path,
     resolve_project_relative_path,
-    stimulus_originals_dir,
     to_project_relative_posix,
 )
-from fpvs_studio.preprocessing.importer import import_stimulus_source_directory
+from fpvs_studio.preprocessing.importer import import_fresh_stimulus_source_directory
 from fpvs_studio.preprocessing.models import StimulusSetInspectionSummary
 
 
@@ -26,21 +24,13 @@ def import_designer_source(
     source_dir: Path,
 ) -> tuple[StimulusSetInspectionSummary, StimulusSet]:
     """Import to a fresh owned set so changing folders never merges image pools."""
-    set_id = f"{condition_id}-{role}-{uuid4().hex[:12]}"
-    destination = stimulus_originals_dir(project_root, set_id)
-    resolve_project_relative_path(
-        project_root, to_project_relative_posix(project_root, destination)
-    )
-    summary, stimulus_set = import_stimulus_source_directory(
+    return import_fresh_stimulus_source_directory(
         source_dir=source_dir,
         project_root=project_root,
-        set_id=set_id,
+        set_id_prefix=f"{condition_id}-{role}",
         set_name=f"{condition_id} {role.upper()}",
         strict=False,
     )
-    if stimulus_set.image_count == 0:
-        raise ValueError("The selected folder contains no supported images.")
-    return summary, stimulus_set
 
 
 def load_designer_thumbnails(

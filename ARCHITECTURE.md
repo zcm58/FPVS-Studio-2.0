@@ -69,9 +69,13 @@ lazily only inside the engine package.
 - `src/fpvs_studio/core/`: editable models, validation, compilation, `RunSpec`,
   `SessionPlan`, reusable condition-task definitions, execution results, persistence,
   `.fpvsconfig` interchange, portable `.fpvsbundle` services, and other engine-neutral
-  domain logic.
+  domain logic. `compiler_inputs.py` and `compiler_tasks.py` prepare shared inputs only
+  for one compilation invocation; compiled run/task outputs stay independent.
+  `serialization.py` owns atomic UTF-8 persistence; bundle hashes describe the exact
+  streamed archive bytes. See `docs/SESSION_PLAN.md` and `docs/GUI_WORKFLOW.md`.
 - `src/fpvs_studio/preprocessing/`: image intake, inspection, normalization, derived
   variants, and manifest provenance; independent of GUI, runtime, and PsychoPy.
+  Fresh source pools are staged and validated before document adoption.
 - `src/fpvs_studio/tools/`: reserved for Studio-native utilities. Current Image Resizer
   UI remains under the GUI package and delegates to preprocessing.
 - `src/fpvs_studio/runtime/`: launch settings, preflight, session orchestration,
@@ -237,6 +241,9 @@ owns endpoint estimates and task-response checkpoints. Details and acceptance ar
 - The independent updater imports no runtime or experiment engine. Studio saves through
   its existing GUI callback before accepting a handoff; the helper never edits projects.
   Installer/download trust, private IPC, and recovery rules live in `docs/PACKAGING.md`.
+- `tests/unit/test_import_boundaries.py` checks documented internal restrictions,
+  including relative imports and aliased authoring-model use, without importing modules.
+  It preserves the explicit core/preprocessing contract relationship.
 
 ## Source-of-Truth Documents
 

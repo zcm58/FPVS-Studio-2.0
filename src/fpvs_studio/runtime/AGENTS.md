@@ -63,6 +63,10 @@ This phase should establish:
   artifacts under `runs/` only when full run export mode is enabled
 - checkpoint experimental task responses incrementally, preserve partial responses on
   abort, and keep raw task answers out of application logs and summary workbooks
+- checkpoint completed compact run results before later task/feedback screens; retain
+  recovery files on interruption/export failure and preserve the original runtime error
+- commit numbered research rows idempotently before generating derived spreadsheets;
+  preserve legacy rows, visit identity, and prior files if atomic replacement fails
 - `attentional_blink_report.py` checkpoints native burst targets and per-question
   answers before proceeding, including in compact mode. Its read-only query returns
   immutable burst rows and separate T1/T2 SOA denominators; completed stream answers

@@ -1285,7 +1285,10 @@ def test_compact_session_persists_task_answers_under_logs_without_runs_folder(
         plan,
         output_dir,
         participant_number="009",
-        runtime_options={"export_mode": "compact", "serial_enabled": False},
+        runtime_options={
+            "export_mode": "compact", "serial_enabled": False,
+            "experiment_test_mode": True,
+        },
     )
 
     assert summary.aborted is False
@@ -1326,7 +1329,10 @@ def test_repeated_compact_plan_keeps_numbered_answers_and_legacy_checkpoint(
         worker.execute_session(
             root, plan, root / "runs" / "unused",
             participant_number="009", participant_session_number=number,
-            runtime_options={"export_mode": "compact", "serial_enabled": False},
+            runtime_options={
+                "export_mode": "compact", "serial_enabled": False,
+                "experiment_test_mode": True,
+            },
         )
     with (root / "logs" / "task_responses.csv").open(encoding="utf-8", newline="") as handle:
         rows = list(csv.DictReader(handle))
@@ -1394,7 +1400,10 @@ def test_session_task_order_and_full_exports_preserve_raw_checkpoint(
         plan,
         output_dir,
         participant_number="010",
-        runtime_options={"export_mode": "full", "serial_enabled": False},
+        runtime_options={
+            "export_mode": "full", "serial_enabled": False,
+            "experiment_test_mode": True,
+        },
         relative_output_dir="runs/P010",
     )
 
@@ -1452,7 +1461,10 @@ def test_pre_task_can_serve_as_condition_gate_without_duplicate_transition(
         plan,
         project_root / "runs" / "P012",
         participant_number="012",
-        runtime_options={"export_mode": "compact", "serial_enabled": False},
+        runtime_options={
+            "export_mode": "compact", "serial_enabled": False,
+            "experiment_test_mode": True,
+        },
     )
 
     assert summary.aborted is False
@@ -1492,7 +1504,10 @@ def test_transition_abort_after_pre_task_preserves_compact_response(
         plan,
         project_root / "runs" / "P011",
         participant_number="011",
-        runtime_options={"export_mode": "compact", "serial_enabled": False},
+        runtime_options={
+            "export_mode": "compact", "serial_enabled": False,
+            "experiment_test_mode": True,
+        },
     )
 
     assert summary.aborted is True
@@ -1541,7 +1556,10 @@ def test_post_task_abort_preserves_completed_fpvs_run_and_partial_full_exports(
         plan,
         output_dir,
         participant_number="012",
-        runtime_options={"export_mode": "full", "serial_enabled": False},
+        runtime_options={
+            "export_mode": "full", "serial_enabled": False,
+            "experiment_test_mode": True,
+        },
         relative_output_dir="runs/P012",
     )
 

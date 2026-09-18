@@ -6,10 +6,8 @@ not ongoing compilation, runtime execution, or engine control."""
 from __future__ import annotations
 
 import json
-import os
 from dataclasses import dataclass
 from pathlib import Path
-from uuid import uuid4
 
 from fpvs_studio.core.attentional_blink_presets import populate_attentional_blink_stream
 from fpvs_studio.core.cognitive_load_presets import populate_cognitive_load_fpvs
@@ -44,7 +42,7 @@ from fpvs_studio.core.paths import (
     task_assets_root,
     validate_project_id,
 )
-from fpvs_studio.core.serialization import save_project_file
+from fpvs_studio.core.serialization import atomic_text_write, save_project_file
 from fpvs_studio.core.template_library import DEFAULT_TEMPLATE_ID, get_template
 from fpvs_studio.preprocessing.cognitive_load_placeholders import (
     create_cognitive_load_placeholder_images,
@@ -77,12 +75,7 @@ def rename_project(project_root: Path, name: str) -> ProjectMeta:
     # Do not rewrite schema versions, conditions, or any other authoring state.
     payload["meta"]["name"] = meta.name
     payload["meta"]["updated_at"] = meta.updated_at.isoformat()
-    temporary = path.with_name(f".rename-{uuid4().hex}.json")
-    try:
-        temporary.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
-        os.replace(temporary, path)
-    finally:
-        temporary.unlink(missing_ok=True)
+    atomic_text_write(path, json.dumps(payload, indent=2, ensure_ascii=False))
     return meta
 
 
