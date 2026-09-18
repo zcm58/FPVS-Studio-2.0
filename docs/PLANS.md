@@ -37,6 +37,8 @@ luminance/RMS algorithm investigation instead of duplicating its scientific deci
 Completed plans are historical implementation notes. Read their directory only when
 the current contracts do not explain why a landed decision exists.
 
+Recent completion: [Frontend usability and responsiveness](exec-plans/completed/frontend-usability-polish.md).
+
 Recent completion: [Backend reliability and compilation efficiency](exec-plans/completed/backend-reliability-efficiency.md).
 
 Recent completion: [FPVS Condition Modifiers](exec-plans/completed/fpvs-condition-modifiers.md).

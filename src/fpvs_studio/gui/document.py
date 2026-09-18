@@ -163,12 +163,21 @@ class ProjectDocument(
     def open_existing(cls, project_location: Path) -> ProjectDocument:
         """Load an existing project directory or `project.json` file."""
 
+        project_root, project, manifest = cls.read_existing(project_location)
+        return cls(project_root=project_root, project=project, manifest=manifest)
+
+    @staticmethod
+    def read_existing(
+        project_location: Path,
+    ) -> tuple[Path, ProjectFile, StimulusManifest | None]:
+        """Read project data on a worker without constructing a GUI-thread document."""
+
         project_file_path = resolve_project_location(project_location)
         project = load_project_file(project_file_path)
         project_root = project_file_path.parent
         manifest_path = stimulus_manifest_path(project_root)
         manifest = read_stimulus_manifest(project_root) if manifest_path.is_file() else None
-        return cls(project_root=project_root, project=project, manifest=manifest)
+        return project_root, project, manifest
 
     @property
     def project(self) -> ProjectFile:

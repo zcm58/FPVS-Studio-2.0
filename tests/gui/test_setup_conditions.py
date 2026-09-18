@@ -369,7 +369,7 @@ def test_setup_wizard_confirms_populated_modality_switch(
     _, window = _open_created_project(controller, qtbot, tmp_path, "Stimulus Type Switch")
     guide = window.setup_wizard_page
     step = guide.condition_setup_step
-    guide.open_wizard(step_key="conditions")
+    window.show_setup_wizard(step_key="conditions")
     window.resize(1120, 820)
     errors: list[str] = []
     monkeypatch.setattr(
@@ -905,6 +905,8 @@ def test_conditions_six_condition_layout_expands_with_aligned_panels(
         step._select_condition(selected_id)
         guide.refresh()
         QApplication.processEvents()
+        # The queued wizard refresh can hide the hint and post another layout pass.
+        qtbot.waitUntil(lambda: step.condition_list.y() == 0)
         assert (window.width(), window.height()) == window_size
         assert step.condition_list.count() == 6
         assert step.instructions_edit.toPlainText() == instructions
@@ -1039,6 +1041,7 @@ def test_setup_wizard_design_next_normalizes_mixed_images_before_advancing(
             size=(160, 120),
         ),
     )
+    original_oddball = window.document.get_condition_stimulus_set(condition_id, "oddball")
     _open_image_design_step(qtbot, guide)
     QApplication.processEvents()
 
@@ -1063,8 +1066,9 @@ def test_setup_wizard_design_next_normalizes_mixed_images_before_advancing(
     qtbot.waitUntil(lambda: guide.step_stack.currentWidget() is guide.experiment_step_surface)
     base_set = window.document.get_condition_stimulus_set(condition_id, "base")
     oddball_set = window.document.get_condition_stimulus_set(condition_id, "oddball")
-    assert base_set.source_dir == "stimuli/normalized-images/condition-1-base"
-    assert oddball_set.source_dir == "stimuli/original-images/condition-1-oddball"
+    assert Path(base_set.source_dir).parent.as_posix() == "stimuli/normalized-images"
+    assert Path(base_set.source_dir).name.startswith("condition-1-base-")
+    assert oddball_set == original_oddball
     assert base_set.resolution is not None
     assert base_set.resolution.as_tuple() == (512, 512)
     assert oddball_set.resolution is not None

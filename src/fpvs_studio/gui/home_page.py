@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from PySide6.QtCore import QEvent, Qt, QTimer
+from PySide6.QtCore import QEvent, QObject, Qt, QTimer
 from PySide6.QtGui import QAction, QColor, QPainter, QPaintEvent, QResizeEvent
 from PySide6.QtWidgets import (
     QFrame,
@@ -227,9 +227,12 @@ class HomePage(QWidget):
             Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
         )
         self.current_project_header.setSizePolicy(
-            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Ignored,
             QSizePolicy.Policy.Preferred,
         )
+        self.current_project_header.setMinimumWidth(0)
+        self.current_project_header.setTextFormat(Qt.TextFormat.PlainText)
+        self.current_project_header.installEventFilter(self)
 
         self.current_project_subtitle = QLabel(
             "Open a project, confirm its identity, and launch quickly.",
@@ -329,6 +332,7 @@ class HomePage(QWidget):
             try:
                 apply_home_page_theme(self)
                 self._sync_launch_button_geometry()
+                self._sync_hero_height()
             finally:
                 self._theme_refreshing = False
 
@@ -417,7 +421,7 @@ class HomePage(QWidget):
         ordered_conditions = self._document.ordered_conditions()
         report = self._status_report()
 
-        self.current_project_header.setText(project.meta.name)
+        self._refresh_project_title()
         subtitle_text = self._project_description_text(project.meta.description)
         self.current_project_subtitle.setText(subtitle_text)
         self.current_project_subtitle.setToolTip(
@@ -449,6 +453,34 @@ class HomePage(QWidget):
         self._refresh_sophia_mode_ticker()
         self._set_status_indicator(report)
         self.launch_surface.hero_layout.activate()
+        self._sync_hero_height()
+
+    def _sync_hero_height(self) -> None:
+        panel = self.launch_surface.hero_container
+        layout = self.launch_surface.hero_layout
+        self.current_project_subtitle.setMaximumHeight(
+            self.current_project_subtitle.fontMetrics().lineSpacing() * 2 + 4,
+        )
+        panel.setMinimumHeight(max(
+            _HOME_HERO_MIN_HEIGHT, layout.minimumSize().height(),
+            layout.totalHeightForWidth(panel.width()),
+        ))
+
+    def _refresh_project_title(self) -> None:
+        label = self.current_project_header
+        name = self._document.project.meta.name
+        label.setText(label.fontMetrics().elidedText(
+            name, Qt.TextElideMode.ElideRight, label.contentsRect().width(),
+        ))
+        label.setToolTip(name)
+        label.setAccessibleDescription(name)
+
+    def eventFilter(self, watched: QObject, event: QEvent) -> bool:  # noqa: N802
+        if watched is self.current_project_header and event.type() in (
+            QEvent.Type.Resize, QEvent.Type.FontChange, QEvent.Type.StyleChange,
+        ):
+            self._refresh_project_title()
+        return super().eventFilter(watched, event)
 
     def _refresh_sophia_mode_ticker(self) -> None:
         self.sophia_mode_ticker.set_sophia_mode_enabled(

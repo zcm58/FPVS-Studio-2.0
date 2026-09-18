@@ -162,6 +162,23 @@ Mode for explicit no-hardware verification launches; packaged builds hide it.
 
 ## Main Window
 
+User-selected projects (Recent, Open Project and Manage Projects) load through the
+application-owned worker lifecycle. The current project stays open behind an
+indeterminate, cancelable Opening project dialog. Only the latest successful request
+can create the replacement document/window, on the GUI thread; canceled or failed
+reads leave the current project intact. The synchronous document-open helper remains
+available for internal callers and focused tests.
+
+File > Save and Ctrl+S share the existing save/navigation gates. Keyboard saving first
+commits the focused name field and pending text/design edits. The menu area's compact
+save indicator is visible on Home and Setup: Saved, Unsaved changes, Save blocked, or
+Save failed. Failures retain the open edits and expose the reason in the tooltip and
+existing error dialog. This adds no footer or extra height to the guided content.
+
+Home elides long project titles to the available width while keeping the complete name
+in a tooltip and accessible description. Its launch panel reserves the height needed
+by wrapped descriptions, metrics and the launch button in both themes.
+
 Cognitive Load FPVS creation, placeholder replacement, reusable backward-counting
 task controls and visible acceptance are documented in
 [Cognitive Load FPVS](COGNITIVE_LOAD_FPVS.md).
@@ -239,6 +256,12 @@ project-contained source set; old/new folders are never merged. Timing edits app
 before leaving Design, switching conditions or saving, with all AB conditions
 validated against a changed project-wide cadence. Invalid edits stay visible for
 correction; explicitly discarding a draft preserves completed folder imports.
+Image cards show Importing images or Loading previews while workers are active.
+Each open editor reuses its bounded image previews across unrelated metadata/timing
+edits and page navigation; source or manifest changes invalidate those previews.
+Only the first four base images and first oddball image are passed to the decoder.
+Failed preview reads remain visible, can retry, and clear their error after success.
+The AB SOA table reserves its styled header, three complete rows and frame at 1120x820.
 Preview slowly uses a cancellable animation. Timing &
 display details opens a separate small dialog with requested/achieved frame timing
 and T2 marker; preview refresh is never treated as display measurement.

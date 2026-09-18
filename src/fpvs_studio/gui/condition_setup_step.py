@@ -838,6 +838,13 @@ class ConditionSetupStep(QWidget):
         self._base_words_committer.flush()
         self._oddball_words_committer.flush()
 
+    def has_pending_edits(self) -> bool:
+        condition = self._current_condition()
+        pending_name = condition is not None and self.condition_name_edit.text() != condition.name
+        return pending_name or any(committer.pending for committer in (
+            self._instructions_committer, self._base_words_committer, self._oddball_words_committer,
+        ))
+
     def focus_setup_blocker(self) -> None:
         """Select the first incomplete condition and focus its missing field."""
 

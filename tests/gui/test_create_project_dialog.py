@@ -193,7 +193,7 @@ def test_creation_summaries_follow_name_template_and_category(qtbot) -> None:
     dialog.project_name_edit.clear()
     assert dialog.folder_hint_label.text() == empty_hint
 
-    dialog.condition_profile_combo.setCurrentIndex(1)
+    assert dialog.condition_profile_combo.count() == 1
     selected = next(
         profile for profile in profiles if profile.profile_id == dialog.condition_profile_id
     )
@@ -203,6 +203,7 @@ def test_creation_summaries_follow_name_template_and_category(qtbot) -> None:
     assert dialog.back_button.isVisible()
     dialog.select_category(ExperimentCategory.FPVS_ODDBALL)
     dialog.accept()
+    dialog.condition_profile_combo.setCurrentIndex(1)
     selected = next(
         profile for profile in profiles if profile.profile_id == dialog.condition_profile_id
     )

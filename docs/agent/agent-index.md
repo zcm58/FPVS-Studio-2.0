@@ -195,6 +195,12 @@ controller bindings and `core/project_service.py`. Verify metadata-only persiste
 and open-document draft preservation with `tests/unit/test_project_service.py` and
 registered `tests/gui/test_manage_projects_rename.py`. The dialog fits `860x520`.
 
+For project-opening responsiveness and save feedback, start with `gui/controller.py`,
+`gui/document.py`, `gui/main_window.py`, and registered
+`tests/gui/test_frontend_responsiveness.py`. Preview reuse/error recovery is covered
+by `tests/gui/test_design_setup_step.py`. Use the existing application-owned job
+lifecycle for project reads and keep document/widget construction on the GUI thread.
+
 The eight-step Setup flow and shared dialog acceptance sizes are documented in
 [GUI workflow](../GUI_WORKFLOW.md#setup-design-and-manual-acceptance). Use the GUI
 focused route for edits and the repo precommit tier for shared component changes.

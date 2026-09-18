@@ -42,6 +42,9 @@ lazily only inside the engine package.
   then project details; Library downloads reuse bundle import. Setup composes eight
   model-backed pages (Project, Conditions, Design, Timing & Session, Image Size, Fixation,
   Response, Review); shared dialog/form styling remains in `gui/components.py`.
+  User-selected project reads use the app-owned job lifecycle; GUI documents/windows
+  are constructed after completion on the GUI thread. Authoring save feedback and
+  per-editor thumbnail reuse are specified in `docs/GUI_WORKFLOW.md`.
   Conditions confirms populated image/word switches before the document replaces only
   the selected condition's source associations. Its list and text editors expand
   vertically within the shared wizard surface; see `docs/GUI_WORKFLOW.md`.

@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 from pathlib import Path
+from threading import Event
 
 import pytest
 from PySide6.QtGui import QColor, QPalette
 from PySide6.QtWidgets import QApplication, QLabel, QPushButton, QTabBar
-from tests.gui.helpers import assert_visible_children_within_parent
+from tests.gui.helpers import assert_visible_children_within_parent, write_image_directory
 from tests.gui.test_experiment_designer import _populate_sources
 
 from fpvs_studio.core.enums import ExperimentCategory, StimulusModality
@@ -211,7 +212,7 @@ def test_hidden_embedded_refresh_defers_thumbnail_work_until_shown(
     QApplication.processEvents()
     assert len(decoded_sources) == 1
     assert not step.is_busy()
-    assert step.editor._thumbnail_pending
+    assert not step.editor._thumbnail_pending
     assert step.editor.request_close()
     step.show()
     QApplication.processEvents()
@@ -232,6 +233,108 @@ def test_refresh_retains_pending_edits_and_updates_saved_external_timing(
     assert step.editor is editor
     assert step.editor.rate_spin.value() == 4.0
     assert step.has_pending_design()
+
+
+def test_design_reuses_thumbnails_until_image_sources_change(qtbot, monkeypatch, tmp_path):
+    decoded_sources = []
+
+    def decode(root, sources):
+        decoded_sources.append(sources)
+        return load_designer_thumbnails(root, sources)
+
+    monkeypatch.setattr(
+        "fpvs_studio.gui.experiment_designer_dialog.load_designer_thumbnails", decode,
+    )
+    document = _document(tmp_path)
+    condition_id = document.create_condition(name="Cached source previews")
+    _populate_sources(document, condition_id, tmp_path / "first")
+    step = DesignSetupStep(document)
+    qtbot.addWidget(step)
+    step.resize(1000, 600)
+    step.show()
+    qtbot.waitUntil(lambda: bool(decoded_sources) and not step.is_busy())
+    editor = step.editor
+    assert editor is not None
+    initial = len(decoded_sources)
+    pixmap_key = editor._pixmaps["base"][0].cacheKey()
+    for _ in range(3):
+        document.update_project_description("Only the description changed")
+        editor.refresh_sources()
+        step.hide()
+        step.show()
+        QApplication.processEvents()
+        qtbot.waitUntil(lambda: not step.is_busy())
+    assert len(decoded_sources) == initial
+    assert editor._pixmaps["base"][0].cacheKey() == pixmap_key
+
+    replacement = write_image_directory(tmp_path / "replacement", count=3)
+    monkeypatch.setattr(
+        "fpvs_studio.gui.experiment_designer_dialog.QFileDialog.getExistingDirectory",
+        lambda *args: str(replacement),
+    )
+    editor._choose_source("base")
+    qtbot.waitUntil(lambda: len(decoded_sources) > initial and not step.is_busy())
+    assert editor._pixmaps["base"][0].cacheKey() != pixmap_key
+
+
+def test_thumbnail_retry_clears_the_previous_error(qtbot, monkeypatch, tmp_path):
+    calls = []
+
+    def decode(root, sources):
+        calls.append(sources)
+        if len(calls) == 1:
+            raise ValueError("Temporarily unavailable image")
+        return load_designer_thumbnails(root, sources)
+
+    monkeypatch.setattr(
+        "fpvs_studio.gui.experiment_designer_dialog.load_designer_thumbnails", decode,
+    )
+    document = _document(tmp_path)
+    condition_id = document.create_condition(name="Preview retry")
+    _populate_sources(document, condition_id, tmp_path / "images")
+    step = DesignSetupStep(document)
+    qtbot.addWidget(step)
+    step.show()
+    qtbot.waitUntil(lambda: len(calls) == 1 and not step.is_busy())
+    editor = step.editor
+    assert "Temporarily unavailable" in editor.status_label.text()
+    editor.refresh_sources()
+    qtbot.waitUntil(lambda: len(calls) == 2 and not step.is_busy())
+    assert editor._pixmaps["base"]
+    assert not editor.status_label.isVisible()
+
+
+def test_preview_loading_is_visible_and_fits_the_design_surface(qtbot, monkeypatch, tmp_path):
+    entered, release = Event(), Event()
+
+    def decode(root, sources):
+        entered.set()
+        assert release.wait(5)
+        return load_designer_thumbnails(root, sources)
+
+    monkeypatch.setattr(
+        "fpvs_studio.gui.experiment_designer_dialog.load_designer_thumbnails", decode,
+    )
+    document = _document(tmp_path)
+    condition_id = document.create_condition(name="Loading previews")
+    _populate_sources(document, condition_id, tmp_path / "images")
+    step = DesignSetupStep(document)
+    qtbot.addWidget(step)
+    step.resize(1000, 570)
+    step.show()
+    try:
+        qtbot.waitUntil(entered.is_set)
+        QApplication.processEvents()
+        assert_visible_children_within_parent(step)
+        for card in step.editor._cards().values():
+            assert card.count_label.text() == "Loading previews…"
+            assert card.count_label.width() >= card.count_label.fontMetrics().horizontalAdvance(
+                card.count_label.text()
+            )
+    finally:
+        release.set()
+        qtbot.waitUntil(lambda: not step.is_busy())
+    assert all(card.count_label.text() == "2 images" for card in step.editor._cards().values())
 
 
 @pytest.mark.parametrize(

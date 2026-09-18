@@ -126,10 +126,14 @@ def assert_visible_children_within_parent(root: QWidget) -> None:
             continue
         top_left = child.mapTo(parent, child.rect().topLeft())
         bottom_right = child.mapTo(parent, child.rect().bottomRight())
-        assert top_left.x() >= -1, child.objectName()
-        assert top_left.y() >= -1, child.objectName()
-        assert bottom_right.x() <= parent.width() + 1, child.objectName()
-        assert bottom_right.y() <= parent.height() + 1, child.objectName()
+        bounds = (
+            f"{type(child).__name__} {child.objectName()}: {child.geometry().getRect()} "
+            f"inside {type(parent).__name__} {parent.objectName()}: {parent.size().toTuple()}"
+        )
+        assert top_left.x() >= -1, bounds
+        assert top_left.y() >= -1, bounds
+        assert bottom_right.x() <= parent.width() + 1, bounds
+        assert bottom_right.y() <= parent.height() + 1, bounds
 
 
 def find_profile_row(dialog: ConditionTemplateManagerDialog, profile_id: str) -> int:

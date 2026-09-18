@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from math import ceil
 from pathlib import Path
 
-from PySide6.QtCore import QEvent, QSize, Qt, QTimer
+from PySide6.QtCore import QEvent, QSize, Qt, QTimer, Signal
 from PySide6.QtGui import QResizeEvent
 from PySide6.QtWidgets import (
     QDialog,
@@ -183,6 +183,8 @@ class _SetupStepSurface(_NaturalSizePanel):
 
 class SetupWizardPage(QWidget):
     """In-window guided setup flow backed by the shared project document."""
+
+    pending_edits_changed = Signal()
 
     def __init__(
         self,
@@ -481,6 +483,16 @@ class SetupWizardPage(QWidget):
         self._document.project_changed.connect(self.schedule_refresh)
         self._document.manifest_changed.connect(self.schedule_refresh)
         self._document.session_plan_changed.connect(self.schedule_refresh)
+        self.design_setup_step.draft_changed.connect(self.pending_edits_changed)
+        self.project_overview_editor.project_name_edit.textEdited.connect(self.pending_edits_changed)
+        self.condition_setup_step.condition_name_edit.textEdited.connect(self.pending_edits_changed)
+        for editor in (
+            self.project_overview_editor.project_description_edit,
+            self.condition_setup_step.instructions_edit,
+            self.condition_setup_step.base_words_edit,
+            self.condition_setup_step.oddball_words_edit,
+        ):
+            editor.textChanged.connect(self.pending_edits_changed)
         apply_setup_wizard_theme(self)
         self.refresh()
 
@@ -522,6 +534,13 @@ class SetupWizardPage(QWidget):
         if step_key is not None:
             self._select_step(self._step_index_for_key(step_key))
         self.refresh()
+
+    def has_pending_edits(self) -> bool:
+        return (
+            self.design_setup_step.has_pending_design()
+            or self.project_overview_editor.has_pending_edits()
+            or self.condition_setup_step.has_pending_edits()
+        )
 
     def flush_pending_edits(self) -> bool:
         if self._condition_image_task_active():

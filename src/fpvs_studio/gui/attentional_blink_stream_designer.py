@@ -279,7 +279,8 @@ class AttentionalBlinkStreamDesigner(QWidget):
         self.condition_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.condition_table.setShowGrid(False)
         self.condition_table.setAlternatingRowColors(True)
-        self.condition_table.setMinimumHeight(126)
+        # Reserve the styled header, three 36px SOA rows, and the table frame.
+        self.condition_table.setMinimumHeight(150)
         self.condition_table.setMaximumHeight(150)
         header = self.condition_table.horizontalHeader()
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)

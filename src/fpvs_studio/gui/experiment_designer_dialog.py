@@ -111,8 +111,11 @@ class ExperimentDesignerWidget(QWidget):
         self._thumbnail_task: BackgroundTask | None = None
         self._thumbnail_revision = 0
         self._thumbnail_pending = False
+        self._thumbnail_key: tuple[object, ...] | None = None
         self._close_requested = False
         self._source_error: str | None = None
+        self._thumbnail_error: str | None = None
+        self._import_role: str | None = None
         self._pixmaps: dict[str, list[QPixmap]] = {}
         self._source_counts: dict[str, int] = {}
         self._source_paths: dict[str, str] = {}
@@ -530,6 +533,20 @@ class ExperimentDesignerWidget(QWidget):
         return cards
 
     def _load_thumbnails(self) -> None:
+        # Metadata/timing edits do not change the image previews. Fresh intake or
+        # manifest inspection invalidates this per-editor cache, including same-path imports.
+        manifest = self._document.manifest
+        source_keys = []
+        for role in self._cards():
+            source = self._document.get_condition_stimulus_set(self._condition_id, role)
+            source_keys.append((role, source.set_id, source.source_dir, source.image_count))
+        key = (
+            self._document.project_root, manifest.generated_at if manifest else None,
+            tuple(source_keys),
+        )
+        if key == self._thumbnail_key:
+            return
+        self._thumbnail_key = key
         self._thumbnail_revision += 1
         self._thumbnail_pending = True
         if self._thumbnail_task is not None:
@@ -553,7 +570,10 @@ class ExperimentDesignerWidget(QWidget):
                 else None
             )
             paths = (
-                tuple(item.source.relative_path for item in manifest_set.assets)
+                tuple(
+                    item.source.relative_path
+                    for item in manifest_set.assets[:4 if role == "base" else 1]
+                )
                 if manifest_set
                 else ()
             )
@@ -573,13 +593,21 @@ class ExperimentDesignerWidget(QWidget):
         )
         self._thumbnail_task = task
         task.succeeded.connect(lambda result: self._thumbnails_loaded(revision, result))
-        task.failed.connect(self._task_failed)
+        task.failed.connect(lambda error: self._thumbnail_failed(revision, error))
         task.finished.connect(self._thumbnail_finished)
         task.start()
+
+    def _thumbnail_failed(self, revision: int, error: object) -> None:
+        if revision != self._thumbnail_revision:
+            return
+        self._thumbnail_key = None
+        self._thumbnail_error = str(error)
+        _LOG.error("Designer preview task failed: %s", error)
 
     def _thumbnails_loaded(self, revision: int, result: object) -> None:
         if revision != self._thumbnail_revision:
             return
+        self._thumbnail_error = None
         images = cast(dict[str, list[QImage]], result)
         self._pixmaps = {
             role: [QPixmap.fromImage(image) for image in items] for role, items in images.items()
@@ -622,6 +650,7 @@ class ExperimentDesignerWidget(QWidget):
     def _start_source_import(self, role: str, directory: Path) -> None:
         self._stop_preview()
         self._source_error = None
+        self._import_role = role
         root, condition_id = self._document.project_root, self._condition_id
         import_role = "oddball" if role == "t1" and self._mode == "standard" else role
         task = BackgroundTask(
@@ -660,6 +689,7 @@ class ExperimentDesignerWidget(QWidget):
 
     def _import_finished(self) -> None:
         self._task = None
+        self._import_role = None
         if self._refresh_pending and not self.is_busy() and not self._close_requested:
             self.refresh()
         self._refresh_preview()
@@ -671,8 +701,9 @@ class ExperimentDesignerWidget(QWidget):
         self._stop_preview()
         self._description = None
         self.status_label.hide()
-        if self._source_error:
-            self._show_error(self._source_error)
+        error = self._source_error or self._thumbnail_error
+        if error:
+            self._show_error(error)
         ab = self._mode == "attentional_blink"
         self.base_source.title_label.setText("Base images")
         self.t1_source.title_label.setText("T1 · First target" if ab else "Oddball images")
@@ -690,8 +721,13 @@ class ExperimentDesignerWidget(QWidget):
         self.cycle_canvas.update()
         self.slot_canvas.update()
         self.slot_panel.setVisible(ab)
-        for card in self._cards().values():
+        for role, card in self._cards().items():
             card.folder_button.setEnabled(self._task is None)
+            card.set_activity(
+                "Importing images…" if self._task is not None and role == self._import_role
+                else "Loading previews…" if self._thumbnail_task is not None and card.source_count
+                else ""
+            )
         self.apply_button.setEnabled(False)
         self.preview_button.setEnabled(False)
         try:

@@ -93,7 +93,7 @@ def test_failed_rename_keeps_open_document_and_disk(qtbot, controller, monkeypat
     def fail_replace(*args):
         raise PermissionError("Read-only project")
 
-    monkeypatch.setattr("fpvs_studio.core.project_service.os.replace", fail_replace)
+    monkeypatch.setattr("fpvs_studio.core.project_service.atomic_text_write", fail_replace)
     dialog = _dialog(qtbot, controller)
     dialog.rename_button.click()
     assert errors

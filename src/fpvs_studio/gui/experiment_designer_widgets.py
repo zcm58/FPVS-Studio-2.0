@@ -240,7 +240,7 @@ class SourceCard(QFrame):
     def set_source(self, count: int, path: str, pixmaps: Sequence[QPixmap]) -> None:
         self.source_count = count
         self.source_path = path
-        self.count_label.setText(f"{count} image" if count == 1 else f"{count} images")
+        self.set_activity("")
         self.tile.set_pixmaps(pixmaps)
         self.folder_button.setText("Change folder…" if path else "Choose images…")
         description = f"{count} images • {path}" if path else "No image folder selected"
@@ -252,6 +252,11 @@ class SourceCard(QFrame):
         self.path_label.setAccessibleName(f"{self.title_label.text()} folder")
         self.path_label.setAccessibleDescription(path or "No image folder selected")
         self._refresh_path_label()
+
+    def set_activity(self, text: str) -> None:
+        """Show current image work in the existing count area without resizing the card."""
+        count = self.source_count
+        self.count_label.setText(text or (f"{count} image" if count == 1 else f"{count} images"))
 
     def _refresh_path_label(self) -> None:
         text = Path(self.source_path).name if self.source_path else "No folder selected"

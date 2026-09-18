@@ -719,13 +719,16 @@ def test_fixation_step_authors_pre_stream_gaze_lead_in(
     QApplication.processEvents()
 
     assert editor.pre_stream_fixation_spin.value() == 2.0
-    assert "first stimulus and condition trigger" in (
+    assert "before the stream starts" in (
         editor.pre_stream_fixation_note.text().lower()
     )
     editor.pre_stream_fixation_spin.setValue(2.75)
     QApplication.processEvents()
     assert document.project.settings.presentation.pre_stream_fixation_seconds == 2.75
-    assert "2.75 s pre-stream gaze lead-in" in guide._fixation_review_line()
+    fixation_lines = next(
+        lines for key, _title, lines in guide._review_checklist_sections() if key == "response"
+    )
+    assert any("lead-in 2.75 s" in line for line in fixation_lines)
 
 
 def test_experiment_template_editor_exposes_and_saves_presentation_defaults(qtbot) -> None:

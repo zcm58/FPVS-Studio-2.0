@@ -18,8 +18,16 @@ from threading import Event
 from types import TracebackType
 from typing import TYPE_CHECKING, cast
 
-from PySide6.QtCore import QObject, QSettings, QTimer, Slot
-from PySide6.QtWidgets import QApplication, QDialog, QFileDialog, QInputDialog, QMessageBox, QWidget
+from PySide6.QtCore import QObject, QSettings, Qt, QTimer, Slot
+from PySide6.QtWidgets import (
+    QApplication,
+    QDialog,
+    QFileDialog,
+    QInputDialog,
+    QMessageBox,
+    QProgressDialog,
+    QWidget,
+)
 
 from fpvs_studio import __version__
 from fpvs_studio.core.condition_template_profiles import (
@@ -28,7 +36,7 @@ from fpvs_studio.core.condition_template_profiles import (
     normalize_condition_template_profile_root,
 )
 from fpvs_studio.core.enums import ExperimentCategory
-from fpvs_studio.core.models import ConditionTemplateProfile
+from fpvs_studio.core.models import ConditionTemplateProfile, ProjectFile
 from fpvs_studio.core.paths import (
     condition_template_library_path,
     is_reserved_root_entry_name,
@@ -59,7 +67,12 @@ from fpvs_studio.gui.manage_projects_dialog import ManageProjectsDialog, Project
 from fpvs_studio.gui.root_folder_setup_dialog import RootFolderSetupDialog
 from fpvs_studio.gui.settings_dialog import AppSettingsDialog
 from fpvs_studio.gui.update_dialog import UpdateDialog
-from fpvs_studio.gui.update_lifecycle import UpdateJob, UpdateTaskResult, update_lifecycle
+from fpvs_studio.gui.update_lifecycle import (
+    ProgressReporter,
+    UpdateJob,
+    UpdateTaskResult,
+    update_lifecycle,
+)
 from fpvs_studio.gui.welcome_window import WelcomeWindow
 from fpvs_studio.gui.window_helpers import (
     _coerce_exception,
@@ -68,6 +81,7 @@ from fpvs_studio.gui.window_helpers import (
     _show_error_dialog as _show_error,
 )
 from fpvs_studio.gui.workers import BackgroundTask, ProgressSignalBridge
+from fpvs_studio.preprocessing.models import StimulusManifest
 from fpvs_studio.runtime.export_modes import (
     EXPORT_MODE_COMPACT,
     EXPORT_MODE_FULL,
@@ -139,6 +153,8 @@ class StudioController(QObject):
             lambda cancel: HelperClient().check(__version__, cancel_event=cancel)
         )
         self._active_import_bundle_task: BackgroundTask | None = None
+        self._project_open_job: UpdateJob | None = None
+        self._project_open_dialog: QProgressDialog | None = None
         self._library_import_job: UpdateJob | None = None
         self._library_import_finished: Callable[[Path | None], None] | None = None
         self._library_import_result: Path | None = None
@@ -349,7 +365,7 @@ class StudioController(QObject):
     def open_recent_project(self, project_root: str) -> None:
         """Open a project selected from the welcome screen recent-project list."""
 
-        self.open_project(Path(project_root))
+        self.request_open_project(Path(project_root))
 
     def load_fpvs_root_dir(self) -> Path | None:
         """Load the persisted FPVS Studio root folder when it still exists."""
@@ -628,7 +644,7 @@ class StudioController(QObject):
         )
         if not directory:
             return
-        self.open_project(Path(directory))
+        self.request_open_project(Path(directory))
 
     def show_manage_projects_dialog(self) -> None:
         """Show the project management dialog for known FPVS projects."""
@@ -696,6 +712,57 @@ class StudioController(QObject):
             return None
         self._open_document(document)
         return document
+
+    def request_open_project(self, project_location: Path) -> None:
+        """Read user-selected project files without blocking the current window."""
+        if self._project_open_job is not None:
+            self._project_open_job.cancel()
+        if self._project_open_dialog is not None:
+            self._project_open_dialog.close()
+            self._project_open_dialog.deleteLater()
+        parent = self.main_window or self.welcome_window
+        dialog = QProgressDialog("Opening project…", "Cancel", 0, 0, parent)
+        dialog.setWindowTitle("Open Project")
+        dialog.setWindowModality(Qt.WindowModality.ApplicationModal)
+        dialog.setMinimumDuration(0)
+        dialog.setMinimumWidth(420)
+        dialog.setToolTip(str(project_location))
+        self._project_open_dialog = dialog
+        root_dir = self._fpvs_root_dir
+
+        def read_project(
+            _progress: ProgressReporter, cancel: Event,
+        ) -> tuple[Path, ProjectFile, StimulusManifest | None] | None:
+            if root_dir is not None:
+                normalize_condition_template_profile_root(root_dir)
+            if cancel.is_set():
+                return None
+            return ProjectDocument.read_existing(Path(project_location))
+
+        job = self._update_lifecycle.start_task(read_project)
+        self._project_open_job = job
+        dialog.canceled.connect(job.cancel)
+        job.finished.connect(lambda result: self._finish_project_open(job, result))
+        dialog.show()
+
+    def _finish_project_open(self, job: UpdateJob, result: UpdateTaskResult) -> None:
+        if job is not self._project_open_job:
+            return
+        self._project_open_job = None
+        dialog = self._project_open_dialog
+        self._project_open_dialog = None
+        if dialog is not None:
+            dialog.close()
+            dialog.deleteLater()
+        if result.cancelled or self._update_lifecycle.is_shutting_down:
+            return
+        if result.error is not None:
+            _show_error(self.main_window or self.welcome_window, "Open Project Error", result.error)
+            return
+        root, project, manifest = cast(
+            tuple[Path, ProjectFile, StimulusManifest | None], result.value,
+        )
+        self._open_document(ProjectDocument(project_root=root, project=project, manifest=manifest))
 
     def show_settings_dialog(self) -> None:
         """Show application-level settings, including the FPVS Studio root folder."""
@@ -1327,7 +1394,7 @@ class StudioController(QObject):
         if self.main_window is not None and not self.main_window.maybe_save_changes():
             return
         dialog.accept()
-        self.open_project(Path(project_root))
+        self.request_open_project(Path(project_root))
 
     def _delete_managed_project(self, dialog: ManageProjectsDialog, project_root: str) -> None:
         self.delete_project(Path(project_root), parent=dialog)

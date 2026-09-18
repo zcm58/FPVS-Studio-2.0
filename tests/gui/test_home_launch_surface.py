@@ -717,7 +717,7 @@ def test_no_standalone_preflight_controls_are_exposed(
     assert "Settings..." in menu_labels
     assert "Create New Project" not in menu_labels
     assert "Open Project..." not in menu_labels
-    assert "Save" not in menu_labels
+    assert "Save" in menu_labels
     assert "Launch Experiment" not in menu_labels
     assert "Preflight" not in menu_labels
 
@@ -752,6 +752,7 @@ def test_home_launch_surface_shows_only_essential_project_session_metadata(
     tmp_path: Path,
 ) -> None:
     _, window = _open_created_project(controller, qtbot, tmp_path, "Home Metadata Project")
+    window.document.update_fixation_settings(enabled=False, accuracy_task_enabled=False)
     qtbot.mouseClick(window.conditions_page.add_condition_button, Qt.MouseButton.LeftButton)
 
     window.session_structure_page.block_count_spin.setValue(2)
@@ -852,7 +853,18 @@ def test_pilot_collects_standard_demographics_on_both_launch_surfaces(qtbot, tmp
             age=23, sex="Female", handedness="Right handed", colorblind=False
         ),
     )
-    for surface in (StudioMainWindow(document=document), RunPage(document=document)):
+    window = StudioMainWindow(
+        document=document,
+        on_request_new_project=lambda: None,
+        on_request_open_project=lambda: None,
+        on_request_manage_projects=lambda: None,
+        on_request_import_project_config=lambda: None,
+        on_request_import_project_bundle=lambda: None,
+        on_request_settings=lambda: None,
+        on_load_condition_template_profiles=lambda: [],
+        on_manage_condition_templates=lambda: [],
+    )
+    for surface in (window, RunPage(document=document)):
         qtbot.addWidget(surface)
         monkeypatch.setattr(surface, "_prompt_participant_number", lambda: details)
         monkeypatch.setattr(

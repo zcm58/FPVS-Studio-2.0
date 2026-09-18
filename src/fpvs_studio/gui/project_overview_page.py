@@ -253,6 +253,12 @@ class ProjectOverviewEditor(QWidget):
     def flush_pending_edits(self) -> None:
         self._description_committer.flush()
 
+    def has_pending_edits(self) -> bool:
+        return (
+            self._description_committer.pending
+            or self.project_name_edit.text() != self._document.project.meta.name
+        )
+
     def _refresh_condition_profile_widgets(self) -> None:
         profiles = [
             profile

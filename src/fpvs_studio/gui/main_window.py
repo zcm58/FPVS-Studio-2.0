@@ -12,10 +12,11 @@ from pathlib import Path
 from typing import cast
 
 from PySide6.QtCore import QEvent, Qt, QTimer, QUrl, Slot
-from PySide6.QtGui import QAction, QCloseEvent, QDesktopServices, QShowEvent
+from PySide6.QtGui import QAction, QCloseEvent, QDesktopServices, QKeySequence, QShowEvent
 from PySide6.QtWidgets import (
     QApplication,
     QFileDialog,
+    QLineEdit,
     QMainWindow,
     QMenu,
     QMessageBox,
@@ -45,7 +46,7 @@ from fpvs_studio.gui import folder_actions
 from fpvs_studio.gui.animations import ButtonHoverAnimator
 from fpvs_studio.gui.attentional_blink_data_dialog import AttentionalBlinkDataDialog
 from fpvs_studio.gui.bundle_export_dialog import BundleExportOptionsDialog
-from fpvs_studio.gui.components import apply_studio_theme
+from fpvs_studio.gui.components import StatusBadgeLabel, apply_studio_theme
 from fpvs_studio.gui.document import ProjectDocument
 from fpvs_studio.gui.document_support import DocumentError, format_validation_report
 from fpvs_studio.gui.fixation_cross_data_dialog import FixationCrossDataDialog
@@ -219,6 +220,7 @@ class StudioMainWindow(QMainWindow):
         self.document.session_plan_changed.connect(self._sync_home_after_document_update)
         self.document.dirty_changed.connect(self._update_window_title)
         self.document.saved.connect(lambda: self.statusBar().showMessage("Project saved.", 3000))
+        self.document.saved.connect(self._update_save_state)
 
     @property
     def setup_wizard_page(self) -> SetupWizardPage:
@@ -234,6 +236,7 @@ class StudioMainWindow(QMainWindow):
                 on_save_project=self.save_project,
             )
             self._setup_wizard_page = page
+            page.pending_edits_changed.connect(self._update_save_state)
             self.main_stack.addWidget(page)
             self._install_button_hover_animations()
         return self._setup_wizard_page
@@ -525,6 +528,7 @@ class StudioMainWindow(QMainWindow):
         self.export_group_summary_action.setObjectName("export_group_summary_action")
         self.export_group_summary_action.triggered.connect(self.export_group_summary)
         self.save_project_action = QAction("Save", self)
+        self.save_project_action.setShortcut(QKeySequence.StandardKey.Save)
         self.save_project_action.triggered.connect(self.save_project)
         self.settings_action = QAction("Settings...", self)
         self.settings_action.setObjectName("settings_action")
@@ -579,6 +583,12 @@ class StudioMainWindow(QMainWindow):
         self.tools_menu = self.menuBar().addMenu("Tools")
         self.menuBar().setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.file_menu.addAction(self.manage_projects_action)
+        self.file_menu.addAction(self.save_project_action)
+        self.save_state_label = StatusBadgeLabel(parent=self.menuBar())
+        self.save_state_label.setObjectName("project_save_state")
+        self.save_state_label.setWordWrap(False)
+        self.save_state_label.setAccessibleName("Project save status")
+        self.menuBar().setCornerWidget(self.save_state_label)
         self.file_menu.addSeparator()
         self.import_menu = QMenu("Import", self.file_menu)
         self.import_menu.setObjectName("file_import_menu")
@@ -704,11 +714,21 @@ class StudioMainWindow(QMainWindow):
         )
 
     def save_project(self) -> bool:
+        # Ctrl+S does not move focus like clicking Save. Commit editingFinished
+        # fields first so the name currently being typed is included in the save.
+        focused = self.focusWidget()
+        if isinstance(focused, QLineEdit):
+            focused.clearFocus()
+            focused.setFocus()
         if not self.flush_pending_edits():
+            self._set_save_feedback("error", "Save blocked",
+                "Finish or correct the highlighted setup fields, then save.",
+            )
             return False
         try:
             self.document.save()
         except Exception as error:
+            self._set_save_feedback("error", "Save failed", f"Your edits are still open. {error}")
             _show_error_dialog(self, "Save Error", error)
             return False
         return True
@@ -1383,3 +1403,23 @@ class StudioMainWindow(QMainWindow):
         self.setWindowTitle(
             f"{dirty_prefix}{self.document.project.meta.name} - FPVS Studio Beta"
         )
+        self._update_save_state()
+
+    def _update_save_state(self) -> None:
+        pending = (
+            self._setup_wizard_page is not None
+            and self._setup_wizard_page.has_pending_edits()
+        )
+        dirty = self.document.dirty or pending
+        text = "Unsaved changes" if dirty else "Saved"
+        self._set_save_feedback("warning" if dirty else "ready", text,
+            "Save your project with File > Save or Ctrl+S."
+            if dirty else "All current project changes are saved."
+        )
+
+    def _set_save_feedback(self, state: str, text: str, tooltip: str) -> None:
+        if self.save_state_label.text() != text:
+            self.save_state_label.set_state(state, text)
+            # QMenuBar retains its corner widget geometry when only the text changes.
+            self.menuBar().setCornerWidget(self.save_state_label)
+        self.save_state_label.setToolTip(tooltip)

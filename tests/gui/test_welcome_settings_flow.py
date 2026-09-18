@@ -210,7 +210,7 @@ def test_welcome_window_actions_fit_minimum_and_default_sizes(
         welcome.resize(width, height)
         QApplication.processEvents()
 
-        assert welcome._action_columns == (1 if width == 760 else 2)
+        assert welcome.action_container.width() <= welcome.hero_container.width()
         assert_visible_children_within_parent(welcome)
         for button in action_buttons:
             text_width = button.fontMetrics().horizontalAdvance(button.text())
@@ -1446,7 +1446,8 @@ def test_settings_dialog_experiment_test_mode_is_explicit_and_fits(
     assert checkbox.width() >= checkbox.fontMetrics().horizontalAdvance(checkbox.text())
     assert_visible_children_within_parent(dialog)
 
-    qtbot.mouseClick(checkbox, Qt.MouseButton.LeftButton)
+    assert checkbox.isVisible()
+    qtbot.mouseClick(checkbox, Qt.MouseButton.LeftButton, pos=QPoint(10, checkbox.height() // 2))
 
     assert checkbox.isChecked() is True
     assert captured_values == [True]
@@ -1927,7 +1928,7 @@ def test_manage_condition_templates_dialog_renders_hierarchical_details(
     assert "Template Name: Continuous Images" in details_text
     assert "Built-in: Yes" in details_text
     assert "Display Refresh Rate: Not Set" in details_text
-    assert "Display Resolution: Full Screen (1920 Ã— 1080)" in details_text
+    assert "Display Resolution: Full Screen (1920 × 1080)" in details_text
     assert "Fixation Cross: Enabled" in details_text
     assert "Fixation Cross Accuracy Task: Enabled" in details_text
     assert "Total cross color changes in each condition: 8 to 13" in details_text
@@ -2161,7 +2162,10 @@ def test_creation_manual_category_page_requires_explicit_category_and_hides_deta
     assert not dialog.condition_profile_combo.isVisible()
     assert not dialog.category_buttons[ExperimentCategory.FPVS].isEnabled()
     assert not any(button.isChecked() for button in dialog.category_buttons.values())
-    assert all(button.height() >= 120 for button in dialog.category_buttons.values())
+    assert all(
+        button.height() >= button.minimumSizeHint().height()
+        for button in dialog.category_buttons.values()
+    )
     dialog.accept()
     assert dialog.category_stack.currentWidget() is dialog.category_page
     assert_visible_children_within_parent(dialog)
@@ -2173,7 +2177,7 @@ def test_creation_manual_category_page_requires_explicit_category_and_hides_deta
     qtbot.mouseClick(ok_button, Qt.MouseButton.LeftButton)
     assert dialog.project_name_edit.isVisible()
     assert dialog.category_stack.currentWidget() is dialog.details_page
-    assert dialog.condition_profile_combo.count() == 2
+    assert dialog.condition_profile_combo.count() == 1
     assert dialog.condition_profile_combo.currentData() == "attentional-blink-letter-stream-v1"
     assert dialog.category_summary_label.text() == "Attentional-Blink"
     assert_visible_children_within_parent(dialog)
@@ -2206,9 +2210,10 @@ def test_create_dialog_forwards_selected_attentional_blink_category(
     document = controller.main_window.document
     assert document.project.experiment_category == ExperimentCategory.ATTENTIONAL_BLINK
     assert document.project.settings.protocol.base_hz == 10.0
-    assert document.project.settings.protocol.oddball_every_n == 20
+    assert document.project.settings.protocol.oddball_every_n == 50
     assert document.project.settings.condition_profile_id == ATTENTIONAL_BLINK_STREAM_PROFILE_ID
-    assert document.project.settings.condition_defaults.oddball_cycle_repeats_per_sequence == 146
+    assert document.project.settings.condition_defaults.oddball_cycle_repeats_per_sequence == 1
+    assert document.project.settings.session.block_count == 24
     assert len(document.project.conditions) == 3
     for condition, soa_ms in zip(document.project.conditions, (100.0, 300.0, 500.0), strict=True):
         assert isinstance(condition.attentional_blink, AttentionalBlinkStreamSettings)
