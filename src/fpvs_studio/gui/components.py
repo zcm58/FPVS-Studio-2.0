@@ -2225,7 +2225,11 @@ def setup_wizard_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
 
 
 def apply_setup_wizard_theme(widget: QWidget) -> None:
-    widget.setStyleSheet(setup_wizard_stylesheet(widget.palette()))
+    stylesheet = setup_wizard_stylesheet(widget.palette())
+    # Parenting/palette events can repeat during construction. Reapplying identical
+    # rules repolishes every child even though the effective theme has not changed.
+    if widget.styleSheet() != stylesheet:
+        widget.setStyleSheet(stylesheet)
 
 
 def welcome_window_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:

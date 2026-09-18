@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 from PySide6.QtCore import (
+    QEvent,
     QPoint,
     Qt,
 )
@@ -30,6 +31,43 @@ from tests.gui.helpers import (
 
 from fpvs_studio.gui.controller import StudioController
 from fpvs_studio.gui.design_system import resolve_studio_theme
+from fpvs_studio.gui.setup_wizard_page import SetupWizardPage
+
+
+def test_edit_setup_does_not_reapply_unchanged_theme(
+    qtbot, controller: StudioController, tmp_path: Path, monkeypatch,
+) -> None:
+    """Opening/reopening Setup must not repeatedly restyle its entire widget tree."""
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Setup Styling")
+    applied_styles = []
+    original = SetupWizardPage.setStyleSheet
+
+    def record_style(page, stylesheet):
+        applied_styles.append(stylesheet)
+        original(page, stylesheet)
+
+    monkeypatch.setattr(SetupWizardPage, "setStyleSheet", record_style)
+    window.show_setup_wizard(allow_step_jumps=True)
+    QApplication.processEvents()
+    guide = window.setup_wizard_page
+    assert guide.parentWidget() is window.main_stack
+    assert applied_styles == [guide.styleSheet()]
+
+    QApplication.sendEvent(guide, QEvent(QEvent.Type.PaletteChange))
+    window.show_home()
+    window.show_setup_wizard(allow_step_jumps=True)
+    QApplication.processEvents()
+    assert window.setup_wizard_page is guide
+    assert applied_styles == [guide.styleSheet()]
+
+    palette = QPalette(guide.palette())
+    dark = palette.color(QPalette.ColorRole.Window).lightness() < 128
+    palette.setColor(QPalette.ColorRole.Window, QColor("#ffffff" if dark else "#202124"))
+    guide.setPalette(palette)
+    QApplication.processEvents()
+    assert len(applied_styles) == 2
+    assert applied_styles[0] != applied_styles[1]
+    assert applied_styles[-1] == guide.styleSheet()
 
 
 def test_main_window_uses_home_and_setup_wizard_stack(

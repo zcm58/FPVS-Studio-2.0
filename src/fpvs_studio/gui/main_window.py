@@ -223,6 +223,8 @@ class StudioMainWindow(QMainWindow):
     @property
     def setup_wizard_page(self) -> SetupWizardPage:
         if self._setup_wizard_page is None:
+            # Assemble off the styled window tree so every layout insertion does not
+            # repeat inherited style propagation. The stack takes ownership below.
             page = SetupWizardPage(
                 self.document,
                 load_condition_template_profiles=self._on_load_condition_template_profiles,
@@ -230,7 +232,6 @@ class StudioMainWindow(QMainWindow):
                 load_fpvs_root_dir=self._on_load_fpvs_root_dir,
                 on_return_home=self.show_home,
                 on_save_project=self.save_project,
-                parent=self,
             )
             self._setup_wizard_page = page
             self.main_stack.addWidget(page)

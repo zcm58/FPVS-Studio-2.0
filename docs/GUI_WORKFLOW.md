@@ -737,7 +737,10 @@ preprocessing services but must not silently mutate the active project.
   session/fixation page classes.
 - Guided setup composition lives in `src/fpvs_studio/gui/setup_wizard_page.py`; it
   uses existing document services and editor widgets rather than duplicating project
-  state.
+  state. The main window assembles the wizard before attaching it to the styled
+  workflow stack, which takes ownership. The shared setup-theme helper skips unchanged
+  stylesheets so parenting and palette events do not repeatedly restyle the entire
+  wizard. Theme changes, all eight pages, and existing navigation gates remain active.
 - Display and image-size settings editing lives in
   `src/fpvs_studio/gui/runtime_settings_page.py`; refresh/background controls stay
   separate from visual-angle geometry controls.
