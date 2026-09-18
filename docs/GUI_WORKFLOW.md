@@ -677,10 +677,15 @@ The bundled **FPVS Studio Update & Repair** Start Menu entry uses the same dialo
 separate process, at a `680x660` minimum and `760x680` default. Its full-installer repair
 action supports the currently installed version and requires all Studio windows to close
 before installation. It works independently of Studio's authoring/runtime dependencies.
-The managed install-progress dialog has a `620x340` minimum and `700x380` default. It
-shows waiting, package verification, installing, restart, cancellation, or failure states;
-long error details remain accessible in a read-only scrolling field. Cancel is available
-before setup begins and disabled after explicit installation commitment. Late cancellation
+The managed install-progress dialog has a `480x140` minimum and `560x160` default. Its
+normal surface contains only "Updating FPVS Studio to version X... Please wait..." and
+an animated progress bar. The target version comes from the installation handoff, not
+the running helper's version. The bar stays indeterminate because setup does not report
+an installation percentage; no elapsed-time percentage is invented. Error details and
+action buttons remain hidden during installation. Failure expands the dialog to a
+`480x300` minimum and `560x340` default, with a read-only scrolling error field.
+Closing the window cancels before setup begins and is ignored after explicit installation
+commitment. Late cancellation
 cannot turn a failed installation into a false cancellation message. Failure exposes
 **Open Update & Repair**; successful installation closes the progress window after restart.
 Helper staging, trust, locks, and native installation contracts are in `docs/PACKAGING.md`.

@@ -1241,7 +1241,36 @@ def test_standalone_handoff_does_not_claim_to_be_studio(qtbot, deferred_updates,
     assert calls[0]["parent_pid"] is None
 
 
-@pytest.mark.parametrize("size", [(620, 340), (700, 380)])
+@pytest.mark.parametrize("size", [(480, 140), (560, 160)])
+def test_apply_progress_is_minimal_and_preserves_target_version(qtbot, deferred_updates, size):
+    lifecycle, jobs, _ = deferred_updates
+    window = ApplyUpdateDialog(lambda _progress, _cancel: None, lifecycle=lifecycle)
+    qtbot.addWidget(window)
+    window.resize(*size)
+    window.show()
+    qtbot.waitUntil(lambda: bool(jobs) and jobs[-1]._started)
+    version = "2026.12.123rc10"
+    window._progress(UpdatePhase("Preparing", target_version=version), None)
+    window._progress(UpdatePhase("Installing; keep this window open", install_committed=True), None)
+    assert window.status_label.text() == (
+        f"Updating FPVS Studio to version {version}... Please wait..."
+    )
+    assert not window.details_label.isVisible()
+    assert not window.repair_button.isVisible()
+    assert not window.close_button.isVisible()
+    assert window.progress_bar.isVisible()
+    assert window.progress_bar.minimum() == window.progress_bar.maximum() == 0
+    qtbot.wait(1)
+    assert window.status_label.height() >= window.status_label.heightForWidth(
+        window.status_label.width()
+    )
+    assert_visible_children_within_parent(window)
+    jobs[-1].finish()
+    assert window.progress_bar.value() == window.progress_bar.maximum() == 100
+    assert not window.details_label.isVisible()
+
+
+@pytest.mark.parametrize("size", [(480, 140), (560, 160)])
 def test_apply_progress_failure_keeps_repair_and_complete_error_accessible(
     qtbot, deferred_updates, size
 ):
@@ -1254,7 +1283,9 @@ def test_apply_progress_failure_keeps_repair_and_complete_error_accessible(
     error = "Target verification failed. " + "FPVS-Studio-long-file-name.dll " * 60
     jobs[-1].finish(error=UpdateError(error))
     assert window.details_label.toPlainText() == error
+    assert window.details_label.isVisible()
     assert window.repair_button.isVisible()
+    assert window.close_button.isVisible()
     assert window.close_button.isEnabled()
     assert not window.progress_bar.isVisible()
     qtbot.wait(1)

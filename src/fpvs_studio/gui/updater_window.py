@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 from threading import Event
 
-from PySide6.QtCore import QTimer, Slot
+from PySide6.QtCore import Qt, QTimer, Slot
 from PySide6.QtGui import QCloseEvent
 from PySide6.QtWidgets import (
     QApplication,
@@ -151,8 +151,8 @@ class ApplyUpdateDialog(QDialog):
         super().__init__()
         self.setObjectName("updater_install_progress")
         self.setWindowTitle("FPVS Studio Updater")
-        self.setMinimumSize(620, 340)
-        self.resize(700, 380)
+        self.setMinimumSize(480, 140)
+        self.resize(560, 160)
         self._callback = callback
         self._lifecycle = lifecycle or update_lifecycle()
         self._job: UpdateJob | None = None
@@ -162,23 +162,21 @@ class ApplyUpdateDialog(QDialog):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(20, 20, 20, 20)
         layout.setSpacing(14)
-        self.title_label = QLabel("Updating FPVS Studio", self)
-        layout.addWidget(self.title_label)
-        self.status_label = QLabel("Preparing the verified update...", self)
+        self.status_label = QLabel("Updating FPVS Studio... Please wait...", self)
+        self.status_label.setTextFormat(Qt.TextFormat.PlainText)
         self.status_label.setWordWrap(True)
+        layout.addStretch(1)
         layout.addWidget(self.status_label)
         self.details_label = QPlainTextEdit(self)
         self.details_label.setReadOnly(True)
-        self.details_label.setPlainText(
-            "Your projects, templates, settings, run history, and logs "
-            "stay in their existing folders."
-        )
+        self.details_label.setVisible(False)
         self.details_label.setMaximumHeight(140)
         layout.addWidget(self.details_label)
-        layout.addStretch(1)
         self.progress_bar = QProgressBar(self)
         self.progress_bar.setRange(0, 0)
+        self.progress_bar.setTextVisible(False)
         layout.addWidget(self.progress_bar)
+        layout.addStretch(1)
         self.repair_button = QPushButton("Open Update && Repair", self)
         mark_primary_action(self.repair_button)
         self.repair_button.setVisible(False)
@@ -186,6 +184,7 @@ class ApplyUpdateDialog(QDialog):
         layout.addWidget(self.repair_button)
         self.close_button = QPushButton("Cancel", self)
         mark_secondary_action(self.close_button)
+        self.close_button.setVisible(False)
         self.close_button.clicked.connect(self.reject)
         layout.addWidget(self.close_button)
         apply_studio_theme(self)
@@ -214,10 +213,12 @@ class ApplyUpdateDialog(QDialog):
     @Slot(object, object)
     def _progress(self, phase: object, _total: object) -> None:
         if isinstance(phase, UpdatePhase):
-            self.status_label.setText(phase.text)
+            if phase.target_version is not None:
+                self.status_label.setText(
+                    f"Updating FPVS Studio to version {phase.target_version}... Please wait..."
+                )
             if phase.install_committed:
                 self.close_button.setEnabled(False)
-                self.close_button.setText("Installation in progress")
 
     @Slot(object)
     def _finished(self, outcome: object) -> None:
@@ -231,6 +232,9 @@ class ApplyUpdateDialog(QDialog):
             and not outcome.cancelled
         ):
             self.status_label.setText("FPVS Studio was updated and restarted successfully.")
+            self.progress_bar.setRange(0, 100)
+            self.progress_bar.setValue(100)
+            self.progress_bar.setVisible(True)
             QTimer.singleShot(1500, self.accept)
         elif (
             isinstance(outcome, UpdateTaskResult)
@@ -238,13 +242,19 @@ class ApplyUpdateDialog(QDialog):
             and not self._committed.is_set()
         ):
             self.status_label.setText("The update was canceled before installation.")
+            self.close_button.setVisible(True)
         else:
             self.status_label.setText("The update could not be completed.")
             error = outcome.error if isinstance(outcome, UpdateTaskResult) else None
             self.details_label.setPlainText(
-                str(error) or "Open Update & Repair to retry the full installer."
+                str(error) if error is not None
+                else "Open Update & Repair to retry the full installer."
             )
+            self.setMinimumSize(480, 300)
+            self.resize(max(self.width(), 560), max(self.height(), 340))
+            self.details_label.setVisible(True)
             self.repair_button.setVisible(True)
+            self.close_button.setVisible(True)
 
     @Slot()
     def _open_repair(self) -> None:
