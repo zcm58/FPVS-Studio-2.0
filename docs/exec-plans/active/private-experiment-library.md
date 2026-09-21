@@ -4,6 +4,29 @@ Status: Active
 
 Date: 2026-09-16
 
+## Import cleanup follow-up (September 21, 2026)
+
+Download release now removes recognized transfer files while still holding the cache
+lease after completed import, review rejection, cancellation or failure. Transfer errors
+also clean recognized archives, including withdrawn retained payloads. Cleanup failures
+are logged, always release the lease and preserve the original operation outcome;
+subsequent downloads retry cleanup. The coordination lock and unrelated files remain.
+Core already removes per-import extraction staging in its finalizer; imported projects
+stay under the selected Studio root and never depend on downloaded archives.
+
+Regression coverage checks repeated transfers, retained-payload recovery, cleanup failure
+and lock release, and a real bundle import that remains readable after archive deletion.
+Baseline Library focused verification has six unrelated COM3 publishing-test failures:
+the tests disable serial output without setting `experiment_test_mode=True`.
+Visible GUI and installed-build checks remain unperformed for this backend change.
+
+Verification: client/cache/bundle regressions passed (89 passed, one Windows symlink
+skip). Library focused finished with 164 passed, one skip and the same six baseline
+publishing failures. Precommit passed Ruff, compilation, mypy (192 files), repository
+and docs audits; its unit run encountered additional failures and then a Windows access
+violation in `test_runtime_launcher_export.py` during runtime session export, so the
+full repository gate is not green. No Qt or live service checks were run.
+
 ## Phase 1 implementation authorization
 
 The user authorized Phase 1 implementation, private GitHub/service setup, two test

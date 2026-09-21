@@ -16,6 +16,7 @@ lazily only inside the engine package.
 - `src/fpvs_studio/app/`: thin application entry points and startup wiring.
 - `src/fpvs_studio/library/`: GUI-neutral experiment catalog, device enrollment,
   native protected credential storage, and bounded verified bundle downloads.
+  Download leases clean up transfer files when review/import ends.
   The Library dialog uses app-owned jobs and the existing reviewed project importer;
   `core/library_publish.py` prepares clean publishable whole-project copies with
   the current fixed COM3 serial-port policy.

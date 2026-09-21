@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 import secrets
 import time
@@ -37,6 +38,7 @@ NETWORK_TIMEOUT_SECONDS = 10
 METADATA_TOTAL_SECONDS = 30
 DOWNLOAD_TOTAL_SECONDS = 30 * 60
 ProgressCallback = Callable[[int, int], None]
+_LOGGER = logging.getLogger(__name__)
 
 
 class _NoRedirect(HTTPRedirectHandler):
@@ -345,7 +347,7 @@ class LibraryClient:
             return result
         except BaseException as error:
             try:
-                self._cache.remove("download.part")
+                self._clear_download()
             finally:
                 self._cache.release()
             if isinstance(error, OSError):
@@ -355,10 +357,21 @@ class LibraryClient:
             raise
 
     def release_download(self) -> None:
-        """Release after the importer/review stops reading; the verified payload remains bounded."""
+        """Remove temporary bytes after import/review stops reading, then release the lease."""
         if self._download_held:
             self._download_held = False
-            self._cache.release()
+            try:
+                self._clear_download()
+            finally:
+                self._cache.release()
+
+    def _clear_download(self) -> None:
+        try:
+            self._cache.clear()
+        except (OSError, LibraryError):
+            # Cleanup must not turn a committed import into a failure or mask the
+            # original transfer error. The next download retries bounded cleanup.
+            _LOGGER.warning("Could not remove temporary Library download files", exc_info=True)
 
     def disconnect(self, *, cancel_event: Event | None = None) -> None:
         """Revoke remotely before clearing local access; keep retry state on network failure."""

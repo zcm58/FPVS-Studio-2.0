@@ -133,13 +133,20 @@ Linux uses `$XDG_CACHE_HOME/fpvs-studio/experiment-library/<origin-hash>/`, or
 Cache permissions restrict access to the owning user; Windows permits SYSTEM as well.
 Cache paths reject links, reparse points and unsafe files. Cleanup removes only
 recognized Library files. The bounded cache retains at most one verified payload plus
-one partial; cached payloads are rehashed and reauthorized before reuse.
+one partial during an operation; cached payloads left by an interrupted process or
+failed cleanup are rehashed and reauthorized before reuse.
 
 `download()` returns a verified `Path` with an interprocess cache lease. The caller must
 invoke `release_download()` after review rejection, failure, cancellation or import
 completion, not merely when network transfer ends. The Library controller holds that
 lease while the existing importer reads the archive, preventing another Studio process
-from replacing the payload. The imported project refers only to its own copied files.
+from replacing the payload. Release removes recognized downloaded archives and partials
+before unlocking, including after rejected review, canceled setup or import failure.
+The small lock file stays in place for cross-process coordination; unrelated files are
+never removed. Cleanup failures are logged without changing an already committed import
+or masking a transfer error, and the next download retries cleanup. Core removes its
+extraction staging directory when import finishes. The imported project refers only to
+its own copied files.
 No updater staging directory, installed program file or downloaded script participates.
 
 ## Developer publishing in Studio
