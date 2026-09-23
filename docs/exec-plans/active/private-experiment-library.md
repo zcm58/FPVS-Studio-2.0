@@ -30,7 +30,8 @@ periodic polling. Checks never install changes or interrupt presentation.
   provenance, unsaved-change guards and visible layout coverage. Run Library, project-I/O,
   GUI and docs focused routes plus precommit. Visible Qt execution remains opt-in.
 
-Progress: implemented on `codex/library-project-updates`.
+Progress: implemented and released in
+[v1.9.0](../completed/release-1.9.0.md).
 
 - Library focused: 203 passed, 3 Windows symlink skips. Project-I/O focused: 212 passed,
   2 Windows symlink skips. Safe GUI focused: 7 passed. Docs focused: 9 passed.
@@ -43,7 +44,8 @@ Progress: implemented on `codex/library-project-updates`.
   with the original project bytes and synthetic participant data unchanged.
 - Registered Qt coverage includes stale-window cancellation, explicit installation,
   download-lease lifetime, linking, menu guards and minimum/default layouts. Qt and
-  installed-build checks remain unrun; no installer or service changes were published.
+  installed-GUI checks remain unrun. The v1.9.0 release record documents the verified
+  installers and live updater checks; this follow-up required no service changes.
 
 ## Phase 1 implementation authorization
 
