@@ -48,8 +48,13 @@ run. One target is sampled per run and remains fixed. Faces/Number base and mask
 sampling rejects immediate repetitions, including across consecutive runs.
 
 Native scene visuals retain signed RGB triples without conversion to eight-bit hex,
-original units, geometry, outlines, fonts and interpolation. The color source uses
-5 cm base circles and 5 degree target/mask circles; that distinction is preserved.
+authored units, geometry, outlines, fonts and interpolation. The Color preset uses
+5-degree base, target and mask circles. The source mixed 5 cm bases with 5-degree
+targets/masks: nearly equal at the default 57 cm viewing distance, but the latter
+become about 40% wider at 80 cm. Matching all three roles in degrees corrects this
+source defect and keeps their relative sizes stable when display calibration changes.
+Previously saved projects retain their explicit geometry; correcting the preset does
+not silently rewrite custom sources. The migrated Masking project was repaired too.
 Number uses native Arial Black text and a gray rectangle behind each base/mask letter.
 Faces preserves original JPEG bytes and the authored square 5-by-5-degree display.
 Implicit source text wraps are stored explicitly before conversion to pixel units:
@@ -58,10 +63,13 @@ one window-height for instructions/breaks/thanks and 15 degrees for option label
 The user chose the intended design with source defects corrected: parse color-string
 triples, sample symbols before drawing/logging, score the valid option click, require
 fresh clicks consistently, and synchronize nominal SOAs to display frames. The source
-editable files define condition-start markers 1/2/3 for Color/Faces/Number. They become
-flip-locked stream-start markers; no base/target/mask onset markers are added. Existing
-hardware transport is unchanged. The ordinary oddball marker setting stays 55 and is
-unused by masking. No source CSV format or historical jitter equivalence is claimed.
+editable files define condition-start markers 1/2/3 for Color/Faces/Number. The migrated
+project uses the user-requested nine unique codes instead: Color 1/2/3, Faces 4/5/6,
+and Number 7/8/9, each in ascending 16.6667/50/100 ms SOA order. Each condition's saved
+code becomes its flip-locked stream-start marker and survives session randomization;
+no base/target/mask onset markers are added. Existing hardware transport is unchanged.
+The ordinary oddball marker setting stays 55 and is unused by masking. No source CSV
+format or historical jitter equivalence is claimed.
 
 The delivered project's display geometry was explicitly selected by the user:
 80 cm viewing distance, 60.96 cm screen width and 1920x1080 at 60 Hz. It replaces the

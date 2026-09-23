@@ -7,6 +7,7 @@ from types import SimpleNamespace
 
 import pytest
 from pydantic import ValidationError
+from tests.unit.test_masking import masking_project
 from tests.unit.test_psychopy_engine import (
     _build_fake_psychopy,
     _patch_fake_psychopy,
@@ -140,6 +141,34 @@ def test_native_primitives_preserve_signed_rgb_units_shapes_and_fonts(monkeypatc
     assert Path(image["image"]) == tmp_path / "stimuli" / "face.jpg"
     assert image["size"] == (5, 5)
     assert all(kwargs["autoLog"] is False for _, kwargs in constructors)
+
+
+@pytest.mark.parametrize("viewing_distance_cm", [57, 80, 100])
+def test_color_masking_circles_keep_equal_diameters_at_every_soa(
+    tmp_path, viewing_distance_cm,
+):
+    project = masking_project(("color",))
+    project.settings.display.viewing_distance_cm = viewing_distance_cm
+    project.settings.display.screen_width_cm = 60.96
+    project.settings.display.screen_width_px = 1920
+    project.settings.display.screen_height_px = 1080
+    circles = []
+    visual = SimpleNamespace(ShapeStim=lambda _window, **kwargs: circles.append(kwargs))
+    for condition in project.conditions:
+        run = compile_run_spec(
+            project, condition_id=condition.condition_id, project_root=tmp_path,
+            refresh_hz=60, random_seed=124,
+        )
+        assert run.scene_stream is not None
+        circles.clear()
+        for definition in run.scene_stream.visuals:
+            if definition.kind == "circle":
+                psychopy_scenes.prepare_scene_visual(visual, object(), tmp_path, definition)
+        # Base, all four targets and mask must scale together with monitor calibration.
+        assert len(circles) == 6
+        assert {(circle["units"], circle["size"]) for circle in circles} == {
+            ("deg", (5, 5))
+        }
 
 
 def test_scene_resources_prime_sync_calibration_and_cleanup(monkeypatch, tmp_path):

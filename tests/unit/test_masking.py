@@ -1,16 +1,21 @@
 """Independent source-design invariants for masking compilation and task linkage."""
 
+import json
 from collections import Counter
 
 import pytest
+from PIL import Image
 
 from fpvs_studio.core.compiler import CompileError, compile_run_spec, compile_session_plan
 from fpvs_studio.core.condition_modifiers import assign_modifier
 from fpvs_studio.core.enums import PresentationUnit
 from fpvs_studio.core.masking_presets import apply_masking_timing_defaults, create_masking_modifier
 from fpvs_studio.core.models import Condition, ProjectFile, ProjectMeta
+from fpvs_studio.core.project_config import export_project_config
+from fpvs_studio.core.scene_models import SceneVisual
 from fpvs_studio.core.serialization import load_project_file, save_project_file
 from fpvs_studio.core.validation import validate_display_refresh, validate_project
+from fpvs_studio.runtime.masking_report import write_masking_plan_checkpoint
 from fpvs_studio.runtime.preflight import PreflightError, preflight_session_plan
 
 
@@ -109,6 +114,78 @@ def test_nominal_source_frames_questions_and_independent_triplet_randomization(t
     )
 
 
+@pytest.mark.parametrize("random_seed", [7, 124])
+def test_nine_condition_markers_survive_shuffled_repeats_and_exports(tmp_path, random_seed):
+    project = masking_project(("color", "faces", "number"))
+    expected_codes = {
+        f"{variant}-{soa_index + 1}": variant_index * 3 + soa_index + 1
+        for variant_index, variant in enumerate(("color", "faces", "number"))
+        for soa_index in range(3)
+    }
+    for condition in project.conditions:
+        condition.trigger_code = expected_codes[condition.condition_id]
+    for modifier in project.condition_modifiers:
+        settings = modifier.masking
+        if settings.variant != "faces":
+            continue
+        visuals = []
+        for index, identity in enumerate(("object-a", "object-b", "face")):
+            relative = f"stimuli/task-assets/{modifier.pre_task_ids[0]}/{identity}.png"
+            path = tmp_path / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            Image.new("RGB", (12, 10), color=(40 + 50 * index, 60, 20)).save(path)
+            visuals.append(SceneVisual(
+                kind="image", visual_id=identity, image_path=relative,
+                units="deg", size=(5, 5),
+            ))
+        settings.base_visuals = visuals[:2]
+        settings.target_visuals = visuals[2:]
+        settings.target_answers = {"face": "angry"}
+
+    plan = compile_session_plan(
+        project, project_root=tmp_path, refresh_hz=60, random_seed=random_seed,
+    )
+    preflight_session_plan(
+        tmp_path, plan, engine=ValidationEngine(), runtime_options={"strict_timing": False},
+    )
+    assert plan.total_runs == 27
+    assert Counter(entry.run_spec.condition.trigger_code for entry in plan.ordered_entries()) == {
+        code: 3 for code in range(1, 10)
+    }
+    for block_index, block in enumerate(plan.blocks):
+        expected_group_codes = set(range(3 * block_index + 1, 3 * block_index + 4))
+        for start in (0, 3, 6):
+            assert {
+                entry.run_spec.condition.trigger_code for entry in block.entries[start:start + 3]
+            } == expected_group_codes
+        for entry in block.entries:
+            expected = expected_codes[entry.condition_id]
+            assert entry.run_spec.condition.trigger_code == expected
+            assert entry.run_spec.scene_stream.soa_frames == (1, 3, 6)[(expected - 1) % 3]
+            assert [
+                (event.frame_index, event.code, event.label)
+                for event in entry.run_spec.trigger_events
+            ] == [(0, expected, "condition_start")]
+
+    config = export_project_config(project, tmp_path)
+    assert {condition.condition_id: condition.trigger_code for condition in config.conditions} == (
+        expected_codes
+    )
+    assert config.toolbox.event_map == expected_codes
+    checkpoint = write_masking_plan_checkpoint(
+        tmp_path, plan, participant_number="synthetic", participant_session_number=1,
+    )
+    assert checkpoint is not None
+    saved = json.loads(checkpoint.read_text(encoding="utf-8"))["session_plan"]
+    for block in saved["blocks"]:
+        for entry in block["entries"]:
+            expected = expected_codes[entry["condition_id"]]
+            assert entry["run_spec"]["condition"]["trigger_code"] == expected
+            assert entry["run_spec"]["trigger_events"] == [
+                {"frame_index": 0, "code": expected, "label": "condition_start"},
+            ]
+
+
 def test_inter_run_fixation_moves_only_in_compiled_plan_preserving_visual_order(tmp_path):
     project = masking_project(("color",))
     for module in project.task_modules:
@@ -155,8 +232,9 @@ def test_incompatible_masking_fixation_relocation_is_rejected(tmp_path, customiz
 
 def test_exact_palette_and_source_geometry():
     color = create_masking_modifier().modifier.masking
-    assert color.base_visuals[0].units == "cm"
-    assert color.mask_visuals[0].units == "deg"
+    for visual in [*color.base_visuals, *color.target_visuals, *color.mask_visuals]:
+        assert visual.units == "deg"
+        assert visual.size == (5, 5)
     assert color.target_visuals[0].rgb == (0.97, 0.36, 0.37)
     assert color.target_visuals[0].line_rgb == color.target_visuals[0].rgb
     assert color.target_visuals[0].edges is None

@@ -150,7 +150,7 @@ def create_masking_modifier(
             SceneVisual(
                 visual_id="gray-base",
                 kind="circle",
-                units="cm",
+                units="deg",
                 size=(5, 5),
                 rgb=(0.57, 0.57, 0.57),
                 line_rgb=(0.57, 0.57, 0.57),
@@ -158,7 +158,7 @@ def create_masking_modifier(
         ]
         settings.mask_visuals = [
             settings.base_visuals[0].model_copy(
-                update={"visual_id": "gray-mask", "units": "deg"},
+                update={"visual_id": "gray-mask"},
                 deep=True,
             )
         ]

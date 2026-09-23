@@ -95,7 +95,7 @@ def test_native_source_roles_fit_and_preserve_exact_fields(
     assert settings.model_dump() == original
 
 
-def test_native_palette_edit_retains_rgb_precision_and_separate_mask_units(
+def test_native_palette_edit_retains_rgb_precision_and_matching_circle_units(
     qtbot, tmp_path: Path,
 ) -> None:
     settings = create_masking_modifier().modifier.masking
@@ -108,7 +108,8 @@ def test_native_palette_edit_retains_rgb_precision_and_separate_mask_units(
     result = dialog.settings
     assert result.target_visuals[0].rgb == (0.971234567, 0.36, 0.37)
     assert result.target_visuals[0].edges is None
-    assert result.base_visuals[0].units == "cm"
+    assert result.base_visuals[0].units == "deg"
+    assert result.target_visuals[0].units == "deg"
     assert result.mask_visuals[0].units == "deg"
     assert settings.target_visuals[0].rgb[0] == 0.97
 
