@@ -48,6 +48,7 @@ from fpvs_studio.gui.condition_task_dialog import (
     TaskOptionDraft,
     TaskParticipantPreview,
     TaskStepDraft,
+    TaskStepEditor,
     _module_from_draft,
     _module_to_draft,
     build_condition_task_models,
@@ -434,6 +435,38 @@ def test_pre_task_binding_start_gate_replacement_roundtrips(tmp_path: Path) -> N
     assert pre_bindings == [binding]
     assert post_bindings == []
     assert copies == []
+
+
+def test_native_circle_styles_and_spatial_shuffle_survive_task_editor(qtbot, tmp_path) -> None:
+    module = TaskModule(
+        task_id="masking-report", name="Masking response",
+        steps=[TaskStep(
+            step_id="choice", kind=TaskStepKind.CHOICE_GRID,
+            layout_mode=TaskLayoutMode.EXACT, randomize_positions=True,
+            degree_geometry="linear",
+            text="What target color did you see?", prompt_y=10,
+            prompt_height=2.5, prompt_width=40, show_footer=False,
+            items=[TaskDisplayItem(
+                item_id="color", modality=TaskItemModality.CIRCLE, width=5, height=5,
+                x=-5, y=5, color_rgb=(0.91, -0.4387, -0.602),
+                line_color_rgb=(1, 1, 1), circle_edges=64, selectable=True,
+            )],
+        )],
+    )
+    draft = _module_to_draft(module, TaskBinding(task_id=module.task_id))
+    editor = TaskStepEditor(tmp_path)
+    qtbot.addWidget(editor)
+    editor.resize(1100, 720)
+    editor.set_step(draft.steps[0])
+    editor.show()
+    QApplication.processEvents()
+    assert editor.randomize_options_checkbox.isChecked()
+    assert editor.option_table.options()[0].shape == "circle"
+    updated = editor.step()
+    assert updated is not None
+    draft.steps[0] = updated
+    assert _module_from_draft(draft) == module
+    _assert_visible_non_scroll_children_within_parent(editor)
 
 
 def test_condition_task_dialog_apply_is_lossless_after_visiting_every_step(

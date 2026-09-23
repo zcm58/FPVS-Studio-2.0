@@ -242,8 +242,11 @@ Use a new output directory for each publication. Do not save dry-run JSON there:
 publisher reads every `*.json` in the selected directory and rejects dry-run reports.
 
 Preparation includes referenced stimulus sets, original and declared derived images,
-authored word lists, task media and the complete project's tasks/modifiers. It omits
-unrelated media and files outside the declared asset closure, including logs, runs,
+authored word lists, task media and the complete project's tasks/modifiers.
+Modifier-owned base, target, mask, backdrop and fixation images use the same contained
+asset ownership as ordinary bundle exports. A canonical
+`stimuli/manifest.json` is still required, including an empty one for native-only projects.
+The exporter omits unrelated media and files outside the declared asset closure, including logs, runs,
 caches, receipt folders and credentials. It clears participant electrode selections,
 the source monitor name and app-local condition-profile identity. Every Library
 bundle sets `settings.triggers.serial_port` to `COM3`, including preparation from an

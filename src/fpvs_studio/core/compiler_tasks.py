@@ -20,10 +20,12 @@ from fpvs_studio.core.condition_modifiers import (
 from fpvs_studio.core.models import Condition, ProjectFile
 from fpvs_studio.core.paths import resolve_project_relative_path
 from fpvs_studio.core.run_spec import RunSpec
+from fpvs_studio.core.session_plan import SessionEntry
 from fpvs_studio.core.task_models import (
     BackwardCountingConfig,
     BackwardCountingRole,
     BackwardCountingSpec,
+    ConditionModifierKind,
     ImageMemoryRole,
     ImageMemorySpec,
     ModifierProvenance,
@@ -35,10 +37,55 @@ from fpvs_studio.core.task_models import (
     TaskPhase,
     TaskQuestionKind,
     TaskStep,
+    TaskStepKind,
     TaskStepSpec,
 )
 
 SUPPORTED_TASK_IMAGE_SUFFIXES = frozenset({".jpg", ".jpeg", ".png"})
+
+
+def relocate_masking_lead_ins(entries: list[SessionEntry]) -> None:
+    """Keep authored cross-to-stream timing clear of inter-run preparation and exports.
+
+    Only a masking group's inter-run trailing fixation moves; the source order on
+    screen stays break, fixation, stream. Its authored identity and modifier provenance
+    stay intact, but its response record belongs to the next entry's pre-condition phase.
+    The final cross and thanks remain post-condition, and editable modules are unchanged.
+    """
+    for current, following in zip(entries, entries[1:], strict=False):
+        for module_index, module in enumerate(current.post_tasks):
+            if module.modifier is None or module.modifier.kind != ConditionModifierKind.MASKING:
+                continue
+            for step_index, step in enumerate(module.steps):
+                if step.step_id != "masking-break-fixation":
+                    continue
+                if (
+                    module_index != len(current.post_tasks) - 1
+                    or step_index != len(module.steps) - 1
+                    or module.repeat_count != 1
+                    or any(item.branch_rules or item.repeat_count != 1 for item in module.steps)
+                    or step.kind not in {TaskStepKind.INSTRUCTION, TaskStepKind.TIMED_FEEDBACK}
+                    or step.duration_seconds is None
+                    or step.continue_key is not None
+                    or step.allowed_keys
+                    or step.require_response
+                    or step.questions
+                    or any(item.selectable for item in step.items)
+                    or step.max_attempts != 1
+                ):
+                    raise CompileError(
+                        "Masking break fixation must be the final, timed non-response screen "
+                        "of a single-pass, branch-free final post-task."
+                    )
+                lead_in = module.model_copy(
+                    deep=True, update={"phase": TaskPhase.PRE_CONDITION, "steps": [step]},
+                )
+                following.pre_tasks.insert(0, lead_in)
+                if len(module.steps) == 1:
+                    current.post_tasks.pop(module_index)
+                else:
+                    module.steps = module.steps[:-1]
+                break
 
 
 @dataclass(frozen=True)
@@ -94,6 +141,8 @@ def compile_condition_tasks(
     run_spec: RunSpec | None = None,
     global_order_index: int = 0,
     inputs: TaskCompilationInputs | None = None,
+    stream_group_index: int | None = None,
+    stream_group_count: int | None = None,
 ) -> list[TaskModuleSpec]:
     """Compile the applicable task bindings for one concrete session entry."""
 
@@ -112,6 +161,8 @@ def compile_condition_tasks(
             block_index=block_index,
             block_count=block_count,
             global_order_index=global_order_index,
+            stream_group_index=stream_group_index,
+            stream_group_count=stream_group_count,
         ):
             continue
         module = modules.get(binding.task_id)
@@ -154,6 +205,28 @@ def compile_condition_tasks(
             )
         )
     if phase == TaskPhase.POST_CONDITION:
+        from fpvs_studio.core.masking import condition_masking
+
+        masking = condition_masking(project, condition)
+        if masking is not None:
+            if run_spec is None or run_spec.scene_stream is None:
+                raise CompileError("Masking identification requires the compiled run target.")
+            target_id = run_spec.scene_stream.target_id
+            if target_id is None or target_id not in masking.target_answers:
+                raise CompileError("The masking run target is missing its identification answer.")
+            answer_id = masking.target_answers[target_id]
+            for compiled_module in compiled:
+                for step in compiled_module.steps:
+                    if step.step_id != "masking-identification":
+                        continue
+                    if answer_id not in {item.item_id for item in step.items if item.selectable}:
+                        raise CompileError(
+                            "The presented masking target has no identification option."
+                        )
+                    for item in step.items:
+                        if item.selectable:
+                            item.correct = item.item_id == answer_id
+                            item.score = float(item.correct)
         for compiled_module in compiled:
             if compiled_module.task_id == RECALL_TASK_ID:
                 if run_spec is None:
@@ -219,6 +292,8 @@ def _binding_applies(
     block_index: int,
     block_count: int,
     global_order_index: int = 0,
+    stream_group_index: int | None = None,
+    stream_group_count: int | None = None,
 ) -> bool:
     if binding.occurrence == TaskOccurrence.EVERY_ENTRY:
         return True
@@ -226,6 +301,14 @@ def _binding_applies(
         return block_index == 0
     if binding.occurrence == TaskOccurrence.FIRST_SESSION_ENTRY:
         return global_order_index == 0
+    if binding.occurrence == TaskOccurrence.FIRST_STREAM_GROUP_ENTRY:
+        if stream_group_index is None:
+            raise CompileError("First stream-group tasks require a compiled masking group.")
+        return stream_group_index == 0
+    if binding.occurrence == TaskOccurrence.LAST_STREAM_GROUP_ENTRY:
+        if stream_group_index is None or stream_group_count is None:
+            raise CompileError("Last stream-group tasks require a compiled masking group.")
+        return stream_group_index == stream_group_count - 1
     return block_index == block_count - 1
 
 
@@ -569,6 +652,14 @@ def _compile_task_step(
             inputs.asset(task_id, item.image_path)
     if step.randomize_options:
         rng.shuffle(items)
+    if step.randomize_positions:
+        selectable = [item for item in items if item.selectable]
+        slots = [(item.x, item.y, item.unit) for item in selectable]
+        rng.shuffle(selectable)
+        for item, (x, y, unit) in zip(selectable, slots, strict=True):
+            item.x, item.y, item.unit = x, y, unit
+        stationary = [item for item in items if not item.selectable]
+        items = stationary + selectable
 
     questions = []
     question_option_orders: dict[str, list[str]] = {}

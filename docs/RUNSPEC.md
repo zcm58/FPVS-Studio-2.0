@@ -38,6 +38,10 @@ classification and explicit separation. Compiled contract versions are unchanged
 
 ## Timing model
 
+Native masking scenes use the additional `scene_stream` contract with independent
+inclusive onset/exclusive offset frame windows and ordered native visual draws.
+They do not also carry a legacy stimulus sequence. See [Masking](MASKING.md).
+
 All execution timing in `RunSpec` is represented in frames.
 
 For a project-selected base rate:

@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
 from fpvs_studio.core.enums import ExperimentCategory, PresentationUnit, StimulusModality
 from fpvs_studio.core.experiment_categories import category_conflict_condition_ids
 from fpvs_studio.core.frame_validation import FrameValidationError
+from fpvs_studio.core.masking import condition_masking, is_masking_project
 from fpvs_studio.core.models import AttentionalBlinkStreamSettings, ConditionTemplateProfile
 from fpvs_studio.core.validation import condition_fixation_guidance
 from fpvs_studio.gui.assets_pages import AssetsPage
@@ -310,7 +311,8 @@ class SetupWizardPage(QWidget):
 
         self.progress_steps = SetupProgressStepper(
             tuple(
-                "Character Size" if key == "image_size" and is_letter_stream_project(document)
+                "Display Geometry" if key == "image_size" and is_masking_project(document.project)
+                else "Character Size" if key == "image_size" and is_letter_stream_project(document)
                 else title for key, title in _WIZARD_STEPS
             ),
             parent=self,
@@ -609,8 +611,12 @@ class SetupWizardPage(QWidget):
         )
         self.image_size_settings_card = self._settings_step_card(
             self.image_display_size_editor,
-            title="Character Size" if is_letter_stream_project(self._document) else "Image Size",
-            subtitle="Set the on-screen stimulus size and calibrate the viewing geometry.",
+            title=("Display Geometry" if is_masking_project(self._document.project)
+                   else "Character Size" if is_letter_stream_project(self._document)
+                   else "Image Size"),
+            subtitle=("Calibrate the display used by your masking stimuli and questions."
+                      if is_masking_project(self._document.project) else
+                      "Set the on-screen stimulus size and calibrate the viewing geometry."),
             object_name="setup_wizard_image_size_settings_card",
         )
         self.image_size_step_surface = _SetupStepSurface(
@@ -981,7 +987,8 @@ class SetupWizardPage(QWidget):
             "conditions": "Configure your conditions",
             "design": "Design your sequence",
             "experiment": "Set your timing and session",
-            "image_size": "Set your character size" if is_letter_stream_project(self._document)
+            "image_size": "Calibrate your display" if is_masking_project(self._document.project)
+            else "Set your character size" if is_letter_stream_project(self._document)
             else "Set your image size",
             "fixation": "Configure fixation",
             "response": "Configure responses and appearance",
@@ -1195,6 +1202,7 @@ class SetupWizardPage(QWidget):
         protocol = project.settings.protocol
         is_ab = project.experiment_category == ExperimentCategory.ATTENTIONAL_BLINK
         letter_stream = is_letter_stream_project(self._document)
+        masking_project = is_masking_project(project)
         cadence_summary = (
             f"{protocol.base_hz:g} slots/s · target pair every {protocol.oddball_every_n} "
             f"({protocol.oddball_hz:g} Hz)"
@@ -1215,6 +1223,9 @@ class SetupWizardPage(QWidget):
         modes = sorted({_timing_template_label(item.duty_cycle_mode) for item in conditions})
         mode_summary = modes[0] if len(modes) == 1 else f"Mixed presentation ({len(modes)} modes)"
         size_summary = presentation_defaults_summary(project.settings.presentation.defaults)
+        if masking_project:
+            mode_summary = "Native masking stimuli and participant questions"
+            size_summary = "Exact appearance is configured in each masking modifier"
         if letter_stream:
             mode_summary = (
                 "Letter distractors and target digits" if session.randomize_across_blocks
@@ -1276,7 +1287,8 @@ class SetupWizardPage(QWidget):
             ),
             (
                 "image_size",
-                "Character Size" if letter_stream else "Image Size",
+                "Display Geometry" if masking_project else "Character Size" if letter_stream
+                else "Image Size",
                 (
                     size_summary,
                     f"Viewing distance: {display.viewing_distance_cm:g} cm · "
@@ -1421,6 +1433,8 @@ class SetupWizardPage(QWidget):
                 return f"Enter a descriptive name for condition {index}"
             if not is_guided_trigger_code(condition.trigger_code):
                 return f"Set a trigger code above 0 for {condition.name}"
+            if condition_masking(self._document.project, condition) is not None:
+                continue
             for role, set_id in (
                 ("base", condition.base_stimulus_set_id),
                 ("oddball", condition.oddball_stimulus_set_id),
@@ -1438,7 +1452,9 @@ class SetupWizardPage(QWidget):
         if category_conflict_condition_ids(self._document.project):
             return "Separate oddball conditions in Conditions before editing this design"
         if not _conditions_have_assigned_assets(self._document, conditions):
-            return "Choose the image sources for every condition in Design"
+            return ("Configure the sources in each masking modifier"
+                    if any(condition_masking(self._document.project, item) for item in conditions)
+                    else "Choose the image sources for every condition in Design")
         return self.design_setup_step.validation_message()
 
     def _focus_step_blocker(self) -> None:

@@ -59,8 +59,12 @@ class ResolvedTaskItem:
     position_px: tuple[float, float] = (0.0, 0.0)
     size_px: tuple[float, float] | None = None
     text_height_px: float = 32.0
-    color: str = "white"
+    color: str | tuple[float, float, float] = "white"
     selectable: bool = False
+    shape: Literal["circle"] | None = None
+    line_color_rgb: tuple[float, float, float] | None = None
+    line_width_px: float = 1.0
+    circle_edges: int | None = None
 
 
 @dataclass(frozen=True)
@@ -78,6 +82,8 @@ class ResolvedTaskStep:
     continue_key: str = "space"
     submit_key: str = "return"
     duration_s: float | None = None
+    duration_frames: int | None = None
+    clear_after_duration: bool = False
     timeout_s: float | None = None
     required: bool = True
     minimum_selections: int = 1
@@ -90,11 +96,13 @@ class ResolvedTaskStep:
     prompt: str | None = None
     prompt_position_px: tuple[float, float] | None = None
     prompt_height_px: float | None = None
+    prompt_width_px: float | None = None
     show_footer: bool = True
     repeat_index: int = 0
     question_id: str | None = None
     font_family: str = "Arial"
     submit_label: str = "Submit"
+    background_rgb: tuple[float, float, float] | None = None
 
 
 @dataclass(frozen=True)
@@ -226,6 +234,21 @@ class PresentationEngine(ABC):
         trigger_backend: TriggerBackend | None = None,
     ) -> RunExecutionSummary:
         """Execute a compiled condition run."""
+
+    def prepare_condition(
+        self,
+        run_spec: RunSpec,
+        project_root: Path,
+        *,
+        runtime_options: Mapping[str, object] | None = None,
+    ) -> None:
+        """Stage condition resources before runtime presents timed pre-task screens.
+
+        Engines without deferred preparation need no additional work here. Native
+        scene engines use this boundary to keep uploads out of authored timing.
+        """
+
+        return None
 
     @abstractmethod
     def show_completion_screen(

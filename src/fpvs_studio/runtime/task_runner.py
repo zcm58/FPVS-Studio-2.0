@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from fpvs_studio.core.display_geometry import visual_angle_width_px
 from fpvs_studio.core.enums import PresentationUnit
@@ -57,12 +57,27 @@ class TaskResponseCheckpoint:
     ) -> None:
         self._path = path
         self._on_response = on_response
+        self._deferred: list[TaskResponseRecord] = []
 
     @property
     def path(self) -> Path | None:
         return self._path
 
     def append(self, record: TaskResponseRecord) -> None:
+        self.flush()
+        self._append_record(record)
+
+    def defer(self, record: TaskResponseRecord) -> None:
+        """Buffer non-input timing records until the display leaves its timed transition."""
+        self._deferred.append(record)
+
+    def flush(self) -> None:
+        """Persist buffered timing records in their original response order."""
+        while self._deferred:
+            self._append_record(self._deferred[0])
+            self._deferred.pop(0)
+
+    def _append_record(self, record: TaskResponseRecord) -> None:
         if self._path is not None:
             self._path.parent.mkdir(parents=True, exist_ok=True)
             append_task_response_checkpoint(self._path, record)
@@ -92,13 +107,14 @@ def run_task_modules(
     response_start_index: int = 0,
     checkpoint: TaskResponseCheckpoint | None = None,
     backward_counting: BackwardCountingSession | None = None,
+    terminal: bool = False,
 ) -> TaskFlowOutcome:
     """Execute compiled modules in order, preserving module-level repeat semantics."""
 
     responses: list[TaskResponseRecord] = []
     checkpoint = checkpoint or TaskResponseCheckpoint(None)
     backward_counting = backward_counting or BackwardCountingSession()
-    for module in modules:
+    for module_index, module in enumerate(modules):
         validate_task_module_repeat_capacity(module)
         selection_history: dict[tuple[str, str, str | None], set[str]] = {}
         for module_repeat_index in range(module.repeat_count):
@@ -114,6 +130,8 @@ def run_task_modules(
                 checkpoint=checkpoint,
                 backward_counting=backward_counting,
                 selection_history=selection_history,
+                terminal=(terminal and module_index == len(modules) - 1
+                          and module_repeat_index == module.repeat_count - 1),
             )
             responses.extend(outcome.responses)
             if outcome.aborted:
@@ -138,6 +156,7 @@ def _run_module_once(
     checkpoint: TaskResponseCheckpoint,
     backward_counting: BackwardCountingSession,
     selection_history: dict[tuple[str, str, str | None], set[str]],
+    terminal: bool = False,
 ) -> TaskFlowOutcome:
     responses: list[TaskResponseRecord] = []
     answer_lookup: dict[str, object] = {}
@@ -168,6 +187,8 @@ def _run_module_once(
                 selection_history=selection_history,
                 checkpoint=checkpoint,
                 backward_counting=backward_counting,
+                terminal=(terminal and step_index == len(module.steps) - 1
+                          and step_repeat_index == step.repeat_count - 1),
             )
             for record in rendered:
                 responses.append(record)
@@ -253,6 +274,7 @@ def _run_step(
     selection_history: dict[tuple[str, str, str | None], set[str]],
     checkpoint: TaskResponseCheckpoint,
     backward_counting: BackwardCountingSession,
+    terminal: bool = False,
 ) -> list[TaskResponseRecord]:
     if step.kind == TaskStepKind.QUESTIONNAIRE:
         records: list[TaskResponseRecord] = []
@@ -312,6 +334,7 @@ def _run_step(
                 step,
                 run_spec=run_spec,
                 forbidden_ids=forbidden_ids,
+                clear_after_duration=terminal,
             ),
             project_root,
         )
@@ -330,7 +353,15 @@ def _run_step(
         )
         record = backward_counting.record(module, record)
         records.append(record)
-        checkpoint.append(record)
+        if (
+            run_spec.scene_stream is not None
+            and step.duration_seconds is not None
+            and record.response_kind == TaskResponseKind.NONE
+            and not record.aborted
+        ):
+            checkpoint.defer(record)
+        else:
+            checkpoint.append(record)
         if record.aborted or not _should_retry(step, record, attempt_index):
             break
     return records
@@ -354,6 +385,7 @@ def _resolved_step(
     *,
     run_spec: RunSpec,
     forbidden_ids: set[str] | None = None,
+    clear_after_duration: bool = False,
 ) -> ResolvedTaskStep:
     items_by_id = {item.item_id: item for item in step.items}
     ordered_ids = step.realized_item_order or [item.item_id for item in step.items]
@@ -376,6 +408,11 @@ def _resolved_step(
         allowed_keys=tuple(step.allowed_keys),
         continue_key=step.continue_key or "space",
         duration_s=step.duration_seconds,
+        duration_frames=_scene_task_duration_frames(step, run_spec=run_spec),
+        clear_after_duration=(
+            clear_after_duration and run_spec.scene_stream is not None
+            and step.duration_seconds is not None and _step_response_kind(step) == "none"
+        ),
         timeout_s=step.timeout_seconds,
         required=step.require_response,
         minimum_selections=step.min_selections,
@@ -384,7 +421,9 @@ def _resolved_step(
         submit_label=step.submit_label,
         prompt_position_px=_prompt_position_px(step, run_spec=run_spec),
         prompt_height_px=_prompt_height_px(step, run_spec=run_spec),
+        prompt_width_px=_prompt_width_px(step, run_spec=run_spec),
         show_footer=step.show_footer,
+        background_rgb=(run_spec.scene_stream.background_rgb if run_spec.scene_stream else None),
     )
 
 
@@ -432,6 +471,7 @@ def _resolved_question_step(
         prompt=question.prompt,
         items=items,
         duration_s=step.duration_seconds,
+        duration_frames=_scene_task_duration_frames(step, run_spec=run_spec),
         timeout_s=step.timeout_seconds,
         required=question.required,
         minimum_selections=minimum,
@@ -445,8 +485,19 @@ def _resolved_question_step(
         question_id=question.question_id,
         prompt_position_px=_prompt_position_px(step, run_spec=run_spec),
         prompt_height_px=_prompt_height_px(step, run_spec=run_spec),
+        prompt_width_px=_prompt_width_px(step, run_spec=run_spec),
         show_footer=step.show_footer,
+        background_rgb=(run_spec.scene_stream.background_rgb if run_spec.scene_stream else None),
     )
+
+
+def _scene_task_duration_frames(step: TaskStepSpec, *, run_spec: RunSpec) -> int | None:
+    """Quantize native-scene screens to the display's frame schedule."""
+    if run_spec.scene_stream is None or step.duration_seconds is None:
+        return None
+    from fpvs_studio.core.frame_validation import frames_per_stimulus
+
+    return frames_per_stimulus(run_spec.display.refresh_hz, 1.0 / step.duration_seconds)
 
 
 def _prompt_position_px(
@@ -457,15 +508,25 @@ def _prompt_position_px(
     if step.layout_mode.value != "exact":
         return None
     return (
-        _layout_value_px(step.prompt_x, step.prompt_unit, run_spec=run_spec, signed=True),
-        _layout_value_px(step.prompt_y, step.prompt_unit, run_spec=run_spec, signed=True),
+        _layout_value_px(step.prompt_x, step.prompt_unit, run_spec=run_spec, signed=True,
+                         degree_geometry=step.degree_geometry),
+        _layout_value_px(step.prompt_y, step.prompt_unit, run_spec=run_spec, signed=True,
+                         degree_geometry=step.degree_geometry),
     )
 
 
 def _prompt_height_px(step: TaskStepSpec, *, run_spec: RunSpec) -> float | None:
     if step.prompt_height is None:
         return None
-    return _layout_value_px(step.prompt_height, step.prompt_unit, run_spec=run_spec)
+    return _layout_value_px(step.prompt_height, step.prompt_unit, run_spec=run_spec,
+                            degree_geometry=step.degree_geometry)
+
+
+def _prompt_width_px(step: TaskStepSpec, *, run_spec: RunSpec) -> float | None:
+    if step.prompt_width is None:
+        return None
+    return _layout_value_px(step.prompt_width, step.prompt_unit, run_spec=run_spec,
+                            degree_geometry=step.degree_geometry)
 
 
 def _resolved_display_item(
@@ -473,16 +534,21 @@ def _resolved_display_item(
     *,
     run_spec: RunSpec,
     selectable: bool | None = None,
+    degree_geometry: Literal["visual_angle", "linear"] = "visual_angle",
 ) -> ResolvedTaskItem:
-    x_px = _layout_value_px(item.x, item.unit, run_spec=run_spec, signed=True)
-    y_px = _layout_value_px(item.y, item.unit, run_spec=run_spec, signed=True)
+    x_px = _layout_value_px(item.x, item.unit, run_spec=run_spec, signed=True,
+                            degree_geometry=degree_geometry)
+    y_px = _layout_value_px(item.y, item.unit, run_spec=run_spec, signed=True,
+                            degree_geometry=degree_geometry)
     width_px = (
-        _layout_value_px(item.width, item.unit, run_spec=run_spec)
+        _layout_value_px(item.width, item.unit, run_spec=run_spec,
+                         degree_geometry=degree_geometry)
         if item.width is not None
         else None
     )
     height_px = (
-        _layout_value_px(item.height, item.unit, run_spec=run_spec)
+        _layout_value_px(item.height, item.unit, run_spec=run_spec,
+                         degree_geometry=degree_geometry)
         if item.height is not None
         else None
     )
@@ -502,8 +568,14 @@ def _resolved_display_item(
             1.0,
             PresentationUnit.DEGREES,
             run_spec=run_spec,
+            degree_geometry=degree_geometry,
         ),
         selectable=item.selectable if selectable is None else selectable,
+        color=item.color_rgb if item.color_rgb is not None else "white",
+        shape="circle" if item.modality.value == "circle" else None,
+        line_color_rgb=item.line_color_rgb,
+        line_width_px=item.line_width_px,
+        circle_edges=item.circle_edges,
     )
 
 
@@ -521,6 +593,7 @@ def _resolved_display_items(
             item,
             run_spec=run_spec,
             selectable=item.selectable and item.item_id not in (forbidden_ids or set()),
+            degree_geometry=step.degree_geometry,
         )
         for item in items
     ]
@@ -660,9 +733,15 @@ def _layout_value_px(
     *,
     run_spec: RunSpec,
     signed: bool = False,
+    degree_geometry: Literal["visual_angle", "linear"] = "visual_angle",
 ) -> float:
     if unit == PresentationUnit.WINDOW_HEIGHT_FRACTION:
         return float(value) * float(run_spec.display.screen_height_px)
+    if degree_geometry == "linear":
+        return (
+            float(value) * 0.017455 * run_spec.display.viewing_distance_cm
+            * run_spec.display.screen_width_px / run_spec.display.screen_width_cm
+        )
     if signed and value == 0:
         return 0.0
     magnitude = float(

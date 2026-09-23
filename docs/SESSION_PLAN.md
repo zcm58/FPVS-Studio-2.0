@@ -1,7 +1,10 @@
 # SessionPlan Contract
 
 `SessionPlan` is the compiled multi-condition session contract for FPVS Studio.
-Its current persisted contract is schema `1.2.0`; each embedded `RunSpec` retains its
+Ordinary sessions retain schema `1.2.0`; masking sessions use `1.3.0` with an
+explicit authored task flow and variant-group ordering. See [Masking](MASKING.md)
+for its `RunSpec`/project versions and first/last stream-group task scopes.
+The original embedded `RunSpec` retains its
 independent `1.1.0` timed-presentation contract. Editable `ProjectFile` uses schema
 `1.3.0`. Schema `1.0.0`, `1.1.0`, and `1.2.0` projects are migrated in memory before
 compilation and are not rewritten merely by loading or launching them. That one-time

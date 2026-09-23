@@ -30,6 +30,7 @@ from fpvs_studio.runtime.attentional_blink_report import AttentionalBlinkSession
 from fpvs_studio.runtime.backward_counting import BackwardCountingSession
 from fpvs_studio.runtime.export_modes import EXPORT_MODE_FULL
 from fpvs_studio.runtime.fixation import build_fixation_task_summary, score_fixation_responses
+from fpvs_studio.runtime.masking_report import write_masking_plan_checkpoint
 from fpvs_studio.runtime.preflight import PreflightError
 from fpvs_studio.runtime.session_export import (
     append_compact_task_responses,
@@ -113,6 +114,10 @@ class RuntimeWorker:
                 )
             else:
                 trigger_start_index = len(trigger_backend.records)
+                if run_spec.scene_stream is not None:
+                    self._engine.prepare_condition(
+                        run_spec, project_root, runtime_options=runtime_options,
+                    )
                 if self._show_run_start(run_spec):
                     run_summary = _build_start_aborted_summary(
                         run_spec,
@@ -263,10 +268,15 @@ class RuntimeWorker:
 
         execution_error: Exception | None = None
         running_post_tasks = False
+        task_checkpoint: TaskResponseCheckpoint | None = None
 
         try:
             self._engine.open_session(runtime_options=runtime_options)
             session_open = True
+            write_masking_plan_checkpoint(
+                project_root, session_plan, participant_number=participant_number,
+                participant_session_number=participant_session_number,
+            )
             if ordered_entries:
                 _validate_configured_display_resolution(self._engine, ordered_entries[0].run_spec)
                 tutorial_outcome = self._show_participant_tutorial(
@@ -279,6 +289,10 @@ class RuntimeWorker:
                 if abort_reason is not None:
                     break
                 _validate_configured_display_resolution(self._engine, entry.run_spec)
+                if entry.run_spec.scene_stream is not None:
+                    self._engine.prepare_condition(
+                        entry.run_spec, project_root, runtime_options=runtime_options,
+                    )
                 blink_recorder.start_entry(entry)
                 task_checkpoint = TaskResponseCheckpoint(
                     compact_task_checkpoint.path if compact_task_checkpoint is not None
@@ -296,6 +310,7 @@ class RuntimeWorker:
                     backward_counting=backward_counting,
                 )
                 if pre_task_outcome.aborted:
+                    task_checkpoint.flush()
                     run_summary = _build_start_aborted_summary(
                         entry.run_spec,
                         engine_name=self._engine.engine_id,
@@ -416,6 +431,7 @@ class RuntimeWorker:
                         trigger_start_index=trigger_start_index,
                         warnings=(),
                     )
+                task_checkpoint.flush()
                 task_summary_update: dict[str, object] = {
                     "task_responses": list(pre_task_outcome.responses),
                     "participant_session_number": participant_session_number,
@@ -442,7 +458,9 @@ class RuntimeWorker:
                         response_start_index=len(run_summary.task_responses),
                         checkpoint=task_checkpoint,
                         backward_counting=backward_counting,
+                        terminal=entry.run_spec.scene_stream is not None,
                     )
+                    task_checkpoint.flush()
                     update: dict[str, object] = {
                         "task_flow_completed": not post_task_outcome.aborted,
                         "task_responses": [
@@ -494,14 +512,15 @@ class RuntimeWorker:
                     )
                     break
 
-                if self._show_block_break(entry, session_plan):
+                if (not session_plan.authored_task_flow
+                        and self._show_block_break(entry, session_plan)):
                     abort_reason = (
                         f"Session aborted during the inter-block break after block "
                         f"{entry.block_index + 1}."
                     )
                     break
 
-            if abort_reason is None:
+            if abort_reason is None and not session_plan.authored_task_flow:
                 completion_aborted = self._engine.show_completion_screen(
                     completed_condition_count=len(run_results),
                     total_condition_count=session_plan.total_runs,
@@ -519,6 +538,14 @@ class RuntimeWorker:
                     "task_abort_reason": f"{type(exc).__name__}: {exc}",
                 })
         finally:
+            try:
+                if task_checkpoint is not None:
+                    task_checkpoint.flush()
+            except Exception as exc:
+                if execution_error is None:
+                    execution_error = exc
+                else:
+                    LOGGER.exception("Task checkpoint also failed after session interruption.")
             try:
                 if session_open:
                     self._engine.close_session()

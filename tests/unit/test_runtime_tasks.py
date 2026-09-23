@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 from PIL import ImageFont
+from pydantic import ValidationError
 from tests.unit.runtime_launcher_helpers import StubEngine
 from tests.unit.test_runtime_preflight import _PreflightEngine
 
@@ -20,6 +21,7 @@ from fpvs_studio.core.task_models import (
     TaskFontFamily,
     TaskItemModality,
     TaskLayoutMode,
+    TaskModule,
     TaskModuleSpec,
     TaskOccurrence,
     TaskOption,
@@ -28,6 +30,7 @@ from fpvs_studio.core.task_models import (
     TaskQuestionKind,
     TaskStepKind,
     TaskStepSpec,
+    task_requires_scene_schema,
 )
 from fpvs_studio.engines import psychopy_tasks
 from fpvs_studio.engines.base import ResolvedTaskItem, ResolvedTaskStep, TaskEngineInput
@@ -77,6 +80,405 @@ def _compiled_run(sample_project, sample_project_root):
         project_root=sample_project_root,
         run_id="task-test-run",
     )
+
+
+def test_native_circle_task_preserves_signed_rgb_and_rejects_invalid_shapes() -> None:
+    item = TaskDisplayItem(
+        item_id="red", modality=TaskItemModality.CIRCLE,
+        width=5.0, height=5.0, color_rgb=(0.91, -0.4387, -0.602),
+        line_color_rgb=(1.0, 1.0, 1.0), selectable=True,
+    )
+    assert TaskDisplayItem.model_validate_json(item.model_dump_json()) == item
+    assert item.color_rgb == (0.91, -0.4387, -0.602)
+    assert item.circle_edges is None
+    for color in ((1.01, 0, 0), (0, float("nan"), 0), (0, 0, float("inf"))):
+        with pytest.raises(ValidationError, match="RGB channels"):
+            TaskDisplayItem.model_validate({**item.model_dump(), "color_rgb": color})
+    for update, message in (
+        ({"width": None}, "require width and height"),
+        ({"text": "circle"}, "may not store text"),
+        ({"circle_edges": 2}, "greater than or equal to 3"),
+        ({"line_width_px": float("inf")}, "must be finite"),
+    ):
+        with pytest.raises(ValidationError, match=message):
+            TaskDisplayItem.model_validate({**item.model_dump(), **update})
+    with pytest.raises(ValidationError, match="Only circle"):
+        TaskDisplayItem(
+            item_id="text", modality=TaskItemModality.TEXT, text="Text",
+            line_color_rgb=(1, 1, 1),
+        )
+
+
+def test_legacy_task_serialization_omits_unused_native_visual_fields() -> None:
+    step = TaskStepSpec(
+        step_id="study", kind=TaskStepKind.STUDY, random_seed=1, continue_key="space",
+        items=[TaskDisplayItem(item_id="word", modality="text", text="Word")],
+    )
+    serialized = step.model_dump()
+    assert "prompt_width" not in serialized
+    assert "randomize_positions" not in serialized
+    assert "degree_geometry" not in serialized
+    assert not {"color_rgb", "line_color_rgb", "line_width_px", "circle_edges"}.intersection(
+        serialized["items"][0]
+    )
+    module = TaskModule(task_id="study", name="Study", steps=[step])
+    assert not task_requires_scene_schema(module)
+    module.steps[0].items[0].color_rgb = (1, -1, -1)
+    assert task_requires_scene_schema(module)
+    assert module.model_dump()["steps"][0]["items"][0]["color_rgb"] == (1, -1, -1)
+
+
+def test_task_position_randomization_requires_explicit_exact_choice_grid() -> None:
+    payload = {
+        "step_id": "choice", "kind": "choice_grid", "random_seed": 1,
+        "layout_mode": "exact", "randomize_positions": True,
+        "items": [TaskDisplayItem(
+            item_id="red", modality=TaskItemModality.CIRCLE, width=5, height=5,
+            selectable=True,
+        )],
+    }
+    assert TaskStepSpec.model_validate(payload).randomize_positions
+    for update in (
+        {"layout_mode": "responsive_grid"}, {"randomize_options": True}, {"kind": "study"},
+    ):
+        with pytest.raises(ValidationError, match="Position randomization"):
+            TaskStepSpec.model_validate({**payload, **update})
+
+
+@pytest.mark.parametrize("degree_geometry", ["visual_angle", "linear"])
+def test_runtime_resolves_native_task_color_geometry_and_prompt_wrap(
+    sample_project, sample_project_root, degree_geometry,
+) -> None:
+    from fpvs_studio.core.display_geometry import visual_angle_width_px
+    from fpvs_studio.core.scene_models import SceneEvent, SceneStreamSpec, SceneVisual
+
+    run = _compiled_run(sample_project, sample_project_root)
+    if degree_geometry == "linear":
+        run = run.model_copy(update={"scene_stream": SceneStreamSpec(
+            visuals=[SceneVisual(
+                visual_id="base", kind="circle", units="deg", size=(5, 5),
+            )],
+            events=[SceneEvent(visual_id="base", start_frame=0, duration_frames=1)],
+            background_rgb=(0.1234, 0.2345, 0.3456), requested_soa_ms=50, soa_frames=3,
+        )})
+    step = TaskStepSpec(
+        step_id="target-choice", kind=TaskStepKind.CHOICE_GRID,
+        layout_mode=TaskLayoutMode.EXACT, text="What target color did you see?",
+        degree_geometry=degree_geometry,
+        prompt_y=10, prompt_height=2.5, prompt_width=40,
+        show_footer=False, require_response=True, random_seed=1,
+        items=[
+            TaskDisplayItem(
+                item_id="color", modality=TaskItemModality.CIRCLE,
+                x=-5, y=5, width=5, height=5,
+                color_rgb=(0.91, -0.4387, -0.602), line_color_rgb=(1, 1, 1),
+                line_width_px=1.5, circle_edges=64, selectable=True, correct=True,
+            ),
+            TaskDisplayItem(
+                item_id="cross", modality=TaskItemModality.TEXT, text="+",
+                height=0.025, unit=PresentationUnit.WINDOW_HEIGHT_FRACTION,
+                color_rgb=(1, -1, -1),
+            ),
+        ],
+    )
+    engine = _TaskEngine([TaskEngineInput(selected_item_ids=("color",))])
+    outcome = run_task_modules(
+        engine, [_module(step)], project_root=sample_project_root, run_spec=run,
+        block_index=0, global_order_index=0,
+    )
+    resolved = engine.rendered_steps[0]
+    assert resolved.background_rgb == (
+        (0.1234, 0.2345, 0.3456) if degree_geometry == "linear" else None
+    )
+    circle, cross = resolved.items
+    assert circle.shape == "circle"
+    assert circle.color == (0.91, -0.4387, -0.602)
+    assert circle.line_color_rgb == (1, 1, 1)
+    assert (circle.line_width_px, circle.circle_edges) == (1.5, 64)
+    assert cross.color == (1, -1, -1)
+    assert cross.text_height_px == pytest.approx(run.display.screen_height_px * 0.025)
+    if degree_geometry == "linear":
+        pixels_per_degree = (
+            0.017455 * run.display.viewing_distance_cm
+            * run.display.screen_width_px / run.display.screen_width_cm
+        )
+        width = 40 * pixels_per_degree
+        assert circle.position_px == pytest.approx((-5 * pixels_per_degree,
+                                                    5 * pixels_per_degree))
+        assert circle.size_px == pytest.approx((5 * pixels_per_degree, 5 * pixels_per_degree))
+        assert resolved.prompt_position_px == pytest.approx((0, 10 * pixels_per_degree))
+        assert resolved.prompt_height_px == pytest.approx(2.5 * pixels_per_degree)
+    else:
+        width = visual_angle_width_px(
+            degrees=40, viewing_distance_cm=run.display.viewing_distance_cm,
+            screen_width_cm=run.display.screen_width_cm,
+            screen_width_px=run.display.screen_width_px,
+        )
+    assert resolved.prompt_width_px == pytest.approx(width)
+    assert outcome.responses[0].correct is True
+
+
+def test_native_task_rendering_uses_source_circle_and_unquantized_rgb(tmp_path: Path) -> None:
+    calls: list[dict[str, object]] = []
+
+    class _Stim:
+        def __init__(self, *args, **kwargs) -> None:
+            calls.append(kwargs)
+
+    class _Visual:
+        ShapeStim = _Stim
+        TextStim = _Stim
+
+    _prepare_item_stimuli(
+        visual=_Visual, window=object(), project_root=tmp_path,
+        items=(
+            ResolvedTaskItem(
+                item_id="circle", shape="circle", size_px=(100, 100),
+                color=(0.91, -0.4387, -0.602), line_color_rgb=(1, 1, 1),
+            ),
+            ResolvedTaskItem(
+                item_id="cross", text="+", color=(1, -1, -1), text_height_px=20,
+            ),
+        ),
+        font_family="Open Sans",
+    )
+    assert calls[0]["vertices"] == "circle"
+    assert calls[0]["colorSpace"] == "rgb"
+    assert calls[0]["fillColor"] == (0.91, -0.4387, -0.602)
+    assert calls[0]["lineColor"] == (1, 1, 1)
+    assert calls[0]["lineWidth"] == 1.0
+    assert calls[0]["interpolate"] is True
+    assert calls[1]["color"] == (1, -1, -1)
+    assert calls[1]["font"] == "Open Sans"
+
+
+def test_native_circle_rejects_corner_click_and_accepts_valid_right_click(tmp_path: Path) -> None:
+    class _Window:
+        size = (1280, 720)
+        mouseVisible = False
+        flip_count = 0
+        colorSpace = "rgb255"
+        color = (0, 0, 0)
+
+        def flip(self) -> None:
+            assert self.colorSpace == "rgb"
+            assert self.color == (0.0, 0.0, 0.0)
+            self.flip_count += 1
+
+    window = _Window()
+    hit_tests: list[tuple[float, float]] = []
+
+    class _Shape:
+        def __init__(self, *args, **kwargs) -> None:
+            assert kwargs["vertices"] == "circle"
+
+        def draw(self) -> None:
+            pass
+
+        def contains(self, position, *, units) -> bool:
+            assert units == "pix"
+            hit_tests.append(position)
+            return position[0] ** 2 + position[1] ** 2 <= 50 ** 2
+
+    class _Visual:
+        ShapeStim = _Shape
+
+    class _Clock:
+        def getTime(self) -> float:
+            return window.flip_count * 0.1
+
+    class _Core:
+        Clock = _Clock
+
+    class _Keyboard:
+        def clearEvents(self) -> None:
+            pass
+
+        def getKeys(self, **kwargs) -> list[object]:
+            return []
+
+    class _Mouse:
+        def getPressed(self):
+            return ((0, 0, 0), (1, 0, 0), (0, 0, 0), (0, 0, 1))[window.flip_count]
+
+        def getPos(self):
+            return (40.0, 40.0) if window.flip_count == 1 else (0.0, 0.0)
+
+    class _Event:
+        @staticmethod
+        def Mouse(**kwargs):
+            return _Mouse()
+
+    result = render_task_step(
+        visual=_Visual, core=_Core, event=_Event, window=window, keyboard=_Keyboard(),
+        project_root=tmp_path, is_aborted=lambda: False, set_aborted=lambda: None,
+        step=ResolvedTaskStep(
+            task_id="masking", step_id="choice", kind="choice_grid",
+            response_kind="single_choice", show_footer=False,
+            background_rgb=(0.0, 0.0, 0.0),
+            items=(ResolvedTaskItem(
+                item_id="color", shape="circle", size_px=(100, 100), selectable=True,
+            ),),
+        ),
+    )
+    assert hit_tests == [(40.0, 40.0), (0.0, 0.0)]
+    assert result.selected_item_ids == ("color",)
+    assert result.mouse_button == 2
+    assert result.reaction_time_s == pytest.approx(0.3)
+    assert window.colorSpace == "rgb255"
+    assert window.color == (0, 0, 0)
+
+
+@pytest.mark.parametrize("duration_seconds", [1.0, 2.0])
+@pytest.mark.parametrize("native_scene", [False, True])
+@pytest.mark.parametrize("terminal", [False, True])
+def test_only_scene_backed_timed_tasks_resolve_frame_duration(
+    sample_project, sample_project_root, duration_seconds, native_scene, terminal,
+) -> None:
+    from fpvs_studio.core.scene_models import SceneEvent, SceneStreamSpec, SceneVisual
+
+    run = _compiled_run(sample_project, sample_project_root)
+    if native_scene:
+        run = run.model_copy(update={"scene_stream": SceneStreamSpec(
+            visuals=[SceneVisual(visual_id="base", kind="circle", size=(5, 5))],
+            events=[SceneEvent(visual_id="base", start_frame=0, duration_frames=1)],
+            requested_soa_ms=50, soa_frames=3,
+        )})
+    engine = _TaskEngine([TaskEngineInput()])
+    run_task_modules(
+        engine, [_module(TaskStepSpec(
+            step_id="fixation", kind=TaskStepKind.TIMED_FEEDBACK,
+            duration_seconds=duration_seconds, text="+", random_seed=1,
+        ))],
+        project_root=sample_project_root, run_spec=run, block_index=0, global_order_index=0,
+        terminal=terminal,
+    )
+    resolved = engine.rendered_steps[0]
+    assert resolved.duration_s == duration_seconds
+    assert resolved.duration_frames == (int(duration_seconds * 60) if native_scene else None)
+    assert resolved.clear_after_duration is (native_scene and terminal)
+
+
+@pytest.mark.parametrize("duration_seconds", [1.0, 2.0])
+@pytest.mark.parametrize("frame_duration", [False, True])
+@pytest.mark.parametrize("terminal", [False, True])
+def test_timed_scene_screen_presents_exact_frames_without_changing_ordinary_tasks(
+    tmp_path, monkeypatch, duration_seconds, frame_duration, terminal,
+) -> None:
+    from types import SimpleNamespace
+
+    draws = []
+    monkeypatch.setattr(psychopy_tasks, "_draw_step", lambda **kwargs: draws.append(kwargs))
+
+    class Window:
+        flip_count = 0
+
+        def __init__(self):
+            self.callbacks = []
+
+        def callOnFlip(self, callback):
+            self.callbacks.append(callback)
+
+        def flip(self):
+            self.flip_count += 1
+            assert self.flip_count < 180, "Timed screen did not finish"
+            callbacks, self.callbacks = self.callbacks, []
+            for callback in callbacks:
+                callback()
+
+    window = Window()
+
+    class Clock:
+        onset_frame = 0
+
+        def reset(self):
+            self.onset_frame = window.flip_count
+
+        def getTime(self):
+            return (window.flip_count - self.onset_frame) / 60
+
+    keyboard = SimpleNamespace(clock=Clock(), clearEvents=lambda: None, getKeys=lambda **_: [])
+    frame_count = int(duration_seconds * 60)
+    result = render_task_step(
+        visual=object(), core=SimpleNamespace(Clock=Clock), event=object(),
+        window=window, keyboard=keyboard, project_root=tmp_path,
+        is_aborted=lambda: False, set_aborted=lambda: None,
+        step=ResolvedTaskStep(
+            task_id="masking", step_id="timed", kind="timed_feedback", response_kind="none",
+            duration_s=duration_seconds,
+            duration_frames=frame_count if frame_duration else None,
+            clear_after_duration=frame_duration and terminal,
+        ),
+    )
+    expected_flips = frame_count if frame_duration else frame_count + 1
+    assert window.flip_count == expected_flips + int(frame_duration and terminal)
+    assert len(draws) == expected_flips
+    assert result.reaction_time_s == pytest.approx((expected_flips - 1) / 60)
+    assert not result.timed_out
+    assert not result.aborted
+
+
+@pytest.mark.parametrize("native_scene, aborted", [(True, False), (True, True), (False, False)])
+def test_timed_scene_records_defer_io_until_flush_but_aborts_persist_immediately(
+    sample_project, sample_project_root, tmp_path, native_scene, aborted,
+) -> None:
+    from fpvs_studio.core.scene_models import SceneEvent, SceneStreamSpec, SceneVisual
+
+    run = _compiled_run(sample_project, sample_project_root)
+    if native_scene:
+        run = run.model_copy(update={"scene_stream": SceneStreamSpec(
+            visuals=[SceneVisual(visual_id="base", kind="circle", size=(5, 5))],
+            events=[SceneEvent(visual_id="base", start_frame=0, duration_frames=1)],
+            requested_soa_ms=50, soa_frames=3,
+        )})
+    path = tmp_path / "task_responses.jsonl"
+    notified = []
+    checkpoint = TaskResponseCheckpoint(path, on_response=notified.append)
+    outcome = run_task_modules(
+        _TaskEngine([TaskEngineInput(aborted=aborted)]), [_module(_feedback_step())],
+        project_root=sample_project_root, run_spec=run, block_index=0, global_order_index=0,
+        checkpoint=checkpoint,
+    )
+    deferred = native_scene and not aborted
+    assert path.exists() is not deferred
+    assert notified == ([] if deferred else list(outcome.responses))
+    checkpoint.flush()
+    assert notified == list(outcome.responses)
+    assert len(path.read_text().splitlines()) == 1
+    checkpoint.flush()
+    assert len(path.read_text().splitlines()) == 1
+
+
+def test_next_input_flushes_deferred_timing_record_first(
+    sample_project, sample_project_root, tmp_path,
+) -> None:
+    from fpvs_studio.core.scene_models import SceneEvent, SceneStreamSpec, SceneVisual
+
+    run = _compiled_run(sample_project, sample_project_root).model_copy(update={
+        "scene_stream": SceneStreamSpec(
+            visuals=[SceneVisual(visual_id="base", kind="circle", size=(5, 5))],
+            events=[SceneEvent(visual_id="base", start_frame=0, duration_frames=1)],
+            requested_soa_ms=50, soa_frames=3,
+        ),
+    })
+    path = tmp_path / "responses.jsonl"
+    notified = []
+    checkpoint = TaskResponseCheckpoint(path, on_response=notified.append)
+    run_task_modules(
+        _TaskEngine([TaskEngineInput()]), [_module(_feedback_step())],
+        project_root=sample_project_root, run_spec=run, block_index=0, global_order_index=0,
+        checkpoint=checkpoint,
+    )
+    assert not path.exists()
+    run_task_modules(
+        _TaskEngine([TaskEngineInput(selected_item_ids=("apple",))]), [_module(_choice_step())],
+        project_root=sample_project_root, run_spec=run, block_index=0, global_order_index=0,
+        checkpoint=checkpoint,
+    )
+    assert [record.step_id for record in notified] == ["correct-feedback", "recognition-grid"]
+    assert [json.loads(line)["step_id"] for line in path.read_text().splitlines()] == [
+        "correct-feedback", "recognition-grid",
+    ]
 
 
 def _choice_step(*, retry: bool = False) -> TaskStepSpec:
@@ -1239,6 +1641,7 @@ def test_exact_step_can_suppress_generic_footer() -> None:
             response_kind="continue",
             body="Study these items.",
             prompt_position_px=(0, 0),
+            prompt_width_px=600.25,
             show_footer=False,
         ),
         item_stimuli={},
@@ -1248,6 +1651,7 @@ def test_exact_step_can_suppress_generic_footer() -> None:
     )
 
     assert [call["text"] for call in text_calls] == ["Study these items."]
+    assert text_calls[0]["wrapWidth"] == 600.25
 
 
 def test_compact_session_persists_task_answers_under_logs_without_runs_folder(

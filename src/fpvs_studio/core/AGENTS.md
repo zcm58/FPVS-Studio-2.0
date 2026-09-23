@@ -25,6 +25,8 @@ This directory is the most important foundation in the repo. It should remain im
 - validation
 - project scaffolding helpers
 - compilation of editable project state into a neutral `RunSpec`
+- native masking pools and exact within-item frame compilation in `masking.py`,
+  `compiler_masking.py`, and `scene_models.py`; see `docs/MASKING.md`
 - migration/versioning placeholders
 
 ## Modeling rules

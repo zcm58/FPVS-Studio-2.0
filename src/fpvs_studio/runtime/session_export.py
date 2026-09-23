@@ -38,6 +38,11 @@ from fpvs_studio.core.serialization import (
 from fpvs_studio.core.session_plan import SessionEntry, SessionPlan
 from fpvs_studio.core.task_models import TaskResponseRecord
 from fpvs_studio.core.validation import validate_display_refresh
+from fpvs_studio.runtime.masking_report import (
+    MASKING_SCENE_EVENTS_FILENAME,
+    MASKING_SCENE_EVENTS_HEADER,
+    masking_scene_event_rows,
+)
 from fpvs_studio.runtime.participant_history import (
     ParticipantSessionNumberSource,
     infer_participant_session_numbers,
@@ -529,6 +534,9 @@ def write_run_artifacts(output_dir: Path, run_spec: RunSpec, summary: RunExecuti
     if summary.runtime_metadata is not None:
         write_json_file(output_dir / "runtime_metadata.json", summary.runtime_metadata)
     write_json_file(output_dir / "display_report.json", _display_report_for_run(run_spec))
+    if run_spec.scene_stream is not None:
+        _write_csv(output_dir / MASKING_SCENE_EVENTS_FILENAME, MASKING_SCENE_EVENTS_HEADER,
+                   masking_scene_event_rows(run_spec, summary))
     if isinstance(run_spec.attentional_blink, AttentionalBlinkRunSpec):
         _write_csv(
             output_dir / ATTENTIONAL_BLINK_EVENTS_FILENAME,
@@ -696,6 +704,15 @@ def write_session_artifacts(
     write_json_file(output_dir / "session_plan.json", session_plan)
     _write_execution_summary(output_dir / "session_summary.json", summary)
     ab_results = {result.run_id: result for result in summary.run_results}
+    scene_entries = [entry for entry in session_plan.ordered_entries()
+                     if entry.run_spec.scene_stream is not None and entry.run_id in ab_results]
+    if scene_entries:
+        _write_csv(
+            output_dir / MASKING_SCENE_EVENTS_FILENAME, MASKING_SCENE_EVENTS_HEADER,
+            (row for entry in scene_entries for row in masking_scene_event_rows(
+                entry.run_spec, ab_results[entry.run_id], entry=entry,
+            )),
+        )
     ab_entries = [
         entry for entry in session_plan.ordered_entries()
         if isinstance(entry.run_spec.attentional_blink, AttentionalBlinkRunSpec)
@@ -974,7 +991,26 @@ def _append_session_condition_history_unlocked(
                   "run_id"),
     )
     _append_attentional_blink_events(project_root, session_plan, summary)
+    _append_masking_scene_events(project_root, session_plan, summary)
     return path
+
+
+def _append_masking_scene_events(
+    project_root: Path, session_plan: SessionPlan, summary: SessionExecutionSummary,
+) -> None:
+    """Commit numbered scene rows idempotently under the caller's reporting lock."""
+    results = {result.run_id: result for result in summary.run_results}
+    entries = [entry for entry in session_plan.ordered_entries()
+               if entry.run_spec.scene_stream is not None and entry.run_id in results]
+    if entries:
+        _commit_numbered_rows(
+            logs_dir(project_root) / MASKING_SCENE_EVENTS_FILENAME, MASKING_SCENE_EVENTS_HEADER,
+            (row for entry in entries for row in masking_scene_event_rows(
+                entry.run_spec, results[entry.run_id], entry=entry,
+            )),
+            identity=("project_id", "participant_number", "participant_session_number",
+                      "session_id", "run_id", "event_index"),
+        )
 
 
 ATTENTIONAL_BLINK_EVENTS_HEADER = [

@@ -34,6 +34,7 @@ from fpvs_studio.core.enums import (
     ImageGeometryMode,
     StimulusModality,
 )
+from fpvs_studio.core.masking import is_masking_project
 from fpvs_studio.core.models import AttentionalBlinkStreamSettings, DisplayValidationReport
 from fpvs_studio.core.validation import (
     APPROVED_MONITOR_REFRESH_RATES_HZ,
@@ -1049,6 +1050,13 @@ class ImageDisplaySizeEditor(QWidget):
     def refresh(self) -> None:
         display = self._document.project.settings.display
         geometry = self._document.project.settings.presentation.defaults.image_geometry
+        masking = is_masking_project(self._document.project)
+        self.width_degrees_spin.setVisible(not masking)
+        width_label = self.form_layout.labelForField(self.width_degrees_spin)
+        if width_label is not None:
+            width_label.setVisible(not masking)
+        self.full_screen_preview_button.setVisible(not masking)
+        self.configure_presentation_button.setVisible(not masking)
         width_is_authoritative = geometry.width_degrees is not None
         height_driven_natural = (
             geometry.mode == ImageGeometryMode.NATURAL_ASPECT and geometry.width_degrees is None
@@ -1073,6 +1081,15 @@ class ImageDisplaySizeEditor(QWidget):
             self.screen_height_px_spin.setValue(display.screen_height_px)
         self.screen_width_px_spin.setEnabled(not display.use_current_screen_resolution)
         self.screen_height_px_spin.setEnabled(not display.use_current_screen_resolution)
+        if masking:
+            self.preview_value_label.setText(
+                "Calibrate the display here. Each masking modifier preserves its own "
+                "stimulus size, position and colors."
+            )
+            self.presentation_summary_label.setText(
+                "Edit native circles, faces, letters and numbers in Condition Modifiers."
+            )
+            return
         self.full_screen_preview_button.setEnabled(not height_driven_natural)
         self.full_screen_preview_button.setToolTip(
             "Unavailable for height-constrained Natural Aspect because the width follows "

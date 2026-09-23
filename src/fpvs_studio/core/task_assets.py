@@ -5,13 +5,19 @@ from __future__ import annotations
 import hashlib
 import shutil
 import tempfile
+from collections.abc import Sequence
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from fpvs_studio.core.paths import (
     resolve_project_relative_path,
     validate_project_relative_path,
 )
 from fpvs_studio.core.task_models import TaskModule, validate_task_slug
+
+if TYPE_CHECKING:
+    from fpvs_studio.core.condition_modifiers import ConditionModifier
+    from fpvs_studio.core.scene_models import SceneVisual
 
 SUPPORTED_TASK_ASSET_SUFFIXES = frozenset({".jpg", ".jpeg", ".png"})
 
@@ -36,6 +42,40 @@ def task_image_references(task: TaskModule) -> list[str]:
             ),
         ]
     ]
+
+
+def modifier_scene_visuals(modifier: ConditionModifier) -> list[SceneVisual]:
+    """Enumerate all authored native visuals, including non-sampled decorations."""
+    settings = modifier.masking
+    if settings is None:
+        return []
+    return [
+        *settings.base_visuals, *settings.target_visuals, *(settings.mask_visuals or []),
+        *settings.base_overlays,
+        *([settings.fixation_visual] if settings.fixation_visual is not None else []),
+    ]
+
+
+def modifier_image_references(modifier: ConditionModifier) -> list[str]:
+    """Return scene media owned by the modifier's first pre-condition task."""
+    return [visual.image_path for visual in modifier_scene_visuals(modifier)
+            if visual.image_path is not None]
+
+
+def owned_image_references(
+    tasks: Sequence[TaskModule], modifiers: Sequence[ConditionModifier] = (),
+) -> list[tuple[str, str]]:
+    """Collect portable media with explicit task ownership and lexical containment."""
+    references = [(task.task_id, path) for task in tasks for path in task_image_references(task)]
+    references.extend(
+        (modifier.pre_task_ids[0], path)
+        for modifier in modifiers for path in modifier_image_references(modifier)
+    )
+    for owner, path in references:
+        prefix = f"stimuli/task-assets/{owner}/"
+        if not validate_project_relative_path(path).startswith(prefix):
+            raise TaskAssetError(f"Task '{owner}' asset must live beneath '{prefix}': {path}")
+    return references
 
 
 def copy_task_asset(

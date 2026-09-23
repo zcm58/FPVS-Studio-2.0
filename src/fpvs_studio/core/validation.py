@@ -28,6 +28,7 @@ from fpvs_studio.core.frame_validation import (
     validate_blank_mode_frames,
     validate_sinusoidal_mode_frames,
 )
+from fpvs_studio.core.masking import condition_masking
 from fpvs_studio.core.models import (
     AttentionalBlinkSettings,
     AttentionalBlinkStreamSettings,
@@ -895,7 +896,21 @@ def validate_project(
                     location=f"conditions.{condition.condition_id}.name",
                     message="Condition name may not be empty.",
                 )
-            )
+        )
+        masking = condition_masking(project, condition)
+        if masking is not None:
+            from fpvs_studio.core.compiler_masking import validate_masking_settings
+
+            try:
+                validate_masking_settings(
+                    project, condition, masking,
+                    refresh_hz or project.settings.display.preferred_refresh_hz or 60.0,
+                )
+            except ValueError as exc:
+                issues.append(ValidationIssue(
+                    location=f"conditions.{condition.condition_id}.masking", message=str(exc),
+                ))
+            continue
         if condition.base_stimulus_set_id not in stimulus_sets:
             issues.append(
                 ValidationIssue(

@@ -15,20 +15,26 @@ from pathlib import Path
 from typing import Literal
 from uuid import uuid4
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 
 from fpvs_studio.core.condition_modifiers import (
+    ConditionModifier,
     ModifierDefinition,
     modifier_task_ids,
     validate_image_memory_definition,
 )
 from fpvs_studio.core.models import ProjectFile
 from fpvs_studio.core.paths import filesystem_path, resolve_project_relative_path, templates_dir
-from fpvs_studio.core.task_assets import SUPPORTED_TASK_ASSET_SUFFIXES, task_image_references
+from fpvs_studio.core.task_assets import (
+    SUPPORTED_TASK_ASSET_SUFFIXES,
+    modifier_scene_visuals,
+    owned_image_references,
+)
 from fpvs_studio.core.task_models import (
     ConditionModifierKind,
     TaskBaseModel,
     TaskModule,
+    task_requires_scene_schema,
     validate_task_slug,
 )
 
@@ -40,7 +46,7 @@ class ModifierPresetError(ValueError):
 class ModifierPreset(TaskBaseModel):
     """A versioned local copy; no condition assignments or participant responses."""
 
-    schema_version: Literal["1.0.0"] = "1.0.0"
+    schema_version: Literal["1.0.0", "1.1.0"] = "1.0.0"
     preset_id: str
     name: str = Field(min_length=1, max_length=200)
     description: str = Field(default="", max_length=16_384)
@@ -57,6 +63,12 @@ class ModifierPreset(TaskBaseModel):
         if not value.strip():
             raise ValueError("Preset name may not be blank.")
         return value.strip()
+
+    @model_validator(mode="after")
+    def validate_scene_version(self) -> ModifierPreset:
+        if _requires_scene_schema(self.definition) and self.schema_version != "1.1.0":
+            raise ValueError("Native scene modifier presets require schema 1.1.0.")
+        return self
 
 
 def modifier_presets_dir(fpvs_root: Path) -> Path:
@@ -82,7 +94,8 @@ def load_modifier_preset(fpvs_root: Path, preset_id: str) -> ModifierPreset:
     if preset.preset_id != preset_id:
         raise ModifierPresetError(f"Preset identity does not match its folder: {preset_id}")
     _validate_definition(preset.definition)
-    _asset_sources(preset.definition.task_modules, path.parent, None)
+    _asset_sources(preset.definition.task_modules, path.parent, None,
+                   modifiers=[preset.definition.modifier])
     return preset
 
 
@@ -113,27 +126,35 @@ def _validate_definition(definition: ModifierDefinition) -> None:
         validate_image_memory_definition(definition, allow_incomplete=True)
 
 
+def _requires_scene_schema(definition: ModifierDefinition) -> bool:
+    return definition.modifier.masking is not None or any(
+        task_requires_scene_schema(task) for task in definition.task_modules
+    )
+
+
 def _asset_sources(
     tasks: Sequence[TaskModule],
     source_root: Path,
     overrides: Mapping[str, Path] | None,
+    *, modifiers: Sequence[ConditionModifier] = (),
 ) -> dict[str, Path]:
     sources: dict[str, Path] = {}
-    for task in tasks:
-        prefix = f"stimuli/task-assets/{task.task_id}/"
-        for relative in task_image_references(task):
-            if not relative.startswith(prefix):
-                raise ModifierPresetError(f"Task '{task.task_id}' image must be beneath {prefix}")
-            # Validate even when a staged override supplies the actual source.
-            contained = resolve_project_relative_path(source_root, relative)
-            source = filesystem_path(
-                Path(overrides[relative]) if overrides and relative in overrides else contained
-            )
-            if source.suffix.lower() not in SUPPORTED_TASK_ASSET_SUFFIXES:
-                raise ModifierPresetError(f"Unsupported modifier image: {source.name}")
-            if not source.is_file():
-                raise ModifierPresetError(f"Modifier image is missing: {relative}")
-            sources[relative] = source
+    try:
+        references = owned_image_references(tasks, modifiers)
+    except ValueError as exc:
+        raise ModifierPresetError(str(exc)) from exc
+    for _owner, relative in references:
+        # Validate even when a staged override supplies the actual source.
+        contained = resolve_project_relative_path(source_root, relative)
+        source = filesystem_path(
+            Path(overrides[relative]) if overrides and relative in overrides else contained
+        )
+        if (source.suffix.lower() not in SUPPORTED_TASK_ASSET_SUFFIXES
+                or Path(relative).suffix.lower() not in SUPPORTED_TASK_ASSET_SUFFIXES):
+            raise ModifierPresetError(f"Unsupported modifier image: {source.name}")
+        if not source.is_file():
+            raise ModifierPresetError(f"Modifier image is missing: {relative}")
+        sources[relative] = source
     return sources
 
 
@@ -201,7 +222,8 @@ def apply_modifier_project(
             modifier=modifier,
             task_modules=[task for task in project.task_modules if task.task_id in owned],
         ))
-    sources = _asset_sources(project.task_modules, project_root, asset_sources)
+    sources = _asset_sources(project.task_modules, project_root, asset_sources,
+                             modifiers=project.condition_modifiers)
     _copy_assets(Path(project_root), sources)
     return project
 
@@ -215,7 +237,8 @@ def _remap_definition(
 ) -> tuple[ModifierDefinition, dict[str, Path]]:
     validate_task_slug(modifier_id, field_name="Modifier id")
     _validate_definition(definition)
-    sources = _asset_sources(definition.task_modules, source_root, asset_sources)
+    sources = _asset_sources(definition.task_modules, source_root, asset_sources,
+                             modifiers=[definition.modifier])
     task_ids = {
         task.task_id: f"{modifier_id}-task-{index + 1}"
         for index, task in enumerate(definition.task_modules)
@@ -250,6 +273,16 @@ def _remap_definition(
                 new_path = f"stimuli/task-assets/{task['task_id']}/{name}"
                 item["image_path"] = new_path
                 media[new_path] = source
+    copied_modifier = definition.modifier.model_copy(deep=True)
+    for visual in modifier_scene_visuals(copied_modifier):
+        if visual.image_path is None:
+            continue
+        source = sources[visual.image_path]
+        name = f"{_sha256(source)}{source.suffix.lower()}"
+        visual.image_path = f"stimuli/task-assets/{modifier['pre_task_ids'][0]}/{name}"
+        media[visual.image_path] = source
+    if copied_modifier.masking is not None:
+        modifier["masking"] = copied_modifier.masking.model_dump(mode="json")
     return ModifierDefinition.model_validate(payload), media
 
 
@@ -290,6 +323,7 @@ def save_modifier_preset(
         definition, source_root, modifier_id=chosen_id, asset_sources=asset_sources,
     )
     preset = ModifierPreset(
+        schema_version="1.1.0" if _requires_scene_schema(copied) else "1.0.0",
         preset_id=chosen_id, name=name, description=description, definition=copied,
     )
     destination = modifier_preset_root(fpvs_root, chosen_id)

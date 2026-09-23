@@ -54,6 +54,7 @@ from fpvs_studio.core.serialization import (
     replace_file_atomically,
     save_project_file,
 )
+from fpvs_studio.core.task_assets import owned_image_references
 from fpvs_studio.preprocessing.manifest import read_stimulus_manifest, write_stimulus_manifest
 from fpvs_studio.preprocessing.models import StimulusManifest
 
@@ -643,25 +644,13 @@ def _validate_bundle_source(
             _resolve_existing_relative_file(project_root, asset.source.relative_path)
             for derivative in asset.derivatives:
                 _resolve_existing_relative_file(project_root, derivative.relative_path)
-    for task in project.task_modules:
+    try:
+        task_paths = owned_image_references(project.task_modules, project.condition_modifiers)
+    except ValueError as exc:
+        raise ProjectBundleError(str(exc)) from exc
+    for _owner, task_path in task_paths:
         _check_cancelled(cancel_event)
-        prefix = f"stimuli/task-assets/{task.task_id}/"
-        for step in task.steps:
-            task_paths = [
-                item.image_path for item in step.items if item.image_path is not None
-            ] + [
-                option.image_path
-                for question in step.questions
-                for option in question.options
-                if option.image_path is not None
-            ]
-            for task_path in task_paths:
-                if not task_path.startswith(prefix):
-                    raise ProjectBundleError(
-                        f"Task '{task.task_id}' asset must live beneath '{prefix}': "
-                        f"{task_path}"
-                    )
-                _resolve_existing_relative_file(project_root, task_path)
+        _resolve_existing_relative_file(project_root, task_path)
     try:
         _check_cancelled(cancel_event)
         compile_session_plan(

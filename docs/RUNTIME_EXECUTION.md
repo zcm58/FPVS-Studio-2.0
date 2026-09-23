@@ -66,6 +66,13 @@ The engine never receives `ProjectFile`. It only receives one compiled
 `RunSpec`, the project root for asset resolution, and runtime-only launch
 options.
 
+Masking sessions carry `authored_task_flow`: their explicit task modules replace
+ordinary start gates, block breaks and the final completion page. Before participant
+input, `masking_report.py` checkpoints the full compiled scene plan. Full and compact
+exports retain planned frame events, exact visual properties, responses and available
+execution evidence; unmeasured display-onset timestamps stay empty. See
+[Masking](MASKING.md) for source fidelity and the visible acceptance path.
+
 Modular task clocks are separate from the FPVS clock. Runtime expands module repeats
 outside step repeats, renders questionnaire questions one at a time, evaluates bounded
 branch rules, validates raw engine input, applies authored retry policies, and records

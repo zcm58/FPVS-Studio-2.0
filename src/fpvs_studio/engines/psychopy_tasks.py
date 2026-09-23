@@ -106,7 +106,14 @@ def render_task_step(
         if callable(reset_task_clock):
             reset_task_clock()
 
+    previous_background = (
+        (window.colorSpace, window.color) if step.background_rgb is not None else None
+    )
+    presented_frames = 0
     try:
+        if step.background_rgb is not None:
+            window.colorSpace = "rgb"
+            window.color = step.background_rgb
         while True:
             elapsed_s = float(task_clock.getTime())
             if is_aborted():
@@ -130,6 +137,7 @@ def render_task_step(
                 text_box=text_box,
             )
             window.flip()
+            presented_frames += 1
 
             key_result = _handle_keys(
                 keyboard=keyboard,
@@ -270,7 +278,14 @@ def render_task_step(
                 validation_message = _validation_message(step, selected_item_ids, response_text)
 
             elapsed_s = float(task_clock.getTime())
-            if step.duration_s is not None and elapsed_s >= step.duration_s:
+            duration_complete = (
+                presented_frames >= step.duration_frames
+                if step.duration_frames is not None
+                else step.duration_s is not None and elapsed_s >= step.duration_s
+            )
+            if duration_complete:
+                if step.clear_after_duration:
+                    window.flip()
                 return _task_input(
                     step,
                     reaction_time_s=elapsed_s,
@@ -287,6 +302,8 @@ def render_task_step(
                     displayed_item_ids=displayed_item_ids,
                 )
     finally:
+        if previous_background is not None:
+            window.colorSpace, window.color = previous_background
         if step.response_kind in _EDITABLE_TEXT_RESPONSE_KINDS:
             keyboard.clearEvents()
         if text_box is not None:
@@ -312,6 +329,21 @@ def _prepare_item_stimuli(
 ) -> dict[str, Any]:
     stimuli: dict[str, Any] = {}
     for item in items:
+        if item.shape == "circle":
+            stimuli[item.item_id] = visual.ShapeStim(
+                window,
+                vertices=item.circle_edges if item.circle_edges is not None else "circle",
+                units="pix",
+                pos=item.position_px,
+                size=item.size_px,
+                colorSpace="rgb",
+                fillColor=item.color,
+                lineColor=item.line_color_rgb,
+                lineWidth=item.line_width_px,
+                interpolate=True,
+                autoLog=False,
+            )
+            continue
         if item.image_path is not None:
             stimuli[item.item_id] = visual.ImageStim(
                 window,
@@ -319,6 +351,8 @@ def _prepare_item_stimuli(
                 units="pix",
                 pos=item.position_px,
                 size=item.size_px,
+                color=item.color,
+                colorSpace="rgb",
                 autoLog=False,
             )
             continue
@@ -330,6 +364,7 @@ def _prepare_item_stimuli(
             pos=item.position_px,
             height=item.text_height_px,
             color=item.color,
+            colorSpace="rgb",
             wrapWidth=item.size_px[0] if item.size_px is not None else None,
             autoLog=False,
         )
@@ -476,7 +511,7 @@ def _draw_step(
             units="pix",
             height=step.prompt_height_px or max(22.0, window_height * 0.031),
             pos=prompt_position,
-            wrapWidth=_window_width(window) * 0.9,
+            wrapWidth=step.prompt_width_px or _window_width(window) * 0.9,
             color="white",
             autoLog=False,
         ).draw()

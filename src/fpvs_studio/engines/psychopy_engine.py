@@ -8,6 +8,7 @@ from __future__ import annotations
 import gc
 import logging
 from collections.abc import Mapping
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from functools import partial
 from importlib import import_module
@@ -46,6 +47,11 @@ from fpvs_studio.engines.graphics_readiness import (
 )
 from fpvs_studio.engines.psychopy_loader import load_psychopy_modules
 from fpvs_studio.engines.psychopy_metadata import runtime_metadata_for_run
+from fpvs_studio.engines.psychopy_scenes import (
+    estimate_scene_image_memory,
+    prepare_scene_resources,
+    scene_frame_draws,
+)
 from fpvs_studio.engines.psychopy_stimuli import (
     ConditionResourceCleanupError,
     PreparedConditionResources,
@@ -77,6 +83,18 @@ LOGGER = logging.getLogger(__name__)
 TIMING_DIAGNOSTIC_THRESHOLD_MULTIPLIER = 1.5
 
 
+@dataclass
+class _PreparedPlayback:
+    run_spec: RunSpec
+    project_root: Path
+    resources: PreparedConditionResources
+    default_fixation_stim: Any
+    graphics_readiness: GraphicsReadinessResult | None
+    playback_plan: list[
+        tuple[Any | None, Any, tuple[TriggerEvent, ...], tuple[FixationEvent, ...]]
+    ]
+
+
 def _draw_image_with_contrast(
     stimulus: Any,
     stimulus_draw: Any,
@@ -103,6 +121,7 @@ class PsychoPyEngine(PresentationEngine):
         self._runtime_options: dict[str, object] = {}
         self._aborted = False
         self._active_run_clock: Any | None = None
+        self._prepared_scene: _PreparedPlayback | None = None
 
     @property
     def engine_id(self) -> str:
@@ -284,6 +303,75 @@ class PsychoPyEngine(PresentationEngine):
             if hasattr(window, "frameIntervals"):
                 window.frameIntervals = []
 
+    def prepare_condition(
+        self,
+        run_spec: RunSpec,
+        project_root: Path,
+        *,
+        runtime_options: Mapping[str, object] | None = None,
+    ) -> None:
+        """Upload a scene before its authored instructions and timed fixation."""
+
+        if self._prepared_scene is not None:
+            raise RuntimeError("A prepared scene must be played or its session closed first.")
+        if run_spec.scene_stream is None:
+            return
+        self.open_session(runtime_options=runtime_options)
+        self._prepared_scene = self._prepare_condition_playback(run_spec, project_root)
+
+    def _prepare_condition_playback(
+        self, run_spec: RunSpec, project_root: Path,
+    ) -> _PreparedPlayback:
+        visual = self._require_visual()
+        window = self._require_window()
+        resources: PreparedConditionResources | None = None
+        try:
+            if run_spec.scene_stream is not None:
+                window.colorSpace = "rgb"
+                window.color = run_spec.scene_stream.background_rgb
+            else:
+                window.color = run_spec.display.background_color
+            default_fixation_stim = None
+            target_fixation_stim = None
+            fixation_stimuli: tuple[Any, ...] = ()
+            if run_spec.fixation.show_cross:
+                default_fixation_stim = create_fixation_stim(
+                    visual=visual, window=window, run_spec=run_spec,
+                    color=run_spec.fixation.default_color,
+                )
+                target_fixation_stim = create_fixation_stim(
+                    visual=visual, window=window, run_spec=run_spec,
+                    color=run_spec.fixation.target_color,
+                )
+                fixation_stimuli = (default_fixation_stim, target_fixation_stim)
+            graphics_context = self._graphics_readiness_before_preparation(
+                project_root, run_spec,
+            )
+            prepare_resources = (
+                prepare_scene_resources if run_spec.scene_stream is not None
+                else prepare_condition_resources
+            )
+            resources = prepare_resources(
+                visual=visual, window=window, project_root=project_root,
+                run_spec=run_spec, fixation_stimuli=fixation_stimuli,
+            )
+            if not resources.ready:
+                raise RuntimeError("Condition graphics resources did not reach READY state.")
+            readiness = self._graphics_readiness_after_preparation(graphics_context)
+            plan = self._build_playback_plan(
+                run_spec, prepared_sequence=resources.prepared_sequence,
+                default_fixation_stim=default_fixation_stim,
+                target_fixation_stim=target_fixation_stim,
+            )
+            return _PreparedPlayback(
+                run_spec, project_root, resources, default_fixation_stim, readiness, plan,
+            )
+        except BaseException:
+            if resources is not None:
+                resources.release()
+            self.close_session()
+            raise
+
     def run_condition(
         self,
         run_spec: RunSpec,
@@ -316,7 +404,6 @@ class PsychoPyEngine(PresentationEngine):
         self._aborted = False
         started_at = datetime.now(timezone.utc)
 
-        visual = self._require_visual()
         core = self._require_core()
         window = self._require_window()
         keyboard = self._require_keyboard()
@@ -353,46 +440,27 @@ class PsychoPyEngine(PresentationEngine):
         stimulus_draw: Any | None = None
 
         try:
-            window.color = run_spec.display.background_color
-            default_fixation_stim = None
-            target_fixation_stim = None
-            fixation_stimuli: tuple[Any, ...] = ()
-            if run_spec.fixation.show_cross:
-                default_fixation_stim = create_fixation_stim(
-                    visual=visual,
-                    window=window,
-                    run_spec=run_spec,
-                    color=run_spec.fixation.default_color,
-                )
-                target_fixation_stim = create_fixation_stim(
-                    visual=visual,
-                    window=window,
-                    run_spec=run_spec,
-                    color=run_spec.fixation.target_color,
-                )
-                fixation_stimuli = (default_fixation_stim, target_fixation_stim)
-            graphics_context = self._graphics_readiness_before_preparation(
-                project_root,
-                run_spec,
-            )
-            resources = prepare_condition_resources(
-                visual=visual,
-                window=window,
-                project_root=project_root,
-                run_spec=run_spec,
-                fixation_stimuli=fixation_stimuli,
-            )
-            if not resources.ready:
-                raise RuntimeError("Condition graphics resources did not reach READY state.")
+            if run_spec.scene_stream is not None:
+                prepared = self._prepared_scene
+                if prepared is None:
+                    raise RuntimeError(
+                        "Call prepare_condition before scene pre-tasks and playback."
+                    )
+                if prepared.run_spec is not run_spec or prepared.project_root != project_root:
+                    raise RuntimeError("Prepared scene does not match this condition run.")
+                self._prepared_scene = None
+                window.colorSpace = "rgb"
+                window.color = run_spec.scene_stream.background_rgb
+            else:
+                if self._prepared_scene is not None:
+                    raise RuntimeError("A different scene condition is already prepared.")
+                prepared = self._prepare_condition_playback(run_spec, project_root)
+            resources = prepared.resources
+            default_fixation_stim = prepared.default_fixation_stim
             cache_gpu_synchronized = resources.gpu_synchronized
             cache_unique_variant_count = len(resources.stimuli)
-            graphics_readiness = self._graphics_readiness_after_preparation(graphics_context)
-            playback_plan = self._build_playback_plan(
-                run_spec,
-                prepared_sequence=resources.prepared_sequence,
-                default_fixation_stim=default_fixation_stim,
-                target_fixation_stim=target_fixation_stim,
-            )
+            graphics_readiness = prepared.graphics_readiness
+            playback_plan = prepared.playback_plan
             response_keys = list(dict.fromkeys((*run_spec.fixation.response_keys, "escape")))
             escape_keys = ["escape"]
             flip = window.flip
@@ -421,6 +489,10 @@ class PsychoPyEngine(PresentationEngine):
             )
             blank_warmup_frames = max(0, timing_config.warmup_frames - lead_in_frames)
             pre_stream_frame_count = max(timing_config.warmup_frames, lead_in_frames)
+            if run_spec.scene_stream is not None:
+                # Native scenes have their own authored pre-task fixation. Resources
+                # are already synchronized; an ordinary warmup would inject blanks.
+                pre_stream_frame_count = 0
             keyboard_clock_armed = False
             gc_was_enabled = gc.isenabled()
             if gc_was_enabled:
@@ -797,11 +869,19 @@ class PsychoPyEngine(PresentationEngine):
 
     def close_session(self) -> None:
         window = self._window
+        prepared_scene = self._prepared_scene
+        self._prepared_scene = None
+        cleanup_report = None
+        if prepared_scene is not None:
+            prepared_scene.playback_plan.clear()
+            cleanup_report = prepared_scene.resources.release()
         self._window = None
         self._keyboard = None
         self._active_run_clock = None
         if window is not None:
             window.close()
+        if cleanup_report is not None and not cleanup_report.succeeded:
+            raise ConditionResourceCleanupError(cleanup_report)
 
     def abort(self) -> None:
         self._aborted = True
@@ -834,10 +914,15 @@ class PsychoPyEngine(PresentationEngine):
     ) -> list[tuple[Any | None, Any, tuple[TriggerEvent, ...], tuple[FixationEvent, ...]]]:
         """Compile model-heavy frame decisions into bound draw calls before playback."""
 
-        if len(prepared_sequence) != len(run_spec.stimulus_sequence):
+        scene = run_spec.scene_stream
+        scene_draws = (
+            scene_frame_draws(scene, prepared_sequence, run_spec.display.total_frames)
+            if scene is not None else None
+        )
+        if scene is None and len(prepared_sequence) != len(run_spec.stimulus_sequence):
             raise RuntimeError("Prepared stimulus sequence does not match the RunSpec.")
         duty_cycle_mode = run_spec.display.duty_cycle_mode
-        sinusoidal_mode = duty_cycle_mode == DutyCycleMode.SINUSOIDAL
+        sinusoidal_mode = scene is None and duty_cycle_mode == DutyCycleMode.SINUSOIDAL
         if sinusoidal_mode and (
             run_spec.condition.stimulus_modality != StimulusModality.IMAGE
             or any(
@@ -887,8 +972,8 @@ class PsychoPyEngine(PresentationEngine):
             stimulus_event = (
                 run_spec.stimulus_sequence[stimulus_index] if run_spec.stimulus_sequence else None
             )
-            stimulus_draw = None
-            if stimulus_event is not None and should_draw_stimulus(
+            stimulus_draw = scene_draws[frame_index] if scene_draws is not None else None
+            if scene is None and stimulus_event is not None and should_draw_stimulus(
                 stimulus_event,
                 frame_index,
             ):
@@ -1005,10 +1090,14 @@ class PsychoPyEngine(PresentationEngine):
         gl_module = import_module("psychopy.visual.basevisual").GL
         renderer = probe_renderer_from_gl(gl_module)
         decoded_dimensions, decoded_modes = self._decoded_image_metadata(project_root, run_spec)
-        estimate = estimate_run_spec_image_memory(
-            run_spec,
-            decoded_dimensions=decoded_dimensions,
-            decoded_modes=decoded_modes,
+        estimate = (
+            estimate_scene_image_memory(run_spec.scene_stream, decoded_dimensions, decoded_modes)
+            if run_spec.scene_stream is not None
+            else estimate_run_spec_image_memory(
+                run_spec,
+                decoded_dimensions=decoded_dimensions,
+                decoded_modes=decoded_modes,
+            )
         )
         observer = WindowsGraphicsBudgetObserver(renderer_hint=renderer.renderer)
         observation = activate_renderer_candidates_conservatively(
@@ -1057,7 +1146,11 @@ class PsychoPyEngine(PresentationEngine):
 
         dimensions: dict[str, tuple[int, int]] = {}
         modes: dict[str, str] = {}
-        for event in run_spec.stimulus_sequence:
+        image_definitions = (
+            run_spec.scene_stream.visuals if run_spec.scene_stream is not None
+            else run_spec.stimulus_sequence
+        )
+        for event in image_definitions:
             image_path = event.image_path
             if image_path is None or image_path in dimensions:
                 continue

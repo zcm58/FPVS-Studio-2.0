@@ -29,6 +29,7 @@ from fpvs_studio.core.enums import (
     StimulusVariant,
     ValidationSeverity,
 )
+from fpvs_studio.core.masking import condition_masking
 from fpvs_studio.core.models import AttentionalBlinkStreamSettings, ImageResolution
 from fpvs_studio.gui.design_system import (
     CONTENT_MAX_WIDTHS,
@@ -242,8 +243,6 @@ def _conditions_have_assigned_assets(document: ProjectDocument, ordered_conditio
     stimulus_sets_by_id = {
         stimulus_set.set_id: stimulus_set for stimulus_set in document.project.stimulus_sets
     }
-    if not stimulus_sets_by_id:
-        return False
 
     def has_ready_stimuli(set_id: str) -> bool:
         stimulus_set = stimulus_sets_by_id.get(set_id)
@@ -255,23 +254,30 @@ def _conditions_have_assigned_assets(document: ProjectDocument, ordered_conditio
             return stimulus_set.word_count > 0
         return False
 
-    return all(
-        has_ready_stimuli(condition.base_stimulus_set_id)
-        and has_ready_stimuli(condition.oddball_stimulus_set_id)
-        and (
-            condition.attentional_blink is None
-            or condition.t2_stimulus_set_id is not None
-            and has_ready_stimuli(condition.t2_stimulus_set_id)
-        )
-        and (
-            condition.attentional_blink is None
-            or isinstance(condition.attentional_blink, AttentionalBlinkStreamSettings)
-            or condition.attentional_blink.isi_mode == "blank"
-            or condition.isi_stimulus_set_id is not None
-            and has_ready_stimuli(condition.isi_stimulus_set_id)
-        )
-        for condition in ordered_conditions
-    )
+    for condition in ordered_conditions:
+        masking = condition_masking(document.project, condition)
+        if masking is not None:
+            if not masking.base_visuals or not masking.target_visuals or masking.mask_visuals == []:
+                return False
+            continue
+        if not (
+            has_ready_stimuli(condition.base_stimulus_set_id)
+            and has_ready_stimuli(condition.oddball_stimulus_set_id)
+            and (
+                condition.attentional_blink is None
+                or condition.t2_stimulus_set_id is not None
+                and has_ready_stimuli(condition.t2_stimulus_set_id)
+            )
+            and (
+                condition.attentional_blink is None
+                or isinstance(condition.attentional_blink, AttentionalBlinkStreamSettings)
+                or condition.attentional_blink.isi_mode == "blank"
+                or condition.isi_stimulus_set_id is not None
+                and has_ready_stimuli(condition.isi_stimulus_set_id)
+            )
+        ):
+            return False
+    return True
 
 
 def _launcher_readiness_report(
@@ -313,7 +319,11 @@ def _launcher_readiness_report(
     if not conditions_ready:
         status_summary = "Add at least one condition before launching."
     elif not assets_ready:
-        status_summary = "Finish the image sources in Design, or word lists in Conditions."
+        status_summary = (
+            "Finish masking sources in Condition Modifiers."
+            if any(condition_masking(document.project, item) for item in ordered_conditions)
+            else "Finish the image sources in Design, or word lists in Conditions."
+        )
     elif blocking_issue_count > 0:
         status_summary = (
             f"Validation at {refresh_hz:.2f} Hz reports {blocking_issue_count} blocking issue(s)."

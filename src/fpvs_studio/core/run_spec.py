@@ -7,9 +7,16 @@ outside RunSpec."""
 from __future__ import annotations
 
 from math import isfinite
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import Field, StrictInt, field_validator, model_validator
+from pydantic import (
+    Field,
+    SerializerFunctionWrapHandler,
+    StrictInt,
+    field_validator,
+    model_serializer,
+    model_validator,
+)
 
 from fpvs_studio.core.enums import (
     DutyCycleMode,
@@ -29,6 +36,7 @@ from fpvs_studio.core.models import (
     validate_response_key_name,
     validate_slug,
 )
+from fpvs_studio.core.scene_models import SceneStreamSpec
 
 StimulusRole = Literal["base", "oddball"]
 AttentionalBlinkPhase = Literal["base", "t1", "separator", "t2"]
@@ -338,13 +346,31 @@ class RunSpec(FPVSBaseModel):
     fixation: FixationStyleSpec
     presentation: ConditionPresentationSpec | None = None
     attentional_blink: AttentionalBlinkRunSpec | AttentionalBlinkStreamRunSpec | None = None
+    scene_stream: SceneStreamSpec | None = None
     pre_stream_fixation_frames: int = Field(default=0, ge=0)
     stimulus_sequence: list[StimulusEvent] = Field(default_factory=list)
     fixation_events: list[FixationEvent] = Field(default_factory=list)
     trigger_events: list[TriggerEvent] = Field(default_factory=list)
 
+    @model_serializer(mode="wrap")
+    def serialize_optional_scene(
+        self, handler: SerializerFunctionWrapHandler,
+    ) -> dict[str, Any]:
+        payload: dict[str, Any] = handler(self)
+        if self.scene_stream is None:
+            payload.pop("scene_stream", None)
+        return payload
+
     @model_validator(mode="after")
     def validate_stream_schema(self) -> RunSpec:
+        if self.scene_stream is not None:
+            if self.schema_version != "1.4.0":
+                raise ValueError("Scene streams require RunSpec schema 1.4.0.")
+            if self.stimulus_sequence or self.attentional_blink is not None:
+                raise ValueError("Scene streams cannot also contain a legacy stimulus stream.")
+            if self.condition.stimulus_modality != StimulusModality.SCENE:
+                raise ValueError("Scene stream modality must be scene.")
+            self.scene_stream.validate_frame_bounds(self.display.total_frames)
         if not self.fixation.show_cross and (
             self.fixation_events
             or self.fixation.accuracy_task_enabled

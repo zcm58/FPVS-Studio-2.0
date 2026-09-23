@@ -2,21 +2,22 @@
 
 Condition modifiers keep a participant activity's before/after screens, sustained
 instruction, settings, and response rules together. Open **FPVS Condition Modifiers**
-from Setup > Conditions. The FPVS image stream remains governed by the condition's
-ordinary Design and Timing settings.
+from Setup > Conditions. Ordinary modifiers retain the condition's Design and Timing
+settings. Masking modifiers supply native visual pools and within-item windows while
+retaining the FPVS item and oddball cadence.
 
 ## Authoring
 
 The editor lists modifiers added to the selected condition and separates **Overview**, **Settings**, and
 **Participant preview**. Overview describes the full workflow and recorded data.
-Settings exposes the relevant counting or memory controls. Preview uses example
+Settings exposes the relevant counting, memory or masking controls. Preview uses example
 numbers and does not reserve a session, consume its seed, or write participant data.
 
 **Add modifier** opens **Built-in** and **My presets**. Built-ins include **Backward
-counting** and **Remember four images**. Add assigns the new modifier to the current
+counting**, **Remember four images**, and **Masking: Color, Faces, Number**. Add assigns the new modifier to the current
 condition when it has no sustained activity. **Choose conditions…** explicitly changes
 the assignment to other conditions;
-one sustained counting or memory activity is supported per condition. Additional
+one sustained activity or masking stream is supported per condition. Additional
 ordinary instructions and questions remain available in the advanced task editor.
 Existing custom tasks retain their original ordering, response rules, and media.
 No imported protocol is inferred to be a generic memory task.
@@ -38,6 +39,13 @@ the project. Apply validates the complete draft and media before updating the li
 document; the ordinary project Save lifecycle still applies. Cancel discards the
 project draft and its staging files. Existing project images are never deleted by
 removing or replacing a modifier.
+
+## Masking
+
+Masking variants add native visual source pools, exact target-to-mask SOA and
+source-style before/after screens. Their stream windows compile into RunSpec,
+independently of task clocks. See [Masking](MASKING.md) for authoring, variant grouping,
+version requirements, migration corrections and physical acceptance limits.
 
 ## Backward counting
 

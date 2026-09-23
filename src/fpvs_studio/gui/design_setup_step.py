@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from PySide6.QtCore import QSignalBlocker, Signal
-from PySide6.QtWidgets import QComboBox, QHBoxLayout, QLabel, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QComboBox, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
+from fpvs_studio.core.compiler_masking import validate_masking_settings
 from fpvs_studio.core.enums import ExperimentCategory, StimulusModality
 from fpvs_studio.core.experiment_categories import (
     RETIRED_IMAGE_PAIR_MESSAGE,
@@ -12,11 +13,13 @@ from fpvs_studio.core.experiment_categories import (
     experiment_category_label,
     has_retired_image_pair_design,
 )
+from fpvs_studio.core.masking import condition_masking
 from fpvs_studio.core.models import AttentionalBlinkStreamSettings
 from fpvs_studio.gui.attentional_blink_stream_designer import (
     AttentionalBlinkStreamDesigner,
     is_letter_stream_project,
 )
+from fpvs_studio.gui.components import mark_secondary_action
 from fpvs_studio.gui.document import ProjectDocument
 from fpvs_studio.gui.experiment_designer_dialog import ExperimentDesignerWidget
 
@@ -54,6 +57,12 @@ class DesignSetupStep(QWidget):
         self.status_label = QLabel(self)
         self.status_label.setWordWrap(True)
         layout.addWidget(self.status_label)
+        self.masking_edit_button = QPushButton("Edit Masking Modifier…", self)
+        self.masking_edit_button.setObjectName("design_masking_edit_button")
+        mark_secondary_action(self.masking_edit_button)
+        self.masking_edit_button.clicked.connect(self._edit_masking)
+        self.masking_edit_button.hide()
+        layout.addWidget(self.masking_edit_button)
         self.editor_container = QWidget(self)
         self.editor_layout = QVBoxLayout(self.editor_container)
         self.editor_layout.setContentsMargins(0, 0, 0, 0)
@@ -100,6 +109,22 @@ class DesignSetupStep(QWidget):
         message = self._category_message()
         if message:
             return message
+        condition = self._document.get_condition(self._selected_id) if self._selected_id else None
+        masking = condition_masking(self._document.project, condition) if condition else None
+        if masking is not None and condition is not None:
+            try:
+                validate_masking_settings(
+                    self._document.project, condition, masking,
+                    self._document.project.settings.display.preferred_refresh_hz or 60.0,
+                )
+            except ValueError as error:
+                return str(error)
+        elif condition is not None and any(
+            self._document.get_stimulus_set(set_id) is None for set_id in (
+                condition.base_stimulus_set_id, condition.oddball_stimulus_set_id,
+            )
+        ):
+            return "This condition has no stimulus sources. Configure its sources in Conditions."
         return self.editor.validation_message() if self.editor is not None else ""
 
     def apply_pending_design(self) -> bool:
@@ -108,7 +133,9 @@ class DesignSetupStep(QWidget):
             self._show_message(message)
             return False
         if self.editor is None:
-            return True
+            message = self.validation_message()
+            self._show_message(message)
+            return not message
         self._show_message("")
         if not self.editor.apply_pending_design():
             return False
@@ -173,7 +200,10 @@ class DesignSetupStep(QWidget):
                 self.condition_combo.setCurrentIndex(self.condition_combo.findData(desired))
             self.condition_combo.setEnabled(bool(conditions) and not self.is_busy())
             conflict = desired in category_conflict_condition_ids(self._document.project)
-            if desired != self._selected_id or (self.editor is not None and conflict):
+            selected = self._document.get_condition(desired) if desired else None
+            masking = condition_masking(self._document.project, selected) if selected else None
+            if (desired != self._selected_id
+                    or (self.editor is not None and (conflict or masking is not None))):
                 if not self.is_busy():
                     self._display_condition(desired)
             elif self.editor is not None and self._displayed_project is not self._document.project:
@@ -185,6 +215,7 @@ class DesignSetupStep(QWidget):
             self._refreshing = False
 
     def _display_condition(self, condition_id: str | None) -> None:
+        self.masking_edit_button.hide()
         if self.editor is not None:
             self.editor.request_close()
             self.editor_layout.removeWidget(self.editor)
@@ -203,7 +234,23 @@ class DesignSetupStep(QWidget):
         ):
             self._show_message(self._category_message())
             return
-        source = self._document.get_condition_stimulus_set(condition.condition_id, "base")
+        masking = condition_masking(self._document.project, condition)
+        if masking is not None:
+            self._show_message(
+                f"{masking.variant.title()} masking · {masking.soa_ms:g} ms target-to-mask SOA.\n"
+                f"{len(masking.base_visuals)} base and "
+                f"{len(masking.target_visuals)} target visuals. "
+                "Condition Modifiers owns the source pools, exact appearance, timing and questions."
+            )
+            self.masking_edit_button.show()
+            return
+        source = self._document.get_stimulus_set(condition.base_stimulus_set_id)
+        if source is None:
+            self._show_message(
+                "This condition has no stimulus sources. Add a modifier in Conditions "
+                "or create a condition with image or word sources."
+            )
+            return
         stream = isinstance(condition.attentional_blink, AttentionalBlinkStreamSettings)
         if source.modality == StimulusModality.WORD and not stream:
             self._show_message(
@@ -226,6 +273,17 @@ class DesignSetupStep(QWidget):
         self.editor.busy_changed.connect(self._editor_busy_changed)
         self.condition_combo.setEnabled(not self.editor.is_busy())
         self._displayed_project = self._document.project
+
+    def _edit_masking(self) -> None:
+        if self._selected_id is None:
+            return
+        from fpvs_studio.gui.condition_modifier_dialog import ConditionModifierDialog
+
+        dialog = ConditionModifierDialog(
+            self._document, condition_id=self._selected_id, parent=self,
+        )
+        dialog.exec()
+        self.refresh()
 
     def _stream_condition_selected(self, condition_id: str) -> None:
         self._selected_id = condition_id

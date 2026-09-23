@@ -12,7 +12,7 @@ import csv
 import io
 import re
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Literal
 
@@ -146,6 +146,8 @@ _OCCURRENCE_LABELS = (
     ("First occurrence in the session", "first_occurrence"),
     ("Last occurrence in the session", "last_occurrence"),
     ("First entry of the whole session", "first_session_entry"),
+    ("First sequence of this stimulus group", "first_stream_group_entry"),
+    ("Last sequence of this stimulus group", "last_stream_group_entry"),
 )
 _COUNTING_LIBRARY = (
     ("Counting baseline", "baseline", create_backward_counting_baseline_task),
@@ -171,6 +173,11 @@ class TaskOptionDraft:
     width_degrees: float | None = None
     height_degrees: float | None = None
     unit: str = "degrees"
+    shape: Literal["circle"] | None = None
+    color_rgb: tuple[float, float, float] | None = None
+    line_color_rgb: tuple[float, float, float] | None = None
+    line_width_px: float = 1.0
+    circle_edges: int | None = None
 
 
 @dataclass
@@ -220,10 +227,12 @@ class TaskStepDraft:
     title: str = "Instruction"
     prompt: str = ""
     font_family: str = TaskFontFamily.ARIAL.value
+    degree_geometry: Literal["visual_angle", "linear"] = "visual_angle"
     prompt_x: float = 0.0
     prompt_y: float = 0.0
     prompt_unit: str = "degrees"
     prompt_height: float | None = None
+    prompt_width: float | None = None
     continue_key: str | None = "space"
     advance_keys: list[str] = field(default_factory=list)
     timeout_seconds: float | None = None
@@ -239,6 +248,7 @@ class TaskStepDraft:
     maximum_selections: int = 1
     allow_duplicate_choices_across_repeats: bool = True
     randomize_options: bool = False
+    randomize_positions: bool = False
     submission_mode: str = "immediate"
     submit_label: str = "Submit"
     show_footer: bool = True
@@ -545,6 +555,20 @@ class TaskParticipantPreview(QWidget):
         option: TaskOptionDraft,
         pixmap: QPixmap | None,
     ) -> None:
+        if option.shape == "circle":
+            fill = option.color_rgb or (1.0, 1.0, 1.0)
+            painter.save()
+            painter.setBrush(QColor.fromRgbF(*((value + 1.0) / 2.0 for value in fill)))
+            if option.line_color_rgb is None:
+                painter.setPen(Qt.PenStyle.NoPen)
+            else:
+                outline = QColor.fromRgbF(
+                    *((value + 1.0) / 2.0 for value in option.line_color_rgb)
+                )
+                painter.setPen(QPen(outline, option.line_width_px))
+            painter.drawEllipse(rect)
+            painter.restore()
+            return
         pen_color = "#f4f4f4" if option.selectable else "#707070"
         painter.setPen(QPen(QColor(pen_color), 1.0))
         painter.drawRect(rect)
@@ -737,8 +761,12 @@ class TaskOptionTable(QTableWidget):
     def options(self) -> list[TaskOptionDraft]:
         result: list[TaskOptionDraft] = []
         for row in range(self.rowCount()):
+            identifier = self.item(row, 0)
+            assert identifier is not None
+            source: TaskOptionDraft = identifier.data(Qt.ItemDataRole.UserRole)
             result.append(
-                TaskOptionDraft(
+                replace(
+                    source,
                     option_id=self._text(row, 0),
                     label=self._text(row, 1),
                     image_path=self._image_path(row),
@@ -863,6 +891,8 @@ class TaskOptionTable(QTableWidget):
                 if option.source_path is not None:
                     item.setData(Qt.ItemDataRole.UserRole, str(option.source_path))
                 item.setData(Qt.ItemDataRole.UserRole + 1, option.image_path)
+            if column == 0:
+                item.setData(Qt.ItemDataRole.UserRole, copy.deepcopy(option))
             self.setItem(row, column, item)
         unit_combo = QComboBox(self)
         unit_combo.addItem("Degrees", "degrees")
@@ -1811,7 +1841,9 @@ class TaskStepEditor(QWidget):
             self.choice_minimum_spin.setValue(step.minimum_selections)
             self.choice_maximum_spin.setValue(step.maximum_selections)
             self.duplicate_choices_checkbox.setChecked(step.allow_duplicate_choices_across_repeats)
-            self.randomize_options_checkbox.setChecked(step.randomize_options)
+            self.randomize_options_checkbox.setChecked(
+                step.randomize_options or step.randomize_positions
+            )
             self.submission_mode_combo.setCurrentIndex(
                 self.submission_mode_combo.findData(step.submission_mode)
             )
@@ -1890,7 +1922,10 @@ class TaskStepEditor(QWidget):
         step.minimum_selections = self.choice_minimum_spin.value()
         step.maximum_selections = self.choice_maximum_spin.value()
         step.allow_duplicate_choices_across_repeats = self.duplicate_choices_checkbox.isChecked()
-        step.randomize_options = self.randomize_options_checkbox.isChecked()
+        shuffle_positions = step.layout_mode == "exact" and not step.randomize_options
+        randomize = self.randomize_options_checkbox.isChecked()
+        step.randomize_positions = randomize and shuffle_positions
+        step.randomize_options = randomize and not shuffle_positions
         step.submission_mode = str(self.submission_mode_combo.currentData())
         step.show_footer = self.show_footer_checkbox.isChecked()
         step.questions = self.questionnaire_editor.questions()
@@ -2702,6 +2737,11 @@ def _step_to_draft(step: TaskStep) -> TaskStepDraft:
             width_degrees=item.width,
             height_degrees=item.height,
             unit=item.unit.value,
+            shape="circle" if item.modality == TaskItemModality.CIRCLE else None,
+            color_rgb=item.color_rgb,
+            line_color_rgb=item.line_color_rgb,
+            line_width_px=item.line_width_px,
+            circle_edges=item.circle_edges,
         )
         for item in step.items
     ]
@@ -2774,10 +2814,12 @@ def _step_to_draft(step: TaskStep) -> TaskStepDraft:
         title=step.heading,
         prompt=step.text,
         font_family=step.font_family.value,
+        degree_geometry=step.degree_geometry,
         prompt_x=step.prompt_x,
         prompt_y=step.prompt_y,
         prompt_unit=step.prompt_unit.value,
         prompt_height=step.prompt_height,
+        prompt_width=step.prompt_width,
         continue_key=step.continue_key,
         advance_keys=list(step.allowed_keys),
         timeout_seconds=step.timeout_seconds,
@@ -2797,6 +2839,7 @@ def _step_to_draft(step: TaskStep) -> TaskStepDraft:
         maximum_selections=step.max_selections,
         allow_duplicate_choices_across_repeats=(step.allow_duplicate_selections_across_repeats),
         randomize_options=step.randomize_options,
+        randomize_positions=step.randomize_positions,
         submission_mode=step.submission_mode.value,
         submit_label=step.submit_label,
         show_footer=step.show_footer,
@@ -2957,10 +3000,12 @@ def _step_from_draft(step: TaskStepDraft) -> TaskStep:
         heading=step.title,
         text=step.prompt,
         font_family=TaskFontFamily(step.font_family),
+        degree_geometry=step.degree_geometry,
         prompt_x=step.prompt_x,
         prompt_y=step.prompt_y,
         prompt_unit=PresentationUnit(step.prompt_unit),
         prompt_height=step.prompt_height,
+        prompt_width=step.prompt_width,
         layout_mode=TaskLayoutMode(step.layout_mode),
         columns=columns,
         items=items,
@@ -2974,6 +3019,7 @@ def _step_from_draft(step: TaskStepDraft) -> TaskStep:
         retry_on_invalid=step.retry_on_invalid,
         retry_on_incorrect=step.retry_on_incorrect,
         randomize_options=step.randomize_options,
+        randomize_positions=step.randomize_positions,
         submission_mode=TaskSubmissionMode(step.submission_mode),
         submit_label=step.submit_label,
         show_footer=step.show_footer,
@@ -2990,14 +3036,19 @@ def _display_item_from_draft(option: TaskOptionDraft) -> TaskDisplayItem:
     selectable = option.selectable
     return TaskDisplayItem(
         item_id=option.option_id,
-        modality=TaskItemModality.IMAGE if image else TaskItemModality.TEXT,
-        text=None if image else option.label,
+        modality=(TaskItemModality.CIRCLE if option.shape == "circle"
+                  else TaskItemModality.IMAGE if image else TaskItemModality.TEXT),
+        text=None if image or option.shape else option.label,
         image_path=option.image_path if image else None,
         x=option.x_degrees,
         y=option.y_degrees,
         width=option.width_degrees,
         height=option.height_degrees,
         unit=PresentationUnit(option.unit),
+        color_rgb=option.color_rgb,
+        line_color_rgb=option.line_color_rgb,
+        line_width_px=option.line_width_px,
+        circle_edges=option.circle_edges,
         selectable=selectable,
         correct=option.correct if selectable else None,
         score=option.score if selectable else None,

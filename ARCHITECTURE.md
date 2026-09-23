@@ -125,6 +125,11 @@ Every source package has a nested `AGENTS.md`; read the one governing files you 
 
 ## Contract Flow
 
+Masking modifiers own native image/text/shape source pools and independent within-item
+target/mask windows. Core compiles them to `RunSpec.scene_stream`; engines prepare
+native draw calls, while pre/post screens remain `SessionEntry` tasks. Variant groups
+use authored task flow. See [Masking](docs/MASKING.md) for schemas and exactness limits.
+
 ```text
 ProjectFile
   -> compiler -> RunSpec (one condition)

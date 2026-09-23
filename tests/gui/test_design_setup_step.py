@@ -11,11 +11,20 @@ from PySide6.QtWidgets import QApplication, QLabel, QPushButton, QTabBar
 from tests.gui.helpers import assert_visible_children_within_parent, write_image_directory
 from tests.gui.test_experiment_designer import _populate_sources
 
+from fpvs_studio.core.condition_modifiers import assign_modifier, remove_modifier
 from fpvs_studio.core.enums import ExperimentCategory, StimulusModality
+from fpvs_studio.core.masking import condition_masking
+from fpvs_studio.core.masking_presets import apply_masking_timing_defaults, create_masking_modifier
+from fpvs_studio.core.models import Condition, ProjectFile, ProjectMeta
 from fpvs_studio.gui.design_setup_step import DesignSetupStep
 from fpvs_studio.gui.designer_sources import load_designer_thumbnails
 from fpvs_studio.gui.document import ProjectDocument
 from fpvs_studio.gui.experiment_designer_dialog import ExperimentDesignerWidget
+from fpvs_studio.gui.setup_wizard_page import SetupWizardPage
+from fpvs_studio.gui.window_helpers import (
+    _conditions_have_assigned_assets,
+    _launcher_readiness_report,
+)
 
 
 def _document(tmp_path, category=ExperimentCategory.FPVS_ODDBALL):
@@ -32,6 +41,90 @@ def _step(qtbot, monkeypatch, document, *, size=(1000, 600)):
     step.show()
     QApplication.processEvents()
     return step
+
+
+def _masking_document(tmp_path):
+    project = ProjectFile(
+        meta=ProjectMeta(project_id="masking", name="Masking", template_id="fpvs_6hz_every5_v1"),
+        conditions=[Condition(
+            condition_id="color", name="Color Masking with native source-owned circles",
+            base_stimulus_set_id="modifier-owned-base",
+            oddball_stimulus_set_id="modifier-owned-target",
+            sequence_count=1, trigger_code=1,
+        )],
+    )
+    project = assign_modifier(
+        project, create_masking_modifier(variant="color", modifier_id="color-mask"), ["color"],
+    )
+    project = apply_masking_timing_defaults(project)
+    return ProjectDocument(project_root=tmp_path, project=project)
+
+
+def test_masking_design_routes_to_modifier_and_removal_exposes_missing_sources(
+    qtbot, monkeypatch, tmp_path,
+):
+    document = _masking_document(tmp_path)
+    step = _step(qtbot, monkeypatch, document)
+    assert document.project.stimulus_sets == []
+    assert step.editor is None
+    assert step.masking_edit_button.isVisible()
+    assert "target-to-mask SOA" in step.status_label.text()
+    assert step.validation_message() == ""
+    assert _conditions_have_assigned_assets(document, document.ordered_conditions())
+    assert _launcher_readiness_report(document, refresh_hz=60).status_label == "Ready to Launch"
+    assert_visible_children_within_parent(step)
+
+    document.apply_condition_modifier_project(
+        remove_modifier(document.project, "color-mask", ["color"]),
+    )
+    QApplication.processEvents()
+    assert step.editor is None
+    assert not step.masking_edit_button.isVisible()
+    assert "no stimulus sources" in step.status_label.text()
+    assert not step.apply_pending_design()
+    assert not _conditions_have_assigned_assets(document, document.ordered_conditions())
+
+
+def test_masking_duplicate_keeps_modifier_assignment_without_creating_image_sets(tmp_path):
+    document = _masking_document(tmp_path)
+    source = document.project.conditions[0]
+    duplicate_id = document.duplicate_condition(source.condition_id)
+    duplicate = document.get_condition(duplicate_id)
+    assert duplicate is not None
+    assert duplicate.name == source.name + " Copy"
+    assert duplicate.pre_task_bindings == source.pre_task_bindings
+    assert duplicate.post_task_bindings == source.post_task_bindings
+    assert condition_masking(document.project, duplicate) == condition_masking(
+        document.project, source,
+    )
+    assert len(document.project.condition_modifiers) == 1
+    assert document.project.stimulus_sets == []
+
+
+def test_masking_wizard_uses_modifier_sources_and_preserves_display_calibration(qtbot, tmp_path):
+    document = _masking_document(tmp_path)
+    wizard = SetupWizardPage(
+        document, load_condition_template_profiles=lambda: [],
+        manage_condition_templates=lambda: [],
+    )
+    qtbot.addWidget(wizard)
+    wizard.resize(1120, 820)
+    wizard.show()
+    assert wizard._condition_setup_blocker() == ""
+    assert wizard._design_setup_blocker() == ""
+    for step_key in ("conditions", "design", "image_size", "review"):
+        wizard.open_wizard(step_key=step_key, allow_step_jumps=True)
+        QApplication.processEvents()
+        assert_visible_children_within_parent(wizard.step_stack.currentWidget())
+        assert wizard.shell.page_container.scroll_area.verticalScrollBar().maximum() == 0
+    wizard.open_wizard(step_key="image_size", allow_step_jumps=True)
+    QApplication.processEvents()
+    editor = wizard.image_display_size_editor
+    assert not editor.width_degrees_spin.isVisible()
+    assert not editor.configure_presentation_button.isVisible()
+    assert editor.viewing_distance_spin.isVisible()
+    assert editor.screen_width_spin.isVisible()
+    assert "Calibrate" in editor.preview_value_label.text()
 
 
 def test_empty_design_step_explains_where_to_add_a_condition(qtbot, monkeypatch, tmp_path):

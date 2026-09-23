@@ -6,7 +6,7 @@ from collections.abc import Callable
 from io import BytesIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import cast
+from typing import Literal, cast
 from uuid import uuid4
 
 from PIL import Image
@@ -53,6 +53,11 @@ from fpvs_studio.core.condition_modifiers import (
     modifier_condition_ids,
     validate_image_memory_definition,
 )
+from fpvs_studio.core.masking import MaskingSettings
+from fpvs_studio.core.masking_presets import (
+    apply_masking_timing_defaults,
+    create_masking_modifier,
+)
 from fpvs_studio.core.models import ProjectFile
 from fpvs_studio.core.modifier_presets import (
     ModifierPreset,
@@ -65,7 +70,7 @@ from fpvs_studio.core.modifier_presets import (
     save_modifier_preset,
 )
 from fpvs_studio.core.paths import filesystem_path
-from fpvs_studio.core.task_assets import task_image_references
+from fpvs_studio.core.task_assets import modifier_image_references, task_image_references
 from fpvs_studio.core.task_models import (
     BackwardCountingRole,
     BackwardCountingSpec,
@@ -83,6 +88,7 @@ from fpvs_studio.gui.components import (
 )
 from fpvs_studio.gui.condition_task_dialog import ConditionTaskDialog
 from fpvs_studio.gui.document import ProjectDocument
+from fpvs_studio.gui.masking_source_dialog import MaskingSourceDialog
 from fpvs_studio.gui.modifier_library_dialog import (
     ModifierLibraryDialog,
     ModifierScopeDialog,
@@ -168,6 +174,7 @@ class ConditionModifierDialog(QDialog):
         self._loading = False
         self._fields_dirty = False
         self._custom_edited = False
+        self._masking_timing_edited = False
         self._selected_id: str | None = None
         self._definitions: dict[str, ModifierDefinition] = {}
         self._scopes: dict[str, list[str]] = {}
@@ -425,6 +432,54 @@ class ConditionModifierDialog(QDialog):
             )
         )
         self.settings_stack.addWidget(memory)
+        masking = QWidget(settings)
+        masking_form = QFormLayout(masking)
+        self.masking_timing_spins: dict[str, QDoubleSpinBox] = {}
+        for key, title in (
+            ("soa_ms", "Target-to-mask SOA"), ("target_duration_ms", "Target duration"),
+            ("mask_duration_ms", "Mask duration"), ("base_duration_ms", "Base duration"),
+        ):
+            timing_spin = QDoubleSpinBox(masking)
+            timing_spin.setObjectName(f"modifier_masking_{key}")
+            timing_spin.setDecimals(9)
+            timing_spin.setRange(0.000001, 100000)
+            timing_spin.setSuffix(" ms")
+            timing_spin.setAccessibleName(title)
+            timing_spin.setToolTip(title)
+            timing_spin.valueChanged.connect(self._mark_dirty)
+            self.masking_timing_spins[key] = timing_spin
+        for title, keys in (
+            ("SOA / target duration", ("soa_ms", "target_duration_ms")),
+            ("Mask / base duration", ("mask_duration_ms", "base_duration_ms")),
+        ):
+            holder = QWidget(masking)
+            row = QHBoxLayout(holder)
+            row.setContentsMargins(0, 0, 0, 0)
+            for key in keys:
+                row.addWidget(self.masking_timing_spins[key])
+            masking_form.addRow(title, holder)
+        rgb_row = QWidget(masking)
+        rgb_layout = QHBoxLayout(rgb_row)
+        rgb_layout.setContentsMargins(0, 0, 0, 0)
+        self.masking_background_spins: list[QDoubleSpinBox] = []
+        for _index in range(3):
+            channel_spin = QDoubleSpinBox(rgb_row)
+            channel_spin.setRange(-1, 1)
+            channel_spin.setDecimals(9)
+            channel_spin.valueChanged.connect(self._mark_dirty)
+            self.masking_background_spins.append(channel_spin)
+            rgb_layout.addWidget(channel_spin)
+        masking_form.addRow("Background RGB (−1 to 1)", rgb_row)
+        self.masking_sources_label = _label("", masking)
+        self.masking_sources_button = QPushButton("Edit native sources…", masking)
+        self.masking_sources_button.clicked.connect(self._edit_masking_sources)
+        masking_form.addRow(self.masking_sources_label, self.masking_sources_button)
+        self.masking_timing_label = _label("", masking)
+        masking_form.addRow(self.masking_timing_label)
+        self.masking_defaults_button = QPushButton("Use source experiment timing…", masking)
+        self.masking_defaults_button.clicked.connect(self._apply_masking_defaults)
+        masking_form.addRow(self.masking_defaults_button)
+        self.settings_stack.addWidget(masking)
         layout.addWidget(self.settings_stack, 1)
         self.instructions_button = QPushButton("Edit participant instructions…", settings)
         self.instructions_button.clicked.connect(self._edit_instructions)
@@ -541,6 +596,19 @@ class ConditionModifierDialog(QDialog):
                             config.instructions = self._instructions[0]
                         if self._instructions[1] != self._loaded_instructions[1]:
                             config.endpoint_prompt = self._instructions[1]
+            elif existing.modifier.kind == ConditionModifierKind.MASKING:
+                settings = definition.modifier.masking
+                assert settings is not None
+                values = settings.model_dump()
+                for key, spin in self.masking_timing_spins.items():
+                    if spin.value() != self._loaded_controls.get(key):
+                        values[key] = spin.value()
+                for index, spin in enumerate(self.masking_background_spins):
+                    if spin.value() != self._loaded_controls.get(f"background_{index}"):
+                        background = list(values["background_rgb"])
+                        background[index] = spin.value()
+                        values["background_rgb"] = tuple(background)
+                definition.modifier.masking = MaskingSettings.model_validate(values)
             else:
                 kwargs = {}
                 if self._instructions[0] is not None:
@@ -602,6 +670,9 @@ class ConditionModifierDialog(QDialog):
             "step": self.step_spin.value(), "minimum": self.minimum_spin.value(),
             "maximum": self.maximum_spin.value(), "baseline": self.duration_spin.value(),
             "study": self.study_duration.value(), "study_mode": self.study_mode.currentIndex(),
+            **{key: spin.value() for key, spin in self.masking_timing_spins.items()},
+            **{f"background_{index}": spin.value()
+               for index, spin in enumerate(self.masking_background_spins)},
         }
         self._loaded_instructions = self._instructions
 
@@ -656,8 +727,10 @@ class ConditionModifierDialog(QDialog):
         self.purpose_edit.setText(definition.modifier.description)
         self.purpose_edit.setToolTip(definition.modifier.description)
         is_counting = definition.modifier.kind == ConditionModifierKind.BACKWARD_COUNTING
-        self.settings_stack.setCurrentIndex(0 if is_counting else 1)
+        is_masking = definition.modifier.kind == ConditionModifierKind.MASKING
+        self.settings_stack.setCurrentIndex(0 if is_counting else 2 if is_masking else 1)
         self.screens_button.setVisible(not is_counting)
+        self.instructions_button.setVisible(not is_masking)
         if is_counting:
             start = next(
                 task
@@ -684,6 +757,16 @@ class ConditionModifierDialog(QDialog):
             self._instructions = (config.instructions, config.endpoint_prompt)
             self._baseline_instructions = baseline.instructions if baseline else None
             self._baseline_endpoint_prompt = baseline.endpoint_prompt if baseline else None
+        elif is_masking:
+            settings = definition.modifier.masking
+            assert settings is not None
+            for key, spin in self.masking_timing_spins.items():
+                spin.setValue(getattr(settings, key))
+            for spin, channel in zip(
+                self.masking_background_spins, settings.background_rgb, strict=True,
+            ):
+                spin.setValue(channel)
+            self._refresh_masking_sources(settings)
         else:
             study = self._study_module(definition)
             recognition = self._recognition_module(definition)
@@ -718,7 +801,7 @@ class ConditionModifierDialog(QDialog):
         self._fields_dirty = False
         self._snapshot_controls()
         self._refresh_details()
-        if not is_counting:
+        if not is_counting and not is_masking:
             self._request_thumbnails()
 
     @staticmethod
@@ -739,6 +822,8 @@ class ConditionModifierDialog(QDialog):
 
     def _refresh_details(self) -> None:
         affected = {self._condition_id} if self._custom_edited else set()
+        if self._masking_timing_edited:
+            affected.update(condition.condition_id for condition in self._project.conditions)
         for key in self._original_definitions.keys() | self._definitions.keys():
             before = set(self._original_scopes.get(key, []))
             after = set(self._scopes.get(key, []))
@@ -791,6 +876,22 @@ class ConditionModifierDialog(QDialog):
                 "estimated steps and counting rate, and available baseline comparison. "
                 "The estimate does not verify arithmetic accuracy."
             )
+        elif modifier.kind == ConditionModifierKind.MASKING:
+            settings = modifier.masking
+            assert settings is not None
+            phase_copy = (
+                "No separate baseline.",
+                "Instructions and two-second fixation before each experiment variant.",
+                "Brief target followed by a mask at "
+                f"{self.masking_timing_spins['soa_ms'].value():g} ms SOA. "
+                "The same target repeats throughout the run.",
+                "Visibility → target identity → frequency → self-paced break and fixation.",
+            )
+            self.recorded_label.setText(
+                "Recorded data: realized frame timing, target identity, selected answers, "
+                "identity correctness and response times. Native source properties are retained."
+            )
+            self._refresh_masking_sources(settings)
         else:
             study_key = self._study_module(definition).steps[0].continue_key or "space"
             phase_copy = (
@@ -811,6 +912,77 @@ class ConditionModifierDialog(QDialog):
         for label, text in zip(self.workflow_labels, phase_copy, strict=True):
             label.setText(text)
         self._refresh_preview()
+
+    def _refresh_masking_sources(self, settings: MaskingSettings) -> None:
+        masks = len(settings.mask_visuals) if settings.mask_visuals else len(settings.base_visuals)
+        self.masking_sources_label.setText(
+            f"{len(settings.base_visuals)} base · "
+            f"{len(settings.target_visuals)} target · {masks} mask"
+        )
+        self.masking_timing_label.setText(
+            f"Project: {self._project.settings.protocol.base_hz:g} Hz; target every "
+            f"{self._project.settings.protocol.oddball_every_n} items. Source: 5 Hz, "
+            "40 cycles/run, three randomized SOA triplets. Native sources replace "
+            "ordinary condition pools while Masking is assigned."
+        )
+
+    def _edit_masking_sources(self) -> None:
+        if self._selected_id is None or not self._save_fields():
+            return
+        definition = self._definitions[self._selected_id]
+        settings = definition.modifier.masking
+        assert settings is not None
+        dialog = MaskingSourceDialog(
+            settings, project_root=self._document.project_root,
+            task_id=definition.modifier.pre_task_ids[0], parent=self,
+            answers={item.item_id: item.text or item.item_id
+                     for task in definition.task_modules for step in task.steps
+                     if step.step_id == "masking-identification" for item in step.items
+                     if item.selectable},
+        )
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        if settings.variant == "color":
+            previous_colors = {visual.visual_id: visual.rgb for visual in settings.target_visuals}
+            changed_colors = {
+                visual.visual_id: visual.rgb for visual in dialog.settings.target_visuals
+                if visual.visual_id in previous_colors
+                and visual.rgb != previous_colors[visual.visual_id]
+            }
+            for task in definition.task_modules:
+                for step in task.steps:
+                    if step.step_id == "masking-identification":
+                        for item in step.items:
+                            if item.item_id in changed_colors:
+                                item.color_rgb = changed_colors[item.item_id]
+        definition.modifier.masking = dialog.settings
+        self._asset_sources.update(dialog.asset_sources)
+        self._refresh_details()
+        self._set_status(
+            "Native sources updated in the draft. Matching color answer swatches follow changed "
+            "target colors. Apply modifiers saves changes."
+            if settings.variant == "color" else
+            "Native sources updated in the draft. Apply modifiers saves changes."
+        )
+
+    def _apply_masking_defaults(self) -> None:
+        if not self._save_fields():
+            return
+        answer = QMessageBox.question(
+            self, "Use source experiment timing",
+            "Set this experiment to 5 Hz with a target every five items, 40 cycles per "
+            "Masking run, three repetitions of each configured SOA, and steady fixation? "
+            "The 5 Hz cadence is project-wide; ordinary conditions keep their own run counts. "
+            "These changes remain pending until Apply modifiers.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        self._project = apply_masking_timing_defaults(self._build_project())
+        self._masking_timing_edited = True
+        self._refresh_details()
+        self._set_status("Source timing is staged. Apply modifiers saves the experiment settings.")
 
     def _tab_changed(self, *_args: object) -> None:
         if self._loading:
@@ -916,6 +1088,8 @@ class ConditionModifierDialog(QDialog):
             for task in clone.task_modules:
                 for path in task_image_references(task):
                     self._asset_sources[path] = staging / path
+            for path in modifier_image_references(clone.modifier):
+                self._asset_sources[path] = staging / path
             self._scopes[original_id] = [
                 condition_id
                 for condition_id in self._scopes[original_id]
@@ -964,6 +1138,15 @@ class ConditionModifierDialog(QDialog):
         source, key = dialog.selection
         new_id = f"modifier-{uuid4().hex[:10]}"
         if source == "built-in":
+            if key.startswith("masking-"):
+                variant = cast(Literal["color", "faces", "number"], key.removeprefix("masking-"))
+                self._add_definition(create_masking_modifier(modifier_id=new_id, variant=variant))
+                self.tabs.setCurrentIndex(1)
+                self._set_status(
+                    "Masking added to the draft. Review native sources and use source experiment "
+                    "timing when reproducing the original study. Apply saves the complete draft."
+                )
+                return
             factory = (
                 create_backward_counting_modifier
                 if key == "backward-counting"
@@ -992,6 +1175,8 @@ class ConditionModifierDialog(QDialog):
             for task in definition.task_modules:
                 for path in task_image_references(task):
                     self._asset_sources[path] = staging / path
+            for path in modifier_image_references(definition.modifier):
+                self._asset_sources[path] = staging / path
             self._add_definition(definition)
 
         self._run_job(import_preset, imported, "Copying preset into the dialog draft…")
@@ -1154,6 +1339,27 @@ class ConditionModifierDialog(QDialog):
         definition = self._definitions[self._selected_id]
         counting = definition.modifier.kind == ConditionModifierKind.BACKWARD_COUNTING
         phase = self.preview_phase.currentIndex()
+        if definition.modifier.kind == ConditionModifierKind.MASKING:
+            self.preview_grid_widget.hide()
+            self.preview_endpoint.hide()
+            self.preview_submit.hide()
+            self.preview_result.setText(
+                "Sequence overview. Edit modifier screens previews the authored question layouts."
+            )
+            settings = definition.modifier.masking
+            assert settings is not None
+            self.preview_text.setText((
+                "Instructions → Space → two-second red fixation.",
+                f"Base presentations start {self.masking_timing_spins['soa_ms'].value():g} ms "
+                "into each item slot. On target slots, the target starts immediately and the "
+                "mask follows at the selected SOA. Native sources preserve color and geometry.",
+                "How clearly did you see the brief target stimulus during the sequence?\n\n"
+                "Identify the target.\n\n"
+                "How often did you see the brief target stimulus during the sequence?\n\n"
+                "Take a break, then press Space.",
+                "This modifier has no separate session baseline.",
+            )[phase])
+            return
         self.preview_grid_widget.setVisible(not counting and phase in (0, 2))
         self.preview_endpoint.setVisible(counting and phase == 2)
         self.preview_submit.setVisible(phase == 2)
@@ -1384,16 +1590,26 @@ class ConditionModifierDialog(QDialog):
         if self._selected_id is None or not self._save_fields():
             return
         definition = self._definitions[self._selected_id]
+        masking = definition.modifier.kind == ConditionModifierKind.MASKING
         condition = next(
             item for item in self._project.conditions if item.condition_id == self._condition_id
         )
+        if masking:
+            condition = next(
+                item for item in self._build_project().conditions
+                if item.condition_id == self._condition_id
+            )
         condition = condition.model_copy(
             update={
-                "pre_task_bindings": [
+                "pre_task_bindings": [binding for binding in condition.pre_task_bindings
+                                      if binding.task_id in definition.modifier.pre_task_ids]
+                if masking else [
                     TaskBinding(task_id=task_id, replaces_condition_start_gate=True)
                     for task_id in definition.modifier.pre_task_ids
                 ],
-                "post_task_bindings": [
+                "post_task_bindings": [binding for binding in condition.post_task_bindings
+                                       if binding.task_id in definition.modifier.post_task_ids]
+                if masking else [
                     TaskBinding(task_id=task_id) for task_id in definition.modifier.post_task_ids
                 ],
             }
@@ -1422,11 +1638,12 @@ class ConditionModifierDialog(QDialog):
                 or post != condition.post_task_bindings
             ):
                 raise ValueError(
-                    "Keep the linked study and recognition modules in their original phases, "
-                    "with one occurrence per condition. Add other content in Advanced custom steps."
+                    "Keep the linked modifier modules in their original phases and occurrences. "
+                    "Add other content in Advanced custom steps."
                 )
             candidate = ModifierDefinition(modifier=definition.modifier, task_modules=modules)
-            validate_image_memory_definition(candidate, allow_incomplete=True)
+            if not masking:
+                validate_image_memory_definition(candidate, allow_incomplete=True)
 
         dialog = ConditionTaskDialog(
             detached,
@@ -1435,8 +1652,11 @@ class ConditionModifierDialog(QDialog):
             defer_apply=True,
             staged_validator=validate_screens,
         )
-        dialog.setWindowTitle("Edit image-memory screens")
+        dialog.setWindowTitle("Edit masking screens" if masking else "Edit image-memory screens")
         dialog.header.subtitle_label.setText(
+            "Edit the instructions, visibility, target identity and frequency screens. "
+            "Keep target response values consistent with Native sources → Target answer."
+            if masking else
             "Edit instructions, fonts and layouts. Keep one study screen and one recognition "
             "screen with four targets, four foils and an explicit four-choice Submit response."
         )
@@ -1468,6 +1688,7 @@ class ConditionModifierDialog(QDialog):
             return
         definition = self._definitions[self._selected_id].model_copy(deep=True)
         image_count = sum(len(task_image_references(task)) for task in definition.task_modules)
+        image_count += len(modifier_image_references(definition.modifier))
         dialog = SaveModifierPresetDialog(
             name=definition.modifier.name,
             description=definition.modifier.description,

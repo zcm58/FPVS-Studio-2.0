@@ -60,6 +60,9 @@ class ModifierLibraryDialog(QDialog):
         for key, label in (
             ("backward-counting", "Backward counting"),
             ("image-memory", "Remember four images"),
+            ("masking-color", "Masking — Colors"),
+            ("masking-faces", "Masking — Faces"),
+            ("masking-number", "Masking — Numbers"),
         ):
             item = QListWidgetItem(label)
             item.setData(Qt.ItemDataRole.UserRole, key)
@@ -122,6 +125,14 @@ class ModifierLibraryDialog(QDialog):
                 "Optional session baseline → random starting number → count backward during "
                 "FPVS → report the final number. Records an estimated counting rate and "
                 "baseline comparison. New defaults: subtract 13, 120-second baseline."
+            )
+        elif key.startswith("masking-"):
+            self.details.setText(
+                "Brief repeated target → delayed mask → visibility, identity and frequency "
+                "questions. Edit SOA, native stimulus geometry, colors and all pre/post screens. "
+                + ("Faces requires your base and target image pools."
+                   if key == "masking-faces"
+                   else "Includes the source stimulus palette or character pools.")
             )
         else:
             self.details.setText(

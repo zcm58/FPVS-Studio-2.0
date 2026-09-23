@@ -38,6 +38,7 @@ from fpvs_studio.core.enums import (
     StimulusVariant,
 )
 from fpvs_studio.core.experiment_categories import category_conflict_condition_ids
+from fpvs_studio.core.masking import condition_masking
 from fpvs_studio.core.models import (
     AttentionalBlinkStreamSettings,
     Condition,
@@ -781,7 +782,9 @@ class ConditionSetupStep(QWidget):
             self.condition_list.clear()
             for condition in self._document.ordered_conditions():
                 settings = condition.attentional_blink
+                masking = condition_masking(self._document.project, condition)
                 timing_label = (
+                    f"Masking · {masking.soa_ms:g} ms SOA" if masking is not None else
                     f"{self._document.project.settings.protocol.base_hz:g} Hz character stream"
                     if isinstance(settings, AttentionalBlinkStreamSettings)
                     else _timing_template_label(condition.duty_cycle_mode)
@@ -859,10 +862,17 @@ class ConditionSetupStep(QWidget):
                 self._select_condition(condition.condition_id)
                 self.trigger_code_spin.setFocus()
                 return
+            if condition_masking(self._document.project, condition) is not None:
+                continue
             for role in ("base", "oddball"):
-                stimulus_set = self._document.get_condition_stimulus_set(
-                    condition.condition_id, role
+                stimulus_set = self._document.get_stimulus_set(
+                    condition.base_stimulus_set_id if role == "base"
+                    else condition.oddball_stimulus_set_id
                 )
+                if stimulus_set is None:
+                    self._select_condition(condition.condition_id)
+                    self.task_button.setFocus()
+                    return
                 if (
                     stimulus_set.modality == StimulusModality.IMAGE
                     or self._stimulus_ready(stimulus_set)
@@ -888,13 +898,19 @@ class ConditionSetupStep(QWidget):
     def _condition_status_text(self, condition: Condition) -> str:
         if condition.condition_id in category_conflict_condition_ids(self._document.project):
             return "Needs separation"
-        base_set = self._document.get_condition_stimulus_set(condition.condition_id, "base")
-        oddball_set = self._document.get_condition_stimulus_set(condition.condition_id, "oddball")
         if not is_guided_condition_name(condition.name):
             return "Needs name"
         elif not is_guided_trigger_code(condition.trigger_code):
             return "Needs trigger"
-        elif base_set.modality == StimulusModality.IMAGE:
+        masking = condition_masking(self._document.project, condition)
+        if masking is not None:
+            return ("Masking configured" if masking.base_visuals and masking.target_visuals
+                    else "Configure masking sources")
+        base_set = self._document.get_stimulus_set(condition.base_stimulus_set_id)
+        oddball_set = self._document.get_stimulus_set(condition.oddball_stimulus_set_id)
+        if base_set is None or oddball_set is None:
+            return "Missing stimulus sources"
+        if base_set.modality == StimulusModality.IMAGE:
             return "Design configured" if (
                 self._stimulus_ready(base_set) and self._stimulus_ready(oddball_set)
                 and (
@@ -922,17 +938,25 @@ class ConditionSetupStep(QWidget):
         stream = condition is not None and isinstance(
             condition.attentional_blink, AttentionalBlinkStreamSettings,
         )
+        masking = condition_masking(self._document.project, condition) if condition else None
         self.ab_stream_summary.hide()
-        self.appearance_row.setVisible(not stream)
-        self.appearance_label.setVisible(not stream)
+        self.appearance_row.setVisible(not stream and masking is None)
+        self.appearance_label.setVisible(not stream and masking is None)
         self.trigger_label.setText("T1 Trigger Code" if stream else "Trigger Code")
-        self.create_control_condition_button.setVisible(not stream)
+        self.create_control_condition_button.setVisible(not stream and masking is None)
         self.sources_row.hide()
-        self.modality_label.setVisible(not ab)
-        self.modality_combo.setVisible(not ab)
-        self.presentation_mode_label.setVisible(not ab)
-        self.presentation_mode_row.setVisible(not ab)
-        self.all_conditions_section.setVisible(not ab)
+        self.modality_label.setVisible(not ab and masking is None)
+        self.modality_combo.setVisible(not ab and masking is None)
+        self.presentation_mode_label.setVisible(not ab and masking is None)
+        self.presentation_mode_row.setVisible(not ab and masking is None)
+        self.all_conditions_section.setVisible(not ab and masking is None)
+        self.instructions_label.setVisible(masking is None)
+        self.instructions_edit.setVisible(masking is None)
+        self.duplicate_condition_button.setToolTip(
+            "Keeps the shared masking modifier. Use Copy for Condition in Condition Modifiers "
+            "before changing only the duplicate's stimuli or questions."
+            if masking is not None else ""
+        )
         for widget in (
             self.condition_name_edit,
             self.trigger_code_spin,
@@ -997,8 +1021,29 @@ class ConditionSetupStep(QWidget):
             self._set_source_summary(None, role="oddball")
             return
 
-        base_set = self._document.get_condition_stimulus_set(condition.condition_id, "base")
-        oddball_set = self._document.get_condition_stimulus_set(condition.condition_id, "oddball")
+        base_set = self._document.get_stimulus_set(condition.base_stimulus_set_id)
+        oddball_set = self._document.get_stimulus_set(condition.oddball_stimulus_set_id)
+        if masking is not None or base_set is None or oddball_set is None:
+            with QSignalBlocker(self.condition_name_edit):
+                self.condition_name_edit.setText(condition.name)
+            with QSignalBlocker(self.trigger_code_spin):
+                self.trigger_code_spin.setValue(condition.trigger_code)
+            self.condition_scope_label.setText("This condition")
+            self.condition_scope_label.setToolTip(condition.name)
+            self.words_panel.hide()
+            self.task_summary_label.setText(
+                condition_modifier_summary(self._document, condition.condition_id)
+            )
+            self.condition_list_hint.setText(
+                f"{masking.variant.title()} masking · {masking.soa_ms:g} ms SOA. "
+                "Edit sources, colors and participant questions in Condition Modifiers."
+                if masking is not None else
+                "This condition has no stimulus sources. Add a condition modifier "
+                "or create a condition with image or word sources."
+            )
+            self.presentation_button.setEnabled(False)
+            self.modality_combo.setEnabled(False)
+            return
         modality = base_set.modality
         named = is_guided_condition_name(condition.name)
         trigger_ready = is_guided_trigger_code(condition.trigger_code)
@@ -1525,10 +1570,13 @@ class ConditionSetupStep(QWidget):
     def _condition_has_control_sources(self, condition: Condition | None) -> bool:
         if condition is None or self._active_task is not None:
             return False
-        base_set = self._document.get_condition_stimulus_set(condition.condition_id, "base")
-        oddball_set = self._document.get_condition_stimulus_set(condition.condition_id, "oddball")
+        if condition_masking(self._document.project, condition) is not None:
+            return False
+        base_set = self._document.get_stimulus_set(condition.base_stimulus_set_id)
+        oddball_set = self._document.get_stimulus_set(condition.oddball_stimulus_set_id)
         if (
-            base_set.modality != StimulusModality.IMAGE
+            base_set is None or oddball_set is None
+            or base_set.modality != StimulusModality.IMAGE
             or oddball_set.modality != StimulusModality.IMAGE
         ):
             return False

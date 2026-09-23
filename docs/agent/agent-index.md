@@ -133,6 +133,11 @@ check persistence, and disable it again to restore ordinary launch checks.
 
 ## Cognitive Load FPVS
 
+For Masking, start with `core/masking.py`, `core/masking_presets.py`,
+`core/compiler_masking.py`, `core/scene_models.py`, and [Masking](../MASKING.md).
+Native sources are modifier-owned; pre/post tasks remain outside stream timing.
+Use compiler/project-io/runtime/engine/gui focused routes, then repo precommit.
+
 For Library downloads, the publisher applies the temporary COM3 bundle policy;
 see [Experiment Library](../EXPERIMENT_LIBRARY.md) before changing port handling.
 

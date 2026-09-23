@@ -3,9 +3,15 @@
 from __future__ import annotations
 
 from pathlib import PurePosixPath
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import (
+    Field,
+    SerializerFunctionWrapHandler,
+    field_validator,
+    model_serializer,
+    model_validator,
+)
 
 from fpvs_studio.core.backward_counting import (
     create_backward_counting_baseline_task,
@@ -13,6 +19,7 @@ from fpvs_studio.core.backward_counting import (
     create_backward_counting_start_task,
 )
 from fpvs_studio.core.enums import ProjectSchemaVersion
+from fpvs_studio.core.masking import MaskingSettings
 from fpvs_studio.core.paths import validate_project_relative_path
 from fpvs_studio.core.task_models import (
     BackwardCountingRole,
@@ -48,6 +55,16 @@ class ConditionModifier(TaskBaseModel):
     pre_task_ids: list[str]
     post_task_ids: list[str]
     baseline_task_id: str | None = None
+    masking: MaskingSettings | None = None
+
+    @model_serializer(mode="wrap")
+    def serialize_optional_masking(
+        self, handler: SerializerFunctionWrapHandler,
+    ) -> dict[str, Any]:
+        payload: dict[str, Any] = handler(self)
+        if self.masking is None:
+            payload.pop("masking", None)
+        return payload
 
     @field_validator("modifier_id")
     @classmethod
@@ -63,6 +80,8 @@ class ConditionModifier(TaskBaseModel):
 
     @model_validator(mode="after")
     def validate_ids(self) -> ConditionModifier:
+        if (self.kind == ConditionModifierKind.MASKING) != (self.masking is not None):
+            raise ValueError("Masking modifiers require masking settings exclusively.")
         ids = [*self.pre_task_ids, *self.post_task_ids]
         if not self.pre_task_ids or not self.post_task_ids:
             raise ValueError("A condition modifier requires both before and after modules.")
@@ -423,7 +442,7 @@ def validate_condition_modifiers(project: ProjectFile) -> None:
                 for config in after
                 if config is not None and config.role == BackwardCountingRole.LOAD_REPORT
             ]
-        else:
+        elif modifier.kind == ConditionModifierKind.IMAGE_MEMORY:
             memory_before = [modules[task_id].image_memory for task_id in modifier.pre_task_ids]
             memory_after = [modules[task_id].image_memory for task_id in modifier.post_task_ids]
             start_links = [
@@ -436,6 +455,8 @@ def validate_condition_modifiers(project: ProjectFile) -> None:
                 for config in memory_after
                 if config is not None and config.role == ImageMemoryRole.RECOGNITION
             ]
+        else:
+            start_links = report_links = [modifier.modifier_id]
         if len(start_links) != 1 or len(report_links) != 1 or start_links[0] != report_links[0]:
             raise ValueError(
                 f"Modifier '{modifier.name}' requires one matching typed before/after pair."
@@ -532,13 +553,25 @@ def assign_modifier(
         if condition.condition_id not in condition_ids:
             continue
         condition.pre_task_bindings.extend(
-            TaskBinding(task_id=task_id, replaces_condition_start_gate=True)
+            TaskBinding(task_id=task_id, replaces_condition_start_gate=True,
+                        occurrence=TaskOccurrence.FIRST_STREAM_GROUP_ENTRY
+                        if definition.modifier.masking is not None else TaskOccurrence.EVERY_ENTRY)
             for task_id in definition.modifier.pre_task_ids
         )
         condition.post_task_bindings = [
-            TaskBinding(task_id=task_id) for task_id in definition.modifier.post_task_ids
+            TaskBinding(task_id=task_id,
+                        occurrence=TaskOccurrence.LAST_STREAM_GROUP_ENTRY
+                        if definition.modifier.masking is not None and index == len(
+                            definition.modifier.post_task_ids) - 1
+                        else TaskOccurrence.EVERY_ENTRY)
+            for index, task_id in enumerate(definition.modifier.post_task_ids)
         ] + condition.post_task_bindings
-    draft.schema_version = ProjectSchemaVersion.V1_6
+    draft.schema_version = (
+        ProjectSchemaVersion.V1_7
+        if any(item.masking is not None for item in draft.condition_modifiers)
+        or project.schema_version == ProjectSchemaVersion.V1_7
+        else ProjectSchemaVersion.V1_6
+    )
     return type(project).model_validate(draft.model_dump())
 
 

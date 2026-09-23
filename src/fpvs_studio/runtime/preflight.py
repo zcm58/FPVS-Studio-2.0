@@ -142,6 +142,9 @@ def _validate_sinusoidal_presentation(run_spec: RunSpec) -> None:
 
 
 def _validate_stimulus_timing(run_spec: RunSpec) -> None:
+    if run_spec.scene_stream is not None:
+        _validate_scene_timing(run_spec)
+        return
     stimulus_sequence = run_spec.stimulus_sequence
     if len(stimulus_sequence) != run_spec.condition.total_stimuli:
         raise PreflightError(
@@ -423,6 +426,42 @@ def _validate_trigger_timing(run_spec: RunSpec) -> None:
             )
 
 
+def _validate_scene_timing(run_spec: RunSpec) -> None:
+    scene = run_spec.scene_stream
+    assert scene is not None
+    try:
+        scene.validate_frame_bounds(run_spec.display.total_frames)
+    except ValueError as exc:
+        raise PreflightError(str(exc)) from exc
+    slot = run_spec.display.frames_per_stimulus
+    every = run_spec.condition.oddball_every_n
+    slots = run_spec.condition.total_stimuli
+    bases = [event for event in scene.events if event.role in {"base", "mask"}]
+    targets = [event for event in scene.events if event.role == "target"]
+    if (run_spec.schema_version != "1.4.0"
+            or run_spec.condition.stimulus_modality != StimulusModality.SCENE
+            or run_spec.stimulus_sequence or run_spec.attentional_blink is not None
+            or not scene.target_id or every < 2 or slots < 1
+            or slots != run_spec.condition.total_oddball_cycles * every
+            or len(bases) != slots or len(targets) != run_spec.condition.total_oddball_cycles
+            or run_spec.display.total_frames != slots * slot
+            or not isclose(scene.requested_soa_ms * run_spec.display.refresh_hz / 1000,
+                           scene.soa_frames, rel_tol=0, abs_tol=1e-6)):
+        raise PreflightError(
+            "Compiled masking scene metadata or item-grid coverage is inconsistent."
+        )
+    for index, event in enumerate(bases):
+        expected_role = "mask" if (index + 1) % every == 0 else "base"
+        if (event.role != expected_role or event.start_frame != index * slot + scene.soa_frames
+                or scene.soa_frames + event.duration_frames > slot):
+            raise PreflightError("Compiled masking base/mask windows do not match the item grid.")
+    for index, event in enumerate(targets):
+        if (event.visual_id != scene.target_id
+                or event.start_frame != ((index + 1) * every - 1) * slot
+                or event.duration_frames > scene.soa_frames):
+            raise PreflightError("Compiled masking target windows do not match the item grid.")
+
+
 def _resolve_project_image_path(project_root: Path, image_path: str) -> Path:
     relative_path = Path(image_path)
     if relative_path.is_absolute():
@@ -447,6 +486,10 @@ def _validate_image_assets(
     decode: bool,
 ) -> None:
     image_references: dict[str, set[tuple[str, int, int]]] = {}
+    if run_spec.scene_stream is not None:
+        for visual in run_spec.scene_stream.visuals:
+            if visual.image_path is not None:
+                image_references.setdefault(visual.image_path, set())
     for event in run_spec.stimulus_sequence:
         if event.stimulus_modality != StimulusModality.IMAGE or event.image_path is None:
             continue

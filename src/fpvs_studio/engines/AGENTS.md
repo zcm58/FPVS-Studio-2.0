@@ -24,7 +24,10 @@ play compiled runs end to end.
 - Apply the compiled sinusoidal mode only to image stimuli, using precomputed per-frame
   contrast operations while leaving continuous and 50%-blank drawing unchanged.
 - Keep condition-local stimulus preparation and cleanup inside the engine run
-  boundary; do not retain image or text stimuli across conditions.
+  boundary; do not retain image or text stimuli across conditions. Native scene
+  runs use `prepare_condition` before authored pre-task screens, consume that one
+  prepared condition without warmup blanks, and release it on playback or session
+  close. A scene must never prepare resources after its timed pre-task fixation.
 - Render runtime-owned instruction, inter-block break, and completion screens without moving session sequencing into the engine.
 - Render one compiled, engine-neutral condition-task step and return neutral input;
   runtime remains responsible for module order, repeats, response validation,

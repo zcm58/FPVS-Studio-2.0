@@ -6,7 +6,9 @@ requests."""
 
 from __future__ import annotations
 
-from pydantic import Field, model_validator
+from typing import Any
+
+from pydantic import Field, SerializerFunctionWrapHandler, model_serializer, model_validator
 
 from fpvs_studio.core.enums import InterConditionMode, SchemaVersion
 from fpvs_studio.core.models import FPVSBaseModel
@@ -88,9 +90,21 @@ class SessionPlan(FPVSBaseModel):
     transition: InterConditionTransitionSpec
     blocks: list[SessionBlock] = Field(default_factory=list)
     total_runs: int = Field(ge=0)
+    authored_task_flow: bool | None = None
+
+    @model_serializer(mode="wrap")
+    def serialize_optional_flow(
+        self, handler: SerializerFunctionWrapHandler,
+    ) -> dict[str, Any]:
+        payload: dict[str, Any] = handler(self)
+        if self.authored_task_flow is None:
+            payload.pop("authored_task_flow", None)
+        return payload
 
     @model_validator(mode="after")
     def validate_totals(self) -> SessionPlan:
+        if self.authored_task_flow is not None and self.schema_version != "1.3.0":
+            raise ValueError("Authored task session flow requires SessionPlan schema 1.3.0.")
         if self.block_count != len(self.blocks):
             raise ValueError("block_count must match the number of blocks.")
         total_entries = sum(len(block.entries) for block in self.blocks)

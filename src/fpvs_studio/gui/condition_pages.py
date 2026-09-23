@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
 )
 
 from fpvs_studio.core.enums import DutyCycleMode, StimulusModality, StimulusVariant
+from fpvs_studio.core.masking import condition_masking
 from fpvs_studio.core.models import Condition, StimulusSet
 from fpvs_studio.core.paths import stimuli_dir
 from fpvs_studio.core.template_library import get_template
@@ -483,14 +484,18 @@ class ConditionsPage(QWidget):
             return
 
         template = get_template(self._document.project.meta.template_id)
-        repeat_guidance = {
-            (row.condition_id, row.role): row
-            for row in condition_stimulus_repeat_guidance(self._document.project)
-        }
-        base_set = self._document.get_condition_stimulus_set(condition.condition_id, "base")
-        oddball_set = self._document.get_condition_stimulus_set(condition.condition_id, "oddball")
+        masking = condition_masking(self._document.project, condition)
+        base_set = (
+            self._document.get_condition_stimulus_set(condition.condition_id, "base")
+            if masking is None else None
+        )
+        oddball_set = (
+            self._document.get_condition_stimulus_set(condition.condition_id, "oddball")
+            if masking is None else None
+        )
         image_mode = (
-            base_set.modality == StimulusModality.IMAGE
+            base_set is not None and oddball_set is not None
+            and base_set.modality == StimulusModality.IMAGE
             and oddball_set.modality == StimulusModality.IMAGE
         )
         self.base_import_button.setEnabled(enabled and image_mode)
@@ -520,7 +525,7 @@ class ConditionsPage(QWidget):
             )
         _sync_timing_template_combo(
             self.timing_template_combo,
-            modality=StimulusModality.IMAGE if image_mode else StimulusModality.WORD,
+            modality=StimulusModality.IMAGE if image_mode or masking else StimulusModality.WORD,
             selected_mode=condition.duty_cycle_mode,
         )
         protocol = self._document.project.settings.protocol
@@ -528,6 +533,30 @@ class ConditionsPage(QWidget):
             f"{template.display_name}: base {protocol.base_hz:g} Hz, oddball every "
             f"{protocol.oddball_every_n} stimuli ({protocol.oddball_hz:g} Hz)."
         )
+        if masking is not None:
+            self.selected_condition_note.setText(
+                "Edit native sources in Setup → Conditions → FPVS Condition Modifiers."
+            )
+            for role, pool in (("base", masking.base_visuals), ("oddball", masking.target_visuals)):
+                getattr(self, f"{role}_source_state").set_state(
+                    "ready" if pool else "pending", "Masking sources" if pool else "Needs sources",
+                )
+                getattr(self, f"{role}_source_value").set_path_text("Owned by Masking modifier")
+                getattr(self, f"{role}_count_value").setText(str(len(pool)))
+                getattr(self, f"{role}_repeat_guidance_value").setText(
+                    "Native masking stimulus pool."
+                )
+                getattr(self, f"{role}_resolution_value").setText("Authored native geometry")
+                getattr(self, f"{role}_variants_value").setText("Masking")
+            self.variant_combo.setEnabled(False)
+            self.timing_template_combo.setEnabled(False)
+            self.target_repeats_spin.setEnabled(False)
+            return
+        assert base_set is not None and oddball_set is not None
+        repeat_guidance = {
+            (row.condition_id, row.role): row
+            for row in condition_stimulus_repeat_guidance(self._document.project)
+        }
         self._set_source_panel(
             stimulus_set=base_set,
             guidance=repeat_guidance[(condition.condition_id, "base")],

@@ -865,11 +865,11 @@ class ProjectFile(FPVSBaseModel):
     def validate_unique_ids(self) -> ProjectFile:
         if any(isinstance(item.attentional_blink, AttentionalBlinkStreamSettings)
                for item in self.conditions) and self.schema_version not in {
-                   ProjectSchemaVersion.V1_5, ProjectSchemaVersion.V1_6,
+                   ProjectSchemaVersion.V1_5, ProjectSchemaVersion.V1_6, ProjectSchemaVersion.V1_7,
                }:
             raise ValueError("Letter-stream projects require project schema 1.5.0.")
         if (self.condition_modifiers or any(task.image_memory for task in self.task_modules)) and (
-            self.schema_version != ProjectSchemaVersion.V1_6
+            self.schema_version not in {ProjectSchemaVersion.V1_6, ProjectSchemaVersion.V1_7}
         ):
             raise ValueError("Condition modifiers and image memory require project schema 1.6.0.")
         set_ids = [item.set_id for item in self.stimulus_sets]
@@ -882,6 +882,12 @@ class ProjectFile(FPVSBaseModel):
         if len(task_ids) != len(set(task_ids)):
             raise ValueError("Task module ids must be unique.")
         validate_condition_modifiers(self)
+        from fpvs_studio.core.task_models import task_requires_scene_schema
+
+        if (any(modifier.masking is not None for modifier in self.condition_modifiers)
+                or any(task_requires_scene_schema(task) for task in self.task_modules)):
+            if self.schema_version != ProjectSchemaVersion.V1_7:
+                raise ValueError("Masking and native task scenes require project schema 1.7.0.")
         return self
 
 

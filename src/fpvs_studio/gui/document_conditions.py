@@ -30,6 +30,7 @@ from fpvs_studio.core.experiment_categories import (
     RETIRED_IMAGE_PAIR_MESSAGE,
     has_retired_image_pair_design,
 )
+from fpvs_studio.core.masking import condition_masking
 from fpvs_studio.core.models import (
     AttentionalBlinkSettings,
     AttentionalBlinkStreamSettings,
@@ -317,7 +318,7 @@ class DocumentConditionMixin:
         self._replace_project(project)
 
     def duplicate_condition(self, condition_id: str) -> str:
-        """Duplicate condition metadata with new empty base/oddball stimulus sets."""
+        """Duplicate metadata, retaining shared modifiers and their source ownership."""
 
         if has_retired_image_pair_design(self._project):
             raise DocumentError(RETIRED_IMAGE_PAIR_MESSAGE)
@@ -336,6 +337,15 @@ class DocumentConditionMixin:
             copy_name = f"{source_condition.name} Copy {suffix}"
             suffix += 1
         new_condition_id = self._unique_slug(copy_name, existing_condition_ids)
+        if condition_masking(self._project, source_condition) is not None:
+            duplicate = validated_copy(
+                source_condition, condition_id=new_condition_id, name=copy_name,
+                order_index=len(ordered_conditions),
+            )
+            self._replace_project(validated_copy(
+                self._project, conditions=[*ordered_conditions, duplicate],
+            ))
+            return new_condition_id
         if isinstance(source_condition.attentional_blink, AttentionalBlinkStreamSettings):
             duplicate = validated_copy(
                 source_condition, condition_id=new_condition_id, name=copy_name,

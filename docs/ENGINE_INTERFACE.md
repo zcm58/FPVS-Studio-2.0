@@ -27,6 +27,12 @@ as PsychoPy. Runtime owns flow and calls engines through
 - Runtime may pass one `ResolvedTaskStep` at a time to `render_task_step(...)`.
   Engines return `TaskEngineInput`; they do not own module ordering, repeats, retries,
   branching, validation, scoring, abort policy, or response export.
+- Native scene runs use `prepare_condition(...)` before their timed pre-task screens.
+  The engine retains one prepared condition until `run_condition(...)` consumes it,
+  then releases it normally; abort/session close also releases unconsumed resources.
+  Scene playback adds no ordinary blank warmup. Timed scene task screens receive
+  resolved frame counts; terminal screens clear at their duration boundary. See
+  [Masking](MASKING.md) for the authored flow and checkpoint timing.
 - `ResolvedTaskStep.font_family` is the engine-neutral Arial/Open Sans choice compiled
   from the authored step. An engine must use it consistently for every text surface in
   that step; it must not substitute a machine-dependent font path into the contract.

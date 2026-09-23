@@ -13,7 +13,15 @@ from enum import Enum
 from math import isfinite
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    SerializerFunctionWrapHandler,
+    field_validator,
+    model_serializer,
+    model_validator,
+)
 
 from fpvs_studio.core.enums import PresentationUnit
 from fpvs_studio.core.paths import validate_project_relative_path
@@ -75,6 +83,8 @@ class TaskOccurrence(str, Enum):
     FIRST_OCCURRENCE = "first_occurrence"
     LAST_OCCURRENCE = "last_occurrence"
     FIRST_SESSION_ENTRY = "first_session_entry"
+    FIRST_STREAM_GROUP_ENTRY = "first_stream_group_entry"
+    LAST_STREAM_GROUP_ENTRY = "last_stream_group_entry"
 
 
 class BackwardCountingRole(str, Enum):
@@ -143,6 +153,7 @@ class BackwardCountingResult(TaskBaseModel):
 class ConditionModifierKind(str, Enum):
     BACKWARD_COUNTING = "backward_counting"
     IMAGE_MEMORY = "image_memory"
+    MASKING = "masking"
 
 
 class ModifierProvenance(TaskBaseModel):
@@ -208,6 +219,7 @@ class TaskItemModality(str, Enum):
 
     TEXT = "text"
     IMAGE = "image"
+    CIRCLE = "circle"
 
 
 class TaskQuestionKind(str, Enum):
@@ -274,7 +286,7 @@ def _clean_task_text(value: str, *, field_name: str, allow_blank: bool = True) -
 
 
 class TaskDisplayItem(TaskBaseModel):
-    """One positioned image or text item in a study/choice surface."""
+    """One positioned image, text, or native circle in a study/choice surface."""
 
     item_id: str
     modality: TaskItemModality
@@ -285,9 +297,24 @@ class TaskDisplayItem(TaskBaseModel):
     width: float | None = Field(default=None, gt=0)
     height: float | None = Field(default=None, gt=0)
     unit: PresentationUnit = PresentationUnit.DEGREES
+    color_rgb: tuple[float, float, float] | None = None
+    line_color_rgb: tuple[float, float, float] | None = None
+    line_width_px: float = Field(default=1.0, ge=0)
+    circle_edges: int | None = Field(default=None, ge=3)
     selectable: bool = False
     correct: bool | None = None
     score: float | None = None
+
+    @model_serializer(mode="wrap")
+    def serialize_visual_fields(self, handler: SerializerFunctionWrapHandler) -> dict[str, object]:
+        payload: dict[str, object] = handler(self)
+        for name, default in (
+            ("color_rgb", None), ("line_color_rgb", None),
+            ("line_width_px", 1.0), ("circle_edges", None),
+        ):
+            if getattr(self, name) == default:
+                payload.pop(name, None)
+        return payload
 
     @field_validator("item_id")
     @classmethod
@@ -308,7 +335,7 @@ class TaskDisplayItem(TaskBaseModel):
             return None
         return validate_project_relative_path(value)
 
-    @field_validator("x", "y", "width", "height", "score")
+    @field_validator("x", "y", "width", "height", "score", "line_width_px")
     @classmethod
     def validate_finite_number(cls, value: float | None) -> float | None:
         if value is None:
@@ -318,6 +345,16 @@ class TaskDisplayItem(TaskBaseModel):
             raise ValueError("Task layout and score values must be finite.")
         return normalized
 
+    @field_validator("color_rgb", "line_color_rgb")
+    @classmethod
+    def validate_rgb(
+        cls, value: tuple[float, float, float] | None,
+    ) -> tuple[float, float, float] | None:
+        if value is not None and any(not isfinite(channel) or not -1 <= channel <= 1
+                                     for channel in value):
+            raise ValueError("Task RGB channels must be finite values from -1 through 1.")
+        return value
+
     @model_validator(mode="after")
     def validate_payload(self) -> TaskDisplayItem:
         if self.modality == TaskItemModality.IMAGE:
@@ -326,6 +363,16 @@ class TaskDisplayItem(TaskBaseModel):
         elif self.modality == TaskItemModality.TEXT:
             if self.text is None or self.image_path is not None:
                 raise ValueError("Text task items require text and may not store image_path.")
+        elif self.modality == TaskItemModality.CIRCLE:
+            if self.text is not None or self.image_path is not None:
+                raise ValueError("Circle task items may not store text or image_path.")
+            if self.width is None or self.height is None:
+                raise ValueError("Circle task items require width and height.")
+        if self.modality != TaskItemModality.CIRCLE and (
+            self.line_color_rgb is not None or self.line_width_px != 1.0
+            or self.circle_edges is not None
+        ):
+            raise ValueError("Only circle task items may define an outline or edge count.")
         if not self.selectable and (self.correct is not None or self.score is not None):
             raise ValueError("Only selectable task items may define correctness or score.")
         return self
@@ -514,10 +561,12 @@ class TaskStep(TaskBaseModel):
     heading: str = ""
     text: str = ""
     font_family: TaskFontFamily = TaskFontFamily.ARIAL
+    degree_geometry: Literal["visual_angle", "linear"] = "visual_angle"
     prompt_x: float = 0.0
     prompt_y: float = 0.0
     prompt_unit: PresentationUnit = PresentationUnit.DEGREES
     prompt_height: float | None = Field(default=None, gt=0)
+    prompt_width: float | None = Field(default=None, gt=0)
     show_footer: bool = True
     layout_mode: TaskLayoutMode = TaskLayoutMode.RESPONSIVE_GRID
     columns: int | None = Field(default=None, ge=1)
@@ -534,11 +583,23 @@ class TaskStep(TaskBaseModel):
     retry_on_invalid: bool = False
     retry_on_incorrect: bool = False
     randomize_options: bool = False
+    randomize_positions: bool = False
     require_response: bool = False
     min_selections: int = Field(default=1, ge=0)
     max_selections: int = Field(default=1, ge=1)
     allow_duplicate_selections_across_repeats: bool = True
     branch_rules: list[TaskBranchRule] = Field(default_factory=list)
+
+    @model_serializer(mode="wrap")
+    def serialize_layout_fields(self, handler: SerializerFunctionWrapHandler) -> dict[str, object]:
+        payload: dict[str, object] = handler(self)
+        if self.prompt_width is None:
+            payload.pop("prompt_width", None)
+        if not self.randomize_positions:
+            payload.pop("randomize_positions", None)
+        if self.degree_geometry == "visual_angle":
+            payload.pop("degree_geometry", None)
+        return payload
 
     @field_validator("step_id")
     @classmethod
@@ -577,7 +638,7 @@ class TaskStep(TaskBaseModel):
             raise ValueError("Task durations must be finite.")
         return value
 
-    @field_validator("prompt_x", "prompt_y", "prompt_height")
+    @field_validator("prompt_x", "prompt_y", "prompt_height", "prompt_width")
     @classmethod
     def validate_prompt_geometry(cls, value: float | None) -> float | None:
         if value is not None and not isfinite(float(value)):
@@ -599,6 +660,14 @@ class TaskStep(TaskBaseModel):
             raise ValueError("Task min_selections must not exceed max_selections.")
         if (self.retry_on_invalid or self.retry_on_incorrect) and self.max_attempts < 2:
             raise ValueError("Retry policies require max_attempts of at least two.")
+        if self.randomize_positions and (
+            self.layout_mode != TaskLayoutMode.EXACT
+            or self.kind != TaskStepKind.CHOICE_GRID
+            or self.randomize_options
+        ):
+            raise ValueError(
+                "Position randomization requires an exact choice grid without option randomization."
+            )
         if self.kind in {TaskStepKind.STUDY, TaskStepKind.CHOICE_GRID} and not self.items:
             raise ValueError(f"{self.kind.value} steps require display items.")
         if self.layout_mode == TaskLayoutMode.EXACT:
@@ -918,6 +987,24 @@ class TaskModule(TaskBaseModel):
             steps=self.steps,
         )
         return self
+
+
+def task_requires_scene_schema(task: TaskModule) -> bool:
+    """Identify task visuals/layout that older strict task readers cannot preserve."""
+    return any(
+        step.prompt_width is not None
+        or step.degree_geometry == "linear"
+        or step.randomize_positions
+        or any(
+            item.modality == TaskItemModality.CIRCLE
+            or item.color_rgb is not None
+            or item.line_color_rgb is not None
+            or item.line_width_px != 1.0
+            or item.circle_edges is not None
+            for item in step.items
+        )
+        for step in task.steps
+    )
 
 
 class TaskBinding(TaskBaseModel):

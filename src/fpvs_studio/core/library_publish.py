@@ -31,7 +31,7 @@ from fpvs_studio.core.project_bundle import (
     import_project_bundle,
 )
 from fpvs_studio.core.serialization import load_project_file, save_project_file
-from fpvs_studio.core.task_assets import SUPPORTED_TASK_ASSET_SUFFIXES, task_image_references
+from fpvs_studio.core.task_assets import SUPPORTED_TASK_ASSET_SUFFIXES, owned_image_references
 from fpvs_studio.preprocessing.manifest import read_stimulus_manifest, write_stimulus_manifest
 from fpvs_studio.preprocessing.models import StimulusManifest
 
@@ -156,11 +156,12 @@ def _clean_inventory(
             for derivative in asset.derivatives:
                 _validate_provenance(derivative.parameters)
                 paths.add(derivative.relative_path)
-    for task in clean.task_modules:
-        for relative in task_image_references(task):
-            if not relative.startswith(f"stimuli/task-assets/{task.task_id}/"):
-                raise ProjectBundleError(f"Task image is outside its task folder: {relative}")
-            paths.add(relative)
+    try:
+        paths.update(relative for _owner, relative in owned_image_references(
+            clean.task_modules, clean.condition_modifiers,
+        ))
+    except ValueError as exc:
+        raise ProjectBundleError(str(exc)) from exc
     for relative in paths:
         if (
             not relative.startswith("stimuli/")
