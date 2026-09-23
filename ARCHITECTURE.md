@@ -20,7 +20,10 @@ lazily only inside the engine package.
   `core/library_publish.py` prepares clean publishable whole-project copies with
   the current fixed COM3 serial-port policy.
   `core/library_origin.py` owns local import receipts; `library/project_updates.py`
-  discovers newer project releases. On-open checks and explicit separate-project
+  uses receipt identity for version checks. `core/library_installations.py` scans
+  installed metadata; `library/installations.py` gates payload downloads and explicit
+  updates. The bundle importer also blocks repeated recorded releases at commit.
+  On-open checks and explicit separate-project
   installation use `gui/project_update_controller.py`; see the Library contract.
   Private content and the independent Cloudflare service live in
   `zcm58/FPVS-Studio-Library`; that service checks live release-asset availability

@@ -10,7 +10,9 @@ import pytest
 from PySide6.QtCore import Qt, QThread
 from PySide6.QtWidgets import QApplication, QDialog, QLabel, QPushButton
 from tests.gui.helpers import assert_visible_children_within_parent, open_created_project
+from tests.unit.test_library_installations import project as installed_project
 
+from fpvs_studio.core.library_installations import scan_library_projects
 from fpvs_studio.core.project_bundle import ProjectBundleCancelled, ProjectBundleError
 from fpvs_studio.core.project_service import create_project
 from fpvs_studio.gui import library_controller as library_module
@@ -52,13 +54,32 @@ def _connection() -> LibraryConnection:
 
 
 @pytest.mark.parametrize("size", [(900, 640), (1040, 760)])
-@pytest.mark.parametrize("state", ["disconnected", "ready", "busy", "error", "empty"])
-def test_library_layout_and_full_metadata(qtbot, size, state) -> None:
+@pytest.mark.parametrize("state", [
+    "disconnected", "ready", "busy", "error", "empty", "installed", "update", "review",
+])
+def test_library_layout_and_full_metadata(qtbot, tmp_path, size, state) -> None:
     dialog = LibraryDialog()
     qtbot.addWidget(dialog)
     item = _item(title="Long experiment name " * 7, description="Protocol description. " * 150)
     if state != "disconnected":
         dialog.set_connection(_connection())
+        if state in {"installed", "update", "review"}:
+            installed_project(
+                tmp_path / ("long-folder-name-" * 5), project_id="example",
+                name=item.title, version="0.9" if state == "update" else "1.0",
+                linked=False,
+            )
+            # Give known versions the catalog identity; unknown copies stay unlinked.
+            if state != "review":
+                from tests.unit.test_library_project_updates import origin
+
+                from fpvs_studio.core.library_origin import save_library_origin
+                folder = next((tmp_path / ("long-folder-name-" * 5)).iterdir())
+                save_library_origin(folder, origin(
+                    item_id="example", local_project_id="example",
+                    installed_version="0.9" if state == "update" else "1.0",
+                ))
+        dialog.set_installations(scan_library_projects(tmp_path), "https://library.example.test")
         dialog.set_catalog(
             LibraryCatalog(schema_version="1.0", library_name="Research", items=[item])
         )
@@ -90,6 +111,27 @@ def test_library_layout_and_full_metadata(qtbot, size, state) -> None:
         assert dialog.progress_bar.value() == 50
         assert not dialog.install_button.isEnabled()
         assert dialog.cancel_button.isEnabled()
+    if state == "installed":
+        assert not dialog.install_button.isEnabled()
+        assert dialog.install_button.text() == "Already installed"
+    elif state in {"update", "review"}:
+        assert dialog.install_button.isEnabled()
+        assert "Review" in dialog.install_button.text()
+
+
+def test_library_rechecks_installation_before_any_download(qapp, qtbot, monkeypatch, tmp_path):
+    controller, client, _lifecycle = _controller(
+        qapp, qtbot, monkeypatch, tmp_path, lambda *_args: pytest.fail("Unexpected import"),
+    )
+    _enroll(controller, qtbot)
+    reviewed = []
+    controller._review_project = reviewed.append
+    folder = installed_project(tmp_path, project_id="example", linked=False)
+    controller.dialog.install_button.click()
+    qtbot.waitUntil(lambda: controller._job is None)
+    assert reviewed == [folder]
+    assert not client.download_started.is_set()
+    assert not controller.dialog.isVisible()
 
 
 def test_library_search_and_incompatible_item(qtbot) -> None:
@@ -157,7 +199,10 @@ def _controller(qapp, qtbot, monkeypatch, tmp_path, import_bundle):
         lambda path: SimpleNamespace(project=SimpleNamespace(project_id="example")),
     )
     client = _Client(tmp_path / "example.fpvsbundle")
-    controller = LibraryController(qapp, import_bundle=import_bundle, client=client)
+    controller = LibraryController(
+        qapp, import_bundle=import_bundle, client=client, studio_root=lambda: tmp_path,
+        review_project=lambda root: None,
+    )
     controller.show()
     qtbot.addWidget(controller.dialog)
     qtbot.waitUntil(lambda: controller._job is None)
@@ -260,6 +305,27 @@ def test_library_import_review_cancel_releases_handoff(controller, tmp_path, mon
     results = []
     controller.import_project_bundle_file(tmp_path / "test.fpvsbundle", on_finished=results.append)
     assert results == [None]
+
+
+@pytest.mark.parametrize("allow_handoff,save", [(False, True), (True, False), (True, True)])
+def test_existing_library_review_respects_handoff_and_save_guards(
+    controller, tmp_path, monkeypatch, allow_handoff, save,
+):
+    window = SimpleNamespace(
+        document=SimpleNamespace(project_root=tmp_path / "current"),
+        maybe_save_changes=lambda: save,
+    )
+    monkeypatch.setattr(controller, "main_window", window)
+    monkeypatch.setattr(controller, "_can_publish_from", lambda target: allow_handoff)
+    opened = []
+    monkeypatch.setattr(
+        controller, "request_open_project",
+        lambda path, **kwargs: opened.append((path, kwargs["on_opened"])),
+    )
+    controller._review_library_project(tmp_path / "existing")
+    assert bool(opened) == (allow_handoff and save)
+    if opened:
+        assert opened == [(tmp_path / "existing", controller.show_project_versions)]
 
 
 def test_library_import_cancel_and_late_commit(controller, qtbot, tmp_path, monkeypatch) -> None:

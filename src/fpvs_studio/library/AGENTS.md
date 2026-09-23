@@ -21,6 +21,9 @@ validation and extraction; this package only transfers and verifies bytes.
   Compare semantic versions by item identity even if the installed release disappeared;
   never infer origins from names or follow a receipt to a different service endpoint.
   Checking does not install. GUI-owned review imports a separate project explicitly.
+- `installations.py` checks the configured Studio Root before and after payload transfer.
+  Same/newer installed versions cannot download again, including through project updates.
+  Older or unlinked review candidates require the explicit project-version workflow.
 
 See `docs/EXPERIMENT_LIBRARY.md` and the active library execution plan. Run the
 `library` focused verification route and repo precommit for shared changes.

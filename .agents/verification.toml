@@ -92,6 +92,7 @@ manual_smoke = []
 [scopes."project-io"]
 checks = []
 tests = [
+  "tests/unit/test_library_installations.py",
   "tests/unit/test_library_origin.py",
   "tests/unit/test_masking_media_portability.py",
   "tests/unit/test_serialization.py",
@@ -114,6 +115,7 @@ manual_smoke = []
 [scopes.library]
 checks = []
 tests = [
+  "tests/unit/test_library_installations.py",
   "tests/unit/test_library_origin.py",
   "tests/unit/test_library_project_updates.py",
   "tests/unit/test_library_client.py",
@@ -130,6 +132,7 @@ include = [
   "src/fpvs_studio/developer/**",
   "src/fpvs_studio/core/library_publish.py",
   "src/fpvs_studio/core/library_origin.py",
+  "src/fpvs_studio/core/library_installations.py",
   "src/fpvs_studio/gui/library_*.py",
   "src/fpvs_studio/gui/project_update_controller.py",
   "src/fpvs_studio/gui/project_version_dialog.py",

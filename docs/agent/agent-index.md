@@ -112,11 +112,13 @@ acceptance; source checks do not establish an installed update or clean-PC repai
 ## Library Project Versions
 
 For project-version checks, start with `core/library_origin.py`,
+`core/library_installations.py`, `library/installations.py`,
 `library/project_updates.py`, `gui/project_update_controller.py` and
 [Experiment Library](../EXPERIMENT_LIBRARY.md#project-version-checks).
 Library imports write local receipts before commit; checks on open never install
 changes. Use Library/project-io/GUI focused routes and registered project-version
-dialog/controller tests. Existing downloads need explicit linking, not name matching.
+dialog/controller tests. Legacy name matches require review and explicit linking;
+same/newer recorded installations block downloading and bundle commit.
 
 ## Bug Reporting
 

@@ -163,6 +163,35 @@ def test_import_receipt_uses_collision_safe_identity_without_changing_project_sc
         assert not any(name.startswith(ORIGIN_DIRECTORY) for name in archive.namelist())
 
 
+@pytest.mark.parametrize("requested", ["1.0.0", "0.9.0"])
+def test_library_import_rejects_a_second_copy_of_the_same_release(bundle, tmp_path, requested):
+    path, _project = bundle
+    root = tmp_path / "studio"
+    receipt = origin(bundle_sha256=hashlib.sha256(path.read_bytes()).hexdigest())
+    installed = import_project_bundle(path, root, library_origin=receipt)
+    before = (installed.project_root / "project.json").read_bytes()
+    with pytest.raises(ProjectBundleError, match="already installed"):
+        import_project_bundle(path, root, library_origin=receipt.model_copy(
+            update={"installed_version": requested},
+        ))
+    assert (installed.project_root / "project.json").read_bytes() == before
+    assert len(list(root.glob("*/project.json"))) == 1
+
+
+def test_explicit_newer_library_import_preserves_the_previous_project(bundle, tmp_path):
+    path, _project = bundle
+    root = tmp_path / "studio"
+    receipt = origin(bundle_sha256=hashlib.sha256(path.read_bytes()).hexdigest())
+    previous = import_project_bundle(path, root, library_origin=receipt)
+    before = (previous.project_root / "project.json").read_bytes()
+    newer = import_project_bundle(path, root, library_origin=receipt.model_copy(
+        update={"installed_version": "1.1.0"},
+    ))
+    assert newer.project_root != previous.project_root
+    assert (previous.project_root / "project.json").read_bytes() == before
+    assert load_library_origin(newer.project_root).installed_version == "1.1.0"
+
+
 @pytest.mark.parametrize("failure", ["receipt-write", "cancel", "checksum"])
 def test_import_failure_before_commit_leaves_no_project_or_receipt(
     bundle, tmp_path, monkeypatch, failure,

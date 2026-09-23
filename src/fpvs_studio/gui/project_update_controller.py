@@ -13,6 +13,7 @@ from PySide6.QtCore import QObject
 from PySide6.QtWidgets import QApplication
 from shiboken6 import isValid
 
+from fpvs_studio.core.library_installations import LibraryInstallStatus
 from fpvs_studio.core.library_origin import (
     LibraryOriginError,
     LibraryProjectOrigin,
@@ -31,6 +32,7 @@ from fpvs_studio.gui.update_lifecycle import (
 )
 from fpvs_studio.library.client import LibraryClient
 from fpvs_studio.library.errors import LibraryCancelled, LibraryError
+from fpvs_studio.library.installations import check_library_install, download_library_install
 from fpvs_studio.library.models import LibraryCatalog
 from fpvs_studio.library.project_updates import ProjectUpdateResult, check_project_update
 
@@ -53,12 +55,14 @@ class ProjectUpdateController(QObject):
         self, app: QApplication, *,
         current_window: Callable[[], StudioMainWindow | None],
         import_bundle: ImportCallback,
+        studio_root: Callable[[], Path],
         client: LibraryClient | None = None,
     ) -> None:
         super().__init__(app)
         self.client = client or LibraryClient()
         self._current_window = current_window
         self._import_bundle = import_bundle
+        self._studio_root = studio_root
         self._lifecycle = update_lifecycle(app)
         self._lifecycle.shutdown_started.connect(self._shutdown)
         self._window: StudioMainWindow | None = None
@@ -115,6 +119,7 @@ class ProjectUpdateController(QObject):
             return
         root = window.document.project_root
         local_project_id = window.document.project.meta.project_id
+        studio_root = self._studio_root()
 
         def check(_progress: ProgressReporter, cancel: Event) -> _Checked:
             try:
@@ -133,6 +138,14 @@ class ProjectUpdateController(QObject):
                 result = check_project_update(self.client, origin, automatic=automatic,
                                               cancel_event=cancel)
             catalog = None
+            if result.can_install and result.latest_item is not None:
+                installed = check_library_install(
+                    studio_root, self.client.service_url, result.latest_item, cancel_event=cancel,
+                )
+                if installed.state == "installed":
+                    result = ProjectUpdateResult(
+                        "unavailable", origin, result.latest_item, installed.message,
+                    )
             if not automatic and origin is None and self.client.connection_info() is not None:
                 catalog = self.client.catalog(cancel_event=cancel)
             return _Checked(result, catalog)
@@ -275,11 +288,18 @@ class ProjectUpdateController(QObject):
             return
         assert result.origin is not None
         item, previous_origin = result.latest_item, result.origin
+        assert self._window is not None
+        root = self._studio_root()
 
         def download(
             progress: ProgressReporter, cancel: Event,
         ) -> tuple[Path, ProjectBundleManifest, LibraryProjectOrigin]:
-            path = self.client.download(item, cancel_event=cancel, progress_callback=progress)
+            path = download_library_install(
+                self.client, item, root, update=True,
+                cancel_event=cancel, progress_callback=progress,
+            )
+            if isinstance(path, LibraryInstallStatus):
+                raise LibraryOriginError(path.message)
             manifest = read_project_bundle_manifest(path)
             origin = LibraryProjectOrigin(
                 service_url=self.client.service_url, item_id=item.item_id,

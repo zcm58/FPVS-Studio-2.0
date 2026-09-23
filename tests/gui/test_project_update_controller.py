@@ -9,6 +9,7 @@ from types import SimpleNamespace
 import pytest
 from PySide6.QtCore import QObject, Signal
 from PySide6.QtWidgets import QApplication, QWidget
+from tests.unit.test_library_installations import project as installed_project
 
 from fpvs_studio.core.library_origin import LibraryOriginError, LibraryProjectOrigin
 from fpvs_studio.gui import project_update_controller as module
@@ -173,6 +174,7 @@ def updates(qapp, qtbot, monkeypatch, tmp_path):
     controller = module.ProjectUpdateController(
         qapp, current_window=lambda: current[0],
         import_bundle=lambda *args: handoffs.append(args), client=client,
+        studio_root=lambda: tmp_path,
     )
     yield SimpleNamespace(
         controller=controller, window=window, current=current, lifecycle=lifecycle,
@@ -204,6 +206,18 @@ def test_open_check_is_deferred_coalesced_and_never_installs(updates):
     assert state.handoffs == []
     assert state.controller.dialog is None
 
+
+def test_latest_version_already_installed_elsewhere_disables_update(updates):
+    state = updates
+    installed_project(state.root, project_id="masking-from-bundle", version="1.0.1")
+    state.controller.show(state.window)
+    state.lifecycle.drain()
+    assert not state.controller._result.can_install
+    assert "already installed" in state.controller._result.message
+    state.controller._action("install")
+    state.lifecycle.drain()
+    assert state.client.download_calls == []
+    assert state.handoffs == []
 
 def test_closed_project_ignores_completed_background_result(updates):
     state = updates

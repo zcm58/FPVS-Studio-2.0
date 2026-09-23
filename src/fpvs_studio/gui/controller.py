@@ -716,7 +716,9 @@ class StudioController(QObject):
         self._open_document(document)
         return document
 
-    def request_open_project(self, project_location: Path) -> None:
+    def request_open_project(
+        self, project_location: Path, *, on_opened: Callable[[], None] | None = None,
+    ) -> None:
         """Read user-selected project files without blocking the current window."""
         if self._project_open_job is not None:
             self._project_open_job.cancel()
@@ -745,10 +747,13 @@ class StudioController(QObject):
         job = self._update_lifecycle.start_task(read_project)
         self._project_open_job = job
         dialog.canceled.connect(job.cancel)
-        job.finished.connect(lambda result: self._finish_project_open(job, result))
+        job.finished.connect(lambda result: self._finish_project_open(job, result, on_opened))
         dialog.show()
 
-    def _finish_project_open(self, job: UpdateJob, result: UpdateTaskResult) -> None:
+    def _finish_project_open(
+        self, job: UpdateJob, result: UpdateTaskResult,
+        on_opened: Callable[[], None] | None = None,
+    ) -> None:
         if job is not self._project_open_job:
             return
         self._project_open_job = None
@@ -766,6 +771,9 @@ class StudioController(QObject):
             tuple[Path, ProjectFile, StimulusManifest | None], result.value,
         )
         self._open_document(ProjectDocument(project_root=root, project=project, manifest=manifest))
+        if on_opened is not None:
+            window = self.main_window
+            QTimer.singleShot(0, lambda: on_opened() if self.main_window is window else None)
 
     def show_settings_dialog(self) -> None:
         """Show application-level settings, including the FPVS Studio root folder."""
@@ -815,13 +823,32 @@ class StudioController(QObject):
         """Open the app-owned Experiment Library without changing the current project."""
         if self._active_import_bundle_task is not None or self._library_import_job is not None:
             return
+        if not self.ensure_fpvs_root_configured():
+            return
         if self._library_controller is None:
             from fpvs_studio.gui.library_controller import LibraryController
 
             self._library_controller = LibraryController(
                 self._app, import_bundle=self._import_library_bundle,
+                studio_root=self._library_root, review_project=self._review_library_project,
             )
         self._library_controller.show()
+
+    def _library_root(self) -> Path:
+        assert self._fpvs_root_dir is not None
+        return self._fpvs_root_dir
+
+    def _review_library_project(self, root: Path) -> None:
+        window = self.main_window
+        if window is not None:
+            if not self._can_publish_from(window):
+                return
+            if window.document.project_root.resolve() == root.resolve():
+                self.show_project_versions()
+                return
+            if not window.maybe_save_changes():
+                return
+        self.request_open_project(root, on_opened=self.show_project_versions)
 
     def _import_library_bundle(
         self, path: Path, manifest: ProjectBundleManifest, origin: LibraryProjectOrigin,
@@ -846,6 +873,7 @@ class StudioController(QObject):
             self._project_update_controller = ProjectUpdateController(
                 self._app, current_window=lambda: self.main_window,
                 import_bundle=self._import_library_bundle,
+                studio_root=self._library_root,
             )
         return self._project_update_controller
 

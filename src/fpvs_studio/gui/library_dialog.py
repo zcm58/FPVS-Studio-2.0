@@ -25,6 +25,11 @@ from PySide6.QtWidgets import (
 
 from fpvs_studio.core.enums import ExperimentCategory
 from fpvs_studio.core.experiment_categories import experiment_category_label
+from fpvs_studio.core.library_installations import (
+    InstalledLibraryProject,
+    LibraryInstallStatus,
+    library_install_status,
+)
 from fpvs_studio.gui.components import DialogHeader, apply_dialog_theme, mark_primary_action
 from fpvs_studio.library.models import LibraryCatalog, LibraryConnection, LibraryItem
 
@@ -45,6 +50,8 @@ class LibraryDialog(QDialog):
         self._busy = False
         self._connected = False
         self._items: tuple[LibraryItem, ...] = ()
+        self._installations: tuple[InstalledLibraryProject, ...] | None = None
+        self._service_url = ""
         layout = QVBoxLayout(self)
         layout.setContentsMargins(24, 20, 24, 20)
         layout.setSpacing(12)
@@ -171,6 +178,22 @@ class LibraryDialog(QDialog):
         row = self.item_list.currentItem()
         return cast(LibraryItem, row.data(Qt.ItemDataRole.UserRole)) if row is not None else None
 
+    def set_installations(
+        self, projects: tuple[InstalledLibraryProject, ...] | None, service_url: str,
+    ) -> None:
+        self._installations = projects
+        self._service_url = service_url
+        self._selection_changed()
+
+    def selected_installation(self) -> LibraryInstallStatus | None:
+        item = self.selected_item()
+        if item is None or self._installations is None:
+            return None
+        return library_install_status(
+            self._installations, service_url=self._service_url,
+            item_id=item.item_id, version=item.version, title=item.title,
+        )
+
     def set_busy(self, busy: bool, message: str = "", *, downloading: bool = False) -> None:
         self._busy = busy
         self.status_label.setText(message)
@@ -212,6 +235,8 @@ class LibraryDialog(QDialog):
         if item is not None:
             category = experiment_category_label(ExperimentCategory(item.experiment_category))
             compatibility = item.compatibility_message or "Compatible with this Studio version."
+            installed = self.selected_installation()
+            installation = installed.message if installed else "Checking installed experiments…"
             self.details.setPlainText(
                 f"{item.title}\n\n{item.description}\n\n"
                 f"Version: {item.version}\nCategory: {category}\n"
@@ -220,6 +245,7 @@ class LibraryDialog(QDialog):
                 f"{item.uncompressed_size_bytes / 1048576:.1f} MB\n"
                 f"Minimum FPVS Studio: {item.min_studio_version}\n\n"
                 f"{compatibility}\n\n"
+                f"{installation}\n\n"
                 "Creates an independent, editable project in your Studio Root Folder. "
                 "Existing projects stay in place. "
                 "Review display, timing and triggers in Setup before use."
@@ -228,6 +254,13 @@ class LibraryDialog(QDialog):
 
     def _sync_actions(self, *_args: object) -> None:
         item = self.selected_item()
+        installed = self.selected_installation()
+        self.install_button.setText({
+            "new": "Download and set up experiment",
+            "installed": "Already installed",
+            "update": "Review update…",
+            "review": "Review existing project…",
+        }[installed.state] if installed else "Checking installation…")
         self.connect_button.setEnabled(
             not self._busy
             and bool(self.code_edit.text().strip())
@@ -237,6 +270,7 @@ class LibraryDialog(QDialog):
         self.refresh_button.setEnabled(not self._busy and self._connected)
         self.install_button.setEnabled(
             not self._busy and self._connected and item is not None and item.compatible
+            and installed is not None and installed.state != "installed"
         )
         self.connection_fields.setEnabled(not self._busy)
         self.search_edit.setEnabled(not self._busy and self._connected)

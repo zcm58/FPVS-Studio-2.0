@@ -5,15 +5,22 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 from pathlib import Path
+from threading import Event
 from typing import cast
 
 from PySide6.QtCore import QObject
 from PySide6.QtWidgets import QApplication
 
-from fpvs_studio.core.library_origin import LibraryProjectOrigin
+from fpvs_studio.core.library_installations import (
+    InstalledLibraryProject,
+    LibraryInstallStatus,
+    scan_library_projects,
+)
+from fpvs_studio.core.library_origin import LibraryOriginError, LibraryProjectOrigin
 from fpvs_studio.core.project_bundle import ProjectBundleManifest, read_project_bundle_manifest
 from fpvs_studio.gui.library_dialog import LibraryDialog
 from fpvs_studio.gui.update_lifecycle import (
+    ProgressReporter,
     UpdateCallback,
     UpdateJob,
     UpdateTaskResult,
@@ -21,6 +28,7 @@ from fpvs_studio.gui.update_lifecycle import (
 )
 from fpvs_studio.library.client import LibraryClient
 from fpvs_studio.library.errors import LibraryAuthorizationError, LibraryCancelled, LibraryError
+from fpvs_studio.library.installations import download_library_install
 from fpvs_studio.library.models import LibraryCatalog, LibraryConnection, LibraryItem
 
 _LOGGER = logging.getLogger(__name__)
@@ -37,11 +45,15 @@ class LibraryController(QObject):
         app: QApplication,
         *,
         import_bundle: ImportCallback,
+        studio_root: Callable[[], Path],
+        review_project: Callable[[Path], None],
         client: LibraryClient | None = None,
     ) -> None:
         super().__init__(app)
         self.client = client or LibraryClient()
         self._import_bundle = import_bundle
+        self._studio_root = studio_root
+        self._review_project = review_project
         self.dialog: LibraryDialog | None = None
         self._job: UpdateJob | None = None
         self._importing = False
@@ -121,14 +133,24 @@ class LibraryController(QObject):
 
     def _refresh(self) -> None:
         self._view().set_catalog(None)
+        self._view().set_installations(None, self.client.service_url)
+        root = self._studio_root()
+
+        def refresh(
+            _progress: ProgressReporter, cancel: Event,
+        ) -> tuple[LibraryCatalog, tuple[InstalledLibraryProject, ...]]:
+            catalog = self.client.catalog(cancel_event=cancel)
+            return catalog, scan_library_projects(root, cancel_event=cancel)
+
         self._start(
-            lambda _progress, cancel: self.client.catalog(cancel_event=cancel),
+            refresh,
             self._catalog_ready,
             "Loading available experiments…",
         )
 
     def _catalog_ready(self, value: object) -> None:
-        catalog = cast(LibraryCatalog, value)
+        catalog, projects = cast(tuple[LibraryCatalog, tuple[InstalledLibraryProject, ...]], value)
+        self._view().set_installations(projects, self.client.service_url)
         self._view().set_catalog(catalog)
         self._view().status_label.setText(
             "Select an experiment to review its contents."
@@ -166,14 +188,15 @@ class LibraryController(QObject):
             if item is None or not item.compatible:
                 return
             self._install_item = item
+            root = self._studio_root()
             self._start(
-                lambda progress, cancel: self.client.download(
-                    item,
+                lambda progress, cancel: download_library_install(
+                    self.client, item, root,
                     cancel_event=cancel,
                     progress_callback=progress,
                 ),
                 self._downloaded,
-                "Downloading and verifying the experiment…",
+                "Checking installed projects before downloading…",
                 downloading=True,
             )
 
@@ -184,6 +207,14 @@ class LibraryController(QObject):
         )
 
     def _downloaded(self, value: object) -> None:
+        if isinstance(value, LibraryInstallStatus):
+            self._install_item = None
+            if value.state == "installed":
+                self._refresh()
+            elif value.project is not None:
+                self._view().hide()
+                self._review_project(value.project.root)
+            return
         path = cast(Path, value)
         # Archive-directory and manifest parsing can be substantial. Keep this work
         # off the GUI thread and retain the payload lease until review/import ends.
@@ -242,7 +273,7 @@ class LibraryController(QObject):
 
     @staticmethod
     def _error(error: Exception | None) -> str:
-        if isinstance(error, LibraryError):
+        if isinstance(error, (LibraryError, LibraryOriginError)):
             return str(error)
         _LOGGER.error("Library operation failed (%s)", type(error).__name__)
         return "The library operation could not finish. Retry or contact your lab administrator."

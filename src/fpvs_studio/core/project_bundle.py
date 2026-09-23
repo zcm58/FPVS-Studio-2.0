@@ -24,6 +24,7 @@ from pydantic import Field, ValidationError, field_validator
 from fpvs_studio import __version__
 from fpvs_studio.core.compiler import CompileError, compile_session_plan
 from fpvs_studio.core.experiment_categories import require_valid_experiment_category
+from fpvs_studio.core.library_installations import library_install_status, scan_library_projects
 from fpvs_studio.core.library_origin import (
     LibraryProjectOrigin,
     origin_for_import,
@@ -365,6 +366,18 @@ def import_project_bundle(
         target_dir.parent.mkdir(parents=True, exist_ok=True)
         _check_cancelled(cancel_event)
         # This rename is the commit boundary; later cancellation cannot undo a project.
+        if library_origin is not None and library_origin.installed_version is not None:
+            try:
+                installed = library_install_status(
+                    scan_library_projects(fpvs_root_dir, cancel_event=cancel_event),
+                    service_url=library_origin.service_url, item_id=library_origin.item_id,
+                    version=library_origin.installed_version,
+                )
+            except InterruptedError as error:
+                raise ProjectBundleCancelled(str(error)) from error
+            if installed.state == "installed":
+                raise ProjectBundleError(installed.message)
+        _check_cancelled(cancel_event)
         staged_project_root.rename(filesystem_path(target_dir))
         _notify_import_progress(progress_callback, "complete")
         return ProjectScaffold(project_root=target_dir, project=project)

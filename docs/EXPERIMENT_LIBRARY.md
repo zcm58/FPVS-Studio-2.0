@@ -21,7 +21,16 @@ Enrollment is stored for the current OS user on that computer. Other user profil
 enroll separately. The code itself is not retained as the device credential. Search
 by title, description, or category; select a result to see its complete description,
 version, download size, file count, extracted size, and minimum Studio version.
-Each opening or Refresh fetches current availability. The service matches catalog
+Each opening or Refresh fetches current availability and scans projects under the
+configured Studio Root Folder in a worker. A recorded installation of the same or a
+newer release shows **Already installed** and disables downloading. **Review update…**
+opens an older installed project's version dialog. Unlinked copies matching the exact
+project ID (including bundle collision suffixes) or title show **Review existing
+project…**; this is a review candidate, never an automatically inferred Library link.
+The explicit link/version review must finish before an update can be downloaded.
+Existing duplicates are retained, including their edits and participant data.
+
+The service matches catalog
 entries to uploaded assets on live, published GitHub releases using asset ID,
 filename, size and SHA-256. Deleted releases/assets, drafts and incomplete or changed
 uploads are excluded even if their catalog metadata remains. GitHub failures show
@@ -34,7 +43,10 @@ details expose their complete values.
 
 **Download and set up experiment** verifies the payload, then enters the ordinary
 project-bundle review. Select the configured Studio Root Folder if necessary and confirm
-the destination. Existing folders receive collision-safe new names. When a project is
+the destination. Installation is rechecked before and after transfer and at the import
+commit. Only explicit project updates may create a newer separate copy; plain Library
+downloads cannot add another installed experiment. Ordinary local bundle imports retain
+their collision-safe naming. When a project is
 open, the current Save/Discard/Cancel and launch-state guards run before the handoff.
 The import reuses the normal display-settings review and opens the local project.
 Review Setup, including display geometry, timing and desired triggers, before use.
@@ -69,11 +81,17 @@ bundle review, Save/Discard/Cancel guards and display-settings review. The curre
 project's setup, local edits, logs and participant data stay in its existing folder;
 the imported project gets its own collision-safe folder and version record. A newer
 release requiring a newer Studio build remains visible with installation disabled.
+The update check and download also check the configured Root Folder: if that release
+or a newer one is already installed elsewhere, the dialog reports its path and blocks
+another download. Unreadable project metadata or version records stop installation with
+an error rather than being treated as proof that nothing is installed.
 
 New Library imports atomically include `.fpvs-library/project-origin.json`, storing
 the service origin, stable item identity, installed version, verified bundle SHA-256,
 local project ID and automatic-check preference. `core/library_origin.py` owns this
 bounded local receipt; `core/project_bundle.py` writes it before the import commit.
+`core/library_installations.py` owns read-only installed-project discovery and version
+decisions; `library/installations.py` applies those decisions before payload transfer.
 It contains no credentials and is excluded from ordinary bundles and clean publication.
 Moving the entire local project retains it; exporting/importing a general bundle does not.
 
@@ -402,6 +420,9 @@ with controlled clients/importers; it does not access the live service.
 In an approved visible session, check both themes, display scaling, long titles and
 descriptions, empty/error/disconnected/busy states, keyboard navigation, and all controls
 at these sizes. Exercise root-picker and Save cancellation, download Cancel/Close/Escape,
+Already installed, Review update and Review existing project with long installed paths,
+refresh after an external import, and an older project with the latest version already
+installed beside it. Confirm all duplicate paths transfer no payload bytes. Exercise
 extraction cancellation, late commit, app quit and a revoked credential. Existing local
 bundle import/export remains available independently of the Library.
 Check **View > Experiment Library...**, both Create Project choices, and Back from

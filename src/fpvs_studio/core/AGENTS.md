@@ -24,6 +24,8 @@ This directory is the most important foundation in the repo. It should remain im
 - JSON serialization
 - optional project-local Library origin receipts in `library_origin.py`, committed
   inside bundle import staging and excluded from authored project/runtime contracts
+- installed-project discovery and duplicate decisions in `library_installations.py`;
+  receipt identity is authoritative, while legacy name matches require explicit review
 - validation
 - project scaffolding helpers
 - compilation of editable project state into a neutral `RunSpec`
