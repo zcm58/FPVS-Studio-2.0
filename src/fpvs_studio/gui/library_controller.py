@@ -10,6 +10,7 @@ from typing import cast
 from PySide6.QtCore import QObject
 from PySide6.QtWidgets import QApplication
 
+from fpvs_studio.core.library_origin import LibraryProjectOrigin
 from fpvs_studio.core.project_bundle import ProjectBundleManifest, read_project_bundle_manifest
 from fpvs_studio.gui.library_dialog import LibraryDialog
 from fpvs_studio.gui.update_lifecycle import (
@@ -20,10 +21,12 @@ from fpvs_studio.gui.update_lifecycle import (
 )
 from fpvs_studio.library.client import LibraryClient
 from fpvs_studio.library.errors import LibraryAuthorizationError, LibraryCancelled, LibraryError
-from fpvs_studio.library.models import LibraryCatalog, LibraryConnection
+from fpvs_studio.library.models import LibraryCatalog, LibraryConnection, LibraryItem
 
 _LOGGER = logging.getLogger(__name__)
-ImportCallback = Callable[[Path, ProjectBundleManifest, Callable[[Path | None], None]], None]
+ImportCallback = Callable[
+    [Path, ProjectBundleManifest, LibraryProjectOrigin, Callable[[Path | None], None]], None
+]
 
 
 class LibraryController(QObject):
@@ -42,6 +45,7 @@ class LibraryController(QObject):
         self.dialog: LibraryDialog | None = None
         self._job: UpdateJob | None = None
         self._importing = False
+        self._install_item: LibraryItem | None = None
         self._closing = False
         self._lifecycle = update_lifecycle(app)
         self._lifecycle.shutdown_started.connect(self._shutdown)
@@ -161,6 +165,7 @@ class LibraryController(QObject):
             item = self._view().selected_item()
             if item is None or not item.compatible:
                 return
+            self._install_item = item
             self._start(
                 lambda progress, cancel: self.client.download(
                     item,
@@ -194,7 +199,14 @@ class LibraryController(QObject):
         self._view().set_busy(True, "Review the experiment and its destination.")
         self._view().hide()
         try:
-            self._import_bundle(path, manifest, self._import_finished)
+            assert self._install_item is not None
+            item = self._install_item
+            origin = LibraryProjectOrigin(
+                service_url=self.client.service_url, item_id=item.item_id,
+                installed_version=item.version, bundle_sha256=item.sha256,
+                local_project_id=manifest.project.project_id,
+            )
+            self._import_bundle(path, manifest, origin, self._import_finished)
         except Exception as error:
             _LOGGER.exception("Library project import handoff failed")
             self._import_finished(None)
@@ -203,6 +215,7 @@ class LibraryController(QObject):
     def _import_finished(self, project_root: Path | None) -> None:
         self.client.release_download()
         self._importing = False
+        self._install_item = None
         self._view().set_busy(
             False,
             (

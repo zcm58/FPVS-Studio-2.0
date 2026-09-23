@@ -141,6 +141,7 @@ class StudioMainWindow(QMainWindow):
         on_load_fpvs_root_dir: Callable[[], Path | None] | None = None,
         on_request_library: Callable[[], None] | None = None,
         on_request_library_publish: Callable[[], None] | None = None,
+        on_request_project_update: Callable[[], None] | None = None,
     ) -> None:
         super().__init__()
         self.setObjectName("studio_main_window")
@@ -153,6 +154,7 @@ class StudioMainWindow(QMainWindow):
         self._on_request_settings = on_request_settings
         self._on_request_library = on_request_library
         self._on_request_library_publish = on_request_library_publish
+        self._on_request_project_update = on_request_project_update
         self.setWindowTitle("FPVS Studio Beta")
         self._auto_workspace_sized = False
         self._auto_workspace_return_size: tuple[int, int] | None = None
@@ -207,6 +209,13 @@ class StudioMainWindow(QMainWindow):
             edit_setup=lambda: self.show_setup_wizard(allow_step_jumps=True),
             complete_setup=self.show_incomplete_setup_wizard,
         )
+        self.home_page.project_update_button.clicked.connect(self.project_update_action.trigger)
+        self.project_update_action.changed.connect(
+            lambda: self.home_page.project_update_button.setEnabled(
+                self.project_update_action.isEnabled()
+            )
+        )
+        self.home_page.project_update_button.setEnabled(self.project_update_action.isEnabled())
         self._create_menu_and_toolbar()
         self._button_hover_animators: list[ButtonHoverAnimator] = []
         self._install_button_hover_animations()
@@ -536,6 +545,10 @@ class StudioMainWindow(QMainWindow):
         self.library_action = QAction("Experiment Library...", self)
         self.library_action.setObjectName("experiment_library_action")
         self.library_action.triggered.connect(self._request_library)
+        self.project_update_action = QAction("Update Project Version...", self)
+        self.project_update_action.setObjectName("update_project_version_action")
+        self.project_update_action.setEnabled(self._on_request_project_update is not None)
+        self.project_update_action.triggered.connect(self._request_project_update)
         self.publish_library_action: QAction | None = None
         if self._on_request_library_publish is not None:
             self.publish_library_action = QAction("Publish to Experiment Library...", self)
@@ -605,6 +618,7 @@ class StudioMainWindow(QMainWindow):
             self.export_menu.addSeparator()
             self.export_menu.addAction(self.publish_library_action)
         self.file_menu.addMenu(self.export_menu)
+        self.file_menu.addAction(self.project_update_action)
         self.file_menu.addSeparator()
         self.file_menu.addAction(self.settings_action)
         self.file_menu.addSeparator()
@@ -1102,6 +1116,7 @@ class StudioMainWindow(QMainWindow):
             self.save_project_action,
             self.settings_action,
             self.library_action,
+            self.project_update_action,
             self.fixation_cross_data_action,
             self.image_resizer_action,
             self.launch_action,
@@ -1110,6 +1125,9 @@ class StudioMainWindow(QMainWindow):
             action.setEnabled(not busy)
         if self.publish_library_action is not None:
             self.publish_library_action.setEnabled(not busy)
+        self.project_update_action.setEnabled(
+            not busy and self._on_request_project_update is not None
+        )
 
     @Slot(object)
     def _on_bundle_export_succeeded(self, result: object) -> None:
@@ -1387,6 +1405,20 @@ class StudioMainWindow(QMainWindow):
     def _request_library(self) -> None:
         if self._on_request_library is not None and self._allow_project_handoff_during_launch():
             self._on_request_library()
+
+    def set_project_update_notice(self, message: str) -> None:
+        """Display a passive library notice without changing the active page."""
+        self.home_page.set_project_update_notice(message)
+
+    def _request_project_update(self) -> None:
+        if (
+            self._on_request_project_update is not None
+            and self._active_bundle_export_task is None
+            and not self._bundle_import_processing_active
+            and self._allow_project_handoff_during_launch()
+            and self._allow_project_handoff_during_fixation_load()
+        ):
+            self._on_request_project_update()
 
     def _request_library_publish(self) -> None:
         if (

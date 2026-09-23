@@ -24,6 +24,11 @@ from pydantic import Field, ValidationError, field_validator
 from fpvs_studio import __version__
 from fpvs_studio.core.compiler import CompileError, compile_session_plan
 from fpvs_studio.core.experiment_categories import require_valid_experiment_category
+from fpvs_studio.core.library_origin import (
+    LibraryProjectOrigin,
+    origin_for_import,
+    save_library_origin,
+)
 from fpvs_studio.core.models import FPVSBaseModel, ProjectFile, validate_project_relative_path
 from fpvs_studio.core.paths import (
     MANIFEST_FILENAME,
@@ -284,6 +289,7 @@ def import_project_bundle(
     *,
     progress_callback: BundleImportProgressCallback | None = None,
     cancel_event: Event | None = None,
+    library_origin: LibraryProjectOrigin | None = None,
 ) -> ProjectScaffold:
     """Import a `.fpvsbundle` into a new project folder under the FPVS Studio root."""
 
@@ -295,6 +301,14 @@ def import_project_bundle(
     try:
         _notify_import_progress(progress_callback, "verify")
         _check_cancelled(cancel_event)
+        if library_origin is not None and library_origin.bundle_sha256 is not None:
+            digest = hashlib.sha256()
+            with bundle_path.open("rb") as archive_bytes:
+                for chunk in iter(lambda: archive_bytes.read(65536), b""):
+                    _check_cancelled(cancel_event)
+                    digest.update(chunk)
+            if digest.hexdigest() != library_origin.bundle_sha256:
+                raise ProjectBundleError("Library bundle does not match its origin checksum.")
         staged_project_root.mkdir(parents=True, exist_ok=False)
         bundle_manifest = _extract_bundle_to_staging(
             bundle_path, staged_project_root, cancel_event=cancel_event,
@@ -342,6 +356,10 @@ def import_project_bundle(
                 project_id=project_id,
             )
         _ensure_import_project_structure(staged_project_root)
+        if library_origin is not None:
+            save_library_origin(
+                staged_project_root, origin_for_import(library_origin, project.meta.project_id),
+            )
         if target_dir.exists():
             raise ProjectBundleError(f"Imported project target already exists: {target_dir}")
         target_dir.parent.mkdir(parents=True, exist_ok=True)

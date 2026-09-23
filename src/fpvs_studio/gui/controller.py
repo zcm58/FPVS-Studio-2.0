@@ -36,6 +36,7 @@ from fpvs_studio.core.condition_template_profiles import (
     normalize_condition_template_profile_root,
 )
 from fpvs_studio.core.enums import ExperimentCategory
+from fpvs_studio.core.library_origin import LibraryProjectOrigin
 from fpvs_studio.core.models import ConditionTemplateProfile, ProjectFile
 from fpvs_studio.core.paths import (
     condition_template_library_path,
@@ -94,6 +95,7 @@ from fpvs_studio.updates.models import UpdateCheckResult
 if TYPE_CHECKING:
     from fpvs_studio.gui.library_controller import LibraryController
     from fpvs_studio.gui.library_publisher_controller import LibraryPublisherController
+    from fpvs_studio.gui.project_update_controller import ProjectUpdateController
 
 _SETTINGS_ORGANIZATION = "FPVS Studio"
 _SETTINGS_APPLICATION = "FPVS Studio"
@@ -159,6 +161,7 @@ class StudioController(QObject):
         self._library_import_finished: Callable[[Path | None], None] | None = None
         self._library_import_result: Path | None = None
         self._library_controller: LibraryController | None = None
+        self._project_update_controller: ProjectUpdateController | None = None
         self._library_publisher_controller: LibraryPublisherController | None = None
         self._import_bundle_progress_bridge: ProgressSignalBridge | None = None
         self._import_bundle_processing_window: StudioMainWindow | None = None
@@ -821,7 +824,8 @@ class StudioController(QObject):
         self._library_controller.show()
 
     def _import_library_bundle(
-        self, path: Path, manifest: ProjectBundleManifest, finished: Callable[[Path | None], None],
+        self, path: Path, manifest: ProjectBundleManifest, origin: LibraryProjectOrigin,
+        finished: Callable[[Path | None], None],
     ) -> None:
         window = self.main_window
         if window is not None and (
@@ -831,7 +835,24 @@ class StudioController(QObject):
         ):
             finished(None)
             return
-        self.import_project_bundle_file(path, on_finished=finished, review_manifest=manifest)
+        self.import_project_bundle_file(
+            path, on_finished=finished, review_manifest=manifest, library_origin=origin,
+        )
+
+    def _project_versions(self) -> ProjectUpdateController:
+        if self._project_update_controller is None:
+            from fpvs_studio.gui.project_update_controller import ProjectUpdateController
+
+            self._project_update_controller = ProjectUpdateController(
+                self._app, current_window=lambda: self.main_window,
+                import_bundle=self._import_library_bundle,
+            )
+        return self._project_update_controller
+
+    def show_project_versions(self) -> None:
+        window = self.main_window
+        if window is not None and self._can_publish_from(window):
+            self._project_versions().show(window)
 
     def show_library_publisher(self) -> None:
         """Show the publisher only when developer mode was active at startup."""
@@ -885,6 +906,7 @@ class StudioController(QObject):
             on_request_import_project_bundle=self.show_import_project_bundle_dialog,
             on_request_settings=self.show_settings_dialog,
             on_request_library=self.show_library,
+            on_request_project_update=self.show_project_versions,
             on_request_library_publish=(
                 self.show_library_publisher if self._developer_mode.active else None
             ),
@@ -929,6 +951,7 @@ class StudioController(QObject):
             self.welcome_window.hide()
         if previous_window is not None and previous_window is not target_window:
             previous_window.close()
+        self._project_versions().opened(target_window)
 
     def _load_condition_template_profiles(self) -> list[ConditionTemplateProfile]:
         root_dir = self._fpvs_root_dir
@@ -1019,6 +1042,7 @@ class StudioController(QObject):
     def import_project_bundle_file(
         self, bundle_path: object, *, on_finished: Callable[[Path | None], None] | None = None,
         review_manifest: ProjectBundleManifest | None = None,
+        library_origin: LibraryProjectOrigin | None = None,
     ) -> None:
         """Import a known `.fpvsbundle` path without opening the file picker."""
 
@@ -1026,6 +1050,7 @@ class StudioController(QObject):
         try:
             started = self._import_project_bundle_file(
                 bundle_path, on_finished=on_finished, review_manifest=review_manifest,
+                library_origin=library_origin,
             )
         finally:
             if not started and on_finished is not None:
@@ -1034,6 +1059,7 @@ class StudioController(QObject):
     def _import_project_bundle_file(
         self, bundle_path: object, *, on_finished: Callable[[Path | None], None] | None,
         review_manifest: ProjectBundleManifest | None,
+        library_origin: LibraryProjectOrigin | None = None,
     ) -> bool:
         root_dir, parent = self._prepare_project_bundle_import()
         if root_dir is None:
@@ -1071,6 +1097,7 @@ class StudioController(QObject):
             parent,
             project_name=manifest.project.name,
             on_finished=on_finished,
+            library_origin=library_origin,
         )
         return True
 
@@ -1124,6 +1151,7 @@ class StudioController(QObject):
         *,
         project_name: str,
         on_finished: Callable[[Path | None], None] | None = None,
+        library_origin: LibraryProjectOrigin | None = None,
     ) -> None:
         task_parent = parent or self.main_window or self.welcome_window
         if task_parent is None:
@@ -1162,6 +1190,7 @@ class StudioController(QObject):
                     bundle_path, root_dir,
                     progress_callback=progress_bridge.stage_changed.emit,
                     cancel_event=cancel,
+                    library_origin=library_origin,
                 ),
                 keep_success_on_cancel=True,
             )
@@ -1174,6 +1203,7 @@ class StudioController(QObject):
                 bundle_path,
                 root_dir,
                 progress_callback=progress_bridge.stage_changed.emit,
+                library_origin=library_origin,
             )
 
         task = BackgroundTask(parent_widget=task_parent, callback=_import_bundle)

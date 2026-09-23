@@ -55,6 +55,42 @@ and clears recognized Library cache files. Network failure retains retryable con
 state; an already-revoked credential can still be removed. Previously installed projects
 remain editable and usable offline. Disconnecting cannot remove copies on other machines.
 
+## Project version checks
+
+Opening a linked project checks the Library once in an app-owned worker. There is no
+periodic polling or automatic installation. A newer release adds a passive Home notice;
+**Review update...** and **File > Update Project Version...** open the same nonmodal
+dialog. Checks never take focus or open a dialog during presentation. Offline, revoked
+or unavailable service states do not block project opening or claim the project is current.
+
+The dialog shows the installed and latest versions, release description and minimum
+Studio version. **Open new version separately** uses the existing verified download,
+bundle review, Save/Discard/Cancel guards and display-settings review. The current
+project's setup, local edits, logs and participant data stay in its existing folder;
+the imported project gets its own collision-safe folder and version record. A newer
+release requiring a newer Studio build remains visible with installation disabled.
+
+New Library imports atomically include `.fpvs-library/project-origin.json`, storing
+the service origin, stable item identity, installed version, verified bundle SHA-256,
+local project ID and automatic-check preference. `core/library_origin.py` owns this
+bounded local receipt; `core/project_bundle.py` writes it before the import commit.
+It contains no credentials and is excluded from ordinary bundles and clean publication.
+Moving the entire local project retains it; exporting/importing a general bundle does not.
+
+Earlier downloads and manually created projects have no trustworthy Library identity.
+Use the version dialog to link one explicitly; enter its installed version only when
+known, otherwise leave it unknown. Studio never guesses from a title or folder name.
+**Change library link...** can correct an association. The project-local checkbox
+controls checks on open; the manual Check action still works when automatic checks are off.
+
+`library/project_updates.py` compares semantic versions by item identity, so removal of
+the installed release does not prevent discovery of a newer one. Changed bytes under the
+same version and ambiguous equivalent versions are reported explicitly. The saved
+service origin cannot redirect credentials or requests away from the configured client.
+`gui/project_update_controller.py` owns jobs, cancellation, stale-window suppression,
+passive notices and explicit import handoff. The dialog minimum/default is `760x680` /
+`820x720`; Home notice acceptance includes `760x520` and `1120x720` with long content.
+
 ## Service and access boundary
 
 Private GitHub Releases in

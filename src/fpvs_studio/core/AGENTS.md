@@ -22,6 +22,8 @@ This directory is the most important foundation in the repo. It should remain im
 - condition modifier grouping/factories in `condition_modifiers.py`; local preset
   persistence and staged project media intake in `modifier_presets.py`
 - JSON serialization
+- optional project-local Library origin receipts in `library_origin.py`, committed
+  inside bundle import staging and excluded from authored project/runtime contracts
 - validation
 - project scaffolding helpers
 - compilation of editable project state into a neutral `RunSpec`

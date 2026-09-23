@@ -109,6 +109,15 @@ See the completed independent-updater execution plan for implementation evidence
 [v1.7.0 release record](../exec-plans/completed/release-1.7.0.md) for published artifact
 acceptance; source checks do not establish an installed update or clean-PC repair result.
 
+## Library Project Versions
+
+For project-version checks, start with `core/library_origin.py`,
+`library/project_updates.py`, `gui/project_update_controller.py` and
+[Experiment Library](../EXPERIMENT_LIBRARY.md#project-version-checks).
+Library imports write local receipts before commit; checks on open never install
+changes. Use Library/project-io/GUI focused routes and registered project-version
+dialog/controller tests. Existing downloads need explicit linking, not name matching.
+
 ## Bug Reporting
 
 For File > Report a Bug or Request a Feature, begin with `support/AGENTS.md`, `docs/BUG_REPORTING.md`,

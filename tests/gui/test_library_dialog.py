@@ -110,6 +110,7 @@ def test_library_search_and_incompatible_item(qtbot) -> None:
 class _Client:
     def __init__(self, path: Path) -> None:
         self.path = path
+        self.service_url = "https://library.example.test"
         self.connection = None
         self.releases = 0
         self.download_started = Event()
@@ -151,7 +152,10 @@ class _Client:
 def _controller(qapp, qtbot, monkeypatch, tmp_path, import_bundle):
     lifecycle = UpdateLifecycle(qapp, quit_callback=lambda: None)
     monkeypatch.setattr(library_module, "update_lifecycle", lambda app: lifecycle)
-    monkeypatch.setattr(library_module, "read_project_bundle_manifest", lambda path: "manifest")
+    monkeypatch.setattr(
+        library_module, "read_project_bundle_manifest",
+        lambda path: SimpleNamespace(project=SimpleNamespace(project_id="example")),
+    )
     client = _Client(tmp_path / "example.fpvsbundle")
     controller = LibraryController(qapp, import_bundle=import_bundle, client=client)
     controller.show()
@@ -173,7 +177,9 @@ def test_enrollment_import_lease_and_disconnect(qapp, qtbot, monkeypatch, tmp_pa
         qtbot,
         monkeypatch,
         tmp_path,
-        lambda path, manifest, finished: handoffs.append((path, manifest, finished)),
+        lambda path, manifest, origin, finished: handoffs.append(
+            (path, manifest, origin, finished)
+        ),
     )
     _enroll(controller, qtbot)
     assert controller.dialog.code_edit.text() == ""
@@ -183,8 +189,11 @@ def test_enrollment_import_lease_and_disconnect(qapp, qtbot, monkeypatch, tmp_pa
     assert controller._importing
     controller.show()
     assert not controller.dialog.isVisible()
-    assert handoffs[0][1] == "manifest"
-    handoffs[0][2](None)
+    assert handoffs[0][1].project.project_id == "example"
+    assert handoffs[0][2].item_id == "example"
+    assert handoffs[0][2].installed_version == "1.0"
+    assert handoffs[0][2].bundle_sha256 == "a" * 64
+    handoffs[0][3](None)
     assert client.releases == 1
     assert not controller._importing
     assert controller.dialog.isVisible()
@@ -324,7 +333,7 @@ def test_manifest_read_runs_off_gui_and_retains_lease(
         assert finish_read.wait(3), "Test did not release manifest reader"
         if outcome == "failure":
             raise ProjectBundleError("Invalid manifest")
-        return "worker-manifest"
+        return SimpleNamespace(project=SimpleNamespace(project_id="worker-manifest"))
 
     monkeypatch.setattr(library_module, "read_project_bundle_manifest", read_manifest)
     controller.dialog.install_button.click()
@@ -343,9 +352,9 @@ def test_manifest_read_runs_off_gui_and_retains_lease(
     assert worker_threads == [True]
     assert not lifecycle.has_active_jobs
     if outcome == "success":
-        assert handoffs[0][1] == "worker-manifest"
+        assert handoffs[0][1].project.project_id == "worker-manifest"
         assert client.releases == 0
-        handoffs[0][2](None)
+        handoffs[0][3](None)
     else:
         assert handoffs == []
     assert client.releases == 1

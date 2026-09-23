@@ -20,6 +20,8 @@ tests/gui/test_manage_projects_rename.py
 tests/gui/test_masking_modifier_dialog.py
 tests/gui/test_presentation_settings_dialog.py
 tests/gui/test_project_config_import_export.py
+tests/gui/test_project_update_controller.py
+tests/gui/test_project_version_dialog.py
 tests/gui/test_report_bug_dialog.py
 tests/gui/test_run_page_launch.py
 tests/gui/test_settings_dialog.py

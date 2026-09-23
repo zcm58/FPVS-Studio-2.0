@@ -92,6 +92,7 @@ manual_smoke = []
 [scopes."project-io"]
 checks = []
 tests = [
+  "tests/unit/test_library_origin.py",
   "tests/unit/test_masking_media_portability.py",
   "tests/unit/test_serialization.py",
   "tests/unit/test_condition_template_profiles.py",
@@ -113,6 +114,8 @@ manual_smoke = []
 [scopes.library]
 checks = []
 tests = [
+  "tests/unit/test_library_origin.py",
+  "tests/unit/test_library_project_updates.py",
   "tests/unit/test_library_client.py",
   "tests/unit/test_library_cache.py",
   "tests/unit/test_library_credentials.py",
@@ -126,7 +129,10 @@ include = [
   "src/fpvs_studio/library/**",
   "src/fpvs_studio/developer/**",
   "src/fpvs_studio/core/library_publish.py",
+  "src/fpvs_studio/core/library_origin.py",
   "src/fpvs_studio/gui/library_*.py",
+  "src/fpvs_studio/gui/project_update_controller.py",
+  "src/fpvs_studio/gui/project_version_dialog.py",
   "scripts/prepare_library_bundle.py",
   "scripts/create_library_test_bundles.py",
   "tests/unit/test_library_*.py",
@@ -135,8 +141,11 @@ include = [
   "tests/unit/test_catalog_publisher.py",
   "tests/gui/test_library_dialog.py",
   "tests/gui/test_library_publisher_dialog.py",
+  "tests/gui/test_project_update_controller.py",
+  "tests/gui/test_project_version_dialog.py",
 ]
 manual_smoke = [
+  "Open a linked project, review a newer Library version on Home, and explicitly import it separately; confirm old edits and participant data remain intact. Check offline, unknown origin, auto-check toggle, cancellation and stale-window cases.",
   "Enroll two machine/user profiles and install a whole project from the Experiment Library; inspect Setup and reopen offline.",
   "Use an approved visible session to check cancellation, revocation, and dialog sizes documented in docs/EXPERIMENT_LIBRARY.md.",
   "In Settings > Advanced, reject an incorrect developer password, enable with the correct password and restart; check publisher review/cancellation, then disable and restart to confirm the action is hidden.",

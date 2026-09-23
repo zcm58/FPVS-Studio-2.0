@@ -4,6 +4,47 @@ Status: Active
 
 Date: 2026-09-16
 
+## Project version checks follow-up (September 22, 2026)
+
+The user requested an Update Project Version option and automatic notification when
+a newer Library release exists. They selected checking when a project opens, without
+periodic polling. Checks never install changes or interrupt presentation.
+
+- Record Library origin, installed version, verified bundle hash and local identity in
+  `.fpvs-library/project-origin.json` within the existing import staging transaction.
+  Keep this optional local metadata outside ProjectFile and exported study bundles.
+- Compare semantic versions by stable Library item identity even when the installed
+  release was withdrawn. Show incompatible newer versions with their Studio requirement.
+- Add a persistent Home notice and File > Update Project Version action, with app-owned
+  cancellable workers. Ignore results for closed/replaced windows; checks must never
+  show dialogs or take focus during presentation. Offline projects remain usable.
+- Earlier downloads have no trustworthy origin receipt. Offer explicit Library linking
+  with a known or unknown installed version; never infer identity from a project name.
+- Offer a project-local automatic-check toggle and a manual check. Use existing secure
+  enrollment and the current fixed service; do not add credentials to project files.
+- Default installation to a separate project through the existing reviewed importer,
+  preserving the current project's edits and participant data. Use this recommended
+  separate-copy behavior; in-place replacement is outside this follow-up.
+- Verify receipt containment/atomic import, withdrawn-version comparison, semantic
+  ordering, incompatibility, cancellation, offline and stale-window behavior, import
+  provenance, unsaved-change guards and visible layout coverage. Run Library, project-I/O,
+  GUI and docs focused routes plus precommit. Visible Qt execution remains opt-in.
+
+Progress: implemented on `codex/library-project-updates`.
+
+- Library focused: 203 passed, 3 Windows symlink skips. Project-I/O focused: 212 passed,
+  2 Windows symlink skips. Safe GUI focused: 7 passed. Docs focused: 9 passed.
+- Repo precommit passed Ruff, compilation, mypy (204 source files), repository audits
+  and 2,065 unit tests, with 10 Windows symlink skips. Focused GUI/static checks were
+  repeated after the final download and failed-recheck guard changes.
+- Live read-only Masking catalog verification found only 1.0.1 and correctly detected
+  its update from a 1.0.0 receipt despite withdrawal of that older release. Temporary
+  imports verified collision-safe folders, receipt identity and current-version checks,
+  with the original project bytes and synthetic participant data unchanged.
+- Registered Qt coverage includes stale-window cancellation, explicit installation,
+  download-lease lifetime, linking, menu guards and minimum/default layouts. Qt and
+  installed-build checks remain unrun; no installer or service changes were published.
+
 ## Phase 1 implementation authorization
 
 The user authorized Phase 1 implementation, private GitHub/service setup, two test

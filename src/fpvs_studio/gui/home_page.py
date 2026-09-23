@@ -266,6 +266,27 @@ class HomePage(QWidget):
         )
         launch_panel_layout.addLayout(identity_row)
 
+        self.project_update_notice = QWidget(launch_panel)
+        self.project_update_notice.setObjectName("home_project_update_notice")
+        update_layout = QHBoxLayout(self.project_update_notice)
+        update_layout.setContentsMargins(0, 0, 0, 0)
+        update_layout.setSpacing(PAGE_SECTION_GAP)
+        self.project_update_label = QLabel(self.project_update_notice)
+        self.project_update_label.setObjectName("home_project_update_label")
+        self.project_update_label.setTextFormat(Qt.TextFormat.PlainText)
+        self.project_update_label.setSizePolicy(
+            QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred,
+        )
+        self.project_update_label.setMinimumWidth(0)
+        self.project_update_label.installEventFilter(self)
+        self.project_update_button = QPushButton("Review update…", self.project_update_notice)
+        self.project_update_button.setObjectName("home_project_update_button")
+        mark_secondary_action(self.project_update_button)
+        update_layout.addWidget(self.project_update_label, 1)
+        update_layout.addWidget(self.project_update_button)
+        self.project_update_notice.hide()
+        launch_panel_layout.addWidget(self.project_update_notice)
+
         action_layout = QGridLayout()
         action_layout.setContentsMargins(0, 0, 0, 0)
         action_layout.setHorizontalSpacing(PAGE_SECTION_GAP)
@@ -414,6 +435,13 @@ class HomePage(QWidget):
         self._complete_setup_action = complete_setup or edit_setup
         self.edit_setup_button.clicked.connect(self._open_setup_from_home)
 
+    def set_project_update_notice(self, message: str) -> None:
+        """Show library version news independently of experiment launch readiness."""
+        self.project_update_label.setToolTip(message)
+        self.project_update_label.setAccessibleDescription(message)
+        self._refresh_project_update_notice()
+        self.project_update_notice.setVisible(bool(message))
+
     def refresh(self) -> None:
         project = self._document.project
         session_settings = project.settings.session
@@ -475,11 +503,21 @@ class HomePage(QWidget):
         label.setToolTip(name)
         label.setAccessibleDescription(name)
 
+    def _refresh_project_update_notice(self) -> None:
+        label = self.project_update_label
+        label.setText(label.fontMetrics().elidedText(
+            label.toolTip(), Qt.TextElideMode.ElideRight, label.contentsRect().width(),
+        ))
+
     def eventFilter(self, watched: QObject, event: QEvent) -> bool:  # noqa: N802
         if watched is self.current_project_header and event.type() in (
             QEvent.Type.Resize, QEvent.Type.FontChange, QEvent.Type.StyleChange,
         ):
             self._refresh_project_title()
+        elif watched is getattr(self, "project_update_label", None) and event.type() in (
+            QEvent.Type.Resize, QEvent.Type.FontChange, QEvent.Type.StyleChange,
+        ):
+            self._refresh_project_update_notice()
         return super().eventFilter(watched, event)
 
     def _refresh_sophia_mode_ticker(self) -> None:
