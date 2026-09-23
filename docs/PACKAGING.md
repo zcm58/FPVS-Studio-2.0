@@ -56,8 +56,8 @@ For the current release package, use the PEP 440-compatible package version `1.9
 The GitHub Release title can use a friendlier beta label, but the release tag and
 installer filename must use the exact package version.
 
-The [v1.9.0 release record](exec-plans/completed/release-1.9.0.md) records the published
-installer, direct 1.8.1 patch, payload audits and verification boundaries.
+The [v1.9.1 release record](exec-plans/completed/release-1.9.1.md) records the published
+installer, direct 1.9.0 patch, payload audits and verification boundaries.
 
 Use simple semantic versioning:
 
