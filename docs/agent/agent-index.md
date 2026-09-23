@@ -146,6 +146,8 @@ check persistence, and disable it again to restore ordinary launch checks.
 
 For Masking, start with `core/masking.py`, `core/masking_presets.py`,
 `core/compiler_masking.py`, `core/scene_models.py`, and [Masking](../MASKING.md).
+Masking block order lives in `core/compiler.py`; GUI retry seeding in `gui/document.py`;
+the joined target/answer trial table in `runtime/masking_report.py` and `session_export.py`.
 Native sources are modifier-owned; pre/post tasks remain outside stream timing.
 Use compiler/project-io/runtime/engine/gui focused routes, then repo precommit.
 

@@ -15,6 +15,7 @@ from tests.gui.helpers import (
     _open_created_project,
     _prepare_compile_ready_project,
 )
+from tests.unit.test_masking import masking_project
 
 from fpvs_studio.core.condition_template_profiles import (
     SIXTY_HZ_BLANK_FIXATION_PROFILE_ID,
@@ -24,7 +25,7 @@ from fpvs_studio.core.enums import DutyCycleMode, InterConditionMode, RunMode, S
 from fpvs_studio.core.execution import SessionExecutionSummary
 from fpvs_studio.core.serialization import load_project_file, write_json_file
 from fpvs_studio.gui.controller import StudioController
-from fpvs_studio.gui.document import _CONDITION_LENGTH_ERROR_MESSAGE
+from fpvs_studio.gui.document import _CONDITION_LENGTH_ERROR_MESSAGE, ProjectDocument
 
 
 def test_project_description_typing_round_trips_without_cursor_reset(
@@ -397,6 +398,22 @@ def test_compile_session_replaces_completed_prior_seed_before_launch(
 
     assert plan.random_seed == 202
     assert window.document.project.settings.session.session_seed == 202
+
+
+def test_masking_recompile_refreshes_seed_without_a_completed_session(qtbot, tmp_path, monkeypatch):
+    document = ProjectDocument(project_root=tmp_path, project=masking_project())
+    seeds = iter((101, 202))
+    monkeypatch.setattr(document, "_generate_unused_session_seed", lambda: next(seeds))
+
+    first = document.compile_session(refresh_hz=60)
+    second = document.compile_session(refresh_hz=60)
+
+    assert (first.random_seed, second.random_seed) == (101, 202)
+    assert document.project.settings.session.session_seed == 202
+    assert not document.dirty
+    assert first.ordered_entries()[0].run_spec.random_seed != (
+        second.ordered_entries()[0].run_spec.random_seed
+    )
 
 
 def test_fixation_color_change_mode_toggles_relevant_controls(

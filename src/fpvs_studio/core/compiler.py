@@ -388,6 +388,7 @@ def compile_session_plan(
                 session_rng.shuffle(triplet)
                 ordered.extend(triplet)
             group_conditions.append(ordered)
+        session_rng.shuffle(group_conditions)
         compiled_block_count = len(group_conditions)
     elif any(condition_masking(project, item) is not None for item in selected_conditions):
         raise CompileError(

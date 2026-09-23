@@ -21,13 +21,18 @@ Native sources belong to the modifier; ordinary Base/Oddball folders are inactiv
 while it is assigned. Removing it restores ordinary source validation. Shared edits,
 copy-for-condition, Cancel, and preset behavior follow the existing modifier rules.
 
-All selected masking conditions run in variant groups, ordered by the first condition
-of each variant. Each group contains one independently shuffled pass through its SOAs
+All selected masking conditions run in variant groups, with randomized group order.
+Each group contains one independently shuffled pass through its SOAs
 per session repetition. This preserves the source's three randomized triplets rather
 than shuffling all nine runs together. Mixed launches with ordinary non-masking
 conditions are rejected explicitly. The group's introduction runs once, questions
 after every stream, and thanks once after the final break/fixation. Authored task flow
 suppresses Studio's additional start gates, block breaks and completion page.
+
+Studio 1.9.2 refreshes the Masking seed on every GUI compilation, including retries
+after an interrupted session. Each trial independently samples its target, so chance
+repeats remain possible. Explicit core compilation seeds still reproduce a session.
+Other experiment families retain their existing seed behavior.
 
 Compilation places each inter-run break's trailing timed fixation immediately before
 the next stream, keeping the same visible order and the authored screen properties.
@@ -47,6 +52,13 @@ fifth slot for one frame. There are 200 slots, 40 target flashes and 2400 frames
 run. One target is sampled per run and remains fixed. Faces/Number base and mask
 sampling rejects immediate repetitions, including across consecutive runs.
 
+The approved Masking 1.1.0 Library revision changes the middle SOA from 50 ms to
+33.333333 ms: its windows start at 1, 2 or 6 frames (16.666667/33.333333/100 ms).
+All other timing, signed RGB values, circle geometry and source image bytes remain
+unchanged. The face block retains 26 base objects and four exemplars for each of four
+emotions. New instructions explain target identification, static red fixation, and
+avoiding deliberate blink timing during stimulation, with breaks for blinking/rest.
+
 Native scene visuals retain signed RGB triples without conversion to eight-bit hex,
 authored units, geometry, outlines, fonts and interpolation. The Color preset uses
 5-degree base, target and mask circles. The source mixed 5 cm bases with 5-degree
@@ -65,11 +77,18 @@ triples, sample symbols before drawing/logging, score the valid option click, re
 fresh clicks consistently, and synchronize nominal SOAs to display frames. The source
 editable files define condition-start markers 1/2/3 for Color/Faces/Number. The migrated
 project uses the user-requested nine unique codes instead: Color 1/2/3, Faces 4/5/6,
-and Number 7/8/9, each in ascending 16.6667/50/100 ms SOA order. Each condition's saved
+and Number 7/8/9, each in ascending SOA order (16.6667/33.3333/100 ms in 1.1.0).
+Each condition's saved
 code becomes its flip-locked stream-start marker and survives session randomization;
 no base/target/mask onset markers are added. Existing hardware transport is unchanged.
 The ordinary oddball marker setting stays 55 and is unused by masking. No source CSV
 format or historical jitter equivalence is claimed.
+
+| Variant | 16.6667 ms | 33.3333 ms | 100 ms |
+| --- | --- | --- | --- |
+| Color | 1 | 2 | 3 |
+| Faces | 4 | 5 | 6 |
+| Number | 7 | 8 | 9 |
 
 The delivered project's display geometry was explicitly selected by the user:
 80 cm viewing distance, 60.96 cm screen width and 1920x1080 at 60 Hz. It replaces the
@@ -94,7 +113,16 @@ establish optical equivalence on an unmeasured monitor.
 Masking requires project schema 1.7.0, config 1.5.0, preset 1.1.0, RunSpec 1.4.0,
 and SessionPlan 1.3.0. Existing ordinary payloads omit unused extensions and retain
 their previous schema and seeded compilation. Older installed builds cannot load
-Masking; use the source feature branch until a release is built.
+Masking. The revised Library project requires Studio 1.9.2.
+
+`logs/masking_trials_v1.csv` joins each attempted trial's actual compiled target
+(including face image path or text/RGB), expected and selected answer, correctness,
+reaction time, SOA, seed and EEG code. It is written in both export modes on session
+finalization, including graceful aborts. Absent/aborted answers have blank correctness;
+valid wrong answers have `False`. `target_presented` and `target_flashes_completed`
+describe completed-frame evidence, not measured optical onset. The existing compiled
+plan checkpoint is saved before input; response JSONL journals flush immediately
+after each response, preserving evidence even before this joined CSV is finalized.
 
 ## Verification and visible acceptance
 
@@ -109,6 +137,6 @@ Setup's 1120x820: all three presets, long image paths, source/answer editing, Ap
 Cancel, shared assignment, copy, preset reload and modifier removal. Confirm Home
 is ready with complete masking pools and that ordinary source editors do not claim
 to control those visuals. Physical acceptance must verify Open Sans/Arial Black,
-circle edges and hit testing, the 1/3/6-frame SOAs, final break/cross, and EEG start
+circle edges and hit testing, the revised 1/2/6-frame SOAs, final break/cross, and EEG start
 markers on the intended monitor and serial device. No offscreen Qt or physical
 PsychoPy playback is part of the default local check.

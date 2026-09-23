@@ -57,6 +57,39 @@ class ValidationEngine:
         return validate_display_refresh(run_spec.display.refresh_hz, base_hz=5, oddball_every_n=5)
 
 
+def test_masking_randomizes_whole_variant_blocks_across_seeds(tmp_path):
+    project = masking_project()
+    orders = set()
+    for seed in range(6):
+        plan = compile_session_plan(project, project_root=tmp_path, refresh_hz=60, random_seed=seed)
+        order = []
+        for block in plan.blocks:
+            variants = {entry.condition_id.split("-")[0] for entry in block.entries}
+            assert len(variants) == 1
+            order.append(next(iter(variants)))
+            for start in (0, 3, 6):
+                assert {entry.run_spec.scene_stream.soa_frames
+                        for entry in block.entries[start:start + 3]} == {1, 3, 6}
+        orders.add(tuple(order))
+    assert orders == {("color", "number"), ("number", "color")}
+
+
+def test_revised_middle_soa_is_two_frames_and_targets_vary_between_trials(tmp_path):
+    project = masking_project()
+    for modifier in project.condition_modifiers:
+        if modifier.masking.soa_ms == 50:
+            modifier.masking.soa_ms = 1000 / 30
+    targets = {"color": set(), "number": set()}
+    for seed in range(8):
+        plan = compile_session_plan(project, project_root=tmp_path, refresh_hz=60, random_seed=seed)
+        for block in plan.blocks:
+            assert {entry.run_spec.scene_stream.soa_frames for entry in block.entries} == {1, 2, 6}
+            for entry in block.entries:
+                variant = entry.condition_id.split("-")[0]
+                targets[variant].add(entry.run_spec.scene_stream.target_id)
+    assert all(len(values) == 4 for values in targets.values())
+
+
 def test_nominal_source_frames_questions_and_independent_triplet_randomization(tmp_path):
     project = masking_project()
     report = validate_project(project, refresh_hz=60)
@@ -68,7 +101,8 @@ def test_nominal_source_frames_questions_and_independent_triplet_randomization(t
     preflight_session_plan(
         tmp_path, plan, engine=ValidationEngine(), runtime_options={"strict_timing": False}
     )
-    for block, variant in zip(plan.blocks, ("color", "number"), strict=True):
+    for block in plan.blocks:
+        variant = block.entries[0].condition_id.split("-")[0]
         assert len(block.entries) == 9
         for start in (0, 3, 6):
             assert {
@@ -152,8 +186,10 @@ def test_nine_condition_markers_survive_shuffled_repeats_and_exports(tmp_path, r
     assert Counter(entry.run_spec.condition.trigger_code for entry in plan.ordered_entries()) == {
         code: 3 for code in range(1, 10)
     }
-    for block_index, block in enumerate(plan.blocks):
-        expected_group_codes = set(range(3 * block_index + 1, 3 * block_index + 4))
+    for block in plan.blocks:
+        first_code = expected_codes[block.entries[0].condition_id]
+        group_start = 3 * ((first_code - 1) // 3) + 1
+        expected_group_codes = set(range(group_start, group_start + 3))
         for start in (0, 3, 6):
             assert {
                 entry.run_spec.condition.trigger_code for entry in block.entries[start:start + 3]

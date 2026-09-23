@@ -41,7 +41,10 @@ from fpvs_studio.core.validation import validate_display_refresh
 from fpvs_studio.runtime.masking_report import (
     MASKING_SCENE_EVENTS_FILENAME,
     MASKING_SCENE_EVENTS_HEADER,
+    MASKING_TRIALS_FILENAME,
+    MASKING_TRIALS_HEADER,
     masking_scene_event_rows,
+    masking_trial_row,
 )
 from fpvs_studio.runtime.participant_history import (
     ParticipantSessionNumberSource,
@@ -1003,6 +1006,12 @@ def _append_masking_scene_events(
     entries = [entry for entry in session_plan.ordered_entries()
                if entry.run_spec.scene_stream is not None and entry.run_id in results]
     if entries:
+        _commit_numbered_rows(
+            logs_dir(project_root) / MASKING_TRIALS_FILENAME, MASKING_TRIALS_HEADER,
+            (masking_trial_row(entry, results[entry.run_id]) for entry in entries),
+            identity=("project_id", "participant_number", "participant_session_number",
+                      "session_id", "run_id"),
+        )
         _commit_numbered_rows(
             logs_dir(project_root) / MASKING_SCENE_EVENTS_FILENAME, MASKING_SCENE_EVENTS_HEADER,
             (row for entry in entries for row in masking_scene_event_rows(

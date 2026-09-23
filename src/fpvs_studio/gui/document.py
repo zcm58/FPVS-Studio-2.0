@@ -12,6 +12,7 @@ from PySide6.QtCore import QObject, Signal
 
 from fpvs_studio.core.enums import ExperimentCategory
 from fpvs_studio.core.experiment_categories import category_conflict_condition_ids
+from fpvs_studio.core.masking import condition_masking
 from fpvs_studio.core.models import (
     ConditionTemplateProfile,
     ProjectFile,
@@ -395,10 +396,12 @@ class ProjectDocument(
         self._replace_session_seed_without_dirty(seed)
 
     def ensure_unused_session_seed_for_launch(self) -> int:
-        """Ensure the current launch seed has not been consumed by a prior session."""
+        """Refresh Masking attempts; other studies retain unused preview seeds."""
 
         seed = self._project.settings.session.session_seed
-        if seed in completed_session_seeds(self._project_root):
+        masking = any(condition_masking(self._project, condition) is not None
+                      for condition in self._project.conditions)
+        if masking or seed in completed_session_seeds(self._project_root):
             seed = self._generate_unused_session_seed()
             self._replace_session_seed_without_dirty(seed)
         return seed

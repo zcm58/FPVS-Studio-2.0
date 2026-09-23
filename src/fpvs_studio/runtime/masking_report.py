@@ -17,6 +17,15 @@ from fpvs_studio.runtime.reporting_lock import project_reporting_lock
 
 MASKING_SCENE_EVENTS_FILENAME = "masking_scene_events_v1.csv"
 MASKING_PLAN_DIRNAME = "masking-scene-plans"
+MASKING_TRIALS_FILENAME = "masking_trials_v1.csv"
+MASKING_TRIALS_HEADER = [
+    "schema_version", "project_id", "session_id", "run_id", "condition_id", "condition_name",
+    "participant_number", "participant_session_number", "block_index", "global_order_index",
+    "run_seed", "trigger_code", "requested_soa_ms", "soa_frames", "planned_soa_ms",
+    "target_id", "target_image_path", "target_text", "target_rgb", "target_presented",
+    "target_flashes_completed", "expected_answer", "selected_target", "response_valid",
+    "correct", "reaction_time_s", "response_aborted", "run_aborted",
+]
 MASKING_SCENE_EVENTS_HEADER = [
     "schema_version", "project_id", "project_name", "session_id", "run_id", "condition_id",
     "condition_name", "participant_number", "participant_session_number", "block_index",
@@ -69,6 +78,38 @@ def _safe_csv_text(value: object) -> object:
     if not isinstance(value, str):
         return value
     return f"'{value}" if value.lstrip(" \t\r\n").startswith(("=", "+", "-", "@")) else value
+
+
+def masking_trial_row(entry: SessionEntry, summary: RunExecutionSummary) -> tuple[object, ...]:
+    """Join completed-frame evidence and the actual answer without treating a plan as playback."""
+    run = entry.run_spec
+    scene = run.scene_stream
+    assert scene is not None
+    target = next(visual for visual in scene.visuals if visual.visual_id == scene.target_id)
+    question = next((step for module in entry.post_tasks for step in module.steps
+                     if step.step_id == "masking-identification"), None)
+    expected = (next((item.item_id for item in question.items if item.correct), None)
+                if question else None)
+    answers = [response for response in summary.task_responses
+               if response.step_id == "masking-identification"]
+    answer = answers[-1] if answers else None
+    flashes = sum(
+        event.start_frame + event.duration_frames <= summary.completed_frames
+        for event in scene.events if event.role == "target"
+    )
+    return tuple(_safe_csv_text(value) for value in (
+        "1.0.0", run.project_id, summary.session_id or "", run.run_id,
+        run.condition.condition_id, run.condition.name, summary.participant_number or "",
+        summary.participant_session_number, entry.block_index, entry.global_order_index,
+        run.random_seed, run.condition.trigger_code, scene.requested_soa_ms, scene.soa_frames,
+        scene.soa_frames * 1000.0 / run.display.refresh_hz, scene.target_id,
+        target.image_path, target.text, json.dumps(target.rgb), flashes > 0, flashes, expected,
+        ";".join(answer.selected_option_ids) if answer else None,
+        answer.valid if answer else None,
+        answer.correct if answer and answer.valid and not answer.aborted else None,
+        answer.reaction_time_s if answer else None, answer.aborted if answer else None,
+        summary.aborted,
+    ))
 
 
 def masking_scene_event_rows(

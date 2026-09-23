@@ -31,11 +31,27 @@ MASKING_COLORS = {
 MASKING_LETTERS = ("C", "E", "F", "H", "K", "M", "N", "P", "R", "T", "V", "W", "X", "A")
 MASKING_NUMBERS = ("3", "5", "7", "9")
 MASKING_INSTRUCTIONS = (
-    "Instructions:\nSeveral images will be shown to you in rapid succession. \n"
-    "However, all you have to do is fixate on the red cross in the middle of the screen.\n"
-    "Please try not to blink during the stimuli presentation\n\n"
-    "Press space when you're ready to begin"
+    "{variant} block\n\n"
+    "Identify the brief target: {choices}.\n"
+    "The same target repeats within a sequence and may change on the next trial.\n\n"
+    "Keep looking at the red + throughout each sequence.\n"
+    "Try not to blink while the stimuli are flashing.\n"
+    "Blink and rest during the questions and breaks; do not time blinks to reveal the target.\n\n"
+    "After each sequence, rate visibility, choose the target (guess if unsure),\n"
+    "and report how often you saw it. The cross will not change color.\n\n"
+    "Press space when you are ready."
 )
+
+
+def masking_instructions(variant: str) -> str:
+    choices = {
+        "color": "red, green, blue or yellow",
+        "number": "3, 5, 7 or 9",
+        "faces": "an angry, happy, fearful or sad expression",
+    }
+    return MASKING_INSTRUCTIONS.format(variant=variant.title(), choices=choices[variant])
+
+
 MASKING_BREAK = (
     "Take a break. As long as you need.\n\nReady for the next trial?\n\nPress space to go again\n"
 )
@@ -269,10 +285,11 @@ def create_masking_modifier(
         task_id=f"{modifier_id}-before",
         name="Instructions and fixation",
         steps=[
-            _message("masking-instructions", MASKING_INSTRUCTIONS),
+            _message("masking-instructions", masking_instructions(variant)),
             _message("masking-start-fixation", "+", seconds=2, cross=True),
         ],
     )
+    before.steps[0].items[0].height = 0.035
     after = TaskModule(
         task_id=f"{modifier_id}-after",
         name="Visibility, identity and frequency",

@@ -58,10 +58,11 @@ def _plan(project, root: Path):
 
 
 class _MaskingEngine(StubEngine):
-    def __init__(self, plan, *, abort_step=None):
+    def __init__(self, plan, *, abort_step=None, wrong_answer=False):
         super().__init__({})
         self.events = []
         self.abort_step = abort_step
+        self.wrong_answer = wrong_answer
         self.correct_options = [
             next(item.item_id for item in step.items if item.correct)
             for entry in plan.ordered_entries() for task in entry.post_tasks for step in task.steps
@@ -73,7 +74,10 @@ class _MaskingEngine(StubEngine):
         if step.step_id == self.abort_step:
             return TaskEngineInput(aborted=True)
         if step.step_id == "masking-identification":
-            return TaskEngineInput(selected_item_ids=(self.correct_options.pop(0),),
+            correct = self.correct_options.pop(0)
+            selected = (next(item.item_id for item in step.items if item.item_id != correct)
+                        if self.wrong_answer else correct)
+            return TaskEngineInput(selected_item_ids=(selected,),
                                    reaction_time_s=0.625)
         if step.kind == "choice_grid":
             return TaskEngineInput(selected_item_ids=(step.items[0].item_id,), reaction_time_s=0.5)
@@ -111,6 +115,16 @@ def test_all_masking_variants_follow_authored_tasks_and_keep_provenance(
         relative_output_dir="runs/P007_session01",
     )
     assert not summary.aborted
+    trials = _rows(sample_project_root / "logs" / "masking_trials_v1.csv")
+    assert len(trials) == 6
+    by_run = {row["run_id"]: row for row in trials}
+    for entry in plan.ordered_entries():
+        row = by_run[entry.run_id]
+        assert row["target_id"] == entry.run_spec.scene_stream.target_id
+        assert row["target_presented"] == "True"
+        assert row["selected_target"] == row["expected_answer"]
+        assert row["correct"] == "True"
+        assert row["trigger_code"] == str(entry.run_spec.condition.trigger_code)
     expected = []
     for _ in range(3):
         expected.extend(["masking-instructions", "masking-start-fixation"])
@@ -166,6 +180,7 @@ def test_all_masking_variants_follow_authored_tasks_and_keep_provenance(
     assert saved["session_plan"]["blocks"][0]["entries"][0]["run_spec"]["scene_stream"]
     append_session_condition_history(sample_project_root, plan, summary, refresh_reports=False)
     assert _rows(events_path) == rows
+    assert _rows(sample_project_root / "logs" / "masking_trials_v1.csv") == trials
 
 
 @pytest.mark.parametrize("mode", ["full", "compact"])
@@ -182,12 +197,42 @@ def test_pre_task_abort_keeps_compiled_target_and_marks_no_stimulus_onsets(
         },
     )
     assert summary.aborted and engine.events == ["prepare", "masking-instructions"]
+    trials = _rows(sample_project_root / "logs" / "masking_trials_v1.csv")
+    assert len(trials) == 1
+    assert trials[0]["target_presented"] == "False"
+    assert trials[0]["target_flashes_completed"] == "0"
+    assert trials[0]["correct"] == trials[0]["selected_target"] == ""
     assert all(row["onset_frame_completed"] == "False" for row in _rows(
         sample_project_root / "logs" / MASKING_SCENE_EVENTS_FILENAME
     ))
     plans = list((sample_project_root / "logs" / MASKING_PLAN_DIRNAME).glob("*.json"))
     assert len(plans) == 1
     assert json.loads(plans[0].read_text(encoding="utf-8"))["planned_only"] is True
+
+
+@pytest.mark.parametrize("mode", ["full", "compact"])
+@pytest.mark.parametrize("abort_answer", [False, True])
+def test_trial_table_distinguishes_wrong_and_aborted_answers(
+    mode, abort_answer, sample_project, sample_project_root,
+):
+    plan = _plan(sample_project, sample_project_root)
+    engine = _MaskingEngine(
+        plan, wrong_answer=True,
+        abort_step="masking-identification" if abort_answer else None,
+    )
+    RuntimeWorker(engine).execute_session(
+        sample_project_root, plan, sample_project_root / "runs" / "answers",
+        participant_number="009", participant_session_number=1,
+        runtime_options={"serial_enabled": False, "export_mode": mode,
+                         "experiment_test_mode": True},
+    )
+    trials = _rows(sample_project_root / "logs" / "masking_trials_v1.csv")
+    assert len(trials) == (1 if abort_answer else 6)
+    for row in trials:
+        assert row["target_presented"] == "True"
+        assert row["correct"] == ("" if abort_answer else "False")
+        assert row["selected_target"] != row["expected_answer"]
+        assert row["response_aborted"] == str(abort_answer)
 
 
 def test_numbered_plan_checkpoint_is_idempotent_and_rejects_conflicting_plan(
