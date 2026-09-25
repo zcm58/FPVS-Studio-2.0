@@ -228,6 +228,11 @@ marker on the first stimulus onset frame and oddball markers on each oddball
 stimulus onset frame. Runtime and engines observe these frame markers while
 serial-port details stay behind the trigger backend boundary.
 
+For Masking, the condition marker is stream frame zero, before its first base image.
+Opt-in modifier event settings additionally emit `oddball_onset`, `mask_onset` and
+`catch_slot_onset` through this same contract. The latter identifies an omitted
+target's scheduled onset, never a displayed target. See [Masking](MASKING.md#optional-target-mask-and-catch-slot-markers).
+
 For AB pairs, `t1_onset` retains the existing Oddball marker (55 by default, including
 the explicit nonstandard-code override). `t2_onset` uses the authored T2 code (56 by
 default). The separator has no target marker. T2's code must differ from T1 and all

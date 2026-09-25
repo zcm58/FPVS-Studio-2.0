@@ -568,7 +568,11 @@ def assign_modifier(
             for index, task_id in enumerate(definition.modifier.post_task_ids)
         ] + condition.post_task_bindings
     draft.schema_version = (
-        ProjectSchemaVersion.V1_9
+        ProjectSchemaVersion.V1_10
+        if any(item.masking is not None and item.masking.event_triggers is not None
+               for item in draft.condition_modifiers)
+        or project.schema_version == ProjectSchemaVersion.V1_10
+        else ProjectSchemaVersion.V1_9
         if any(condition.masking_catch for condition in draft.conditions)
         or any(task_requires_text_alignment_schema(task) for task in draft.task_modules)
         or project.schema_version == ProjectSchemaVersion.V1_9
@@ -692,5 +696,6 @@ def adopt_backward_counting_modifier(
             baseline_task_id=baseline_task_id,
         )
     )
-    draft.schema_version = ProjectSchemaVersion.V1_6
+    if draft.schema_version != ProjectSchemaVersion.V1_10:
+        draft.schema_version = ProjectSchemaVersion.V1_6
     return type(project).model_validate(draft.model_dump())

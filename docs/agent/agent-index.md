@@ -157,6 +157,8 @@ its item table and preview live in `gui/condition_task_dialog.py`.
 The joined target/answer/PAS v2
 trial table and detection outcomes live in `runtime/masking_report.py` and `session_export.py`.
 Native sources are modifier-owned; pre/post tasks remain outside stream timing.
+Optional `masking.event_triggers` uses the compiler's generic trigger schedule;
+focused compiler/project-io/engine routes cover frame alignment and persisted opt-in.
 Catch schema guards span project/config, RunSpec and SessionPlan; read the Masking
 contract before changing compatibility or exports. Use compiler/project-io/runtime/engine/gui
 focused routes, then repo precommit; visible Qt acceptance remains an explicit opt-in.

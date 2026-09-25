@@ -94,6 +94,7 @@ MODIFIER_CONFIG_SCHEMA_VERSION: Literal["1.4.0"] = "1.4.0"
 SCENE_CONFIG_SCHEMA_VERSION: Literal["1.5.0"] = "1.5.0"
 CATCH_CONFIG_SCHEMA_VERSION: Literal["1.6.0"] = "1.6.0"
 CONDITION_CATCH_CONFIG_SCHEMA_VERSION: Literal["1.7.0"] = "1.7.0"
+MASKING_EVENT_CONFIG_SCHEMA_VERSION: Literal["1.8.0"] = "1.8.0"
 PROJECT_CONFIG_SUFFIX = ".fpvsconfig"
 _CONFIG_FILENAME_RE = re.compile(r"[^a-z0-9]+")
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
@@ -373,7 +374,9 @@ class ProjectConfigTaskAsset(FPVSBaseModel):
 class ProjectConfigFile(FPVSBaseModel):
     """Top-level Studio `.fpvsconfig` interchange file."""
 
-    schema_version: Literal["1.2.0", "1.3.0", "1.4.0", "1.5.0", "1.6.0", "1.7.0"] = "1.2.0"
+    schema_version: Literal[
+        "1.2.0", "1.3.0", "1.4.0", "1.5.0", "1.6.0", "1.7.0", "1.8.0",
+    ] = "1.2.0"
     experiment_category: ExperimentCategory = Field(
         default=ExperimentCategory.FPVS_ODDBALL, frozen=True
     )
@@ -402,7 +405,7 @@ class ProjectConfigFile(FPVSBaseModel):
     def validate_task_asset_inventory(self) -> ProjectConfigFile:
         if any(isinstance(item.attentional_blink, AttentionalBlinkStreamSettings)
                for item in self.conditions) and self.schema_version not in {
-                   "1.3.0", "1.4.0", "1.5.0", "1.6.0", "1.7.0",
+                   "1.3.0", "1.4.0", "1.5.0", "1.6.0", "1.7.0", "1.8.0",
                }:
             raise ValueError("Letter-stream configs require schema 1.3.0 or newer.")
         if (self.condition_modifiers or any(task.image_memory for task in self.task_modules)):
@@ -410,6 +413,7 @@ class ProjectConfigFile(FPVSBaseModel):
                 MODIFIER_CONFIG_SCHEMA_VERSION, SCENE_CONFIG_SCHEMA_VERSION,
                 CATCH_CONFIG_SCHEMA_VERSION,
                 CONDITION_CATCH_CONFIG_SCHEMA_VERSION,
+                MASKING_EVENT_CONFIG_SCHEMA_VERSION,
             }:
                 raise ValueError("Condition modifiers require config schema 1.4.0 or newer.")
         if (any(modifier.masking is not None for modifier in self.condition_modifiers)
@@ -417,21 +421,29 @@ class ProjectConfigFile(FPVSBaseModel):
             if self.schema_version not in {
                 SCENE_CONFIG_SCHEMA_VERSION, CATCH_CONFIG_SCHEMA_VERSION,
                 CONDITION_CATCH_CONFIG_SCHEMA_VERSION,
+                MASKING_EVENT_CONFIG_SCHEMA_VERSION,
             }:
                 raise ValueError("Native scene workflows require config schema 1.5.0.")
         if any(modifier.masking is not None and modifier.masking.catch_trial is not None
                for modifier in self.condition_modifiers):
             if self.schema_version not in {
                 CATCH_CONFIG_SCHEMA_VERSION, CONDITION_CATCH_CONFIG_SCHEMA_VERSION,
+                MASKING_EVENT_CONFIG_SCHEMA_VERSION,
             }:
                 raise ValueError("Masking catch trials require config schema 1.6.0.")
         if any(condition.masking_catch for condition in self.conditions) or any(
             task_requires_text_alignment_schema(task) for task in self.task_modules
         ):
-            if self.schema_version != CONDITION_CATCH_CONFIG_SCHEMA_VERSION:
+            if self.schema_version not in {
+                CONDITION_CATCH_CONFIG_SCHEMA_VERSION, MASKING_EVENT_CONFIG_SCHEMA_VERSION,
+            }:
                 raise ValueError(
                     "Catch conditions and task text alignment require config schema 1.7.0."
                 )
+        if any(modifier.masking is not None and modifier.masking.event_triggers is not None
+               for modifier in self.condition_modifiers):
+            if self.schema_version != MASKING_EVENT_CONFIG_SCHEMA_VERSION:
+                raise ValueError("Masking event triggers require config schema 1.8.0.")
         referenced = set(owned_image_references(self.task_modules, self.condition_modifiers))
         embedded = [(asset.task_id, asset.relative_path) for asset in self.task_assets]
         if len(embedded) != len(set(embedded)):
@@ -470,7 +482,10 @@ def export_project_config(
     )
     return ProjectConfigFile(
         schema_version=(
-            CONDITION_CATCH_CONFIG_SCHEMA_VERSION if any(
+            MASKING_EVENT_CONFIG_SCHEMA_VERSION if any(
+                modifier.masking is not None and modifier.masking.event_triggers is not None
+                for modifier in project.condition_modifiers
+            ) else CONDITION_CATCH_CONFIG_SCHEMA_VERSION if any(
                 condition.masking_catch for condition in project.conditions
             ) or any(task_requires_text_alignment_schema(task) for task in project.task_modules)
             else CATCH_CONFIG_SCHEMA_VERSION if any(
@@ -612,10 +627,11 @@ def read_project_config(path: Path) -> ProjectConfigFile:
         CONFIG_SCHEMA_VERSION, LETTER_STREAM_CONFIG_SCHEMA_VERSION, MODIFIER_CONFIG_SCHEMA_VERSION,
         SCENE_CONFIG_SCHEMA_VERSION, CATCH_CONFIG_SCHEMA_VERSION,
         CONDITION_CATCH_CONFIG_SCHEMA_VERSION,
+        MASKING_EVENT_CONFIG_SCHEMA_VERSION,
     }:
         raise ProjectConfigError(
             "Unsupported project config schema version: "
-            f"{raw_version!r}. Expected a supported version from 1.2.0 through 1.7.0."
+            f"{raw_version!r}. Expected a supported version from 1.2.0 through 1.8.0."
         )
     try:
         return ProjectConfigFile.model_validate(raw_payload)
@@ -660,7 +676,9 @@ def create_project_from_config(parent_dir: Path, config: ProjectConfigFile) -> P
 
     project = ProjectFile(
         schema_version=(
-            ProjectSchemaVersion.V1_9
+            ProjectSchemaVersion.V1_10
+            if config.schema_version == MASKING_EVENT_CONFIG_SCHEMA_VERSION
+            else ProjectSchemaVersion.V1_9
             if config.schema_version == CONDITION_CATCH_CONFIG_SCHEMA_VERSION
             else ProjectSchemaVersion.V1_8 if config.schema_version == CATCH_CONFIG_SCHEMA_VERSION
             else ProjectSchemaVersion.V1_7 if config.schema_version == SCENE_CONFIG_SCHEMA_VERSION

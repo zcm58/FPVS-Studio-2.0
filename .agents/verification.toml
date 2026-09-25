@@ -73,6 +73,7 @@ manual_smoke = []
 [scopes.compiler]
 checks = []
 tests = [
+  "tests/unit/test_masking_event_markers.py",
   "tests/unit/test_masking.py",
   "tests/unit/test_masking_catch_conditions.py",
   "tests/unit/test_compiler_preparation.py",
@@ -94,6 +95,7 @@ manual_smoke = []
 [scopes."project-io"]
 checks = []
 tests = [
+  "tests/unit/test_masking_event_marker_io.py",
   "tests/unit/test_library_installations.py",
   "tests/unit/test_library_origin.py",
   "tests/unit/test_masking_media_portability.py",
@@ -202,6 +204,7 @@ manual_smoke = []
 [scopes.engine]
 checks = []
 tests = [
+  "tests/unit/test_masking_event_marker_playback.py",
   "tests/unit/test_psychopy_scenes.py",
   "tests/unit/test_masking_catch_preflight.py",
   "tests/unit/test_psychopy_recall_input.py",

@@ -141,6 +141,8 @@ conditions; the modifier tab retains legacy
 automatic catches. Instruction text items support explicit alignment through the shared
 task contract, editor and renderer. Runtime joins
 target/answer/PAS evidence and separate detection outcomes into a versioned trial table.
+Optional modifier-owned event markers compile target, mask and omitted-target slots
+into the existing generic trigger list; transport and scene timing stay unchanged.
 See [Masking](docs/MASKING.md)
 for schemas, launch seeding and exactness limits.
 

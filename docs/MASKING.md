@@ -133,16 +133,44 @@ and Number 7/8/9, each in ascending SOA order (16.6667/50/100 ms in 1.3.0).
 Catch codes 10/11/12 identify the target-absent Color/Faces/Number sequences; their
 sampled SOA is saved with the trial. In 1.3.0 these codes belong to the three actual
 catch conditions. Each condition's saved code becomes its flip-locked stream-start marker and survives
-session randomization;
-no base/target/mask onset markers are added. Existing hardware transport is unchanged.
-The ordinary oddball marker setting stays 55 and is unused by masking. No source CSV
-format or historical jitter equivalence is claimed.
+session randomization. Projects without `MaskingSettings.event_triggers` retain this
+start-only behavior, including the published Masking 1.3.0 project.
+No source CSV format or historical jitter equivalence is claimed.
 
 | Variant | 16.6667 ms | 50 ms | 100 ms | Catch (sampled SOA) |
 | --- | --- | --- | --- | --- |
 | Color | 1 | 2 | 3 | 10 |
 | Faces | 4 | 5 | 6 | 11 |
 | Number | 7 | 8 | 9 | 12 |
+
+### Optional target, mask and catch-slot markers
+
+The modifier's optional `event_triggers` object enables within-sequence markers.
+`mask_onset_code` defaults to 56 and `catch_slot_onset_code` to 57. Target onset
+uses the existing project `oddball_trigger_code` (55 by default, with its existing
+explicit nonstandard-code policy). Codes must be distinct from each other and from
+condition/automatic-catch start codes. Omitting the object preserves legacy behavior.
+
+| Event | Default code | Frame in each target slot |
+| --- | --- | --- |
+| Sequence start | Condition's saved code (1–12 in Masking) | Stream frame 0, once |
+| Actual target/oddball onset | 55 | Slot start, ordinary sequences only |
+| Mask onset | 56 | Slot start plus SOA frames, ordinary and catch sequences |
+| Omitted target's scheduled onset | 57 | Slot start, catch sequences only |
+
+At 60 Hz in the delivered design, target slots begin at frames 48, 108, ..., 2388.
+Their masks begin 1, 3 or 6 frames later. Ordinary sequences contain one start marker
+and 40 pairs of 55 then 56; catches contain one start marker and 40 pairs of 57 then
+56. Code 57 never represents a displayed target or replaces the catch condition's
+start code. Base slots, target offsets, questions and answers receive no new markers.
+The full 30-sequence design therefore schedules 2,430 events: 30 starts, 1,080 targets,
+1,200 masks and 120 omitted-target slots.
+
+Compilation changes only the generic `TriggerEvent` list. The existing engine emits
+each event through its display-flip callback and existing trigger backend; scene
+frames, stimulus sampling, participant questions, scoring and hardware pulse behavior
+remain unchanged. Separate events support target/mask EEG alignment, but do not by
+themselves separate overlapping neural responses or establish optical timing.
 
 The delivered project's display geometry was explicitly selected by the user:
 80 cm viewing distance, 60.96 cm screen width and 1920x1080 at 60 Hz. It replaces the
@@ -176,6 +204,12 @@ ordinary runs retain 1.4.0. Sessions with catches but no non-centered task text 
 Modifier presets containing it require **1.2.0**; centered Masking presets, including
 legacy automatic catches, retain 1.1.0. Strict schema/settings guards reject unsupported
 behavior in older readers instead of silently dropping it.
+
+Opt-in `event_triggers` requires project/config **1.10.0/1.8.0** and modifier preset
+**1.3.0**. Generic compiled trigger events need no new RunSpec or SessionPlan schema.
+The marker-enabled project requires Studio 2.2.0; Studio 2.1.0 does not support these
+new authoring settings. Masking 1.4.0 uses this capability while retaining the prior
+stimulus timing, block randomization and participant questions.
 
 The Masking 1.3.0 Library project requires **Studio 2.1.0** for visible catch conditions
 and aligned instruction text. The preceding Masking 1.2.0 remains a Studio 2.0.0

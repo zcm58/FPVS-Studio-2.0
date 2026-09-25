@@ -7,7 +7,12 @@ from pathlib import Path
 
 from fpvs_studio.core.compiler_support import CompileError, make_run_id
 from fpvs_studio.core.enums import DutyCycleMode, StimulusModality
-from fpvs_studio.core.masking import MaskingSettings, masking_frame_counts
+from fpvs_studio.core.masking import (
+    MaskingEventTriggers,
+    MaskingSettings,
+    masking_frame_counts,
+    validate_masking_event_triggers,
+)
 from fpvs_studio.core.models import Condition, ProjectFile
 from fpvs_studio.core.paths import resolve_project_relative_path
 from fpvs_studio.core.run_spec import (
@@ -36,7 +41,7 @@ def validate_masking_settings(
     condition: Condition,
     settings: MaskingSettings,
     refresh_hz: float,
-) -> None:
+) -> MaskingEventTriggers | None:
     owned_image_references([], project.condition_modifiers)
     if (
         condition.attentional_blink is not None
@@ -55,6 +60,7 @@ def validate_masking_settings(
     if project.settings.protocol.oddball_every_n < 2:
         raise ValueError("Masking needs at least one base slot before each target.")
     masking_frame_counts(settings, refresh_hz=refresh_hz, base_hz=project.settings.protocol.base_hz)
+    return validate_masking_event_triggers(project, settings)
 
 
 def compile_masking_run(
@@ -70,7 +76,7 @@ def compile_masking_run(
     is_catch_trial: bool = False,
 ) -> RunSpec:
     try:
-        validate_masking_settings(project, condition, settings, refresh_hz)
+        event_triggers = validate_masking_settings(project, condition, settings, refresh_hz)
         slot, soa, target_frames, mask_frames, base_frames = masking_frame_counts(
             settings,
             refresh_hz=refresh_hz,
@@ -90,6 +96,7 @@ def compile_masking_run(
     rng = random.Random(random_seed)
     target = rng.choice(settings.target_visuals)
     events: list[SceneEvent] = []
+    marker_events: list[TriggerEvent] = []
     protocol = project.settings.protocol
     cycles = condition.sequence_count * condition.oddball_cycle_repeats_per_sequence
     total_slots = cycles * protocol.oddball_every_n
@@ -103,6 +110,20 @@ def compile_masking_run(
         selected = rng.choice(choices)
         previous = selected.visual_id
         start = index * slot
+        if is_target and event_triggers is not None:
+            marker_events.extend([
+                TriggerEvent(
+                    frame_index=start,
+                    code=(event_triggers.catch_slot_onset_code if is_catch_trial
+                          else project.settings.triggers.oddball_trigger_code),
+                    label="catch_slot_onset" if is_catch_trial else "oddball_onset",
+                ),
+                TriggerEvent(
+                    frame_index=start + soa,
+                    code=event_triggers.mask_onset_code,
+                    label="mask_onset",
+                ),
+            ])
         if is_target and not is_catch_trial:
             events.append(
                 SceneEvent(
@@ -200,6 +221,7 @@ def compile_masking_run(
         ),
         scene_stream=scene,
         trigger_events=[
-            TriggerEvent(frame_index=0, code=trigger_code, label="condition_start")
+            TriggerEvent(frame_index=0, code=trigger_code, label="condition_start"),
+            *marker_events,
         ],
     )

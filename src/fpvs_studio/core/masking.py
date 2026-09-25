@@ -9,6 +9,7 @@ from pydantic import Field, SerializerFunctionWrapHandler, model_serializer, mod
 
 from fpvs_studio.core.scene_models import SceneVisual
 from fpvs_studio.core.task_models import TaskBaseModel
+from fpvs_studio.core.trigger_codes import validate_oddball_trigger_code_policy
 
 if TYPE_CHECKING:
     from fpvs_studio.core.models import Condition, ProjectFile
@@ -18,6 +19,19 @@ class MaskingCatchTrialSettings(TaskBaseModel):
     """One extra target-absent trial in each variant block."""
 
     trigger_code: int = Field(ge=1, le=255, strict=True)
+
+
+class MaskingEventTriggers(TaskBaseModel):
+    """Opt-in target-slot markers; target onset uses the project oddball code."""
+
+    mask_onset_code: int = Field(default=56, ge=1, le=255, strict=True)
+    catch_slot_onset_code: int = Field(default=57, ge=1, le=255, strict=True)
+
+    @model_validator(mode="after")
+    def validate_distinct_codes(self) -> MaskingEventTriggers:
+        if self.mask_onset_code == self.catch_slot_onset_code:
+            raise ValueError("Mask and catch-slot onset trigger codes must be distinct.")
+        return self
 
 
 class MaskingSettings(TaskBaseModel):
@@ -36,6 +50,7 @@ class MaskingSettings(TaskBaseModel):
     base_overlays: list[SceneVisual] = Field(default_factory=list)
     fixation_visual: SceneVisual | None = None
     catch_trial: MaskingCatchTrialSettings | None = None
+    event_triggers: MaskingEventTriggers | None = None
 
     @model_serializer(mode="wrap")
     def serialize_optional_catch(
@@ -44,6 +59,8 @@ class MaskingSettings(TaskBaseModel):
         payload: dict[str, Any] = handler(self)
         if self.catch_trial is None:
             payload.pop("catch_trial", None)
+        if self.event_triggers is None:
+            payload.pop("event_triggers", None)
         return payload
 
     @model_validator(mode="after")
@@ -94,6 +111,59 @@ def is_masking_project(project: ProjectFile) -> bool:
     return bool(project.conditions) and all(
         condition_masking(project, condition) is not None for condition in project.conditions
     )
+
+
+def _validated_event_triggers(value: MaskingEventTriggers | None) -> MaskingEventTriggers | None:
+    if value is None:
+        return None
+    # Models are mutable during authoring, so validate edited values again at compilation.
+    payload = value.model_dump() if isinstance(value, MaskingEventTriggers) else value
+    return MaskingEventTriggers.model_validate(payload)
+
+
+def validate_masking_event_triggers(
+    project: ProjectFile, settings: MaskingSettings,
+) -> MaskingEventTriggers | None:
+    """Keep sampled catch SOAs consistent and distinguish event codes from trial starts."""
+    markers = _validated_event_triggers(settings.event_triggers)
+    variant_settings = [
+        (condition, bound) for condition in project.conditions
+        if (bound := condition_masking(project, condition)) is not None
+        and bound.variant == settings.variant
+    ]
+    if any(condition.masking_catch or bound.catch_trial is not None
+           for condition, bound in variant_settings):
+        if any(_validated_event_triggers(bound.event_triggers) != markers
+               for _, bound in variant_settings):
+            raise ValueError(
+                f"The {settings.variant} catch condition and its SOA sources must use the same "
+                "event trigger settings."
+            )
+    if markers is None:
+        return None
+    triggers = project.settings.triggers
+    try:
+        target_code = validate_oddball_trigger_code_policy(
+            triggers.oddball_trigger_code,
+            allow_nonstandard=triggers.allow_nonstandard_oddball_trigger_code,
+        )
+    except (TypeError, ValueError) as exc:
+        raise ValueError(str(exc)) from exc
+    if target_code in {markers.mask_onset_code, markers.catch_slot_onset_code}:
+        raise ValueError("Target, mask and catch-slot onset trigger codes must be distinct.")
+    condition_codes = {condition.trigger_code for condition in project.conditions}
+    condition_codes.update(
+        modifier.masking.catch_trial.trigger_code for modifier in project.condition_modifiers
+        if modifier.masking is not None and modifier.masking.catch_trial is not None
+    )
+    if condition_codes.intersection(
+        {target_code, markers.mask_onset_code, markers.catch_slot_onset_code}
+    ):
+        raise ValueError(
+            "Masking event trigger codes must be distinct from condition-start and automatic "
+            "catch trial codes."
+        )
+    return markers
 
 
 def validate_masking_catch_trials(project: ProjectFile, conditions: list[Condition]) -> None:
@@ -195,6 +265,12 @@ def _new_masking_catch_condition(
     used_codes = {item.trigger_code for item in project.conditions}
     used_codes.update(item.masking.catch_trial.trigger_code for item in project.condition_modifiers
                       if item.masking is not None and item.masking.catch_trial is not None)
+    for modifier in project.condition_modifiers:
+        if modifier.masking is not None and modifier.masking.event_triggers is not None:
+            markers = validate_masking_event_triggers(project, modifier.masking)
+            assert markers is not None
+            used_codes.update({project.settings.triggers.oddball_trigger_code,
+                               markers.mask_onset_code, markers.catch_slot_onset_code})
     if trigger_code is None:
         preferred = {"color": 10, "faces": 11, "number": 12}[variant]
         trigger_code = next((code for code in [*range(preferred, 256), *range(1, preferred)]
@@ -249,6 +325,12 @@ def add_masking_catch_condition(
     for index, condition in enumerate(ordered):
         condition.order_index = index
     draft.conditions = ordered
-    draft.schema_version = ProjectSchemaVersion.V1_9
+    draft.schema_version = (
+        ProjectSchemaVersion.V1_10
+        if any(modifier.masking is not None and modifier.masking.event_triggers is not None
+               for modifier in draft.condition_modifiers)
+        or project.schema_version == ProjectSchemaVersion.V1_10
+        else ProjectSchemaVersion.V1_9
+    )
     validate_masking_catch_trials(draft, draft.conditions)
     return type(project).model_validate(draft.model_dump()), catch.condition_id

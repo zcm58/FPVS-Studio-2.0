@@ -47,7 +47,7 @@ class ModifierPresetError(ValueError):
 class ModifierPreset(TaskBaseModel):
     """A versioned local copy; no condition assignments or participant responses."""
 
-    schema_version: Literal["1.0.0", "1.1.0", "1.2.0"] = "1.0.0"
+    schema_version: Literal["1.0.0", "1.1.0", "1.2.0", "1.3.0"] = "1.0.0"
     preset_id: str
     name: str = Field(min_length=1, max_length=200)
     description: str = Field(default="", max_length=16_384)
@@ -68,12 +68,16 @@ class ModifierPreset(TaskBaseModel):
     @model_validator(mode="after")
     def validate_scene_version(self) -> ModifierPreset:
         if _requires_scene_schema(self.definition) and self.schema_version not in {
-            "1.1.0", "1.2.0",
+            "1.1.0", "1.2.0", "1.3.0",
         }:
             raise ValueError("Native scene modifier presets require schema 1.1.0.")
         if any(task_requires_text_alignment_schema(task) for task in self.definition.task_modules):
-            if self.schema_version != "1.2.0":
+            if self.schema_version not in {"1.2.0", "1.3.0"}:
                 raise ValueError("Task text alignment requires modifier preset schema 1.2.0.")
+        settings = self.definition.modifier.masking
+        if settings is not None and settings.event_triggers is not None:
+            if self.schema_version != "1.3.0":
+                raise ValueError("Masking event triggers require modifier preset schema 1.3.0.")
         return self
 
 
@@ -330,7 +334,9 @@ def save_modifier_preset(
     )
     preset = ModifierPreset(
         schema_version=(
-            "1.2.0" if any(task_requires_text_alignment_schema(task)
+            "1.3.0" if copied.modifier.masking is not None
+            and copied.modifier.masking.event_triggers is not None
+            else "1.2.0" if any(task_requires_text_alignment_schema(task)
                            for task in copied.task_modules)
             else "1.1.0" if _requires_scene_schema(copied) else "1.0.0"
         ),

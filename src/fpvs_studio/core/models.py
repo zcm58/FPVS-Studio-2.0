@@ -883,13 +883,13 @@ class ProjectFile(FPVSBaseModel):
                for item in self.conditions) and self.schema_version not in {
                    ProjectSchemaVersion.V1_5, ProjectSchemaVersion.V1_6, ProjectSchemaVersion.V1_7,
                    ProjectSchemaVersion.V1_8,
-                   ProjectSchemaVersion.V1_9,
+                   ProjectSchemaVersion.V1_9, ProjectSchemaVersion.V1_10,
                }:
             raise ValueError("Letter-stream projects require project schema 1.5.0.")
         if (self.condition_modifiers or any(task.image_memory for task in self.task_modules)) and (
             self.schema_version not in {
                 ProjectSchemaVersion.V1_6, ProjectSchemaVersion.V1_7, ProjectSchemaVersion.V1_8,
-                ProjectSchemaVersion.V1_9,
+                ProjectSchemaVersion.V1_9, ProjectSchemaVersion.V1_10,
             }
         ):
             raise ValueError("Condition modifiers and image memory require project schema 1.6.0.")
@@ -909,18 +909,25 @@ class ProjectFile(FPVSBaseModel):
                 or any(task_requires_scene_schema(task) for task in self.task_modules)):
             if self.schema_version not in {
                 ProjectSchemaVersion.V1_7, ProjectSchemaVersion.V1_8, ProjectSchemaVersion.V1_9,
+                ProjectSchemaVersion.V1_10,
             }:
                 raise ValueError("Masking and native task scenes require project schema 1.7.0.")
         if any(modifier.masking is not None and modifier.masking.catch_trial is not None
                for modifier in self.condition_modifiers):
-            if self.schema_version not in {ProjectSchemaVersion.V1_8, ProjectSchemaVersion.V1_9}:
+            if self.schema_version not in {
+                ProjectSchemaVersion.V1_8, ProjectSchemaVersion.V1_9, ProjectSchemaVersion.V1_10,
+            }:
                 raise ValueError("Masking catch trials require project schema 1.8.0.")
         if any(condition.masking_catch for condition in self.conditions):
-            if self.schema_version != ProjectSchemaVersion.V1_9:
+            if self.schema_version not in {ProjectSchemaVersion.V1_9, ProjectSchemaVersion.V1_10}:
                 raise ValueError("Explicit masking catch conditions require project schema 1.9.0.")
         if any(task_requires_text_alignment_schema(task) for task in self.task_modules):
-            if self.schema_version != ProjectSchemaVersion.V1_9:
+            if self.schema_version not in {ProjectSchemaVersion.V1_9, ProjectSchemaVersion.V1_10}:
                 raise ValueError("Task text alignment requires project schema 1.9.0.")
+        if any(modifier.masking is not None and modifier.masking.event_triggers is not None
+               for modifier in self.condition_modifiers):
+            if self.schema_version != ProjectSchemaVersion.V1_10:
+                raise ValueError("Masking event triggers require project schema 1.10.0.")
         return self
 
 

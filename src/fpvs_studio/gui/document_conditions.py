@@ -815,7 +815,9 @@ class DocumentConditionMixin:
             conditions=self._reindex_conditions(updated_conditions),
             task_modules=updated_modules,
             schema_version=(
-                ProjectSchemaVersion.V1_9
+                ProjectSchemaVersion.V1_10
+                if self._project.schema_version == ProjectSchemaVersion.V1_10
+                else ProjectSchemaVersion.V1_9
                 if any(task_requires_text_alignment_schema(module) for module in updated_modules)
                 else self._project.schema_version
             ),

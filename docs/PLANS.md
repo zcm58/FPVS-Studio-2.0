@@ -13,6 +13,7 @@ Use this page to find planning material before making feature-sized changes.
 
 Current implementation:
 
+- [Masking 1.4.0 and Studio 2.2.0](exec-plans/active/masking-1.4-release.md)
 - [Experiment Library: Phase 1 whole projects](exec-plans/active/private-experiment-library.md)
 - [Cloudflare bug reporting: desktop implementation](exec-plans/active/cloudflare-bug-reporting.md)
 - `exec-plans/active/bounded-updater-storage-and-clean-upgrades.md`
@@ -38,6 +39,8 @@ Completed plans are historical implementation notes. Read their directory only w
 the current contracts do not explain why a landed decision exists.
 
 Recent completion: [Masking condition modifiers](exec-plans/completed/masking-condition-modifiers.md).
+
+Recent completion: [Masking event markers](exec-plans/completed/masking-event-markers.md).
 
 Recent completion: [Frontend usability and responsiveness](exec-plans/completed/frontend-usability-polish.md).
 
