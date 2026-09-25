@@ -211,6 +211,10 @@ The marker-enabled project requires Studio 2.2.0; Studio 2.1.0 does not support 
 new authoring settings. Masking 1.4.0 uses this capability while retaining the prior
 stimulus timing, block randomization and participant questions.
 
+Masking 1.4.0 is the current Library listing; 1.3.0 was unlisted while its historical
+release assets were retained. See the [release record](exec-plans/completed/masking-1.4-release.md)
+for artifact checks and the unrun GUI/hardware acceptance boundaries.
+
 The Masking 1.3.0 Library project requires **Studio 2.1.0** for visible catch conditions
 and aligned instruction text. The preceding Masking 1.2.0 remains a Studio 2.0.0
 automatic-catch project. Project-only revisions do not otherwise require

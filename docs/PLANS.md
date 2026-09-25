@@ -13,13 +13,13 @@ Use this page to find planning material before making feature-sized changes.
 
 Current implementation:
 
-- [Masking 1.4.0 and Studio 2.2.0](exec-plans/active/masking-1.4-release.md)
 - [Experiment Library: Phase 1 whole projects](exec-plans/active/private-experiment-library.md)
 - [Cloudflare bug reporting: desktop implementation](exec-plans/active/cloudflare-bug-reporting.md)
 - `exec-plans/active/bounded-updater-storage-and-clean-upgrades.md`
 
 Concrete planned work:
 
+- [Participant results and question presentation](exec-plans/planned/participant-results-and-question-presentation.md) (proposal; not implemented)
 - `exec-plans/planned/restore-tutorials-file-menu-entry.md`
 - `exec-plans/planned/luminance-rms-equalization-investigation.md`
 
@@ -41,6 +41,8 @@ the current contracts do not explain why a landed decision exists.
 Recent completion: [Masking condition modifiers](exec-plans/completed/masking-condition-modifiers.md).
 
 Recent completion: [Masking event markers](exec-plans/completed/masking-event-markers.md).
+
+Recent completion: [Masking 1.4.0 and Studio 2.2.0](exec-plans/completed/masking-1.4-release.md).
 
 Recent completion: [Frontend usability and responsiveness](exec-plans/completed/frontend-usability-polish.md).
 
