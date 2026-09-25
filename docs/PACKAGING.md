@@ -60,8 +60,8 @@ Write release notes as bullet points, with one or two sentences per major change
 Keep verification summaries and installer instructions out of the release notes;
 retain audit evidence and check boundaries in the release record instead.
 
-The [v1.9.2 release record](exec-plans/completed/masking-protocol-feedback.md) records the published
-installer, direct 1.9.1 patch, payload audits and verification boundaries.
+The [v2.0.0 release record](exec-plans/completed/masking-catch-trials.md) records the published
+installer, direct 1.9.2 patch, payload audits and verification boundaries.
 
 Use simple semantic versioning:
 
