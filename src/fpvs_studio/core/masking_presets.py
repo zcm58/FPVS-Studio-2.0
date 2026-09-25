@@ -33,23 +33,32 @@ MASKING_NUMBERS = ("3", "5", "7", "9")
 MASKING_INSTRUCTIONS = (
     "{variant} block\n\n"
     "Identify the brief target: {choices}.\n"
-    "The same target repeats within a sequence and may change on the next trial.\n\n"
+    "{presence}\n\n"
     "Keep looking at the red + throughout each sequence.\n"
     "Try not to blink while the stimuli are flashing.\n"
     "Blink and rest during the questions and breaks; do not time blinks to reveal the target.\n\n"
-    "After each sequence, rate visibility, choose the target (guess if unsure),\n"
-    "and report how often you saw it. The cross will not change color.\n\n"
+    "After each sequence, rate visibility: choose No experience if you saw nothing.\n"
+    "Then choose the target (guess if unsure) and report how often you saw it.\n"
+    "The cross will not change color.\n\n"
     "Press space when you are ready."
 )
 
 
-def masking_instructions(variant: str) -> str:
+def masking_instructions(variant: str, *, include_catch_trial: bool = False) -> str:
     choices = {
         "color": "red, green, blue or yellow",
         "number": "3, 5, 7 or 9",
         "faces": "an angry, happy, fearful or sad expression",
     }
-    return MASKING_INSTRUCTIONS.format(variant=variant.title(), choices=choices[variant])
+    presence = (
+        "Some sequences contain no target.\n"
+        "When present, the same target repeats within that sequence."
+        if include_catch_trial else
+        "The same target repeats within a sequence and may change on the next trial."
+    )
+    return MASKING_INSTRUCTIONS.format(
+        variant=variant.title(), choices=choices[variant], presence=presence,
+    )
 
 
 MASKING_BREAK = (

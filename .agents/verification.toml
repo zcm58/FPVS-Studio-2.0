@@ -171,6 +171,7 @@ manual_smoke = []
 checks = []
 tests = [
   "tests/unit/test_masking_runtime.py",
+  "tests/unit/test_masking_catch_preflight.py",
   "tests/unit/test_runtime_result_durability.py",
   "tests/unit/test_runtime_display_refresh.py",
   "tests/unit/test_runtime_fixation.py",
@@ -199,6 +200,7 @@ manual_smoke = []
 checks = []
 tests = [
   "tests/unit/test_psychopy_scenes.py",
+  "tests/unit/test_masking_catch_preflight.py",
   "tests/unit/test_psychopy_recall_input.py",
   "tests/unit/test_psychopy_engine.py",
   "tests/unit/test_attentional_blink_runtime.py",

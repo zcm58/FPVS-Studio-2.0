@@ -8,6 +8,7 @@ shared compiler support.
 from __future__ import annotations
 
 import random
+from collections import Counter
 from pathlib import Path
 
 from fpvs_studio.core.attentional_blink_presets import RECALL_TASK_ID
@@ -62,7 +63,7 @@ from fpvs_studio.core.frame_validation import (
     frames_per_stimulus,
     on_off_frames,
 )
-from fpvs_studio.core.masking import condition_masking
+from fpvs_studio.core.masking import condition_masking, validate_masking_catch_trials
 from fpvs_studio.core.models import AttentionalBlinkStreamSettings, Condition, ProjectFile
 from fpvs_studio.core.presentation import resolve_pre_stream_fixation_seconds
 from fpvs_studio.core.run_spec import (
@@ -110,6 +111,7 @@ def _compile_prepared_run(
     inputs: CompilationInputs, condition: Condition, *, random_seed: int,
     run_id: str | None, realized_target_count: int | None,
     previous_base_id: str | None = None,
+    is_catch_trial: bool = False,
 ) -> RunSpec:
     project, refresh_hz = inputs.project, inputs.refresh_hz
     masking = condition_masking(project, condition)
@@ -118,6 +120,7 @@ def _compile_prepared_run(
             project, condition, masking, refresh_hz=refresh_hz,
             project_root=inputs.project_root, random_seed=random_seed, run_id=run_id,
             previous_base_id=previous_base_id,
+            is_catch_trial=is_catch_trial,
         )
     prepared = inputs.condition(condition)
     base_set, oddball_set = prepared.base_set, prepared.oddball_set
@@ -374,19 +377,28 @@ def compile_session_plan(
     masking_groups = all(
         condition_masking(project, item) is not None for item in selected_conditions
     )
-    group_conditions: list[list[Condition]] = []
+    group_conditions: list[list[tuple[Condition, bool]]] = []
     if masking_groups:
+        try:
+            validate_masking_catch_trials(project, selected_conditions)
+        except ValueError as exc:
+            raise CompileError(str(exc)) from exc
         grouped: dict[str, list[Condition]] = {}
         for item in selected_conditions:
             settings = condition_masking(project, item)
             assert settings is not None
             grouped.setdefault(settings.variant, []).append(item)
         for pool in grouped.values():
-            ordered: list[Condition] = []
+            ordered: list[tuple[Condition, bool]] = []
             for _ in range(repetition_count):
                 triplet = list(pool)
                 session_rng.shuffle(triplet)
-                ordered.extend(triplet)
+                ordered.extend((condition, False) for condition in triplet)
+            settings = condition_masking(project, pool[0])
+            assert settings is not None
+            if settings.catch_trial is not None:
+                catch_condition = session_rng.choice(pool)
+                ordered.insert(session_rng.randrange(len(ordered) + 1), (catch_condition, True))
             group_conditions.append(ordered)
         session_rng.shuffle(group_conditions)
         compiled_block_count = len(group_conditions)
@@ -395,21 +407,28 @@ def compile_session_plan(
             "Run masking variants separately from conditions without masking modifiers."
         )
     previous_masking_base: dict[str, str] = {}
+    masking_occurrence_counts = Counter(
+        condition.condition_id for group in group_conditions for condition, _ in group
+    )
     occurrences: dict[str, int] = {}
     for block_index in range(compiled_block_count):
         if masking_groups:
-            block_conditions = group_conditions[block_index]
+            block_trials = group_conditions[block_index]
         else:
             block_conditions = list(selected_conditions)
             if shuffle_all:
                 block_conditions *= repetition_count
             session_rng.shuffle(block_conditions)
+            block_trials = [(condition, False) for condition in block_conditions]
 
         entries: list[SessionEntry] = []
-        for index_within_block, condition in enumerate(block_conditions):
+        for index_within_block, (condition, is_catch_trial) in enumerate(block_trials):
             masking = condition_masking(project, condition)
             occurrence_index = occurrences.get(condition.condition_id, 0)
             occurrences[condition.condition_id] = occurrence_index + 1
+            condition_occurrence_count = (
+                masking_occurrence_counts[condition.condition_id] if masking else repetition_count
+            )
             run_id = make_session_run_id(
                 global_order_index=global_order_index,
                 condition_id=condition.condition_id,
@@ -440,6 +459,7 @@ def compile_session_plan(
                     previous_base_id=(
                         previous_masking_base.get(masking.variant) if masking else None
                     ),
+                    is_catch_trial=is_catch_trial,
                 )
                 if masking is not None and run_spec.scene_stream is not None:
                     base_events = [event for event in run_spec.scene_stream.events
@@ -452,7 +472,7 @@ def compile_session_plan(
                     condition,
                     phase=TaskPhase.PRE_CONDITION,
                     block_index=occurrence_index,
-                    block_count=repetition_count,
+                    block_count=condition_occurrence_count,
                     session_seed=random_seed,
                     run_id=run_id,
                     project_root=project_root,
@@ -460,14 +480,14 @@ def compile_session_plan(
                     global_order_index=global_order_index,
                     inputs=task_inputs,
                     stream_group_index=index_within_block if masking else None,
-                    stream_group_count=len(block_conditions) if masking else None,
+                    stream_group_count=len(block_trials) if masking else None,
                 )
                 post_tasks = compile_condition_tasks(
                     project,
                     condition,
                     phase=TaskPhase.POST_CONDITION,
                     block_index=occurrence_index,
-                    block_count=repetition_count,
+                    block_count=condition_occurrence_count,
                     session_seed=random_seed,
                     run_id=run_id,
                     project_root=project_root,
@@ -475,7 +495,7 @@ def compile_session_plan(
                     global_order_index=global_order_index,
                     inputs=task_inputs,
                     stream_group_index=index_within_block if masking else None,
-                    stream_group_count=len(block_conditions) if masking else None,
+                    stream_group_count=len(block_trials) if masking else None,
                 )
                 if global_order_index == 0 and baseline_requirements:
                     pre_tasks.insert(0, compile_modifier_baseline(
@@ -520,13 +540,16 @@ def compile_session_plan(
         blocks.append(
             SessionBlock(
                 block_index=block_index,
-                condition_order=[condition.condition_id for condition in block_conditions],
+                condition_order=[condition.condition_id for condition, _ in block_trials],
                 entries=entries,
             )
         )
 
     return SessionPlan(
-        schema_version="1.3.0" if masking_groups else SchemaVersion.V1_2.value,
+        schema_version=(
+            "1.4.0" if any(is_catch for group in group_conditions for _, is_catch in group)
+            else "1.3.0" if masking_groups else SchemaVersion.V1_2.value
+        ),
         authored_task_flow=True if masking_groups else None,
         session_id=session_identifier,
         project_id=project.meta.project_id,

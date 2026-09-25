@@ -7,13 +7,22 @@ import pytest
 from PIL import Image
 
 from fpvs_studio.core.compiler import CompileError, compile_run_spec, compile_session_plan
+from fpvs_studio.core.compiler_masking import compile_masking_run
 from fpvs_studio.core.condition_modifiers import assign_modifier
-from fpvs_studio.core.enums import PresentationUnit
+from fpvs_studio.core.enums import PresentationUnit, ProjectSchemaVersion
+from fpvs_studio.core.masking import MaskingCatchTrialSettings, condition_masking
 from fpvs_studio.core.masking_presets import apply_masking_timing_defaults, create_masking_modifier
 from fpvs_studio.core.models import Condition, ProjectFile, ProjectMeta
-from fpvs_studio.core.project_config import export_project_config
+from fpvs_studio.core.project_config import (
+    ProjectConfigFile,
+    create_project_from_config,
+    export_project_config,
+)
+from fpvs_studio.core.run_spec import RunSpec
 from fpvs_studio.core.scene_models import SceneVisual
 from fpvs_studio.core.serialization import load_project_file, save_project_file
+from fpvs_studio.core.session_plan import SessionPlan
+from fpvs_studio.core.task_models import TaskBinding, TaskModule, TaskOccurrence, TaskStep
 from fpvs_studio.core.validation import validate_display_refresh, validate_project
 from fpvs_studio.runtime.masking_report import write_masking_plan_checkpoint
 from fpvs_studio.runtime.preflight import PreflightError, preflight_session_plan
@@ -318,3 +327,210 @@ def test_roundtrip_and_preflight_reject_changed_mask_onset(tmp_path):
         preflight_session_plan(
             tmp_path, plan, engine=ValidationEngine(), runtime_options={"strict_timing": False}
         )
+
+
+def catch_project():
+    project = masking_project(("color", "faces", "number"))
+    project.schema_version = ProjectSchemaVersion.V1_8
+    for index, condition in enumerate(project.conditions):
+        condition.trigger_code = index + 1
+        condition.oddball_cycle_repeats_per_sequence = 1
+    for modifier in project.condition_modifiers:
+        settings = modifier.masking
+        settings.catch_trial = MaskingCatchTrialSettings(
+            trigger_code={"color": 10, "faces": 11, "number": 12}[settings.variant],
+        )
+        if settings.variant == "faces":
+            settings.base_visuals = [SceneVisual(
+                kind="rectangle", visual_id="object", units="deg", size=(5, 5),
+            )]
+            settings.target_visuals = [SceneVisual(
+                kind="rectangle", visual_id="angry", units="deg", size=(5, 5),
+            )]
+            settings.target_answers = {"angry": "angry"}
+    return project
+
+
+def test_catch_trials_keep_all_regular_soas_and_randomize_complete_blocks(tmp_path):
+    project = catch_project()
+    authored = project.model_dump()
+    orders = set()
+    catch_positions = set()
+    catch_soas = set()
+    for seed in range(24):
+        plan = compile_session_plan(project, project_root=tmp_path, refresh_hz=60, random_seed=seed)
+        assert plan.schema_version == "1.4.0"
+        assert plan.total_runs == 30
+        assert len(plan.blocks) == 3
+        orders.add(tuple(block.entries[0].condition_id.split("-")[0] for block in plan.blocks))
+        codes = Counter(entry.run_spec.condition.trigger_code for entry in plan.ordered_entries())
+        assert codes == {
+            **dict.fromkeys(range(1, 10), 3), **dict.fromkeys(range(10, 13), 1),
+        }
+        for block in plan.blocks:
+            assert len(block.entries) == 10
+            assert len({entry.condition_id.split("-")[0] for entry in block.entries}) == 1
+            regular = [entry for entry in block.entries
+                       if not entry.run_spec.scene_stream.is_catch_trial]
+            catch, = [entry for entry in block.entries
+                      if entry.run_spec.scene_stream.is_catch_trial]
+            catch_positions.add(catch.index_within_block)
+            catch_soas.add(catch.run_spec.scene_stream.soa_frames)
+            for start in (0, 3, 6):
+                assert {entry.run_spec.scene_stream.soa_frames
+                        for entry in regular[start:start + 3]} == {1, 3, 6}
+            for entry in block.entries:
+                run = entry.run_spec
+                scene = run.scene_stream
+                assert run.trigger_events[0].frame_index == 0
+                assert run.trigger_events[0].code == run.condition.trigger_code
+                assert run.display.total_frames == 60
+                identity = next(step for task in entry.post_tasks for step in task.steps
+                                if step.step_id == "masking-identification")
+                if scene.is_catch_trial:
+                    assert scene.target_id is None
+                    assert all(event.role != "target" for event in scene.events)
+                    assert all(item.correct is None and item.score is None
+                               for item in identity.items if item.selectable)
+                else:
+                    assert scene.target_id is not None
+                    assert len([item for item in identity.items if item.correct]) == 1
+            assert any(step.step_id == "masking-instructions"
+                       for task in block.entries[0].pre_tasks for step in task.steps)
+            assert any(step.step_id == "masking-thanks"
+                       for task in block.entries[-1].post_tasks for step in task.steps)
+        assert plan == compile_session_plan(
+            project, project_root=tmp_path, refresh_hz=60, random_seed=seed,
+        )
+    assert len(orders) == 6
+    assert catch_positions == set(range(10))
+    assert catch_soas == {1, 3, 6}
+    assert project.model_dump() == authored
+
+
+def test_catch_omits_only_target_events_preserving_base_mask_and_fixation(tmp_path):
+    project = catch_project()
+    for condition in project.conditions:
+        settings = condition_masking(project, condition)
+        args = dict(refresh_hz=60, project_root=tmp_path, random_seed=109,
+                    run_id="same-run", previous_base_id=None)
+        regular = compile_masking_run(project, condition, settings, **args)
+        catch = compile_masking_run(project, condition, settings, is_catch_trial=True, **args)
+        assert catch.scene_stream.events == [
+            event for event in regular.scene_stream.events if event.role != "target"
+        ]
+        assert catch.scene_stream.visuals == regular.scene_stream.visuals
+        assert catch.display == regular.display
+        assert catch.fixation == regular.fixation
+        assert catch.scene_stream.background_rgb == regular.scene_stream.background_rgb
+        assert catch.scene_stream.soa_frames == regular.scene_stream.soa_frames
+        assert catch.scene_stream.requested_soa_ms == regular.scene_stream.requested_soa_ms
+
+
+@pytest.mark.parametrize("problem,message", [
+    ("missing", "same catch trial settings"),
+    ("mismatch", "same catch trial settings"),
+    ("ordinary_collision", "ordinary condition marker"),
+    ("catch_collision", "distinct catch trigger code"),
+])
+def test_catch_configuration_errors_block_validation_and_compilation(tmp_path, problem, message):
+    project = catch_project()
+    if problem == "missing":
+        project.condition_modifiers[0].masking.catch_trial = None
+    elif problem == "mismatch":
+        project.condition_modifiers[0].masking.catch_trial.trigger_code = 13
+    else:
+        for modifier in project.condition_modifiers:
+            if modifier.masking.variant == "faces":
+                modifier.masking.catch_trial.trigger_code = (
+                    1 if problem == "ordinary_collision" else 10
+                )
+    report = validate_project(project, refresh_hz=60)
+    assert any(message in issue.message and issue.severity.value == "error"
+               for issue in report.issues)
+    with pytest.raises(CompileError, match=message):
+        compile_session_plan(project, project_root=tmp_path, refresh_hz=60, random_seed=5)
+
+
+@pytest.mark.parametrize("code", [0, 256, True, 10.0])
+def test_catch_marker_requires_strict_valid_event_code(code):
+    with pytest.raises(ValueError):
+        MaskingCatchTrialSettings(trigger_code=code)
+
+
+def test_catch_schemas_roundtrip_and_reject_older_versions(tmp_path):
+    project = catch_project()
+    path = tmp_path / "project.json"
+    save_project_file(project, path)
+    assert load_project_file(path) == project
+    payload = project.model_dump(mode="json")
+    payload["schema_version"] = "1.7.0"
+    with pytest.raises(ValueError, match="schema 1.8.0"):
+        ProjectFile.model_validate(payload)
+
+    config = export_project_config(project, tmp_path)
+    assert config.schema_version == "1.6.0"
+    assert config.toolbox.event_map == {
+        **{condition.name: condition.trigger_code for condition in project.conditions},
+        "Color catch": 10, "Faces catch": 11, "Number catch": 12,
+    }
+    imported = create_project_from_config(tmp_path / "imported", config)
+    assert imported.project.condition_modifiers == project.condition_modifiers
+    assert imported.project.schema_version == ProjectSchemaVersion.V1_8
+    payload = config.model_dump(mode="json")
+    payload["schema_version"] = "1.5.0"
+    with pytest.raises(ValueError, match="schema 1.6.0"):
+        ProjectConfigFile.model_validate(payload)
+
+    plan = compile_session_plan(project, project_root=tmp_path, refresh_hz=60, random_seed=5)
+    assert SessionPlan.model_validate_json(plan.model_dump_json()) == plan
+    payload = plan.model_dump(mode="json")
+    payload["schema_version"] = "1.3.0"
+    with pytest.raises(ValueError, match="schema 1.4.0"):
+        SessionPlan.model_validate(payload)
+    catch = next(entry.run_spec for entry in plan.ordered_entries()
+                 if entry.run_spec.scene_stream.is_catch_trial)
+    payload = catch.model_dump(mode="json")
+    payload["schema_version"] = "1.4.0"
+    with pytest.raises(ValueError, match="schema 1.5.0"):
+        RunSpec.model_validate(payload)
+    payload["schema_version"] = "1.5.0"
+    payload["scene_stream"]["target_id"] = payload["scene_stream"]["visuals"][0]["visual_id"]
+    with pytest.raises(ValueError, match="must not identify or present a target"):
+        RunSpec.model_validate(payload)
+
+
+def test_disabled_catch_retains_old_schema_and_serialization(tmp_path):
+    project = masking_project(("color",))
+    assert project.schema_version == ProjectSchemaVersion.V1_7
+    assert "catch_trial" not in project.model_dump_json()
+    plan = compile_session_plan(project, project_root=tmp_path, refresh_hz=60, random_seed=5)
+    assert plan.schema_version == "1.3.0"
+    assert "is_catch_trial" not in plan.model_dump_json()
+    assert all(entry.run_spec.schema_version == "1.4.0" for entry in plan.ordered_entries())
+
+
+def test_catch_condition_last_occurrence_tasks_follow_actual_scheduled_count(tmp_path):
+    project = catch_project()
+    project.task_modules.append(TaskModule(
+        task_id="condition-last", name="After the final occurrence",
+        steps=[TaskStep(step_id="done", kind="instruction", text="Finished", continue_key="space")],
+    ))
+    for condition in project.conditions:
+        binding = TaskBinding(task_id="condition-last", occurrence=TaskOccurrence.LAST_OCCURRENCE)
+        condition.pre_task_bindings.insert(0, binding)
+        condition.post_task_bindings.insert(0, binding.model_copy(deep=True))
+    catch_occurrences = set()
+    for seed in range(24):
+        plan = compile_session_plan(project, project_root=tmp_path, refresh_hz=60, random_seed=seed)
+        for condition in project.conditions:
+            entries = [entry for entry in plan.ordered_entries()
+                       if entry.condition_id == condition.condition_id]
+            expected = [False] * (len(entries) - 1) + [True]
+            assert [any(task.task_id == "condition-last" for task in entry.pre_tasks)
+                    for entry in entries] == expected
+            assert [any(task.task_id == "condition-last" for task in entry.post_tasks)
+                    for entry in entries] == expected
+            catch_occurrences.update(index for index, entry in enumerate(entries)
+                                     if entry.run_spec.scene_stream.is_catch_trial)
+    assert catch_occurrences == {0, 1, 2, 3}

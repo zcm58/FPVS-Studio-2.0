@@ -67,6 +67,7 @@ def compile_masking_run(
     random_seed: int,
     run_id: str | None,
     previous_base_id: str | None = None,
+    is_catch_trial: bool = False,
 ) -> RunSpec:
     try:
         validate_masking_settings(project, condition, settings, refresh_hz)
@@ -77,6 +78,8 @@ def compile_masking_run(
         )
     except ValueError as exc:
         raise CompileError(str(exc)) from exc
+    if is_catch_trial and settings.catch_trial is None:
+        raise CompileError("A catch run requires enabled masking catch trial settings.")
     visuals = masking_visuals(settings)
     for visual in visuals:
         if visual.image_path is not None:
@@ -100,7 +103,7 @@ def compile_masking_run(
         selected = rng.choice(choices)
         previous = selected.visual_id
         start = index * slot
-        if is_target:
+        if is_target and not is_catch_trial:
             events.append(
                 SceneEvent(
                     visual_id=target.visual_id,
@@ -141,13 +144,18 @@ def compile_masking_run(
         visuals=visuals,
         events=events,
         background_rgb=settings.background_rgb,
-        target_id=target.visual_id,
+        target_id=None if is_catch_trial else target.visual_id,
+        is_catch_trial=True if is_catch_trial else None,
         requested_soa_ms=settings.soa_ms,
         soa_frames=soa,
     )
     display = project.settings.display
+    trigger_code = (
+        settings.catch_trial.trigger_code
+        if is_catch_trial and settings.catch_trial is not None else condition.trigger_code
+    )
     return RunSpec(
-        schema_version="1.4.0",
+        schema_version="1.5.0" if is_catch_trial else "1.4.0",
         run_id=run_id or make_run_id(condition.condition_id),
         project_id=project.meta.project_id,
         project_name=project.meta.name,
@@ -163,7 +171,7 @@ def compile_masking_run(
             total_oddball_cycles=cycles,
             total_stimuli=total_slots,
             stimulus_modality=StimulusModality.SCENE,
-            trigger_code=condition.trigger_code,
+            trigger_code=trigger_code,
         ),
         display=DisplayRunSpec(
             refresh_hz=refresh_hz,
@@ -192,6 +200,6 @@ def compile_masking_run(
         ),
         scene_stream=scene,
         trigger_events=[
-            TriggerEvent(frame_index=0, code=condition.trigger_code, label="condition_start")
+            TriggerEvent(frame_index=0, code=trigger_code, label="condition_start")
         ],
     )

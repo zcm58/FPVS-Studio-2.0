@@ -866,10 +866,13 @@ class ProjectFile(FPVSBaseModel):
         if any(isinstance(item.attentional_blink, AttentionalBlinkStreamSettings)
                for item in self.conditions) and self.schema_version not in {
                    ProjectSchemaVersion.V1_5, ProjectSchemaVersion.V1_6, ProjectSchemaVersion.V1_7,
+                   ProjectSchemaVersion.V1_8,
                }:
             raise ValueError("Letter-stream projects require project schema 1.5.0.")
         if (self.condition_modifiers or any(task.image_memory for task in self.task_modules)) and (
-            self.schema_version not in {ProjectSchemaVersion.V1_6, ProjectSchemaVersion.V1_7}
+            self.schema_version not in {
+                ProjectSchemaVersion.V1_6, ProjectSchemaVersion.V1_7, ProjectSchemaVersion.V1_8,
+            }
         ):
             raise ValueError("Condition modifiers and image memory require project schema 1.6.0.")
         set_ids = [item.set_id for item in self.stimulus_sets]
@@ -886,8 +889,12 @@ class ProjectFile(FPVSBaseModel):
 
         if (any(modifier.masking is not None for modifier in self.condition_modifiers)
                 or any(task_requires_scene_schema(task) for task in self.task_modules)):
-            if self.schema_version != ProjectSchemaVersion.V1_7:
+            if self.schema_version not in {ProjectSchemaVersion.V1_7, ProjectSchemaVersion.V1_8}:
                 raise ValueError("Masking and native task scenes require project schema 1.7.0.")
+        if any(modifier.masking is not None and modifier.masking.catch_trial is not None
+               for modifier in self.condition_modifiers):
+            if self.schema_version != ProjectSchemaVersion.V1_8:
+                raise ValueError("Masking catch trials require project schema 1.8.0.")
         return self
 
 

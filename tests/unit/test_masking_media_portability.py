@@ -15,6 +15,7 @@ from fpvs_studio.core import modifier_presets
 from fpvs_studio.core.condition_modifiers import assign_modifier
 from fpvs_studio.core.enums import ProjectSchemaVersion
 from fpvs_studio.core.library_publish import prepare_library_bundle
+from fpvs_studio.core.masking import MaskingCatchTrialSettings
 from fpvs_studio.core.masking_presets import create_masking_modifier
 from fpvs_studio.core.modifier_presets import (
     ModifierPreset,
@@ -82,9 +83,12 @@ def _project(sample_project, project_root: Path, source: Path):
     return project
 
 
-def test_masking_preset_rekeys_and_copies_all_media_independently(tmp_path):
+@pytest.mark.parametrize("catch_enabled", [False, True])
+def test_masking_preset_rekeys_and_copies_all_media_independently(tmp_path, catch_enabled):
     source = tmp_path / "source"
     definition = _definition(source)
+    if catch_enabled:
+        definition.modifier.masking.catch_trial = MaskingCatchTrialSettings(trigger_code=11)
     original_paths = modifier_image_references(definition.modifier)
     hashes = {hashlib.sha256((source / path).read_bytes()).hexdigest() for path in original_paths}
     library = tmp_path / "library"
@@ -104,6 +108,7 @@ def test_masking_preset_rekeys_and_copies_all_media_independently(tmp_path):
                for path in paths)
     assert imported.modifier.modifier_id != loaded.definition.modifier.modifier_id
     assert imported.modifier.masking.target_answers == {"target": "angry"}
+    assert imported.modifier.masking.catch_trial == definition.modifier.masking.catch_trial
     assert {
         hashlib.sha256(filesystem_path(destination / path).read_bytes()).hexdigest()
         for path in paths

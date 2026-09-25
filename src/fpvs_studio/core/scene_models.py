@@ -3,9 +3,17 @@
 from __future__ import annotations
 
 from math import isfinite
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    SerializerFunctionWrapHandler,
+    field_validator,
+    model_serializer,
+    model_validator,
+)
 
 from fpvs_studio.core.paths import validate_project_relative_path
 
@@ -102,8 +110,18 @@ class SceneStreamSpec(BaseModel):
     events: list[SceneEvent]
     background_rgb: RGB = (0.0, 0.0, 0.0)
     target_id: SceneId | None = None
+    is_catch_trial: bool | None = None
     requested_soa_ms: float = Field(gt=0, allow_inf_nan=False)
     soa_frames: int = Field(gt=0, strict=True)
+
+    @model_serializer(mode="wrap")
+    def serialize_optional_catch(
+        self, handler: SerializerFunctionWrapHandler,
+    ) -> dict[str, Any]:
+        payload: dict[str, Any] = handler(self)
+        if self.is_catch_trial is None:
+            payload.pop("is_catch_trial", None)
+        return payload
 
     @model_validator(mode="after")
     def validate_references(self) -> SceneStreamSpec:
@@ -117,6 +135,10 @@ class SceneStreamSpec(BaseModel):
             raise ValueError("Scene events reference an unknown visual.")
         if self.target_id is not None and self.target_id not in known:
             raise ValueError("The scene target references an unknown visual.")
+        if self.is_catch_trial and (
+            self.target_id is not None or any(event.role == "target" for event in self.events)
+        ):
+            raise ValueError("Catch scenes must not identify or present a target.")
         return self
 
     def validate_frame_bounds(self, total_frames: int) -> None:

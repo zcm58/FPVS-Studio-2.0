@@ -28,7 +28,7 @@ from fpvs_studio.core.frame_validation import (
     validate_blank_mode_frames,
     validate_sinusoidal_mode_frames,
 )
-from fpvs_studio.core.masking import condition_masking
+from fpvs_studio.core.masking import condition_masking, validate_masking_catch_trials
 from fpvs_studio.core.models import (
     AttentionalBlinkSettings,
     AttentionalBlinkStreamSettings,
@@ -813,6 +813,11 @@ def validate_project(
             )
 
     issues.extend(validate_fixation_settings(project.settings.fixation_task))
+    try:
+        validate_masking_catch_trials(project, project.conditions)
+    except ValueError as exc:
+        issues.append(ValidationIssue(location="condition_modifiers.masking.catch_trial",
+                                      message=str(exc)))
     issues.extend(validate_condition_repeat_cycle_consistency(project))
     issues.extend(presentation_clipping_warnings(project))
     for row in condition_stimulus_repeat_guidance(project):

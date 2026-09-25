@@ -26,6 +26,11 @@ MASKING_TRIALS_HEADER = [
     "target_flashes_completed", "expected_answer", "selected_target", "response_valid",
     "correct", "reaction_time_s", "response_aborted", "run_aborted",
 ]
+MASKING_TRIALS_V2_FILENAME = "masking_trials_v2.csv"
+MASKING_TRIALS_V2_HEADER = [
+    *MASKING_TRIALS_HEADER, "is_catch_trial", "pas_rating", "pas_selected_option_ids",
+    "pas_response_valid", "pas_response_aborted", "pas_reaction_time_s", "detection_outcome",
+]
 MASKING_SCENE_EVENTS_HEADER = [
     "schema_version", "project_id", "project_name", "session_id", "run_id", "condition_id",
     "condition_name", "participant_number", "participant_session_number", "block_index",
@@ -85,7 +90,8 @@ def masking_trial_row(entry: SessionEntry, summary: RunExecutionSummary) -> tupl
     run = entry.run_spec
     scene = run.scene_stream
     assert scene is not None
-    target = next(visual for visual in scene.visuals if visual.visual_id == scene.target_id)
+    target = (next(visual for visual in scene.visuals if visual.visual_id == scene.target_id)
+              if scene.target_id is not None else None)
     question = next((step for module in entry.post_tasks for step in module.steps
                      if step.step_id == "masking-identification"), None)
     expected = (next((item.item_id for item in question.items if item.correct), None)
@@ -103,13 +109,42 @@ def masking_trial_row(entry: SessionEntry, summary: RunExecutionSummary) -> tupl
         summary.participant_session_number, entry.block_index, entry.global_order_index,
         run.random_seed, run.condition.trigger_code, scene.requested_soa_ms, scene.soa_frames,
         scene.soa_frames * 1000.0 / run.display.refresh_hz, scene.target_id,
-        target.image_path, target.text, json.dumps(target.rgb), flashes > 0, flashes, expected,
+        target.image_path if target else None, target.text if target else None,
+        json.dumps(target.rgb) if target else None, flashes > 0, flashes,
+        None if scene.is_catch_trial else expected,
         ";".join(answer.selected_option_ids) if answer else None,
         answer.valid if answer else None,
-        answer.correct if answer and answer.valid and not answer.aborted else None,
+        answer.correct if answer and answer.valid and not answer.aborted
+        and not scene.is_catch_trial else None,
         answer.reaction_time_s if answer else None, answer.aborted if answer else None,
         summary.aborted,
     ))
+
+
+def masking_trial_v2_row(entry: SessionEntry, summary: RunExecutionSummary) -> tuple[object, ...]:
+    """Keep awareness/detection separate from target identity and incomplete exposure."""
+    run = entry.run_spec
+    scene = run.scene_stream
+    assert scene is not None
+    row = masking_trial_row(entry, summary)
+    answers = [response for response in summary.task_responses if response.step_id == "masking-pas"]
+    answer = answers[-1] if answers else None
+    ratings = {f"masking-pas-{rating}": rating for rating in range(1, 5)}
+    rating = (ratings.get(answer.selected_option_ids[0])
+              if answer and len(answer.selected_option_ids) == 1 else None)
+    detection = None
+    if answer and answer.valid and not answer.aborted and rating is not None:
+        if scene.is_catch_trial:
+            if summary.completed_frames >= run.display.total_frames:
+                detection = "correct_rejection" if rating == 1 else "false_alarm"
+        elif any(event.role == "target" and event.start_frame + event.duration_frames
+                 <= summary.completed_frames for event in scene.events):
+            detection = "miss" if rating == 1 else "hit"
+    return tuple(_safe_csv_text(value) for value in (
+            "2.0.0", *row[1:], bool(scene.is_catch_trial), rating,
+            ";".join(answer.selected_option_ids) if answer else None,
+            answer.valid if answer else None, answer.aborted if answer else None,
+            answer.reaction_time_s if answer else None, detection))
 
 
 def masking_scene_event_rows(

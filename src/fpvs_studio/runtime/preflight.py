@@ -438,12 +438,15 @@ def _validate_scene_timing(run_spec: RunSpec) -> None:
     slots = run_spec.condition.total_stimuli
     bases = [event for event in scene.events if event.role in {"base", "mask"}]
     targets = [event for event in scene.events if event.role == "target"]
-    if (run_spec.schema_version != "1.4.0"
+    catch = scene.is_catch_trial is True
+    expected_targets = 0 if catch else run_spec.condition.total_oddball_cycles
+    if (run_spec.schema_version != ("1.5.0" if catch else "1.4.0")
             or run_spec.condition.stimulus_modality != StimulusModality.SCENE
             or run_spec.stimulus_sequence or run_spec.attentional_blink is not None
-            or not scene.target_id or every < 2 or slots < 1
+            or (scene.target_id is not None if catch else not scene.target_id)
+            or every < 2 or slots < 1
             or slots != run_spec.condition.total_oddball_cycles * every
-            or len(bases) != slots or len(targets) != run_spec.condition.total_oddball_cycles
+            or len(bases) != slots or len(targets) != expected_targets
             or run_spec.display.total_frames != slots * slot
             or not isclose(scene.requested_soa_ms * run_spec.display.refresh_hz / 1000,
                            scene.soa_frames, rel_tol=0, abs_tol=1e-6)):

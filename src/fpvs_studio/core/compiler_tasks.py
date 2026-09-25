@@ -212,21 +212,24 @@ def compile_condition_tasks(
             if run_spec is None or run_spec.scene_stream is None:
                 raise CompileError("Masking identification requires the compiled run target.")
             target_id = run_spec.scene_stream.target_id
-            if target_id is None or target_id not in masking.target_answers:
+            is_catch = bool(run_spec.scene_stream.is_catch_trial)
+            if not is_catch and (target_id is None or target_id not in masking.target_answers):
                 raise CompileError("The masking run target is missing its identification answer.")
-            answer_id = masking.target_answers[target_id]
+            answer_id = masking.target_answers[target_id] if target_id is not None else None
             for compiled_module in compiled:
                 for step in compiled_module.steps:
                     if step.step_id != "masking-identification":
                         continue
-                    if answer_id not in {item.item_id for item in step.items if item.selectable}:
+                    if not is_catch and answer_id not in {
+                        item.item_id for item in step.items if item.selectable
+                    }:
                         raise CompileError(
                             "The presented masking target has no identification option."
                         )
                     for item in step.items:
                         if item.selectable:
-                            item.correct = item.item_id == answer_id
-                            item.score = float(item.correct)
+                            item.correct = None if is_catch else item.item_id == answer_id
+                            item.score = None if is_catch else float(bool(item.correct))
         for compiled_module in compiled:
             if compiled_module.task_id == RECALL_TASK_ID:
                 if run_spec is None:

@@ -103,8 +103,13 @@ class SessionPlan(FPVSBaseModel):
 
     @model_validator(mode="after")
     def validate_totals(self) -> SessionPlan:
-        if self.authored_task_flow is not None and self.schema_version != "1.3.0":
+        if self.authored_task_flow is not None and self.schema_version not in {"1.3.0", "1.4.0"}:
             raise ValueError("Authored task session flow requires SessionPlan schema 1.3.0.")
+        if any(entry.run_spec.scene_stream is not None
+               and entry.run_spec.scene_stream.is_catch_trial
+               for block in self.blocks for entry in block.entries):
+            if self.schema_version != "1.4.0":
+                raise ValueError("Catch trials require SessionPlan schema 1.4.0.")
         if self.block_count != len(self.blocks):
             raise ValueError("block_count must match the number of blocks.")
         total_entries = sum(len(block.entries) for block in self.blocks)

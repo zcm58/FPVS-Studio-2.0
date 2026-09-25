@@ -24,13 +24,36 @@ copy-for-condition, Cancel, and preset behavior follow the existing modifier rul
 All selected masking conditions run in variant groups, with randomized group order.
 Each group contains one independently shuffled pass through its SOAs
 per session repetition. This preserves the source's three randomized triplets rather
-than shuffling all nine runs together. Mixed launches with ordinary non-masking
+than shuffling all nine ordinary runs together. Enabling catches adds one extra
+full-length sequence at a randomly selected position in each variant block. Its mask
+timing is independently sampled from that block's selected SOAs. All ordinary SOA
+passes and the catch finish before moving to the next variant. The delivered
+Masking 1.2.0 project therefore has three blocks of ten trials, or 30 trials total.
+The first block can be Color, Faces or Number; chance repeats across launches remain
+possible. Mixed launches with ordinary non-masking
 conditions are rejected explicitly. The group's introduction runs once, questions
 after every stream, and thanks once after the final break/fixation. Authored task flow
 suppresses Studio's additional start gates, block breaks and completion page.
 
-Studio 1.9.2 refreshes the Masking seed on every GUI compilation, including retries
-after an interrupted session. Each trial independently samples its target, so chance
+The Masking-only **Catch trials** tab enables the extra sequence and sets its EEG code.
+All selected SOA modifiers within a variant must agree on catch enablement and code.
+Each variant's catch code must differ from ordinary condition markers and other
+variants' catch codes. Defaults are Color 10, Faces 11 and Number 12. Changing one
+modifier never silently updates another. Apply, Cancel, shared assignments, independent
+copies and local presets retain their existing draft behavior.
+
+Catch sequences omit every target flash while preserving the base/mask stream,
+overlays, static fixation and total duration. They carry no target identity. The four
+identification choices remain available, but catch identity accuracy is unscored.
+PAS measures perceived presence: **No experience** is a correct rejection on a fully
+presented catch; a higher PAS rating is a false alarm. Edit modifier screens to explain
+possible absence before using catches. Enabling the checkbox does not rewrite custom
+instructions. The delivered project explicitly explains possible absence, honest
+visibility ratings, guessing on the separate identity question, and blinking/resting
+during breaks.
+
+Since Studio 1.9.2, Masking refreshes its seed on every GUI compilation, including retries
+after an interrupted session. Each ordinary trial independently samples its target, so chance
 repeats remain possible. Explicit core compilation seeds still reproduce a session.
 Other experiment families retain their existing seed behavior.
 
@@ -49,15 +72,17 @@ durable. A terminal timed screen ends with a neutral offset before export work.
 At 60 Hz the source design has 12-frame item slots. Base/mask onset is 1, 3 or 6
 frames into the slot, lasting six frames. A target occurs at the beginning of every
 fifth slot for one frame. There are 200 slots, 40 target flashes and 2400 frames per
-run. One target is sampled per run and remains fixed. Faces/Number base and mask
+ordinary run. A catch retains all 200 slots and 2400 frames, with zero target flashes.
+One target is sampled per ordinary run and remains fixed. Faces/Number base and mask
 sampling rejects immediate repetitions, including across consecutive runs.
 
-The approved Masking 1.1.0 Library revision changes the middle SOA from 50 ms to
-33.333333 ms: its windows start at 1, 2 or 6 frames (16.666667/33.333333/100 ms).
-All other timing, signed RGB values, circle geometry and source image bytes remain
-unchanged. The face block retains 26 base objects and four exemplars for each of four
-emotions. New instructions explain target identification, static red fixation, and
-avoiding deliberate blink timing during stimulation, with breaks for blinking/rest.
+Masking 1.2.0 restores the middle SOA to **50 ms**, giving windows at **1, 3 or 6
+frames** (16.666667/50/100 ms). The preceding 1.1.0 revision used 33.333333 ms for the
+middle SOA. Signed RGB values, circle geometry, source image bytes and other within-run
+timing remain unchanged. The face block retains 26 base objects and four exemplars
+for each of four emotions; this revision does not expand the pool. Instructions retain
+target identification, static red fixation, and avoiding deliberate blink timing
+during stimulation, with breaks for blinking/rest.
 
 Native scene visuals retain signed RGB triples without conversion to eight-bit hex,
 authored units, geometry, outlines, fonts and interpolation. The Color preset uses
@@ -77,18 +102,20 @@ triples, sample symbols before drawing/logging, score the valid option click, re
 fresh clicks consistently, and synchronize nominal SOAs to display frames. The source
 editable files define condition-start markers 1/2/3 for Color/Faces/Number. The migrated
 project uses the user-requested nine unique codes instead: Color 1/2/3, Faces 4/5/6,
-and Number 7/8/9, each in ascending SOA order (16.6667/33.3333/100 ms in 1.1.0).
-Each condition's saved
-code becomes its flip-locked stream-start marker and survives session randomization;
+and Number 7/8/9, each in ascending SOA order (16.6667/50/100 ms in 1.2.0).
+Catch codes 10/11/12 identify the target-absent Color/Faces/Number sequences; their
+sampled SOA is saved with the trial. Each ordinary condition's saved code, or the
+variant's catch code, becomes its flip-locked stream-start marker and survives
+session randomization;
 no base/target/mask onset markers are added. Existing hardware transport is unchanged.
 The ordinary oddball marker setting stays 55 and is unused by masking. No source CSV
 format or historical jitter equivalence is claimed.
 
-| Variant | 16.6667 ms | 33.3333 ms | 100 ms |
-| --- | --- | --- | --- |
-| Color | 1 | 2 | 3 |
-| Faces | 4 | 5 | 6 |
-| Number | 7 | 8 | 9 |
+| Variant | 16.6667 ms | 50 ms | 100 ms | Catch (sampled SOA) |
+| --- | --- | --- | --- | --- |
+| Color | 1 | 2 | 3 | 10 |
+| Faces | 4 | 5 | 6 | 11 |
+| Number | 7 | 8 | 9 | 12 |
 
 The delivered project's display geometry was explicitly selected by the user:
 80 cm viewing distance, 60.96 cm screen width and 1920x1080 at 60 Hz. It replaces the
@@ -110,17 +137,36 @@ establish optical equivalence on an unmeasured monitor.
 - Runtime owns task input, scoring and durable scene/task provenance. Planned event
   timestamps must never be reported as observed display times.
 
-Masking requires project schema 1.7.0, config 1.5.0, preset 1.1.0, RunSpec 1.4.0,
-and SessionPlan 1.3.0. Existing ordinary payloads omit unused extensions and retain
-their previous schema and seeded compilation. Older installed builds cannot load
-Masking. The revised Library project requires Studio 1.9.2.
+Masking without catch support retains project schema 1.7.0, config 1.5.0,
+RunSpec 1.4.0 and SessionPlan 1.3.0. Catch-enabled projects/configs use **1.8.0/1.6.0**;
+catch runs use **RunSpec 1.5.0**, and sessions containing them use **SessionPlan 1.4.0**.
+Ordinary runs retain RunSpec 1.4.0. Disabled optional catch fields are omitted from
+legacy payloads. A project already saved at the catch-capable schema keeps that version
+when catches are disabled. Modifier presets retain their 1.1.0 outer envelope; strict
+nested settings reject catch fields in older builds rather than silently dropping them.
 
-`logs/masking_trials_v1.csv` joins each attempted trial's actual compiled target
+The Masking 1.2.0 Library project requires **Studio 2.0.0** for its new catch scheduling,
+GUI authoring and scoring capabilities. Project-only revisions do not otherwise require
+the newest Studio release: the minimum version reflects the features actually used.
+
+New sessions write `logs/masking_trials_v2.csv`, joining each attempted trial's compiled target
 (including face image path or text/RGB), expected and selected answer, correctness,
-reaction time, SOA, seed and EEG code. It is written in both export modes on session
+reaction time, SOA, seed and EEG code with `is_catch_trial`, PAS rating/selection,
+PAS validity/abort/response-time evidence and `detection_outcome`. Existing
+`masking_trials_v1.csv` files remain untouched. The v2 table is written in both export modes on session
 finalization, including graceful aborts. Absent/aborted answers have blank correctness;
-valid wrong answers have `False`. `target_presented` and `target_flashes_completed`
-describe completed-frame evidence, not measured optical onset. The existing compiled
+valid wrong ordinary identity answers have `False`. Catch rows have blank target and
+expected-answer fields, zero target flashes, and blank identity correctness regardless
+of the selected option. PAS detection is separate from identity correctness:
+
+- A fully presented catch with PAS 1 yields `correct_rejection`; PAS 2–4 yields
+  `false_alarm`. Partial catch exposure is unscored.
+- An ordinary run with at least one completed target flash yields `miss` for PAS 1
+  or `hit` for PAS 2–4. These labels describe reported presence, not identification accuracy.
+- Missing, invalid or aborted PAS responses have blank detection outcomes.
+
+`target_presented` and `target_flashes_completed` describe completed-frame evidence,
+not measured optical onset. The existing compiled
 plan checkpoint is saved before input; response JSONL journals flush immediately
 after each response, preserving evidence even before this joined CSV is finalized.
 
@@ -130,13 +176,21 @@ Run compiler, project-io, runtime, engine and GUI focused routes, then repo prec
 Tests independently check source frame windows, fixed targets, no-repeat continuity,
 three shuffled SOA passes, spatial option randomization, answer linkage, exact RGB,
 native constructors, copy/relocation, stale schema rejection, and task/session flow.
+Catch coverage checks one extra sequence per complete variant block, random insertion
+and SOA selection, absent targets with retained timing/masks, distinct markers,
+unscored identity and PAS detection outcomes with incomplete/aborted exposure.
 
 Registered GUI tests require a user-approved visible environment. Check both themes
 at the modifier dialog's 1100x720 minimum, source editor's documented minimum and
 Setup's 1120x820: all three presets, long image paths, source/answer editing, Apply,
-Cancel, shared assignment, copy, preset reload and modifier removal. Confirm Home
+Cancel, shared assignment, copy, preset reload and modifier removal. At both 1100x720
+and 1120x760, inspect all four Masking tabs and the Catch trials enabled/disabled states,
+trigger persistence, matching-SOA guidance and participant-instruction reminder.
+The tab must remain hidden for other modifier kinds. Confirm Home
 is ready with complete masking pools and that ordinary source editors do not claim
 to control those visuals. Physical acceptance must verify Open Sans/Arial Black,
-circle edges and hit testing, the revised 1/2/6-frame SOAs, final break/cross, and EEG start
-markers on the intended monitor and serial device. No offscreen Qt or physical
-PsychoPy playback is part of the default local check.
+circle edges and hit testing, the restored 1/3/6-frame SOAs, target-absent catches,
+final break/cross, and EEG start markers 1–12 on the intended monitor and serial device.
+Registered Qt and visible/manual acceptance remain unrun for this revision; focused
+non-Qt checks do not establish visible layout or physical timing/EEG acceptance.
+No offscreen Qt or physical PsychoPy playback is part of the default local check.

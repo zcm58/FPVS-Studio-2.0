@@ -3,15 +3,21 @@
 from __future__ import annotations
 
 from math import isclose
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
-from pydantic import Field, model_validator
+from pydantic import Field, SerializerFunctionWrapHandler, model_serializer, model_validator
 
 from fpvs_studio.core.scene_models import SceneVisual
 from fpvs_studio.core.task_models import TaskBaseModel
 
 if TYPE_CHECKING:
     from fpvs_studio.core.models import Condition, ProjectFile
+
+
+class MaskingCatchTrialSettings(TaskBaseModel):
+    """One extra target-absent trial in each variant block."""
+
+    trigger_code: int = Field(ge=1, le=255, strict=True)
 
 
 class MaskingSettings(TaskBaseModel):
@@ -29,6 +35,16 @@ class MaskingSettings(TaskBaseModel):
     mask_visuals: list[SceneVisual] | None = None
     base_overlays: list[SceneVisual] = Field(default_factory=list)
     fixation_visual: SceneVisual | None = None
+    catch_trial: MaskingCatchTrialSettings | None = None
+
+    @model_serializer(mode="wrap")
+    def serialize_optional_catch(
+        self, handler: SerializerFunctionWrapHandler,
+    ) -> dict[str, Any]:
+        payload: dict[str, Any] = handler(self)
+        if self.catch_trial is None:
+            payload.pop("catch_trial", None)
+        return payload
 
     @model_validator(mode="after")
     def validate_rgb(self) -> MaskingSettings:
@@ -78,3 +94,29 @@ def is_masking_project(project: ProjectFile) -> bool:
     return bool(project.conditions) and all(
         condition_masking(project, condition) is not None for condition in project.conditions
     )
+
+
+def validate_masking_catch_trials(project: ProjectFile, conditions: list[Condition]) -> None:
+    """Check block-wide catch agreement and unambiguous trial-start markers."""
+    by_variant: dict[str, MaskingCatchTrialSettings | None] = {}
+    for condition in conditions:
+        settings = condition_masking(project, condition)
+        if settings is None:
+            continue
+        if settings.variant in by_variant and by_variant[settings.variant] != settings.catch_trial:
+            raise ValueError(
+                f"All selected {settings.variant} SOAs must use the same catch trial settings."
+            )
+        by_variant[settings.variant] = settings.catch_trial
+    normal_codes = {condition.trigger_code for condition in project.conditions}
+    catch_codes: set[int] = set()
+    for variant, catch in by_variant.items():
+        if catch is None:
+            continue
+        if catch.trigger_code in normal_codes:
+            raise ValueError(
+                f"The {variant} catch trigger code collides with an ordinary condition marker."
+            )
+        if catch.trigger_code in catch_codes:
+            raise ValueError("Each masking variant needs a distinct catch trigger code.")
+        catch_codes.add(catch.trigger_code)

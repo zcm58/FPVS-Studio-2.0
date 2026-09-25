@@ -567,7 +567,11 @@ def assign_modifier(
             for index, task_id in enumerate(definition.modifier.post_task_ids)
         ] + condition.post_task_bindings
     draft.schema_version = (
-        ProjectSchemaVersion.V1_7
+        ProjectSchemaVersion.V1_8
+        if any(item.masking is not None and item.masking.catch_trial is not None
+               for item in draft.condition_modifiers)
+        or project.schema_version == ProjectSchemaVersion.V1_8
+        else ProjectSchemaVersion.V1_7
         if any(item.masking is not None for item in draft.condition_modifiers)
         or project.schema_version == ProjectSchemaVersion.V1_7
         else ProjectSchemaVersion.V1_6

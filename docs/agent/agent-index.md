@@ -146,10 +146,15 @@ check persistence, and disable it again to restore ordinary launch checks.
 
 For Masking, start with `core/masking.py`, `core/masking_presets.py`,
 `core/compiler_masking.py`, `core/scene_models.py`, and [Masking](../MASKING.md).
-Masking block order lives in `core/compiler.py`; GUI retry seeding in `gui/document.py`;
-the joined target/answer trial table in `runtime/masking_report.py` and `session_export.py`.
+Masking block order and extra catch placement/SOA sampling live in `core/compiler.py`;
+catch agreement/code validation in `core/masking.py`; GUI retry seeding in `gui/document.py`.
+The Masking-only Catch trials tab is in `gui/condition_modifier_dialog.py`, with registered
+coverage in `tests/gui/test_masking_modifier_dialog.py`. The joined target/answer/PAS v2
+trial table and detection outcomes live in `runtime/masking_report.py` and `session_export.py`.
 Native sources are modifier-owned; pre/post tasks remain outside stream timing.
-Use compiler/project-io/runtime/engine/gui focused routes, then repo precommit.
+Catch schema guards span project/config, RunSpec and SessionPlan; read the Masking
+contract before changing compatibility or exports. Use compiler/project-io/runtime/engine/gui
+focused routes, then repo precommit; visible Qt acceptance remains an explicit opt-in.
 
 For Library downloads, the publisher applies the temporary COM3 bundle policy;
 see [Experiment Library](../EXPERIMENT_LIBRARY.md) before changing port handling.

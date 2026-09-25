@@ -9,7 +9,8 @@ from PIL import Image
 from PySide6.QtWidgets import QApplication, QDialog, QFileDialog, QLabel, QMessageBox
 from tests.gui.helpers import assert_visible_children_within_parent
 
-from fpvs_studio.core.condition_modifiers import assign_modifier
+from fpvs_studio.core.condition_modifiers import assign_modifier, create_backward_counting_modifier
+from fpvs_studio.core.masking import MaskingCatchTrialSettings
 from fpvs_studio.core.masking_presets import create_masking_modifier
 from fpvs_studio.gui import condition_modifier_dialog
 from fpvs_studio.gui.condition_modifier_dialog import ConditionModifierDialog
@@ -40,8 +41,9 @@ def _document(tmp_path: Path, variant: str = "color"):
 
 @pytest.mark.parametrize("variant", ["color", "faces", "number"])
 @pytest.mark.parametrize("size", [(1100, 720), (1120, 760)])
+@pytest.mark.parametrize("catch_enabled", [False, True])
 def test_masking_tabs_fit_and_edits_preserve_native_sources(
-    qtbot, tmp_path: Path, variant, size,
+    qtbot, tmp_path: Path, variant, size, catch_enabled,
 ) -> None:
     document, condition_id = _document(tmp_path, variant)
     original = document.project.model_dump()
@@ -49,14 +51,31 @@ def test_masking_tabs_fit_and_edits_preserve_native_sources(
     qtbot.addWidget(dialog)
     dialog.resize(*size)
     dialog.show()
+    dialog.tabs.setCurrentIndex(1)
     assert dialog.settings_stack.currentIndex() == 2
     assert dialog.screens_button.isVisible()
     assert not dialog.instructions_button.isVisible()
+    assert not dialog.masking_catch_checkbox.isChecked()
+    assert not dialog.masking_catch_trigger_spin.isEnabled()
+    assert dialog.masking_catch_trigger_spin.value() == {
+        "color": 10, "faces": 11, "number": 12,
+    }[variant]
+    dialog.masking_catch_checkbox.setChecked(catch_enabled)
+    assert dialog.masking_catch_trigger_spin.isEnabled() == catch_enabled
+    assert "All SOAs in the same variant must use matching catch settings and code" in (
+        dialog.masking_catch_help.text()
+    )
     before = dialog._definitions[dialog._selected_id].model_copy(deep=True)
-    for tab in range(3):
+    assert "does not rewrite participant instructions" in dialog.masking_catch_help.text()
+    for tab in range(4):
         dialog.tabs.setCurrentIndex(tab)
         _fit(dialog)
         assert (dialog.width(), dialog.height()) == size
+        if tab == dialog.masking_catch_tab_index:
+            assert dialog.masking_catch_checkbox.width() >= (
+                dialog.masking_catch_checkbox.sizeHint().width()
+            )
+    dialog.tabs.setCurrentIndex(2)
     for phase in range(4):
         dialog.preview_phase.setCurrentIndex(phase)
         _fit(dialog)
@@ -67,9 +86,99 @@ def test_masking_tabs_fit_and_edits_preserve_native_sources(
     assert after.modifier.masking.soa_ms == 100
     assert after.modifier.masking.target_duration_ms == before.modifier.masking.target_duration_ms
     assert after.modifier.masking.base_visuals == before.modifier.masking.base_visuals
+    if catch_enabled:
+        assert after.modifier.masking.catch_trial.trigger_code == (
+            dialog.masking_catch_trigger_spin.value()
+        )
+    else:
+        assert after.modifier.masking.catch_trial is None
     assert after.task_modules == before.task_modules
     dialog.reject()
     assert document.project.model_dump() == original
+
+
+@pytest.mark.parametrize("initially_enabled", [False, True])
+def test_masking_catch_apply_reopens_with_enabled_state_and_code(
+    qtbot, tmp_path: Path, initially_enabled,
+) -> None:
+    document, condition_id = _document(tmp_path)
+    definition = create_masking_modifier()
+    definition.modifier.masking.catch_trial = (
+        MaskingCatchTrialSettings(trigger_code=71) if initially_enabled else None
+    )
+    document.apply_condition_modifier_project(
+        assign_modifier(document.project, definition, [condition_id])
+    )
+    modifier = document.project.condition_modifiers[0]
+    before = document.project.model_dump()
+    dialog = ConditionModifierDialog(document, condition_id=condition_id)
+    qtbot.addWidget(dialog)
+    assert dialog.masking_catch_checkbox.isChecked() == initially_enabled
+    if initially_enabled:
+        assert dialog.masking_catch_trigger_spin.value() == 71
+    dialog.masking_catch_checkbox.setChecked(not initially_enabled)
+    if not initially_enabled:
+        dialog.masking_catch_trigger_spin.setValue(72)
+    assert document.project.model_dump() == before
+    dialog.accept()
+    qtbot.waitUntil(lambda: dialog._active_task is None, timeout=10000)
+    assert dialog.result() == QDialog.DialogCode.Accepted
+    updated = document.project.condition_modifiers[0].masking
+    assert updated.base_visuals == modifier.masking.base_visuals
+    assert updated.target_visuals == modifier.masking.target_visuals
+    if initially_enabled:
+        assert updated.catch_trial is None
+        assert "catch_trial" not in updated.model_dump()
+    else:
+        assert updated.catch_trial.trigger_code == 72
+        assert document.project.schema_version == "1.8.0"
+    reopened = ConditionModifierDialog(document, condition_id=condition_id)
+    qtbot.addWidget(reopened)
+    assert reopened.masking_catch_checkbox.isChecked() == (not initially_enabled)
+    assert reopened.masking_catch_trigger_spin.isEnabled() == (not initially_enabled)
+    if not initially_enabled:
+        assert reopened.masking_catch_trigger_spin.value() == 72
+    reopened.reject()
+
+
+def test_masking_catch_copy_keeps_other_condition_and_cancel_unchanged(
+    qtbot, tmp_path: Path,
+) -> None:
+    document, condition_id = _document(tmp_path)
+    other_id = document.create_condition(name="Same variant with another SOA")
+    definition = create_masking_modifier()
+    definition.modifier.masking.catch_trial = MaskingCatchTrialSettings(trigger_code=10)
+    document.apply_condition_modifier_project(
+        assign_modifier(document.project, definition, [condition_id, other_id])
+    )
+    before = document.project.model_dump()
+    dialog = ConditionModifierDialog(document, condition_id=condition_id)
+    qtbot.addWidget(dialog)
+    original_id = dialog._selected_id
+    dialog._copy_for_condition()
+    qtbot.waitUntil(lambda: dialog._active_task is None, timeout=10000)
+    assert dialog._selected_id != original_id
+    assert dialog.masking_catch_checkbox.isChecked()
+    assert dialog.masking_catch_trigger_spin.value() == 10
+    dialog.masking_catch_trigger_spin.setValue(73)
+    assert dialog._save_fields()
+    assert dialog._definitions[dialog._selected_id].modifier.masking.catch_trial.trigger_code == 73
+    assert dialog._definitions[original_id].modifier.masking.catch_trial.trigger_code == 10
+    assert dialog._scopes[original_id] == [other_id]
+    assert document.project.model_dump() == before
+    dialog.reject()
+    assert document.project.model_dump() == before
+
+
+def test_catch_tab_is_hidden_for_other_modifier_kinds(qtbot, tmp_path: Path) -> None:
+    document, condition_id = _document(tmp_path)
+    document.apply_condition_modifier_project(
+        assign_modifier(document.project, create_backward_counting_modifier(), [condition_id])
+    )
+    dialog = ConditionModifierDialog(document, condition_id=condition_id)
+    qtbot.addWidget(dialog)
+    assert not dialog.tabs.isTabVisible(dialog.masking_catch_tab_index)
+    dialog.reject()
 
 
 @pytest.mark.parametrize("variant", ["color", "faces", "number"])

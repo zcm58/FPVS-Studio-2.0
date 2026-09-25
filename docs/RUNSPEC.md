@@ -40,7 +40,12 @@ classification and explicit separation. Compiled contract versions are unchanged
 
 Native masking scenes use the additional `scene_stream` contract with independent
 inclusive onset/exclusive offset frame windows and ordered native visual draws.
-They do not also carry a legacy stimulus sequence. See [Masking](MASKING.md).
+They do not also carry a legacy stimulus sequence. A target-absent catch uses
+RunSpec 1.5.0 with `scene_stream.is_catch_trial=True`, `target_id=None` and no target
+events, while retaining the stream's duration and base/mask timing. Ordinary masking
+runs retain RunSpec 1.4.0. Catch placement and SOA selection belong to session compilation;
+catch detection scoring belongs to runtime. See [Masking](MASKING.md) for the complete
+schema, trigger and result contracts.
 
 All execution timing in `RunSpec` is represented in frames.
 

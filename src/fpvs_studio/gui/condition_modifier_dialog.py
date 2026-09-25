@@ -329,6 +329,7 @@ class ConditionModifierDialog(QDialog):
         self.tabs.addTab(self.overview, "Overview")
         self._build_settings()
         self._build_preview()
+        self._build_masking_catch_settings()
         self.tabs.currentChanged.connect(self._tab_changed)
         detail.addWidget(self.tabs, 1)
         body.addWidget(self.detail, 1)
@@ -544,6 +545,39 @@ class ConditionModifierDialog(QDialog):
         layout.addWidget(self.preview_result)
         self.tabs.addTab(page, "Participant preview")
 
+    def _build_masking_catch_settings(self) -> None:
+        page = QWidget(self.tabs)
+        layout = QVBoxLayout(page)
+        self.masking_catch_checkbox = QCheckBox(
+            "Add one catch trial per variant block", page,
+        )
+        self.masking_catch_checkbox.setObjectName("modifier_masking_catch_enabled")
+        layout.addWidget(self.masking_catch_checkbox)
+        form = QFormLayout()
+        self.masking_catch_trigger_spin = QSpinBox(page)
+        self.masking_catch_trigger_spin.setObjectName("modifier_masking_catch_trigger")
+        self.masking_catch_trigger_spin.setRange(1, 255)
+        self.masking_catch_trigger_spin.setAccessibleName("Catch EEG code")
+        form.addRow("Catch EEG code", self.masking_catch_trigger_spin)
+        layout.addLayout(form)
+        self.masking_catch_help = _label(
+            "Adds one full-length target-absent sequence at a random position in each variant "
+            "block, using a randomly selected SOA from that block. Masks and base stimuli remain."
+            "\n\nAll SOAs in the same variant must use matching catch settings and code. "
+            "Use a code distinct from ordinary conditions and other variants. Other modifiers "
+            "are not changed automatically."
+            "\n\nEdit modifier screens to explain that targets may be absent. Enabling catches "
+            "does not rewrite participant instructions. PAS 'No experience' scores a correct "
+            "rejection; the four-choice identity response remains unscored on catch trials.", page,
+        )
+        layout.addWidget(self.masking_catch_help)
+        layout.addStretch()
+        self.masking_catch_checkbox.toggled.connect(self.masking_catch_trigger_spin.setEnabled)
+        self.masking_catch_checkbox.toggled.connect(self._mark_dirty)
+        self.masking_catch_trigger_spin.valueChanged.connect(self._mark_dirty)
+        self.masking_catch_tab_index = self.tabs.addTab(page, "Catch trials")
+        self.tabs.setTabVisible(self.masking_catch_tab_index, False)
+
     def _mark_dirty(self, *_args: object) -> None:
         if not self._loading:
             self._fields_dirty = True
@@ -608,6 +642,10 @@ class ConditionModifierDialog(QDialog):
                         background = list(values["background_rgb"])
                         background[index] = spin.value()
                         values["background_rgb"] = tuple(background)
+                values["catch_trial"] = (
+                    {"trigger_code": self.masking_catch_trigger_spin.value()}
+                    if self.masking_catch_checkbox.isChecked() else None
+                )
                 definition.modifier.masking = MaskingSettings.model_validate(values)
             else:
                 kwargs = {}
@@ -729,6 +767,7 @@ class ConditionModifierDialog(QDialog):
         is_counting = definition.modifier.kind == ConditionModifierKind.BACKWARD_COUNTING
         is_masking = definition.modifier.kind == ConditionModifierKind.MASKING
         self.settings_stack.setCurrentIndex(0 if is_counting else 2 if is_masking else 1)
+        self.tabs.setTabVisible(self.masking_catch_tab_index, is_masking)
         self.screens_button.setVisible(not is_counting)
         self.instructions_button.setVisible(not is_masking)
         if is_counting:
@@ -766,6 +805,13 @@ class ConditionModifierDialog(QDialog):
                 self.masking_background_spins, settings.background_rgb, strict=True,
             ):
                 spin.setValue(channel)
+            catch = settings.catch_trial
+            self.masking_catch_trigger_spin.setValue(
+                catch.trigger_code if catch is not None
+                else {"color": 10, "faces": 11, "number": 12}[settings.variant]
+            )
+            self.masking_catch_checkbox.setChecked(catch is not None)
+            self.masking_catch_trigger_spin.setEnabled(catch is not None)
             self._refresh_masking_sources(settings)
         else:
             study = self._study_module(definition)
@@ -879,17 +925,21 @@ class ConditionModifierDialog(QDialog):
         elif modifier.kind == ConditionModifierKind.MASKING:
             settings = modifier.masking
             assert settings is not None
+            catch_enabled = self.masking_catch_checkbox.isChecked()
             phase_copy = (
                 "No separate baseline.",
                 "Instructions and two-second fixation before each experiment variant.",
                 "Brief target followed by a mask at "
                 f"{self.masking_timing_spins['soa_ms'].value():g} ms SOA. "
-                "The same target repeats throughout the run.",
+                "The same target repeats throughout the run. "
+                + ("One extra target-absent catch per variant block." if catch_enabled else ""),
                 "Visibility → target identity → frequency → self-paced break and fixation.",
             )
             self.recorded_label.setText(
                 "Recorded data: realized frame timing, target identity, selected answers, "
-                "identity correctness and response times. Native source properties are retained."
+                "identity correctness and response times. "
+                + ("Catch trials use PAS to score absence; identity is unscored."
+                   if catch_enabled else "Native source properties are retained.")
             )
             self._refresh_masking_sources(settings)
         else:
@@ -1348,11 +1398,18 @@ class ConditionModifierDialog(QDialog):
             )
             settings = definition.modifier.masking
             assert settings is not None
+            catch_preview = (
+                "\n\nOne extra sequence per variant block omits every target, retains the masks, "
+                "and uses a randomly selected SOA. PAS 'No experience' is a correct rejection; "
+                "target identity is unscored."
+                if self.masking_catch_checkbox.isChecked() else ""
+            )
             self.preview_text.setText((
                 "Instructions → Space → two-second red fixation.",
                 f"Base presentations start {self.masking_timing_spins['soa_ms'].value():g} ms "
                 "into each item slot. On target slots, the target starts immediately and the "
-                "mask follows at the selected SOA. Native sources preserve color and geometry.",
+                "mask follows at the selected SOA. Native sources preserve color and geometry."
+                + catch_preview,
                 "How clearly did you see the brief target stimulus during the sequence?\n\n"
                 "Identify the target.\n\n"
                 "How often did you see the brief target stimulus during the sequence?\n\n"

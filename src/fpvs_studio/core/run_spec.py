@@ -364,8 +364,10 @@ class RunSpec(FPVSBaseModel):
     @model_validator(mode="after")
     def validate_stream_schema(self) -> RunSpec:
         if self.scene_stream is not None:
-            if self.schema_version != "1.4.0":
+            if self.schema_version not in {"1.4.0", "1.5.0"}:
                 raise ValueError("Scene streams require RunSpec schema 1.4.0.")
+            if self.scene_stream.is_catch_trial is not None and self.schema_version != "1.5.0":
+                raise ValueError("Catch-trial scenes require RunSpec schema 1.5.0.")
             if self.stimulus_sequence or self.attentional_blink is not None:
                 raise ValueError("Scene streams cannot also contain a legacy stimulus stream.")
             if self.condition.stimulus_modality != StimulusModality.SCENE:
