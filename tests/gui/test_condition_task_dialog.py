@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
     QAbstractScrollArea,
     QApplication,
     QCheckBox,
+    QComboBox,
     QDialog,
     QFileDialog,
     QLabel,
@@ -467,6 +468,63 @@ def test_native_circle_styles_and_spatial_shuffle_survive_task_editor(qtbot, tmp
     draft.steps[0] = updated
     assert _module_from_draft(draft) == module
     _assert_visible_non_scroll_children_within_parent(editor)
+
+
+@pytest.mark.parametrize("size", [(1100, 720), (1120, 760)])
+def test_positioned_instruction_items_expose_editable_alignment_and_preview(
+    qtbot, tmp_path, monkeypatch, size,
+) -> None:
+    module = TaskModule(task_id="masking-instructions", name="Masking", steps=[TaskStep(
+        step_id="instructions", kind=TaskStepKind.INSTRUCTION, layout_mode=TaskLayoutMode.EXACT,
+        font_family=TaskFontFamily.OPEN_SANS, continue_key="space", show_footer=False,
+        items=[TaskDisplayItem(
+            item_id="body", modality=TaskItemModality.TEXT,
+            text="Identify the target.\nSome sequences contain no target.\nKeep looking at the +.",
+            text_alignment="left", width=0.9, height=0.035,
+            unit="window_height_fraction", y=0.1,
+        )],
+    )])
+    draft = _module_to_draft(module, TaskBinding(task_id=module.task_id))
+    editor = TaskStepEditor(tmp_path)
+    qtbot.addWidget(editor)
+    editor.resize(*size)
+    editor.set_step(draft.steps[0])
+    editor.show()
+    QApplication.processEvents()
+    assert editor.option_table.isVisible()
+    assert editor.editor_tabs.currentIndex() == 0
+    assert editor.type_stack.currentWidget() == editor._type_pages["study"]
+    alignment = editor.option_table.cellWidget(0, 11)
+    assert isinstance(alignment, QComboBox)
+    assert alignment.currentData() == "left" and alignment.isEnabled()
+    assert "center anchor" in alignment.toolTip()
+    assert editor.option_table.item(0, 1).toolTip() == module.steps[0].items[0].text
+    draft.steps[0] = editor.step()
+    assert _module_from_draft(draft) == module
+    alignment.setCurrentIndex(alignment.findData("right"))
+    draft.steps[0] = editor.step()
+    updated = _module_from_draft(draft)
+    assert updated.steps[0].kind == TaskStepKind.INSTRUCTION
+    assert updated.steps[0].items[0].text_alignment == "right"
+    assert updated.steps[0].items[0].x == 0 and updated.steps[0].items[0].y == 0.1
+    assert updated.steps[0].items[0].text == module.steps[0].items[0].text
+    _assert_visible_non_scroll_children_within_parent(editor)
+
+    rendered = []
+    original = TaskParticipantPreview._paint_text_item
+
+    def capture(painter, rect, option):
+        rendered.append((option.label, option.text_alignment))
+        original(painter, rect, option)
+
+    monkeypatch.setattr(TaskParticipantPreview, "_paint_text_item", staticmethod(capture))
+    preview = TaskParticipantPreview(tmp_path)
+    qtbot.addWidget(preview)
+    preview.resize(400, 420)
+    preview.set_step(draft.steps[0])
+    preview.show()
+    QApplication.processEvents()
+    assert (module.steps[0].items[0].text, "right") in rendered
 
 
 def test_condition_task_dialog_apply_is_lossless_after_visiting_every_step(

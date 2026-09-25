@@ -24,7 +24,7 @@ from fpvs_studio.core.compiler_fixation import (
     resolve_realized_target_count,
 )
 from fpvs_studio.core.compiler_inputs import CompilationInputs
-from fpvs_studio.core.compiler_masking import compile_masking_run
+from fpvs_studio.core.compiler_masking import compile_masking_run, validate_masking_settings
 from fpvs_studio.core.compiler_presentation import (
     build_interleaved_text_height_values,
 )
@@ -63,7 +63,11 @@ from fpvs_studio.core.frame_validation import (
     frames_per_stimulus,
     on_off_frames,
 )
-from fpvs_studio.core.masking import condition_masking, validate_masking_catch_trials
+from fpvs_studio.core.masking import (
+    condition_masking,
+    masking_catch_source_conditions,
+    validate_masking_catch_trials,
+)
 from fpvs_studio.core.models import AttentionalBlinkStreamSettings, Condition, ProjectFile
 from fpvs_studio.core.presentation import resolve_pre_stream_fixation_seconds
 from fpvs_studio.core.run_spec import (
@@ -74,7 +78,7 @@ from fpvs_studio.core.run_spec import (
     RunSpec,
 )
 from fpvs_studio.core.session_plan import SessionBlock, SessionEntry, SessionPlan
-from fpvs_studio.core.task_models import TaskPhase
+from fpvs_studio.core.task_models import TaskPhase, task_requires_text_alignment_schema
 from fpvs_studio.core.trigger_codes import validate_oddball_trigger_code_policy
 from fpvs_studio.preprocessing.models import StimulusManifest
 
@@ -112,9 +116,23 @@ def _compile_prepared_run(
     run_id: str | None, realized_target_count: int | None,
     previous_base_id: str | None = None,
     is_catch_trial: bool = False,
+    masking_source_condition: Condition | None = None,
 ) -> RunSpec:
     project, refresh_hz = inputs.project, inputs.refresh_hz
     masking = condition_masking(project, condition)
+    if condition.masking_catch:
+        try:
+            validate_masking_catch_trials(project, [condition])
+            sources = (
+                [masking_source_condition] if masking_source_condition is not None
+                else masking_catch_source_conditions(project, condition)
+            )
+            _validate_masking_catch_sources(project, sources, refresh_hz)
+        except ValueError as exc:
+            raise CompileError(str(exc)) from exc
+        source = random.Random(random_seed).choice(sources)
+        masking = condition_masking(project, source)
+        is_catch_trial = True
     if masking is not None:
         return compile_masking_run(
             project, condition, masking, refresh_hz=refresh_hz,
@@ -319,6 +337,15 @@ def _compile_prepared_run(
     )
 
 
+def _validate_masking_catch_sources(
+    project: ProjectFile, sources: list[Condition], refresh_hz: float,
+) -> None:
+    for source in sources:
+        settings = condition_masking(project, source)
+        assert settings is not None
+        validate_masking_settings(project, source, settings, refresh_hz)
+
+
 def _project_oddball_trigger_code(project: ProjectFile) -> int:
     triggers = project.settings.triggers
     try:
@@ -377,7 +404,7 @@ def compile_session_plan(
     masking_groups = all(
         condition_masking(project, item) is not None for item in selected_conditions
     )
-    group_conditions: list[list[tuple[Condition, bool]]] = []
+    group_conditions: list[list[tuple[Condition, bool, Condition | None]]] = []
     if masking_groups:
         try:
             validate_masking_catch_trials(project, selected_conditions)
@@ -389,16 +416,31 @@ def compile_session_plan(
             assert settings is not None
             grouped.setdefault(settings.variant, []).append(item)
         for pool in grouped.values():
-            ordered: list[tuple[Condition, bool]] = []
+            ordinary = [condition for condition in pool if not condition.masking_catch]
+            catches = [condition for condition in pool if condition.masking_catch]
+            ordered: list[tuple[Condition, bool, Condition | None]] = []
             for _ in range(repetition_count):
-                triplet = list(pool)
+                triplet = list(ordinary)
                 session_rng.shuffle(triplet)
-                ordered.extend((condition, False) for condition in triplet)
+                ordered.extend((condition, False, None) for condition in triplet)
             settings = condition_masking(project, pool[0])
             assert settings is not None
-            if settings.catch_trial is not None:
+            if catches:
+                catch_condition = catches[0]
+                sources = masking_catch_source_conditions(project, catch_condition, pool)
+                try:
+                    _validate_masking_catch_sources(project, sources, refresh_hz)
+                except ValueError as exc:
+                    raise CompileError(str(exc)) from exc
+                source = session_rng.choice(sources)
+                ordered.insert(
+                    session_rng.randrange(len(ordered) + 1), (catch_condition, True, source),
+                )
+            elif settings.catch_trial is not None:
                 catch_condition = session_rng.choice(pool)
-                ordered.insert(session_rng.randrange(len(ordered) + 1), (catch_condition, True))
+                ordered.insert(
+                    session_rng.randrange(len(ordered) + 1), (catch_condition, True, None),
+                )
             group_conditions.append(ordered)
         session_rng.shuffle(group_conditions)
         compiled_block_count = len(group_conditions)
@@ -408,7 +450,7 @@ def compile_session_plan(
         )
     previous_masking_base: dict[str, str] = {}
     masking_occurrence_counts = Counter(
-        condition.condition_id for group in group_conditions for condition, _ in group
+        condition.condition_id for group in group_conditions for condition, _, _ in group
     )
     occurrences: dict[str, int] = {}
     for block_index in range(compiled_block_count):
@@ -419,10 +461,11 @@ def compile_session_plan(
             if shuffle_all:
                 block_conditions *= repetition_count
             session_rng.shuffle(block_conditions)
-            block_trials = [(condition, False) for condition in block_conditions]
+            block_trials = [(condition, False, None) for condition in block_conditions]
 
         entries: list[SessionEntry] = []
-        for index_within_block, (condition, is_catch_trial) in enumerate(block_trials):
+        for index_within_block, trial in enumerate(block_trials):
+            condition, is_catch_trial, masking_source = trial
             masking = condition_masking(project, condition)
             occurrence_index = occurrences.get(condition.condition_id, 0)
             occurrences[condition.condition_id] = occurrence_index + 1
@@ -460,6 +503,7 @@ def compile_session_plan(
                         previous_masking_base.get(masking.variant) if masking else None
                     ),
                     is_catch_trial=is_catch_trial,
+                    masking_source_condition=masking_source,
                 )
                 if masking is not None and run_spec.scene_stream is not None:
                     base_events = [event for event in run_spec.scene_stream.events
@@ -540,14 +584,17 @@ def compile_session_plan(
         blocks.append(
             SessionBlock(
                 block_index=block_index,
-                condition_order=[condition.condition_id for condition, _ in block_trials],
+                condition_order=[condition.condition_id for condition, _, _ in block_trials],
                 entries=entries,
             )
         )
 
     return SessionPlan(
         schema_version=(
-            "1.4.0" if any(is_catch for group in group_conditions for _, is_catch in group)
+            "1.5.0" if any(task_requires_text_alignment_schema(task)
+                           for block in blocks for entry in block.entries
+                           for task in [*entry.pre_tasks, *entry.post_tasks])
+            else "1.4.0" if any(is_catch for group in group_conditions for _, is_catch, _ in group)
             else "1.3.0" if masking_groups else SchemaVersion.V1_2.value
         ),
         authored_task_flow=True if masking_groups else None,

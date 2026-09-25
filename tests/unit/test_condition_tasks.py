@@ -6,7 +6,7 @@ import pytest
 from pydantic import ValidationError
 
 from fpvs_studio.core.compiler import CompileError, compile_run_spec, compile_session_plan
-from fpvs_studio.core.enums import PresentationUnit
+from fpvs_studio.core.enums import PresentationUnit, ProjectSchemaVersion
 from fpvs_studio.core.execution import RunExecutionSummary
 from fpvs_studio.core.migrations import migrate_project_payload
 from fpvs_studio.core.project_config import (
@@ -15,6 +15,7 @@ from fpvs_studio.core.project_config import (
     read_project_config,
     write_project_config,
 )
+from fpvs_studio.core.serialization import load_project_file, save_project_file
 from fpvs_studio.core.task_assets import TaskAssetError, copy_task_asset
 from fpvs_studio.core.task_models import (
     TaskBinding,
@@ -37,6 +38,54 @@ from fpvs_studio.core.task_models import (
     TaskSubmissionMode,
 )
 from fpvs_studio.core.validation import validate_project
+from fpvs_studio.gui.document_conditions import DocumentConditionMixin
+
+
+@pytest.mark.parametrize("alignment", ["left", "center", "right"])
+@pytest.mark.parametrize("schema", [ProjectSchemaVersion.V1_4, ProjectSchemaVersion.V1_8,
+                                    ProjectSchemaVersion.V1_9])
+def test_document_task_apply_promotes_alignment_schema_without_changing_centered_defaults(
+    sample_project, tmp_path, alignment, schema,
+):
+    class TaskDocument(DocumentConditionMixin):
+        def __init__(self, project):
+            self._project = project
+            self._project_root = tmp_path
+
+        def _replace_project(self, project):
+            self._project = project
+
+    original = sample_project.model_copy(deep=True)
+    original.schema_version = schema
+    before = original.model_dump()
+    document = TaskDocument(original)
+    instruction = TaskModule(
+        task_id="aligned-intro", name="Instructions",
+        steps=[TaskStep(
+            step_id="instructions", kind=TaskStepKind.INSTRUCTION,
+            continue_key="space", layout_mode=TaskLayoutMode.EXACT,
+            items=[TaskDisplayItem(
+                item_id="body", modality=TaskItemModality.TEXT,
+                text="Identify the target. Keep looking at the fixation cross.",
+                text_alignment=alignment, width=0.9, height=0.03,
+                unit=PresentationUnit.WINDOW_HEIGHT_FRACTION,
+            )],
+        )],
+    )
+    document.set_condition_task_flow(
+        "faces", modules=[instruction],
+        pre_bindings=[TaskBinding(task_id=instruction.task_id)], post_bindings=[],
+    )
+    expected_schema = ProjectSchemaVersion.V1_9 if alignment != "center" else schema
+    assert document._project.schema_version == expected_schema
+    assert original.model_dump() == before
+    path = tmp_path / "project.json"
+    save_project_file(document._project, path)
+    restored = load_project_file(path)
+    assert restored.schema_version == expected_schema
+    restored_item = restored.task_modules[0].steps[0].items[0]
+    assert restored_item.text_alignment == alignment
+    assert ("text_alignment" in restored_item.model_dump()) == (alignment != "center")
 
 
 def _instruction_module(task_id: str = "memory-intro") -> TaskModule:

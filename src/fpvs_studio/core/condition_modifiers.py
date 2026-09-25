@@ -35,6 +35,7 @@ from fpvs_studio.core.task_models import (
     TaskStep,
     TaskStepKind,
     TaskSubmissionMode,
+    task_requires_text_alignment_schema,
     validate_task_slug,
 )
 
@@ -567,7 +568,11 @@ def assign_modifier(
             for index, task_id in enumerate(definition.modifier.post_task_ids)
         ] + condition.post_task_bindings
     draft.schema_version = (
-        ProjectSchemaVersion.V1_8
+        ProjectSchemaVersion.V1_9
+        if any(condition.masking_catch for condition in draft.conditions)
+        or any(task_requires_text_alignment_schema(task) for task in draft.task_modules)
+        or project.schema_version == ProjectSchemaVersion.V1_9
+        else ProjectSchemaVersion.V1_8
         if any(item.masking is not None and item.masking.catch_trial is not None
                for item in draft.condition_modifiers)
         or project.schema_version == ProjectSchemaVersion.V1_8

@@ -47,6 +47,7 @@ manual_smoke = [
 checks = []
 tests = [
   "tests/unit/test_models.py",
+  "tests/unit/test_masking_catch_conditions.py",
   "tests/unit/test_validation.py",
   "tests/unit/test_fixation_settings.py",
   "tests/unit/test_document_conditions.py",
@@ -66,13 +67,14 @@ tests = [
   "tests/unit/test_modifier_presets.py",
 ]
 full_tests = []
-include = ["src/fpvs_studio/core/**", "tests/unit/test_models.py", "tests/unit/test_validation.py", "tests/unit/test_fixation_settings.py", "tests/unit/test_condition_tasks.py", "tests/unit/test_contrast_modulation.py", "tests/unit/test_document_*.py", "tests/unit/test_experiment_design.py", "tests/unit/test_experiment_categories.py", "tests/unit/test_attentional_blink*.py", "tests/unit/test_windows_paths.py"]
+include = ["tests/unit/test_masking_catch_conditions.py", "src/fpvs_studio/core/**", "tests/unit/test_models.py", "tests/unit/test_validation.py", "tests/unit/test_fixation_settings.py", "tests/unit/test_condition_tasks.py", "tests/unit/test_contrast_modulation.py", "tests/unit/test_document_*.py", "tests/unit/test_experiment_design.py", "tests/unit/test_experiment_categories.py", "tests/unit/test_attentional_blink*.py", "tests/unit/test_windows_paths.py"]
 manual_smoke = []
 
 [scopes.compiler]
 checks = []
 tests = [
   "tests/unit/test_masking.py",
+  "tests/unit/test_masking_catch_conditions.py",
   "tests/unit/test_compiler_preparation.py",
   "tests/unit/test_compiler.py",
   "tests/unit/test_compiler_fixation.py",
@@ -86,7 +88,7 @@ tests = [
   "tests/unit/test_condition_modifiers.py",
 ]
 full_tests = []
-include = ["src/fpvs_studio/core/compiler*.py", "src/fpvs_studio/core/attentional_blink_stream.py", "src/fpvs_studio/core/run_spec.py", "src/fpvs_studio/core/session_plan.py", "tests/unit/test_compiler*.py", "tests/unit/test_attentional_blink_stream_core.py", "tests/unit/test_contrast_modulation.py", "tests/unit/test_session_plan.py", "tests/unit/test_windows_image_paths.py"]
+include = ["tests/unit/test_masking_catch_conditions.py", "src/fpvs_studio/core/compiler*.py", "src/fpvs_studio/core/attentional_blink_stream.py", "src/fpvs_studio/core/run_spec.py", "src/fpvs_studio/core/session_plan.py", "tests/unit/test_compiler*.py", "tests/unit/test_attentional_blink_stream_core.py", "tests/unit/test_contrast_modulation.py", "tests/unit/test_session_plan.py", "tests/unit/test_windows_image_paths.py"]
 manual_smoke = []
 
 [scopes."project-io"]
@@ -95,6 +97,7 @@ tests = [
   "tests/unit/test_library_installations.py",
   "tests/unit/test_library_origin.py",
   "tests/unit/test_masking_media_portability.py",
+  "tests/unit/test_masking_catch_conditions.py",
   "tests/unit/test_serialization.py",
   "tests/unit/test_condition_template_profiles.py",
   "tests/unit/test_project_bundle.py",
@@ -109,7 +112,7 @@ tests = [
   "tests/unit/test_modifier_presets.py",
 ]
 full_tests = []
-include = ["src/fpvs_studio/core/project*.py", "src/fpvs_studio/core/serialization.py", "src/fpvs_studio/core/library_publish.py", "src/fpvs_studio/core/task_assets.py", "src/fpvs_studio/core/template_library.py", "src/fpvs_studio/core/condition_template_profiles.py", "src/fpvs_studio/core/attentional_blink_presets.py", "src/fpvs_studio/core/modifier_presets.py", "tests/unit/test_serialization.py", "tests/unit/test_modifier_presets.py", "tests/unit/test_attentional_blink_presets.py", "tests/unit/test_project*.py", "tests/unit/test_library_publish.py", "tests/unit/test_experiment_categories.py", "tests/unit/test_template_library.py", "tests/unit/test_condition_template_profiles.py"]
+include = ["tests/unit/test_masking_catch_conditions.py", "src/fpvs_studio/core/project*.py", "src/fpvs_studio/core/serialization.py", "src/fpvs_studio/core/library_publish.py", "src/fpvs_studio/core/task_assets.py", "src/fpvs_studio/core/template_library.py", "src/fpvs_studio/core/condition_template_profiles.py", "src/fpvs_studio/core/attentional_blink_presets.py", "src/fpvs_studio/core/modifier_presets.py", "tests/unit/test_serialization.py", "tests/unit/test_modifier_presets.py", "tests/unit/test_attentional_blink_presets.py", "tests/unit/test_project*.py", "tests/unit/test_library_publish.py", "tests/unit/test_experiment_categories.py", "tests/unit/test_template_library.py", "tests/unit/test_condition_template_profiles.py"]
 manual_smoke = []
 
 [scopes.library]

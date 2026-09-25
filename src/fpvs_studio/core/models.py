@@ -10,15 +10,17 @@ import re
 from collections.abc import Iterable, Mapping
 from datetime import datetime, timezone
 from math import isfinite
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import (
     AliasChoices,
     BaseModel,
     ConfigDict,
     Field,
+    SerializerFunctionWrapHandler,
     StrictInt,
     field_validator,
+    model_serializer,
     model_validator,
 )
 
@@ -41,7 +43,11 @@ from fpvs_studio.core.enums import (
     ValidationSeverity,
 )
 from fpvs_studio.core.paths import validate_project_relative_path
-from fpvs_studio.core.task_models import TaskBinding, TaskModule
+from fpvs_studio.core.task_models import (
+    TaskBinding,
+    TaskModule,
+    task_requires_text_alignment_schema,
+)
 from fpvs_studio.core.trigger_codes import (
     LOCKED_ODDBALL_TRIGGER_CODE,
     validate_oddball_trigger_code_policy,
@@ -731,6 +737,16 @@ class Condition(FPVSBaseModel):
     )
     pre_task_bindings: list[TaskBinding] = Field(default_factory=list)
     post_task_bindings: list[TaskBinding] = Field(default_factory=list)
+    masking_catch: bool = False
+
+    @model_serializer(mode="wrap")
+    def serialize_optional_masking_catch(
+        self, handler: SerializerFunctionWrapHandler,
+    ) -> dict[str, Any]:
+        payload: dict[str, Any] = handler(self)
+        if not self.masking_catch:
+            payload.pop("masking_catch", None)
+        return payload
 
     @field_validator("condition_id")
     @classmethod
@@ -867,11 +883,13 @@ class ProjectFile(FPVSBaseModel):
                for item in self.conditions) and self.schema_version not in {
                    ProjectSchemaVersion.V1_5, ProjectSchemaVersion.V1_6, ProjectSchemaVersion.V1_7,
                    ProjectSchemaVersion.V1_8,
+                   ProjectSchemaVersion.V1_9,
                }:
             raise ValueError("Letter-stream projects require project schema 1.5.0.")
         if (self.condition_modifiers or any(task.image_memory for task in self.task_modules)) and (
             self.schema_version not in {
                 ProjectSchemaVersion.V1_6, ProjectSchemaVersion.V1_7, ProjectSchemaVersion.V1_8,
+                ProjectSchemaVersion.V1_9,
             }
         ):
             raise ValueError("Condition modifiers and image memory require project schema 1.6.0.")
@@ -889,12 +907,20 @@ class ProjectFile(FPVSBaseModel):
 
         if (any(modifier.masking is not None for modifier in self.condition_modifiers)
                 or any(task_requires_scene_schema(task) for task in self.task_modules)):
-            if self.schema_version not in {ProjectSchemaVersion.V1_7, ProjectSchemaVersion.V1_8}:
+            if self.schema_version not in {
+                ProjectSchemaVersion.V1_7, ProjectSchemaVersion.V1_8, ProjectSchemaVersion.V1_9,
+            }:
                 raise ValueError("Masking and native task scenes require project schema 1.7.0.")
         if any(modifier.masking is not None and modifier.masking.catch_trial is not None
                for modifier in self.condition_modifiers):
-            if self.schema_version != ProjectSchemaVersion.V1_8:
+            if self.schema_version not in {ProjectSchemaVersion.V1_8, ProjectSchemaVersion.V1_9}:
                 raise ValueError("Masking catch trials require project schema 1.8.0.")
+        if any(condition.masking_catch for condition in self.conditions):
+            if self.schema_version != ProjectSchemaVersion.V1_9:
+                raise ValueError("Explicit masking catch conditions require project schema 1.9.0.")
+        if any(task_requires_text_alignment_schema(task) for task in self.task_modules):
+            if self.schema_version != ProjectSchemaVersion.V1_9:
+                raise ValueError("Task text alignment requires project schema 1.9.0.")
         return self
 
 

@@ -55,6 +55,7 @@ class ResolvedTaskItem:
 
     item_id: str
     text: str | None = None
+    text_alignment: Literal["left", "center", "right"] = "center"
     image_path: str | None = None
     position_px: tuple[float, float] = (0.0, 0.0)
     size_px: tuple[float, float] | None = None

@@ -22,6 +22,7 @@ from fpvs_studio.core.condition_template_profiles import (
 from fpvs_studio.core.enums import (
     DutyCycleMode,
     ExperimentCategory,
+    ProjectSchemaVersion,
     StimulusModality,
     StimulusTransform,
     StimulusVariant,
@@ -29,6 +30,9 @@ from fpvs_studio.core.enums import (
 from fpvs_studio.core.experiment_categories import (
     RETIRED_IMAGE_PAIR_MESSAGE,
     has_retired_image_pair_design,
+)
+from fpvs_studio.core.masking import (
+    add_masking_catch_condition as core_add_masking_catch_condition,
 )
 from fpvs_studio.core.masking import condition_masking
 from fpvs_studio.core.models import (
@@ -47,7 +51,11 @@ from fpvs_studio.core.paths import (
     to_project_relative_posix,
 )
 from fpvs_studio.core.task_assets import copy_task_asset
-from fpvs_studio.core.task_models import TaskBinding, TaskModule
+from fpvs_studio.core.task_models import (
+    TaskBinding,
+    TaskModule,
+    task_requires_text_alignment_schema,
+)
 from fpvs_studio.core.validation import validate_attentional_blink_condition
 from fpvs_studio.gui.document_support import (
     ConditionStimulusRow,
@@ -240,6 +248,14 @@ class DocumentConditionMixin:
             self._project,
             conditions=self._reindex_conditions(conditions),
             stimulus_sets=[*self._project.stimulus_sets, *new_sets],
+        )
+        self._replace_project(project)
+        return condition_id
+
+    def add_masking_catch_condition(self, source_condition_id: str) -> str:
+        """Add one explicit catch using core-owned variant and scheduling rules."""
+        project, condition_id = core_add_masking_catch_condition(
+            self._project, source_condition_id,
         )
         self._replace_project(project)
         return condition_id
@@ -798,6 +814,11 @@ class DocumentConditionMixin:
             self._project,
             conditions=self._reindex_conditions(updated_conditions),
             task_modules=updated_modules,
+            schema_version=(
+                ProjectSchemaVersion.V1_9
+                if any(task_requires_text_alignment_schema(module) for module in updated_modules)
+                else self._project.schema_version
+            ),
         )
 
         created_paths: list[Path] = []

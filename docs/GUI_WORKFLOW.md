@@ -396,6 +396,15 @@ The authoring window is organized around two user-facing modes:
     instructions, task bindings and appearance settings. Mixed legacy projects expose
     an explicit separation action here and cannot advance until category conflicts
     are resolved
+  - Masking exposes **Add Catch Condition** in Conditions for a selected ordinary
+    variant. It adds a real condition with its own name, ID and Trigger Code, sharing
+    the native modifier sources and questions. The list identifies catch markers and
+    random SOAs; a Catch schedule summary explains once-per-variant placement and
+    standalone sampling from the project's ordinary same-variant conditions. Existing
+    automatic catches or an existing explicit catch disable creation with a visible
+    explanation. Other modifiers are never changed silently. The modifier's older
+    Catch trials tab remains available for automatic-catch projects and directs new
+    visible-condition authoring back here; see [Masking](MASKING.md)
   - each selected condition exposes a compact `Project defaults` / `Custom settings`
     action for inherited condition and role settings; AB shares its target appearance
     overrides between T1 and T2. The draft-based dialog supports
@@ -424,11 +433,19 @@ The authoring window is organized around two user-facing modes:
     remains the default for existing and newly added steps, while the bundled Open Sans
     face is used by both the authoring preview and runtime task screen when selected;
     the choice applies to all text belonging to that step
-  - study and choice displays default to responsive grids and can opt into exact
+  - instruction, study and choice displays expose editable item tables and can opt into exact
     center-origin PsychoPy geometry; exact items support degrees of visual angle or
-    fractions of window height, per-item position and size, selectable/scored targets,
+    fractions of window height and per-item position and size. Study/choice displays
+    default to responsive grids. Choice behavior retains selectable/scored targets,
     one-valid-choice completion, duplicate choices across repeats, explicit submission,
     retries, and randomized display order
+  - text items offer Left, Center and Right alignment within their authored width;
+    X/Y remain the center anchor. The editor preview and runtime both honor alignment,
+    and instruction items can form separate heading/body/footer text without changing
+    response behavior. Alignment defaults to Center and is not serialized when unchanged.
+    Only text items can use non-centered alignment. The Masking 1.3.0 project uses
+    left-aligned instruction sections and a distinct Space prompt; built-in factory
+    instructions and unrelated saved projects are not rewritten
   - questionnaires support ordered single choice, multiple choice, short text, long
     text, numeric, and rating items, including required/optional responses, selection
     and numeric bounds, option randomization, stable IDs, scores/correctness, and bounded

@@ -44,7 +44,19 @@ removing or replacing a modifier.
 
 Masking variants add native visual source pools, exact target-to-mask SOA and
 source-style before/after screens. Their stream windows compile into RunSpec,
-independently of task clocks. See [Masking](MASKING.md) for authoring, variant grouping,
+independently of task clocks. **Setup > Conditions > Add Catch Condition** creates a
+visible, once-per-variant condition sharing the selected ordinary condition's modifier
+and tasks. Its ID, name and EEG marker belong to that condition. The modifier's
+**Catch trials** tab preserves Studio 2.0.0 automatic extra sequences; those settings
+do not create condition rows. Explicit and automatic catches cannot coexist within
+a variant. The action explains when existing automatic settings must first be disabled,
+without editing shared modifiers automatically.
+
+Instruction steps expose positioned display items in the existing task editor. Text
+items support left/center/right alignment within their width while retaining a center
+X/Y anchor, independent item sizes/colors and a shared step font. The delivered
+Masking 1.3.0 instruction redesign uses this contract; it does not rewrite built-in
+factory instructions or other projects. See [Masking](MASKING.md) for authoring, variant grouping,
 version requirements, migration corrections and physical acceptance limits.
 
 ## Backward counting
@@ -135,7 +147,11 @@ this implementation.
 Projects using modifiers require project schema **1.6.0**; configs require **1.4.0**.
 Older projects retain their schema and omit empty modifier grouping on serialization.
 New schema versions are rejected by old strict readers instead of dropping behavior.
-The portable bundle envelope and single-condition `RunSpec` format are unchanged.
+The portable bundle envelope is unchanged. Masking streams and catch conditions have
+their own schema requirements described in [Masking](MASKING.md). Non-centered task
+text requires project/config **1.9.0/1.7.0**, SessionPlan **1.5.0**, and modifier preset
+**1.2.0**. Default-centered alignment is omitted, so existing centered task payloads
+retain their previous formats and presentation.
 
 ## Verification and visible acceptance
 
@@ -148,6 +164,9 @@ At the modifier dialog's 1100x720 minimum and 1120x760 default, check both theme
 long names, library empty/populated states, scope selection, validation, baseline
 enabled/disabled, memory incomplete/complete, and local save/update. Check the entry
 and summary in Setup at 1120x820. Required controls must fit without clipping.
+Include visible catch creation, saved condition/marker identity, automatic-catch
+blocking, and Instruction item alignment and preview. Registered coverage does not
+establish visible acceptance unless it is actually run in an approved environment.
 
 In a disposable experiment, preserve a 30-second baseline through open/cancel and
 open/apply/save/reopen; verify explicit typed-counting adoption. Stage images then

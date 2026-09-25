@@ -291,6 +291,7 @@ class TaskDisplayItem(TaskBaseModel):
     item_id: str
     modality: TaskItemModality
     text: str | None = None
+    text_alignment: Literal["left", "center", "right"] = "center"
     image_path: str | None = None
     x: float = 0.0
     y: float = 0.0
@@ -311,6 +312,7 @@ class TaskDisplayItem(TaskBaseModel):
         for name, default in (
             ("color_rgb", None), ("line_color_rgb", None),
             ("line_width_px", 1.0), ("circle_edges", None),
+            ("text_alignment", "center"),
         ):
             if getattr(self, name) == default:
                 payload.pop(name, None)
@@ -357,6 +359,8 @@ class TaskDisplayItem(TaskBaseModel):
 
     @model_validator(mode="after")
     def validate_payload(self) -> TaskDisplayItem:
+        if self.modality != TaskItemModality.TEXT and self.text_alignment != "center":
+            raise ValueError("Only text task items may define text alignment.")
         if self.modality == TaskItemModality.IMAGE:
             if self.image_path is None or self.text is not None:
                 raise ValueError("Image task items require image_path and may not store text.")
@@ -1005,6 +1009,11 @@ def task_requires_scene_schema(task: TaskModule) -> bool:
         )
         for step in task.steps
     )
+
+
+def task_requires_text_alignment_schema(task: TaskModule | TaskModuleSpec) -> bool:
+    """Identify nondefault text alignment that older strict readers cannot preserve."""
+    return any(item.text_alignment != "center" for step in task.steps for item in step.items)
 
 
 class TaskBinding(TaskBaseModel):

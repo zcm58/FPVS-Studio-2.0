@@ -549,7 +549,7 @@ class ConditionModifierDialog(QDialog):
         page = QWidget(self.tabs)
         layout = QVBoxLayout(page)
         self.masking_catch_checkbox = QCheckBox(
-            "Add one catch trial per variant block", page,
+            "Add one automatic catch trial per variant block", page,
         )
         self.masking_catch_checkbox.setObjectName("modifier_masking_catch_enabled")
         layout.addWidget(self.masking_catch_checkbox)
@@ -561,6 +561,9 @@ class ConditionModifierDialog(QDialog):
         form.addRow("Catch EEG code", self.masking_catch_trigger_spin)
         layout.addLayout(form)
         self.masking_catch_help = _label(
+            "For a visible catch condition, use Setup → Conditions → Add Catch Condition. "
+            "These controls manage automatic extra sequences for existing projects; a visible "
+            "catch condition is independent of this checkbox.\n\n"
             "Adds one full-length target-absent sequence at a random position in each variant "
             "block, using a randomly selected SOA from that block. Masks and base stimuli remain."
             "\n\nAll SOAs in the same variant must use matching catch settings and code. "

@@ -135,8 +135,11 @@ Masking modifiers own native image/text/shape source pools and independent withi
 target/mask windows. Core compiles them to `RunSpec.scene_stream`; engines prepare
 native draw calls, while pre/post screens remain `SessionEntry` tasks. Variant groups
 use authored task flow. Variant groups and their SOA passes are independently shuffled;
-optional catch settings add one randomly placed, target-absent run per complete variant
-block. The modifier dialog exposes those settings in its Catch trials tab. Runtime joins
+explicit catch conditions or legacy automatic settings add one randomly placed,
+target-absent run per complete variant block. Setup Conditions authors real catch
+conditions; the modifier tab retains legacy
+automatic catches. Instruction text items support explicit alignment through the shared
+task contract, editor and renderer. Runtime joins
 target/answer/PAS evidence and separate detection outcomes into a versioned trial table.
 See [Masking](docs/MASKING.md)
 for schemas, launch seeding and exactness limits.

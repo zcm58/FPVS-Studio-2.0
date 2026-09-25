@@ -147,9 +147,14 @@ check persistence, and disable it again to restore ordinary launch checks.
 For Masking, start with `core/masking.py`, `core/masking_presets.py`,
 `core/compiler_masking.py`, `core/scene_models.py`, and [Masking](../MASKING.md).
 Masking block order and extra catch placement/SOA sampling live in `core/compiler.py`;
-catch agreement/code validation in `core/masking.py`; GUI retry seeding in `gui/document.py`.
-The Masking-only Catch trials tab is in `gui/condition_modifier_dialog.py`, with registered
-coverage in `tests/gui/test_masking_modifier_dialog.py`. The joined target/answer/PAS v2
+catch creation, agreement/code validation and source-pool selection in `core/masking.py`;
+GUI retry seeding in `gui/document.py`. Visible catch conditions are authored through
+`gui/condition_setup_step.py` and `gui/document_conditions.py`, with registered coverage
+in `tests/gui/test_masking_conditions.py`. The legacy automatic Catch trials tab remains
+in `gui/condition_modifier_dialog.py`. Instruction text alignment flows from
+`core/task_models.py` through `runtime/task_runner.py` to `engines/psychopy_tasks.py`;
+its item table and preview live in `gui/condition_task_dialog.py`.
+The joined target/answer/PAS v2
 trial table and detection outcomes live in `runtime/masking_report.py` and `session_export.py`.
 Native sources are modifier-owned; pre/post tasks remain outside stream timing.
 Catch schema guards span project/config, RunSpec and SessionPlan; read the Masking

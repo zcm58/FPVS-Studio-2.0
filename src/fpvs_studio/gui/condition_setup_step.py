@@ -38,7 +38,7 @@ from fpvs_studio.core.enums import (
     StimulusVariant,
 )
 from fpvs_studio.core.experiment_categories import category_conflict_condition_ids
-from fpvs_studio.core.masking import condition_masking
+from fpvs_studio.core.masking import condition_masking, masking_catch_condition_block_reason
 from fpvs_studio.core.models import (
     AttentionalBlinkStreamSettings,
     Condition,
@@ -363,6 +363,10 @@ class ConditionSetupStep(QWidget):
         )
         self.create_control_condition_button.clicked.connect(self._create_control_condition)
         mark_secondary_action(self.create_control_condition_button)
+        self.add_catch_condition_button = QPushButton("Add Catch Condition", self)
+        self.add_catch_condition_button.setObjectName("setup_wizard_add_catch_condition_button")
+        self.add_catch_condition_button.clicked.connect(self._add_catch_condition)
+        mark_secondary_action(self.add_catch_condition_button)
         self.remove_condition_button = QPushButton("Remove", self)
         self.remove_condition_button.setObjectName("setup_wizard_remove_condition_button")
         self.remove_condition_button.clicked.connect(self._remove_condition)
@@ -388,6 +392,7 @@ class ConditionSetupStep(QWidget):
         action_grid.addWidget(self.add_condition_button, 0, 0)
         action_grid.addWidget(self.duplicate_condition_button, 0, 1)
         action_grid.addWidget(self.create_control_condition_button, 1, 0)
+        action_grid.addWidget(self.add_catch_condition_button, 1, 0)
         action_grid.addWidget(self.remove_condition_button, 1, 1)
         self.separate_conditions_button = QPushButton("Separate oddball conditions...", self)
         self.separate_conditions_button.setObjectName("setup_separate_conditions_button")
@@ -561,6 +566,12 @@ class ConditionSetupStep(QWidget):
         self.appearance_label = QLabel("Appearance", self)
         form.addRow(self.appearance_label, presentation_row)
         form.addRow("Modifiers", task_row)
+        self.catch_schedule_title = QLabel("Catch schedule", self)
+        self.catch_schedule_summary = QLabel(self)
+        self.catch_schedule_summary.setObjectName("setup_conditions_catch_schedule_summary")
+        self.catch_schedule_summary.setWordWrap(True)
+        self.catch_schedule_summary.setMinimumWidth(0)
+        form.addRow(self.catch_schedule_title, self.catch_schedule_summary)
         self.presentation_mode_label = QLabel("Presentation mode", self)
         self.presentation_mode_label.setBuddy(self.timing_template_combo)
         form.addRow(self.presentation_mode_label, mode_row)
@@ -784,17 +795,20 @@ class ConditionSetupStep(QWidget):
                 settings = condition.attentional_blink
                 masking = condition_masking(self._document.project, condition)
                 timing_label = (
+                    f"Catch · EEG {condition.trigger_code} · random SOA"
+                    if condition.masking_catch else
                     f"Masking · {masking.soa_ms:g} ms SOA" if masking is not None else
                     f"{self._document.project.settings.protocol.base_hz:g} Hz character stream"
                     if isinstance(settings, AttentionalBlinkStreamSettings)
                     else _timing_template_label(condition.duty_cycle_mode)
                 )
-                item = QListWidgetItem(
-                    f"{condition.name}\n" +
+                detail_text = (
+                    timing_label if condition.masking_catch else
                     ("" if isinstance(settings, AttentionalBlinkStreamSettings)
                      else f"{timing_label} - ") +
                     f"{self._condition_status_text(condition)}"
                 )
+                item = QListWidgetItem(f"{condition.name}\n{detail_text}")
                 item.setToolTip(
                     f"{condition.name}\n{timing_label}\n"
                     f"{self._condition_status_text(condition)}"
@@ -944,6 +958,19 @@ class ConditionSetupStep(QWidget):
         self.appearance_label.setVisible(not stream and masking is None)
         self.trigger_label.setText("T1 Trigger Code" if stream else "Trigger Code")
         self.create_control_condition_button.setVisible(not stream and masking is None)
+        self.add_catch_condition_button.setVisible(masking is not None)
+        self.catch_schedule_title.setVisible(masking is not None)
+        self.catch_schedule_summary.setVisible(masking is not None)
+        catch_block_reason = (
+            masking_catch_condition_block_reason(self._document.project, condition.condition_id)
+            if masking is not None and condition is not None else "Select a Masking condition."
+        )
+        self.add_catch_condition_button.setEnabled(
+            catch_block_reason is None and self._active_task is None
+        )
+        self.add_catch_condition_button.setToolTip(
+            catch_block_reason or "Add one target-absent condition to this variant block."
+        )
         self.sources_row.hide()
         self.modality_label.setVisible(not ab and masking is None)
         self.modality_combo.setVisible(not ab and masking is None)
@@ -977,6 +1004,12 @@ class ConditionSetupStep(QWidget):
         self.create_control_condition_button.setEnabled(
             enabled and self._condition_has_control_sources(condition)
         )
+        if condition is not None and condition.masking_catch:
+            self.duplicate_condition_button.setEnabled(False)
+            self.duplicate_condition_button.setToolTip(
+                "Each variant has one catch condition. Select an ordinary Masking condition "
+                "to add a catch for another variant."
+            )
         self.create_control_condition_button.setToolTip(
             ""
             if self.create_control_condition_button.isEnabled()
@@ -1034,7 +1067,20 @@ class ConditionSetupStep(QWidget):
             self.task_summary_label.setText(
                 condition_modifier_summary(self._document, condition.condition_id)
             )
+            if masking is not None:
+                self.catch_schedule_summary.setText(
+                    f"No target is shown. Runs once per {masking.variant.title()} block at a "
+                    "random position, using an SOA sampled from the selected ordinary conditions "
+                    "of that variant. When launched alone, it samples from all ordinary "
+                    "conditions of that variant in this project."
+                    if condition.masking_catch else catch_block_reason or
+                    "Add a catch condition for one extra target-absent sequence in this variant "
+                    "block. Its position and SOA are randomized."
+                )
             self.condition_list_hint.setText(
+                f"{masking.variant.title()} catch · once per variant block. "
+                "Its EEG marker is the condition's Trigger Code."
+                if masking is not None and condition.masking_catch else
                 f"{masking.variant.title()} masking · {masking.soa_ms:g} ms SOA. "
                 "Edit sources, colors and participant questions in Condition Modifiers."
                 if masking is not None else
@@ -1252,6 +1298,18 @@ class ConditionSetupStep(QWidget):
             _show_error_dialog(self, "Condition Error", error)
             return
         self._select_condition(duplicated_id)
+
+    def _add_catch_condition(self) -> None:
+        self.flush_pending_edits()
+        source_id = self.selected_condition_id()
+        if source_id is None:
+            return
+        try:
+            condition_id = self._document.add_masking_catch_condition(source_id)
+        except Exception as error:
+            _show_error_dialog(self, "Catch Condition Error", error)
+            return
+        self._select_condition(condition_id)
 
     def _create_control_condition(self) -> None:
         self.flush_pending_edits()

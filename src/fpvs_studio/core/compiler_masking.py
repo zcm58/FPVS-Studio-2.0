@@ -78,7 +78,7 @@ def compile_masking_run(
         )
     except ValueError as exc:
         raise CompileError(str(exc)) from exc
-    if is_catch_trial and settings.catch_trial is None:
+    if is_catch_trial and settings.catch_trial is None and not condition.masking_catch:
         raise CompileError("A catch run requires enabled masking catch trial settings.")
     visuals = masking_visuals(settings)
     for visual in visuals:
@@ -150,10 +150,10 @@ def compile_masking_run(
         soa_frames=soa,
     )
     display = project.settings.display
-    trigger_code = (
-        settings.catch_trial.trigger_code
-        if is_catch_trial and settings.catch_trial is not None else condition.trigger_code
-    )
+    trigger_code = condition.trigger_code
+    if is_catch_trial and not condition.masking_catch:
+        assert settings.catch_trial is not None
+        trigger_code = settings.catch_trial.trigger_code
     return RunSpec(
         schema_version="1.5.0" if is_catch_trial else "1.4.0",
         run_id=run_id or make_run_id(condition.condition_id),

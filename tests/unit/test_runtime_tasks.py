@@ -31,6 +31,7 @@ from fpvs_studio.core.task_models import (
     TaskStepKind,
     TaskStepSpec,
     task_requires_scene_schema,
+    task_requires_text_alignment_schema,
 )
 from fpvs_studio.engines import psychopy_tasks
 from fpvs_studio.engines.base import ResolvedTaskItem, ResolvedTaskStep, TaskEngineInput
@@ -118,7 +119,8 @@ def test_legacy_task_serialization_omits_unused_native_visual_fields() -> None:
     assert "prompt_width" not in serialized
     assert "randomize_positions" not in serialized
     assert "degree_geometry" not in serialized
-    assert not {"color_rgb", "line_color_rgb", "line_width_px", "circle_edges"}.intersection(
+    assert not {"color_rgb", "line_color_rgb", "line_width_px", "circle_edges",
+                "text_alignment"}.intersection(
         serialized["items"][0]
     )
     module = TaskModule(task_id="study", name="Study", steps=[step])
@@ -126,6 +128,65 @@ def test_legacy_task_serialization_omits_unused_native_visual_fields() -> None:
     module.steps[0].items[0].color_rgb = (1, -1, -1)
     assert task_requires_scene_schema(module)
     assert module.model_dump()["steps"][0]["items"][0]["color_rgb"] == (1, -1, -1)
+
+
+@pytest.mark.parametrize("alignment", ["left", "center", "right"])
+def test_instruction_text_alignment_survives_resolution_without_moving_anchor(
+    alignment, sample_project, sample_project_root,
+) -> None:
+    run = _compiled_run(sample_project, sample_project_root)
+    item = TaskDisplayItem(
+        item_id="instructions", modality="text", text="Identify the target.\nKeep looking at +.",
+        text_alignment=alignment, x=0.12, y=0.2, width=0.8, height=0.03,
+        unit=PresentationUnit.WINDOW_HEIGHT_FRACTION,
+    )
+    assert TaskDisplayItem.model_validate_json(item.model_dump_json()) == item
+    assert ("text_alignment" in item.model_dump()) == (alignment != "center")
+    step = TaskStepSpec(
+        step_id="instructions", kind=TaskStepKind.INSTRUCTION, random_seed=1,
+        layout_mode=TaskLayoutMode.EXACT, continue_key="space", items=[item],
+    )
+    module = _module(step)
+    assert task_requires_text_alignment_schema(module) == (alignment != "center")
+    engine = _TaskEngine([TaskEngineInput(key="space")])
+    run_task_modules(
+        engine, [module], project_root=sample_project_root, run_spec=run,
+        block_index=0, global_order_index=0,
+    )
+    resolved, = engine.rendered_steps[0].items
+    height = run.display.screen_height_px
+    assert resolved.text_alignment == alignment
+    assert resolved.position_px == pytest.approx((0.12 * height, 0.2 * height))
+    assert resolved.size_px == pytest.approx((0.8 * height, 0.03 * height))
+    calls = []
+
+    class _Visual:
+        @staticmethod
+        def TextStim(*args, **kwargs):
+            calls.append(kwargs)
+            return object()
+
+    _prepare_item_stimuli(
+        visual=_Visual, window=object(), project_root=sample_project_root, items=(resolved,),
+    )
+    call, = calls
+    assert call["pos"] == resolved.position_px
+    assert call["wrapWidth"] == pytest.approx(0.8 * height)
+    assert call["height"] == pytest.approx(0.03 * height)
+    assert call["text"] == item.text
+    if alignment == "center":
+        assert "alignText" not in call and "anchorHoriz" not in call
+    else:
+        assert call["alignText"] == alignment
+        assert call["anchorHoriz"] == "center"
+
+
+def test_task_text_alignment_rejects_unknown_values_and_nontext_items() -> None:
+    with pytest.raises(ValidationError, match="text_alignment"):
+        TaskDisplayItem(item_id="label", modality="text", text="Text", text_alignment="justify")
+    with pytest.raises(ValidationError, match="Only text"):
+        TaskDisplayItem(item_id="circle", modality="circle", width=5, height=5,
+                        text_alignment="left")
 
 
 def test_task_position_randomization_requires_explicit_exact_choice_grid() -> None:

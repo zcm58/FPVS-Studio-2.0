@@ -560,6 +560,7 @@ def _resolved_display_item(
     return ResolvedTaskItem(
         item_id=item.item_id,
         text=item.text,
+        text_alignment=item.text_alignment,
         image_path=item.image_path,
         position_px=(x_px, y_px),
         size_px=size_px,

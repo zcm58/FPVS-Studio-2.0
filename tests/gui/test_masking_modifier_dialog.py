@@ -56,6 +56,8 @@ def test_masking_tabs_fit_and_edits_preserve_native_sources(
     assert dialog.screens_button.isVisible()
     assert not dialog.instructions_button.isVisible()
     assert not dialog.masking_catch_checkbox.isChecked()
+    assert "automatic" in dialog.masking_catch_checkbox.text()
+    assert "Setup → Conditions → Add Catch Condition" in dialog.masking_catch_help.text()
     assert not dialog.masking_catch_trigger_spin.isEnabled()
     assert dialog.masking_catch_trigger_spin.value() == {
         "color": 10, "faces": 11, "number": 12,

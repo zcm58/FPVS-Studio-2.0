@@ -15,9 +15,17 @@ import json
 import re
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import Field, StrictInt, ValidationError, field_validator, model_validator
+from pydantic import (
+    Field,
+    SerializerFunctionWrapHandler,
+    StrictInt,
+    ValidationError,
+    field_validator,
+    model_serializer,
+    model_validator,
+)
 
 from fpvs_studio import __version__
 from fpvs_studio.core.condition_modifiers import ConditionModifier
@@ -72,7 +80,10 @@ from fpvs_studio.core.project_service import ProjectScaffold
 from fpvs_studio.core.serialization import read_json_file, save_project_file
 from fpvs_studio.core.session_plan import SessionPlan
 from fpvs_studio.core.task_assets import owned_image_references
-from fpvs_studio.core.task_models import task_requires_scene_schema
+from fpvs_studio.core.task_models import (
+    task_requires_scene_schema,
+    task_requires_text_alignment_schema,
+)
 from fpvs_studio.core.trigger_codes import validate_oddball_trigger_code_policy
 from fpvs_studio.preprocessing.manifest import create_empty_manifest, write_stimulus_manifest
 from fpvs_studio.preprocessing.models import StimulusManifest, StimulusSetManifest
@@ -82,6 +93,7 @@ LETTER_STREAM_CONFIG_SCHEMA_VERSION = "1.3.0"
 MODIFIER_CONFIG_SCHEMA_VERSION: Literal["1.4.0"] = "1.4.0"
 SCENE_CONFIG_SCHEMA_VERSION: Literal["1.5.0"] = "1.5.0"
 CATCH_CONFIG_SCHEMA_VERSION: Literal["1.6.0"] = "1.6.0"
+CONDITION_CATCH_CONFIG_SCHEMA_VERSION: Literal["1.7.0"] = "1.7.0"
 PROJECT_CONFIG_SUFFIX = ".fpvsconfig"
 _CONFIG_FILENAME_RE = re.compile(r"[^a-z0-9]+")
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
@@ -147,6 +159,16 @@ class ProjectConfigCondition(FPVSBaseModel):
     )
     pre_task_bindings: list[TaskBinding] = Field(default_factory=list)
     post_task_bindings: list[TaskBinding] = Field(default_factory=list)
+    masking_catch: bool = False
+
+    @model_serializer(mode="wrap")
+    def serialize_optional_masking_catch(
+        self, handler: SerializerFunctionWrapHandler,
+    ) -> dict[str, Any]:
+        payload: dict[str, Any] = handler(self)
+        if not self.masking_catch:
+            payload.pop("masking_catch", None)
+        return payload
 
     @field_validator("condition_id", "base_stimulus_set_id", "oddball_stimulus_set_id")
     @classmethod
@@ -351,7 +373,7 @@ class ProjectConfigTaskAsset(FPVSBaseModel):
 class ProjectConfigFile(FPVSBaseModel):
     """Top-level Studio `.fpvsconfig` interchange file."""
 
-    schema_version: Literal["1.2.0", "1.3.0", "1.4.0", "1.5.0", "1.6.0"] = "1.2.0"
+    schema_version: Literal["1.2.0", "1.3.0", "1.4.0", "1.5.0", "1.6.0", "1.7.0"] = "1.2.0"
     experiment_category: ExperimentCategory = Field(
         default=ExperimentCategory.FPVS_ODDBALL, frozen=True
     )
@@ -380,25 +402,36 @@ class ProjectConfigFile(FPVSBaseModel):
     def validate_task_asset_inventory(self) -> ProjectConfigFile:
         if any(isinstance(item.attentional_blink, AttentionalBlinkStreamSettings)
                for item in self.conditions) and self.schema_version not in {
-                   "1.3.0", "1.4.0", "1.5.0", "1.6.0",
+                   "1.3.0", "1.4.0", "1.5.0", "1.6.0", "1.7.0",
                }:
             raise ValueError("Letter-stream configs require schema 1.3.0 or newer.")
         if (self.condition_modifiers or any(task.image_memory for task in self.task_modules)):
             if self.schema_version not in {
                 MODIFIER_CONFIG_SCHEMA_VERSION, SCENE_CONFIG_SCHEMA_VERSION,
                 CATCH_CONFIG_SCHEMA_VERSION,
+                CONDITION_CATCH_CONFIG_SCHEMA_VERSION,
             }:
                 raise ValueError("Condition modifiers require config schema 1.4.0 or newer.")
         if (any(modifier.masking is not None for modifier in self.condition_modifiers)
                 or any(task_requires_scene_schema(task) for task in self.task_modules)):
             if self.schema_version not in {
                 SCENE_CONFIG_SCHEMA_VERSION, CATCH_CONFIG_SCHEMA_VERSION,
+                CONDITION_CATCH_CONFIG_SCHEMA_VERSION,
             }:
                 raise ValueError("Native scene workflows require config schema 1.5.0.")
         if any(modifier.masking is not None and modifier.masking.catch_trial is not None
                for modifier in self.condition_modifiers):
-            if self.schema_version != CATCH_CONFIG_SCHEMA_VERSION:
+            if self.schema_version not in {
+                CATCH_CONFIG_SCHEMA_VERSION, CONDITION_CATCH_CONFIG_SCHEMA_VERSION,
+            }:
                 raise ValueError("Masking catch trials require config schema 1.6.0.")
+        if any(condition.masking_catch for condition in self.conditions) or any(
+            task_requires_text_alignment_schema(task) for task in self.task_modules
+        ):
+            if self.schema_version != CONDITION_CATCH_CONFIG_SCHEMA_VERSION:
+                raise ValueError(
+                    "Catch conditions and task text alignment require config schema 1.7.0."
+                )
         referenced = set(owned_image_references(self.task_modules, self.condition_modifiers))
         embedded = [(asset.task_id, asset.relative_path) for asset in self.task_assets]
         if len(embedded) != len(set(embedded)):
@@ -437,7 +470,10 @@ def export_project_config(
     )
     return ProjectConfigFile(
         schema_version=(
-            CATCH_CONFIG_SCHEMA_VERSION if any(
+            CONDITION_CATCH_CONFIG_SCHEMA_VERSION if any(
+                condition.masking_catch for condition in project.conditions
+            ) or any(task_requires_text_alignment_schema(task) for task in project.task_modules)
+            else CATCH_CONFIG_SCHEMA_VERSION if any(
                 modifier.masking is not None and modifier.masking.catch_trial is not None
                 for modifier in project.condition_modifiers
             ) else SCENE_CONFIG_SCHEMA_VERSION if (
@@ -461,6 +497,7 @@ def export_project_config(
         conditions=[
             ProjectConfigCondition(
                 condition_id=condition.condition_id,
+                masking_catch=condition.masking_catch,
                 name=condition.name,
                 trigger_code=condition.trigger_code,
                 base_stimulus_set_id=condition.base_stimulus_set_id,
@@ -574,10 +611,11 @@ def read_project_config(path: Path) -> ProjectConfigFile:
     if raw_version not in {
         CONFIG_SCHEMA_VERSION, LETTER_STREAM_CONFIG_SCHEMA_VERSION, MODIFIER_CONFIG_SCHEMA_VERSION,
         SCENE_CONFIG_SCHEMA_VERSION, CATCH_CONFIG_SCHEMA_VERSION,
+        CONDITION_CATCH_CONFIG_SCHEMA_VERSION,
     }:
         raise ProjectConfigError(
             "Unsupported project config schema version: "
-            f"{raw_version!r}. Expected a supported version from 1.2.0 through 1.6.0."
+            f"{raw_version!r}. Expected a supported version from 1.2.0 through 1.7.0."
         )
     try:
         return ProjectConfigFile.model_validate(raw_payload)
@@ -622,7 +660,9 @@ def create_project_from_config(parent_dir: Path, config: ProjectConfigFile) -> P
 
     project = ProjectFile(
         schema_version=(
-            ProjectSchemaVersion.V1_8 if config.schema_version == CATCH_CONFIG_SCHEMA_VERSION
+            ProjectSchemaVersion.V1_9
+            if config.schema_version == CONDITION_CATCH_CONFIG_SCHEMA_VERSION
+            else ProjectSchemaVersion.V1_8 if config.schema_version == CATCH_CONFIG_SCHEMA_VERSION
             else ProjectSchemaVersion.V1_7 if config.schema_version == SCENE_CONFIG_SCHEMA_VERSION
             else ProjectSchemaVersion.V1_6
             if config.schema_version == MODIFIER_CONFIG_SCHEMA_VERSION
@@ -650,6 +690,7 @@ def create_project_from_config(parent_dir: Path, config: ProjectConfigFile) -> P
         conditions=[
             Condition(
                 condition_id=condition.condition_id,
+                masking_catch=condition.masking_catch,
                 name=condition.name,
                 instructions=condition.instructions,
                 base_stimulus_set_id=condition.base_stimulus_set_id,

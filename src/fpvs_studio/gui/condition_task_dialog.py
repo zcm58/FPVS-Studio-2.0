@@ -14,7 +14,7 @@ import re
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from pathlib import Path, PurePosixPath
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Literal, cast
 
 from PySide6.QtCore import QRectF, QSignalBlocker, QSize, Qt, Signal
 from PySide6.QtGui import (
@@ -178,6 +178,7 @@ class TaskOptionDraft:
     line_color_rgb: tuple[float, float, float] | None = None
     line_width_px: float = 1.0
     circle_edges: int | None = None
+    text_alignment: Literal["left", "center", "right"] = "center"
 
 
 @dataclass
@@ -493,7 +494,7 @@ class TaskParticipantPreview(QWidget):
             step.prompt,
         )
         content_rect = QRectF(16, 116, self.width() - 32, self.height() - 150)
-        if step.kind in {"study", "choice_grid"}:
+        if step.kind in {"study", "choice_grid"} or (step.kind == "instruction" and step.options):
             self._paint_options(painter, content_rect, step)
         elif step.kind == "questionnaire":
             self._paint_questions(painter, content_rect, step)
@@ -541,12 +542,36 @@ class TaskParticipantPreview(QWidget):
         for index, (option, rect) in enumerate(
             zip(step.options, self._option_rects(bounds, step), strict=True)
         ):
+            if (not option.image_path and not option.source_path and option.shape is None
+                    and (step.kind == "instruction" or option.text_alignment != "center")):
+                self._paint_text_item(painter, rect, option)
+                continue
             self._paint_option(
                 painter,
                 rect,
                 option,
                 self._scaled_option_pixmaps.get(index),
             )
+
+    @staticmethod
+    def _paint_text_item(painter: QPainter, rect: QRectF, option: TaskOptionDraft) -> None:
+        """Align wrapped lines inside a text rectangle whose anchor remains its center."""
+        painter.save()
+        font = painter.font()
+        font.setPixelSize(max(1, round(rect.height())))
+        painter.setFont(font)
+        color = option.color_rgb or (1.0, 1.0, 1.0)
+        painter.setPen(QColor.fromRgbF(*((value + 1.0) / 2.0 for value in color)))
+        alignment = {"left": Qt.AlignmentFlag.AlignLeft, "center": Qt.AlignmentFlag.AlignHCenter,
+                     "right": Qt.AlignmentFlag.AlignRight}[option.text_alignment]
+        flags = alignment | Qt.AlignmentFlag.AlignVCenter | Qt.TextFlag.TextWordWrap
+        text_bounds = painter.boundingRect(
+            QRectF(0, 0, rect.width(), 10000), flags, option.label,
+        )
+        draw_bounds = QRectF(rect.x(), rect.center().y() - text_bounds.height() / 2,
+                             rect.width(), text_bounds.height())
+        painter.drawText(draw_bounds, flags, option.label)
+        painter.restore()
 
     def _paint_option(
         self,
@@ -728,6 +753,7 @@ class TaskOptionTable(QTableWidget):
         "Width",
         "Height",
         "Units",
+        "Text alignment",
     )
 
     def __init__(self, project_root: Path, parent: QWidget | None = None) -> None:
@@ -745,6 +771,7 @@ class TaskOptionTable(QTableWidget):
         for column in range(3, 10):
             self.setColumnWidth(column, 74)
         self.setColumnWidth(10, 135)
+        self.setColumnWidth(11, 115)
         self._project_root = Path(project_root)
         self._syncing = False
         self.itemChanged.connect(self._emit_changed)
@@ -779,6 +806,7 @@ class TaskOptionTable(QTableWidget):
                     width_degrees=self._optional_float(row, 8),
                     height_degrees=self._optional_float(row, 9),
                     unit=self._unit(row),
+                    text_alignment=self._text_alignment(row),
                 )
             )
         return result
@@ -835,6 +863,10 @@ class TaskOptionTable(QTableWidget):
         item.setText(source.name)
         item.setToolTip(str(source))
         item.setData(Qt.ItemDataRole.UserRole, str(source))
+        alignment = self.cellWidget(row, 11)
+        if isinstance(alignment, QComboBox):
+            alignment.setCurrentIndex(alignment.findData("center"))
+            alignment.setEnabled(False)
         self.changed.emit()
 
     def remove_selected(self) -> None:
@@ -891,6 +923,8 @@ class TaskOptionTable(QTableWidget):
                 if option.source_path is not None:
                     item.setData(Qt.ItemDataRole.UserRole, str(option.source_path))
                 item.setData(Qt.ItemDataRole.UserRole + 1, option.image_path)
+            if column == 1:
+                item.setToolTip(option.label)
             if column == 0:
                 item.setData(Qt.ItemDataRole.UserRole, copy.deepcopy(option))
             self.setItem(row, column, item)
@@ -900,6 +934,22 @@ class TaskOptionTable(QTableWidget):
         unit_combo.setCurrentIndex(max(0, unit_combo.findData(option.unit)))
         unit_combo.currentIndexChanged.connect(self._emit_changed)
         self.setCellWidget(row, 10, unit_combo)
+        alignment_combo = QComboBox(self)
+        alignment_combo.setAccessibleName(f"Text alignment for {option.option_id}")
+        alignment_combo.setToolTip("Align text within its width; X and Y remain the center anchor.")
+        for value in ("left", "center", "right"):
+            alignment_combo.addItem(value.title(), value)
+        alignment_combo.setCurrentIndex(alignment_combo.findData(option.text_alignment))
+        alignment_combo.setEnabled(
+            option.image_path is None and option.source_path is None and option.shape is None,
+        )
+        alignment_combo.currentIndexChanged.connect(self._emit_changed)
+        self.setCellWidget(row, 11, alignment_combo)
+
+    def _text_alignment(self, row: int) -> Literal["left", "center", "right"]:
+        combo = self.cellWidget(row, 11)
+        assert isinstance(combo, QComboBox)
+        return cast(Literal["left", "center", "right"], combo.currentData())
 
     def _emit_changed(self, *_args: object) -> None:
         if not self._syncing:
@@ -1551,18 +1601,6 @@ class TaskStepEditor(QWidget):
         advance_form.addRow("Timeout", self.timeout_spin)
         advance_form.addRow(self.auto_advance_checkbox)
         advance_form.addRow("Auto-advance", self.auto_advance_spin)
-        instruction_page = QWidget(self)
-        instruction_layout = QVBoxLayout(instruction_page)
-        instruction_layout.setContentsMargins(0, 0, 0, 0)
-        instruction_note = QLabel(
-            "Show participant-facing content, then continue by key or optional auto-advance.",
-            instruction_page,
-        )
-        instruction_note.setWordWrap(True)
-        instruction_layout.addWidget(instruction_note)
-        instruction_layout.addStretch(1)
-        self._add_type_page("instruction", instruction_page)
-
         self.layout_mode_combo = QComboBox(self)
         self.layout_mode_combo.setObjectName("condition_task_layout_mode_combo")
         self.layout_mode_combo.addItem("Responsive grid", "responsive_grid")
@@ -1690,6 +1728,7 @@ class TaskStepEditor(QWidget):
         item_layout.addLayout(item_actions)
         self._add_type_page("study", item_page)
         self._type_pages["choice_grid"] = item_page
+        self._type_pages["instruction"] = item_page
 
         self.questionnaire_editor = QuestionnaireEditor(self)
         self._add_type_page("questionnaire", self.questionnaire_editor)
@@ -1859,7 +1898,8 @@ class TaskStepEditor(QWidget):
         self._refresh_layout_fields()
         self._refresh_prompt_geometry()
         self.editor_tabs.setCurrentIndex(
-            0 if step.kind in {"study", "choice_grid", "questionnaire"} else 1
+            0 if step.kind in {"study", "choice_grid", "questionnaire"}
+            or (step.kind == "instruction" and step.options) else 1
         )
 
     def step(self) -> TaskStepDraft | None:
@@ -2742,6 +2782,7 @@ def _step_to_draft(step: TaskStep) -> TaskStepDraft:
             line_color_rgb=item.line_color_rgb,
             line_width_px=item.line_width_px,
             circle_edges=item.circle_edges,
+            text_alignment=item.text_alignment,
         )
         for item in step.items
     ]
@@ -3049,6 +3090,7 @@ def _display_item_from_draft(option: TaskOptionDraft) -> TaskDisplayItem:
         line_color_rgb=option.line_color_rgb,
         line_width_px=option.line_width_px,
         circle_edges=option.circle_edges,
+        text_alignment=option.text_alignment,
         selectable=selectable,
         correct=option.correct if selectable else None,
         score=option.score if selectable else None,
@@ -3392,7 +3434,7 @@ class ConditionTaskDialog(QDialog):
             )
             return
         details = [step.kind.replace("_", " ").title()]
-        if step.kind in {"study", "choice_grid"}:
+        if step.kind in {"study", "choice_grid"} or (step.kind == "instruction" and step.options):
             details.append("exact geometry" if step.layout_mode == "exact" else "responsive grid")
             details.append(f"{len(step.options)} items")
         elif step.kind == "questionnaire":

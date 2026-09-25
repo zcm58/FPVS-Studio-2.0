@@ -367,6 +367,8 @@ def _prepare_item_stimuli(
             colorSpace="rgb",
             wrapWidth=item.size_px[0] if item.size_px is not None else None,
             autoLog=False,
+            **({"alignText": item.text_alignment, "anchorHoriz": "center"}
+               if item.text_alignment != "center" else {}),
         )
     return stimuli
 

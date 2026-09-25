@@ -35,6 +35,7 @@ from fpvs_studio.core.task_models import (
     TaskBaseModel,
     TaskModule,
     task_requires_scene_schema,
+    task_requires_text_alignment_schema,
     validate_task_slug,
 )
 
@@ -46,7 +47,7 @@ class ModifierPresetError(ValueError):
 class ModifierPreset(TaskBaseModel):
     """A versioned local copy; no condition assignments or participant responses."""
 
-    schema_version: Literal["1.0.0", "1.1.0"] = "1.0.0"
+    schema_version: Literal["1.0.0", "1.1.0", "1.2.0"] = "1.0.0"
     preset_id: str
     name: str = Field(min_length=1, max_length=200)
     description: str = Field(default="", max_length=16_384)
@@ -66,8 +67,13 @@ class ModifierPreset(TaskBaseModel):
 
     @model_validator(mode="after")
     def validate_scene_version(self) -> ModifierPreset:
-        if _requires_scene_schema(self.definition) and self.schema_version != "1.1.0":
+        if _requires_scene_schema(self.definition) and self.schema_version not in {
+            "1.1.0", "1.2.0",
+        }:
             raise ValueError("Native scene modifier presets require schema 1.1.0.")
+        if any(task_requires_text_alignment_schema(task) for task in self.definition.task_modules):
+            if self.schema_version != "1.2.0":
+                raise ValueError("Task text alignment requires modifier preset schema 1.2.0.")
         return self
 
 
@@ -323,7 +329,11 @@ def save_modifier_preset(
         definition, source_root, modifier_id=chosen_id, asset_sources=asset_sources,
     )
     preset = ModifierPreset(
-        schema_version="1.1.0" if _requires_scene_schema(copied) else "1.0.0",
+        schema_version=(
+            "1.2.0" if any(task_requires_text_alignment_schema(task)
+                           for task in copied.task_modules)
+            else "1.1.0" if _requires_scene_schema(copied) else "1.0.0"
+        ),
         preset_id=chosen_id, name=name, description=description, definition=copied,
     )
     destination = modifier_preset_root(fpvs_root, chosen_id)
