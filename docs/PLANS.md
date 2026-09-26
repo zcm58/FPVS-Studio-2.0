@@ -19,6 +19,7 @@ Current implementation:
 
 Concrete planned work:
 
+- [Unicorn Hybrid Black recording support](exec-plans/planned/unicorn-hybrid-black-support.md) (no-purchase Recorder/UDP integration; companion Toolbox plan; not implemented)
 - [Participant results and question presentation](exec-plans/planned/participant-results-and-question-presentation.md) (proposal; not implemented)
 - `exec-plans/planned/restore-tutorials-file-menu-entry.md`
 - `exec-plans/planned/luminance-rms-equalization-investigation.md`
