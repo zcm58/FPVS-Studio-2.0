@@ -134,8 +134,14 @@ def test_serial_backend_reports_open_and_write_failures() -> None:
         115200,
         serial_module=_FakeSerialModule(fail_open=True),
     )
-    with pytest.raises(RuntimeError, match="Unable to open serial trigger port"):
+    with pytest.raises(RuntimeError) as error:
         open_failure_backend.connect()
+    assert str(error.value) == (
+        "FPVS Studio cannot detect the COM3 Serial Port. "
+        "Please make sure that your BioSemi system is properly plugged in. "
+        "If you would like to run the experiment without being connected to "
+        "BioSemi, please navigate to the settings menu and enable test mode."
+    )
 
     write_failure_backend = SerialBackend(
         "COM3",

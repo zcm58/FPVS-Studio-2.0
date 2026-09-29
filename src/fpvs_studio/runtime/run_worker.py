@@ -51,6 +51,7 @@ from fpvs_studio.runtime.triggers import (
     TriggerEmissionError,
     build_trigger_backend,
 )
+from fpvs_studio.triggers.serial_backend import SerialBackendError
 
 _TUTORIAL_REQUIRED_SUCCESSES = 3
 LOGGER = logging.getLogger(__name__)
@@ -952,6 +953,8 @@ def _build_and_connect_trigger_backend(
     except Exception as exc:
         if trigger_backend is not None:
             trigger_backend.close()
+        if isinstance(exc, SerialBackendError):
+            raise PreflightError(str(exc)) from exc
         raise PreflightError(
             "Trigger preflight failed before launch. Confirm the configured serial "
             "port is available, the trigger interface is connected, and no other "

@@ -68,8 +68,10 @@ class SerialBackend(TriggerBackend):
             )
         except Exception as exc:
             raise SerialBackendError(
-                f"Unable to open serial trigger port {self._port!r} at "
-                f"{self._baudrate} baud: {exc}"
+                f"FPVS Studio cannot detect the {self._port} Serial Port. "
+                "Please make sure that your BioSemi system is properly plugged in. "
+                "If you would like to run the experiment without being connected to "
+                "BioSemi, please navigate to the settings menu and enable test mode."
             ) from exc
 
     def send(self, code: int) -> None:

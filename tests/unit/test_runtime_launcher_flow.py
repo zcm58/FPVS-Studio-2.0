@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from tests.unit.runtime_launcher_helpers import (
@@ -1097,29 +1098,27 @@ def test_session_launch_blocks_when_detected_resolution_differs_from_project_set
     assert "run_ids" not in captures
 
 
+@pytest.mark.parametrize("port", ["COM3", "COM9"])
 def test_launch_run_checks_serial_port_before_engine_session(
     monkeypatch,
     sample_project,
     sample_project_root,
+    port,
 ) -> None:
-    class _UnavailableSerialBackend(TriggerBackend):
-        def __init__(self, *_args: object, **_kwargs: object) -> None:
-            return None
-
-        def connect(self) -> None:
-            raise RuntimeError("port unavailable")
-
-        def send_trigger(self, code: int, **_kwargs: object) -> None:
-            return None
-
-        def reset(self) -> None:
-            return None
-
-        def close(self) -> None:
-            return None
+    def unavailable_serial(**kwargs: object) -> None:
+        assert kwargs["port"] == port
+        raise FileNotFoundError("port unavailable")
 
     captures: dict[str, object] = {}
-    monkeypatch.setattr("fpvs_studio.runtime.triggers.SerialBackend", _UnavailableSerialBackend)
+    monkeypatch.setattr(
+        "fpvs_studio.triggers.serial_backend._load_serial_module",
+        lambda: SimpleNamespace(
+            Serial=unavailable_serial,
+            EIGHTBITS=8,
+            PARITY_NONE="N",
+            STOPBITS_ONE=1,
+        ),
+    )
     register_engine("stub-serial-preflight", lambda: StubEngine(captures))
     try:
         run_spec = compile_run_spec(
@@ -1129,7 +1128,7 @@ def test_launch_run_checks_serial_port_before_engine_session(
             run_id="faces-run",
         )
 
-        with pytest.raises(PreflightError, match="Trigger preflight failed before launch"):
+        with pytest.raises(PreflightError) as error:
             launch_run(
                 sample_project_root,
                 run_spec,
@@ -1137,9 +1136,16 @@ def test_launch_run_checks_serial_port_before_engine_session(
                 launch_settings=LaunchSettings(
                     engine_name="stub-serial-preflight",
                     serial_enabled=True,
-                    serial_port="COM9",
+                    serial_port=port,
                 ),
             )
+        assert str(error.value) == (
+            f"FPVS Studio cannot detect the {port} Serial Port. "
+            "Please make sure that your BioSemi system is properly plugged in. "
+            "If you would like to run the experiment without being connected to "
+            "BioSemi, please navigate to the settings menu and enable test mode."
+        )
+        assert isinstance(error.value.__cause__.__cause__, FileNotFoundError)
     finally:
         unregister_engine("stub-serial-preflight")
 
