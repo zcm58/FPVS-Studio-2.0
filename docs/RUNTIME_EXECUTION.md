@@ -226,12 +226,14 @@ The PsychoPy implementation:
 - the `oddball_onset` marker code is locked to `55`; a nonstandard oddball marker code
   is only valid when the project or `.fpvsconfig` explicitly records
   `allow_nonstandard_oddball_trigger_code=true` in response to user direction
-- normal GUI launches always enable serial output, regardless of legacy project
-  `triggers.enabled` or `triggers.backend` values; the configured port and baudrate
-  remain in use
-- runtime launch settings default to serial output. `serial_enabled=false` requires
-  explicit `experiment_test_mode=true` or `pilot_mode=true`; otherwise launch fails
-  before playback. Missing/busy ports or failed writes never select null output
+- normal GUI launches resolve the computer's local recording selection first. With no
+  selection, or with BioSemi selected, serial output remains enabled regardless of legacy
+  project `triggers.enabled` or `triggers.backend` values; the project port and baudrate
+  remain in use. Unicorn selects a separate loopback UDP endpoint and never inherits COM3
+- runtime launch settings default to serial output. Explicit boolean
+  `experiment_test_mode=true` or `pilot_mode=true` always selects null output, including
+  when serial is enabled or Unicorn is selected. Outside those modes, disabling serial
+  without selecting an external transport is an error. Open/write errors never select null
 - serial-port execution writes single-byte marker codes to the configured COM port and
   baudrate
 
@@ -242,8 +244,10 @@ serial adapter owns resolution, and launch options record the resolved port.
 The logged wrapper requires an explicit backend and a matching backend name;
 omitting a backend cannot silently construct null output. The PsychoPy playback
 entry point also rejects a missing backend before opening its session.
-The shared backend contract defaults `emits_hardware_triggers` to false; the serial
-adapter explicitly reports true and logging wrappers preserve that capability.
+The shared backend contract defaults `emits_external_markers` to the legacy
+`emits_hardware_triggers` capability. Serial reports both; Unicorn reports external
+marker output without claiming direct hardware output. Logging wrappers preserve the
+capability and the distinct `serial`, `unicorn_udp`, or `null` transport identity.
 Playback independently rejects a log-only backend unless an explicit boolean test or
 pilot flag is true, including callers that bypass runtime's factory. Preflight and
 playback also reject an empty trigger schedule instead of silently running without markers.
@@ -262,6 +266,140 @@ the backend write path succeeds; disabled/null output records `skipped_disabled`
 backend send failures record `error` before the run/session is aborted and exported.
 The pre-run COM-port open check verifies OS-level serial availability; it does not prove
 that downstream EEG/status-channel cabling is physically correct.
+
+### Unicorn Recorder UDP: receiver validation pending
+
+Selecting Unicorn in local Settings enables real marker output through the normal
+launch workflow. `runtime/recording.py` validates the configuration; the launch worker
+checks that Recorder is open and writing a raw BDF before reserving a participant
+visit or opening presentation. A valid configuration and successful readiness check
+allow playback to send markers to the configured loopback port, initially 1000.
+Test/Pilot always uses null output and skips Recorder checks.
+
+Full receiver and physical timing qualification remain pending, but do not block this
+workflow. There is no additional validation mode, bypass preference or manual approval.
+The retained 426-marker test demonstrates exact counts/order, codes 1–255 and repeated
+codes in Recorder 1.24.02's classic BDF and parallel CSV. It does not establish BDF+
+interchange, Toolbox acceptance, loss handling or display/physical timing. The active
+plan tracks those remaining checks, and exported receiver-validation metadata stays
+`pending`.
+
+The local selection is `None` (legacy serial), `serial`, or `unicorn_udp`. An unknown
+saved choice is an error requiring explicit repair in Settings. The UDP port is a strict
+integer from 1 through 65535, initially 1000. The host is always `127.0.0.1`; there is no
+remote host option. These machine settings stay outside `ProjectFile`, `RunSpec`, and
+`SessionPlan`, so a library project's COM3 normalization cannot overwrite the selection.
+
+The standard-library UDP adapter prepares decimal ASCII payloads for codes 1–255 before
+presentation. Code 55 is `b"55"`. Each compiled flip callback makes one nonblocking
+datagram submission, with no retries, waits, reset messages, background queue, or assumed
+Bluetooth compensation. Would-block, socket and short-write errors fail the run through
+the logged trigger path. Reset sends no datagram while reset semantics remain unverified.
+Serial bytes, frame scheduling, oddball codes, and warmup exclusion remain unchanged.
+
+`sent` means the local backend accepted the submission. It does not establish Recorder
+reception, a saved marker, an EEG sample index, disk activity, or a connected headset.
+The receiver has no acknowledgement channel. Studio cannot automatically detect an absent
+or paused Recorder or a wrong destination port from a successful UDP send.
+
+The operator workflow is to open Recorder on the same Windows computer,
+select real electrodes and raw BDF/BDF+ logging, enable UDP input on the matching port, and
+start the intended participant/session recording before Studio playback. Recorder owns
+acquisition and manual start/stop. Toolbox owns BDF inspection, event reconciliation,
+sample integrity and any measured alignment correction.
+
+`runtime/unicorn_recorder.py` provides the automatic launch check for effective Unicorn
+output. Home and Run invoke it through their existing background launch worker; direct
+`launch_run` and `launch_session` callers use the same check before engine creation or
+visit reservation. Serial and effective Test/Pilot null output skip it. A fresh check
+runs for every launch, with a 12-second timeout on hidden Windows PowerShell and no elevation,
+Recorder control clicks, marker sends, or changes to Recorder settings/raw files.
+
+Recorder 1.24.02 (executable 1.24.2.2760) has no reliable accessible recording-mode
+flag: its Record button changes visual style. The Windows adapter therefore checks one
+Recorder process, its version, the configured raw BDF logger, a matching file held by
+that exact process, and growth in two consecutive one-second observations. Closed, idle, ambiguous, unsupported,
+unreadable, timed-out, or non-growing states block launch with an actionable message.
+The check reads Recorder's per-user configuration/output; project paths and persisted
+experiment settings do not acquire vendor-specific paths. No manual recording checkbox
+can override a failed check.
+
+Errors distinguish Recorder not being open, an active raw recording not being
+verifiable using its saved settings, and a Recorder-owned raw file that is no longer
+growing. Missing-output errors show the saved raw folder and filename prefix when
+available, and explain how to save changed settings before retrying. They must not
+claim Recorder is stopped: its live settings may differ from the saved configuration.
+No error claims that the headset is disconnected; this check cannot distinguish that
+cause from stopped acquisition, buffering or a logging problem.
+Unavailable/unsupported checks have separate errors.
+
+The checked output must be a local directory without redirected links, with at most
+1,024 files; only the five most recently written matching BDF files are inspected.
+Restart Manager resource queries identify the owning PID and process start time;
+shutdown/restart functions are never called. A newly started recording may need time
+to create and begin writing the raw file before launch can pass.
+
+This Recorder saves configuration only when its window closes, not when its Settings
+dialog is accepted. After changing raw logging options, folder or filename prefix,
+stop recording, close and reopen Recorder, reconnect and start recording. Otherwise the saved
+configuration can point the check at the previous output and cause a blocked launch.
+Recorder exposes no supported live raw-logger configuration query. Studio does not
+guess another folder or accept an arbitrary growing BDF: processed output can use
+an arbitrary folder and prefix too. Restarting Recorder after changing these settings
+remains required; the diagnostic improvement does not remove that limitation.
+
+This evidence means Recorder was writing a raw file at the check, not that electrodes
+were selected, the correct participant was associated, markers arrived, or all EEG was
+valid. It is not continuous monitoring or a promise that recording cannot stop afterward.
+Existing optional operator-reported metadata stays available to explicit API callers,
+but the GUI does not manufacture human confirmation from automatic readiness.
+
+Receiver qualification and physical timing qualification are distinct. Neither a callback
+timestamp nor a successful socket submission measures pixel onset or headset latency.
+No timing shift is applied in Studio. See the
+[active execution plan](exec-plans/active/unicorn-hybrid-black-support.md) for receiver
+fixtures, repeated/boundary/rate tests, loss evidence, and the no-purchase timing route.
+
+### Acquisition evidence contract, version 1
+
+`core/execution.py` owns `RecordingSnapshot` and `AcquisitionEvidence`; runtime's
+`acquisition_evidence.py` writes the latter. Its status is explicitly
+`candidate_receiver_validation_pending`: a Studio software contract awaiting the
+companion Toolbox validation, not a qualified interchange claim.
+
+When Unicorn is selected, each execution writes
+`logs/acquisition/<execution_id>.acquisition-v1.json` beneath the active project in
+both full and compact modes. `execution_id` is a new UUID, so repeat visits or reusing
+a compiled plan cannot overwrite an earlier execution. The payload carries Studio
+version, project ID, participant number, reserved visit number (when applicable),
+session ID, ordered run/condition IDs and names. Full mode keeps its existing event
+and trigger files as well. Compact evidence survives successful removal of recovery
+checkpoints and does not create a detailed `runs/` directory. BioSemi exports do not
+gain this sidecar.
+
+The recording snapshot records selected/effective transport, legacy or local selection
+source, loopback endpoint, operator-reported recording association and Recorder version
+(unknown when absent). It labels receiver validation as pending, saved-marker integrity
+and acquisition status as unknown, and physical timing as uncharacterized. Test/Pilot
+snapshots show effective null output and cannot claim raw recording confirmation.
+Snapshots also appear in additive `RuntimeMetadata.recording`; older metadata without
+that field remains readable.
+
+Each run separates its compiled code/label map and planned marker count from ordered
+`attempted_events`. Actual `TriggerRecord` entries retain callback frame, code, label,
+time, backend, `sent`/`error` status and error details. Null `skipped_disabled` entries
+are excluded from actual attempts. The file declares callback units as seconds and
+origin as the per-run playback clock after warmup. Evidence-write timestamps are UTC;
+neither clock is synchronized with EEG or a measured screen onset.
+
+Runtime atomically replaces the sidecar before presentation, at safe run boundaries
+and during orderly failure/finalization. States distinguish prepared, running,
+completed, aborted and interrupted executions; run states distinguish unstarted work
+from attempted work. Export failures retain the last saved evidence and record the
+error when writing remains possible. No disk I/O is added to a flip callback. An abrupt
+process kill or machine failure can omit the current run's in-memory attempts; the
+export explicitly states that persistence boundary. Do not reconstruct missing attempts
+from compiled intent or infer a successful recording from a completed Studio session.
 
 These software checks do not prove physical display onset timing. Lab timing precision
 still needs BioSemi/BDF and photodiode validation on the actual machine and display.

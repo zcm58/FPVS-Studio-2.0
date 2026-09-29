@@ -13,13 +13,13 @@ Use this page to find planning material before making feature-sized changes.
 
 Current implementation:
 
+- [Unicorn Hybrid Black recording support](exec-plans/active/unicorn-hybrid-black-support.md) (normal marker output enabled; full receiver, Toolbox and physical timing validation pending)
 - [Experiment Library: Phase 1 whole projects](exec-plans/active/private-experiment-library.md)
 - [Cloudflare bug reporting: desktop implementation](exec-plans/active/cloudflare-bug-reporting.md)
 - `exec-plans/active/bounded-updater-storage-and-clean-upgrades.md`
 
 Concrete planned work:
 
-- [Unicorn Hybrid Black recording support](exec-plans/planned/unicorn-hybrid-black-support.md) (no-purchase Recorder/UDP integration; companion Toolbox plan; not implemented)
 - [Participant results and question presentation](exec-plans/planned/participant-results-and-question-presentation.md) (proposal; not implemented)
 - `exec-plans/planned/restore-tutorials-file-menu-entry.md`
 - `exec-plans/planned/luminance-rms-equalization-investigation.md`

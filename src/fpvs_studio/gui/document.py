@@ -127,6 +127,9 @@ class ProjectDocument(
         self._show_sophia_mode_ticker = False
         self._experiment_test_mode_enabled = False
         self._attentional_blink_pilot_mode_enabled = False
+        self._recording_configuration: dict[str, object] = {
+            "recording_backend": None, "unicorn_udp_port": 1000,
+        }
         self._last_session_plan: SessionPlan | None = None
         self._image_normalization_scan_cache: (
             tuple[
@@ -221,7 +224,9 @@ class ProjectDocument(
         """Return whether GUI launches require the BioSemi recording safety check."""
 
         return (
-            self._require_biosemi_recording_confirmation and not self.local_testing_enabled
+            self._require_biosemi_recording_confirmation
+            and not self.local_testing_enabled
+            and self._recording_configuration.get("recording_backend") in (None, "serial")
         )
 
     @property
@@ -413,6 +418,12 @@ class ProjectDocument(
             valid_values = "', '".join(sorted(VALID_EXPORT_MODES))
             raise DocumentError(f"Run export mode must be one of '{valid_values}'.")
         self._session_export_mode = export_mode
+
+    def set_recording_configuration(self, configuration: dict[str, object]) -> None:
+        """Inject local preferences without rewriting projects or repairing bad values."""
+
+        self._recording_configuration = dict(configuration)
+        self.project_changed.emit()
 
     def set_require_biosemi_recording_confirmation(self, required: bool) -> None:
         """Set whether GUI launches require the BioSemi recording safety check."""

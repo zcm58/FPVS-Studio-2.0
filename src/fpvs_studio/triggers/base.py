@@ -13,9 +13,25 @@ class TriggerBackend(ABC):
 
     @property
     def emits_hardware_triggers(self) -> bool:
-        """Require hardware adapters to explicitly declare physical output."""
+        """Legacy capability for adapters that directly drive trigger hardware."""
 
         return False
+
+    @property
+    def emits_external_markers(self) -> bool:
+        """Declare external output without implying EEG receipt or disk recording.
+
+        Existing hardware adapters retain their capability; software transports
+        override this property without pretending to be a hardware interface.
+        """
+
+        return self.emits_hardware_triggers
+
+    @property
+    def backend_name(self) -> str:
+        """Transport identity, preserving the legacy serial/null adapter contract."""
+
+        return "serial" if self.emits_hardware_triggers else "null"
 
     @abstractmethod
     def connect(self) -> None:

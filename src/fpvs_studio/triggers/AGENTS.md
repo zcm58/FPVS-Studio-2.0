@@ -8,8 +8,9 @@ adapter scaffolding.
 ## Requirements
 
 - Keep trigger backends runtime-facing and hardware-adapter focused.
-- Hardware adapters must explicitly report `emits_hardware_triggers=True`; the base
-  contract defaults to false and runtime wrappers preserve the underlying capability.
+- External adapters must explicitly report `emits_external_markers=True`; the base
+  contract preserves legacy `emits_hardware_triggers` adapters. UDP must report its
+  own `unicorn_udp` identity without claiming direct hardware output or EEG receipt.
 - Keep trigger planning in compiled core contracts and trigger logging/export behavior
   in runtime.
 - Do not push serial-port or hardware-only settings into `RunSpec` or `SessionPlan`.
@@ -22,6 +23,11 @@ adapter scaffolding.
   after a port fails to open or write.
 - Let backend open/write failures propagate to runtime so they can abort and export a
   clear error record. Runtime owns the pre-run serial-open check and trigger logs.
+- Unicorn UDP uses only `127.0.0.1`, a validated port, prepared decimal ASCII codes,
+  and one nonblocking datagram submission per marker. No automatic reset, waits,
+  retries, receiver detection, or compensation is permitted. Runtime owns the
+  prelaunch Recorder readiness check and pending qualification metadata; use injected
+  fake sockets in automated tests.
 
 ## Restrictions
 

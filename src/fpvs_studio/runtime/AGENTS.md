@@ -14,8 +14,11 @@ This phase should establish:
 - session-plan iteration and transition flow above the engine seam
 - runtime-side fail-fast preflight for assets, timing, and launch hardware
 - normal session-mode result assembly with explicit presentation and timing-QC options
-- trigger backend wiring/logging with serial availability checked before participant
-  launch screens
+- trigger backend wiring/logging with selected transport availability checked before
+  participant launch screens; `recording.py` owns local selection and configuration
+  validation before visit reservation. `unicorn_recorder.py`
+  checks Recorder's process and active raw-file writes in the launch worker before
+  presentation; never run OS probes on the GUI thread or in frame callbacks.
 - session export writers
 - participant and seed-history lookup
 - atomic participant visit reservation across full and compact exports, preserving
@@ -59,6 +62,15 @@ This phase should establish:
   must be exported as `error` records and abort the current run/session cleanly
 - keep trigger timestamps run-playback-relative; do not include timing warmup frames in
   exported trigger `time_s`
+- `acquisition_evidence.py` owns versioned Unicorn evidence beneath active-project
+  `logs/acquisition/` in both export modes, separate from deleted recovery checkpoints.
+  Persist configuration, explicit operator association, planned code maps and actual
+  sent/error attempts at run boundaries and orderly failure. No disk writes enter
+  the frame loop; abrupt process loss can omit the current run's attempts.
+- keep local transport submission, operator confirmation, recorded-marker integrity
+  and physical timing qualification distinct; none implies the next. The prelaunch
+  process/file check observes current raw recording activity only; marker integrity
+  and EEG timing remain unknown without receiving-side evidence.
 - append project-level reporting indexes under `logs/`; write detailed execution
   artifacts under `runs/` only when full run export mode is enabled
 - checkpoint experimental task responses incrementally, preserve partial responses on
@@ -99,9 +111,14 @@ This phase should establish:
 - Do not move session randomization or compilation logic out of core and into runtime.
 - Do not add null-trigger fallback after a configured serial backend fails to open or
   write.
-- Normal launches default to serial output. Null output requires an explicit
+- Normal launches default to serial output unless an explicit local selection exists.
+  Invalid saved selections are actionable errors, never fallback. Normal Unicorn
+  launches send real markers after configuration and Recorder readiness pass. Full
+  receiver/timing qualification remains pending metadata and does not block launch.
+  Null output requires an explicit
   `experiment_test_mode` or `pilot_mode` runtime flag; `serial_enabled=false` alone
-  must be rejected. Legacy project disabled/null flags cannot suppress GUI recording.
+  must be rejected. Test/Pilot always select null, including with serial enabled.
+  Legacy project disabled/null flags cannot suppress an explicit recording selection.
 
 ## Export guidance
 
@@ -117,6 +134,9 @@ Even if the exporter is skeletal in this phase, define a stable shape for:
 - `responses.csv`
 - `frame_intervals.csv`
 - `trigger_log.csv`
+- `logs/acquisition/<execution_id>.acquisition-v1.json` retains candidate Unicorn
+  handoff evidence, including participant visit/session/run identity, after successful
+  compact finalization; it does not establish a qualified Toolbox import contract.
 - `attentional_blink_stream_events_v1.csv` for native AB characters, including
   symbol/phase/cycle, requested/achieved SOA and planned/observed onsets; retain legacy
   image-pair event headers. Revalidate complete exact-grid character coverage and

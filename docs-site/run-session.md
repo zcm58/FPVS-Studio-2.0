@@ -9,17 +9,47 @@ Confirm that:
 - the intended project is open
 - the lab monitor is connected and set to the expected refresh rate
 - the display resolution matches the project display settings
-- the BioSemi recording setup is ready
+- the selected BioSemi or Unicorn recording setup is ready
 - participant response devices are connected if fixation accuracy tracking is on
 - the project is not stored in a synced folder such as OneDrive or Dropbox
 
 ## Launch
 
+### Local recording choice
+
+Settings includes a **Recording** tab with **Recording Setup…**. BioSemi retains the
+project's serial settings and existing recording prompt. The choice applies to this
+computer and does not change portable experiments. Review the effective output shown
+on Home and Run before launching.
+
+**Unicorn Recorder UDP sends real markers through the normal launch workflow.**
+Select it in Recording Setup and match its local UDP port to Recorder, initially
+`1000`. Experiment Test Mode and Pilot Study Mode send no markers, including with
+Unicorn selected.
+
+After **Launch Experiment** and participant entry, Studio automatically checks that
+Unicorn Recorder is open and writing a raw recording before opening presentation.
+If it is closed or stopped, start recording in Recorder and launch again. This check
+does not require a recording-confirmation checkbox. When it passes, Studio continues
+to the experiment. Test/Pilot skips the Recorder check.
+
+Use Unicorn Recorder on the same Windows computer:
+real electrodes, raw BDF/BDF+ recording, and UDP input at `127.0.0.1` on the selected port
+(initially `1000`). Recorder owns manual recording start/stop. Actual recorded markers
+and timing must be checked before accepting study data. No SDK or additional purchase
+is part of Studio's adapter. The
+[vendor manual](https://github.com/unicorn-bi/Unicorn-Recorder-Hybrid-Black/blob/main/README.md)
+describes Recorder setup. Recorder 1.24.02 retained all 426 synthetic test markers in
+classic BDF and parallel CSV, including codes 1–255 and repeated codes. Full receiver,
+BDF+/Toolbox and physical timing validation remain pending; this does not block launch.
+
+### Start the session
+
 1. Open FPVS Studio.
 2. Choose **Open Projects** and select the project.
-3. On Home, choose **Launch Experiment**.
-4. Enter the participant details when prompted.
-5. Start the EEG recording when your lab protocol says to begin.
+3. Prepare the EEG recording. For Unicorn, start Recorder's raw recording before launching.
+4. On Home, choose **Launch Experiment** and enter the participant details when prompted.
+5. For BioSemi, start the EEG recording when your lab protocol says to begin.
 6. Follow the fullscreen prompts.
 
 The participant details prompt asks for:

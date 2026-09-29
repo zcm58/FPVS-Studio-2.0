@@ -42,8 +42,10 @@ play compiled runs end to end.
   timestamps should come from the run clock after warmup, not from warmup timing.
 - Require an explicit runtime-provided trigger backend before condition playback;
   missing backends are errors. Test/pilot runs receive an explicit log-only backend.
-- Reject log-only/undeclared hardware backends without an explicit boolean test/pilot
-  flag, even for direct engine callers. Reject empty compiled trigger schedules.
+- Require an explicitly declared external-marker capability for recording playback,
+  and reject external output in explicit boolean test/pilot modes, including direct
+  engine callers. A software transport does not imply EEG receipt or sample timing.
+  Reject empty compiled trigger schedules.
 - Record strict timing misses as runtime metadata quality-control fields instead of
   aborting playback unless runtime policy changes.
 - Poll `escape` only as an abort signal; condition-task semantics stay in runtime/core.

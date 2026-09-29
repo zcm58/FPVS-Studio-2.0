@@ -27,6 +27,10 @@ from fpvs_studio.gui.document_support import (
 from fpvs_studio.runtime.launcher import LaunchSettings
 from fpvs_studio.runtime.participant_history import find_completed_sessions_for_participant
 from fpvs_studio.runtime.participant_sessions import resolve_next_participant_session_number
+from fpvs_studio.runtime.recording import (
+    recording_backend_label,
+    validate_recording_configuration,
+)
 
 
 def _document_dependency(name: str) -> Any:
@@ -40,6 +44,7 @@ class DocumentRuntimeMixin:
         _project: ProjectFile
         _project_root: Path
         _session_export_mode: str
+        _recording_configuration: dict[str, object]
         _last_session_plan: SessionPlan | None
         session_plan_changed: Any
 
@@ -52,6 +57,42 @@ class DocumentRuntimeMixin:
 
         def ensure_unused_session_seed_for_launch(self) -> int: ...
         def refresh_participant_summary_if_stale(self) -> Path | None: ...
+
+    def recording_launch_options(self) -> dict[str, object]:
+        """Resolve local preference inputs without changing portable project fields."""
+
+        return {
+            **self._recording_configuration,
+            "serial_enabled": not self.local_testing_enabled,
+            "serial_port": self._project.settings.triggers.serial_port,
+            "experiment_test_mode": self.experiment_test_mode_enabled,
+            "pilot_mode": self.attentional_blink_pilot_mode_enabled,
+        }
+
+    def recording_setup_summary(self) -> str:
+        """Describe effective output before either Home or Run starts a launch."""
+
+        options = self.recording_launch_options()
+        try:
+            backend = validate_recording_configuration(options)
+            label = recording_backend_label(options)
+        except ValueError:
+            return "Recording setup invalid. Open Settings > Recording to correct it."
+        if backend == "unicorn_udp":
+            return f"{label} — Recorder check before launch"
+        return label
+
+    def validate_recording_launch(self) -> str:
+        """Validate local settings without probing vendor software on the GUI thread.
+
+        The launch worker checks Recorder readiness before the runtime reserves a
+        visit or opens participant presentation. Validation status is informational.
+        """
+
+        try:
+            return validate_recording_configuration(self.recording_launch_options())
+        except ValueError as exc:
+            raise DocumentError(str(exc)) from exc
 
     def validation_report(self, *, refresh_hz: float) -> ProjectValidationReport:
         """Validate the current project at a specific compile refresh rate."""
@@ -130,6 +171,7 @@ class DocumentRuntimeMixin:
         """Preflight an already-compiled session plan."""
 
         try:
+            self.validate_recording_launch()
             engine = _document_dependency("create_engine")(engine_name)
             preflight_session_plan = _document_dependency("preflight_session_plan")
             if decode_image_assets:
@@ -158,6 +200,9 @@ class DocumentRuntimeMixin:
         display_index: int | None,
         fullscreen: bool = True,
         engine_name: str = EngineName.PSYCHOPY.value,
+        recording_operator_confirmed: bool = False,
+        recording_association: str | None = None,
+        recorder_version: str | None = None,
     ) -> LaunchSummary:
         """Launch an already-prepared session plan through the runtime boundary."""
 
@@ -172,6 +217,7 @@ class DocumentRuntimeMixin:
                         "participant sessions in Setup > Project before launching again."
                     )
                 participant_session_number = 1
+            self.validate_recording_launch()
             trigger_settings = self._project.settings.triggers
             launch_kwargs = {
                 "participant_number": participant_number,
@@ -181,6 +227,15 @@ class DocumentRuntimeMixin:
                     display_index=display_index,
                     # Persisted legacy flags cannot disable EEG recording output.
                     serial_enabled=not self.local_testing_enabled,
+                    recording_backend=cast(
+                        str | None, self._recording_configuration.get("recording_backend"),
+                    ),
+                    unicorn_udp_port=cast(
+                        int, self._recording_configuration.get("unicorn_udp_port", 1000),
+                    ),
+                    recording_operator_confirmed=recording_operator_confirmed,
+                    recording_association=recording_association,
+                    recorder_version=recorder_version,
                     experiment_test_mode=self.experiment_test_mode_enabled,
                     serial_port=trigger_settings.serial_port,
                     serial_baudrate=trigger_settings.baudrate,

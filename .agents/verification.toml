@@ -189,6 +189,8 @@ tests = [
   "tests/unit/test_runtime_participant_history.py",
   "tests/unit/test_runtime_participant_sessions.py",
   "tests/unit/test_runtime_reporting_lock.py",
+  "tests/unit/test_runtime_recording.py",
+  "tests/unit/test_runtime_unicorn_recorder.py",
   "tests/unit/test_runtime_preflight.py",
   "tests/unit/test_attentional_blink_runtime.py",
   "tests/unit/test_attentional_blink_stream_runtime.py",
@@ -224,10 +226,10 @@ manual_smoke = ["Run a short experiment on the intended presentation machine whe
 
 [scopes.triggers]
 checks = []
-tests = ["tests/unit/test_serial_trigger_backend.py"]
+tests = ["tests/unit/test_serial_trigger_backend.py", "tests/unit/test_unicorn_udp_backend.py"]
 full_tests = []
-include = ["src/fpvs_studio/triggers/**", "src/fpvs_studio/runtime/triggers.py", "tests/unit/test_serial_trigger_backend.py"]
-manual_smoke = ["Use the intended trigger hardware for a visible/manual smoke when serial I/O behavior changes."]
+include = ["src/fpvs_studio/triggers/**", "src/fpvs_studio/runtime/triggers.py", "tests/unit/test_serial_trigger_backend.py", "tests/unit/test_unicorn_udp_backend.py"]
+manual_smoke = ["For an approved Unicorn recording test, start raw recording in Recorder and use a normal launch; Test/Pilot send no markers. Inspect the saved events separately from the Recorder readiness check."]
 
 [scopes.updates]
 checks = []

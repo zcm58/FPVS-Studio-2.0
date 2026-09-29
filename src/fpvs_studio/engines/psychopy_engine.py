@@ -386,11 +386,16 @@ class PsychoPyEngine(PresentationEngine):
                 "Test and pilot launches must supply an explicit log-only backend."
             )
         options = runtime_options or {}
-        if not trigger_backend.emits_hardware_triggers and not (
+        no_output_mode = (
             options.get("experiment_test_mode") is True or options.get("pilot_mode") is True
-        ):
+        )
+        if trigger_backend.emits_external_markers and no_output_mode:
             raise ValueError(
-                "Recording playback requires a hardware trigger backend. Log-only output "
+                "Experiment Test Mode and Pilot Study Mode require a log-only backend."
+            )
+        if not trigger_backend.emits_external_markers and not no_output_mode:
+            raise ValueError(
+                "Recording playback requires an external marker backend. Log-only output "
                 "is permitted only in explicit Experiment Test Mode or Pilot Study Mode."
             )
         if not run_spec.trigger_events:

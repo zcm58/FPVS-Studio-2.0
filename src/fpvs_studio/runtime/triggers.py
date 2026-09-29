@@ -10,9 +10,11 @@ from collections.abc import Mapping
 
 from fpvs_studio.core.execution import TriggerRecord, TriggerStatus
 from fpvs_studio.core.trigger_codes import validate_event_trigger_code
+from fpvs_studio.runtime.recording import validate_production_recording
 from fpvs_studio.triggers.base import TriggerBackend
 from fpvs_studio.triggers.null_backend import NullBackend
 from fpvs_studio.triggers.serial_backend import SerialBackend, resolve_serial_port
+from fpvs_studio.triggers.unicorn_udp_backend import UnicornUDPBackend
 
 LOGGER = logging.getLogger(__name__)
 
@@ -32,9 +34,13 @@ class LoggedTriggerBackend(TriggerBackend):
     ) -> None:
         if backend is None:
             raise ValueError("A trigger backend must be explicitly supplied.")
-        expected_name = "serial" if backend.emits_hardware_triggers else "null"
+        expected_name = backend.backend_name
         if backend_name != expected_name:
-            raise ValueError("Trigger backend name must match its actual null/serial output.")
+            raise ValueError("Trigger backend name must match its actual transport identity.")
+        if (backend_name == "null") == backend.emits_external_markers:
+            raise ValueError(
+                "Trigger transport identity must match its external-marker capability."
+            )
         self._backend = backend
         self._backend_name = backend_name
         self._raw_records: list[_RawTriggerAttempt] = []
@@ -42,6 +48,10 @@ class LoggedTriggerBackend(TriggerBackend):
     @property
     def emits_hardware_triggers(self) -> bool:
         return self._backend.emits_hardware_triggers
+
+    @property
+    def emits_external_markers(self) -> bool:
+        return self._backend.emits_external_markers
 
     @property
     def backend_name(self) -> str:
@@ -96,12 +106,16 @@ class LoggedTriggerBackend(TriggerBackend):
         label: str | None = None,
         time_s: float | None = None,
     ) -> None:
-        """Perform the physical write and append only primitive callback-time data."""
+        """Submit the marker and append only primitive callback-time data."""
 
         normalized_label = label or "trigger"
         normalized_frame_index = frame_index if frame_index is not None else 0
         status: TriggerStatus = "sent"
-        message: str | None = None
+        message: str | None = (
+            "Datagram submitted locally; Recorder receipt and recording are unverified."
+            if self._backend_name == "unicorn_udp"
+            else None
+        )
         caught_exception: Exception | None = None
         if self._backend_name == "null":
             self._raw_records.append(
@@ -179,18 +193,16 @@ def build_trigger_backend(
     """Create the runtime trigger backend wrapper and any launch warnings."""
 
     options = runtime_options or {}
-    serial_enabled = options.get("serial_enabled", True)
-    test_mode = options.get("experiment_test_mode", False)
-    pilot_mode = options.get("pilot_mode", False)
-    if not all(isinstance(value, bool) for value in (serial_enabled, test_mode, pilot_mode)):
-        raise ValueError("Serial output and test-mode flags must be booleans.")
-    if not serial_enabled and not (test_mode or pilot_mode):
-        raise ValueError(
-            "Serial trigger output is required for recording. Null output is only allowed "
-            "in Experiment Test Mode or Pilot Study Mode."
-        )
-    if serial_enabled:
+    backend_name = validate_production_recording(options)
+    if backend_name == "serial":
         return LoggedTriggerBackend(_build_serial_backend(options), backend_name="serial"), []
+    if backend_name == "unicorn_udp":
+        return LoggedTriggerBackend(
+            UnicornUDPBackend(
+                _positive_int_option(options, "unicorn_udp_port", default=1000)
+            ),
+            backend_name="unicorn_udp",
+        ), []
     return LoggedNullBackend(), []
 
 

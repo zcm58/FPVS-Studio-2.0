@@ -99,3 +99,13 @@ backend-driven.
 AB-only Pilot Study Mode is an app Settings preference, defaults off and takes
 precedence over Test Mode for AB. Reuse the standard demographics/visit flow; document
 launch settings alone select local hardware checks. See `docs/GUI_WORKFLOW.md`.
+
+Settings > Recording edits the local serial/Unicorn choice through a staged
+Recording Setup dialog; Apply saves and Cancel preserves the previous preference.
+Home and Run validate configuration before participant collection, then run automatic
+Recorder readiness in the existing launch worker before presentation.
+Do not ask for a manual Unicorn recording checkbox or run OS probes on the GUI thread.
+Successful readiness allows normal Unicorn marker output; full receiver/timing
+validation remains pending metadata. Test/Pilot sends no markers and skips Recorder
+checks. Sophia confirmation remains serial-only.
+See `docs/GUI_WORKFLOW.md`.

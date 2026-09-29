@@ -30,6 +30,7 @@ from fpvs_studio.gui.components import (
     apply_dialog_theme,
     mark_secondary_action,
 )
+from fpvs_studio.gui.recording_dialog import RecordingSetupDialog, recording_preference_summary
 
 
 class AppSettingsDialog(QDialog):
@@ -39,6 +40,8 @@ class AppSettingsDialog(QDialog):
         self,
         *,
         fpvs_root_dir: Path,
+        recording_configuration: dict[str, object] | None = None,
+        on_recording_configuration_changed: Callable[[dict[str, object]], None] | None = None,
         on_show_root_folder_setup: Callable[[QWidget], Path | None] | None = None,
         on_manage_condition_templates: Callable[[], object] | None = None,
         on_show_library: Callable[[], None] | None = None,
@@ -70,6 +73,10 @@ class AppSettingsDialog(QDialog):
         self.resize(self.minimumSize())
 
         self._developer_mode_active = developer_mode_active
+        self._recording_configuration = dict(recording_configuration or {
+            "recording_backend": None, "unicorn_udp_port": 1000,
+        })
+        self._on_recording_configuration_changed = on_recording_configuration_changed
         self._developer_mode_requested = developer_mode_requested
         self._on_developer_mode_changed = on_developer_mode_changed
         self._on_show_root_folder_setup = on_show_root_folder_setup
@@ -266,6 +273,31 @@ class AppSettingsDialog(QDialog):
             general_layout.addWidget(developer)
         general_layout.addStretch(1)
         self.tabs.addTab(general, "General")
+        recording = QWidget(self.tabs)
+        recording_layout = QVBoxLayout(recording)
+        recording_layout.setContentsMargins(16, 16, 16, 16)
+        recording_layout.setSpacing(12)
+        self.recording_summary = QLabel(recording_preference_summary(
+            self._recording_configuration,
+        ), recording)
+        self.recording_summary.setObjectName("settings_recording_summary")
+        self.recording_summary.setWordWrap(True)
+        recording_layout.addWidget(self.recording_summary)
+        self.recording_setup_button = QPushButton("Recording Setup…", recording)
+        self.recording_setup_button.setObjectName("settings_recording_setup")
+        mark_secondary_action(self.recording_setup_button)
+        self.recording_setup_button.setEnabled(on_recording_configuration_changed is not None)
+        self.recording_setup_button.clicked.connect(self._show_recording_setup)
+        recording_layout.addWidget(self.recording_setup_button)
+        recording_help = QLabel(
+            "Choose BioSemi serial or Unicorn Recorder UDP. "
+            "Unicorn launches require Recorder to be open and recording. "
+            "This computer's selection takes precedence over imported project settings.", recording,
+        )
+        recording_help.setObjectName("settings_recording_help")
+        recording_help.setWordWrap(True)
+        recording_layout.addWidget(recording_help)
+        recording_layout.addStretch(1)
         advanced = QWidget(self.tabs)
         advanced_layout = QVBoxLayout(advanced)
         advanced_layout.setContentsMargins(16, 16, 16, 16)
@@ -310,10 +342,21 @@ class AppSettingsDialog(QDialog):
         advanced_layout.addWidget(self.developer_status)
         advanced_layout.addStretch(1)
         self.tabs.addTab(advanced, "Advanced")
+        self.tabs.addTab(recording, "Recording")
         self._refresh_developer_status()
         layout.addWidget(self.tabs, 1)
         layout.addLayout(footer_layout)
         apply_dialog_theme(self)
+
+    def _show_recording_setup(self) -> None:
+        dialog = RecordingSetupDialog(self._recording_configuration, self)
+        if dialog.exec() != int(QDialog.DialogCode.Accepted):
+            return
+        configuration = dialog.configuration
+        if self._on_recording_configuration_changed is not None:
+            self._on_recording_configuration_changed(configuration)
+        self._recording_configuration = configuration
+        self.recording_summary.setText(recording_preference_summary(configuration))
 
     def _refresh_developer_status(self) -> None:
         if self._developer_mode_requested != self._developer_mode_active:

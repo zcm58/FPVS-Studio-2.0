@@ -9,6 +9,13 @@ This document records a separate future project; it does not authorize changing 
 current setup redesign or weakening existing recording checks. Move it to `active/`
 when implementation becomes the selected task.
 
+The narrower [Unicorn recording plan](../active/unicorn-hybrid-black-support.md) now
+implements a local BioSemi/Unicorn transport choice through the existing preferences.
+Normal launches send markers after Recorder readiness passes; full receiver and timing
+validation remain pending. Reuse that selection and validation
+owner when implementing profiles; named profiles and display identity work described
+here remain unimplemented.
+
 Give researchers named recording profiles for this computer: participant display,
 supported trigger output and serial port, and recording-confirmation policy. Keep the
 existing Sophia behavior available as an explicit lab preset.

@@ -750,6 +750,11 @@ class StudioMainWindow(QMainWindow):
     def launch_session(self) -> None:
         if self.is_launch_busy():
             return
+        try:
+            self.document.validate_recording_launch()
+        except Exception as error:
+            _show_error_dialog(self, "Launch Blocked", error)
+            return
         if not self._ensure_session_seed_ready_for_launch():
             return
         if not self.flush_pending_edits():
@@ -798,6 +803,7 @@ class StudioMainWindow(QMainWindow):
     ) -> None:
         participant_number = participant_details.participant_number
         try:
+            self.document.validate_recording_launch()
             if not self.document.experiment_test_mode_enabled:
                 self.document.update_manual_removed_electrodes(
                     participant_number, participant_details.manual_removed_electrodes,
@@ -817,7 +823,6 @@ class StudioMainWindow(QMainWindow):
             return
 
         def _launch() -> LaunchTaskResult:
-            self.document.preflight_compiled_session(session_plan)
             summary = self.document.launch_compiled_session(
                 session_plan,
                 participant_number=participant_number,

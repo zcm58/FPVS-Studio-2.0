@@ -88,6 +88,7 @@ from fpvs_studio.runtime.export_modes import (
     EXPORT_MODE_FULL,
     VALID_EXPORT_MODES,
 )
+from fpvs_studio.runtime.recording import validate_recording_configuration
 from fpvs_studio.updates.downloader import cleanup_update_cache
 from fpvs_studio.updates.helper_client import HelperClient
 from fpvs_studio.updates.models import UpdateCheckResult
@@ -102,6 +103,8 @@ _SETTINGS_APPLICATION = "FPVS Studio"
 _FPVS_ROOT_DIR_KEY = "paths/fpvs_root_dir"
 _RECENT_PROJECT_ROOTS_KEY = "projects/recent_project_roots"
 _RUN_EXPORT_MODE_KEY = "exports/run_export_mode"
+_RECORDING_BACKEND_KEY = "recording/backend"
+_UNICORN_UDP_PORT_KEY = "recording/unicorn_udp_port"
 _BIOSEMI_RECORDING_CONFIRMATION_KEY = "launch/require_biosemi_recording_confirmation"
 _SOPHIA_MODE_TICKER_KEY = "launch/show_sophia_mode_ticker"
 _EXPERIMENT_TEST_MODE_KEY = "launch/experiment_test_mode"
@@ -435,6 +438,32 @@ class StudioController(QObject):
         """Return whether launched sessions should write detailed run folders."""
 
         return self.load_run_export_mode() == EXPORT_MODE_FULL
+
+    def load_recording_configuration(self) -> dict[str, object]:
+        """Keep absent legacy settings and invalid saved values distinguishable."""
+
+        port = self._settings.value(_UNICORN_UDP_PORT_KEY, 1000)
+        # QSettings INI values can be returned as text after a process restart.
+        if isinstance(port, str) and len(port) <= 5 and port.isascii() and port.isdecimal():
+            port = int(port)
+        return {
+            "recording_backend": self._settings.value(_RECORDING_BACKEND_KEY, None),
+            "unicorn_udp_port": port,
+        }
+
+    def save_recording_configuration(self, configuration: dict[str, object]) -> None:
+        """Save a reviewed local selection independently of the current project."""
+
+        validate_recording_configuration(configuration)
+        backend = configuration.get("recording_backend")
+        if backend is None:
+            self._settings.remove(_RECORDING_BACKEND_KEY)
+        else:
+            self._settings.setValue(_RECORDING_BACKEND_KEY, backend)
+        self._settings.setValue(_UNICORN_UDP_PORT_KEY, configuration.get("unicorn_udp_port", 1000))
+        self._settings.sync()
+        if self.main_window is not None:
+            self.main_window.document.set_recording_configuration(configuration)
 
     def set_detailed_run_exports_enabled(self, enabled: bool) -> None:
         """Persist the Settings checkbox value for detailed run folders."""
@@ -788,6 +817,8 @@ class StudioController(QObject):
             return
         dialog = AppSettingsDialog(
             fpvs_root_dir=root_dir,
+            recording_configuration=self.load_recording_configuration(),
+            on_recording_configuration_changed=self.save_recording_configuration,
             developer_mode_active=self._developer_mode.active,
             developer_mode_requested=self._developer_mode.requested,
             on_developer_mode_changed=self._developer_mode.configure,
@@ -915,6 +946,7 @@ class StudioController(QObject):
 
     def _open_document(self, document: ProjectDocument) -> None:
         document.set_session_export_mode(self.load_run_export_mode())
+        document.set_recording_configuration(self.load_recording_configuration())
         document.set_require_biosemi_recording_confirmation(
             self.require_biosemi_recording_confirmation()
         )

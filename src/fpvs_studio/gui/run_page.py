@@ -671,6 +671,10 @@ class RunPage(QWidget):
         controls_card.card_layout.setContentsMargins(12, 10, 12, 10)
         controls_card.card_layout.setSpacing(8)
         controls_card.body_layout.setSpacing(8)
+        self.recording_summary = QLabel(self)
+        self.recording_summary.setObjectName("run_recording_summary")
+        self.recording_summary.setWordWrap(True)
+        controls_card.body_layout.addWidget(self.recording_summary)
         controls_card.body_layout.addWidget(button_row)
 
         self.summary_stack = QStackedWidget(self)
@@ -819,6 +823,7 @@ class RunPage(QWidget):
         if self.is_launch_busy():
             return
         try:
+            self._document.validate_recording_launch()
             refresh_hz = self.current_refresh_hz()
             validation = self._document.validation_report(refresh_hz=refresh_hz)
             if not validation.is_valid:
@@ -863,6 +868,11 @@ class RunPage(QWidget):
         self, participant_details: ParticipantLaunchDetails, refresh_hz: float,
         participant_session_number: int | None,
     ) -> None:
+        try:
+            self._document.validate_recording_launch()
+        except Exception as error:
+            _show_runtime_error_dialog(self, "Launch Blocked", error)
+            return
         participant_number = participant_details.participant_number
         if not self._document.experiment_test_mode_enabled:
             try:
@@ -897,7 +907,6 @@ class RunPage(QWidget):
             return
 
         def _launch() -> LaunchTaskResult:
-            self._document.preflight_compiled_session(session_plan)
             summary = self._document.launch_compiled_session(
                 session_plan,
                 participant_number=participant_number,
@@ -1098,6 +1107,7 @@ class RunPage(QWidget):
         self._set_summary(session_plan)
 
     def _refresh_readiness_panel(self) -> None:
+        self.recording_summary.setText(self._document.recording_setup_summary())
         report = self._status_report()
         self.readiness_badge.set_state(report.badge_state, report.status_label)
         summary_text = report.status_summary

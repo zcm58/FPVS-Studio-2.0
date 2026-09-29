@@ -33,7 +33,10 @@ from fpvs_studio.engines.psychopy_stimuli import (
     release_stimuli,
 )
 from fpvs_studio.engines.psychopy_text_screens import show_text_screen
+from fpvs_studio.runtime.triggers import LoggedTriggerBackend
 from fpvs_studio.triggers.base import TriggerBackend
+from fpvs_studio.triggers.serial_backend import SerialBackend
+from fpvs_studio.triggers.unicorn_udp_backend import UnicornUDPBackend
 
 
 class _FakeWindow:
@@ -1937,6 +1940,90 @@ def test_psychopy_engine_emits_compiled_triggers_on_presentation_flip(
     ]
     call_on_flip_events = [event for event in _events(captures) if event[0] == "callOnFlip"]
     assert len(call_on_flip_events) == 2
+
+
+@pytest.mark.parametrize("transport", ["serial", "unicorn_udp"])
+def test_psychopy_engine_preserves_marker_frames_and_clock_for_external_transports(
+    monkeypatch, sample_project, sample_project_root, transport,
+) -> None:
+    run_spec = _two_event_run_spec(sample_project, sample_project_root, duplicate_image=False)
+    run_spec.trigger_events = [
+        TriggerEvent(frame_index=0, code=1, label="condition_start"),
+        TriggerEvent(frame_index=1, code=55, label="oddball_onset"),
+    ]
+    submissions: list[bytes] = []
+
+    def submit(payload: bytes, *_args) -> int:
+        submissions.append(payload)
+        return len(payload)
+
+    adapter: TriggerBackend
+    if transport == "serial":
+        serial_module = SimpleNamespace(
+            EIGHTBITS=8, PARITY_NONE="N", STOPBITS_ONE=1,
+            Serial=lambda **_kwargs: SimpleNamespace(write=submit, close=lambda: None),
+        )
+        adapter = SerialBackend(serial_module=serial_module)
+    else:
+        fake_socket = SimpleNamespace(
+            setblocking=lambda _flag: None, sendto=submit, close=lambda: None,
+        )
+        adapter = UnicornUDPBackend(socket_factory=lambda *_args: fake_socket)
+    backend = LoggedTriggerBackend(adapter, backend_name=transport)
+    captures: dict[str, object] = {}
+    fake_psychopy = _build_fake_psychopy(captures, flip_times=[0.1, 0.2, 0.3, 0.4, 0.5])
+    engine = PsychoPyEngine()
+    _patch_fake_psychopy(monkeypatch, engine, fake_psychopy)
+    backend.connect()
+    try:
+        engine.run_condition(
+            run_spec,
+            sample_project_root,
+            runtime_options={"timing_warmup_frames": 2},
+            trigger_backend=backend,
+        )
+    finally:
+        backend.close()
+        engine.close_session()
+
+    assert submissions == ([b"\x01", b"7"] if transport == "serial" else [b"1", b"55"])
+    assert [record.code for record in backend.records] == [1, 55]
+    assert [record.frame_index for record in backend.records] == [0, 1]
+    assert [record.time_s for record in backend.records] == pytest.approx([0.1, 0.2])
+    assert [record.backend_name for record in backend.records] == [transport, transport]
+    assert [record.status for record in backend.records] == ["sent", "sent"]
+
+
+@pytest.mark.parametrize("mode", ["experiment_test_mode", "pilot_mode"])
+def test_psychopy_engine_rejects_external_output_in_explicit_no_output_modes(
+    sample_project, sample_project_root, mode,
+) -> None:
+    run_spec = _two_event_run_spec(sample_project, sample_project_root, duplicate_image=False)
+    engine = PsychoPyEngine()
+    # The guard must reject before opening a socket or a PsychoPy window.
+    with pytest.raises(ValueError, match="require a log-only backend"):
+        engine.run_condition(
+            run_spec,
+            sample_project_root,
+            runtime_options={mode: True},
+            trigger_backend=UnicornUDPBackend(),
+        )
+
+
+@pytest.mark.parametrize("mode", ["experiment_test_mode", "pilot_mode"])
+@pytest.mark.parametrize("invalid_flag", [None, 0, 1, "true", "false"])
+def test_psychopy_engine_does_not_treat_nonboolean_flags_as_test_permission(
+    sample_project, sample_project_root, mode, invalid_flag,
+) -> None:
+    run_spec = _two_event_run_spec(sample_project, sample_project_root, duplicate_image=False)
+    engine = PsychoPyEngine()
+    with pytest.raises(ValueError, match="requires an external marker backend"):
+        engine.run_condition(
+            run_spec,
+            sample_project_root,
+            runtime_options={mode: invalid_flag},
+            trigger_backend=_RecordingTriggerBackend(),
+        )
 
 
 @pytest.mark.parametrize(

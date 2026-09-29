@@ -24,7 +24,14 @@ from fpvs_studio.engines.registry import create_engine
 from fpvs_studio.runtime.export_modes import EXPORT_MODE_FULL, VALID_EXPORT_MODES
 from fpvs_studio.runtime.participant_sessions import reserve_participant_session
 from fpvs_studio.runtime.preflight import preflight_run_spec, preflight_session_plan
+from fpvs_studio.runtime.recording import (
+    RecordingConfigurationError,
+    resolve_recording_backend,
+    validate_production_recording,
+    validate_recording_configuration,
+)
 from fpvs_studio.runtime.run_worker import RuntimeWorker
+from fpvs_studio.runtime.unicorn_recorder import require_unicorn_recorder_recording
 from fpvs_studio.triggers.serial_backend import resolve_serial_port
 
 
@@ -45,6 +52,11 @@ class LaunchSettings:
     serial_pulse_width_ms: int = 10
     serial_reset_code: int | None = None
     serial_reset_delay_ms: int = 5
+    recording_backend: str | None = None
+    unicorn_udp_port: int = 1000
+    recording_operator_confirmed: bool = False
+    recording_association: str | None = None
+    recorder_version: str | None = None
     strict_timing: bool = True
     strict_timing_warmup: bool = True
     verify_refresh_rate: bool = True
@@ -61,7 +73,8 @@ class LaunchSettings:
         """Return a generic engine-facing runtime options mapping."""
 
         options = asdict(self)
-        options["serial_port"] = resolve_serial_port(self.serial_port)
+        if resolve_recording_backend(options) == "serial":
+            options["serial_port"] = resolve_serial_port(self.serial_port)
         engine_name = options["engine_name"]
         if isinstance(engine_name, EngineName):
             options["engine_name"] = engine_name.value
@@ -80,11 +93,10 @@ def _validate_launch_settings(settings: LaunchSettings) -> None:
         raise LaunchSettingsError("fullscreen must be a boolean.")
     if not isinstance(settings.serial_enabled, bool):
         raise LaunchSettingsError("serial_enabled must be a boolean.")
-    if not settings.serial_enabled and not (settings.experiment_test_mode or settings.pilot_mode):
-        raise LaunchSettingsError(
-            "Serial trigger output is required for recording. Null output is only allowed "
-            "in Experiment Test Mode or Pilot Study Mode."
-        )
+    try:
+        effective_recording_backend = validate_production_recording(asdict(settings))
+    except RecordingConfigurationError as exc:
+        raise LaunchSettingsError(str(exc)) from exc
     if not isinstance(settings.strict_timing, bool):
         raise LaunchSettingsError("strict_timing must be a boolean.")
     if not isinstance(settings.strict_timing_warmup, bool):
@@ -124,10 +136,13 @@ def _validate_launch_settings(settings: LaunchSettings) -> None:
     if settings.export_mode not in VALID_EXPORT_MODES:
         valid_values = "', '".join(sorted(VALID_EXPORT_MODES))
         raise LaunchSettingsError(f"export_mode must be one of '{valid_values}'.")
-    try:
-        resolve_serial_port(settings.serial_port)
-    except ValueError as exc:
-        raise LaunchSettingsError(str(exc)) from exc
+    if settings.recording_backend == "unicorn_udp":
+        return
+    if effective_recording_backend == "serial":
+        try:
+            resolve_serial_port(settings.serial_port)
+        except ValueError as exc:
+            raise LaunchSettingsError(str(exc)) from exc
     if not isinstance(settings.serial_baudrate, int) or settings.serial_baudrate <= 0:
         raise LaunchSettingsError("serial_baudrate must be a positive integer.")
     if (
@@ -159,6 +174,21 @@ def _validate_participant_number(participant_number: str) -> str:
     return cleaned
 
 
+def _check_recorder_before_launch(settings: LaunchSettings) -> None:
+    """Check live Recorder state outside the GUI thread before presentation.
+
+    Pending receiver/timing qualification is recorded as metadata, not a blanket
+    launch block. A normal Unicorn launch still requires fresh raw recording data.
+    """
+
+    try:
+        backend = validate_recording_configuration(asdict(settings))
+    except RecordingConfigurationError as exc:
+        raise LaunchSettingsError(str(exc)) from exc
+    if backend == "unicorn_udp":
+        require_unicorn_recorder_recording()
+
+
 def _validate_participant_metadata(
     participant_metadata: ParticipantMetadata | Mapping[str, object] | None,
 ) -> ParticipantMetadata:
@@ -183,6 +213,7 @@ def launch_run(
     """Launch one compiled RunSpec into the selected presentation engine."""
 
     settings = launch_settings or LaunchSettings()
+    _check_recorder_before_launch(settings)
     _validate_launch_settings(settings)
     if settings.export_mode != EXPORT_MODE_FULL:
         raise LaunchSettingsError(
@@ -220,6 +251,7 @@ def launch_session(
     """Launch an ordered session plan into the selected presentation engine."""
 
     settings = launch_settings or LaunchSettings()
+    _check_recorder_before_launch(settings)
     _validate_launch_settings(settings)
     runtime_options = settings.as_runtime_options()
     cleaned_participant_number = _validate_participant_number(participant_number)

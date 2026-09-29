@@ -588,6 +588,49 @@ check that
 requires typing `Confirm` before the runtime task starts; cancelling that check returns
 to FPVS Studio without starting the experiment.
 
+Local recording configuration is validated before participant collection. **Settings > Recording >
+Recording Setup…** edits a computer-local BioSemi serial / Unicorn Recorder UDP choice
+and the loopback UDP port. The subdialog stages edits until Apply; Cancel keeps the
+saved choice. Existing Settings controls keep their immediate-save/Close behavior.
+Home and Run show the effective output or an actionable invalid-setting message.
+With no local choice, legacy BioSemi behavior remains; selecting Unicorn does not
+modify project serial fields, library bundles or compiled experiment timing.
+
+After Launch Experiment and the normal participant flow, the existing background
+launch worker checks that Unicorn Recorder is open and writing a raw BDF. A failure
+returns an actionable error and restores the launch controls before presentation or
+visit reservation. There is no manual Unicorn recording-confirmation dialog. The
+operator still selects real electrodes, raw logging, the intended recording and the
+matching UDP input in Recorder. Successful readiness allows the normal launch to send
+real markers to the selected loopback UDP port, initially `1000`. Full receiver and
+physical timing qualification remain pending in the exported metadata; they do not
+block launch or require a separate mode or approval. The Sophia prompt remains specific to BioSemi.
+Test/Pilot uses null output and skips Recorder checks. Runtime validation remains the
+authority if callers bypass the GUI; see
+[Runtime execution](RUNTIME_EXECUTION.md#unicorn-recorder-udp-receiver-validation-pending).
+
+Recording setup has a `640x560` minimum/default size.
+The additional Settings tab preserves the existing parent size budgets documented
+above; Home and Run retain the `1120x720` main-window minimum. Registered
+`tests/gui/test_recording_setup.py` covers Apply/Cancel, settings reload, invalid saved
+choices/ports and wrapping in both themes. It also checks that both launch surfaces
+queue Recorder checks off the GUI thread, surface failures, restore controls, and
+never create the presentation engine or reserve a visit after a failed check. This coverage is
+registered for a safe visible environment and is not run by ordinary local checks.
+
+Visible acceptance: open Settings > Recording, choose Unicorn, enter port `65535`,
+Apply and reopen. Check the complete pending-validation text and effective endpoint
+on Home and Run at their minimum sizes. Cancel a second edit and verify the saved
+selection is unchanged. Attempt an ordinary launch from Home and Run with Recorder
+closed, open/stopped, acquiring without recording, and actively writing raw BDF.
+Failures must appear after the worker check and return to enabled launch controls;
+successful readiness must continue to the ordinary presentation workflow with Unicorn output.
+Repeat while Recorder is minimized and verify the same result. Enable Test/Pilot
+and verify the label says no marker output and no Recorder probe runs;
+restore the original setting afterward. Check an invalid saved choice and nonnumeric
+port, keyboard navigation, and both light/dark themes. No visible smoke here establishes
+actual BDF receipt or physical timing.
+
 When Experiment Test Mode is enabled, launch first applies the same full-project
 validation gate as a production launch, then replaces participant collection with an
 explicit acknowledgement and a `Condition to run` selector. The selector defaults to
@@ -900,8 +943,8 @@ Current honest behavior:
 - each condition waits for `Space` before playback starts
 - non-final blocks show a separate `Press Space to continue` break screen
 - PsychoPy remains behind the runtime and engine layers
-- serial trigger model fields remain in backend contracts, but serial trigger settings
-  are not exposed in the current GUI
+- serial trigger model fields remain in backend contracts; Settings exposes the local
+  BioSemi/Unicorn choice and UDP port while serial parameters remain project-owned
 - GUI startup itself still does not initialize PsychoPy
 - runtime launch settings keep presentation and timing-QC policies explicit
 - Experiment Test Mode in source and installed builds on Windows and Linux composes those settings
@@ -1009,7 +1052,10 @@ or clean-PC acceptance; implementing these surfaces does not establish those res
 The shared component owner supplies theme-aware form fields, keyboard focus states,
 validation text, dialog headers, and button roles. Settings groups preferences into
 Workspace, Participant runs, and Development; preferences still save immediately.
-Its minimum/default size is `700x520` for packaged builds and `700x610` for source runs.
+Its minimum/default size is `700x560`, or `700x650` with local experiment testing
+available. Library access adds 44 pixels of height (`700x604` / `700x694`).
+The AB Pilot controls use `700x720`, or `700x764` with Library access, in source and
+installed builds. The Recording tab preserves these existing dimensions.
 Presentation (`900x600` minimum) and FPVS Condition Modifiers retain staged Apply/Cancel behavior.
 Native dropdown/spinner affordances and system file pickers remain available.
 

@@ -281,6 +281,29 @@ resolution and relative serialization), then the image I/O entry point. Keep nam
 prefixes out of saved JSON. Core, preprocessing and compiler/runtime focused routes
 include the Windows path regression files.
 
+## Unicorn Recorder Integration
+
+Start with `runtime/recording.py`, `runtime/unicorn_recorder.py`,
+`runtime/unicorn_recorder_windows.py`, `triggers/unicorn_udp_backend.py`,
+`runtime/triggers.py`, the Settings recording controls and
+[Runtime execution](../RUNTIME_EXECUTION.md#trigger-behavior). The
+[active Unicorn plan](../exec-plans/active/unicorn-hybrid-black-support.md) separates
+the implemented software path from pending receiver and physical timing qualification.
+Normal Unicorn launches send real markers after configuration and Recorder readiness
+pass; Test/Pilot always selects null. Full qualification remains pending, with a
+retained 426-marker classic-BDF/CSV receiver test. Never use a fake socket test to
+claim BDF acceptance.
+Home and Run share the automatic Recorder process/raw-file check in the launch worker;
+no manual recording checkbox, UI-thread OS probe, or marker test is part of that check.
+Readiness does not establish receiver/physical-timing qualification; that pending
+evidence status does not block the normal launch workflow.
+
+Use triggers/runtime/engine/gui/docs focused routes, then repo precommit. Adapter tests
+must use fake sockets and never send to an active Recorder. New adapter coverage is
+explicitly registered in the triggers route. Registered GUI checks require an approved
+visible session. Local recording choice is separate from portable project COM fields;
+the broader named-profile/display plan remains planned work.
+
 ## Planning Route
 
 - Planning map: `docs/PLANS.md`

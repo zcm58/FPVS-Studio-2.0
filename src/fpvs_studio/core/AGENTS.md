@@ -12,6 +12,9 @@ This directory is the most important foundation in the repo. It should remain im
 - dedicated `RunSpec` schemas in `run_spec.py`
 - dedicated `SessionPlan` schemas in `session_plan.py`
 - dedicated execution-result schemas in `execution.py`
+- neutral, versioned recording snapshots and acquisition attempt evidence in
+  `execution.py`; runtime owns qualification, transport selection and file writing.
+  These execution metadata fields never enter `ProjectFile`, `RunSpec` or `SessionPlan`.
 - reusable declarative condition-task schemas in `task_models.py`
 - compilation of condition-task bindings into `SessionEntry` task specs
 - project-contained task-media services in `task_assets.py`

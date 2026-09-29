@@ -26,12 +26,14 @@ from fpvs_studio.core.run_spec import AttentionalBlinkStreamRunSpec, RunSpec
 from fpvs_studio.core.session_plan import SessionEntry, SessionPlan
 from fpvs_studio.core.task_models import TaskResponseRecord
 from fpvs_studio.engines.base import PresentationEngine
+from fpvs_studio.runtime.acquisition_evidence import AcquisitionEvidenceRecorder
 from fpvs_studio.runtime.attentional_blink_report import AttentionalBlinkSessionRecorder
 from fpvs_studio.runtime.backward_counting import BackwardCountingSession
 from fpvs_studio.runtime.export_modes import EXPORT_MODE_FULL
 from fpvs_studio.runtime.fixation import build_fixation_task_summary, score_fixation_responses
 from fpvs_studio.runtime.masking_report import write_masking_plan_checkpoint
 from fpvs_studio.runtime.preflight import PreflightError
+from fpvs_studio.runtime.recording import recording_backend_label, recording_snapshot
 from fpvs_studio.runtime.session_export import (
     append_compact_task_responses,
     append_session_condition_history,
@@ -95,9 +97,21 @@ class RuntimeWorker:
         run_spec = _run_spec_for_participant(run_spec, participant_metadata)
         write_detailed_exports = _writes_detailed_exports(runtime_options)
         summary_relative_output_dir = relative_output_dir if write_detailed_exports else None
-        trigger_backend, trigger_warnings = _build_and_connect_trigger_backend(runtime_options)
-        session_open = False
+        acquisition = AcquisitionEvidenceRecorder(
+            project_root, [run_spec], runtime_options=runtime_options,
+            project_id=run_spec.project_id,
+            participant_number=participant_number,
+        )
         try:
+            trigger_backend, trigger_warnings = _build_and_connect_trigger_backend(runtime_options)
+        except Exception as exc:
+            _finish_acquisition_after_error(acquisition, exc)
+            raise
+        session_open = False
+        execution_error: Exception | None = None
+        run_summary: RunExecutionSummary | None = None
+        try:
+            acquisition.start_run(run_spec.run_id, len(trigger_backend.records))
             self._engine.open_session(runtime_options=runtime_options)
             session_open = True
             _validate_configured_display_resolution(self._engine, run_spec)
@@ -181,13 +195,38 @@ class RuntimeWorker:
                             total_condition_count=1,
                             was_aborted=False,
                         )
+        except Exception as exc:
+            execution_error = exc
         finally:
-            if session_open:
-                self._engine.close_session()
-            trigger_backend.close()
+            try:
+                if session_open:
+                    self._engine.close_session()
+            except Exception as exc:
+                execution_error = execution_error or exc
+            try:
+                trigger_backend.close()
+            except Exception as exc:
+                execution_error = execution_error or exc
 
-        if write_detailed_exports:
-            write_run_artifacts(output_dir, run_spec, run_summary)
+        if execution_error is not None:
+            _finish_acquisition_after_error(
+                acquisition, execution_error, records=trigger_backend.records,
+            )
+            raise execution_error
+        assert run_summary is not None
+        try:
+            acquisition.record_run(run_summary)
+            acquisition.finish(
+                abort_reason=run_summary.abort_reason if run_summary.aborted else None,
+                records=trigger_backend.records,
+            )
+            if write_detailed_exports:
+                write_run_artifacts(output_dir, run_spec, run_summary)
+        except Exception as exc:
+            _finish_acquisition_after_error(
+                acquisition, exc, records=trigger_backend.records, export_error=str(exc),
+            )
+            raise
         return run_summary
 
     def execute_session(
@@ -206,7 +245,18 @@ class RuntimeWorker:
 
         session_plan = _session_plan_for_participant(session_plan, participant_metadata)
         write_detailed_exports = _writes_detailed_exports(runtime_options)
-        trigger_backend, trigger_warnings = _build_and_connect_trigger_backend(runtime_options)
+        acquisition = AcquisitionEvidenceRecorder(
+            project_root, [entry.run_spec for entry in session_plan.ordered_entries()],
+            project_id=session_plan.project_id,
+            runtime_options=runtime_options, participant_number=participant_number,
+            participant_session_number=participant_session_number,
+            session_id=session_plan.session_id,
+        )
+        try:
+            trigger_backend, trigger_warnings = _build_and_connect_trigger_backend(runtime_options)
+        except Exception as exc:
+            _finish_acquisition_after_error(acquisition, exc)
+            raise
         session_open = False
         warnings = list(trigger_warnings)
         run_results: list[RunExecutionSummary] = []
@@ -251,7 +301,11 @@ class RuntimeWorker:
                 aborted=reason is not None,
                 abort_reason=reason,
                 warnings=warnings,
-                runtime_metadata=_pick_session_runtime_metadata(results),
+                runtime_metadata=_pick_session_runtime_metadata(results) or RuntimeMetadata(
+                    engine_name=self._engine.engine_id,
+                    recording=recording_snapshot(runtime_options),
+                    pilot_mode=bool((runtime_options or {}).get("pilot_mode", False)),
+                ),
                 realized_block_orders=[
                     list(block.condition_order) for block in session_plan.blocks
                 ],
@@ -262,6 +316,7 @@ class RuntimeWorker:
         compact_run_paths: set[Path] = set()
 
         def checkpoint_results(results: list[RunExecutionSummary]) -> None:
+            acquisition.record_run(results[-1])
             if not write_detailed_exports:
                 compact_run_paths.add(
                     write_compact_run_checkpoint(project_root, results[-1]),
@@ -289,6 +344,7 @@ class RuntimeWorker:
             for entry in ordered_entries:
                 if abort_reason is not None:
                     break
+                acquisition.start_run(entry.run_id, len(trigger_backend.records))
                 _validate_configured_display_resolution(self._engine, entry.run_spec)
                 if entry.run_spec.scene_stream is not None:
                     self._engine.prepare_condition(
@@ -570,6 +626,12 @@ class RuntimeWorker:
             )
         session_summary = session_result(run_results, abort_reason)
         try:
+            for result in run_results:
+                acquisition.record_run(result)
+            acquisition.finish(
+                abort_reason=abort_reason, interrupted=execution_error is not None,
+                records=trigger_backend.records,
+            )
             compact_summary_path = (
                 None if write_detailed_exports
                 else write_compact_session_checkpoint(project_root, session_summary)
@@ -593,6 +655,10 @@ class RuntimeWorker:
                 if compact_task_checkpoint is not None:
                     compact_task_checkpoint.discard()
         except Exception as export_error:
+            _finish_acquisition_after_error(
+                acquisition, execution_error or export_error,
+                records=trigger_backend.records, export_error=str(export_error),
+            )
             if execution_error is not None:
                 LOGGER.exception("Result finalization also failed after session interruption.")
                 raise execution_error from export_error
@@ -651,6 +717,7 @@ class RuntimeWorker:
                 )
         runtime_metadata = runtime_metadata.model_copy(
             update={
+                "recording": recording_snapshot(runtime_options),
                 "pilot_mode": bool((runtime_options or {}).get("pilot_mode", False)),
                 "fixation_rt_scoring_source": _fixation_rt_scoring_source(
                     run_spec,
@@ -952,15 +1019,40 @@ def _build_and_connect_trigger_backend(
         trigger_backend.connect()
     except Exception as exc:
         if trigger_backend is not None:
-            trigger_backend.close()
+            try:
+                trigger_backend.close()
+            except Exception:
+                LOGGER.exception("Trigger cleanup also failed during preflight.")
         if isinstance(exc, SerialBackendError):
             raise PreflightError(str(exc)) from exc
+        try:
+            label = recording_backend_label(runtime_options)
+        except ValueError:
+            label = "configured recording backend"
+        help_text = (
+            "Check the configured loopback UDP port. Opening a socket cannot verify "
+            "Recorder is listening or saving EEG."
+            if (runtime_options or {}).get("recording_backend") == "unicorn_udp"
+            else "Confirm the configured serial port is available, the trigger interface "
+            "is connected, and no other program has the port open."
+        )
         raise PreflightError(
-            "Trigger preflight failed before launch. Confirm the configured serial "
-            "port is available, the trigger interface is connected, and no other "
-            f"program has the port open. Details: {exc}"
+            f"Trigger preflight failed before launch ({label}). {help_text} Details: {exc}"
         ) from exc
     return trigger_backend, warnings
+
+
+def _finish_acquisition_after_error(
+    acquisition: AcquisitionEvidenceRecorder, error: Exception, *,
+    records: Iterable[TriggerRecord] = (), export_error: str | None = None,
+) -> None:
+    try:
+        acquisition.finish(
+            abort_reason=f"{type(error).__name__}: {error}", interrupted=True,
+            records=list(records), export_error=export_error,
+        )
+    except Exception:
+        LOGGER.exception("Acquisition evidence finalization also failed; retaining last snapshot.")
 
 
 def _estimate_refresh_hz(frame_intervals: list[FrameIntervalRecord]) -> float | None:
@@ -1147,6 +1239,7 @@ def _build_start_aborted_summary(
         warnings=list(warnings),
         runtime_metadata=RuntimeMetadata(
             engine_name=engine_name,
+            recording=recording_snapshot(runtime_options),
             display_index=_coerce_int(runtime_options, "display_index"),
             fullscreen=bool((runtime_options or {}).get("fullscreen", True)),
             requested_refresh_hz=run_spec.display.refresh_hz,
@@ -1185,6 +1278,7 @@ def _build_trigger_aborted_summary(
         warnings=list(warnings),
         runtime_metadata=RuntimeMetadata(
             engine_name=engine_name,
+            recording=recording_snapshot(runtime_options),
             display_index=_coerce_int(runtime_options, "display_index"),
             fullscreen=bool((runtime_options or {}).get("fullscreen", True)),
             requested_refresh_hz=run_spec.display.refresh_hz,

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from pathlib import Path
+from types import SimpleNamespace
 
 from PIL import Image
 from PySide6.QtCore import Qt
@@ -23,7 +24,26 @@ from fpvs_studio.core.enums import RunMode, StimulusVariant
 from fpvs_studio.core.execution import SessionExecutionSummary
 from fpvs_studio.gui.controller import StudioController
 from fpvs_studio.gui.main_window import ParticipantNumberDialog
+from fpvs_studio.runtime import launcher as runtime_launcher
 from fpvs_studio.runtime.export_modes import EXPORT_MODE_COMPACT
+
+
+def _stub_runtime_session_execution(monkeypatch, execute_session) -> None:
+    """Keep shared runtime preflight ordering without reserving or presenting a visit."""
+
+    monkeypatch.setattr(
+        runtime_launcher, "create_engine", lambda engine_name: {"engine_name": engine_name},
+    )
+    monkeypatch.setattr(
+        runtime_launcher, "reserve_participant_session",
+        lambda _root, _participant, *, session_id, **_kwargs: SimpleNamespace(
+            output_label=session_id, participant_session_number=1,
+        ),
+    )
+    monkeypatch.setattr(
+        runtime_launcher, "RuntimeWorker",
+        lambda _engine: SimpleNamespace(execute_session=execute_session),
+    )
 
 
 def test_assets_preprocessing_import_and_materialize_updates_status(
@@ -104,10 +124,6 @@ def test_launch_collects_participant_prompt_before_backend_preflight(
 
     captures: dict[str, object] = {}
     monkeypatch.setattr(
-        "fpvs_studio.gui.document.create_engine",
-        lambda engine_name: {"engine_name": engine_name},
-    )
-    monkeypatch.setattr(
         "fpvs_studio.gui.main_window.QMessageBox.information",
         lambda *args, **kwargs: QMessageBox.StandardButton.Ok,
     )
@@ -118,8 +134,7 @@ def test_launch_collects_participant_prompt_before_backend_preflight(
         return "00042"
 
     def _fake_launch(
-        project_root, session_plan, participant_number, launch_settings,
-        participant_session_number=None,
+        project_root, session_plan, _output_dir, *, participant_number, **_kwargs,
     ):
         phase_trace.append("launch")
         return SessionExecutionSummary(
@@ -136,7 +151,7 @@ def test_launch_collects_participant_prompt_before_backend_preflight(
             output_dir=f"runs/{session_plan.session_id}",
         )
 
-    def _capture_preflight(project_root, session_plan, engine):
+    def _capture_preflight(project_root, session_plan, *, engine, **_kwargs):
         phase_trace.append("preflight")
         captures.update(
             {
@@ -146,9 +161,9 @@ def test_launch_collects_participant_prompt_before_backend_preflight(
             }
         )
 
-    monkeypatch.setattr("fpvs_studio.gui.document.preflight_session_plan", _capture_preflight)
+    monkeypatch.setattr(runtime_launcher, "preflight_session_plan", _capture_preflight)
     monkeypatch.setattr(window.run_page, "_prompt_participant_number", _fake_prompt)
-    monkeypatch.setattr("fpvs_studio.gui.document.launch_session", _fake_launch)
+    _stub_runtime_session_execution(monkeypatch, _fake_launch)
     monkeypatch.setattr("fpvs_studio.gui.run_page.ProgressTask", _ImmediateProgressTask)
 
     window.run_page.launch_session()
@@ -337,7 +352,6 @@ def test_launch_after_preview_recompiles_and_preflights_once_per_click(
     assert "session preview refreshed" in window.run_page.summary_text.toPlainText().lower()
 
     original_compile = window.document.compile_session
-    original_preflight = window.document.preflight_compiled_session
     compile_calls: list[float] = []
     preflight_session_ids: list[str] = []
     launched_session_ids: list[str] = []
@@ -347,11 +361,12 @@ def test_launch_after_preview_recompiles_and_preflights_once_per_click(
         assert condition_ids is None
         return original_compile(refresh_hz=refresh_hz, condition_ids=condition_ids)
 
-    def _capture_preflight_compiled(session_plan, **kwargs):
+    def _capture_preflight_compiled(_project_root, session_plan, **_kwargs):
         preflight_session_ids.append(session_plan.session_id)
-        return original_preflight(session_plan, **kwargs)
 
-    def _capture_launch(project_root, session_plan, participant_number, launch_settings):
+    def _capture_launch(
+        project_root, session_plan, _output_dir, *, participant_number, **_kwargs,
+    ):
         launched_session_ids.append(session_plan.session_id)
         return SessionExecutionSummary(
             project_id=session_plan.project_id,
@@ -368,17 +383,11 @@ def test_launch_after_preview_recompiles_and_preflights_once_per_click(
         )
 
     monkeypatch.setattr(window.document, "compile_session", _capture_compile)
-    monkeypatch.setattr(window.document, "preflight_compiled_session", _capture_preflight_compiled)
     monkeypatch.setattr(
-        "fpvs_studio.gui.document.create_engine",
-        lambda engine_name: {"engine_name": engine_name},
-    )
-    monkeypatch.setattr(
-        "fpvs_studio.gui.document.preflight_session_plan",
-        lambda project_root, session_plan, engine: None,
+        runtime_launcher, "preflight_session_plan", _capture_preflight_compiled,
     )
     monkeypatch.setattr(window.run_page, "_prompt_participant_number", lambda: "00052")
-    monkeypatch.setattr("fpvs_studio.gui.document.launch_session", _capture_launch)
+    _stub_runtime_session_execution(monkeypatch, _capture_launch)
     monkeypatch.setattr(
         "fpvs_studio.gui.main_window.QMessageBox.information",
         lambda *args, **kwargs: QMessageBox.StandardButton.Ok,

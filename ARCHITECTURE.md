@@ -242,8 +242,18 @@ owns endpoint estimates and task-response checkpoints. Details and acceptance ar
   task sequencing, validation, compilation, session decisions, project persistence,
   or exports. Runtime image/word transforms and native geometry are compiled
   presentation properties and never create project assets.
-  The trigger backend contract declares physical-output capability; playback rejects
+  The trigger backend contract declares external-marker capability; playback rejects
   log-only backends outside explicit test/pilot launches and empty trigger schedules.
+- `runtime/recording.py` resolves the local BioSemi/Unicorn selection independently of
+  project trigger fields. Unicorn's loopback UDP adapter uses prepared ASCII markers;
+  normal launches send real markers after configuration and Recorder readiness pass.
+  `runtime/unicorn_recorder.py`
+  owns a bounded, read-only Windows process/raw-file readiness check in the launch worker,
+  before participant presentation. Receiver and physical timing qualification remain
+  pending evidence states rather than software launch blockers. Runtime owns
+  versioned acquisition evidence in full and compact modes. Local submission, operator
+  confirmation, recorded-marker integrity and physical timing remain separate evidence
+  levels; see [Runtime execution](docs/RUNTIME_EXECUTION.md#trigger-behavior).
 - Full export mode writes each numbered visit under `runs/P<PID>_session<NN>/`.
   Compact mode keeps reporting and visit reservations under `logs/` without detailed
   run folders. Historical outputs remain in place.

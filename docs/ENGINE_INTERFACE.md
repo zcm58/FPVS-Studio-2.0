@@ -24,6 +24,13 @@ as PsychoPy. Runtime owns flow and calls engines through
 - PsychoPy imports must remain lazy and local to engine implementations.
 - Engines return core-owned execution summaries; exporters stay outside engine
   code.
+- Production playback requires a backend declaring `emits_external_markers`; the legacy
+  `emits_hardware_triggers` property remains compatible for existing serial adapters.
+  Unicorn UDP declares external output without claiming a direct hardware connection.
+  The unchanged flip callback submits one prepared marker at each compiled event;
+  payload preparation, receiver qualification and acquisition exports stay outside it.
+  Test/Pilot uses null output. Neither capability nor a successful send establishes
+  receiver delivery or EEG sample timing. See [Runtime execution](RUNTIME_EXECUTION.md#trigger-behavior).
 - Runtime may pass one `ResolvedTaskStep` at a time to `render_task_step(...)`.
   Engines return `TaskEngineInput`; they do not own module ordering, repeats, retries,
   branching, validation, scoring, abort policy, or response export.

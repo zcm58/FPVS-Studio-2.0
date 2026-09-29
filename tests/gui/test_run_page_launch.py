@@ -187,20 +187,6 @@ def test_run_page_readiness_and_launch_feedback_is_updated_on_launch(
 
     captures: dict[str, object] = {}
     monkeypatch.setattr(
-        "fpvs_studio.gui.document.create_engine",
-        lambda engine_name: {"engine_name": engine_name},
-    )
-    monkeypatch.setattr(
-        "fpvs_studio.gui.document.preflight_session_plan",
-        lambda project_root, session_plan, engine: captures.update(
-            {
-                "project_root": project_root,
-                "session_id": session_plan.session_id,
-                "engine": engine,
-            }
-        ),
-    )
-    monkeypatch.setattr(
         "fpvs_studio.gui.main_window.QMessageBox.information",
         lambda *args, **kwargs: QMessageBox.StandardButton.Ok,
     )
@@ -211,6 +197,8 @@ def test_run_page_readiness_and_launch_feedback_is_updated_on_launch(
         project_root, session_plan, participant_number, launch_settings,
         participant_session_number=None,
     ):
+        captures["project_root"] = project_root
+        captures["session_id"] = session_plan.session_id
         captures["participant_number"] = participant_number
         return SessionExecutionSummary(
             project_id=session_plan.project_id,

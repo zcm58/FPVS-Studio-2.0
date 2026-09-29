@@ -331,6 +331,11 @@ class HomePage(QWidget):
         for column in range(4):
             metrics_layout.setColumnStretch(column, 1)
         launch_panel_layout.addWidget(metrics_panel)
+        self.recording_summary = QLabel(self)
+        self.recording_summary.setObjectName("home_recording_summary")
+        self.recording_summary.setWordWrap(True)
+        self.recording_summary.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        launch_panel_layout.addWidget(self.recording_summary)
         launch_panel_layout.addWidget(self.launch_button, 0, Qt.AlignmentFlag.AlignCenter)
 
         layout = QVBoxLayout(self)
@@ -479,6 +484,7 @@ class HomePage(QWidget):
             else "Enabled" if fixation_settings.accuracy_task_enabled else "Disabled"
         )
         self._refresh_sophia_mode_ticker()
+        self.recording_summary.setText(self._document.recording_setup_summary())
         self._set_status_indicator(report)
         self.launch_surface.hero_layout.activate()
         self._sync_hero_height()

@@ -104,6 +104,26 @@ class ParticipantMetadata(FPVSBaseModel):
         )
 
 
+class RecordingSnapshot(FPVSBaseModel):
+    """Versioned local configuration and human confirmation, never EEG telemetry."""
+
+    schema_version: Literal[1] = 1
+    selected_backend: Literal["serial", "unicorn_udp"]
+    effective_backend: Literal["serial", "unicorn_udp", "null"]
+    selection_source: Literal["legacy_project", "local_settings"]
+    udp_host: Literal["127.0.0.1"] | None = None
+    udp_port: StrictInt | None = Field(default=None, ge=1, le=65535)
+    serial_port: str | None = None
+    serial_baudrate: StrictInt | None = Field(default=None, gt=0)
+    operator_confirmed_raw_bdf_recording: bool = False
+    recording_association: str | None = None
+    recorder_version: str | None = None
+    receiver_validation: Literal["pending", "not_applicable"]
+    recorded_marker_integrity: Literal["unknown"] = "unknown"
+    physical_timing: Literal["uncharacterized"] = "uncharacterized"
+    acquisition_status: Literal["unknown"] = "unknown"
+
+
 class RuntimeMetadata(FPVSBaseModel):
     """Measured runtime/display metadata captured while executing a session."""
 
@@ -122,6 +142,7 @@ class RuntimeMetadata(FPVSBaseModel):
     # Runtime control flow must not depend on this historical field.
     test_mode: bool = False
     pilot_mode: bool = False
+    recording: RecordingSnapshot | None = None
     timing_qc_expected_interval_s: float | None = Field(default=None, gt=0)
     timing_qc_threshold_interval_s: float | None = Field(default=None, gt=0)
     timing_qc_warmup_frames: int | None = Field(default=None, ge=0)
@@ -278,6 +299,66 @@ class TriggerRecord(FPVSBaseModel):
         if not cleaned:
             raise ValueError("Trigger labels and backend names may not be blank.")
         return cleaned
+
+
+class AcquisitionCodeMapEntry(FPVSBaseModel):
+    """A compiled code/label association; this does not assert emission."""
+
+    code: StrictInt = Field(ge=1, le=255)
+    label: str
+
+
+class AcquisitionRunEvidence(FPVSBaseModel):
+    """Runtime attempt evidence for one run, separate from compiled intent."""
+
+    run_id: str
+    condition_id: str
+    condition_name: str
+    code_map: list[AcquisitionCodeMapEntry] = Field(default_factory=list)
+    planned_event_count: int = Field(ge=0)
+    attempted_events: list[TriggerRecord] = Field(default_factory=list)
+    state: Literal["not_started", "started", "completed", "aborted", "interrupted"] = "not_started"
+    completed_frames: int | None = Field(default=None, ge=0)
+    abort_reason: str | None = None
+
+
+class AcquisitionEvidence(FPVSBaseModel):
+    """Candidate versioned Studio handoff, not a receiver reconciliation result."""
+
+    schema_version: Literal["1.0"] = "1.0"
+    contract_status: Literal["candidate_receiver_validation_pending"] = (
+        "candidate_receiver_validation_pending"
+    )
+    studio_version: str
+    execution_id: str
+    project_id: str
+    participant_number: str
+    participant_session_number: int | None = Field(default=None, ge=1)
+    session_id: str | None = None
+    recording: RecordingSnapshot
+    created_at_utc: datetime
+    updated_at_utc: datetime
+    wall_clock_meaning: Literal["UTC evidence write time; not EEG synchronization"] = (
+        "UTC evidence write time; not EEG synchronization"
+    )
+    callback_time_units: Literal["seconds"] = "seconds"
+    callback_time_origin: Literal["per-run playback clock after warmup; not EEG time"] = (
+        "per-run playback clock after warmup; not EEG time"
+    )
+    sent_status_meaning: Literal[
+        "local transport submission only; receipt and disk logging unknown"
+    ] = (
+        "local transport submission only; receipt and disk logging unknown"
+    )
+    persistence_boundary: Literal[
+        "between runs and on orderly failure; abrupt process loss may omit current run"
+    ] = (
+        "between runs and on orderly failure; abrupt process loss may omit current run"
+    )
+    state: Literal["prepared", "running", "completed", "aborted", "interrupted"] = "prepared"
+    abort_reason: str | None = None
+    export_error: str | None = None
+    runs: list[AcquisitionRunEvidence] = Field(default_factory=list)
 
 
 class AttentionalBlinkBurstRecord(FPVSBaseModel):
