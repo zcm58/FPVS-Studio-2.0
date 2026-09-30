@@ -16,9 +16,11 @@ from tests.gui.helpers import (
     prepare_compile_ready_project,
 )
 
-from fpvs_studio.core.enums import RunMode
+from fpvs_studio.core.enums import ExperimentCategory, RunMode
 from fpvs_studio.core.execution import SessionExecutionSummary
 from fpvs_studio.gui import controller as controller_module
+from fpvs_studio.gui import home_page as home_page_module
+from fpvs_studio.gui.document import ProjectDocument
 from fpvs_studio.gui.recording_dialog import RecordingSetupDialog
 from fpvs_studio.gui.run_page import ParticipantLaunchDetails, RunPage
 from fpvs_studio.gui.settings_dialog import AppSettingsDialog
@@ -215,10 +217,14 @@ def test_unicorn_launch_queues_automatic_check_and_surfaces_failure(
     window.resize(1120, 720)
     window.show()
     QApplication.processEvents()
-    assert "127.0.0.1:1000" in window.home_page.recording_summary.text()
+    assert window.home_page.recording_summary.text() == (
+        "Recording Device: Unicorn Black Mobile Headset"
+    )
+    assert "127.0.0.1:1000" in window.home_page.recording_summary.toolTip()
     _assert_labels_fit(window.home_page)
     document.set_experiment_test_mode_enabled(True)
     assert "No marker output" in document.recording_setup_summary()
+    assert window.home_page.recording_summary.text() == "No marker output (Test/Pilot)"
 
 
 @pytest.mark.parametrize("entrypoint", ["home", "run"])
@@ -286,6 +292,89 @@ def test_ready_unicorn_reaches_runtime_execution_on_both_launch_surfaces(
     assert not window.is_launch_busy()
     assert page._active_launch_task is None
     assert "Recorder check before launch" in document.recording_setup_summary()
+
+
+@pytest.mark.parametrize("background", ["#f4f7fb", "#202124"])
+@pytest.mark.parametrize("backend, port, expected", [
+    (None, 1000, "Recording Device: BioSemi ActiveTwo"),
+    ("serial", 1000, "Recording Device: BioSemi ActiveTwo"),
+    ("unicorn_udp", 65535, "Recording Device: Unicorn Black Mobile Headset"),
+    ("unicorn_udp", "broken saved port",
+     "Recording setup invalid. Open Settings > Recording to correct it."),
+    ("unknown old selection", 1000,
+     "Recording setup invalid. Open Settings > Recording to correct it."),
+])
+def test_home_recording_device_label_fits_and_preserves_output_details(
+    qtbot, controller, tmp_path, monkeypatch, background, backend, port, expected,
+):
+    document, window = open_created_project(controller, qtbot, tmp_path, "Home recording setup")
+    recorder_probe = Mock(side_effect=AssertionError("Home refresh must not probe Recorder"))
+    monkeypatch.setattr(runtime_launcher, "require_unicorn_recorder_recording", recorder_probe)
+    document.set_recording_configuration({"recording_backend": backend, "unicorn_udp_port": port})
+    palette = window.palette()
+    palette.setColor(QPalette.ColorRole.Window, QColor(background))
+    window.setPalette(palette)
+    window.resize(1120, 720)
+    window.show()
+    page = window.home_page
+    label = page.recording_summary
+
+    for setup_ready in (False, True):
+        if setup_ready:
+            prepare_compile_ready_project(window, tmp_path / "home-recording-assets")
+        QApplication.processEvents()
+        assert label.text() == expected
+        assert label.toolTip() == document.recording_setup_summary()
+        assert label.accessibleDescription() == document.recording_setup_summary()
+        assert label.textFormat() == Qt.TextFormat.PlainText
+        assert label.alignment() == Qt.AlignmentFlag.AlignCenter
+        assert label.geometry().bottom() < page.launch_button.geometry().top()
+        _assert_labels_fit(page)
+
+    if backend in (None, "serial", "unicorn_udp") and isinstance(port, int):
+        document.set_experiment_test_mode_enabled(True)
+        QApplication.processEvents()
+        assert label.text() == "No marker output (Test/Pilot)"
+        _assert_labels_fit(page)
+        document.set_experiment_test_mode_enabled(False)
+        assert label.text() == expected
+    recorder_probe.assert_not_called()
+
+
+@pytest.mark.parametrize("background", ["#f4f7fb", "#202124"])
+def test_home_recording_device_name_extension_and_pilot_output(
+    qtbot, tmp_path, monkeypatch, background,
+):
+    name = (
+        "Wireless High Density Research EEG Headset with an Extended Computer Local "
+        "Acquisition Configuration for the Cognitive Neuroscience Laboratory"
+    )
+    monkeypatch.setitem(home_page_module._HOME_RECORDING_DEVICE_NAMES, "unicorn_udp", name)
+    document = ProjectDocument.create_new(
+        parent_dir=tmp_path, project_name="Recording label extension",
+        experiment_category=ExperimentCategory.ATTENTIONAL_BLINK,
+    )
+    page = home_page_module.HomePage(document, load_condition_template_profiles=lambda: [])
+    qtbot.addWidget(page)
+    palette = page.palette()
+    palette.setColor(QPalette.ColorRole.Window, QColor(background))
+    page.setPalette(palette)
+    page.resize(1120, 720)
+    page.show()
+    document.set_recording_configuration({
+        "recording_backend": "unicorn_udp", "unicorn_udp_port": 1000,
+    })
+    QApplication.processEvents()
+    assert page.recording_summary.text() == f"Recording Device: {name}"
+    _assert_labels_fit(page)
+    document.set_attentional_blink_pilot_mode_enabled(True)
+    QApplication.processEvents()
+    assert page.recording_summary.text() == "No marker output (Test/Pilot)"
+    _assert_labels_fit(page)
+    document.set_attentional_blink_pilot_mode_enabled(False)
+    assert page.recording_summary.text() == f"Recording Device: {name}"
+    document.set_recording_configuration({"recording_backend": "serial"})
+    assert page.recording_summary.text() == "Recording Device: BioSemi ActiveTwo"
 
 
 @pytest.mark.parametrize("backend, port", [

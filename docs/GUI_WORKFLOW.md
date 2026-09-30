@@ -592,7 +592,14 @@ Local recording configuration is validated before participant collection. **Sett
 Recording Setup…** edits a computer-local BioSemi serial / Unicorn Recorder UDP choice
 and the loopback UDP port. The subdialog stages edits until Apply; Cancel keeps the
 saved choice. Existing Settings controls keep their immediate-save/Close behavior.
-Home and Run show the effective output or an actionable invalid-setting message.
+Home shows a centered `Recording Device: BioSemi ActiveTwo` or
+`Recording Device: Unicorn Black Mobile Headset` immediately above Launch Experiment.
+Its GUI-only display-name map in `gui/home_page.py` can be extended when recording
+backends are added. The existing effective transport, endpoint and Recorder-check
+details remain in the label's tooltip and accessible description; Run retains its
+full output summary. Home and Run preserve the no-marker Test/Pilot text and
+actionable invalid-setting messages. The device label identifies the configuration,
+not a detected connection or recording-readiness result.
 With no local choice, legacy BioSemi behavior remains; selecting Unicorn does not
 modify project serial fields, library bundles or compiled experiment timing.
 
@@ -619,8 +626,10 @@ never create the presentation engine or reserve a visit after a failed check. Th
 registered for a safe visible environment and is not run by ordinary local checks.
 
 Visible acceptance: open Settings > Recording, choose Unicorn, enter port `65535`,
-Apply and reopen. Check the complete pending-validation text and effective endpoint
-on Home and Run at their minimum sizes. Cancel a second edit and verify the saved
+Apply and reopen. Check Home's full device name above Launch Experiment, its transport
+tooltip, and Run's complete output summary at their minimum sizes in both themes.
+Switch back to BioSemi and confirm Home updates to `Recording Device: BioSemi ActiveTwo`.
+Cancel a second edit and verify the saved
 selection is unchanged. Attempt an ordinary launch from Home and Run with Recorder
 closed, open/stopped, acquiring without recording, and actively writing raw BDF.
 Failures must appear after the worker check and return to enabled launch controls;

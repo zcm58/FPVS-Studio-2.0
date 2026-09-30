@@ -32,7 +32,7 @@ from fpvs_studio.gui.components import (
     mark_primary_action,
     mark_secondary_action,
 )
-from fpvs_studio.gui.document import ProjectDocument
+from fpvs_studio.gui.document import DocumentError, ProjectDocument
 from fpvs_studio.gui.window_helpers import (
     LauncherReadinessReport,
     _launcher_readiness_report,
@@ -44,6 +44,11 @@ _HOME_LAUNCH_BUTTON_HORIZONTAL_CHROME = 76
 _HOME_LAUNCH_BUTTON_VERTICAL_CHROME = 40
 _HOME_LAUNCH_BUTTON_ICON_GAP = 8
 _HOME_HERO_MIN_HEIGHT = 328
+# Add display names here as new recording backends become supported.
+_HOME_RECORDING_DEVICE_NAMES = {
+    "serial": "BioSemi ActiveTwo",
+    "unicorn_udp": "Unicorn Black Mobile Headset",
+}
 _SOPHIA_MODE_TICKER_TEXT = (
     "SOPHIA MODE ENABLED    SOPHIA MODE ENABLED    SOPHIA MODE ENABLED"
 )
@@ -333,6 +338,7 @@ class HomePage(QWidget):
         launch_panel_layout.addWidget(metrics_panel)
         self.recording_summary = QLabel(self)
         self.recording_summary.setObjectName("home_recording_summary")
+        self.recording_summary.setTextFormat(Qt.TextFormat.PlainText)
         self.recording_summary.setWordWrap(True)
         self.recording_summary.setAlignment(Qt.AlignmentFlag.AlignCenter)
         launch_panel_layout.addWidget(self.recording_summary)
@@ -484,10 +490,24 @@ class HomePage(QWidget):
             else "Enabled" if fixation_settings.accuracy_task_enabled else "Disabled"
         )
         self._refresh_sophia_mode_ticker()
-        self.recording_summary.setText(self._document.recording_setup_summary())
+        self._refresh_recording_summary()
         self._set_status_indicator(report)
         self.launch_surface.hero_layout.activate()
         self._sync_hero_height()
+
+    def _refresh_recording_summary(self) -> None:
+        summary = self._document.recording_setup_summary()
+        try:
+            backend = self._document.validate_recording_launch()
+        except DocumentError:
+            device_name = None
+        else:
+            device_name = _HOME_RECORDING_DEVICE_NAMES.get(backend)
+        self.recording_summary.setText(
+            f"Recording Device: {device_name}" if device_name else summary,
+        )
+        self.recording_summary.setToolTip(summary)
+        self.recording_summary.setAccessibleDescription(summary)
 
     def _sync_hero_height(self) -> None:
         panel = self.launch_surface.hero_container

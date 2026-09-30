@@ -1963,6 +1963,11 @@ def home_page_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
         font-size: 20px;
         font-weight: 700;
     }}
+    QLabel#home_recording_summary {{
+        color: {theme.text_primary};
+        font-size: 14px;
+        font-weight: 600;
+    }}
     QPushButton#home_launch_experiment_button {{
         font-size: 18px;
         min-height: 50px;

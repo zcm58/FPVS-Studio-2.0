@@ -359,6 +359,22 @@ tests require a user-approved safe visible setup; never use offscreen Qt locally
 
 ## Decision And Progress Log
 
+- 2026-09-30: User selected the minimal Home launch-text indicator, with
+  `Recording Device: BioSemi ActiveTwo` and
+  `Recording Device: Unicorn Black Mobile Headset`. Home's display-name map is the
+  extension point for future supported backends; this adds no new recording backend.
+  Transport/endpoint and Recorder-check details remain in the tooltip and accessible
+  description. Run's output summary, Test/Pilot no-marker text, invalid-configuration
+  messages and launch checks retain their existing behavior. Registered visible Qt
+  coverage includes both themes at `1120x720`, incomplete/ready projects, configuration
+  changes, no-output modes and a long future display name. Local Qt execution remains
+  opt-in; the visible acceptance route is in `docs/GUI_WORKFLOW.md`.
+  Validation: focused GUI checks passed seven tests; Ruff, compilation, mypy across
+  212 source files and repository/docs audits passed. The non-Qt precommit suite
+  had 2,407 passes, 11 Windows symlink skips and two failures in unchanged Windows
+  named-pipe/file-lock tests. Both affected modules passed outside the sandbox on
+  targeted rerun (16 passed, one symlink skip). Registered Qt checks were not run.
+
 - 2026-09-29: Prepared the Unicorn implementation for the requested remote push,
   rebasing onto the existing 2.2.1 release commits and preserving the newer BioSemi
   serial-port error. Corrected stale Settings guidance that still claimed normal
