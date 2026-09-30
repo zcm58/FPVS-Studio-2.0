@@ -588,10 +588,12 @@ check that
 requires typing `Confirm` before the runtime task starts; cancelling that check returns
 to FPVS Studio without starting the experiment.
 
-Local recording configuration is validated before participant collection. **Settings > Recording >
-Recording Setup…** edits a computer-local BioSemi serial / Unicorn Recorder UDP choice
-and the loopback UDP port. The subdialog stages edits until Apply; Cancel keeps the
-saved choice. Existing Settings controls keep their immediate-save/Close behavior.
+Project recording configuration is validated before participant collection. **Settings > Recording >
+Recording Setup…** edits the open project's BioSemi serial / Unicorn Recorder UDP choice
+and loopback UDP port. Apply atomically saves only `settings.recording` in that project's
+`project.json`; Cancel keeps the saved choice, and failed saves retain the accepted device.
+Other unsaved setup edits remain pending. Recording Setup is disabled without an open
+project. The obsolete computer-wide recording preference is ignored.
 Home shows a centered `Recording Device: BioSemi ActiveTwo` or
 `Recording Device: Unicorn Black Mobile Headset` immediately above Launch Experiment.
 Its GUI-only display-name map in `gui/home_page.py` can be extended when recording
@@ -600,8 +602,12 @@ details remain in the label's tooltip and accessible description; Run retains it
 full output summary. Home and Run preserve the no-marker Test/Pilot text and
 actionable invalid-setting messages. The device label identifies the configuration,
 not a detected connection or recording-readiness result.
-With no local choice, legacy BioSemi behavior remains; selecting Unicorn does not
-modify project serial fields, library bundles or compiled experiment timing.
+Projects without `settings.recording` use BioSemi. Save/reopen and project switching
+restore each project's choice; `.fpvsconfig` and `.fpvsbundle` transfers preserve it.
+The optional typed settings contain `recording_backend` (`serial` or `unicorn_udp`)
+and `unicorn_udp_port` (integer 1-65535, default 1000). Malformed saved configurations
+are rejected on load. Recording choice does not alter existing project serial fields
+or compiled experiment timing.
 
 After Launch Experiment and the normal participant flow, the existing background
 launch worker checks that Unicorn Recorder is open and writing a raw BDF. A failure
@@ -619,7 +625,7 @@ authority if callers bypass the GUI; see
 Recording setup has a `640x560` minimum/default size.
 The additional Settings tab preserves the existing parent size budgets documented
 above; Home and Run retain the `1120x720` main-window minimum. Registered
-`tests/gui/test_recording_setup.py` covers Apply/Cancel, settings reload, invalid saved
+`tests/gui/test_recording_setup.py` covers Apply/Cancel, project reopen/switch, failed saves, invalid saved
 choices/ports and wrapping in both themes. It also checks that both launch surfaces
 queue Recorder checks off the GUI thread, surface failures, restore controls, and
 never create the presentation engine or reserve a visit after a failed check. This coverage is
@@ -1108,3 +1114,8 @@ T1/T2 accuracy includes pilots; Bursts over time marks them Pilot. Hover the par
 cell for demographics; Export Excel includes flat demographics and Pilot columns.
 Settings with Pilot and Library access uses 700 x 764 minimum/default; the tab bar
 adds 40 pixels to the previous single-page layout.
+
+Recording persistence manual acceptance: open one Unicorn and one BioSemi project;
+confirm Home and Run agree after switching and restarting. Change a device through
+Settings, cancel a draft, and confirm Apply persists without saving unrelated pending
+setup edits. Check Recording Setup at `640x560` and Settings in both themes.

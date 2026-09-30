@@ -50,6 +50,7 @@ from fpvs_studio.core.models import (
     ProjectFile,
     ProjectMeta,
     ProjectPresentationSettings,
+    ProjectRecordingSettings,
     ProjectSettings,
     ProtocolSettings,
     SessionSettings,
@@ -389,6 +390,7 @@ class ProjectConfigFile(FPVSBaseModel):
     task_assets: list[ProjectConfigTaskAsset] = Field(default_factory=list)
     display: ProjectConfigDisplay
     presentation: ProjectPresentationSettings = Field(default_factory=ProjectPresentationSettings)
+    recording: ProjectRecordingSettings | None = None
     protocol: ProjectConfigProtocol = Field(default_factory=ProjectConfigProtocol)
     session: ProjectConfigSession
     triggers: ProjectConfigTriggers
@@ -556,6 +558,10 @@ def export_project_config(
         task_assets=_portable_task_assets(project, project_root),
         display=_display_config(project.settings.display),
         presentation=project.settings.presentation.model_copy(deep=True),
+        recording=(
+            project.settings.recording.model_copy(deep=True)
+            if project.settings.recording is not None else None
+        ),
         protocol=ProjectConfigProtocol(
             base_hz=project.settings.protocol.base_hz,
             oddball_every_n=project.settings.protocol.oddball_every_n,
@@ -695,6 +701,7 @@ def create_project_from_config(parent_dir: Path, config: ProjectConfigFile) -> P
             description=config.project.description,
         ),
         settings=ProjectSettings(
+            recording=config.recording,
             allow_repeated_participant_sessions=(
                 config.project.allow_repeated_participant_sessions
             ),

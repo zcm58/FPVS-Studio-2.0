@@ -100,8 +100,9 @@ AB-only Pilot Study Mode is an app Settings preference, defaults off and takes
 precedence over Test Mode for AB. Reuse the standard demographics/visit flow; document
 launch settings alone select local hardware checks. See `docs/GUI_WORKFLOW.md`.
 
-Settings > Recording edits the local serial/Unicorn choice through a staged
-Recording Setup dialog; Apply saves and Cancel preserves the previous preference.
+Settings > Recording edits the active project's serial/Unicorn choice through a staged
+Recording Setup dialog; Apply saves only project recording fields and Cancel preserves
+the previous choice. Ignore obsolete global overrides and retain unrelated drafts.
 Home and Run validate configuration before participant collection, then run automatic
 Recorder readiness in the existing launch worker before presentation.
 Do not ask for a manual Unicorn recording checkbox or run OS probes on the GUI thread.

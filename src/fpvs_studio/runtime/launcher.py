@@ -53,6 +53,7 @@ class LaunchSettings:
     serial_reset_code: int | None = None
     serial_reset_delay_ms: int = 5
     recording_backend: str | None = None
+    recording_selection_source: str = "local_settings"
     unicorn_udp_port: int = 1000
     recording_operator_confirmed: bool = False
     recording_association: str | None = None

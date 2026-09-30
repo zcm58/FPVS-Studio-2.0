@@ -106,6 +106,7 @@ def test_runtime_launcher_dispatches_runspec_to_registered_engine(
         "serial_reset_code": None,
         "serial_reset_delay_ms": 5,
         "recording_backend": None,
+        "recording_selection_source": "local_settings",
         "unicorn_udp_port": 1000,
         "recording_operator_confirmed": False,
         "recording_association": None,

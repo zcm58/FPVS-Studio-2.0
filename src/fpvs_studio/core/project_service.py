@@ -24,6 +24,7 @@ from fpvs_studio.core.models import (
     ProjectFile,
     ProjectMeta,
     ProjectPresentationSettings,
+    ProjectRecordingSettings,
     ProjectSettings,
     ProtocolSettings,
     utc_now,
@@ -77,6 +78,21 @@ def rename_project(project_root: Path, name: str) -> ProjectMeta:
     payload["meta"]["updated_at"] = meta.updated_at.isoformat()
     atomic_text_write(path, json.dumps(payload, indent=2, ensure_ascii=False))
     return meta
+
+
+def save_project_recording_settings(
+    project_root: Path, recording: ProjectRecordingSettings,
+) -> None:
+    """Atomically save only device settings, preserving all other saved project data."""
+
+    recording = ProjectRecordingSettings.model_validate(recording.model_dump())
+    path = filesystem_path(project_json_path(project_root))
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError("Project file must contain a JSON object.")
+    migrate_project_payload(payload)
+    payload.setdefault("settings", {})["recording"] = recording.model_dump(mode="json")
+    atomic_text_write(path, json.dumps(payload, indent=2, ensure_ascii=False))
 
 
 def build_starter_project(

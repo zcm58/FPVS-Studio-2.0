@@ -301,7 +301,9 @@ evidence status does not block the normal launch workflow.
 Use triggers/runtime/engine/gui/docs focused routes, then repo precommit. Adapter tests
 must use fake sockets and never send to an active Recorder. New adapter coverage is
 explicitly registered in the triggers route. Registered GUI checks require an approved
-visible session. Local recording choice is separate from portable project COM fields;
+visible session. Recording choice persists in `ProjectSettings.recording`; Settings Apply uses the
+project service and ignores obsolete global overrides. Recording choice is separate
+from project COM fields;
 the broader named-profile/display plan remains planned work.
 
 ## Planning Route

@@ -462,3 +462,12 @@ def test_evidence_path_rejects_linked_logs_escape(execution, tmp_path):
             runtime_options={"recording_backend": "unicorn_udp"}, participant_number="007",
         )
     assert list(outside.iterdir()) == []
+
+
+def test_project_recording_selection_is_identified_in_export_snapshot():
+    snapshot = recording_snapshot({
+        "recording_backend": "unicorn_udp", "unicorn_udp_port": 2345,
+        "recording_selection_source": "project_settings",
+    })
+    assert snapshot.selection_source == "project_settings"
+    assert snapshot.udp_port == 2345

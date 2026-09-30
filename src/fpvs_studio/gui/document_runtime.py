@@ -44,7 +44,6 @@ class DocumentRuntimeMixin:
         _project: ProjectFile
         _project_root: Path
         _session_export_mode: str
-        _recording_configuration: dict[str, object]
         _last_session_plan: SessionPlan | None
         session_plan_changed: Any
 
@@ -54,15 +53,17 @@ class DocumentRuntimeMixin:
         def attentional_blink_pilot_mode_enabled(self) -> bool: ...
         @property
         def local_testing_enabled(self) -> bool: ...
+        @property
+        def recording_configuration(self) -> dict[str, object]: ...
 
         def ensure_unused_session_seed_for_launch(self) -> int: ...
         def refresh_participant_summary_if_stale(self) -> Path | None: ...
 
     def recording_launch_options(self) -> dict[str, object]:
-        """Resolve local preference inputs without changing portable project fields."""
+        """Resolve the saved project device into runtime-only launch options."""
 
         return {
-            **self._recording_configuration,
+            **self.recording_configuration,
             "serial_enabled": not self.local_testing_enabled,
             "serial_port": self._project.settings.triggers.serial_port,
             "experiment_test_mode": self.experiment_test_mode_enabled,
@@ -228,11 +229,12 @@ class DocumentRuntimeMixin:
                     # Persisted legacy flags cannot disable EEG recording output.
                     serial_enabled=not self.local_testing_enabled,
                     recording_backend=cast(
-                        str | None, self._recording_configuration.get("recording_backend"),
+                        str | None, self.recording_configuration.get("recording_backend"),
                     ),
                     unicorn_udp_port=cast(
-                        int, self._recording_configuration.get("unicorn_udp_port", 1000),
+                        int, self.recording_configuration.get("unicorn_udp_port", 1000),
                     ),
+                    recording_selection_source="project_settings",
                     recording_operator_confirmed=recording_operator_confirmed,
                     recording_association=recording_association,
                     recorder_version=recorder_version,

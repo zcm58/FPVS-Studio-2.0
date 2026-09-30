@@ -8,7 +8,8 @@ This directory is the most important foundation in the repo. It should remain im
 
 ## Required responsibilities
 
-- persistent project/data models
+- persistent project/data models, including optional project-owned recording device/port
+  configuration; runtime resolves transport outside compiled contracts
 - dedicated `RunSpec` schemas in `run_spec.py`
 - dedicated `SessionPlan` schemas in `session_plan.py`
 - dedicated execution-result schemas in `execution.py`

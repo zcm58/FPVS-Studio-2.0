@@ -586,10 +586,18 @@ class SessionSettings(FPVSBaseModel):
         return cleaned
 
 
+class ProjectRecordingSettings(FPVSBaseModel):
+    """Saved recording-device choice, separate from compiled timing contracts."""
+
+    recording_backend: Literal["serial", "unicorn_udp"] = "serial"
+    unicorn_udp_port: StrictInt = Field(default=1000, ge=1, le=65535)
+
+
 class ProjectSettings(FPVSBaseModel):
     """Editable project-level settings."""
 
     allow_repeated_participant_sessions: bool = False
+    recording: ProjectRecordingSettings | None = None
     condition_profile_id: str | None = None
     condition_defaults: ConditionDefaults = Field(default_factory=ConditionDefaults)
     display: DisplaySettings = Field(default_factory=DisplaySettings)

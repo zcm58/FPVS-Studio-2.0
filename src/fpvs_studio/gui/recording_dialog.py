@@ -1,4 +1,4 @@
-"""Local recording preferences and Recorder launch-check guidance."""
+"""Project recording preferences and Recorder launch-check guidance."""
 
 from __future__ import annotations
 
@@ -44,7 +44,7 @@ def recording_preference_summary(configuration: dict[str, object]) -> str:
 
 
 class RecordingSetupDialog(QDialog):
-    """Stage the two supported local transport choices until Apply."""
+    """Stage the two supported project transport choices until Apply."""
 
     def __init__(
         self, configuration: dict[str, object], parent: QWidget | None = None,
@@ -59,14 +59,13 @@ class RecordingSetupDialog(QDialog):
         layout.setContentsMargins(24, 20, 24, 20)
         layout.setSpacing(14)
         layout.addWidget(DialogHeader(
-            "Recording Setup", "For this computer. Apply saves the selection.", parent=self,
+            "Recording Setup", "For this project. Apply saves the selection.", parent=self,
         ))
         self.backend_combo = QComboBox(self)
         self.backend_combo.setObjectName("recording_backend_combo")
-        self.backend_combo.addItem("BioSemi serial (legacy project settings)", None)
         self.backend_combo.addItem("BioSemi serial", "serial")
         self.backend_combo.addItem("Unicorn Recorder UDP", "unicorn_udp")
-        backend = configuration.get("recording_backend")
+        backend = configuration.get("recording_backend") or "serial"
         index = self.backend_combo.findData(backend)
         if index < 0:
             self.backend_combo.addItem("Invalid saved choice — select a recording device", backend)

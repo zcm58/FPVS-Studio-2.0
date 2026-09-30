@@ -110,7 +110,7 @@ class RecordingSnapshot(FPVSBaseModel):
     schema_version: Literal[1] = 1
     selected_backend: Literal["serial", "unicorn_udp"]
     effective_backend: Literal["serial", "unicorn_udp", "null"]
-    selection_source: Literal["legacy_project", "local_settings"]
+    selection_source: Literal["legacy_project", "local_settings", "project_settings"]
     udp_host: Literal["127.0.0.1"] | None = None
     udp_port: StrictInt | None = Field(default=None, ge=1, le=65535)
     serial_port: str | None = None

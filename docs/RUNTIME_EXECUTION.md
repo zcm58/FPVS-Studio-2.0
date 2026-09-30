@@ -226,7 +226,7 @@ The PsychoPy implementation:
 - the `oddball_onset` marker code is locked to `55`; a nonstandard oddball marker code
   is only valid when the project or `.fpvsconfig` explicitly records
   `allow_nonstandard_oddball_trigger_code=true` in response to user direction
-- normal GUI launches resolve the computer's local recording selection first. With no
+- normal GUI launches resolve the active project's saved recording selection. With no
   selection, or with BioSemi selected, serial output remains enabled regardless of legacy
   project `triggers.enabled` or `triggers.backend` values; the project port and baudrate
   remain in use. Unicorn selects a separate loopback UDP endpoint and never inherits COM3
@@ -269,7 +269,7 @@ that downstream EEG/status-channel cabling is physically correct.
 
 ### Unicorn Recorder UDP: receiver validation pending
 
-Selecting Unicorn in local Settings enables real marker output through the normal
+Selecting Unicorn for the open project in Settings enables real marker output through the normal
 launch workflow. `runtime/recording.py` validates the configuration; the launch worker
 checks that Recorder is open and writing a raw BDF before reserving a participant
 visit or opening presentation. A valid configuration and successful readiness check
@@ -284,11 +284,12 @@ interchange, Toolbox acceptance, loss handling or display/physical timing. The a
 plan tracks those remaining checks, and exported receiver-validation metadata stays
 `pending`.
 
-The local selection is `None` (legacy serial), `serial`, or `unicorn_udp`. An unknown
-saved choice is an error requiring explicit repair in Settings. The UDP port is a strict
-integer from 1 through 65535, initially 1000. The host is always `127.0.0.1`; there is no
-remote host option. These machine settings stay outside `ProjectFile`, `RunSpec`, and
-`SessionPlan`, so a library project's COM3 normalization cannot overwrite the selection.
+The project selection is `serial` or `unicorn_udp`; projects without saved recording
+settings use BioSemi. Invalid persisted values are rejected on load. The UDP port is a
+strict integer from 1 through 65535, initially 1000. The host is always `127.0.0.1`; there
+is no remote host option. `ProjectSettings.recording` persists the choice independently
+of serial COM fields. GUI launch settings carry it to runtime outside `RunSpec` and
+`SessionPlan`, so Library COM3 normalization does not overwrite the selected device.
 
 The standard-library UDP adapter prepares decimal ASCII payloads for codes 1–255 before
 presentation. Code 55 is `b"55"`. Each compiled flip callback makes one nonblocking
@@ -377,7 +378,7 @@ and trigger files as well. Compact evidence survives successful removal of recov
 checkpoints and does not create a detailed `runs/` directory. BioSemi exports do not
 gain this sidecar.
 
-The recording snapshot records selected/effective transport, legacy or local selection
+The recording snapshot records selected/effective transport, legacy, local or project selection
 source, loopback endpoint, operator-reported recording association and Recorder version
 (unknown when absent). It labels receiver validation as pending, saved-marker integrity
 and acquisition status as unknown, and physical timing as uncharacterized. Test/Pilot

@@ -98,24 +98,28 @@ def recording_snapshot(options: Mapping[str, object] | None = None) -> Recording
     effective = validate_recording_configuration(values)
     selected = values.get("recording_backend") or "serial"
     serial_port = values.get("serial_port")
-    return RecordingSnapshot.model_validate({
-        "selected_backend": selected,
-        "effective_backend": effective,
-        "selection_source": (
-            "legacy_project" if values.get("recording_backend") is None else "local_settings"
-        ),
-        "udp_host": "127.0.0.1" if selected == "unicorn_udp" else None,
-        "udp_port": values.get("unicorn_udp_port", 1000) if selected == "unicorn_udp" else None,
-        "serial_port": (
-            resolve_serial_port(serial_port)
-            if effective == "serial" else None
-        ),
-        "serial_baudrate": values.get("serial_baudrate", 115200) if effective == "serial" else None,
-        "operator_confirmed_raw_bdf_recording": (
-            bool(values.get("recording_operator_confirmed", False))
-            if effective == "unicorn_udp" else False
-        ),
-        "recording_association": values.get("recording_association"),
-        "recorder_version": values.get("recorder_version"),
-        "receiver_validation": "pending" if selected == "unicorn_udp" else "not_applicable",
-    })
+    return RecordingSnapshot.model_validate(
+        {
+            "selected_backend": selected,
+            "effective_backend": effective,
+            "selection_source": (
+                "legacy_project"
+                if values.get("recording_backend") is None
+                else values.get("recording_selection_source", "local_settings")
+            ),
+            "udp_host": "127.0.0.1" if selected == "unicorn_udp" else None,
+            "udp_port": values.get("unicorn_udp_port", 1000) if selected == "unicorn_udp" else None,
+            "serial_port": (resolve_serial_port(serial_port) if effective == "serial" else None),
+            "serial_baudrate": values.get("serial_baudrate", 115200)
+            if effective == "serial"
+            else None,
+            "operator_confirmed_raw_bdf_recording": (
+                bool(values.get("recording_operator_confirmed", False))
+                if effective == "unicorn_udp"
+                else False
+            ),
+            "recording_association": values.get("recording_association"),
+            "recorder_version": values.get("recorder_version"),
+            "receiver_validation": "pending" if selected == "unicorn_udp" else "not_applicable",
+        }
+    )

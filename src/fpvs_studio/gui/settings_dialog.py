@@ -1,10 +1,8 @@
-"""Application settings dialog for local FPVS Studio preferences. It edits GUI-level
-configuration that shapes the desktop authoring experience without becoming part of
-ProjectFile, RunSpec, or SessionPlan data. The module owns app-preference widgets only;
-experiment semantics and runtime settings stay in their respective backend layers."""
+"""Application preferences and the active project's recording-device controls."""
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from pathlib import Path
 
@@ -32,9 +30,11 @@ from fpvs_studio.gui.components import (
 )
 from fpvs_studio.gui.recording_dialog import RecordingSetupDialog, recording_preference_summary
 
+_LOGGER = logging.getLogger(__name__)
+
 
 class AppSettingsDialog(QDialog):
-    """Expose lightweight app-level settings that are not project-scoped."""
+    """Expose app preferences and explicitly project-scoped recording setup."""
 
     def __init__(
         self,
@@ -292,7 +292,8 @@ class AppSettingsDialog(QDialog):
         recording_help = QLabel(
             "Choose BioSemi serial or Unicorn Recorder UDP. "
             "Unicorn launches require Recorder to be open and recording. "
-            "This computer's selection takes precedence over imported project settings.", recording,
+            "The device and port are saved for the open project only. "
+            "Open a project to change its recording setup.", recording,
         )
         recording_help.setObjectName("settings_recording_help")
         recording_help.setWordWrap(True)
@@ -354,7 +355,14 @@ class AppSettingsDialog(QDialog):
             return
         configuration = dialog.configuration
         if self._on_recording_configuration_changed is not None:
-            self._on_recording_configuration_changed(configuration)
+            try:
+                self._on_recording_configuration_changed(configuration)
+            except (ValueError, OSError) as exc:
+                _LOGGER.exception("Could not save project recording settings")
+                self.recording_summary.setText(
+                    f"Recording setup was not saved. Previous device retained. {exc}"
+                )
+                return
         self._recording_configuration = configuration
         self.recording_summary.setText(recording_preference_summary(configuration))
 

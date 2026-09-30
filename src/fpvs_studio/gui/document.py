@@ -17,6 +17,7 @@ from fpvs_studio.core.models import (
     ConditionTemplateProfile,
     ProjectFile,
     ProjectPresentationSettings,
+    ProjectRecordingSettings,
     ProjectValidationReport,
     normalize_manual_removed_electrodes,
     utc_now,
@@ -32,7 +33,11 @@ from fpvs_studio.core.project_config import (
     find_latest_completed_session_dir,
     write_project_config,
 )
-from fpvs_studio.core.project_service import create_project, rename_project
+from fpvs_studio.core.project_service import (
+    create_project,
+    rename_project,
+    save_project_recording_settings,
+)
 from fpvs_studio.core.serialization import load_project_file, save_project_file
 from fpvs_studio.core.session_plan import SessionPlan
 from fpvs_studio.core.validation import validate_condition_repeat_cycle_consistency
@@ -127,9 +132,6 @@ class ProjectDocument(
         self._show_sophia_mode_ticker = False
         self._experiment_test_mode_enabled = False
         self._attentional_blink_pilot_mode_enabled = False
-        self._recording_configuration: dict[str, object] = {
-            "recording_backend": None, "unicorn_udp_port": 1000,
-        }
         self._last_session_plan: SessionPlan | None = None
         self._image_normalization_scan_cache: (
             tuple[
@@ -226,7 +228,7 @@ class ProjectDocument(
         return (
             self._require_biosemi_recording_confirmation
             and not self.local_testing_enabled
-            and self._recording_configuration.get("recording_backend") in (None, "serial")
+            and self.recording_configuration.get("recording_backend") == "serial"
         )
 
     @property
@@ -420,9 +422,26 @@ class ProjectDocument(
         self._session_export_mode = export_mode
 
     def set_recording_configuration(self, configuration: dict[str, object]) -> None:
-        """Inject local preferences without rewriting projects or repairing bad values."""
+        """Edit the project's device choice through the normal document save flow."""
 
-        self._recording_configuration = dict(configuration)
+        recording = ProjectRecordingSettings.model_validate(configuration)
+        settings = _validated_copy(self._project.settings, recording=recording)
+        self._apply_project_update(settings=settings)
+
+    @property
+    def recording_configuration(self) -> dict[str, object]:
+        """Return this project's selection; older projects default to BioSemi."""
+
+        recording = self._project.settings.recording or ProjectRecordingSettings()
+        return recording.model_dump(mode="json")
+
+    def save_recording_configuration(self, configuration: dict[str, object]) -> None:
+        """Apply only recording settings on disk and retain unrelated unsaved edits."""
+
+        recording = ProjectRecordingSettings.model_validate(configuration)
+        save_project_recording_settings(self.project_root, recording)
+        settings = _validated_copy(self._project.settings, recording=recording)
+        self._project = _validated_copy(self._project, settings=settings)
         self.project_changed.emit()
 
     def set_require_biosemi_recording_confirmation(self, required: bool) -> None:

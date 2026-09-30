@@ -606,3 +606,8 @@ tests require a user-approved safe visible setup; never use offscreen Qt locally
   receiver protocol test, implementation, or physical calibration has been performed.
 - 2026-09-25: Saved as planned work with a companion Toolbox plan. Current architecture
   docs remain descriptions of shipped behavior; this plan does not make Unicorn supported.
+
+- 2026-09-30: User requested urgent per-project device persistence. The 2.2.3 fix
+  saves typed device/port settings in ProjectSettings, ignores the former global
+  override, and preserves existing serial fields, compiled timing and readiness checks.
+  Software acceptance and publication are tracked in `project-recording-2.2.3.md`.

@@ -230,17 +230,22 @@ def test_document_compile_session_filters_conditions_without_persisting_selectio
     assert document.last_session_plan is session_plan
 
 
-@pytest.mark.parametrize("selection", [None, "serial", "unicorn_udp"])
+@pytest.mark.parametrize("selection", ["serial", "unicorn_udp"])
 @pytest.mark.parametrize("test_mode", [False, True])
-def test_local_recording_selection_preserves_project_and_test_output(
-    multi_condition_project, multi_condition_project_root, monkeypatch, selection, test_mode,
+def test_project_recording_selection_preserves_protocol_and_test_output(
+    multi_condition_project,
+    multi_condition_project_root,
+    monkeypatch,
+    selection,
+    test_mode,
 ) -> None:
     from fpvs_studio.runtime.recording import validate_recording_configuration
 
     probe = Mock(side_effect=AssertionError("GUI configuration validation must not probe Recorder"))
     monkeypatch.setattr("fpvs_studio.runtime.launcher.require_unicorn_recorder_recording", probe)
-    monkeypatch.setattr("fpvs_studio.runtime.unicorn_recorder.require_unicorn_recorder_recording",
-                        probe)
+    monkeypatch.setattr(
+        "fpvs_studio.runtime.unicorn_recorder.require_unicorn_recorder_recording", probe
+    )
     document = ProjectDocument(
         project_root=multi_condition_project_root,
         project=multi_condition_project.model_copy(deep=True),
@@ -248,32 +253,40 @@ def test_local_recording_selection_preserves_project_and_test_output(
     original = document.project.model_dump(mode="json")
     document.set_recording_configuration({"recording_backend": selection, "unicorn_udp_port": 4567})
     document.set_experiment_test_mode_enabled(test_mode)
-    assert document.project.model_dump(mode="json") == original
-    assert not document.dirty
+    changed = document.project.model_dump(mode="json")
+    changed["settings"]["recording"] = original["settings"]["recording"]
+    assert changed == original
+    assert document.dirty
     assert document.require_biosemi_recording_confirmation == (
         not test_mode and selection != "unicorn_udp"
     )
-    assert document.validate_recording_launch() == (
-        "null" if test_mode else selection or "serial"
-    )
+    assert document.validate_recording_launch() == ("null" if test_mode else selection or "serial")
 
     # The document only assembles settings; runtime owns readiness and qualification.
-    plan = compile_session_plan(document.project, refresh_hz=60,
-                                project_root=multi_condition_project_root, random_seed=55)
+    plan = compile_session_plan(
+        document.project, refresh_hz=60, project_root=multi_condition_project_root, random_seed=55
+    )
     captured = []
+
     def fake_launch(_root, _plan, **kwargs):
         captured.append(kwargs["launch_settings"])
         return SessionExecutionSummary(
-            project_id=plan.project_id, session_id=plan.session_id, engine_name="fake",
+            project_id=plan.project_id,
+            session_id=plan.session_id,
+            engine_name="fake",
             run_mode=RunMode.SESSION,
-            participant_number="7", total_condition_count=plan.total_runs,
+            participant_number="7",
+            total_condition_count=plan.total_runs,
             completed_condition_count=plan.total_runs,
         )
+
     monkeypatch.setattr("fpvs_studio.gui.document.launch_session", fake_launch)
     monkeypatch.setattr(document, "refresh_participant_summary_if_stale", lambda: None)
     confirmed = selection == "unicorn_udp" and not test_mode
     document.launch_compiled_session(
-        plan, participant_number="7", display_index=None,
+        plan,
+        participant_number="7",
+        display_index=None,
         recording_operator_confirmed=confirmed,
         recording_association="participant-7-session-1" if confirmed else None,
         recorder_version="unknown test build" if confirmed else None,
@@ -292,23 +305,27 @@ def test_local_recording_selection_preserves_project_and_test_output(
     probe.assert_not_called()
 
 
-@pytest.mark.parametrize("configuration", [
-    {"recording_backend": "invalid", "unicorn_udp_port": 1000},
-    {"recording_backend": "unicorn_udp", "unicorn_udp_port": "bad"},
-])
+@pytest.mark.parametrize(
+    "configuration",
+    [
+        {"recording_backend": "invalid", "unicorn_udp_port": 1000},
+        {"recording_backend": "unicorn_udp", "unicorn_udp_port": "bad"},
+    ],
+)
 def test_invalid_local_recording_selection_is_actionable_not_repaired(
-    multi_condition_project, multi_condition_project_root, configuration,
+    multi_condition_project,
+    multi_condition_project_root,
+    configuration,
 ) -> None:
     document = ProjectDocument(
         project_root=multi_condition_project_root,
         project=multi_condition_project.model_copy(deep=True),
     )
-    document.set_recording_configuration(configuration)
-    assert "Settings > Recording" in document.recording_setup_summary()
-    with pytest.raises(DocumentError):
-        document.validate_recording_launch()
-    for key, value in configuration.items():
-        assert document.recording_launch_options()[key] == value
+    before = document.recording_configuration
+    with pytest.raises(ValueError):
+        document.set_recording_configuration(configuration)
+    assert document.recording_configuration == before
+    assert document.validate_recording_launch() == "serial"
 
 
 def test_unicorn_selection_preserves_attentional_blink_pilot_null_mode(tmp_path) -> None:
@@ -490,3 +507,44 @@ def test_pilot_launch_is_ab_only_and_keeps_participant_details(
         assert captured["participant_session_number"] == 1
     document.set_attentional_blink_pilot_mode_enabled(False)
     assert document.experiment_test_mode_enabled is test_mode
+
+
+def test_recording_apply_persists_only_active_project_and_retains_drafts(tmp_path):
+    from fpvs_studio.core.serialization import load_project_file
+
+    unicorn = ProjectDocument.create_new(parent_dir=tmp_path, project_name="Unicorn project")
+    biosemi = ProjectDocument.create_new(parent_dir=tmp_path, project_name="BioSemi project")
+    unicorn.update_protocol_settings(base_hz=5.0)
+    saved_hz = load_project_file(unicorn.project_file_path).settings.protocol.base_hz
+    unicorn.save_recording_configuration(
+        {"recording_backend": "unicorn_udp", "unicorn_udp_port": 2345}
+    )
+    assert unicorn.dirty
+    assert unicorn.project.settings.protocol.base_hz == 5.0
+    saved = ProjectDocument.open_existing(unicorn.project_root)
+    assert saved.project.settings.protocol.base_hz == saved_hz
+    assert saved.recording_configuration == unicorn.recording_configuration
+    assert saved.validate_recording_launch() == "unicorn_udp"
+    assert biosemi.validate_recording_launch() == "serial"
+    assert (
+        ProjectDocument.open_existing(biosemi.project_root).validate_recording_launch() == "serial"
+    )
+    unicorn.save()
+    assert (
+        ProjectDocument.open_existing(unicorn.project_root).recording_configuration
+        == saved.recording_configuration
+    )
+
+
+def test_recording_apply_failed_save_retains_document_and_disk(tmp_path, monkeypatch):
+    document = ProjectDocument.create_new(parent_dir=tmp_path, project_name="Failed device save")
+    before = document.project_file_path.read_bytes()
+    monkeypatch.setattr(
+        "fpvs_studio.gui.document.save_project_recording_settings",
+        Mock(side_effect=PermissionError("locked project")),
+    )
+    with pytest.raises(PermissionError):
+        document.save_recording_configuration({"recording_backend": "unicorn_udp"})
+    assert document.validate_recording_launch() == "serial"
+    assert not document.dirty
+    assert document.project_file_path.read_bytes() == before

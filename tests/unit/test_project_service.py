@@ -175,3 +175,46 @@ def test_project_scaffolding_applies_sinusoidal_profile_background(tmp_path) -> 
     assert project.settings.condition_profile_id == "sinusoidal-contrast-v1"
     assert project.settings.condition_defaults.duty_cycle_mode.value == "sinusoidal"
     assert project.settings.display.background_color == "#808080"
+
+
+def test_recording_device_save_changes_only_recording_and_failure_keeps_file(tmp_path, monkeypatch):
+    from fpvs_studio.core.models import ProjectRecordingSettings
+    from fpvs_studio.core.project_service import save_project_recording_settings
+    from fpvs_studio.core.serialization import load_project_file
+
+    scaffold = create_project(tmp_path, "Device configuration")
+    path = scaffold.project_root / "project.json"
+    original = json.loads(path.read_text())
+    setting = ProjectRecordingSettings(recording_backend="unicorn_udp", unicorn_udp_port=65535)
+    save_project_recording_settings(scaffold.project_root, setting)
+    expected = dict(original)
+    expected["settings"]["recording"] = setting.model_dump()
+    assert json.loads(path.read_text()) == expected
+    assert load_project_file(path).settings.recording == setting
+    before = path.read_bytes()
+    monkeypatch.setattr(
+        "fpvs_studio.core.serialization.os.replace",
+        lambda *_: (_ for _ in ()).throw(PermissionError("locked")),
+    )
+    with pytest.raises(PermissionError):
+        save_project_recording_settings(scaffold.project_root, ProjectRecordingSettings())
+    assert path.read_bytes() == before
+    assert not list(scaffold.project_root.glob(".*.tmp"))
+
+
+@pytest.mark.parametrize(
+    "configuration",
+    [
+        {"recording_backend": "unknown"},
+        {"recording_backend": None},
+        {"unicorn_udp_port": True},
+        {"unicorn_udp_port": "1000"},
+        {"unicorn_udp_port": 0},
+        {"unicorn_udp_port": 65536},
+    ],
+)
+def test_project_recording_rejects_invalid_device_or_port(configuration):
+    from fpvs_studio.core.models import ProjectRecordingSettings
+
+    with pytest.raises(ValueError):
+        ProjectRecordingSettings.model_validate(configuration)

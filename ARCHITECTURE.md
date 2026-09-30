@@ -244,8 +244,9 @@ owns endpoint estimates and task-response checkpoints. Details and acceptance ar
   presentation properties and never create project assets.
   The trigger backend contract declares external-marker capability; playback rejects
   log-only backends outside explicit test/pilot launches and empty trigger schedules.
-- `runtime/recording.py` resolves the local BioSemi/Unicorn selection independently of
-  project trigger fields. Unicorn's loopback UDP adapter uses prepared ASCII markers;
+- `ProjectSettings.recording` persists each project's BioSemi/Unicorn choice and UDP port;
+  `project_service.py` atomically saves only those fields. `runtime/recording.py` resolves
+  that choice independently of project trigger fields and compiled timing. Unicorn's loopback UDP adapter uses prepared ASCII markers;
   normal launches send real markers after configuration and Recorder readiness pass.
   `runtime/unicorn_recorder.py`
   owns a bounded, read-only Windows process/raw-file readiness check in the launch worker,

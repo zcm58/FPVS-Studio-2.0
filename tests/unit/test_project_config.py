@@ -361,3 +361,18 @@ def test_project_config_without_protocol_loads_current_defaults(tmp_path, sample
 
     assert loaded.protocol.base_hz == 6.0
     assert loaded.protocol.oddball_every_n == 5
+
+
+def test_recording_device_and_port_survive_config_interchange(
+    tmp_path, sample_project, sample_project_root
+):
+    from fpvs_studio.core.models import ProjectRecordingSettings
+
+    setting = ProjectRecordingSettings(recording_backend="unicorn_udp", unicorn_udp_port=2345)
+    sample_project.settings.recording = setting
+    config = export_project_config(sample_project, sample_project_root)
+    path = tmp_path / "device.fpvsconfig"
+    write_project_config(path, config)
+    loaded = read_project_config(path)
+    result = create_project_from_config(tmp_path / "imported", loaded)
+    assert result.project.settings.recording == setting

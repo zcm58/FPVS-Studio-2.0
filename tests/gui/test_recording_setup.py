@@ -18,7 +18,6 @@ from tests.gui.helpers import (
 
 from fpvs_studio.core.enums import ExperimentCategory, RunMode
 from fpvs_studio.core.execution import SessionExecutionSummary
-from fpvs_studio.gui import controller as controller_module
 from fpvs_studio.gui import home_page as home_page_module
 from fpvs_studio.gui.document import ProjectDocument
 from fpvs_studio.gui.recording_dialog import RecordingSetupDialog
@@ -125,25 +124,40 @@ def test_settings_recording_subdialog_persists_only_apply(qtbot, tmp_path, monke
         assert "legacy" in dialog.recording_summary.text()
 
 
-def test_recording_preferences_reopen_preserve_invalid_choices(controller, tmp_path):
-    path = str(tmp_path / "recording.ini")
-    controller._settings = QSettings(path, QSettings.Format.IniFormat)
-    original = controller.load_recording_configuration()
-    assert original == {"recording_backend": None, "unicorn_udp_port": 1000}
-    controller.save_recording_configuration({
-        "recording_backend": "unicorn_udp", "unicorn_udp_port": 3456,
-    })
-    controller._settings = QSettings(path, QSettings.Format.IniFormat)
-    assert controller.load_recording_configuration() == {
-        "recording_backend": "unicorn_udp", "unicorn_udp_port": 3456,
-    }
-    controller._settings.setValue(controller_module._RECORDING_BACKEND_KEY, "removed-backend")
-    controller._settings.setValue(controller_module._UNICORN_UDP_PORT_KEY, "12.5")
+def test_project_device_reopen_and_switch_ignore_obsolete_global_choice(
+    qtbot,
+    controller,
+    tmp_path,
+):
+    controller._settings = QSettings(str(tmp_path / "recording.ini"), QSettings.Format.IniFormat)
+    controller._settings.setValue("recording/backend", "unicorn_udp")
+    controller._settings.setValue("recording/unicorn_udp_port", 5432)
     controller._settings.sync()
+    first, first_window = open_created_project(controller, qtbot, tmp_path, "Semantic Categories")
+    assert first.validate_recording_launch() == "serial"
+    controller.save_recording_configuration(
+        {"recording_backend": "unicorn_udp", "unicorn_udp_port": 3456}
+    )
+    assert (
+        first_window.home_page.recording_summary.text()
+        == "Recording Device: Unicorn Black Mobile Headset"
+    )
+    second, second_window = open_created_project(controller, qtbot, tmp_path, "Other study")
+    assert second_window.home_page.recording_summary.text() == "Recording Device: BioSemi ActiveTwo"
+    assert controller.load_recording_configuration()["recording_backend"] == "serial"
+    controller.save_recording_configuration(
+        {"recording_backend": "serial", "unicorn_udp_port": 1000}
+    )
+    reopened = ProjectDocument.open_existing(first.project_root)
+    controller._open_document(reopened)
+    qtbot.addWidget(controller.main_window)
     assert controller.load_recording_configuration() == {
-        "recording_backend": "removed-backend", "unicorn_udp_port": "12.5",
+        "recording_backend": "unicorn_udp",
+        "unicorn_udp_port": 3456,
     }
-    assert controller._settings.value(controller_module._RECORDING_BACKEND_KEY) == "removed-backend"
+    assert (
+        ProjectDocument.open_existing(second.project_root).validate_recording_launch() == "serial"
+    )
 
 
 @pytest.mark.parametrize("entrypoint", ["home", "run"])
@@ -295,22 +309,54 @@ def test_ready_unicorn_reaches_runtime_execution_on_both_launch_surfaces(
 
 
 @pytest.mark.parametrize("background", ["#f4f7fb", "#202124"])
-@pytest.mark.parametrize("backend, port, expected", [
-    (None, 1000, "Recording Device: BioSemi ActiveTwo"),
-    ("serial", 1000, "Recording Device: BioSemi ActiveTwo"),
-    ("unicorn_udp", 65535, "Recording Device: Unicorn Black Mobile Headset"),
-    ("unicorn_udp", "broken saved port",
-     "Recording setup invalid. Open Settings > Recording to correct it."),
-    ("unknown old selection", 1000,
-     "Recording setup invalid. Open Settings > Recording to correct it."),
-])
+@pytest.mark.parametrize(
+    "backend, port, expected",
+    [
+        (None, 1000, "Recording Device: BioSemi ActiveTwo"),
+        ("serial", 1000, "Recording Device: BioSemi ActiveTwo"),
+        ("unicorn_udp", 65535, "Recording Device: Unicorn Black Mobile Headset"),
+        (
+            "unicorn_udp",
+            "broken saved port",
+            "Recording setup invalid. Open Settings > Recording to correct it.",
+        ),
+        (
+            "unknown old selection",
+            1000,
+            "Recording setup invalid. Open Settings > Recording to correct it.",
+        ),
+    ],
+)
 def test_home_recording_device_label_fits_and_preserves_output_details(
-    qtbot, controller, tmp_path, monkeypatch, background, backend, port, expected,
+    qtbot,
+    controller,
+    tmp_path,
+    monkeypatch,
+    background,
+    backend,
+    port,
+    expected,
 ):
     document, window = open_created_project(controller, qtbot, tmp_path, "Home recording setup")
     recorder_probe = Mock(side_effect=AssertionError("Home refresh must not probe Recorder"))
     monkeypatch.setattr(runtime_launcher, "require_unicorn_recorder_recording", recorder_probe)
-    document.set_recording_configuration({"recording_backend": backend, "unicorn_udp_port": port})
+    if backend is None:
+        assert document.validate_recording_launch() == "serial"
+    elif backend not in ("serial", "unicorn_udp") or not isinstance(port, int):
+        # Corrupt drafts remain actionable; disk loading rejects malformed typed settings.
+        monkeypatch.setattr(
+            document,
+            "recording_launch_options",
+            lambda: {
+                "recording_backend": backend,
+                "unicorn_udp_port": port,
+            },
+        )
+        document.project_changed.emit()
+    else:
+        document.set_recording_configuration(
+            {"recording_backend": backend, "unicorn_udp_port": port}
+        )
     palette = window.palette()
     palette.setColor(QPalette.ColorRole.Window, QColor(background))
     window.setPalette(palette)
@@ -377,14 +423,38 @@ def test_home_recording_device_name_extension_and_pilot_output(
     assert page.recording_summary.text() == "Recording Device: BioSemi ActiveTwo"
 
 
-@pytest.mark.parametrize("backend, port", [
-    (None, 1000), ("unicorn_udp", 65535), ("invalid", 1000),
-])
+@pytest.mark.parametrize(
+    "backend, port",
+    [
+        (None, 1000),
+        ("unicorn_udp", 65535),
+        ("invalid", 1000),
+    ],
+)
 def test_run_recording_summary_fits_existing_window_budget(
-    qtbot, controller, tmp_path, backend, port,
+    qtbot,
+    controller,
+    tmp_path,
+    monkeypatch,
+    backend,
+    port,
 ):
     document, _window = open_created_project(controller, qtbot, tmp_path, "Run recording setup")
-    document.set_recording_configuration({"recording_backend": backend, "unicorn_udp_port": port})
+    if backend is None:
+        assert document.validate_recording_launch() == "serial"
+    elif backend == "invalid":
+        monkeypatch.setattr(
+            document,
+            "recording_launch_options",
+            lambda: {
+                "recording_backend": backend,
+                "unicorn_udp_port": port,
+            },
+        )
+    else:
+        document.set_recording_configuration(
+            {"recording_backend": backend, "unicorn_udp_port": port}
+        )
     page = RunPage(document)
     qtbot.addWidget(page)
     page.resize(1120, 720)
@@ -394,3 +464,27 @@ def test_run_recording_summary_fits_existing_window_budget(
     label = page.recording_summary
     assert label.height() >= label.heightForWidth(label.width())
     assert label.text() == document.recording_setup_summary()
+
+
+def test_recording_settings_failed_save_preserves_accepted_device(qtbot, tmp_path, monkeypatch):
+    original = {"recording_backend": "serial", "unicorn_udp_port": 1000}
+    dialog = AppSettingsDialog(
+        fpvs_root_dir=tmp_path,
+        recording_configuration=original,
+        on_recording_configuration_changed=Mock(side_effect=PermissionError("locked")),
+    )
+    qtbot.addWidget(dialog)
+    dialog.tabs.setCurrentIndex(2)
+    dialog.show()
+
+    def fake_exec(child):
+        child.backend_combo.setCurrentIndex(child.backend_combo.findData("unicorn_udp"))
+        child.accept()
+        return child.result()
+
+    monkeypatch.setattr(RecordingSetupDialog, "exec", fake_exec)
+    dialog.recording_setup_button.click()
+    QApplication.processEvents()
+    assert "not saved" in dialog.recording_summary.text()
+    assert dialog._recording_configuration == original
+    _assert_labels_fit(dialog)
