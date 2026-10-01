@@ -60,8 +60,8 @@ Write release notes as bullet points, with one or two sentences per major change
 Keep verification summaries and installer instructions out of the release notes;
 retain audit evidence and check boundaries in the release record instead.
 
-The [v2.2.3 release record](exec-plans/completed/project-recording-2.2.3.md) records the
-published installer, direct 2.2.1/2.2.2 patches, payload audits and verification boundaries.
+The [v2.2.4 release record](exec-plans/completed/release-2.2.4.md) records the
+published installer, direct 2.2.3 patch, payload audits and verification boundaries.
 
 Use simple semantic versioning:
 
@@ -275,7 +275,7 @@ Then build the setup EXE:
 Expected output for the current package:
 
 ```text
-dist\installer\FPVS-Studio-Setup-1.7.0.exe
+dist\installer\FPVS-Studio-Setup-2.2.4.exe
 ```
 
 The installer build validates that the PyInstaller bundle has an `_internal` folder and
