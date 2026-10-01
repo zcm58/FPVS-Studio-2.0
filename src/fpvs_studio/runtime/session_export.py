@@ -324,11 +324,16 @@ def write_compact_run_checkpoint(project_root: Path, summary: RunExecutionSummar
 
 
 def _display_report_for_run(run_spec: RunSpec) -> DisplayValidationReport:
+    timing = run_spec.attentional_blink
+    target_interval = (
+        timing.target_interval_slots
+        if isinstance(timing, AttentionalBlinkStreamRunSpec) else None
+    )
     return validate_display_refresh(
         run_spec.display.refresh_hz,
         duty_cycle_mode=run_spec.display.duty_cycle_mode,
         base_hz=run_spec.condition.base_hz,
-        oddball_every_n=run_spec.condition.oddball_every_n,
+        oddball_every_n=target_interval or run_spec.condition.oddball_every_n,
     )
 
 

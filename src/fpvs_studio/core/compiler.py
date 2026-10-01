@@ -276,7 +276,11 @@ def _compile_prepared_run(
             instructions_text=condition.instructions or None,
             base_hz=protocol.base_hz,
             oddball_every_n=protocol.oddball_every_n,
-            oddball_hz=protocol.oddball_hz,
+            oddball_hz=(
+                protocol.base_hz / attentional_blink.target_interval_slots
+                if attentional_blink is not None and attentional_blink.target_interval_slots
+                else protocol.oddball_hz
+            ),
             total_oddball_cycles=total_oddball_cycles,
             total_stimuli=len(stimulus_sequence),
             stimulus_modality=base_set.modality,
@@ -333,6 +337,10 @@ def _compile_prepared_run(
             condition_trigger_code=condition.trigger_code,
             oddball_trigger_code=_project_oddball_trigger_code(project),
             t2_trigger_code=(attentional_blink.t2_trigger_code if attentional_blink else None),
+            distractor_trigger_code=(
+                attentional_blink.distractor_trigger_code
+                if isinstance(attentional_blink, AttentionalBlinkStreamRunSpec) else None
+            ),
         ),
     )
 

@@ -70,6 +70,31 @@ The chronological burst number remains available for learning-over-time analyses
 See [runtime reporting](RUNTIME_EXECUTION.md#attentional-blink-recall-results)
 for files, partial responses and Excel export.
 
+### Repeated Targets Within a Burst
+
+Native streams may explicitly set `target_count`, `target_interval_slots` and
+`omit_first_t2` on their AB settings. Their defaults (1, absent, false) preserve
+single-pair studies and are omitted from serialized default settings/RunSpecs.
+`oddball_every_n` remains the full burst length in characters. The nominal first
+T1 is `t2_slot_index - lag`; subsequent targets advance by `target_interval_slots`.
+Omitting the first T2 substitutes a sampled distractor in its slot. The interval
+must exceed the SOA lag, and distractors must remain before T1 and after the last T2.
+One distinct T1/T2 identity pair is sampled per burst and reused throughout it;
+the next burst draws a new seeded pair. Recall requires a single burst per entry.
+
+MSMS AB uses 90 characters at 10 Hz (nine seconds), six T1 presentations at
+2.1, 3.1, 4.1, 5.1, 6.1 and 7.1 seconds, and five T2 presentations following
+T1s 2-6 at the existing 100/300/500 ms SOAs. Its nominal T2 slots are 22/24/26
+(zero-based), its interval is ten slots, and its first T2 is omitted. The 24 bursts
+per SOA yield 216 seconds per SOA and 648 seconds of stream presentation overall.
+The two existing recall questions remain one answer per distinct target identity.
+
+Design preserves the burst duration, first T1 time and repetition interval during
+rate/SOA edits through core's exact retiming helper. An incompatible new grid is
+rejected without rounding. The preview brackets the first complete pair, reports
+both target counts, and exposes all target positions in its accessible description.
+No new repeated-target creation controls are added to the default preset.
+
 Existing saved native studies retain their digit distractors, letter targets,
 timing, tasks and session settings. They are not silently converted to the new
 burst preset. Physical display and trigger timing require hardware validation.

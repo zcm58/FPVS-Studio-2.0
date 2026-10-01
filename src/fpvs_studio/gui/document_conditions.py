@@ -12,6 +12,7 @@ from fpvs_studio.core.attentional_blink_presets import (
 )
 from fpvs_studio.core.attentional_blink_stream import (
     attentional_blink_burst_grid,
+    retime_attentional_blink_stream,
     validate_attentional_blink_stream_symbols,
 )
 from fpvs_studio.core.condition_template_profiles import (
@@ -296,6 +297,11 @@ class DocumentConditionMixin:
         used.update(
             c.attentional_blink.t2_trigger_code for c in self._project.conditions
             if c.attentional_blink is not None
+        )
+        used.update(
+            c.attentional_blink.distractor_trigger_code for c in self._project.conditions
+            if isinstance(c.attentional_blink, AttentionalBlinkStreamSettings)
+            and c.attentional_blink.distractor_trigger_code is not None
         )
         for code in range(1, 256):
             if code not in used:
@@ -661,15 +667,33 @@ class DocumentConditionMixin:
         validate_attentional_blink_stream_symbols(base_words, t1_words, t2_words)
         protocol = self._project.settings.protocol
         rate = protocol.base_hz if base_hz is None else base_hz
-        burst_grid = (
-            attentional_blink_burst_grid(rate)
-            if self._project.settings.session.randomize_across_blocks else None
-        )
+        cycle_slots: set[int] = set()
         words_by_set: dict[str, list[str]] = {}
         updated_conditions: list[Condition] = []
         for condition in conditions:
             ab = condition.attentional_blink
             assert isinstance(ab, AttentionalBlinkStreamSettings)
+            t2_slot_index = ab.t2_slot_index
+            target_interval_slots = ab.target_interval_slots
+            condition_cycle_slots = protocol.oddball_every_n
+            if ab.target_count > 1:
+                description = retime_attentional_blink_stream(
+                    base_hz=protocol.base_hz,
+                    cycle_slots=protocol.oddball_every_n,
+                    soa_ms=ab.soa_ms,
+                    t2_slot_index=ab.t2_slot_index,
+                    target_count=ab.target_count,
+                    target_interval_slots=ab.target_interval_slots,
+                    omit_first_t2=ab.omit_first_t2,
+                    new_base_hz=rate,
+                    new_soa_ms=soa_by_condition[condition.condition_id],
+                )
+                condition_cycle_slots = description.cycle_slots
+                t2_slot_index = description.t2_slot_index
+                target_interval_slots = description.target_interval_slots
+            elif self._project.settings.session.randomize_across_blocks:
+                condition_cycle_slots, t2_slot_index = attentional_blink_burst_grid(rate)
+            cycle_slots.add(condition_cycle_slots)
             for set_id, words in (
                 (condition.base_stimulus_set_id, base_words),
                 (condition.oddball_stimulus_set_id, t1_words),
@@ -687,9 +711,12 @@ class DocumentConditionMixin:
                 attentional_blink=validated_copy(
                     ab, soa_ms=soa_by_condition[condition.condition_id],
                     t1_color=t1_color, t2_color=t2_color,
-                    t2_slot_index=ab.t2_slot_index if burst_grid is None else burst_grid[1],
+                    t2_slot_index=t2_slot_index,
+                    target_interval_slots=target_interval_slots,
                 ),
             ))
+        if len(cycle_slots) != 1:
+            raise ValueError("All conditions must use the same number of characters per burst.")
         project = validated_copy(
             self._project,
             settings=validated_copy(
@@ -697,9 +724,7 @@ class DocumentConditionMixin:
                 protocol=validated_copy(
                     self._project.settings.protocol,
                     base_hz=rate,
-                    oddball_every_n=(
-                        protocol.oddball_every_n if burst_grid is None else burst_grid[0]
-                    ),
+                    oddball_every_n=cycle_slots.pop(),
                 ),
                 session=validated_copy(
                     self._project.settings.session,

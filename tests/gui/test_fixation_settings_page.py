@@ -73,6 +73,11 @@ def test_ab_cross_can_be_hidden_saved_and_shown_again(qtbot, tmp_path):
     assert editor.findChild(QLabel, "fixation_cross_hidden_note") is None
     assert editor.pre_stream_fixation_spin.isEnabled()
     assert "blank screen" in editor.pre_stream_fixation_note.text()
+    assert "Normally, the first stimulus and condition marker start at frame zero." in (
+        editor.pre_stream_fixation_note.toolTip()
+    )
+    assert "With distractor markers enabled" in editor.pre_stream_fixation_note.toolTip()
+    assert "neutral flip immediately before frame zero" in editor.pre_stream_fixation_note.toolTip()
     editor.pre_stream_fixation_spin.setValue(0.5)
     document.save()
     reopened = ProjectDocument.open_existing(document.project_root)

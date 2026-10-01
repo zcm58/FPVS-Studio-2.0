@@ -158,7 +158,9 @@ The current v1 policy is:
 - task option randomization uses a task-specific deterministic seed namespace and
   records stable item/option ids in the compiled task spec
 - AB recall answer keys are resolved from the actual T1/T2 events for each entry;
-  exactly one target pair is required for the built-in recall task
+  the built-in recall task requires one unique identity per target phase and the
+  declared number of presentations. Explicit repeated-target bursts reuse that
+  pair; default bursts present it once.
 
 ## Runtime responsibilities
 

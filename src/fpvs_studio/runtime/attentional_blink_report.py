@@ -236,9 +236,17 @@ class AttentionalBlinkSessionRecorder:
         targets = {}
         for phase in ("t1", "t2"):
             events = [event for event in run.stimulus_sequence if event.phase == phase]
-            if len(events) != 1 or events[0].text is None:
-                raise ValueError("AB recall requires exactly one target of each kind per burst.")
-            targets[phase] = events[0].text
+            expected_count = timing.target_count - int(phase == "t2" and timing.omit_first_t2)
+            symbols = {event.text for event in events}
+            if len(events) != expected_count or len(symbols) != 1:
+                raise ValueError(
+                    "AB recall requires the declared presentations of one target symbol "
+                    "per role in each burst."
+                )
+            symbol = events[0].text
+            if symbol is None or len(symbol) != 1 or symbol not in "0123456789":
+                raise ValueError("AB recall requires one digit per target role in each burst.")
+            targets[phase] = symbol
         markers = [event for event in run.trigger_events if event.label == "condition_start"]
         if len(markers) != 1:
             raise ValueError("AB recall requires one condition onset trigger.")
@@ -319,11 +327,15 @@ class AttentionalBlinkSessionRecorder:
             onset.sequence_index: onset.time_s for onset in summary.attentional_blink_onsets or ()
         }
         targets = {
-            event.phase: onsets.get(event.sequence_index)
+            (event.cycle_index, event.phase): onsets.get(event.sequence_index)
             for event in run.stimulus_sequence
             if event.phase in {"t1", "t2"}
         }
-        first, second = targets.get("t1"), targets.get("t2")
+        observed_soas = []
+        for (cycle_index, phase), second in targets.items():
+            first = targets.get((cycle_index, "t1"))
+            if phase == "t2" and first is not None and second is not None:
+                observed_soas.append((second - first) * 1000.0)
         self._save(
             record.model_copy(
                 update={
@@ -333,9 +345,9 @@ class AttentionalBlinkSessionRecorder:
                     "stimulus_completed": completed,
                     "run_aborted": summary.aborted,
                     "included_in_accuracy": completed,
-                    "observed_soa_ms": (second - first) * 1000.0
-                    if first is not None and second is not None
-                    else None,
+                    "observed_soa_ms": (
+                        sum(observed_soas) / len(observed_soas) if observed_soas else None
+                    ),
                 }
             )
         )
@@ -523,7 +535,8 @@ def write_attentional_blink_accuracy_xlsx(
         "cumulative_stimulus_s includes stream time only; participant response screens "
         "and breaks are excluded.",
         "requested_soa_ms and achieved_soa_ms are compiled onset-to-onset timing; "
-        "observed_soa_ms requires actual target flip timestamps.",
+        "observed_soa_ms is the mean of target pairs with both actual flip timestamps. "
+        "Individual pairs remain available in the character-stream event CSV.",
         "session_finalized=False means the data is a live or interrupted checkpoint, "
         "not a finalized session.",
         "SOA totals are descriptive answer-weighted accuracy. Use Participant SOA "

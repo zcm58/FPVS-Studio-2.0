@@ -284,7 +284,7 @@ class TriggerRecord(FPVSBaseModel):
     """One attempted trigger emission observed during execution."""
 
     trigger_index: int = Field(ge=0)
-    frame_index: int = Field(ge=0)
+    frame_index: int = Field(ge=-1)
     time_s: float | None = Field(default=None, ge=0)
     code: StrictInt = Field(ge=1, le=255)
     label: str
@@ -299,6 +299,12 @@ class TriggerRecord(FPVSBaseModel):
         if not cleaned:
             raise ValueError("Trigger labels and backend names may not be blank.")
         return cleaned
+
+    @model_validator(mode="after")
+    def validate_pre_stream_marker(self) -> TriggerRecord:
+        if self.frame_index == -1 and self.label != "condition_start":
+            raise ValueError("Only condition_start may use pre-stream marker frame -1.")
+        return self
 
 
 class AcquisitionCodeMapEntry(FPVSBaseModel):

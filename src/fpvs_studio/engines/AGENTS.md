@@ -40,6 +40,8 @@ play compiled runs end to end.
   sequencing, reset rules, and participant-facing summary text.
 - Keep trigger emission flip-locked through `window.callOnFlip(...)`; exported trigger
   timestamps should come from the run clock after warmup, not from warmup timing.
+  Opted-in AB distractor markers reserve frame -1 for one neutral condition-marker
+  flip before stream frame zero; keep its trigger clock continuous into the stream.
 - Require an explicit runtime-provided trigger backend before condition playback;
   missing backends are errors. Test/pilot runs receive an explicit log-only backend.
 - Require an explicitly declared external-marker capability for recording playback,

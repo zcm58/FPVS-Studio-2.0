@@ -27,6 +27,7 @@ from fpvs_studio.core.attentional_blink_stream import (
     attentional_blink_burst_grid,
     describe_attentional_blink_stream,
     iter_attentional_blink_stream_cycles,
+    retime_attentional_blink_stream,
     validate_attentional_blink_stream_symbols,
 )
 from fpvs_studio.core.models import AttentionalBlinkStreamSettings
@@ -55,7 +56,7 @@ def _characters(text: str) -> list[str]:
 
 
 class LetterStreamTimeline(QWidget):
-    """Draw every core-described slot and mark the two target onsets."""
+    """Draw the neighborhood around the first complete core-described target pair."""
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -68,11 +69,17 @@ class LetterStreamTimeline(QWidget):
         self.t2_color = "#FFFFFF"
         self.active_index: int | None = None
 
+    def target_pair_slots(self) -> tuple[int, int]:
+        """Place the onset bracket on a presented T2, including after an omission."""
+        t2_index = self.description.roles.index("t2")
+        return t2_index - self.description.lag, t2_index
+
     def visible_slots(self) -> range:
-        """Keep the target neighborhood readable for a full five-second burst."""
+        """Keep a complete target neighborhood readable across burst lengths."""
         description = self.description
         count = min(description.cycle_slots, max(15, description.lag + 9))
-        start = max(0, min(description.t1_slot_index - 4, description.cycle_slots - count))
+        t1_index, _t2_index = self.target_pair_slots()
+        start = max(0, min(t1_index - 4, description.cycle_slots - count))
         return range(start, start + count)
 
     def slot_rect(self, index: int) -> QRectF:
@@ -126,8 +133,9 @@ class LetterStreamTimeline(QWidget):
                 Qt.AlignmentFlag.AlignCenter,
                 role.upper() if target else str(index + 1),
             )
-        t1 = self.slot_rect(self.description.t1_slot_index).left()
-        t2 = self.slot_rect(self.description.t2_slot_index).left()
+        t1_index, t2_index = self.target_pair_slots()
+        t1 = self.slot_rect(t1_index).left()
+        t2 = self.slot_rect(t2_index).left()
         painter.setPen(QPen(QColor(theme.primary), 1.5))
         painter.drawLine(int(t1), 31, int(t2), 31)
         painter.drawLine(int(t1), 27, int(t1), 50)
@@ -210,7 +218,7 @@ class AttentionalBlinkStreamDesigner(QWidget):
         self.bursts_per_soa_spin.setAccessibleName("Bursts per SOA")
         self.bursts_per_soa_spin.setToolTip(
             "How many bursts to present for each SOA. All bursts are shuffled together. "
-            "24 five-second bursts provide 120 seconds of EEG per SOA; answers add time."
+            "EEG time uses the authored burst duration; answers add time."
         )
         self.burst_count_label.setBuddy(self.bursts_per_soa_spin)
         heading.addWidget(self.burst_count_label)
@@ -463,6 +471,18 @@ class AttentionalBlinkStreamDesigner(QWidget):
         settings = condition.attentional_blink
         assert isinstance(settings, AttentionalBlinkStreamSettings)
         protocol = self._document.project.settings.protocol
+        if settings.target_count > 1:
+            return retime_attentional_blink_stream(
+                base_hz=protocol.base_hz,
+                cycle_slots=protocol.oddball_every_n,
+                soa_ms=settings.soa_ms,
+                t2_slot_index=settings.t2_slot_index,
+                target_count=settings.target_count,
+                target_interval_slots=settings.target_interval_slots,
+                omit_first_t2=settings.omit_first_t2,
+                new_base_hz=self._base_hz(),
+                new_soa_ms=float(self.soa_edits[condition_id].text()),
+            )
         cycle_slots, t2_slot = protocol.oddball_every_n, settings.t2_slot_index
         if self._document.project.settings.session.randomize_across_blocks:
             cycle_slots, t2_slot = attentional_blink_burst_grid(self._base_hz())
@@ -485,6 +505,9 @@ class AttentionalBlinkStreamDesigner(QWidget):
                 AttentionalBlinkStreamSettings(
                     soa_ms=description.soa_ms,
                     t2_slot_index=description.t2_slot_index,
+                    target_count=description.target_count,
+                    target_interval_slots=description.target_interval_slots,
+                    omit_first_t2=description.omit_first_t2,
                     t1_color=self.t1_color_button.color_hex(),
                     t2_color=self.t2_color_button.color_hex(),
                 )
@@ -547,21 +570,37 @@ class AttentionalBlinkStreamDesigner(QWidget):
         self.timeline.t1_color = self.t1_color_button.color_hex()
         self.timeline.t2_color = self.t2_color_button.color_hex()
         self.timeline.update()
+        target_positions = {
+            role: [index + 1 for index, slot_role in enumerate(description.roles)
+                   if slot_role == role]
+            for role in ("t1", "t2")
+        }
+        target_summary = (
+            f"T1 in positions {', '.join(map(str, target_positions['t1']))}; "
+            f"T2 in positions {', '.join(map(str, target_positions['t2']))}. "
+            if description.target_count > 1 else
+            f"T1 in position {description.t1_slot_index + 1}; "
+            f"T2 in position {description.t2_slot_index + 1}. "
+        )
         self.timeline.setAccessibleName(
             f"{description.cycle_slots} characters. "
             f"Presentation rate {description.base_hz:g} Hz; "
             f"{description.item_ms:g} milliseconds per character. "
-            f"T1 in position {description.t1_slot_index + 1}; "
-            f"T2 in position {description.t2_slot_index + 1}. "
+            f"{target_summary}"
             f"SOA {description.soa_ms:g} milliseconds; "
             f"{description.intervening_digits} distractors between T1 and T2."
             " Distractors and distinct targets are randomized for each burst."
+            + (" The same T1 and T2 repeat within the burst."
+               if description.target_count > 1 else "")
+            + (" No T2 follows the first T1." if description.omit_first_t2 else "")
         )
         self.rate_label.setText(
             f"{description.item_ms:g} ms per character"
         )
         self.cycle_summary.setText(
             f"{description.cycle_slots} characters · {description.cycle_ms / 1000:g} s"
+            + (f" · {len(target_positions['t1'])} T1 / {len(target_positions['t2'])} T2"
+               if description.target_count > 1 else "")
         )
         repeats = self.bursts_per_soa_spin.value()
         seconds = description.cycle_ms / 1000 * repeats

@@ -287,9 +287,15 @@ class FixationEvent(FPVSBaseModel):
 class TriggerEvent(FPVSBaseModel):
     """One trigger pulse scheduled relative to the frame clock."""
 
-    frame_index: int = Field(ge=0)
+    frame_index: int = Field(ge=-1)
     code: StrictInt = Field(ge=1, le=255)
     label: str
+
+    @model_validator(mode="after")
+    def validate_pre_stream_marker(self) -> TriggerEvent:
+        if self.frame_index == -1 and self.label != "condition_start":
+            raise ValueError("Only condition_start may use pre-stream marker frame -1.")
+        return self
 
 
 class AttentionalBlinkRunSpec(FPVSBaseModel):
@@ -318,17 +324,41 @@ class AttentionalBlinkStreamRunSpec(FPVSBaseModel):
     cycle_slots: int = Field(ge=4, le=1000)
     t1_slot_index: int = Field(ge=1)
     t2_slot_index: int = Field(ge=2)
+    target_count: int = Field(default=1, ge=1, le=1000)
+    target_interval_slots: int | None = Field(default=None, ge=1, le=1000)
+    omit_first_t2: bool = False
     t2_trigger_code: StrictInt = Field(ge=1, le=255)
+    distractor_trigger_code: StrictInt | None = Field(default=None, ge=1, le=255)
     t2_presentation: RolePresentationSpec
+
+    @model_serializer(mode="wrap")
+    def serialize_optional_repetition(
+        self, handler: SerializerFunctionWrapHandler,
+    ) -> dict[str, Any]:
+        payload: dict[str, Any] = handler(self)
+        if (self.target_count == 1 and self.target_interval_slots is None
+                and not self.omit_first_t2):
+            for name in ("target_count", "target_interval_slots", "omit_first_t2"):
+                payload.pop(name, None)
+        if self.distractor_trigger_code is None:
+            payload.pop("distractor_trigger_code", None)
+        return payload
 
     @model_validator(mode="after")
     def validate_target_positions(self) -> AttentionalBlinkStreamRunSpec:
+        from fpvs_studio.core.attentional_blink_stream import attentional_blink_target_roles
+
         if self.t2_slot_index - self.t1_slot_index != self.lag:
             raise ValueError("Compiled target positions must match target lag.")
         if self.t2_slot_index >= self.cycle_slots - 1:
             raise ValueError("Compiled stream must retain digits after T2.")
         if self.t2_presentation.text is None:
             raise ValueError("Compiled letter streams require a text presentation for T2.")
+        attentional_blink_target_roles(
+            cycle_slots=self.cycle_slots, t1_slot_index=self.t1_slot_index,
+            t2_slot_index=self.t2_slot_index, target_count=self.target_count,
+            target_interval_slots=self.target_interval_slots, omit_first_t2=self.omit_first_t2,
+        )
         return self
 
 
@@ -384,6 +414,44 @@ class RunSpec(FPVSBaseModel):
         if (isinstance(self.attentional_blink, AttentionalBlinkStreamRunSpec)
                 and self.schema_version != "1.3.0"):
             raise ValueError("Letter-stream execution requires RunSpec schema 1.3.0.")
+        return self
+
+    @model_validator(mode="after")
+    def validate_distractor_markers(self) -> RunSpec:
+        timing = self.attentional_blink
+        if (not isinstance(timing, AttentionalBlinkStreamRunSpec)
+                or timing.distractor_trigger_code is None):
+            if any(marker.frame_index == -1 or marker.label == "distractor_onset"
+                   for marker in self.trigger_events):
+                raise ValueError(
+                    "Pre-stream and distractor markers require an opted-in letter stream."
+                )
+            return self
+        t1_codes = {marker.code for marker in self.trigger_events if marker.label == "t1_onset"}
+        if len(t1_codes) != 1:
+            raise ValueError("Distractor-marked streams require one consistent T1 marker code.")
+        t1_code = next(iter(t1_codes))
+        codes = {self.condition.trigger_code, t1_code,
+                 timing.t2_trigger_code, timing.distractor_trigger_code}
+        if len(codes) != 4:
+            raise ValueError("Condition, T1, T2, and distractor marker codes must be distinct.")
+        phase_markers = {
+            "base": (timing.distractor_trigger_code, "distractor_onset"),
+            "t1": (t1_code, "t1_onset"),
+            "t2": (timing.t2_trigger_code, "t2_onset"),
+        }
+        expected = [(-1, self.condition.trigger_code, "condition_start")]
+        for event in self.stimulus_sequence:
+            if event.phase not in phase_markers:
+                raise ValueError("Distractor-marked streams require base, T1, or T2 events.")
+            code, label = phase_markers[event.phase]
+            expected.append((event.on_start_frame, code, label))
+        actual = [(marker.frame_index, marker.code, marker.label) for marker in self.trigger_events]
+        if actual != expected:
+            raise ValueError(
+                "Distractor-marked streams require condition_start at frame -1 and exactly "
+                "one marker at every character onset."
+            )
         return self
 
 

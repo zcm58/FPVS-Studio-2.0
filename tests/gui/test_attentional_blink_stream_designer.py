@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from PySide6.QtCore import QPoint, Qt
 from PySide6.QtGui import QColor, QPalette
-from PySide6.QtWidgets import QApplication, QColorDialog, QSpinBox
+from PySide6.QtWidgets import QApplication, QColorDialog, QLabel, QSpinBox
 from tests.gui.helpers import assert_visible_children_within_parent
 
 from fpvs_studio.core.attentional_blink_stream import iter_attentional_blink_stream_cycles
@@ -25,6 +25,22 @@ def stream_document(tmp_path):
         project_name="Digit and letter attentional blink",
         experiment_category=ExperimentCategory.ATTENTIONAL_BLINK,
     )
+
+
+def _use_repeated_targets(document):
+    document.project.settings.protocol.oddball_every_n = 90
+    for condition in document.project.conditions:
+        settings = condition.attentional_blink
+        settings.target_count = 6
+        settings.target_interval_slots = 10
+        settings.omit_first_t2 = True
+        settings.t2_slot_index = 21 + round(settings.soa_ms / 100)
+
+
+@pytest.fixture
+def repeated_stream_document(stream_document):
+    _use_repeated_targets(stream_document)
+    return stream_document
 
 
 @pytest.fixture
@@ -89,6 +105,131 @@ def test_burst_rate_preserves_five_seconds_and_rejects_partial_character_grid(
     assert "character boundaries" in editor.validation_message()
     assert not step.apply_pending_design()
     assert stream_document.project.model_dump(mode="json") == before
+
+
+def test_repeated_burst_preview_shows_counts_and_first_complete_pair(
+    qtbot, repeated_stream_document,
+):
+    _step, editor = _editor(qtbot, repeated_stream_document)
+    assert editor.cycle_summary.text() == "90 characters · 9 s · 6 T1 / 5 T2"
+    assert editor.burst_summary.text() == "216 s EEG per SOA · 72 total bursts"
+    assert "five-second" not in editor.bursts_per_soa_spin.toolTip()
+    for row, lag in enumerate((1, 3, 5)):
+        editor.condition_table.selectRow(row)
+        description = editor.timeline.description
+        assert description.cycle_ms == 9000
+        assert description.t1_slot_index == 21
+        assert description.roles.count("t1") == 6
+        assert description.roles.count("t2") == 5
+        assert description.roles[21 + lag] == "base"
+        assert editor.timeline.target_pair_slots() == (31, 31 + lag)
+        assert all(index in editor.timeline.visible_slots()
+                   for index in editor.timeline.target_pair_slots())
+        assert "No T2 follows the first T1" in editor.timeline.accessibleName()
+        assert "same T1 and T2 repeat" in editor.timeline.accessibleName()
+        for role in ("t1", "t2"):
+            symbols = {symbol for symbol, slot_role in
+                       zip(editor.timeline.symbols, description.roles, strict=True)
+                       if slot_role == role}
+            assert len(symbols) == 1
+        editor._preview_index = description.t2_slot_index - 1
+        editor._advance_preview()
+        assert "Distractor" in editor.preview_caption.text()
+
+
+def test_repeated_burst_edits_preserve_duration_first_t1_and_recall(
+    qtbot, repeated_stream_document,
+):
+    document = repeated_stream_document
+    step, editor = _editor(qtbot, document)
+    bindings = [condition.post_task_bindings for condition in document.ordered_conditions()]
+    editor.base_edit.setText("ABCD")
+    first = document.ordered_conditions()[0]
+    editor.soa_edits[first.condition_id].setText("200")
+    assert editor.timeline.description.t1_slot_index == 21
+    assert editor.timeline.description.t2_slot_index == 23
+    assert step.apply_pending_design()
+    assert document.project.settings.protocol.oddball_every_n == 90
+    assert document.project.settings.session.block_count == 24
+    assert [condition.post_task_bindings for condition in document.ordered_conditions()] == bindings
+    document.save()
+    reopened = ProjectDocument.open_existing(document.project_root)
+    _, restored = _editor(qtbot, reopened)
+    assert restored.cycle_summary.text() == "90 characters · 9 s · 6 T1 / 5 T2"
+    for condition in reopened.ordered_conditions():
+        settings = condition.attentional_blink
+        assert settings.target_count == 6
+        assert settings.target_interval_slots == 10
+        assert settings.omit_first_t2
+        assert settings.t2_slot_index - round(settings.soa_ms / 100) == 21
+    assert not restored.has_pending_design()
+
+
+def test_repeated_burst_rate_preserves_onsets_and_rejects_partial_grid(
+    qtbot, repeated_stream_document,
+):
+    document = repeated_stream_document
+    step, editor = _editor(qtbot, document)
+    editor.rate_edit.setText("20")
+    assert not editor.validation_message()
+    description = editor.timeline.description
+    assert description.cycle_slots == 180
+    assert description.cycle_ms == 9000
+    assert description.t1_slot_index == 42
+    assert description.target_interval_slots == 20
+    assert description.roles.count("t1") == 6
+    assert description.roles.count("t2") == 5
+    assert step.apply_pending_design()
+    assert document.project.settings.protocol.oddball_every_n == 180
+    assert all(condition.attentional_blink.target_interval_slots == 20
+               for condition in document.ordered_conditions())
+    before = document.project.model_dump(mode="json")
+    editor.rate_edit.setText("7.5")
+    for edit, lag in zip(editor.soa_edits.values(), (1, 3, 5), strict=True):
+        edit.setText(str(lag * 1000 / 7.5))
+    assert "character boundaries" in editor.validation_message()
+    assert not editor.preview_button.isEnabled()
+    assert not step.apply_pending_design()
+    assert document.project.model_dump(mode="json") == before
+
+
+@pytest.mark.parametrize("document_fixture", ["stream_document", "repeated_stream_document"])
+def test_design_edits_and_save_preserve_all_character_markers(qtbot, request, document_fixture):
+    document = request.getfixturevalue(document_fixture)
+    for condition in document.ordered_conditions():
+        condition.attentional_blink.distractor_trigger_code = 57
+        condition.attentional_blink.t2_trigger_code = 76
+    condition_markers = [condition.trigger_code for condition in document.ordered_conditions()]
+    step, editor = _editor(qtbot, document)
+    editor.rate_edit.setText("20")
+    editor.base_edit.setText("ABCD")
+    first = document.ordered_conditions()[0]
+    editor.soa_edits[first.condition_id].setText("200")
+    assert not editor.validation_message()
+    assert step.apply_pending_design()
+    document.save()
+    reopened = ProjectDocument.open_existing(document.project_root)
+    assert [condition.trigger_code for condition in reopened.ordered_conditions()] == (
+        condition_markers
+    )
+    assert reopened.project.settings.triggers.oddball_trigger_code == 55
+    for condition in reopened.ordered_conditions():
+        assert condition.attentional_blink.t2_trigger_code == 76
+        assert condition.attentional_blink.distractor_trigger_code == 57
+
+
+@pytest.mark.parametrize("duplicate", [False, True])
+def test_new_stream_condition_marker_reserves_distractor_code(stream_document, duplicate):
+    for condition in stream_document.ordered_conditions():
+        condition.attentional_blink.distractor_trigger_code = 2
+    first = stream_document.ordered_conditions()[0]
+    new_id = (
+        stream_document.duplicate_condition(first.condition_id)
+        if duplicate else stream_document.create_condition()
+    )
+    new_condition = stream_document.get_condition(new_id)
+    assert new_condition.trigger_code == 4
+    assert new_condition.attentional_blink.distractor_trigger_code == 2
 
 
 def test_three_soas_show_core_target_positions_and_intervening_digits(qtbot, stream_document):
@@ -466,8 +607,40 @@ def test_timing_rejects_rounded_character_intervals(qtbot, stream_document):
     assert not editor.oddball_every_n_spin.isVisible()
 
 
+def test_repeated_burst_timing_reports_t1_cadence_and_preserves_duration(
+    qtbot, repeated_stream_document,
+):
+    editor = DisplaySettingsEditor(repeated_stream_document, editable=False)
+    qtbot.addWidget(editor)
+    editor.resize(1000, 590)
+    editor.show()
+    QApplication.processEvents()
+    report = editor.timing_report()
+    assert report.compatible
+    assert report.oddball_every_n == 10
+    assert report.requested_oddball_hz == 1
+    assert report.realized_oddball_hz == 1
+    assert editor._condition_duration_text(report.frames_per_cycle) == "condition 9.0 s"
+    assert editor.summary_value_labels["oddball"].text() == "Every 10 stimuli (1 Hz)"
+    label = editor.summary_layout.labelForField(editor.summary_value_labels["oddball"])
+    assert label.text() == "T1 repetition"
+    assert_visible_children_within_parent(editor)
+    value = editor.summary_value_labels["oddball"]
+    assert value.width() >= value.fontMetrics().horizontalAdvance(value.text())
+
+    settings = repeated_stream_document.project.conditions[0].attentional_blink
+    settings.target_interval_slots = 8
+    editor.refresh()
+    assert editor.timing_report().compatible
+    assert editor.timing_report().requested_oddball_hz is None
+    assert editor.summary_value_labels["oddball"].text() == "Varies by condition"
+    settings.target_interval_slots = 20
+    assert not editor.timing_report().compatible
+
+
 @pytest.mark.parametrize("dark", [False, True])
 @pytest.mark.parametrize("size", [(1120, 820), (1448, 1086)])
+@pytest.mark.parametrize("repeated", [False, True])
 def test_stream_design_fits_wizard_in_both_themes(
     qtbot,
     qapp,
@@ -475,10 +648,13 @@ def test_stream_design_fits_wizard_in_both_themes(
     stream_document,
     dark,
     size,
+    repeated,
 ):
     previous_palette = qapp.palette()
     qapp.setPalette(QPalette(QColor("#202124" if dark else "#f4f7fb")))
     try:
+        if repeated:
+            _use_repeated_targets(stream_document)
         stream_document.save()
         controller.open_project(stream_document.project_root)
         window = controller.main_window
@@ -510,8 +686,7 @@ def test_stream_design_fits_wizard_in_both_themes(
             assert field.height() >= field.minimumSizeHint().height()
         visible = editor.timeline.visible_slots()
         assert editor.timeline.slot_rect(visible.stop - 1).right() <= editor.timeline.width()
-        assert editor.timeline.description.t1_slot_index in visible
-        assert editor.timeline.description.t2_slot_index in visible
+        assert all(index in visible for index in editor.timeline.target_pair_slots())
         for label in (
             editor.rate_caption, editor.rate_label, editor.cycle_summary, editor.separation_label,
             editor.base_order_label, editor.timeline_title, editor.burst_count_label,
@@ -552,12 +727,15 @@ def test_stream_design_fits_wizard_in_both_themes(
 
 @pytest.mark.parametrize("dark", [False, True])
 @pytest.mark.parametrize("show_cross", [True, False])
+@pytest.mark.parametrize("repeated", [False, True])
 def test_all_stream_setup_steps_fit_default_window(
-    qtbot, qapp, controller, stream_document, dark, show_cross,
+    qtbot, qapp, controller, stream_document, dark, show_cross, repeated,
 ):
     previous_palette = qapp.palette()
     qapp.setPalette(QPalette(QColor("#202124" if dark else "#f4f7fb")))
     try:
+        if repeated:
+            _use_repeated_targets(stream_document)
         stream_document.update_fixation_settings(show_cross=show_cross)
         stream_document.save()
         controller.open_project(stream_document.project_root)
@@ -614,5 +792,12 @@ def test_all_stream_setup_steps_fit_default_window(
                 assert sections["image_size"][0] == (
                     f"Character height: {height.values[0]:g} visual degrees"
                 )
+                if repeated:
+                    assert sections["experiment"][1] == (
+                        "10 Hz · 9 s bursts · T1 1 Hz · 6 T1 / 5 T2"
+                    )
+                for label in wizard.review_card.findChildren(QLabel):
+                    if label.isVisible() and label.wordWrap():
+                        assert label.height() >= label.heightForWidth(label.width()), label.text()
     finally:
         qapp.setPalette(previous_palette)

@@ -713,9 +713,26 @@ class AttentionalBlinkStreamSettings(FPVSBaseModel):
     layout: Literal["letter_stream"] = "letter_stream"
     soa_ms: float = Field(default=300.0, gt=0, allow_inf_nan=False)
     t2_slot_index: int = Field(default=15, ge=1)
+    target_count: int = Field(default=1, ge=1, le=1000)
+    target_interval_slots: int | None = Field(default=None, ge=1, le=1000)
+    omit_first_t2: bool = False
     t1_color: str = "#FF0000"
     t2_color: str = "#FFFFFF"
     t2_trigger_code: StrictInt = Field(default=56, ge=1, le=255)
+    distractor_trigger_code: StrictInt | None = Field(default=None, ge=1, le=255)
+
+    @model_serializer(mode="wrap")
+    def serialize_optional_repetition(
+        self, handler: SerializerFunctionWrapHandler,
+    ) -> dict[str, Any]:
+        payload: dict[str, Any] = handler(self)
+        if (self.target_count == 1 and self.target_interval_slots is None
+                and not self.omit_first_t2):
+            for name in ("target_count", "target_interval_slots", "omit_first_t2"):
+                payload.pop(name, None)
+        if self.distractor_trigger_code is None:
+            payload.pop("distractor_trigger_code", None)
+        return payload
 
     @field_validator("t1_color", "t2_color")
     @classmethod

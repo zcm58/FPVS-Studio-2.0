@@ -133,9 +133,13 @@ the authored repeats and `randomize_across_blocks` selects the new session-wide 
 `compiler_tasks.py` resolves correct options from the actual compiled target pair.
 Existing saved digit streams and blockwise session settings retain their behavior.
 These streams require exact whole frames per character, rejecting approximate
-refresh ratios. Retired image-pair records remain decodable, but category validation
+refresh ratios. Explicit repeated targets use `target_count`, `target_interval_slots`
+and `omit_first_t2`; one distinct digit pair is sampled per burst, with separate
+event cycle indices for each repeated pair. See `docs/EXPERIMENT_CATEGORIES.md`.
+Retired image-pair records remain decodable, but category validation
 blocks their saving, export and compilation; runtime rejects old compiled copies. See `docs/EXPERIMENT_CATEGORIES.md` for the
-layout and schema contracts. Each new recall burst contains exactly one target pair.
+layout and schema contracts. Each default starter recall burst contains one target pair;
+explicit repeated-target studies reuse that pair throughout the authored burst.
 
 Represent timing in frames after display validation/compilation. Do not use sleep-based millisecond scheduling as a design primitive.
 
@@ -163,6 +167,9 @@ A minimal compiler in this phase should be able to:
   single-condition
 - when randomized fixation target-count mode is enabled, select realized counts during session compilation with session-seed determinism and no immediate repetition across consecutive ordered runs
 - emit trigger events without implementing hardware I/O
+- preserve opt-in native AB distractor markers and their restricted condition-start
+  frame -1 through RunSpec, execution records, and completed project configs; the
+  full marker and clock contract is in `docs/RUNSPEC.md` and `docs/RUNTIME_EXECUTION.md`
 - keep the `oddball_onset` trigger code locked to `55` by default; nonstandard
   oddball marker codes require explicit user direction and the persisted
   `allow_nonstandard_oddball_trigger_code` override

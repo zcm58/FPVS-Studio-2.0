@@ -285,9 +285,15 @@ class ProjectConfigToolbox(FPVSBaseModel):
 class ProjectConfigTriggerEvent(FPVSBaseModel):
     """One compiled trigger event included in a completed config."""
 
-    frame_index: int = Field(ge=0)
+    frame_index: int = Field(ge=-1)
     code: StrictInt = Field(ge=1, le=255)
     label: str
+
+    @model_validator(mode="after")
+    def validate_pre_stream_marker(self) -> ProjectConfigTriggerEvent:
+        if self.frame_index == -1 and self.label != "condition_start":
+            raise ValueError("Only condition_start may use pre-stream marker frame -1.")
+        return self
 
 
 class ProjectConfigCompletedRun(FPVSBaseModel):

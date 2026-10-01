@@ -515,13 +515,14 @@ class FixationSettingsEditor(QWidget):
         timing_layout.addRow("Color change duration (ms)", self.target_duration_spin)
         timing_layout.addRow("Minimum gap (ms)", self.min_gap_spin)
         timing_layout.addRow("Before condition starts", self.pre_stream_fixation_spin)
-        self.pre_stream_fixation_note = QLabel(
-            "The fixation cross stays visible so participants can settle their gaze. "
-            "The first stimulus and condition trigger still begin together at frame zero.",
-            self.fixation_timing_group,
-        )
+        self.pre_stream_fixation_note = QLabel(self.fixation_timing_group)
         self.pre_stream_fixation_note.setObjectName("pre_stream_fixation_note")
         self.pre_stream_fixation_note.setWordWrap(True)
+        self.pre_stream_fixation_note.setToolTip(
+            "Normally, the first stimulus and condition marker start at frame zero. "
+            "With distractor markers enabled, the condition marker occurs on a neutral "
+            "flip immediately before frame zero."
+        )
         timing_layout.addRow(self.pre_stream_fixation_note)
 
         self.fixation_response_group = QWidget(self.fixation_panel)

@@ -962,11 +962,22 @@ def build_trigger_events(
     condition_trigger_code: int,
     oddball_trigger_code: int,
     t2_trigger_code: int | None = None,
+    distractor_trigger_code: int | None = None,
 ) -> list[TriggerEvent]:
     """Build frame-accurate condition and oddball trigger events."""
 
     if not stimulus_sequence:
         return []
+
+    if distractor_trigger_code is not None:
+        validate_event_trigger_code(distractor_trigger_code, label="distractor_onset")
+        if ({event.phase for event in stimulus_sequence} - {"base", "t1", "t2"}
+                or t2_trigger_code is None
+                or not any(event.phase == "t1" for event in stimulus_sequence)):
+            raise CompileError("Distractor markers require an attentional-blink letter stream.")
+        if len({condition_trigger_code, oddball_trigger_code,
+                t2_trigger_code, distractor_trigger_code}) != 4:
+            raise CompileError("Condition, T1, T2, and distractor marker codes must be distinct.")
 
     if any(event.phase == "t2" for event in stimulus_sequence):
         if t2_trigger_code is None:
@@ -976,7 +987,8 @@ def build_trigger_events(
 
     trigger_events: list[TriggerEvent] = [
         TriggerEvent(
-            frame_index=stimulus_sequence[0].on_start_frame,
+            frame_index=(-1 if distractor_trigger_code is not None
+                         else stimulus_sequence[0].on_start_frame),
             code=validate_event_trigger_code(
                 condition_trigger_code,
                 label="condition_start",
@@ -999,6 +1011,16 @@ def build_trigger_events(
         for event in stimulus_sequence
         if event.role == "oddball"
     )
+    if distractor_trigger_code is not None:
+        trigger_events.extend(
+            TriggerEvent(
+                frame_index=event.on_start_frame,
+                code=distractor_trigger_code,
+                label="distractor_onset",
+            )
+            for event in stimulus_sequence
+            if event.role == "base"
+        )
     return _validate_and_sort_trigger_events(trigger_events)
 
 

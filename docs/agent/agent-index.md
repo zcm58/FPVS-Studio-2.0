@@ -62,6 +62,12 @@ workflow is separate.
 
 ## Skill Routing
 
+For native AB all-character markers, start with `core/compiler_schedules.py`,
+`engines/psychopy_triggers.py`, and `runtime/preflight.py`. Frame -1 is the explicit
+neutral condition-marker flip for opted-in streams; see the TriggerEvent contract
+in [RunSpec](../RUNSPEC.md#triggerevent). Use compiler/engine/runtime routes and
+`tests/unit/test_attentional_blink_distractor_triggers.py`, then repo precommit.
+
 | Task | Repo-local skill |
 | --- | --- |
 | PySide6 layout, components, workers, status/error UX | `.agents/skills/pyside6-gui-cleanup/SKILL.md` |
@@ -195,6 +201,13 @@ and GUI focused routes, then repo precommit. GUI acceptance remains visible/manu
 unless an explicitly approved safe Qt environment is available.
 
 ## Attentional Blink Presentation Rate
+
+For repeated targets within a burst (including MSMS AB), the same core helper owns
+`target_count`, `target_interval_slots` and `omit_first_t2`, exact retiming and
+per-pair cycle indices. Use the repeated-target section in
+`docs/EXPERIMENT_CATEGORIES.md`. Keep GUI preview/apply, recall compilation,
+runtime preflight and burst/event reports consistent; run compiler/runtime/GUI
+focused routes and repo precommit. Defaults remain single-pair bursts.
 
 Setup > Design edits the shared rate through `gui/attentional_blink_stream_designer.py`
 and the atomic `gui/document_conditions.py` apply method, alongside **Bursts per SOA**.

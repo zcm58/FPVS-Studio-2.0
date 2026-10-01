@@ -13,10 +13,13 @@ from fpvs_studio.core.attentional_blink_stream import (
     describe_attentional_blink_stream,
     iter_attentional_blink_stream_cycles,
     preview_attentional_blink_stream,
+    retime_attentional_blink_stream,
     validate_attentional_blink_stream_symbols,
 )
-from fpvs_studio.core.compiler import CompileError, compile_run_spec
+from fpvs_studio.core.compiler import CompileError, compile_run_spec, compile_session_plan
+from fpvs_studio.core.compiler_schedules import build_trigger_events
 from fpvs_studio.core.enums import ExperimentCategory, ProjectSchemaVersion, StimulusModality
+from fpvs_studio.core.execution import TriggerRecord
 from fpvs_studio.core.experiment_categories import require_valid_experiment_category
 from fpvs_studio.core.models import (
     AttentionalBlinkSettings,
@@ -29,13 +32,19 @@ from fpvs_studio.core.models import (
 )
 from fpvs_studio.core.project_config import (
     ProjectConfigFile,
+    ProjectConfigTriggerEvent,
     create_project_from_config,
     export_project_config,
     read_project_config,
     write_project_config,
 )
-from fpvs_studio.core.run_spec import AttentionalBlinkStreamRunSpec, RunSpec, event_presentation
-from fpvs_studio.core.serialization import load_project_file, save_project_file
+from fpvs_studio.core.run_spec import (
+    AttentionalBlinkStreamRunSpec,
+    RunSpec,
+    TriggerEvent,
+    event_presentation,
+)
+from fpvs_studio.core.serialization import load_project_file, save_project_file, write_json_file
 from fpvs_studio.core.validation import condition_stimulus_repeat_guidance, validate_project
 
 
@@ -385,3 +394,337 @@ def test_repeat_guidance_counts_two_target_slots(stream_project):
     assert rows["base"].presentation_count == 4 * 18
     assert rows["oddball"].presentation_count == rows["t2"].presentation_count == 4
     assert "isi" not in rows
+
+
+@pytest.fixture
+def repeated_target_project(stream_project):
+    stream_project.settings.protocol.oddball_every_n = 90
+    stream_project.stimulus_sets[0].words = list("ABCDEFGH")
+    stream_project.stimulus_sets[1].words = list("23456789")
+    stream_project.stimulus_sets[2].words = list("23456789")
+    condition = stream_project.conditions[0]
+    condition.oddball_cycle_repeats_per_sequence = 1
+    condition.attentional_blink = AttentionalBlinkStreamSettings(
+        soa_ms=300, t2_slot_index=24, target_count=6,
+        target_interval_slots=10, omit_first_t2=True,
+    )
+    return stream_project
+
+
+@pytest.mark.parametrize("refresh", [60, 120, 240])
+@pytest.mark.parametrize("soa", [100, 300, 500])
+def test_repeated_targets_have_exact_nine_second_schedule_and_markers(
+    repeated_target_project, refresh, soa,
+):
+    settings = repeated_target_project.conditions[0].attentional_blink
+    settings.soa_ms = soa
+    settings.t2_slot_index = 21 + soa // 100
+    preview = preview_attentional_blink_stream(
+        refresh_hz=refresh, cycle_slots=90, soa_ms=soa,
+        t2_slot_index=settings.t2_slot_index, target_count=6,
+        target_interval_slots=10, omit_first_t2=True,
+    )
+    run = compile_run_spec(repeated_target_project, refresh_hz=refresh, random_seed=47)
+    assert validate_project(repeated_target_project, refresh_hz=refresh).is_valid
+    assert run.display.total_frames == preview.total_frames == 9 * refresh
+    assert preview.cycle_ms == 9000 and preview.pair_hz == 1
+    assert preview.description.pair_hz == 1
+    assert preview.description.t1_slot_index == 21
+    assert preview.achieved_soa_ms == soa
+    assert len(run.stimulus_sequence) == 90
+    assert [event.phase for event in run.stimulus_sequence] == list(preview.description.roles)
+    assert [event.on_start_frame for event in run.stimulus_sequence] == [
+        slot * refresh // 10 for slot in range(90)
+    ]
+    assert {event.on_frames for event in run.stimulus_sequence} == {refresh // 10}
+    assert {event.off_frames for event in run.stimulus_sequence} == {0}
+    assert not any(event.is_blank for event in run.stimulus_sequence)
+    t1_events = [event for event in run.stimulus_sequence if event.phase == "t1"]
+    t2_events = [event for event in run.stimulus_sequence if event.phase == "t2"]
+    assert [event.on_start_frame / refresh for event in t1_events] == [
+        2.1, 3.1, 4.1, 5.1, 6.1, 7.1,
+    ]
+    assert [event.cycle_index for event in t1_events] == list(range(6))
+    assert [event.cycle_index for event in t2_events] == list(range(1, 6))
+    assert len({event.text for event in t1_events}) == len({event.text for event in t2_events}) == 1
+    assert t1_events[0].text != t2_events[0].text
+    assert t1_events[0].text.isdigit() and t2_events[0].text.isdigit()
+    for t1, t2 in zip(t1_events[1:], t2_events, strict=True):
+        assert t2.on_start_frame - t1.on_start_frame == soa * refresh // 1000
+    omitted = run.stimulus_sequence[settings.t2_slot_index]
+    assert omitted.phase == "base" and omitted.text.isalpha()
+    assert not any(marker.frame_index == omitted.on_start_frame for marker in run.trigger_events)
+    assert [(marker.frame_index, marker.code, marker.label) for marker in run.trigger_events] == [
+        (0, repeated_target_project.conditions[0].trigger_code, "condition_start"),
+        *[(event.on_start_frame, 55 if event.phase == "t1" else 56, f"{event.phase}_onset")
+          for event in run.stimulus_sequence if event.phase in ("t1", "t2")],
+    ]
+
+
+def test_repeated_target_sampling_keeps_one_pair_per_burst_and_seeded_distractors():
+    description = describe_attentional_blink_stream(
+        cycle_slots=90, soa_ms=300, t2_slot_index=24,
+        target_count=6, target_interval_slots=10, omit_first_t2=True,
+    )
+
+    def sample(seed):
+        return list(islice(iter_attentional_blink_stream_cycles(
+            description, base_words=list("ABCDEFGH"), t1_words=list("23456789"),
+            t2_words=list("23456789"), random_seed=seed,
+        ), 12))
+
+    bursts = sample(47)
+    assert bursts == sample(47) and bursts != sample(48)
+    pairs = set()
+    previous = None
+    for symbols in bursts:
+        targets = {
+            phase: {symbol for role, symbol in zip(description.roles, symbols, strict=True)
+                    if role == phase}
+            for phase in ("t1", "t2")
+        }
+        assert len(targets["t1"]) == len(targets["t2"]) == 1
+        assert targets["t1"] != targets["t2"]
+        pairs.add((next(iter(targets["t1"])), next(iter(targets["t2"]))))
+        assert symbols[24].isalpha()
+        for role, symbol in zip(description.roles, symbols, strict=True):
+            if role == "base":
+                assert symbol.isalpha() and symbol != previous
+                previous = symbol
+            else:
+                previous = None
+    assert len(pairs) > 1
+
+
+@pytest.mark.parametrize("rate", [10, 20, 30])
+def test_retiming_repeated_targets_preserves_duration_first_onset_and_cadence(rate):
+    description = retime_attentional_blink_stream(
+        base_hz=10, cycle_slots=90, soa_ms=300, t2_slot_index=24,
+        target_count=6, target_interval_slots=10, omit_first_t2=True,
+        new_base_hz=rate, new_soa_ms=400,
+    )
+    assert description.cycle_ms == 9000
+    assert description.t1_slot_index / rate == 2.1
+    assert description.t2_slot_index / rate == 2.5
+    assert description.target_interval_slots / rate == 1
+    assert description.roles.count("t1") == 6 and description.roles.count("t2") == 5
+    assert description.roles[description.t2_slot_index] == "base"
+
+
+@pytest.mark.parametrize("rate,soa", [(7.5, 400), (12, 250), (15, 200), (20, 125)])
+def test_retiming_repeated_targets_rejects_inexact_grid(rate, soa):
+    with pytest.raises(ValueError, match="exactly on character boundaries|whole multiple"):
+        retime_attentional_blink_stream(
+            base_hz=10, cycle_slots=90, soa_ms=300, t2_slot_index=24,
+            target_count=6, target_interval_slots=10, omit_first_t2=True,
+            new_base_hz=rate, new_soa_ms=soa,
+        )
+
+
+@pytest.mark.parametrize("changes,error", [
+    ({"target_interval_slots": None}, "longer than"),
+    ({"target_interval_slots": 3}, "longer than"),
+    ({"target_interval_slots": 14}, "after the final T2"),
+    ({"target_count": 8}, "after the final T2"),
+    ({"target_count": 1, "target_interval_slots": None}, "require repeated targets"),
+])
+def test_invalid_repeated_targets_rejected_before_compilation_or_playback(
+    repeated_target_project, changes, error,
+):
+    run_payload = compile_run_spec(repeated_target_project, refresh_hz=60).model_dump()
+    run_payload["attentional_blink"].update(changes)
+    with pytest.raises(ValidationError, match=error):
+        RunSpec.model_validate(run_payload)
+    condition = repeated_target_project.conditions[0]
+    condition.attentional_blink = condition.attentional_blink.model_copy(update=changes)
+    assert not validate_project(repeated_target_project, refresh_hz=60).is_valid
+    with pytest.raises(CompileError, match=error):
+        compile_run_spec(repeated_target_project, refresh_hz=60)
+
+
+@pytest.mark.parametrize("distractor_code", [None, 57])
+def test_repeated_targets_project_config_and_run_spec_roundtrip(
+    repeated_target_project, tmp_path, distractor_code,
+):
+    settings = repeated_target_project.conditions[0].attentional_blink
+    settings.distractor_trigger_code = distractor_code
+    project_path = tmp_path / "project.json"
+    save_project_file(repeated_target_project, project_path)
+    restored = load_project_file(project_path)
+    assert restored == repeated_target_project
+    config_path = tmp_path / "repeated-targets.fpvsconfig"
+    write_project_config(config_path, export_project_config(restored, project_root=None))
+    imported = create_project_from_config(tmp_path / "imported", read_project_config(config_path))
+    assert imported.project.conditions == restored.conditions
+    assert imported.project.settings.protocol == restored.settings.protocol
+    run = compile_run_spec(imported.project, refresh_hz=60, random_seed=47)
+    assert RunSpec.model_validate_json(run.model_dump_json()) == run
+    assert run.stimulus_sequence == compile_run_spec(
+        repeated_target_project, refresh_hz=60, random_seed=47,
+    ).stimulus_sequence
+    assert run.attentional_blink.target_count == 6
+    assert run.attentional_blink.target_interval_slots == 10
+    assert run.attentional_blink.omit_first_t2
+    assert run.attentional_blink.distractor_trigger_code == distractor_code
+    rows = {row.role: row for row in condition_stimulus_repeat_guidance(imported.project)}
+    assert rows["base"].presentation_count == 79
+    assert rows["oddball"].presentation_count == 6
+    assert rows["t2"].presentation_count == 5
+
+
+@pytest.mark.parametrize("refresh", [60, 120, 240])
+@pytest.mark.parametrize("soa,condition_code", [(100, 1), (300, 2), (500, 3)])
+def test_distractor_markers_cover_every_character_without_changing_stream_timing(
+    repeated_target_project, refresh, soa, condition_code,
+):
+    condition = repeated_target_project.conditions[0]
+    condition.trigger_code = condition_code
+    condition.attentional_blink.soa_ms = soa
+    condition.attentional_blink.t2_slot_index = 21 + soa // 100
+    without_distractors = compile_run_spec(
+        repeated_target_project, refresh_hz=refresh, random_seed=47,
+    )
+    condition.attentional_blink.distractor_trigger_code = 57
+    run = compile_run_spec(repeated_target_project, refresh_hz=refresh, random_seed=47)
+    assert run.stimulus_sequence == without_distractors.stimulus_sequence
+    assert run.display == without_distractors.display
+    assert run.pre_stream_fixation_frames == without_distractors.pre_stream_fixation_frames
+    assert run.display.total_frames == 9 * refresh
+    assert len(run.trigger_events) == 91
+    assert len({marker.frame_index for marker in run.trigger_events}) == 91
+    assert run.trigger_events[0] == TriggerEvent(
+        frame_index=-1, code=condition_code, label="condition_start",
+    )
+    expected = {"base": (57, "distractor_onset"), "t1": (55, "t1_onset"),
+                "t2": (56, "t2_onset")}
+    for event, marker in zip(run.stimulus_sequence, run.trigger_events[1:], strict=True):
+        assert marker.frame_index == event.on_start_frame
+        assert (marker.code, marker.label) == expected[event.phase]
+    assert sum(marker.code == 55 for marker in run.trigger_events) == 6
+    assert sum(marker.code == 56 for marker in run.trigger_events) == 5
+    assert sum(marker.code == 57 for marker in run.trigger_events) == 79
+    assert run.trigger_events[1].frame_index == 0
+    assert run.trigger_events[1].code == 57
+    omitted_slot = condition.attentional_blink.t2_slot_index
+    assert run.trigger_events[omitted_slot + 1].code == 57
+    assert RunSpec.model_validate_json(run.model_dump_json()) == run
+
+
+@pytest.mark.parametrize("code", [0, 256, True, 57.0, "57"])
+def test_distractor_code_requires_nonzero_strict_byte_code(stream_project, code):
+    with pytest.raises(ValidationError):
+        AttentionalBlinkStreamSettings(distractor_trigger_code=code)
+    payload = compile_run_spec(stream_project, refresh_hz=60).model_dump()
+    payload["attentional_blink"]["distractor_trigger_code"] = code
+    with pytest.raises(ValidationError):
+        RunSpec.model_validate(payload)
+
+
+@pytest.mark.parametrize("code", [1, 2, 55, 56, 58])
+def test_distractor_code_cannot_alias_any_condition_or_target_marker(stream_project, code):
+    condition = stream_project.conditions[0]
+    other = condition.model_copy(deep=True)
+    other.condition_id = "other"
+    other.trigger_code = 2
+    other.attentional_blink.t2_trigger_code = 58
+    stream_project.conditions.append(other)
+    condition.attentional_blink.distractor_trigger_code = code
+    report = validate_project(stream_project, refresh_hz=60)
+    assert not report.is_valid
+    with pytest.raises(CompileError, match="Distractor marker must differ"):
+        compile_run_spec(stream_project, condition_id=condition.condition_id, refresh_hz=60)
+
+
+def test_optional_distractor_markers_preserve_legacy_serialized_shape(stream_project):
+    settings = stream_project.conditions[0].attentional_blink
+    assert "distractor_trigger_code" not in settings.model_dump()
+    assert "distractor_trigger_code" not in settings.model_dump_json()
+    run = compile_run_spec(stream_project, refresh_hz=60)
+    assert "distractor_trigger_code" not in run.model_dump()["attentional_blink"]
+    assert "distractor_trigger_code" not in run.model_dump_json()
+    assert run.trigger_events[0].frame_index == 0
+    assert {marker.label for marker in run.trigger_events} == {
+        "condition_start", "t1_onset", "t2_onset",
+    }
+
+
+@pytest.mark.parametrize("change", [
+    "start_frame", "start_code", "remove_start", "remove_distractor", "wrong_distractor",
+    "extra_distractor", "remove_t1", "remove_t2", "code_collision", "disabled", "not_ab",
+])
+def test_run_spec_rejects_invalid_opted_in_distractor_schedule(stream_project, change):
+    stream_project.conditions[0].attentional_blink.distractor_trigger_code = 57
+    payload = compile_run_spec(stream_project, refresh_hz=60).model_dump()
+    markers = payload["trigger_events"]
+    if change == "start_frame":
+        markers[0]["frame_index"] = 0
+    elif change == "start_code":
+        markers[0]["code"] = 2
+    elif change == "remove_start":
+        markers.pop(0)
+    elif change == "remove_distractor":
+        markers.pop(1)
+    elif change == "wrong_distractor":
+        markers[1]["code"] = 58
+    elif change == "extra_distractor":
+        markers.append(markers[1].copy())
+    elif change in {"remove_t1", "remove_t2"}:
+        markers.remove(next(marker for marker in markers
+                            if marker["label"] == f"{change.removeprefix('remove_')}_onset"))
+    elif change == "code_collision":
+        payload["attentional_blink"]["distractor_trigger_code"] = 55
+    elif change == "disabled":
+        payload["attentional_blink"].pop("distractor_trigger_code")
+    elif change == "not_ab":
+        payload["attentional_blink"] = None
+    with pytest.raises(ValidationError):
+        RunSpec.model_validate(payload)
+
+
+@pytest.mark.parametrize("label", ["t1_onset", "t2_onset", "distractor_onset", "oddball_onset"])
+def test_only_condition_marker_may_use_pre_stream_frame(label):
+    with pytest.raises(ValidationError, match="Only condition_start"):
+        TriggerEvent(frame_index=-1, code=55, label=label)
+    with pytest.raises(ValidationError, match="Only condition_start"):
+        TriggerRecord(trigger_index=0, frame_index=-1, time_s=0, code=55,
+                      label=label, backend_name="null")
+    with pytest.raises(ValidationError, match="Only condition_start"):
+        ProjectConfigTriggerEvent(frame_index=-1, code=55, label=label)
+    assert TriggerRecord(trigger_index=0, frame_index=-1, time_s=0, code=1,
+                         label="condition_start", backend_name="null").frame_index == -1
+
+
+def test_distractor_trigger_builder_rejects_non_ab_events(stream_project):
+    run = compile_run_spec(stream_project, refresh_hz=60)
+    sequence = [event for event in run.stimulus_sequence if event.phase == "base"]
+    with pytest.raises(CompileError, match="letter stream"):
+        build_trigger_events(stimulus_sequence=sequence, condition_trigger_code=1,
+                             oddball_trigger_code=55, t2_trigger_code=56,
+                             distractor_trigger_code=57)
+
+
+def test_completed_config_retains_pre_stream_and_all_character_markers(
+    repeated_target_project, tmp_path,
+):
+    repeated_target_project.conditions[0].attentional_blink.distractor_trigger_code = 57
+    project_root = tmp_path / "source"
+    session = compile_session_plan(repeated_target_project, refresh_hz=60, random_seed=47)
+    completed_dir = project_root / "runs" / session.session_id
+    write_json_file(completed_dir / "session_plan.json", session)
+    config = export_project_config(repeated_target_project, project_root,
+                                   completed_session_dir=completed_dir)
+    config_path = tmp_path / "completed.fpvsconfig"
+    write_project_config(config_path, config)
+    loaded = read_project_config(config_path)
+    assert loaded == config
+    for completed, entry in zip(loaded.completed_session.ordered_runs,
+                                session.ordered_entries(), strict=True):
+        assert len(completed.trigger_events) == 91
+        assert completed.trigger_events[0].frame_index == -1
+        assert [marker.model_dump() for marker in completed.trigger_events] == [
+            marker.model_dump() for marker in entry.run_spec.trigger_events
+        ]
+    imported = create_project_from_config(tmp_path / "imported", loaded)
+    run = compile_run_spec(imported.project, refresh_hz=60)
+    assert run.attentional_blink.distractor_trigger_code == 57
+    assert len(run.trigger_events) == 91

@@ -192,8 +192,9 @@ is cleared when the user authors a native text-height rule.
 `RunSpec.pre_stream_fixation_frames` is a separate fixation-only phase after the
 participant's Space gate and before stream frame zero. It is not part of
 `DisplayRunSpec.total_frames`, and no stimulus, response target, or trigger is scheduled
-inside it. The first image/word and condition-start trigger still begin together at
-stream frame zero.
+inside it. The first image/word and condition-start trigger normally begin together
+at stream frame zero. Native AB streams with distractor markers use the separate
+neutral condition-marker flip described below, after this fixation phase.
 
 When `FixationStyleSpec.show_cross` is false, this lead-in is a blank interval of
 the same duration. The engine also omits the cross during stimulus playback and
@@ -238,6 +239,16 @@ the explicit nonstandard-code override). `t2_onset` uses the authored T2 code (5
 default). The separator has no target marker. T2's code must differ from T1 and all
 condition-start codes in the project. Runtime verifies one target marker at each
 compiled T1/T2 onset; marker delivery remains flip-locked.
+
+Native AB letter streams may opt into `distractor_trigger_code` (absent by default).
+It must differ from T1, T2, and every condition code. The compiler then emits
+`distractor_onset` at every base-character onset, including stream frame zero and
+any omitted-T2 replacement letter. To retain one marker byte per flip, the condition
+marker uses frame `-1`: one neutral display flip immediately before stream frame
+zero, after warmup/fixation. Only this opted-in AB condition marker may have a
+negative frame index. It does not count toward `DisplayRunSpec.total_frames` or
+shift character/target onsets. The compiled contract and runtime preflight reject
+missing, additional, conflicting, or misaligned character markers.
 
 Normal event trigger codes must be integers from `1` through `255`. Code `0` is
 reserved for reset behavior and is not valid for `condition_start` or
@@ -291,6 +302,15 @@ New burst runs contain exactly one target pair in five seconds (50 characters at
 compiled onto the surrounding `SessionEntry`, not the timed `RunSpec`. Participant
 response time separates successive bursts and is not a periodic target frequency.
 The layout and exact-grid defaults are defined in [Experiment Categories](EXPERIMENT_CATEGORIES.md).
+
+Explicit repeated-target bursts additionally carry `target_count`,
+`target_interval_slots` and `omit_first_t2`. Nominal target slots retain their
+onset-to-onset lag even when the first T2 is omitted. Events contain the actual
+six/five (or authored) target exposures, with one sampled identity per phase in
+each burst. `cycle_index` identifies each repeated pair, including the initial
+unpaired T1; the complete burst still owns `cycle_slots`. For repeated targets,
+`ConditionRunSpec.oddball_hz` records the T1 repetition cadence. See the
+[repeated-target contract](EXPERIMENT_CATEGORIES.md#repeated-targets-within-a-burst).
 
 For ordinary FPVS Oddball Paradigm, the compiler emits a seed-deterministic schedule:
 

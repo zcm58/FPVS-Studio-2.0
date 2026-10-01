@@ -72,6 +72,20 @@ class AttentionalBlinkStreamDescription:
     lag: int
     t1_slot_index: int
     t2_slot_index: int
+    target_count: int = 1
+    target_interval_slots: int | None = None
+    omit_first_t2: bool = False
+
+    def target_cycle_index(self, slot_index: int) -> int:
+        """Keep each repeated pair separate when matching observed target onsets."""
+        burst, slot = divmod(slot_index, self.cycle_slots)
+        if self.target_interval_slots is None:
+            return burst
+        pair = max(0, min(
+            self.target_count - 1,
+            (slot - self.t1_slot_index) // self.target_interval_slots,
+        ))
+        return burst * self.target_count + pair
 
     @property
     def cycle_slots(self) -> int:
@@ -91,7 +105,7 @@ class AttentionalBlinkStreamDescription:
 
     @property
     def pair_hz(self) -> float:
-        return self.base_hz / self.cycle_slots
+        return self.base_hz / (self.target_interval_slots or self.cycle_slots)
 
 
 def iter_attentional_blink_stream_cycles(
@@ -161,7 +175,38 @@ class AttentionalBlinkStreamPreview:
 
     @property
     def pair_hz(self) -> float:
-        return self.achieved_base_hz / self.description.cycle_slots
+        return self.achieved_base_hz / (
+            self.description.target_interval_slots or self.description.cycle_slots
+        )
+
+
+def attentional_blink_target_roles(
+    *, cycle_slots: int, t1_slot_index: int, t2_slot_index: int,
+    target_count: int = 1, target_interval_slots: int | None = None,
+    omit_first_t2: bool = False,
+) -> tuple[StreamSlotRole, ...]:
+    """Place repeated pairs on one burst grid, leaving distractors in omitted slots."""
+    if not isinstance(target_count, int) or not 1 <= target_count <= 1000:
+        raise ValueError("Target count must be an integer from 1 to 1000.")
+    if target_count == 1:
+        if target_interval_slots is not None or omit_first_t2:
+            raise ValueError("Target intervals and T2 omission require repeated targets.")
+        interval = 0
+    else:
+        if (not isinstance(target_interval_slots, int)
+                or target_interval_slots <= t2_slot_index - t1_slot_index):
+            raise ValueError("Repeated target interval must be longer than the T1-to-T2 lag.")
+        interval = target_interval_slots
+    last_t2 = t2_slot_index + (target_count - 1) * interval
+    if t1_slot_index < 1 or t2_slot_index <= t1_slot_index or last_t2 >= cycle_slots - 1:
+        raise ValueError("The stream must retain distractors before T1 and after the final T2.")
+    roles: list[StreamSlotRole] = ["base"] * cycle_slots
+    for target_index in range(target_count):
+        offset = target_index * interval
+        roles[t1_slot_index + offset] = "t1"
+        if target_index or not omit_first_t2:
+            roles[t2_slot_index + offset] = "t2"
+    return tuple(roles)
 
 
 def describe_attentional_blink_stream(
@@ -170,6 +215,9 @@ def describe_attentional_blink_stream(
     cycle_slots: int = STREAM_CYCLE_SLOTS,
     soa_ms: float = 300.0,
     t2_slot_index: int = 15,
+    target_count: int = 1,
+    target_interval_slots: int | None = None,
+    omit_first_t2: bool = False,
 ) -> AttentionalBlinkStreamDescription:
     """Validate the onset grid and retain distractors both before T1 and after T2."""
 
@@ -193,11 +241,55 @@ def describe_attentional_blink_stream(
     t1_slot_index = t2_slot_index - lag
     if t1_slot_index < 1:
         raise ValueError("SOA must leave at least one distractor before T1 in each cycle.")
-    roles: list[StreamSlotRole] = ["base"] * cycle_slots
-    roles[t1_slot_index] = "t1"
-    roles[t2_slot_index] = "t2"
+    roles = attentional_blink_target_roles(
+        cycle_slots=cycle_slots, t1_slot_index=t1_slot_index, t2_slot_index=t2_slot_index,
+        target_count=target_count, target_interval_slots=target_interval_slots,
+        omit_first_t2=omit_first_t2,
+    )
     return AttentionalBlinkStreamDescription(
-        tuple(roles), base_hz, soa_ms, lag, t1_slot_index, t2_slot_index
+        roles, base_hz, soa_ms, lag, t1_slot_index, t2_slot_index,
+        target_count, target_interval_slots, omit_first_t2,
+    )
+
+
+def retime_attentional_blink_stream(
+    *, base_hz: float, cycle_slots: int, soa_ms: float, t2_slot_index: int,
+    target_count: int, target_interval_slots: int | None, omit_first_t2: bool,
+    new_base_hz: float, new_soa_ms: float,
+) -> AttentionalBlinkStreamDescription:
+    """Preserve burst duration, first T1 onset and target cadence on an exact new grid."""
+    original = describe_attentional_blink_stream(
+        base_hz=base_hz, cycle_slots=cycle_slots, soa_ms=soa_ms,
+        t2_slot_index=t2_slot_index, target_count=target_count,
+        target_interval_slots=target_interval_slots, omit_first_t2=omit_first_t2,
+    )
+    if not isfinite(new_base_hz) or new_base_hz <= 0:
+        raise ValueError("Stream rate must be finite and greater than zero.")
+
+    def scaled_slot(value: int) -> int:
+        scaled = value * new_base_hz / original.base_hz
+        if not isfinite(scaled) or not isclose(
+            scaled, round(scaled), rel_tol=0, abs_tol=GRID_TOLERANCE,
+        ):
+            raise ValueError(
+                "Presentation rate must preserve the burst end, first T1 and target interval "
+                "exactly on character boundaries."
+            )
+        return round(scaled)
+
+    # Resolve the new SOA on the canonical grid before calculating its target position.
+    lag = new_soa_ms * new_base_hz / 1000
+    if not isfinite(lag) or lag < 1 or not isclose(
+        lag, round(lag), rel_tol=0, abs_tol=GRID_TOLERANCE,
+    ):
+        raise ValueError(f"SOA must be a whole multiple of {1000 / new_base_hz:.15g} ms.")
+    return describe_attentional_blink_stream(
+        base_hz=new_base_hz, cycle_slots=scaled_slot(cycle_slots), soa_ms=new_soa_ms,
+        t2_slot_index=scaled_slot(original.t1_slot_index) + round(lag),
+        target_count=target_count,
+        target_interval_slots=(scaled_slot(target_interval_slots)
+                               if target_interval_slots is not None else None),
+        omit_first_t2=omit_first_t2,
     )
 
 
@@ -208,11 +300,16 @@ def preview_attentional_blink_stream(
     cycle_slots: int = STREAM_CYCLE_SLOTS,
     soa_ms: float = 300.0,
     t2_slot_index: int = 15,
+    target_count: int = 1,
+    target_interval_slots: int | None = None,
+    omit_first_t2: bool = False,
 ) -> AttentionalBlinkStreamPreview:
     """Require exact character durations rather than changing requested timing."""
 
     description = describe_attentional_blink_stream(
-        base_hz=base_hz, cycle_slots=cycle_slots, soa_ms=soa_ms, t2_slot_index=t2_slot_index
+        base_hz=base_hz, cycle_slots=cycle_slots, soa_ms=soa_ms, t2_slot_index=t2_slot_index,
+        target_count=target_count, target_interval_slots=target_interval_slots,
+        omit_first_t2=omit_first_t2,
     )
     if not isfinite(refresh_hz) or refresh_hz <= 0:
         raise ValueError("Refresh rate must be finite and greater than zero.")

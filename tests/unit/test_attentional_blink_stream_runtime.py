@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import json
 from pathlib import Path
 
 import pytest
@@ -185,6 +186,88 @@ def test_default_burst_fake_playback_is_five_seconds_with_green_and_white_digits
     assert [record["code"] for record in triggers.records] == [code, 55, 56]
 
 
+@pytest.mark.parametrize("soa_ms", [100, 300, 500])
+@pytest.mark.parametrize("missing_cycle", [None, 2])
+def test_repeated_burst_playback_and_exports_preserve_unpaired_t1_and_each_later_pair(
+    monkeypatch, tmp_path, soa_ms, missing_cycle,
+):
+    project = build_starter_project(
+        "Repeated targets", experiment_category=ExperimentCategory.ATTENTIONAL_BLINK,
+    )
+    project.conditions = [
+        condition for condition in project.conditions
+        if condition.attentional_blink.soa_ms == soa_ms
+    ]
+    project.settings.protocol.oddball_every_n = 90
+    project.settings.session.block_count = 1
+    settings = project.conditions[0].attentional_blink
+    settings.t2_slot_index = 21 + soa_ms // 100
+    settings.target_count = 6
+    settings.target_interval_slots = 10
+    settings.omit_first_t2 = True
+    plan = compile_session_plan(project, refresh_hz=60.0, random_seed=41)
+    run = plan.ordered_entries()[0].run_spec
+    _preflight(run, tmp_path)
+    missing_flips = (
+        {(21 + missing_cycle * 10) * 6 + 2} if missing_cycle is not None else None
+    )
+    result, _, triggers, draws = _play(
+        monkeypatch, run, tmp_path, missing_flips=missing_flips,
+    )
+    assert result.completed_frames == len(draws) == 540
+    assert len(triggers.records) == 12
+    for phase, onsets in (
+        ("t1", [2.1 + index for index in range(6)]),
+        ("t2", [3.1 + index + soa_ms / 1000 for index in range(5)]),
+    ):
+        events = [event for event in run.stimulus_sequence if event.phase == phase]
+        assert [event.on_start_frame / 60 for event in events] == pytest.approx(onsets)
+        assert len({event.text for event in events}) == 1
+        assert [record["frame_index"] for record in triggers.records
+                if record["code"] == (55 if phase == "t1" else 56)] == [
+                    event.on_start_frame for event in events
+                ]
+    summary = _session_summary(project, plan, result)
+    append_session_condition_history(tmp_path, plan, summary)
+    write_run_artifacts(tmp_path / "full-run", run, result)
+    compact = _read_rows(tmp_path / "logs" / ATTENTIONAL_BLINK_STREAM_EVENTS_FILENAME)
+    full = _read_rows(tmp_path / "full-run" / ATTENTIONAL_BLINK_STREAM_EVENTS_FILENAME)
+    display_report = json.loads((tmp_path / "full-run" / "display_report.json").read_text())
+    assert display_report["requested_oddball_hz"] == display_report["realized_oddball_hz"] == 1
+    assert display_report["oddball_every_n"] == 10
+    assert display_report["frames_per_cycle"] == run.display.frames_per_stimulus == 6
+    assert run.condition.oddball_hz == 1
+    assert run.condition.oddball_every_n == 90
+    assert run.display.total_frames == 540
+    assert len(compact) == len(full) == 90
+    assert sum(row["phase"] == "t1" for row in compact) == 6
+    assert sum(row["phase"] == "t2" for row in compact) == 5
+    assert compact[settings.t2_slot_index]["phase"] == "base"
+    for rows in (compact, full):
+        for row in rows:
+            if row["cycle_index"] in {"0", str(missing_cycle)}:
+                assert row["observed_pair_soa_ms"] == ""
+            else:
+                assert float(row["observed_pair_soa_ms"]) == pytest.approx(soa_ms)
+        assert {row["cycle_index"] for row in rows if row["phase"] == "t2"} == {
+            "1", "2", "3", "4", "5",
+        }
+
+
+@pytest.mark.parametrize("phase", ["t1", "t2"])
+def test_preflight_rejects_changing_repeated_target_identity(stream_project, tmp_path, phase):
+    stream_project.settings.protocol.oddball_every_n = 90
+    stream_project.conditions[0].oddball_cycle_repeats_per_sequence = 1
+    stream_project.conditions[0].attentional_blink = AttentionalBlinkStreamSettings(
+        t2_slot_index=24, target_count=6, target_interval_slots=10, omit_first_t2=True,
+    )
+    run = _compile(stream_project)
+    events = [event for event in run.stimulus_sequence if event.phase == phase]
+    events[-1].text = "Z" if events[0].text != "Z" else "Y"
+    with pytest.raises(PreflightError, match="keep one symbol per role"):
+        _preflight(run, tmp_path)
+
+
 def test_identical_letter_in_different_target_roles_does_not_share_color_cache(stream_project):
     run = _compile(stream_project)
     t1 = next(event for event in run.stimulus_sequence if event.phase == "t1")
@@ -288,6 +371,98 @@ def test_preflight_rejects_ambiguous_stream_markers(stream_project, tmp_path, ki
     else:
         run.trigger_events.append(start.model_copy(update={"label": "extra_marker"}))
     with pytest.raises(PreflightError, match="stream markers"):
+        _preflight(run, tmp_path)
+
+
+def _compile_marked_repeated_burst(*, soa_ms=300, refresh_hz=60):
+    project = build_starter_project(
+        "Marked repeated targets", experiment_category=ExperimentCategory.ATTENTIONAL_BLINK,
+    )
+    project.conditions = [
+        condition for condition in project.conditions
+        if condition.attentional_blink.soa_ms == soa_ms
+    ]
+    project.settings.protocol.oddball_every_n = 90
+    condition = project.conditions[0]
+    condition.trigger_code = {100: 1, 300: 2, 500: 3}[soa_ms]
+    settings = condition.attentional_blink
+    settings.t2_slot_index = 21 + soa_ms // 100
+    settings.target_count = 6
+    settings.target_interval_slots = 10
+    settings.omit_first_t2 = True
+    settings.distractor_trigger_code = 57
+    return compile_run_spec(project, refresh_hz=refresh_hz, random_seed=41)
+
+
+@pytest.mark.parametrize("soa_ms", [100, 300, 500])
+@pytest.mark.parametrize("refresh_hz", [60, 120, 240])
+def test_preflight_accepts_every_character_marker_and_pre_stream_start(
+    tmp_path, soa_ms, refresh_hz,
+):
+    run = _compile_marked_repeated_burst(soa_ms=soa_ms, refresh_hz=refresh_hz)
+    _preflight(run, tmp_path)
+    assert run.display.total_frames == 9 * refresh_hz
+    assert len(run.trigger_events) == 91
+    assert run.trigger_events[0].frame_index == -1
+    assert run.trigger_events[0].label == "condition_start"
+    assert run.trigger_events[0].code == {100: 1, 300: 2, 500: 3}[soa_ms]
+    markers = run.trigger_events[1:]
+    assert [marker.frame_index for marker in markers] == [
+        event.on_start_frame for event in run.stimulus_sequence
+    ]
+    assert [marker.code for marker in markers].count(55) == 6
+    assert [marker.code for marker in markers].count(56) == 5
+    assert [marker.code for marker in markers].count(57) == 79
+    assert markers[0].code == markers[21 + soa_ms // 100].code == 57
+
+
+@pytest.mark.parametrize("kind", [
+    "missing_first", "missing_omitted_t2", "missing_last", "duplicate", "wrong_frame",
+    "wrong_code", "wrong_label", "start_at_stream_zero", "start_too_early",
+])
+def test_preflight_rejects_incomplete_or_misaligned_distractor_markers(tmp_path, kind):
+    run = _compile_marked_repeated_burst()
+    marker = next(event for event in run.trigger_events if event.label == "distractor_onset")
+    if kind == "missing_first":
+        run.trigger_events.remove(marker)
+    elif kind == "missing_omitted_t2":
+        run.trigger_events = [event for event in run.trigger_events if event.frame_index != 24 * 6]
+    elif kind == "missing_last":
+        run.trigger_events.pop()
+    elif kind == "duplicate":
+        run.trigger_events.append(marker.model_copy())
+    elif kind == "wrong_frame":
+        marker.frame_index += 1
+    elif kind == "wrong_code":
+        marker.code = 58
+    elif kind == "wrong_label":
+        marker.label = "extra_marker"
+    else:
+        start = run.trigger_events[0]
+        run.trigger_events[0] = start.model_copy(update={
+            "frame_index": 0 if kind == "start_at_stream_zero" else -2,
+        })
+    with pytest.raises(PreflightError, match="markers|trigger event"):
+        _preflight(run, tmp_path)
+
+
+@pytest.mark.parametrize("code", [2, 55, 56])
+def test_preflight_rejects_distractor_code_collisions(tmp_path, code):
+    run = _compile_marked_repeated_burst()
+    run.attentional_blink = run.attentional_blink.model_copy(
+        update={"distractor_trigger_code": code},
+    )
+    for marker in run.trigger_events:
+        if marker.label == "distractor_onset":
+            marker.code = code
+    with pytest.raises(PreflightError, match="distractor marker code must differ"):
+        _preflight(run, tmp_path)
+
+
+def test_preflight_rejects_pre_stream_marker_without_distractor_opt_in(stream_project, tmp_path):
+    run = _compile(stream_project)
+    run.trigger_events[0] = run.trigger_events[0].model_copy(update={"frame_index": -1})
+    with pytest.raises(PreflightError, match="stream markers|trigger event"):
         _preflight(run, tmp_path)
 
 

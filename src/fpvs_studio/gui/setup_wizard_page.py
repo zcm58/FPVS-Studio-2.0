@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from fpvs_studio.core.attentional_blink_stream import describe_attentional_blink_stream
 from fpvs_studio.core.enums import ExperimentCategory, PresentationUnit, StimulusModality
 from fpvs_studio.core.experiment_categories import category_conflict_condition_ids
 from fpvs_studio.core.frame_validation import FrameValidationError
@@ -1217,6 +1218,37 @@ class SetupWizardPage(QWidget):
                 f"{protocol.base_hz:g} Hz character stream · "
                 f"{protocol.oddball_hz:g} Hz target repetition"
             )
+            if any(
+                isinstance(condition.attentional_blink, AttentionalBlinkStreamSettings)
+                and condition.attentional_blink.target_count > 1
+                for condition in conditions
+            ):
+                try:
+                    target_summaries = set()
+                    for condition in conditions:
+                        settings = condition.attentional_blink
+                        assert isinstance(settings, AttentionalBlinkStreamSettings)
+                        description = describe_attentional_blink_stream(
+                            base_hz=protocol.base_hz,
+                            cycle_slots=protocol.oddball_every_n,
+                            soa_ms=settings.soa_ms,
+                            t2_slot_index=settings.t2_slot_index,
+                            target_count=settings.target_count,
+                            target_interval_slots=settings.target_interval_slots,
+                            omit_first_t2=settings.omit_first_t2,
+                        )
+                        target_summaries.add(
+                            f"{description.cycle_ms / 1000:g} s bursts · "
+                            f"T1 {description.pair_hz:g} Hz · "
+                            f"{description.roles.count('t1')} T1 / "
+                            f"{description.roles.count('t2')} T2"
+                        )
+                    cadence_summary = f"{protocol.base_hz:g} Hz · " + (
+                        target_summaries.pop() if len(target_summaries) == 1
+                        else "Target timing varies by condition"
+                    )
+                except ValueError:
+                    cadence_summary = "Stream timing needs correction"
         fixation = project.settings.fixation_task
         refresh_hz = self.runtime_settings_editor.current_refresh_hz()
         default_lead_in = project.settings.presentation.pre_stream_fixation_seconds

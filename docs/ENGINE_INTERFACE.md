@@ -56,7 +56,9 @@ as PsychoPy. Runtime owns flow and calls engines through
   infer it from the full-cycle on/off split or recompute it from a nominal frequency.
 - A compiled pre-stream fixation phase is rendered after the participant gate and
   before the stream clock starts. Frame-zero stimuli and condition triggers retain
-  their existing alignment.
+  their existing alignment by default. Opted-in AB distractor marking uses one
+  neutral condition-marker flip at compiled frame `-1`, followed immediately by
+  stream frame zero and its distractor marker. See [RunSpec](RUNSPEC.md#triggerevent).
 - A PsychoPy condition may not begin until every unique render variant and both
   immutable fixation colors have been created, drawn once to force deferred upload or
   glyph work, the back buffer has been cleared, and queued GPU work has completed.

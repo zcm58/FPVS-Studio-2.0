@@ -502,14 +502,24 @@ def condition_stimulus_repeat_guidance(project: ProjectFile) -> list[StimulusRep
         }
         if condition.attentional_blink is not None:
             if isinstance(condition.attentional_blink, AttentionalBlinkStreamSettings):
-                role_presentations["base"] = oddball_presentations * (oddball_every_n - 2)
+                ab = condition.attentional_blink
+                t2_count = ab.target_count - int(ab.omit_first_t2)
+                role_presentations["base"] = oddball_presentations * (
+                    oddball_every_n - ab.target_count - t2_count
+                )
+                role_presentations["oddball"] = oddball_presentations * ab.target_count
             if (isinstance(condition.attentional_blink, AttentionalBlinkSettings)
                     and condition.attentional_blink.isi_mode == "image"
                     and condition.isi_stimulus_set_id is not None):
                 role_presentations["isi"] = oddball_presentations
                 role_set_ids["isi"] = condition.isi_stimulus_set_id
             if condition.t2_stimulus_set_id is not None:
-                role_presentations["t2"] = oddball_presentations
+                role_presentations["t2"] = oddball_presentations * (
+                    condition.attentional_blink.target_count
+                    - int(condition.attentional_blink.omit_first_t2)
+                    if isinstance(condition.attentional_blink, AttentionalBlinkStreamSettings)
+                    else 1
+                )
                 role_set_ids["t2"] = condition.t2_stimulus_set_id
         for role, presentation_count in role_presentations.items():
             stimulus_set = stimulus_sets.get(role_set_ids[role])
@@ -708,21 +718,31 @@ def _validate_attentional_blink_stream_condition(
     reserved_codes.add(project.settings.triggers.oddball_trigger_code)
     if settings.t2_trigger_code in reserved_codes:
         errors.append("T2 marker must differ from the condition-start and T1/oddball markers.")
+    all_target_codes = reserved_codes | {
+        item.attentional_blink.t2_trigger_code for item in project.conditions
+        if item.attentional_blink is not None
+    }
+    if settings.distractor_trigger_code in all_target_codes:
+        errors.append("Distractor marker must differ from all condition-start, T1, and T2 markers.")
     protocol = project.settings.protocol
     if any(item.trigger_code == project.settings.triggers.oddball_trigger_code
            for item in project.conditions):
         errors.append("Condition-start markers must differ from the T1 marker in letter streams.")
     try:
         if any(binding.task_id == "ab-recall" for binding in condition.post_task_bindings):
-            burst_slots, burst_t2_slot = attentional_blink_burst_grid(protocol.base_hz)
-            if (protocol.oddball_every_n != burst_slots
-                    or settings.t2_slot_index != burst_t2_slot
-                    or condition.sequence_count != 1
-                    or condition.oddball_cycle_repeats_per_sequence != 1):
-                errors.append(
-                    "Target number recall requires one five-second burst with one target pair "
-                    "and T2 at three seconds. Apply the burst design to update its timing."
-                )
+            if settings.target_count == 1:
+                burst_slots, burst_t2_slot = attentional_blink_burst_grid(protocol.base_hz)
+                if (protocol.oddball_every_n != burst_slots
+                        or settings.t2_slot_index != burst_t2_slot
+                        or condition.sequence_count != 1
+                        or condition.oddball_cycle_repeats_per_sequence != 1):
+                    errors.append(
+                        "Target number recall requires one five-second burst with one target "
+                        "pair and T2 at three seconds. Apply the burst design to update its timing."
+                    )
+            elif (condition.sequence_count != 1
+                  or condition.oddball_cycle_repeats_per_sequence != 1):
+                errors.append("Repeated-target recall requires one burst per condition entry.")
             if len(pools) == 3 and any(
                 len(symbol) != 1 or symbol not in "0123456789"
                 for pool in pools[1:] for symbol in pool
@@ -731,12 +751,18 @@ def _validate_attentional_blink_stream_condition(
         describe_attentional_blink_stream(
             base_hz=protocol.base_hz, cycle_slots=protocol.oddball_every_n,
             soa_ms=settings.soa_ms, t2_slot_index=settings.t2_slot_index,
+            target_count=settings.target_count,
+            target_interval_slots=settings.target_interval_slots,
+            omit_first_t2=settings.omit_first_t2,
         )
         if refresh_hz is not None:
             preview_attentional_blink_stream(
                 refresh_hz=refresh_hz, base_hz=protocol.base_hz,
                 cycle_slots=protocol.oddball_every_n, soa_ms=settings.soa_ms,
                 t2_slot_index=settings.t2_slot_index,
+                target_count=settings.target_count,
+                target_interval_slots=settings.target_interval_slots,
+                omit_first_t2=settings.omit_first_t2,
             )
     except ValueError as error:
         errors.append(str(error))

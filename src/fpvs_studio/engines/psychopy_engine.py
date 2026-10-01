@@ -466,6 +466,9 @@ class PsychoPyEngine(PresentationEngine):
             cache_unique_variant_count = len(resources.stimuli)
             graphics_readiness = prepared.graphics_readiness
             playback_plan = prepared.playback_plan
+            pre_stream_trigger = next(
+                (event for event in run_spec.trigger_events if event.frame_index == -1), None,
+            )
             response_keys = list(dict.fromkeys((*run_spec.fixation.response_keys, "escape")))
             escape_keys = ["escape"]
             flip = window.flip
@@ -554,11 +557,27 @@ class PsychoPyEngine(PresentationEngine):
                             if capture_key_timestamps
                             else None
                         )
-                    # All allocation and method binding is already complete. Resetting
-                    # this lightweight clock is the only setup between the final
-                    # warmup flip and drawing stream frame zero.
+                    # Exclude warmup while keeping the optional condition marker and
+                    # subsequent stream markers on one continuous trigger clock.
                     if callable(reset_run_clock):
                         reset_run_clock()
+
+                    if pre_stream_trigger is not None:
+                        call_on_flip(
+                            self._emit_trigger,
+                            trigger_backend,
+                            pre_stream_trigger.code,
+                            pre_stream_trigger.label,
+                            -1,
+                        )
+                        # One neutral flip keeps the condition byte separate from
+                        # the first distractor byte without shifting stream frames.
+                        marker_flip_time = flip()
+                        warmup_last_flip_has_timestamp = marker_flip_time is not None
+                        warmup_last_flip_time = (
+                            float(marker_flip_time)
+                            if marker_flip_time is not None else run_clock_get_time()
+                        )
 
                     last_flip_time: float | None = None
                     last_flip_has_timestamp = False

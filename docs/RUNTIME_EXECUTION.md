@@ -45,7 +45,8 @@ SessionPlan
             -> complete technical warmup, using its final configured frames for the
                fixation-only lead-in
             -> reset input and run-relative timing
-            -> present stream frame zero and its condition trigger together
+            -> optionally emit an AB condition marker on neutral frame -1
+            -> present stream frame zero and its compiled marker together
             -> end the last compiled frame with a neutral, trigger-free offset flip
             -> release the condition cache before returning
        -> execute compiled post-condition task modules, if any
@@ -220,6 +221,14 @@ The PsychoPy implementation:
 - trigger attempts are recorded with frame/time metadata, backend name, status, and
   failure message when applicable; exported trigger `time_s` values are run-playback
   times and do not include timing warmup frames
+- opt-in native AB `distractor_trigger_code` marks every distractor, including the
+  first character and omitted-T2 replacements. Its condition marker is emitted on
+  one neutral flip at frame `-1`, after warmup and before stream frame zero. Trigger
+  records and acquisition evidence retain `-1`; their continuous clock starts
+  before that marker, so stream trigger times include this one-frame lead-in.
+  Character-onset measurements remain relative to the first stream flip. The marker
+  flip is separate from warmup and excluded from the nine-second stimulus duration;
+  a write failure aborts before the stream. Legacy marker timing is unchanged.
 - new FPVS Studio projects default to BioSemi-compatible serial output on `COM3`;
   condition starts use each condition's configured trigger code and every oddball onset
   uses project trigger code `55`
@@ -719,6 +728,12 @@ target pair. Runtime scores them independently through the ordinary task scorer.
 The participant types a digit or **unsure** on each separate screen, then presses
 Enter or clicks **Next**. Raw text is preserved; scoring compares the trimmed text
 with the expected digit. Saved single-choice recall tasks remain supported.
+Explicit repeated-target bursts use the same questions and one unique digit per
+phase. Preflight verifies every declared occurrence, omission, identity, pair index
+and marker. Their burst-level observed SOA is the arithmetic mean of complete
+observed T1/T2 pairs; the initial unpaired T1 and pairs missing timestamps are
+excluded. No complete observed pair yields an unavailable value. Individual
+onset records and event CSV rows retain all occurrences and missing measurements.
 An explicit unknown answer counts as incorrect; missing, invalid or aborted
 answers have null correctness and are excluded from that target's denominator.
 Each SOA summary shows its separate T1/T2 answer counts. T2 recall is unconditional
@@ -768,6 +783,10 @@ full run/session output and compact project logs. Its versioned rows add the act
 character, `base`/`t1`/`t2` phase, cycle and slot, requested/achieved SOA, and planned
 plus observed timing. A missing flip timestamp stays unavailable. Session exports
 carry block/order context; individual run exports join to that context using `run_id`.
+For repeated-target bursts, `cycle_index` identifies each repeated pair, while
+`slot_in_cycle` remains the character position within the complete burst grid.
+Thus the first omitted T2 has no target row or marker, and that unpaired T1 has
+no observed SOA. Each later pair retains its own observed SOA.
 The existing text cache and frame loop handle native events, and preflight verifies
 exact-grid exposures, complete cycles, digit/target roles, and condition/T1/T2 markers.
 Post-condition task responses retain their separate clocks and exports. The default

@@ -30,7 +30,9 @@ backend-driven.
   streams expose a shared presentation rate, character pools and onset-to-onset SOAs.
   New burst studies expose Bursts per SOA in Design and Timing & Session, with EEG time
   and total burst count in Design. Rate/source/SOA/burst-count drafts apply atomically;
-  core guards five-second burst timing and category rules. Legacy stream pools remain
+  core guards default five-second or explicitly repeated-target burst timing and
+  category rules. Design preserves repeated-target duration and first onset through
+  exact rate/SOA edits. Legacy stream pools remain
   unchanged. View > T1 and T2 Accuracy reads runtime-owned SOA/trigger summaries and
   chronological burst records, with worker-backed Excel export and busy-close guards.
   Other categories retain View > Fixation Task Accuracy.

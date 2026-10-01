@@ -208,6 +208,11 @@ SOAs are preserved when the rate changes; incompatible values stay visible for
 correction. The timeline, character duration, cycle duration and quarter-speed preview
 follow the draft rate. New burst studies keep their five-second duration when the
 rate changes. Editable decimal SOAs retain full precision when reopened.
+Explicit repeated-target studies retain their authored burst duration, first T1
+onset and target interval on exact rate/SOA edits. Their summary includes both
+target counts, the timeline brackets the first actual pair, and accessibility text
+lists every target position and the initial T2 omission. See
+[the repeated-target contract](EXPERIMENT_CATEGORIES.md#repeated-targets-within-a-burst).
 Extremely slow/fast rates outside the animation timer's range retain a static timeline
 with an explanation; this does not change the authored rate or runtime validation.
 
@@ -221,6 +226,13 @@ bursts reject rates that cannot represent their duration and target positions ex
 Enter zero or an incompatible SOA
 and verify that the error remains visible, preview stops, and the saved project is
 unchanged. Display timing remains subject to the existing exact-frame check.
+
+Repeated-target visible acceptance at `1120x820` in both themes: open MSMS AB,
+verify 90 characters / 9 seconds / 6 T1 / 5 T2, 216 seconds per SOA and 72 bursts.
+Inspect each SOA, source-edit and Apply, save/reopen, and confirm the first T1
+remains at 2.1 seconds. At 20 Hz verify 180 characters with unchanged onset times;
+an incompatible rate must keep the draft invalid. Check the complete wizard and
+expanded `1448x1086` layout for clipping. Local Qt execution remains opt-in.
 
 ### Attentional Blink accuracy
 

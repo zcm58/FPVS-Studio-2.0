@@ -213,6 +213,9 @@ def _validate_attentional_blink_stream_timing(
             refresh_hz=display.refresh_hz, base_hz=condition.base_hz,
             cycle_slots=slots, soa_ms=timing.requested_soa_ms,
             t2_slot_index=timing.t2_slot_index,
+            target_count=timing.target_count,
+            target_interval_slots=timing.target_interval_slots,
+            omit_first_t2=timing.omit_first_t2,
         )
     except ValueError as exc:
         raise PreflightError(f"Attentional-blink letter-stream timing is invalid: {exc}") from exc
@@ -252,13 +255,16 @@ def _validate_attentional_blink_stream_timing(
     target_symbols = "0123456789" if letter_distractors else "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
     previous_distractor: str | None = None
     t1_symbol: str | None = None
+    burst_targets: dict[str, str] = {}
     for index, event in enumerate(run_spec.stimulus_sequence):
-        cycle_index, slot_index = divmod(index, slots)
+        slot_index = index % slots
+        if slot_index == 0:
+            burst_targets.clear()
         phase = preview.description.roles[slot_index]
         if (
             event.sequence_index != index
             or event.slot_index != index
-            or event.cycle_index != cycle_index
+            or event.cycle_index != preview.description.target_cycle_index(index)
             or event.phase != phase
             or event.role != ("base" if phase == "base" else "oddball")
             or event.stimulus_modality != StimulusModality.WORD
@@ -284,6 +290,13 @@ def _validate_attentional_blink_stream_timing(
             previous_distractor = symbol
         else:
             previous_distractor = None
+            if timing.target_count > 1:
+                if phase in burst_targets and burst_targets[phase] != symbol:
+                    raise PreflightError(
+                        "Repeated attentional-blink targets must keep one symbol per role "
+                        "throughout each burst."
+                    )
+                burst_targets[phase] = symbol
             if phase == "t1":
                 t1_symbol = symbol
             elif symbol == t1_symbol:
@@ -293,20 +306,43 @@ def _validate_attentional_blink_stream_timing(
     _validate_attentional_blink_markers(run_spec, timing.t2_trigger_code)
     starts = [event for event in run_spec.trigger_events if event.label == "condition_start"]
     t1_codes = {event.code for event in run_spec.trigger_events if event.label == "t1_onset"}
+    distractor_code = timing.distractor_trigger_code
+    expected_start_frame = -1 if distractor_code is not None else 0
+    allowed_labels = {"condition_start", "t1_onset", "t2_onset"}
+    if distractor_code is not None:
+        allowed_labels.add("distractor_onset")
     if (
         len(starts) != 1
-        or starts[0].frame_index != 0
+        or starts[0].frame_index != expected_start_frame
         or starts[0].code != condition.trigger_code
         or len(t1_codes) != 1
         or starts[0].code in t1_codes
         or len({event.frame_index for event in run_spec.trigger_events})
         != len(run_spec.trigger_events)
-        or any(event.label not in ("condition_start", "t1_onset", "t2_onset")
-               for event in run_spec.trigger_events)
+        or any(event.label not in allowed_labels for event in run_spec.trigger_events)
     ):
         raise PreflightError(
             "Attentional-blink stream markers need one condition start and distinct target codes."
         )
+    if distractor_code is not None:
+        expected_frames = [
+            event.on_start_frame for event in run_spec.stimulus_sequence if event.phase == "base"
+        ]
+        distractors = [
+            event for event in run_spec.trigger_events if event.label == "distractor_onset"
+        ]
+        if (
+            sorted(event.frame_index for event in distractors) != expected_frames
+            or any(event.code != distractor_code for event in distractors)
+        ):
+            raise PreflightError(
+                "Attentional-blink distractor markers must match every distractor onset and code."
+            )
+        if distractor_code in {condition.trigger_code, timing.t2_trigger_code, *t1_codes}:
+            raise PreflightError(
+                "Attentional-blink distractor marker code must differ from condition "
+                "and target codes."
+            )
 
 
 def _validate_attentional_blink_markers(run_spec: RunSpec, t2_trigger_code: int) -> None:
@@ -419,7 +455,16 @@ def _validate_trigger_timing(run_spec: RunSpec) -> None:
     if not run_spec.trigger_events:
         raise PreflightError("Run preflight failed because the compiled trigger schedule is empty.")
     for trigger_event in run_spec.trigger_events:
-        if trigger_event.frame_index >= run_spec.display.total_frames:
+        pre_stream_start = (
+            trigger_event.frame_index == -1
+            and trigger_event.label == "condition_start"
+            and isinstance(run_spec.attentional_blink, AttentionalBlinkStreamRunSpec)
+            and run_spec.attentional_blink.distractor_trigger_code is not None
+        )
+        if (
+            trigger_event.frame_index < 0 and not pre_stream_start
+            or trigger_event.frame_index >= run_spec.display.total_frames
+        ):
             raise PreflightError(
                 "Run preflight failed because a trigger event falls outside "
                 "the compiled run duration."

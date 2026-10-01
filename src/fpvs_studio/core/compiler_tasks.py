@@ -19,7 +19,7 @@ from fpvs_studio.core.condition_modifiers import (
 )
 from fpvs_studio.core.models import Condition, ProjectFile
 from fpvs_studio.core.paths import resolve_project_relative_path
-from fpvs_studio.core.run_spec import RunSpec
+from fpvs_studio.core.run_spec import AttentionalBlinkStreamRunSpec, RunSpec
 from fpvs_studio.core.session_plan import SessionEntry
 from fpvs_studio.core.task_models import (
     BackwardCountingConfig,
@@ -239,13 +239,21 @@ def compile_condition_tasks(
 
 
 def _resolve_attentional_blink_recall(module: TaskModuleSpec, run_spec: RunSpec) -> None:
-    """Score each recall question against the one target actually presented this burst."""
+    """Score against the single target identity per phase, including repeated displays."""
     targets: dict[str, str] = {}
+    timing = run_spec.attentional_blink
     for phase in RECALL_QUESTION_PHASES.values():
         events = [event for event in run_spec.stimulus_sequence if event.phase == phase]
-        if len(events) != 1 or events[0].text is None:
-            raise CompileError("Target number recall requires exactly one T1/T2 pair per burst.")
-        targets[phase] = events[0].text
+        expected_count = (
+            timing.target_count - int(phase == "t2" and timing.omit_first_t2)
+            if isinstance(timing, AttentionalBlinkStreamRunSpec) else 1
+        )
+        values = {event.text for event in events}
+        if len(events) != expected_count or len(values) != 1 or None in values:
+            raise CompileError("Target number recall requires one unique T1 and T2 per burst.")
+        value = values.pop()
+        assert value is not None
+        targets[phase] = value
     for step in module.steps:
         for question in step.questions:
             target_phase = RECALL_QUESTION_PHASES.get(question.question_id)

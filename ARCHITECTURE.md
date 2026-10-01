@@ -69,6 +69,13 @@ lazily only inside the engine package.
   repeated bursts as one session block; every recall burst requires Space, and
   compiled answer keys refer to each entry's actual targets. Existing native studies
   retain their saved character pools and blockwise session behavior.
+  Explicit repeated-target studies retain a complete burst grid, repeated target
+  identities and optional first-T2 omission. Core owns exact retiming; Design
+  preserves the authored duration/onsets, and runtime groups observed target pairs
+  separately. See the repeated-target contract in `docs/EXPERIMENT_CATEGORIES.md`.
+  Opt-in all-character AB markers use a separate neutral condition-marker flip;
+  frame `-1` and log-clock semantics are defined in `docs/RUNSPEC.md` and
+  `docs/RUNTIME_EXECUTION.md`.
   Historical image-pair models remain decodable without an authoring or playback route.
   AB letter streams can hide the fixation cross through Setup > Fixation. The persisted
   `FixationTaskSettings.show_cross` flag compiles into `FixationStyleSpec`; engines

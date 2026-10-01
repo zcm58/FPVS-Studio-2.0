@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fpvs_studio.core.run_spec import RunSpec, TriggerEvent
+from fpvs_studio.core.run_spec import AttentionalBlinkStreamRunSpec, RunSpec, TriggerEvent
 from fpvs_studio.core.trigger_codes import validate_event_trigger_code
 from fpvs_studio.triggers.base import TriggerBackend
 
@@ -13,15 +13,28 @@ def build_trigger_lookup(run_spec: RunSpec) -> dict[int, tuple[TriggerEvent, ...
     """Validate and index compiled trigger events before timed playback."""
 
     trigger_lookup: dict[int, list[TriggerEvent]] = {}
+    timing = run_spec.attentional_blink
+    distractor_markers = (
+        isinstance(timing, AttentionalBlinkStreamRunSpec)
+        and timing.distractor_trigger_code is not None
+    )
     for trigger_event in run_spec.trigger_events:
         validate_event_trigger_code(trigger_event.code, label=trigger_event.label)
         if not trigger_event.label.strip():
             raise ValueError("Trigger labels may not be blank.")
+        if trigger_event.frame_index < 0 and (
+            trigger_event.frame_index != -1
+            or trigger_event.label != "condition_start"
+            or not distractor_markers
+        ):
+            raise ValueError("Only an opted-in AB condition marker may use pre-stream frame -1.")
         if trigger_event.frame_index in trigger_lookup:
             raise ValueError(
                 "A compiled display frame may contain at most one trigger marker."
             )
         trigger_lookup.setdefault(trigger_event.frame_index, []).append(trigger_event)
+    if distractor_markers and -1 not in trigger_lookup:
+        raise ValueError("AB distractor markers require a separate pre-stream condition marker.")
     return {frame_index: tuple(events) for frame_index, events in trigger_lookup.items()}
 
 

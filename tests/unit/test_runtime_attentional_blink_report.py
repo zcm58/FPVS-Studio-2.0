@@ -11,6 +11,7 @@ from tests.unit.runtime_launcher_helpers import StubEngine
 
 from fpvs_studio.core.compiler import compile_session_plan
 from fpvs_studio.core.enums import ExperimentCategory
+from fpvs_studio.core.execution import AttentionalBlinkOnsetRecord
 from fpvs_studio.core.project_service import build_starter_project
 from fpvs_studio.core.task_models import (
     TaskOption,
@@ -23,6 +24,7 @@ from fpvs_studio.runtime.attentional_blink_report import (
     ATTENTIONAL_BLINK_BURSTS_FILENAME,
     ATTENTIONAL_BLINK_JOURNAL_FILENAME,
     AttentionalBlinkDataError,
+    AttentionalBlinkSessionRecorder,
     load_attentional_blink_data,
     write_attentional_blink_accuracy_xlsx,
 )
@@ -36,6 +38,21 @@ def _plan():
         experiment_category=ExperimentCategory.ATTENTIONAL_BLINK,
     )
     project.settings.session.block_count = 2
+    return compile_session_plan(project, refresh_hz=60.0, random_seed=271)
+
+
+def _repeated_target_plan():
+    project = build_starter_project(
+        "Repeated AB recall", experiment_category=ExperimentCategory.ATTENTIONAL_BLINK,
+    )
+    project.settings.protocol.oddball_every_n = 90
+    project.settings.session.block_count = 1
+    for condition in project.conditions:
+        settings = condition.attentional_blink
+        settings.t2_slot_index = 21 + round(settings.soa_ms / 100)
+        settings.target_count = 6
+        settings.target_interval_slots = 10
+        settings.omit_first_t2 = True
     return compile_session_plan(project, refresh_hz=60.0, random_seed=271)
 
 
@@ -185,6 +202,72 @@ def test_t2_abort_preserves_t1_with_separate_denominators(tmp_path):
     soa = report.conditions[0]
     assert soa.t1_answer_count == 1 and soa.t1_accuracy_percent == 100
     assert soa.t2_answer_count == 0 and soa.t2_accuracy_percent is None
+
+
+@pytest.mark.parametrize("mode", ["compact", "full"])
+def test_repeated_targets_keep_two_scored_answers_and_nine_second_burst_records(tmp_path, mode):
+    plan = _repeated_target_plan()
+    result = _execute(tmp_path, plan, RecallEngine(), mode=mode)
+    assert not result.aborted
+    report = load_attentional_blink_data(tmp_path)
+    assert report.total_bursts == report.included_burst_count == 3
+    assert [row.cumulative_stimulus_s for row in report.bursts] == [9, 18, 27]
+    for row, entry in zip(report.bursts, plan.ordered_entries(), strict=True):
+        assert row.planned_duration_s == row.completed_stimulus_s == 9
+        assert row.t1_correct is True and row.t2_correct is False
+        assert row.t1_target != row.t2_target
+        assert row.recall_completed
+        for phase, count, digit in (("t1", 6, row.t1_target), ("t2", 5, row.t2_target)):
+            events = [event for event in entry.run_spec.stimulus_sequence if event.phase == phase]
+            assert len(events) == count
+            assert {event.text for event in events} == {digit}
+    assert all(condition.t1_answer_count == condition.t2_answer_count == 1
+               for condition in report.conditions)
+    assert all(len(run.task_responses) == 2 for run in result.run_results)
+
+
+@pytest.mark.parametrize("phase", ["t1", "t2"])
+def test_repeated_target_recorder_rejects_mixed_digits_before_writing(tmp_path, phase):
+    plan = _repeated_target_plan()
+    entry = plan.ordered_entries()[0]
+    events = [event for event in entry.run_spec.stimulus_sequence if event.phase == phase]
+    events[-1].text = "0" if events[0].text != "0" else "1"
+    recorder = AttentionalBlinkSessionRecorder(
+        tmp_path, plan, participant_number="42", participant_session_number=1,
+    )
+    with pytest.raises(ValueError, match="one target symbol per role"):
+        recorder.start_entry(entry)
+    assert not (tmp_path / "logs").exists()
+
+
+@pytest.mark.parametrize("missing_pair", [None, 3])
+def test_repeated_burst_observed_soa_averages_only_complete_pairs(tmp_path, missing_pair):
+    plan = _repeated_target_plan()
+    entry = plan.ordered_entries()[0]
+    run = entry.run_spec
+    recorder = AttentionalBlinkSessionRecorder(
+        tmp_path, plan, participant_number="42", participant_session_number=1,
+    )
+    recorder.start_entry(entry)
+    summary = StubEngine({}).run_condition(run, tmp_path)
+    summary.attentional_blink_onsets = [
+        AttentionalBlinkOnsetRecord(
+            sequence_index=event.sequence_index, phase=event.phase,
+            slot_index=event.slot_index, frame_index=event.on_start_frame,
+            time_s=(
+                None if event.phase == "t2" and event.cycle_index == missing_pair
+                else event.on_start_frame / 60
+                + (event.cycle_index / 1000 if event.phase == "t2" else 0)
+            ),
+        )
+        for event in run.stimulus_sequence
+    ]
+    recorder.update_run(summary)
+    record = load_attentional_blink_data(tmp_path).bursts[0]
+    included = [pair for pair in range(1, 6) if pair != missing_pair]
+    assert record.observed_soa_ms == pytest.approx(
+        run.attentional_blink.requested_soa_ms + sum(included) / len(included)
+    )
 
 
 def test_t2_recall_accuracy_is_retained_when_t1_is_wrong(tmp_path):

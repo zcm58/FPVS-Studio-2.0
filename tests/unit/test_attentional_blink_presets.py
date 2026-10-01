@@ -13,7 +13,11 @@ from fpvs_studio.core.condition_template_profiles import (
     built_in_condition_template_profiles,
 )
 from fpvs_studio.core.enums import ExperimentCategory, ProjectSchemaVersion, StimulusModality
-from fpvs_studio.core.models import AttentionalBlinkSettings, ConditionTemplateProfile
+from fpvs_studio.core.models import (
+    AttentionalBlinkSettings,
+    AttentionalBlinkStreamSettings,
+    ConditionTemplateProfile,
+)
 from fpvs_studio.core.project_config import create_project_from_config, export_project_config
 from fpvs_studio.core.project_service import build_starter_project, create_project
 from fpvs_studio.core.run_spec import event_presentation
@@ -400,3 +404,107 @@ def test_adding_after_removal_keeps_condition_and_target_markers_distinct(study)
     markers = [c.trigger_code for c in document._project.conditions]
     assert len(set(markers)) == len(markers)
     assert not set(markers).intersection({55, 56})
+
+
+@pytest.fixture
+def repeated_target_study(study):
+    study.settings.protocol.oddball_every_n = 90
+    for condition in study.conditions:
+        settings = condition.attentional_blink
+        condition.attentional_blink = AttentionalBlinkStreamSettings.model_validate({
+            **settings.model_dump(), "t2_slot_index": 21 + round(settings.soa_ms / 100),
+            "target_count": 6, "target_interval_slots": 10, "omit_first_t2": True,
+        })
+    return study
+
+
+def test_repeated_target_session_preserves_balanced_bursts_and_scores_the_two_numbers(
+    repeated_target_study,
+):
+    plan = compile_session_plan(repeated_target_study, refresh_hz=60, random_seed=47)
+    assert plan == compile_session_plan(repeated_target_study, refresh_hz=60, random_seed=47)
+    entries = plan.ordered_entries()
+    assert plan.total_runs == 72 and plan.block_count == 1
+    assert Counter(entry.condition_id for entry in entries) == {
+        condition.condition_id: 24 for condition in repeated_target_study.conditions
+    }
+    assert plan.transition.continue_key == "space"
+    target_pairs = {condition.condition_id: set() for condition in repeated_target_study.conditions}
+    for entry in entries:
+        assert entry.show_condition_start_gate
+        assert entry.run_spec.display.total_frames == 540
+        assert len(entry.post_tasks) == 1 and len(entry.post_tasks[0].steps) == 2
+        assert entry.post_tasks[0].task_id == repeated_target_study.task_modules[0].task_id
+        pair = []
+        for step, phase, count in zip(entry.post_tasks[0].steps, ("t1", "t2"), (6, 5), strict=True):
+            events = [event for event in entry.run_spec.stimulus_sequence if event.phase == phase]
+            assert len(events) == count
+            targets = {event.text for event in events}
+            assert len(targets) == 1
+            target = targets.pop()
+            pair.append(target)
+            assert len(step.questions) == 1
+            assert step.questions[0].question_id == f"{phase}-recall"
+            assert step.questions[0].kind == TaskQuestionKind.SHORT_TEXT
+            assert step.questions[0].correct_text == target
+            assert step.submit_label == "Next" and step.submission_mode.value == "explicit"
+        assert pair[0] != pair[1]
+        target_pairs[entry.condition_id].add(tuple(pair))
+    assert all(len(pairs) > 1 for pairs in target_pairs.values())
+    assert all(step.questions[0].correct_text is None
+               for step in repeated_target_study.task_modules[0].steps)
+    different = compile_session_plan(repeated_target_study, refresh_hz=60, random_seed=48)
+    assert [entry.condition_id for entry in entries] != [
+        entry.condition_id for entry in different.ordered_entries()
+    ]
+
+
+@pytest.mark.parametrize("rate", [10, 20])
+def test_repeated_target_design_edit_preserves_nine_seconds_and_target_cadence(
+    repeated_target_study, tmp_path, rate,
+):
+    document = _Document(repeated_target_study, tmp_path)
+    intervals = {condition.condition_id: soa for condition, soa in
+                 zip(repeated_target_study.conditions, (100, 400, 500), strict=True)}
+    sources = [source.words for source in repeated_target_study.stimulus_sets]
+    edit = {"t1_color": "#00FF00", "t2_color": "#FFFFFF", "base_hz": rate}
+    assert document.apply_attentional_blink_stream_design(*sources, intervals, **edit)
+    assert not document.apply_attentional_blink_stream_design(*sources, intervals, **edit)
+    assert document.replacements == 1
+    save_project_file(document._project, tmp_path / "project.json")
+    restored = load_project_file(tmp_path / "project.json")
+    assert restored == document._project
+    assert restored.settings.protocol.oddball_every_n == rate * 9
+    assert restored.settings.session == repeated_target_study.settings.session
+    assert restored.task_modules == repeated_target_study.task_modules
+    assert restored.stimulus_sets == repeated_target_study.stimulus_sets
+    for previous, condition in zip(
+        repeated_target_study.conditions, restored.conditions, strict=True,
+    ):
+        settings = condition.attentional_blink
+        assert settings.target_count == 6 and settings.omit_first_t2
+        assert settings.target_interval_slots == rate
+        assert condition.post_task_bindings == previous.post_task_bindings
+        assert condition.sequence_count == condition.oddball_cycle_repeats_per_sequence == 1
+        run = compile_run_spec(restored, condition_id=condition.condition_id, refresh_hz=60)
+        assert run.display.total_frames == 540
+        t1 = [event for event in run.stimulus_sequence if event.phase == "t1"]
+        t2 = [event for event in run.stimulus_sequence if event.phase == "t2"]
+        assert [event.on_start_frame for event in t1] == [126, 186, 246, 306, 366, 426]
+        assert len(t2) == 5
+        assert all(second.on_start_frame - first.on_start_frame == settings.soa_ms * 60 / 1000
+                   for first, second in zip(t1[1:], t2, strict=True))
+
+
+def test_repeated_target_design_rejects_rate_that_moves_first_t1_without_mutating_project(
+    repeated_target_study, tmp_path,
+):
+    document = _Document(repeated_target_study, tmp_path)
+    with pytest.raises(ValueError, match="exactly on character boundaries"):
+        document.apply_attentional_blink_stream_design(
+            *[source.words for source in repeated_target_study.stimulus_sets],
+            {condition.condition_id: 250 for condition in repeated_target_study.conditions},
+            t1_color="#123456", t2_color="#FFFFFF", base_hz=12,
+        )
+    assert document._project == repeated_target_study
+    assert document.replacements == 0

@@ -284,6 +284,19 @@ class DisplaySettingsEditor(QWidget):
         refresh_hz = self.refresh_hz_combo.currentData()
         return float(refresh_hz) if isinstance(refresh_hz, (int, float)) else 60.0
 
+    def _target_cadence_slots(self) -> int | None:
+        protocol = self._document.project.settings.protocol
+        cadences = {
+            settings.target_interval_slots
+            if isinstance(settings := condition.attentional_blink,
+                          AttentionalBlinkStreamSettings) and settings.target_count > 1
+            else protocol.oddball_every_n
+            for condition in self._document.project.conditions
+        }
+        return cadences.pop() if len(cadences) == 1 else (
+            protocol.oddball_every_n if not cadences else None
+        )
+
     def timing_report(self) -> DisplayValidationReport:
         protocol = self._document.project.settings.protocol
         condition_modes = [
@@ -305,7 +318,7 @@ class DisplaySettingsEditor(QWidget):
                 self.current_refresh_hz(),
                 duty_cycle_mode=mode,
                 base_hz=protocol.base_hz,
-                oddball_every_n=protocol.oddball_every_n,
+                oddball_every_n=self._target_cadence_slots(),
             )
             for mode in ordered_modes
         ]
@@ -318,6 +331,9 @@ class DisplaySettingsEditor(QWidget):
                         refresh_hz=self.current_refresh_hz(), base_hz=protocol.base_hz,
                         cycle_slots=protocol.oddball_every_n, soa_ms=settings.soa_ms,
                         t2_slot_index=settings.t2_slot_index,
+                        target_count=settings.target_count,
+                        target_interval_slots=settings.target_interval_slots,
+                        omit_first_t2=settings.omit_first_t2,
                     )
                 except ValueError as error:
                     return report.model_copy(update={
@@ -362,6 +378,11 @@ class DisplaySettingsEditor(QWidget):
             for source in self._document.project.stimulus_sets
         )
         stream = is_attentional_blink_stream_project(self._document.project)
+        repeated_targets = stream and any(
+            isinstance(condition.attentional_blink, AttentionalBlinkStreamSettings)
+            and condition.attentional_blink.target_count > 1
+            for condition in self._document.project.conditions
+        )
         _set_form_row_visible(self.form_layout, self.base_hz_spin, not image_design and not stream)
         _set_form_row_visible(
             self.form_layout, self.oddball_every_n_spin, not image_design and not stream,
@@ -371,7 +392,9 @@ class DisplaySettingsEditor(QWidget):
             cadence_label.setText("Target pair every" if ab else "Oddball every")
         summary_label = self.summary_layout.labelForField(self.summary_value_labels["oddball"])
         if isinstance(summary_label, QLabel):
-            summary_label.setText("Target pair" if ab else "Oddball")
+            summary_label.setText(
+                "T1 repetition" if repeated_targets else "Target pair" if ab else "Oddball"
+            )
         self._sync_refresh_combo(preferred_refresh)
         with QSignalBlocker(self.base_hz_spin):
             self.base_hz_spin.setValue(protocol.base_hz)
@@ -406,8 +429,10 @@ class DisplaySettingsEditor(QWidget):
         if not self._editable:
             self.summary_value_labels["refresh"].setText(f"{preferred_refresh:.2f} Hz")
             self.summary_value_labels["base"].setText(f"{protocol.base_hz:g} Hz")
+            cadence_slots = self._target_cadence_slots()
             self.summary_value_labels["oddball"].setText(
-                f"Every {protocol.oddball_every_n} stimuli ({protocol.oddball_hz:g} Hz)"
+                f"Every {cadence_slots} stimuli ({protocol.base_hz / cadence_slots:g} Hz)"
+                if cadence_slots is not None else "Varies by condition"
             )
             self.summary_value_labels["background"].setText(
                 self.runtime_background_color_combo.currentText()

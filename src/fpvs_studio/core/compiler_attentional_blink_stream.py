@@ -44,6 +44,9 @@ def compile_attentional_blink_stream_sequence(
         refresh_hz=refresh_hz, base_hz=protocol.base_hz,
         cycle_slots=protocol.oddball_every_n, soa_ms=settings.soa_ms,
         t2_slot_index=settings.t2_slot_index,
+        target_count=settings.target_count,
+        target_interval_slots=settings.target_interval_slots,
+        omit_first_t2=settings.omit_first_t2,
     )
     description = preview.description
     t1_presentation = presentation.oddball.model_copy(deep=True)
@@ -71,7 +74,7 @@ def compile_attentional_blink_stream_sequence(
             events.append(StimulusEvent(
                 sequence_index=slot_index,
                 slot_index=slot_index,
-                cycle_index=cycle_index,
+                cycle_index=description.target_cycle_index(slot_index),
                 phase=phase,
                 role="base" if phase == "base" else "oddball",
                 stimulus_modality=StimulusModality.WORD,
@@ -90,6 +93,10 @@ def compile_attentional_blink_stream_sequence(
         cycle_slots=description.cycle_slots,
         t1_slot_index=description.t1_slot_index,
         t2_slot_index=description.t2_slot_index,
+        target_count=description.target_count,
+        target_interval_slots=description.target_interval_slots,
+        omit_first_t2=description.omit_first_t2,
         t2_trigger_code=settings.t2_trigger_code,
+        distractor_trigger_code=settings.distractor_trigger_code,
         t2_presentation=t2_presentation,
     ), presentation
