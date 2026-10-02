@@ -712,12 +712,21 @@ imports started from Welcome use the same page inside a modal progress dialog. T
 progress surface uses a wide, single-card layout with flat source/destination and
 activity sections so paths, status copy, and all four stage labels remain visible. The
 configured Studio root is persisted and loaded as an absolute path; import destinations
-never fall back to the application working directory. Legacy relative root settings are
+never fall back to the application working directory. Bundle reads, collision checks
+and destination creation use the core Windows path adapter, including long source and
+receiving paths; the returned project location retains the ordinary configured path.
+Opening project/manifest JSON, root-folder selection/preferences, recent projects,
+restart discovery, template storage and image-readiness signatures reuse that adapter.
+Disk-full and permission errors identify the storage action needed to retry.
+Legacy relative root settings are
 discarded so the root-folder setup flow can collect an explicit location again. The
 display confirmation dialog compares imported settings with Qt-detected refresh,
 resolution, and physical screen width, preserves editable local values, and exposes
 explicit `Open with Imported Values` and `Apply & Open Project` actions. The visual-angle
-target remains imported, and PsychoPy stays behind the engine boundary. Detected refresh
+target remains imported, and PsychoPy stays behind the engine boundary. Detected
+resolution uses physical pixels (`QScreen.geometry` multiplied by its device pixel
+ratio). The Image Size preview converts its physical dimensions to Qt logical drawing
+coordinates so Windows scaling does not enlarge the actual-size stimulus box. Refresh
 measurements are mapped to the nearest approved FPVS refresh rate when they are within
 tolerance; unsupported measurements are shown for review without writing an invalid
 refresh target. Closing or pressing Escape cannot bypass the two explicit open actions.

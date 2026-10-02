@@ -736,13 +736,16 @@ class ImageSizePreview(QWidget):
 
         available_width = max(1, self.width() - 18)
         available_height = max(1, self.height() - 18)
+        pixel_ratio = self.devicePixelRatioF()
+        logical_width = self._preview_width_px / pixel_ratio
+        logical_height = self._preview_height_px / pixel_ratio
         scale = min(
             1.0,
-            available_width / self._preview_width_px,
-            available_height / self._preview_height_px,
+            available_width / logical_width,
+            available_height / logical_height,
         )
-        preview_width = max(1, round(self._preview_width_px * scale))
-        preview_height = max(1, round(self._preview_height_px * scale))
+        preview_width = max(1, round(logical_width * scale))
+        preview_height = max(1, round(logical_height * scale))
         left = (self.width() - preview_width) // 2
         top = (self.height() - preview_height) // 2
         painter.fillRect(left, top, preview_width, preview_height, QColor("#f8fafc"))
@@ -1189,7 +1192,7 @@ def _primary_screen_width_px() -> int:
     screen = QApplication.primaryScreen()
     if screen is None:
         return 1920
-    return max(1, screen.geometry().width())
+    return max(1, round(screen.geometry().width() * screen.devicePixelRatio()))
 
 
 def _display_screen_width_px(display: object) -> int:

@@ -55,7 +55,8 @@ def _connection() -> LibraryConnection:
 
 @pytest.mark.parametrize("size", [(900, 640), (1040, 760)])
 @pytest.mark.parametrize("state", [
-    "disconnected", "ready", "busy", "error", "empty", "installed", "update", "review",
+    "disconnected", "ready", "busy", "error", "authorization_error", "empty",
+    "installed", "update", "review",
 ])
 def test_library_layout_and_full_metadata(qtbot, tmp_path, size, state) -> None:
     dialog = LibraryDialog()
@@ -90,6 +91,11 @@ def test_library_layout_and_full_metadata(qtbot, tmp_path, size, state) -> None:
         dialog.set_busy(
             False,
             "This computer's access was revoked. Disconnect and reconnect with a new access code.",
+        )
+    elif state == "authorization_error":
+        dialog.set_connection(None)
+        dialog.set_busy(
+            False, "Library access was rejected. Reconnect with your lab's access code.",
         )
     elif state == "empty":
         dialog.set_catalog(LibraryCatalog(schema_version="1.0", library_name="Research", items=[]))
@@ -298,6 +304,13 @@ def test_authorization_failure_clears_catalog(qapp, qtbot, monkeypatch, tmp_path
     assert controller.dialog.item_list.count() == 0
     assert not controller.dialog.install_button.isEnabled()
     assert "revoked" in controller.dialog.status_label.text()
+    assert controller.dialog.connection_fields.isVisible()
+    assert controller.dialog.connect_button.isVisible()
+    assert not controller.dialog.disconnect_button.isVisible()
+    client.authorization_error = False
+    _enroll(controller, qtbot)
+    assert controller.dialog.item_list.count() == 1
+    assert controller.dialog.install_button.isEnabled()
 
 
 def test_library_import_review_cancel_releases_handoff(controller, tmp_path, monkeypatch) -> None:
@@ -542,3 +555,24 @@ def test_import_progress_escape_requests_cancel_and_stays_alive(qtbot) -> None:
     assert dialog.isVisible()
     assert not dialog.cancel_button.isEnabled()
     dialog.finish()
+
+
+def test_bundle_review_error_is_actionable_and_releases_download(
+    qapp, qtbot, monkeypatch, tmp_path,
+):
+    controller, client, _lifecycle = _controller(
+        qapp, qtbot, monkeypatch, tmp_path,
+        lambda *_args: pytest.fail("Invalid bundle must not import"),
+    )
+    _enroll(controller, qtbot)
+    message = "Project bundle checksum mismatch: project.json"
+
+    def invalid(path):
+        raise ProjectBundleError(message)
+
+    monkeypatch.setattr(library_module, "read_project_bundle_manifest", invalid)
+    controller.dialog.install_button.click()
+    qtbot.waitUntil(lambda: client.releases == 1 and controller._job is None)
+    assert controller.dialog.status_label.text() == message
+    assert not controller._importing
+    assert controller.dialog.install_button.isEnabled()

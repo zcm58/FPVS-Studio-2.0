@@ -16,7 +16,7 @@ from fpvs_studio.core.models import (
     StimulusSet,
     TriggerSettings,
 )
-from fpvs_studio.core.paths import project_json_path
+from fpvs_studio.core.paths import filesystem_path, project_json_path
 
 _CONDITION_REPEAT_CYCLE_MISMATCH_PREFIX = (
     "Condition repeat/cycle settings must match across all conditions."
@@ -87,11 +87,11 @@ def resolve_project_location(project_location: Path) -> Path:
     """Resolve a directory or `project.json` path to the canonical JSON path."""
 
     candidate = Path(project_location)
-    if candidate.is_dir():
+    if filesystem_path(candidate).is_dir():
         candidate = project_json_path(candidate)
     if candidate.name != "project.json":
         raise DocumentError("Select a project directory or a project.json file.")
-    if not candidate.is_file():
+    if not filesystem_path(candidate).is_file():
         raise DocumentError(f"Project file was not found: {candidate}")
     return candidate
 

@@ -7,6 +7,7 @@ source of truth plus stimulus assets. The bundle manifest validates archive inte
 
 from __future__ import annotations
 
+import errno
 import hashlib
 import io
 import re
@@ -273,14 +274,16 @@ def read_project_bundle_manifest(bundle_path: Path) -> ProjectBundleManifest:
     """Read and validate `fpvs_bundle.json` from a `.fpvsbundle` archive."""
 
     try:
-        with zipfile.ZipFile(bundle_path, mode="r") as archive:
+        with zipfile.ZipFile(filesystem_path(Path(bundle_path)), mode="r") as archive:
             _validate_archive_member_count(archive)
             bundle_manifest = _read_bundle_manifest_from_archive(archive)
             _validate_bundle_resource_limits(archive, bundle_manifest)
             return bundle_manifest
     except ProjectBundleError:
         raise
-    except (OSError, zipfile.BadZipFile, RuntimeError, NotImplementedError) as exc:
+    except OSError as exc:
+        raise _bundle_io_error(exc, bundle_path) from exc
+    except (zipfile.BadZipFile, RuntimeError, NotImplementedError) as exc:
         raise ProjectBundleError(f"Unable to read project bundle: {bundle_path}") from exc
 
 
@@ -304,7 +307,7 @@ def import_project_bundle(
         _check_cancelled(cancel_event)
         if library_origin is not None and library_origin.bundle_sha256 is not None:
             digest = hashlib.sha256()
-            with bundle_path.open("rb") as archive_bytes:
+            with filesystem_path(bundle_path).open("rb") as archive_bytes:
                 for chunk in iter(lambda: archive_bytes.read(65536), b""):
                     _check_cancelled(cancel_event)
                     digest.update(chunk)
@@ -361,9 +364,9 @@ def import_project_bundle(
             save_library_origin(
                 staged_project_root, origin_for_import(library_origin, project.meta.project_id),
             )
-        if target_dir.exists():
+        if filesystem_path(target_dir).exists():
             raise ProjectBundleError(f"Imported project target already exists: {target_dir}")
-        target_dir.parent.mkdir(parents=True, exist_ok=True)
+        filesystem_path(target_dir.parent).mkdir(parents=True, exist_ok=True)
         _check_cancelled(cancel_event)
         # This rename is the commit boundary; later cancellation cannot undo a project.
         if library_origin is not None and library_origin.installed_version is not None:
@@ -383,11 +386,27 @@ def import_project_bundle(
         return ProjectScaffold(project_root=target_dir, project=project)
     except ProjectBundleError:
         raise
+    except OSError as exc:
+        raise _bundle_io_error(exc, bundle_path) from exc
     except Exception as exc:
         raise ProjectBundleError(f"Unable to import project bundle: {bundle_path}") from exc
     finally:
         if filesystem_path(stage_dir).exists():
             shutil.rmtree(filesystem_path(stage_dir), ignore_errors=True)
+
+
+def _bundle_io_error(error: OSError, bundle_path: Path) -> ProjectBundleError:
+    if error.errno == errno.ENOSPC or getattr(error, "winerror", None) == 112:
+        return ProjectBundleError(
+            "Not enough free disk space for this bundle. Free space on the Studio Root "
+            "Folder drive and try again."
+        )
+    if error.errno in {errno.EACCES, errno.EPERM} or getattr(error, "winerror", None) == 5:
+        return ProjectBundleError(
+            "Bundle access was denied. Check that the bundle is readable and the Studio "
+            "Root Folder is writable, then try again."
+        )
+    return ProjectBundleError(f"Unable to access project bundle or destination: {bundle_path}")
 
 
 def _notify_import_progress(
@@ -425,7 +444,7 @@ def _extract_bundle_to_staging(
     cancel_event: Event | None = None,
 ) -> ProjectBundleManifest:
     try:
-        with zipfile.ZipFile(bundle_path, mode="r") as archive:
+        with zipfile.ZipFile(filesystem_path(Path(bundle_path)), mode="r") as archive:
             archive_paths = _validated_archive_file_paths(archive)
             bundle_manifest = _read_bundle_manifest_from_archive(archive)
             expected_paths = {
@@ -453,7 +472,9 @@ def _extract_bundle_to_staging(
             return bundle_manifest
     except ProjectBundleError:
         raise
-    except (OSError, zipfile.BadZipFile) as exc:
+    except OSError as exc:
+        raise _bundle_io_error(exc, bundle_path) from exc
+    except zipfile.BadZipFile as exc:
         raise ProjectBundleError(f"Unable to read project bundle: {bundle_path}") from exc
 
 
@@ -541,6 +562,18 @@ def _validate_bundle_manifest_resource_limits(
     record_paths = [record.path for record in records]
     if len(record_paths) != len(set(record_paths)):
         raise ProjectBundleError("Project bundle manifest contains duplicate payload paths.")
+    windows_paths: dict[str, str] = {}
+    for path in record_paths:
+        prefix = PurePosixPath()
+        for part in PurePosixPath(path).parts:
+            prefix /= part
+            spelling = prefix.as_posix()
+            previous = windows_paths.setdefault(spelling.lower(), spelling)
+            if previous != spelling:
+                raise ProjectBundleError(
+                    "Project bundle paths differ only by case and conflict on Windows: "
+                    f"{previous}, {spelling}. Rename these files or folders before exporting."
+                )
     if BUNDLE_MANIFEST_FILENAME in record_paths:
         raise ProjectBundleError(
             "Project bundle manifest may not list fpvs_bundle.json as a payload file."
@@ -828,14 +861,14 @@ def _write_bundle_archive(
 def _unique_import_project_dir(parent_dir: Path, source_project_id: str) -> tuple[Path, str]:
     candidate_id = source_project_id
     candidate_dir = project_dir(parent_dir, candidate_id)
-    if not candidate_dir.exists():
+    if not filesystem_path(candidate_dir).exists():
         return candidate_dir, candidate_id
 
     base_id = f"{source_project_id}-from-bundle"
     candidate_id = base_id
     candidate_dir = project_dir(parent_dir, candidate_id)
     suffix = 2
-    while candidate_dir.exists():
+    while filesystem_path(candidate_dir).exists():
         candidate_id = f"{base_id}-{suffix}"
         candidate_dir = project_dir(parent_dir, candidate_id)
         suffix += 1

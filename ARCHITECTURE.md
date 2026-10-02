@@ -216,6 +216,9 @@ owns endpoint estimates and task-response checkpoints. Details and acceptance ar
 - `core/paths.py` owns Windows filesystem namespace adaptation. Image I/O uses
   extended-length paths while manifests and compiled contracts retain project-relative
   POSIX paths; containment checks and serialization normalize both filesystem forms.
+  Bundle review/import and Library cache I/O reuse this adapter for long Windows paths.
+  Project/manifest reads, GUI root preferences/discovery, and root template storage
+  use the same adapter when opening and configuring imported projects.
 - Runtime owns machine launch options, session transitions, declarative pre/post task
   sequencing and validation, participant flow, fixation scoring, trigger I/O
   coordination, and result assembly. Task clocks and compiled Arial/Open Sans font

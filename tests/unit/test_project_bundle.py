@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import os
 import zipfile
 from contextlib import contextmanager
 from pathlib import Path
@@ -646,3 +647,113 @@ def test_recording_device_and_port_survive_project_bundle(
     export_project_bundle(sample_project_root, bundle)
     result = import_project_bundle(bundle, tmp_path / "imported")
     assert result.project.settings.recording == setting
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows namespace behavior")
+@pytest.mark.parametrize("long_bundle", [False, True])
+def test_bundle_transfer_without_windows_long_path_policy(
+    tmp_path, sample_project, sample_project_root, monkeypatch, long_bundle,
+):
+    from fpvs_studio.core.paths import filesystem_path
+
+    _save_bundle_ready_project(sample_project_root, sample_project)
+    nested = tmp_path / ("different-user-" * 5) / ("研究室 folder " * 6) / ("root-folder-" * 5)
+    while len(str(nested)) <= 270:
+        nested /= "nested-root-folder"
+    bundle = nested / "download.fpvsbundle" if long_bundle else tmp_path / "download.fpvsbundle"
+    export_project_bundle(sample_project_root, bundle)
+    receiver = nested / "receiver"
+    original_mkdir, original_exists, original_open = Path.mkdir, Path.exists, zipfile.io.open
+
+    def require_namespace(path):
+        value = str(path)
+        if len(value) >= 248 and not value.startswith("\\\\?\\"):
+            raise OSError(206, "Windows long-path policy is disabled", value)
+
+    def mkdir(path, *args, **kwargs):
+        require_namespace(path)
+        return original_mkdir(path, *args, **kwargs)
+
+    def exists(path):
+        require_namespace(path)
+        return original_exists(path)
+
+    def open_file(path, *args, **kwargs):
+        if isinstance(path, (str, Path)):
+            require_namespace(path)
+        return original_open(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "mkdir", mkdir)
+    monkeypatch.setattr(Path, "exists", exists)
+    monkeypatch.setattr(zipfile.io, "open", open_file)
+    read_project_bundle_manifest(bundle)
+    from fpvs_studio.core.library_origin import LibraryProjectOrigin
+
+    origin = LibraryProjectOrigin(
+        service_url="https://library.example.test", item_id="sample-project",
+        installed_version="1.0.0",
+        bundle_sha256=hashlib.sha256(filesystem_path(bundle).read_bytes()).hexdigest(),
+        local_project_id=sample_project.meta.project_id,
+    )
+    first = import_project_bundle(bundle, receiver, library_origin=origin)
+    second = import_project_bundle(bundle, receiver)
+    assert first.project_root == receiver / sample_project.meta.project_id
+    assert second.project_root.name == f"{sample_project.meta.project_id}-from-bundle"
+    assert filesystem_path(first.project_root / "project.json").is_file()
+    assert list(filesystem_path(app_data_dir(receiver) / IMPORT_STAGING_DIRNAME).iterdir()) == []
+    saved = filesystem_path(second.project_root / "project.json").read_text(encoding="utf-8")
+    assert "different-user" not in saved and "\\\\?\\" not in saved
+
+
+@pytest.mark.parametrize("error, message", [
+    (PermissionError(13, "denied"), "writable"),
+    (OSError(28, "full"), "space"),
+])
+def test_bundle_import_storage_failure_is_actionable_and_cleans_staging(
+    tmp_path, sample_project, sample_project_root, monkeypatch, error, message,
+):
+    _save_bundle_ready_project(sample_project_root, sample_project)
+    bundle = tmp_path / "download.fpvsbundle"
+    export_project_bundle(sample_project_root, bundle)
+    receiver = tmp_path / "receiver"
+
+    def fail(*args, **kwargs):
+        raise error
+
+    monkeypatch.setattr(project_bundle_module, "_extract_verified_record", fail)
+    with pytest.raises(ProjectBundleError, match=message):
+        import_project_bundle(bundle, receiver)
+    assert not (receiver / sample_project.meta.project_id).exists()
+    assert list((app_data_dir(receiver) / IMPORT_STAGING_DIRNAME).iterdir()) == []
+
+
+@pytest.mark.parametrize("alias", [
+    "stimuli/original-images/base-set/BASE-SET-01.PNG",
+    "stimuli/original-images/BASE-SET/other.png",
+])
+def test_bundle_rejects_paths_that_collide_on_windows(
+    tmp_path, sample_project, sample_project_root, alias,
+):
+    _save_bundle_ready_project(sample_project_root, sample_project)
+    original = tmp_path / "original.fpvsbundle"
+    export_project_bundle(sample_project_root, original)
+    bundle = tmp_path / "case-collision.fpvsbundle"
+    with zipfile.ZipFile(original) as source, zipfile.ZipFile(bundle, "w") as target:
+        manifest = read_project_bundle_manifest(original)
+        payload = source.read("stimuli/original-images/oddball-set/oddball-set-01.png")
+        record = project_bundle_module.ProjectBundleFileRecord(
+            path=alias, size_bytes=len(payload), sha256=hashlib.sha256(payload).hexdigest(),
+        )
+        manifest.files.append(record)
+        for info in source.infolist():
+            if info.filename != BUNDLE_MANIFEST_FILENAME:
+                target.writestr(info, source.read(info.filename))
+        target.writestr(alias, payload)
+        target.writestr(BUNDLE_MANIFEST_FILENAME, manifest.model_dump_json())
+    with pytest.raises(ProjectBundleError, match="case"):
+        read_project_bundle_manifest(bundle)
+    receiver = tmp_path / "receiver"
+    with pytest.raises(ProjectBundleError, match="case"):
+        import_project_bundle(bundle, receiver)
+    assert not (receiver / sample_project.meta.project_id).exists()
+    assert list((app_data_dir(receiver) / IMPORT_STAGING_DIRNAME).iterdir()) == []

@@ -23,6 +23,7 @@ from fpvs_studio.core.models import (
     utc_now,
 )
 from fpvs_studio.core.paths import (
+    filesystem_path,
     project_json_path,
     stimulus_manifest_path,
 )
@@ -182,7 +183,10 @@ class ProjectDocument(
         project = load_project_file(project_file_path)
         project_root = project_file_path.parent
         manifest_path = stimulus_manifest_path(project_root)
-        manifest = read_stimulus_manifest(project_root) if manifest_path.is_file() else None
+        manifest = (
+            read_stimulus_manifest(project_root)
+            if filesystem_path(manifest_path).is_file() else None
+        )
         return project_root, project, manifest
 
     @property

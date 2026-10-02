@@ -35,9 +35,9 @@ manual_smoke = []
 
 [scopes.gui]
 checks = []
-tests = ["tests/unit/test_preprocessing_import.py"]
+tests = ["tests/unit/test_preprocessing_import.py", "tests/unit/test_bundle_open_setup.py"]
 full_tests = ["tests/gui"]
-include = ["src/fpvs_studio/gui/**", "tests/gui/**"]
+include = ["src/fpvs_studio/gui/**", "tests/gui/**", "tests/unit/test_bundle_open_setup.py"]
 manual_smoke = [
   "Launch FPVS Studio normally in a visible Windows session.",
   "Exercise the changed surface at its documented minimum/default size and check for clipping.",

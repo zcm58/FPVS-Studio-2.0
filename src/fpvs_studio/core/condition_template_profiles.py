@@ -37,6 +37,7 @@ from fpvs_studio.core.paths import (
     CONDITION_TEMPLATE_LIBRARY_FILENAME,
     TEMPLATES_DIRNAME,
     condition_template_library_path,
+    filesystem_path,
     templates_dir,
 )
 from fpvs_studio.core.presentation import legacy_project_presentation_settings
@@ -233,7 +234,7 @@ def _migrate_library_payload(
 def normalize_condition_template_profile_root(root_dir: Path) -> Path:
     """Ensure app template storage exists and migrate legacy library files."""
 
-    root_dir = Path(root_dir)
+    root_dir = filesystem_path(Path(root_dir))
     templates_root = templates_dir(root_dir)
     templates_root.mkdir(parents=True, exist_ok=True)
 

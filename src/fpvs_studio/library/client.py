@@ -139,6 +139,10 @@ class LibraryClient:
         except HTTPError as error:
             status = error.code
             error.close()
+            if token and status in (401, 403):
+                # A revoked token cannot enroll again. Keep failed invitation tokens
+                # pending, but remove rejected device access so reconnect starts fresh.
+                self.store.delete()
             raise _status_error(status) from None
         except (URLError, TimeoutError, OSError):
             raise LibraryError(
@@ -335,9 +339,15 @@ class LibraryClient:
                             progress_callback(received, item.size_bytes)
                     target.flush()
                     os.fsync(target.fileno())
-            if received != item.size_bytes or digest.hexdigest() != item.sha256:
+            if received != item.size_bytes:
                 raise LibraryError(
-                    "The Library download failed its size or SHA-256 integrity check."
+                    f"The Library download ended early: received {received:,} of "
+                    f"{item.size_bytes:,} bytes. Try again."
+                )
+            if digest.hexdigest() != item.sha256:
+                raise LibraryError(
+                    "The Library download failed its SHA-256 integrity check. "
+                    "Refresh the catalog and try again."
                 )
             check_cancel(cancel_event)
             result = self._cache.commit(item)

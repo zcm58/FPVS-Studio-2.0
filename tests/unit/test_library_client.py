@@ -5,8 +5,10 @@ from __future__ import annotations
 import hashlib
 import io
 import json
+import os
 from contextlib import contextmanager
 from email.message import Message
+from pathlib import Path
 from threading import Event
 from urllib.error import HTTPError, URLError
 
@@ -261,7 +263,7 @@ def test_download_verifies_hash_size_and_retains_exclusive_lease(environment):
 def test_failed_download_removes_partial_and_releases_lock(environment, payload):
     client, _, _, replies = environment
     replies.append(payload_reply(payload))
-    with pytest.raises(LibraryError, match="size|integrity"):
+    with pytest.raises(LibraryError, match="early|size|integrity"):
         client.download(item())
     assert list(client._cache.root.glob("*.part")) == []
     assert list(client._cache.root.glob("*.fpvsbundle")) == []
@@ -471,3 +473,73 @@ def test_mutated_item_cannot_bypass_validated_download_route(environment):
     with pytest.raises(LibraryError, match="invalid metadata"):
         client.download(altered)
     assert requests == []
+
+
+@pytest.mark.parametrize("status", [401, 403])
+def test_rejected_device_can_enroll_again_with_a_fresh_token(environment, status):
+    client, store, requests, replies = environment
+    rejected_token = store.value.token
+    replies.append(HTTPError(ORIGIN, status, "revoked", {}, io.BytesIO()))
+    with pytest.raises(LibraryAuthorizationError):
+        client.catalog()
+    assert client.connection_info() is None
+    replies.append(dict(schema_version="1.0", device_id="device-2", library_name="Test library"))
+    client.enroll("NEW-INVITE", "New enrollment")
+    assert len(requests) == 2
+    submitted = json.loads(requests[-1].data)
+    assert submitted["device_token"] != rejected_token
+    assert client.connection_info().device_id == "device-2"
+
+
+def test_bad_invitation_preserves_pending_token_for_retry(environment):
+    client, store, _, replies = environment
+    store.value = None
+    replies.append(HTTPError(ORIGIN, 403, "bad code", {}, io.BytesIO()))
+    with pytest.raises(LibraryAuthorizationError):
+        client.enroll("BAD-INVITE", "Machine")
+    pending = store.value
+    assert pending is not None and pending.connection is None
+    replies.append(dict(schema_version="1.0", device_id="device-2", library_name="Test library"))
+    client.enroll("GOOD-INVITE", "Machine")
+    assert store.value.token == pending.token
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows namespace behavior")
+def test_download_cache_without_windows_long_path_policy(environment, tmp_path, monkeypatch):
+    client, _, _, replies = environment
+    root = tmp_path / ("long-user-profile-" * 5) / ("local-cache-" * 6)
+    while len(str(root)) <= 270:
+        root /= "nested-profile-folder"
+    client._cache = DownloadCache(root)
+    original_exists, original_mkdir = Path.exists, Path.mkdir
+
+    def require_namespace(path):
+        value = str(path)
+        if len(value) >= 248 and not value.startswith("\\\\?\\"):
+            raise OSError(206, "Windows long-path policy is disabled", value)
+
+    def exists(path):
+        require_namespace(path)
+        return original_exists(path)
+
+    def mkdir(path, *args, **kwargs):
+        require_namespace(path)
+        return original_mkdir(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "exists", exists)
+    monkeypatch.setattr(Path, "mkdir", mkdir)
+    replies.append(payload_reply())
+    downloaded = client.download(item())
+    assert downloaded.read_bytes() == PAYLOAD
+    client.release_download()
+    replies.append(catalog(item()))
+    assert client.download(item()) == downloaded
+
+
+def test_truncated_download_reports_received_bytes(environment):
+    client, _, _, replies = environment
+    replies.append(payload_reply(PAYLOAD[:-1]))
+    message = f"received {len(PAYLOAD) - 1} of {len(PAYLOAD)} bytes"
+    with pytest.raises(LibraryError, match=message):
+        client.download(item())
+    assert list(client._cache.root.glob("*.part")) == []

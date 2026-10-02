@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
@@ -36,6 +37,7 @@ from fpvs_studio.gui.controller import StudioController
 from fpvs_studio.gui.import_display_settings_dialog import (
     DetectedDisplaySettings,
     ImportDisplaySettingsDialog,
+    detect_primary_display_settings,
 )
 from fpvs_studio.gui.main_window import _BundleExportTaskResult
 
@@ -1011,3 +1013,43 @@ def test_import_display_settings_dialog_actions_are_explicit(qtbot) -> None:
 
     assert apply_dialog.result() == int(QDialog.DialogCode.Accepted)
     assert apply_dialog.should_apply_updates is True
+
+
+@pytest.mark.parametrize("ratio, logical", [
+    (1.0, (3840, 2160)), (1.25, (3072, 1728)),
+    (1.5, (2560, 1440)), (2.0, (1920, 1080)),
+])
+def test_import_display_detection_uses_physical_pixels(monkeypatch, ratio, logical):
+    from types import SimpleNamespace
+
+    from fpvs_studio.gui.runtime_settings_page import _primary_screen_width_px
+
+    screen = SimpleNamespace(
+        geometry=lambda: QRect(0, 0, *logical), devicePixelRatio=lambda: ratio,
+        physicalSize=lambda: SimpleNamespace(width=lambda: 600.0), refreshRate=lambda: 60.0,
+    )
+    monkeypatch.setattr(QApplication, "primaryScreen", lambda: screen)
+    detected = detect_primary_display_settings()
+    assert (detected.screen_width_px, detected.screen_height_px) == (3840, 2160)
+    assert detected.screen_width_cm == 60.0
+    assert detected.refresh_hz == 60.0
+    assert _primary_screen_width_px() == 3840
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows namespace behavior")
+def test_root_folder_picker_accepts_long_windows_path(controller, tmp_path, monkeypatch):
+    from fpvs_studio.core.paths import filesystem_path
+
+    root = tmp_path / ("receiver-root-" * 8) / ("studio-root-" * 8)
+    filesystem_path(root).mkdir(parents=True)
+    original_is_dir = Path.is_dir
+    monkeypatch.setattr(
+        Path, "is_dir", lambda path: False if path == root else original_is_dir(path),
+    )
+    monkeypatch.setattr(
+        "fpvs_studio.gui.controller.QFileDialog.getExistingDirectory", lambda *args: str(root),
+    )
+    monkeypatch.setattr(
+        "fpvs_studio.gui.controller.QMessageBox.warning", lambda *args: None,
+    )
+    assert controller._choose_fpvs_root_dir(parent=None, initial_dir=tmp_path) == root

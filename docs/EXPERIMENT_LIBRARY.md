@@ -57,7 +57,9 @@ blank, unset or customized; it does not change ordinary local bundle exports or
 previously downloaded projects.
 
 Cancel or Escape during a download waits for the active read to stop; no import starts
-after cancellation. During Library project extraction, **Cancel setup** requests cleanup
+after cancellation. Permission and disk-full failures identify the required storage
+fix; archive validation errors retain their actionable message in the Library view.
+During Library project extraction, **Cancel setup** requests cleanup
 and keeps progress alive until the worker finishes. An import that has already committed
 is retained and reported as a successful local project even if Cancel arrives too late.
 Closing Studio cancels app-owned work and defers teardown until the worker threads exit.
@@ -66,6 +68,10 @@ Closing Studio cancels app-owned work and defers teardown until the worker threa
 and clears recognized Library cache files. Network failure retains retryable connection
 state; an already-revoked credential can still be removed. Previously installed projects
 remain editable and usable offline. Disconnecting cannot remove copies on other machines.
+A protected request rejected with HTTP 401/403 removes that device's local credential
+and returns the Library to its connection fields. Reconnecting creates a fresh token;
+it never reuses revoked access. A rejected invitation preserves its pending token for
+idempotent retry, and ordinary network failures preserve existing enrollment.
 
 ## Project version checks
 
@@ -130,9 +136,8 @@ after disconnect. These checks do not substitute for visible or second-machine t
 The private release `library-test-v1` contains **Library Demo - Words** and
 **Library Demo - Cognitive Load**. The user-provided reusable enrollment code is a
 temporary test configuration held only as a server secret hash. Each enrollment still
-receives its own revocable credential. A current source checkout of
-`codex/experiment-library` contains this GUI; previously published installers do not
-gain it from a catalog update. No new installer or application release was published.
+receives its own revocable credential. The Library is included in ordinary releases;
+install at least the Studio version shown for the selected bundle. MSMS AB 1.1.2 requires Studio 2.2.4.
 
 The current client contract uses schema version `1.0`:
 
@@ -166,6 +171,13 @@ timeout, a 30-second metadata deadline and a 30-minute transfer deadline. Reads 
 hashing are chunked and cooperatively cancelable; a blocked socket may take its timeout
 to return. Size and SHA-256 must match before import. Core still applies its independent
 archive/member/manifest/compile validation; network metadata cannot bypass it.
+Truncated transfers report the received and expected byte counts; checksum failures
+ask the user to refresh the catalog. Partial downloads are removed rather than imported.
+The service uses the Workers native fixed-length stream to advertise and enforce
+the payload size without a JavaScript loop over large downloads. The October 2 service
+fix verified the complete 502,495,471-byte Cognitive Decline bundle after repeated
+truncation near 100 MB, plus a fresh MSMS AB 1.1.2 download. Both imported and compiled
+offline at fresh short and long Windows roots on one PC.
 
 ## Ownership and local storage
 
@@ -401,8 +413,22 @@ publications.
 
 Windows archive tests may need a short explicit temporary root, for example
 `PYTEST_ADDOPTS=--basetemp=build/t1`, when the host lacks long-path support.
-This workaround is not proof that arbitrary long paths work. Backend tests cover
-credentials, enrollment retry, cache safety, bounds, corrupt transfers and publishing;
+This workaround is not proof that arbitrary long paths work. Bundle review, origin
+hashing, collision checks, destination creation and Library cache I/O use the core
+Windows namespace adapter. Regressions simulate Windows long-path policy being disabled
+and transfer through long paths with spaces and Unicode, including receipt writing,
+repeat imports and cache reuse; persisted study paths remain project-relative. Archive
+validation also rejects file and folder spellings that differ only by case, preventing
+Windows extraction from merging distinct source folders or replacing stimulus files.
+Post-import regressions exercise the actual GUI worker read method without constructing
+Qt objects, loading project/manifest JSON from long roots, retaining root/recent
+preferences, rediscovering the project after restart, preserving root templates and
+invalidating image-readiness scans after source changes. Display detection converts
+Qt's logical screen geometry to physical resolution; the actual-size preview converts
+physical stimulus dimensions back to logical drawing coordinates. Registered GUI
+tests cover 100/125/150/200% scaling and root-folder selection. Visible acceptance is
+still required before claiming a full GUI pass.
+Backend tests cover credentials, enrollment retry, cache safety, bounds, corrupt transfers and publishing;
 service tests run in their owning repository. Ordinary verification excludes Qt before
 import. The registered `tests/gui/test_library_dialog.py` covers the view and lifecycle
 with controlled clients/importers; it does not access the live service.

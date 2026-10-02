@@ -4,6 +4,96 @@ Status: Active
 
 Date: 2026-09-16
 
+## Bundle transfer audit (October 2, 2026)
+
+The user authorized investigation and fixes for MSMS AB and other bundles on another PC.
+Work uses current Studio 2.2.4 from remote master; the initial local 2.2.1 checkout was
+behind. The live latest MSMS release is 1.1.2 and correctly requires Studio 2.2.4.
+
+- Reproduced bundle read/collision/destination calls and download-cache creation failing
+  when long Windows paths cannot use the ordinary namespace. Reuse `core.paths` at
+  those I/O boundaries; keep project-relative records and ordinary returned project paths.
+- Reproduced rejected device credentials remaining connected and being reused during
+  enrollment. Protected-request 401/403 now removes rejected local access and the Library
+  exposes reconnect fields. Failed invitations keep pending tokens; network errors retain
+  working enrollment. No remote device is revoked by this repair.
+- Reproduced extraction permission/disk-full failures mislabeled as unreadable archives.
+  Bundle errors now identify storage recovery; the Library preserves archive errors.
+- Reproduced archive inventories accepting file/folder spellings that differ only by
+  case. Reject these during review and extraction, before Windows can merge or overwrite
+  separate authored assets. Export uses the same inventory check.
+- Reproduced the live 502,495,471-byte Cognitive Decline stream ending near 100 MB
+  twice. The private service now uses Workers native `FixedLengthStream`/`pipeTo`,
+  with exact length, cancellation and the existing thirty-minute transfer deadline.
+  A Miniflare regression rejects the original missing HTTP length and tests native
+  short/oversized bodies. All 21 service tests, syntax checks and dry deployment pass.
+  Deployed version: `0e43e56f-779b-4717-955a-2155c91c179e`; service source commit
+  `4bd5e86`. No catalog or bundle bytes changed. The desktop separates early EOF
+  (received/expected byte counts) from a SHA-256 mismatch and removes partial files.
+- Regression tests reproduce each failure before its fix. Registered GUI coverage checks
+  reconnection and actionable bundle-review failures without starting an import.
+- Live verification: newest MSMS AB 1.1.2, Masking 1.4.0, Cognitive Load 1.0.3,
+  Creatine 1.0.0 and Cognitive Decline 1.0.0 all passed verified imports and offline
+  compiles at fresh short and long roots. After deployment, Cognitive Decline downloaded
+  all 502,495,471 bytes with the catalog SHA-256 and compiled at a 310-character root.
+  A fresh MSMS AB transfer/import compiled all 72 session entries at a 305-character root.
+  A separate native cache probe passed private ACLs and a payload path over 260 characters.
+- Verification: final Library focused passed 230 tests (3 Windows symlink skips).
+  Final Project-I/O focused passed 280 tests (2 symlink skips); safe GUI focused
+  passed 7 non-Qt tests and docs focused passed 9. Final mypy passed all 212 source files.
+  Repo precommit passed Ruff, compilation, mypy (212 source files), repository audits
+  and 2,548 unit tests (11 symlink skips). Its one restricted-sandbox named-pipe failure
+  passed on an isolated native-access rerun; new case-collision/transfer diagnostics
+  tests are covered by the final focused routes. Restricted-sandbox import renames
+  also denied access intermittently; both complete focused routes passed with native
+  access. Service remote `main` was verified at `4bd5e86d08d123426857672a7eec5a4abf931121`.
+  Temporary downloads, imported copies and diagnostic scripts were removed; retained
+  credential-free JSON evidence is under `build/bundle-audit/`.
+- Visible Qt tests, a second physical PC and a newly packaged installer remain unrun.
+  Local changes require a subsequent application release to reach installed users.
+
+
+## Post-download opening and Setup audit (October 2, 2026)
+
+The user extended the audit to opening downloaded bundles and configuring Setup on
+another PC. Preserve authored schedules and production hardware checks.
+
+- Reproduced successful imports failing at ordinary-path project lookup/JSON reads
+  when Windows long-path policy is unavailable. The shared serializer and GUI worker
+  now adapt filesystem reads while returning ordinary project paths.
+- Reproduced root/recent preferences and restart discovery rejecting those paths;
+  root selection, saved preferences and discovery now share the core path adapter.
+  Root template normalization previously failed during folder setup. Adapt storage
+  without dropping saved custom profiles. Image-readiness directory signatures also
+  use the adapter so source changes continue to invalidate cached Setup scans.
+- Reproduced 4K displays at 150% scaling being detected as 2560x1440 rather than
+  3840x2160. Apply the screen device pixel ratio to detected experiment resolution
+  and the current-screen image-size calculation. The actual-size preview previously
+  drew physical pixels as Qt logical coordinates, enlarging its box at scaled settings;
+  convert those dimensions back to logical coordinates before painting.
+- Live MSMS AB 1.1.2 re-download passed SHA-256 and opened through the actual worker
+  read method at fresh 100- and 304-character roots. Both copies validate and compile
+  all 72 session entries at 60/120/240 Hz. Exact 10 Hz / 100 ms character timing correctly
+  rejects 59.94/75/144 Hz. The bundle requires Studio 2.2.4 and carries BioSemi COM3,
+  1920x1080 resolution, 52 cm screen width and 80 cm viewing distance. Receiving-PC
+  display calibration and recording hardware must be checked; AB Pilot Mode is the
+  existing hardware-free testing path. No timing or trigger-sending code changed.
+- Verification: GUI focused passed 17 safe tests, including 10 post-import regressions;
+  Project-I/O focused passed 280 tests with 2 Windows symlink skips. Native-access
+  repo precommit passed 2,561 tests with 11 symlink skips, Ruff, compilation, mypy
+  (212 source files), and repository/docs audits. That run preceded the final preview
+  painting, root-picker and source-signature changes; final GUI focused and static
+  checks cover those additions. Final full source mypy passed all 212 files; docs
+  focused passed 9 tests, and the 13-scope harness config passed. Qt-free metadata/math
+  probes exercise scaled pixels; the preview probe fails the original scaled drawing
+  and passes the fix at 100/125/150/200% scaling.
+  Registered GUI integration remains unrun. Credential-free live evidence is retained
+  in `build/bundle-audit/open-setup-results.json` and `preview-scaling-results.json`.
+- Visible Qt tests, an actual second PC, physical display/recording acceptance and an
+  updated packaged installer remain unrun. These desktop fixes are local and require
+  a subsequent application release; the previous service streaming fix is already live.
+
+
 ## Project version checks follow-up (September 22, 2026)
 
 The user requested an Update Project Version option and automatic notification when

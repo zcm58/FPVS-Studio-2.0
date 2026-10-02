@@ -40,6 +40,7 @@ from fpvs_studio.core.library_origin import LibraryProjectOrigin
 from fpvs_studio.core.models import ConditionTemplateProfile, ProjectFile
 from fpvs_studio.core.paths import (
     condition_template_library_path,
+    filesystem_path,
     is_reserved_root_entry_name,
     project_json_path,
 )
@@ -298,7 +299,7 @@ class StudioController(QObject):
             normalized = str(project_root)
             if normalized in seen:
                 continue
-            if not (project_root / "project.json").is_file():
+            if not filesystem_path(project_root / "project.json").is_file():
                 continue
             recent_paths.append(project_root)
             seen.add(normalized)
@@ -336,7 +337,7 @@ class StudioController(QObject):
         """Persist a project root as the most recent launch/open target."""
 
         normalized_root = Path(project_root).expanduser()
-        if not (normalized_root / "project.json").is_file():
+        if not filesystem_path(normalized_root / "project.json").is_file():
             return
         existing = [
             path
@@ -385,7 +386,7 @@ class StudioController(QObject):
             self._fpvs_root_dir = None
             return None
         root_dir = root_dir.resolve()
-        if root_dir.is_dir():
+        if filesystem_path(root_dir).is_dir():
             self._fpvs_root_dir = root_dir
             self._projects_parent_dir = root_dir
             return root_dir
@@ -399,7 +400,7 @@ class StudioController(QObject):
         """Persist the FPVS Studio root folder preference."""
 
         root_dir = Path(path).expanduser().resolve()
-        if not root_dir.is_dir():
+        if not filesystem_path(root_dir).is_dir():
             raise ValueError("FPVS Studio Root Folder must be an existing directory.")
         self._settings.setValue(_FPVS_ROOT_DIR_KEY, str(root_dir))
         self._settings.sync()
@@ -609,7 +610,7 @@ class StudioController(QObject):
         if not directory:
             return None
         selected_path = Path(directory).expanduser().resolve()
-        if selected_path.is_dir():
+        if filesystem_path(selected_path).is_dir():
             return selected_path
         QMessageBox.warning(
             parent,
@@ -1412,7 +1413,7 @@ class StudioController(QObject):
 
     def _discover_project_roots(self) -> list[Path]:
         root_dir = self._fpvs_root_dir
-        if root_dir is None or not root_dir.is_dir():
+        if root_dir is None or not filesystem_path(root_dir).is_dir():
             return []
         project_roots: list[Path] = []
         pending_dirs = [root_dir]
@@ -1420,11 +1421,13 @@ class StudioController(QObject):
             current_dir = pending_dirs.pop()
             if not self._is_within_configured_root(current_dir):
                 continue
-            if project_json_path(current_dir).is_file():
+            if filesystem_path(project_json_path(current_dir)).is_file():
                 project_roots.append(current_dir)
                 continue
             try:
-                children = list(current_dir.iterdir())
+                children = [
+                    current_dir / child.name for child in filesystem_path(current_dir).iterdir()
+                ]
             except OSError:
                 continue
             if current_dir == root_dir:
@@ -1433,7 +1436,7 @@ class StudioController(QObject):
                     for child in children
                     if not is_reserved_root_entry_name(child.name)
                 ]
-            pending_dirs.extend(child for child in children if child.is_dir())
+            pending_dirs.extend(child for child in children if filesystem_path(child).is_dir())
         return project_roots
 
     def _project_management_entry(self, project_root: Path) -> ProjectManagementEntry:

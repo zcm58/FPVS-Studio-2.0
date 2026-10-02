@@ -11,6 +11,7 @@ from pathlib import Path
 from threading import Event
 from typing import BinaryIO
 
+from fpvs_studio.core.paths import filesystem_path
 from fpvs_studio.library.errors import LibraryCancelled, LibraryError
 from fpvs_studio.library.models import LibraryItem
 
@@ -111,7 +112,7 @@ class DownloadCache:
     """A held lease protects the returned payload until the importer releases it."""
 
     def __init__(self, root: Path) -> None:
-        self.root = Path(os.path.abspath(root))
+        self.root = filesystem_path(Path(os.path.abspath(root)))
         self._lock: BinaryIO | None = None
 
     def acquire(self) -> None:

@@ -289,10 +289,17 @@ settings/RunSpec owners, and `engines/psychopy_engine.py` / `psychopy_stimuli.py
 stream GUI tests cover visible/hidden layouts, and engine tests verify no cross
 resources or draws with unchanged character timing and triggers.
 
-For long Windows image paths, start with `core/paths.py` (`filesystem_path`, containment
-resolution and relative serialization), then the image I/O entry point. Keep namespace
-prefixes out of saved JSON. Core, preprocessing and compiler/runtime focused routes
-include the Windows path regression files.
+For long Windows paths, start with `core/paths.py` (`filesystem_path`, containment
+resolution and relative serialization), then the affected I/O entry point. Bundle reads,
+origin hashing and import collisions use `core/project_bundle.py`; download cache I/O
+uses `library/cache.py`. Keep namespace prefixes out of saved JSON. Project-I/O and
+Library focused routes cover transfer with Windows long-path policy disabled. The
+GUI focused route includes safe post-import opening, root/recent preferences, restart
+discovery, template storage and image-readiness signature regressions in
+`test_bundle_open_setup.py`; core, preprocessing and compiler/runtime routes include
+the image path regressions. Imported display detection and image-size previews use
+physical pixels at the experiment boundary and logical pixels for Qt painting;
+registered GUI scaling coverage is in the config import and setup display modules.
 
 ## Unicorn Recorder Integration
 
