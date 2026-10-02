@@ -33,9 +33,12 @@ persistence. Local Qt execution remains opt-in; no live service is used.
 ## Desktop scope
 
 The native desktop implementation is available independently of Cloudflare.
-**File > Report a Bug...** is the only reporting entry point and opens Details and
-Diagnostics tabs. Welcome, root-folder setup, and error dialogs have no reporting
-button. Unexpected errors still enter the application logs for later review.
+**File > Report a Bug...** opens Details and Diagnostics tabs. Error popups also
+offer **Report this bug. Please!**, including errors before a project is open or
+while choosing the Studio Root. One click closes the error popup and opens the
+existing reporter with its full error details attached. A fresh report has its
+summary and description filled in; a quick note about reproduction is optional.
+Opening either entry point collects locally and never submits automatically.
 Repeated menu clicks raise the same dialog and preserve its existing draft.
 
 Required fields: summary and what happened. Reproduction steps, expected behavior,
@@ -44,9 +47,26 @@ Users can edit or exclude logs, copy the report, or save UTF-8 text. Excluding l
 also excludes the error excerpt; app version and OS remain included. Credentials
 for receipt access never appear in text exports or clipboard copies.
 
-There is no live reporting backend configured by default. Submit is disabled and
-the dialog explains that online reporting is not connected. No network requests
-occur on dialog opening, collection, editing, draft saving, or exporting.
+The approved reporting service is connected by default. Submit Report keeps the
+existing browser verification, reviewed payload, and receipt recovery workflow.
+An explicitly disabled connection leaves Copy and Save available. No network
+requests occur on dialog opening, collection, editing, draft saving, or exporting.
+
+Common permission, missing-file, file-in-use, disk-space, archive, connection,
+dependency and compatibility errors have plain-language explanations and next
+steps. Unknown errors describe the failed action without guessing its cause.
+**Show Details...** retains the original message and chained traceback. Studio's
+application-owned `gui/error_dialogs.py` decorates critical message boxes and
+simple warning errors, including static Qt message boxes. Warning confirmations
+and information messages retain their existing decisions. Native error popups
+size to their wrapped text with a minimum width of 580 logical pixels; details
+expand separately. The report button is never the default or Escape action.
+
+`support/error_explanations.py` owns GUI-neutral explanation rules. New error
+context is redacted and bounded through the existing support helpers. Existing
+report text is preserved; **Use newly reported error** explicitly replaces its
+diagnostics and fills only blank description fields. Verification, sending, and
+receipt-locked reports cannot replace their payload with a later error.
 
 ## Local ownership and retention
 
@@ -208,8 +228,11 @@ Manual visible acceptance in both themes and at 125%/150% Windows scaling:
 2. Write a detailed report, edit the diagnostic preview, exclude logs, and copy/save
    text. Check that excluded logs and receipt tokens are absent. Cancel the picker.
 3. Close and reopen, then restart normally to confirm recovery. Discard the draft.
-4. Verify Welcome, first-run root setup, and error dialogs have no reporting button.
-   Open the report from File twice and verify preservation of the existing draft.
+4. Trigger a file-access error from Welcome/first-run setup and a project window.
+   Check its explanation, expanded details, and Report this bug. Please! button.
+   Confirm OK/Enter/Escape never reports, confirmation choices are unchanged, and
+   the report is interactive above modal setup. Submit a fresh error report with
+   no reproduction note using a fake service; verify draft/receipt preservation.
 5. With a test service only, test browser failure/expiry, cancellation, quota failure,
    lost upload response, pending/submitted receipts, and quit during a draft write.
 6. With the variable explicitly empty, Submit remains disabled and no browser/network opens.

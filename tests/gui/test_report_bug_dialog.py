@@ -211,6 +211,34 @@ def test_repeat_open_preserves_draft_and_new_error_requires_action(reporter):
     assert dialog.diagnostics_edit.toPlainText() == "New traceback"
 
 
+def test_error_prefill_is_submittable_without_reproduction_note(qtbot):
+    dialog = ReportBugDialog(Draft(), online=True)
+    qtbot.addWidget(dialog)
+    dialog.offer_error("Import Error", "Full traceback", "Studio couldn't import this experiment.")
+    dialog.use_pending_error()
+    assert dialog.steps_edit.toPlainText() == ""
+    assert dialog.snapshot().report.problems() == {}
+    assert dialog.tabs.currentIndex() == 0
+    assert dialog.happened_edit.toPlainText() == "Studio couldn't import this experiment."
+    with qtbot.waitSignal(dialog.action_requested) as signal:
+        dialog.submit_button.click()
+    assert signal.args == ["submit"]
+
+
+def test_locked_report_never_replaces_payload_with_new_error(qtbot):
+    draft = Draft(
+        report=Report(title="Saved report", happened="Original", diagnostics="Old logs"),
+        delivery="uncertain",
+    )
+    dialog = ReportBugDialog(draft, online=True)
+    qtbot.addWidget(dialog)
+    original = dialog.snapshot().report.payload()
+    dialog.offer_error("Another Error", "Another traceback", "Another message")
+    dialog.use_pending_error()
+    assert dialog.snapshot().report.payload() == original
+    assert dialog.snapshot().receipt_token == draft.receipt_token
+
+
 def test_close_during_verification_reopens_editable(reporter):
     reporter._intent = Intent(intent_id="i" * 20, browser_token="b" * 43, desktop_token="d" * 43)
     reporter.dialog.set_state("verifying", "Complete verification")

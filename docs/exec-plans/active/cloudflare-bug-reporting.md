@@ -4,6 +4,16 @@ Status: Active
 
 Date: 2026-09-12
 
+## Error reporting follow-up (October 2, 2026)
+
+The user requested common-error explanations and a Report this bug. Please!
+button on error popups, including fresh report prefilling and optional reproduction
+notes. This supersedes the historical File-only preference below. The existing
+approved service, explicit submission/browser verification, redaction, payload
+limits, worker lifecycle, and receipt recovery remain canonical. Implementation
+and Studio 2.2.5 publication are tracked in
+[the active release plan](error-reporting-and-release-2.2.5.md).
+
 ## Service integration (2026-09-14)
 
 The user subsequently authorized Cloudflare provisioning and direct email

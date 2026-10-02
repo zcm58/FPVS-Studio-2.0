@@ -36,6 +36,7 @@ from fpvs_studio.gui.design_system import (
     elide_middle,
 )
 from fpvs_studio.gui.document import ProjectDocument
+from fpvs_studio.gui.error_dialogs import decorate_error_dialog
 
 _CYCLE_HELP_TEXT = "Cycle = one turn of base presentations plus one oddball presentation."
 _FIXATION_FEASIBILITY_TOOLTIP_TEXT = (
@@ -75,6 +76,7 @@ def _show_error_dialog(parent: QWidget | None, title: str, error: Exception) -> 
     dialog.setDetailedText(
         "".join(traceback.format_exception(type(error), error, error.__traceback__))
     )
+    decorate_error_dialog(dialog, error)
     if not isinstance(error, (ValueError, FileNotFoundError)):
         logging.getLogger(__name__).error("%s", title,
                                          exc_info=(type(error), error, error.__traceback__))

@@ -13,6 +13,7 @@ from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication, QStyle
 
 from fpvs_studio.gui.controller import StudioController
+from fpvs_studio.gui.error_dialogs import install_error_reporting
 from fpvs_studio.gui.update_lifecycle import update_lifecycle
 
 _APP_ICON_PATH = Path(__file__).resolve().parent.parent / "assets" / "fpvs-studio.ico"
@@ -42,6 +43,7 @@ def create_application(argv: list[str] | None = None) -> QApplication:
     app.setApplicationName("FPVS Studio")
     app.setOrganizationName("FPVS Studio")
     _ensure_application_icon(app)
+    install_error_reporting(app)
     return app
 
 

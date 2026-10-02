@@ -40,6 +40,8 @@ lazily only inside the engine package.
   submission defaults to the verified production endpoint and requires explicit user action.
   The independent Cloudflare backend is in private `zcm58/FPVS-Studio-Feedback`.
   See `docs/BUG_REPORTING.md` for the wire contract and activation.
+  GUI-neutral common-error explanations live here; `gui/error_dialogs.py` adds
+  plain-language guidance and an explicit error-report action to Studio popups.
 - `src/fpvs_studio/assets/`: packaged release-facing static assets, including the
   licensed Open Sans face used by authored modular tasks.
 - `src/fpvs_studio/gui/`: PySide6 windows, dialogs, controllers, document binding,

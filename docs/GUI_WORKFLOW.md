@@ -4,14 +4,15 @@
 
 File > Request a Feature opens a separate text-only draft using the same reporting
 workflow and window sizes, with a 4,000-character counter and copy/save actions.
-It collects no logs. Both submission actions remain disabled until service setup.
+It collects no logs. Both reporting actions use the approved service by default.
 
 File > Report a Bug opens a native report editor at 860x760 (minimum 760x680).
-File is the only reporting entry point; Welcome, root-folder setup, and error
-dialogs have no reporting button. Details and Diagnostics support editing/excluding logs,
+Error popups also offer Report this bug. Please!, with plain-language explanations
+and original technical details under Show Details. The button prefills a fresh
+report; reproduction notes are optional. Details and Diagnostics support editing/excluding logs,
 copying, and saving a text report without a project. Drafts are stored locally
-for seven days. Online submission is explicitly unavailable until the service
-is configured; no Cloudflare/GitHub infrastructure is created by the desktop app.
+for seven days. Reports are sent only after explicit submission and the existing
+browser verification; no Cloudflare/GitHub infrastructure is created by the desktop app.
 See [Bug reporting](BUG_REPORTING.md) for configuration, retention, acceptance,
 and the HTTP contract. Qt jobs remain app-owned and never block the GUI thread.
 

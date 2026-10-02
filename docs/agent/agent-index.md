@@ -134,9 +134,12 @@ reviewed payload and OS-local drafts; the GUI owns interactions and delegates
 work through the existing app-owned task lifecycle. Online reporting requires explicit submission and defaults to the approved endpoint
 of the separate Cloudflare service in private `zcm58/FPVS-Studio-Feedback`;
 never enable it as part of a test. That repository owns deployment and operations.
+For error popup explanations/reporting, also start with `support/error_explanations.py`
+and `gui/error_dialogs.py`; registered coverage is `tests/gui/test_error_dialogs.py`.
 Run the GUI scope, `tests/unit/test_support_reports.py` and
 `tests/unit/test_support_client.py`, then repo precommit for startup/lifecycle
 changes. Registered Qt coverage is `tests/gui/test_report_bug_dialog.py`.
+Common-error rule coverage is `tests/unit/test_error_explanations.py`.
 Visible acceptance and later service setup are in `docs/BUG_REPORTING.md`.
 
 ## Settings Test Mode

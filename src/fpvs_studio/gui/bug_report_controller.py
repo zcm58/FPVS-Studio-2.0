@@ -54,7 +54,7 @@ class BugReportController(QObject):
         self._saving = False
         self._save_failed = False
         self._loaded = False
-        self._error_context: tuple[str, str] | None = None
+        self._error_context: tuple[str, str, str] | None = None
         self._lifecycle = update_lifecycle(app)
         self._lifecycle.shutdown_started.connect(self._shutdown)
         self._autosave = QTimer(self)
@@ -76,7 +76,7 @@ class BugReportController(QObject):
     def _empty_draft(self) -> Draft:
         return Draft(report=Report(kind=self.kind), include_logs=self.kind == "bug")
 
-    def show(self, title: str = "", details: str = "") -> None:
+    def show(self, title: str = "", details: str = "", message: str = "") -> None:
         if self._lifecycle.is_shutting_down:
             return
         self._closing = False
@@ -98,7 +98,9 @@ class BugReportController(QObject):
         dialog.raise_()
         dialog.activateWindow()
         if self.kind == "bug" and (title or details):
-            self._error_context = (redact(title), bounded_text(redact(details)))
+            self._error_context = (
+                redact(title), bounded_text(redact(details)), bounded_text(redact(message), 4096),
+            )
             if self._loaded:
                 dialog.offer_error(*self._error_context)
         if not self._loaded and self._job is None:
@@ -119,11 +121,11 @@ class BugReportController(QObject):
         self._loaded = True
         draft, fresh = cast(tuple[Draft, bool], value)
         dialog.set_draft(draft)
+        self._show_delivery(draft)
         if self._error_context is not None:
             dialog.offer_error(*self._error_context)
             if fresh:
                 dialog.use_pending_error()
-        self._show_delivery(draft)
 
     def _dialog(self) -> ReportBugDialog:
         assert self.dialog is not None
@@ -420,8 +422,8 @@ def report_controller(kind: ReportKind = "bug") -> BugReportController:
     return controller if controller is not None else BugReportController(app, kind=kind)
 
 
-def show_bug_report(title: str = "", details: str = "") -> None:
-    report_controller().show(title, details)
+def show_bug_report(title: str = "", details: str = "", message: str = "") -> None:
+    report_controller().show(title, details, message)
 
 
 def show_feature_request() -> None:

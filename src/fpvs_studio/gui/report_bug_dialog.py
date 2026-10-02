@@ -54,6 +54,7 @@ class ReportBugDialog(QDialog):
         self._state = "editing"
         self._pending_error = ""
         self._pending_title = ""
+        self._pending_message = ""
         layout = QVBoxLayout(self)
         layout.setContentsMargins(22, 18, 22, 18)
         layout.setSpacing(10)
@@ -79,7 +80,7 @@ class ReportBugDialog(QDialog):
         )
         self.steps_edit = QPlainTextEdit(details)
         self.steps_edit.setPlaceholderText(
-            "List the steps, or choose the unknown-cause option below."
+            "Optional: add a quick note about what you did before the error appeared."
         )
         self.expected_edit = QPlainTextEdit(details)
         self.expected_edit.setPlaceholderText("What should have happened? (optional)")
@@ -101,7 +102,7 @@ class ReportBugDialog(QDialog):
         for caption, editor in (
             ("Summary *", self.title_edit),
             ("What happened? *", self.happened_edit),
-            ("Steps to reproduce", self.steps_edit),
+            ("Steps to reproduce (optional)", self.steps_edit),
             ("Expected behavior", self.expected_edit),
             ("Reply email", self.email_edit),
         ):
@@ -327,17 +328,23 @@ class ReportBugDialog(QDialog):
                 self.online and not self.snapshot().report.problems()
             )
 
-    def offer_error(self, title: str, details: str) -> None:
+    def offer_error(self, title: str, details: str, message: str = "") -> None:
         self._pending_title, self._pending_error = title, details
+        self._pending_message = message or f"FPVS Studio showed this error: {title}"
         self.context_button.show()
 
     def use_pending_error(self) -> None:
+        if self._draft.locked or self._state in ("loading", "verifying", "sending", "checking"):
+            return
         self.diagnostics_edit.setPlainText(self._pending_error)
         if not self.title_edit.text():
             self.title_edit.setText(self._pending_title[:160])
+        if not self.happened_edit.toPlainText().strip():
+            self.happened_edit.setPlainText(self._pending_message)
         self.include_logs.setChecked(True)
         self.context_button.hide()
-        self.tabs.setCurrentIndex(1)
+        self.tabs.setCurrentIndex(0)
+        self.steps_edit.setFocus()
 
     def _changed(self) -> None:
         if self._updating:
