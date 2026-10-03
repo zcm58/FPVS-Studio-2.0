@@ -49,8 +49,8 @@ behind. The live latest MSMS release is 1.1.2 and correctly requires Studio 2.2.
   access. Service remote `main` was verified at `4bd5e86d08d123426857672a7eec5a4abf931121`.
   Temporary downloads, imported copies and diagnostic scripts were removed; retained
   credential-free JSON evidence is under `build/bundle-audit/`.
-- Visible Qt tests, a second physical PC and a newly packaged installer remain unrun.
-  Local changes require a subsequent application release to reach installed users.
+- Visible Qt tests and a second physical PC remain unrun. These desktop fixes
+  shipped in Studio 2.2.5; see its completed release record and check waiver.
 
 
 ## Post-download opening and Setup audit (October 2, 2026)
@@ -89,9 +89,10 @@ another PC. Preserve authored schedules and production hardware checks.
   and passes the fix at 100/125/150/200% scaling.
   Registered GUI integration remains unrun. Credential-free live evidence is retained
   in `build/bundle-audit/open-setup-results.json` and `preview-scaling-results.json`.
-- Visible Qt tests, an actual second PC, physical display/recording acceptance and an
-  updated packaged installer remain unrun. These desktop fixes are local and require
-  a subsequent application release; the previous service streaming fix is already live.
+- Visible Qt tests, an actual second PC, physical display/recording acceptance and
+  installed-upgrade testing remain unrun. These desktop fixes shipped in Studio
+  2.2.5 with additional release checks explicitly waived; see the completed release
+  record. The previous service streaming fix is already live.
 
 
 ## Project version checks follow-up (September 22, 2026)

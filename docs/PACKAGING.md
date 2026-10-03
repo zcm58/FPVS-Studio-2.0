@@ -60,8 +60,9 @@ Write release notes as bullet points, with one or two sentences per major change
 Keep verification summaries and installer instructions out of the release notes;
 retain audit evidence and check boundaries in the release record instead.
 
-The [v2.2.4 release record](exec-plans/completed/release-2.2.4.md) records the
-published installer, direct 2.2.3 patch, payload audits and verification boundaries.
+The [v2.2.5 release record](exec-plans/completed/release-2.2.5.md) records the
+published installer, direct 2.2.4 patch, exact release note and explicitly waived
+release checks.
 
 Use simple semantic versioning:
 
