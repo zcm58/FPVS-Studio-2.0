@@ -4,6 +4,35 @@ Status: Active
 
 Date: 2026-10-05
 
+## Portal navigation and website theme
+
+The user requested a top header, optional account controls that change after
+sign-in and clearer stimulus-set wording. After reviewing Studio's colour palette,
+they chose to keep the original warm tan and muted green website theme.
+The private service owns these website changes; no desktop GUI or personal
+website changes are needed. Lab-code browsing stays independent of email sign-in.
+
+- [x] Clear top navigation and exact-release stimulus label help.
+- [x] Server-confirmed account/owner controls and session lifecycle regression checks.
+- [x] Synthetic desktop/mobile browser acceptance, service/docs gates and deployment.
+
+All 145 private-service tests pass, including 11 new session/navigation checks and
+native workerd/D1 fixtures. Synthetic browser acceptance covers lab-code-only,
+researcher and owner states, sign-out without lab disconnection, browser-history
+restore, keyboard navigation and probe error/retry. Catalog/detail/account/editor
+content fits 1280px and 360px without body overflow. The optional stimulus-set
+label names existing images/words, with an example and associated help; empty
+labels are omitted. The final colours retain the original warm tan/muted green
+theme and a dark green top header. Ignored `build/library-portal-*.png` retain
+synthetic and live public screenshots.
+
+Syntax/diff checks, 78.24 KiB dry packaging and the 10 documentation checks pass.
+Worker version `d4ce1a9a-91fb-478c-9b2b-02bb43362ffa` is deployed. Read-only
+live public/security checks pass; five changed code/style/logo assets match source
+and the browser shows the final lab-code homepage. No database migration, real
+email, live account/code change or paid feature was needed. The pre-existing
+protected real-account and second-machine native acceptance checks remain separate.
+
 ## Experiment website follow-up
 
 The user authorized a clean lab-code-protected experiment website, with citations

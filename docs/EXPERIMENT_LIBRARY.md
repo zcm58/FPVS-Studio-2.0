@@ -89,6 +89,11 @@ discovery; each experiment has separate reference pages for its exact published
 versions. View permission allows browsing; download permission also enables bundle
 downloads. Researchers need no email or GitHub account for this route.
 
+The top header keeps Library visible, with optional email sign-in
+under Account. Signed-in users see account/sign-out controls; the verified owner
+also sees the owner workspace. Email sign-out leaves the lab-code browser
+connection independent.
+
 Cloudflare checks the current lab permission and proxies the allowlisted private
 GitHub asset. A direct private repository link would require GitHub access. After
 downloading a `.fpvsbundle`, drag it onto Studio's **Welcome screen** and follow the
@@ -109,6 +114,9 @@ recorded download counts are keyed to experiment ID, version and bundle SHA-256;
 new versions do not inherit papers from previous releases. Publishing bundles
 remains the existing Studio maintainer workflow. The website has separate browser
 APIs for enriched metadata; the strict native `/v1` catalog stays unchanged.
+The optional stimulus-set label names images or words already included in one
+release (for example, "Face photographs, Set A"); it does not select or upload
+files. Empty labels are omitted from reader pages.
 
 **Downloads started** counts authorized download starts through either Studio or the
 website, after valid upstream asset retrieval and the final access check. Repeated
