@@ -80,6 +80,46 @@ and returns the Library to its connection fields. Reconnecting creates a fresh t
 it never reuses revoked access. A rejected invitation preserves its pending token for
 idempotent retry, and ordinary network failures preserve existing enrollment.
 
+## Website browsing and downloads
+
+The same Library is available at [fpvs.zack-murphy.com](https://fpvs.zack-murphy.com).
+Enter the lab code supplied by your PI or lab manager to browse descriptions,
+stimulus-set labels and publication links. Search and category filters support
+discovery; each experiment has separate reference pages for its exact published
+versions. View permission allows browsing; download permission also enables bundle
+downloads. Researchers need no email or GitHub account for this route.
+
+Cloudflare checks the current lab permission and proxies the allowlisted private
+GitHub asset. A direct private repository link would require GitHub access. After
+downloading a `.fpvsbundle`, drag it onto Studio's **Welcome screen** and follow the
+ordinary bundle review/setup flow. The website supports discovery, citations and
+delivery; Studio owns project setup, update review and execution. Browser downloads
+are ordinary imports and do not create the native Library origin receipt. To enable
+project-version checks for that local copy, link it explicitly in the version dialog.
+
+The browser connection lasts seven days and has its own revocable credential,
+separate from Studio enrollment and email sign-in. The owner roster identifies it
+as **Website browser**. Disconnect revokes only that browser credential; replacing
+or revoking its lab code disables all credentials linked to that code. Website
+experiment content remains protected even though its page shell is public.
+
+The owner manages website descriptions, stimulus-set labels and publication links
+at `/admin`, selecting the exact experiment and version before saving. Claims and
+recorded download counts are keyed to experiment ID, version and bundle SHA-256;
+new versions do not inherit papers from previous releases. Publishing bundles
+remains the existing Studio maintainer workflow. The website has separate browser
+APIs for enriched metadata; the strict native `/v1` catalog stays unchanged.
+
+**Downloads started** counts authorized download starts through either Studio or the
+website, after valid upstream asset retrieval and the final access check. Repeated
+requests count. Denied, revoked and unavailable requests do not; a later transfer
+failure or cancellation may still count. Tracking begins with the website migration
+and does not reconstruct historical usage. Per-version totals refer to that artifact,
+while experiment/collection totals sum currently available versions. Counts do not
+measure completed transfers, unique researchers or successful local save/import.
+Current deployment acceptance is recorded in the
+[account portal plan](exec-plans/active/fpvs-account-portal.md).
+
 ## Project version checks
 
 Opening a linked project checks the Library once in an app-owned worker. There is no
@@ -122,6 +162,7 @@ It contains no credentials and is excluded from ordinary bundles and clean publi
 Moving the entire local project retains it; exporting/importing a general bundle does not.
 
 Earlier downloads and manually created projects have no trustworthy Library identity.
+This also applies to ordinary imports of bundles downloaded through the website.
 Use the version dialog to link one explicitly; enter its installed version only when
 known, otherwise leave it unknown. Studio never guesses from a title or folder name.
 **Change library link...** can correct an association. The project-local checkbox
@@ -139,8 +180,10 @@ passive notices and explicit import handoff. The dialog minimum/default is `760x
 
 ### Account portal
 
-The account portal implementation in private `zcm58/FPVS-Studio-Library` is deployed
-at `https://fpvs.zack-murphy.com`, with an owner-only `/admin` view and management API.
+The private `zcm58/FPVS-Studio-Library` repository owns the website and account portal
+at `https://fpvs.zack-murphy.com`, with an owner-only `/admin` view and
+management API. Registration/sign-in remains available at `/sign-in`; lab-code
+browsing uses `/` or `/library` and does not require an email session.
 The initial configured owner is `zackmurphy25@protonmail.com`. Changing that identity
 requires updating the backend owner setting; it
 does not move user accounts or experiment files. Current deployment/acceptance status
@@ -236,6 +279,8 @@ Each catalog item contains `item_id`, `kind: experiment`, `version`, `title`,
 Unknown metadata fields, unsupported schemas, duplicate identities, invalid filenames,
 unsupported categories and malformed versions are rejected. Phase 1 requests only
 experiments; service-side filtering preserves compatibility when Phase 2 adds conditions.
+Website descriptions, publications and download totals are returned only by the
+separate browser API and never added to this native contract.
 
 Before enrollment, Studio generates a random device token and saves a pending credential
 in the OS store. A lost response retries the same device identity instead of consuming a
@@ -256,7 +301,9 @@ archive/member/manifest/compile validation; network metadata cannot bypass it.
 Truncated transfers report the received and expected byte counts; checksum failures
 ask the user to refresh the catalog. Partial downloads are removed rather than imported.
 The service uses the Workers native fixed-length stream to advertise and enforce
-the payload size without a JavaScript loop over large downloads. The October 2 service
+the payload size without a JavaScript loop over large downloads. Download-start
+counting occurs before the response, without inspecting payload chunks.
+The October 2 service
 fix verified the complete 502,495,471-byte Cognitive Decline bundle after repeated
 truncation near 100 MB, plus a fresh MSMS AB 1.1.2 download. Both imported and compiled
 offline at fresh short and long Windows roots on one PC.

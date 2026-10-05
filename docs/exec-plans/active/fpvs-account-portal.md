@@ -4,6 +4,55 @@ Status: Active
 
 Date: 2026-10-05
 
+## Experiment website follow-up
+
+The user authorized a clean lab-code-protected experiment website, with citations
+for the exact experiment stimulus set/version and recorded download totals, managed
+from the owner portal. The website supports discovery, version reference pages and
+bundle downloads; Studio handles setup, version updates and running experiments.
+Its Welcome screen already accepts dropped `.fpvsbundle` files. Private GitHub
+assets stay behind Cloudflare download authorization, so researchers need lab
+codes rather than repository membership. The personal website stays independent.
+
+Separate browser APIs preserve the strict native catalog. Canonical device auth
+also checks browser credentials, while owner-only metadata edits retain session
+identity, origin/CSRF and audit protection. Additive website metadata and authorized
+download-start counts bind to item ID, version and bundle SHA-256. Counts start at
+feature launch and include repeat starts. Denied/unavailable requests do not count;
+transfers failed or cancelled after starting may count. Totals do not represent
+completion, unique users or confirmed local imports. New versions do not
+inherit old publication claims. Existing verified Studio publishing owns package
+uploads; the service GitHub App remains read-only.
+
+- [x] Session, permission/revocation, exact-version metadata and migration tests.
+- [x] Download-start counting and failure/cancellation regression checks.
+- [x] Catalog/detail/admin editor browser checks at 1280px and 360px.
+- [x] Service tests/syntax/dry build, docs and reviewed live deployment.
+
+All 134 private-service tests pass, including actual workerd/D1 checks, 500-item
+metadata joins, migration preservation and atomic per-artifact counts. Syntax,
+diff checks and 77.63 KiB dry packaging pass; Studio's documentation focused gate
+passes 10 tests. Synthetic browser acceptance covers lab connection, search,
+category filters, exact-version selection/download, view-only access, browser
+disconnect and owner metadata/publication saves with version isolation. At 1280px
+and 360px, catalog/detail/editor layouts have no body overflow. Ignored screenshots
+under `build/experiment-library-*.png` retain synthetic and public live evidence.
+
+A 512 MiB actual local workerd profile verified native streaming without full
+buffering. Completion tracking through JavaScript on every chunk regressed that
+path, so final **Downloads started** tracking uses one scheduled D1 write after
+upstream validation and final authorization. It preserves the original native
+transport and makes no completion claim.
+
+The existing remote D1 database has a private pre-website local backup and additive
+`0004_library_content.sql` applied. Worker version
+`86cca457-4c5a-4de8-9915-4d35ca2b21ef` is deployed. Live public-page/security
+checks pass on the custom and retained native hostnames; all changed code/style
+assets match source hashes, and the browser confirms the lab-code landing page.
+Real protected catalog/download/editor checks and second-machine native acceptance
+remain separate. No live accounts/codes were changed, real emails sent, or paid
+features enabled. This plan remains active for the pre-existing live acceptance gap.
+
 ## Owner-chosen lab codes
 
 The owner may type a custom code when creating or replacing a lab code, or leave
