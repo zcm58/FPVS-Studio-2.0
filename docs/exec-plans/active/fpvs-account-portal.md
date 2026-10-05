@@ -4,6 +4,35 @@ Status: Active
 
 Date: 2026-10-05
 
+## Owner-chosen lab codes
+
+The owner may type a custom code when creating or replacing a lab code, or leave
+the optional field blank for a secure generated code. Custom codes are case
+sensitive, 12–128 printable ASCII characters, and cannot have surrounding spaces.
+The server stores only hashes and rejects reuse of historical lab/invitation
+codes or the configured legacy code. Rejected replacements must preserve current
+access; successful replacements retain the existing explicit confirmation and
+atomically revoke previous code/device credentials. No desktop enrollment contract
+or database migration changes are needed.
+
+- [x] Synthetic custom-code enrollment, validation, collision and race regressions.
+- [x] Owner form browser acceptance at 1280px and 360px.
+- [x] Service tests/syntax/dry build, documentation checks and reviewed deployment.
+
+All 97 private-service tests pass, including real workerd/D1 same-code races
+and collision rollback. Syntax/diff checks and 61.92 KiB dry Worker packaging
+pass. Browser acceptance covers typed creation, Show/Hide, invalid whitespace,
+duplicate replacement preserving two PC connections, and successful replacement
+revoking both before enrolling with the new download code. Reload/navigation
+clears plaintext. Both 1280px and 360px layouts fit without body overflow; ignored
+`build/custom-lab-code-desktop.png` and `build/custom-lab-code-mobile.png` retain
+synthetic evidence. Studio documentation focused passes all 10 checks.
+
+Worker version `4fef26c6-b7f6-42c3-b3ca-6ac31e162909` is deployed. Read-only live
+checks pass on both retained hostnames; changed assets match local source hashes.
+No migration, real account/code mutation, real email, paid service or desktop
+contract change was needed.
+
 ## Reusable lab-code follow-up
 
 The user now prefers PI-distributed lab access over individual researcher email

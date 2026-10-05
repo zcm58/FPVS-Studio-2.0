@@ -147,6 +147,11 @@ does not move user accounts or experiment files. Current deployment/acceptance s
 is recorded in the [account portal plan](exec-plans/active/fpvs-account-portal.md).
 
 The owner can create one reusable code per lab with view or download permission.
+Enter a chosen code or leave the optional field blank for a secure generated code.
+Custom codes are case sensitive and accept 12–128 printable ASCII characters,
+without spaces at the start or end. The same field chooses a new code when
+replacing an existing one; previously used codes cannot be reused. Invalid or
+unavailable replacements leave current access intact.
 The PI/lab manager distributes it to that lab's PCs; each receives its own protected
 device credential without researcher registration or email. Plaintext is shown only
 at creation. Replace a lost code or revoke it in the dashboard: both permanently
