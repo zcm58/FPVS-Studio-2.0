@@ -42,9 +42,10 @@ result submission or experiment publication.
   revoked and long-value states; real-browser synthetic acceptance.
 - [x] Existing Library transport regression suite, new SQL/security tests, syntax,
   binding types and dry Worker build.
-- [ ] Domain and email configuration, non-destructive remote schema migration,
+- [x] Domain and email configuration, non-destructive remote schema migration,
   authorized deployment and live sign-in/read-only acceptance.
-- [ ] Canonical integration documents and exact implementation/deployment state.
+- [x] Canonical integration documents and exact implementation/deployment state.
+- [ ] Live second-machine enrollment, permitted download and revocation acceptance.
 
 Paid subscriptions, chargeable overages and Cloudflare Access billing activation
 are excluded. Tests never send email, query
@@ -66,6 +67,12 @@ configuration. The existing D1 database has a private local pre-migration backup
 and the additive account migration is applied. The tested Worker is deployed and
 `fpvs.zack-murphy.com` is attached. Live HTTPS checks verify the public-page 200 and
 anonymous account/admin/Library denial; the old native hostname remains active.
-Sending-key setup and real owner sign-in acceptance remain outstanding.
-No paid subscription or overage consent
-has been activated.
+Cloudflare's secret inventory confirms `RESEND_API_KEY` is stored as an encrypted
+Worker secret. After the owner registration/sign-in instructions, the user reported
+"Everything appears to work now" on 2026-10-05. This is user-reported live portal
+acceptance; owner email delivery and sign-in are no longer setup blockers.
+No paid subscription or overage consent has been activated.
+
+The plan remains active for live enrollment/download/revocation on another machine.
+Those flows pass synthetic coverage, but the user's portal confirmation does not
+establish that separate native acceptance check.

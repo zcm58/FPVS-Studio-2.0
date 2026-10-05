@@ -132,8 +132,8 @@ passive notices and explicit import handoff. The dialog minimum/default is `760x
 
 ### Account portal
 
-The account portal implementation in private `zcm58/FPVS-Studio-Library` targets
-`https://fpvs.zack-murphy.com`, with an owner-only `/admin` view and management API.
+The account portal implementation in private `zcm58/FPVS-Studio-Library` is deployed
+at `https://fpvs.zack-murphy.com`, with an owner-only `/admin` view and management API.
 The initial configured owner is `zackmurphy25@protonmail.com`. Changing that identity
 requires updating the backend owner setting; it
 does not move user accounts or experiment files. Current deployment/acceptance status
