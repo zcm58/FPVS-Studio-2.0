@@ -130,6 +130,40 @@ passive notices and explicit import handoff. The dialog minimum/default is `760x
 
 ## Service and access boundary
 
+### Account portal
+
+The account portal implementation in private `zcm58/FPVS-Studio-Library` targets
+`https://fpvs.zack-murphy.com`, with an owner-only `/admin` view and management API.
+The initial configured owner is `zackmurphy25@protonmail.com`. Changing that identity
+requires updating the backend owner setting; it
+does not move user accounts or experiment files. Current deployment/acceptance status
+is recorded in the [account portal plan](exec-plans/active/fpvs-account-portal.md).
+
+Researchers verify their email, supply name/institution/requested lab and await
+manual review. Email verification never grants Library access. The owner creates/assigns labs, approves view or download grants and manages
+linked computers. An approved user or the owner can issue a short-lived computer
+invitation; the server stores only its hash. Studio's existing enrollment request
+redeems it into the normal native credential. A grant is checked on every protected
+request; revoking it disables its invitations and enrolled computers. View grants
+allow catalog browsing; download grants also allow experiment bundle transfer.
+Each assigned lab accesses the existing shared catalog in this first version; lab
+assignment does not yet select separate experiment inventories.
+
+The current service hostname remains available for released Studio clients and saved
+project-origin receipts. Existing reusable-code enrollments have no verified human
+identity or lab grant; the owner dashboard lists them explicitly as unlinked devices
+and can revoke them individually. They are not silently assigned to new accounts.
+Downloaded experiments remain independent local copies. Library approval does not
+opt a project into data sharing or authorize uploads to the separate Results service.
+
+The private repository owns web source, D1 migrations, verification and deployment;
+the personal site's main address remains served by its existing repository. Email
+delivery and the configured owner email are service prerequisites, not desktop settings.
+The portal uses Cloudflare Workers/D1 and Resend Free only. Sending stops at the
+application's UTC limits of 100 emails daily and 3,000 monthly; paid overages and
+automatic account approvals are excluded. Administrator API requests require a
+verified session for the configured owner, with CSRF protection for mutations.
+
 Private GitHub Releases in
 [`zcm58/FPVS-Studio-Library`](https://github.com/zcm58/FPVS-Studio-Library)
 hold versioned bundles. That repository owns the Cloudflare service, invitation/device

@@ -29,6 +29,9 @@ lazily only inside the engine package.
   Private content and the independent Cloudflare service live in
   `zcm58/FPVS-Studio-Library`; that service checks live release-asset availability
   for each browse/download. See `docs/EXPERIMENT_LIBRARY.md`.
+  The same private repository owns the account portal at `fpvs.zack-murphy.com`,
+  including verified accounts, owner review, lab grants and linked device revocation;
+  deployment status is tracked in `docs/exec-plans/active/fpvs-account-portal.md`.
 - `src/fpvs_studio/developer/`: bundled maintainer tools, enabled by a password-gated
   app preference in Settings > Advanced. `mode.py` snapshots activation at startup;
   enabling/disabling requires restart. `library_publisher.py` owns prepared copies;
