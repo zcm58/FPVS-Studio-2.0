@@ -77,7 +77,10 @@ Library-linked projects check for a newer version when opened and show a passive
 Home notice. **File > Update Project Version...** also checks manually, controls
 checks on open, and links earlier downloads explicitly. Installing a newer version
 opens a separate project through ordinary import review; local edits and participant
-data stay in the current project. See the [version workflow](EXPERIMENT_LIBRARY.md#project-version-checks).
+data stay in the current project. Review explains the risk of changing an experiment
+after collection begins and offers **Keep current version** or **Download new version
+separately**. Keeping the version leaves automatic checks enabled according to the
+existing preference. See the [version workflow](EXPERIMENT_LIBRARY.md#project-version-checks).
 
 Library jobs use the application-owned coordinator. Close/Escape/cancel drain transfers;
 **Cancel setup** cooperatively stops extraction before commit. The cache lease lasts

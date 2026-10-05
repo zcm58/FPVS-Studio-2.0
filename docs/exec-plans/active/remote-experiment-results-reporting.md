@@ -5,10 +5,10 @@ Status: Active
 Date: 2026-10-05
 
 Implementation approved on 2026-10-05 on `codex/experiment-data-sharing`.
-Source implementation is complete. Focused local checks pass; repo precommit has an
-unresolved Windows Library-import access failure. User-approved visible GUI acceptance
-and authorized live service acceptance remain separate checks. Keep this plan active
-until those acceptance boundaries are resolved.
+Source implementation is complete. Focused local checks and latest repo precommit
+pass. User-approved visible GUI acceptance and authorized live service acceptance
+remain separate checks. Keep this plan active until those acceptance boundaries are
+resolved.
 
 ## Outcome and approved scope
 
@@ -103,19 +103,23 @@ and changes no shared data. Partial moves are actionable and resumable.
   privilege. GUI safe focused route: 17 pass. Docs focused route: 10 pass.
 - [x] Independent synthetic Worker suite: 16 tests pass; six syntax checks pass.
   No credentials, participant data or deployed resources enter these checks.
-- [x] Repo precommit ran outside the sandbox: changed-file Ruff/compilation, mypy
-  (222 source files), repository audits and docs hygiene pass. Latest full non-Qt
+- [x] Earlier repo precommit ran outside the sandbox: changed-file Ruff/compilation, mypy
+  (222 source files), repository audits and docs hygiene pass. Earlier full non-Qt
   suite: 2,671 pass, 11 skip, one fails at the unchanged Library staging-directory
   rename (`test_explicit_newer_library_import_preserves_the_previous_project`,
   WinError 5). An isolated Library/serialization module follow-up has 30 pass,
   two skip and one different Library import access failure. Earlier isolated
   serialization retry cases all passed. No Library import/serialization production
   or test code was changed to mask these failures; their locking process is unproven.
+- [x] Latest repo precommit after collection-safe version-review changes passes:
+  2,672 unit tests, 11 Windows symlink-privilege skips, changed-file Ruff/compilation,
+  full source mypy (222 files), repository audits and docs hygiene. Earlier Windows
+  file-access failures did not recur; no import/serialization code was changed.
 
 ## Remaining acceptance
 
-- [ ] Resolve the independent Windows Library-import access failures and obtain a
-  clean repo precommit result. Focused feature checks do not establish that result.
+- [x] Obtain a clean repo precommit result. The earlier file-locking process remains
+  unproven; this passing run does not claim an unrelated Windows issue was fixed.
 - [ ] In a user-approved safe visible environment, inspect the dialog at `820x620`
   minimum and `880x700` default, both themes and practical Windows scaling. Exercise
   long labels, busy/error/cohort states, opt-out and cancellation during requests,

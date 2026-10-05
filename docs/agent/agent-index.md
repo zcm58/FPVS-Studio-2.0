@@ -126,6 +126,9 @@ Library imports write local receipts before commit; checks on open never install
 changes. Use Library/project-io/GUI focused routes and registered project-version
 dialog/controller tests. Legacy name matches require review and explicit linking;
 same/newer recorded installations block downloading and bundle commit.
+The version dialog warns about updating after collection begins and offers keeping
+the current version or downloading separately. Preserve the original experiment and
+its reporting scope; individual-condition merging is a separate deferred workflow.
 
 ## Bug Reporting
 

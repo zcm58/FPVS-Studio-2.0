@@ -73,6 +73,14 @@ execution remains available. Reports are never relabeled to a newly registered
 version. `RunSpec`, `SessionPlan`, project JSON, config exports and bundles contain
 neither sharing activation nor credentials.
 
+With automatic checks enabled, Library-linked projects check for new experiment
+versions on open. The version review
+warns about changing an ongoing study and offers keeping the current version or
+downloading a separate project for inspection. Keeping the current version preserves
+its enrollment and reporting scope. The new copy needs its own enrollment and explicit
+opt-in; an available update never relabels earlier reports or changes conditions.
+See [Project version checks](EXPERIMENT_LIBRARY.md#project-version-checks).
+
 ## Completion and crash recovery
 
 Automatic capture applies to ordinary multi-condition session launches, including

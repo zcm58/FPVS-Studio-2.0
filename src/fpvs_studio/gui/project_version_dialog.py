@@ -42,7 +42,7 @@ class ProjectVersionDialog(QDialog):
         self._linking = False
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 16, 16, 16)
-        layout.setSpacing(8)
+        layout.setSpacing(6)
         self.header = DialogHeader("Project versions", project_name, parent=self)
         self.header.subtitle_label.setTextFormat(Qt.TextFormat.PlainText)
         layout.addWidget(self.header)
@@ -101,32 +101,39 @@ class ProjectVersionDialog(QDialog):
         self.details = QTextEdit(self)
         self.details.setObjectName("project_version_details")
         self.details.setReadOnly(True)
-        self.details.setMinimumHeight(110)
+        self.details.setMinimumHeight(72)
         layout.addWidget(self.details, 1)
         self.preservation_label = QLabel(
+            "Warning: updating this experiment after data collection has already begun may not be "
+            "advised. If you’re considering updating, please first download this experiment under "
+            "a different folder and investigate its changes before using this in your ongoing "
+            "study.\n"
             "The new version opens as a separate project. Your current project's edits and "
             "participant data stay in the existing folder.", self,
         )
+        self.preservation_label.setTextFormat(Qt.TextFormat.PlainText)
         self.preservation_label.setWordWrap(True)
+        self.preservation_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         layout.addWidget(self.preservation_label)
         self.status_label = QLabel(self)
         self.status_label.setObjectName("project_version_status")
         self.status_label.setTextFormat(Qt.TextFormat.PlainText)
         self.status_label.setWordWrap(True)
-        self.status_label.setMinimumHeight(40)
+        self.status_label.setMinimumHeight(24)
         layout.addWidget(self.status_label)
         buttons = QHBoxLayout()
         self.check_button = QPushButton("Check for new version", self)
         self.check_button.setObjectName("project_version_check_button")
         self.check_button.clicked.connect(lambda: self.action_requested.emit("check"))
-        self.install_button = QPushButton("Open new version separately", self)
+        self.install_button = QPushButton("Download new version separately", self)
         self.install_button.setObjectName("project_version_install_button")
         self.install_button.clicked.connect(lambda: self.action_requested.emit("install"))
         mark_primary_action(self.install_button)
         self.cancel_button = QPushButton("Cancel", self)
         self.cancel_button.setObjectName("project_version_cancel_button")
         self.cancel_button.clicked.connect(lambda: self.action_requested.emit("cancel"))
-        self.close_button = QPushButton("Close", self)
+        self.close_button = QPushButton("Keep current version", self)
+        self.close_button.setObjectName("project_version_keep_current_button")
         self.close_button.clicked.connect(self.reject)
         buttons.addWidget(self.check_button)
         buttons.addStretch(1)

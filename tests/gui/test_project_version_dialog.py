@@ -13,6 +13,12 @@ from fpvs_studio.gui.main_window import StudioMainWindow
 from fpvs_studio.gui.project_version_dialog import ProjectVersionDialog
 from fpvs_studio.library.models import LibraryItem
 
+_UPDATE_WARNING = (
+    "Warning: updating this experiment after data collection has already begun may not be "
+    "advised. If you’re considering updating, please first download this experiment under "
+    "a different folder and investigate its changes before using this in your ongoing study."
+)
+
 
 def _item(**updates) -> LibraryItem:
     values = dict(
@@ -34,12 +40,14 @@ def _fit(widget) -> None:
             assert label.height() >= label.heightForWidth(label.width()), label.text()
     for button in widget.findChildren(QPushButton):
         if button.isVisible():
-            assert button.width() >= button.fontMetrics().horizontalAdvance(button.text())
+            assert button.width() >= button.sizeHint().width(), button.text()
 
 
 @pytest.mark.parametrize("size", [(760, 680), (820, 720)])
 @pytest.mark.parametrize(
-    "state", ["unlinked", "relink", "current", "update", "incompatible", "offline", "busy"],
+    "state", [
+        "unlinked", "unknown", "relink", "current", "update", "incompatible", "offline", "busy",
+    ],
 )
 def test_project_version_states_fit_and_preserve_full_description(qtbot, size, state):
     dialog = ProjectVersionDialog(
@@ -50,6 +58,7 @@ def test_project_version_states_fit_and_preserve_full_description(qtbot, size, s
     dialog.set_link_items([item])
     status = {
         "unlinked": "Link this project to check its library version.",
+        "unknown": "The installed library version is unknown. Review the new version separately.",
         "relink": "Choose the correct experiment, then link this project.",
         "current": "This project has the latest library version.",
         "update": "A newer library version is available.",
@@ -58,10 +67,10 @@ def test_project_version_states_fit_and_preserve_full_description(qtbot, size, s
         "busy": "Downloading and verifying the project. Cancel waits for the operation to stop.",
     }[state]
     dialog.set_state(
-        installed_version=None if state == "unlinked" else "1.0.0",
+        installed_version=None if state in {"unlinked", "unknown"} else "1.0.0",
         latest=None if state in {"unlinked", "offline"} else item,
         linked=state != "unlinked", auto_check=True, status=status,
-        can_install=state in {"update", "busy"},
+        can_install=state in {"unknown", "update", "busy"},
     )
     if state == "busy":
         dialog.set_busy(True, status)
@@ -73,14 +82,26 @@ def test_project_version_states_fit_and_preserve_full_description(qtbot, size, s
     _fit(dialog)
     assert (dialog.width(), dialog.height()) == size
     assert not dialog.isModal()
-    assert dialog.install_button.isEnabled() == (state == "update")
+    assert dialog.install_button.isEnabled() == (state in {"unknown", "update"})
     assert dialog.status_label.text() == status
+    assert dialog.preservation_label.text().startswith(_UPDATE_WARNING + "\n")
+    assert dialog.preservation_label.textFormat() == Qt.TextFormat.PlainText
+    assert dialog.preservation_label.wordWrap()
+    assert dialog.preservation_label.isVisible()
+    assert dialog.install_button.text() == "Download new version separately"
+    assert dialog.close_button.text() == "Keep current version"
+    assert dialog.close_button.isVisible() == (state != "busy")
+    assert dialog.cancel_button.isVisible() == (state == "busy")
     assert "separate project" in dialog.preservation_label.text()
     assert "participant data" in dialog.preservation_label.text()
     if state == "relink":
         assert item.description in dialog.details.toPlainText()
         assert dialog.link_panel.isVisible()
         assert dialog.relink_button.isVisible()
+    elif state == "unknown":
+        assert "Installed library version: Unknown" in dialog.versions_label.text()
+        assert dialog.link_panel.isVisible()
+        assert item.description in dialog.details.toPlainText()
     elif state not in {"unlinked", "offline"}:
         assert item.description in dialog.details.toPlainText()
         assert item.min_studio_version in dialog.details.toPlainText()
@@ -124,6 +145,30 @@ def test_user_actions_and_unknown_installed_version_are_explicit(qtbot):
     assert actions[-1] == "cancel"
     qtbot.keyClick(dialog, Qt.Key.Key_Escape)
     assert closed == [True]
+
+
+@pytest.mark.parametrize("state", ["unknown", "update", "relink"])
+def test_keep_current_version_closes_without_requesting_changes(qtbot, state):
+    dialog = ProjectVersionDialog("Masking")
+    qtbot.addWidget(dialog)
+    actions = []
+    closed = []
+    dialog.action_requested.connect(actions.append)
+    dialog.closing.connect(lambda: closed.append(True))
+    dialog.set_state(
+        installed_version=None if state == "unknown" else "1.0.0",
+        latest=_item(), linked=True, auto_check=True, can_install=state == "update",
+    )
+    if state == "relink":
+        dialog.begin_linking()
+    dialog.show()
+    assert dialog.close_button.isVisible()
+    dialog.close_button.click()
+    assert actions == []
+    assert closed == [True]
+    assert dialog.result() == dialog.DialogCode.Rejected
+    assert dialog.auto_check_enabled()
+    assert not dialog.isVisible()
 
 
 def test_existing_library_link_can_be_replaced_without_guessing(qtbot):
