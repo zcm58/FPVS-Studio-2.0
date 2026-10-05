@@ -74,6 +74,8 @@ class LibraryItem(_Contract):
 class LibraryCatalog(_Contract):
     schema_version: Literal["1.0"]
     library_name: str = Field(min_length=1, max_length=120)
+    access_level: Literal["view", "download"] = "download"
+    lab_name: str | None = Field(default=None, max_length=120)
     items: list[LibraryItem] = Field(max_length=MAX_CATALOG_ITEMS)
 
     @model_validator(mode="after")
@@ -88,12 +90,16 @@ class LibraryConnection(_Contract):
     device_id: str = Field(min_length=1, max_length=100, pattern=r"^[A-Za-z0-9_-]+$")
     library_name: str = Field(min_length=1, max_length=120)
     device_name: str = Field(min_length=1, max_length=100)
+    access_level: Literal["view", "download"] = "download"
+    lab_name: str | None = Field(default=None, max_length=120)
 
 
 class EnrollmentResponse(_Contract):
     schema_version: Literal["1.0"]
     device_id: str = Field(min_length=1, max_length=100, pattern=r"^[A-Za-z0-9_-]+$")
     library_name: str = Field(min_length=1, max_length=120)
+    access_level: Literal["view", "download"] = "download"
+    lab_name: str | None = Field(default=None, max_length=120)
 
 
 class DeviceCredential(_Contract):

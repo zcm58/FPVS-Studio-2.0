@@ -4,6 +4,54 @@ Status: Active
 
 Date: 2026-10-05
 
+## Reusable lab-code follow-up
+
+The user now prefers PI-distributed lab access over individual researcher email
+registration. Add one reusable view/download code per lab, issued and revoked by
+the existing verified owner dashboard. Researchers may enroll multiple PCs with
+the same code without creating accounts. Existing account invitations and legacy
+devices remain compatible; the administrator's email sign-in is retained.
+
+Studio prompts at startup when no local Library enrollment is configured, with
+an explicit **Continue offline** option. Reading local protected credentials and
+enrollment use app-owned workers. A saved enrollment skips the prompt; startup
+does not contact the service or require online access. The code is never persisted
+on the PC: existing OS-protected per-device tokens remain the native credential.
+
+The service adds lab code/device linkage through an additive migration. Each
+protected request checks the lab code and its permission. Replacing or revoking
+a code permanently revokes its enrolled tokens; downloaded experiments remain
+local. New clients request optional permission/lab metadata through an explicit
+header, preserving older strict response contracts. Library view access must not
+enable download or be mistaken for revoked enrollment.
+
+- [x] Multi-PC lab code creation, replacement, revocation and permission tests.
+- [x] Owner lab-code cards and enrolled-PC roster, synthetic browser acceptance.
+- [x] Startup prompt, saved-enrollment/offline behavior and registered Qt coverage.
+- [x] Library/GUI/docs focused checks, service checks and repo precommit.
+- [x] Reviewed additive migration/deployment and read-only live verification.
+
+The follow-up passes 88 private-service Node tests, including actual workerd/D1
+enrollment/rotation/revocation races and additive migration preservation. Studio
+Library focused passes 262 tests (3 Windows symlink skips), safe GUI focused 17,
+and documentation focused 10. Repo precommit passes Ruff, compilation, mypy for
+223 source files, repository audits and 2,704 unit tests (11 symlink skips).
+Registered startup and view-permission Qt tests are not run locally; the manual
+visible path remains required before an installed desktop release.
+
+Synthetic browser acceptance creates a view code, enrolls two PCs, revokes one
+while retaining the other, replaces the code with download access (revoking the
+old connections), and revokes that code. Hidden/reloaded codes are not returned.
+Long values fit 1280px/360px without body overflow. Screenshots are retained as
+ignored `build/lab-code-desktop.jpg` and `build/lab-code-mobile.jpg`.
+
+The existing remote D1 database was backed up locally before `0003_lab_codes.sql`
+was applied. Worker version `696a5dde-3b21-49aa-a6c9-826adadbfd68` is deployed;
+live public HTTPS and anonymous account/admin/native denial checks pass on both
+preserved hostnames. No real lab code, researcher grant or experimental result
+was created for verification. Desktop changes are source on the feature branch;
+an updated installer has not been built or published.
+
 ## Approved outcome
 
 The user authorized account registration, a private account-management dashboard

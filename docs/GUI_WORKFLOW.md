@@ -1,5 +1,22 @@
 # GUI Workflow
 
+## Lab Library access on startup
+
+After root-folder setup and Welcome, Studio reads local protected Library access
+in an app-owned worker. If enrollment is missing (including a pending retry), it
+shows lab setup at minimum `640x420`, default `700x460`. Enter the PI-distributed
+lab code and PC name, then Connect; no researcher account/email is needed.
+Successful enrollment is retained in the existing OS credential store. The code
+is cleared when setup finishes or is dismissed. Existing configured access skips
+this prompt without a network request. No project settings are changed.
+
+**Continue offline**, Escape or window close dismisses setup for the current
+launch; View > Experiment Library can connect later. Closing during enrollment
+cancels the app-owned job and suppresses late UI updates, while a completed
+enrollment remains saved. Errors leave retry/offline choices available. View-only
+access permits catalog browsing and disables download; the server remains the
+authority for permission and revocation. See [Experiment Library](EXPERIMENT_LIBRARY.md).
+
 ## Private experiment sharing
 
 View > Data Sharing & Comparison opens a two-tab dialog at `880x700`, minimum

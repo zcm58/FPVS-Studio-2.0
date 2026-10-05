@@ -23,7 +23,7 @@ from fpvs_studio.gui.library_dialog import LibraryDialog
 from fpvs_studio.gui.settings_dialog import AppSettingsDialog
 from fpvs_studio.gui.update_lifecycle import UpdateLifecycle
 from fpvs_studio.gui.welcome_window import WelcomeWindow
-from fpvs_studio.library.errors import LibraryAuthorizationError, LibraryCancelled
+from fpvs_studio.library.errors import LibraryAuthorizationError, LibraryCancelled, LibraryError
 from fpvs_studio.library.models import LibraryCatalog, LibraryConnection, LibraryItem
 
 
@@ -45,25 +45,31 @@ def _item(**updates) -> LibraryItem:
     return LibraryItem(**data)
 
 
-def _connection() -> LibraryConnection:
-    return LibraryConnection(
+def _connection(**updates) -> LibraryConnection:
+    values = dict(
         device_id="device-1",
         library_name="Research experiment library",
         device_name="Lab computer",
     )
+    values.update(updates)
+    return LibraryConnection(**values)
 
 
 @pytest.mark.parametrize("size", [(900, 640), (1040, 760)])
 @pytest.mark.parametrize("state", [
     "disconnected", "ready", "busy", "error", "authorization_error", "empty",
-    "installed", "update", "review",
+    "installed", "update", "review", "view_only",
 ])
 def test_library_layout_and_full_metadata(qtbot, tmp_path, size, state) -> None:
     dialog = LibraryDialog()
     qtbot.addWidget(dialog)
     item = _item(title="Long experiment name " * 7, description="Protocol description. " * 150)
     if state != "disconnected":
-        dialog.set_connection(_connection())
+        dialog.set_connection(_connection(
+            library_name="Research experiment library " * 4,
+            device_name="Research computer name " * 4,
+            lab_name="Research laboratory name " * 4,
+        ) if state == "view_only" else _connection())
         if state in {"installed", "update", "review"}:
             installed_project(
                 tmp_path / ("long-folder-name-" * 5), project_id="example",
@@ -82,7 +88,11 @@ def test_library_layout_and_full_metadata(qtbot, tmp_path, size, state) -> None:
                 ))
         dialog.set_installations(scan_library_projects(tmp_path), "https://library.example.test")
         dialog.set_catalog(
-            LibraryCatalog(schema_version="1.0", library_name="Research", items=[item])
+            LibraryCatalog(
+                schema_version="1.0", library_name="Research", items=[item],
+                access_level="view" if state == "view_only" else "download",
+                lab_name="Research laboratory name " * 4 if state == "view_only" else None,
+            )
         )
     if state == "busy":
         dialog.set_busy(True, "Downloading and verifying the experiment…", downloading=True)
@@ -123,6 +133,42 @@ def test_library_layout_and_full_metadata(qtbot, tmp_path, size, state) -> None:
     elif state in {"update", "review"}:
         assert dialog.install_button.isEnabled()
         assert "Review" in dialog.install_button.text()
+    elif state == "view_only":
+        assert not dialog.install_button.isEnabled()
+        assert dialog.install_button.text() == "View-only access"
+        assert "not permitted" in dialog.install_button.toolTip()
+        assert "View-only" in dialog.connection_label.text()
+        assert "Research laboratory name " * 4 in dialog.connection_label.text()
+        assert "View-only" in dialog.details.toPlainText()
+        assert dialog.refresh_button.isEnabled()
+        assert dialog.search_edit.isEnabled()
+    elif state == "disconnected":
+        assert "reusable lab code" in dialog.connection_label.text()
+        assert "No account or email" in dialog.connection_label.text()
+
+
+def test_catalog_permission_overrides_saved_access_and_refreshes_actions(qtbot) -> None:
+    dialog = LibraryDialog()
+    qtbot.addWidget(dialog)
+    dialog.set_connection(_connection(access_level="download", lab_name="Previous lab"))
+    dialog.set_installations((), "https://library.example.test")
+    dialog.set_catalog(LibraryCatalog(
+        schema_version="1.0", library_name="Shared library", items=[_item()],
+        access_level="view", lab_name="Current lab",
+    ))
+    assert not dialog.install_button.isEnabled()
+    assert not dialog.can_download
+    assert "Current lab" in dialog.connection_label.text()
+    assert "Previous lab" not in dialog.connection_label.text()
+    dialog.set_catalog(LibraryCatalog(
+        schema_version="1.0", library_name="Shared library", items=[_item()],
+        access_level="download", lab_name="Current lab",
+    ))
+    assert dialog.install_button.isEnabled()
+    assert dialog.can_download
+    assert "Download access" in dialog.connection_label.text()
+    assert "View-only" not in dialog.details.toPlainText()
+    assert dialog.install_button.toolTip() == ""
 
 
 def test_library_rechecks_installation_before_any_download(qapp, qtbot, monkeypatch, tmp_path):
@@ -165,13 +211,15 @@ class _Client:
         self.finish_download = Event()
         self.block_download = False
         self.authorization_error = False
+        self.access_level = "download"
+        self.download_denied = False
 
     def connection_info(self):
         return self.connection
 
     def enroll(self, code, device_name, *, cancel_event=None):
         assert code == "test-access"
-        self.connection = _connection()
+        self.connection = _connection(access_level=self.access_level, lab_name="Shared lab")
         return self.connection
 
     def catalog(self, *, cancel_event=None):
@@ -179,10 +227,17 @@ class _Client:
             raise LibraryAuthorizationError(
                 "Access revoked. Disconnect this computer and reconnect."
             )
-        return LibraryCatalog(schema_version="1.0", library_name="Research", items=[_item()])
+        return LibraryCatalog(
+            schema_version="1.0", library_name="Research", items=[_item()],
+            access_level=self.access_level, lab_name="Shared lab",
+        )
 
     def download(self, item, *, cancel_event=None, progress_callback=None):
         self.download_started.set()
+        if self.download_denied:
+            raise LibraryError(
+                "Your lab has view-only Library access. Downloads are not permitted."
+            )
         if self.block_download:
             while not self.finish_download.wait(0.01):
                 if cancel_event.is_set():
@@ -311,6 +366,41 @@ def test_authorization_failure_clears_catalog(qapp, qtbot, monkeypatch, tmp_path
     _enroll(controller, qtbot)
     assert controller.dialog.item_list.count() == 1
     assert controller.dialog.install_button.isEnabled()
+
+
+def test_view_only_catalog_blocks_programmatic_install(qapp, qtbot, monkeypatch, tmp_path) -> None:
+    controller, client, _lifecycle = _controller(
+        qapp, qtbot, monkeypatch, tmp_path, lambda *_args: pytest.fail("Unexpected import"),
+    )
+    client.access_level = "view"
+    _enroll(controller, qtbot)
+    assert "View-only" in controller.dialog.status_label.text()
+    assert not controller.dialog.install_button.isEnabled()
+    assert controller.dialog.refresh_button.isEnabled()
+    controller._action("install")
+    assert not client.download_started.is_set()
+    assert controller._job is None
+    assert client.connection is not None
+
+
+def test_download_permission_denial_keeps_library_connected(qapp, qtbot, monkeypatch, tmp_path):
+    controller, client, _lifecycle = _controller(
+        qapp, qtbot, monkeypatch, tmp_path, lambda *_args: pytest.fail("Unexpected import"),
+    )
+    _enroll(controller, qtbot)
+    client.download_denied = True
+    controller.dialog.install_button.click()
+    qtbot.waitUntil(lambda: controller._job is None)
+    assert "view-only" in controller.dialog.status_label.text()
+    assert controller.dialog.item_list.count() == 1
+    assert not controller.dialog.connection_fields.isVisible()
+    assert controller.dialog.disconnect_button.isVisible()
+    assert client.connection is not None
+    client.access_level = "view"
+    controller.dialog.refresh_button.click()
+    qtbot.waitUntil(lambda: controller._job is None)
+    assert not controller.dialog.install_button.isEnabled()
+    assert controller.dialog.item_list.count() == 1
 
 
 def test_library_import_review_cancel_releases_handoff(controller, tmp_path, monkeypatch) -> None:
