@@ -82,16 +82,18 @@ idempotent retry, and ordinary network failures preserve existing enrollment.
 
 ## Website browsing and downloads
 
-The same Library is available at [fpvs.zack-murphy.com](https://fpvs.zack-murphy.com).
-Enter the lab code supplied by your PI or lab manager to browse descriptions,
-stimulus-set labels and publication links. Search and category filters support
-discovery; each experiment has separate reference pages for its exact published
+The **OpenFPVS Experiment Library** is available at
+[fpvs.zack-murphy.com](https://fpvs.zack-murphy.com). Enter the lab code supplied by
+your PI or lab manager to browse descriptions and publication links. Search
+supports discovery; each experiment has separate reference pages for its exact published
 versions. View permission allows browsing; download permission also enables bundle
 downloads. Researchers need no email or GitHub account for this route.
 
-The top header keeps Library visible, with optional email sign-in
-under Account. Signed-in users see account/sign-out controls; the verified owner
-also sees the owner workspace. Email sign-out leaves the lab-code browser
+The top header keeps Library visible. **Account** offers **Login with a Lab Code**
+and optional **Individual Account Login**. The lab-code entry remains available
+independently of email state; signed-in users see account/sign-out controls instead
+of individual login. The verified **OpenFPVS Administrator** also sees the
+administration workspace. Email sign-out leaves the lab-code browser
 connection independent.
 
 Cloudflare checks the current lab permission and proxies the allowlisted private
@@ -108,22 +110,28 @@ as **Website browser**. Disconnect revokes only that browser credential; replaci
 or revoking its lab code disables all credentials linked to that code. Website
 experiment content remains protected even though its page shell is public.
 
-The owner manages website descriptions, stimulus-set labels and publication links
+The OpenFPVS Administrator manages website descriptions and publication links
 at `/admin`, selecting the exact experiment and version before saving. Claims and
 recorded download counts are keyed to experiment ID, version and bundle SHA-256;
 new versions do not inherit papers from previous releases. Publishing bundles
 remains the existing Studio maintainer workflow. The website has separate browser
 APIs for enriched metadata; the strict native `/v1` catalog stays unchanged.
-The optional stimulus-set label names images or words already included in one
-release (for example, "Face photographs, Set A"); it does not select or upload
-files. Empty labels are omitted from reader pages.
+Reader pages omit stimulus-set labels, category filters/tags and artifact details;
+the administrator editor manages descriptions and publications. Native Studio
+category metadata and bundle validation remain unchanged. The service retains the
+historical `stimulus_set` database column dormant without a migration.
 
-**Downloads started** counts authorized download starts through either Studio or the
-website, after valid upstream asset retrieval and the final access check. Repeated
+Reader pages show **x total downloads** per experiment. The server aggregates all
+recorded versions/digests for that item ID, including retired or unavailable
+artifacts, so experiment totals remain stable when a version is withdrawn.
+The technical counter records authorized download starts through Studio or the
+website after valid upstream asset retrieval and the final access check. Repeated
 requests count. Denied, revoked and unavailable requests do not; a later transfer
 failure or cancellation may still count. Tracking begins with the website migration
-and does not reconstruct historical usage. Per-version totals refer to that artifact,
-while experiment/collection totals sum currently available versions. Counts do not
+and does not reconstruct historical usage. Browser `website.total_downloads` is the
+experiment total; compatible `downloads_started` and `tracking_since` fields remain
+for exact-artifact technical metadata. Counter explanations are kept in developer
+documentation rather than repeated in the reader UI. Counts do not
 measure completed transfers, unique researchers or successful local save/import.
 Current deployment acceptance is recorded in the
 [account portal plan](exec-plans/active/fpvs-account-portal.md).
@@ -189,8 +197,8 @@ passive notices and explicit import handoff. The dialog minimum/default is `760x
 ### Account portal
 
 The private `zcm58/FPVS-Studio-Library` repository owns the website and account portal
-at `https://fpvs.zack-murphy.com`, with an owner-only `/admin` view and
-management API. Registration/sign-in remains available at `/sign-in`; lab-code
+at `https://fpvs.zack-murphy.com`, with protected `/admin` content and management APIs restricted
+to the OpenFPVS Administrator. Registration/sign-in remains available at `/sign-in`; lab-code
 browsing uses `/` or `/library` and does not require an email session.
 The initial configured owner is `zackmurphy25@protonmail.com`. Changing that identity
 requires updating the backend owner setting; it

@@ -1,8 +1,47 @@
-# FPVS account portal
+# OpenFPVS account portal
 
 Status: Active
 
 Date: 2026-10-05
+
+## OpenFPVS website simplification
+
+The current follow-up renames the website **OpenFPVS Experiment Library** and its
+administrator **OpenFPVS Administrator**. Remove stimulus-set labels from reader
+and administrator editor flows, website category filters/tags, reader artifact
+details and the requested counter/footer paragraphs. The warm tan/muted green
+theme and top navigation remain. Account controls distinguish **Login with a Lab
+Code** from **Individual Account Login**; the lab-code entry stays independent of
+email sessions, while individual login is replaced by signed-in controls.
+
+Reader pages show **x total downloads** for the experiment across all its recorded
+versions/digests, including retired artifacts. The technical count remains
+authorized native/browser starts after upstream validation and the final access
+check, so later cancellation/failure can count. Preserve exact-version/digest
+description/publication metadata, compatible technical count fields, native
+catalog categories and the original streaming path. The historical D1
+`stimulus_set` column remains dormant; no database migration is needed. This work
+belongs to the existing private service; Studio GUI and the personal website are
+unchanged. Completed sections below retain their historical evidence.
+
+- [x] Website removals, brand/role wording and independent lab/email controls.
+- [x] Cross-version/digest aggregate and current browser/admin content contracts.
+- [x] Synthetic desktop/mobile checks, service/docs gates and live deployment.
+
+All 150 service tests pass, including aggregate-history and native workerd/D1
+coverage. The later same-page lab-login focus correction passes all nine focused
+navigation tests. Synthetic 1280px/360px browser checks cover both login choices,
+lab-code-only access, search, version switching, experiment totals, publications,
+administrator saves and sign-out that preserves the lab connection. Changed
+catalog/detail/editor surfaces fit without body overflow. Ignored
+`build/openfpvs-*.png` retain desktop, mobile and live public evidence.
+
+Syntax/diff checks, 78.46 KiB dry packaging and all 10 documentation checks pass.
+Worker `70ae9d09-2bc7-4f75-8455-3e5b2ac47531` is deployed. Read-only live public
+and protected-API denial checks pass; five code/style/logo assets match source.
+The live browser confirms OpenFPVS branding and both login choices. No migration,
+real email, live account/code mutation or paid feature was needed. Protected
+real-account and second-machine acceptance remain the pre-existing separate checks.
 
 ## Portal navigation and website theme
 
