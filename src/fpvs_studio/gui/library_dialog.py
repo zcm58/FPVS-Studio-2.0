@@ -49,6 +49,8 @@ class LibraryDialog(QDialog):
         self.setModal(True)
         self._busy = False
         self._connected = False
+        self._connection: LibraryConnection | None = None
+        self._catalog: LibraryCatalog | None = None
         self._items: tuple[LibraryItem, ...] = ()
         self._installations: tuple[InstalledLibraryProject, ...] | None = None
         self._service_url = ""
@@ -58,11 +60,11 @@ class LibraryDialog(QDialog):
         layout.addWidget(
             DialogHeader(
                 "Experiment Library",
-                "Download a complete experiment, then review its settings for this computer.",
+                "Browse experiments and, when permitted, download a copy to review in Setup.",
                 parent=self,
             )
         )
-        self.connection_label = QLabel("Connect this computer with your lab's access code.", self)
+        self.connection_label = QLabel("", self)
         self.connection_label.setWordWrap(True)
         self.connection_label.setTextFormat(Qt.TextFormat.PlainText)
         layout.addWidget(self.connection_label)
@@ -73,11 +75,11 @@ class LibraryDialog(QDialog):
         self.code_edit.setObjectName("library_access_code")
         self.code_edit.setMaxLength(128)
         self.code_edit.setEchoMode(QLineEdit.EchoMode.Password)
-        self.code_edit.setPlaceholderText("Lab-issued access code")
+        self.code_edit.setPlaceholderText("Reusable lab code from your PI")
         self.device_edit = QLineEdit(socket.gethostname()[:80], self.connection_fields)
         self.device_edit.setObjectName("library_device_name")
         self.device_edit.setMaxLength(80)
-        connection_form.addRow("Access code", self.code_edit)
+        connection_form.addRow("Lab code", self.code_edit)
         connection_form.addRow("Computer name", self.device_edit)
         layout.addWidget(self.connection_fields)
         connection_actions = QHBoxLayout()
@@ -153,15 +155,13 @@ class LibraryDialog(QDialog):
         apply_dialog_theme(self)
 
     def set_connection(self, connection: LibraryConnection | None) -> None:
+        self._connection = connection
+        self._catalog = None
         self._connected = connection is not None
         self.connection_fields.setVisible(not self._connected)
         self.connect_button.setVisible(not self._connected)
         self.disconnect_button.setVisible(self._connected)
-        self.connection_label.setText(
-            f"{connection.library_name} · {connection.device_name}"
-            if connection
-            else "Connect this computer with your lab's access code."
-        )
+        self._sync_connection_label()
         if connection is not None:
             self.code_edit.clear()
         else:
@@ -169,10 +169,38 @@ class LibraryDialog(QDialog):
         self._sync_actions()
 
     def set_catalog(self, catalog: LibraryCatalog | None) -> None:
+        self._catalog = catalog
         self._items = (
             tuple(item for item in catalog.items if item.kind == "experiment") if catalog else ()
         )
+        self._sync_connection_label()
         self._filter()
+
+    @property
+    def can_download(self) -> bool:
+        return (
+            self._connected and self._catalog is not None
+            and self._catalog.access_level == "download"
+        )
+
+    def _sync_connection_label(self) -> None:
+        connection = self._connection
+        if connection is None:
+            self.connection_label.setText(
+                "Enter the reusable lab code shared by your PI once on this computer. "
+                "No account or email is required."
+            )
+            return
+        metadata = self._catalog or connection
+        lab = f"\nLab: {metadata.lab_name}" if metadata.lab_name else ""
+        permission = (
+            "View-only access: browse experiment details; downloads are not permitted."
+            if metadata.access_level == "view"
+            else "Download access."
+        )
+        self.connection_label.setText(
+            f"{metadata.library_name} · {connection.device_name}{lab}\n{permission}"
+        )
 
     def selected_item(self) -> LibraryItem | None:
         row = self.item_list.currentItem()
@@ -237,6 +265,11 @@ class LibraryDialog(QDialog):
             compatibility = item.compatibility_message or "Compatible with this Studio version."
             installed = self.selected_installation()
             installation = installed.message if installed else "Checking installed experiments…"
+            permission = (
+                "View-only access. Your lab can browse this experiment, but cannot download it.\n\n"
+                if self._catalog is not None and self._catalog.access_level == "view"
+                else ""
+            )
             self.details.setPlainText(
                 f"{item.title}\n\n{item.description}\n\n"
                 f"Version: {item.version}\nCategory: {category}\n"
@@ -245,7 +278,7 @@ class LibraryDialog(QDialog):
                 f"{item.uncompressed_size_bytes / 1048576:.1f} MB\n"
                 f"Minimum FPVS Studio: {item.min_studio_version}\n\n"
                 f"{compatibility}\n\n"
-                f"{installation}\n\n"
+                f"{permission}{installation}\n\n"
                 "Creates an independent, editable project in your Studio Root Folder. "
                 "Existing projects stay in place. "
                 "Review display, timing and triggers in Setup before use."
@@ -261,6 +294,13 @@ class LibraryDialog(QDialog):
             "update": "Review update…",
             "review": "Review existing project…",
         }[installed.state] if installed else "Checking installation…")
+        view_only = self._catalog is not None and self._catalog.access_level == "view"
+        if view_only:
+            self.install_button.setText("View-only access")
+        self.install_button.setToolTip(
+            "Your lab has view-only access; downloading experiments is not permitted."
+            if view_only else ""
+        )
         self.connect_button.setEnabled(
             not self._busy
             and bool(self.code_edit.text().strip())
@@ -269,7 +309,7 @@ class LibraryDialog(QDialog):
         self.disconnect_button.setEnabled(not self._busy and self._connected)
         self.refresh_button.setEnabled(not self._busy and self._connected)
         self.install_button.setEnabled(
-            not self._busy and self._connected and item is not None and item.compatible
+            not self._busy and self.can_download and item is not None and item.compatible
             and installed is not None and installed.state != "installed"
         )
         self.connection_fields.setEnabled(not self._busy)

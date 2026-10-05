@@ -23,6 +23,7 @@ from fpvs_studio.library.errors import LibraryAuthorizationError, LibraryCancell
 from fpvs_studio.library.models import (
     MAX_DOWNLOAD_BYTES,
     DeviceCredential,
+    EnrollmentResponse,
     LibraryCatalog,
     LibraryConnection,
     LibraryItem,
@@ -171,6 +172,141 @@ def test_catalog_uses_bearer_token_and_experiment_filter(environment):
     assert result.items[0].title == "Synthetic project"
     assert requests[0].full_url == ORIGIN + "/v1/catalog?kind=experiment"
     assert requests[0].get_header("Authorization") == f"Bearer {store.value.token}"
+    assert requests[0].get_header("X-fpvs-library-metadata") == "1"
+
+
+def test_old_service_metadata_preserves_native_download_access():
+    enrollment = EnrollmentResponse(
+        schema_version="1.0", device_id="legacy", library_name="Legacy library",
+    )
+    connection = LibraryConnection(
+        device_id="legacy", library_name="Legacy library", device_name="Legacy computer",
+    )
+    legacy_catalog = LibraryCatalog.model_validate(catalog(item()))
+    for metadata in (enrollment, connection, legacy_catalog):
+        assert metadata.access_level == "download"
+        assert metadata.lab_name is None
+
+
+def test_enrollment_persists_lab_permission_without_lab_code(environment):
+    client, store, requests, replies = environment
+    store.value = None
+    replies.append(dict(
+        schema_version="1.0", device_id="view-device", library_name="Shared library",
+        access_level="view", lab_name="Synthetic research lab",
+    ))
+    connection = client.enroll("SYNTHETIC-LAB-CODE", "Research computer")
+    assert connection.access_level == "view"
+    assert connection.lab_name == "Synthetic research lab"
+    assert client.connection_info() == connection
+    assert requests[0].get_header("X-fpvs-library-metadata") == "1"
+    assert json.loads(requests[0].data)["code"] == "SYNTHETIC-LAB-CODE"
+    assert "SYNTHETIC-LAB-CODE" not in store.value.model_dump_json()
+
+
+@pytest.mark.parametrize("model", [EnrollmentResponse, LibraryConnection, LibraryCatalog])
+@pytest.mark.parametrize("changes", [
+    {"access_level": "owner"}, {"access_level": None}, {"access_level": 1},
+    {"lab_name": "x" * 121}, {"lab_name": 1}, {"unexpected": "metadata"},
+])
+def test_access_metadata_is_strict_and_bounded(model, changes):
+    values = dict(library_name="Synthetic library")
+    if model is LibraryCatalog:
+        values.update(schema_version="1.0", items=[])
+    elif model is LibraryConnection:
+        values.update(device_id="device", device_name="Computer")
+    else:
+        values.update(schema_version="1.0", device_id="device")
+    values.update(changes)
+    with pytest.raises(ValidationError):
+        model.model_validate(values)
+
+
+def test_catalog_refreshes_protected_permission_metadata(environment):
+    client, store, _, replies = environment
+    original_token = store.value.token
+    replies.append(dict(catalog(item()), access_level="view", lab_name="Shared lab"))
+    result = client.catalog()
+    assert result.access_level == "view"
+    assert client.connection_info().access_level == "view"
+    assert client.connection_info().lab_name == "Shared lab"
+    assert store.value.token == original_token
+    replies.append(dict(catalog(item()), access_level="download", lab_name="Renamed lab"))
+    client.catalog()
+    assert client.connection_info().access_level == "download"
+    assert client.connection_info().lab_name == "Renamed lab"
+
+
+def test_saved_view_only_access_blocks_download_without_rejecting_enrollment(environment):
+    client, store, requests, replies = environment
+    replies.append(dict(catalog(item()), access_level="view"))
+    client.catalog()
+    saved = store.value
+    with pytest.raises(LibraryError, match="view-only") as error:
+        client.download(item())
+    assert not isinstance(error.value, LibraryAuthorizationError)
+    assert store.value == saved
+    assert len(requests) == 1
+
+
+def test_view_only_download_denial_preserves_credential_and_catalog_access(environment):
+    client, store, requests, replies = environment
+    saved = store.value
+    replies.append(HTTPError(
+        ORIGIN, 403, "PRIVATE DETAIL", {}, io.BytesIO(json.dumps({
+            "schema_version": "1.0", "error": "download_not_permitted",
+            "message": "SECRET REMOTE MESSAGE",
+        }).encode()),
+    ))
+    with pytest.raises(LibraryError, match="view-only") as error:
+        client.download(item())
+    assert not isinstance(error.value, LibraryAuthorizationError)
+    assert "SECRET" not in str(error.value)
+    assert store.value == saved
+    assert requests[0].get_header("X-fpvs-library-metadata") is None
+    replies.append(dict(catalog(item()), access_level="view"))
+    assert client.catalog().items == [item()]
+
+
+def test_canceling_download_denial_read_keeps_credential(environment):
+    client, store, _, replies = environment
+    saved = store.value
+    cancel = Event()
+
+    class CancelingBody(io.BytesIO):
+        def read1(self, count):
+            cancel.set()
+            return super().read1(count)
+
+    body = CancelingBody(b'{"error":"download_not_permitted"}')
+    replies.append(HTTPError(ORIGIN, 403, "denied", {}, body))
+    with pytest.raises(LibraryCancelled):
+        client.download(item(), cancel_event=cancel)
+    assert store.value == saved
+    assert body.closed
+
+
+@pytest.mark.parametrize("body", [
+    b"not json", b"x" * 8193, b'{"message":"download_not_permitted"}',
+    b'{"error":"revoked"}', b'{"error":"download_not_permitted"' + b" " * 8192 + b"}",
+])
+def test_unrecognized_download_denial_retains_revocation_behavior(environment, body):
+    client, store, _, replies = environment
+    replies.append(HTTPError(ORIGIN, 403, "revoked", {}, io.BytesIO(body)))
+    with pytest.raises(LibraryAuthorizationError):
+        client.download(item())
+    assert store.value is None
+
+
+@pytest.mark.parametrize("status,path", [(401, "download"), (403, "catalog")])
+def test_permission_code_cannot_override_revocation_on_other_requests(environment, status, path):
+    client, store, _, replies = environment
+    replies.append(HTTPError(
+        ORIGIN, status, "revoked", {}, io.BytesIO(b'{"error":"download_not_permitted"}'),
+    ))
+    with pytest.raises(LibraryAuthorizationError):
+        client.download(item()) if path == "download" else client.catalog()
+    assert store.value is None
 
 
 @pytest.mark.parametrize(
@@ -315,6 +451,26 @@ def test_cached_withdrawn_item_is_not_importable(environment):
     replies.append(catalog())
     with pytest.raises(LibraryError, match="withdrawn"):
         client.download(item())
+
+
+def test_cached_payload_does_not_bypass_current_view_only_permission(environment):
+    client, store, requests, replies = environment
+    replies.append(payload_reply())
+    path = client.download(item())
+    client.release_download()
+    token = store.value.token
+    replies.append(dict(catalog(item()), access_level="view", lab_name="Shared lab"))
+    with pytest.raises(LibraryError, match="view-only"):
+        client.download(item())
+    assert store.value.token == token
+    assert client.connection_info().access_level == "view"
+    assert requests[-1].full_url.endswith("catalog?kind=experiment")
+    assert requests[-1].get_header("X-fpvs-library-metadata") == "1"
+    assert path.read_bytes() == PAYLOAD
+    assert not client._download_held
+    lock = DownloadCache(client._cache.root)
+    lock.acquire()
+    lock.release()
 
 
 def test_new_payload_replaces_only_recognized_cache_files(environment):

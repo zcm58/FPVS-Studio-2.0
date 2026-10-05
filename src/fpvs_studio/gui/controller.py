@@ -94,6 +94,7 @@ from fpvs_studio.updates.helper_client import HelperClient
 from fpvs_studio.updates.models import UpdateCheckResult
 
 if TYPE_CHECKING:
+    from fpvs_studio.gui.library_access_dialog import LibraryAccessController
     from fpvs_studio.gui.library_controller import LibraryController
     from fpvs_studio.gui.library_publisher_controller import LibraryPublisherController
     from fpvs_studio.gui.project_update_controller import ProjectUpdateController
@@ -162,6 +163,7 @@ class StudioController(QObject):
         self._library_import_finished: Callable[[Path | None], None] | None = None
         self._library_import_result: Path | None = None
         self._library_controller: LibraryController | None = None
+        self._library_access_controller: LibraryAccessController | None = None
         self._project_update_controller: ProjectUpdateController | None = None
         self._library_publisher_controller: LibraryPublisherController | None = None
         self._import_bundle_progress_bridge: ProgressSignalBridge | None = None
@@ -852,6 +854,16 @@ class StudioController(QObject):
                 studio_root=self._library_root, review_project=self._review_library_project,
             )
         self._library_controller.show()
+
+    def prompt_for_library_access(self) -> None:
+        """Offer lab setup once after startup; offline authoring remains available."""
+        if self.welcome_window is None and self.main_window is None:
+            return
+        if self._library_access_controller is None:
+            from fpvs_studio.gui.library_access_dialog import LibraryAccessController
+
+            self._library_access_controller = LibraryAccessController(self._app)
+        self._library_access_controller.check()
 
     def _library_root(self) -> Path:
         assert self._fpvs_root_dir is not None

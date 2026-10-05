@@ -22,7 +22,7 @@ from pydantic import ValidationError
 from fpvs_studio import __version__
 from fpvs_studio.library.cache import CHUNK_BYTES, DownloadCache, check_cancel, default_cache_root
 from fpvs_studio.library.credentials import CredentialStore, credential_store
-from fpvs_studio.library.errors import LibraryAuthorizationError, LibraryError
+from fpvs_studio.library.errors import LibraryAuthorizationError, LibraryCancelled, LibraryError
 from fpvs_studio.library.models import (
     MAX_CATALOG_BYTES,
     DeviceCredential,
@@ -36,6 +36,7 @@ DEFAULT_LIBRARY_SERVICE_URL = "https://fpvs-studio-library.fpvs-studio-zcm58.wor
 NETWORK_TIMEOUT_SECONDS = 10
 METADATA_TOTAL_SECONDS = 30
 DOWNLOAD_TOTAL_SECONDS = 30 * 60
+_VIEW_ONLY_MESSAGE = "Your lab has view-only Library access. Downloads are not permitted."
 ProgressCallback = Callable[[int, int], None]
 
 
@@ -69,7 +70,7 @@ def _origin(value: str) -> str:
 def _status_error(status: int) -> LibraryError:
     if status in (401, 403):
         return LibraryAuthorizationError(
-            "Library access was rejected. Check the invitation code or reconnect this device."
+            "Library access was rejected. Check the lab code or reconnect this device."
         )
     if status in (404, 410):
         return LibraryError("This Library item is no longer available. Refresh the catalog.")
@@ -119,7 +120,8 @@ class LibraryClient:
 
     @contextmanager
     def _response(
-        self, method: str, path: str, *, token: str = "", data: bytes | None = None
+        self, method: str, path: str, *, token: str = "", data: bytes | None = None,
+        cancel_event: Event | None = None,
     ) -> Iterator[Any]:
         url = self.service_url + path
         headers = {
@@ -129,6 +131,8 @@ class LibraryClient:
             "Accept-Encoding": "identity",
             "User-Agent": f"FPVS-Studio/{__version__}",
         }
+        if path.split("?", 1)[0] in ("/v1/enroll", "/v1/catalog"):
+            headers["X-FPVS-Library-Metadata"] = "1"
         if data is not None:
             headers["Content-Type"] = "application/json"
         if token:
@@ -138,7 +142,15 @@ class LibraryClient:
             response = build_opener(_NoRedirect()).open(request, timeout=NETWORK_TIMEOUT_SECONDS)
         except HTTPError as error:
             status = error.code
-            error.close()
+            try:
+                view_only = (
+                    bool(token) and status == 403 and path.endswith("/download")
+                    and self._download_not_permitted(error, cancel_event)
+                )
+            finally:
+                error.close()
+            if view_only:
+                raise LibraryError(_VIEW_ONLY_MESSAGE) from None
             if token and status in (401, 403):
                 # A revoked token cannot enroll again. Keep failed invitation tokens
                 # pending, but remove rejected device access so reconnect starts fresh.
@@ -156,6 +168,22 @@ class LibraryClient:
             if response.headers.get("Content-Encoding", "identity") != "identity":
                 raise LibraryError("The Library service returned unsupported compressed transport.")
             yield response
+
+    @classmethod
+    def _download_not_permitted(cls, error: HTTPError, cancel_event: Event | None) -> bool:
+        """Recognize only the bounded service permission code, never remote prose."""
+        if error.fp is None:
+            return False
+        try:
+            raw = b"".join(cls._chunks(
+                error, 8192, time.monotonic() + METADATA_TOTAL_SECONDS, cancel_event,
+            ))
+            metadata = json.loads(raw)
+        except LibraryCancelled:
+            raise
+        except (LibraryError, ValueError, UnicodeError, RecursionError):
+            return False
+        return isinstance(metadata, dict) and metadata.get("error") == "download_not_permitted"
 
     @staticmethod
     def _chunks(
@@ -194,7 +222,9 @@ class LibraryClient:
         check_cancel(cancel_event)
         data = json.dumps(payload).encode("utf-8") if payload is not None else None
         deadline = time.monotonic() + METADATA_TOTAL_SECONDS
-        with self._response(method, path, token=token, data=data) as response:
+        with self._response(
+            method, path, token=token, data=data, cancel_event=cancel_event,
+        ) as response:
             if response.headers.get_content_type() != "application/json":
                 raise LibraryError("The Library service returned an unexpected response type.")
             raw = b"".join(self._chunks(response, limit, deadline, cancel_event))
@@ -213,7 +243,7 @@ class LibraryClient:
         code, device_name = code.strip(), device_name.strip()
         if not code or len(code) > 128 or not device_name or len(device_name) > 100:
             raise LibraryError(
-                "Enter an invitation code and a device name of up to 100 characters."
+                "Enter a lab code and a computer name of up to 100 characters."
             )
         with self._operation(cancel_event):
             existing = self.store.load()
@@ -246,6 +276,8 @@ class LibraryClient:
                 device_id=enrolled.device_id,
                 library_name=enrolled.library_name,
                 device_name=pending.device_name,
+                access_level=enrolled.access_level,
+                lab_name=enrolled.lab_name,
             )
             self.store.save(pending.model_copy(update={"connection": connection}))
             return connection
@@ -254,24 +286,38 @@ class LibraryClient:
         credential = self.store.load()
         if credential is None or credential.connection is None:
             raise LibraryAuthorizationError(
-                "Connect to the Experiment Library with your lab invitation code."
+                "Connect to the Experiment Library with your PI's lab code."
             )
         return credential
 
     def catalog(self, *, cancel_event: Event | None = None) -> LibraryCatalog:
         with self._operation(cancel_event):
-            raw = self._json_request(
-                "GET",
-                "/v1/catalog?kind=experiment",
-                token=self._credential().token,
-                cancel_event=cancel_event,
-            )
-            try:
-                return LibraryCatalog.model_validate(raw)
-            except ValidationError:
-                raise LibraryError(
-                    "The Library catalog uses invalid or unsupported metadata."
-                ) from None
+            return self._read_catalog(self._credential(), cancel_event)
+
+    def _read_catalog(
+        self, credential: DeviceCredential, cancel_event: Event | None,
+    ) -> LibraryCatalog:
+        raw = self._json_request(
+            "GET",
+            "/v1/catalog?kind=experiment",
+            token=credential.token,
+            cancel_event=cancel_event,
+        )
+        try:
+            catalog = LibraryCatalog.model_validate(raw)
+        except ValidationError:
+            raise LibraryError(
+                "The Library catalog uses invalid or unsupported metadata."
+            ) from None
+        assert credential.connection is not None
+        connection = credential.connection.model_copy(update={
+            "library_name": catalog.library_name,
+            "access_level": catalog.access_level,
+            "lab_name": catalog.lab_name,
+        })
+        if connection != credential.connection:
+            self.store.save(credential.model_copy(update={"connection": connection}))
+        return catalog
 
     def download(
         self,
@@ -293,21 +339,14 @@ class LibraryClient:
         self._cache.acquire()
         try:
             credential = self._credential()
+            if credential.connection is not None and credential.connection.access_level == "view":
+                raise LibraryError(_VIEW_ONLY_MESSAGE)
             retained = self._cache.verified(item, cancel_event)
             if retained is not None:
                 # Confirm current authorization/withdrawal before reusing retained content.
-                current = self._json_request(
-                    "GET",
-                    "/v1/catalog?kind=experiment",
-                    token=credential.token,
-                    cancel_event=cancel_event,
-                )
-                try:
-                    catalog = LibraryCatalog.model_validate(current)
-                except ValidationError:
-                    raise LibraryError(
-                        "The Library catalog uses invalid or unsupported metadata."
-                    ) from None
+                catalog = self._read_catalog(credential, cancel_event)
+                if catalog.access_level != "download":
+                    raise LibraryError(_VIEW_ONLY_MESSAGE)
                 if item not in catalog.items:
                     raise LibraryError(
                         "This Library item changed or was withdrawn. Refresh the catalog."
@@ -321,7 +360,9 @@ class LibraryClient:
             deadline = time.monotonic() + DOWNLOAD_TOTAL_SECONDS
             path = f"/v1/items/{item.item_id}/versions/{item.version}/download"
             digest, received = hashlib.sha256(), 0
-            with self._response("GET", path, token=credential.token) as response:
+            with self._response(
+                "GET", path, token=credential.token, cancel_event=cancel_event,
+            ) as response:
                 declared = response.headers.get("Content-Length")
                 if declared is not None and declared != str(item.size_bytes):
                     raise LibraryError("The Library download size changed. Refresh the catalog.")

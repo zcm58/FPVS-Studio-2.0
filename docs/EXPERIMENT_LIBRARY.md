@@ -13,9 +13,16 @@ manually**, followed by the existing category, template, name and folder steps. 
 returns through those steps without discarding a manual draft. Selecting the Library
 opens the browser without creating an empty project; cancelling leaves projects intact.
 **Settings > Experiment Library / Manage Access...** opens the same connection controls.
-Enter the lab invitation code and a friendly computer name, then select **Connect**.
+Enter the lab access code and a friendly computer name, then select **Connect**.
 No GitHub account, Git installation, installer, administrator rights, or application
 restart is needed to browse and download experiments.
+
+Startup offers lab setup when this OS user has no saved Library enrollment.
+Ask your PI or lab manager for the reusable lab code; no researcher account or
+email registration is required. **Continue offline** leaves local experiments
+available and prompts again on the next launch until access is configured.
+Saved enrollment skips startup setup without contacting the service. View-only
+permission allows browsing; download permission also enables experiment downloads.
 
 Enrollment is stored for the current OS user on that computer. Other user profiles
 enroll separately. The code itself is not retained as the device credential. Search
@@ -148,6 +155,13 @@ The current client contract uses schema version `1.0`:
 | `GET /v1/items/{item_id}/versions/{version}/download` | Device bearer credential; exact selected item/version bytes. |
 | `DELETE /v1/device` | Device bearer credential; revoke this enrollment and return JSON. |
 
+New clients send `X-FPVS-Library-Metadata: 1` for enrollment/catalog requests;
+responses additionally include `access_level` (`view` or `download`) and nullable
+`lab_name`. Legacy requests retain their original strict response shape. Older
+servers omit these optional fields and retain their original download permission.
+Catalog refresh updates locally stored permission metadata. A download-only denial
+does not erase a valid view-only enrollment; revoked/invalid device access does.
+
 Each catalog item contains `item_id`, `kind: experiment`, `version`, `title`,
 `description`, `experiment_category`, `filename`, `size_bytes`,
 `uncompressed_size_bytes`, `file_count`, `sha256`, and `min_studio_version`.
@@ -191,6 +205,7 @@ offline at fresh short and long Windows roots on one PC.
 | `core/library_publish.py` | Explicit clean publishing preparation without modifying source projects. |
 | `gui/library_dialog.py`, `library_controller.py` | View state and orchestration through app-owned `update_lifecycle.py` jobs. |
 | `gui/controller.py` | Existing root/review/display/document handoff and cancellable Library import. |
+| `gui/library_access_dialog.py` | Optional startup lab setup and app-owned local credential/enrollment jobs. |
 
 On Windows, downloads live under
 `%LOCALAPPDATA%/FPVS Studio/experiment-library/<origin-hash>/`.

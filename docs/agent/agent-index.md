@@ -117,6 +117,13 @@ acceptance; source checks do not establish an installed update or clean-PC repai
 
 ## Library Project Versions
 
+For reusable lab codes and optional startup setup, begin with
+`gui/library_access_dialog.py`, `gui/application.py`, `gui/controller.py` and
+`library/client.py`/`models.py`. The private service owns code issuance and
+revocation; a code never enters project settings or grants results-upload access.
+Use Library/GUI/docs focused routes and repo precommit; registered startup coverage
+is `tests/gui/test_library_access_dialog.py` and is excluded from safe local runs.
+
 For project-version checks, start with `core/library_origin.py`,
 `core/library_installations.py`, `library/installations.py`,
 `library/project_updates.py`, `gui/project_update_controller.py` and

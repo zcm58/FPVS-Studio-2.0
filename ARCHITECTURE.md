@@ -28,6 +28,9 @@ lazily only inside the engine package.
   Private content and the independent Cloudflare service live in
   `zcm58/FPVS-Studio-Library`; that service checks live release-asset availability
   for each browse/download. See `docs/EXPERIMENT_LIBRARY.md`.
+  Reusable PI-distributed lab codes enroll multiple PCs without researcher
+  accounts. `gui/library_access_dialog.py` owns optional startup connection setup;
+  existing OS-protected enrollment skips it, and Continue offline preserves local use.
 - `src/fpvs_studio/developer/`: bundled maintainer tools, enabled by a password-gated
   app preference in Settings > Advanced. `mode.py` snapshots activation at startup;
   enabling/disabling requires restart. `library_publisher.py` owns prepared copies;
