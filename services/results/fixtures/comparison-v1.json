@@ -1,0 +1,37 @@
+{
+  "schema_version": "1.0",
+  "experiment_id": "test-faces",
+  "experiment_version": "1.0.0",
+  "protocol_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "minimum_sessions": 10,
+  "minimum_devices": 3,
+  "conditions": [
+    {
+      "condition_id": "faces",
+      "session_count": 10,
+      "device_count": 3,
+      "eligible": true,
+      "total_targets": 200,
+      "hit_count": 160,
+      "accuracy_percent": 80.0,
+      "mean_rt_ms": 340.0,
+      "rt_count": 100,
+      "scoring_source": "timestamps",
+      "response_window_ms": 1000.0
+    },
+    {
+      "condition_id": "sparse",
+      "session_count": 1,
+      "device_count": 1,
+      "eligible": false,
+      "total_targets": null,
+      "hit_count": null,
+      "accuracy_percent": null,
+      "mean_rt_ms": null,
+      "rt_count": null,
+      "scoring_source": null,
+      "response_window_ms": null
+    }
+  ],
+  "generated_at": "2026-10-05T14:00:01.000Z"
+}

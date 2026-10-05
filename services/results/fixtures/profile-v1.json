@@ -1,0 +1,8 @@
+{
+  "schema_version": "1.0",
+  "experiment_id": "test-faces",
+  "experiment_version": "1.0.0",
+  "protocol_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "title": "Synthetic fixation study",
+  "device_id": "00000000-0000-4000-8000-000000000002"
+}

@@ -20,6 +20,7 @@ _FORBIDDEN_INTERNAL_IMPORTS = {
     "updates": ("gui", "runtime", "engines"),
     "library": ("gui", "runtime", "engines", "updates"),
     "support": ("gui", "engines", "core.models"),
+    "data_sharing": ("gui", "engines", "triggers", "runtime.launcher", "runtime.run_worker"),
 }
 
 
@@ -82,6 +83,7 @@ def test_documented_internal_dependencies() -> None:
     ("updates", "from .. import runtime"),
     ("library", "import fpvs_studio.updates.cache"),
     ("support", "from ..core import models"),
+    ("data_sharing", "from ..runtime import run_worker"),
 ])
 def test_dependency_audit_rejects_forbidden_imports(package, source) -> None:
     assert _internal_import_violations(source, package=f"fpvs_studio.{package}")
@@ -95,6 +97,7 @@ def test_dependency_audit_rejects_forbidden_imports(package, source) -> None:
     ("engines", "from ..core.execution import RunExecutionSummary"),
     ("updates", "from .models import UpdateError"),
     ("support", "from ..core.paths import filesystem_path"),
+    ("data_sharing", "from ..runtime.data_sharing import recover_captures"),
 ])
 def test_dependency_audit_preserves_allowed_contracts(package, source) -> None:
     assert not _internal_import_violations(source, package=f"fpvs_studio.{package}")
@@ -145,6 +148,9 @@ def test_backend_imports_do_not_pull_in_optional_gui_or_engine_dependencies() ->
     importlib.import_module("fpvs_studio.support.storage")
     importlib.import_module("fpvs_studio.support.diagnostics")
     importlib.import_module("fpvs_studio.support.client")
+    importlib.import_module("fpvs_studio.data_sharing.client")
+    importlib.import_module("fpvs_studio.data_sharing.service")
+    importlib.import_module("fpvs_studio.core.data_sharing")
 
     assert all(
         module_name != "psychopy"

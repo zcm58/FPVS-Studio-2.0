@@ -29,6 +29,7 @@ from fpvs_studio.engines.base import PresentationEngine
 from fpvs_studio.runtime.acquisition_evidence import AcquisitionEvidenceRecorder
 from fpvs_studio.runtime.attentional_blink_report import AttentionalBlinkSessionRecorder
 from fpvs_studio.runtime.backward_counting import BackwardCountingSession
+from fpvs_studio.runtime.data_sharing import SharingCapture
 from fpvs_studio.runtime.export_modes import EXPORT_MODE_FULL
 from fpvs_studio.runtime.fixation import build_fixation_task_summary, score_fixation_responses
 from fpvs_studio.runtime.masking_report import write_masking_plan_checkpoint
@@ -259,6 +260,21 @@ class RuntimeWorker:
             raise
         session_open = False
         warnings = list(trigger_warnings)
+        sharing_capture: SharingCapture | None = None
+        try:
+            sharing_capture = SharingCapture.begin(
+                project_root, session_plan, participant_number=participant_number,
+                participant_session_number=participant_session_number,
+                runtime_options=runtime_options,
+            )
+        except Exception:
+            LOGGER.warning(
+                "Data sharing capture could not be initialized; local execution continues.",
+                exc_info=True,
+            )
+            warnings.append(
+                "Data sharing capture could not be initialized. Review Data Sharing settings.",
+            )
         run_results: list[RunExecutionSummary] = []
         abort_reason: str | None = None
         ordered_entries = session_plan.ordered_entries()
@@ -625,6 +641,18 @@ class RuntimeWorker:
                 f"Session interrupted: {type(execution_error).__name__}: {execution_error}"
             )
         session_summary = session_result(run_results, abort_reason)
+        if sharing_capture is not None:
+            try:
+                sharing_capture.terminal(session_summary)
+            except Exception:
+                LOGGER.warning(
+                    "Data sharing completion proof could not be saved; "
+                    "local finalization continues.",
+                    exc_info=True,
+                )
+                warnings.append(
+                    "Data sharing completion proof could not be saved. Report retained for review.",
+                )
         try:
             for result in run_results:
                 acquisition.record_run(result)
@@ -646,6 +674,18 @@ class RuntimeWorker:
             blink_recorder.finish(
                 session_summary, output_dir=output_dir if write_detailed_exports else None,
             )
+            if sharing_capture is not None:
+                try:
+                    sharing_capture.research_committed()
+                except Exception:
+                    LOGGER.warning(
+                        "Completed data sharing report could not be queued; "
+                        "local results remain saved.",
+                        exc_info=True,
+                    )
+                    warnings.append(
+                        "Data sharing report could not be queued. Review Data Sharing and retry.",
+                    )
             write_participant_summary(project_root)
             if execution_error is None:
                 if compact_summary_path is not None:

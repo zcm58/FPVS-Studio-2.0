@@ -1,5 +1,15 @@
 # GUI Workflow
 
+## Private experiment sharing
+
+View > Data Sharing & Comparison opens a two-tab dialog at `880x700`, minimum
+`820x620`. Lab invitation enrollment leaves sharing off until the operator explicitly
+enables it. App-owned jobs handle hashing, delivery and descriptive comparison after
+completed sessions, with opt-out/backlog release and cancel/shutdown guards.
+Archive uploaded history retains receipts and private mappings locally without HTTP.
+See [Data sharing](DATA_SHARING.md) for the exact fields, cohort limits, source-only
+service configuration and pending live/visible acceptance.
+
 ## Bug reporting
 
 File > Request a Feature opens a separate text-only draft using the same reporting

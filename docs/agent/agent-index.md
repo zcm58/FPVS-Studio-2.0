@@ -29,6 +29,7 @@ cross-layer behavior require it.
 | `triggers` | Trigger contracts, serial hardware adapters, marker writes, or trigger logs | `src/fpvs_studio/triggers/AGENTS.md` and the trigger sections of `docs/RUNTIME_EXECUTION.md` |
 | `updates` | Independent updater protocol/staging, release and repair selection, bounded cache/locking, verified downloads/launch, or update GUI shutdown coordination | `src/fpvs_studio/updates/AGENTS.md` and `docs/PACKAGING.md` |
 | `library` | View/Create Project library entry points, private catalog, enrollment, downloads, Advanced developer mode, and publishing | `src/fpvs_studio/library/AGENTS.md`, `src/fpvs_studio/developer/AGENTS.md` for publishing, `docs/EXPERIMENT_LIBRARY.md`, and the active private-library plan |
+| `data-sharing` | Experiment contribution consent, credentials, completion capture, outbox, Cloudflare intake or matched reference comparisons | `src/fpvs_studio/data_sharing/AGENTS.md`, `docs/DATA_SHARING.md`, and `services/results/AGENTS.md` for backend work |
 | `packaging` | Versioning, PyInstaller, Inno Setup, sparse patches, owned-file upgrade reconciliation, branding, isolated beta/executable builds, or packaged smoke | `packaging/AGENTS.md`, `docs/PACKAGING.md`, and `pyproject.toml` |
 
 Run a route with:
@@ -138,6 +139,20 @@ Run the GUI scope, `tests/unit/test_support_reports.py` and
 `tests/unit/test_support_client.py`, then repo precommit for startup/lifecycle
 changes. Registered Qt coverage is `tests/gui/test_report_bug_dialog.py`.
 Visible acceptance and later service setup are in `docs/BUG_REPORTING.md`.
+
+## Experiment Data Sharing
+
+Start with `core/data_sharing.py`, `runtime/data_sharing.py`, the data-sharing package
+guide and [Data sharing](../DATA_SHARING.md). The dialog/controller use app-owned
+workers and snapshots; neither HTTP nor authored asset hashing belongs on the GUI
+thread or in presentation callbacks. The independent Worker has its own source map,
+registration tooling and Node SQLite tests under `services/results/`.
+
+Use the data-sharing focused route, runtime for launch/finalization changes, and repo
+precommit for shared behavior. Run the Worker's Node tests separately as documented;
+the Python harness does not run them. Registered GUI coverage is
+`tests/gui/test_data_sharing_dialog.py`; visible sizing and two-machine staging
+acceptance remain explicit platform/service checks.
 
 ## Settings Test Mode
 

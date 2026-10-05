@@ -45,6 +45,13 @@ def test_launch_settings_can_explicitly_disable_connected_refresh_verification()
     assert settings.as_runtime_options()["verify_refresh_rate"] is False
 
 
+def test_sharing_protocol_is_an_explicit_transient_launch_option() -> None:
+    assert "sharing_protocol_sha256" not in LaunchSettings().as_runtime_options()
+    digest = "a" * 64
+    settings = LaunchSettings(sharing_protocol_sha256=digest)
+    assert settings.as_runtime_options()["sharing_protocol_sha256"] == digest
+
+
 def test_launch_settings_can_explicitly_disable_graphics_memory_verification() -> None:
     settings = LaunchSettings(verify_graphics_memory=False)
 

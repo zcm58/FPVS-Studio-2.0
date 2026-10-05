@@ -40,6 +40,14 @@ lazily only inside the engine package.
   submission defaults to the verified production endpoint and requires explicit user action.
   The independent Cloudflare backend is in private `zcm58/FPVS-Studio-Feedback`.
   See `docs/BUG_REPORTING.md` for the wire contract and activation.
+- `src/fpvs_studio/data_sharing/`: GUI-neutral per-experiment consent, native OS
+  credentials, immutable durable upload outbox and bounded HTTPS delivery.
+  `core/data_sharing.py` owns strict wire contracts and authored protocol identity;
+  `runtime/data_sharing.py` captures eligible completed sessions after research commits.
+  View > Data Sharing & Comparison uses app-owned jobs, with all network activity
+  outside presentation. The independent Cloudflare Worker and D1 schema are in
+  `services/results/`; the desktop endpoint defaults unconfigured. Canonical privacy,
+  comparison and recovery rules are in `docs/DATA_SHARING.md`.
 - `src/fpvs_studio/assets/`: packaged release-facing static assets, including the
   licensed Open Sans face used by authored modular tasks.
 - `src/fpvs_studio/gui/`: PySide6 windows, dialogs, controllers, document binding,
@@ -297,6 +305,7 @@ owns endpoint estimates and task-response checkpoints. Details and acceptance ar
 - Run/session/runtime contracts: `docs/RUNSPEC.md`, `docs/SESSION_PLAN.md`, and
   `docs/RUNTIME_EXECUTION.md`
 - Engine boundary: `docs/ENGINE_INTERFACE.md`
+- Opt-in experiment contributions and comparisons: `docs/DATA_SHARING.md`
 - Environment and packaging: `docs/ENVIRONMENT.md` and `docs/PACKAGING.md`
 - Plans and technical debt: `docs/PLANS.md` and `docs/exec-plans/`
 
@@ -304,7 +313,7 @@ Use `docs/index.md` for the full developer-documentation map.
 
 ## Task Context Recipes
 
-Start with `docs/agent/agent-index.md`. Match one of its 12 verification scopes, read
+Start with `docs/agent/agent-index.md`. Match one of its verification scopes, read
 only that row's initial context and the nearest nested `AGENTS.md`, then search for the
 specific symbol or behavior. Do not open broad source/test trees merely to confirm a
 passing audit.

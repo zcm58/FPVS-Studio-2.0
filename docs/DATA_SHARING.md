@@ -1,0 +1,277 @@
+# Private experiment data sharing
+
+FPVS Studio can contribute fixation-task summaries for an enrolled experiment and
+compare its latest eligible local session with compatible shared results. Sharing
+is off by default. The desktop implementation and independently deployable
+[Results Worker](../services/results/README.md) are available in source; no Results
+service has been provisioned or deployed by this change.
+
+## Operator workflow
+
+Open **View > Data Sharing & Comparison** in the active experiment. Enter the
+lab-issued invitation code and choose **Connect**, review the registered study,
+version and field list, then enable **Automatically share completed sessions for
+this experiment**. Connecting alone does not enable sharing or upload history.
+Locally authored experiments can enroll without a Library download.
+
+After a completed session, Studio saves its research records and queues the report.
+An application-owned background job submits it. Project opening, session completion
+and opening the sharing dialog can retry opted-in pending reports; temporary
+failures use bounded backoff. The controller schedules at most four automatic
+follow-up retries per cycle. **Retry pending** explicitly releases held reports in
+the current registered scope. Authentication, schema, version and digest conflicts
+require operator attention. Closing the dialog cancels its current operation.
+Starting a Home or Setup launch cancels background reporting and waits asynchronously
+for its bounded request to finish before starting runtime work. An in-flight request
+may already have reached the service; no new request starts during presentation.
+Projects that have never enrolled and leave sharing off skip protocol hashing and
+network access. Enrolled protocol hashing checks cancellation between asset chunks
+so a canceled reporting job can release the launch gate promptly.
+
+Turning sharing off stops new uploads and holds unsent reports. Turning it back on
+does not silently release that backlog. The off setting is committed before outbox
+review; malformed records remain intact and prevent re-enabling until resolved.
+The bounded local opt-out job survives dialog closure, project switching and app
+shutdown. Upload cancellation cannot discard the requested opt-out.
+**Revoke access** disables local sharing
+and revokes the enrollment; accepted reports remain with the owner. Reconnection
+requires a lab invitation. If access was already rejected or the copied project's
+OS credential is missing, Revoke access can clear the unusable local enrollment
+and allow reconnection; previously received records remain. An offline/other revoke
+failure preserves the profile with sharing disabled for an explicit retry.
+Sharing failures change the reporting status and preserve
+local research results.
+
+The service origin is configured through `FPVS_DATA_SHARING_SERVICE_URL`, one HTTPS
+origin without credentials, paths, queries or fragments. An empty value disables
+online operations. The desktop rejects redirects. Configuring an origin does not
+provision the service or activate sharing.
+
+## Experiment and protocol identity
+
+The service registers an immutable experiment ID, version and protocol SHA-256.
+Folder names and local project IDs do not identify a shared study. Enrollment and
+every submission are scoped to that registered identity. A new reviewed protocol
+requires a new registered version and invitation; earlier reports retain their
+original scope.
+
+`core/data_sharing.py:protocol_fingerprint` hashes authored protocol, condition,
+task, fixation, presentation and stimulus settings, template identity, and actual
+bytes of the selected stimulus variants and referenced task media. It uses the
+compiler's existing manifest/filesystem path resolver; unrelated files and
+unselected image variants do not enter asset provenance. Actual selected assets are
+hashed in chunks, so editing a file without updating the manifest changes the hash.
+Local project identity, dates, participant electrode bookkeeping, random seeds and
+machine connection/display geometry fields are excluded.
+
+The GUI supplies the actual authored fingerprint as a runtime-only launch option,
+only for the document's current compiled session plan. A stale compiled plan can
+still run locally but cannot be labeled with an edited document's sharing protocol.
+Runtime snapshots it with the enrolled profile before presentation. A mismatch,
+missing fingerprint or later project edit holds upload eligibility while local
+execution remains available. Reports are never relabeled to a newly registered
+version. `RunSpec`, `SessionPlan`, project JSON, config exports and bundles contain
+neither sharing activation nor credentials.
+
+## Completion and crash recovery
+
+Automatic capture applies to ordinary multi-condition session launches, including
+single-occurrence sessions. The standalone stream-only `RuntimeWorker.execute`
+entry point does not queue a report. V1 requires a positive planned condition count,
+every planned occurrence in order, full stream frame counts, all pre/post tasks
+complete and no session abort, including a completion-screen abort. Test Mode,
+Pilot Mode and reserved participant IDs `0` and `00` stay local. Runtime checks the
+actual launch flags; historical execution-mode metadata is not the gate.
+
+The local sequence is the same in full and compact export modes:
+
+1. Before presentation, persist an explicit capture intent with a fresh report UUID,
+   registered profile, actual protocol, launch flags and private local join references.
+2. After presentation/tasks/cleanup, before research finalization, persist the
+   terminal eligibility decision and exact allowlisted report candidate.
+3. Commit the existing research records: condition history, compact task rows when
+   applicable, and finalized native attentional-blink records. Full artifacts remain
+   in their ordinary output directory.
+4. Verify the numbered condition-history rows, persist an explicit research-commit
+   marker and evidence digest, and atomically queue immutable report bytes.
+5. Generate the derived participant workbook and discard successful recovery
+   checkpoints through the existing runtime workflow.
+
+A workbook failure after step 4 cannot remove the queued report. An earlier research
+write failure cannot make a report eligible for submission. Capture/queue failures
+produce logging and actionable status without replacing a runtime error or blocking
+local research finalization.
+
+Recovery considers explicit capture intents only. It requires eligible terminal
+proof, the persisted research-commit marker and matching committed condition-history
+evidence. Rows alone never imply a successfully finished execution. A crash after
+research writes but before the commit marker leaves a capture requiring review;
+Studio conservatively holds it instead of inferring completion. An eligible committed
+capture interrupted during queuing reuses the same UUID and bytes. Enrollment does
+not backfill historical results.
+
+## Private wire contract
+
+`core/data_sharing.py` owns strict Pydantic models with unknown fields forbidden.
+The Worker independently validates the same contract. The report contains exactly:
+
+| Envelope | Meaning |
+| --- | --- |
+| `schema_version` | `"1.0"` |
+| `report_id` | Canonical UUID generated for this execution |
+| `experiment_id`, `experiment_version`, `protocol_sha256` | Immutable enrolled scope |
+| `completed_at`, `studio_version` | UTC completion time and Studio release |
+| `occurrences` | Ordered, distinct condition occurrences |
+
+Each occurrence contains `condition_id`, one-based `occurrence_index`,
+`total_targets`, `hit_count`, `miss_count`, `false_alarm_count`, `accuracy_percent`,
+`mean_rt_ms`, `rt_count`, `scoring_source` (`timestamps` or `frames`), `refresh_hz`
+and `response_window_ms`. Repeated conditions retain distinct occurrence indices.
+The local scoring labels `hardware_timestamp` and `frame_fallback` map explicitly
+to those wire values. Mixed provenance within an individual occurrence requires
+review; legitimate differences between occurrences remain in the stored report.
+
+Counts conserve targets: hits plus misses equal targets. Accuracy is
+`100 * hits / targets`; it is null when targets are zero. False alarms remain a
+separate count. Mean RT comes from existing hit scoring and is null exactly when
+the RT observation count is zero. RT observation count cannot exceed hits.
+Disabled fixation tasks produce zero counts and null accuracy/RT. No composite
+attention score or EEG quality inference is introduced.
+
+Reports contain no participant numbers, names, demographics, hostnames, paths,
+raw keypresses, questionnaire answers, logs, stimulus files or EEG. Stream/task
+completion flags and participant-to-report mappings remain in private local
+capture evidence. The remote endpoint still receives completion timestamps and
+an authenticated enrollment link; these summaries are private research data,
+not an anonymous public dataset.
+
+Reports are bounded to 128 KiB, 1–4,096 occurrences and at most 512 distinct condition
+IDs. Per-occurrence integer counts are bounded to 1,000,000; booleans cannot stand
+in for counts. Refresh rates are 1–1,000 Hz and RT/window values are 0–600,000 ms.
+Nonfinite numbers, malformed UTC timestamps and inconsistent metrics are rejected.
+Oversized data is retained for review rather than truncated or acknowledged.
+
+The service commits immutable bytes before issuing a receipt containing report ID,
+scope, SHA-256 and UTC receipt time. Same ID and bytes return the existing receipt;
+conflicting bytes return a conflict. The desktop persists an attempt before sending
+and records Uploaded only after validating that receipt. A lost response never
+causes creation of a replacement UUID.
+
+## Descriptive comparison
+
+The local column pools repeated occurrences within the latest eligible captured
+session for the current scope, including a pending or held report. It is not an
+aggregate of all local participants or a new analysis-inclusion decision.
+
+The reference column uses only the matching experiment/version/protocol and always
+excludes the requesting enrollment's reports. Each condition requires at least ten
+distinct report sessions from three other enrolled devices. These are report and
+credential/enrollment counts, not unique-participant counts or proof of independent
+people. Zero-target observations do not contribute to the reference denominator.
+
+Reference conditions with insufficient counts or mixed scoring sources/response
+windows expose no performance metrics. Eligible reference conditions carry their
+scoring source/window; Studio also suppresses comparison when these differ from
+the latest local condition. The response retains cohort counts when metrics are
+suppressed; the GUI shows eligible denominators and a threshold notice when the
+reference cohort is unavailable.
+Accuracy uses pooled hit/target counts. RT uses observation-weighted means,
+`sum(mean_rt_ms * rt_count) / sum(rt_count)`, with null RT for no-hit cohorts.
+This supports descriptive comparison, not a participant-level repeated-measures
+test, a population norm or causal inference. Contributors cannot retrieve other
+devices' individual reports.
+
+## Local persistence and credentials
+
+| Project-local path | Purpose |
+| --- | --- |
+| `.fpvs-data-sharing/settings.json` | Bounded local profile and explicit opt-in |
+| `logs/data-sharing/intents/<UUID>.json` | Private launch, completion and commit proof |
+| `logs/data-sharing/outbox/<UUID>.json` | Immutable report JSON/digest, attempts, state and receipt |
+| `logs/data-sharing/archive/<UUID>/report.json` | Explicitly archived acknowledged record |
+| `logs/data-sharing/archive/<UUID>/capture.json` | Corresponding finalized private mapping, when present |
+
+Files stay beneath the active project root, reject links/reparse points and require
+private regular files. Settings are bounded to 16 KiB, each intent/outbox record to
+256 KiB, and each active collection to 512 records. Reads reject malformed data
+visibly; no pending report is silently skipped or discarded. Recovery reads at most
+64 MiB of committed condition history. Atomic replacements and the existing project
+reporting lock preserve writes across threads/processes.
+
+Credentials use Windows Credential Manager or Linux Secret Service in a dedicated
+Data Sharing namespace, scoped to origin, project path and protocol. Enrollment
+codes are not saved in project files. A token is stored before enrollment so an
+ambiguous response can retry the same identity. Library credentials are not reused.
+A copied project requires its own secure-store enrollment on the destination.
+
+**Archive uploaded history** performs no HTTP request. It moves older acknowledged
+outbox records and matching finalized intents to the guarded archive, retaining the
+latest uploaded report for each experiment/version/protocol in the active outbox.
+Pending, held, failed and unfinished captures remain active. Receipt and local
+participant-to-report evidence are preserved for audit; raw research exports and
+the shared dataset are unchanged. Every selected source/schema/destination is
+validated before file moves; existing targets are never overwritten. A partial
+move remains recoverable and resumes on an explicit retry. Active capacity counts
+ignore archived files. Archiving is explicit, never automatic.
+
+## Maintainer setup
+
+Save the reviewed experiment first. From the repository root, obtain the same
+fingerprint used by Studio without presentation, network access or enrollment:
+
+```powershell
+$env:FPVS_PROTOCOL_PROJECT = 'C:\path\to\the\experiment'
+@'
+import os
+from pathlib import Path
+from fpvs_studio.core.data_sharing import protocol_fingerprint
+from fpvs_studio.core.paths import project_json_path
+from fpvs_studio.core.serialization import load_project_file
+
+root = Path(os.environ["FPVS_PROTOCOL_PROJECT"])
+project = load_project_file(project_json_path(root))
+print(protocol_fingerprint(project, root))
+'@ | & .\.venv3.10\Scripts\python.exe -
+```
+
+The loader applies normal in-memory project migrations; this command does not save
+the project. It requires the selected image variants and referenced task media to
+exist. Register the reviewed hash/version and a hashed high-entropy invitation
+through [the standalone service registration procedure](../services/results/README.md#registration-and-enrollment).
+The registration script emits SQL for review and does not deploy or execute it.
+Resolve owner access, private-data retention/deletion, backups, research approval
+and current Cloudflare capacity before authorizing a live installation.
+
+`services/results/` owns Worker/D1 enrollment, intake, receipts, revocation and
+aggregate comparison. It has separate credentials and deployment from Library
+and Feedback. Public publication, raw EEG upload, researcher dashboards, owner CSV
+exports and longitudinal joins are future work.
+
+## Verification and remaining acceptance
+
+Use the `data-sharing` focused route for neutral contracts, local storage, runtime,
+fake HTTP and shared wire fixtures; run repo precommit after cross-layer edits.
+Run the independent Worker's synthetic Node SQLite tests separately as described
+in its README; the Python harness does not run those tests.
+The GUI route excludes Qt locally. Registered GUI tests and source checks do not
+confirm real layout or live service acceptance.
+
+```powershell
+./scripts/verify.ps1 -Scope data-sharing -Tier focused
+./scripts/verify.ps1 -Scope gui -Tier focused
+./scripts/verify.ps1 -Scope docs -Tier focused
+./scripts/verify.ps1 -Scope repo -Tier precommit
+```
+
+Visible/manual acceptance remains pending at the dialog's `820x620` minimum and
+`880x700` default, both themes and practical Windows scaling. Exercise long profiles,
+all status states, opt-out/cancel during a request, project switching and application
+shutdown. Run registered Qt tests only in a user-approved safe visible environment;
+never use local offscreen Qt.
+
+Live acceptance remains pending: authorize and provision an isolated Results
+Worker/D1 scope, enroll two or more machines with synthetic sessions, check exported
+metrics and lost-response deduplication, prove credential-scope rejection and build
+the required aggregate cohort without real participant data. No claim of completed
+deployment, current account capacity or live multi-machine acceptance follows from
+local tests.

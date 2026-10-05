@@ -278,6 +278,7 @@ def test_checked_in_verification_config_is_valid() -> None:
     assert set(scopes) == {
         "compiler",
         "core",
+        "data-sharing",
         "docs",
         "engine",
         "gui",

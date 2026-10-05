@@ -13,6 +13,10 @@ This directory is the most important foundation in the repo. It should remain im
 - dedicated `RunSpec` schemas in `run_spec.py`
 - dedicated `SessionPlan` schemas in `session_plan.py`
 - dedicated execution-result schemas in `execution.py`
+- allowlisted fixation-report, enrollment-link and comparison models plus read-only
+  authored protocol/selected-asset fingerprinting in `data_sharing.py`; local opt-in,
+  credentials and outbox I/O stay outside authored/compiled contracts. See
+  `docs/DATA_SHARING.md` from the repository root.
 - neutral, versioned recording snapshots and acquisition attempt evidence in
   `execution.py`; runtime owns qualification, transport selection and file writing.
   These execution metadata fields never enter `ProjectFile`, `RunSpec` or `SessionPlan`.

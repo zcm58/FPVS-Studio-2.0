@@ -60,6 +60,12 @@ def test_export_project_bundle_writes_project_stimuli_and_manifest(
     (sample_project_root / "cache" / "ignored.tmp").write_text("cache", encoding="utf-8")
     (sample_project_root / "logs").mkdir()
     (sample_project_root / "logs" / "ignored.csv").write_text("logs", encoding="utf-8")
+    sharing_dir = sample_project_root / ".fpvs-data-sharing"
+    sharing_dir.mkdir()
+    (sharing_dir / "settings.json").write_text("private local enrollment", encoding="utf-8")
+    reporting_dir = sample_project_root / "logs" / "data-sharing" / "outbox"
+    reporting_dir.mkdir(parents=True)
+    (reporting_dir / "private.json").write_text("private report and receipt", encoding="utf-8")
     bundle_path = tmp_path / "sample.fpvsbundle"
 
     manifest = export_project_bundle(sample_project_root, bundle_path)
@@ -77,6 +83,8 @@ def test_export_project_bundle_writes_project_stimuli_and_manifest(
         assert "stimuli/original-images/oddball-set/oddball-set-03.png" in names
         assert "cache/ignored.tmp" not in names
         assert "logs/ignored.csv" not in names
+        assert not any(name.startswith(".fpvs-data-sharing/") for name in names)
+        assert not any(name.startswith("logs/data-sharing/") for name in names)
         project_json = archive.read("project.json").decode("utf-8")
         assert "#00FF00" in project_json
 

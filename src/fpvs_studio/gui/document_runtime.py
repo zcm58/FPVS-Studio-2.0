@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Sequence
 from importlib import import_module
 from pathlib import Path
@@ -10,6 +11,7 @@ from typing import TYPE_CHECKING, Any, cast
 from pydantic import ValidationError
 
 from fpvs_studio.core.compiler import CompileError, compile_session_plan
+from fpvs_studio.core.data_sharing import protocol_fingerprint
 from fpvs_studio.core.enums import EngineName
 from fpvs_studio.core.execution import ParticipantMetadata
 from fpvs_studio.core.models import ProjectFile, ProjectValidationReport
@@ -19,6 +21,7 @@ from fpvs_studio.core.validation import (
     condition_fixation_guidance,
     validate_project,
 )
+from fpvs_studio.data_sharing.storage import load_settings
 from fpvs_studio.gui.document_support import (
     DocumentError,
     LaunchSummary,
@@ -35,6 +38,19 @@ from fpvs_studio.runtime.recording import (
 
 def _document_dependency(name: str) -> Any:
     return getattr(import_module("fpvs_studio.gui.document"), name)
+
+
+def _sharing_protocol(project: ProjectFile, project_root: Path) -> str | None:
+    try:
+        if load_settings(project_root).enabled:
+            return protocol_fingerprint(project, project_root)
+    except Exception:
+        logging.getLogger(__name__).warning(
+            "Sharing protocol could not be verified; "
+            "local launch continues and uploads remain held.",
+            exc_info=True,
+        )
+    return None
 
 
 class DocumentRuntimeMixin:
@@ -249,6 +265,10 @@ class DocumentRuntimeMixin:
                     pilot_mode=self.attentional_blink_pilot_mode_enabled,
                     completion_screen_seconds=0.5,
                     export_mode=self._session_export_mode,
+                    sharing_protocol_sha256=(
+                        _sharing_protocol(self._project, self._project_root)
+                        if session_plan is self._last_session_plan else None
+                    ),
                 ),
             }
             if participant_metadata is not None:
