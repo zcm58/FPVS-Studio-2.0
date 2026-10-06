@@ -8,6 +8,9 @@ validation and extraction; this package only transfers and verifies bytes.
 - No GitHub credentials, enrollment codes, or downloaded executable code live here.
 - Persist a random device token in the secure OS store before enrollment. Preserve
   pending tokens after network errors so retry is idempotent.
+- Native access uses `/v2` with JSON schema `1.0`. Clear previous-protocol secure
+  credentials under the cache lock before startup/enrollment; reconnect with a fresh
+  token and the existing lab code. Never reuse old or revoked machine access.
 - Windows uses Credential Manager; Linux requires Secret Service. Fail closed when
   secure storage is unavailable; never write secrets to project files or the cache.
 - Keep HTTP requests on the configured HTTPS service origin, reject redirects, bound

@@ -137,7 +137,7 @@ at `/admin`, selecting the exact experiment and version before saving. Claims an
 recorded download counts are keyed to experiment ID, version and bundle SHA-256;
 new versions do not inherit papers from previous releases. Publishing bundles
 remains the existing Studio maintainer workflow. The website has separate browser
-APIs for enriched metadata; the strict native `/v1` catalog stays unchanged.
+APIs for enriched metadata; the strict native `/v2` catalog remains separate.
 Reader pages omit stimulus-set labels, category filters/tags and artifact details;
 the administrator editor manages descriptions and publications. Native Studio
 category metadata and bundle validation remain unchanged. The service retains the
@@ -299,15 +299,23 @@ The current client contract uses schema version `1.0`:
 
 | Request | Contract |
 | --- | --- |
-| `POST /v1/enroll` | JSON `schema_version`, `code`, `device_token`, `device_name`; response `schema_version`, `device_id`, `library_name`. |
-| `GET /v1/catalog?kind=experiment` | Device bearer credential; response `schema_version`, `library_name`, `items`. |
-| `GET /v1/items/{item_id}/versions/{version}/download` | Device bearer credential; exact selected item/version bytes. |
-| `DELETE /v1/device` | Device bearer credential; revoke this enrollment and return JSON. |
+| `POST /v2/enroll` | JSON `schema_version`, `code`, `device_token`, `device_name`; response `schema_version`, `device_id`, `library_name`. |
+| `GET /v2/catalog?kind=experiment` | Device bearer credential; response `schema_version`, `library_name`, `items`. |
+| `GET /v2/items/{item_id}/versions/{version}/download` | Device bearer credential; exact selected item/version bytes. |
+| `DELETE /v2/device` | Device bearer credential; revoke this enrollment and return JSON. |
 
-New clients send `X-FPVS-Library-Metadata: 1` for enrollment/catalog requests;
+Native `/v2` retains JSON `schema_version: "1.0"`; the route version changes
+enrollment compatibility, not project or bundle formats. Previous native `/v1`
+requests return HTTP 426 `client_upgrade_required`, including enrollment. Computers
+must update Studio and reconnect using their currently valid lab code. Old machine
+credentials are revoked server-side; startup discards their previous-protocol local
+credentials under the existing cache lock and offers connection or **Continue offline**.
+The new enrollment always uses a fresh random token. Current `/v2` pending tokens remain
+retryable after a lost response. Existing local projects continue to work offline.
+
+Clients send `X-FPVS-Library-Metadata: 1` for enrollment/catalog requests;
 responses additionally include `access_level` (`view` or `download`) and nullable
-`lab_name`. Legacy requests retain their original strict response shape. Older
-servers omit these optional fields and retain their original download permission.
+`lab_name`. The client continues to validate the bounded native metadata contract.
 Catalog refresh updates locally stored permission metadata. A download-only denial
 does not erase a valid view-only enrollment; revoked/invalid device access does.
 
