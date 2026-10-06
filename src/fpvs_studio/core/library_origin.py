@@ -16,6 +16,18 @@ from fpvs_studio.core.serialization import atomic_text_write
 ORIGIN_DIRECTORY = ".fpvs-library"
 ORIGIN_FILENAME = "project-origin.json"
 MAX_ORIGIN_BYTES = 16 * 1024
+MANAGED_LIBRARY_SERVICE_URL = "https://openfpvs.com"
+_PREVIOUS_MANAGED_LIBRARY_SERVICE_URLS = frozenset({
+    "https://fpvs-studio-library.fpvs-studio-zcm58.workers.dev",
+    "https://fpvs.zack-murphy.com",
+})
+
+
+def canonical_library_service_url(service_url: str) -> str:
+    """Recognize prior managed origins without rewriting receipts or custom services."""
+    if service_url in _PREVIOUS_MANAGED_LIBRARY_SERVICE_URLS:
+        return MANAGED_LIBRARY_SERVICE_URL
+    return service_url
 
 
 class LibraryOriginError(ValueError):

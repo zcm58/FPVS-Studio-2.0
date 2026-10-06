@@ -28,11 +28,14 @@ lazily only inside the engine package.
   preserves the choice to keep the current version; see the Library contract.
   Private content and the independent Cloudflare service live in
   `zcm58/FPVS-Studio-Library`; that service checks live release-asset availability
-  for each browse/download. See `docs/EXPERIMENT_LIBRARY.md`.
+  for each browse/download. Native access connects directly to `https://openfpvs.com`;
+  core's exact origin policy preserves receipt identity without transferring credentials.
+  See `docs/EXPERIMENT_LIBRARY.md`.
   The same private repository owns the website at `https://openfpvs.com`: lab-code
   discovery, exact-version publications, bundle downloads, recorded download starts
   and owner content/access management, including verified accounts, lab grants and
   linked device revocation.
+  Website maintenance lives in the standalone sibling `../OpenFPVS` PyCharm project.
   Separate browser APIs enrich metadata without changing the strict native catalog;
   ordinary website bundle imports require explicit linking for project-version checks.
   Deployment status is tracked in `docs/exec-plans/active/fpvs-account-portal.md`.

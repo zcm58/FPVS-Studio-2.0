@@ -215,3 +215,26 @@ def test_import_failure_before_commit_leaves_no_project_or_receipt(
     assert not project_dir(root, project.meta.project_id).exists()
     staging = app_data_dir(root) / project_bundle.IMPORT_STAGING_DIRNAME
     assert not staging.exists() or list(staging.iterdir()) == []
+
+
+@pytest.mark.parametrize("previous_origin", [
+    "https://fpvs-studio-library.fpvs-studio-zcm58.workers.dev",
+    "https://fpvs.zack-murphy.com",
+])
+def test_managed_origin_move_preserves_duplicate_import_commit_guard(
+    bundle, tmp_path, previous_origin,
+):
+    path, _project = bundle
+    root = tmp_path / "studio"
+    receipt = origin(service_url=previous_origin,
+                     bundle_sha256=hashlib.sha256(path.read_bytes()).hexdigest())
+    installed = import_project_bundle(path, root, library_origin=receipt)
+    receipt_path = installed.project_root / ORIGIN_DIRECTORY / ORIGIN_FILENAME
+    before = receipt_path.read_bytes()
+    with pytest.raises(ProjectBundleError, match="already installed"):
+        import_project_bundle(path, root, library_origin=receipt.model_copy(
+            update={"service_url": "https://openfpvs.com"},
+        ))
+    assert receipt_path.read_bytes() == before
+    assert load_library_origin(installed.project_root).service_url == previous_origin
+    assert len(list(root.glob("*/project.json"))) == 1

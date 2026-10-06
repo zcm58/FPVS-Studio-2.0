@@ -225,3 +225,53 @@ def test_startup_access_fits_all_states(qtbot, size, state):
     assert dialog.status_label.height() >= dialog.status_label.heightForWidth(
         dialog.status_label.width(),
     )
+
+
+@pytest.mark.parametrize("current_access", [False, True])
+def test_managed_origin_move_prompts_once_without_reusing_old_access(
+    setup, qtbot, tmp_path, monkeypatch, current_access,
+):
+    controller, lifecycle, _client, _reads, _enrollments = setup
+    previous = DeviceCredential(
+        token="o" * 43, device_name="Previously connected PC", library_api_version=2,
+        connection=_connection(),
+    )
+    canonical_origin = "https://openfpvs.com"
+    stored = {
+        "https://fpvs-studio-library.fpvs-studio-zcm58.workers.dev": previous,
+        "https://fpvs.zack-murphy.com": previous,
+        canonical_origin: previous.model_copy(update={"token": "n" * 43})
+        if current_access else None,
+    }
+    before = stored.copy()
+    selected_origins = []
+
+    def select_store(service_url):
+        selected_origins.append(service_url)
+        assert service_url == canonical_origin
+        return SimpleNamespace(
+            load=lambda: stored[service_url],
+            save=lambda _value: pytest.fail("startup cannot transfer credentials"),
+            delete=lambda: pytest.fail("startup cannot remove current protocol credentials"),
+        )
+
+    monkeypatch.setattr(cache_module, "_private_directory", lambda _path: None)
+    monkeypatch.setattr(client_module, "credential_store", select_store)
+    monkeypatch.setattr(
+        client_module, "build_opener", lambda *_args: pytest.fail("unexpected startup network"),
+    )
+    controller.client = LibraryClient(cache_root=tmp_path / "cache")
+    controller.check()
+    lifecycle.jobs[-1].finish()
+    assert selected_origins == [canonical_origin]
+    assert stored == before
+    if current_access:
+        assert controller.dialog is None
+    else:
+        dialog = controller.dialog
+        qtbot.addWidget(dialog)
+        assert dialog.isVisible()
+        assert dialog.code_edit.isEnabled()
+        assert dialog.offline_button.isEnabled()
+        qtbot.mouseClick(dialog.offline_button, Qt.MouseButton.LeftButton)
+        assert not dialog.isVisible()

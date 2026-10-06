@@ -30,6 +30,11 @@ from fpvs_studio.library.models import (
 )
 
 ORIGIN = "https://library.example.test"
+MANAGED_ORIGIN = "https://openfpvs.com"
+LEGACY_MANAGED_ORIGINS = (
+    "https://fpvs-studio-library.fpvs-studio-zcm58.workers.dev",
+    "https://fpvs.zack-murphy.com",
+)
 PAYLOAD = b"synthetic-bundle-bytes"
 
 
@@ -133,6 +138,121 @@ def payload_reply(payload=PAYLOAD, **kwargs):
     return lambda request: Response(
         payload, request.full_url, content_type="application/octet-stream", **kwargs
     )
+
+
+@pytest.fixture
+def managed_credentials(environment, monkeypatch):
+    store = MemoryStore(connected=False)
+    previous_stores = {origin: MemoryStore() for origin in LEGACY_MANAGED_ORIGINS}
+    selected_origins = []
+    for previous in previous_stores.values():
+        monkeypatch.setattr(
+            previous, "load", lambda: pytest.fail("previous-origin credentials must not be loaded"),
+        )
+
+    def select_store(origin):
+        selected_origins.append(origin)
+        return store if origin == MANAGED_ORIGIN else previous_stores[origin]
+
+    monkeypatch.setattr(client_module, "credential_store", select_store)
+    return store, selected_origins
+
+
+@pytest.mark.parametrize("service_url", [None, MANAGED_ORIGIN, *LEGACY_MANAGED_ORIGINS])
+def test_managed_service_default_and_old_urls_request_canonical_origin(
+    environment, managed_credentials, tmp_path, service_url,
+):
+    _, _, requests, replies = environment
+    store, selected_origins = managed_credentials
+    store.value = MemoryStore().value.model_copy(update={"token": "n" * 43})
+    client = (
+        LibraryClient(cache_root=tmp_path / "managed")
+        if service_url is None
+        else LibraryClient(service_url, cache_root=tmp_path / "managed")
+    )
+    replies.append(catalog(item()))
+    assert client.catalog().items[0].item_id == "synthetic"
+    assert client.service_url == MANAGED_ORIGIN
+    assert selected_origins == [MANAGED_ORIGIN]
+    assert requests[0].full_url == MANAGED_ORIGIN + "/v2/catalog?kind=experiment"
+    assert requests[0].get_header("Authorization") == "Bearer " + "n" * 43
+
+
+@pytest.mark.parametrize("service_url", [
+    ORIGIN,
+    "https://fpvs.zack-murphy.com:8443",
+    "https://fpvs-studio-library.fpvs-studio-zcm58.workers.dev.example.test",
+])
+def test_explicit_custom_service_keeps_its_origin_and_credentials(
+    environment, monkeypatch, tmp_path, service_url,
+):
+    _, store, requests, replies = environment
+    selected_origins = []
+
+    def select_store(origin):
+        selected_origins.append(origin)
+        return store
+
+    monkeypatch.setattr(client_module, "credential_store", select_store)
+    client = LibraryClient(service_url, cache_root=tmp_path / "custom")
+    replies.append(catalog(item()))
+    assert client.catalog().items[0].item_id == "synthetic"
+    assert client.service_url == service_url
+    assert selected_origins == [service_url]
+    assert requests[0].full_url == service_url + "/v2/catalog?kind=experiment"
+    assert requests[0].get_header("Authorization") == f"Bearer {store.value.token}"
+
+
+@pytest.mark.parametrize("service_url", LEGACY_MANAGED_ORIGINS)
+def test_managed_origin_reconnection_uses_fresh_token_and_reloads_without_http(
+    environment, managed_credentials, tmp_path, service_url,
+):
+    _, _, requests, replies = environment
+    store, selected_origins = managed_credentials
+    client = LibraryClient(service_url, cache_root=tmp_path / "managed")
+    assert client.connection_info() is None
+    assert requests == []
+    replies.append(dict(schema_version="1.0", device_id="new-device", library_name="Test library"))
+    connection = client.enroll("SAME-LAB-CODE", "Reconnected PC")
+    assert requests[0].full_url == MANAGED_ORIGIN + "/v2/enroll"
+    submitted = json.loads(requests[0].data)
+    assert submitted["code"] == "SAME-LAB-CODE"
+    assert submitted["device_token"] == store.value.token != "t" * 43
+    assert store.value.library_api_version == 2
+    restarted = LibraryClient(cache_root=tmp_path / "managed")
+    assert restarted.connection_info() == connection
+    assert selected_origins == [MANAGED_ORIGIN, MANAGED_ORIGIN]
+    assert len(requests) == 1
+
+
+@pytest.mark.parametrize("service_url", LEGACY_MANAGED_ORIGINS)
+def test_managed_reconnection_pending_token_survives_restart_and_lost_response(
+    environment, managed_credentials, tmp_path, service_url,
+):
+    _, _, requests, replies = environment
+    store, selected_origins = managed_credentials
+    client = LibraryClient(service_url, cache_root=tmp_path / "managed")
+
+    def lose_response(request):
+        assert store.value.connection is None
+        assert store.value.token == json.loads(request.data)["device_token"]
+        raise URLError("synthetic lost enrollment response")
+
+    replies.append(lose_response)
+    with pytest.raises(LibraryError, match="connection"):
+        client.enroll("SAME-LAB-CODE", "Reconnected PC")
+    pending_token = store.value.token
+    assert pending_token != "t" * 43
+    restarted = LibraryClient(cache_root=tmp_path / "managed")
+    assert restarted.connection_info() is None
+    assert store.value.token == pending_token
+    replies.append(dict(schema_version="1.0", device_id="new-device", library_name="Test library"))
+    connection = restarted.enroll("SAME-LAB-CODE", "Changed PC name")
+    assert connection.device_name == "Reconnected PC"
+    assert selected_origins == [MANAGED_ORIGIN, MANAGED_ORIGIN]
+    assert [request.full_url for request in requests] == [MANAGED_ORIGIN + "/v2/enroll"] * 2
+    assert [json.loads(request.data)["device_token"] for request in requests] == [pending_token] * 2
+    assert store.value.connection == connection
 
 
 def test_enrollment_persists_token_before_http_and_reuses_lost_response(environment):

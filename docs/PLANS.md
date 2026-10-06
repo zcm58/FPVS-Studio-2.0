@@ -40,6 +40,8 @@ luminance/RMS algorithm investigation instead of duplicating its scientific deci
 Completed plans are historical implementation notes. Read their directory only when
 the current contracts do not explain why a landed decision exists.
 
+Recent completion: [FPVS Studio 2.2.6 Library reconnection release](exec-plans/completed/release-2.2.6.md).
+
 Recent completion: [FPVS Studio 2.2.1 release](exec-plans/completed/release-2.2.1.md).
 
 Recent completion: [FPVS Studio 2.2.4 release](exec-plans/completed/release-2.2.4.md).

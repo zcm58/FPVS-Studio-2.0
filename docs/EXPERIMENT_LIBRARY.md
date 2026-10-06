@@ -288,11 +288,26 @@ administration, catalog publishing and deployment. GitHub App credentials stay o
 service; desktop clients receive only authorized catalog metadata and streamed bytes.
 See its operational README for live service configuration and maintainer commands.
 
-The deployed service origin is
-`https://fpvs-studio-library.fpvs-studio-zcm58.workers.dev`, declared in
-`library/client.py` as `DEFAULT_LIBRARY_SERVICE_URL`. It is not a GUI preference or a
-project setting. `LibraryClient(service_url=...)` is the explicit constructor seam for
-isolated deployments and tests. The September 17, 2026 deployment was verified using
+The native service origin is `https://openfpvs.com`, exposed by `library/client.py`
+as `DEFAULT_LIBRARY_SERVICE_URL`. It is not a GUI preference or a project setting.
+The public website is maintained separately in the sibling `../OpenFPVS` repository.
+`LibraryClient(service_url=...)` remains the explicit constructor seam for isolated
+deployments and tests; unrelated custom origins are preserved.
+
+The two previous managed origins,
+`https://fpvs-studio-library.fpvs-studio-zcm58.workers.dev` and
+`https://fpvs.zack-murphy.com`, now select the canonical native origin. Reconnect once
+with the existing lab code: credentials and caches are scoped to the new origin,
+and old device tokens are never copied or reused. The existing startup connection
+prompt appears until that enrollment succeeds; Continue offline preserves local use.
+Native routes remain `/v2` with schema `1.0`, and redirects remain unsupported.
+
+Core's `library_origin.py` owns this exact managed-origin policy. Project-version
+checks and duplicate-install decisions recognize these prior origins as the same
+Library without rewriting installed receipt files or contacting their saved host.
+Other origins remain distinct and require an explicit Library link correction.
+
+The September 17, 2026 deployment at the previous workers.dev origin was verified using
 two independent credentials on one Windows computer: enrollment, native credential
 reload, both catalog entries/downloads, import, revocation, and local reopen/compile
 after disconnect. These checks do not substitute for visible or second-machine tests.

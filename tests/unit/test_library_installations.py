@@ -140,3 +140,28 @@ def test_cancel_before_scan_never_downloads(tmp_path):
     with pytest.raises(LibraryCancelled):
         download_library_install(client, item("1.1"), tmp_path, cancel_event=cancel)
     assert client.calls == 0
+
+
+@pytest.mark.parametrize("previous_origin", [
+    "https://fpvs-studio-library.fpvs-studio-zcm58.workers.dev",
+    "https://fpvs.zack-murphy.com",
+])
+@pytest.mark.parametrize("installed,requested,state", [
+    ("1.0", "1.0.0", "installed"), ("1.1", "1.0", "installed"),
+    ("1.0", "1.1", "update"),
+])
+def test_managed_origin_move_preserves_install_gate_and_receipt_bytes(
+    tmp_path, previous_origin, installed, requested, state,
+):
+    folder = project(tmp_path, project_id="renamed-from-bundle", name="Edited title",
+                     version=installed, service_url=previous_origin)
+    receipt_path = folder / ".fpvs-library" / "project-origin.json"
+    before = receipt_path.read_bytes()
+    client = Client()
+    client.service_url = "https://openfpvs.com"
+    result = download_library_install(client, item(requested), tmp_path)
+    assert result.state == state
+    assert result.project.root == folder
+    assert result.project.origin.service_url == previous_origin
+    assert client.calls == client.releases == 0
+    assert receipt_path.read_bytes() == before
