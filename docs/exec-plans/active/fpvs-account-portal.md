@@ -4,6 +4,42 @@ Status: Active
 
 Date: 2026-10-05
 
+## Library access reset and administrator workspace
+
+The user confirmed the administrator login works. The current follow-up organizes
+the dashboard into tabs, removes previously enrolled/revoked computer display,
+revokes existing library machine credentials, and moves native access to `/v2`.
+Valid lab codes remain available for reconnection; local experiments and offline
+use stay independent. Browser lab login becomes session-only and browsers no
+longer enroll as computers. A verified administrator browses without a lab code
+and can toggle administrator/user presentation without changing server identity.
+
+The private service's PORTAL_PLAN.md owns backend/reset/deployment detail. This
+repository owns the native credential migration and a focused 2.2.6 release from
+master, including the lab-code startup/reconnection workflow. The user chose to
+exclude the separate unreleased results-sharing work. The public release note is:
+
+> Updated experiment backend server, which means all pcs will need to reconnect with their lab code before being able to access the experiment library again.
+
+- [x] Native v2 routes and secure cached-credential reconnection coverage.
+- [x] Private-service reset, browser/admin authorization and dashboard acceptance.
+- [x] Focused and precommit verification; documented GUI/platform boundaries.
+- [ ] Focused release artifacts, publication, digests and updater selection.
+
+The private service passes all 204 tests and is deployed as Worker version
+`423b806b-9e55-4553-b95e-d51f469bb8d5`. D1 was backed up before the additive reset;
+six old credentials were revoked while the reusable lab code, grant, account and
+administrator web sessions were preserved. Live public boundaries, v1 upgrade
+responses, v2 authentication and seven asset digests pass. Synthetic browser
+acceptance covers keyboard tabs, exact-version editor links, the Library view
+toggle and view-only/disconnect behavior at desktop/mobile widths.
+
+The isolated master-based release includes startup and native v2 changes without
+results-sharing source. All focused scopes pass. Mypy checks 213 files; the full
+non-Qt run passes 2,605 tests with 11 Windows symlink skips and one Windows rename
+denial. Both affected bundle-transfer cases pass an isolated rerun without source
+changes. The separate release plan records artifact and GUI/platform acceptance.
+
 ## Dedicated administrator password login
 
 The approved follow-up gives `/admin` a dedicated administrator login and dashboard
@@ -23,7 +59,7 @@ unchanged; implementation belongs to the private Library service.
 - [x] Reviewed deployment, additive schema and live public-route/asset/boundary verification.
 - [x] Authorized Firebase project creation and confirmed Spark free plan.
 - [x] Provider bindings and administrator-selected password.
-- [ ] Real administrator password login, dashboard landing and recovery acceptance.
+- [x] Real administrator password login and dashboard landing confirmed by the user.
 
 Missing provider configuration disables password actions explicitly and retains
 email recovery. No billing account, paid plan or overage is allowed.
@@ -45,9 +81,9 @@ encrypted Worker secret. The user explicitly approved saving the Firebase API ke
 as an encrypted Worker secret, and the dashboard confirms the binding. Live password
 controls are enabled. Spark remains free without a Cloud Billing account.
 
-The administrator is completing live password sign-in and provider email
-verification. Real dashboard-login and recovery acceptance remain pending;
-configuration and public live checks do not establish those private flows.
+The administrator confirmed real password login and dashboard landing work.
+Recovery/provider interruption have synthetic coverage; acceptance did not force
+a real password reset.
 
 ## OpenFPVS website simplification
 
