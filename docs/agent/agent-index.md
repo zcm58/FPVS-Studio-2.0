@@ -126,10 +126,12 @@ For protected website discovery, exact-version publications, per-experiment
 **total downloads**, administrator content editing, dedicated administrator password
 login, web account registration and lab Library access, use the
 private `zcm58/FPVS-Studio-Library` repository's `AGENTS.md`, `ARCHITECTURE.md` and
-`PORTAL_PLAN.md`. The active local plan is
-`docs/exec-plans/active/fpvs-account-portal.md`; keep backend source and schema there,
-not in a second desktop implementation. Run its Node tests, syntax and dry deployment
-checks; this repository's Library route covers the existing native client contract.
+`PORTAL_PLAN.md`. Its standalone local checkout is the sibling `../OpenFPVS/`,
+opened as its own PyCharm project. Studio's integration plan is
+`docs/exec-plans/active/fpvs-account-portal.md`; keep backend source and schema in
+the private project, not in a second desktop implementation. Run its Node tests,
+syntax and dry deployment checks; this repository's Library route covers the
+existing native client contract.
 Website enrichment uses separate browser APIs; preserve the strict native catalog.
 Browser bundle downloads use ordinary Welcome-screen imports without native origin
 receipts; project-version checks require explicit linking. The personal website

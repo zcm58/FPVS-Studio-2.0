@@ -4,6 +4,16 @@ Status: Active
 
 Date: 2026-10-06
 
+## Standalone website maintenance checkout (2026-10-06)
+
+The private OpenFPVS website/service checkout now lives in the sibling
+`../OpenFPVS/` at `C:\Users\zcm58\PycharmProjects\OpenFPVS`, opened as its own
+PyCharm project. The move retains its existing Git history/remote, Worker, D1,
+accounts, permissions and local credentials. Studio contains only integration
+documentation; the private project's `PORTAL_PLAN.md` owns website implementation
+and deployment acceptance. Dated deployment evidence below keeps its historical
+paths and facts rather than describing the current maintenance directory.
+
 ## Portal domain migration (2026-10-06)
 
 The current portal destination is `https://openfpvs.com`, replacing the previous
@@ -347,9 +357,10 @@ Resend Free delivers sign-in email with hard UTC limits of 100 daily/3,000 month
 
 Implementation belongs to private `zcm58/FPVS-Studio-Library`, alongside its existing
 Worker and D1 database, on `codex/account-portal`. The local implementation checkout
-is under ignored `build/account-library-service/`; Studio retains only integration
-documentation. Its canonical plan is `PORTAL_PLAN.md`, and its migrations preserve
-legacy computer enrollments. Keep the existing service hostname functional for
+is the standalone sibling `../OpenFPVS/`, opened as its own PyCharm project;
+Studio retains only integration documentation. Its canonical plan is
+`PORTAL_PLAN.md`, and its migrations preserve legacy computer enrollments.
+Keep the existing service hostname functional for
 released desktop clients and existing project-origin receipts.
 
 The personal website's main address and hosting remain independent. Result-sharing
