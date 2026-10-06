@@ -11,8 +11,11 @@ from tests.gui.helpers import assert_visible_children_within_parent
 
 from fpvs_studio.gui import library_access_dialog as module
 from fpvs_studio.gui.update_lifecycle import UpdateTaskResult
+from fpvs_studio.library import cache as cache_module
+from fpvs_studio.library import client as client_module
+from fpvs_studio.library.client import LibraryClient
 from fpvs_studio.library.errors import LibraryError
-from fpvs_studio.library.models import LibraryConnection
+from fpvs_studio.library.models import DeviceCredential, LibraryConnection
 
 
 class _Job(QObject):
@@ -84,6 +87,37 @@ def test_saved_enrollment_skips_prompt_without_network(setup):
     controller.check()
     assert controller.dialog is None
     assert len(reads) == 1 and not enrollments
+
+
+@pytest.mark.parametrize("connected", [True, False])
+def test_previous_protocol_prompts_for_reconnection_with_offline_available(
+    setup, qtbot, tmp_path, monkeypatch, connected,
+):
+    controller, lifecycle, _client, _reads, _enrollments = setup
+    stored = [DeviceCredential(
+        token="o" * 43, device_name="Previously connected PC",
+        connection=_connection() if connected else None,
+    )]
+    store = SimpleNamespace(
+        load=lambda: stored[0], delete=lambda: stored.__setitem__(0, None),
+    )
+    monkeypatch.setattr(cache_module, "_private_directory", lambda _path: None)
+    monkeypatch.setattr(
+        client_module, "build_opener", lambda *_args: pytest.fail("unexpected network"),
+    )
+    controller.client = LibraryClient(
+        "https://library.example.test", credential_store=store, cache_root=tmp_path / "cache",
+    )
+    controller.check()
+    lifecycle.jobs[-1].finish()
+    dialog = controller.dialog
+    qtbot.addWidget(dialog)
+    assert dialog.isVisible()
+    assert dialog.code_edit.isEnabled()
+    assert dialog.offline_button.isEnabled()
+    assert stored[0] is None
+    qtbot.mouseClick(dialog.offline_button, Qt.MouseButton.LeftButton)
+    assert not dialog.isVisible()
 
 
 def test_unconfigured_startup_and_success_use_existing_enrollment(setup, qtbot):

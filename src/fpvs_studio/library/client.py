@@ -76,6 +76,10 @@ def _status_error(status: int) -> LibraryError:
         return LibraryError("This Library item is no longer available. Refresh the catalog.")
     if status == 429:
         return LibraryError("Too many Library requests. Wait a minute and try again.")
+    if status == 426:
+        return LibraryError(
+            "Update FPVS Studio, then reconnect with your lab code to use the Experiment Library."
+        )
     if 300 <= status < 400:
         return LibraryError("The Library service attempted an unsupported redirect.")
     return LibraryError(f"The Library service could not complete the request ({status}).")
@@ -131,7 +135,7 @@ class LibraryClient:
             "Accept-Encoding": "identity",
             "User-Agent": f"FPVS-Studio/{__version__}",
         }
-        if path.split("?", 1)[0] in ("/v1/enroll", "/v1/catalog"):
+        if path.split("?", 1)[0] in ("/v2/enroll", "/v2/catalog"):
             headers["X-FPVS-Library-Metadata"] = "1"
         if data is not None:
             headers["Content-Type"] = "application/json"
@@ -234,8 +238,17 @@ class LibraryClient:
             raise LibraryError("The Library service returned invalid metadata.") from None
 
     def connection_info(self) -> LibraryConnection | None:
+        with self._operation(None):
+            credential = self._load_current_credential()
+            return credential.connection if credential is not None else None
+
+    def _load_current_credential(self) -> DeviceCredential | None:
+        """Read under the cache lock; old protocol access must reconnect with a new token."""
         credential = self.store.load()
-        return credential.connection if credential is not None else None
+        if credential is not None and credential.library_api_version != 2:
+            self.store.delete()
+            return None
+        return credential
 
     def enroll(
         self, code: str, device_name: str, *, cancel_event: Event | None = None
@@ -246,17 +259,17 @@ class LibraryClient:
                 "Enter a lab code and a computer name of up to 100 characters."
             )
         with self._operation(cancel_event):
-            existing = self.store.load()
+            existing = self._load_current_credential()
             if existing is not None and existing.connection is not None:
                 return existing.connection
             pending = existing or DeviceCredential(
-                token=secrets.token_urlsafe(32), device_name=device_name
+                token=secrets.token_urlsafe(32), device_name=device_name, library_api_version=2,
             )
             # Save BEFORE the request: lost responses retry the same server-side enrollment.
             self.store.save(pending)
             raw = self._json_request(
                 "POST",
-                "/v1/enroll",
+                "/v2/enroll",
                 payload={
                     "schema_version": "1.0",
                     "code": code,
@@ -283,7 +296,7 @@ class LibraryClient:
             return connection
 
     def _credential(self) -> DeviceCredential:
-        credential = self.store.load()
+        credential = self._load_current_credential()
         if credential is None or credential.connection is None:
             raise LibraryAuthorizationError(
                 "Connect to the Experiment Library with your PI's lab code."
@@ -299,7 +312,7 @@ class LibraryClient:
     ) -> LibraryCatalog:
         raw = self._json_request(
             "GET",
-            "/v1/catalog?kind=experiment",
+            "/v2/catalog?kind=experiment",
             token=credential.token,
             cancel_event=cancel_event,
         )
@@ -358,7 +371,7 @@ class LibraryClient:
                 return retained
             self._cache.clear()
             deadline = time.monotonic() + DOWNLOAD_TOTAL_SECONDS
-            path = f"/v1/items/{item.item_id}/versions/{item.version}/download"
+            path = f"/v2/items/{item.item_id}/versions/{item.version}/download"
             digest, received = hashlib.sha256(), 0
             with self._response(
                 "GET", path, token=credential.token, cancel_event=cancel_event,
@@ -414,12 +427,12 @@ class LibraryClient:
     def disconnect(self, *, cancel_event: Event | None = None) -> None:
         """Revoke remotely before clearing local access; keep retry state on network failure."""
         with self._operation(cancel_event):
-            credential = self.store.load()
+            credential = self._load_current_credential()
             if credential is not None:
                 try:
                     self._json_request(
                         "DELETE",
-                        "/v1/device",
+                        "/v2/device",
                         token=credential.token,
                         cancel_event=cancel_event,
                         limit=8192,

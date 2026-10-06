@@ -39,6 +39,7 @@ class MemoryStore:
             DeviceCredential(
                 token="t" * 43,
                 device_name="Test machine",
+                library_api_version=2,
                 connection=LibraryConnection(
                     device_id="device-1", library_name="Test library", device_name="Test machine"
                 ),
@@ -170,7 +171,7 @@ def test_catalog_uses_bearer_token_and_experiment_filter(environment):
     replies.append(catalog(item()))
     result = client.catalog()
     assert result.items[0].title == "Synthetic project"
-    assert requests[0].full_url == ORIGIN + "/v1/catalog?kind=experiment"
+    assert requests[0].full_url == ORIGIN + "/v2/catalog?kind=experiment"
     assert requests[0].get_header("Authorization") == f"Bearer {store.value.token}"
     assert requests[0].get_header("X-fpvs-library-metadata") == "1"
 
@@ -386,7 +387,7 @@ def test_download_verifies_hash_size_and_retains_exclusive_lease(environment):
     )
     assert path.read_bytes() == PAYLOAD
     assert progress[-1] == (len(PAYLOAD), len(PAYLOAD))
-    assert requests[0].full_url.endswith("/v1/items/synthetic/versions/1.0.0/download")
+    assert requests[0].full_url.endswith("/v2/items/synthetic/versions/1.0.0/download")
     second = DownloadCache(path.parent)
     with pytest.raises(LibraryError, match="Another"):
         second.acquire()
@@ -511,6 +512,81 @@ def test_disconnect_requires_remote_revocation_before_local_deletion(environment
     client.disconnect()
     assert store.value is None
     assert requests[-1].method == "DELETE"
+    assert requests[-1].full_url == ORIGIN + "/v2/device"
+
+
+@pytest.mark.parametrize("connected", [True, False])
+def test_previous_protocol_access_is_removed_locally_before_startup(environment, connected):
+    client, store, requests, _ = environment
+    store.value = DeviceCredential(
+        token="o" * 43, device_name="Previously connected PC",
+        connection=store.value.connection if connected else None,
+    )
+    assert client.connection_info() is None
+    assert store.value is None
+    assert requests == []
+
+
+def test_upgrade_enrollment_creates_a_new_token_and_uses_v2(environment):
+    client, store, requests, replies = environment
+    old_token = "o" * 43
+    store.value = DeviceCredential(token=old_token, device_name="Previous PC")
+    replies.append(dict(schema_version="1.0", device_id="device-2", library_name="Test library"))
+    client.enroll("SAME-LAB-CODE", "Reconnected PC")
+    assert requests[0].full_url == ORIGIN + "/v2/enroll"
+    submitted = json.loads(requests[0].data)
+    assert submitted["code"] == "SAME-LAB-CODE"
+    assert submitted["schema_version"] == "1.0"
+    assert submitted["device_token"] != old_token
+    assert submitted["device_name"] == "Reconnected PC"
+    assert requests[0].get_header("X-fpvs-library-metadata") == "1"
+    assert store.value.library_api_version == 2
+
+
+def test_current_protocol_access_does_not_prompt_again(environment):
+    client, store, requests, _ = environment
+    assert client.connection_info() == store.value.connection
+    assert client.connection_info() == store.value.connection
+    assert requests == []
+
+
+def test_previous_access_is_removed_under_lock_before_catalog_request(environment, monkeypatch):
+    client, store, requests, _ = environment
+    store.value = DeviceCredential(
+        token="o" * 43, device_name="Old PC", connection=store.value.connection,
+    )
+
+    def delete():
+        assert client._cache._lock is not None
+        store.value = None
+
+    monkeypatch.setattr(store, "delete", delete)
+    with pytest.raises(LibraryAuthorizationError, match="lab code"):
+        client.catalog()
+    assert store.value is None
+    assert requests == []
+
+
+def test_previous_access_removal_failure_does_not_start_enrollment(environment, monkeypatch):
+    client, store, requests, _ = environment
+    store.value = DeviceCredential(token="o" * 43, device_name="Old PC")
+
+    def cannot_delete():
+        raise LibraryError("Could not remove Library access from secure storage.")
+
+    monkeypatch.setattr(store, "delete", cannot_delete)
+    with pytest.raises(LibraryError, match="Could not remove"):
+        client.enroll("SAME-LAB-CODE", "New PC")
+    assert store.value is not None
+    assert requests == []
+
+
+def test_service_upgrade_requirement_is_actionable_and_keeps_current_access(environment):
+    client, store, _, replies = environment
+    replies.append(HTTPError(ORIGIN, 426, "upgrade required", {}, None))
+    with pytest.raises(LibraryError, match="Update FPVS Studio, then reconnect with your lab code"):
+        client.catalog()
+    assert store.value is not None
 
 
 def test_disconnect_clears_already_revoked_credentials(environment):

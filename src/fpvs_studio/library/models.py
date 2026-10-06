@@ -108,3 +108,4 @@ class DeviceCredential(_Contract):
     token: str = Field(min_length=43, max_length=128, pattern=r"^[A-Za-z0-9_-]+$", repr=False)
     device_name: str = Field(min_length=1, max_length=100)
     connection: LibraryConnection | None = None
+    library_api_version: int = Field(default=1, ge=1, le=2)
