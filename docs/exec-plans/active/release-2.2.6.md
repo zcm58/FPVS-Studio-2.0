@@ -29,10 +29,11 @@ Updated experiment backend server, which means all pcs will need to reconnect wi
 - Integrated startup feature: parent commit `47a5bbd`; results-sharing conflict context removed.
 - Integrated native v2 behavior: parent commit `cf70ae0`.
 - Canonical version: `pyproject.toml`, `2.2.6`.
+- Source/version candidate: `2a4a4e44845b663f0e9f5767cf7ec4e9d1bd02ca`.
 - Reuse the existing Python 3.10 environment with this worktree's source on PYTHONPATH.
   Do not install or update runtime dependencies for source verification.
 - [x] Library focused, safe GUI focused, packaging, updates and docs focused pass.
-- [ ] Repo precommit (non-Qt suite, mypy and audits) passes.
+- [x] Repo precommit completed; one Windows rename denial passed the isolated native recheck below.
 - [ ] Commit and publish the exact source from stable master.
 - [ ] Build the full installer and direct 2.2.5 patch in isolated versioned folders.
 - [ ] Verify full/patch inventories, exact reconstruction, local/server digests and updater selection.
@@ -47,8 +48,14 @@ Focused source verification on the candidate:
 - Packaging: 181 passed. Updates: 309 passed, 4 Windows symlink skips.
 - Docs: 9 passed; documentation hygiene passed.
 - Every Python file changed from master passed explicit Ruff and compilation.
-- Precommit mypy passed all 213 source files and repository/docs audits passed;
-  the full non-Qt unit suite is still running. Do not claim the complete gate passed yet.
+- Precommit mypy passed all 213 source files and repository/docs audits passed.
+  The full non-Qt suite recorded 2,605 passed, 11 Windows symlink skips and one
+  Windows access-denied error while renaming a staged long-path import directory in
+  `test_bundle_transfer_without_windows_long_path_policy[False]`. Both transfer
+  parametrizations passed in an isolated fresh-path native rerun (2 passed), with
+  no source change. Record this as a successful isolated recheck, not an uninterrupted
+  all-green harness run. Evidence: `precommit-short-path.log` and
+  `long-path-native-recheck.log` under `build/release-2.2.6/verification/`.
 
 ## Acceptance boundary
 
