@@ -13,7 +13,6 @@ Use this page to find planning material before making feature-sized changes.
 
 Current implementation:
 
-- [FPVS Studio 2.2.6 Library reconnection release](exec-plans/active/release-2.2.6.md)
 - [Unicorn Hybrid Black recording support](exec-plans/active/unicorn-hybrid-black-support.md) (normal marker output enabled; full receiver, Toolbox and physical timing validation pending)
 - [Experiment Library: Phase 1 whole projects](exec-plans/active/private-experiment-library.md)
 - [Cloudflare bug reporting: desktop implementation](exec-plans/active/cloudflare-bug-reporting.md)
@@ -39,6 +38,8 @@ luminance/RMS algorithm investigation instead of duplicating its scientific deci
 
 Completed plans are historical implementation notes. Read their directory only when
 the current contracts do not explain why a landed decision exists.
+
+Recent completion: [FPVS Studio 2.2.6 Library reconnection release](exec-plans/completed/release-2.2.6.md).
 
 Recent completion: [FPVS Studio 2.2.1 release](exec-plans/completed/release-2.2.1.md).
 
