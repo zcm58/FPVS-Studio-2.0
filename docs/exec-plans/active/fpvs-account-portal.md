@@ -24,7 +24,7 @@ exclude the separate unreleased results-sharing work. The public release note is
 - [x] Native v2 routes and secure cached-credential reconnection coverage.
 - [x] Private-service reset, browser/admin authorization and dashboard acceptance.
 - [x] Focused and precommit verification; documented GUI/platform boundaries.
-- [ ] Focused release artifacts, publication, digests and updater selection.
+- [x] Focused release artifacts, publication, digests and updater selection.
 
 The private service passes all 204 tests and is deployed as Worker version
 `423b806b-9e55-4553-b95e-d51f469bb8d5`. D1 was backed up before the additive reset;
@@ -39,6 +39,17 @@ results-sharing source. All focused scopes pass. Mypy checks 213 files; the full
 non-Qt run passes 2,605 tests with 11 Windows symlink skips and one Windows rename
 denial. Both affected bundle-transfer cases pass an isolated rerun without source
 changes. The separate release plan records artifact and GUI/platform acceptance.
+
+Studio 2.2.6 is published as the latest release at
+`https://github.com/zcm58/FPVS-Studio-2.0/releases/tag/v2.2.6`, built from
+`2a4a4e44845b663f0e9f5767cf7ec4e9d1bd02ca`. All six public asset sizes/digests and
+the exact release note match local evidence. The full 7,985-file payload and direct
+2.2.5 patch reconstruct identically. The approved visible packaged smoke and all
+67 startup/Library GUI tests pass. Seven live updater cases verify the authenticated
+2.2.5 patch, full fallback/forced full, older versions and no update at 2.2.6.
+Evidence is retained under `build/release-2.2.6/`. Installer lifecycle, a second
+physical PC and real experimental/EEG execution were not run. The unreleased
+results-sharing feature remains on its separate branch.
 
 ## Dedicated administrator password login
 
