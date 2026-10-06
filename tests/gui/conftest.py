@@ -50,8 +50,6 @@ def _clear_fpvs_root_setting() -> None:
     settings.remove(controller_module._AB_PILOT_MODE_KEY)
     settings.remove(controller_module._LEGACY_LINUX_DEVELOPMENT_TEST_MODE_KEY)
     settings.remove(controller_module._RUN_EXPORT_MODE_KEY)
-    settings.remove(controller_module._RECORDING_BACKEND_KEY)
-    settings.remove(controller_module._UNICORN_UDP_PORT_KEY)
     settings.remove(controller_module._RECENT_PROJECT_ROOTS_KEY)
     settings.sync()
     yield
@@ -63,8 +61,6 @@ def _clear_fpvs_root_setting() -> None:
     settings.remove(controller_module._AB_PILOT_MODE_KEY)
     settings.remove(controller_module._LEGACY_LINUX_DEVELOPMENT_TEST_MODE_KEY)
     settings.remove(controller_module._RUN_EXPORT_MODE_KEY)
-    settings.remove(controller_module._RECORDING_BACKEND_KEY)
-    settings.remove(controller_module._UNICORN_UDP_PORT_KEY)
     settings.remove(controller_module._RECENT_PROJECT_ROOTS_KEY)
     settings.sync()
 
