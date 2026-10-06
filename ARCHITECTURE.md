@@ -29,7 +29,7 @@ lazily only inside the engine package.
   Private content and the independent Cloudflare service live in
   `zcm58/FPVS-Studio-Library`; that service checks live release-asset availability
   for each browse/download. See `docs/EXPERIMENT_LIBRARY.md`.
-  The same private repository owns the website at `fpvs.zack-murphy.com`: lab-code
+  The same private repository owns the website at `https://openfpvs.com`: lab-code
   discovery, exact-version publications, bundle downloads, recorded download starts
   and owner content/access management, including verified accounts, lab grants and
   linked device revocation.

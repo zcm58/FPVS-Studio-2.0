@@ -83,7 +83,7 @@ idempotent retry, and ordinary network failures preserve existing enrollment.
 ## Website browsing and downloads
 
 The **OpenFPVS Experiment Library** is available at
-[fpvs.zack-murphy.com](https://fpvs.zack-murphy.com). Enter the lab code supplied by
+[openfpvs.com](https://openfpvs.com). Enter the lab code supplied by
 your PI or lab manager to browse descriptions and publication links. Search
 supports discovery; each experiment has separate reference pages for its exact published
 versions. View permission allows browsing; download permission also enables bundle
@@ -219,13 +219,20 @@ passive notices and explicit import handoff. The dialog minimum/default is `760x
 ### Account portal
 
 The private `zcm58/FPVS-Studio-Library` repository owns the website and account portal
-at `https://fpvs.zack-murphy.com`, with protected `/admin` content and management APIs restricted
+at `https://openfpvs.com`, with protected `/admin` content and management APIs restricted
 to the OpenFPVS Administrator. Registration/sign-in remains available at `/sign-in`; lab-code
 browsing uses `/` or `/library` and does not require an email session.
 The initial configured owner is `zackmurphy25@protonmail.com`. Changing that identity
 requires updating the backend owner setting; it
 does not move user accounts or experiment files. Current deployment/acceptance status
 is recorded in the [account portal plan](exec-plans/active/fpvs-account-portal.md).
+
+The move to `openfpvs.com` retains the same Worker, D1 database, accounts, lab
+codes and grants. Browser authentication uses host-only cookies, so researchers
+and administrators sign in again on the new hostname. Native Studio retains the
+service origin documented below, preserving enrollment and project-origin receipts.
+The migration uses free services only; the personal website, Feedback service and
+separate Results service remain independent.
 
 The owner can create one reusable code per lab with view or download permission.
 Enter a chosen code or leave the optional field blank for a secure generated code.
@@ -258,8 +265,9 @@ allow catalog browsing; download grants also allow experiment bundle transfer.
 Each assigned lab accesses the existing shared catalog in this first version; lab
 assignment does not yet select separate experiment inventories.
 
-The current service hostname remains available for released Studio clients and saved
-project-origin receipts. Existing legacy reusable-code enrollments have no verified human
+The native service hostname remains directly available for released Studio clients
+and saved project-origin receipts; native requests cannot follow a portal redirect.
+Existing legacy reusable-code enrollments have no verified human
 identity or lab grant; the owner dashboard lists them explicitly as unlinked devices
 and can revoke them individually. They are not silently assigned to new accounts.
 Downloaded experiments remain independent local copies. Library approval does not

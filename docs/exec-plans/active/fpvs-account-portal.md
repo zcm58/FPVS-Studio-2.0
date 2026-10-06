@@ -2,7 +2,46 @@
 
 Status: Active
 
-Date: 2026-10-05
+Date: 2026-10-06
+
+## Portal domain migration (2026-10-06)
+
+The current portal destination is `https://openfpvs.com`, replacing the previous
+browser address at `fpvs.zack-murphy.com`. The migration keeps the same Cloudflare
+Worker, D1 database, accounts, reusable lab codes, grants and experiment catalog.
+It introduces no access reset, database migration or paid service. Existing
+account credentials and lab codes continue to identify the same access.
+
+Native Studio retains
+`https://fpvs-studio-library.fpvs-studio-zcm58.workers.dev` as its service origin.
+That hostname must serve `/v2` directly because the client rejects redirects.
+Keeping this origin preserves OS-protected enrollment, cache namespaces and saved
+project-origin receipts; the portal move does not require another native
+reconnection. Previous `/v1` clients still receive the existing HTTP 426 upgrade
+requirement independently of this domain change.
+
+Browser authentication uses host-only cookies. Researchers and administrators
+sign in again at `openfpvs.com`; browser sessions do not transfer across hostnames.
+The private Library repository owns domain bindings, browser routing, provider
+configuration and live deployment acceptance. Studio owns the current integration
+links and documentation checks. Earlier deployment evidence below retains its
+original hostname and date.
+
+The separate Results service and its opt-in consent, the Feedback service at
+`reports.zack-murphy.com`, and the personal website at `zack-murphy.com` remain
+independent. The migration stays within the approved free services, without paid
+subscriptions or paid overages.
+
+The migration is deployed as Worker version
+`91541690-a775-4eef-ad60-9596623c6ee1`. Cloudflare serves both new hostnames; the
+old browser address redirects allowlisted pages while native routes stay direct.
+Resend verifies the new sender domain with enforced TLS and the existing key's
+sending-only restriction moved to `openfpvs.com`. Read-only record counts match
+before and after deployment. All 208 service tests, 57 live HTTP checks and the
+Studio documentation checks pass. On 2026-10-06, the user confirmed the dashboard
+loads at the new `/admin` address with existing credentials. Real email delivery
+and an authenticated physical-PC download were not exercised during migration;
+the private service plan records those verification boundaries.
 
 ## Library access reset and administrator workspace
 
@@ -293,7 +332,7 @@ an updated installer has not been built or published.
 ## Approved outcome
 
 The user authorized account registration, a private account-management dashboard
-and administrator page at `https://fpvs.zack-murphy.com`. Initial sole administrator
+and administrator page at `https://openfpvs.com`. Initial sole administrator
 is `zackmurphy25@protonmail.com`; the identity must remain configurable for a later
 change. Researchers create free verified accounts, request access, and wait for owner
 review. Approval grants a named lab access to the experiment Library. Invitations
@@ -350,9 +389,10 @@ ignored `build/portal-desktop.jpg` and `build/portal-mobile.jpg`.
 
 Resend reports the sender subdomain verified, with enforced TLS and no tracking
 configuration. The existing D1 database has a private local pre-migration backup
-and the additive account migration is applied. The tested Worker is deployed and
-`fpvs.zack-murphy.com` is attached. Live HTTPS checks verify the public-page 200 and
-anonymous account/admin/Library denial; the old native hostname remains active.
+and the additive account migration is applied. On 2026-10-05, the tested Worker
+was deployed and `fpvs.zack-murphy.com` was attached. Live HTTPS checks verified the
+public-page 200 and anonymous account/admin/Library denial; the old native hostname
+remained active.
 Cloudflare's secret inventory confirms `RESEND_API_KEY` is stored as an encrypted
 Worker secret. After the owner registration/sign-in instructions, the user reported
 "Everything appears to work now" on 2026-10-05. This is user-reported live portal
