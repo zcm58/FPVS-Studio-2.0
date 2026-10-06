@@ -14,6 +14,18 @@ documentation; the private project's `PORTAL_PLAN.md` owns website implementatio
 and deployment acceptance. Dated deployment evidence below keeps its historical
 paths and facts rather than describing the current maintenance directory.
 
+## Studio 2.2.7 direct native connection (2026-10-06)
+
+The later desktop update selects `https://openfpvs.com` directly and requires one
+lab-code reconnection under the new origin-bound credential/cache namespace.
+Only the two exact previous managed origins share receipt/version identity;
+installed receipt bytes and local experiments stay unchanged. `/v2` and schema
+`1.0` remain unchanged, and the retained old native hosts still serve released
+clients. No SQL access reset is reapplied. The separate
+`release-2.2.7.md` plan owns installer, patch and publication acceptance; its
+released-base package excludes the feature branch's unreleased results sharing.
+The domain migration phase below records the earlier website deployment, before
+this desktop origin change.
 ## Portal domain migration (2026-10-06)
 
 The current portal destination is `https://openfpvs.com`, replacing the previous
