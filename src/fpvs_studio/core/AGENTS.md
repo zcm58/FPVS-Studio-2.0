@@ -27,7 +27,8 @@ This directory is the most important foundation in the repo. It should remain im
   persistence and staged project media intake in `modifier_presets.py`
 - JSON serialization
 - optional project-local Library origin receipts in `library_origin.py`, committed
-  inside bundle import staging and excluded from authored project/runtime contracts
+  inside bundle import staging and excluded from authored project/runtime contracts;
+  its exact managed-origin alias policy preserves receipts during service moves
 - installed-project discovery and duplicate decisions in `library_installations.py`;
   receipt identity is authoritative, while legacy name matches require explicit review
 - validation

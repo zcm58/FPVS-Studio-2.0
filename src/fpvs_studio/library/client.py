@@ -20,6 +20,10 @@ from urllib.request import HTTPRedirectHandler, Request, build_opener
 from pydantic import ValidationError
 
 from fpvs_studio import __version__
+from fpvs_studio.core.library_origin import (
+    MANAGED_LIBRARY_SERVICE_URL,
+    canonical_library_service_url,
+)
 from fpvs_studio.library.cache import CHUNK_BYTES, DownloadCache, check_cancel, default_cache_root
 from fpvs_studio.library.credentials import CredentialStore, credential_store
 from fpvs_studio.library.errors import LibraryAuthorizationError, LibraryCancelled, LibraryError
@@ -32,7 +36,7 @@ from fpvs_studio.library.models import (
     LibraryItem,
 )
 
-DEFAULT_LIBRARY_SERVICE_URL = "https://fpvs-studio-library.fpvs-studio-zcm58.workers.dev"
+DEFAULT_LIBRARY_SERVICE_URL = MANAGED_LIBRARY_SERVICE_URL
 NETWORK_TIMEOUT_SECONDS = 10
 METADATA_TOTAL_SECONDS = 30
 DOWNLOAD_TOTAL_SECONDS = 30 * 60
@@ -94,7 +98,7 @@ class LibraryClient:
         credential_store: CredentialStore | None = None,
         cache_root: Path | None = None,
     ) -> None:
-        self.service_url = _origin(service_url)
+        self.service_url = canonical_library_service_url(_origin(service_url))
         self._store = credential_store
         self._cache = DownloadCache(cache_root or default_cache_root(self.service_url))
         self._download_held = False

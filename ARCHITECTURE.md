@@ -27,7 +27,10 @@ lazily only inside the engine package.
   installation use `gui/project_update_controller.py`; see the Library contract.
   Private content and the independent Cloudflare service live in
   `zcm58/FPVS-Studio-Library`; that service checks live release-asset availability
-  for each browse/download. See `docs/EXPERIMENT_LIBRARY.md`.
+  for each browse/download. Native access connects directly to `https://openfpvs.com`;
+  core's exact origin policy preserves receipt identity without transferring credentials.
+  The public website is maintained separately in the sibling `../OpenFPVS` repository.
+  See `docs/EXPERIMENT_LIBRARY.md`.
   Reusable PI-distributed lab codes enroll multiple PCs without researcher
   accounts. `gui/library_access_dialog.py` owns optional startup connection setup;
   existing OS-protected enrollment skips it, and Continue offline preserves local use.

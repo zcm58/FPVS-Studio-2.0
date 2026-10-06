@@ -11,6 +11,11 @@ validation and extraction; this package only transfers and verifies bytes.
 - Native access uses `/v2` with JSON schema `1.0`. Clear previous-protocol secure
   credentials under the cache lock before startup/enrollment; reconnect with a fresh
   token and the existing lab code. Never reuse old or revoked machine access.
+- Native Studio connects directly to `https://openfpvs.com`. Canonicalize only the
+  two previous managed origins through core's `library_origin.py` policy; preserve
+  custom service origins. New-origin enrollment uses its own secure store/cache;
+  never copy old credentials or rewrite installed receipts. Receipt comparisons use
+  the same policy without sending requests to the saved origin.
 - Windows uses Credential Manager; Linux requires Secret Service. Fail closed when
   secure storage is unavailable; never write secrets to project files or the cache.
 - Keep HTTP requests on the configured HTTPS service origin, reject redirects, bound

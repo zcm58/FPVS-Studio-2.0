@@ -129,7 +129,9 @@ For project-version checks, start with `core/library_origin.py`,
 `library/project_updates.py`, `gui/project_update_controller.py` and
 [Experiment Library](../EXPERIMENT_LIBRARY.md#project-version-checks).
 Library imports write local receipts before commit; checks on open never install
-changes. Use Library/project-io/GUI focused routes and registered project-version
+changes. Core's exact managed-origin alias policy preserves existing receipts and
+installation matching when native access moves to `openfpvs.com`; credentials stay
+scoped to the canonical connection origin. Use Library/project-io/GUI focused routes and registered project-version
 dialog/controller tests. Legacy name matches require review and explicit linking;
 same/newer recorded installations block downloading and bundle commit.
 

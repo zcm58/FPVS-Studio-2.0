@@ -15,6 +15,7 @@ from packaging.version import Version
 from fpvs_studio.core.library_origin import (
     LibraryOriginError,
     LibraryProjectOrigin,
+    canonical_library_service_url,
     load_library_origin,
 )
 from fpvs_studio.core.models import ProjectMeta
@@ -95,9 +96,11 @@ def library_install_status(
     item_id: str, version: str, title: str = "",
 ) -> LibraryInstallStatus:
     """Names identify review candidates only; they never create a Library association."""
+    canonical_service = canonical_library_service_url(service_url)
     linked = [
         project for project in projects if project.origin is not None
-        and project.origin.service_url == service_url and project.origin.item_id == item_id
+        and canonical_library_service_url(project.origin.service_url) == canonical_service
+        and project.origin.item_id == item_id
     ]
     known = [
         (Version(project.origin.installed_version), project) for project in linked
