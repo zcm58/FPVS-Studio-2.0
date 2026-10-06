@@ -118,8 +118,9 @@ acceptance; source checks do not establish an installed update or clean-PC repai
 
 ## Library Project Versions
 
-For protected website discovery, exact-version publications, **Downloads started**, owner
-content editing, web account registration and lab Library access, use the
+For protected website discovery, exact-version publications, per-experiment
+**total downloads**, administrator content editing, dedicated administrator password
+login, web account registration and lab Library access, use the
 private `zcm58/FPVS-Studio-Library` repository's `AGENTS.md`, `ARCHITECTURE.md` and
 `PORTAL_PLAN.md`. The active local plan is
 `docs/exec-plans/active/fpvs-account-portal.md`; keep backend source and schema there,
@@ -129,6 +130,12 @@ Website enrichment uses separate browser APIs; preserve the strict native catalo
 Browser bundle downloads use ordinary Welcome-screen imports without native origin
 receipts; project-version checks require explicit linking. The personal website
 repository is independent.
+The private service owns Firebase Spark configuration, additive password-session
+migration and encrypted provider credential rechecks. Its README is the canonical
+setup guide; administrator `/admin` and `/admin/sign-in` remain separate from
+researcher `/account` and native device authorization. Run Studio's documentation
+focused route for integration-document changes; no desktop identity implementation
+or Qt verification is needed for a website-only login change.
 
 For reusable lab codes and optional startup setup, begin with
 `gui/library_access_dialog.py`, `gui/application.py`, `gui/controller.py` and

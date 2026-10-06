@@ -4,6 +4,51 @@ Status: Active
 
 Date: 2026-10-05
 
+## Dedicated administrator password login
+
+The approved follow-up gives `/admin` a dedicated administrator login and dashboard
+landing, an `/admin/sign-in` entry alias, seven-day browser sessions and email
+recovery. Firebase Authentication's free Spark plan handles the administrator's
+password. The existing Cloudflare service mediates fixed provider routes, pins
+the administrator email/UID/project number and reuses the verified D1 profile.
+Encrypted provider refresh credentials link to hashed web sessions through
+additive `0005_admin_password_sessions.sql`; protected requests check revocation.
+Passwords and provider tokens never enter browser storage or logs. Independent
+email and lab-code flows remain compatible. Studio and the personal website are
+unchanged; implementation belongs to the private Library service.
+
+- [x] Password/recovery integration and dedicated login/dashboard flow.
+- [x] Synthetic session/security service tests and documentation checks.
+- [x] Synthetic desktop/mobile browser acceptance and dry packaging.
+- [x] Reviewed deployment, additive schema and live public-route/asset/boundary verification.
+- [x] Authorized Firebase project creation and confirmed Spark free plan.
+- [x] Provider bindings and administrator-selected password.
+- [ ] Real administrator password login, dashboard landing and recovery acceptance.
+
+Missing provider configuration disables password actions explicitly and retains
+email recovery. No billing account, paid plan or overage is allowed.
+
+All 183 private-service tests and 10 Studio documentation tests pass. Dry packaging
+passes at 91.25 KiB (21.17 KiB gzip). Synthetic administrator/login checks at
+1280px/360px cover wrong-password clearing, recovery, unverified email, revoked
+sessions and provider interruption; missing configuration and researcher boundaries
+are covered by tests. The additive
+`0005_admin_password_sessions.sql` migration and Worker version
+`659f997a-f94b-4970-ae0c-4ad572b41948` are deployed. Live public routes, protected
+boundaries and code/style assets are verified. The user explicitly approved
+Firebase setup, personally accepted its Terms and created the **OpenFPVS** project,
+and confirmed the no-cost Spark plan. Previous console-approval/Terms blockers are
+resolved. Email/Password is enabled, and the user personally selected the
+administrator's password. The exact Firebase UID/project number are deployed as
+pinned Worker variables; the session-encryption key was generated directly into an
+encrypted Worker secret. The user explicitly approved saving the Firebase API key
+as an encrypted Worker secret, and the dashboard confirms the binding. Live password
+controls are enabled. Spark remains free without a Cloud Billing account.
+
+The administrator is completing live password sign-in and provider email
+verification. Real dashboard-login and recovery acceptance remain pending;
+configuration and public live checks do not establish those private flows.
+
 ## OpenFPVS website simplification
 
 The current follow-up renames the website **OpenFPVS Experiment Library** and its

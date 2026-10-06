@@ -96,6 +96,28 @@ of individual login. The verified **OpenFPVS Administrator** also sees the
 administration workspace. Email sign-out leaves the lab-code browser
 connection independent.
 
+The dedicated **Administrator Login** is at `/admin`, with `/admin/sign-in` as an
+entry alias. After provider configuration, the sole OpenFPVS Administrator uses
+their email and chosen password to open **Administrator dashboard** directly;
+navigation shows **Administrator** only after server confirmation. The existing
+email-link route also lands administrators on that dashboard, while researchers
+retain their account page. **Forgot password?** uses provider-managed email recovery.
+Missing password configuration explicitly disables password actions and leaves the
+email-link option available. Browser sessions last seven days; passwords and provider
+tokens are not stored in browser storage.
+
+Firebase Authentication on the no-cost Spark plan owns the administrator password.
+The Cloudflare service pins the administrator email, Firebase UID and numeric Google
+project number, requires an enabled verified profile, and rechecks encrypted
+password-session credentials against Firebase on protected requests. Provider
+revocation/password changes deny those sessions; requesting recovery alone does
+not. The first otherwise valid password login may require following a provider
+verification email before retrying. Lab codes and researcher email sessions remain
+independent; neither grants administrator access. The private service README owns
+provider configuration, private password hand-off and free-plan limits. Actual live
+provider readiness is recorded in the
+[account portal plan](exec-plans/active/fpvs-account-portal.md).
+
 Cloudflare checks the current lab permission and proxies the allowlisted private
 GitHub asset. A direct private repository link would require GitHub access. After
 downloading a `.fpvsbundle`, drag it onto Studio's **Welcome screen** and follow the
