@@ -25,10 +25,13 @@ function finite(value, minimum, maximum) {
 }
 
 export function validateEnrollment(body) {
-  if (!exactObject(body, ["schema_version", "code", "device_token", "protocol_sha256"])
+  const fields = ["schema_version", "code", "device_token", "protocol_sha256"];
+  if (!(exactObject(body, fields) || exactObject(body, [...fields, "experiment_id", "experiment_version"]))
       || body.schema_version !== "1.0" || typeof body.code !== "string"
       || body.code.length < 1 || body.code.length > 128 || /[\x00-\x20\x7f]/.test(body.code)
-      || !validString(body.device_token, HASH) || !validString(body.protocol_sha256, HASH)) {
+      || !validString(body.device_token, HASH) || !validString(body.protocol_sha256, HASH)
+      || Object.hasOwn(body, "experiment_id")
+        && (!validString(body.experiment_id, ID) || !validString(body.experiment_version, VERSION))) {
     throw new ServiceError(400, "invalid_enrollment");
   }
   return body;

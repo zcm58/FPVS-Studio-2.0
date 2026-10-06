@@ -46,6 +46,7 @@ PowerShell wrapper, or the Python driver.
 
 - `focused`: selected scope checks plus changed-file Ruff and Python compilation.
 - `precommit`: repo audits, mypy, changed-file checks, and the safe non-Qt pytest suite.
+  The driver selects unit files outside the Qt registry before invoking pytest.
 - `full`: optional full Ruff, mypy, and pytest with registered Qt tests explicitly
   enabled for an approved visible local environment.
 
@@ -60,6 +61,9 @@ verification. The full tier requires `FPVS_ALLOW_QT_TESTS=1`, user approval, and
 visible environment; do not set `QT_QPA_PLATFORM=offscreen`. GitHub does not repeat the
 repository's local test or code-quality checks. Its documentation build and publishing
 workflow is separate.
+The registry also includes the two `ProjectDocument` QObject test modules under
+`tests/unit/`; the `core` full tier selects them, while default collection excludes
+them before importing Qt.
 
 ## Skill Routing
 
@@ -176,6 +180,9 @@ guide and [Data sharing](../DATA_SHARING.md). The dialog/controller use app-owne
 workers and snapshots; neither HTTP nor authored asset hashing belongs on the GUI
 thread or in presentation callbacks. The independent Worker has its own source map,
 registration tooling and Node SQLite tests under `services/results/`.
+For linked Library identity checks, use `data_sharing/library_scope.py` and core's
+canonical `library_origin.py` receipt reader. The planned lab-code contribution
+bridge and current separation of Library/Results grants are in the canonical guide.
 
 Use the data-sharing focused route, runtime for launch/finalization changes, and repo
 precommit for shared behavior. Run the Worker's Node tests separately as documented;

@@ -4,6 +4,13 @@ This directory is a standalone Cloudflare Worker/D1 source artifact. It is track
 the desktop feature for review but is deployed independently. Nothing is provisioned or
 published; the desktop results endpoint remains unconfigured until an approved deployment.
 The existing Library and Feedback services and their credentials are separate.
+The planned OpenFPVS bridge would reuse a Library lab code only with an administrator's
+explicit experiment/version/protocol contribution grant and separate desktop opt-in.
+That bridge, its administrator Contributions section and any dashboard are not implemented.
+The current Library `/v1` namespace returns 426 and cannot host these routes unchanged;
+a distinct Results namespace, scoped grant mapping, separate Results device credentials
+and immediate grant-revocation checks are required. See the canonical
+[integration target](../../docs/DATA_SHARING.md#planned-openfpvs-authorization-bridge).
 
 ## Local verification
 
@@ -45,10 +52,20 @@ or disable invitations with `invitations.revoked_at`; this stops new enrollments
 existing access with `devices.revoked_at` or the version's `revoked_at`. Invitation hashes,
 token hashes and private data must also have restricted maintainer access.
 
+For a native Library-linked project, register its exact Library item ID and installed
+version with the reviewed protocol hash. Studio checks that receipt before enrollment,
+capture, sending and comparison; unknown installed versions require review. Standalone
+authored projects retain their separately registered scope. The current
+`invitations.code_hash` primary key allows one scope per invitation hash, so it is not a
+multi-experiment Library lab-code grant map. Library credentials or download grants do
+not authorize this independent Results API.
+
 Enrollment uses a client-generated 256-bit token (64 lowercase hex characters), retained
 in the operating system credential store. The server stores its hash. A retry with the same
 token/code returns the same profile; a revoked token cannot enroll again. The token is scoped
 to exactly one experiment/version/protocol. Enrollment never turns desktop sharing on.
+The device insert atomically rechecks invitation expiry and invitation/version revocation,
+so an authorization change after the initial lookup cannot create a new enrollment.
 
 ## Native v1 API
 
@@ -59,7 +76,7 @@ code, never SQL messages, tokens, invitation codes, IP addresses or private payl
 
 | Route | JSON body / access |
 | --- | --- |
-| `POST /v1/enroll` | `{schema_version:"1.0", code, device_token, protocol_sha256}`; valid lab invitation and Cloudflare client IP required |
+| `POST /v1/enroll` | `{schema_version:"1.0", code, device_token, protocol_sha256}` with optional paired `experiment_id`/`experiment_version` for linked Library scope; valid Results invitation and Cloudflare client IP required |
 | `POST /v1/experiments/{id}/reports` | Exact report envelope below; scoped Bearer credential |
 | `GET /v1/experiments/{id}/reports/{uuid}/receipt` | Only this device's receipt in its registered scope |
 | `POST /v1/experiments/{id}/comparison` | `{schema_version:"1.0"}`; scoped Bearer credential, aggregate only |
@@ -103,6 +120,8 @@ otherwise `100*hits/targets` within `1e-6`. Mean RT is null exactly when `rt_cou
 available RT and response windows range 0–600,000 ms, refresh rates 1–1,000 Hz. Unknown
 fields, nonfinite numbers and malformed timestamps fail validation. No participant IDs,
 demographics, stimulus paths, raw answers, EEG or free text enter this API.
+Duplicate JSON object keys, including escaped-equivalent keys, are rejected before
+validation and storage so D1 cannot aggregate a different value from the validated one.
 
 Immutable request bytes and their SHA-256 digest are saved before the receipt is returned.
 The insert atomically checks that the device and registered version remain unrevoked;

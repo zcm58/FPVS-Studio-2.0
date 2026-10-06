@@ -24,6 +24,7 @@ from fpvs_studio.core.data_sharing import (
 )
 from fpvs_studio.core.execution import SessionExecutionSummary
 from fpvs_studio.core.session_plan import SessionPlan
+from fpvs_studio.data_sharing.library_scope import validate_library_scope
 from fpvs_studio.data_sharing.storage import (
     MAX_RECORDS,
     SharingStorageError,
@@ -257,10 +258,17 @@ class SharingCapture:
         settings = load_settings(root)
         if not settings.enabled or settings.profile is None:
             return None
+        options = runtime_options or {}
+        if (
+            options.get("experiment_test_mode", False)
+            or options.get("pilot_mode", False)
+            or participant_number in {"0", "00"}
+        ):
+            return None
+        validate_library_scope(root, settings.profile)
         directory = _private_path(root, "logs/data-sharing/intents")
         if directory.exists() and len(list(directory.glob("*.json"))) >= MAX_RECORDS:
             raise SharingStorageError("Sharing capture history is full; review prior captures.")
-        options = runtime_options or {}
         actual = options.get("sharing_protocol_sha256")
         intent = CaptureIntent(
             report_id=str(uuid4()),

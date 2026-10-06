@@ -13,6 +13,8 @@ lab-issued invitation code and choose **Connect**, review the registered study,
 version and field list, then enable **Automatically share completed sessions for
 this experiment**. Connecting alone does not enable sharing or upload history.
 Locally authored experiments can enroll without a Library download.
+The current connection uses a separately registered Results invitation. Library
+view/download access and Library credentials do not authorize Results operations.
 
 After a completed session, Studio saves its research records and queues the report.
 An application-owned background job submits it. Project opening, session completion
@@ -55,6 +57,17 @@ every submission are scoped to that registered identity. A new reviewed protocol
 requires a new registered version and invitation; earlier reports retain their
 original scope.
 
+For an experiment with a native Library origin receipt, the Results experiment ID
+must equal its Library `item_id`, and the Results version must exactly equal its
+`installed_version`. `data_sharing/library_scope.py` checks that association before
+enrollment, ordinary capture, sending and comparison. Linked enrollment requests
+include both expected identity fields, so the Worker can reject an invitation for
+another item or version before creating a device enrollment. An unknown installed
+Library version requires review; Studio does not guess it from the project name or
+the available catalog version. A mismatch holds reporting and preserves local runs.
+Standalone authored experiments without a Library receipt retain the scope supplied
+by their registered Results invitation; a Library download is not a prerequisite.
+
 `core/data_sharing.py:protocol_fingerprint` hashes authored protocol, condition,
 task, fixation, presentation and stimulus settings, template identity, and actual
 bytes of the selected stimulus variants and referenced task media. It uses the
@@ -81,6 +94,33 @@ its enrollment and reporting scope. The new copy needs its own enrollment and ex
 opt-in; an available update never relabels earlier reports or changes conditions.
 See [Project version checks](EXPERIMENT_LIBRARY.md#project-version-checks).
 
+## Planned OpenFPVS authorization bridge
+
+The planned Library integration reuses the existing lab code with an administrator's
+explicit contribution grant for each experiment/version/protocol, followed by the
+operator's separate local experiment opt-in. A Library view/download grant alone
+must never enable contribution or aggregate comparison. A future administrator
+**Contributions** section would manage these scoped grants; it is not implemented.
+
+The current Results Worker is independent, unconfigured and unprovisioned. Its
+`invitations.code_hash` primary key binds an invitation to one registered scope.
+Reusing one Library lab code across multiple experiments therefore needs an explicit
+scoped grant mapping and coordinated enrollment contract, rather than conflicting
+invitation rows. The bridge must retain separate Results device credentials in the
+Results secure-store namespace, verify the installed Library item/version and actual
+protocol, and check contribution-grant revocation immediately during enrollment,
+intake and comparison. Disabling a contribution grant must remove that access without
+requiring a desktop restart or a cached credential refresh.
+
+The existing Library `/v1` namespace returns HTTP 426 for its retired contract.
+The current Results client uses an independent `/v1` API; pointing its configured
+origin at the Library service does not create an integration. A bridge needs a
+distinct Results namespace and matching desktop/service changes. It must fit the
+approved free-only scope, with account capacity verified before provisioning.
+No contribution dashboard, grant bridge or deployment is delivered by this source.
+The reports remain private summaries and matched aggregates; public dataset
+publication requires a separate workflow and approval.
+
 ## Completion and crash recovery
 
 Automatic capture applies to ordinary multi-condition session launches, including
@@ -89,7 +129,10 @@ entry point does not queue a report. V1 requires a positive planned condition co
 every planned occurrence in order, full stream frame counts, all pre/post tasks
 complete and no session abort, including a completion-screen abort. Test Mode,
 Pilot Mode and reserved participant IDs `0` and `00` stay local. Runtime checks the
-actual launch flags; historical execution-mode metadata is not the gate.
+actual launch flags and skips these known local-only launches before writing capture
+intents or consuming the 512-record capture capacity. Historical execution-mode
+metadata is not the gate. Terminal proof validation still rejects test executions
+when reading existing capture records.
 
 The local sequence is the same in full and compact export modes:
 
@@ -157,6 +200,8 @@ Reports are bounded to 128 KiB, 1–4,096 occurrences and at most 512 distinct c
 IDs. Per-occurrence integer counts are bounded to 1,000,000; booleans cannot stand
 in for counts. Refresh rates are 1–1,000 Hz and RT/window values are 0–600,000 ms.
 Nonfinite numbers, malformed UTC timestamps and inconsistent metrics are rejected.
+The Worker also rejects duplicate JSON object keys, including escaped-equivalent
+keys, so its validated fields and D1's aggregate interpretation cannot disagree.
 Oversized data is retained for review rather than truncated or acknowledged.
 
 The service commits immutable bytes before issuing a receipt containing report ID,
@@ -164,6 +209,9 @@ scope, SHA-256 and UTC receipt time. Same ID and bytes return the existing recei
 conflicting bytes return a conflict. The desktop persists an attempt before sending
 and records Uploaded only after validating that receipt. A lost response never
 causes creation of a replacement UUID.
+Enrollment inserts atomically recheck invitation expiry and invitation/version
+revocation. Report inserts atomically recheck device/version revocation after
+authentication; a revoke during that interval prevents a new report commit.
 
 ## Descriptive comparison
 
@@ -222,6 +270,13 @@ validated before file moves; existing targets are never overwritten. A partial
 move remains recoverable and resumes on an explicit retry. Active capacity counts
 ignore archived files. Archiving is explicit, never automatic.
 
+Ordinary aborted and protocol-mismatched capture intents remain active and still
+count toward the 512-record limit. **Archive uploaded history** cannot free these
+records because they have no acknowledged report/finalized capture pair. A full
+capture collection can therefore hold new reporting while local execution continues.
+An explicit review/archive workflow for these retained captures is still required;
+the implementation does not silently delete their evidence.
+
 ## Maintainer setup
 
 Save the reviewed experiment first. From the repository root, obtain the same
@@ -246,6 +301,8 @@ The loader applies normal in-memory project migrations; this command does not sa
 the project. It requires the selected image variants and referenced task media to
 exist. Register the reviewed hash/version and a hashed high-entropy invitation
 through [the standalone service registration procedure](../services/results/README.md#registration-and-enrollment).
+For a linked experiment, use the receipt's exact Library item ID and installed
+version; for a standalone authored experiment, use its reviewed registered identity.
 The registration script emits SQL for review and does not deploy or execute it.
 Resolve owner access, private-data retention/deletion, backups, research approval
 and current Cloudflare capacity before authorizing a live installation.
@@ -271,11 +328,13 @@ confirm real layout or live service acceptance.
 ./scripts/verify.ps1 -Scope repo -Tier precommit
 ```
 
-Visible/manual acceptance remains pending at the dialog's `820x620` minimum and
-`880x700` default, both themes and practical Windows scaling. Exercise long profiles,
-all status states, opt-out/cancel during a request, project switching and application
-shutdown. Run registered Qt tests only in a user-approved safe visible environment;
-never use local offscreen Qt.
+The user-approved synthetic native layout check passes at `820x620` minimum and
+`880x700` default in both themes, at 125% and 150% scaling. It checks both tabs,
+long profiles/condition labels, empty/ready/busy/error/validation states, and explicit
+opt-out and cancel actions. No controller, HTTP client, presentation or hardware is
+instantiated. Request lifecycle checks with project switching and application shutdown
+remain separate end-to-end acceptance. Registered Qt tests require a user-approved
+safe visible environment; never use local offscreen Qt.
 
 Live acceptance remains pending: authorize and provision an isolated Results
 Worker/D1 scope, enroll two or more machines with synthetic sessions, check exported

@@ -14,6 +14,7 @@ class LocalD1 {
     this.sqlite.exec(readFileSync(new URL("../migrations/0001_results.sql", import.meta.url), "utf8"));
     this.failReportInsert = false;
     this.beforeReportInsert = null;
+    this.beforeDeviceInsert = null;
   }
   prepare(sql) {
     const database = this.sqlite;
@@ -25,6 +26,7 @@ class LocalD1 {
       async run() {
         if (adapter.failReportInsert && sql.startsWith("INSERT INTO reports")) throw new Error("Synthetic database failure");
         if (adapter.beforeReportInsert && sql.startsWith("INSERT INTO reports")) adapter.beforeReportInsert();
+        if (adapter.beforeDeviceInsert && sql.startsWith("INSERT INTO devices")) adapter.beforeDeviceInsert();
         return { success: true, meta: database.prepare(sql).run(...values) };
       },
       all() { return { success: true, results: database.prepare(sql).all(...values) }; },
@@ -129,6 +131,43 @@ test("enrollment is scoped, idempotent after a lost response, and stores only ha
   assert.equal(env.DB.sqlite.prepare("SELECT COUNT(*) n FROM devices").get().n, 1);
 });
 
+test("expected enrollment identity is paired, strict and rejects a wrong invitation before token creation", async t => {
+  for (const wrongScope of [
+    { experiment_id: "other-faces", experiment_version: "1.0.0", protocol_sha256: "a".repeat(64) },
+    { experiment_id: "test-faces", experiment_version: "1.1.0", protocol_sha256: "a".repeat(64) },
+  ]) {
+    const { env, scope, run, register, client } = await setup(t);
+    const device = client();
+    const expected = { experiment_id: scope.experiment_id, experiment_version: scope.experiment_version };
+    const wrongCode = await register(wrongScope);
+    const response = await run(device.enrollment({ ...expected, code: wrongCode }));
+    assert.equal(response.status, 409);
+    assert.deepEqual(await response.json(), { schema_version: "1.0", error: "protocol_mismatch" });
+    assert.equal(env.DB.sqlite.prepare("SELECT COUNT(*) n FROM devices").get().n, 0);
+    const corrected = await run(device.enrollment(expected));
+    assert.equal(corrected.status, 200);
+    const profile = await corrected.json();
+    assert.equal(profile.experiment_id, scope.experiment_id);
+    assert.equal(profile.experiment_version, scope.experiment_version);
+    assert.deepEqual(await (await run(device.enrollment(expected))).json(), profile);
+    assert.equal(env.DB.sqlite.prepare("SELECT COUNT(*) n FROM devices").get().n, 1);
+  }
+  const { env, run, client } = await setup(t);
+  const device = client();
+  for (const fields of [
+    { experiment_id: "test-faces" },
+    { experiment_version: "1.0.0" },
+    { experiment_id: "../invalid", experiment_version: "1.0.0" },
+    { experiment_id: "test-faces", experiment_version: "" },
+    { experiment_id: "test-faces", experiment_version: "1.0.0", lab_id: "unknown" },
+  ]) {
+    const response = await run(device.enrollment(fields));
+    assert.equal(response.status, 400);
+    assert.deepEqual(await response.json(), { schema_version: "1.0", error: "invalid_enrollment" });
+  }
+  assert.equal(env.DB.sqlite.prepare("SELECT COUNT(*) n FROM devices").get().n, 0);
+});
+
 test("shared synthetic wire fixtures match service enrollment, intake and aggregate output", async t => {
   const { client } = await setup(t);
   const device = client();
@@ -180,6 +219,34 @@ test("disabled/expired invitations and disabled protocol versions fail closed", 
   env.DB.sqlite.exec("UPDATE experiment_versions SET revoked_at = 1");
   assert.equal((await device.comparison()).status, 403);
   assert.equal((await run(client().enrollment())).status, 403);
+});
+
+test("revocation or invitation expiry between lookup and enrollment prevents a new device", async t => {
+  for (const update of [
+    "UPDATE invitations SET revoked_at = 1",
+    "UPDATE invitations SET expires_at = 1",
+    "UPDATE experiment_versions SET revoked_at = 1",
+  ]) {
+    const { env, run, client } = await setup(t);
+    env.DB.beforeDeviceInsert = () => env.DB.sqlite.exec(update);
+    assert.equal((await run(client().enrollment())).status, 403, update);
+    assert.equal(env.DB.sqlite.prepare("SELECT COUNT(*) n FROM devices").get().n, 0);
+  }
+});
+
+test("invitation expiry uses the database execution clock after binding", async t => {
+  const { env, run, client } = await setup(t);
+  const requestNow = Math.floor(Date.now() / 1000);
+  t.mock.method(Date, "now", () => requestNow * 1000);
+  let databaseNow = requestNow;
+  env.DB.sqlite.function("unixepoch", value => {
+    assert.equal(value, "now");
+    return databaseNow;
+  });
+  env.DB.sqlite.prepare("UPDATE invitations SET expires_at = ?").run(requestNow + 1);
+  env.DB.beforeDeviceInsert = () => { databaseNow = requestNow + 2; };
+  assert.equal((await run(client().enrollment())).status, 403);
+  assert.equal(env.DB.sqlite.prepare("SELECT COUNT(*) n FROM devices").get().n, 0);
 });
 
 test("intake commits before receipts, retries immutable bytes, and rejects digest/device conflicts", async t => {
@@ -284,6 +351,45 @@ test("reads reject oversized streams, malformed UTF-8/JSON and browser or proxy 
   assert.equal((await run(device.request(`/v1/experiments/${scope.experiment_id}/reports`))).status, 405);
   delete env.RESULTS_ORIGIN;
   assert.equal((await device.comparison()).status, 503);
+});
+
+test("duplicate JSON members cannot retain hidden private fields or unvalidated SQL metrics", async t => {
+  const { env, scope, client } = await setup(t);
+  const device = client();
+  await device.enroll();
+  const raw = JSON.stringify(report(scope));
+  const privateMember = raw.replace('"total_targets":10',
+    '"total_targets":{"participant_id":"PRIVATE-SYNTHETIC-ONLY"},"total_targets":10');
+  // JavaScript keeps the last member, while SQLite selects the first member.
+  assert.equal(JSON.parse(privateMember).occurrences[0].total_targets, 10);
+  assert.equal(env.DB.sqlite.prepare("SELECT json_extract(?, '$.occurrences[0].total_targets.participant_id') value")
+    .get(privateMember).value, "PRIVATE-SYNTHETIC-ONLY");
+  for (const body of [
+    privateMember,
+    raw.replace('"schema_version":"1.0"', '"schema_version":{"participant_id":"private"},"schema_version":"1.0"'),
+    raw.replace('"total_targets":10', '"total_targets":1000001,"total_targets":10'),
+    raw.replace('"hit_count":8', '"hit_count":0,"hit_count":8'),
+    raw.replace('"schema_version":"1.0"', '"schema_version":"1.0","schema_\\u0076ersion":"1.0"'),
+    raw.replace('"condition_id":"faces"', '"condition_id":"faces","condition_\\u0069d":"faces"'),
+  ]) {
+    const response = await device.send(body);
+    assert.equal(response.status, 400);
+    assert.deepEqual(await response.json(), { schema_version: "1.0", error: "invalid_json" });
+  }
+  assert.equal(env.DB.sqlite.prepare("SELECT COUNT(*) n FROM reports").get().n, 0);
+  const enrollment = device.enrollment();
+  const enrollmentBody = (await enrollment.text()).replace('"code":', '"code":"hidden-private-value","code":');
+  const response = await handleRequest(new Request(enrollment.url, {
+    method: enrollment.method, headers: enrollment.headers, body: enrollmentBody,
+  }), env);
+  assert.equal(response.status, 400);
+  assert.equal((await device.comparison('{"schema_version":"1.0","schema_version":"1.0"}')).status, 400);
+  // Independent objects may reuse field names; accepted bytes and their digest stay exact.
+  const valid = ` \n${JSON.stringify(report(scope, [occurrence(), occurrence({ occurrence_index: 2 })]), null, 2)}\n`;
+  const receipt = await (await device.send(valid)).json();
+  assert.equal(receipt.sha256, await sha256(valid));
+  assert.equal(env.DB.sqlite.prepare("SELECT payload FROM reports").get().payload, valid);
+  assert.deepEqual(await (await device.send(valid)).json(), receipt);
 });
 
 test("enrollment and new-report quotas are bounded; raw errors and cacheable data never leave service", async t => {

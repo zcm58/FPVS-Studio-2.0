@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import ast
-import importlib
+import subprocess
 import sys
 from importlib.util import resolve_name
 from pathlib import Path
+from types import ModuleType
 
 import pytest
 
@@ -103,12 +104,6 @@ def test_dependency_audit_preserves_allowed_contracts(package, source) -> None:
     assert not _internal_import_violations(source, package=f"fpvs_studio.{package}")
 
 
-def _clear_imports(package_name: str) -> None:
-    for module_name in list(sys.modules):
-        if module_name == package_name or module_name.startswith(f"{package_name}."):
-            sys.modules.pop(module_name, None)
-
-
 def _find_import_violations(*, package_name: str, allowed_package: str) -> list[str]:
     project_root = Path(__file__).resolve().parents[2]
     violations: list[str] = []
@@ -132,33 +127,43 @@ def _find_import_violations(*, package_name: str, allowed_package: str) -> list[
 
 
 def test_backend_imports_do_not_pull_in_optional_gui_or_engine_dependencies() -> None:
-    _clear_imports("psychopy")
-    _clear_imports("PySide6")
-
-    importlib.import_module("fpvs_studio.app.main")
-    importlib.import_module("fpvs_studio.core.run_spec")
-    importlib.import_module("fpvs_studio.core.session_plan")
-    importlib.import_module("fpvs_studio.core.compiler")
-    importlib.import_module("fpvs_studio.core.execution")
-    importlib.import_module("fpvs_studio.runtime.launcher")
-    importlib.import_module("fpvs_studio.runtime.fixation")
-    importlib.import_module("fpvs_studio.runtime.preflight")
-    importlib.import_module("fpvs_studio.preprocessing.importer")
-    importlib.import_module("fpvs_studio.support.models")
-    importlib.import_module("fpvs_studio.support.storage")
-    importlib.import_module("fpvs_studio.support.diagnostics")
-    importlib.import_module("fpvs_studio.support.client")
-    importlib.import_module("fpvs_studio.data_sharing.client")
-    importlib.import_module("fpvs_studio.data_sharing.service")
-    importlib.import_module("fpvs_studio.core.data_sharing")
-
-    assert all(
-        module_name != "psychopy"
-        and not module_name.startswith("psychopy.")
-        and module_name != "PySide6"
-        and not module_name.startswith("PySide6.")
-        for module_name in sys.modules
+    # A fresh interpreter checks uncached imports without unloading Qt modules
+    # that registered GUI tests may have imported during collection.
+    script = """
+import importlib
+import sys
+sys.path.insert(0, "src")
+for name in (
+    "fpvs_studio.app.main", "fpvs_studio.core.run_spec", "fpvs_studio.core.session_plan",
+    "fpvs_studio.core.compiler", "fpvs_studio.core.execution", "fpvs_studio.runtime.launcher",
+    "fpvs_studio.runtime.fixation", "fpvs_studio.runtime.preflight",
+    "fpvs_studio.preprocessing.importer", "fpvs_studio.support.models",
+    "fpvs_studio.support.storage", "fpvs_studio.support.diagnostics",
+    "fpvs_studio.support.client", "fpvs_studio.data_sharing.client",
+    "fpvs_studio.data_sharing.service", "fpvs_studio.core.data_sharing",
+):
+    importlib.import_module(name)
+assert all(
+    name != "psychopy" and not name.startswith("psychopy.")
+    and name != "PySide6" and not name.startswith("PySide6.")
+    for name in sys.modules
+)
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", script], cwd=Path(__file__).resolve().parents[2],
+        capture_output=True, text=True, timeout=30,
     )
+    assert result.returncode == 0, result.stderr
+
+
+def test_backend_import_check_preserves_preloaded_optional_modules(monkeypatch) -> None:
+    modules = {name: ModuleType(name) for name in ("PySide6.QtWidgets", "psychopy")}
+    for name, module in modules.items():
+        monkeypatch.setitem(sys.modules, name, module)
+
+    test_backend_imports_do_not_pull_in_optional_gui_or_engine_dependencies()
+
+    assert all(sys.modules.get(name) is module for name, module in modules.items())
 
 
 def test_psychopy_imports_are_confined_to_engines_package() -> None:

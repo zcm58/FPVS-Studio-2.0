@@ -54,6 +54,8 @@ lazily only inside the engine package.
 - `src/fpvs_studio/data_sharing/`: GUI-neutral per-experiment consent, native OS
   credentials, immutable durable upload outbox and bounded HTTPS delivery.
   `core/data_sharing.py` owns strict wire contracts and authored protocol identity;
+  `data_sharing/library_scope.py` gates linked projects against the canonical Library
+  origin receipt's exact item/version before enrollment, capture, send and comparison.
   `runtime/data_sharing.py` captures eligible completed sessions after research commits.
   View > Data Sharing & Comparison uses app-owned jobs, with all network activity
   outside presentation. The independent Cloudflare Worker and D1 schema are in
@@ -344,8 +346,11 @@ current compatible Python interpreter:
 
 - `focused`: scope tests/checks plus changed-file Ruff and compilation.
 - `precommit`: mechanical/docs audits, mypy, changed-file checks, and safe non-Qt pytest.
+  The driver selects unit files outside the Qt registry before invoking pytest.
 - `full`: optional full Ruff, mypy, and pytest with registered Qt tests explicitly
   enabled for an approved visible local environment.
+  Core-scoped `ProjectDocument` QObject tests under `tests/unit/` also require this
+  opt-in; default collection excludes them before importing Qt.
 
 Add `-List` to a scoped command to inspect its steps and use
 `./scripts/verify.ps1 -CheckConfig` after harness edits. GUI-focused local verification

@@ -22,6 +22,8 @@ from fpvs_studio.runtime.session_export import (
     write_participant_summary,
 )
 
+pytestmark = pytest.mark.qt
+
 
 def test_open_existing_project_defers_stale_participant_summary_refresh(
     tmp_path: Path,

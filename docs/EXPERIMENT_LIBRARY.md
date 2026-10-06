@@ -591,7 +591,9 @@ Windows archive tests may need a short explicit temporary root, for example
 `PYTEST_ADDOPTS=--basetemp=build/t1`, when the host lacks long-path support.
 This workaround is not proof that arbitrary long paths work. Bundle review, origin
 hashing, collision checks, destination creation and Library cache I/O use the core
-Windows namespace adapter. Regressions simulate Windows long-path policy being disabled
+Windows namespace adapter. Bundle enumeration preserves the namespace on the directory
+before traversal, so children exceeding the legacy limit remain visible even when
+their parent directory is shorter. Regressions simulate Windows long-path policy being disabled
 and transfer through long paths with spaces and Unicode, including receipt writing,
 repeat imports and cache reuse; persisted study paths remain project-relative. Archive
 validation also rejects file and folder spellings that differ only by case, preventing

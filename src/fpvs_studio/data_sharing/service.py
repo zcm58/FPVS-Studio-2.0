@@ -16,6 +16,7 @@ from fpvs_studio.core.data_sharing import (
 )
 from fpvs_studio.data_sharing.client import DataSharingClient, check_cancel
 from fpvs_studio.data_sharing.errors import DataSharingCancelled, DataSharingError
+from fpvs_studio.data_sharing.library_scope import validate_library_scope
 from fpvs_studio.data_sharing.storage import (
     OutboxRecord,
     archive_uploaded,
@@ -133,6 +134,13 @@ def load_view(
     latest = max(reports, key=lambda report: report.completed_at) if reports else None
     status = "pending" if settings.enabled else "off"
     error = ""
+    if settings.profile is not None:
+        try:
+            validate_library_scope(root, settings.profile)
+        except DataSharingError as scope_error:
+            status = "protocol_mismatch"
+            error = str(scope_error)
+            latest = None
     if settings.profile is not None and settings.profile.protocol_sha256 != protocol_sha256:
         status = "protocol_mismatch"
         error = "This experiment has changed. Its current protocol needs a new registered version."
@@ -202,6 +210,8 @@ def set_sharing_enabled(
         raise DataSharingError(
             "Connect the matching experiment version before opting in.", code="protocol"
         )
+    if enabled and settings.profile is not None:
+        validate_library_scope(root, settings.profile)
     save_settings(root, settings.model_copy(update={"enabled": enabled}))
     return load_view(root, protocol_sha256, Event(), client=client)
 
@@ -210,11 +220,14 @@ def _may_send(root: Path, profile: SharingProfile, protocol_sha256: str, cancel:
     if cancel.is_set():
         return False
     current = load_settings(root)
-    return bool(
+    allowed = bool(
         current.enabled
         and current.profile == profile
         and profile.protocol_sha256 == protocol_sha256
     )
+    if allowed:
+        validate_library_scope(root, profile)
+    return allowed
 
 
 def sync_project(
@@ -231,7 +244,10 @@ def sync_project(
     transport = client or DataSharingClient.configured()
     view = load_view(root, protocol_sha256, cancel, client=transport)
     profile = view.settings.profile
-    if not view.settings.enabled or profile is None or profile.protocol_sha256 != protocol_sha256:
+    if (
+        not view.settings.enabled or profile is None
+        or view.status == "protocol_mismatch" or profile.protocol_sha256 != protocol_sha256
+    ):
         return view
     if not transport.enabled:
         return replace(view, status="unavailable", error="The results service is not configured.")

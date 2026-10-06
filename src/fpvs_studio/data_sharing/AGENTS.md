@@ -9,6 +9,9 @@ in presentation callbacks. Credentials belong only in the operating-system secur
 store. Settings are local sidecars, excluded from authored project/config/bundle
 contracts. Every send rechecks opt-in and the registered protocol; paused reports
 need an explicit release. Preserve immutable report bytes and UUIDs for retries.
+For Library-linked projects, reuse `library_scope.py` and core's canonical Library
+origin reader to require the exact installed item/version. A missing or malformed
+version stays actionable; never substitute the latest catalog version.
 
 Storage stays beneath the supplied active project root, rejects links/reparse
 points, validates bounded regular files and replaces atomically. Malformed records

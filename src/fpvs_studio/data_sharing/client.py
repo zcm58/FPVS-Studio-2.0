@@ -27,6 +27,10 @@ from fpvs_studio.core.data_sharing import (
 )
 from fpvs_studio.data_sharing.credentials import sharing_credential_store
 from fpvs_studio.data_sharing.errors import DataSharingCancelled, DataSharingError
+from fpvs_studio.data_sharing.library_scope import (
+    library_enrollment_scope,
+    validate_library_scope,
+)
 from fpvs_studio.library.credentials import CredentialStore
 from fpvs_studio.library.errors import LibraryError
 from fpvs_studio.library.models import DeviceCredential, LibraryConnection
@@ -241,6 +245,7 @@ class DataSharingClient:
             raise DataSharingError("Enter a valid lab invitation code.", code="invitation")
         if not self.enabled:
             raise DataSharingError("The results service is not configured.", code="configuration")
+        scope = library_enrollment_scope(root)
         store = self._store(root, protocol_sha256)
         try:
             credential = store.load()
@@ -256,6 +261,7 @@ class DataSharingClient:
                     "code": code.strip(),
                     "device_token": credential.token,
                     "protocol_sha256": protocol_sha256,
+                    **scope,
                 },
                 separators=(",", ":"),
             ).encode("utf-8")
@@ -266,6 +272,7 @@ class DataSharingClient:
                 raise DataSharingError(
                     "The invitation belongs to a different protocol.", code="protocol"
                 )
+            validate_library_scope(root, profile)
             credential = credential.model_copy(
                 update={
                     "connection": LibraryConnection(
@@ -292,6 +299,7 @@ class DataSharingClient:
         *,
         before_send: Callable[[], bool] | None = None,
     ) -> DeliveryReceipt:
+        validate_library_scope(root, profile)
         report = self._parse(payload, SessionReport)
         if (
             report.experiment_id != profile.experiment_id
@@ -360,6 +368,7 @@ class DataSharingClient:
         return receipt
 
     def comparison(self, root: Path, profile: SharingProfile, cancel: Event) -> ComparisonSnapshot:
+        validate_library_scope(root, profile)
         credential = self._load_credential(root, profile)
         snapshot = self._parse(
             self._request(

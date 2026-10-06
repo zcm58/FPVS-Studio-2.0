@@ -19,6 +19,7 @@ from tests.unit.test_data_sharing_client import (
 )
 
 from fpvs_studio.core.data_sharing import SharingSettings
+from fpvs_studio.core.library_origin import LibraryProjectOrigin, save_library_origin
 from fpvs_studio.data_sharing.client import DataSharingClient
 from fpvs_studio.data_sharing.errors import DataSharingError
 from fpvs_studio.data_sharing.service import (
@@ -60,6 +61,79 @@ def empty_comparison():
 
 def enable(root):
     save_settings(root, SharingSettings(enabled=True, profile=profile()))
+
+
+def library_origin(root, *, item_id="study", version="1.0"):
+    save_library_origin(root, LibraryProjectOrigin(
+        service_url="https://library.example.invalid", item_id=item_id,
+        installed_version=version, local_project_id="local-study",
+    ))
+
+
+def test_library_enrollment_sends_exact_installed_identity_without_opting_in(tmp_path):
+    library_origin(tmp_path)
+    bodies = []
+
+    def transport(method, url, body, headers, cancel):
+        bodies.append(json.loads(body))
+        return profile().model_dump_json().encode()
+
+    result = enroll_project(tmp_path, "code", HASH, Event(), client=client(transport, Store()))
+    assert not result.settings.enabled
+    assert bodies[0]["experiment_id"] == "study"
+    assert bodies[0]["experiment_version"] == "1.0"
+
+
+@pytest.mark.parametrize("item_id,version", [("another-study", "1.0"), ("study", "2.0")])
+def test_same_protocol_wrong_library_scope_cannot_send_compare_or_enable(
+    tmp_path, item_id, version,
+):
+    enable(tmp_path)
+    queued = queue_report(tmp_path, report())
+    library_origin(tmp_path, item_id=item_id, version=version)
+    calls = []
+    backend = client(lambda *args: calls.append(args))
+    view = sync_project(tmp_path, HASH, Event(), release_held=True, client=backend)
+    assert view.status == "protocol_mismatch"
+    assert "different Library experiment or version" in view.error
+    assert not view.local_conditions and view.remote is None and not calls
+    assert list_records(tmp_path)[0] == queued
+    with pytest.raises(DataSharingError, match="different Library experiment or version"):
+        set_sharing_enabled(tmp_path, True, HASH, Event(), client=backend)
+    with pytest.raises(DataSharingError):
+        backend.submit(tmp_path, profile(), queued.payload_json.encode(), Event())
+    with pytest.raises(DataSharingError):
+        backend.comparison(tmp_path, profile(), Event())
+    assert not calls
+    disabled = set_sharing_enabled(tmp_path, False, HASH, Event(), client=backend)
+    assert not disabled.settings.enabled and list_records(tmp_path)[0].state == "held"
+
+
+@pytest.mark.parametrize("unknown_version", [True, False])
+def test_unconfirmed_or_malformed_library_link_blocks_enrollment_before_credentials(
+    tmp_path, unknown_version,
+):
+    library_origin(tmp_path, version=None if unknown_version else "1.0")
+    if not unknown_version:
+        (tmp_path / ".fpvs-library" / "project-origin.json").write_text("invalid")
+    calls = []
+    store = Store()
+    backend = client(lambda *args: calls.append(args), store)
+    with pytest.raises(DataSharingError):
+        enroll_project(tmp_path, "code", HASH, Event(), client=backend)
+    assert not calls and store.value is None
+    assert load_settings(tmp_path).profile is None
+
+
+def test_unrelated_enrollment_response_cannot_be_saved_for_a_library_project(tmp_path):
+    library_origin(tmp_path)
+    wrong_profile = profile().model_copy(update={"experiment_version": "2.0"})
+    store = Store()
+    backend = client(lambda *_: wrong_profile.model_dump_json().encode(), store)
+    with pytest.raises(DataSharingError, match="different Library experiment or version"):
+        enroll_project(tmp_path, "code", HASH, Event(), client=backend)
+    assert load_settings(tmp_path).profile is None
+    assert store.value is not None and store.value.connection is None
 
 
 def test_enrollment_does_not_opt_in_or_submit_existing_history(tmp_path):

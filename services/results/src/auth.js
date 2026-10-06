@@ -26,21 +26,29 @@ export async function enroll(request, env) {
     { key: "enroll:global", duration: 600, maximum: 1000 },
   ], now);
   const body = validateEnrollment((await readJson(request, 2048)).value);
+  const invitationHash = await sha256(body.code);
   const invitation = await env.DB.prepare(`SELECT i.*, v.title, v.revoked_at AS version_revoked_at
     FROM invitations i JOIN experiment_versions v USING (experiment_id, experiment_version, protocol_sha256)
-    WHERE i.code_hash = ?`).bind(await sha256(body.code)).first();
+    WHERE i.code_hash = ?`).bind(invitationHash).first();
   if (!invitation || invitation.revoked_at !== null || invitation.version_revoked_at !== null
       || invitation.expires_at !== null && invitation.expires_at <= now) {
     throw new ServiceError(403, "invalid_invitation");
   }
-  if (invitation.protocol_sha256 !== body.protocol_sha256) {
+  if (invitation.protocol_sha256 !== body.protocol_sha256 || body.experiment_id !== undefined
+      && (invitation.experiment_id !== body.experiment_id || invitation.experiment_version !== body.experiment_version)) {
     throw new ServiceError(409, "protocol_mismatch");
   }
   const tokenHash = await sha256(body.device_token);
+  // Recheck invitation/version status atomically with creation, including expiry during the request.
   await env.DB.prepare(`INSERT INTO devices(device_id, token_hash, experiment_id, experiment_version,
-    protocol_sha256, created_at) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(token_hash) DO NOTHING`)
+    protocol_sha256, created_at) SELECT ?, ?, ?, ?, ?, ? FROM invitations i JOIN experiment_versions v
+      USING (experiment_id, experiment_version, protocol_sha256)
+    WHERE i.code_hash = ? AND i.experiment_id = ? AND i.experiment_version = ? AND i.protocol_sha256 = ?
+      AND i.revoked_at IS NULL AND v.revoked_at IS NULL AND (i.expires_at IS NULL OR i.expires_at > unixepoch('now'))
+    ON CONFLICT(token_hash) DO NOTHING`)
     .bind(crypto.randomUUID(), tokenHash, invitation.experiment_id, invitation.experiment_version,
-      invitation.protocol_sha256, now).run();
+      invitation.protocol_sha256, now, invitationHash, invitation.experiment_id, invitation.experiment_version,
+      invitation.protocol_sha256).run();
   const device = await env.DB.prepare("SELECT * FROM devices WHERE token_hash = ?").bind(tokenHash).first();
   if (!device || device.revoked_at !== null) throw new ServiceError(403, "device_revoked");
   if (device.experiment_id !== invitation.experiment_id || device.experiment_version !== invitation.experiment_version

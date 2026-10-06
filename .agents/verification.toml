@@ -50,8 +50,6 @@ tests = [
   "tests/unit/test_masking_catch_conditions.py",
   "tests/unit/test_validation.py",
   "tests/unit/test_fixation_settings.py",
-  "tests/unit/test_document_conditions.py",
-  "tests/unit/test_document_summary_refresh.py",
   "tests/unit/test_experiment_design.py",
   "tests/unit/test_experiment_categories.py",
   "tests/unit/test_attentional_blink.py",
@@ -66,7 +64,10 @@ tests = [
   "tests/unit/test_condition_modifiers.py",
   "tests/unit/test_modifier_presets.py",
 ]
-full_tests = []
+full_tests = [
+  "tests/unit/test_document_conditions.py",
+  "tests/unit/test_document_summary_refresh.py",
+]
 include = ["tests/unit/test_masking_catch_conditions.py", "src/fpvs_studio/core/**", "tests/unit/test_models.py", "tests/unit/test_validation.py", "tests/unit/test_fixation_settings.py", "tests/unit/test_condition_tasks.py", "tests/unit/test_contrast_modulation.py", "tests/unit/test_document_*.py", "tests/unit/test_experiment_design.py", "tests/unit/test_experiment_categories.py", "tests/unit/test_attentional_blink*.py", "tests/unit/test_windows_paths.py"]
 manual_smoke = []
 

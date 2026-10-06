@@ -38,3 +38,5 @@ tests/gui/test_setup_wizard_shell.py
 tests/gui/test_update_dialog.py
 tests/gui/test_welcome_settings_flow.py
 tests/gui/test_workers.py
+tests/unit/test_document_conditions.py
+tests/unit/test_document_summary_refresh.py

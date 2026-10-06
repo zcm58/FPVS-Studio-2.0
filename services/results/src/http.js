@@ -17,6 +17,31 @@ export function jsonResponse(body, status = 200) {
   });
 }
 
+function rejectDuplicateMembers(text) {
+  // Syntax is already validated by JSON.parse. Compare decoded keys in each object:
+  // JavaScript keeps the last duplicate, while D1's JSON queries may use the first.
+  const objects = [];
+  for (let index = 0; index < text.length; index++) {
+    if (text[index] === "{") objects.push(new Set());
+    else if (text[index] === "}") objects.pop();
+    else if (text[index] === '"') {
+      const start = index;
+      for (index++; index < text.length; index++) {
+        if (text[index] === "\\") index++;
+        else if (text[index] === '"') break;
+      }
+      let next = index + 1;
+      while (/\s/.test(text[next] ?? "")) next++;
+      if (text[next] === ":") {
+        const key = JSON.parse(text.slice(start, index + 1));
+        const keys = objects.at(-1);
+        if (keys.has(key)) throw new ServiceError(400, "invalid_json");
+        keys.add(key);
+      }
+    }
+  }
+}
+
 export async function readJson(request, maximumBytes) {
   if (request.headers.get("Content-Type")?.split(";")[0].trim().toLowerCase() !== "application/json") {
     throw new ServiceError(415, "json_required");
@@ -47,7 +72,9 @@ export async function readJson(request, maximumBytes) {
       offset += chunk.byteLength;
     }
     const text = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes);
-    return { value: JSON.parse(text), text, bytes };
+    const value = JSON.parse(text);
+    rejectDuplicateMembers(text);
+    return { value, text, bytes };
   } catch (error) {
     if (error instanceof ServiceError) throw error;
     throw new ServiceError(400, "invalid_json");

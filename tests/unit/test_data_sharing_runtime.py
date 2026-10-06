@@ -7,6 +7,7 @@ from tests.unit.runtime_launcher_helpers import StubEngine
 from tests.unit.test_data_sharing_storage import enable
 
 from fpvs_studio.core.compiler import compile_session_plan
+from fpvs_studio.core.library_origin import LibraryProjectOrigin, save_library_origin
 from fpvs_studio.data_sharing.storage import list_records
 from fpvs_studio.runtime import data_sharing, run_worker
 from fpvs_studio.runtime.run_worker import RuntimeWorker
@@ -66,12 +67,86 @@ def test_reports_only_completed_occurrences_and_keeps_private_fields_local(execu
         ({"pilot_mode": True}, "0007"),
         ({}, "0"),
         ({}, "00"),
-        ({"sharing_protocol_sha256": "b" * 64}, "0007"),
     ],
 )
-def test_test_pilot_test_participants_and_protocol_edits_stay_local(execution, flags, participant):
+def test_test_pilot_and_test_participants_do_not_create_captures(execution, flags, participant):
     execute(execution, flags=flags, participant=participant)
     assert not list_records(execution[0])
+    assert not tuple((execution[0] / "logs/data-sharing/intents").glob("*.json"))
+
+
+def test_protocol_edits_stay_local_and_retain_review_evidence(execution):
+    execute(execution, flags={"sharing_protocol_sha256": "b" * 64})
+    root, _ = execution
+    assert not list_records(root)
+    intent_path = next((root / "logs/data-sharing/intents").glob("*.json"))
+    intent = data_sharing.CaptureIntent.model_validate_json(intent_path.read_bytes())
+    assert intent.state == "ineligible" and intent.reason == "protocol_mismatch"
+
+
+def test_local_testing_does_not_exhaust_capture_capacity(execution, monkeypatch):
+    root, _ = execution
+    monkeypatch.setattr(data_sharing, "MAX_RECORDS", 1)
+    execute(execution, flags={"experiment_test_mode": True})
+    summary = execute(execution, participant="0008")
+    assert len(list_records(root)) == 1
+    assert not any("capture could not be initialized" in warning for warning in summary.warnings)
+
+
+def test_local_testing_with_full_capture_history_preserves_existing_capture(
+    execution, monkeypatch,
+):
+    root, _ = execution
+    monkeypatch.setattr(data_sharing, "MAX_RECORDS", 1)
+    execute(execution)
+    intent_path = next((root / "logs/data-sharing/intents").glob("*.json"))
+    before = intent_path.read_bytes()
+    summary = execute(execution, flags={"pilot_mode": True}, participant="0008")
+    assert intent_path.read_bytes() == before
+    assert len(tuple((root / "logs/data-sharing/intents").glob("*.json"))) == 1
+    assert not any("capture could not be initialized" in warning for warning in summary.warnings)
+
+
+@pytest.mark.parametrize(
+    "item_id,version", [("study", "2.0"), ("different-study", "1.0"), ("study", None)],
+)
+def test_library_scope_mismatch_holds_capture_and_preserves_local_results(
+    execution, item_id, version, caplog,
+):
+    root, plan = execution
+    save_library_origin(root, LibraryProjectOrigin(
+        service_url="https://library.example.invalid", item_id=item_id,
+        installed_version=version, local_project_id=plan.project_id,
+    ))
+    summary = execute(execution)
+    assert not summary.aborted
+    assert (root / "logs/session_condition_history.csv").exists()
+    assert not list_records(root)
+    assert not tuple((root / "logs/data-sharing/intents").glob("*.json"))
+    assert any("capture could not be initialized" in warning for warning in summary.warnings)
+    assert "Library" in caplog.text
+
+
+def test_matching_library_scope_can_capture(execution):
+    root, plan = execution
+    save_library_origin(root, LibraryProjectOrigin(
+        service_url="https://library.example.invalid", item_id="study",
+        installed_version="1.0", local_project_id=plan.project_id,
+    ))
+    execute(execution)
+    assert len(list_records(root)) == 1
+
+
+def test_local_testing_skips_library_scope_validation(execution):
+    root, plan = execution
+    save_library_origin(root, LibraryProjectOrigin(
+        service_url="https://library.example.invalid", item_id="study",
+        installed_version="2.0", local_project_id=plan.project_id,
+    ))
+    summary = execute(execution, flags={"experiment_test_mode": True})
+    assert not summary.aborted
+    assert not any("capture could not be initialized" in warning for warning in summary.warnings)
+    assert not tuple((root / "logs/data-sharing/intents").glob("*.json"))
 
 
 def test_final_completion_screen_abort_cannot_queue(execution, monkeypatch):
