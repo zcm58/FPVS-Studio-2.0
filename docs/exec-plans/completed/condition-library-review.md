@@ -1,6 +1,6 @@
 # Condition Library review
 
-Status: Active
+Status: Completed
 
 Date: 2026-10-07
 
@@ -26,8 +26,8 @@ Keep the existing Library audience and authentication requirements.
 
 The user chose the existing private GitHub repository's draft Releases for bundle
 storage. Tags identify requests; draft visibility plus an accepted-only D1 catalog
-overlay enforce review. No R2 binding or paid service is added. Production App
-permissions, migration, live upload and deployment remain explicit maintainer work.
+overlay enforce review. No R2 binding or paid service is added. Production permission and deployment changes require explicit maintainer approval;
+the approved activation and release are recorded below.
 
 ## Progress
 
@@ -35,14 +35,15 @@ permissions, migration, live upload and deployment remain explicit maintainer wo
 - [x] Studio submission/status GUI and client.
 - [x] OpenFPVS review queue and publication.
 - [x] Safe local verification and deployment instructions.
-- [ ] Approved visible native GUI/installed-build acceptance.
-- [ ] Production App permission, additive migration and service activation.
-- [ ] Live end-to-end submission, testing, rejection and publication.
+- [x] Approved visible native GUI and packaged smoke checks.
+- [x] Production App permission, additive migration and service activation.
 
-## Verification on 2026-10-07
+## Development verification before release isolation
 
 The tracked development branch was pulled with `--ff-only`; it was already current.
-Both source checkouts use `codex/condition-review`; changes are uncommitted.
+At that stage both source checkouts used `codex/condition-review`; source changes
+were uncommitted. This historical run included unrelated results-sharing development
+and is not the released-source verification record.
 
 Studio Library focused verification passed 307 tests with three Windows symlink
 privilege skips, GUI focused passed 17 safe non-Qt checks, and docs focused passed
@@ -65,3 +66,19 @@ explicitly approved visible environment. These source checks do not establish
 installed-build behavior, actual experiment execution or live GitHub/service
 publication. Production configuration retains submissions disabled; no permission,
 migration, deployment or paid-service change occurred.
+
+## Completed activation and release
+
+The isolated Studio release and companion integration are committed and pushed.
+Studio 2.3.0 is public and the review feature is enabled on OpenFPVS. The user
+explicitly approved the fixed-private-repository App Contents write permission,
+visible GUI verification and production deployment. Five new registered GUI
+tests and the packaged visible smoke pass. The additive D1 migration was applied
+after a private local backup. The deployed feature preserves the website rename,
+research tags and concurrent Toolbox download-link fix.
+
+See [the 2.3.0 release record](release-2.3.0.md) for exact source/Worker versions,
+authenticated artifact audits, current-source test counts and live endpoint checks.
+Live authenticated submission/testing/rejection/acceptance was not exercised on
+this unenrolled Windows profile; this verification boundary does not claim actual
+experiment execution or installed-upgrade acceptance.

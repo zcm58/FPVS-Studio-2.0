@@ -1,6 +1,6 @@
 # FPVS Studio 2.3.0 condition publication release
 
-Status: Active
+Status: Completed
 
 Date: 2026-10-07
 
@@ -29,15 +29,14 @@ Contents write permission before enabling uploads. No paid services are required
 - [x] Build full installer, direct patch, update metadata and checksums.
 - [x] Audit exact patch reconstruction, native dependencies and all embedded source.
 - [x] Approved visible native submission tests and bounded packaged smoke, or explicit waiver.
-- [ ] Verify/activate the companion service and live protected review endpoints.
-- [ ] Publish the exact Studio release note and authenticated artifacts.
-- [ ] Verify public assets/digests, updater choices and remote branch/tag identities.
+- [x] Verify/activate the companion service and live protected review endpoints.
+- [x] Publish the exact Studio release note and authenticated artifacts.
+- [x] Verify public assets/digests, updater choices and remote branch/tag identities.
 
 ## Boundaries
 
-Release packaging is authorized. Native Qt testing still requires explicit approval
-for a safe visible environment; do not use offscreen execution. Build without GUI
-smoke while that approval is outstanding. No actual experimental stimulus playback,
+Release packaging and production deployment were explicitly authorized. Native Qt
+verification ran with explicit approval in a visible Windows environment. No actual experimental stimulus playback,
 participant data submission or installed upgrade is implied by artifact audits.
 Keep precise verification and activation evidence here, outside public release notes.
 
@@ -70,7 +69,45 @@ Its 228 tests, syntax checks, binding types, and enabled dry packaging pass. The
 App permission change was explicitly approved and applied to only private
 `zcm58/OpenFPVS-Website`. The existing D1 was privately backed up (not included
 in release assets) before applying only additive migration 0008. The feature
-flag is enabled in source. Production deployment has not run: automatic approval
-review rejected the documented routes-omitted, keep-vars deployment because its
-exact authorization and routing impact were unclear. An explicit action question
-is pending. Public release publication waits for service activation/live checks.
+flag is enabled in source. Automatic approval review initially rejected production deployment because exact
+authorization and routing impact were unclear. The user then explicitly authorized
+the documented domain-preserving production deployment; final results follow.
+
+## Published release and production activation
+
+On 2026-10-07 the user explicitly authorized deployment of the OpenFPVS backend.
+The deployed source snapshot is `79487807108a238bd19b9f915fb4fcb31433c702`: the
+verified review feature plus the separately committed Toolbox download-link fix.
+The export kept source immutable during deployment and preserved concurrent edits.
+Worker version `77d4f892-f611-43ad-a1d5-3de44ad3ce95` deployed successfully using
+the documented routes-omitted temporary configuration and `--keep-vars`. Existing
+secrets, database, domain bindings and other dashboard variables were preserved.
+No additional migration or paid service was introduced.
+
+Live pages return 200. The native submission GET/POST/PUT, owner queue and native
+catalog reject anonymous requests with 401. The live app/submission/home assets
+match the deployed snapshot exactly. Both custom website aliases still redirect
+Library pages to the canonical origin, while all three retained native aliases
+and the workers.dev hostname deny anonymous requests without redirects.
+
+[FPVS Studio 2.3.0](https://github.com/zcm58/FPVS-Studio-2.0/releases/tag/v2.3.0)
+is published as latest stable, release 406080714, tagged at the exact built source
+`05e649675cb03a35e0402067c53b0715cbe0f969`. All six public asset sizes and
+server SHA-256 digests match the audited local files; public sidecar bytes also
+match. Live updater selection chooses the direct patch for authenticated 2.2.6,
+the full installer for missing inventory, forced repair and older versions, and
+no update for 2.3.0. The existing 2.2.7 draft remains independent.
+
+Installer SHA-256: `0f772f38739a147c76ca5ad6ed2c1e33abc383e6b5fc07f2d8fb41de0f74b91d`.
+2.2.6 patch SHA-256: `d09518901376e30161d34eff381c5ade2dd2b895928a928194cdf9b598f83e65`.
+Audit evidence is retained under ignored `build/release-2.3.0`; release assets are
+under `dist/release-2.3.0/installer`. The private D1 backup is never a release asset.
+
+## Verification limits
+
+This Windows profile has no current Library enrollment, so live authenticated
+submission/download/owner acceptance was not run. These transitions, exact-byte
+publication, revocation and CSRF/concurrency boundaries pass synthetic Node/workerd
+and Studio tests. Actual experiment playback, installed upgrade, EEG/trigger and
+second-machine verification were not run or claimed. The public note contains only
+the exact user-requested feature sentence.

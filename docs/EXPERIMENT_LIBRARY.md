@@ -50,9 +50,10 @@ tokens. Review uploads/publication require separately requested Contents write
 tokens restricted to the same private repository and explicit server activation.
 Neither the GUI nor submitted projects receive GitHub credentials.
 
-Source implementation does not activate the production service. See
-[condition review plan](exec-plans/active/condition-library-review.md) and the
-private project's README for permission, migration and deployment setup.
+Service activation requires App permission, the additive migration and deployment
+as documented in the private project's README. The review service was activated
+with Studio 2.3.0; see the [release record](exec-plans/completed/release-2.3.0.md)
+and [implementation history](exec-plans/completed/condition-library-review.md).
 
 Visible manual smoke: at minimum size, select a long-named condition, prepare it,
 review dependencies, cancel/retry a submission, and check **My requests**; confirm
