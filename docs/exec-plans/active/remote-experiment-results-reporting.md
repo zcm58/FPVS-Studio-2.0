@@ -230,8 +230,10 @@ participant number was added to the wire contract. Toolbox reporting is also def
   bindings, variables and secrets. Version: `cb4ee772-d663-49f5-9863-d9c258b5f18b`.
   Live checks confirm `/projects`, removed paragraph, private API 401, native Results
   access rejection, preserved Library routes and canonical alias redirects.
-- [ ] Package/release the Studio integration when explicitly requested; the current
-  installer remains 2.3.0 and does not include this source update.
+- [ ] Package/release the Studio integration. The user authorized Studio 2.4.0 on
+  2026-10-07; packaging and publication evidence belongs in
+  [the release plan](release-2.4.0.md). The current public installer remains 2.3.0
+  until that release is published.
 - [ ] Real two-machine study enrollment, presentation/metrics acceptance and shutdown
   cancellation remain operational checks. No real report, experiment or participant
   upload was used for verification; no production project grant was created.
