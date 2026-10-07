@@ -121,7 +121,7 @@ For condition publication requests, begin with `core/library_publish.py`,
 `library/submissions.py`, `gui/library_submission_controller.py` and
 `docs/exec-plans/active/condition-library-review.md`. The standalone private
 `../OpenFPVS` service owns `src/submissions.js`, GitHub draft writes, additive
-`0007_library_submissions.sql`, review controls and the accepted catalog overlay.
+`0008_library_submissions.sql`, review controls and the accepted catalog overlay.
 Use Library/GUI/docs focused scopes and safe repo precommit; private-service
 tests mock GitHub and never publish content. GUI tests remain visible opt-in.
 
