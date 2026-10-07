@@ -697,7 +697,7 @@ def _validate_bundle_source(
         if stimulus_set.source_dir is None:
             continue
         source_dir = _resolve_existing_relative_dir(project_root, stimulus_set.source_dir)
-        if not any(path.is_file() for path in source_dir.iterdir()):
+        if not any(path.is_file() for path in filesystem_path(source_dir).iterdir()):
             raise ProjectBundleError(
                 f"Stimulus set '{stimulus_set.name}' does not contain any files."
             )
@@ -772,7 +772,7 @@ def _resolve_existing_relative_file(project_root: Path, relative_path: str) -> P
 
 def _collect_bundle_file_paths(project_root: Path) -> list[str]:
     project_file = project_json_path(project_root)
-    stimuli_root = stimuli_dir(project_root)
+    stimuli_root = filesystem_path(stimuli_dir(project_root))
     if not stimuli_root.is_dir():
         raise ProjectBundleError("Project bundle export requires a stimuli folder.")
 

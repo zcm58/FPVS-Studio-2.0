@@ -1,5 +1,10 @@
 # Runtime Execution
 
+Opt-in completed-session reporting uses explicit launch/terminal/commit proof above
+the engine seam, after local research commits and before derived workbooks. Test/Pilot
+and reserved IDs `0`/`00` stay local; sharing metadata stays outside compiled contracts.
+See [Data sharing](DATA_SHARING.md) for capture/recovery, privacy and delivery ownership.
+
 Phase 4 introduces the first real execution path from `SessionPlan` to PsychoPy.
 
 ## Ownership split

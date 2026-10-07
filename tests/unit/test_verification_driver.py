@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 import pytest
+from tests.qt_test_registry import requested_registered_qt_files
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 VERIFY_PATH = PROJECT_ROOT / ".agents" / "scripts" / "verify.py"
@@ -90,7 +91,16 @@ def test_precommit_lints_changed_python_and_runs_only_safe_unit_tests() -> None:
         "src/fpvs_studio/core/models.py",
     ] in commands
     pytest_command = next(command for command in commands if "pytest" in command)
-    assert pytest_command[-1] == "tests/unit"
+    targets = pytest_command[pytest_command.index("-q") + 1:]
+    registry = verify.read_qt_registry(verify.load_scopes()[1])
+    unit_files = {
+        path.relative_to(PROJECT_ROOT).as_posix()
+        for path in (PROJECT_ROOT / "tests/unit").rglob("test_*.py")
+    }
+    assert set(targets) == unit_files - registry
+    assert not requested_registered_qt_files(
+        pytest_command[3:], repo_root=PROJECT_ROOT, registry=registry,
+    )
     assert "--allow-qt-tests" not in pytest_command
     assert plugin_name not in pytest_command
 
@@ -278,6 +288,7 @@ def test_checked_in_verification_config_is_valid() -> None:
     assert set(scopes) == {
         "compiler",
         "core",
+        "data-sharing",
         "docs",
         "engine",
         "gui",

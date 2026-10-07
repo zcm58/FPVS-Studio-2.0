@@ -94,6 +94,7 @@ from fpvs_studio.updates.helper_client import HelperClient
 from fpvs_studio.updates.models import UpdateCheckResult
 
 if TYPE_CHECKING:
+    from fpvs_studio.gui.data_sharing_controller import DataSharingController
     from fpvs_studio.gui.library_access_dialog import LibraryAccessController
     from fpvs_studio.gui.library_controller import LibraryController
     from fpvs_studio.gui.library_publisher_controller import LibraryPublisherController
@@ -166,6 +167,7 @@ class StudioController(QObject):
         self._library_controller: LibraryController | None = None
         self._library_access_controller: LibraryAccessController | None = None
         self._project_update_controller: ProjectUpdateController | None = None
+        self._data_sharing_controller: DataSharingController | None = None
         self._library_publisher_controller: LibraryPublisherController | None = None
         self._library_submission_controller: LibrarySubmissionController | None = None
         self._import_bundle_progress_bridge: ProgressSignalBridge | None = None
@@ -915,6 +917,20 @@ class StudioController(QObject):
         if window is not None and self._can_publish_from(window):
             self._project_versions().show(window)
 
+    def _data_sharing(self) -> DataSharingController:
+        if self._data_sharing_controller is None:
+            from fpvs_studio.gui.data_sharing_controller import DataSharingController
+
+            self._data_sharing_controller = DataSharingController(
+                self._app, current_window=lambda: self.main_window,
+            )
+        return self._data_sharing_controller
+
+    def show_data_sharing(self) -> None:
+        window = self.main_window
+        if window is not None and self._can_publish_from(window):
+            self._data_sharing().show(window)
+
     def show_library_publisher(self) -> None:
         """Show the publisher only when developer mode was active at startup."""
         window = self.main_window
@@ -985,6 +1001,11 @@ class StudioController(QObject):
             on_request_library=self.show_library,
             on_request_library_submission=self.show_library_submission,
             on_request_project_update=self.show_project_versions,
+            on_request_data_sharing=self.show_data_sharing,
+            on_session_completed=lambda window: self._data_sharing().session_completed(window),
+            on_session_started=lambda window, ready: self._data_sharing().session_started(
+                window, ready,
+            ),
             on_request_library_publish=(
                 self.show_library_publisher if self._developer_mode.active else None
             ),
@@ -1030,6 +1051,7 @@ class StudioController(QObject):
         if previous_window is not None and previous_window is not target_window:
             previous_window.close()
         self._project_versions().opened(target_window)
+        self._data_sharing().opened(target_window)
 
     def _load_condition_template_profiles(self) -> list[ConditionTemplateProfile]:
         root_dir = self._fpvs_root_dir

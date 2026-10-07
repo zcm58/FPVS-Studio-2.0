@@ -23,6 +23,8 @@ public quickstart site lives in `../docs-site/` and is built with MkDocs.
   `SECURITY.md`
 - Desktop bug reports and future service connection: `BUG_REPORTING.md`
 - Private whole-experiment library and publishing: `EXPERIMENT_LIBRARY.md`
+- Opt-in experiment contributions and comparisons: `DATA_SHARING.md` and
+  [active acceptance plan](exec-plans/active/remote-experiment-results-reporting.md)
 
 ## Runtime Contracts
 

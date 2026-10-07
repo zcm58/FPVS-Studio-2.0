@@ -6,6 +6,7 @@ tests/gui/test_condition_modifier_dialog.py
 tests/gui/test_condition_task_dialog.py
 tests/gui/test_conditions_session_fixation.py
 tests/gui/test_create_project_dialog.py
+tests/gui/test_data_sharing_dialog.py
 tests/gui/test_design_setup_step.py
 tests/gui/test_experiment_categories_gui.py
 tests/gui/test_experiment_designer.py
@@ -38,3 +39,5 @@ tests/gui/test_setup_wizard_shell.py
 tests/gui/test_update_dialog.py
 tests/gui/test_welcome_settings_flow.py
 tests/gui/test_workers.py
+tests/unit/test_document_conditions.py
+tests/unit/test_document_summary_refresh.py

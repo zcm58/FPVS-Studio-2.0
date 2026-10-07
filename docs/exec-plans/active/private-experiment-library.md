@@ -155,6 +155,36 @@ Progress: implemented and released in
   installed-GUI checks remain unrun. The v1.9.0 release record documents the verified
   installers and live updater checks; this follow-up required no service changes.
 
+## Collection-safe version review follow-up (October 5, 2026)
+
+The user requested an automatic availability check with an explicit choice before
+adopting updated conditions during an ongoing study. Existing on-open Library checks
+remain the discovery route, without periodic polling or automatic installation.
+Condition changes are reviewed in the complete experiment version, with settings and
+assets. Individual-condition merging remains deferred.
+
+- [x] Confirm background checks only read metadata; explicit verified imports create
+  a collision-safe separate project and preserve the original reporting scope.
+- [x] Show the requested conditional collection warning during version review and
+  offer **Keep current version** / **Download new version separately**. Keeping a
+  version must not write its origin, change checks, download or import.
+- [x] Update registered dialog/controller coverage at `760x680` / `820x720`, including
+  long warning text, unknown/relinked versions, busy states and the keep choice.
+- [x] Library focused baseline: 230 pass, three Windows symlink privilege skips.
+  Safe GUI focused: 17 pass; docs focused: 10 pass. Touched Ruff, compilation and
+  two-file mypy pass. No Library/backend or import-path behavior changed.
+- [x] Final repo precommit passes: changed-file Ruff/compilation, full source mypy
+  (222 files), repository/docs audits and 2,672 safe unit tests, with 11 skips for
+  unavailable Windows symlink privileges. No Qt, presentation or live service calls
+  were run for this follow-up.
+- [ ] Visible/manual acceptance remains pending: inspect the full warning and both
+  choices at minimum/default size in both themes, keep an older collecting project,
+  then separately download/review a newer version. Registered Qt tests were not run;
+  execution requires an explicitly approved safe visible environment.
+
+Canonical workflow and warning text live in
+[Project version checks](../../EXPERIMENT_LIBRARY.md#project-version-checks).
+
 ## Phase 1 implementation authorization
 
 The user authorized Phase 1 implementation, private GitHub/service setup, two test

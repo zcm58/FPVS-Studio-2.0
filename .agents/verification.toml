@@ -50,8 +50,6 @@ tests = [
   "tests/unit/test_masking_catch_conditions.py",
   "tests/unit/test_validation.py",
   "tests/unit/test_fixation_settings.py",
-  "tests/unit/test_document_conditions.py",
-  "tests/unit/test_document_summary_refresh.py",
   "tests/unit/test_experiment_design.py",
   "tests/unit/test_experiment_categories.py",
   "tests/unit/test_attentional_blink.py",
@@ -66,7 +64,10 @@ tests = [
   "tests/unit/test_condition_modifiers.py",
   "tests/unit/test_modifier_presets.py",
 ]
-full_tests = []
+full_tests = [
+  "tests/unit/test_document_conditions.py",
+  "tests/unit/test_document_summary_refresh.py",
+]
 include = ["tests/unit/test_masking_catch_conditions.py", "src/fpvs_studio/core/**", "tests/unit/test_models.py", "tests/unit/test_validation.py", "tests/unit/test_fixation_settings.py", "tests/unit/test_condition_tasks.py", "tests/unit/test_contrast_modulation.py", "tests/unit/test_document_*.py", "tests/unit/test_experiment_design.py", "tests/unit/test_experiment_categories.py", "tests/unit/test_attentional_blink*.py", "tests/unit/test_windows_paths.py"]
 manual_smoke = []
 
@@ -172,6 +173,35 @@ tests = [
 full_tests = []
 include = ["src/fpvs_studio/preprocessing/**", "tests/unit/test_preprocessing_*.py"]
 manual_smoke = []
+
+[scopes."data-sharing"]
+checks = []
+tests = [
+  "tests/unit/test_data_sharing_models.py",
+  "tests/unit/test_data_sharing_runtime.py",
+  "tests/unit/test_data_sharing_storage.py",
+  "tests/unit/test_data_sharing_client.py",
+  "tests/unit/test_data_sharing_service.py",
+  "tests/unit/test_data_sharing_gui_jobs.py",
+  "tests/unit/test_data_sharing_wire.py",
+  "tests/unit/test_import_boundaries.py",
+]
+full_tests = ["tests/gui/test_data_sharing_dialog.py"]
+include = [
+  "src/fpvs_studio/data_sharing/**",
+  "src/fpvs_studio/core/data_sharing.py",
+  "src/fpvs_studio/runtime/data_sharing.py",
+  "src/fpvs_studio/gui/data_sharing_*.py",
+  "services/results/**",
+  "tests/unit/test_data_sharing_*.py",
+  "tests/gui/test_data_sharing_dialog.py",
+  "docs/DATA_SHARING.md",
+]
+manual_smoke = [
+  "In an approved visible Windows session inspect both tabs at 820x620 and 880x700; exercise enrollment, opt-in/out, retry and archive with a fake service.",
+  "Run sibling OpenFPVS npm test and npm run check; Python verification does not run backend tests.",
+  "After an approved staging deployment, enroll two machines, complete production sessions and check scoped receipts, offline retries, revocation and threshold suppression.",
+]
 
 [scopes.runtime]
 checks = []

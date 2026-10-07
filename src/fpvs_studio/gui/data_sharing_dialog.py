@@ -1,0 +1,305 @@
+"""Opt-in experiment reporting and aggregate fixation comparison surface."""
+
+from __future__ import annotations
+
+from collections.abc import Sequence
+from dataclasses import dataclass
+
+from PySide6.QtCore import QEvent, Qt, Signal
+from PySide6.QtGui import QCloseEvent
+from PySide6.QtWidgets import (
+    QAbstractItemView,
+    QCheckBox,
+    QDialog,
+    QHBoxLayout,
+    QHeaderView,
+    QLabel,
+    QLineEdit,
+    QPushButton,
+    QSizePolicy,
+    QTableWidget,
+    QTableWidgetItem,
+    QTabWidget,
+    QVBoxLayout,
+    QWidget,
+)
+
+from fpvs_studio.gui.components import (
+    DialogHeader,
+    apply_dialog_theme,
+    mark_primary_action,
+    mark_secondary_action,
+)
+
+
+@dataclass(frozen=True)
+class ComparisonRow:
+    """Already formatted backend metrics; widgets do not score results."""
+
+    condition: str
+    condition_id: str
+    local: str
+    shared: str
+
+
+class DataSharingDialog(QDialog):
+    action_requested = Signal(str)
+    enabled_requested = Signal(bool)
+    closing = Signal()
+
+    def __init__(self, *, configured: bool, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setObjectName("data_sharing_dialog")
+        self.setWindowTitle("Data Sharing & Comparison")
+        self.setMinimumSize(820, 620)
+        self.resize(880, 700)
+        self._configured = configured
+        self._connected = False
+        self._enabled = False
+        self._loaded = False
+        self._busy = False
+        self._updating = False
+        self._project_url = ""
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(20, 16, 20, 16)
+        layout.setSpacing(8)
+        self.header = DialogHeader(
+            "Data Sharing & Comparison",
+            "Report fixation task results to your private lab project on OpenFPVS.",
+            parent=self,
+        )
+        layout.addWidget(self.header)
+        self.tabs = QTabWidget(self)
+        sharing_page = QWidget(self.tabs)
+        sharing_layout = QVBoxLayout(sharing_page)
+        sharing_layout.setContentsMargins(12, 12, 12, 12)
+        sharing_layout.setSpacing(8)
+        comparison_page = QWidget(self.tabs)
+        comparison_layout = QVBoxLayout(comparison_page)
+        comparison_layout.setContentsMargins(12, 12, 12, 12)
+        comparison_layout.setSpacing(8)
+        self.tabs.addTab(sharing_page, "Sharing & privacy")
+        self.tabs.addTab(comparison_page, "Comparison")
+        self.profile_label = self._label("No experiment enrollment. Sharing is off.")
+        self.profile_label.setObjectName("sharing_profile")
+        sharing_layout.addWidget(self.profile_label)
+        self.project_id_edit = QLineEdit(self)
+        self.project_id_edit.setObjectName("sharing_project_id")
+        self.project_id_edit.setPlaceholderText("OpenFPVS project ID (from the project page)")
+        self.project_id_edit.setAccessibleName("OpenFPVS project ID")
+        self.project_id_edit.setMaxLength(36)
+        sharing_layout.addWidget(self.project_id_edit)
+        self.enabled_checkbox = QCheckBox(
+            "Automatically share completed sessions for this experiment", self,
+        )
+        self.enabled_checkbox.setObjectName("sharing_enabled")
+        self.enabled_checkbox.toggled.connect(self._enabled_changed)
+        sharing_layout.addWidget(self.enabled_checkbox)
+        self.consent_label = self._label(
+            "Private reports include experiment/version, protocol fingerprint, random report ID, "
+            "Studio version, completion time, condition IDs/order, fixation targets/hits/misses/"
+            "false alarms/accuracy, mean response time and observation count, scoring method, "
+            "refresh rate and response window. No participant IDs, demographics, raw EEG or "
+            "individual answers. You see aggregate comparison only."
+        )
+        self.consent_label.setObjectName("sharing_consent")
+        sharing_layout.addWidget(self.consent_label)
+        connection = QHBoxLayout()
+        connection.setSpacing(8)
+        self.invitation_edit = QLineEdit(self)
+        self.invitation_edit.setObjectName("sharing_invitation_code")
+        self.invitation_edit.setEchoMode(QLineEdit.EchoMode.Password)
+        self.invitation_edit.setPlaceholderText("Lab-issued invitation code")
+        self.invitation_edit.setAccessibleName("Lab-issued invitation code")
+        self.invitation_edit.setMaxLength(128)
+        self.invitation_edit.textChanged.connect(self._update_controls)
+        connection.addWidget(self.invitation_edit, 1)
+        self.connect_button = QPushButton("Connect", self)
+        self.connect_button.setObjectName("sharing_connect")
+        self.connect_button.setAutoDefault(False)
+        self.connect_button.clicked.connect(lambda: self.action_requested.emit("connect"))
+        mark_primary_action(self.connect_button)
+        connection.addWidget(self.connect_button)
+        self.disconnect_button = QPushButton("Revoke access", self)
+        self.disconnect_button.setObjectName("sharing_disconnect")
+        self.disconnect_button.clicked.connect(lambda: self.action_requested.emit("disconnect"))
+        mark_secondary_action(self.disconnect_button)
+        connection.addWidget(self.disconnect_button)
+        self.archive_button = QPushButton("Archive uploaded history", self)
+        self.archive_button.setObjectName("sharing_archive")
+        self.archive_button.setToolTip(
+            "Archive older accepted upload history locally to make room for new contributions. "
+            "Research records and shared results remain available; the latest comparison is kept."
+        )
+        self.archive_button.clicked.connect(lambda: self.action_requested.emit("archive"))
+        mark_secondary_action(self.archive_button)
+        connection.addWidget(self.archive_button)
+        sharing_layout.addLayout(connection)
+        project_actions = QHBoxLayout()
+        self.protocol_button = QPushButton("Copy protocol fingerprint", self)
+        self.protocol_button.setToolTip(
+            "Copy the current protocol for the administrator to enable this project."
+        )
+        self.protocol_button.clicked.connect(lambda: self.action_requested.emit("protocol"))
+        mark_secondary_action(self.protocol_button)
+        project_actions.addWidget(self.protocol_button)
+        self.website_button = QPushButton("View OpenFPVS project", self)
+        self.website_button.clicked.connect(lambda: self.action_requested.emit("website"))
+        mark_secondary_action(self.website_button)
+        project_actions.addWidget(self.website_button)
+        project_actions.addStretch(1)
+        sharing_layout.addLayout(project_actions)
+        sharing_layout.addWidget(self._label(
+            "Connecting does not enable sharing or upload old sessions. Turning sharing off pauses "
+            "unsent reports; Retry pending resumes them explicitly. Revoking access leaves "
+            "received reports with the owner. Archive moves older accepted upload history locally "
+            "to make room; research records, shared results and the latest comparison remain."
+        ))
+        sharing_layout.addStretch(1)
+        self.status_label = self._label(
+            "Sharing service is not configured. Local results remain available."
+            if not configured else "Loading this experiment's sharing settings…"
+        )
+        self.status_label.setObjectName("sharing_status")
+        layout.addWidget(self.status_label)
+        self.counts_label = self._label("Pending: 0 · Held: 0 · Uploaded: 0")
+        self.counts_label.setObjectName("sharing_counts")
+        layout.addWidget(self.counts_label)
+        layout.addWidget(self.tabs, 1)
+        self.scope_label = self._label(
+            "Local: latest eligible completed session. Shared: matching protocol."
+        )
+        self.scope_label.setObjectName("sharing_comparison_scope")
+        comparison_layout.addWidget(self.scope_label)
+        self.comparison_table = QTableWidget(0, 3, self)
+        self.comparison_table.setObjectName("sharing_comparison_table")
+        self.comparison_table.setHorizontalHeaderLabels(
+            ["Condition", "Latest local session", "Shared dataset"]
+        )
+        self.comparison_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.comparison_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.comparison_table.setWordWrap(True)
+        self.comparison_table.setMinimumHeight(125)
+        self.comparison_table.verticalHeader().hide()
+        self.comparison_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.comparison_table.setAccessibleName("Fixation task accuracy comparison by condition")
+        comparison_layout.addWidget(self.comparison_table, 1)
+        self.comparison_notice = self._label(
+            "Shared accuracy needs at least 10 session reports from 3 device enrollments "
+            "per condition. "
+            "This is task performance; it does not measure EEG quality."
+        )
+        self.comparison_notice.setObjectName("sharing_comparison_notice")
+        comparison_layout.addWidget(self.comparison_notice)
+        footer = QHBoxLayout()
+        self.retry_button = QPushButton("Retry pending / refresh", self)
+        self.retry_button.setObjectName("sharing_retry")
+        self.retry_button.clicked.connect(lambda: self.action_requested.emit("retry"))
+        mark_secondary_action(self.retry_button)
+        footer.addWidget(self.retry_button)
+        footer.addStretch(1)
+        self.cancel_button = QPushButton("Cancel operation", self)
+        self.cancel_button.setObjectName("sharing_cancel")
+        self.cancel_button.clicked.connect(lambda: self.action_requested.emit("cancel"))
+        footer.addWidget(self.cancel_button)
+        self.close_button = QPushButton("Close", self)
+        self.close_button.clicked.connect(self.close)
+        footer.addWidget(self.close_button)
+        layout.addLayout(footer)
+        apply_dialog_theme(self)
+        self._update_controls()
+
+    def _label(self, text: str) -> QLabel:
+        label = QLabel(text, self)
+        label.setWordWrap(True)
+        label.setTextFormat(Qt.TextFormat.PlainText)
+        label.setMinimumWidth(0)
+        label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+        return label
+
+    def invitation_code(self) -> str:
+        return self.invitation_edit.text().strip()
+
+    def clear_invitation(self) -> None:
+        self.invitation_edit.clear()
+
+    def project_id(self) -> str:
+        return self.project_id_edit.text().strip()
+
+    def set_project_url(self, url: str) -> None:
+        self._project_url = url
+        self._update_controls()
+
+    def set_state(
+        self, *, connected: bool, enabled: bool, profile: str, status: str,
+        pending: int = 0, held: int = 0, uploaded: int = 0,
+    ) -> None:
+        self._connected, self._enabled = connected, enabled
+        self._loaded = True
+        self._updating = True
+        self.enabled_checkbox.setChecked(enabled)
+        self._updating = False
+        self.profile_label.setText(profile)
+        self.profile_label.setToolTip(profile)
+        self.status_label.setText(status)
+        self.counts_label.setText(f"Pending: {pending:,} · Held: {held:,} · Uploaded: {uploaded:,}")
+        self._update_controls()
+
+    def set_comparison(self, rows: Sequence[ComparisonRow], *, scope: str, notice: str) -> None:
+        self.scope_label.setText(scope)
+        self.comparison_notice.setText(notice)
+        self.comparison_table.setRowCount(len(rows))
+        for index, row in enumerate(rows):
+            for column, value in enumerate((row.condition, row.local, row.shared)):
+                item = QTableWidgetItem(value)
+                item.setToolTip(
+                    f"{row.condition}\nCondition ID: {row.condition_id}"
+                    if column == 0 else value
+                )
+                self.comparison_table.setItem(index, column, item)
+        self.comparison_table.resizeRowsToContents()
+
+    def set_busy(self, busy: bool, message: str = "") -> None:
+        self._busy = busy
+        if message:
+            self.status_label.setText(message)
+        self._update_controls()
+
+    def _update_controls(self) -> None:
+        ready = self._configured and not self._busy
+        self.project_id_edit.setEnabled(ready and not self._connected)
+        self.protocol_button.setEnabled(not self._busy)
+        self.website_button.setEnabled(not self._busy and bool(self._project_url))
+        self.invitation_edit.setEnabled(ready and not self._connected)
+        self.connect_button.setEnabled(
+            ready and not self._connected and bool(self.invitation_code())
+        )
+        self.disconnect_button.setEnabled(not self._busy and self._connected)
+        self.enabled_checkbox.setEnabled(
+            self._connected and (not self._busy or self._enabled)
+            and (self._configured or self._enabled)
+        )
+        self.retry_button.setEnabled(ready and self._connected and self._enabled)
+        self.archive_button.setEnabled(not self._busy and self._loaded)
+        self.cancel_button.setVisible(self._busy)
+
+    def _enabled_changed(self, enabled: bool) -> None:
+        if not self._updating:
+            self.enabled_requested.emit(enabled)
+
+    def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802
+        self.closing.emit()
+        event.accept()
+
+    def reject(self) -> None:
+        self.close()
+
+    def changeEvent(self, event: QEvent) -> None:  # noqa: N802
+        super().changeEvent(event)
+        if event.type() in (QEvent.Type.PaletteChange, QEvent.Type.ApplicationPaletteChange):
+            if not getattr(self, "_refreshing_theme", False):
+                self._refreshing_theme = True
+                try:
+                    apply_dialog_theme(self)
+                finally:
+                    self._refreshing_theme = False

@@ -9,6 +9,8 @@ from fpvs_studio.core.models import ProjectFile
 from fpvs_studio.core.serialization import load_project_file
 from fpvs_studio.gui.document import DocumentError, ProjectDocument
 
+pytestmark = pytest.mark.qt
+
 
 def _document_for_project(tmp_path, project: ProjectFile) -> ProjectDocument:
     return ProjectDocument(project_root=tmp_path, project=project.model_copy(deep=True))

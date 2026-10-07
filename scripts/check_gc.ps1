@@ -47,7 +47,7 @@ Push-Location $RepoRoot
 try {
     $failures = [System.Collections.Generic.List[string]]::new()
 
-    $printMatches = Invoke-GitGrep "print(" @("src", "scripts") |
+    $printMatches = Invoke-GitGrep "\bprint[[:space:]]*(" @("src", "scripts") |
         Where-Object { $_ -notlike "scripts/check_gc.ps1:*" }
     Add-Failure $failures "Use structured logging instead of print(...) in source/scripts." $printMatches
 

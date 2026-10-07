@@ -10,10 +10,11 @@ from pathlib import Path
 from threading import Event
 
 import pytest
+from PIL import Image
 
 import fpvs_studio.core.project_bundle as project_bundle_module
 from fpvs_studio.core.models import ProjectFile
-from fpvs_studio.core.paths import app_data_dir
+from fpvs_studio.core.paths import app_data_dir, filesystem_path
 from fpvs_studio.core.project_bundle import (
     BUNDLE_MANIFEST_FILENAME,
     IMPORT_STAGING_DIRNAME,
@@ -49,6 +50,38 @@ def test_project_bundle_filename_uses_compact_project_title() -> None:
     assert project_bundle_filename("   ") == f"fpvsproject{PROJECT_BUNDLE_SUFFIX}"
 
 
+@pytest.mark.skipif(os.name != "nt", reason="Windows extended-path enumeration boundary")
+@pytest.mark.parametrize("directory_length", [238, 247, 264])
+@pytest.mark.parametrize("operation", ["validate", "collect"])
+def test_bundle_enumeration_handles_long_child_paths(
+    tmp_path, sample_project, directory_length, operation,
+):
+    source_suffix = "stimuli/original-images/" + "s" * 16
+    padding = directory_length - len(str(tmp_path)) - len(source_suffix) - 2
+    assert padding > 0, "Use a shorter --basetemp to exercise this Windows path boundary."
+    root = tmp_path / ("p" * padding)
+    expected = set()
+    for stimulus_set in sample_project.stimulus_sets:
+        stimulus_set.source_dir = (
+            "stimuli/original-images/" + stimulus_set.set_id.ljust(16, "-")
+        )
+        folder = root / stimulus_set.source_dir
+        assert len(str(folder)) == directory_length
+        filesystem_path(folder).mkdir(parents=True)
+        image = folder / "long-stimulus-file-named-beyond-the-windows-limit.png"
+        assert len(str(image)) > 260
+        Image.new("RGB", (256, 256)).save(filesystem_path(image))
+        expected.add(image.relative_to(root).as_posix())
+    _save_bundle_ready_project(root, sample_project)
+    if operation == "validate":
+        project_bundle_module._validate_bundle_source(
+            root, project=sample_project,
+            manifest=create_empty_manifest(sample_project.meta.project_id), refresh_hz=60.0,
+        )
+    else:
+        assert expected <= set(project_bundle_module._collect_bundle_file_paths(root))
+
+
 def test_export_project_bundle_writes_project_stimuli_and_manifest(
     tmp_path,
     sample_project,
@@ -60,6 +93,12 @@ def test_export_project_bundle_writes_project_stimuli_and_manifest(
     (sample_project_root / "cache" / "ignored.tmp").write_text("cache", encoding="utf-8")
     (sample_project_root / "logs").mkdir()
     (sample_project_root / "logs" / "ignored.csv").write_text("logs", encoding="utf-8")
+    sharing_dir = sample_project_root / ".fpvs-data-sharing"
+    sharing_dir.mkdir()
+    (sharing_dir / "settings.json").write_text("private local enrollment", encoding="utf-8")
+    reporting_dir = sample_project_root / "logs" / "data-sharing" / "outbox"
+    reporting_dir.mkdir(parents=True)
+    (reporting_dir / "private.json").write_text("private report and receipt", encoding="utf-8")
     bundle_path = tmp_path / "sample.fpvsbundle"
 
     manifest = export_project_bundle(sample_project_root, bundle_path)
@@ -77,6 +116,8 @@ def test_export_project_bundle_writes_project_stimuli_and_manifest(
         assert "stimuli/original-images/oddball-set/oddball-set-03.png" in names
         assert "cache/ignored.tmp" not in names
         assert "logs/ignored.csv" not in names
+        assert not any(name.startswith(".fpvs-data-sharing/") for name in names)
+        assert not any(name.startswith("logs/data-sharing/") for name in names)
         project_json = archive.read("project.json").decode("utf-8")
         assert "#00FF00" in project_json
 

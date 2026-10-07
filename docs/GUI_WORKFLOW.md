@@ -27,6 +27,19 @@ HTTPS and temporary-file cleanup run in app-owned jobs; close/shutdown cancels
 without discarding an uncertain submission. See [Experiment Library](EXPERIMENT_LIBRARY.md)
 for dependency closure, exclusions, bounds, review and manual smoke acceptance.
 
+## Private experiment sharing
+
+View > Data Sharing & Comparison opens a two-tab dialog at `880x700`, minimum
+`820x620`. Existing lab-code and OpenFPVS project-ID enrollment leaves sharing off until the operator explicitly
+enables it. App-owned jobs handle hashing, delivery and descriptive comparison after
+completed sessions, with opt-out/backlog release and cancel/shutdown guards.
+Archive uploaded history retains receipts and private mappings locally without HTTP.
+Copy protocol fingerprint supplies the hash for administrator project setup;
+View OpenFPVS project opens the private website dashboard after enrollment.
+See [Data sharing](DATA_SHARING.md) for exact fields, cohort limits and activation.
+Synthetic visible checks cover both tabs and connection states at minimum/default
+sizes; production multi-machine acceptance remains a separate service check.
+
 ## Bug reporting
 
 File > Request a Feature opens a separate text-only draft using the same reporting
@@ -94,7 +107,10 @@ Library-linked projects check for a newer version when opened and show a passive
 Home notice. **File > Update Project Version...** also checks manually, controls
 checks on open, and links earlier downloads explicitly. Installing a newer version
 opens a separate project through ordinary import review; local edits and participant
-data stay in the current project. See the [version workflow](EXPERIMENT_LIBRARY.md#project-version-checks).
+data stay in the current project. Review explains the risk of changing an experiment
+after collection begins and offers **Keep current version** or **Download new version
+separately**. Keeping the version leaves automatic checks enabled according to the
+existing preference. See the [version workflow](EXPERIMENT_LIBRARY.md#project-version-checks).
 
 Library jobs use the application-owned coordinator. Close/Escape/cancel drain transfers;
 **Cancel setup** cooperatively stops extraction before commit. The cache lease lasts

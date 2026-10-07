@@ -285,6 +285,13 @@ def build_commands(
         ]
 
     if tier == "precommit":
+        _, registry_path = load_scopes()
+        qt_tests = read_qt_registry(registry_path)
+        unit_tests = tuple(
+            candidate.relative_to(REPO_ROOT).as_posix()
+            for candidate in _test_candidates(REPO_ROOT / "tests/unit")
+            if candidate.relative_to(REPO_ROOT).as_posix() not in qt_tests
+        )
         commands = _changed_python_commands(
             python,
             tuple(path.replace("\\", "/") for path in changed),
@@ -294,7 +301,7 @@ def build_commands(
                 [str(python), "-m", "mypy", "src"],
                 _check_command("gc", powershell=powershell),
                 _check_command("docs-hygiene", powershell=powershell),
-                _pytest_command(python, ("tests/unit",), allow_qt=False),
+                _pytest_command(python, unit_tests, allow_qt=False),
             ]
         )
         return commands

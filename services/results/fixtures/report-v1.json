@@ -1,0 +1,25 @@
+{
+  "schema_version": "1.0",
+  "report_id": "00000000-0000-4000-8000-000000000001",
+  "experiment_id": "test-faces",
+  "experiment_version": "1.0.0",
+  "protocol_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "completed_at": "2026-10-05T14:00:00.000Z",
+  "studio_version": "2.2.0+local",
+  "occurrences": [
+    {
+      "condition_id": "faces",
+      "occurrence_index": 1,
+      "total_targets": 10,
+      "hit_count": 8,
+      "miss_count": 2,
+      "false_alarm_count": 1,
+      "accuracy_percent": 80.0,
+      "mean_rt_ms": 300.0,
+      "rt_count": 8,
+      "scoring_source": "timestamps",
+      "refresh_hz": 60.0,
+      "response_window_ms": 1000.0
+    }
+  ]
+}
