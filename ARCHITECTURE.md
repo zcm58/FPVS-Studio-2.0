@@ -26,7 +26,7 @@ lazily only inside the engine package.
   On-open checks and explicit separate-project
   installation use `gui/project_update_controller.py`; see the Library contract.
   Private content and the independent Cloudflare service live in
-  `zcm58/FPVS-Studio-Library`; that service checks live release-asset availability
+  `zcm58/OpenFPVS-Website`; that service checks live release-asset availability
   for each browse/download. Native access connects directly to `https://openfpvs.com`;
   core's exact origin policy preserves receipt identity without transferring credentials.
   The public website is maintained separately in the sibling `../OpenFPVS` repository.

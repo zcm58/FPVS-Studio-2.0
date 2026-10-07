@@ -79,7 +79,7 @@ def test_publisher_layout_and_plain_review(qtbot, tmp_path, size, state, dark) -
     apply_dialog_theme(dialog)
     _fill(dialog)
     dialog.title_edit.setText("Long research experiment title " * 5)
-    dialog.set_access(True, "GitHub: zcm58 · zcm58/FPVS-Studio-Library")
+    dialog.set_access(True, "GitHub: zcm58 · zcm58/OpenFPVS-Website")
     if state in {"prepared", "failed", "published", "retained"}:
         prepared = _prepared(tmp_path, dialog.request())
         dialog.set_prepared(True, publication_review(prepared))
@@ -92,7 +92,7 @@ def test_publisher_layout_and_plain_review(qtbot, tmp_path, size, state, dark) -
     elif state == "published":
         dialog.set_published()
         dialog.status_label.setText(
-            "Published to zcm58/FPVS-Studio-Library · " + "long-release-title-" * 4
+            "Published to zcm58/OpenFPVS-Website · " + "long-release-title-" * 4
             + "v1.0.0. Catalog commit: " + "b" * 40
         )
     elif state == "retained":
@@ -153,7 +153,7 @@ class _Service:
         self._check_thread()
         if self.access_denied:
             raise PublisherError("GitHub owner or write access is not authorized.")
-        return PublisherAccess(login="zcm58", repository="zcm58/FPVS-Studio-Library")
+        return PublisherAccess(login="zcm58", repository="zcm58/OpenFPVS-Website")
 
     def prepare(self, project_root, request, *, cancel_event):
         self._check_thread()
@@ -170,7 +170,7 @@ class _Service:
         if self.publish_error:
             raise PublisherError("Connection lost while publishing.")
         return PublicationResult(
-            repository="zcm58/FPVS-Studio-Library",
+            repository="zcm58/OpenFPVS-Website",
             tag="example-v1.0.0",
             catalog_commit="b" * 40,
         )
