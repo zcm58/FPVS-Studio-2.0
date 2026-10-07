@@ -19,7 +19,7 @@ from fpvs_studio.core.library_publish import LibraryBundlePreparation, prepare_l
 from fpvs_studio.core.project_bundle import ProjectBundleCancelled, ProjectBundleError
 from fpvs_studio.developer import catalog_publisher
 
-REPOSITORY = "zcm58/FPVS-Studio-Library"
+REPOSITORY = catalog_publisher.REPOSITORY
 _REPORT_LIMIT = 16 * 1024 * 1024
 
 

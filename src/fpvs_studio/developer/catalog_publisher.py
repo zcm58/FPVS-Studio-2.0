@@ -27,7 +27,7 @@ from pathlib import Path, PurePosixPath
 from threading import Event
 from typing import Any, TypeGuard
 
-REPOSITORY = "zcm58/FPVS-Studio-Library"
+REPOSITORY = "zcm58/OpenFPVS-Website"
 REPO_PATH = f"/repos/{REPOSITORY}"
 MAX_ASSET_BYTES = 2 * 1024**3 - 1
 MAX_UNCOMPRESSED_BYTES = 20 * 1024**3

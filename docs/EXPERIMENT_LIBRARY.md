@@ -125,7 +125,7 @@ passive notices and explicit import handoff. The dialog minimum/default is `760x
 ## Service and access boundary
 
 Private GitHub Releases in
-[`zcm58/FPVS-Studio-Library`](https://github.com/zcm58/FPVS-Studio-Library)
+[`zcm58/OpenFPVS-Website`](https://github.com/zcm58/OpenFPVS-Website)
 hold versioned bundles. That repository owns the Cloudflare service, invitation/device
 administration, catalog publishing and deployment. GitHub App credentials stay on the
 service; desktop clients receive only authorized catalog metadata and streamed bytes.
@@ -379,7 +379,7 @@ Library service repository.
 For command-line publishing, use the Studio Python environment; the private repository
 script delegates to `fpvs_studio.developer.catalog_publisher`. The GUI does not need
 this checkout. The maintainer needs write access to the private
-[`FPVS-Studio-Library` repository](https://github.com/zcm58/FPVS-Studio-Library).
+[`OpenFPVS Website` repository](https://github.com/zcm58/OpenFPVS-Website).
 On this development computer its checkout is `build/experiment-library-service` inside
 the Studio checkout. On another computer, clone that private repository and adjust
 `$libraryRepo` below. The publisher uses `GH_TOKEN` or Git's configured credential helper;

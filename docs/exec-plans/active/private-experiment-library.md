@@ -4,6 +4,23 @@ Status: Active
 
 Date: 2026-09-16
 
+## Website repository rename (October 7, 2026)
+
+The user authorized consolidating the website/service onto `main` and renaming
+the existing private repository to `zcm58/OpenFPVS-Website`. Update the publisher's
+fixed repository target and reuse it in the GUI-neutral publication service.
+Owner/write authorization, redirect rejection and native `openfpvs.com` access
+remain unchanged. This source update requires a new Studio build for maintainer
+publishing in installed versions; ordinary Library browsing/downloads keep the
+same service origin. Verification uses the Library focused route without Qt,
+live publication or experimental runtimes.
+
+The Library focused route passes all 300 tests, changed-file Ruff and compilation.
+The publication wrapper now reuses `catalog_publisher.REPOSITORY` so the fixed
+authorization target has one owner. GUI fixtures use the new repository label;
+visible Qt and actual publishing were not run. Work was isolated from the primary
+checkout's unrelated bundle/compiler changes.
+
 ## Bundle transfer audit (October 2, 2026)
 
 The user authorized investigation and fixes for MSMS AB and other bundles on another PC.
