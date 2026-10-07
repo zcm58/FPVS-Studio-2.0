@@ -141,6 +141,7 @@ class StudioMainWindow(QMainWindow):
         on_load_fpvs_root_dir: Callable[[], Path | None] | None = None,
         on_request_library: Callable[[], None] | None = None,
         on_request_library_publish: Callable[[], None] | None = None,
+        on_request_library_submission: Callable[[], None] | None = None,
         on_request_project_update: Callable[[], None] | None = None,
     ) -> None:
         super().__init__()
@@ -154,6 +155,7 @@ class StudioMainWindow(QMainWindow):
         self._on_request_settings = on_request_settings
         self._on_request_library = on_request_library
         self._on_request_library_publish = on_request_library_publish
+        self._on_request_library_submission = on_request_library_submission
         self._on_request_project_update = on_request_project_update
         self.setWindowTitle("FPVS Studio Beta")
         self._auto_workspace_sized = False
@@ -550,6 +552,9 @@ class StudioMainWindow(QMainWindow):
         self.project_update_action.setEnabled(self._on_request_project_update is not None)
         self.project_update_action.triggered.connect(self._request_project_update)
         self.publish_library_action: QAction | None = None
+        self.submit_library_action = QAction("Request Library publication...", self)
+        self.submit_library_action.setObjectName("request_library_publication_action")
+        self.submit_library_action.triggered.connect(self._request_library_submission)
         if self._on_request_library_publish is not None:
             self.publish_library_action = QAction("Publish to Experiment Library...", self)
             self.publish_library_action.setObjectName("publish_experiment_library_action")
@@ -614,6 +619,7 @@ class StudioMainWindow(QMainWindow):
         self.export_menu.addAction(self.export_project_config_action)
         self.export_menu.addAction(self.export_completed_project_config_action)
         self.export_menu.addAction(self.export_group_summary_action)
+        self.export_menu.addAction(self.submit_library_action)
         if self.publish_library_action is not None:
             self.export_menu.addSeparator()
             self.export_menu.addAction(self.publish_library_action)
@@ -1434,6 +1440,16 @@ class StudioMainWindow(QMainWindow):
             and self._allow_project_handoff_during_fixation_load()
         ):
             self._on_request_library_publish()
+
+    def _request_library_submission(self) -> None:
+        if (
+            self._on_request_library_submission is not None
+            and self._active_bundle_export_task is None
+            and not self._bundle_import_processing_active
+            and self._allow_project_handoff_during_launch()
+            and self._allow_project_handoff_during_fixation_load()
+        ):
+            self._on_request_library_submission()
 
     def _update_window_title(self, *_args: object) -> None:
         dirty_prefix = "*" if self.document.dirty else ""

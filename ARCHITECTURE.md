@@ -31,6 +31,11 @@ lazily only inside the engine package.
   core's exact origin policy preserves receipt identity without transferring credentials.
   The public website is maintained separately in the sibling `../OpenFPVS` repository.
   See `docs/EXPERIMENT_LIBRARY.md`.
+  `library/submissions.py` handles enrolled-device condition review uploads/status;
+  `gui/library_submission_controller.py` owns app jobs and explicit distribution
+  confirmation. Clean preparation selects one condition through the existing
+  exporter. The private service owns GitHub draft storage, manual review and an
+  accepted-only catalog overlay; approval never grants future publishing authority.
   Reusable PI-distributed lab codes enroll multiple PCs without researcher
   accounts. `gui/library_access_dialog.py` owns optional startup connection setup;
   existing OS-protected enrollment skips it, and Continue offline preserves local use.

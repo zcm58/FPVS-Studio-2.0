@@ -97,6 +97,7 @@ if TYPE_CHECKING:
     from fpvs_studio.gui.library_access_dialog import LibraryAccessController
     from fpvs_studio.gui.library_controller import LibraryController
     from fpvs_studio.gui.library_publisher_controller import LibraryPublisherController
+    from fpvs_studio.gui.library_submission_controller import LibrarySubmissionController
     from fpvs_studio.gui.project_update_controller import ProjectUpdateController
 
 _SETTINGS_ORGANIZATION = "FPVS Studio"
@@ -166,6 +167,7 @@ class StudioController(QObject):
         self._library_access_controller: LibraryAccessController | None = None
         self._project_update_controller: ProjectUpdateController | None = None
         self._library_publisher_controller: LibraryPublisherController | None = None
+        self._library_submission_controller: LibrarySubmissionController | None = None
         self._import_bundle_progress_bridge: ProgressSignalBridge | None = None
         self._import_bundle_processing_window: StudioMainWindow | None = None
         self._import_bundle_processing_dialog: BundleImportProgressDialog | None = None
@@ -933,6 +935,22 @@ class StudioController(QObject):
             save_project=lambda: self._can_publish_from(window) and window.save_project(),
         )
 
+    def show_library_submission(self) -> None:
+        window = self.main_window
+        if window is None or not self._can_publish_from(window):
+            return
+        if self._library_submission_controller is None:
+            from fpvs_studio.gui.library_submission_controller import LibrarySubmissionController
+
+            self._library_submission_controller = LibrarySubmissionController(self._app)
+        self._library_submission_controller.show(
+            project_root=window.document.project_root,
+            conditions=[
+                (item.condition_id, item.name) for item in window.document.project.conditions
+            ],
+            save_project=lambda: self._can_publish_from(window) and window.save_project(),
+        )
+
     def _can_publish_from(self, window: StudioMainWindow) -> bool:
         return (
             self.main_window is window
@@ -965,6 +983,7 @@ class StudioController(QObject):
             on_request_import_project_bundle=self.show_import_project_bundle_dialog,
             on_request_settings=self.show_settings_dialog,
             on_request_library=self.show_library,
+            on_request_library_submission=self.show_library_submission,
             on_request_project_update=self.show_project_versions,
             on_request_library_publish=(
                 self.show_library_publisher if self._developer_mode.active else None

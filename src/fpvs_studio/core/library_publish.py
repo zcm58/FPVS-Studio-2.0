@@ -17,6 +17,7 @@ from typing import Any
 
 from fpvs_studio import __version__
 from fpvs_studio.core.compiler_assets import resolve_image_paths
+from fpvs_studio.core.condition_modifiers import modifier_task_ids
 from fpvs_studio.core.enums import StimulusModality, StimulusVariant
 from fpvs_studio.core.models import ProjectFile
 from fpvs_studio.core.paths import (
@@ -181,6 +182,7 @@ def prepare_library_bundle(
     minimum_studio_version: str = __version__,
     dry_run: bool = False,
     cancel_event: Event | None = None,
+    condition_id: str | None = None,
 ) -> LibraryBundlePreparation:
     """Validate a sanitized copy and optionally publish its local bundle atomically.
 
@@ -223,6 +225,32 @@ def prepare_library_bundle(
         original_manifest = (source_root / "stimuli" / "manifest.json").read_bytes()
         project = load_project_file(source_root / "project.json")
         manifest = read_stimulus_manifest(source_root)
+        if condition_id is not None:
+            selected = next(
+                (item for item in project.conditions if item.condition_id == condition_id), None
+            )
+            if selected is None:
+                raise ProjectBundleError("The selected condition no longer exists.")
+            if selected.masking_catch:
+                raise ProjectBundleError(
+                    "A masking catch condition depends on other conditions "
+                    "and cannot be submitted alone."
+                )
+            project = project.model_copy(deep=True)
+            project.conditions = [selected.model_copy(deep=True)]
+            task_ids = {
+                binding.task_id
+                for binding in (*selected.pre_task_bindings, *selected.post_task_bindings)
+            }
+            project.condition_modifiers = [
+                modifier for modifier in project.condition_modifiers
+                if task_ids.intersection(modifier_task_ids(modifier))
+            ]
+            for modifier in project.condition_modifiers:
+                task_ids.update(modifier_task_ids(modifier))
+            project.task_modules = [
+                task for task in project.task_modules if task.task_id in task_ids
+            ]
         clean, clean_manifest, paths = _clean_inventory(source_root, project, manifest)
         clean_root = staging / "project"
         clean_root.mkdir()

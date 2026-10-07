@@ -25,6 +25,10 @@ validation and extraction; this package only transfers and verifies bytes.
   payload and one bounded partial are retained; rehash cached bytes before reuse.
 - Imported projects are independent copies and work offline. Network access never
   replaces an existing project or edits settings.
+- `submissions.py` transfers an explicitly confirmed clean condition bundle through
+  the enrolled-device review API. Bind retries to its UUID/digest; preparation uses
+  core's clean exporter through the existing prepared-file owner. No GitHub write
+  credential enters the desktop client. Approval covers exact bytes only.
 - `project_updates.py` discovers newer versions from an explicit local origin receipt.
   Compare semantic versions by item identity even if the installed release disappeared;
   never infer origins from names or follow a receipt to a different service endpoint.

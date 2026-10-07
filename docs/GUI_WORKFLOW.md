@@ -17,6 +17,16 @@ enrollment remains saved. Errors leave retry/offline choices available. View-onl
 access permits catalog browsing and disables download; the server remains the
 authority for permission and revocation. See [Experiment Library](EXPERIMENT_LIBRARY.md).
 
+## Condition publication requests
+
+File > Export > Request Library publication opens the condition review dialog at
+minimum `860x740`, default `940x800`. Select one condition, enter its title/contact,
+prepare an immutable clean copy and explicitly confirm distribution rights before
+upload. My requests refreshes per-computer review decisions. Preparation, hashing,
+HTTPS and temporary-file cleanup run in app-owned jobs; close/shutdown cancels
+without discarding an uncertain submission. See [Experiment Library](EXPERIMENT_LIBRARY.md)
+for dependency closure, exclusions, bounds, review and manual smoke acceptance.
+
 ## Bug reporting
 
 File > Request a Feature opens a separate text-only draft using the same reporting

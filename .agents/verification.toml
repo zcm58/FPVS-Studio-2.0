@@ -120,6 +120,7 @@ manual_smoke = []
 [scopes.library]
 checks = []
 tests = [
+  "tests/unit/test_library_submissions.py",
   "tests/unit/test_library_installations.py",
   "tests/unit/test_library_origin.py",
   "tests/unit/test_library_project_updates.py",

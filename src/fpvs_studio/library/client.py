@@ -12,7 +12,7 @@ from contextlib import contextmanager
 from http.client import HTTPException
 from pathlib import Path
 from threading import Event
-from typing import Any
+from typing import Any, BinaryIO
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
@@ -128,8 +128,8 @@ class LibraryClient:
 
     @contextmanager
     def _response(
-        self, method: str, path: str, *, token: str = "", data: bytes | None = None,
-        cancel_event: Event | None = None,
+        self, method: str, path: str, *, token: str = "", data: bytes | BinaryIO | None = None,
+        cancel_event: Event | None = None, content_length: int | None = None,
     ) -> Iterator[Any]:
         url = self.service_url + path
         headers = {
@@ -143,6 +143,9 @@ class LibraryClient:
             headers["X-FPVS-Library-Metadata"] = "1"
         if data is not None:
             headers["Content-Type"] = "application/json"
+        if content_length is not None:
+            headers["Content-Type"] = "application/octet-stream"
+            headers["Content-Length"] = str(content_length)
         if token:
             headers["Authorization"] = f"Bearer {token}"
         request = Request(url, data=data, headers=headers, method=method)
@@ -223,7 +226,7 @@ class LibraryClient:
         path: str,
         *,
         token: str = "",
-        payload: dict[str, str] | None = None,
+        payload: dict[str, Any] | None = None,
         cancel_event: Event | None = None,
         limit: int = MAX_CATALOG_BYTES,
     ) -> object:
