@@ -4,8 +4,10 @@ FPVS Studio can contribute fixation-task summaries for an enrolled experiment an
 compare its latest eligible local session with compatible shared results. Sharing
 is off by default. OpenFPVS owns the private lab project dashboard and the
 `/results/v1` service in the sibling `../OpenFPVS` repository. Its canonical backend
-contract is `PROJECT_REPORTING.md`. The integration is available in source;
-production activation requires that repository's migration and deployment.
+contract is `PROJECT_REPORTING.md`. The integration is included in the published
+Studio 2.4.0 Windows installer, and the existing OpenFPVS backend is activated.
+Packaging evidence and operational check boundaries are in the
+[2.4.0 release record](exec-plans/completed/release-2.4.0.md).
 
 ## Operator workflow
 
