@@ -46,6 +46,16 @@ Notes:
   verification
 - the packaging extra includes PyInstaller for local executable builds
 
+If Windows PowerShell blocks repository scripts because execution is restricted,
+launch the specific repository script with a process-only policy:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\verify.ps1 -Scope repo -Tier precommit
+```
+
+This does not change the user or machine execution policy. Repository test helpers
+that load `.ps1` files use the same process-only setting.
+
 ## Launching The App
 
 Run the authoring GUI with:

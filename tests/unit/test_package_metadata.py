@@ -441,6 +441,8 @@ def _run_build_path_helper(root: Path, command: str, **variables: str) -> object
             powershell,
             "-NoProfile",
             "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
             "-Command",
             "$ErrorActionPreference = 'Stop'; . $env:FPVS_BUILD_TEST_HELPER; " + command,
         ],

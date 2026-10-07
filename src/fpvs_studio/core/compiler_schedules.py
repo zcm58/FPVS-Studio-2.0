@@ -9,7 +9,12 @@ from dataclasses import dataclass
 from heapq import heappop, heappush
 from typing import Generic, TypeVar
 
-from fpvs_studio.core.compiler_support import CompileError, namespaced_random_seed
+from fpvs_studio.core.compiler_support import (
+    CompileError,
+    check_compilation_cancelled,
+    consume_compilation_work,
+    namespaced_random_seed,
+)
 from fpvs_studio.core.enums import InterConditionMode, StimulusModality
 from fpvs_studio.core.models import ProjectFile
 from fpvs_studio.core.run_spec import StimulusEvent, StimulusRole, TriggerEvent
@@ -284,6 +289,7 @@ def build_stimulus_sequence(
     selected_text_heights: list[float | None] = []
 
     for index in range(total_stimuli):
+        check_compilation_cancelled(index)
         role: StimulusRole = "oddball" if (index + 1) % oddball_every_n == 0 else "base"
         if not active_pools[role]:
             active_pools[role] = _ActiveBalancedBag(
@@ -355,6 +361,7 @@ def build_stimulus_sequence(
     for index, (stimulus, text_height_value) in enumerate(
         zip(repaired_stimuli, selected_text_heights, strict=True)
     ):
+        check_compilation_cancelled(index)
         role = _role_for_index(index, oddball_every_n)
         sequence.append(
             StimulusEvent(
@@ -399,6 +406,7 @@ def repair_no_repeat_role_bag_sequence(
 
     search_start = 1
     while True:
+        check_compilation_cancelled()
         conflict_index = next(
             (
                 index
@@ -413,6 +421,7 @@ def repair_no_repeat_role_bag_sequence(
         for target_index in (conflict_index, conflict_index - 1):
             member_indices = bag_members[bag_for_index[target_index]]
             for candidate_index in member_indices:
+                check_compilation_cancelled(candidate_index)
                 if candidate_index == target_index:
                     continue
                 if not _swap_is_repeat_free(
@@ -454,6 +463,7 @@ def _role_bag_members(
     role_offsets: dict[StimulusRole, int] = {"base": 0, "oddball": 0}
     members: dict[tuple[StimulusRole, int], list[int]] = {}
     for index in range(total_stimuli):
+        check_compilation_cancelled(index)
         role = _role_for_index(index, oddball_every_n)
         bag_size = bag_sizes[role]
         if bag_size <= 0:
@@ -602,6 +612,7 @@ def boundary_aware_shuffled_bag(
     ordered: list[ItemT] = []
     last_key = previous_key
     while heap:
+        check_compilation_cancelled(len(ordered))
         selected = heappop(heap)
         if selected[3] == last_key and heap:
             alternative = heappop(heap)
@@ -634,6 +645,7 @@ def build_balanced_shuffled_values(
     result: list[ItemT] = []
     previous_key: KeyT | None = None
     while len(result) < count:
+        check_compilation_cancelled()
         bag = boundary_aware_shuffled_bag(
             values,
             rng=rng,
@@ -710,8 +722,13 @@ def _counts_after_selection_can_bridge_to_forced(
     if remaining_count < draws_before_forced:
         return True
     counts[previous_key] -= 1
+    visited = 0
 
     def can_finish(last_key: KeyT, draws_remaining: int) -> bool:
+        nonlocal visited
+        consume_compilation_work()
+        check_compilation_cancelled(visited)
+        visited += 1
         if draws_remaining == 0:
             return last_key != forced_key
         for candidate_key in list(counts):
@@ -861,6 +878,7 @@ def plan_no_repeat_role_bag_keys(
             item_index for item_index, count in enumerate(authored_bag_counts[role]) if count
         ]
         for _ in range(bag_count):
+            check_compilation_cancelled(_)
             shuffled_indices = authored_indices.copy()
             role_rng.shuffle(shuffled_indices)
             tie_priorities[role].append(
@@ -879,11 +897,13 @@ def plan_no_repeat_role_bag_keys(
     role_events_seen: dict[StimulusRole, int] = {"base": 0, "oddball": 0}
 
     for index in range(total_stimuli):
+        check_compilation_cancelled(index)
         role = _role_for_index(index, oddball_every_n)
         bag_index = role_events_seen[role] // len(source_pools[role])
         role_events_seen[role] += 1
         next_states: dict[ScheduleState, tuple[ScheduleState, int]] = {}
-        for state in current_states:
+        for state_index, state in enumerate(current_states):
+            check_compilation_cancelled(state_index)
             remaining_base, remaining_oddball, previous_index = state
             remaining = remaining_base if role == "base" else remaining_oddball
             if not any(remaining):
@@ -899,6 +919,7 @@ def plan_no_repeat_role_bag_keys(
                     tie_priorities[role][bag_index][item_index],
                 )
             )
+            consume_compilation_work(len(all_keys) * (1 + len(candidate_indices)))
             for item_index in candidate_indices:
                 updated = list(remaining)
                 updated[item_index] -= 1
@@ -921,6 +942,7 @@ def plan_no_repeat_role_bag_keys(
     final_state = next(iter(current_states))
     planned_indices = [0] * total_stimuli
     for index in range(total_stimuli - 1, -1, -1):
+        check_compilation_cancelled(index)
         prior_state, item_index = predecessors[index][final_state]
         planned_indices[index] = item_index
         final_state = prior_state

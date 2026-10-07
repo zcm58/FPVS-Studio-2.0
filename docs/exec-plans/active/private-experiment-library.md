@@ -4,6 +4,64 @@ Status: Active
 
 Date: 2026-09-16
 
+## Local bundle security hardening (October 3, 2026)
+
+Commit verification on October 7, 2026: repository precommit passes Ruff,
+compilation, mypy, architecture/documentation audits and all 2,675 non-Qt unit
+tests. Visible Qt, hardware and actual remote publication were not repeated.
+Current website/private-library source is consolidated on `main` in the renamed
+`zcm58/OpenFPVS-Website` repository; publisher references use that exact name.
+
+The user authorized strict bundle inventory/content validation and bounded parsing and
+compilation. Upload/download screens, review steps, progress stages, project formats,
+stimulus bytes, and compiled experimental behavior must remain unchanged for valid studies.
+Signing, service changes, account settings, and malware-scanning infrastructure are out of scope.
+
+- Reuse `core/project_bundle.py` for receive/export checks and the preprocessing owner
+  for PNG/JPEG format verification and bounded decoding. Reject unexpected payloads,
+  malformed images, special archive entries, and excessive JSON before project commit.
+- Bound compilation work before materializing schedules, and honor cancellation during
+  expensive work without silently truncating studies. Derive compatibility coverage from
+  native oddball, AB, masking, and task/modifier fixtures.
+- Preserve the existing GUI-neutral error paths and staging transaction. No GUI edits
+  or new user actions are planned. Add inert hostile-input regressions and verify exact
+  valid asset bytes and compilation behavior.
+- Verification: Library, project-I/O, preprocessing/compiler, and docs focused routes,
+  then repo precommit. No local Qt execution. Baseline Library: 232 passed and one
+  intermittent Windows access-denied error at the existing directory-rename commit.
+- Completed locally: strict Library inventory checks run before extraction, actual
+  images are verified/decoded with format and resource bounds, and bundle compilation
+  has count, frame, task and scheduling-work budgets with cooperative cancellation.
+  Library-origin imports cannot disable validation; publishing revalidates bytes before
+  credential lookup. Source preparation bounds copies before and during streaming.
+- Compatibility: exact 256x256 and 1024x1024 image bytes, folder-based variant discovery,
+  seeded oddball/word/AB/task schedules, and masking outputs pass. Ordinary archival
+  bundles retain original word-list/provenance payloads. No GUI files changed. Canonical
+  limits and remaining decoder/authenticity boundaries are documented in
+  [Experiment Library](../../EXPERIMENT_LIBRARY.md#local-payload-validation).
+- Independent review closed disguised-decoder access, unsupported ZIP codecs, growing
+  source copies, numeric overflow, quadratic role-boundary scanning, and unbounded
+  recursive schedule searches. Hostile-input tests keep hashes/reports internally
+  consistent to exercise content validation rather than only checksum failures.
+- Final verification: project-I/O focused 309 passed; Library focused 243 passed plus
+  final catalog regression run 44 passed; preprocessing focused 58 passed; compiler
+  focused 438 passed plus final targeted 90 passed; docs focused 9 passed. Repository
+  precommit passed Ruff, compilation, mypy (213 files), and repository/docs audits;
+  unit tests finished with 2,607 passed and 67 failures in unchanged test areas.
+  Isolated reruns reproduce 61 graphics-engine failures when the real PsychoPy GL
+  module is unavailable and six packaging failures because child Windows PowerShell
+  blocks script execution. Visible Qt and live remote publication/download checks were
+  not run. The broader Phase 2 plan remains active.
+- Follow-up authorized by the user: installed the existing `engine` extra into this
+  checkout's `.venv` (PsychoPy 2026.2.4, sounddevice 0.5.6). Package imports and
+  `pip check` pass. Repository `.ps1` child launches now specify a process-only
+  execution policy; Windows PowerShell's persistent policy remains Restricted. The
+  engine test fixture now supplies its simulated GL barrier, so unit tests never need
+  a real graphics context. Follow-up verification passed: 38 packaging metadata tests,
+  98 simulated-engine tests, harness configuration (13 scopes), and the complete repo
+  precommit gate: Ruff, compilation, mypy (213 files), audits, and 2,675 unit tests.
+  No visible GUI, hardware session, or installer lifecycle was launched.
+
 ## Bundle transfer audit (October 2, 2026)
 
 The user authorized investigation and fixes for MSMS AB and other bundles on another PC.

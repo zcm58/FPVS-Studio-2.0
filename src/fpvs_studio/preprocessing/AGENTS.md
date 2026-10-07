@@ -24,6 +24,12 @@ For the current phase, the priority is **deterministic derived-asset materializa
 - Standalone `Tools > Image Resizer` optimization may additionally read `.bmp`, `.tif`,
   and `.tiff`, but it must write separate PNG copies and must not mutate project stimulus
   sets or manifests.
+- `inspection.validate_image_files` owns bundle image-content checks. Preserve original
+  bytes while checking matching PNG/JPEG/BMP/TIFF formats, single-frame structure and
+  complete decoding. Bound encoded files and decoded pixel buffers to 64 MiB, images
+  to 8192 pixels per axis and 16,777,216 pixels total. Decoder overhead is additional;
+  cancellation is between decoding phases, not inside Pillow. These checks are not a
+  malware scan or process sandbox. Library publishing keeps its narrower PNG/JPEG policy.
 
 ## v1 derivative semantics
 

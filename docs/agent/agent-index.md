@@ -117,6 +117,13 @@ acceptance; source checks do not establish an installed update or clean-PC repai
 
 ## Library Project Versions
 
+For Library payload security, start with `core/project_bundle.py`,
+`core/compiler_limits.py`, `preprocessing/inspection.py`, and publisher verification in
+`developer/catalog_publisher.py`. The canonical limits and compatibility rules are in
+[Experiment Library](../EXPERIMENT_LIBRARY.md#local-payload-validation). Use Library,
+project-io, compiler, and preprocessing focused routes, then repo precommit. Validation
+must preserve stimulus bytes, existing progress stages, and seeded compiled behavior.
+
 For project-version checks, start with `core/library_origin.py`,
 `core/library_installations.py`, `library/installations.py`,
 `library/project_updates.py`, `gui/project_update_controller.py` and

@@ -27,6 +27,12 @@ from pathlib import Path, PurePosixPath
 from threading import Event
 from typing import Any, TypeGuard
 
+from fpvs_studio.core.project_bundle import (
+    ProjectBundleCancelled,
+    ProjectBundleError,
+    validate_project_bundle,
+)
+
 REPOSITORY = "zcm58/OpenFPVS-Website"
 REPO_PATH = f"/repos/{REPOSITORY}"
 MAX_ASSET_BYTES = 2 * 1024**3 - 1
@@ -164,6 +170,12 @@ def verify_bundle(metadata_path: Path, cancel_event: Event | None = None) -> Pre
     digest = file_sha256(path, cancel_event)
     if metadata.get("sha256") != digest:
         raise PublishError(f"Bundle checksum differs from preparation metadata: {name}")
+    try:
+        validate_project_bundle(path, cancel_event=cancel_event)
+    except ProjectBundleCancelled as exc:
+        raise CatalogCancelled("Publishing stopped during bundle validation.") from exc
+    except ProjectBundleError as exc:
+        raise PublishError(f"Bundle failed Library safety validation: {exc}") from exc
     with zipfile.ZipFile(path) as archive:
         infos = archive.infolist()
         names = [info.filename for info in infos]

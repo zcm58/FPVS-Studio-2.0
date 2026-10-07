@@ -22,6 +22,7 @@ from fpvs_studio.core.enums import (
     StimulusTransform,
 )
 from fpvs_studio.core.run_spec import FixationEvent, TriggerEvent
+from fpvs_studio.engines import psychopy_stimuli as psychopy_stimuli_module
 from fpvs_studio.engines import psychopy_window as psychopy_window_module
 from fpvs_studio.engines.graphics_readiness import (
     BudgetObservationStatus,
@@ -311,6 +312,7 @@ def _build_fake_psychopy(
     return SimpleNamespace(
         visual=fake_visual,
         core=fake_core,
+        gl=SimpleNamespace(glFinish=lambda: events.append(("gpu_sync", None))),
         hardware=SimpleNamespace(keyboard=SimpleNamespace(Keyboard=_fake_keyboard)),
         logging=fake_logging,
         __version__="fake-psychopy",
@@ -335,6 +337,9 @@ def _build_flip_times(
 
 
 def _patch_fake_psychopy(monkeypatch, engine: PsychoPyEngine, fake_psychopy: object) -> None:
+    # Keep resource barriers simulated even when real PsychoPy is installed.
+    # Patch the loader so tests can still override synchronize_gpu to exercise failures.
+    monkeypatch.setattr(psychopy_stimuli_module, "_load_psychopy_gl", lambda: fake_psychopy.gl)
     monkeypatch.setattr(
         psychopy_window_module,
         "_detect_fullscreen_size_px",
@@ -346,6 +351,20 @@ def _patch_fake_psychopy(monkeypatch, engine: PsychoPyEngine, fake_psychopy: obj
     engine._keyboard_module = fake_psychopy.hardware.keyboard
     engine._psychopy_logging = fake_psychopy.logging
     monkeypatch.setattr(engine, "_load_psychopy", lambda: fake_psychopy)
+
+
+def test_fake_psychopy_gpu_barrier_never_imports_real_psychopy(monkeypatch) -> None:
+    captures: dict[str, object] = {}
+    fake_psychopy = _build_fake_psychopy(captures, flip_times=[])
+    _patch_fake_psychopy(monkeypatch, PsychoPyEngine(), fake_psychopy)
+
+    def unexpected_import(module_name):
+        raise AssertionError(f"Simulated engine tried to import {module_name}")
+
+    monkeypatch.setattr(psychopy_stimuli_module, "import_module", unexpected_import)
+    psychopy_stimuli_module.synchronize_gpu()
+
+    assert captures["events"] == [("gpu_sync", None)]
 
 
 def test_measure_refresh_hz_uses_fullscreen_psychopy_probe_and_closes_window(monkeypatch) -> None:

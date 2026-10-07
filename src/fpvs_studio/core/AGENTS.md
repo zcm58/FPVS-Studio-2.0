@@ -26,6 +26,9 @@ This directory is the most important foundation in the repo. It should remain im
 - condition modifier grouping/factories in `condition_modifiers.py`; local preset
   persistence and staged project media intake in `modifier_presets.py`
 - JSON serialization
+- bundle inventory/JSON validation in `project_bundle.py`, with image decoding delegated
+  to preprocessing; opt-in compilation budgets in `compiler_limits.py` apply before
+  bundle schedules are allocated. See `docs/EXPERIMENT_LIBRARY.md` for limits.
 - optional project-local Library origin receipts in `library_origin.py`, committed
   inside bundle import staging and excluded from authored project/runtime contracts
 - installed-project discovery and duplicate decisions in `library_installations.py`;

@@ -12,9 +12,17 @@ import pytest
 import fpvs_studio.core.compiler as compiler
 import fpvs_studio.core.compiler_assets as compiler_assets
 import fpvs_studio.core.compiler_inputs as compiler_inputs
+import fpvs_studio.core.compiler_presentation as compiler_presentation
+import fpvs_studio.core.compiler_schedules as compiler_schedules
 import fpvs_studio.core.compiler_tasks as compiler_tasks
 from fpvs_studio.core.attentional_blink_presets import populate_attentional_blink_stream
 from fpvs_studio.core.compiler import CompileError, compile_session_plan
+from fpvs_studio.core.compiler_limits import CompilationLimits, validate_compilation_workload
+from fpvs_studio.core.compiler_support import (
+    check_compilation_cancelled,
+    compilation_cancellation,
+    consume_compilation_work,
+)
 from fpvs_studio.core.condition_modifiers import (
     MemoryImage,
     assign_modifier,
@@ -28,6 +36,7 @@ from fpvs_studio.core.enums import (
     TextHeightMode,
 )
 from fpvs_studio.core.models import ProjectFile, StimulusSet, TextHeightScheduleSettings
+from fpvs_studio.core.task_models import TaskBinding, TaskModule, TaskStep, TaskStepKind
 from fpvs_studio.preprocessing.importer import materialize_project_assets
 
 
@@ -96,17 +105,246 @@ _BASELINE_DIGESTS = {
 
 @pytest.mark.parametrize("kind", ["image", "word", "ab", "counting", "memory"])
 @pytest.mark.parametrize("seed", [42, 83])
+@pytest.mark.parametrize("limits", [None, CompilationLimits()])
 def test_complete_seeded_plan_matches_preparation_baseline(
-    multi_condition_project, multi_condition_project_root, kind, seed,
+    multi_condition_project, multi_condition_project_root, kind, seed, limits,
 ) -> None:
     project = _scenario(multi_condition_project, multi_condition_project_root, kind)
     plan = compile_session_plan(
         project, refresh_hz=60, project_root=multi_condition_project_root,
         random_seed=seed, session_id="preparation-parity",
+        limits=limits,
     )
     payload = json.dumps(plan.model_dump(mode="json"), sort_keys=True, separators=(",", ":"))
     digest = hashlib.sha256(payload.encode()).hexdigest()
     assert digest == _BASELINE_DIGESTS[(kind, seed)]
+
+
+@pytest.mark.parametrize("field", ["sequence_count", "oddball_cycle_repeats_per_sequence"])
+@pytest.mark.parametrize("kind", ["image", "word", "ab"])
+def test_untrusted_event_expansion_fails_before_any_run_compilation(
+    sample_project, sample_project_root, monkeypatch, field, kind,
+) -> None:
+    project = _scenario(sample_project, sample_project_root, kind)
+    setattr(project.conditions[0], field, 1_000_000_000)
+
+    def unexpected(*args, **kwargs):
+        raise AssertionError("A rejected workload must not allocate run schedules.")
+
+    monkeypatch.setattr(compiler, "_compile_prepared_run", unexpected)
+    with pytest.raises(CompileError, match="events per run limit"):
+        compile_session_plan(
+            project, refresh_hz=60, project_root=sample_project_root,
+            limits=CompilationLimits(),
+        )
+
+
+@pytest.mark.parametrize("shuffle_all", [False, True])
+def test_untrusted_session_repetitions_fail_before_expanding_conditions(
+    sample_project, monkeypatch, shuffle_all,
+) -> None:
+    sample_project.settings.session.block_count = 1_000_000_000
+    sample_project.settings.session.randomize_across_blocks = shuffle_all
+    monkeypatch.setattr(
+        compiler, "_compile_session_plan",
+        lambda *args, **kwargs: pytest.fail("Session expansion started before its budget check."),
+    )
+    with pytest.raises(CompileError, match="session entries limit"):
+        compile_session_plan(sample_project, refresh_hz=60, limits=CompilationLimits())
+
+
+@pytest.mark.parametrize("field", ["module", "step", "attempts"])
+def test_untrusted_task_repeat_products_are_bounded(sample_project, field) -> None:
+    module = TaskModule(task_id="large", name="Large", steps=[TaskStep(
+        step_id="instructions", kind=TaskStepKind.INSTRUCTION,
+        text="Review instructions", continue_key="space",
+    )])
+    if field == "module":
+        module.repeat_count = 1_000_000_000
+    elif field == "step":
+        module.steps[0].repeat_count = 1_000_000_000
+    else:
+        module.steps[0].max_attempts = 1_000_000_000
+    sample_project.task_modules = [module]
+    sample_project.conditions[0].pre_task_bindings = [TaskBinding(task_id="large")]
+    with pytest.raises(CompileError, match="task expansion limit"):
+        validate_compilation_workload(
+            sample_project, sample_project.conditions, refresh_hz=60,
+            limits=CompilationLimits(),
+        )
+
+
+def test_untrusted_fixation_candidate_range_is_bounded(sample_project) -> None:
+    fixation = sample_project.settings.fixation_task
+    fixation.target_count_mode = "randomized"
+    fixation.target_count_max = 1_000_000_000
+    with pytest.raises(CompileError, match="fixation count candidates limit"):
+        compile_session_plan(sample_project, refresh_hz=60, limits=CompilationLimits())
+
+
+def test_untrusted_total_events_and_frames_are_bounded(sample_project) -> None:
+    with pytest.raises(CompileError, match="total events limit"):
+        compile_session_plan(
+            sample_project, refresh_hz=60, limits=CompilationLimits(max_total_events=1),
+        )
+    sample_project.settings.presentation.pre_stream_fixation_seconds = 1_000_000_000
+    with pytest.raises(CompileError, match="total frames limit"):
+        compile_session_plan(sample_project, refresh_hz=60, limits=CompilationLimits())
+
+
+@pytest.mark.parametrize("refresh_hz", [float("inf"), float("nan"), 0.0, -60.0, 75.0, 1e308])
+def test_untrusted_refresh_rate_has_actionable_compile_error(sample_project, refresh_hz) -> None:
+    with pytest.raises(CompileError, match="refresh rate must be an approved value"):
+        compile_session_plan(
+            sample_project, refresh_hz=refresh_hz, limits=CompilationLimits(),
+        )
+
+
+@pytest.mark.parametrize("field", ["base_rate", "lead_in"])
+def test_untrusted_timing_overflow_is_rejected_before_frame_conversion(sample_project, field):
+    if field == "base_rate":
+        sample_project.settings.protocol.base_hz = 5e-324
+    else:
+        sample_project.settings.presentation.pre_stream_fixation_seconds = 1e308
+    with pytest.raises(CompileError, match="total frames limit"):
+        compile_session_plan(sample_project, refresh_hz=60, limits=CompilationLimits())
+
+
+def test_large_word_cadence_uses_constant_time_role_boundary_lookup(
+    sample_project, sample_project_root, monkeypatch,
+) -> None:
+    project = _scenario(sample_project, sample_project_root, "word")
+    project.settings.session.block_count = 1
+    project.settings.protocol.oddball_every_n = 80_000
+    project.conditions[0].oddball_cycle_repeats_per_sequence = 1
+    validate_compilation_workload(
+        project, project.conditions, refresh_hz=60, limits=CompilationLimits(),
+    )
+
+    def bounded_range(*args):
+        result = range(*args)
+        if len(args) == 2 and len(result) > 256:
+            raise AssertionError("Role-boundary lookup must not scan the remaining stimulus tail.")
+        return result
+
+    # The former per-event tail scan would perform 3.2 billion iterations here;
+    # reject its first long scan without making the regression itself expensive.
+    monkeypatch.setattr(compiler_presentation, "range", bounded_range, raising=False)
+    values = compiler_presentation.build_interleaved_text_height_values(
+        {"base": TextHeightScheduleSettings(values=[1.0]),
+         "oddball": TextHeightScheduleSettings(values=[2.0])},
+        total_stimuli=80_000, oddball_every_n=80_000, random_seed=42,
+    )
+    assert values == {"base": [1.0] * 79_999, "oddball": [2.0]}
+
+
+def test_untrusted_small_schedule_cannot_exhaust_recursive_search_budget():
+    # Only fifty words can induce combinatorial feasibility search. Count search
+    # work itself rather than assuming a small event count implies a cheap compile.
+    with pytest.raises(CompileError, match="schedule work limit"):
+        with compilation_cancellation(None, max_work_units=4_096):
+            compiler_schedules._counts_after_selection_can_bridge_to_forced(
+                Counter({"A": 30, "B": 10, "C": 10}),
+                previous_key="A", draws_before_forced=49, forced_key="A",
+            )
+    consume_compilation_work(4_097)  # The failed invocation must not retain its budget.
+
+
+def test_untrusted_small_word_project_enforces_work_budget(sample_project, sample_project_root):
+    project = _scenario(sample_project, sample_project_root, "word")
+    project.settings.session.block_count = 1
+    project.settings.protocol.oddball_every_n = 51
+    project.settings.fixation_task.enabled = False
+    project.conditions[0].oddball_cycle_repeats_per_sequence = 1
+    project.stimulus_sets[0].words = ["A"] * 30 + ["B"] * 10 + ["C"] * 10
+    project.stimulus_sets[1].words = ["A"]
+    project.settings.presentation.defaults.text_height = TextHeightScheduleSettings(values=[1.0])
+    validate_compilation_workload(
+        project, project.conditions, refresh_hz=60, limits=CompilationLimits(),
+    )
+    with pytest.raises(CompileError, match="schedule work limit"):
+        compile_session_plan(
+            project, refresh_hz=60, project_root=sample_project_root, random_seed=0,
+            limits=CompilationLimits(max_schedule_work=4_096),
+        )
+    consume_compilation_work(4_097)
+
+
+@pytest.mark.parametrize("kind", ["image", "word", "ab"])
+def test_compilation_cancels_inside_schedules_and_resets_invocation_context(
+    sample_project, sample_project_root, monkeypatch, kind,
+) -> None:
+    project = _scenario(sample_project, sample_project_root, kind)
+    schedule_started = False
+    checks_inside = 0
+    name = ("compile_attentional_blink_stream_sequence" if kind == "ab"
+            else "build_interleaved_text_height_values" if kind == "word"
+            else "build_stimulus_sequence")
+    original = getattr(compiler, name)
+
+    def schedule(*args, **kwargs):
+        nonlocal schedule_started
+        schedule_started = True
+        return original(*args, **kwargs)
+
+    class CancelledProbe(Exception):
+        pass
+
+    def cancel():
+        nonlocal checks_inside
+        if schedule_started:
+            checks_inside += 1
+            if checks_inside == 2:
+                raise CancelledProbe("cancelled during schedule construction")
+
+    monkeypatch.setattr(compiler, name, schedule)
+    with pytest.raises(CancelledProbe, match="during schedule"):
+        compile_session_plan(
+            project, refresh_hz=60, project_root=sample_project_root,
+            limits=CompilationLimits(), cancel_check=cancel,
+        )
+    assert checks_inside == 2
+    check_compilation_cancelled()
+    assert checks_inside == 2
+    # A later invocation must not retain the previous cancellation callback.
+    assert compile_session_plan(
+        project, refresh_hz=60, project_root=sample_project_root,
+        limits=CompilationLimits(),
+    ).total_runs > 0
+
+
+def test_compilation_context_resets_after_preflight_cancellation(sample_project) -> None:
+    def cancel():
+        raise InterruptedError("cancelled before compilation")
+
+    with pytest.raises(InterruptedError, match="before compilation"):
+        compile_session_plan(sample_project, refresh_hz=60, cancel_check=cancel)
+    check_compilation_cancelled()
+
+
+def test_compilation_can_cancel_during_task_media_hashing(
+    sample_project, sample_project_root, monkeypatch,
+) -> None:
+    project = _scenario(sample_project, sample_project_root, "memory")
+    hashing = False
+    original = compiler_tasks.TaskCompilationInputs.asset_hash
+
+    def asset_hash(*args, **kwargs):
+        nonlocal hashing
+        hashing = True
+        return original(*args, **kwargs)
+
+    def cancel():
+        if hashing:
+            raise InterruptedError("cancelled task media hash")
+
+    monkeypatch.setattr(compiler_tasks.TaskCompilationInputs, "asset_hash", asset_hash)
+    with pytest.raises(InterruptedError, match="task media hash"):
+        compile_session_plan(
+            project, refresh_hz=60, project_root=sample_project_root,
+            limits=CompilationLimits(), cancel_check=cancel,
+        )
+    check_compilation_cancelled()
 
 
 def test_repeated_session_media_work_scales_with_unique_inputs(

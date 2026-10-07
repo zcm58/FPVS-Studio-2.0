@@ -5,13 +5,18 @@ from __future__ import annotations
 import random
 
 from fpvs_studio.core.compiler_schedules import (
+    _next_role_change_index,
     boundary_aware_shuffled_bag,
     build_balanced_shuffled_values,
     plan_no_repeat_role_bag_keys,
     pop_preferred_bag_item,
     repair_no_repeat_role_bag_sequence,
 )
-from fpvs_studio.core.compiler_support import CompileError, namespaced_random_seed
+from fpvs_studio.core.compiler_support import (
+    CompileError,
+    check_compilation_cancelled,
+    namespaced_random_seed,
+)
 from fpvs_studio.core.enums import StimulusModality, TextHeightMode
 from fpvs_studio.core.models import (
     Condition,
@@ -113,6 +118,7 @@ def build_interleaved_text_height_values(
     if exact_schedule is not None:
         exact_results: dict[StimulusRole, list[float]] = {"base": [], "oddball": []}
         for index, selected in enumerate(exact_schedule):
+            check_compilation_cancelled(index)
             exact_role: StimulusRole = "oddball" if (index + 1) % oddball_every_n == 0 else "base"
             exact_results[exact_role].append(selected)
         return exact_results
@@ -127,15 +133,11 @@ def build_interleaved_text_height_values(
     previous_height: float | None = None
 
     for index in range(total_stimuli):
+        check_compilation_cancelled(index)
         role: StimulusRole = "oddball" if (index + 1) % oddball_every_n == 0 else "base"
         settings = settings_by_role[role]
-        next_role_change_index = next(
-            (
-                candidate_index
-                for candidate_index in range(index + 1, total_stimuli)
-                if ("oddball" if (candidate_index + 1) % oddball_every_n == 0 else "base") != role
-            ),
-            None,
+        next_role_change_index = _next_role_change_index(
+            index, total_stimuli=total_stimuli, oddball_every_n=oddball_every_n,
         )
         next_role: StimulusRole = (
             ("oddball" if (next_role_change_index + 1) % oddball_every_n == 0 else "base")

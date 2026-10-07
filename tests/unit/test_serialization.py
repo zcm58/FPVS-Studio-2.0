@@ -76,6 +76,36 @@ def test_atomic_text_preserves_explicit_csv_line_endings(tmp_path) -> None:
     assert destination.read_bytes() == b"name,value\r\nexample,1\r\n"
 
 
+def test_bounded_project_json_accepts_exact_utf8_bytes_and_rejects_excess(
+    tmp_path, sample_project,
+):
+    destination = tmp_path / "project.json"
+    sample_project.meta.name = "Mémoire"
+    save_project_file(sample_project, destination)
+    size = destination.stat().st_size
+    assert load_project_file(destination, maximum_bytes=size) == sample_project
+    with pytest.raises(ValueError, match="JSON exceeds"):
+        load_project_file(destination, maximum_bytes=size - 1)
+
+
+def test_bounded_json_uses_limited_reads_without_trusting_stat(tmp_path, monkeypatch):
+    from io import BytesIO
+
+    path = tmp_path / "project.json"
+    path.write_bytes(b"{}")
+    reads = []
+
+    class GrowingFile(BytesIO):
+        def read(self, size=-1):
+            reads.append(size)
+            return super().read(size)
+
+    monkeypatch.setattr(Path, "open", lambda *args, **kwargs: GrowingFile(b" " * 100))
+    with pytest.raises(ValueError, match="JSON exceeds"):
+        load_project_file(path, maximum_bytes=10)
+    assert reads == [11]
+
+
 @pytest.mark.parametrize("winerror", [5, 32, 33])
 def test_project_save_retries_brief_windows_locks_without_overwriting_old_data(
     tmp_path, sample_project, monkeypatch, winerror,

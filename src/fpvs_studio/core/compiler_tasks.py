@@ -9,7 +9,7 @@ from pathlib import Path, PurePosixPath
 
 from fpvs_studio.core.attentional_blink_presets import RECALL_QUESTION_PHASES, RECALL_TASK_ID
 from fpvs_studio.core.backward_counting import backward_counting_steps
-from fpvs_studio.core.compiler_support import CompileError
+from fpvs_studio.core.compiler_support import CompileError, check_compilation_cancelled
 from fpvs_studio.core.condition_modifiers import (
     ConditionModifier,
     modifier_condition_ids,
@@ -123,6 +123,7 @@ class TaskCompilationInputs:
             digest = hashlib.sha256()
             with path.open("rb") as handle:
                 for chunk in iter(lambda: handle.read(65_536), b""):
+                    check_compilation_cancelled()
                     digest.update(chunk)
             self._hashes[path] = digest.hexdigest()
         return self._hashes[path]
@@ -156,6 +157,7 @@ def compile_condition_tasks(
     )
     compiled: list[TaskModuleSpec] = []
     for binding_index, binding in enumerate(bindings):
+        check_compilation_cancelled()
         if not _binding_applies(
             binding,
             block_index=block_index,
@@ -656,6 +658,7 @@ def _compile_task_step(
     random_seed: int,
     inputs: TaskCompilationInputs,
 ) -> TaskStepSpec:
+    check_compilation_cancelled()
     rng = random.Random(random_seed)
     items = [item.model_copy(deep=True) for item in step.items]
     for item in items:

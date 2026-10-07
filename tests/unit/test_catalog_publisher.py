@@ -13,7 +13,20 @@ from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
 
+from fpvs_studio.core.enums import StimulusModality
+from fpvs_studio.core.models import Condition, StimulusSet
+from fpvs_studio.core.project_bundle import export_project_bundle
+from fpvs_studio.core.project_service import build_starter_project
+from fpvs_studio.core.serialization import save_project_file
+from fpvs_studio.core.task_models import (
+    TaskDisplayItem,
+    TaskItemModality,
+    TaskModule,
+    TaskStep,
+    TaskStepKind,
+)
 from fpvs_studio.developer import catalog_publisher as publisher
+from fpvs_studio.preprocessing.manifest import create_empty_manifest, write_stimulus_manifest
 
 SCRIPT = Path(publisher.__file__)
 
@@ -146,28 +159,42 @@ class OnlineGitHub(FakeGitHub):
 
 
 class PublishCatalogTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        # One genuine, tiny exported project keeps all publisher tests exercising
+        # the same import contract without repeatedly constructing a study.
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "source"
+            source.mkdir()
+            project = build_starter_project("Demo")
+            project.settings.fixation_task.enabled = False
+            project.settings.fixation_task.accuracy_task_enabled = False
+            project.settings.fixation_task.participant_tutorial_enabled = False
+            project.stimulus_sets = [
+                StimulusSet(set_id=role, name=role.title(), modality=StimulusModality.WORD,
+                            words=[role])
+                for role in ("base", "oddball")
+            ]
+            project.conditions = [
+                Condition(condition_id="words", name="Words", base_stimulus_set_id="base",
+                          oddball_stimulus_set_id="oddball", sequence_count=1,
+                          oddball_cycle_repeats_per_sequence=1)
+            ]
+            save_project_file(project, source / "project.json")
+            write_stimulus_manifest(source, create_empty_manifest(project.meta.project_id))
+            path = root / "demo.fpvsbundle"
+            manifest = export_project_bundle(source, path)
+            cls.bundle_bytes = path.read_bytes()
+            cls.payload_bytes = sum(record.size_bytes for record in manifest.files)
+            cls.payload_paths = [record.path for record in manifest.files]
+
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name)
         self.path = self.root / "demo-1.0.0.fpvsbundle"
-        records = [
-            {"path": path, "size_bytes": 2, "sha256": "a" * 64}
-            for path in ("project.json", "stimuli/manifest.json")
-        ]
-        with zipfile.ZipFile(self.path, "w") as archive:
-            archive.writestr(
-                "fpvs_bundle.json",
-                json.dumps(
-                    {
-                        "schema_version": "1.0.0",
-                        "project": {"project_id": "demo"},
-                        "files": records,
-                    }
-                ),
-            )
-            for record in records:
-                archive.writestr(record["path"], "{}")
+        self.path.write_bytes(self.bundle_bytes)
         self.metadata = {
             "dry_run": False,
             "asset_name": self.path.name,
@@ -181,7 +208,7 @@ class PublishCatalogTests(unittest.TestCase):
             "size_bytes": self.path.stat().st_size,
             "sha256": publisher.file_sha256(self.path),
             "file_count": 2,
-            "included_paths": [record["path"] for record in records],
+            "included_paths": self.payload_paths,
         }
         self.metadata_path = self.root / "demo-1.0.0.json"
         self.write_metadata()
@@ -194,7 +221,7 @@ class PublishCatalogTests(unittest.TestCase):
     def test_local_inventory_derives_catalog_limits(self):
         loaded = publisher.load_prepared(self.root)
         self.assertEqual(len(loaded), 1)
-        self.assertEqual(loaded[0].entry["uncompressed_size_bytes"], 4)
+        self.assertEqual(loaded[0].entry["uncompressed_size_bytes"], self.payload_bytes)
         self.assertEqual(loaded[0].entry["file_count"], 2)
         self.assertNotIn("asset_id", loaded[0].entry)
 
@@ -214,6 +241,89 @@ class PublishCatalogTests(unittest.TestCase):
         self.write_metadata()
         with self.assertRaisesRegex(publisher.PublishError, "plain asset_name"):
             publisher.verify_bundle(self.metadata_path)
+
+    def test_forged_preparation_report_cannot_authorize_unsafe_bundle(self):
+        for relative, payload in (
+            ("stimuli/helper.py", b"# synthetic script; never executed\n"),
+            ("stimuli/task-assets/review/photo.png", b"not a decoded image"),
+        ):
+            with self.subTest(relative=relative):
+                with zipfile.ZipFile(io.BytesIO(self.bundle_bytes)) as source:
+                    members = {name: source.read(name) for name in source.namelist()}
+                manifest = json.loads(members["fpvs_bundle.json"])
+                if relative.endswith(".png"):
+                    project = json.loads(members["project.json"])
+                    project["task_modules"] = [TaskModule(
+                        task_id="review", name="Review", steps=[TaskStep(
+                            step_id="show", kind=TaskStepKind.STUDY, continue_key="space",
+                            items=[TaskDisplayItem(item_id="photo", modality=TaskItemModality.IMAGE,
+                                                   image_path=relative)],
+                        )],
+                    ).model_dump(mode="json")]
+                    members["project.json"] = json.dumps(project).encode()
+                    for record in manifest["files"]:
+                        if record["path"] == "project.json":
+                            record.update(size_bytes=len(members["project.json"]),
+                                          sha256=hashlib.sha256(members["project.json"]).hexdigest())
+                manifest["files"].append({
+                    "path": relative, "size_bytes": len(payload),
+                    "sha256": hashlib.sha256(payload).hexdigest(),
+                })
+                members["fpvs_bundle.json"] = json.dumps(manifest).encode()
+                members[relative] = payload
+                with zipfile.ZipFile(self.path, "w") as archive:
+                    for name, content in members.items():
+                        archive.writestr(name, content)
+                # All report facts, including both layers of hashes, match the
+                # attacker-controlled bytes. They do not attest to safe content.
+                self.metadata.update(
+                    size_bytes=self.path.stat().st_size,
+                    sha256=publisher.file_sha256(self.path),
+                    file_count=len(manifest["files"]),
+                    included_paths=[record["path"] for record in manifest["files"]],
+                )
+                self.write_metadata()
+                with self.assertRaisesRegex(publisher.PublishError, "Library safety"):
+                    publisher.verify_bundle(self.metadata_path)
+                arguments = [str(SCRIPT), "--publish-online", "--tag", "test-v1",
+                             "--bundle-directory", str(self.root)]
+                with (
+                    patch.object(sys, "argv", arguments),
+                    patch.object(publisher, "maintainer_token") as credential,
+                    patch.object(publisher, "GitHubPublisher") as api,
+                    contextlib.redirect_stdout(io.StringIO()) as output,
+                ):
+                    self.assertEqual(publisher.main(), 1)
+                    self.assertIn("Library safety", json.loads(output.getvalue())["error"])
+                    credential.assert_not_called()
+                    api.assert_not_called()
+
+    def test_invalid_bundle_envelope_fails_before_credentials_or_network(self):
+        for payload in (b"[]", b"not JSON"):
+            with self.subTest(payload=payload):
+                with zipfile.ZipFile(io.BytesIO(self.bundle_bytes)) as source:
+                    members = {name: source.read(name) for name in source.namelist()}
+                members["fpvs_bundle.json"] = payload
+                with zipfile.ZipFile(self.path, "w") as archive:
+                    for name, content in members.items():
+                        archive.writestr(name, content)
+                self.metadata.update(size_bytes=self.path.stat().st_size,
+                                     sha256=publisher.file_sha256(self.path))
+                self.write_metadata()
+                with self.assertRaisesRegex(publisher.PublishError, "Library safety"):
+                    publisher.verify_bundle(self.metadata_path)
+                arguments = [str(SCRIPT), "--publish-online", "--tag", "test-v1",
+                             "--bundle-directory", str(self.root)]
+                with (
+                    patch.object(sys, "argv", arguments),
+                    patch.object(publisher, "maintainer_token") as credential,
+                    patch.object(publisher, "GitHubPublisher") as api,
+                    contextlib.redirect_stdout(io.StringIO()) as output,
+                ):
+                    self.assertEqual(publisher.main(), 1)
+                    self.assertIn("Library safety", json.loads(output.getvalue())["error"])
+                    credential.assert_not_called()
+                    api.assert_not_called()
 
     def test_creates_draft_uploads_verifies_then_publishes(self):
         api = FakeGitHub(self.bundle)

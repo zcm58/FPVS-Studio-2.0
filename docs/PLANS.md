@@ -20,6 +20,7 @@ Current implementation:
 
 Concrete planned work:
 
+- [Optional image pool reset policy](exec-plans/planned/image-pool-reset-policy.md) (retain reset per condition run; future carryover option with user-facing pros/cons)
 - [Participant results and question presentation](exec-plans/planned/participant-results-and-question-presentation.md) (proposal; not implemented)
 - `exec-plans/planned/restore-tutorials-file-menu-entry.md`
 - `exec-plans/planned/luminance-rms-equalization-investigation.md`

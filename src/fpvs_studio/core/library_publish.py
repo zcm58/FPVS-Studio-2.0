@@ -25,14 +25,19 @@ from fpvs_studio.core.paths import (
     to_project_relative_posix,
 )
 from fpvs_studio.core.project_bundle import (
+    MAX_BUNDLE_PAYLOAD_FILES,
+    MAX_BUNDLE_PROJECT_JSON_BYTES,
+    MAX_BUNDLE_STIMULUS_JSON_BYTES,
+    MAX_BUNDLE_TOTAL_UNCOMPRESSED_BYTES,
     ProjectBundleCancelled,
     ProjectBundleError,
     export_project_bundle,
     import_project_bundle,
 )
-from fpvs_studio.core.serialization import load_project_file, save_project_file
+from fpvs_studio.core.serialization import project_from_json, read_json_bytes, save_project_file
 from fpvs_studio.core.task_assets import SUPPORTED_TASK_ASSET_SUFFIXES, owned_image_references
-from fpvs_studio.preprocessing.manifest import read_stimulus_manifest, write_stimulus_manifest
+from fpvs_studio.preprocessing.inspection import MAX_BUNDLE_IMAGE_BYTES
+from fpvs_studio.preprocessing.manifest import write_stimulus_manifest
 from fpvs_studio.preprocessing.models import StimulusManifest
 
 # GitHub requires each Release asset to be strictly smaller than 2 GiB.
@@ -68,6 +73,22 @@ class LibraryBundlePreparation:
 def _check_cancelled(cancel_event: Event | None) -> None:
     if cancel_event is not None and cancel_event.is_set():
         raise ProjectBundleCancelled("Library bundle preparation cancelled.")
+
+
+def _read_source_json(path: Path, maximum: int) -> bytes:
+    try:
+        return read_json_bytes(path, maximum_bytes=maximum)
+    except ValueError as exc:
+        raise ProjectBundleError(f"Invalid Library source JSON: {exc}") from exc
+
+
+def _validate_copy_size(relative: str, size: int, total_size: int) -> None:
+    if size > MAX_BUNDLE_IMAGE_BYTES:
+        raise ProjectBundleError(
+            f"Library stimulus exceeds the {MAX_BUNDLE_IMAGE_BYTES:,}-byte image limit: {relative}"
+        )
+    if total_size > MAX_BUNDLE_TOTAL_UNCOMPRESSED_BYTES:
+        raise ProjectBundleError("Library stimulus payload exceeds the bundle byte limit.")
 
 
 def _validate_provenance(value: object) -> None:
@@ -162,14 +183,21 @@ def _clean_inventory(
         ))
     except ValueError as exc:
         raise ProjectBundleError(str(exc)) from exc
+    if len(paths) + 2 > MAX_BUNDLE_PAYLOAD_FILES:
+        raise ProjectBundleError("Library stimulus inventory exceeds the bundle file limit.")
+    total_size = 0
     for relative in paths:
         if (
             not relative.startswith("stimuli/")
             or Path(relative).suffix.lower() not in SUPPORTED_TASK_ASSET_SUFFIXES
         ):
             raise ProjectBundleError(f"Unsupported library stimulus asset: {relative}")
-        if not resolve_project_relative_path(source_root, relative).is_file():
+        source_path = resolve_project_relative_path(source_root, relative)
+        if not source_path.is_file():
             raise ProjectBundleError(f"Required library stimulus asset is missing: {relative}")
+        size = source_path.stat().st_size
+        total_size += size
+        _validate_copy_size(relative, size, total_size)
     # Revalidate copied models, including task/modifier references, before writing them.
     return ProjectFile.model_validate(clean.model_dump()), clean_manifest, paths
 
@@ -219,37 +247,56 @@ def prepare_library_bundle(
                 "Library source must be a saved project folder or .fpvsbundle."
             )
         source_root = filesystem_path(source_root)
-        original_project = (source_root / "project.json").read_bytes()
-        original_manifest = (source_root / "stimuli" / "manifest.json").read_bytes()
-        project = load_project_file(source_root / "project.json")
-        manifest = read_stimulus_manifest(source_root)
+        original_project = _read_source_json(
+            source_root / "project.json", MAX_BUNDLE_PROJECT_JSON_BYTES,
+        )
+        original_manifest = _read_source_json(
+            source_root / "stimuli" / "manifest.json", MAX_BUNDLE_STIMULUS_JSON_BYTES,
+        )
+        try:
+            project = project_from_json(original_project)
+            manifest = StimulusManifest.model_validate_json(original_manifest)
+        except (ValueError, RecursionError) as exc:
+            raise ProjectBundleError(f"Invalid Library source JSON: {exc}") from exc
         clean, clean_manifest, paths = _clean_inventory(source_root, project, manifest)
         clean_root = staging / "project"
         clean_root.mkdir()
+        total_copied = 0
         for relative in sorted(paths):
             _check_cancelled(cancel_event)
             source_path = resolve_project_relative_path(source_root, relative)
             target = resolve_project_relative_path(clean_root, relative)
             target.parent.mkdir(parents=True, exist_ok=True)
             with source_path.open("rb") as handle, target.open("xb") as output:
+                copied = 0
                 for chunk in iter(lambda: handle.read(65536), b""):
                     _check_cancelled(cancel_event)
+                    copied += len(chunk)
+                    total_copied += len(chunk)
+                    _validate_copy_size(relative, copied, total_copied)
                     output.write(chunk)
-        if original_project != (source_root / "project.json").read_bytes() or (
-            original_manifest != (source_root / "stimuli" / "manifest.json").read_bytes()
+        if original_project != _read_source_json(
+            source_root / "project.json", MAX_BUNDLE_PROJECT_JSON_BYTES,
+        ) or (
+            original_manifest != _read_source_json(
+                source_root / "stimuli" / "manifest.json",
+                MAX_BUNDLE_STIMULUS_JSON_BYTES,
+            )
         ):
             raise ProjectBundleError("Source project changed during preparation; save and retry.")
         save_project_file(clean, clean_root / "project.json")
         write_stimulus_manifest(clean_root, clean_manifest)
         temporary_bundle = staging / destination.name
         bundle_manifest = export_project_bundle(
-            clean_root, temporary_bundle, cancel_event=cancel_event
+            clean_root, temporary_bundle, cancel_event=cancel_event, library_safe=True,
         )
         size_bytes = temporary_bundle.stat().st_size
         if size_bytes >= GITHUB_RELEASE_ASSET_LIMIT:
             raise ProjectBundleError("GitHub library bundles must be smaller than 2 GiB.")
         # Exercise the ordinary integrity/extraction/compile contract before publication.
-        import_project_bundle(temporary_bundle, staging / "verified", cancel_event=cancel_event)
+        import_project_bundle(
+            temporary_bundle, staging / "verified", cancel_event=cancel_event, library_safe=True,
+        )
         digest = hashlib.sha256()
         with temporary_bundle.open("rb") as handle:
             for chunk in iter(lambda: handle.read(65536), b""):

@@ -5,20 +5,115 @@ choose session order, derive RunSpec timing, or render anything."""
 
 from __future__ import annotations
 
+import os
+from collections.abc import Callable, Iterable, Iterator
+from contextlib import contextmanager
 from hashlib import sha256
 from pathlib import Path
 
-from PIL import Image
+from PIL import Image, ImageFile
 
 from fpvs_studio.core.models import ImageResolution, StimulusSet
 from fpvs_studio.core.paths import filesystem_path
 from fpvs_studio.preprocessing.models import InspectionFileRecord, StimulusSetInspectionSummary
 
 SUPPORTED_SOURCE_SUFFIXES = frozenset({".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff"})
+_STIMULUS_FORMATS = {
+    ".jpg": "JPEG", ".jpeg": "JPEG", ".png": "PNG",
+    ".bmp": "BMP", ".tif": "TIFF", ".tiff": "TIFF",
+}
+MAX_IMAGE_DIMENSION = 8192
+MAX_IMAGE_PIXELS = 16_777_216
+MAX_IMAGE_DECODED_BYTES = 64 * 1024 * 1024
+MAX_BUNDLE_IMAGE_BYTES = 64 * 1024 * 1024
 
 
 class ImageInspectionError(ValueError):
-    """Raised when a stimulus source directory fails inspection."""
+    """Raised when a stimulus image or source directory fails inspection."""
+
+
+@contextmanager
+def _image_errors(path: Path) -> Iterator[None]:
+    try:
+        yield
+    except ImageInspectionError:
+        raise
+    except (OSError, ValueError, SyntaxError, Image.DecompressionBombError) as error:
+        raise ImageInspectionError(
+            f"Image is unreadable, corrupt, truncated, or unsafe: {path.name}"
+        ) from error
+
+
+def validate_image_files(
+    paths: Iterable[Path], *, cancel_check: Callable[[], None] | None = None,
+) -> None:
+    """Fully check bounded, single-frame source images without changing their bytes.
+
+    Restrict the decoders before opening untrusted data, then verify the structure
+    and decode all pixels. Four bytes per pixel conservatively bounds Pillow's
+    pixel buffer for PNG/JPEG/BMP/TIFF; decoder overhead is additional. Cancellation
+    is checked between files and decoding phases, not inside Pillow's C decoder.
+    This validates image content, not malware or an operating-system sandbox.
+    """
+    if cancel_check is not None:
+        cancel_check()
+    if ImageFile.LOAD_TRUNCATED_IMAGES:
+        raise ImageInspectionError("Image validation requires strict truncated-image handling.")
+    for source in paths:
+        if cancel_check is not None:
+            cancel_check()
+        path = filesystem_path(source)
+        expected_format = _STIMULUS_FORMATS.get(path.suffix.lower())
+        if expected_format is None:
+            raise ImageInspectionError(f"Unsupported stimulus image extension: {path.name}")
+        with _image_errors(path):
+            handle = path.open("rb")
+        with handle:
+            with _image_errors(path):
+                size = os.fstat(handle.fileno()).st_size
+                if not 0 < size <= MAX_BUNDLE_IMAGE_BYTES:
+                    raise ImageInspectionError(
+                        f"Image exceeds the encoded file size limit or is empty: {path.name}"
+                    )
+                with Image.open(handle, formats=[expected_format]) as image:
+                    if image.format != expected_format:
+                        raise ImageInspectionError(
+                            f"Image content does not match its extension: {path.name}"
+                        )
+                    width, height = image.size
+                    if not (0 < width <= MAX_IMAGE_DIMENSION and 0 < height <= MAX_IMAGE_DIMENSION):
+                        raise ImageInspectionError(
+                            f"Image dimensions exceed the {MAX_IMAGE_DIMENSION}-pixel limit: "
+                            f"{path.name}"
+                        )
+                    pixels = width * height
+                    if pixels > MAX_IMAGE_PIXELS or pixels * 4 > MAX_IMAGE_DECODED_BYTES:
+                        raise ImageInspectionError(
+                            f"Image exceeds the pixel or decoded-memory limit: {path.name}"
+                        )
+                    if expected_format == "TIFF":
+                        # TIFF n_frames walks every IFD; reject as soon as page two exists.
+                        try:
+                            image.seek(1)
+                        except EOFError:
+                            multiple_frames = False
+                        else:
+                            multiple_frames = True
+                    else:
+                        multiple_frames = getattr(image, "n_frames", 1) != 1
+                    if multiple_frames:
+                        raise ImageInspectionError(
+                            f"Animated or multipage stimulus images are unsupported: {path.name}"
+                        )
+                    image.verify()
+            if cancel_check is not None:
+                cancel_check()
+            with _image_errors(path):
+                handle.seek(0)
+                with Image.open(handle, formats=[expected_format]) as image:
+                    image.load()
+            if cancel_check is not None:
+                cancel_check()
 
 
 def compute_file_sha256(path: Path) -> str:

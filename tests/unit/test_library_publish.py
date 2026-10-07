@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import zipfile
+from pathlib import Path
 from threading import Event
 
 import pytest
@@ -162,6 +163,79 @@ def test_publisher_dry_run_validates_without_writing_bundle(
     assert not destination.exists()
     assert not list(tmp_path.glob(".library-publish-*"))
     assert _snapshot(sample_project_root) == before
+
+
+@pytest.mark.parametrize("limit, message", [
+    ("MAX_BUNDLE_IMAGE_BYTES", "image limit"),
+    ("MAX_BUNDLE_TOTAL_UNCOMPRESSED_BYTES", "bundle byte limit"),
+    ("MAX_BUNDLE_PAYLOAD_FILES", "bundle file limit"),
+])
+def test_publisher_rejects_excessive_source_before_copy(
+    tmp_path, sample_project, sample_project_root, monkeypatch, limit, message,
+):
+    _ready_project(sample_project_root, sample_project)
+    monkeypatch.setattr(publisher, limit, 1)
+    original_open = Path.open
+
+    def no_copy(path, mode="r", *args, **kwargs):
+        if mode == "xb":
+            pytest.fail("Source limits must fail before copying a stimulus.")
+        return original_open(path, mode, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", no_copy)
+    destination = tmp_path / "oversized.fpvsbundle"
+    with pytest.raises(ProjectBundleError, match=message):
+        prepare_library_bundle(sample_project_root, destination)
+    assert not destination.exists()
+    assert not list(tmp_path.glob(".library-publish-*"))
+
+
+@pytest.mark.parametrize("limit, message", [
+    ("MAX_BUNDLE_IMAGE_BYTES", "image limit"),
+    ("MAX_BUNDLE_TOTAL_UNCOMPRESSED_BYTES", "bundle byte limit"),
+])
+def test_publisher_bounds_source_growth_during_preparation(
+    tmp_path, sample_project, sample_project_root, monkeypatch, limit, message,
+):
+    _ready_project(sample_project_root, sample_project)
+    source_bytes = sum(path.stat().st_size for path in sample_project_root.rglob("*.png"))
+    budget = source_bytes * 2
+    monkeypatch.setattr(publisher, limit, budget)
+    original_inventory = publisher._clean_inventory
+
+    def grow_after_preflight(*args):
+        result = original_inventory(*args)
+        source = sample_project_root / sorted(result[2])[0]
+        with source.open("ab") as handle:
+            handle.write(b"x" * (budget + 1))
+        return result
+
+    monkeypatch.setattr(publisher, "_clean_inventory", grow_after_preflight)
+    destination = tmp_path / "growing.fpvsbundle"
+    with pytest.raises(ProjectBundleError, match=message):
+        prepare_library_bundle(sample_project_root, destination)
+    assert not destination.exists()
+    assert not list(tmp_path.glob(".library-publish-*"))
+
+
+@pytest.mark.parametrize("relative, limit", [
+    ("project.json", "MAX_BUNDLE_PROJECT_JSON_BYTES"),
+    ("stimuli/manifest.json", "MAX_BUNDLE_STIMULUS_JSON_BYTES"),
+])
+@pytest.mark.parametrize("failure", ["size", "parse"])
+def test_publisher_source_json_errors_keep_actionable_bundle_error(
+    tmp_path, sample_project, sample_project_root, monkeypatch, relative, limit, failure,
+):
+    _ready_project(sample_project_root, sample_project)
+    if failure == "size":
+        monkeypatch.setattr(publisher, limit, 1)
+    else:
+        (sample_project_root / relative).write_bytes(b"not JSON")
+    destination = tmp_path / "invalid.fpvsbundle"
+    with pytest.raises(ProjectBundleError, match="Invalid Library source JSON"):
+        prepare_library_bundle(sample_project_root, destination)
+    assert not destination.exists()
+    assert not list(tmp_path.glob(".library-publish-*"))
 
 
 def test_publisher_keeps_condition_variant_resolved_without_manifest(

@@ -83,10 +83,29 @@ def replace_file_atomically(source: Path, destination: Path) -> None:
             time.sleep(delay)
 
 
-def read_json_file(path: Path, model_type: type[ModelT]) -> ModelT:
+def read_json_file(
+    path: Path, model_type: type[ModelT], *, maximum_bytes: int | None = None,
+) -> ModelT:
     """Read a UTF-8 JSON file into a Pydantic model."""
 
-    return model_type.model_validate_json(filesystem_path(path).read_text(encoding="utf-8"))
+    return model_type.model_validate_json(_read_json_text(path, maximum_bytes))
+
+
+def _read_json_text(path: Path, maximum_bytes: int | None) -> str:
+    if maximum_bytes is None:
+        return filesystem_path(path).read_text(encoding="utf-8")
+    return read_json_bytes(path, maximum_bytes=maximum_bytes).decode("utf-8")
+
+
+def read_json_bytes(path: Path, *, maximum_bytes: int) -> bytes:
+    """Read at most the explicit JSON budget, including when a file changes during access."""
+    if maximum_bytes < 1:
+        raise ValueError("JSON byte limit must be positive.")
+    with filesystem_path(path).open("rb") as handle:
+        payload = handle.read(maximum_bytes + 1)
+    if len(payload) > maximum_bytes:
+        raise ValueError(f"JSON exceeds its {maximum_bytes:,}-byte safety limit: {path.name}")
+    return payload
 
 
 def save_project_file(project: ProjectFile, path: Path) -> None:
@@ -95,10 +114,16 @@ def save_project_file(project: ProjectFile, path: Path) -> None:
     write_json_file(path, project)
 
 
-def load_project_file(path: Path) -> ProjectFile:
+def load_project_file(path: Path, *, maximum_bytes: int | None = None) -> ProjectFile:
     """Load a project JSON file."""
 
-    payload = json.loads(filesystem_path(path).read_text(encoding="utf-8"))
+    return project_from_json(_read_json_text(path, maximum_bytes))
+
+
+def project_from_json(text: str | bytes) -> ProjectFile:
+    """Decode and migrate the canonical project contract, including bounded archive reads."""
+
+    payload = json.loads(text)
     if not isinstance(payload, dict):
         raise ValueError("Project file must contain a JSON object.")
     return migrate_project_payload(payload)

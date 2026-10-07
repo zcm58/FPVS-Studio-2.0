@@ -322,6 +322,10 @@ For ordinary FPVS Oddball Paradigm, the compiler emits a seed-deterministic sche
   immediate repeated display values are avoided within bags, across bag refills, and
   across Base/Oddball boundaries whenever the remaining authored multiplicities make
   an alternative possible
+- fresh Base/Oddball pools at the start of each condition run, including later runs of
+  the same condition; within-run cycle repetitions continue consuming those pools.
+  Optional carryover between runs is [planned future work](exec-plans/planned/image-pool-reset-policy.md),
+  not current behavior.
 - independently seeded balanced word-height bags for Base and Oddball roles, also with
   no immediate repeat across bag boundaries; style randomization does not perturb
   stimulus selection order

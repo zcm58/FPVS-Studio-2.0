@@ -118,7 +118,7 @@ passive notices and explicit import handoff. The dialog minimum/default is `760x
 ## Service and access boundary
 
 Private GitHub Releases in
-[`zcm58/FPVS-Studio-Library`](https://github.com/zcm58/FPVS-Studio-Library)
+[`zcm58/OpenFPVS-Website`](https://github.com/zcm58/OpenFPVS-Website)
 hold versioned bundles. That repository owns the Cloudflare service, invitation/device
 administration, catalog publishing and deployment. GitHub App credentials stay on the
 service; desktop clients receive only authorized catalog metadata and streamed bytes.
@@ -187,7 +187,9 @@ offline at fresh short and long Windows roots on one PC.
 | `library/client.py` | Enrollment, authorized requests, timeouts and verified transfer. |
 | `library/credentials.py` | Windows Credential Manager and Linux Secret Service adapters. |
 | `library/cache.py` | Private per-user cache, no-follow checks and cross-process lease. |
-| `core/project_bundle.py` | Existing whole-project archive validation, extraction and optional cancellation. |
+| `core/project_bundle.py` | Whole-project archive validation, strict Library inventory, bounded JSON, staged validation and cancellation. |
+| `core/compiler_limits.py` | Pre-allocation bundle compilation budgets. |
+| `preprocessing/inspection.py` | Actual image format, structure and bounded pixel decoding. |
 | `core/library_publish.py` | Explicit clean publishing preparation without modifying source projects. |
 | `gui/library_dialog.py`, `library_controller.py` | View state and orchestration through app-owned `update_lifecycle.py` jobs. |
 | `gui/controller.py` | Existing root/review/display/document handoff and cancellable Library import. |
@@ -207,6 +209,53 @@ completion, not merely when network transfer ends. The Library controller holds 
 lease while the existing importer reads the archive, preventing another Studio process
 from replacing the payload. The imported project refers only to its own copied files.
 No updater staging directory, installed program file or downloaded script participates.
+
+## Local payload validation
+
+Library preparation, publication verification, and Library-origin imports use the same
+backend validation. The upload/download screens, review steps and progress stages are
+unchanged. Publication revalidates the actual bundle before acquiring publishing
+credentials or contacting GitHub; a matching preparation report or checksum is not
+proof that its contents are safe.
+
+Before extraction, Library payloads must contain `project.json`, `stimuli/manifest.json`,
+and only PNG/JPEG stimulus assets declared by the manifest, task/modifier references,
+or authored source/variant directories. Folder-based projects with incomplete manifest
+inventories remain supported. Scripts, executables, shortcuts and unrelated payloads
+are rejected. All bundles reject links, special/encrypted members and compression other
+than stored/deflated ZIP entries, in addition to existing traversal, case-collision,
+size, count, compression-ratio and checksum checks. Ordinary archival bundles still
+retain research provenance such as original word-list files; their file allowlist is
+not narrowed to the Library inventory.
+
+Validation limits are deliberately above current presets and expected 256–1024-pixel
+images. Limits fail explicitly; content is never truncated or rewritten.
+
+| Resource | Limit |
+| --- | --- |
+| `project.json` / `stimuli/manifest.json` | 8 MiB / 32 MiB, bounded before parsing |
+| Encoded image | 64 MiB per file |
+| Image dimensions / pixel count | 8,192 per axis / 16,777,216 pixels |
+| Estimated decoded pixel buffer | 64 MiB per image (four bytes per pixel) |
+| Session entries and block repetitions | 10,000 each |
+| Weighted events per run / session | 100,000 / 500,000 |
+| Task content × repeats × retry attempts | 1,000,000 work units |
+| Scheduling search and repeated pool scans | 10,000,000 work units per compilation |
+| Total stream and lead-in frames | 20,736,000 (24 hours at 240 Hz) |
+
+The image owner restricts decoders, checks extension against actual format, verifies
+structure, and fully decodes pixels before project commit. Animated/multipage,
+truncated, corrupt and oversized images fail. Ordinary archives additionally support
+BMP/TIFF source provenance. Exact image bytes are preserved. Compilation budgets use
+conservative counts including markers, fixation candidates, masking decorations/catches,
+and bound task expansion before schedules are built. Cancellation is checked between
+image phases and throughout compilation. Recursive scheduling searches also consume a
+per-invocation work budget; unchanged seeded fixtures verify normal behavior.
+
+These checks reduce unexpected-content and resource-exhaustion risks. They are not
+malware scanning or process isolation: decoder overhead is additional, and a running
+Pillow C decode cannot be interrupted until it returns. Release authenticity still
+depends on the configured service/GitHub access; signed catalogs are separate work.
 
 ## Developer publishing in Studio
 
@@ -341,7 +390,7 @@ Library service repository.
 For command-line publishing, use the Studio Python environment; the private repository
 script delegates to `fpvs_studio.developer.catalog_publisher`. The GUI does not need
 this checkout. The maintainer needs write access to the private
-[`FPVS-Studio-Library` repository](https://github.com/zcm58/FPVS-Studio-Library).
+[`OpenFPVS Website` repository](https://github.com/zcm58/OpenFPVS-Website).
 On this development computer its checkout is `build/experiment-library-service` inside
 the Studio checkout. On another computer, clone that private repository and adjust
 `$libraryRepo` below. The publisher uses `GH_TOKEN` or Git's configured credential helper;

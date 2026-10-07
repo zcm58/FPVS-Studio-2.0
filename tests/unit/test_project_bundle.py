@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import os
+import stat
 import zipfile
 from contextlib import contextmanager
 from pathlib import Path
@@ -12,6 +14,7 @@ from threading import Event
 import pytest
 
 import fpvs_studio.core.project_bundle as project_bundle_module
+from fpvs_studio.core.library_origin import LibraryProjectOrigin
 from fpvs_studio.core.models import ProjectFile
 from fpvs_studio.core.paths import app_data_dir
 from fpvs_studio.core.project_bundle import (
@@ -24,6 +27,7 @@ from fpvs_studio.core.project_bundle import (
     import_project_bundle,
     project_bundle_filename,
     read_project_bundle_manifest,
+    validate_project_bundle,
 )
 from fpvs_studio.core.serialization import load_project_file, save_project_file
 from fpvs_studio.core.task_models import (
@@ -44,9 +48,194 @@ def _save_bundle_ready_project(project_root: Path, project) -> None:
     write_stimulus_manifest(project_root, create_empty_manifest(project.meta.project_id))
 
 
+def _replace_bundle_payloads(bundle_path, replacements, *, special_mode=None):
+    """Keep all integrity metadata valid while exercising hostile authored content."""
+    with zipfile.ZipFile(bundle_path) as archive:
+        files = {name: archive.read(name) for name in archive.namelist()}
+    manifest = json.loads(files.pop(BUNDLE_MANIFEST_FILENAME))
+    files.update(replacements)
+    manifest["files"] = [
+        {"path": name, "size_bytes": len(payload), "sha256": hashlib.sha256(payload).hexdigest()}
+        for name, payload in files.items()
+    ]
+    with zipfile.ZipFile(bundle_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for name, payload in files.items():
+            if special_mode is not None and name in replacements:
+                info = zipfile.ZipInfo(name)
+                info.create_system = 3
+                info.external_attr = (special_mode | 0o600) << 16
+                archive.writestr(info, payload)
+            else:
+                archive.writestr(name, payload)
+        archive.writestr(BUNDLE_MANIFEST_FILENAME, json.dumps(manifest))
+
+
 def test_project_bundle_filename_uses_compact_project_title() -> None:
     assert project_bundle_filename("Semantic Categories") == "semanticcategories.fpvsbundle"
     assert project_bundle_filename("   ") == f"fpvsproject{PROJECT_BUNDLE_SUFFIX}"
+
+
+@pytest.mark.parametrize("name", ["helper.cmd", "helper.exe", "helper.lnk", "unrelated.png"])
+def test_library_import_rejects_unexpected_payload_before_extraction(
+    tmp_path, sample_project, sample_project_root, monkeypatch, name,
+):
+    _save_bundle_ready_project(sample_project_root, sample_project)
+    bundle = tmp_path / "unsafe.fpvsbundle"
+    export_project_bundle(sample_project_root, bundle)
+    _replace_bundle_payloads(bundle, {f"stimuli/{name}": b"inert test data"})
+    origin = LibraryProjectOrigin(
+        service_url="https://library.example", item_id="sample", installed_version="1.0.0",
+        local_project_id=sample_project.meta.project_id,
+        bundle_sha256=hashlib.sha256(bundle.read_bytes()).hexdigest(),
+    )
+
+    def must_not_extract(*args, **kwargs):
+        pytest.fail("Unexpected Library payload reached extraction")
+
+    monkeypatch.setattr(project_bundle_module, "_extract_verified_record", must_not_extract)
+    receiver = tmp_path / "receiver"
+    with pytest.raises(ProjectBundleError, match="unexpected stimulus file"):
+        import_project_bundle(bundle, receiver, library_origin=origin)
+    assert not (receiver / sample_project.meta.project_id).exists()
+    assert list((app_data_dir(receiver) / IMPORT_STAGING_DIRNAME).iterdir()) == []
+
+
+@pytest.mark.parametrize("mode", [stat.S_IFLNK, stat.S_IFIFO, stat.S_IFCHR])
+def test_bundle_rejects_special_members_before_extraction(
+    tmp_path, sample_project, sample_project_root, monkeypatch, mode,
+):
+    _save_bundle_ready_project(sample_project_root, sample_project)
+    bundle = tmp_path / "special.fpvsbundle"
+    export_project_bundle(sample_project_root, bundle)
+    image_path = "stimuli/original-images/base-set/base-set-01.png"
+    _replace_bundle_payloads(bundle, {image_path: b"inert data"}, special_mode=mode)
+
+    def must_not_extract(*args, **kwargs):
+        pytest.fail("Special member reached extraction")
+
+    monkeypatch.setattr(project_bundle_module, "_extract_verified_record", must_not_extract)
+    with pytest.raises(ProjectBundleError, match="link or special file"):
+        import_project_bundle(bundle, tmp_path / "receiver", library_safe=True)
+
+
+def test_library_import_rejects_forged_image_content_and_cleans_staging(
+    tmp_path, sample_project, sample_project_root,
+):
+    _save_bundle_ready_project(sample_project_root, sample_project)
+    bundle = tmp_path / "false-image.fpvsbundle"
+    export_project_bundle(sample_project_root, bundle)
+    _replace_bundle_payloads(
+        bundle, {"stimuli/original-images/base-set/base-set-01.png": b"not an image"},
+    )
+    receiver = tmp_path / "receiver"
+    with pytest.raises(ProjectBundleError, match="stimulus validation failed"):
+        import_project_bundle(bundle, receiver, library_safe=True)
+    assert not (receiver / sample_project.meta.project_id).exists()
+    assert list((app_data_dir(receiver) / IMPORT_STAGING_DIRNAME).iterdir()) == []
+
+
+@pytest.mark.parametrize("method", [zipfile.ZIP_BZIP2, zipfile.ZIP_LZMA])
+def test_library_validation_rejects_other_compression_before_extraction(
+    tmp_path, sample_project, sample_project_root, monkeypatch, method,
+):
+    _save_bundle_ready_project(sample_project_root, sample_project)
+    bundle = tmp_path / "compression.fpvsbundle"
+    export_project_bundle(sample_project_root, bundle)
+    with zipfile.ZipFile(bundle) as archive:
+        files = {name: archive.read(name) for name in archive.namelist()}
+    with zipfile.ZipFile(bundle, "w") as archive:
+        for name, payload in files.items():
+            archive.writestr(
+                name, payload,
+                compress_type=method if name == "project.json" else zipfile.ZIP_STORED,
+            )
+
+    def must_not_extract(*args, **kwargs):
+        pytest.fail("Unsupported compression reached extraction")
+
+    monkeypatch.setattr(project_bundle_module, "_extract_verified_record", must_not_extract)
+    with pytest.raises(ProjectBundleError, match="unsupported compression method"):
+        validate_project_bundle(bundle)
+
+
+def test_library_inventory_cancellation_retains_cancelled_error(
+    tmp_path, sample_project, sample_project_root, monkeypatch,
+):
+    _save_bundle_ready_project(sample_project_root, sample_project)
+    bundle = tmp_path / "cancel.fpvsbundle"
+    export_project_bundle(sample_project_root, bundle)
+    cancel = Event()
+    parse = project_bundle_module.project_from_json
+
+    def cancel_after_project(payload):
+        project = parse(payload)
+        cancel.set()
+        return project
+
+    monkeypatch.setattr(project_bundle_module, "project_from_json", cancel_after_project)
+    receiver = tmp_path / "receiver"
+    with pytest.raises(ProjectBundleCancelled):
+        import_project_bundle(bundle, receiver, library_safe=True, cancel_event=cancel)
+    assert list((app_data_dir(receiver) / IMPORT_STAGING_DIRNAME).iterdir()) == []
+
+
+@pytest.mark.parametrize(
+    ("constant", "path"),
+    [("MAX_BUNDLE_PROJECT_JSON_BYTES", "project.json"),
+     ("MAX_BUNDLE_STIMULUS_JSON_BYTES", "stimuli/manifest.json"),
+     ("MAX_BUNDLE_IMAGE_BYTES", "stimuli/original-images/base-set/base-set-01.png")],
+)
+def test_bundle_limits_payload_sizes_before_extraction(
+    tmp_path, sample_project, sample_project_root, monkeypatch, constant, path,
+):
+    _save_bundle_ready_project(sample_project_root, sample_project)
+    bundle = tmp_path / "oversized.fpvsbundle"
+    export_project_bundle(sample_project_root, bundle)
+    monkeypatch.setattr(project_bundle_module, constant, 2)
+
+    def must_not_extract(*args, **kwargs):
+        pytest.fail("Oversized payload reached extraction")
+
+    monkeypatch.setattr(project_bundle_module, "_extract_verified_record", must_not_extract)
+    with pytest.raises(ProjectBundleError, match="byte limit") as error:
+        import_project_bundle(bundle, tmp_path / "receiver", library_safe=True)
+    assert path in str(error.value)
+
+
+def test_library_import_rejects_tiny_excessive_workload_before_scheduling(
+    tmp_path, sample_project, sample_project_root, monkeypatch,
+):
+    import fpvs_studio.core.compiler as compiler
+
+    _save_bundle_ready_project(sample_project_root, sample_project)
+    bundle = tmp_path / "excessive.fpvsbundle"
+    export_project_bundle(sample_project_root, bundle)
+    with zipfile.ZipFile(bundle) as archive:
+        project = json.loads(archive.read("project.json"))
+    project["conditions"][0]["oddball_cycle_repeats_per_sequence"] = 1_000_000_000
+    _replace_bundle_payloads(bundle, {"project.json": json.dumps(project).encode()})
+
+    def must_not_schedule(*args, **kwargs):
+        pytest.fail("Excessive workload reached schedule allocation")
+
+    monkeypatch.setattr(compiler, "build_stimulus_sequence", must_not_schedule)
+    receiver = tmp_path / "receiver"
+    with pytest.raises(ProjectBundleError, match="compilation exceeds"):
+        import_project_bundle(bundle, receiver, library_safe=True)
+    assert not (receiver / sample_project.meta.project_id).exists()
+
+
+def test_full_library_validation_preserves_bytes_without_installing(
+    tmp_path, sample_project, sample_project_root,
+):
+    _save_bundle_ready_project(sample_project_root, sample_project)
+    bundle = tmp_path / "valid.fpvsbundle"
+    expected = export_project_bundle(sample_project_root, bundle, library_safe=True)
+    before = bundle.read_bytes()
+    existing_paths = set(tmp_path.rglob("*"))
+    assert validate_project_bundle(bundle) == expected
+    assert bundle.read_bytes() == before
+    assert set(tmp_path.rglob("*")) == existing_paths
 
 
 def test_export_project_bundle_writes_project_stimuli_and_manifest(
@@ -620,9 +809,14 @@ def test_export_failure_during_stream_preserves_destination_and_cleans_owned_tem
             return self.handle.read(size)
 
     @contextmanager
-    def interrupt_read(path, mode="r", *args, **kwargs):
+    def interrupted_handle(path, mode, *args, **kwargs):
         with original_open(path, mode, *args, **kwargs) as handle:
-            yield InterruptedReader(handle) if path == sidecar and mode == "rb" else handle
+            yield InterruptedReader(handle)
+
+    def interrupt_read(path, mode="r", *args, **kwargs):
+        if path == sidecar and mode == "rb":
+            return interrupted_handle(path, mode, *args, **kwargs)
+        return original_open(path, mode, *args, **kwargs)
 
     monkeypatch.setattr(Path, "open", interrupt_read)
     expected = ProjectBundleCancelled if failure == "cancel" else OSError

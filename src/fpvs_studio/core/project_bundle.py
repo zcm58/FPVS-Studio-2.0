@@ -12,6 +12,8 @@ import hashlib
 import io
 import re
 import shutil
+import stat
+import tempfile
 import uuid
 import zipfile
 from collections.abc import Callable
@@ -24,6 +26,8 @@ from pydantic import Field, ValidationError, field_validator
 
 from fpvs_studio import __version__
 from fpvs_studio.core.compiler import CompileError, compile_session_plan
+from fpvs_studio.core.compiler_limits import CompilationLimits
+from fpvs_studio.core.enums import StimulusModality
 from fpvs_studio.core.experiment_categories import require_valid_experiment_category
 from fpvs_studio.core.library_installations import library_install_status, scan_library_projects
 from fpvs_studio.core.library_origin import (
@@ -49,6 +53,7 @@ from fpvs_studio.core.paths import (
     stimulus_generated_variants_root,
     stimulus_manifest_path,
     stimulus_original_images_root,
+    stimulus_variant_dirname,
     task_assets_root,
     to_project_relative_posix,
     validate_project_id,
@@ -57,12 +62,19 @@ from fpvs_studio.core.project_service import ProjectScaffold
 from fpvs_studio.core.serialization import (
     load_project_file,
     model_to_json,
+    project_from_json,
     read_json_file,
     replace_file_atomically,
     save_project_file,
 )
-from fpvs_studio.core.task_assets import owned_image_references
-from fpvs_studio.preprocessing.manifest import read_stimulus_manifest, write_stimulus_manifest
+from fpvs_studio.core.task_assets import SUPPORTED_TASK_ASSET_SUFFIXES, owned_image_references
+from fpvs_studio.preprocessing.inspection import (
+    MAX_BUNDLE_IMAGE_BYTES,
+    SUPPORTED_SOURCE_SUFFIXES,
+    ImageInspectionError,
+    validate_image_files,
+)
+from fpvs_studio.preprocessing.manifest import write_stimulus_manifest
 from fpvs_studio.preprocessing.models import StimulusManifest
 
 BUNDLE_SCHEMA_VERSION = "1.0.0"
@@ -74,6 +86,8 @@ _DEFAULT_VALIDATION_REFRESH_HZ = 60.0
 MAX_BUNDLE_PAYLOAD_FILES = 50_000
 MAX_BUNDLE_ARCHIVE_MEMBERS = MAX_BUNDLE_PAYLOAD_FILES + 256
 MAX_BUNDLE_MANIFEST_BYTES = 16 * 1024 * 1024
+MAX_BUNDLE_PROJECT_JSON_BYTES = 8 * 1024 * 1024
+MAX_BUNDLE_STIMULUS_JSON_BYTES = 32 * 1024 * 1024
 MAX_BUNDLE_FILE_BYTES = 4 * 1024 * 1024 * 1024
 MAX_BUNDLE_TOTAL_UNCOMPRESSED_BYTES = 20 * 1024 * 1024 * 1024
 MAX_BUNDLE_COMPRESSION_RATIO = 200.0
@@ -169,6 +183,7 @@ def export_project_bundle(
     refresh_hz: float | None = None,
     progress_callback: BundleExportProgressCallback | None = None,
     cancel_event: Event | None = None,
+    library_safe: bool = False,
 ) -> ProjectBundleManifest:
     """Validate and write a portable `.fpvsbundle` for one saved project."""
 
@@ -178,6 +193,9 @@ def export_project_bundle(
     _check_cancelled(cancel_event)
     project = _load_project_for_bundle(project_root)
     manifest = _load_manifest_for_bundle(project_root)
+    relative_paths = _collect_bundle_file_paths(project_root)
+    if library_safe:
+        _validate_library_inventory(project, manifest, set(relative_paths))
     payload_overrides: dict[str, bytes] = {}
     if project_name is not None:
         project, manifest = _bundle_identity_override(
@@ -198,7 +216,6 @@ def export_project_bundle(
         cancel_event=cancel_event,
     )
     _notify_export_progress(progress_callback, "stimuli")
-    relative_paths = _collect_bundle_file_paths(project_root)
     bundle_manifest = ProjectBundleManifest(
         project=ProjectBundleProject(
             project_id=project.meta.project_id,
@@ -225,6 +242,7 @@ def export_project_bundle(
         relative_paths=relative_paths,
         payload_overrides=payload_overrides,
         cancel_event=cancel_event,
+        library_safe=library_safe,
     )
     _notify_export_progress(progress_callback, "complete")
     return bundle_manifest
@@ -294,6 +312,7 @@ def import_project_bundle(
     progress_callback: BundleImportProgressCallback | None = None,
     cancel_event: Event | None = None,
     library_origin: LibraryProjectOrigin | None = None,
+    library_safe: bool = False,
 ) -> ProjectScaffold:
     """Import a `.fpvsbundle` into a new project folder under the FPVS Studio root."""
 
@@ -316,9 +335,10 @@ def import_project_bundle(
         staged_project_root.mkdir(parents=True, exist_ok=False)
         bundle_manifest = _extract_bundle_to_staging(
             bundle_path, staged_project_root, cancel_event=cancel_event,
+            library_safe=library_safe or library_origin is not None,
         )
         project = _load_project_for_bundle(staged_project_root)
-        manifest = read_stimulus_manifest(staged_project_root)
+        manifest = _load_manifest_for_bundle(staged_project_root)
         _notify_import_progress(progress_callback, "base")
         _check_cancelled(cancel_event)
         _validate_condition_role_source_dirs(
@@ -422,7 +442,9 @@ def _load_project_for_bundle(project_root: Path) -> ProjectFile:
     if not path.is_file():
         raise ProjectBundleError(f"Project bundle export requires {PROJECT_FILENAME}.")
     try:
-        return load_project_file(path)
+        return load_project_file(path, maximum_bytes=MAX_BUNDLE_PROJECT_JSON_BYTES)
+    except ValueError as exc:
+        raise ProjectBundleError(f"Invalid bundle project JSON: {exc}") from exc
     except Exception as exc:
         raise ProjectBundleError(f"Unable to load project file for bundle: {path}") from exc
 
@@ -432,7 +454,11 @@ def _load_manifest_for_bundle(project_root: Path) -> StimulusManifest:
     if not path.is_file():
         raise ProjectBundleError("Project bundle export requires stimuli/manifest.json.")
     try:
-        return read_json_file(path, StimulusManifest)
+        return read_json_file(
+            path, StimulusManifest, maximum_bytes=MAX_BUNDLE_STIMULUS_JSON_BYTES,
+        )
+    except ValueError as exc:
+        raise ProjectBundleError(f"Invalid bundle stimulus manifest: {exc}") from exc
     except Exception as exc:
         raise ProjectBundleError(f"Unable to load stimulus manifest for bundle: {path}") from exc
 
@@ -442,6 +468,7 @@ def _extract_bundle_to_staging(
     staged_project_root: Path,
     *,
     cancel_event: Event | None = None,
+    library_safe: bool = False,
 ) -> ProjectBundleManifest:
     try:
         with zipfile.ZipFile(filesystem_path(Path(bundle_path)), mode="r") as archive:
@@ -464,6 +491,8 @@ def _extract_bundle_to_staging(
                     + (f" ({'; '.join(details)})" if details else ".")
                 )
             _validate_bundle_resource_limits(archive, bundle_manifest)
+            if library_safe:
+                _validate_library_archive(archive, bundle_manifest, cancel_event=cancel_event)
             for record in bundle_manifest.files:
                 _check_cancelled(cancel_event)
                 _extract_verified_record(
@@ -474,7 +503,7 @@ def _extract_bundle_to_staging(
         raise
     except OSError as exc:
         raise _bundle_io_error(exc, bundle_path) from exc
-    except zipfile.BadZipFile as exc:
+    except (zipfile.BadZipFile, RuntimeError, NotImplementedError) as exc:
         raise ProjectBundleError(f"Unable to read project bundle: {bundle_path}") from exc
 
 
@@ -511,6 +540,7 @@ def _validated_archive_file_paths(archive: zipfile.ZipFile) -> set[str]:
     paths: set[str] = set()
     for info in archive.infolist():
         normalized = _validate_archive_member_name(info.filename)
+        _validate_archive_file_type(info)
         if info.is_dir():
             continue
         if normalized in paths:
@@ -545,7 +575,7 @@ def _validate_bundle_resource_limits(
         _validate_archive_entry_resource_limits(
             info,
             label=record.path,
-            maximum_size=MAX_BUNDLE_FILE_BYTES,
+            maximum_size=_payload_byte_limit(record.path),
         )
 
 
@@ -586,10 +616,11 @@ def _validate_bundle_manifest_resource_limits(
 
 
 def _validate_payload_size(path: str, size: int, total_size: int) -> None:
-    if size > MAX_BUNDLE_FILE_BYTES:
+    maximum = _payload_byte_limit(path)
+    if size > maximum:
         raise ProjectBundleError(
             "Project bundle file exceeds the "
-            f"{MAX_BUNDLE_FILE_BYTES:,}-byte limit: {path}"
+            f"{maximum:,}-byte limit: {path}"
         )
     if total_size > MAX_BUNDLE_TOTAL_UNCOMPRESSED_BYTES:
         raise ProjectBundleError(
@@ -604,6 +635,7 @@ def _validate_archive_entry_resource_limits(
     label: str,
     maximum_size: int,
 ) -> None:
+    _validate_archive_file_type(info)
     if info.file_size > maximum_size:
         raise ProjectBundleError(
             f"Project bundle file exceeds the {maximum_size:,}-byte limit: {label}"
@@ -641,6 +673,128 @@ def _validate_archive_member_name(name: str) -> str:
     return normalized
 
 
+def _payload_byte_limit(path: str) -> int:
+    if path == PROJECT_FILENAME:
+        return MAX_BUNDLE_PROJECT_JSON_BYTES
+    if path == f"{STIMULI_DIRNAME}/{MANIFEST_FILENAME}":
+        return MAX_BUNDLE_STIMULUS_JSON_BYTES
+    if PurePosixPath(path).suffix.lower() in SUPPORTED_SOURCE_SUFFIXES:
+        return min(MAX_BUNDLE_FILE_BYTES, MAX_BUNDLE_IMAGE_BYTES)
+    return MAX_BUNDLE_FILE_BYTES
+
+
+def _validate_archive_file_type(info: zipfile.ZipInfo) -> None:
+    if info.compress_type not in (zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED):
+        raise ProjectBundleError(
+            f"Project bundle contains an unsupported compression method: {info.filename}"
+        )
+    mode = stat.S_IFMT(info.external_attr >> 16)
+    expected = stat.S_IFDIR if info.is_dir() else stat.S_IFREG
+    if mode not in (0, expected) or (info.create_system == 0 and info.external_attr & 0x400):
+        raise ProjectBundleError(f"Project bundle contains a link or special file: {info.filename}")
+    if info.flag_bits & 1:
+        raise ProjectBundleError(f"Project bundle contains an encrypted file: {info.filename}")
+
+
+def _validate_library_inventory(
+    project: ProjectFile, manifest: StimulusManifest, paths: set[str],
+) -> None:
+    """Allow only declared images and the two contracts in a Library payload.
+
+    Source/variant directories remain valid declarations for older projects whose
+    compiler resolves images from folders rather than populated manifest entries.
+    Ordinary archival bundles may retain additional research provenance.
+    """
+    contracts = {PROJECT_FILENAME, f"{STIMULI_DIRNAME}/{MANIFEST_FILENAME}"}
+    if not contracts <= paths:
+        raise ProjectBundleError("Library bundle requires project.json and stimuli/manifest.json.")
+    declared = {
+        path for entry in manifest.sets for asset in entry.assets
+        for path in (
+            asset.source.relative_path, *(item.relative_path for item in asset.derivatives),
+        )
+    }
+    declared.update(path for _owner, path in owned_image_references(
+        project.task_modules, project.condition_modifiers,
+    ))
+    directories: set[str] = set()
+    for stimulus_set in project.stimulus_sets:
+        if stimulus_set.modality != StimulusModality.IMAGE:
+            continue
+        if stimulus_set.source_dir is not None:
+            directories.add(validate_project_relative_path(stimulus_set.source_dir))
+        variants = set(stimulus_set.available_variants)
+        variants.update(
+            condition.stimulus_variant for condition in project.conditions
+            if stimulus_set.set_id in {
+                condition.base_stimulus_set_id, condition.oddball_stimulus_set_id,
+                condition.t2_stimulus_set_id, condition.isi_stimulus_set_id,
+            }
+        )
+        directories.update(
+            f"stimuli/generated-variants/{stimulus_set.set_id}/{stimulus_variant_dirname(v.value)}"
+            for v in variants
+        )
+    for path in sorted(paths - contracts):
+        _validate_archive_member_name(path)
+        if (
+            not path.startswith("stimuli/")
+            or PurePosixPath(path).suffix.lower() not in SUPPORTED_TASK_ASSET_SUFFIXES
+            or (path not in declared and PurePosixPath(path).parent.as_posix() not in directories)
+        ):
+            raise ProjectBundleError(f"Library bundle contains an unexpected stimulus file: {path}")
+
+
+def _validate_library_archive(
+    archive: zipfile.ZipFile, bundle_manifest: ProjectBundleManifest,
+    *, cancel_event: Event | None,
+) -> None:
+    records = {record.path: record for record in bundle_manifest.files}
+
+    def read_contract(path: str) -> bytes:
+        record = records.get(path)
+        if record is None:
+            raise ProjectBundleError(f"Library bundle is missing {path}.")
+        _check_cancelled(cancel_event)
+        with archive.open(path) as handle:
+            payload = handle.read(_payload_byte_limit(path) + 1)
+        _check_cancelled(cancel_event)
+        if (
+            len(payload) != record.size_bytes
+            or hashlib.sha256(payload).hexdigest() != record.sha256
+        ):
+            raise ProjectBundleError(f"Project bundle checksum or size mismatch: {path}")
+        return payload
+
+    try:
+        project = project_from_json(read_contract(PROJECT_FILENAME))
+        manifest = StimulusManifest.model_validate_json(
+            read_contract(f"{STIMULI_DIRNAME}/{MANIFEST_FILENAME}"),
+        )
+        _validate_library_inventory(project, manifest, set(records))
+    except ProjectBundleError:
+        raise
+    except (ValueError, RecursionError) as exc:
+        raise ProjectBundleError(f"Invalid Library bundle: {exc}") from exc
+
+
+def validate_project_bundle(
+    bundle_path: Path, *, cancel_event: Event | None = None,
+) -> ProjectBundleManifest:
+    """Fully validate Library bytes in private staging without installing a project."""
+    _check_cancelled(cancel_event)
+    with tempfile.TemporaryDirectory(prefix="fpvs-bundle-check-") as temporary:
+        root = filesystem_path(Path(temporary))
+        manifest = _extract_bundle_to_staging(
+            bundle_path, root, cancel_event=cancel_event, library_safe=True,
+        )
+        _validate_bundle_source(
+            root, project=_load_project_for_bundle(root), manifest=_load_manifest_for_bundle(root),
+            refresh_hz=manifest.validation.refresh_hz, cancel_event=cancel_event,
+        )
+        return manifest
+
+
 def _extract_verified_record(
     archive: zipfile.ZipFile,
     record: ProjectBundleFileRecord,
@@ -656,7 +810,7 @@ def _extract_verified_record(
         for chunk in iter(lambda: source.read(65536), b""):
             _check_cancelled(cancel_event)
             size += len(chunk)
-            if size > record.size_bytes or size > MAX_BUNDLE_FILE_BYTES:
+            if size > record.size_bytes or size > _payload_byte_limit(record.path):
                 raise ProjectBundleError(f"Project bundle file size mismatch: {record.path}")
             digest.update(chunk)
             target.write(chunk)
@@ -716,12 +870,22 @@ def _validate_bundle_source(
         _check_cancelled(cancel_event)
         _resolve_existing_relative_file(project_root, task_path)
     try:
+        validate_image_files(
+            (path for path in stimuli_dir(project_root).rglob("*")
+             if path.is_file() and path.suffix.lower() in SUPPORTED_SOURCE_SUFFIXES),
+            cancel_check=lambda: _check_cancelled(cancel_event),
+        )
+    except ImageInspectionError as exc:
+        raise ProjectBundleError(f"Bundle stimulus validation failed: {exc}") from exc
+    try:
         _check_cancelled(cancel_event)
         compile_session_plan(
             project,
             refresh_hz=refresh_hz,
             project_root=project_root,
             manifest=manifest,
+            limits=CompilationLimits(),
+            cancel_check=lambda: _check_cancelled(cancel_event),
         )
     except CompileError as exc:
         raise ProjectBundleError(f"Project did not pass bundle compile validation: {exc}") from exc
@@ -791,6 +955,7 @@ def _write_bundle_archive(
     relative_paths: list[str],
     payload_overrides: dict[str, bytes],
     cancel_event: Event | None = None,
+    library_safe: bool = False,
 ) -> ProjectBundleManifest:
     """Record hashes from the same bounded reads that supply archive payload bytes."""
 
@@ -849,6 +1014,8 @@ def _write_bundle_archive(
             _validate_archive_member_count(archive)
             written_manifest = _read_bundle_manifest_from_archive(archive)
             _validate_bundle_resource_limits(archive, written_manifest)
+            if library_safe:
+                _validate_library_archive(archive, written_manifest, cancel_event=cancel_event)
         _check_cancelled(cancel_event)
         replace_file_atomically(temp_path, bundle_path)
         return bundle_manifest
