@@ -37,6 +37,8 @@ This directory is the most important foundation in the repo. It should remain im
   receipt identity is authoritative, while legacy name matches require explicit review
 - validation
 - project scaffolding helpers
+- configured-root project discovery in `project_service.py`, shared by project
+  management and background reporting; never descend project assets or linked folders
 - compilation of editable project state into a neutral `RunSpec`
 - native masking pools and exact within-item frame compilation in `masking.py`,
   `compiler_masking.py`, and `scene_models.py`; see `docs/MASKING.md`

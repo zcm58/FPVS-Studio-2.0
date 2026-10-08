@@ -33,7 +33,11 @@ View > Data Sharing & Comparison opens a two-tab dialog at `880x700`, minimum
 `820x620`. Existing lab-code and OpenFPVS project-ID enrollment leaves sharing off until the operator explicitly
 enables it. App-owned jobs handle hashing, delivery and descriptive comparison after
 completed sessions, with opt-out/backlog release and cancel/shutdown guards.
-Archive uploaded history retains receipts and private mappings locally without HTTP.
+Accepted uploads automatically archive older local history, keeping the latest
+comparison and exact receipts/mappings. Startup retries eligible pending reports
+for known projects without reopening them; waiting-for-connection status is passive
+and presentation cancels reporting across projects. Retained uploaded counts the
+active local cache. Archive uploaded history remains a local retry without HTTP.
 Copy protocol fingerprint supplies the hash for administrator project setup;
 View OpenFPVS project opens the private website dashboard after enrollment.
 See [Data sharing](DATA_SHARING.md) for exact fields, cohort limits and activation.
@@ -815,8 +819,7 @@ title in lowercase with spaces and punctuation removed, such as
 Summary...` manually writes an Excel workbook from the current participant summary rows,
 with a first row aggregating rows marked `Include In Analysis = Y` and participant rows
 remaining visible underneath for filtering/audit. The wired `Tutorials` action remains
-available internally but is temporarily hidden from the File menu until the public
-tutorial section is complete. Settings shows the current app
+available internally but is hidden from the File menu. Settings shows the current app
 version from `pyproject.toml` during source-tree runs and from package metadata in
 bundled installs, and exposes the app-level run export mode. Full run export mode is the
 default and writes detailed `runs/` folders after launch; compact mode skips those

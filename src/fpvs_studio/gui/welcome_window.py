@@ -81,6 +81,14 @@ class WelcomeWindow(QWidget):
         self.bundle_drop_hint_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         hero_layout.addWidget(self.bundle_drop_hint_label)
 
+        self.sharing_status_label = QLabel("", self.hero_container)
+        self.sharing_status_label.setObjectName("welcome_sharing_status")
+        self.sharing_status_label.setProperty("bundleWorkflowRole", "meta")
+        self.sharing_status_label.setWordWrap(True)
+        self.sharing_status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.sharing_status_label.hide()
+        hero_layout.addWidget(self.sharing_status_label)
+
         self.action_container = QWidget(self.hero_container)
         self.action_container.setObjectName("welcome_action_container")
         self.action_layout = QGridLayout(self.action_container)
@@ -167,6 +175,11 @@ class WelcomeWindow(QWidget):
             if self._import_busy
             else "Tip: Drop a .fpvsbundle file anywhere on this window."
         )
+
+    def set_sharing_status(self, message: str) -> None:
+        """Display passive startup delivery status without blocking project actions."""
+        self.sharing_status_label.setText(message)
+        self.sharing_status_label.setVisible(bool(message))
 
     def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802
         if self._import_busy:

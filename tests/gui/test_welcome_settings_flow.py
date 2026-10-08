@@ -217,6 +217,29 @@ def test_welcome_window_actions_fit_minimum_and_default_sizes(
             assert button.contentsRect().width() >= text_width
 
 
+@pytest.mark.parametrize("size", [(760, 520), (1120, 720)])
+@pytest.mark.parametrize("message", [
+    "Checking saved reports…",
+    "Saved reports are waiting for connection. Studio will retry on its next launch.",
+    "Saved reports need attention. Open Data Sharing & Comparison in the affected project.",
+])
+def test_welcome_startup_sharing_status_fits_and_keeps_actions_enabled(qtbot, size, message):
+    welcome = WelcomeWindow()
+    qtbot.addWidget(welcome)
+    welcome.set_sharing_status(message)
+    welcome.resize(*size)
+    welcome.show()
+    qtbot.wait(10)
+    assert welcome.size().toTuple() == size
+    assert_visible_children_within_parent(welcome)
+    label = welcome.sharing_status_label
+    assert label.text() == message and label.isVisible()
+    assert label.height() >= label.heightForWidth(label.width())
+    assert all(button.isEnabled() for button in welcome.findChildren(QPushButton))
+    welcome.set_sharing_status("")
+    assert label.isHidden()
+
+
 def test_welcome_window_accepts_fpvsbundle_drop(
     qtbot,
     controller: StudioController,

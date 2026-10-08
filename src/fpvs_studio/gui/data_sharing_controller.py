@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 from dataclasses import replace
+from pathlib import Path
 from threading import Event
 from types import ModuleType
 from typing import TYPE_CHECKING, cast
@@ -15,6 +16,8 @@ from PySide6.QtWidgets import QApplication
 from shiboken6 import isValid
 
 from fpvs_studio.core.data_sharing import protocol_fingerprint
+from fpvs_studio.core.paths import filesystem_path, project_json_path
+from fpvs_studio.core.project_service import discover_project_roots
 from fpvs_studio.data_sharing import service
 from fpvs_studio.data_sharing.client import DataSharingClient
 from fpvs_studio.data_sharing.errors import DataSharingCancelled, DataSharingError
@@ -41,6 +44,7 @@ class DataSharingController(QObject):
         self, app: QApplication, *,
         current_window: Callable[[], StudioMainWindow | None],
         backend: ModuleType | None = None,
+        startup_status: Callable[[str], None] = lambda _message: None,
     ) -> None:
         super().__init__(app)
         self._backend = backend or service
@@ -50,6 +54,10 @@ class DataSharingController(QObject):
         self._window: StudioMainWindow | None = None
         self.dialog: DataSharingDialog | None = None
         self._job: UpdateJob | None = None
+        self._startup_source: tuple[Path, tuple[Path, ...]] | None = None
+        self._startup_roots: list[Path] | None = None
+        self._startup_problem = False
+        self._startup_status = startup_status
         self._off_job: UpdateJob | None = None
         self._off_error = ""
         self._launch_waiter: tuple[StudioMainWindow, Callable[[], None]] | None = None
@@ -62,6 +70,107 @@ class DataSharingController(QObject):
         self._retry_timer = QTimer(self)
         self._retry_timer.setSingleShot(True)
         self._retry_timer.timeout.connect(self._retry)
+
+    def startup(self, root: Path, recent_roots: tuple[Path, ...]) -> None:
+        """One app-owned pass; discovery and delivery use the same launch/shutdown gate."""
+        if self._startup_source is not None or self._lifecycle.is_shutting_down:
+            return
+        self._startup_source = (root, recent_roots)
+        self._startup_status("Checking saved reports…")
+        self._resume_startup()
+
+    def _resume_startup(self) -> None:
+        if (
+            self._startup_source is None or self._job is not None
+            or self._off_job is not None or self._lifecycle.is_shutting_down
+            or self._launch_waiter is not None
+            or (self._window is not None and self._window.is_launch_busy())
+        ):
+            return
+        source = self._startup_source
+        discovering = self._startup_roots is None
+        if not discovering and not self._startup_roots:
+            if not self._startup_problem:
+                self._startup_status("")
+            return
+        root = None
+        if not discovering:
+            assert self._startup_roots is not None
+            root = self._startup_roots.pop(0)
+            window = self._window
+            if (
+                window is not None and self._current(window)
+                and filesystem_path(window.document.project_root) == filesystem_path(root)
+            ):
+                # The open document may have unsaved protocol edits. Its existing
+                # job captures authored state on the GUI thread before hashing.
+                self._request("startup")
+                return
+        backend = self._backend
+
+        def work(_progress: ProgressReporter, cancel: Event) -> object:
+            if discovering:
+                roots = discover_project_roots(source[0], cancelled=cancel.is_set)
+                roots.extend(
+                    path for path in source[1]
+                    if filesystem_path(project_json_path(path)).is_file()
+                )
+                return list(dict.fromkeys(path.resolve() for path in roots))
+            if cancel.is_set():
+                raise DataSharingCancelled()
+            return backend.sync_startup_project(root, cancel)
+
+        job = self._lifecycle.start_task(work, keep_success_on_cancel=True)
+        self._job = job
+
+        def finished(value: object) -> None:
+            self._job = None
+            outcome = cast(UpdateTaskResult, value)
+            if job.cancel_event.is_set() or outcome.cancelled:
+                if root is not None:
+                    assert self._startup_roots is not None
+                    self._startup_roots.insert(0, root)
+            elif outcome.error is not None:
+                self._startup_problem = True
+                _LOGGER.warning(
+                    "Startup reporting needs attention for %s: %s",
+                    root or source[0], outcome.error,
+                )
+                if discovering:
+                    self._startup_roots = []
+                self._startup_status(
+                    "Saved reports need attention. See the Studio log for details."
+                )
+            elif discovering:
+                self._startup_roots = cast(list[Path], outcome.value)
+            elif outcome.value is not None:
+                assert root is not None
+                self._report_startup_view(root, cast(SharingView, outcome.value))
+            self._run_pending()
+
+        job.finished.connect(finished)
+
+    def _report_startup_view(self, root: Path, view: SharingView) -> None:
+        if view.status == "waiting_connection":
+            if not self._startup_problem:
+                self._startup_status(
+                    "Saved reports are waiting for connection. "
+                    "Studio will retry on its next launch."
+                )
+            self._startup_problem = True
+        elif view.error:
+            self._startup_problem = True
+            _LOGGER.warning("Startup reporting needs attention for %s: %s", root, view.error)
+            self._startup_status(
+                "Saved reports need attention. "
+                "Open Data Sharing & Comparison in the affected project."
+            )
+        elif view.pending_count:
+            if not self._startup_problem:
+                self._startup_status(
+                    "Saved reports are pending. Studio will retry on its next launch."
+                )
+            self._startup_problem = True
 
     def _current(self, window: StudioMainWindow) -> bool:
         return (
@@ -164,7 +273,9 @@ class DataSharingController(QObject):
         def work(_progress: ProgressReporter, cancel: Event) -> tuple[str, SharingView]:
             if cancel.is_set():
                 raise DataSharingCancelled()
-            settings = load_settings(root) if operation in {"load", "sync", "retry"} else None
+            settings = (
+                load_settings(root) if operation in {"load", "sync", "retry", "startup"} else None
+            )
             if cancel.is_set():
                 raise DataSharingCancelled()
             fingerprint = (
@@ -203,11 +314,12 @@ class DataSharingController(QObject):
             else:
                 result = backend.load_view(root, fingerprint, cancel)
             if (
-                (operation in {"sync", "retry"} or (operation == "enable" and value))
+                (operation in {"sync", "retry", "startup"} or (operation == "enable" and value))
                 and result.settings.enabled and may_sync
             ):
                 result = backend.sync_project(
                     root, fingerprint, cancel, release_held=operation == "retry",
+                    retry_offline=operation == "startup", fetch_comparison=operation != "startup",
                 )
             return fingerprint, result
 
@@ -256,6 +368,19 @@ class DataSharingController(QObject):
                     )
             if project_changed and self._pending is None:
                 self._pending = ("load", None)
+            if operation == "startup":
+                if discarded:
+                    assert self._startup_roots is not None
+                    self._startup_roots.insert(0, root)
+                elif outcome.error is not None:
+                    self._startup_problem = True
+                    _LOGGER.warning("Startup reporting needs attention for %s: %s",
+                                    root, outcome.error)
+                    self._startup_status(
+                        "Saved reports need attention. See the Studio log for details."
+                    )
+                elif self._view is not None:
+                    self._report_startup_view(root, self._view)
             self._run_pending()
 
         job.finished.connect(finished)
@@ -362,6 +487,7 @@ class DataSharingController(QObject):
         if pending is not None:
             self._request(*pending)
         self._release_launch_gate()
+        self._resume_startup()
 
     def _render(self) -> None:
         view, dialog = self._view, self.dialog
@@ -386,6 +512,10 @@ class DataSharingController(QObject):
             "enabled": "Automatic sharing is enabled for newly completed eligible sessions.",
             "uploaded": "Eligible completed session reports are uploaded.",
             "pending": "Reports are pending. Retry when the service is available.",
+            "waiting_connection": (
+                "Waiting for connection. Reports are saved locally; "
+                "Studio will retry on its next launch."
+            ),
             "ready": "Sharing is enabled. New eligible sessions will be reported automatically.",
             "failed": "A contribution needs attention. Review the connection, then retry.",
             "unavailable": "The sharing service is unavailable. Local results remain available.",

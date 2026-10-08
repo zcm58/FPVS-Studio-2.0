@@ -13,12 +13,16 @@ from fpvs_studio.core.data_sharing import (
     SessionReport,
     SharingProfile,
     SharingSettings,
+    protocol_fingerprint,
 )
+from fpvs_studio.core.paths import filesystem_path, project_json_path
+from fpvs_studio.core.serialization import load_project_file
 from fpvs_studio.data_sharing.client import DataSharingClient, check_cancel
 from fpvs_studio.data_sharing.errors import DataSharingCancelled, DataSharingError
 from fpvs_studio.data_sharing.library_scope import validate_library_scope
 from fpvs_studio.data_sharing.storage import (
     OutboxRecord,
+    SharingStorageError,
     archive_uploaded,
     list_pending,
     list_records,
@@ -149,12 +153,24 @@ def load_view(
     if any(record.state == "failed" for record in scoped):
         status = "failed" if status != "protocol_mismatch" else status
         error = (
-            error or "A contribution needs attention. Reconnect if access was revoked, then Retry."
+            error or (
+                "The OpenFPVS project or lab has reached its reporting budget. "
+                "Ask its administrator to review capacity, then Retry pending."
+                if any(record.state == "failed" and record.last_error_code == "storage_limit"
+                       for record in scoped)
+                else "A contribution needs attention. Reconnect if access was revoked, then Retry."
+            )
         )
     counts = {
         state: sum(record.state == state for record in scoped)
         for state in ("pending", "held", "uploaded")
     }
+    if settings.enabled and counts["pending"] and not error and status != "protocol_mismatch":
+        if any(
+            record.state == "pending" and record.last_error_code in {"network", "timeout"}
+            for record in scoped
+        ):
+            status = "waiting_connection"
     if settings.enabled and not counts["pending"] and not error:
         status = "uploaded" if counts["uploaded"] else "ready"
     from fpvs_studio.runtime.data_sharing import capture_errors
@@ -232,19 +248,56 @@ def _may_send(root: Path, profile: SharingProfile, protocol_sha256: str, cancel:
     return allowed
 
 
+def sync_startup_project(
+    root: Path, cancel: Event, *, client: DataSharingClient | None = None,
+) -> SharingView | None:
+    """Recover one known project without opening widgets or requesting comparisons."""
+    check_cancel(cancel)
+    if not filesystem_path(project_json_path(root)).is_file():
+        return None
+    settings = load_settings(root)
+    profile = settings.profile
+    protocol = profile.protocol_sha256 if profile is not None else ""
+    try:
+        archive_uploaded(root, cancel=cancel)
+    except SharingStorageError as error:
+        return replace(load_view(root, protocol, cancel),
+                       error=f"Local uploaded-history cleanup needs attention: {error}")
+    view = load_view(root, protocol, cancel)
+    if not settings.enabled or profile is None or view.status == "protocol_mismatch":
+        return view
+    from fpvs_studio.runtime.data_sharing import capture_errors
+
+    if not view.pending_count and not capture_errors(root):
+        return view
+    project = load_project_file(project_json_path(root))
+    protocol = protocol_fingerprint(project, root, cancelled=cancel.is_set)
+    return sync_project(root, protocol, cancel, client=client,
+                        fetch_comparison=False, retry_offline=True)
+
+
 def sync_project(
     root: Path,
     protocol_sha256: str,
     cancel: Event,
     *,
     release_held: bool = False,
+    fetch_comparison: bool = True,
+    retry_offline: bool = False,
     client: DataSharingClient | None = None,
 ) -> SharingView:
     """Retry exact persisted bytes; outcomes cannot alter experiment completion."""
     from fpvs_studio.data_sharing.storage import release_held as release_held_records
 
     transport = client or DataSharingClient.configured()
+    cleanup_error = ""
+    try:
+        archive_uploaded(root, cancel=cancel)
+    except SharingStorageError as error:
+        cleanup_error = f"Local uploaded-history cleanup needs attention: {error}"
     view = load_view(root, protocol_sha256, cancel, client=transport)
+    if cleanup_error:
+        return replace(view, error=cleanup_error)
     profile = view.settings.profile
     if (
         not view.settings.enabled or profile is None
@@ -266,7 +319,11 @@ def sync_project(
             root, profile, protocol_sha256, cancel
         ):
             continue
-        if record.next_attempt_at is not None and record.next_attempt_at > now and not release_held:
+        if (
+            record.next_attempt_at is not None and record.next_attempt_at > now
+            and not release_held
+            and not (retry_offline and record.last_error_code in {"network", "timeout"})
+        ):
             continue
         attempted = record.model_copy(update={"attempt_count": record.attempt_count + 1})
         update_record(root, attempted)
@@ -309,9 +366,23 @@ def sync_project(
             failure = str(error)
             # One inaccessible service/credential should not consume the entire outbox.
             break
+        # The receipt is already durable. An archive failure must never enter the
+        # upload-error handler or reclassify an accepted contribution.
+        try:
+            archive_uploaded(root, cancel=cancel)
+        except SharingStorageError as error:
+            cleanup_error = f"Local uploaded-history cleanup needs attention: {error}"
+            break
     view = load_view(root, protocol_sha256, cancel, client=transport)
+    if cleanup_error:
+        return replace(view, error=cleanup_error)
     if failure:
+        if view.status == "waiting_connection":
+            return replace(view, error="Waiting for connection. Reports are saved locally; "
+                           "Studio will retry on its next launch. " + failure)
         return replace(view, status="pending" if view.pending_count else "failed", error=failure)
+    if not fetch_comparison:
+        return view
     if not _may_send(root, profile, protocol_sha256, cancel):
         return view
     try:

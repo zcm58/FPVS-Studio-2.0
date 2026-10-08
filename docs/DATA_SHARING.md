@@ -41,6 +41,27 @@ Projects that have never enrolled and leave sharing off skip protocol hashing an
 network access. Enrolled protocol hashing checks cancellation between asset chunks
 so a canceled reporting job can release the launch gate promptly.
 
+On Studio startup, one sequential background pass discovers projects beneath the
+configured root and checks remembered existing project paths. It retries eligible
+pending deliveries without reopening projects or retrieving their comparison
+snapshots. Projects without pending/recoverable work skip hashing and HTTP. Saved
+opt-in, Library scope, authored protocol and OS credentials are rechecked before
+delivery. Held reports still require explicit Retry. Missing/moved projects are
+skipped; malformed metadata remains intact and produces non-modal attention status
+and a log identifying the affected project. Startup shares the same job ownership
+and launch/shutdown gate as project-open and after-run work, and resumes interrupted
+projects after the presentation cycle.
+
+Failed delivery with local `network`/`timeout` codes shows **Waiting for connection**
+and retains the exact report and original completion time. Startup permits a prompt
+retry of that connectivity-delayed work; throttling/service backoff remains in place.
+The actual Results request tests availability, without a separate internet probe.
+This flags failed delivery, not proof that acquisition itself occurred offline.
+If the service reports that the project/lab storage budget is full, Studio retains
+the contribution with a persistent needs-attention message. The administrator must
+review capacity before **Retry pending**; automatic startup does not repeatedly send
+that failed report. Ordinary rate throttling retains its retry backoff.
+
 Turning sharing off stops new uploads and holds unsent reports. Turning it back on
 does not silently release that backlog. The off setting is committed before outbox
 review; malformed records remain intact and prevent re-enabling until resolved.
@@ -261,7 +282,7 @@ devices' individual reports.
 | `.fpvs-data-sharing/settings.json` | Bounded local profile and explicit opt-in |
 | `logs/data-sharing/intents/<UUID>.json` | Private launch, completion and commit proof |
 | `logs/data-sharing/outbox/<UUID>.json` | Immutable report JSON/digest, attempts, state and receipt |
-| `logs/data-sharing/archive/<UUID>/report.json` | Explicitly archived acknowledged record |
+| `logs/data-sharing/archive/<UUID>/report.json` | Archived acknowledged record |
 | `logs/data-sharing/archive/<UUID>/capture.json` | Corresponding finalized private mapping, when present |
 
 Files stay beneath the active project root, reject links/reparse points and require
@@ -277,15 +298,24 @@ codes are not saved in project files. A token is stored before enrollment so an
 ambiguous response can retry the same identity. Library credentials are not reused.
 A copied project requires its own secure-store enrollment on the destination.
 
-**Archive uploaded history** performs no HTTP request. It moves older acknowledged
+After each matching receipt is durably saved, automatic cleanup moves older acknowledged
 outbox records and matching finalized intents to the guarded archive, retaining the
-latest uploaded report for each experiment/version/protocol in the active outbox.
+latest uploaded report for each OpenFPVS project/experiment/version/protocol in the active outbox.
 Pending, held, failed and unfinished captures remain active. Receipt and local
 participant-to-report evidence are preserved for audit; raw research exports and
 the shared dataset are unchanged. Every selected source/schema/destination is
 validated before file moves; existing targets are never overwritten. A partial
-move remains recoverable and resumes on an explicit retry. Active capacity counts
-ignore archived files. Archiving is explicit, never automatic.
+move remains recoverable and resumes on a later cleanup cycle. Cleanup also runs
+before startup recovery to retire pre-change acknowledged history. A cleanup error
+preserves accepted status/receipts and reports a local problem; it does not cause
+another submission of an acknowledged record. Active capacity counts ignore
+archived files. **Retained uploaded** counts the active local cache, not lifetime
+cloud contributions. **Archive uploaded history** remains an explicit local retry
+and performs no HTTP request.
+
+Reports already use compact JSON and one exact cloud payload per accepted session.
+[Storage measurements](REPORTING_STORAGE.md) record representative wire/SQLite
+sizes, the read-only D1 snapshot and source-defined project/lab/service budgets.
 
 Ordinary aborted and protocol-mismatched capture intents remain active and still
 count toward the 512-record limit. **Archive uploaded history** cannot free these
@@ -356,6 +386,7 @@ safe visible environment; never use local offscreen Qt.
 Live acceptance remains pending: authorize and provision an isolated Results
 Worker/D1 scope, enroll two or more machines with synthetic sessions, check exported
 metrics and lost-response deduplication, prove credential-scope rejection and build
-the required aggregate cohort without real participant data. No claim of completed
-deployment, current account capacity or live multi-machine acceptance follows from
-local tests.
+the required aggregate cohort without real participant data. No claim of live
+multi-machine acceptance follows from local tests. The read-only database snapshot
+in [Storage measurements](REPORTING_STORAGE.md) does not establish the billing tier,
+included remaining capacity or synthetic live delivery acceptance.

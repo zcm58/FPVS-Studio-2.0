@@ -11,7 +11,7 @@ from fpvs_studio.gui.data_sharing_dialog import ComparisonRow, DataSharingDialog
 
 
 @pytest.mark.parametrize("size", [(820, 620), (880, 700)])
-@pytest.mark.parametrize("state", ["empty", "ready", "busy", "error", "validation"])
+@pytest.mark.parametrize("state", ["empty", "ready", "busy", "error", "validation", "offline"])
 def test_sharing_dialog_fits_long_content_and_all_tabs(qtbot, size, state):
     dialog = DataSharingDialog(configured=True)
     qtbot.addWidget(dialog)
@@ -26,7 +26,8 @@ def test_sharing_dialog_fits_long_content_and_all_tabs(qtbot, size, state):
         status="The service is temporarily unavailable. Reports remain pending; retry when "
         "the connection is available." if state == "error" else
         "Enter the lab-issued invitation code for the reviewed experiment version."
-        if state == "validation" else "Sharing is enabled.",
+        if state == "validation" else "Waiting for connection. Reports are saved locally; "
+        "Studio will retry on its next launch." if state == "offline" else "Sharing is enabled.",
         pending=9999, held=9999, uploaded=9999,
     )
     dialog.project_id_edit.setText("01234567-89ab-cdef-0123-456789abcdef")
@@ -49,6 +50,8 @@ def test_sharing_dialog_fits_long_content_and_all_tabs(qtbot, size, state):
     )
     dialog.resize(*size)
     dialog.show()
+    assert "Retained uploaded: 9,999" in dialog.counts_label.text()
+    assert "cloud contributions remain" in dialog.counts_label.toolTip()
     for index in range(dialog.tabs.count()):
         dialog.tabs.setCurrentIndex(index)
         qtbot.wait(10)

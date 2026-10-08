@@ -36,7 +36,7 @@ local verification, and no additional service or storage provider is required.
   after research writes and before derived participant workbooks. It checks actual
   launch flags, complete frames/tasks/occurrences and completion-screen outcomes.
 - `data_sharing/storage.py` owns private project-local settings, immutable outbox
-  bytes/digests/attempts/receipts, safe state transitions and explicit local archive.
+  bytes/digests/attempts/receipts, safe state transitions and receipt-first local archive.
   OS credentials and fixed-origin HTTP remain in dedicated neutral modules.
 - GUI `data_sharing_controller.py` uses app-owned cancelable jobs and captured project
   snapshots. View > Data Sharing & Comparison supplies enrollment, separate opt-in,
@@ -83,7 +83,7 @@ also checks actual local provenance against the returned uniform reference metho
 Accuracy pools hits/targets; RT uses observation weighting. This is descriptive
 comparison, not a repeated-measures or causal analysis.
 
-Explicit Archive uploaded history moves older acknowledged records and matching
+Receipt-first automatic cleanup and explicit Archive uploaded history move older acknowledged records and matching
 finalized mappings into guarded project archive files. The latest uploaded record
 per scope stays active. Unsent/unfinished captures and raw research exports are
 preserved; receipts and mapping survive for audit. Archive makes no network request
@@ -183,9 +183,11 @@ The capacity limitation for ordinary aborted/protocol-mismatch terminal intents
 remains: these consume the 512 active records, and uploaded-history archiving cannot
 free them. Add an explicit review/archive workflow that preserves their evidence
 before treating long-running collection capacity as complete.
-The user-requested future work is recorded in
-[Long-running results reporting](../planned/long-running-results-reporting.md);
-that plan remains unimplemented.
+Terminal-capture review/archive remains deferred. The narrower user-requested work
+landed in [Reporting upload lifecycle](../completed/long-running-results-reporting.md):
+acknowledged-history retirement, offline startup retry and compact cloud storage.
+Local acceptance is complete; visible/live qualification remains documented. That
+lifecycle does not resolve terminal-capture capacity.
 
 Integration completion requires a reviewed experiment/version/protocol grant map,
 an admin Contributions section, server-authoritative lab/PC/grant revocation, and a

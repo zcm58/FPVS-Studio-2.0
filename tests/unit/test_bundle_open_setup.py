@@ -21,6 +21,7 @@ from fpvs_studio.core.paths import (
     stimulus_manifest_path,
 )
 from fpvs_studio.core.project_bundle import export_project_bundle, import_project_bundle
+from fpvs_studio.core.project_service import discover_project_roots
 from fpvs_studio.core.serialization import load_project_file
 from fpvs_studio.gui.document_support import resolve_project_location
 from fpvs_studio.preprocessing.manifest import read_stimulus_manifest
@@ -116,6 +117,7 @@ def test_imported_project_remains_discoverable_after_restart(
         ["_normalize_path", "_is_within_configured_root", "_discover_project_roots"],
         Path=Path, filesystem_path=filesystem_path, project_json_path=project_json_path,
         is_reserved_root_entry_name=is_reserved_root_entry_name,
+        discover_project_roots=discover_project_roots,
     )
     controller = SimpleNamespace(
         _fpvs_root_dir=imported_long_project.parent, _normalize_path=methods["_normalize_path"],

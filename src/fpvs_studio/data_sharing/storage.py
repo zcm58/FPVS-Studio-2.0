@@ -8,6 +8,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
+from threading import Event
 from typing import Literal, TypeVar
 
 from pydantic import Field, StrictInt, ValidationError, field_validator, model_validator
@@ -26,6 +27,7 @@ from fpvs_studio.core.data_sharing import (
 )
 from fpvs_studio.core.paths import filesystem_path
 from fpvs_studio.core.serialization import atomic_text_write
+from fpvs_studio.data_sharing.errors import DataSharingCancelled
 
 MAX_RECORDS = 512
 MAX_RECORD_BYTES = 256 * 1024
@@ -331,8 +333,8 @@ def delete_pending(root: Path, report_id: str) -> None:
         path.unlink()
 
 
-def archive_uploaded(root: Path) -> int:
-    """Explicitly archive older acknowledged caches, preserving each scope's latest.
+def archive_uploaded(root: Path, *, cancel: Event | None = None) -> int:
+    """Archive older acknowledged caches, preserving each scope's latest.
 
     This never deletes research exports or changes the shared dataset. Finalized
     capture intents cannot be recovered again, so their acknowledged caches may
@@ -365,6 +367,8 @@ def archive_uploaded(root: Path) -> int:
             latest[scope] = record.report_id
         selected: list[tuple[Path, Path, Path | None, Path]] = []
         for record in uploaded:
+            if cancel is not None and cancel.is_set():
+                raise DataSharingCancelled()
             scope = (
                 record.experiment_id,
                 record.experiment_version,
@@ -420,9 +424,11 @@ def archive_uploaded(root: Path) -> int:
             selected.append((record_path, archive_report, intent_path, archive_intent))
         # Validate every source and destination before moving recognized files.
         # Move the intent first so a failed report move can resume from its still
-        # active receipt on the next explicit archive action, without overwrites.
+        # active receipt on the next cleanup cycle, without overwrites.
         try:
             for record_path, archive_report, intent_path, archive_intent in selected:
+                if cancel is not None and cancel.is_set():
+                    raise DataSharingCancelled()
                 archive_report.parent.mkdir(parents=True, exist_ok=True)
                 _private_path(root, f"logs/data-sharing/archive/{record_path.stem}/report.json")
                 _private_path(root, f"logs/data-sharing/archive/{record_path.stem}/capture.json")

@@ -29,7 +29,7 @@ cross-layer behavior require it.
 | `triggers` | Trigger contracts, serial hardware adapters, marker writes, or trigger logs | `src/fpvs_studio/triggers/AGENTS.md` and the trigger sections of `docs/RUNTIME_EXECUTION.md` |
 | `updates` | Independent updater protocol/staging, release and repair selection, bounded cache/locking, verified downloads/launch, or update GUI shutdown coordination | `src/fpvs_studio/updates/AGENTS.md` and `docs/PACKAGING.md` |
 | `library` | View/Create Project library entry points, private catalog, enrollment, downloads, Advanced developer mode, and publishing | `src/fpvs_studio/library/AGENTS.md`, `src/fpvs_studio/developer/AGENTS.md` for publishing, `docs/EXPERIMENT_LIBRARY.md`, and the active private-library plan |
-| `data-sharing` | Experiment contribution consent, credentials, completion capture, outbox, Cloudflare intake or matched reference comparisons | `src/fpvs_studio/data_sharing/AGENTS.md`, `docs/DATA_SHARING.md`, and sibling `../OpenFPVS/PROJECT_REPORTING.md` for backend work |
+| `data-sharing` | Experiment contribution consent, credentials, completion capture, upload retirement, offline startup delivery or matched comparisons | `src/fpvs_studio/data_sharing/AGENTS.md`, `docs/DATA_SHARING.md`, `docs/REPORTING_STORAGE.md` for budgets, and sibling `../OpenFPVS/PROJECT_REPORTING.md` for backend work |
 | `packaging` | Versioning, PyInstaller, Inno Setup, sparse patches, owned-file upgrade reconciliation, branding, isolated beta/executable builds, or packaged smoke | `packaging/AGENTS.md`, `docs/PACKAGING.md`, and `pyproject.toml` |
 
 Run a route with:

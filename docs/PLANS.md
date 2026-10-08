@@ -21,25 +21,14 @@ Current implementation:
 
 Concrete planned work:
 
-- [Long-running results reporting](exec-plans/planned/long-running-results-reporting.md) (future local archive/capacity work; not implemented)
 - [Participant results and question presentation](exec-plans/planned/participant-results-and-question-presentation.md) (proposal; not implemented)
-- `exec-plans/planned/restore-tutorials-file-menu-entry.md`
-- `exec-plans/planned/luminance-rms-equalization-investigation.md`
-
-Accepted future improvements (implementation has not started):
-
-1. [Lab-independent recording setup](exec-plans/planned/lab-independent-recording-setup.md)
-2. [Explicit session-design controls](exec-plans/planned/explicit-session-design-controls.md)
-3. [Rehearsal in the installed application](exec-plans/planned/packaged-experiment-rehearsal.md)
-4. [Stimulus comparison and preprocessing previews](exec-plans/planned/stimulus-comparison-and-preprocessing-previews.md)
-5. [Persistent session quality report](exec-plans/planned/persistent-session-quality-report.md)
-
-These five plans record the user's accepted product direction and remain in `planned/`
-until implementation begins. The stimulus-comparison plan links to the existing
-luminance/RMS algorithm investigation instead of duplicating its scientific decisions.
+- [Luminance/RMS equalization investigation](exec-plans/planned/luminance-rms-equalization-investigation.md) (algorithm and validation investigation; not implemented)
+- [Lab-independent recording setup](exec-plans/planned/lab-independent-recording-setup.md) (named profiles and display selection; not implemented)
 
 Completed plans are historical implementation notes. Read their directory only when
 the current contracts do not explain why a landed decision exists.
+
+Recent completion: [Reporting upload lifecycle](exec-plans/completed/long-running-results-reporting.md) (automatic local retirement and offline startup retry; visible/live qualification remains documented).
 
 Recent completion: [FPVS Studio 2.2.6 Library reconnection release](exec-plans/completed/release-2.2.6.md).
 

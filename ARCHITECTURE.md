@@ -68,7 +68,11 @@ lazily only inside the engine package.
   origin receipt's exact item/version before enrollment, capture, send and comparison.
   `runtime/data_sharing.py` captures eligible completed sessions after research commits.
   View > Data Sharing & Comparison uses app-owned jobs, with all network activity
-  outside presentation. The OpenFPVS Worker in sibling `../OpenFPVS` owns explicit
+  outside presentation. The same controller runs one sequential startup pass over
+  configured-root/remembered projects, reusing neutral `core/project_service.py`
+  discovery and `data_sharing/service.py` delivery without comparison requests.
+  Receipt-first cleanup archives older acknowledged local evidence after uploads.
+  The OpenFPVS Worker in sibling `../OpenFPVS` owns explicit
   lab/project grants, `/results/v1`, dedicated D1 tables and private browser project
   aggregates. Studio defaults to `https://openfpvs.com`; enrollment requires an
   approved project scope and never enables sharing. `services/results/` is an

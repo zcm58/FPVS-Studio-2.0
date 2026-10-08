@@ -193,13 +193,16 @@ include = [
   "src/fpvs_studio/core/data_sharing.py",
   "src/fpvs_studio/runtime/data_sharing.py",
   "src/fpvs_studio/gui/data_sharing_*.py",
+  "scripts/measure_reporting_storage.py",
   "services/results/**",
   "tests/unit/test_data_sharing_*.py",
   "tests/gui/test_data_sharing_dialog.py",
   "docs/DATA_SHARING.md",
+  "docs/REPORTING_STORAGE.md",
 ]
 manual_smoke = [
   "In an approved visible Windows session inspect both tabs at 820x620 and 880x700; exercise enrollment, opt-in/out, retry and archive with a fake service.",
+  "At Welcome 760x520 and 1120x720 check passive startup status with synthetic pending projects; start presentation while another project is sending and confirm cancellation, then resume after the run.",
   "Run sibling OpenFPVS npm test and npm run check; Python verification does not run backend tests.",
   "After an approved staging deployment, enroll two machines, complete production sessions and check scoped receipts, offline retries, revocation and threshold suppression.",
 ]

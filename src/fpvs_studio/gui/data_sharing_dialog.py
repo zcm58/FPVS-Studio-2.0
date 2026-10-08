@@ -162,7 +162,7 @@ class DataSharingDialog(QDialog):
         )
         self.status_label.setObjectName("sharing_status")
         layout.addWidget(self.status_label)
-        self.counts_label = self._label("Pending: 0 · Held: 0 · Uploaded: 0")
+        self.counts_label = self._label("Pending: 0 · Held: 0 · Retained uploaded: 0")
         self.counts_label.setObjectName("sharing_counts")
         layout.addWidget(self.counts_label)
         layout.addWidget(self.tabs, 1)
@@ -242,7 +242,13 @@ class DataSharingDialog(QDialog):
         self.profile_label.setText(profile)
         self.profile_label.setToolTip(profile)
         self.status_label.setText(status)
-        self.counts_label.setText(f"Pending: {pending:,} · Held: {held:,} · Uploaded: {uploaded:,}")
+        self.counts_label.setText(
+            f"Pending: {pending:,} · Held: {held:,} · Retained uploaded: {uploaded:,}"
+        )
+        self.counts_label.setToolTip(
+            "Uploaded counts the retained local comparison cache. Older accepted reports "
+            "are archived locally; their cloud contributions remain."
+        )
         self._update_controls()
 
     def set_comparison(self, rows: Sequence[ComparisonRow], *, scope: str, notice: str) -> None:
