@@ -60,7 +60,7 @@ Write release notes as bullet points, with one or two sentences per major change
 Keep verification summaries and installer instructions out of the release notes;
 retain audit evidence and check boundaries in the release record instead.
 
-The [v2.4.1 release plan](exec-plans/active/release-2.4.1.md) tracks the signed
+The [v2.4.1 release record](exec-plans/completed/release-2.4.1.md) tracks the signed
 experiment transfer security release and its exact artifact/native checks.
 The previous [v2.4.0 release record](exec-plans/completed/release-2.4.0.md) records the
 published installer, direct 2.3.0 patch, exact release note, packaged startup checks
