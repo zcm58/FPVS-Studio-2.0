@@ -5,6 +5,12 @@ Individual conditions, trigger-code remapping during a merge, and condition setu
 belong to Phase 2 of the [execution plan](exec-plans/active/private-experiment-library.md).
 The Library never runs an experiment automatically or updates an existing experiment.
 
+Generic bundle import, review and export reject executable/script, shortcut, web
+active and nested-archive payload extensions beneath `stimuli/` before extraction
+or export. Ordinary text/CSV sidecars and images remain supported. This path guard
+is separate from OpenFPVS publication's stricter validated JSON/PNG/JPEG content
+policy and does not establish the safety of arbitrarily renamed file bytes.
+
 ## Desktop workflow
 
 ### Request condition publication

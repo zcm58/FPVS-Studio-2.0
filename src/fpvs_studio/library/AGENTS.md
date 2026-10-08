@@ -25,6 +25,9 @@ validation and extraction; this package only transfers and verifies bytes.
   payload and one bounded partial are retained; rehash cached bytes before reuse.
 - Imported projects are independent copies and work offline. Network access never
   replaces an existing project or edits settings.
+- `provenance.py` verifies signed bundle evidence with the locally pinned managed
+  service key before cache creation/reuse. Response keys cannot establish trust;
+  see `docs/LIBRARY_ARTIFACT_PROVENANCE.md` for the bounded proof contract.
 - `submissions.py` transfers an explicitly confirmed clean condition bundle through
   the enrolled-device review API. Bind retries to its UUID/digest; preparation uses
   core's clean exporter through the existing prepared-file owner. No GitHub write

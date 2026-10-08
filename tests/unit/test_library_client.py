@@ -14,9 +14,16 @@ from urllib.error import HTTPError, URLError
 
 import pytest
 from pydantic import ValidationError
+from tests.unit.library_provenance_fixtures import (
+    KEY_ID,
+    PUBLIC_KEY,
+    proof_headers,
+    sign_proof,
+)
 
 from fpvs_studio.library import cache as cache_module
 from fpvs_studio.library import client as client_module
+from fpvs_studio.library import provenance
 from fpvs_studio.library.cache import DownloadCache
 from fpvs_studio.library.client import LibraryClient
 from fpvs_studio.library.errors import LibraryAuthorizationError, LibraryCancelled, LibraryError
@@ -112,6 +119,7 @@ def environment(tmp_path, monkeypatch):
     # Network cases exercise file I/O/locking with synthetic workspace bytes. Native
     # cache ACL acceptance is separate, since the local sandbox denies WRITE_DAC.
     monkeypatch.setattr(cache_module, "_private_directory", lambda path: None)
+    monkeypatch.setattr(provenance, "PINNED_KEYS", {ORIGIN: (KEY_ID, PUBLIC_KEY)})
     store = MemoryStore()
     requests = []
     replies = []
@@ -134,10 +142,16 @@ def environment(tmp_path, monkeypatch):
     client.release_download()
 
 
-def payload_reply(payload=PAYLOAD, **kwargs):
+def payload_reply(payload=PAYLOAD, *, proof_item=None, **kwargs):
+    headers = {**proof_headers(proof_item or item()), **kwargs.pop("headers", {})}
     return lambda request: Response(
-        payload, request.full_url, content_type="application/octet-stream", **kwargs
+        payload, request.full_url, content_type="application/octet-stream",
+        headers=headers, **kwargs,
     )
+
+
+def provenance_reply(value=None):
+    return dict(schema_version="1.0", key_id=KEY_ID, proof=sign_proof(value or item()))
 
 
 @pytest.fixture
@@ -555,8 +569,10 @@ def test_cached_payload_rehashed_and_still_requires_authorization(environment):
     path = client.download(item())
     client.release_download()
     replies.append(catalog(item()))
+    replies.append(provenance_reply())
     assert client.download(item()) == path
-    assert requests[-1].full_url.endswith("catalog?kind=experiment")
+    assert requests[-1].full_url.endswith("/provenance")
+    assert requests[-1].get_header("Authorization") == "Bearer " + client.store.value.token
     client.release_download()
     path.write_bytes(b"x" * len(PAYLOAD))
     replies.append(payload_reply())
@@ -605,7 +621,7 @@ def test_new_payload_replaces_only_recognized_cache_files(environment):
     new_item = item(
         item_id="other", size_bytes=len(new_bytes), sha256=hashlib.sha256(new_bytes).hexdigest()
     )
-    replies.append(payload_reply(new_bytes))
+    replies.append(payload_reply(new_bytes, proof_item=new_item))
     second = client.download(new_item)
     assert second.read_bytes() == new_bytes
     assert not first.exists()
@@ -885,6 +901,7 @@ def test_download_cache_without_windows_long_path_policy(environment, tmp_path, 
     assert downloaded.read_bytes() == PAYLOAD
     client.release_download()
     replies.append(catalog(item()))
+    replies.append(provenance_reply())
     assert client.download(item()) == downloaded
 
 
@@ -895,3 +912,43 @@ def test_truncated_download_reports_received_bytes(environment):
     with pytest.raises(LibraryError, match=message):
         client.download(item())
     assert list(client._cache.root.glob("*.part")) == []
+
+
+@pytest.mark.parametrize("headers", [
+    {"X-FPVS-Artifact-Proof": ""}, {"X-FPVS-Artifact-Key-Id": "attacker-key"},
+    {"X-FPVS-Artifact-Proof": "a" * 8193},
+])
+def test_untrusted_download_evidence_never_creates_a_cache_payload(environment, headers):
+    client, _, _, replies = environment
+    replies.append(payload_reply(headers=headers))
+    with pytest.raises(LibraryError, match="untrusted_provenance"):
+        client.download(item())
+    assert list(client._cache.root.glob("*.part")) == []
+    assert list(client._cache.root.glob("*.fpvsbundle")) == []
+    assert not client._download_held
+
+
+def test_cached_payload_requires_live_exact_signed_proof(environment):
+    client, _, requests, replies = environment
+    replies.append(payload_reply())
+    retained = client.download(item())
+    client.release_download()
+    evidence = provenance_reply()
+    evidence["proof"]["sha256"] = "f" * 64
+    replies.extend([catalog(item()), evidence])
+    with pytest.raises(LibraryError, match="untrusted_provenance"):
+        client.download(item())
+    assert not client._download_held
+    assert retained.read_bytes() == PAYLOAD
+    replies.extend([catalog(item()), provenance_reply()])
+    assert client.download(item()) == retained
+    assert requests[-1].full_url.endswith("/provenance")
+
+
+def test_unconfigured_custom_service_fails_before_download_or_cache(environment, monkeypatch):
+    client, _, requests, _ = environment
+    monkeypatch.setattr(provenance, "PINNED_KEYS", {})
+    with pytest.raises(LibraryError, match="untrusted_provenance.*No trusted"):
+        client.download(item())
+    assert requests == []
+    assert not client._cache.root.exists()

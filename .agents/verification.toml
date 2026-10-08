@@ -126,6 +126,7 @@ tests = [
   "tests/unit/test_library_origin.py",
   "tests/unit/test_library_project_updates.py",
   "tests/unit/test_library_client.py",
+  "tests/unit/test_library_provenance.py",
   "tests/unit/test_library_cache.py",
   "tests/unit/test_library_credentials.py",
   "tests/unit/test_library_publish.py",

@@ -16,6 +16,8 @@ its saved preference requires a restart. Keep it outside project/execution contr
   Cancel between requests/upload reads; shutdown waits for bounded active requests.
 - Preparation never changes the project. Retain exact prepared bytes on remote
   failure/cancellation; retry reconciles an uncertain publication.
+- Releases begin as drafts with all digests checked before publication. Existing
+  published/immutable releases are read-only; see `docs/LIBRARY_ARTIFACT_PROVENANCE.md`.
 - Delete only generated directories registered to this service instance, rejecting
   links/reparse points and changed ownership. Never clean the source or private repo.
 

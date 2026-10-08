@@ -532,6 +532,8 @@ def publish(
     release_id = release.get("id")
     if not positive_integer(release_id, 2**53 - 1) or type(release.get("draft")) is not bool:
         raise PublishError("GitHub returned an invalid release identity.")
+    if release.get("immutable") is True and release["draft"]:
+        raise PublishError("An immutable release cannot be modified as an unpublished draft.")
     assets = api.list_all(f"{REPO_PATH}/releases/{release_id}/assets")
     names = [asset.get("name") for asset in assets]
     expected = {bundle.path.name for bundle in bundles}
@@ -599,7 +601,11 @@ def publish(
             f"{REPO_PATH}/releases/{release_id}",
             payload={"draft": False, "make_latest": "false"},
         )
-        if completed.get("draft") is not False or completed.get("id") != release_id:
+        if (
+            completed.get("draft") is not False
+            or completed.get("id") != release_id
+            or completed.get("tag_name") != tag
+        ):
             raise PublishError("Release publication was not confirmed; no catalog was written.")
     return catalog
 

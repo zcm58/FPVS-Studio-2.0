@@ -5,18 +5,59 @@ from __future__ import annotations
 import hashlib
 import json
 from datetime import datetime, timezone
+from email.message import Message
+from io import BytesIO
 from threading import Event
+from urllib.error import HTTPError
 from uuid import uuid4
 
 import pytest
 
 from fpvs_studio.core.data_sharing import FixationOccurrence, SessionReport, SharingProfile
-from fpvs_studio.data_sharing.client import DataSharingClient, _NoRedirect
+from fpvs_studio.data_sharing.client import (
+    DataSharingClient,
+    _NoRedirect,
+    _status_error,
+    http_transport,
+)
 from fpvs_studio.data_sharing.errors import DataSharingCancelled, DataSharingError
 from fpvs_studio.library.models import DeviceCredential, LibraryConnection
 
 ORIGIN = "https://results.example.invalid"
 HASH = "a" * 64
+
+
+def test_pending_results_approval_has_an_actionable_message():
+    error = _status_error(403, {
+        "schema_version": "1.0", "error": "results_approval_required",
+        "message": "Private server text",
+    })
+    assert error.code == "authorization"
+    assert "administrator" in str(error).lower()
+    assert "same" in str(error).lower()
+    assert "Private server text" not in str(error)
+    assert not error.retryable
+
+
+@pytest.mark.parametrize("payload, expected", [
+    (b'{"schema_version":"1.0","error":"results_approval_required","message":"private"}',
+     "administrator"),
+    (b"x" * 2049, "exceeds its limit"),
+    (b"invalid json", "invalid error data"),
+])
+def test_pending_results_http_error_is_bounded_and_safe(monkeypatch, payload, expected):
+    import fpvs_studio.data_sharing.client as module
+
+    headers = Message()
+    headers["Content-Type"] = "application/json"
+    stream = BytesIO(payload)
+    class Opener:
+        def open(self, *args, **kwargs):
+            raise HTTPError(ORIGIN, 403, "Forbidden", headers, stream)
+    monkeypatch.setattr(module, "build_opener", lambda *args: Opener())
+    with pytest.raises(DataSharingError, match=expected):
+        http_transport("POST", ORIGIN + "/results/v1/enroll", b"{}", {}, Event())
+    assert stream.closed
 
 
 def profile():

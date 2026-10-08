@@ -85,6 +85,18 @@ MAX_BUNDLE_FILE_BYTES = 4 * 1024 * 1024 * 1024
 MAX_BUNDLE_TOTAL_UNCOMPRESSED_BYTES = 20 * 1024 * 1024 * 1024
 MAX_BUNDLE_COMPRESSION_RATIO = 200.0
 MIN_BUNDLE_COMPRESSION_CHECK_BYTES = 1024 * 1024
+_ACTIVE_OR_ARCHIVE_SUFFIXES = frozenset({
+    ".exe", ".dll", ".com", ".scr", ".cpl", ".sys", ".msi", ".msp", ".mst",
+    ".msix", ".msixbundle", ".appx", ".appxbundle", ".bat", ".cmd", ".ps1",
+    ".psm1", ".psd1", ".vbs", ".vbe", ".js", ".jse", ".wsf", ".wsh", ".hta",
+    ".html", ".htm", ".xhtml", ".svg", ".svgz", ".mhtml", ".mht", ".lnk",
+    ".url", ".website", ".scf", ".reg", ".inf", ".jar", ".class", ".py",
+    ".pyw", ".pyc", ".pyo", ".sh", ".bash", ".zsh", ".fish", ".pl", ".rb",
+    ".php", ".asp", ".aspx", ".jsp", ".wasm", ".zip", ".7z", ".rar", ".tar",
+    ".gz", ".gzip", ".bz2", ".xz", ".tgz", ".tbz", ".tbz2", ".zst", ".lz",
+    ".lzma", ".iso", ".img", ".vhd", ".vhdx", ".cab", ".fpvsbundle",
+    ".ace", ".arj", ".rpm", ".deb", ".dmg", ".pkg", ".app", ".apk",
+})
 
 BundleExportStage = Literal["validate", "stimuli", "write", "complete"]
 BundleExportProgressCallback = Callable[[BundleExportStage], None]
@@ -333,7 +345,7 @@ def read_project_bundle_manifest(bundle_path: Path) -> ProjectBundleManifest:
 
     try:
         with open_project_bundle_archive(bundle_path) as archive:
-            _validate_archive_member_count(archive)
+            _validated_archive_file_paths(archive)
             bundle_manifest = _read_bundle_manifest_from_archive(archive)
             _validate_bundle_resource_limits(archive, bundle_manifest)
             return bundle_manifest
@@ -701,6 +713,8 @@ def _validate_archive_member_name(name: str) -> str:
     validate_project_relative_path(normalized)
     if normalized != PROJECT_FILENAME and not normalized.startswith("stimuli/"):
         raise ProjectBundleError(f"Project bundle contains unsupported member: {name}")
+    if PurePosixPath(path.name.rstrip(". ")).suffix.lower() in _ACTIVE_OR_ARCHIVE_SUFFIXES:
+        raise ProjectBundleError(f"Project bundle contains active or archive payload: {name}")
     return normalized
 
 
@@ -870,7 +884,8 @@ def _collect_bundle_file_paths(project_root: Path) -> list[str]:
     paths = [to_project_relative_posix(project_root, project_file)]
     for path in sorted(stimuli_root.rglob("*"), key=lambda item: item.as_posix().lower()):
         if path.is_file():
-            paths.append(to_project_relative_posix(project_root, path))
+            relative_path = to_project_relative_posix(project_root, path)
+            paths.append(_validate_archive_member_name(relative_path))
     return sorted(set(paths), key=str.lower)
 
 

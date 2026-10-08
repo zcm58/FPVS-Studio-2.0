@@ -18,6 +18,8 @@ For a Library-linked experiment, use its installed item ID and version.
 
 Open **View > Data Sharing & Comparison** in the active experiment. Enter the
 existing lab code and the website's **OpenFPVS project ID**, choose **Connect**,
+then ask the administrator to approve a new results enrollment on its project page.
+Reconnect with the same code/project after approval;
 review the registered study, version and field list, then enable **Automatically
 share completed sessions for this experiment**. Connecting alone does not enable
 sharing or upload history. **View OpenFPVS project** opens the private dashboard.

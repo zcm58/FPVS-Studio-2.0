@@ -657,6 +657,58 @@ def test_bundle_import_cancels_during_payload_extraction(
     assert list((app_data_dir(receiver) / IMPORT_STAGING_DIRNAME).iterdir()) == []
 
 
+@pytest.mark.parametrize("filename", [
+    "run.EXE", "run.cmd", "script.py", "script.ps1", "shortcut.lnk",
+    "website.html", "picture.svg", "nested.zip", "nested.fpvsbundle", "installer.msi",
+])
+def test_bundle_rejects_active_stimulus_payload_before_export_or_extraction(
+    tmp_path, sample_project, sample_project_root, monkeypatch, filename,
+):
+    _save_bundle_ready_project(sample_project_root, sample_project)
+    safe_bundle = tmp_path / "safe.fpvsbundle"
+    manifest = export_project_bundle(sample_project_root, safe_bundle)
+    sidecar = sample_project_root / "stimuli" / filename
+    sidecar.write_bytes(b"inert synthetic payload")
+    exported = tmp_path / "existing.fpvsbundle"
+    exported.write_bytes(b"preserve previous export")
+    with pytest.raises(ProjectBundleError, match="active or archive payload"):
+        export_project_bundle(sample_project_root, exported)
+    assert exported.read_bytes() == b"preserve previous export"
+    malicious = tmp_path / "malicious.fpvsbundle"
+    record = project_bundle_module.ProjectBundleFileRecord(
+        path=f"stimuli/{filename}", size_bytes=sidecar.stat().st_size,
+        sha256=hashlib.sha256(sidecar.read_bytes()).hexdigest(),
+    )
+    changed = manifest.model_copy(update={"files": [*manifest.files, record]})
+    with zipfile.ZipFile(safe_bundle) as source, zipfile.ZipFile(malicious, "w") as target:
+        for info in source.infolist():
+            if info.filename != BUNDLE_MANIFEST_FILENAME:
+                target.writestr(info, source.read(info.filename))
+        target.writestr(record.path, sidecar.read_bytes())
+        target.writestr(BUNDLE_MANIFEST_FILENAME, changed.model_dump_json())
+    def fail_extraction(*args, **kwargs):
+        pytest.fail("Unsafe payload admission must fail before extraction")
+    monkeypatch.setattr(project_bundle_module, "_extract_verified_record", fail_extraction)
+    with pytest.raises(ProjectBundleError, match="active or archive payload"):
+        read_project_bundle_manifest(malicious)
+    with pytest.raises(ProjectBundleError, match="active or archive payload"):
+        import_project_bundle(malicious, tmp_path / "receiver")
+
+
+def test_generic_bundle_preserves_benign_text_csv_and_images(
+    tmp_path, sample_project, sample_project_root,
+):
+    _save_bundle_ready_project(sample_project_root, sample_project)
+    for filename, payload in [("notes.txt", b"plain notes"), ("labels.csv", b"label\nface\n")]:
+        (sample_project_root / "stimuli" / filename).write_bytes(payload)
+    bundle = tmp_path / "benign.fpvsbundle"
+    manifest = export_project_bundle(sample_project_root, bundle)
+    assert any(record.path.endswith(".png") for record in manifest.files)
+    installed = import_project_bundle(bundle, tmp_path / "receiver")
+    assert (installed.project_root / "stimuli" / "notes.txt").read_bytes() == b"plain notes"
+    assert (installed.project_root / "stimuli" / "labels.csv").read_bytes() == b"label\nface\n"
+
+
 def test_cancelled_bundle_export_preserves_previous_destination(
     tmp_path, sample_project, sample_project_root,
 ) -> None:

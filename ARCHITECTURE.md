@@ -16,6 +16,8 @@ lazily only inside the engine package.
 - `src/fpvs_studio/app/`: thin application entry points and startup wiring.
 - `src/fpvs_studio/library/`: GUI-neutral experiment catalog, device enrollment,
   native protected credential storage, and bounded verified bundle downloads.
+  `provenance.py` checks locally pinned Ed25519 evidence before cache creation/reuse;
+  the bounded wire contract lives in `docs/LIBRARY_ARTIFACT_PROVENANCE.md`.
   The Library dialog uses app-owned jobs and the existing reviewed project importer;
   `core/library_publish.py` prepares clean publishable whole-project copies with
   the current fixed COM3 serial-port policy.

@@ -71,7 +71,16 @@ class _NoRedirect(HTTPRedirectHandler):
         return None
 
 
-def _status_error(status: int) -> DataSharingError:
+def _status_error(status: int, body: object = None) -> DataSharingError:
+    if (status == 403 and isinstance(body, dict)
+            and set(body) == {"schema_version", "error", "message"}
+            and body["schema_version"] == "1.0" and body["error"] == "results_approval_required"
+            and isinstance(body["message"], str)):
+        return DataSharingError(
+            "The OpenFPVS administrator must approve this results enrollment. "
+            "After approval, reconnect with the same lab code and project ID.",
+            code="authorization",
+        )
     if status in (401, 403):
         return DataSharingError(
             "Results access was rejected. Reconnect with a valid lab invitation code.",
@@ -139,8 +148,35 @@ def http_transport(
                 chunks.append(chunk)
             return b"".join(chunks)
     except HTTPError as error:
-        error.close()
-        raise _status_error(error.code) from None
+        error_body: object = None
+        try:
+            if (error.code == 403 and error.headers.get_content_type() == "application/json"
+                    and error.headers.get("Content-Encoding", "identity") == "identity"):
+                check_cancel(cancel)
+                payload = error.read(2049)
+                check_cancel(cancel)
+                if time.monotonic() - started > REQUEST_DEADLINE_SECONDS:
+                    raise DataSharingError(
+                        "Results request timed out.", code="timeout", retryable=True
+                    )
+                if len(payload) > 2048:
+                    raise DataSharingError(
+                        "Results error response exceeds its limit.", code="protocol"
+                    )
+                try:
+                    error_body = json.loads(payload)
+                except (ValueError, UnicodeDecodeError):
+                    raise DataSharingError(
+                        "The results service returned invalid error data.", code="protocol"
+                    ) from None
+        except (OSError, HTTPException):
+            raise DataSharingError(
+                "Unable to read the service response. Local reports remain queued for retry.",
+                code="network", retryable=True,
+            ) from None
+        finally:
+            error.close()
+        raise _status_error(error.code, error_body) from None
     except (URLError, OSError, HTTPException):
         raise DataSharingError(
             "Unable to reach the results service. Local reports are retained for retry.",

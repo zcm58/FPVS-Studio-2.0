@@ -35,6 +35,11 @@ from fpvs_studio.library.models import (
     LibraryConnection,
     LibraryItem,
 )
+from fpvs_studio.library.provenance import (
+    require_pinned_origin,
+    verify_proof,
+    verify_proof_header,
+)
 
 DEFAULT_LIBRARY_SERVICE_URL = MANAGED_LIBRARY_SERVICE_URL
 NETWORK_TIMEOUT_SECONDS = 10
@@ -356,6 +361,7 @@ class LibraryClient:
             ) from None
         if not item.compatible:
             raise LibraryError(item.compatibility_message)
+        require_pinned_origin(self.service_url)
         self._cache.acquire()
         try:
             credential = self._credential()
@@ -371,6 +377,15 @@ class LibraryClient:
                     raise LibraryError(
                         "This Library item changed or was withdrawn. Refresh the catalog."
                     )
+                evidence = self._json_request(
+                    "GET", f"/v2/items/{item.item_id}/versions/{item.version}/provenance",
+                    token=credential.token, cancel_event=cancel_event, limit=8192,
+                )
+                if not isinstance(evidence, dict) or set(evidence) != {
+                    "schema_version", "key_id", "proof",
+                } or evidence["schema_version"] != "1.0":
+                    raise LibraryError("untrusted_provenance: Invalid bundle safety response.")
+                verify_proof(evidence["proof"], evidence["key_id"], item, self.service_url)
                 self._cache.clear(keep=retained.name)
                 if progress_callback is not None:
                     progress_callback(item.size_bytes, item.size_bytes)
@@ -391,6 +406,10 @@ class LibraryClient:
                     "application/zip",
                 ):
                     raise LibraryError("The Library service returned an unexpected download type.")
+                verify_proof_header(
+                    response.headers.get("X-FPVS-Artifact-Proof"),
+                    response.headers.get("X-FPVS-Artifact-Key-Id"), item, self.service_url,
+                )
                 with self._cache.create_partial() as target:
                     for chunk in self._chunks(response, item.size_bytes, deadline, cancel_event):
                         target.write(chunk)

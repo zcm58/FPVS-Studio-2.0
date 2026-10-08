@@ -428,6 +428,11 @@ fetches the bounded JSON through the same trusted GitHub/CDN boundary and verifi
 GitHub digest before using it. Invalid or tampered metadata is an error, not an implicit
 permission to run a different file.
 
+Enable GitHub immutable releases before future publication and attach all assets
+before publishing the draft. Verify the resulting release attestation and downloaded
+assets; see [artifact provenance](LIBRARY_ARTIFACT_PROVENANCE.md#release-publication).
+The local build scripts do not upload or publish releases.
+
 The independent helper reads the exact per-user Windows installation registration rather
 than treating its own package version as Studio's installed version. For discovery it
 authenticates the release JSON and installed ownership-inventory bytes, then offers a
