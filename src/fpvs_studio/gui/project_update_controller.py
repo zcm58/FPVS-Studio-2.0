@@ -390,5 +390,8 @@ class ProjectUpdateController(QObject):
                 )
             if result.status == "update_available":
                 installed = origin.installed_version if origin else "?"
-                return f"Project update available: {installed} → {item.version}."
+                return (
+                    f"Project update available: {installed} → {item.version}. "
+                    f"Keep using version {installed}, or review the new version separately."
+                )
         return f"Project version {origin.installed_version if origin else ''} is up to date."

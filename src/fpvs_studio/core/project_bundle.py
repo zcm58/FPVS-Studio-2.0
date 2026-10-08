@@ -7,17 +7,20 @@ source of truth plus stimulus assets. The bundle manifest validates archive inte
 
 from __future__ import annotations
 
+import errno
 import hashlib
 import io
 import re
 import shutil
+import struct
 import uuid
 import zipfile
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 from threading import Event
-from typing import Literal
+from typing import Any, BinaryIO, Literal, cast
 
 from pydantic import Field, ValidationError, field_validator
 
@@ -30,6 +33,7 @@ from fpvs_studio.core.library_origin import (
     origin_for_import,
     save_library_origin,
 )
+from fpvs_studio.core.masking import condition_masking
 from fpvs_studio.core.models import FPVSBaseModel, ProjectFile, validate_project_relative_path
 from fpvs_studio.core.paths import (
     MANIFEST_FILENAME,
@@ -73,10 +77,26 @@ _DEFAULT_VALIDATION_REFRESH_HZ = 60.0
 MAX_BUNDLE_PAYLOAD_FILES = 50_000
 MAX_BUNDLE_ARCHIVE_MEMBERS = MAX_BUNDLE_PAYLOAD_FILES + 256
 MAX_BUNDLE_MANIFEST_BYTES = 16 * 1024 * 1024
+MAX_BUNDLE_JSON_BYTES = 16 * 1024 * 1024
+MAX_BUNDLE_DIRECTORY_BYTES = 64 * 1024 * 1024
+MAX_BUNDLE_COMPILATION_RUNS = 1000
+MAX_BUNDLE_COMPILATION_EVENTS = 100_000
 MAX_BUNDLE_FILE_BYTES = 4 * 1024 * 1024 * 1024
 MAX_BUNDLE_TOTAL_UNCOMPRESSED_BYTES = 20 * 1024 * 1024 * 1024
 MAX_BUNDLE_COMPRESSION_RATIO = 200.0
 MIN_BUNDLE_COMPRESSION_CHECK_BYTES = 1024 * 1024
+_ACTIVE_OR_ARCHIVE_SUFFIXES = frozenset({
+    ".exe", ".dll", ".com", ".scr", ".cpl", ".sys", ".msi", ".msp", ".mst",
+    ".msix", ".msixbundle", ".appx", ".appxbundle", ".bat", ".cmd", ".ps1",
+    ".psm1", ".psd1", ".vbs", ".vbe", ".js", ".jse", ".wsf", ".wsh", ".hta",
+    ".html", ".htm", ".xhtml", ".svg", ".svgz", ".mhtml", ".mht", ".lnk",
+    ".url", ".website", ".scf", ".reg", ".inf", ".jar", ".class", ".py",
+    ".pyw", ".pyc", ".pyo", ".sh", ".bash", ".zsh", ".fish", ".pl", ".rb",
+    ".php", ".asp", ".aspx", ".jsp", ".wasm", ".zip", ".7z", ".rar", ".tar",
+    ".gz", ".gzip", ".bz2", ".xz", ".tgz", ".tbz", ".tbz2", ".zst", ".lz",
+    ".lzma", ".iso", ".img", ".vhd", ".vhdx", ".cab", ".fpvsbundle",
+    ".ace", ".arj", ".rpm", ".deb", ".dmg", ".pkg", ".app", ".apk",
+})
 
 BundleExportStage = Literal["validate", "stimuli", "write", "complete"]
 BundleExportProgressCallback = Callable[[BundleExportStage], None]
@@ -269,18 +289,71 @@ def _bundle_contract_payloads(
     }
 
 
+@contextmanager
+def open_project_bundle_archive(bundle_path: Path) -> Iterator[zipfile.ZipFile]:
+    """Bound archive directory allocation before the standard ZIP parser runs."""
+
+    with filesystem_path(Path(bundle_path)).open("rb") as stream:
+        _validate_archive_directory(stream)
+        stream.seek(0)
+        with zipfile.ZipFile(stream, mode="r") as archive:
+            yield archive
+
+
+def _validate_archive_directory(stream: BinaryIO) -> None:
+    # CPython's bounded end-record reader handles ordinary ZIP and ZIP64 tails.
+    # Match its directory offset calculation; never read the whole directory here.
+    zip_format = cast(Any, zipfile)  # Private ZIP constants are absent from typeshed.
+    end_record = zip_format._EndRecData(stream)
+    if end_record is None:
+        raise zipfile.BadZipFile("Missing ZIP end record.")
+    directory_size = end_record[zip_format._ECD_SIZE]
+    if directory_size > MAX_BUNDLE_DIRECTORY_BYTES:
+        raise ProjectBundleError("Project bundle archive directory exceeds its byte limit.")
+    directory_start = end_record[zip_format._ECD_LOCATION] - directory_size
+    if end_record[zip_format._ECD_SIGNATURE] == zip_format.stringEndArchive64:
+        directory_start -= (
+            zip_format.sizeEndCentDir64 + zip_format.sizeEndCentDir64Locator
+        )
+    if directory_start < 0:
+        raise zipfile.BadZipFile("Invalid ZIP directory offset.")
+    stream.seek(directory_start)
+    remaining = directory_size
+    member_count = 0
+    while remaining:
+        header = stream.read(46)
+        if len(header) != 46 or header[:4] != b"PK\x01\x02":
+            raise zipfile.BadZipFile("Invalid ZIP directory record.")
+        compression = struct.unpack_from("<H", header, 10)[0]
+        if compression not in {zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED}:
+            raise ProjectBundleError("Project bundle uses unsupported ZIP compression.")
+        name_size, extra_size, comment_size = struct.unpack_from("<3H", header, 28)
+        record_size = 46 + name_size + extra_size + comment_size
+        if record_size > remaining:
+            raise zipfile.BadZipFile("Truncated ZIP directory record.")
+        member_count += 1
+        if member_count > MAX_BUNDLE_ARCHIVE_MEMBERS:
+            raise ProjectBundleError("Project bundle contains too many archive members.")
+        stream.seek(record_size - 46, io.SEEK_CUR)
+        remaining -= record_size
+    if member_count != end_record[zip_format._ECD_ENTRIES_TOTAL]:
+        raise zipfile.BadZipFile("ZIP directory member count does not match its end record.")
+
+
 def read_project_bundle_manifest(bundle_path: Path) -> ProjectBundleManifest:
     """Read and validate `fpvs_bundle.json` from a `.fpvsbundle` archive."""
 
     try:
-        with zipfile.ZipFile(bundle_path, mode="r") as archive:
-            _validate_archive_member_count(archive)
+        with open_project_bundle_archive(bundle_path) as archive:
+            _validated_archive_file_paths(archive)
             bundle_manifest = _read_bundle_manifest_from_archive(archive)
             _validate_bundle_resource_limits(archive, bundle_manifest)
             return bundle_manifest
     except ProjectBundleError:
         raise
-    except (OSError, zipfile.BadZipFile, RuntimeError, NotImplementedError) as exc:
+    except OSError as exc:
+        raise _bundle_io_error(exc, bundle_path) from exc
+    except (zipfile.BadZipFile, RuntimeError, NotImplementedError) as exc:
         raise ProjectBundleError(f"Unable to read project bundle: {bundle_path}") from exc
 
 
@@ -304,7 +377,7 @@ def import_project_bundle(
         _check_cancelled(cancel_event)
         if library_origin is not None and library_origin.bundle_sha256 is not None:
             digest = hashlib.sha256()
-            with bundle_path.open("rb") as archive_bytes:
+            with filesystem_path(bundle_path).open("rb") as archive_bytes:
                 for chunk in iter(lambda: archive_bytes.read(65536), b""):
                     _check_cancelled(cancel_event)
                     digest.update(chunk)
@@ -361,9 +434,9 @@ def import_project_bundle(
             save_library_origin(
                 staged_project_root, origin_for_import(library_origin, project.meta.project_id),
             )
-        if target_dir.exists():
+        if filesystem_path(target_dir).exists():
             raise ProjectBundleError(f"Imported project target already exists: {target_dir}")
-        target_dir.parent.mkdir(parents=True, exist_ok=True)
+        filesystem_path(target_dir.parent).mkdir(parents=True, exist_ok=True)
         _check_cancelled(cancel_event)
         # This rename is the commit boundary; later cancellation cannot undo a project.
         if library_origin is not None and library_origin.installed_version is not None:
@@ -383,11 +456,27 @@ def import_project_bundle(
         return ProjectScaffold(project_root=target_dir, project=project)
     except ProjectBundleError:
         raise
+    except OSError as exc:
+        raise _bundle_io_error(exc, bundle_path) from exc
     except Exception as exc:
         raise ProjectBundleError(f"Unable to import project bundle: {bundle_path}") from exc
     finally:
         if filesystem_path(stage_dir).exists():
             shutil.rmtree(filesystem_path(stage_dir), ignore_errors=True)
+
+
+def _bundle_io_error(error: OSError, bundle_path: Path) -> ProjectBundleError:
+    if error.errno == errno.ENOSPC or getattr(error, "winerror", None) == 112:
+        return ProjectBundleError(
+            "Not enough free disk space for this bundle. Free space on the Studio Root "
+            "Folder drive and try again."
+        )
+    if error.errno in {errno.EACCES, errno.EPERM} or getattr(error, "winerror", None) == 5:
+        return ProjectBundleError(
+            "Bundle access was denied. Check that the bundle is readable and the Studio "
+            "Root Folder is writable, then try again."
+        )
+    return ProjectBundleError(f"Unable to access project bundle or destination: {bundle_path}")
 
 
 def _notify_import_progress(
@@ -425,7 +514,7 @@ def _extract_bundle_to_staging(
     cancel_event: Event | None = None,
 ) -> ProjectBundleManifest:
     try:
-        with zipfile.ZipFile(bundle_path, mode="r") as archive:
+        with open_project_bundle_archive(bundle_path) as archive:
             archive_paths = _validated_archive_file_paths(archive)
             bundle_manifest = _read_bundle_manifest_from_archive(archive)
             expected_paths = {
@@ -453,7 +542,9 @@ def _extract_bundle_to_staging(
             return bundle_manifest
     except ProjectBundleError:
         raise
-    except (OSError, zipfile.BadZipFile) as exc:
+    except OSError as exc:
+        raise _bundle_io_error(exc, bundle_path) from exc
+    except zipfile.BadZipFile as exc:
         raise ProjectBundleError(f"Unable to read project bundle: {bundle_path}") from exc
 
 
@@ -541,6 +632,18 @@ def _validate_bundle_manifest_resource_limits(
     record_paths = [record.path for record in records]
     if len(record_paths) != len(set(record_paths)):
         raise ProjectBundleError("Project bundle manifest contains duplicate payload paths.")
+    windows_paths: dict[str, str] = {}
+    for path in record_paths:
+        prefix = PurePosixPath()
+        for part in PurePosixPath(path).parts:
+            prefix /= part
+            spelling = prefix.as_posix()
+            previous = windows_paths.setdefault(spelling.lower(), spelling)
+            if previous != spelling:
+                raise ProjectBundleError(
+                    "Project bundle paths differ only by case and conflict on Windows: "
+                    f"{previous}, {spelling}. Rename these files or folders before exporting."
+                )
     if BUNDLE_MANIFEST_FILENAME in record_paths:
         raise ProjectBundleError(
             "Project bundle manifest may not list fpvs_bundle.json as a payload file."
@@ -553,6 +656,11 @@ def _validate_bundle_manifest_resource_limits(
 
 
 def _validate_payload_size(path: str, size: int, total_size: int) -> None:
+    if path in {PROJECT_FILENAME, f"{STIMULI_DIRNAME}/{MANIFEST_FILENAME}"}:
+        if size > MAX_BUNDLE_JSON_BYTES:
+            raise ProjectBundleError(
+                f"Project bundle metadata exceeds the {MAX_BUNDLE_JSON_BYTES:,}-byte limit: {path}"
+            )
     if size > MAX_BUNDLE_FILE_BYTES:
         raise ProjectBundleError(
             "Project bundle file exceeds the "
@@ -605,6 +713,8 @@ def _validate_archive_member_name(name: str) -> str:
     validate_project_relative_path(normalized)
     if normalized != PROJECT_FILENAME and not normalized.startswith("stimuli/"):
         raise ProjectBundleError(f"Project bundle contains unsupported member: {name}")
+    if PurePosixPath(path.name.rstrip(". ")).suffix.lower() in _ACTIVE_OR_ARCHIVE_SUFFIXES:
+        raise ProjectBundleError(f"Project bundle contains active or archive payload: {name}")
     return normalized
 
 
@@ -640,6 +750,33 @@ def _staged_destination_path(staged_project_root: Path, relative_path: str) -> P
         raise ProjectBundleError(f"Project bundle path escapes staging: {relative_path}") from exc
 
 
+def _validate_bundle_compilation_budget(project: ProjectFile) -> None:
+    # Reserve one extra occurrence per condition for possible masking catch trials.
+    repetitions = project.settings.session.block_count + 1
+    run_count = len(project.conditions) * repetitions
+    if run_count > MAX_BUNDLE_COMPILATION_RUNS:
+        raise ProjectBundleError("Project bundle compilation workload exceeds the run limit.")
+    event_count = 0
+    for condition in project.conditions:
+        slots = (
+            condition.sequence_count * condition.oddball_cycle_repeats_per_sequence
+            * project.settings.protocol.oddball_every_n
+        )
+        masking = condition_masking(project, condition)
+        # Masking emits overlays, target/mask events and optional markers per slot.
+        weight = len(masking.base_overlays) + 4 if masking is not None else 1
+        event_count += slots * weight * repetitions
+        if event_count > MAX_BUNDLE_COMPILATION_EVENTS:
+            raise ProjectBundleError("Project bundle compilation workload exceeds the event limit.")
+    fixation = project.settings.fixation_task
+    targets = (
+        fixation.target_count_max if fixation.target_count_mode == "randomized"
+        else fixation.changes_per_sequence
+    )
+    if fixation.enabled and targets * run_count > MAX_BUNDLE_COMPILATION_EVENTS:
+        raise ProjectBundleError("Project bundle compilation workload exceeds the fixation limit.")
+
+
 def _validate_bundle_source(
     project_root: Path,
     *,
@@ -649,6 +786,7 @@ def _validate_bundle_source(
     cancel_event: Event | None = None,
 ) -> None:
     _check_cancelled(cancel_event)
+    _validate_bundle_compilation_budget(project)
     try:
         require_valid_experiment_category(project)
     except ValueError as exc:
@@ -664,7 +802,7 @@ def _validate_bundle_source(
         if stimulus_set.source_dir is None:
             continue
         source_dir = _resolve_existing_relative_dir(project_root, stimulus_set.source_dir)
-        if not any(path.is_file() for path in source_dir.iterdir()):
+        if not any(path.is_file() for path in filesystem_path(source_dir).iterdir()):
             raise ProjectBundleError(
                 f"Stimulus set '{stimulus_set.name}' does not contain any files."
             )
@@ -739,14 +877,15 @@ def _resolve_existing_relative_file(project_root: Path, relative_path: str) -> P
 
 def _collect_bundle_file_paths(project_root: Path) -> list[str]:
     project_file = project_json_path(project_root)
-    stimuli_root = stimuli_dir(project_root)
+    stimuli_root = filesystem_path(stimuli_dir(project_root))
     if not stimuli_root.is_dir():
         raise ProjectBundleError("Project bundle export requires a stimuli folder.")
 
     paths = [to_project_relative_posix(project_root, project_file)]
     for path in sorted(stimuli_root.rglob("*"), key=lambda item: item.as_posix().lower()):
         if path.is_file():
-            paths.append(to_project_relative_posix(project_root, path))
+            relative_path = to_project_relative_posix(project_root, path)
+            paths.append(_validate_archive_member_name(relative_path))
     return sorted(set(paths), key=str.lower)
 
 
@@ -828,14 +967,14 @@ def _write_bundle_archive(
 def _unique_import_project_dir(parent_dir: Path, source_project_id: str) -> tuple[Path, str]:
     candidate_id = source_project_id
     candidate_dir = project_dir(parent_dir, candidate_id)
-    if not candidate_dir.exists():
+    if not filesystem_path(candidate_dir).exists():
         return candidate_dir, candidate_id
 
     base_id = f"{source_project_id}-from-bundle"
     candidate_id = base_id
     candidate_dir = project_dir(parent_dir, candidate_id)
     suffix = 2
-    while candidate_dir.exists():
+    while filesystem_path(candidate_dir).exists():
         candidate_id = f"{base_id}-{suffix}"
         candidate_dir = project_dir(parent_dir, candidate_id)
         suffix += 1

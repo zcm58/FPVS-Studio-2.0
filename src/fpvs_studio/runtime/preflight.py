@@ -562,7 +562,7 @@ def _validate_image_assets(
         if not decode:
             continue
         try:
-            with Image.open(absolute_path) as image:
+            with Image.open(absolute_path, formats=("JPEG", "PNG")) as image:
                 image.load()
                 decoded_width_px, decoded_height_px = image.size
         except (OSError, ValueError) as exc:
@@ -640,7 +640,7 @@ def _validate_task_assets(
         if not decode:
             continue
         try:
-            with Image.open(absolute_path) as image:
+            with Image.open(absolute_path, formats=("JPEG", "PNG")) as image:
                 image.load()
         except (OSError, ValueError) as exc:
             unloadable_assets.append(f"{image_path} ({exc})")

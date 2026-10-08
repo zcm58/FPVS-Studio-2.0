@@ -16,6 +16,8 @@ lazily only inside the engine package.
 - `src/fpvs_studio/app/`: thin application entry points and startup wiring.
 - `src/fpvs_studio/library/`: GUI-neutral experiment catalog, device enrollment,
   native protected credential storage, and bounded verified bundle downloads.
+  `provenance.py` checks locally pinned Ed25519 evidence before cache creation/reuse;
+  the bounded wire contract lives in `docs/LIBRARY_ARTIFACT_PROVENANCE.md`.
   The Library dialog uses app-owned jobs and the existing reviewed project importer;
   `core/library_publish.py` prepares clean publishable whole-project copies with
   the current fixed COM3 serial-port policy.
@@ -23,11 +25,30 @@ lazily only inside the engine package.
   uses receipt identity for version checks. `core/library_installations.py` scans
   installed metadata; `library/installations.py` gates payload downloads and explicit
   updates. The bundle importer also blocks repeated recorded releases at commit.
-  On-open checks and explicit separate-project
-  installation use `gui/project_update_controller.py`; see the Library contract.
+  On-open checks and explicit separate-project installation use
+  `gui/project_update_controller.py`. Version review explains collection risks and
+  preserves the choice to keep the current version; see the Library contract.
   Private content and the independent Cloudflare service live in
-  `zcm58/FPVS-Studio-Library`; that service checks live release-asset availability
-  for each browse/download. See `docs/EXPERIMENT_LIBRARY.md`.
+  `zcm58/OpenFPVS-Website`; that service checks live release-asset availability
+  for each browse/download. Native access connects directly to `https://openfpvs.com`;
+  core's exact origin policy preserves receipt identity without transferring credentials.
+  See `docs/EXPERIMENT_LIBRARY.md`.
+  `library/submissions.py` handles enrolled-device condition review uploads/status;
+  `gui/library_submission_controller.py` owns app jobs and explicit distribution
+  confirmation. Clean preparation selects one condition through the existing
+  exporter. The private service owns GitHub draft storage, manual review and an
+  accepted-only catalog overlay; approval never grants future publishing authority.
+  The same private repository owns the website at `https://openfpvs.com`: lab-code
+  discovery, exact-version publications, bundle downloads, recorded download starts
+  and owner content/access management, including verified accounts, lab grants and
+  linked device revocation.
+  Website maintenance lives in the standalone sibling `../OpenFPVS` PyCharm project.
+  Separate browser APIs enrich metadata without changing the strict native catalog;
+  ordinary website bundle imports require explicit linking for project-version checks.
+  Deployment status is tracked in `docs/exec-plans/active/fpvs-account-portal.md`.
+  Reusable PI-distributed lab codes enroll multiple PCs without researcher
+  accounts. `gui/library_access_dialog.py` owns optional startup connection setup;
+  existing OS-protected enrollment skips it, and Continue offline preserves local use.
 - `src/fpvs_studio/developer/`: bundled maintainer tools, enabled by a password-gated
   app preference in Settings > Advanced. `mode.py` snapshots activation at startup;
   enabling/disabling requires restart. `library_publisher.py` owns prepared copies;
@@ -42,6 +63,20 @@ lazily only inside the engine package.
   See `docs/BUG_REPORTING.md` for the wire contract and activation.
   GUI-neutral common-error explanations live here; `gui/error_dialogs.py` adds
   plain-language guidance and an explicit error-report action to Studio popups.
+- `src/fpvs_studio/data_sharing/`: GUI-neutral per-experiment consent, native OS
+  credentials, immutable durable upload outbox and bounded HTTPS delivery.
+  `core/data_sharing.py` owns strict wire contracts and authored protocol identity;
+  `data_sharing/library_scope.py` gates linked projects against the canonical Library
+  origin receipt's exact item/version before enrollment, capture, send and comparison.
+  `runtime/data_sharing.py` captures eligible completed sessions after research commits.
+  View > Data Sharing & Comparison uses app-owned jobs, with all network activity
+  outside presentation. The OpenFPVS Worker in sibling `../OpenFPVS` owns explicit
+  lab/project grants, `/results/v1`, dedicated D1 tables and private browser project
+  aggregates. Studio defaults to `https://openfpvs.com`; enrollment requires an
+  approved project scope and never enables sharing. `services/results/` is an
+  undeployed standalone reference. Canonical desktop privacy, comparison and
+  recovery rules are in `docs/DATA_SHARING.md`; backend ownership is in OpenFPVS's
+  `PROJECT_REPORTING.md`.
 - `src/fpvs_studio/assets/`: packaged release-facing static assets, including the
   licensed Open Sans face used by authored modular tasks.
 - `src/fpvs_studio/gui/`: PySide6 windows, dialogs, controllers, document binding,
@@ -218,6 +253,9 @@ owns endpoint estimates and task-response checkpoints. Details and acceptance ar
 - `core/paths.py` owns Windows filesystem namespace adaptation. Image I/O uses
   extended-length paths while manifests and compiled contracts retain project-relative
   POSIX paths; containment checks and serialization normalize both filesystem forms.
+  Bundle review/import and Library cache I/O reuse this adapter for long Windows paths.
+  Project/manifest reads, GUI root preferences/discovery, and root template storage
+  use the same adapter when opening and configuring imported projects.
 - Runtime owns machine launch options, session transitions, declarative pre/post task
   sequencing and validation, participant flow, fixation scoring, trigger I/O
   coordination, and result assembly. Task clocks and compiled Arial/Open Sans font
@@ -296,14 +334,16 @@ owns endpoint estimates and task-response checkpoints. Details and acceptance ar
 - Run/session/runtime contracts: `docs/RUNSPEC.md`, `docs/SESSION_PLAN.md`, and
   `docs/RUNTIME_EXECUTION.md`
 - Engine boundary: `docs/ENGINE_INTERFACE.md`
+- Opt-in experiment contributions and comparisons: `docs/DATA_SHARING.md`
 - Environment and packaging: `docs/ENVIRONMENT.md` and `docs/PACKAGING.md`
+- Transfer trust boundaries and dependency exceptions: `docs/SECURITY.md`
 - Plans and technical debt: `docs/PLANS.md` and `docs/exec-plans/`
 
 Use `docs/index.md` for the full developer-documentation map.
 
 ## Task Context Recipes
 
-Start with `docs/agent/agent-index.md`. Match one of its 12 verification scopes, read
+Start with `docs/agent/agent-index.md`. Match one of its verification scopes, read
 only that row's initial context and the nearest nested `AGENTS.md`, then search for the
 specific symbol or behavior. Do not open broad source/test trees merely to confirm a
 passing audit.
@@ -323,8 +363,11 @@ current compatible Python interpreter:
 
 - `focused`: scope tests/checks plus changed-file Ruff and compilation.
 - `precommit`: mechanical/docs audits, mypy, changed-file checks, and safe non-Qt pytest.
+  The driver selects unit files outside the Qt registry before invoking pytest.
 - `full`: optional full Ruff, mypy, and pytest with registered Qt tests explicitly
   enabled for an approved visible local environment.
+  Core-scoped `ProjectDocument` QObject tests under `tests/unit/` also require this
+  opt-in; default collection excludes them before importing Qt.
 
 Add `-List` to a scoped command to inspect its steps and use
 `./scripts/verify.ps1 -CheckConfig` after harness edits. GUI-focused local verification

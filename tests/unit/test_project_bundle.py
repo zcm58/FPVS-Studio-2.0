@@ -3,16 +3,19 @@
 from __future__ import annotations
 
 import hashlib
+import os
+import struct
 import zipfile
 from contextlib import contextmanager
 from pathlib import Path
 from threading import Event
 
 import pytest
+from PIL import Image
 
 import fpvs_studio.core.project_bundle as project_bundle_module
 from fpvs_studio.core.models import ProjectFile
-from fpvs_studio.core.paths import app_data_dir
+from fpvs_studio.core.paths import app_data_dir, filesystem_path
 from fpvs_studio.core.project_bundle import (
     BUNDLE_MANIFEST_FILENAME,
     IMPORT_STAGING_DIRNAME,
@@ -48,6 +51,38 @@ def test_project_bundle_filename_uses_compact_project_title() -> None:
     assert project_bundle_filename("   ") == f"fpvsproject{PROJECT_BUNDLE_SUFFIX}"
 
 
+@pytest.mark.skipif(os.name != "nt", reason="Windows extended-path enumeration boundary")
+@pytest.mark.parametrize("directory_length", [238, 247, 264])
+@pytest.mark.parametrize("operation", ["validate", "collect"])
+def test_bundle_enumeration_handles_long_child_paths(
+    tmp_path, sample_project, directory_length, operation,
+):
+    source_suffix = "stimuli/original-images/" + "s" * 16
+    padding = directory_length - len(str(tmp_path)) - len(source_suffix) - 2
+    assert padding > 0, "Use a shorter --basetemp to exercise this Windows path boundary."
+    root = tmp_path / ("p" * padding)
+    expected = set()
+    for stimulus_set in sample_project.stimulus_sets:
+        stimulus_set.source_dir = (
+            "stimuli/original-images/" + stimulus_set.set_id.ljust(16, "-")
+        )
+        folder = root / stimulus_set.source_dir
+        assert len(str(folder)) == directory_length
+        filesystem_path(folder).mkdir(parents=True)
+        image = folder / "long-stimulus-file-named-beyond-the-windows-limit.png"
+        assert len(str(image)) > 260
+        Image.new("RGB", (256, 256)).save(filesystem_path(image))
+        expected.add(image.relative_to(root).as_posix())
+    _save_bundle_ready_project(root, sample_project)
+    if operation == "validate":
+        project_bundle_module._validate_bundle_source(
+            root, project=sample_project,
+            manifest=create_empty_manifest(sample_project.meta.project_id), refresh_hz=60.0,
+        )
+    else:
+        assert expected <= set(project_bundle_module._collect_bundle_file_paths(root))
+
+
 def test_export_project_bundle_writes_project_stimuli_and_manifest(
     tmp_path,
     sample_project,
@@ -59,6 +94,12 @@ def test_export_project_bundle_writes_project_stimuli_and_manifest(
     (sample_project_root / "cache" / "ignored.tmp").write_text("cache", encoding="utf-8")
     (sample_project_root / "logs").mkdir()
     (sample_project_root / "logs" / "ignored.csv").write_text("logs", encoding="utf-8")
+    sharing_dir = sample_project_root / ".fpvs-data-sharing"
+    sharing_dir.mkdir()
+    (sharing_dir / "settings.json").write_text("private local enrollment", encoding="utf-8")
+    reporting_dir = sample_project_root / "logs" / "data-sharing" / "outbox"
+    reporting_dir.mkdir(parents=True)
+    (reporting_dir / "private.json").write_text("private report and receipt", encoding="utf-8")
     bundle_path = tmp_path / "sample.fpvsbundle"
 
     manifest = export_project_bundle(sample_project_root, bundle_path)
@@ -76,6 +117,8 @@ def test_export_project_bundle_writes_project_stimuli_and_manifest(
         assert "stimuli/original-images/oddball-set/oddball-set-03.png" in names
         assert "cache/ignored.tmp" not in names
         assert "logs/ignored.csv" not in names
+        assert not any(name.startswith(".fpvs-data-sharing/") for name in names)
+        assert not any(name.startswith("logs/data-sharing/") for name in names)
         project_json = archive.read("project.json").decode("utf-8")
         assert "#00FF00" in project_json
 
@@ -379,6 +422,94 @@ def test_read_project_bundle_manifest_rejects_oversized_manifest(
         read_project_bundle_manifest(bundle_path)
 
 
+@pytest.mark.parametrize("metadata_path", ["project.json", "stimuli/manifest.json"])
+def test_import_rejects_oversized_project_metadata_before_loading(
+    tmp_path, sample_project, sample_project_root, monkeypatch, metadata_path,
+):
+    _save_bundle_ready_project(sample_project_root, sample_project)
+    bundle = tmp_path / "metadata.fpvsbundle"
+    manifest = export_project_bundle(sample_project_root, bundle)
+    record = next(record for record in manifest.files if record.path == metadata_path)
+    monkeypatch.setattr(project_bundle_module, "MAX_BUNDLE_JSON_BYTES", record.size_bytes - 1,
+                        raising=False)
+    def never_load(*args):
+        pytest.fail("Oversized metadata must be rejected before loading the project")
+    monkeypatch.setattr(project_bundle_module, "_load_project_for_bundle", never_load)
+    with pytest.raises(ProjectBundleError, match="metadata.*limit"):
+        import_project_bundle(bundle, tmp_path / "receiver")
+
+
+def test_large_zip_directory_rejected_before_zipfile_parses_it(tmp_path, monkeypatch):
+    bundle = tmp_path / "directory.fpvsbundle"
+    with zipfile.ZipFile(bundle, "w") as archive:
+        archive.writestr("fpvs_bundle.json", b"{}")
+    monkeypatch.setattr(project_bundle_module, "MAX_BUNDLE_DIRECTORY_BYTES", 1, raising=False)
+    def never_parse(*args, **kwargs):
+        pytest.fail("ZIP directory budget must be checked before ZipFile allocates it")
+    monkeypatch.setattr(project_bundle_module.zipfile, "ZipFile", never_parse)
+    with pytest.raises(ProjectBundleError, match="archive directory.*limit"):
+        read_project_bundle_manifest(bundle)
+
+
+def test_zip_member_budget_ignores_forged_end_record_count(tmp_path, monkeypatch):
+    bundle = tmp_path / "many.fpvsbundle"
+    with zipfile.ZipFile(bundle, "w") as archive:
+        for index in range(3):
+            archive.writestr(f"stimuli/{index}.png", b"x")
+    payload = bytearray(bundle.read_bytes())
+    tail = payload.rfind(b"PK\x05\x06")
+    struct.pack_into("<HH", payload, tail + 8, 1, 1)
+    bundle.write_bytes(payload)
+    monkeypatch.setattr(project_bundle_module, "MAX_BUNDLE_ARCHIVE_MEMBERS", 2)
+    def never_parse(*args, **kwargs):
+        pytest.fail("Actual member count must be bounded before ZipFile allocates entries")
+    monkeypatch.setattr(project_bundle_module.zipfile, "ZipFile", never_parse)
+    with pytest.raises(ProjectBundleError, match="too many archive members"):
+        read_project_bundle_manifest(bundle)
+
+
+def test_bundle_directory_guard_accepts_zip64_and_archive_comment(tmp_path, monkeypatch):
+    bundle = tmp_path / "zip64.fpvsbundle"
+    monkeypatch.setattr(zipfile, "ZIP64_LIMIT", 1)
+    with zipfile.ZipFile(bundle, "w") as archive:
+        archive.writestr("stimuli/base.png", b"valid payload")
+        archive.comment = b"FPVS Studio portable project"
+    with project_bundle_module.open_project_bundle_archive(bundle) as archive:
+        assert archive.read("stimuli/base.png") == b"valid payload"
+
+
+@pytest.mark.parametrize("compression", [zipfile.ZIP_BZIP2, zipfile.ZIP_LZMA])
+def test_bundle_rejects_unsupported_compression_before_decompression(tmp_path, compression):
+    bundle = tmp_path / "unsupported.fpvsbundle"
+    with zipfile.ZipFile(bundle, "w", compression=compression) as archive:
+        archive.writestr("fpvs_bundle.json", b"{}")
+    with pytest.raises(ProjectBundleError, match="unsupported ZIP compression"):
+        read_project_bundle_manifest(bundle)
+
+
+@pytest.mark.parametrize("workload", ["blocks", "stimuli", "fixation"])
+def test_bundle_workload_rejected_before_compiling_and_preserves_destination(
+    tmp_path, sample_project, sample_project_root, monkeypatch, workload,
+):
+    project = sample_project.model_copy(deep=True)
+    if workload == "blocks":
+        project.settings.session.block_count = 10**9
+    elif workload == "stimuli":
+        project.conditions[0].sequence_count = 10**9
+    else:
+        project.settings.fixation_task.enabled = True
+        project.settings.fixation_task.changes_per_sequence = 10**9
+    _save_bundle_ready_project(sample_project_root, project)
+    destination = tmp_path / "existing.fpvsbundle"
+    destination.write_bytes(b"retained")
+    def never_compile(*args, **kwargs):
+        pytest.fail("Untrusted workload must be bounded before allocating a session plan")
+    monkeypatch.setattr(project_bundle_module, "compile_session_plan", never_compile)
+    with pytest.raises(ProjectBundleError, match="compilation workload"):
+        export_project_bundle(sample_project_root, destination)
+    assert destination.read_bytes() == b"retained"
+
+
 def test_export_project_bundle_rejects_resource_limit_without_replacing_destination(
     tmp_path,
     sample_project,
@@ -526,6 +657,58 @@ def test_bundle_import_cancels_during_payload_extraction(
     assert list((app_data_dir(receiver) / IMPORT_STAGING_DIRNAME).iterdir()) == []
 
 
+@pytest.mark.parametrize("filename", [
+    "run.EXE", "run.cmd", "script.py", "script.ps1", "shortcut.lnk",
+    "website.html", "picture.svg", "nested.zip", "nested.fpvsbundle", "installer.msi",
+])
+def test_bundle_rejects_active_stimulus_payload_before_export_or_extraction(
+    tmp_path, sample_project, sample_project_root, monkeypatch, filename,
+):
+    _save_bundle_ready_project(sample_project_root, sample_project)
+    safe_bundle = tmp_path / "safe.fpvsbundle"
+    manifest = export_project_bundle(sample_project_root, safe_bundle)
+    sidecar = sample_project_root / "stimuli" / filename
+    sidecar.write_bytes(b"inert synthetic payload")
+    exported = tmp_path / "existing.fpvsbundle"
+    exported.write_bytes(b"preserve previous export")
+    with pytest.raises(ProjectBundleError, match="active or archive payload"):
+        export_project_bundle(sample_project_root, exported)
+    assert exported.read_bytes() == b"preserve previous export"
+    malicious = tmp_path / "malicious.fpvsbundle"
+    record = project_bundle_module.ProjectBundleFileRecord(
+        path=f"stimuli/{filename}", size_bytes=sidecar.stat().st_size,
+        sha256=hashlib.sha256(sidecar.read_bytes()).hexdigest(),
+    )
+    changed = manifest.model_copy(update={"files": [*manifest.files, record]})
+    with zipfile.ZipFile(safe_bundle) as source, zipfile.ZipFile(malicious, "w") as target:
+        for info in source.infolist():
+            if info.filename != BUNDLE_MANIFEST_FILENAME:
+                target.writestr(info, source.read(info.filename))
+        target.writestr(record.path, sidecar.read_bytes())
+        target.writestr(BUNDLE_MANIFEST_FILENAME, changed.model_dump_json())
+    def fail_extraction(*args, **kwargs):
+        pytest.fail("Unsafe payload admission must fail before extraction")
+    monkeypatch.setattr(project_bundle_module, "_extract_verified_record", fail_extraction)
+    with pytest.raises(ProjectBundleError, match="active or archive payload"):
+        read_project_bundle_manifest(malicious)
+    with pytest.raises(ProjectBundleError, match="active or archive payload"):
+        import_project_bundle(malicious, tmp_path / "receiver")
+
+
+def test_generic_bundle_preserves_benign_text_csv_and_images(
+    tmp_path, sample_project, sample_project_root,
+):
+    _save_bundle_ready_project(sample_project_root, sample_project)
+    for filename, payload in [("notes.txt", b"plain notes"), ("labels.csv", b"label\nface\n")]:
+        (sample_project_root / "stimuli" / filename).write_bytes(payload)
+    bundle = tmp_path / "benign.fpvsbundle"
+    manifest = export_project_bundle(sample_project_root, bundle)
+    assert any(record.path.endswith(".png") for record in manifest.files)
+    installed = import_project_bundle(bundle, tmp_path / "receiver")
+    assert (installed.project_root / "stimuli" / "notes.txt").read_bytes() == b"plain notes"
+    assert (installed.project_root / "stimuli" / "labels.csv").read_bytes() == b"label\nface\n"
+
+
 def test_cancelled_bundle_export_preserves_previous_destination(
     tmp_path, sample_project, sample_project_root,
 ) -> None:
@@ -646,3 +829,113 @@ def test_recording_device_and_port_survive_project_bundle(
     export_project_bundle(sample_project_root, bundle)
     result = import_project_bundle(bundle, tmp_path / "imported")
     assert result.project.settings.recording == setting
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows namespace behavior")
+@pytest.mark.parametrize("long_bundle", [False, True])
+def test_bundle_transfer_without_windows_long_path_policy(
+    tmp_path, sample_project, sample_project_root, monkeypatch, long_bundle,
+):
+    from fpvs_studio.core.paths import filesystem_path
+
+    _save_bundle_ready_project(sample_project_root, sample_project)
+    nested = tmp_path / ("different-user-" * 5) / ("研究室 folder " * 6) / ("root-folder-" * 5)
+    while len(str(nested)) <= 270:
+        nested /= "nested-root-folder"
+    bundle = nested / "download.fpvsbundle" if long_bundle else tmp_path / "download.fpvsbundle"
+    export_project_bundle(sample_project_root, bundle)
+    receiver = nested / "receiver"
+    original_mkdir, original_exists, original_open = Path.mkdir, Path.exists, zipfile.io.open
+
+    def require_namespace(path):
+        value = str(path)
+        if len(value) >= 248 and not value.startswith("\\\\?\\"):
+            raise OSError(206, "Windows long-path policy is disabled", value)
+
+    def mkdir(path, *args, **kwargs):
+        require_namespace(path)
+        return original_mkdir(path, *args, **kwargs)
+
+    def exists(path):
+        require_namespace(path)
+        return original_exists(path)
+
+    def open_file(path, *args, **kwargs):
+        if isinstance(path, (str, Path)):
+            require_namespace(path)
+        return original_open(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "mkdir", mkdir)
+    monkeypatch.setattr(Path, "exists", exists)
+    monkeypatch.setattr(zipfile.io, "open", open_file)
+    read_project_bundle_manifest(bundle)
+    from fpvs_studio.core.library_origin import LibraryProjectOrigin
+
+    origin = LibraryProjectOrigin(
+        service_url="https://library.example.test", item_id="sample-project",
+        installed_version="1.0.0",
+        bundle_sha256=hashlib.sha256(filesystem_path(bundle).read_bytes()).hexdigest(),
+        local_project_id=sample_project.meta.project_id,
+    )
+    first = import_project_bundle(bundle, receiver, library_origin=origin)
+    second = import_project_bundle(bundle, receiver)
+    assert first.project_root == receiver / sample_project.meta.project_id
+    assert second.project_root.name == f"{sample_project.meta.project_id}-from-bundle"
+    assert filesystem_path(first.project_root / "project.json").is_file()
+    assert list(filesystem_path(app_data_dir(receiver) / IMPORT_STAGING_DIRNAME).iterdir()) == []
+    saved = filesystem_path(second.project_root / "project.json").read_text(encoding="utf-8")
+    assert "different-user" not in saved and "\\\\?\\" not in saved
+
+
+@pytest.mark.parametrize("error, message", [
+    (PermissionError(13, "denied"), "writable"),
+    (OSError(28, "full"), "space"),
+])
+def test_bundle_import_storage_failure_is_actionable_and_cleans_staging(
+    tmp_path, sample_project, sample_project_root, monkeypatch, error, message,
+):
+    _save_bundle_ready_project(sample_project_root, sample_project)
+    bundle = tmp_path / "download.fpvsbundle"
+    export_project_bundle(sample_project_root, bundle)
+    receiver = tmp_path / "receiver"
+
+    def fail(*args, **kwargs):
+        raise error
+
+    monkeypatch.setattr(project_bundle_module, "_extract_verified_record", fail)
+    with pytest.raises(ProjectBundleError, match=message):
+        import_project_bundle(bundle, receiver)
+    assert not (receiver / sample_project.meta.project_id).exists()
+    assert list((app_data_dir(receiver) / IMPORT_STAGING_DIRNAME).iterdir()) == []
+
+
+@pytest.mark.parametrize("alias", [
+    "stimuli/original-images/base-set/BASE-SET-01.PNG",
+    "stimuli/original-images/BASE-SET/other.png",
+])
+def test_bundle_rejects_paths_that_collide_on_windows(
+    tmp_path, sample_project, sample_project_root, alias,
+):
+    _save_bundle_ready_project(sample_project_root, sample_project)
+    original = tmp_path / "original.fpvsbundle"
+    export_project_bundle(sample_project_root, original)
+    bundle = tmp_path / "case-collision.fpvsbundle"
+    with zipfile.ZipFile(original) as source, zipfile.ZipFile(bundle, "w") as target:
+        manifest = read_project_bundle_manifest(original)
+        payload = source.read("stimuli/original-images/oddball-set/oddball-set-01.png")
+        record = project_bundle_module.ProjectBundleFileRecord(
+            path=alias, size_bytes=len(payload), sha256=hashlib.sha256(payload).hexdigest(),
+        )
+        manifest.files.append(record)
+        for info in source.infolist():
+            if info.filename != BUNDLE_MANIFEST_FILENAME:
+                target.writestr(info, source.read(info.filename))
+        target.writestr(alias, payload)
+        target.writestr(BUNDLE_MANIFEST_FILENAME, manifest.model_dump_json())
+    with pytest.raises(ProjectBundleError, match="case"):
+        read_project_bundle_manifest(bundle)
+    receiver = tmp_path / "receiver"
+    with pytest.raises(ProjectBundleError, match="case"):
+        import_project_bundle(bundle, receiver)
+    assert not (receiver / sample_project.meta.project_id).exists()
+    assert list((app_data_dir(receiver) / IMPORT_STAGING_DIRNAME).iterdir()) == []

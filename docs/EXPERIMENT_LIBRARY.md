@@ -5,7 +5,67 @@ Individual conditions, trigger-code remapping during a merge, and condition setu
 belong to Phase 2 of the [execution plan](exec-plans/active/private-experiment-library.md).
 The Library never runs an experiment automatically or updates an existing experiment.
 
+Generic bundle import, review and export reject executable/script, shortcut, web
+active and nested-archive payload extensions beneath `stimuli/` before extraction
+or export. Ordinary text/CSV sidecars and images remain supported. This path guard
+is separate from OpenFPVS publication's stricter validated JSON/PNG/JPEG content
+policy and does not establish the safety of arbitrarily renamed file bytes.
+
 ## Desktop workflow
+
+### Request condition publication
+
+**File > Export > Request Library publication...** is available to normal Studio
+users. Connect the computer to OpenFPVS first through Library settings. Select one
+condition, supply a title, description and contact, and choose **Prepare condition**.
+Review the exact local inventory and confirm distribution rights before **Submit
+for review**. The dialog is minimum `860x740`, default `940x800`; **My requests**
+refreshes decisions for this enrolled computer.
+
+Preparation copies that condition, referenced stimulus pools/variants, bound tasks,
+and its modifier's required modules/baseline into an ordinary runnable experiment
+bundle. The original project is unchanged. Participant history, results, logs,
+credentials and unrelated tasks are excluded by the existing clean exporter. A
+masking catch condition depends on other conditions and cannot be submitted alone.
+This workflow does not add condition merging to the existing Library importer.
+
+Submission uses native `/v2/submissions` and `/v2/submissions/<UUID>/bundle`; the
+private OpenFPVS project owns its additive review schema and GitHub writes. Uploads
+are capped at 64 MiB. The UUID, metadata, byte size and SHA-256 remain fixed on an
+exact retry; confirmed requests cannot have their bundles replaced. Cancel or an
+uncertain upload retains prepared files. **My requests** remains available after a
+restart with the same enrolled computer; resuming upload from retained preparation
+is currently an in-session operation. A new submission has a new UUID and review.
+
+The OpenFPVS Administrator's **Experiments** tab lists condition requests and
+offers protected bundle download, rejection with notes, and **Accept and publish**.
+Acceptance requires the exact digest and explicit confirmation of import/testing
+on the latest published stable Studio build, checked again by the service. Pending,
+rejected and interrupted publications stay outside both website/native catalogs.
+Accepted entries retain the ordinary strict experiment catalog and importer.
+Approval publishes only those reviewed bytes; it never grants ongoing publishing
+permission or experimental results-upload access. The Library audience remains
+the existing lab-code/account audience.
+
+Bundles are stored as draft Releases in the existing private GitHub repository.
+An explicit administrator acceptance publishes the release and enables its exact
+asset through a D1-backed accepted catalog overlay; the ordinary committed catalog
+continues to use the existing maintainer publisher. Both sources require current
+published asset IDs, sizes and digests. Browsing requests read-only installation
+tokens. Review uploads/publication require separately requested Contents write
+tokens restricted to the same private repository and explicit server activation.
+Neither the GUI nor submitted projects receive GitHub credentials.
+
+Service activation requires App permission, the additive migration and deployment
+as documented in the private project's README. The review service was activated
+with Studio 2.3.0; see the [release record](exec-plans/completed/release-2.3.0.md)
+and [implementation history](exec-plans/completed/condition-library-review.md).
+
+Visible manual smoke: at minimum size, select a long-named condition, prepare it,
+review dependencies, cancel/retry a submission, and check **My requests**; confirm
+normal developer publishing and ordinary local exports still work. Run the
+registered `tests/gui/test_library_submission_dialog.py` only in an approved
+visible environment. Website synthetic checks use 1280px and 360px.
 
 Open **View > Experiment Library...** in the main window, or choose **Create Project >
 Download from library** from Welcome or Home. Create Project also offers **Create
@@ -13,9 +73,16 @@ manually**, followed by the existing category, template, name and folder steps. 
 returns through those steps without discarding a manual draft. Selecting the Library
 opens the browser without creating an empty project; cancelling leaves projects intact.
 **Settings > Experiment Library / Manage Access...** opens the same connection controls.
-Enter the lab invitation code and a friendly computer name, then select **Connect**.
+Enter the lab access code and a friendly computer name, then select **Connect**.
 No GitHub account, Git installation, installer, administrator rights, or application
 restart is needed to browse and download experiments.
+
+Startup offers lab setup when this OS user has no saved Library enrollment.
+Ask your PI or lab manager for the reusable lab code; no researcher account or
+email registration is required. **Continue offline** leaves local experiments
+available and prompts again on the next launch until access is configured.
+Saved enrollment skips startup setup without contacting the service. View-only
+permission allows browsing; download permission also enables experiment downloads.
 
 Enrollment is stored for the current OS user on that computer. Other user profiles
 enroll separately. The code itself is not retained as the device credential. Search
@@ -57,7 +124,9 @@ blank, unset or customized; it does not change ordinary local bundle exports or
 previously downloaded projects.
 
 Cancel or Escape during a download waits for the active read to stop; no import starts
-after cancellation. During Library project extraction, **Cancel setup** requests cleanup
+after cancellation. Permission and disk-full failures identify the required storage
+fix; archive validation errors retain their actionable message in the Library view.
+During Library project extraction, **Cancel setup** requests cleanup
 and keeps progress alive until the worker finishes. An import that has already committed
 is retained and reported as a successful local project even if Cancel arrives too late.
 Closing Studio cancels app-owned work and defers teardown until the worker threads exit.
@@ -66,6 +135,88 @@ Closing Studio cancels app-owned work and defers teardown until the worker threa
 and clears recognized Library cache files. Network failure retains retryable connection
 state; an already-revoked credential can still be removed. Previously installed projects
 remain editable and usable offline. Disconnecting cannot remove copies on other machines.
+A protected request rejected with HTTP 401/403 removes that device's local credential
+and returns the Library to its connection fields. Reconnecting creates a fresh token;
+it never reuses revoked access. A rejected invitation preserves its pending token for
+idempotent retry, and ordinary network failures preserve existing enrollment.
+
+## Website browsing and downloads
+
+The **OpenFPVS Experiment Library** is available at
+[openfpvs.com](https://openfpvs.com). Enter the lab code supplied by
+your PI or lab manager to browse descriptions and publication links. Search
+supports discovery; each experiment has separate reference pages for its exact published
+versions. View permission allows browsing; download permission also enables bundle
+downloads. Researchers need no email or GitHub account for this route.
+
+The top header keeps Library visible. **Account** offers **Login with a Lab Code**
+and optional **Individual Account Login**. The lab-code entry remains available
+independently of email state; signed-in users see account/sign-out controls instead
+of individual login. The verified **OpenFPVS Administrator** also sees the
+administration workspace. Email sign-out leaves the lab-code browser
+connection independent.
+
+The dedicated **Administrator Login** is at `/admin`, with `/admin/sign-in` as an
+entry alias. After provider configuration, the sole OpenFPVS Administrator uses
+their email and chosen password to open **Administrator dashboard** directly;
+navigation shows **Administrator** only after server confirmation. The existing
+email-link route also lands administrators on that dashboard, while researchers
+retain their account page. **Forgot password?** uses provider-managed email recovery.
+Missing password configuration explicitly disables password actions and leaves the
+email-link option available. Browser sessions last seven days; passwords and provider
+tokens are not stored in browser storage.
+
+Firebase Authentication on the no-cost Spark plan owns the administrator password.
+The Cloudflare service pins the administrator email, Firebase UID and numeric Google
+project number, requires an enabled verified profile, and rechecks encrypted
+password-session credentials against Firebase on protected requests. Provider
+revocation/password changes deny those sessions; requesting recovery alone does
+not. The first otherwise valid password login may require following a provider
+verification email before retrying. Lab codes and researcher email sessions remain
+independent; neither grants administrator access. The private service README owns
+provider configuration, private password hand-off and free-plan limits. Actual live
+provider readiness is recorded in the
+[account portal plan](exec-plans/active/fpvs-account-portal.md).
+
+Cloudflare checks the current lab permission and proxies the allowlisted private
+GitHub asset. A direct private repository link would require GitHub access. After
+downloading a `.fpvsbundle`, drag it onto Studio's **Welcome screen** and follow the
+ordinary bundle review/setup flow. The website supports discovery, citations and
+delivery; Studio owns project setup, update review and execution. Browser downloads
+are ordinary imports and do not create the native Library origin receipt. To enable
+project-version checks for that local copy, link it explicitly in the version dialog.
+
+The browser connection lasts seven days and has its own revocable credential,
+separate from Studio enrollment and email sign-in. The owner roster identifies it
+as **Website browser**. Disconnect revokes only that browser credential; replacing
+or revoking its lab code disables all credentials linked to that code. Website
+experiment content remains protected even though its page shell is public.
+
+The OpenFPVS Administrator manages website descriptions and publication links
+at `/admin`, selecting the exact experiment and version before saving. Claims and
+recorded download counts are keyed to experiment ID, version and bundle SHA-256;
+new versions do not inherit papers from previous releases. Publishing bundles
+remains the existing Studio maintainer workflow. The website has separate browser
+APIs for enriched metadata; the strict native `/v2` catalog remains separate.
+Reader pages omit stimulus-set labels, category filters/tags and artifact details;
+the administrator editor manages descriptions and publications. Native Studio
+category metadata and bundle validation remain unchanged. The service retains the
+historical `stimulus_set` database column dormant without a migration.
+
+Reader pages show **x total downloads** per experiment. The server aggregates all
+recorded versions/digests for that item ID, including retired or unavailable
+artifacts, so experiment totals remain stable when a version is withdrawn.
+The technical counter records authorized download starts through Studio or the
+website after valid upstream asset retrieval and the final access check. Repeated
+requests count. Denied, revoked and unavailable requests do not; a later transfer
+failure or cancellation may still count. Tracking begins with the website migration
+and does not reconstruct historical usage. Browser `website.total_downloads` is the
+experiment total; compatible `downloads_started` and `tracking_since` fields remain
+for exact-artifact technical metadata. Counter explanations are kept in developer
+documentation rather than repeated in the reader UI. Counts do not
+measure completed transfers, unique researchers or successful local save/import.
+Current deployment acceptance is recorded in the
+[account portal plan](exec-plans/active/fpvs-account-portal.md).
 
 ## Project version checks
 
@@ -76,11 +227,24 @@ dialog. Checks never take focus or open a dialog during presentation. Offline, r
 or unavailable service states do not block project opening or claim the project is current.
 
 The dialog shows the installed and latest versions, release description and minimum
-Studio version. **Open new version separately** uses the existing verified download,
+Studio version. **Keep current version** closes review without downloading, changing
+the experiment or turning off future checks. **Download new version separately** uses
+the existing verified download,
 bundle review, Save/Discard/Cancel guards and display-settings review. The current
 project's setup, local edits, logs and participant data stay in its existing folder;
 the imported project gets its own collision-safe folder and version record. A newer
 release requiring a newer Studio build remains visible with installation disabled.
+The review always shows this conditional warning, without scanning participant data:
+
+> Warning: updating this experiment after data collection has already begun may not
+> be advised. If you're considering updating, please first download this experiment
+> under a different folder and investigate its changes before using this in your
+> ongoing study.
+
+Condition changes are reviewed as part of the whole experiment version, with its
+settings and assets. The user decides whether to adopt the separate project after
+inspection; discovery never changes an ongoing study. Its data-sharing enrollment,
+protocol identity and queued reports stay associated with the original project.
 The update check and download also check the configured Root Folder: if that release
 or a newer one is already installed elsewhere, the dialog reports its path and blocks
 another download. Unreadable project metadata or version records stop installation with
@@ -96,6 +260,7 @@ It contains no credentials and is excluded from ordinary bundles and clean publi
 Moving the entire local project retains it; exporting/importing a general bundle does not.
 
 Earlier downloads and manually created projects have no trustworthy Library identity.
+This also applies to ordinary imports of bundles downloaded through the website.
 Use the version dialog to link one explicitly; enter its installed version only when
 known, otherwise leave it unknown. Studio never guesses from a title or folder name.
 **Change library link...** can correct an association. The project-local checkbox
@@ -111,18 +276,98 @@ passive notices and explicit import handoff. The dialog minimum/default is `760x
 
 ## Service and access boundary
 
+### Account portal
+
+The private `zcm58/FPVS-Studio-Library` repository owns the website and account portal
+at `https://openfpvs.com`, with protected `/admin` content and management APIs restricted
+to the OpenFPVS Administrator. Registration/sign-in remains available at `/sign-in`; lab-code
+browsing uses `/` or `/library` and does not require an email session.
+The initial configured owner is `zackmurphy25@protonmail.com`. Changing that identity
+requires updating the backend owner setting; it
+does not move user accounts or experiment files. Current deployment/acceptance status
+is recorded in the [account portal plan](exec-plans/active/fpvs-account-portal.md).
+
+The move to `openfpvs.com` retains the same Worker, D1 database, accounts, lab
+codes and grants. Browser authentication uses host-only cookies, so researchers
+and administrators sign in again on the new hostname. Native Studio retains the
+service origin documented below, preserving enrollment and project-origin receipts.
+The migration uses free services only; the personal website, Feedback service and
+separate Results service remain independent.
+
+The owner can create one reusable code per lab with view or download permission.
+Enter a chosen code or leave the optional field blank for a secure generated code.
+Custom codes are case sensitive and accept 12–128 printable ASCII characters,
+without spaces at the start or end. The same field chooses a new code when
+replacing an existing one; previously used codes cannot be reused. Invalid or
+unavailable replacements leave current access intact.
+The PI/lab manager distributes it to that lab's PCs; each receives its own protected
+device credential without researcher registration or email. Plaintext is shown only
+at creation. Replace a lost code or revoke it in the dashboard: both permanently
+revoke enrolled tokens under the old code. The dashboard lists each code's lab PCs
+and can revoke an individual PC. Code holders cannot administer access or upload
+experiments/results. Sharing a code grants the selected Library permission, so it
+should be distributed only within the approved lab.
+
+Each PC enrollment has its own name, enrollment/revocation timestamps and a
+last-seen timestamp updated at most hourly. Individual revocation disables that
+credential, not a physical hardware identity. Someone who still holds the shared
+code can create a fresh enrollment; exclude them by replacing the code and keeping
+the replacement within the remaining approved operators.
+
+Existing individual account access remains available: researchers verify their
+email, supply name/institution/requested lab and await
+manual review. Email verification never grants Library access. The owner creates/assigns labs, approves view or download grants and manages
+linked computers. An approved user or the owner can issue a short-lived computer
+invitation; the server stores only its hash. Studio's existing enrollment request
+redeems it into the normal native credential. A grant is checked on every protected
+request; revoking it disables its invitations and enrolled computers. View grants
+allow catalog browsing; download grants also allow experiment bundle transfer.
+Each assigned lab accesses the existing shared catalog in this first version; lab
+assignment does not yet select separate experiment inventories.
+
+The native service hostname remains directly available for released Studio clients
+and saved project-origin receipts; native requests cannot follow a portal redirect.
+Existing legacy reusable-code enrollments have no verified human
+identity or lab grant; the owner dashboard lists them explicitly as unlinked devices
+and can revoke them individually. They are not silently assigned to new accounts.
+Downloaded experiments remain independent local copies. Library approval does not
+opt a project into data sharing or authorize uploads to the separate Results service.
+
+The private repository owns web source, D1 migrations, verification and deployment;
+the personal site's main address remains served by its existing repository. Email
+delivery and the configured owner email are service prerequisites, not desktop settings.
+The portal uses Cloudflare Workers/D1 and Resend Free only. Sending stops at the
+application's UTC limits of 100 emails daily and 3,000 monthly; paid overages and
+automatic account approvals are excluded. Administrator API requests require a
+verified session for the configured owner, with CSRF protection for mutations.
+
 Private GitHub Releases in
-[`zcm58/FPVS-Studio-Library`](https://github.com/zcm58/FPVS-Studio-Library)
+[`zcm58/OpenFPVS-Website`](https://github.com/zcm58/OpenFPVS-Website)
 hold versioned bundles. That repository owns the Cloudflare service, invitation/device
 administration, catalog publishing and deployment. GitHub App credentials stay on the
 service; desktop clients receive only authorized catalog metadata and streamed bytes.
 See its operational README for live service configuration and maintainer commands.
 
-The deployed service origin is
-`https://fpvs-studio-library.fpvs-studio-zcm58.workers.dev`, declared in
-`library/client.py` as `DEFAULT_LIBRARY_SERVICE_URL`. It is not a GUI preference or a
-project setting. `LibraryClient(service_url=...)` is the explicit constructor seam for
-isolated deployments and tests. The September 17, 2026 deployment was verified using
+The native service origin is `https://openfpvs.com`, exposed by `library/client.py`
+as `DEFAULT_LIBRARY_SERVICE_URL`. It is not a GUI preference or a project setting.
+The public website is maintained separately in the sibling `../OpenFPVS` repository.
+`LibraryClient(service_url=...)` remains the explicit constructor seam for isolated
+deployments and tests; unrelated custom origins are preserved.
+
+The two previous managed origins,
+`https://fpvs-studio-library.fpvs-studio-zcm58.workers.dev` and
+`https://fpvs.zack-murphy.com`, now select the canonical native origin. Reconnect once
+with the existing lab code: credentials and caches are scoped to the new origin,
+and old device tokens are never copied or reused. The existing startup connection
+prompt appears until that enrollment succeeds; Continue offline preserves local use.
+Native routes remain `/v2` with schema `1.0`, and redirects remain unsupported.
+
+Core's `library_origin.py` owns this exact managed-origin policy. Project-version
+checks and duplicate-install decisions recognize these prior origins as the same
+Library without rewriting installed receipt files or contacting their saved host.
+Other origins remain distinct and require an explicit Library link correction.
+
+The September 17, 2026 deployment at the previous workers.dev origin was verified using
 two independent credentials on one Windows computer: enrollment, native credential
 reload, both catalog entries/downloads, import, revocation, and local reopen/compile
 after disconnect. These checks do not substitute for visible or second-machine tests.
@@ -130,18 +375,32 @@ after disconnect. These checks do not substitute for visible or second-machine t
 The private release `library-test-v1` contains **Library Demo - Words** and
 **Library Demo - Cognitive Load**. The user-provided reusable enrollment code is a
 temporary test configuration held only as a server secret hash. Each enrollment still
-receives its own revocable credential. A current source checkout of
-`codex/experiment-library` contains this GUI; previously published installers do not
-gain it from a catalog update. No new installer or application release was published.
+receives its own revocable credential. The Library is included in ordinary releases;
+install at least the Studio version shown for the selected bundle. MSMS AB 1.1.2 requires Studio 2.2.4.
 
 The current client contract uses schema version `1.0`:
 
 | Request | Contract |
 | --- | --- |
-| `POST /v1/enroll` | JSON `schema_version`, `code`, `device_token`, `device_name`; response `schema_version`, `device_id`, `library_name`. |
-| `GET /v1/catalog?kind=experiment` | Device bearer credential; response `schema_version`, `library_name`, `items`. |
-| `GET /v1/items/{item_id}/versions/{version}/download` | Device bearer credential; exact selected item/version bytes. |
-| `DELETE /v1/device` | Device bearer credential; revoke this enrollment and return JSON. |
+| `POST /v2/enroll` | JSON `schema_version`, `code`, `device_token`, `device_name`; response `schema_version`, `device_id`, `library_name`. |
+| `GET /v2/catalog?kind=experiment` | Device bearer credential; response `schema_version`, `library_name`, `items`. |
+| `GET /v2/items/{item_id}/versions/{version}/download` | Device bearer credential; exact selected item/version bytes. |
+| `DELETE /v2/device` | Device bearer credential; revoke this enrollment and return JSON. |
+
+Native `/v2` retains JSON `schema_version: "1.0"`; the route version changes
+enrollment compatibility, not project or bundle formats. Previous native `/v1`
+requests return HTTP 426 `client_upgrade_required`, including enrollment. Computers
+must update Studio and reconnect using their currently valid lab code. Old machine
+credentials are revoked server-side; startup discards their previous-protocol local
+credentials under the existing cache lock and offers connection or **Continue offline**.
+The new enrollment always uses a fresh random token. Current `/v2` pending tokens remain
+retryable after a lost response. Existing local projects continue to work offline.
+
+Clients send `X-FPVS-Library-Metadata: 1` for enrollment/catalog requests;
+responses additionally include `access_level` (`view` or `download`) and nullable
+`lab_name`. The client continues to validate the bounded native metadata contract.
+Catalog refresh updates locally stored permission metadata. A download-only denial
+does not erase a valid view-only enrollment; revoked/invalid device access does.
 
 Each catalog item contains `item_id`, `kind: experiment`, `version`, `title`,
 `description`, `experiment_category`, `filename`, `size_bytes`,
@@ -149,6 +408,8 @@ Each catalog item contains `item_id`, `kind: experiment`, `version`, `title`,
 Unknown metadata fields, unsupported schemas, duplicate identities, invalid filenames,
 unsupported categories and malformed versions are rejected. Phase 1 requests only
 experiments; service-side filtering preserves compatibility when Phase 2 adds conditions.
+Website descriptions, publications and download totals are returned only by the
+separate browser API and never added to this native contract.
 
 Before enrollment, Studio generates a random device token and saves a pending credential
 in the OS store. A lost response retries the same device identity instead of consuming a
@@ -166,6 +427,15 @@ timeout, a 30-second metadata deadline and a 30-minute transfer deadline. Reads 
 hashing are chunked and cooperatively cancelable; a blocked socket may take its timeout
 to return. Size and SHA-256 must match before import. Core still applies its independent
 archive/member/manifest/compile validation; network metadata cannot bypass it.
+Truncated transfers report the received and expected byte counts; checksum failures
+ask the user to refresh the catalog. Partial downloads are removed rather than imported.
+The service uses the Workers native fixed-length stream to advertise and enforce
+the payload size without a JavaScript loop over large downloads. Download-start
+counting occurs before the response, without inspecting payload chunks.
+The October 2 service
+fix verified the complete 502,495,471-byte Cognitive Decline bundle after repeated
+truncation near 100 MB, plus a fresh MSMS AB 1.1.2 download. Both imported and compiled
+offline at fresh short and long Windows roots on one PC.
 
 ## Ownership and local storage
 
@@ -175,10 +445,11 @@ archive/member/manifest/compile validation; network metadata cannot bypass it.
 | `library/client.py` | Enrollment, authorized requests, timeouts and verified transfer. |
 | `library/credentials.py` | Windows Credential Manager and Linux Secret Service adapters. |
 | `library/cache.py` | Private per-user cache, no-follow checks and cross-process lease. |
-| `core/project_bundle.py` | Existing whole-project archive validation, extraction and optional cancellation. |
+| `core/project_bundle.py` | Whole-project archive validation, extraction, optional cancellation and pre-parse/pre-compilation resource guards; see [Security](SECURITY.md#upload-and-download-trust-boundaries). |
 | `core/library_publish.py` | Explicit clean publishing preparation without modifying source projects. |
 | `gui/library_dialog.py`, `library_controller.py` | View state and orchestration through app-owned `update_lifecycle.py` jobs. |
 | `gui/controller.py` | Existing root/review/display/document handoff and cancellable Library import. |
+| `gui/library_access_dialog.py` | Optional startup lab setup and app-owned local credential/enrollment jobs. |
 
 On Windows, downloads live under
 `%LOCALAPPDATA%/FPVS Studio/experiment-library/<origin-hash>/`.
@@ -329,7 +600,7 @@ Library service repository.
 For command-line publishing, use the Studio Python environment; the private repository
 script delegates to `fpvs_studio.developer.catalog_publisher`. The GUI does not need
 this checkout. The maintainer needs write access to the private
-[`FPVS-Studio-Library` repository](https://github.com/zcm58/FPVS-Studio-Library).
+[`OpenFPVS Website` repository](https://github.com/zcm58/OpenFPVS-Website).
 On this development computer its checkout is `build/experiment-library-service` inside
 the Studio checkout. On another computer, clone that private repository and adjust
 `$libraryRepo` below. The publisher uses `GH_TOKEN` or Git's configured credential helper;
@@ -401,8 +672,24 @@ publications.
 
 Windows archive tests may need a short explicit temporary root, for example
 `PYTEST_ADDOPTS=--basetemp=build/t1`, when the host lacks long-path support.
-This workaround is not proof that arbitrary long paths work. Backend tests cover
-credentials, enrollment retry, cache safety, bounds, corrupt transfers and publishing;
+This workaround is not proof that arbitrary long paths work. Bundle review, origin
+hashing, collision checks, destination creation and Library cache I/O use the core
+Windows namespace adapter. Bundle enumeration preserves the namespace on the directory
+before traversal, so children exceeding the legacy limit remain visible even when
+their parent directory is shorter. Regressions simulate Windows long-path policy being disabled
+and transfer through long paths with spaces and Unicode, including receipt writing,
+repeat imports and cache reuse; persisted study paths remain project-relative. Archive
+validation also rejects file and folder spellings that differ only by case, preventing
+Windows extraction from merging distinct source folders or replacing stimulus files.
+Post-import regressions exercise the actual GUI worker read method without constructing
+Qt objects, loading project/manifest JSON from long roots, retaining root/recent
+preferences, rediscovering the project after restart, preserving root templates and
+invalidating image-readiness scans after source changes. Display detection converts
+Qt's logical screen geometry to physical resolution; the actual-size preview converts
+physical stimulus dimensions back to logical drawing coordinates. Registered GUI
+tests cover 100/125/150/200% scaling and root-folder selection. Visible acceptance is
+still required before claiming a full GUI pass.
+Backend tests cover credentials, enrollment retry, cache safety, bounds, corrupt transfers and publishing;
 service tests run in their owning repository. Ordinary verification excludes Qt before
 import. The registered `tests/gui/test_library_dialog.py` covers the view and lifecycle
 with controlled clients/importers; it does not access the live service.
@@ -413,6 +700,7 @@ with controlled clients/importers; it does not access the live service.
 | Welcome with four project actions | 760×520 | 1120×720 |
 | Create Project, all three pages | 760×500 | 800×500 |
 | Developer publisher | 860×680 | 940×760 |
+| Request Library publication | 860×740 | 940×800 |
 | Settings with Library access | 700×604 | Minimum |
 | Settings with local Test Mode | 700×694 | Minimum |
 | Settings with AB Pilot Mode | 700×764 | Minimum |
@@ -421,6 +709,7 @@ In an approved visible session, check both themes, display scaling, long titles 
 descriptions, empty/error/disconnected/busy states, keyboard navigation, and all controls
 at these sizes. Exercise root-picker and Save cancellation, download Cancel/Close/Escape,
 Already installed, Review update and Review existing project with long installed paths,
+the collection warning and **Keep current version** / **Download new version separately**,
 refresh after an external import, and an older project with the latest version already
 installed beside it. Confirm all duplicate paths transfer no payload bytes. Exercise
 extraction cancellation, late commit, app quit and a revoked credential. Existing local

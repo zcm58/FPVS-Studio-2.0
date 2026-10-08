@@ -228,6 +228,38 @@ class PublishCatalogTests(unittest.TestCase):
         self.assertEqual([call[0] for call in api.calls], ["GET"])
         self.assertEqual(result["items"][0]["asset_id"], 123)
 
+    def test_github_immutable_release_retry_verifies_without_mutation(self):
+        api = FakeGitHub(self.bundle, existing=True)
+        api.release["immutable"] = True
+        result = publisher.publish(api, "test-v1", [self.bundle], self.catalog)
+        self.assertEqual(result["items"][0]["asset_id"], 123)
+        self.assertEqual([call[0] for call in api.calls], ["GET"])
+        api.assets = []
+        with self.assertRaisesRegex(publisher.PublishError, "immutable"):
+            publisher.publish(api, "test-v1", [self.bundle], self.catalog)
+        self.assertTrue(all(method == "GET" for method, _ in api.calls))
+
+    def test_publication_must_confirm_the_exact_release_tag(self):
+        api = FakeGitHub(self.bundle)
+        request = api.request
+
+        def changed_tag(method, path, **kwargs):
+            response = request(method, path, **kwargs)
+            if method == "PATCH":
+                return {**response, "tag_name": "different-tag", "immutable": True}
+            return response
+
+        api.request = changed_tag
+        with self.assertRaisesRegex(publisher.PublishError, "publication was not confirmed"):
+            publisher.publish(api, "test-v1", [self.bundle], self.catalog)
+
+    def test_immutable_release_cannot_be_recovered_as_a_draft(self):
+        api = self.starter_api()
+        api.release["immutable"] = True
+        with self.assertRaisesRegex(publisher.PublishError, "immutable"):
+            publisher.publish(api, "test-v1", [self.bundle], self.catalog)
+        self.assertEqual([call[0] for call in api.calls], ["GET"])
+
     def test_missing_asset_on_published_release_requires_new_tag(self):
         api = FakeGitHub(self.bundle, existing=True)
         api.assets = []
@@ -669,6 +701,7 @@ def test_delete_asset_accepts_github_no_content_response(monkeypatch):
     api = publisher.GitHubPublisher("synthetic-token")
     response = io.BytesIO(b"")
     response.status = 204
+    response.headers = {}
     monkeypatch.setattr(api._opener, "open", lambda *args, **kwargs: response)
     assert api.request("DELETE", publisher.REPO_PATH + "/releases/assets/123") is None
 

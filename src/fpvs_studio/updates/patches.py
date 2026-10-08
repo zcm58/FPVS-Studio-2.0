@@ -14,8 +14,8 @@ from contextlib import ExitStack
 from dataclasses import replace
 from pathlib import Path, PureWindowsPath
 from threading import Event
-from urllib.error import URLError
-from urllib.request import Request, urlopen
+from urllib.error import HTTPError, URLError
+from urllib.request import Request
 
 from fpvs_studio import __version__
 from fpvs_studio.updates.cache_io import (
@@ -36,6 +36,7 @@ from fpvs_studio.updates.models import (
 from fpvs_studio.updates.validation import (
     managed_response,
     parse_release_version,
+    urlopen,
     validate_asset_identity,
     validate_release_asset_url,
     validate_response_url,
@@ -363,13 +364,16 @@ def _fetch_manifest(metadata: dict[str, object], target: str, cancel_event: Even
                 if len(payload) + len(chunk) > size:
                     raise UpdateIntegrityError("Patch metadata exceeded its GitHub asset size.")
                 payload.extend(chunk)
+    except HTTPError as error:
+        error.close()
+        raise UpdateError(f"Patch metadata request failed with HTTP {error.code}.") from error
     except (OSError, URLError) as error:
         raise UpdateError(f"Could not read patch update metadata: {error}") from error
     if len(payload) != size or hashlib.sha256(payload).hexdigest() != normalize_sha256(digest):
         raise UpdateIntegrityError("Patch metadata SHA-256 or size did not match GitHub.")
     try:
         return json.loads(payload.decode("utf-8"), object_pairs_hook=_unique_object)
-    except (UnicodeError, ValueError) as error:
+    except (UnicodeError, ValueError, RecursionError) as error:
         raise UpdateIntegrityError("The release has unreadable patch update metadata.") from error
 
 

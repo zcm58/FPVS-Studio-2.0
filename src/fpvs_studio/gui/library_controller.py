@@ -17,7 +17,11 @@ from fpvs_studio.core.library_installations import (
     scan_library_projects,
 )
 from fpvs_studio.core.library_origin import LibraryOriginError, LibraryProjectOrigin
-from fpvs_studio.core.project_bundle import ProjectBundleManifest, read_project_bundle_manifest
+from fpvs_studio.core.project_bundle import (
+    ProjectBundleError,
+    ProjectBundleManifest,
+    read_project_bundle_manifest,
+)
 from fpvs_studio.gui.library_dialog import LibraryDialog
 from fpvs_studio.gui.update_lifecycle import (
     ProgressReporter,
@@ -108,7 +112,7 @@ class LibraryController(QObject):
                 if holds_download:
                     self.client.release_download()
                 if isinstance(outcome.error, LibraryAuthorizationError):
-                    self._view().set_catalog(None)
+                    self._view().set_connection(None)
                 message = "Operation canceled." if canceled else self._error(outcome.error)
                 self._view().set_busy(False, message)
             elif self._closing or self._lifecycle.is_shutting_down or job.cancel_event.is_set():
@@ -153,7 +157,9 @@ class LibraryController(QObject):
         self._view().set_installations(projects, self.client.service_url)
         self._view().set_catalog(catalog)
         self._view().status_label.setText(
-            "Select an experiment to review its contents."
+            "View-only access. Browse experiment details; downloads are not permitted."
+            if catalog.access_level == "view"
+            else "Select an experiment to review its contents."
             if catalog.items
             else "Your lab has not published any experiments yet."
         )
@@ -185,7 +191,7 @@ class LibraryController(QObject):
             )
         elif action == "install":
             item = self._view().selected_item()
-            if item is None or not item.compatible:
+            if item is None or not item.compatible or not self._view().can_download:
                 return
             self._install_item = item
             root = self._studio_root()
@@ -273,7 +279,7 @@ class LibraryController(QObject):
 
     @staticmethod
     def _error(error: Exception | None) -> str:
-        if isinstance(error, (LibraryError, LibraryOriginError)):
+        if isinstance(error, (LibraryError, LibraryOriginError, ProjectBundleError)):
             return str(error)
         _LOGGER.error("Library operation failed (%s)", type(error).__name__)
         return "The library operation could not finish. Retry or contact your lab administrator."

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ctypes
+import json
 from types import SimpleNamespace
 
 import pytest
@@ -13,7 +14,20 @@ from fpvs_studio.library.models import DeviceCredential
 
 
 def credential():
-    return DeviceCredential(token="t" * 43, device_name="Synthetic machine")
+    return DeviceCredential(token="t" * 43, device_name="Synthetic machine", library_api_version=2)
+
+
+def test_untagged_secure_credential_is_recognized_as_previous_protocol():
+    raw = '{"token":"' + "t" * 43 + '","device_name":"Old PC"}'
+    assert credentials._decode(raw).library_api_version == 1
+
+
+@pytest.mark.parametrize("version", [0, 3, "2", True])
+def test_unsupported_credential_protocol_is_rejected(version):
+    raw = credential().model_dump()
+    raw["library_api_version"] = version
+    with pytest.raises(LibraryError, match="invalid"):
+        credentials._decode(json.dumps(raw))
 
 
 def test_windows_roundtrip_uses_machine_local_generic_credential(monkeypatch):

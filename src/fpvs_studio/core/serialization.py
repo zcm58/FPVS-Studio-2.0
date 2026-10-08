@@ -86,7 +86,7 @@ def replace_file_atomically(source: Path, destination: Path) -> None:
 def read_json_file(path: Path, model_type: type[ModelT]) -> ModelT:
     """Read a UTF-8 JSON file into a Pydantic model."""
 
-    return model_type.model_validate_json(path.read_text(encoding="utf-8"))
+    return model_type.model_validate_json(filesystem_path(path).read_text(encoding="utf-8"))
 
 
 def save_project_file(project: ProjectFile, path: Path) -> None:
@@ -98,7 +98,7 @@ def save_project_file(project: ProjectFile, path: Path) -> None:
 def load_project_file(path: Path) -> ProjectFile:
     """Load a project JSON file."""
 
-    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload = json.loads(filesystem_path(path).read_text(encoding="utf-8"))
     if not isinstance(payload, dict):
         raise ValueError("Project file must contain a JSON object.")
     return migrate_project_payload(payload)

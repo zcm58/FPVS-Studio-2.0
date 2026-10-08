@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from PySide6.QtCore import (
@@ -12,6 +13,7 @@ from PySide6.QtCore import (
     Qt,
     Signal,
 )
+from PySide6.QtGui import QPaintEvent
 from PySide6.QtWidgets import (
     QApplication,
     QLabel,
@@ -28,8 +30,43 @@ from tests.gui.helpers import (
 
 from fpvs_studio.core.enums import DutyCycleMode
 from fpvs_studio.gui.controller import StudioController
+from fpvs_studio.gui.runtime_settings_page import ImageSizePreview
 from fpvs_studio.runtime.display_mode import NativeDisplayMode
 from fpvs_studio.runtime.display_refresh import DisplayRefreshVerification
+
+
+@pytest.mark.parametrize("ratio", [1.0, 1.25, 1.5, 2.0])
+def test_image_size_preview_preserves_physical_pixels(qtbot, monkeypatch, ratio):
+    rectangles = []
+
+    class Painter:
+        RenderHint = SimpleNamespace(Antialiasing=1)
+
+        def __init__(self, widget):
+            pass
+
+        def setRenderHint(self, hint):
+            pass
+
+        def setPen(self, pen):
+            pass
+
+        def drawRect(self, *args):
+            pass
+
+        def fillRect(self, *args):
+            if len(args) == 5:
+                rectangles.append(args[2:4])
+
+    preview = ImageSizePreview(SimpleNamespace())
+    qtbot.addWidget(preview)
+    preview.resize(1200, 800)
+    preview._preview_width_px = 600
+    preview._preview_height_px = 400
+    monkeypatch.setattr(ImageSizePreview, "devicePixelRatioF", lambda self: ratio)
+    monkeypatch.setattr("fpvs_studio.gui.runtime_settings_page.QPainter", Painter)
+    preview.paintEvent(QPaintEvent(preview.rect()))
+    assert rectangles == [(round(600 / ratio), round(400 / ratio))]
 
 
 def _refresh_verification(

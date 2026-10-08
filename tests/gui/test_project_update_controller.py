@@ -207,6 +207,33 @@ def test_open_check_is_deferred_coalesced_and_never_installs(updates):
     assert state.controller.dialog is None
 
 
+def test_keep_current_version_preserves_origin_and_does_not_install(updates):
+    state = updates
+    state.controller.opened(state.window)
+    state.lifecycle.drain()
+    original_origin = state.origins[state.root]
+    original_project = state.window.document.project
+    assert "Keep using version 1.0.0" in state.window.notices[-1]
+    state.controller.show(state.window)
+    state.lifecycle.drain()
+    dialog = state.controller.dialog
+    assert dialog is not None and dialog.install_button.isEnabled()
+    state.io_calls.clear()
+    catalog_calls = state.client.catalog_calls
+
+    dialog.close_button.click()
+    state.lifecycle.drain()
+
+    assert not dialog.isVisible()
+    assert state.origins[state.root] is original_origin
+    assert original_origin.auto_check
+    assert state.window.document.project is original_project
+    assert state.client.catalog_calls == catalog_calls
+    assert state.io_calls == []
+    assert state.client.download_calls == []
+    assert state.handoffs == []
+
+
 def test_latest_version_already_installed_elsewhere_disables_update(updates):
     state = updates
     installed_project(state.root, project_id="masking-from-bundle", version="1.0.1")

@@ -9,7 +9,10 @@ from typing import Literal
 from packaging.version import Version
 
 from fpvs_studio import __version__
-from fpvs_studio.core.library_origin import LibraryProjectOrigin
+from fpvs_studio.core.library_origin import (
+    LibraryProjectOrigin,
+    canonical_library_service_url,
+)
 from fpvs_studio.library.cache import check_cancel
 from fpvs_studio.library.client import LibraryClient
 from fpvs_studio.library.errors import LibraryAuthorizationError, LibraryCancelled, LibraryError
@@ -93,7 +96,9 @@ def check_project_update(
         return ProjectUpdateResult("unlinked", message="Link this project to a Library experiment.")
     if automatic and not origin.auto_check:
         return ProjectUpdateResult("disabled", origin, message="Automatic version checks are off.")
-    if origin.service_url != client.service_url:
+    if canonical_library_service_url(origin.service_url) != canonical_library_service_url(
+        client.service_url,
+    ):
         return ProjectUpdateResult(
             "unavailable", origin, message="This project belongs to a different Library service.",
         )

@@ -616,6 +616,8 @@ def _participant_metadata_summary_lines(metadata: ParticipantMetadata) -> list[s
 class RunPage(QWidget):
     """Session compile and launch page with detailed runtime diagnostics."""
 
+    session_completed = Signal()
+
     def __init__(
         self,
         document: ProjectDocument,
@@ -624,6 +626,7 @@ class RunPage(QWidget):
     ) -> None:
         super().__init__(parent)
         self._document = document
+        self._launch_gate: Callable[[Callable[[], None]], None] | None = None
         self._active_launch_task: ProgressTask | None = None
         self._active_launch_participant_number: str | None = None
         self._active_participant_session_check: ParticipantSessionCheckTask | None = None
@@ -933,7 +936,13 @@ class RunPage(QWidget):
         task.succeeded.connect(self._on_launch_succeeded)
         task.failed.connect(self._on_launch_failed)
         task.finished.connect(self._on_launch_finished)
-        task.start()
+        if self._launch_gate is None:
+            task.start()
+        else:
+            self._launch_gate(task.start)
+
+    def set_launch_gate(self, callback: Callable[[Callable[[], None]], None]) -> None:
+        self._launch_gate = callback
 
     def _on_launch_succeeded(self, result: object) -> None:
         if not isinstance(result, LaunchTaskResult):
@@ -947,6 +956,7 @@ class RunPage(QWidget):
         if participant_number is None:
             return
         self._apply_launch_summary(result.session_plan, participant_number, result.summary)
+        self.session_completed.emit()
 
     def _on_launch_failed(self, error: object) -> None:
         _show_runtime_error_dialog(self, "Launch Error", _coerce_exception(error))

@@ -19,7 +19,7 @@ from fpvs_studio.core.library_publish import LibraryBundlePreparation, prepare_l
 from fpvs_studio.core.project_bundle import ProjectBundleCancelled, ProjectBundleError
 from fpvs_studio.developer import catalog_publisher
 
-REPOSITORY = "zcm58/FPVS-Studio-Library"
+REPOSITORY = catalog_publisher.REPOSITORY
 _REPORT_LIMIT = 16 * 1024 * 1024
 
 
@@ -188,6 +188,7 @@ class PublisherService:
         request: PublicationRequest,
         *,
         cancel_event: Event | None = None,
+        condition_id: str | None = None,
     ) -> PreparedPublication:
         _check_cancel(cancel_event)
         temporary_root = Path(tempfile.gettempdir()).resolve()
@@ -205,6 +206,7 @@ class PublisherService:
                 bundle_path,
                 minimum_studio_version=request.minimum_studio_version,
                 cancel_event=cancel_event,
+                condition_id=condition_id,
             )
             _check_cancel(cancel_event)
             metadata_path.write_bytes(_metadata_bytes(request, report, bundle_path))

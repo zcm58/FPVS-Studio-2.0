@@ -40,6 +40,7 @@ from fpvs_studio.core.library_origin import LibraryProjectOrigin
 from fpvs_studio.core.models import ConditionTemplateProfile, ProjectFile
 from fpvs_studio.core.paths import (
     condition_template_library_path,
+    filesystem_path,
     is_reserved_root_entry_name,
     project_json_path,
 )
@@ -93,8 +94,11 @@ from fpvs_studio.updates.helper_client import HelperClient
 from fpvs_studio.updates.models import UpdateCheckResult
 
 if TYPE_CHECKING:
+    from fpvs_studio.gui.data_sharing_controller import DataSharingController
+    from fpvs_studio.gui.library_access_dialog import LibraryAccessController
     from fpvs_studio.gui.library_controller import LibraryController
     from fpvs_studio.gui.library_publisher_controller import LibraryPublisherController
+    from fpvs_studio.gui.library_submission_controller import LibrarySubmissionController
     from fpvs_studio.gui.project_update_controller import ProjectUpdateController
 
 _SETTINGS_ORGANIZATION = "FPVS Studio"
@@ -161,8 +165,11 @@ class StudioController(QObject):
         self._library_import_finished: Callable[[Path | None], None] | None = None
         self._library_import_result: Path | None = None
         self._library_controller: LibraryController | None = None
+        self._library_access_controller: LibraryAccessController | None = None
         self._project_update_controller: ProjectUpdateController | None = None
+        self._data_sharing_controller: DataSharingController | None = None
         self._library_publisher_controller: LibraryPublisherController | None = None
+        self._library_submission_controller: LibrarySubmissionController | None = None
         self._import_bundle_progress_bridge: ProgressSignalBridge | None = None
         self._import_bundle_processing_window: StudioMainWindow | None = None
         self._import_bundle_processing_dialog: BundleImportProgressDialog | None = None
@@ -298,7 +305,7 @@ class StudioController(QObject):
             normalized = str(project_root)
             if normalized in seen:
                 continue
-            if not (project_root / "project.json").is_file():
+            if not filesystem_path(project_root / "project.json").is_file():
                 continue
             recent_paths.append(project_root)
             seen.add(normalized)
@@ -336,7 +343,7 @@ class StudioController(QObject):
         """Persist a project root as the most recent launch/open target."""
 
         normalized_root = Path(project_root).expanduser()
-        if not (normalized_root / "project.json").is_file():
+        if not filesystem_path(normalized_root / "project.json").is_file():
             return
         existing = [
             path
@@ -385,7 +392,7 @@ class StudioController(QObject):
             self._fpvs_root_dir = None
             return None
         root_dir = root_dir.resolve()
-        if root_dir.is_dir():
+        if filesystem_path(root_dir).is_dir():
             self._fpvs_root_dir = root_dir
             self._projects_parent_dir = root_dir
             return root_dir
@@ -399,7 +406,7 @@ class StudioController(QObject):
         """Persist the FPVS Studio root folder preference."""
 
         root_dir = Path(path).expanduser().resolve()
-        if not root_dir.is_dir():
+        if not filesystem_path(root_dir).is_dir():
             raise ValueError("FPVS Studio Root Folder must be an existing directory.")
         self._settings.setValue(_FPVS_ROOT_DIR_KEY, str(root_dir))
         self._settings.sync()
@@ -609,7 +616,7 @@ class StudioController(QObject):
         if not directory:
             return None
         selected_path = Path(directory).expanduser().resolve()
-        if selected_path.is_dir():
+        if filesystem_path(selected_path).is_dir():
             return selected_path
         QMessageBox.warning(
             parent,
@@ -852,6 +859,16 @@ class StudioController(QObject):
             )
         self._library_controller.show()
 
+    def prompt_for_library_access(self) -> None:
+        """Offer lab setup once after startup; offline authoring remains available."""
+        if self.welcome_window is None and self.main_window is None:
+            return
+        if self._library_access_controller is None:
+            from fpvs_studio.gui.library_access_dialog import LibraryAccessController
+
+            self._library_access_controller = LibraryAccessController(self._app)
+        self._library_access_controller.check()
+
     def _library_root(self) -> Path:
         assert self._fpvs_root_dir is not None
         return self._fpvs_root_dir
@@ -900,6 +917,20 @@ class StudioController(QObject):
         if window is not None and self._can_publish_from(window):
             self._project_versions().show(window)
 
+    def _data_sharing(self) -> DataSharingController:
+        if self._data_sharing_controller is None:
+            from fpvs_studio.gui.data_sharing_controller import DataSharingController
+
+            self._data_sharing_controller = DataSharingController(
+                self._app, current_window=lambda: self.main_window,
+            )
+        return self._data_sharing_controller
+
+    def show_data_sharing(self) -> None:
+        window = self.main_window
+        if window is not None and self._can_publish_from(window):
+            self._data_sharing().show(window)
+
     def show_library_publisher(self) -> None:
         """Show the publisher only when developer mode was active at startup."""
         window = self.main_window
@@ -917,6 +948,22 @@ class StudioController(QObject):
             project_root=window.document.project_root,
             title=window.document.project.meta.name,
             item_id=window.document.project.meta.project_id,
+            save_project=lambda: self._can_publish_from(window) and window.save_project(),
+        )
+
+    def show_library_submission(self) -> None:
+        window = self.main_window
+        if window is None or not self._can_publish_from(window):
+            return
+        if self._library_submission_controller is None:
+            from fpvs_studio.gui.library_submission_controller import LibrarySubmissionController
+
+            self._library_submission_controller = LibrarySubmissionController(self._app)
+        self._library_submission_controller.show(
+            project_root=window.document.project_root,
+            conditions=[
+                (item.condition_id, item.name) for item in window.document.project.conditions
+            ],
             save_project=lambda: self._can_publish_from(window) and window.save_project(),
         )
 
@@ -952,7 +999,13 @@ class StudioController(QObject):
             on_request_import_project_bundle=self.show_import_project_bundle_dialog,
             on_request_settings=self.show_settings_dialog,
             on_request_library=self.show_library,
+            on_request_library_submission=self.show_library_submission,
             on_request_project_update=self.show_project_versions,
+            on_request_data_sharing=self.show_data_sharing,
+            on_session_completed=lambda window: self._data_sharing().session_completed(window),
+            on_session_started=lambda window, ready: self._data_sharing().session_started(
+                window, ready,
+            ),
             on_request_library_publish=(
                 self.show_library_publisher if self._developer_mode.active else None
             ),
@@ -998,6 +1051,7 @@ class StudioController(QObject):
         if previous_window is not None and previous_window is not target_window:
             previous_window.close()
         self._project_versions().opened(target_window)
+        self._data_sharing().opened(target_window)
 
     def _load_condition_template_profiles(self) -> list[ConditionTemplateProfile]:
         root_dir = self._fpvs_root_dir
@@ -1412,7 +1466,7 @@ class StudioController(QObject):
 
     def _discover_project_roots(self) -> list[Path]:
         root_dir = self._fpvs_root_dir
-        if root_dir is None or not root_dir.is_dir():
+        if root_dir is None or not filesystem_path(root_dir).is_dir():
             return []
         project_roots: list[Path] = []
         pending_dirs = [root_dir]
@@ -1420,11 +1474,13 @@ class StudioController(QObject):
             current_dir = pending_dirs.pop()
             if not self._is_within_configured_root(current_dir):
                 continue
-            if project_json_path(current_dir).is_file():
+            if filesystem_path(project_json_path(current_dir)).is_file():
                 project_roots.append(current_dir)
                 continue
             try:
-                children = list(current_dir.iterdir())
+                children = [
+                    current_dir / child.name for child in filesystem_path(current_dir).iterdir()
+                ]
             except OSError:
                 continue
             if current_dir == root_dir:
@@ -1433,7 +1489,7 @@ class StudioController(QObject):
                     for child in children
                     if not is_reserved_root_entry_name(child.name)
                 ]
-            pending_dirs.extend(child for child in children if child.is_dir())
+            pending_dirs.extend(child for child in children if filesystem_path(child).is_dir())
         return project_roots
 
     def _project_management_entry(self, project_root: Path) -> ProjectManagementEntry:

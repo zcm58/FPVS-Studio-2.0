@@ -361,7 +361,7 @@ def _scan_stimulus_set(
         if suffix not in NORMALIZATION_INPUT_SUFFIXES:
             unsupported_files.append(path.name)
             continue
-        with Image.open(path) as image:
+        with Image.open(path, formats=("JPEG", "PNG", "BMP", "TIFF")) as image:
             width, height = ImageOps.exif_transpose(image).size
         resolutions.add((width, height))
         file_types.add(_canonical_file_type(suffix))
@@ -397,7 +397,7 @@ def _resize_center_crop_png(
     target_height: int,
 ) -> None:
     destination_path.parent.mkdir(parents=True, exist_ok=True)
-    with Image.open(source_path) as image:
+    with Image.open(source_path, formats=("JPEG", "PNG", "BMP", "TIFF")) as image:
         image = ImageOps.exif_transpose(image).convert("RGB")
         original_width, original_height = image.size
         scale = max(target_width / original_width, target_height / original_height)

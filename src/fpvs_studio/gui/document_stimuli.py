@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any
 
 from fpvs_studio.core.enums import StimulusModality
 from fpvs_studio.core.models import Condition, ProjectFile, StimulusSet
+from fpvs_studio.core.paths import filesystem_path
 from fpvs_studio.gui.document_support import DocumentError, validated_copy
 from fpvs_studio.preprocessing.importer import (
     import_fresh_stimulus_source_directory,
@@ -268,7 +269,7 @@ class DocumentStimulusMixin:
     def _source_dir_marker(self, stimulus_set: StimulusSet) -> tuple[str, int | None]:
         if stimulus_set.source_dir is None:
             return ("missing-source-dir", None)
-        source_dir = self._project_root / Path(stimulus_set.source_dir)
+        source_dir = filesystem_path(self._project_root / Path(stimulus_set.source_dir))
         try:
             if not source_dir.is_dir():
                 return ("missing-directory", None)

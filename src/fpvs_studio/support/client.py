@@ -5,8 +5,10 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
+from http.client import HTTPException
 from threading import Event
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlencode
@@ -16,6 +18,7 @@ from fpvs_studio.support.models import Draft, Intent
 
 SERVICE_ORIGIN = "https://reports.zack-murphy.com"
 MAX_RESPONSE_BYTES = 16 * 1024
+REQUEST_DEADLINE_SECONDS = 30
 Transport = Callable[[str, str, bytes | None, dict[str, str]], bytes]
 
 
@@ -36,13 +39,35 @@ class _NoRedirect(HTTPRedirectHandler):
 
 def http_transport(method: str, url: str, data: bytes | None, headers: dict[str, str]) -> bytes:
     request = Request(
-        url, data=data, headers={"User-Agent": "FPVS-Studio/1.0", **headers}, method=method
+        url, data=data,
+        headers={"User-Agent": "FPVS-Studio/1.0", "Accept-Encoding": "identity", **headers},
+        method=method,
     )
+    started = time.monotonic()
     try:
         with build_opener(_NoRedirect()).open(request, timeout=10) as response:
             if response.headers.get_content_type() != "application/json":
                 raise ReportServiceError("The reporting service returned an unexpected response.")
-            content = bytes(response.read(MAX_RESPONSE_BYTES + 1))
+            if response.headers.get("Content-Encoding", "identity") != "identity":
+                raise ReportServiceError("The reporting service returned compressed transport.")
+            content = bytearray()
+            while True:
+                if time.monotonic() - started > REQUEST_DEADLINE_SECONDS:
+                    raise ReportServiceError(
+                        "The reporting request timed out. Your draft is preserved."
+                    )
+                chunk = response.read1(min(4096, MAX_RESPONSE_BYTES + 1 - len(content)))
+                if time.monotonic() - started > REQUEST_DEADLINE_SECONDS:
+                    raise ReportServiceError(
+                        "The reporting request timed out. Your draft is preserved."
+                    )
+                if not chunk:
+                    break
+                content.extend(chunk)
+                if len(content) > MAX_RESPONSE_BYTES:
+                    raise ReportServiceError(
+                        "The reporting service response exceeded its size limit."
+                    )
     except HTTPError as error:
         status = error.code
         error.close()
@@ -55,13 +80,11 @@ def http_transport(method: str, url: str, data: bytes | None, headers: dict[str,
         raise ReportServiceError(
             f"The reporting service could not complete the request ({status})."
         ) from None
-    except (URLError, TimeoutError, OSError):
+    except (URLError, TimeoutError, OSError, HTTPException):
         raise ReportServiceError(
             "Could not reach the reporting service. Your draft is preserved."
         ) from None
-    if len(content) > MAX_RESPONSE_BYTES:
-        raise ReportServiceError("The reporting service response exceeded its size limit.")
-    return content
+    return bytes(content)
 
 
 @dataclass(frozen=True)
@@ -104,13 +127,15 @@ class ReportClient:
         if token:
             headers["Authorization"] = f"Bearer {token}"
         raw = self.transport(method, self.origin + path, data, headers)
+        if cancel is not None and cancel.is_set():
+            raise ReportCancelled("Submission canceled. Your draft is preserved.")
         try:
             if len(raw) > MAX_RESPONSE_BYTES:
                 raise ValueError("large response")
             result = json.loads(raw)
             if not isinstance(result, dict):
                 raise ValueError("not an object")
-        except (ValueError, UnicodeError):
+        except (ValueError, UnicodeError, RecursionError):
             raise ReportServiceError(
                 "The reporting service returned an invalid response."
             ) from None

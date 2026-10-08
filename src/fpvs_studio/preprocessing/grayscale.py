@@ -18,5 +18,5 @@ def generate_grayscale_png(source_path: Path, destination_path: Path) -> None:
     source_path = filesystem_path(source_path)
     destination_path = filesystem_path(destination_path)
     destination_path.parent.mkdir(parents=True, exist_ok=True)
-    with Image.open(source_path) as image:
+    with Image.open(source_path, formats=("JPEG", "PNG")) as image:
         image.convert("L").save(destination_path, format="PNG")

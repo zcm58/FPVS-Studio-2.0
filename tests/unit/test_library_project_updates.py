@@ -139,3 +139,29 @@ def test_cancellation_propagates_before_or_during_network():
     assert client.calls == []
     with pytest.raises(LibraryCancelled):
         check_project_update(Client(LibraryCancelled("cancelled")), origin())
+
+
+@pytest.mark.parametrize("previous_origin", [
+    "https://fpvs-studio-library.fpvs-studio-zcm58.workers.dev",
+    "https://fpvs.zack-murphy.com",
+])
+def test_managed_origin_move_preserves_project_version_identity(previous_origin):
+    receipt = origin(service_url=previous_origin)
+    client = Client()
+    client.service_url = "https://openfpvs.com"
+    result = check_project_update(client, receipt)
+    assert result.status == "update_available"
+    assert result.origin == receipt
+    assert result.origin.service_url == previous_origin
+    assert client.calls == ["connection", "catalog"]
+
+
+@pytest.mark.parametrize("previous_origin", [
+    "https://fpvs-studio-library.fpvs-studio-zcm58.workers.dev",
+    "https://fpvs.zack-murphy.com",
+])
+def test_managed_receipt_cannot_select_a_custom_service(previous_origin):
+    client = Client()
+    result = check_project_update(client, origin(service_url=previous_origin))
+    assert result.status == "unavailable"
+    assert client.calls == []

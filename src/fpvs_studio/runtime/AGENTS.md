@@ -57,6 +57,11 @@ This phase should establish:
 - run the participant fixation tutorial once before the first condition when the
   compiled fixation accuracy and tutorial settings are enabled
 - aggregate run results into a session result
+- `data_sharing.py` owns opt-in completed-session capture: persist launch intent before
+  presentation, terminal eligibility before research finalization, then explicit commit
+  proof and immutable report after research writes and before derived XLSX. Recovery
+  requires those proofs and matching rows; HTTP and credentials stay outside runtime.
+  See `docs/DATA_SHARING.md` from the repository root.
 - write run/session export artifacts
 - record trigger writes as `sent` only after the backend write succeeds; write failures
   must be exported as `error` records and abort the current run/session cleanly

@@ -52,7 +52,7 @@ The PyInstaller spec includes package metadata in the bundled app.
 The package distribution name is `fpvs-studio`; the GUI and executable still use the
 display name `FPVS Studio`.
 
-For the current release package, use the PEP 440-compatible package version `2.2.5`.
+For the current release package, use the PEP 440-compatible package version `2.4.1`.
 The GitHub Release title can use a friendlier beta label, but the release tag and
 installer filename must use the exact package version.
 
@@ -60,10 +60,11 @@ Write release notes as bullet points, with one or two sentences per major change
 Keep verification summaries and installer instructions out of the release notes;
 retain audit evidence and check boundaries in the release record instead.
 
-The [v2.2.5 release plan](exec-plans/active/error-reporting-and-release-2.2.5.md)
-tracks clearer error popups, reporting, the installer and direct 2.2.4 patch.
-The [v2.2.4 release record](exec-plans/completed/release-2.2.4.md) records the
-previous published baseline and verification boundaries.
+The [v2.4.1 release record](exec-plans/completed/release-2.4.1.md) tracks the signed
+experiment transfer security release and its exact artifact/native checks.
+The previous [v2.4.0 release record](exec-plans/completed/release-2.4.0.md) records the
+published installer, direct 2.3.0 patch, exact release note, packaged startup checks
+and remaining installed-upgrade/hardware check boundaries.
 
 Use simple semantic versioning:
 
@@ -428,6 +429,11 @@ and `sha256`. Full installer metadata continues to come directly from GitHub. Th
 fetches the bounded JSON through the same trusted GitHub/CDN boundary and verifies its
 GitHub digest before using it. Invalid or tampered metadata is an error, not an implicit
 permission to run a different file.
+
+Enable GitHub immutable releases before future publication and attach all assets
+before publishing the draft. Verify the resulting release attestation and downloaded
+assets; see [artifact provenance](LIBRARY_ARTIFACT_PROVENANCE.md#release-publication).
+The local build scripts do not upload or publish releases.
 
 The independent helper reads the exact per-user Windows installation registration rather
 than treating its own package version as Studio's installed version. For discovery it

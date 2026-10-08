@@ -3,10 +3,31 @@
 from __future__ import annotations
 
 import re
+import subprocess
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 PACKAGE_ROOT = PROJECT_ROOT / "src" / "fpvs_studio"
+
+
+def test_gc_print_scan_rejects_calls_without_matching_fingerprint(tmp_path) -> None:
+    script = (PROJECT_ROOT / "scripts/check_gc.ps1").read_text(encoding="utf-8")
+    match = re.search(r'\$printMatches = Invoke-GitGrep "([^"]+)"', script)
+    assert match is not None
+    source = tmp_path / "example.py"
+    source.write_text(
+        "protocol_fingerprint(value)\nprint(value)\nprint (value)\nfootprint(value)\n",
+        encoding="utf-8",
+    )
+    result = subprocess.run(
+        ["git", "grep", "--no-index", "-n", match.group(1), "--", source.name],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.splitlines() == ["example.py:2:print(value)", "example.py:3:print (value)"]
 
 
 def _read_repo_file(relative_path: str) -> str:

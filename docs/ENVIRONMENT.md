@@ -16,7 +16,7 @@ PowerShell:
 
 ```powershell
 py -3.10 -m venv .venv3.10
-.\.venv3.10\Scripts\python -m pip install -U pip
+.\.venv3.10\Scripts\python -m pip install -U 'pip>=26.2'
 .\.venv3.10\Scripts\python -m pip install -e '.[dev]'
 ```
 
@@ -45,6 +45,14 @@ Notes:
 - the dev extra includes `pytest`, `pytest-qt`, and `pytest-timeout` for GUI
   verification
 - the packaging extra includes PyInstaller for local executable builds
+
+The extras declare security minimums for their existing dependencies. Refresh an
+existing environment with the relevant editable install before verification or
+packaging; `-SkipInstall` does not apply those minimums. See
+[Security](SECURITY.md#dependency-advisories-and-compatibility-exceptions) for the
+remaining Pillow/MoviePy and setuptools/PsychoPy constraints. Do not override
+upstream requirements or treat a scanner package match as proof of a reachable
+Studio attack path.
 
 ## Launching The App
 

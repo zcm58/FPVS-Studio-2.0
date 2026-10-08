@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import os
+import subprocess
 import sys
 from pathlib import Path
 
+import pytest
 from tests.qt_test_registry import (
     find_qt_test_files,
     load_qt_test_registry,
@@ -79,10 +82,38 @@ def test_root_conftest_does_not_force_a_qt_platform() -> None:
     assert headless_platform not in source
 
 
-def test_default_pytest_session_does_not_import_pyside6() -> None:
+@pytest.mark.timeout(90)
+def test_default_pytest_session_does_not_import_pyside6(pytestconfig: pytest.Config) -> None:
     root_module = "PySide6"
 
-    assert all(
-        module_name != root_module and not module_name.startswith(f"{root_module}.")
-        for module_name in sys.modules
+    if not qt_tests_requested(
+        cli_opt_in=bool(pytestconfig.getoption("--allow-qt-tests")), environ=os.environ,
+    ):
+        assert all(
+            module_name != root_module and not module_name.startswith(f"{root_module}.")
+            for module_name in sys.modules
+        )
+
+    # Probe default collection independently of an explicitly opted-in parent.
+    # Block Qt before import so a missed registry entry cannot execute native code.
+    script = """
+import importlib.abc
+import sys
+import pytest
+class BlockQt(importlib.abc.MetaPathFinder):
+    def find_spec(self, fullname, path=None, target=None):
+        if fullname == "PySide6" or fullname.startswith("PySide6."):
+            raise ImportError("Default pytest collection attempted to import Qt: " + fullname)
+sys.meta_path.insert(0, BlockQt())
+result = pytest.main(["--collect-only", "-qq", "--tb=short"])
+assert result == 0, result
+assert not any(name == "PySide6" or name.startswith("PySide6.") for name in sys.modules)
+"""
+    env = os.environ.copy()
+    env.pop("FPVS_ALLOW_QT_TESTS", None)
+    env.pop("PYTEST_ADDOPTS", None)
+    result = subprocess.run(
+        [sys.executable, "-c", script], cwd=Path(__file__).resolve().parents[2],
+        env=env, capture_output=True, text=True, timeout=60,
     )
+    assert result.returncode == 0, result.stdout + result.stderr

@@ -11,7 +11,7 @@ from threading import Event
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
-from urllib.request import Request, urlopen
+from urllib.request import Request
 
 from packaging.version import InvalidVersion, Version
 
@@ -30,6 +30,7 @@ from fpvs_studio.updates.validation import (
     installer_matches_version,
     managed_response,
     parse_release_version,
+    urlopen,
     validate_asset_identity,
     validate_response_url,
 )
@@ -102,6 +103,7 @@ def fetch_release_metadata(
                     raise UpdateError("GitHub release metadata exceeded its size limit.")
                 payload.extend(chunk)
     except HTTPError as error:
+        error.close()
         raise UpdateError(f"GitHub update check failed with HTTP {error.code}.") from error
     except URLError as error:
         raise UpdateError(f"Could not reach GitHub Releases: {error.reason}") from error
@@ -112,7 +114,7 @@ def fetch_release_metadata(
 
     try:
         decoded = json.loads(payload.decode("utf-8"))
-    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+    except (UnicodeDecodeError, json.JSONDecodeError, RecursionError) as error:
         raise UpdateError("GitHub returned unreadable release metadata.") from error
     if not isinstance(decoded, list):
         raise UpdateError("GitHub returned release metadata in an unexpected format.")

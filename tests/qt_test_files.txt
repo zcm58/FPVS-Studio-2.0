@@ -6,6 +6,7 @@ tests/gui/test_condition_modifier_dialog.py
 tests/gui/test_condition_task_dialog.py
 tests/gui/test_conditions_session_fixation.py
 tests/gui/test_create_project_dialog.py
+tests/gui/test_data_sharing_dialog.py
 tests/gui/test_design_setup_step.py
 tests/gui/test_error_dialogs.py
 tests/gui/test_experiment_categories_gui.py
@@ -15,8 +16,10 @@ tests/gui/test_fixation_settings_page.py
 tests/gui/test_frontend_responsiveness.py
 tests/gui/test_home_launch_surface.py
 tests/gui/test_image_resizer_page.py
+tests/gui/test_library_access_dialog.py
 tests/gui/test_library_dialog.py
 tests/gui/test_library_publisher_dialog.py
+tests/gui/test_library_submission_dialog.py
 tests/gui/test_manage_projects_rename.py
 tests/gui/test_masking_conditions.py
 tests/gui/test_masking_modifier_dialog.py
@@ -37,3 +40,5 @@ tests/gui/test_setup_wizard_shell.py
 tests/gui/test_update_dialog.py
 tests/gui/test_welcome_settings_flow.py
 tests/gui/test_workers.py
+tests/unit/test_document_conditions.py
+tests/unit/test_document_summary_refresh.py

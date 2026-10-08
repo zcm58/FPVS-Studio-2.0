@@ -141,7 +141,11 @@ class StudioMainWindow(QMainWindow):
         on_load_fpvs_root_dir: Callable[[], Path | None] | None = None,
         on_request_library: Callable[[], None] | None = None,
         on_request_library_publish: Callable[[], None] | None = None,
+        on_request_library_submission: Callable[[], None] | None = None,
         on_request_project_update: Callable[[], None] | None = None,
+        on_request_data_sharing: Callable[[], None] | None = None,
+        on_session_completed: Callable[[StudioMainWindow], None] | None = None,
+        on_session_started: Callable[[StudioMainWindow, Callable[[], None]], None] | None = None,
     ) -> None:
         super().__init__()
         self.setObjectName("studio_main_window")
@@ -154,7 +158,11 @@ class StudioMainWindow(QMainWindow):
         self._on_request_settings = on_request_settings
         self._on_request_library = on_request_library
         self._on_request_library_publish = on_request_library_publish
+        self._on_request_library_submission = on_request_library_submission
         self._on_request_project_update = on_request_project_update
+        self._on_request_data_sharing = on_request_data_sharing
+        self._on_session_completed = on_session_completed
+        self._on_session_started = on_session_started
         self.setWindowTitle("FPVS Studio Beta")
         self._auto_workspace_sized = False
         self._auto_workspace_return_size: tuple[int, int] | None = None
@@ -245,6 +253,8 @@ class StudioMainWindow(QMainWindow):
                 on_save_project=self.save_project,
             )
             self._setup_wizard_page = page
+            page.run_page.session_completed.connect(self._notify_session_completed)
+            page.run_page.set_launch_gate(self._notify_session_started)
             page.pending_edits_changed.connect(self._update_save_state)
             self.main_stack.addWidget(page)
             self._install_button_hover_animations()
@@ -549,7 +559,14 @@ class StudioMainWindow(QMainWindow):
         self.project_update_action.setObjectName("update_project_version_action")
         self.project_update_action.setEnabled(self._on_request_project_update is not None)
         self.project_update_action.triggered.connect(self._request_project_update)
+        self.data_sharing_action = QAction("Data Sharing & Comparison...", self)
+        self.data_sharing_action.setObjectName("data_sharing_action")
+        self.data_sharing_action.setEnabled(self._on_request_data_sharing is not None)
+        self.data_sharing_action.triggered.connect(self._request_data_sharing)
         self.publish_library_action: QAction | None = None
+        self.submit_library_action = QAction("Request Library publication...", self)
+        self.submit_library_action.setObjectName("request_library_publication_action")
+        self.submit_library_action.triggered.connect(self._request_library_submission)
         if self._on_request_library_publish is not None:
             self.publish_library_action = QAction("Publish to Experiment Library...", self)
             self.publish_library_action.setObjectName("publish_experiment_library_action")
@@ -614,6 +631,7 @@ class StudioMainWindow(QMainWindow):
         self.export_menu.addAction(self.export_project_config_action)
         self.export_menu.addAction(self.export_completed_project_config_action)
         self.export_menu.addAction(self.export_group_summary_action)
+        self.export_menu.addAction(self.submit_library_action)
         if self.publish_library_action is not None:
             self.export_menu.addSeparator()
             self.export_menu.addAction(self.publish_library_action)
@@ -630,6 +648,7 @@ class StudioMainWindow(QMainWindow):
         self.view_menu.addAction(self.library_action)
         self.view_menu.addSeparator()
         self.view_menu.addAction(self.fixation_cross_data_action)
+        self.view_menu.addAction(self.data_sharing_action)
         self.tools_menu.addAction(self.image_resizer_action)
 
     def show_task_accuracy(self) -> None:
@@ -846,7 +865,7 @@ class StudioMainWindow(QMainWindow):
         task.succeeded.connect(self._on_home_launch_succeeded)
         task.failed.connect(self._on_home_launch_failed)
         task.finished.connect(self._on_home_launch_finished)
-        task.start()
+        self._notify_session_started(task.start)
 
     def _home_launch_refresh_hz(self) -> float:
         preferred_refresh = self.document.project.settings.display.preferred_refresh_hz
@@ -919,6 +938,24 @@ class StudioMainWindow(QMainWindow):
         if participant_number is None:
             return
         self._show_home_launch_summary(participant_number, result)
+        self._notify_session_completed()
+
+    def _notify_session_completed(self) -> None:
+        if self._on_session_completed is not None:
+            callback = self._on_session_completed
+            QTimer.singleShot(0, lambda: callback(self))
+
+    def _notify_session_started(self, on_ready: Callable[[], None]) -> None:
+        if self._on_session_started is None:
+            on_ready()
+            return
+        self.statusBar().showMessage("Waiting for data sharing to stop before launch…")
+
+        def start() -> None:
+            self.statusBar().clearMessage()
+            on_ready()
+
+        self._on_session_started(self, start)
 
     @Slot(object)
     def _on_home_launch_failed(self, error: object) -> None:
@@ -1123,6 +1160,7 @@ class StudioMainWindow(QMainWindow):
             self.library_action,
             self.project_update_action,
             self.fixation_cross_data_action,
+            self.data_sharing_action,
             self.image_resizer_action,
             self.launch_action,
         )
@@ -1132,6 +1170,9 @@ class StudioMainWindow(QMainWindow):
             self.publish_library_action.setEnabled(not busy)
         self.project_update_action.setEnabled(
             not busy and self._on_request_project_update is not None
+        )
+        self.data_sharing_action.setEnabled(
+            not busy and self._on_request_data_sharing is not None
         )
 
     @Slot(object)
@@ -1411,6 +1452,10 @@ class StudioMainWindow(QMainWindow):
         if self._on_request_library is not None and self._allow_project_handoff_during_launch():
             self._on_request_library()
 
+    def _request_data_sharing(self) -> None:
+        if self._on_request_data_sharing is not None and not self.is_launch_busy():
+            self._on_request_data_sharing()
+
     def set_project_update_notice(self, message: str) -> None:
         """Display a passive library notice without changing the active page."""
         self.home_page.set_project_update_notice(message)
@@ -1434,6 +1479,16 @@ class StudioMainWindow(QMainWindow):
             and self._allow_project_handoff_during_fixation_load()
         ):
             self._on_request_library_publish()
+
+    def _request_library_submission(self) -> None:
+        if (
+            self._on_request_library_submission is not None
+            and self._active_bundle_export_task is None
+            and not self._bundle_import_processing_active
+            and self._allow_project_handoff_during_launch()
+            and self._allow_project_handoff_during_fixation_load()
+        ):
+            self._on_request_library_submission()
 
     def _update_window_title(self, *_args: object) -> None:
         dirty_prefix = "*" if self.document.dirty else ""

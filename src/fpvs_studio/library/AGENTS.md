@@ -8,6 +8,14 @@ validation and extraction; this package only transfers and verifies bytes.
 - No GitHub credentials, enrollment codes, or downloaded executable code live here.
 - Persist a random device token in the secure OS store before enrollment. Preserve
   pending tokens after network errors so retry is idempotent.
+- Native access uses `/v2` with JSON schema `1.0`. Clear previous-protocol secure
+  credentials under the cache lock before startup/enrollment; reconnect with a fresh
+  token and the existing lab code. Never reuse old or revoked machine access.
+- Native Studio connects directly to `https://openfpvs.com`. Canonicalize only the
+  two previous managed origins through core's `library_origin.py` policy; preserve
+  custom service origins. New-origin enrollment uses its own secure store/cache;
+  never copy old credentials or rewrite installed receipts. Receipt comparisons use
+  the same policy without sending requests to the saved origin.
 - Windows uses Credential Manager; Linux requires Secret Service. Fail closed when
   secure storage is unavailable; never write secrets to project files or the cache.
 - Keep HTTP requests on the configured HTTPS service origin, reject redirects, bound
@@ -17,6 +25,13 @@ validation and extraction; this package only transfers and verifies bytes.
   payload and one bounded partial are retained; rehash cached bytes before reuse.
 - Imported projects are independent copies and work offline. Network access never
   replaces an existing project or edits settings.
+- `provenance.py` verifies signed bundle evidence with the locally pinned managed
+  service key before cache creation/reuse. Response keys cannot establish trust;
+  see `docs/LIBRARY_ARTIFACT_PROVENANCE.md` for the bounded proof contract.
+- `submissions.py` transfers an explicitly confirmed clean condition bundle through
+  the enrolled-device review API. Bind retries to its UUID/digest; preparation uses
+  core's clean exporter through the existing prepared-file owner. No GitHub write
+  credential enters the desktop client. Approval covers exact bytes only.
 - `project_updates.py` discovers newer versions from an explicit local origin receipt.
   Compare semantic versions by item identity even if the installed release disappeared;
   never infer origins from names or follow a receipt to a different service endpoint.

@@ -8,6 +8,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from typing import Any
 from urllib.parse import unquote, urlparse
+from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 from packaging.version import InvalidVersion, Version
 
@@ -147,14 +148,38 @@ def validate_response_url(response: object) -> None:
     final_url = geturl()
     if not isinstance(final_url, str):
         raise UpdateError("GitHub returned an invalid response URL.")
-    parsed = urlparse(final_url)
-    if parsed.scheme != "https" or parsed.netloc.lower() not in {
-        "github.com",
-        "api.github.com",
-        "release-assets.githubusercontent.com",
-        "objects.githubusercontent.com",
-    }:
+    _validate_transfer_url(final_url)
+
+
+def _validate_transfer_url(url: str) -> None:
+    parsed = urlparse(url)
+    if (
+        any(ord(character) <= 32 or ord(character) == 127 for character in url)
+        or parsed.fragment
+        or parsed.scheme != "https"
+        or parsed.netloc.lower() not in {
+            "github.com",
+            "api.github.com",
+            "release-assets.githubusercontent.com",
+            "objects.githubusercontent.com",
+        }
+    ):
         raise UpdateError("GitHub redirected the update request to an untrusted or non-HTTPS URL.")
+
+
+class UpdateRedirectHandler(HTTPRedirectHandler):
+    """Validate every destination before urllib can make the next connection."""
+
+    def redirect_request(
+        self, req: Request, fp: Any, code: int, msg: str, headers: Any, newurl: str,
+    ) -> Request | None:
+        _validate_transfer_url(newurl)
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+def urlopen(request: Request, *, timeout: int) -> Any:
+    _validate_transfer_url(request.full_url)
+    return build_opener(UpdateRedirectHandler()).open(request, timeout=timeout)
 
 
 @contextmanager

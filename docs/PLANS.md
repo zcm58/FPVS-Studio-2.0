@@ -13,6 +13,7 @@ Use this page to find planning material before making feature-sized changes.
 
 Current implementation:
 
+- [Opt-in experiment data sharing and comparison](exec-plans/active/remote-experiment-results-reporting.md)
 - [Unicorn Hybrid Black recording support](exec-plans/active/unicorn-hybrid-black-support.md) (normal marker output enabled; full receiver, Toolbox and physical timing validation pending)
 - [Experiment Library: Phase 1 whole projects](exec-plans/active/private-experiment-library.md)
 - [Cloudflare bug reporting: desktop implementation](exec-plans/active/cloudflare-bug-reporting.md)
@@ -20,6 +21,7 @@ Current implementation:
 
 Concrete planned work:
 
+- [Long-running results reporting](exec-plans/planned/long-running-results-reporting.md) (future local archive/capacity work; not implemented)
 - [Participant results and question presentation](exec-plans/planned/participant-results-and-question-presentation.md) (proposal; not implemented)
 - `exec-plans/planned/restore-tutorials-file-menu-entry.md`
 - `exec-plans/planned/luminance-rms-equalization-investigation.md`
@@ -38,6 +40,10 @@ luminance/RMS algorithm investigation instead of duplicating its scientific deci
 
 Completed plans are historical implementation notes. Read their directory only when
 the current contracts do not explain why a landed decision exists.
+
+Recent completion: [FPVS Studio 2.2.6 Library reconnection release](exec-plans/completed/release-2.2.6.md).
+
+Recent completion: [Upload/download source security hardening](exec-plans/completed/upload-download-security-hardening.md) (runtime/dependency acceptance limits remain documented).
 
 Recent completion: [FPVS Studio 2.2.1 release](exec-plans/completed/release-2.2.1.md).
 

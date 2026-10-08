@@ -14,6 +14,10 @@ backend-driven.
 - Keep GUI-only state shallow; persistent truth should remain in backend models.
 - Route validation, compilation, materialization, preflight, and launch through
   the existing backend seams.
+- View > Data Sharing & Comparison uses `data_sharing_controller.py` with app-owned
+  jobs and neutral backend contracts. Enrollment never opts in; preserve explicit
+  opt-out/backlog release, cancellation, stale-project guards and descriptive cohort
+  limits. Hash assets and call HTTP only in workers. See `docs/DATA_SHARING.md`.
 - Preserve the Home/Setup Wizard workflow: Home is the returning-user launch surface;
   detailed setup widgets should be reached through the guided wizard, not new top-level
   tabs.

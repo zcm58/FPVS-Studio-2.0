@@ -62,6 +62,7 @@ def run_gui_app(argv: list[str] | None = None) -> int:
             # check. It runs even if first-run root-folder onboarding is canceled.
             controller.start_update_cache_housekeeping()
             controller.show_welcome()
+            controller.prompt_for_library_access()
         except Exception as error:
             startup_errors.append(error)
             lifecycle.request_shutdown()

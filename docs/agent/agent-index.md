@@ -29,6 +29,7 @@ cross-layer behavior require it.
 | `triggers` | Trigger contracts, serial hardware adapters, marker writes, or trigger logs | `src/fpvs_studio/triggers/AGENTS.md` and the trigger sections of `docs/RUNTIME_EXECUTION.md` |
 | `updates` | Independent updater protocol/staging, release and repair selection, bounded cache/locking, verified downloads/launch, or update GUI shutdown coordination | `src/fpvs_studio/updates/AGENTS.md` and `docs/PACKAGING.md` |
 | `library` | View/Create Project library entry points, private catalog, enrollment, downloads, Advanced developer mode, and publishing | `src/fpvs_studio/library/AGENTS.md`, `src/fpvs_studio/developer/AGENTS.md` for publishing, `docs/EXPERIMENT_LIBRARY.md`, and the active private-library plan |
+| `data-sharing` | Experiment contribution consent, credentials, completion capture, outbox, Cloudflare intake or matched reference comparisons | `src/fpvs_studio/data_sharing/AGENTS.md`, `docs/DATA_SHARING.md`, and sibling `../OpenFPVS/PROJECT_REPORTING.md` for backend work |
 | `packaging` | Versioning, PyInstaller, Inno Setup, sparse patches, owned-file upgrade reconciliation, branding, isolated beta/executable builds, or packaged smoke | `packaging/AGENTS.md`, `docs/PACKAGING.md`, and `pyproject.toml` |
 
 Run a route with:
@@ -45,6 +46,7 @@ PowerShell wrapper, or the Python driver.
 
 - `focused`: selected scope checks plus changed-file Ruff and Python compilation.
 - `precommit`: repo audits, mypy, changed-file checks, and the safe non-Qt pytest suite.
+  The driver selects unit files outside the Qt registry before invoking pytest.
 - `full`: optional full Ruff, mypy, and pytest with registered Qt tests explicitly
   enabled for an approved visible local environment.
 
@@ -59,6 +61,9 @@ verification. The full tier requires `FPVS_ALLOW_QT_TESTS=1`, user approval, and
 visible environment; do not set `QT_QPA_PLATFORM=offscreen`. GitHub does not repeat the
 repository's local test or code-quality checks. Its documentation build and publishing
 workflow is separate.
+The registry also includes the two `ProjectDocument` QObject test modules under
+`tests/unit/`; the `core` full tier selects them, while default collection excludes
+them before importing Qt.
 
 ## Skill Routing
 
@@ -117,14 +122,56 @@ acceptance; source checks do not establish an installed update or clean-PC repai
 
 ## Library Project Versions
 
+For condition publication requests, begin with `core/library_publish.py`,
+`library/submissions.py`, `gui/library_submission_controller.py` and
+`docs/EXPERIMENT_LIBRARY.md`. Implementation history is in the completed
+condition Library review plan. The standalone private
+`../OpenFPVS` service owns `src/submissions.js`, GitHub draft writes, additive
+`0008_library_submissions.sql`, review controls and the accepted catalog overlay.
+Use Library/GUI/docs focused scopes and safe repo precommit; private-service
+tests mock GitHub and never publish content. GUI tests remain visible opt-in.
+
+For protected website discovery, exact-version publications, per-experiment
+**total downloads**, administrator content editing, dedicated administrator password
+login, web account registration and lab Library access, use the
+private `zcm58/OpenFPVS-Website` repository's `AGENTS.md`, `ARCHITECTURE.md` and
+`PORTAL_PLAN.md`. Its standalone local checkout is the sibling `../OpenFPVS/`,
+opened as its own PyCharm project. Studio's integration plan is
+`docs/exec-plans/active/fpvs-account-portal.md`; keep backend source and schema in
+the private project, not in a second desktop implementation. Run its Node tests,
+syntax and dry deployment checks; this repository's Library route covers the
+existing native client contract.
+Website enrichment uses separate browser APIs; preserve the strict native catalog.
+Browser bundle downloads use ordinary Welcome-screen imports without native origin
+receipts; project-version checks require explicit linking. The personal website
+repository is independent.
+The private service owns Firebase Spark configuration, additive password-session
+migration and encrypted provider credential rechecks. Its README is the canonical
+setup guide; administrator `/admin` and `/admin/sign-in` remain separate from
+researcher `/account` and native device authorization. Run Studio's documentation
+focused route for integration-document changes; no desktop identity implementation
+or Qt verification is needed for a website-only login change.
+
+For reusable lab codes and optional startup setup, begin with
+`gui/library_access_dialog.py`, `gui/application.py`, `gui/controller.py` and
+`library/client.py`/`models.py`. The private service owns code issuance and
+revocation; a code never enters project settings or grants results-upload access.
+Use Library/GUI/docs focused routes and repo precommit; registered startup coverage
+is `tests/gui/test_library_access_dialog.py` and is excluded from safe local runs.
+
 For project-version checks, start with `core/library_origin.py`,
 `core/library_installations.py`, `library/installations.py`,
 `library/project_updates.py`, `gui/project_update_controller.py` and
 [Experiment Library](../EXPERIMENT_LIBRARY.md#project-version-checks).
 Library imports write local receipts before commit; checks on open never install
-changes. Use Library/project-io/GUI focused routes and registered project-version
+changes. Core's exact managed-origin alias policy preserves existing receipts and
+installation matching when native access moves to `openfpvs.com`; credentials stay
+scoped to the canonical connection origin. Use Library/project-io/GUI focused routes and registered project-version
 dialog/controller tests. Legacy name matches require review and explicit linking;
 same/newer recorded installations block downloading and bundle commit.
+The version dialog warns about updating after collection begins and offers keeping
+the current version or downloading separately. Preserve the original experiment and
+its reporting scope; individual-condition merging is a separate deferred workflow.
 
 ## Bug Reporting
 
@@ -141,6 +188,25 @@ Run the GUI scope, `tests/unit/test_support_reports.py` and
 changes. Registered Qt coverage is `tests/gui/test_report_bug_dialog.py`.
 Common-error rule coverage is `tests/unit/test_error_explanations.py`.
 Visible acceptance and later service setup are in `docs/BUG_REPORTING.md`.
+
+## Experiment Data Sharing
+
+Start with `core/data_sharing.py`, `runtime/data_sharing.py`, the data-sharing package
+guide and [Data sharing](../DATA_SHARING.md). The dialog/controller use app-owned
+workers and snapshots; neither HTTP nor authored asset hashing belongs on the GUI
+thread or in presentation callbacks. The production Worker, explicit lab/project
+grants and private website aggregates belong in sibling `../OpenFPVS`; begin with
+that repository's agent guide and `PROJECT_REPORTING.md`. `services/results/`
+retains standalone reference source and shared synthetic wire fixtures.
+For linked Library identity checks, use `data_sharing/library_scope.py` and core's
+canonical `library_origin.py` receipt reader. The separate Results credentials,
+project UUID and explicit opt-in rules are in the canonical guide.
+
+Use the data-sharing focused route, runtime for launch/finalization changes, and repo
+precommit for shared behavior. Run OpenFPVS's `npm test` and `npm run check` separately;
+the Python harness does not run them. Registered GUI coverage is
+`tests/gui/test_data_sharing_dialog.py`; visible sizing and two-machine staging
+acceptance remain explicit platform/service checks.
 
 ## Settings Test Mode
 
@@ -292,10 +358,25 @@ settings/RunSpec owners, and `engines/psychopy_engine.py` / `psychopy_stimuli.py
 stream GUI tests cover visible/hidden layouts, and engine tests verify no cross
 resources or draws with unchanged character timing and triggers.
 
-For long Windows image paths, start with `core/paths.py` (`filesystem_path`, containment
-resolution and relative serialization), then the image I/O entry point. Keep namespace
-prefixes out of saved JSON. Core, preprocessing and compiler/runtime focused routes
-include the Windows path regression files.
+For long Windows paths, start with `core/paths.py` (`filesystem_path`, containment
+resolution and relative serialization), then the affected I/O entry point. Bundle reads,
+origin hashing and import collisions use `core/project_bundle.py`; download cache I/O
+uses `library/cache.py`. Keep namespace prefixes out of saved JSON. Project-I/O and
+Library focused routes cover transfer with Windows long-path policy disabled. The
+GUI focused route includes safe post-import opening, root/recent preferences, restart
+discovery, template storage and image-readiness signature regressions in
+`test_bundle_open_setup.py`; core, preprocessing and compiler/runtime routes include
+the image path regressions. Imported display detection and image-size previews use
+physical pixels at the experiment boundary and logical pixels for Qt painting;
+registered GUI scaling coverage is in the config import and setup display modules.
+
+## Transfer Security
+
+For upload/download security, start with [Security](../SECURITY.md), then the
+affected Library, updater, reporting or bundle owner. Run
+`tests/unit/test_transfer_security.py` and `tests/unit/test_image_decode_security.py`
+alongside the affected focused routes, then repo precommit. Advisory scans must
+distinguish installed-package matches, reachable transfer paths and native binaries.
 
 ## Unicorn Recorder Integration
 

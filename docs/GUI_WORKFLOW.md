@@ -1,5 +1,45 @@
 # GUI Workflow
 
+## Lab Library access on startup
+
+After root-folder setup and Welcome, Studio reads local protected Library access
+in an app-owned worker. If enrollment is missing (including a pending retry), it
+shows lab setup at minimum `640x420`, default `700x460`. Enter the PI-distributed
+lab code and PC name, then Connect; no researcher account/email is needed.
+Successful enrollment is retained in the existing OS credential store. The code
+is cleared when setup finishes or is dismissed. Existing configured access skips
+this prompt without a network request. No project settings are changed.
+
+**Continue offline**, Escape or window close dismisses setup for the current
+launch; View > Experiment Library can connect later. Closing during enrollment
+cancels the app-owned job and suppresses late UI updates, while a completed
+enrollment remains saved. Errors leave retry/offline choices available. View-only
+access permits catalog browsing and disables download; the server remains the
+authority for permission and revocation. See [Experiment Library](EXPERIMENT_LIBRARY.md).
+
+## Condition publication requests
+
+File > Export > Request Library publication opens the condition review dialog at
+minimum `860x740`, default `940x800`. Select one condition, enter its title/contact,
+prepare an immutable clean copy and explicitly confirm distribution rights before
+upload. My requests refreshes per-computer review decisions. Preparation, hashing,
+HTTPS and temporary-file cleanup run in app-owned jobs; close/shutdown cancels
+without discarding an uncertain submission. See [Experiment Library](EXPERIMENT_LIBRARY.md)
+for dependency closure, exclusions, bounds, review and manual smoke acceptance.
+
+## Private experiment sharing
+
+View > Data Sharing & Comparison opens a two-tab dialog at `880x700`, minimum
+`820x620`. Existing lab-code and OpenFPVS project-ID enrollment leaves sharing off until the operator explicitly
+enables it. App-owned jobs handle hashing, delivery and descriptive comparison after
+completed sessions, with opt-out/backlog release and cancel/shutdown guards.
+Archive uploaded history retains receipts and private mappings locally without HTTP.
+Copy protocol fingerprint supplies the hash for administrator project setup;
+View OpenFPVS project opens the private website dashboard after enrollment.
+See [Data sharing](DATA_SHARING.md) for exact fields, cohort limits and activation.
+Synthetic visible checks cover both tabs and connection states at minimum/default
+sizes; production multi-machine acceptance remains a separate service check.
+
 ## Bug reporting
 
 File > Request a Feature opens a separate text-only draft using the same reporting
@@ -68,7 +108,10 @@ Library-linked projects check for a newer version when opened and show a passive
 Home notice. **File > Update Project Version...** also checks manually, controls
 checks on open, and links earlier downloads explicitly. Installing a newer version
 opens a separate project through ordinary import review; local edits and participant
-data stay in the current project. See the [version workflow](EXPERIMENT_LIBRARY.md#project-version-checks).
+data stay in the current project. Review explains the risk of changing an experiment
+after collection begins and offers **Keep current version** or **Download new version
+separately**. Keeping the version leaves automatic checks enabled according to the
+existing preference. See the [version workflow](EXPERIMENT_LIBRARY.md#project-version-checks).
 
 Library jobs use the application-owned coordinator. Close/Escape/cancel drain transfers;
 **Cancel setup** cooperatively stops extraction before commit. The cache lease lasts
@@ -713,12 +756,21 @@ imports started from Welcome use the same page inside a modal progress dialog. T
 progress surface uses a wide, single-card layout with flat source/destination and
 activity sections so paths, status copy, and all four stage labels remain visible. The
 configured Studio root is persisted and loaded as an absolute path; import destinations
-never fall back to the application working directory. Legacy relative root settings are
+never fall back to the application working directory. Bundle reads, collision checks
+and destination creation use the core Windows path adapter, including long source and
+receiving paths; the returned project location retains the ordinary configured path.
+Opening project/manifest JSON, root-folder selection/preferences, recent projects,
+restart discovery, template storage and image-readiness signatures reuse that adapter.
+Disk-full and permission errors identify the storage action needed to retry.
+Legacy relative root settings are
 discarded so the root-folder setup flow can collect an explicit location again. The
 display confirmation dialog compares imported settings with Qt-detected refresh,
 resolution, and physical screen width, preserves editable local values, and exposes
 explicit `Open with Imported Values` and `Apply & Open Project` actions. The visual-angle
-target remains imported, and PsychoPy stays behind the engine boundary. Detected refresh
+target remains imported, and PsychoPy stays behind the engine boundary. Detected
+resolution uses physical pixels (`QScreen.geometry` multiplied by its device pixel
+ratio). The Image Size preview converts its physical dimensions to Qt logical drawing
+coordinates so Windows scaling does not enlarge the actual-size stimulus box. Refresh
 measurements are mapped to the nearest approved FPVS refresh rate when they are within
 tolerance; unsupported measurements are shown for review without writing an invalid
 refresh target. Closing or pressing Escape cannot bypass the two explicit open actions.

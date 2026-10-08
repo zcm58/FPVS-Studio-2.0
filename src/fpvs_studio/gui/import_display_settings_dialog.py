@@ -330,6 +330,7 @@ def detect_primary_display_settings() -> DetectedDisplaySettings:
         return DetectedDisplaySettings()
 
     geometry = screen.geometry()
+    pixel_ratio = screen.devicePixelRatio()
     physical_size = screen.physicalSize()
     screen_width_cm = None
     if physical_size.width() > 0:
@@ -339,6 +340,6 @@ def detect_primary_display_settings() -> DetectedDisplaySettings:
     return DetectedDisplaySettings(
         refresh_hz=refresh_hz if refresh_hz > 0 else None,
         screen_width_cm=screen_width_cm,
-        screen_width_px=max(1, geometry.width()),
-        screen_height_px=max(1, geometry.height()),
+        screen_width_px=max(1, round(geometry.width() * pixel_ratio)),
+        screen_height_px=max(1, round(geometry.height() * pixel_ratio)),
     )

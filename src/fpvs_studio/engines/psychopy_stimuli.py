@@ -529,7 +529,7 @@ def _prepared_image_source_and_size(
     display: DisplayRunSpec,
     geometry: ImageGeometrySpec | None,
 ) -> tuple[str | Any, tuple[int, int]]:
-    with Image.open(absolute_path) as image:
+    with Image.open(absolute_path, formats=("JPEG", "PNG")) as image:
         source_width_px, source_height_px = image.size
 
         if geometry is None:
