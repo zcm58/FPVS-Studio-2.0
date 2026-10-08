@@ -108,11 +108,12 @@ def import_stimulus_source_directory(
     destination_dir.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix=".import-", dir=destination_dir.parent) as temporary:
         staging = filesystem_path(Path(temporary))
+        formats = ("JPEG", "PNG") if strict else ("JPEG", "PNG", "BMP", "TIFF")
         for item in source_files:
             if item.suffix.lower() in SUPPORTED_SOURCE_SUFFIXES:
                 copied = staging / item.name
                 shutil.copy2(item, copied)
-                with Image.open(copied) as image:
+                with Image.open(copied, formats=formats) as image:
                     image.load()
         summary = inspect_source_directory(
             staging,

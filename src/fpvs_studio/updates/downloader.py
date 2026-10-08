@@ -10,7 +10,7 @@ from collections.abc import Callable
 from pathlib import Path
 from threading import Event
 from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
+from urllib.request import Request
 
 from fpvs_studio import __version__
 from fpvs_studio.updates.cache import (
@@ -37,6 +37,7 @@ from fpvs_studio.updates.models import (
 from fpvs_studio.updates.patches import require_running_patch_baseline
 from fpvs_studio.updates.validation import (
     managed_response,
+    urlopen,
     validate_asset_identity,
     validate_response_url,
 )
@@ -155,6 +156,7 @@ def _download_locked(
         completed = True
         return installer
     except HTTPError as error:
+        error.close()
         raise UpdateError(f"Installer download failed with HTTP {error.code}.") from error
     except URLError as error:
         raise UpdateError(f"Could not download the installer: {error.reason}") from error

@@ -64,7 +64,7 @@ def inspect_source_directory(
     resolutions: set[tuple[int, int]] = set()
 
     for path in supported_files:
-        with Image.open(path) as image:
+        with Image.open(path, formats=("JPEG", "PNG", "BMP", "TIFF")) as image:
             width, height = image.size
         resolution = ImageResolution(width_px=width, height_px=height)
         resolutions.add(resolution.as_tuple())

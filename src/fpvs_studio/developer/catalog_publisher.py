@@ -17,15 +17,19 @@ import re
 import subprocess
 import sys
 import tempfile
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
 import zipfile
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from http.client import HTTPException
 from pathlib import Path, PurePosixPath
 from threading import Event
 from typing import Any, TypeGuard
+
+from fpvs_studio.core.project_bundle import open_project_bundle_archive
 
 REPOSITORY = "zcm58/OpenFPVS-Website"
 REPO_PATH = f"/repos/{REPOSITORY}"
@@ -58,10 +62,13 @@ class CancelableUpload:
     def __init__(self, handle: Any, cancel_event: Event | None) -> None:
         self.handle = handle
         self.cancel_event = cancel_event
+        self.deadline = time.monotonic() + 30 * 60
 
     def read(self, size: int = -1) -> bytes:
         check_cancellation(self.cancel_event)
-        return bytes(self.handle.read(size))
+        if time.monotonic() >= self.deadline:
+            raise PublishError("GitHub upload timed out; retry the same prepared bundle.")
+        return bytes(self.handle.read(min(size, 65536) if size > 0 else 65536))
 
 
 class GitHubApiError(PublishError):
@@ -164,7 +171,7 @@ def verify_bundle(metadata_path: Path, cancel_event: Event | None = None) -> Pre
     digest = file_sha256(path, cancel_event)
     if metadata.get("sha256") != digest:
         raise PublishError(f"Bundle checksum differs from preparation metadata: {name}")
-    with zipfile.ZipFile(path) as archive:
+    with open_project_bundle_archive(path) as archive:
         infos = archive.infolist()
         names = [info.filename for info in infos]
         if len(infos) > MAX_FILES + 1 or len(names) != len(set(names)):
@@ -316,9 +323,11 @@ class GitHubPublisher:
             "Accept": "application/vnd.github+json",
             "User-Agent": "FPVS-Studio-Library-Publisher",
             "X-GitHub-Api-Version": "2026-03-10",
+            "Accept-Encoding": "identity",
         }
         handle = None
         data: bytes | CancelableUpload | None
+        deadline = time.monotonic() + (30 * 60 if upload else 30)
         try:
             if upload:
                 handle = upload.open("rb")
@@ -337,15 +346,36 @@ class GitHubPublisher:
                 f"https://{host}{path}", data=data, headers=headers, method=method
             )
             with self._opener.open(request, timeout=120 if upload else 30) as response:
-                raw = response.read(8 * MAX_JSON_BYTES + 1)
-                if len(raw) > 8 * MAX_JSON_BYTES:
-                    raise PublishError("GitHub response exceeded its size limit.")
+                if response.headers.get("Content-Encoding", "identity") != "identity":
+                    raise PublishError("GitHub returned unsupported compressed transport.")
+                raw = bytearray()
+                while True:
+                    check_cancellation(self._cancel_event)
+                    if time.monotonic() >= deadline:
+                        raise PublishError(
+                            "GitHub request timed out; remote state may have changed."
+                        )
+                    chunk = response.read1(min(65536, 8 * MAX_JSON_BYTES + 1 - len(raw)))
+                    check_cancellation(self._cancel_event)
+                    if time.monotonic() >= deadline:
+                        raise PublishError(
+                            "GitHub request timed out; remote state may have changed."
+                        )
+                    if not chunk:
+                        break
+                    raw.extend(chunk)
+                    if len(raw) > 8 * MAX_JSON_BYTES:
+                        raise PublishError("GitHub response exceeded its size limit.")
                 if method == "DELETE" and response.status == 204 and not raw:
                     return None
-                return json.loads(raw)
+                try:
+                    return json.loads(raw)
+                except (ValueError, UnicodeError, RecursionError):
+                    raise PublishError("GitHub returned invalid response metadata.") from None
         except urllib.error.HTTPError as error:
+            error.close()
             raise GitHubApiError(method, error.code) from None
-        except urllib.error.URLError:
+        except (urllib.error.URLError, OSError, HTTPException):
             raise PublishError(
                 "GitHub request failed; no release/catalog completion is assumed."
             ) from None

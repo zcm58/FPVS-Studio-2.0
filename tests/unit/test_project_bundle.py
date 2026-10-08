@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import struct
 import zipfile
 from contextlib import contextmanager
 from pathlib import Path
@@ -419,6 +420,94 @@ def test_read_project_bundle_manifest_rejects_oversized_manifest(
 
     with pytest.raises(ProjectBundleError, match="file exceeds the 1-byte limit"):
         read_project_bundle_manifest(bundle_path)
+
+
+@pytest.mark.parametrize("metadata_path", ["project.json", "stimuli/manifest.json"])
+def test_import_rejects_oversized_project_metadata_before_loading(
+    tmp_path, sample_project, sample_project_root, monkeypatch, metadata_path,
+):
+    _save_bundle_ready_project(sample_project_root, sample_project)
+    bundle = tmp_path / "metadata.fpvsbundle"
+    manifest = export_project_bundle(sample_project_root, bundle)
+    record = next(record for record in manifest.files if record.path == metadata_path)
+    monkeypatch.setattr(project_bundle_module, "MAX_BUNDLE_JSON_BYTES", record.size_bytes - 1,
+                        raising=False)
+    def never_load(*args):
+        pytest.fail("Oversized metadata must be rejected before loading the project")
+    monkeypatch.setattr(project_bundle_module, "_load_project_for_bundle", never_load)
+    with pytest.raises(ProjectBundleError, match="metadata.*limit"):
+        import_project_bundle(bundle, tmp_path / "receiver")
+
+
+def test_large_zip_directory_rejected_before_zipfile_parses_it(tmp_path, monkeypatch):
+    bundle = tmp_path / "directory.fpvsbundle"
+    with zipfile.ZipFile(bundle, "w") as archive:
+        archive.writestr("fpvs_bundle.json", b"{}")
+    monkeypatch.setattr(project_bundle_module, "MAX_BUNDLE_DIRECTORY_BYTES", 1, raising=False)
+    def never_parse(*args, **kwargs):
+        pytest.fail("ZIP directory budget must be checked before ZipFile allocates it")
+    monkeypatch.setattr(project_bundle_module.zipfile, "ZipFile", never_parse)
+    with pytest.raises(ProjectBundleError, match="archive directory.*limit"):
+        read_project_bundle_manifest(bundle)
+
+
+def test_zip_member_budget_ignores_forged_end_record_count(tmp_path, monkeypatch):
+    bundle = tmp_path / "many.fpvsbundle"
+    with zipfile.ZipFile(bundle, "w") as archive:
+        for index in range(3):
+            archive.writestr(f"stimuli/{index}.png", b"x")
+    payload = bytearray(bundle.read_bytes())
+    tail = payload.rfind(b"PK\x05\x06")
+    struct.pack_into("<HH", payload, tail + 8, 1, 1)
+    bundle.write_bytes(payload)
+    monkeypatch.setattr(project_bundle_module, "MAX_BUNDLE_ARCHIVE_MEMBERS", 2)
+    def never_parse(*args, **kwargs):
+        pytest.fail("Actual member count must be bounded before ZipFile allocates entries")
+    monkeypatch.setattr(project_bundle_module.zipfile, "ZipFile", never_parse)
+    with pytest.raises(ProjectBundleError, match="too many archive members"):
+        read_project_bundle_manifest(bundle)
+
+
+def test_bundle_directory_guard_accepts_zip64_and_archive_comment(tmp_path, monkeypatch):
+    bundle = tmp_path / "zip64.fpvsbundle"
+    monkeypatch.setattr(zipfile, "ZIP64_LIMIT", 1)
+    with zipfile.ZipFile(bundle, "w") as archive:
+        archive.writestr("stimuli/base.png", b"valid payload")
+        archive.comment = b"FPVS Studio portable project"
+    with project_bundle_module.open_project_bundle_archive(bundle) as archive:
+        assert archive.read("stimuli/base.png") == b"valid payload"
+
+
+@pytest.mark.parametrize("compression", [zipfile.ZIP_BZIP2, zipfile.ZIP_LZMA])
+def test_bundle_rejects_unsupported_compression_before_decompression(tmp_path, compression):
+    bundle = tmp_path / "unsupported.fpvsbundle"
+    with zipfile.ZipFile(bundle, "w", compression=compression) as archive:
+        archive.writestr("fpvs_bundle.json", b"{}")
+    with pytest.raises(ProjectBundleError, match="unsupported ZIP compression"):
+        read_project_bundle_manifest(bundle)
+
+
+@pytest.mark.parametrize("workload", ["blocks", "stimuli", "fixation"])
+def test_bundle_workload_rejected_before_compiling_and_preserves_destination(
+    tmp_path, sample_project, sample_project_root, monkeypatch, workload,
+):
+    project = sample_project.model_copy(deep=True)
+    if workload == "blocks":
+        project.settings.session.block_count = 10**9
+    elif workload == "stimuli":
+        project.conditions[0].sequence_count = 10**9
+    else:
+        project.settings.fixation_task.enabled = True
+        project.settings.fixation_task.changes_per_sequence = 10**9
+    _save_bundle_ready_project(sample_project_root, project)
+    destination = tmp_path / "existing.fpvsbundle"
+    destination.write_bytes(b"retained")
+    def never_compile(*args, **kwargs):
+        pytest.fail("Untrusted workload must be bounded before allocating a session plan")
+    monkeypatch.setattr(project_bundle_module, "compile_session_plan", never_compile)
+    with pytest.raises(ProjectBundleError, match="compilation workload"):
+        export_project_bundle(sample_project_root, destination)
+    assert destination.read_bytes() == b"retained"
 
 
 def test_export_project_bundle_rejects_resource_limit_without_replacing_destination(

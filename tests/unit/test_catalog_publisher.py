@@ -669,6 +669,7 @@ def test_delete_asset_accepts_github_no_content_response(monkeypatch):
     api = publisher.GitHubPublisher("synthetic-token")
     response = io.BytesIO(b"")
     response.status = 204
+    response.headers = {}
     monkeypatch.setattr(api._opener, "open", lambda *args, **kwargs: response)
     assert api.request("DELETE", publisher.REPO_PATH + "/releases/assets/123") is None
 

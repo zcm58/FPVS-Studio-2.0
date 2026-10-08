@@ -439,7 +439,7 @@ offline at fresh short and long Windows roots on one PC.
 | `library/client.py` | Enrollment, authorized requests, timeouts and verified transfer. |
 | `library/credentials.py` | Windows Credential Manager and Linux Secret Service adapters. |
 | `library/cache.py` | Private per-user cache, no-follow checks and cross-process lease. |
-| `core/project_bundle.py` | Existing whole-project archive validation, extraction and optional cancellation. |
+| `core/project_bundle.py` | Whole-project archive validation, extraction, optional cancellation and pre-parse/pre-compilation resource guards; see [Security](SECURITY.md#upload-and-download-trust-boundaries). |
 | `core/library_publish.py` | Explicit clean publishing preparation without modifying source projects. |
 | `gui/library_dialog.py`, `library_controller.py` | View state and orchestration through app-owned `update_lifecycle.py` jobs. |
 | `gui/controller.py` | Existing root/review/display/document handoff and cancellable Library import. |

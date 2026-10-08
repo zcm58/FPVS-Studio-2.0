@@ -332,6 +332,7 @@ owns endpoint estimates and task-response checkpoints. Details and acceptance ar
 - Engine boundary: `docs/ENGINE_INTERFACE.md`
 - Opt-in experiment contributions and comparisons: `docs/DATA_SHARING.md`
 - Environment and packaging: `docs/ENVIRONMENT.md` and `docs/PACKAGING.md`
+- Transfer trust boundaries and dependency exceptions: `docs/SECURITY.md`
 - Plans and technical debt: `docs/PLANS.md` and `docs/exec-plans/`
 
 Use `docs/index.md` for the full developer-documentation map.

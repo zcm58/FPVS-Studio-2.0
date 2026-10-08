@@ -1179,7 +1179,7 @@ class PsychoPyEngine(PresentationEngine):
             if image_path is None or image_path in dimensions:
                 continue
             absolute_path = resolve_project_relative_path(project_root, image_path)
-            with Image.open(absolute_path) as image:
+            with Image.open(absolute_path, formats=("JPEG", "PNG")) as image:
                 dimensions[image_path] = (int(image.width), int(image.height))
                 modes[image_path] = image.mode
         return dimensions, modes

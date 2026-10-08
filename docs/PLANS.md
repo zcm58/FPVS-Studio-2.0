@@ -21,6 +21,7 @@ Current implementation:
 
 Concrete planned work:
 
+- [Long-running results reporting](exec-plans/planned/long-running-results-reporting.md) (future local archive/capacity work; not implemented)
 - [Participant results and question presentation](exec-plans/planned/participant-results-and-question-presentation.md) (proposal; not implemented)
 - `exec-plans/planned/restore-tutorials-file-menu-entry.md`
 - `exec-plans/planned/luminance-rms-equalization-investigation.md`
@@ -41,6 +42,8 @@ Completed plans are historical implementation notes. Read their directory only w
 the current contracts do not explain why a landed decision exists.
 
 Recent completion: [FPVS Studio 2.2.6 Library reconnection release](exec-plans/completed/release-2.2.6.md).
+
+Recent completion: [Upload/download source security hardening](exec-plans/completed/upload-download-security-hardening.md) (runtime/dependency acceptance limits remain documented).
 
 Recent completion: [FPVS Studio 2.2.1 release](exec-plans/completed/release-2.2.1.md).
 

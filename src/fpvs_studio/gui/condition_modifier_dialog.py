@@ -110,7 +110,7 @@ def _read_preview_thumbnails(paths: list[Path]) -> dict[str, bytes]:
     """Decode full-size image files only in the background worker."""
     results = {}
     for path in paths:
-        with Image.open(filesystem_path(path)) as source:
+        with Image.open(filesystem_path(path), formats=("JPEG", "PNG")) as source:
             source.thumbnail((192, 152))
             with BytesIO() as output:
                 source.convert("RGBA").save(output, format="PNG")

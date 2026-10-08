@@ -12,13 +12,15 @@ import hashlib
 import io
 import re
 import shutil
+import struct
 import uuid
 import zipfile
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 from threading import Event
-from typing import Literal
+from typing import Any, BinaryIO, Literal, cast
 
 from pydantic import Field, ValidationError, field_validator
 
@@ -31,6 +33,7 @@ from fpvs_studio.core.library_origin import (
     origin_for_import,
     save_library_origin,
 )
+from fpvs_studio.core.masking import condition_masking
 from fpvs_studio.core.models import FPVSBaseModel, ProjectFile, validate_project_relative_path
 from fpvs_studio.core.paths import (
     MANIFEST_FILENAME,
@@ -74,6 +77,10 @@ _DEFAULT_VALIDATION_REFRESH_HZ = 60.0
 MAX_BUNDLE_PAYLOAD_FILES = 50_000
 MAX_BUNDLE_ARCHIVE_MEMBERS = MAX_BUNDLE_PAYLOAD_FILES + 256
 MAX_BUNDLE_MANIFEST_BYTES = 16 * 1024 * 1024
+MAX_BUNDLE_JSON_BYTES = 16 * 1024 * 1024
+MAX_BUNDLE_DIRECTORY_BYTES = 64 * 1024 * 1024
+MAX_BUNDLE_COMPILATION_RUNS = 1000
+MAX_BUNDLE_COMPILATION_EVENTS = 100_000
 MAX_BUNDLE_FILE_BYTES = 4 * 1024 * 1024 * 1024
 MAX_BUNDLE_TOTAL_UNCOMPRESSED_BYTES = 20 * 1024 * 1024 * 1024
 MAX_BUNDLE_COMPRESSION_RATIO = 200.0
@@ -270,11 +277,62 @@ def _bundle_contract_payloads(
     }
 
 
+@contextmanager
+def open_project_bundle_archive(bundle_path: Path) -> Iterator[zipfile.ZipFile]:
+    """Bound archive directory allocation before the standard ZIP parser runs."""
+
+    with filesystem_path(Path(bundle_path)).open("rb") as stream:
+        _validate_archive_directory(stream)
+        stream.seek(0)
+        with zipfile.ZipFile(stream, mode="r") as archive:
+            yield archive
+
+
+def _validate_archive_directory(stream: BinaryIO) -> None:
+    # CPython's bounded end-record reader handles ordinary ZIP and ZIP64 tails.
+    # Match its directory offset calculation; never read the whole directory here.
+    zip_format = cast(Any, zipfile)  # Private ZIP constants are absent from typeshed.
+    end_record = zip_format._EndRecData(stream)
+    if end_record is None:
+        raise zipfile.BadZipFile("Missing ZIP end record.")
+    directory_size = end_record[zip_format._ECD_SIZE]
+    if directory_size > MAX_BUNDLE_DIRECTORY_BYTES:
+        raise ProjectBundleError("Project bundle archive directory exceeds its byte limit.")
+    directory_start = end_record[zip_format._ECD_LOCATION] - directory_size
+    if end_record[zip_format._ECD_SIGNATURE] == zip_format.stringEndArchive64:
+        directory_start -= (
+            zip_format.sizeEndCentDir64 + zip_format.sizeEndCentDir64Locator
+        )
+    if directory_start < 0:
+        raise zipfile.BadZipFile("Invalid ZIP directory offset.")
+    stream.seek(directory_start)
+    remaining = directory_size
+    member_count = 0
+    while remaining:
+        header = stream.read(46)
+        if len(header) != 46 or header[:4] != b"PK\x01\x02":
+            raise zipfile.BadZipFile("Invalid ZIP directory record.")
+        compression = struct.unpack_from("<H", header, 10)[0]
+        if compression not in {zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED}:
+            raise ProjectBundleError("Project bundle uses unsupported ZIP compression.")
+        name_size, extra_size, comment_size = struct.unpack_from("<3H", header, 28)
+        record_size = 46 + name_size + extra_size + comment_size
+        if record_size > remaining:
+            raise zipfile.BadZipFile("Truncated ZIP directory record.")
+        member_count += 1
+        if member_count > MAX_BUNDLE_ARCHIVE_MEMBERS:
+            raise ProjectBundleError("Project bundle contains too many archive members.")
+        stream.seek(record_size - 46, io.SEEK_CUR)
+        remaining -= record_size
+    if member_count != end_record[zip_format._ECD_ENTRIES_TOTAL]:
+        raise zipfile.BadZipFile("ZIP directory member count does not match its end record.")
+
+
 def read_project_bundle_manifest(bundle_path: Path) -> ProjectBundleManifest:
     """Read and validate `fpvs_bundle.json` from a `.fpvsbundle` archive."""
 
     try:
-        with zipfile.ZipFile(filesystem_path(Path(bundle_path)), mode="r") as archive:
+        with open_project_bundle_archive(bundle_path) as archive:
             _validate_archive_member_count(archive)
             bundle_manifest = _read_bundle_manifest_from_archive(archive)
             _validate_bundle_resource_limits(archive, bundle_manifest)
@@ -444,7 +502,7 @@ def _extract_bundle_to_staging(
     cancel_event: Event | None = None,
 ) -> ProjectBundleManifest:
     try:
-        with zipfile.ZipFile(filesystem_path(Path(bundle_path)), mode="r") as archive:
+        with open_project_bundle_archive(bundle_path) as archive:
             archive_paths = _validated_archive_file_paths(archive)
             bundle_manifest = _read_bundle_manifest_from_archive(archive)
             expected_paths = {
@@ -586,6 +644,11 @@ def _validate_bundle_manifest_resource_limits(
 
 
 def _validate_payload_size(path: str, size: int, total_size: int) -> None:
+    if path in {PROJECT_FILENAME, f"{STIMULI_DIRNAME}/{MANIFEST_FILENAME}"}:
+        if size > MAX_BUNDLE_JSON_BYTES:
+            raise ProjectBundleError(
+                f"Project bundle metadata exceeds the {MAX_BUNDLE_JSON_BYTES:,}-byte limit: {path}"
+            )
     if size > MAX_BUNDLE_FILE_BYTES:
         raise ProjectBundleError(
             "Project bundle file exceeds the "
@@ -673,6 +736,33 @@ def _staged_destination_path(staged_project_root: Path, relative_path: str) -> P
         raise ProjectBundleError(f"Project bundle path escapes staging: {relative_path}") from exc
 
 
+def _validate_bundle_compilation_budget(project: ProjectFile) -> None:
+    # Reserve one extra occurrence per condition for possible masking catch trials.
+    repetitions = project.settings.session.block_count + 1
+    run_count = len(project.conditions) * repetitions
+    if run_count > MAX_BUNDLE_COMPILATION_RUNS:
+        raise ProjectBundleError("Project bundle compilation workload exceeds the run limit.")
+    event_count = 0
+    for condition in project.conditions:
+        slots = (
+            condition.sequence_count * condition.oddball_cycle_repeats_per_sequence
+            * project.settings.protocol.oddball_every_n
+        )
+        masking = condition_masking(project, condition)
+        # Masking emits overlays, target/mask events and optional markers per slot.
+        weight = len(masking.base_overlays) + 4 if masking is not None else 1
+        event_count += slots * weight * repetitions
+        if event_count > MAX_BUNDLE_COMPILATION_EVENTS:
+            raise ProjectBundleError("Project bundle compilation workload exceeds the event limit.")
+    fixation = project.settings.fixation_task
+    targets = (
+        fixation.target_count_max if fixation.target_count_mode == "randomized"
+        else fixation.changes_per_sequence
+    )
+    if fixation.enabled and targets * run_count > MAX_BUNDLE_COMPILATION_EVENTS:
+        raise ProjectBundleError("Project bundle compilation workload exceeds the fixation limit.")
+
+
 def _validate_bundle_source(
     project_root: Path,
     *,
@@ -682,6 +772,7 @@ def _validate_bundle_source(
     cancel_event: Event | None = None,
 ) -> None:
     _check_cancelled(cancel_event)
+    _validate_bundle_compilation_budget(project)
     try:
         require_valid_experiment_category(project)
     except ValueError as exc:

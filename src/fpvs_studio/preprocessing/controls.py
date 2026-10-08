@@ -19,7 +19,7 @@ def generate_rot180_png(source_path: Path, destination_path: Path) -> None:
     source_path = filesystem_path(source_path)
     destination_path = filesystem_path(destination_path)
     destination_path.parent.mkdir(parents=True, exist_ok=True)
-    with Image.open(source_path) as image:
+    with Image.open(source_path, formats=("JPEG", "PNG")) as image:
         image.transpose(Image.Transpose.ROTATE_180).save(destination_path, format="PNG")
 
 
@@ -31,7 +31,7 @@ def generate_phase_scrambled_png(source_path: Path, destination_path: Path, *, s
     destination_path.parent.mkdir(parents=True, exist_ok=True)
     rng = np.random.default_rng(seed)
 
-    with Image.open(source_path) as image:
+    with Image.open(source_path, formats=("JPEG", "PNG")) as image:
         rgb_image = image.convert("RGB")
         image_array = np.asarray(rgb_image, dtype=np.float64)
 

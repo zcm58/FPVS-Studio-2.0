@@ -183,6 +183,9 @@ The capacity limitation for ordinary aborted/protocol-mismatch terminal intents
 remains: these consume the 512 active records, and uploaded-history archiving cannot
 free them. Add an explicit review/archive workflow that preserves their evidence
 before treating long-running collection capacity as complete.
+The user-requested future work is recorded in
+[Long-running results reporting](../planned/long-running-results-reporting.md);
+that plan remains unimplemented.
 
 Integration completion requires a reviewed experiment/version/protocol grant map,
 an admin Contributions section, server-authoritative lab/PC/grant revocation, and a

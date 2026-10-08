@@ -367,6 +367,14 @@ the image path regressions. Imported display detection and image-size previews u
 physical pixels at the experiment boundary and logical pixels for Qt painting;
 registered GUI scaling coverage is in the config import and setup display modules.
 
+## Transfer Security
+
+For upload/download security, start with [Security](../SECURITY.md), then the
+affected Library, updater, reporting or bundle owner. Run
+`tests/unit/test_transfer_security.py` and `tests/unit/test_image_decode_security.py`
+alongside the affected focused routes, then repo precommit. Advisory scans must
+distinguish installed-package matches, reachable transfer paths and native binaries.
+
 ## Unicorn Recorder Integration
 
 Start with `runtime/recording.py`, `runtime/unicorn_recorder.py`,

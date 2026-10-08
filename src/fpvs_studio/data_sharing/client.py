@@ -113,6 +113,10 @@ def http_transport(
                 raise DataSharingError(
                     "The results service returned invalid data.", code="protocol"
                 )
+            if response.headers.get("Content-Encoding", "identity") != "identity":
+                raise DataSharingError(
+                    "Results service returned compressed transport.", code="protocol"
+                )
             chunks: list[bytes] = []
             size = 0
             while True:
@@ -121,7 +125,12 @@ def http_transport(
                     raise DataSharingError(
                         "Results request timed out.", code="timeout", retryable=True
                     )
-                chunk = response.read(min(16384, MAX_RESPONSE_BYTES + 1 - size))
+                chunk = response.read1(min(16384, MAX_RESPONSE_BYTES + 1 - size))
+                check_cancel(cancel)
+                if time.monotonic() - started > REQUEST_DEADLINE_SECONDS:
+                    raise DataSharingError(
+                        "Results request timed out.", code="timeout", retryable=True
+                    )
                 if not chunk:
                     break
                 size += len(chunk)
@@ -130,6 +139,7 @@ def http_transport(
                 chunks.append(chunk)
             return b"".join(chunks)
     except HTTPError as error:
+        error.close()
         raise _status_error(error.code) from None
     except (URLError, OSError, HTTPException):
         raise DataSharingError(
@@ -420,7 +430,7 @@ class DataSharingClient:
             try:
                 if json.loads(raw) != {"schema_version": "1.0", "revoked": True}:
                     raise ValueError
-            except (ValueError, UnicodeError):
+            except (ValueError, UnicodeError, RecursionError):
                 raise DataSharingError(
                     "Invalid revocation confirmation.", code="protocol"
                 ) from None

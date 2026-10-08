@@ -25,7 +25,10 @@ from fpvs_studio.core.condition_modifiers import (
 )
 from fpvs_studio.core.modifier_presets import list_modifier_presets
 from fpvs_studio.core.task_models import TaskBinding, TaskFontFamily, TaskOccurrence
-from fpvs_studio.gui.condition_modifier_dialog import ConditionModifierDialog
+from fpvs_studio.gui.condition_modifier_dialog import (
+    ConditionModifierDialog,
+    _read_preview_thumbnails,
+)
 from fpvs_studio.gui.condition_task_dialog import ConditionTaskDialog
 from fpvs_studio.gui.document import ProjectDocument
 from fpvs_studio.gui.modifier_library_dialog import (
@@ -424,6 +427,28 @@ def test_failed_background_apply_keeps_dialog_and_live_document(qtbot, tmp_path:
     assert dialog.apply_button.isEnabled()
     assert document.project.model_dump() == original
     _fit(dialog, size=(1120, 760))
+
+
+@pytest.mark.parametrize("size", [(1100, 720), (1120, 760)])
+def test_unsupported_preview_decoder_shows_error_without_changing_project(qtbot, tmp_path, size):
+    document, first, _second = _document(tmp_path)
+    before = document.project.model_dump()
+    disguised = tmp_path / "disguised.png"
+    Image.new("RGB", (8, 8)).save(disguised, format="TGA")
+    dialog = ConditionModifierDialog(document, condition_id=first)
+    qtbot.addWidget(dialog)
+    dialog.resize(*size)
+    dialog.show()
+    dialog._run_job(
+        lambda: _read_preview_thumbnails([disguised]),
+        lambda _value: pytest.fail("Unsupported decoder produced a preview"),
+        "Preparing image previews…",
+    )
+    _wait(dialog, qtbot)
+    assert "cannot identify image" in dialog.status.toolTip()
+    assert dialog.isVisible() and dialog.apply_button.isEnabled()
+    assert document.project.model_dump() == before
+    _fit(dialog, size=size)
 
 
 def test_long_modifier_description_keeps_full_value_accessible(qtbot, tmp_path: Path) -> None:
