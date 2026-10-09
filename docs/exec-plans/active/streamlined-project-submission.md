@@ -3,7 +3,8 @@
 Status: Active
 
 Desktop source ships in Studio 2.4.2; visible synthetic Qt verification passes.
-Production service activation remains pending.
+Cloudflare production activation is complete. Authenticated end-to-end
+upload/email/validation/publication qualification remains pending.
 
 Date: 2026-10-08
 
@@ -89,7 +90,7 @@ visible Qt acceptance. Live submission/email/publication remain unperformed; the
 desktop changes ship in [Studio 2.4.2](../completed/release-2.4.2.md).
 Initial production preflight
 returned Cloudflare D1 code 7403; a later retry using the same limited login succeeded
-without changing account scopes. Only migration 0014 is pending. The existing D1
+without changing account scopes. At that preflight, only migration 0014 was pending. The existing D1
 database was exported to sibling ignored private backup
 `.wrangler/private-backups/before-project-submissions-20261008-184732.sql`
 (28,859 bytes; SHA-256 `33e351e3c2b0031f91c3934bcffd45965f6883cd7477b55439025f8eee539b43`).
@@ -114,3 +115,22 @@ Evidence is retained in ignored `build/merge-studio-visible.xml`; the temporary 
 dependencies were removed. This does not establish live upload, email or publication.
 The full merged source checks and Windows save-retry test caveat are recorded in
 [the automatic crash-reporting integration record](automatic-crash-reporting.md#october-9-remote-integration).
+
+## Cloudflare activation: 2026-10-09
+
+The user authorized activation. Sibling OpenFPVS source `a134828` passed all 329
+synthetic tests, syntax checks, binding type generation and dry packaging. A fresh
+private database export and recovery bookmark preceded application of only 0014.
+Live read-only checks confirmed preserved baseline row counts, all 13 devices,
+zero foreign-key violations and the new submission columns; no migrations remain.
+
+Worker `008f34b9-57aa-4633-83d0-0872751f5499` is deployed with whole-project uploads
+enabled and ten-minute notification retries. The existing limited login, domains,
+native hostname, secrets, variables, D1 binding and runtime settings are preserved.
+All 36 bounded anonymous live checks and five exact browser asset hashes passed.
+The canonical activation/evidence record is sibling `../OpenFPVS/CONDITION_REVIEW.md`.
+
+Cloudflare activation, visible synthetic Qt checks and the Studio 2.4.2 release
+are complete. Authenticated native upload/email/validation/publication qualification
+remains unperformed. No project submission, provider email or publication was used
+as a deployment smoke test. Keep this plan active for that remaining check.
