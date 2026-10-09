@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from threading import Event
 from uuid import uuid4
 
@@ -20,6 +20,7 @@ from tests.unit.test_data_sharing_client import (
 
 from fpvs_studio.core.data_sharing import SharingSettings
 from fpvs_studio.core.library_origin import LibraryProjectOrigin, save_library_origin
+from fpvs_studio.core.serialization import save_project_file
 from fpvs_studio.data_sharing.client import DataSharingClient
 from fpvs_studio.data_sharing.errors import DataSharingError
 from fpvs_studio.data_sharing.service import (
@@ -29,8 +30,10 @@ from fpvs_studio.data_sharing.service import (
     load_view,
     set_sharing_enabled,
     sync_project,
+    sync_startup_project,
 )
 from fpvs_studio.data_sharing.storage import (
+    SharingStorageError,
     list_records,
     load_settings,
     queue_report,
@@ -61,6 +64,268 @@ def empty_comparison():
 
 def enable(root):
     save_settings(root, SharingSettings(enabled=True, profile=profile()))
+
+
+@pytest.mark.timeout(600)
+def test_1500_acknowledged_sessions_retire_exact_history_and_keep_latest(tmp_path):
+    from pathlib import Path
+    from tempfile import gettempdir
+
+    from tests.unit.test_data_sharing_storage import _capture
+
+    # Keep this volume fixture within pytest's isolated root but below Windows'
+    # legacy path length. Dedicated storage/path tests cover extended namespaces.
+    tmp_path = Path(gettempdir()) / "report-volume"
+    tmp_path.mkdir()
+    enable(tmp_path)
+    research = tmp_path / "runs" / "research.csv"
+    research.parent.mkdir()
+    research.write_bytes(b"original participant data")
+    accepted = {}
+
+    def transport(method, url, body, headers, cancel):
+        assert url.endswith("/reports")  # Delivery-only never asks for a comparison.
+        key = json.loads(body)["report_id"]
+        assert key not in accepted
+        accepted[key] = body
+        return receipt_bytes(body)
+
+    backend = client(transport)
+    base = report()
+    for index in range(1500):
+        current = base.model_copy(update={
+            "report_id": str(uuid4()),
+            "completed_at": base.completed_at + timedelta(seconds=index),
+        })
+        queue_report(tmp_path, current)
+        _capture(tmp_path, current)
+        view = sync_project(tmp_path, HASH, Event(), client=backend, fetch_comparison=False)
+        assert view.uploaded_count == 1 and view.pending_count == 0 and not view.error
+    assert len(accepted) == 1500
+    assert list_records(tmp_path)[0].report_id == current.report_id
+    assert view.latest_completed_at == current.completed_at.isoformat()
+    archive = tmp_path / "logs/data-sharing/archive"
+    assert len(list(archive.iterdir())) == 1499
+    for folder in archive.iterdir():
+        receipt_record = json.loads((folder / "report.json").read_text())
+        assert receipt_record["payload_json"].encode() == accepted[folder.name]
+        assert receipt_record["state"] == "uploaded" and receipt_record["receipt"]
+        capture = json.loads((folder / "capture.json").read_text())
+        assert capture["state"] == "finalized" and capture["report_id"] == folder.name
+    assert len(list((tmp_path / "logs/data-sharing/intents").iterdir())) == 1
+    assert research.read_bytes() == b"original participant data"
+
+
+@pytest.mark.parametrize("move", ["intents", "outbox"])
+def test_automatic_cleanup_failure_preserves_receipts_and_resumes(tmp_path, monkeypatch, move):
+    from pathlib import Path
+
+    from tests.unit.test_data_sharing_storage import _capture
+
+    enable(tmp_path)
+    first, second = report(), report()
+    queue_report(tmp_path, first)
+    _capture(tmp_path, first)
+    backend = client(lambda method, url, body, *_: receipt_bytes(body))
+    sync_project(tmp_path, HASH, Event(), client=backend, fetch_comparison=False)
+    queue_report(tmp_path, second)
+    _capture(tmp_path, second)
+    original = Path.rename
+
+    def fail_move(source, target):
+        if source.parent.name == move:
+            raise PermissionError("Synthetic archive failure")
+        return original(source, target)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(Path, "rename", fail_move)
+        result = sync_project(tmp_path, HASH, Event(), client=backend, fetch_comparison=False)
+    assert "cleanup needs attention" in result.error
+    assert result.status == "uploaded" and result.uploaded_count == 2
+    assert all(record.receipt and record.state == "uploaded" for record in list_records(tmp_path))
+    sends = []
+    result = sync_project(tmp_path, HASH, Event(),
+                          client=client(lambda *args: sends.append(args)), fetch_comparison=False)
+    assert not sends and not result.error and result.uploaded_count == 1
+
+
+def test_receipt_write_failure_retries_original_identity_without_duplicate(tmp_path, monkeypatch):
+    import fpvs_studio.data_sharing.storage as storage
+
+    enable(tmp_path)
+    queued = queue_report(tmp_path, report())
+    server, attempts = {}, []
+
+    def transport(method, url, body, *_args):
+        attempts.append(body)
+        server.setdefault(json.loads(body)["report_id"], body)
+        return receipt_bytes(body)
+
+    backend = client(transport)
+    original = storage._save_record
+
+    def fail_receipt(root, record):
+        if record.state == "uploaded":
+            raise SharingStorageError("Synthetic receipt write failure")
+        original(root, record)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(storage, "_save_record", fail_receipt)
+        with pytest.raises(SharingStorageError, match="receipt write"):
+            sync_project(tmp_path, HASH, Event(), client=backend, fetch_comparison=False)
+    assert list_records(tmp_path)[0].state == "pending"
+    result = sync_project(tmp_path, HASH, Event(), client=backend, fetch_comparison=False)
+    assert result.uploaded_count == 1 and len(server) == 1
+    assert attempts == [queued.payload_json.encode()] * 2
+
+
+def test_startup_retires_old_full_history_before_recovery(tmp_path, sample_project, monkeypatch):
+    from tests.unit.test_data_sharing_storage import _capture, _upload
+
+    import fpvs_studio.data_sharing.service as service
+    import fpvs_studio.data_sharing.storage as storage
+    import fpvs_studio.runtime.data_sharing as capture_runtime
+
+    save_project_file(sample_project, tmp_path / "project.json")
+    enable(tmp_path)
+    monkeypatch.setattr(storage, "MAX_RECORDS", 3)
+    monkeypatch.setattr(service, "protocol_fingerprint", lambda *_args, **_kwargs: HASH)
+    for _ in range(2):
+        old = report()
+        _upload(tmp_path, old)
+        _capture(tmp_path, old)
+    pending = queue_report(tmp_path, report())
+    original = capture_runtime.recover_captures
+    recovered = []
+
+    def recover(root):
+        assert len(list_records(root)) == 2  # Startup retired pre-change history first.
+        recovered.append(root)
+        return original(root)
+
+    monkeypatch.setattr(capture_runtime, "recover_captures", recover)
+    result = sync_startup_project(tmp_path, Event(),
+                                 client=client(lambda method, url, body, *_: receipt_bytes(body)))
+    assert recovered == [tmp_path]
+    assert result.uploaded_count == 1 and list_records(tmp_path)[0].report_id == pending.report_id
+
+
+@pytest.mark.parametrize("code", ["network", "timeout", "throttled", "unavailable"])
+def test_startup_retry_only_bypasses_connectivity_delay(
+    tmp_path, monkeypatch, sample_project, code,
+):
+    import fpvs_studio.data_sharing.service as service
+
+    save_project_file(sample_project, tmp_path / "project.json")
+    monkeypatch.setattr(service, "protocol_fingerprint", lambda *_args, **_kwargs: HASH)
+    enable(tmp_path)
+    queued = queue_report(tmp_path, report())
+    deferred = queued.model_copy(update={
+        "last_error_code": code,
+        "next_attempt_at": datetime.now(timezone.utc) + timedelta(hours=1),
+    })
+    update_record(tmp_path, deferred)
+    sends = []
+
+    def transport(method, url, body, *_):
+        sends.append(body)
+        return receipt_bytes(body)
+
+    result = sync_startup_project(tmp_path, Event(), client=client(transport))
+    if code in {"network", "timeout"}:
+        assert sends == [queued.payload_json.encode()]
+        assert result.uploaded_count == 1
+    else:
+        assert not sends and list_records(tmp_path)[0] == deferred
+
+
+def test_offline_exit_and_connected_startup_preserve_two_machine_reports(
+    tmp_path, monkeypatch, sample_project,
+):
+    import fpvs_studio.data_sharing.service as service
+
+    monkeypatch.setattr(service, "protocol_fingerprint", lambda *_args, **_kwargs: HASH)
+    server = {}
+    for machine in ("pc1", "pc2"):
+        root = tmp_path / machine
+        root.mkdir()
+        save_project_file(sample_project, root / "project.json")
+        enable(root)
+        queued = queue_report(root, report())
+
+        def offline(*args):
+            raise DataSharingError("Connection unavailable", code="network", retryable=True)
+
+        view = sync_project(root, HASH, Event(), client=client(offline), fetch_comparison=False)
+        assert view.status == "waiting_connection" and view.pending_count == 1
+        assert list_records(root)[0].last_error_code == "network"
+
+        # A new client/process uses only persisted state; no project is reopened.
+        def connected(method, url, body, *_):
+            assert url.endswith("/reports")
+            server[json.loads(body)["report_id"]] = body
+            return receipt_bytes(body)
+
+        view = sync_startup_project(root, Event(), client=client(connected))
+        assert view.uploaded_count == 1 and view.pending_count == 0
+        assert server[queued.report_id] == queued.payload_json.encode()
+    assert len(server) == 2
+
+
+@pytest.mark.parametrize("state", ["off", "held", "failed", "protocol", "credentials"])
+def test_startup_never_releases_or_sends_unapproved_work(
+    tmp_path, monkeypatch, sample_project, state,
+):
+    import fpvs_studio.data_sharing.service as service
+
+    save_project_file(sample_project, tmp_path / "project.json")
+    monkeypatch.setattr(service, "protocol_fingerprint",
+                        lambda *_args, **_kwargs: "b" * 64 if state == "protocol" else HASH)
+    enable(tmp_path)
+    queued = queue_report(tmp_path, report())
+    if state == "off":
+        save_settings(tmp_path, load_settings(tmp_path).model_copy(update={"enabled": False}))
+    elif state in {"held", "failed"}:
+        update_record(tmp_path, queued.model_copy(update={"state": state}))
+    calls = []
+    view = sync_startup_project(tmp_path, Event(),
+                               client=client(lambda *args: calls.append(args), Store()))
+    assert not calls and view.uploaded_count == 0
+    if state == "protocol":
+        assert view.status == "protocol_mismatch"
+    if state == "credentials":
+        assert view.status == "failed" and view.error
+    assert len(list_records(tmp_path)) == 1
+
+
+def test_storage_budget_status_survives_restart_and_waits_for_explicit_retry(
+    tmp_path, sample_project, monkeypatch,
+):
+    import fpvs_studio.data_sharing.service as service
+
+    save_project_file(sample_project, tmp_path / "project.json")
+    monkeypatch.setattr(service, "protocol_fingerprint", lambda *_args, **_kwargs: HASH)
+    enable(tmp_path)
+    queue_report(tmp_path, report())
+
+    def full(*args):
+        raise DataSharingError("Project reporting budget reached", code="storage_limit")
+
+    view = sync_startup_project(tmp_path, Event(), client=client(full))
+    assert view.status == "failed" and list_records(tmp_path)[0].last_error_code == "storage_limit"
+    assert list_records(tmp_path)[0].next_attempt_at is None
+    calls = []
+    view = sync_startup_project(tmp_path, Event(), client=client(lambda *args: calls.append(args)))
+    assert not calls and "reporting budget" in view.error
+    view = sync_project(tmp_path, HASH, Event(), release_held=True, fetch_comparison=False,
+                        client=client(lambda method, url, body, *_: receipt_bytes(body)))
+    assert view.uploaded_count == 1 and not view.error
+
+
+def test_startup_missing_project_does_not_create_metadata(tmp_path):
+    missing = tmp_path / "moved"
+    assert sync_startup_project(missing, Event()) is None
+    assert not missing.exists()
 
 
 def test_another_project_with_same_protocol_never_sends_previous_project_reports(tmp_path):

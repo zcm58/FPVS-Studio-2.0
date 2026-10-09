@@ -15,7 +15,7 @@ from fpvs_studio.core.paths import (
     project_json_path,
     stimulus_manifest_path,
 )
-from fpvs_studio.core.project_service import create_project, rename_project
+from fpvs_studio.core.project_service import create_project, discover_project_roots, rename_project
 from fpvs_studio.core.serialization import load_project_file, read_json_file
 from fpvs_studio.preprocessing.models import StimulusManifest
 
@@ -38,6 +38,37 @@ def test_rename_preserves_identity_files_and_legacy_payload(tmp_path):
     assert marker.read_bytes() == b"historical results"
     assert scaffold.project_root.name == "original-name"
     assert renamed.project_id == scaffold.project.meta.project_id
+
+
+def test_discovery_stops_at_projects_and_excludes_app_data_and_links(tmp_path, monkeypatch):
+    import stat
+    from pathlib import Path
+
+    for name in ("group/study", ".fpvs-studio/hidden", "study", "linked"):
+        path = tmp_path / name
+        path.mkdir(parents=True)
+        (path / "project.json").write_text("{}")
+    nested = tmp_path / "study" / "stimuli" / "nested"
+    nested.mkdir(parents=True)
+    (nested / "project.json").write_text("{}")
+    original = Path.lstat
+
+    def reparse(path):
+        info = original(path)
+        if path.name == "linked":
+            return type("Info", (), {
+                "st_mode": stat.S_IFDIR, "st_file_attributes": 0x400,
+            })()
+        return info
+
+    monkeypatch.setattr(Path, "lstat", reparse)
+    assert discover_project_roots(tmp_path) == [tmp_path / "group/study", tmp_path / "study"]
+
+
+def test_discovery_missing_root_and_cancellation(tmp_path):
+    assert discover_project_roots(tmp_path / "missing") == []
+    with pytest.raises(InterruptedError, match="discovery cancelled"):
+        discover_project_roots(tmp_path, cancelled=lambda: True)
 
 
 @pytest.mark.parametrize("name", ["", "  \t "])

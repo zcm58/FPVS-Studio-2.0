@@ -8,7 +8,7 @@ Date: 2026-10-07
 
 The user requested a future plan for reporting-history archiving followed by an
 implemented audit and hardening of Studio's uploads and downloads. The future work
-is recorded in [long-running reporting](../planned/long-running-results-reporting.md);
+is recorded in [long-running reporting](long-running-results-reporting.md);
 this plan covers the security implementation only.
 
 Review Library enrollment, catalog and bundle transfers; local bundle review/import;
@@ -50,8 +50,9 @@ revocation, receipt/cache, path/link, clean preparation and exact-submission ide
 tests remain the acceptance route. No new credential namespace, arbitrary URL,
 participant payload, publication bypass or server permission was introduced.
 
-The future reporting plan remains Planned. None of these security changes alter its
-512-record active capacity, consent or archive behavior.
+The reporting plan was still Planned when this security audit completed. These
+security changes did not alter its 512-record active capacity, consent or archive
+behavior; its later lifecycle implementation is recorded separately above.
 
 ## Verification And Remaining Checks
 

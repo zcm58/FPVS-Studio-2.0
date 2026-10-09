@@ -144,3 +144,28 @@ confirm the preference stays off on restart and queued files are discarded. Curr
 Downloaded isolated Qt dependencies and four temporary service patch helpers were
 removed after testing. Ignored XML reports retain the visible verification evidence.
 The execution plan remains active for the authenticated live activation step.
+
+## October 9 remote integration
+
+Studio crash fixes and opt-out reporting were committed as `b3d5328`, then integrated
+with remote reporting lifecycle and whole-project upload commits `c62a913` and
+`0fec897`. The only textual conflict was the completed-plan inventory; both entries
+are preserved. The imported upload plan's status declaration was corrected to the
+repository's required format.
+
+Merged verification: repo focused passes 52 checks, documentation focused passes ten,
+verification configuration passes all 14 scopes, and changed-file Ruff/compilation,
+mypy over 234 modules and repository audits pass. All 78 selected visible Qt 6.11.2
+tests pass, covering crash reporting/recovery, worker/native cleanup, data-sharing and
+upload dialogs, and welcome startup status. Network responses and settings are isolated.
+Evidence remains in ignored `build/merge-studio-visible.xml`; isolated Qt dependencies
+were removed.
+
+The full non-Qt suite finishes with 2,918 passes, 11 Windows symlink skips and one
+existing serialization assertion failure: after two injected Windows lock errors, the
+real atomic replacement needed one additional retry, so the test counted four rather
+than exactly three attempts. The save succeeded with the expected updated data and
+production's bounded retry intact. All eight serialization cases pass in a fresh
+recheck (`build/merge-serialization-recheck.xml`). No unrelated project-I/O or test
+change was added, and the original full gate's failed result is retained here.
+This source integration does not activate live crash intake or release an installer.

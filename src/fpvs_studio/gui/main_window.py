@@ -564,7 +564,7 @@ class StudioMainWindow(QMainWindow):
         self.data_sharing_action.setEnabled(self._on_request_data_sharing is not None)
         self.data_sharing_action.triggered.connect(self._request_data_sharing)
         self.publish_library_action: QAction | None = None
-        self.submit_library_action = QAction("Request Library publication...", self)
+        self.submit_library_action = QAction("Upload Project for Review...", self)
         self.submit_library_action.setObjectName("request_library_publication_action")
         self.submit_library_action.triggered.connect(self._request_library_submission)
         if self._on_request_library_publish is not None:

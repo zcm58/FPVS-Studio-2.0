@@ -84,8 +84,8 @@ Full device identities must be accessible through details even when summaries el
 - Define the supported Windows display-identity key and the mapping from native device
   identity to the engine's current screen index. Document duplicate/ambiguous identities,
   adapter replacement and unsupported platform behavior explicitly.
-- Decide the smallest first-release trigger editor and no-output labeling. A rehearsal
-  policy is a separate plan; no-output selection must not imply that timing checks passed.
+- Decide the smallest first-release trigger editor and no-output labeling. No-output
+  selection must not imply that timing checks passed.
 
 ## Display Identity And Verification Contract
 

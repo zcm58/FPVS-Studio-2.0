@@ -16,6 +16,8 @@ from pydantic import ValidationError
 from fpvs_studio.core.compiler import CompileError, compile_session_plan
 from fpvs_studio.core.data_sharing import SharingProfile, SharingSettings, protocol_fingerprint
 from fpvs_studio.core.enums import EngineName
+from fpvs_studio.core.paths import filesystem_path, project_json_path
+from fpvs_studio.core.project_service import discover_project_roots
 from fpvs_studio.data_sharing.errors import DataSharingCancelled, DataSharingError
 from fpvs_studio.data_sharing.service import ComparisonView, ConditionAggregate, SharingView
 
@@ -120,8 +122,17 @@ class _Backend:
         self.calls.append(("load", root, fingerprint))
         return self.view
 
-    def sync_project(self, root, fingerprint, _cancel, *, release_held=False):
+    def sync_project(
+        self, root, fingerprint, _cancel, *, release_held=False,
+        retry_offline=False, fetch_comparison=True,
+    ):
         self.calls.append(("sync", root, fingerprint, release_held))
+        return self.view
+
+    def sync_startup_project(self, root, cancel):
+        if cancel.is_set():
+            raise DataSharingCancelled()
+        self.calls.append(("startup", root))
         return self.view
 
     def set_sharing_enabled(self, root, enabled, fingerprint, _cancel):
@@ -157,6 +168,9 @@ def _coordinator(lifecycle, fingerprint, load_preferences):
         "ComparisonRow": lambda **values: SimpleNamespace(**values),
         "cast": cast, "_RETRY_LIMIT": 4, "_LOGGER": logging.getLogger(__name__),
         "_STOPPING_MESSAGE": "Stopping uploads…",
+        "discover_project_roots": discover_project_roots,
+        "filesystem_path": filesystem_path, "project_json_path": project_json_path,
+        "Path": Path,
     }
     exec(compile(ast.fix_missing_locations(module), str(path), "exec"), namespace)
     return namespace["DataSharingController"]
@@ -189,6 +203,116 @@ def _profile():
         experiment_id="reviewed-study", experiment_version="1.0.0", protocol_sha256="a" * 64,
         title="Reviewed study", device_id="device-1",
     )
+
+
+def _finish_jobs(state):
+    for _ in range(20):
+        job = next((job for job in state.lifecycle.jobs if not job.done), None)
+        if job is None:
+            return
+        job.run()
+    pytest.fail("Startup did not complete its bounded pass")
+
+
+def test_startup_discovers_and_drains_unopened_projects_once(state):
+    first = state.root / "study1"
+    second = state.root / "group" / "study2"
+    remembered = state.root.parent / "remembered"
+    for root in (first, second, remembered):
+        root.mkdir(parents=True)
+        (root / "project.json").write_text("{}")
+    state.controller.startup(state.root, (first, remembered, state.root / "missing"))
+    assert not state.backend.calls and state.controller._window is None
+    _finish_jobs(state)
+    assert state.backend.calls == [
+        ("startup", root.resolve()) for root in (second, first, remembered)
+    ]
+    count = len(state.lifecycle.jobs)
+    state.controller.startup(state.root, ())
+    assert len(state.lifecycle.jobs) == count
+
+
+def test_open_project_takes_priority_and_startup_resumes_after_run(state):
+    (state.root / "project.json").write_text("{}")
+    state.controller.startup(state.root, ())
+    discovery = state.lifecycle.jobs[-1]
+    state.controller.opened(state.window)
+    assert discovery.cancel_event.is_set()
+    discovery.run()
+    project_job = state.lifecycle.jobs[-1]
+    assert project_job is not discovery
+    project_job.run()
+    discovery = state.lifecycle.jobs[-1]
+    discovery.run()
+    startup_job = state.lifecycle.jobs[-1]
+    launched = []
+    state.window.busy = True
+    state.controller.session_started(state.window, lambda: launched.append(True))
+    assert startup_job.cancel_event.is_set() and not launched
+    startup_job.run()
+    assert launched == [True] and state.controller._job is None
+    assert not any(call[0] == "startup" for call in state.backend.calls)
+    state.window.busy = False
+    state.controller.session_completed(state.window)
+    _finish_jobs(state)
+    assert state.backend.calls[-1][0] == "load"  # Current off document uses its own guarded job.
+
+
+def test_startup_for_open_project_hashes_unsaved_snapshot_without_comparison(state):
+    state.backend.view = SharingView(SharingSettings(enabled=True, profile=_profile()))
+    (state.root / "project.json").write_text("{}")
+    state.controller.opened(state.window)
+    state.lifecycle.jobs[-1].run()
+    edited = state.window.document.project.model_copy(deep=True)
+    edited.settings.protocol.base_hz = 7.0
+    state.window.document.project = edited
+    calls = []
+
+    def sync(root, fingerprint, cancel, **options):
+        calls.append(options)
+        return state.backend.view
+
+    state.backend.sync_project = sync
+    state.controller.startup(state.root, ())
+    _finish_jobs(state)
+    assert state.fingerprints[-1][0] is not edited
+    assert state.fingerprints[-1][0].settings.protocol.base_hz == 7.0
+    assert calls == [{"release_held": False, "retry_offline": True, "fetch_comparison": False}]
+    assert not any(call[0] == "startup" for call in state.backend.calls)
+
+
+def test_shutdown_cancels_startup_and_never_starts_more_jobs(state):
+    (state.root / "project.json").write_text("{}")
+    state.controller.startup(state.root, ())
+    state.lifecycle.is_shutting_down = True
+    state.lifecycle.shutdown_started.emit()
+    job = state.lifecycle.jobs[-1]
+    assert job.cancel_event.is_set()
+    job.run()
+    assert len(state.lifecycle.jobs) == 1 and not state.backend.calls
+
+
+def test_startup_error_is_nonmodal_and_other_projects_continue(state):
+    for name in ("study1", "study2"):
+        folder = state.root / name
+        folder.mkdir()
+        (folder / "project.json").write_text("{}")
+    notices, calls = [], []
+    state.controller._startup_status = notices.append
+
+    def startup(root, cancel):
+        calls.append(root)
+        if root.name == "study1":
+            raise ValueError("Malformed local report; retained for review")
+        return SharingView(SharingSettings(), status="waiting_connection", pending_count=1)
+
+    state.backend.sync_startup_project = startup
+    state.controller.startup(state.root, ())
+    _finish_jobs(state)
+    assert [root.name for root in calls] == ["study1", "study2"]
+    assert any("need attention" in notice for notice in notices)
+    assert "need attention" in notices[-1]  # An offline project cannot hide a repair issue.
+    assert state.controller.dialog is None
 
 
 def test_opening_unenrolled_experiment_reads_without_activation(state):
@@ -575,6 +699,35 @@ def test_comparison_never_renders_unrelated_experiment_version_or_protocol(state
     state.controller._render()
     assert renders[0][0][0].shared == "Not enough compatible reference data"
     assert "does not match" in renders[0][1]["notice"]
+    assert "requires at least" not in renders[0][1]["notice"]
+    assert "does not measure EEG quality" in renders[0][1]["details"]
+
+
+@pytest.mark.parametrize("message", ["", "Not enough compatible reference data."])
+def test_comparison_keeps_cohort_rules_separate_from_current_notice(state, message):
+    row = ConditionAggregate("condition-1", "Condition", 100, 90, 10, 220.0, 90.0, 3)
+    remote = ComparisonView(
+        "available", "reviewed-study", "1.0.0", "a" * 64, (row,), 24, 4, message,
+    )
+    state.controller._protocol = "a" * 64
+    state.controller._view = SharingView(
+        SharingSettings(profile=_profile(), enabled=True), local_conditions=(row,), remote=remote,
+        latest_completed_at="2026-10-08T15:00:00Z",
+    )
+    renders = []
+    state.controller.dialog = SimpleNamespace(
+        set_state=lambda **_values: None, set_busy=lambda *_values: None,
+        set_project_url=lambda _url: None,
+        set_comparison=lambda rows, **values: renders.append((rows, values)),
+    )
+    state.controller._render()
+    rows, values = renders[0]
+    assert rows[0].shared != "Not enough compatible reference data"
+    assert values["notice"] == message
+    assert "24 session reports from 4 device enrollments" in values["details"]
+    assert "does not measure EEG quality" in values["details"]
+    assert "2026-10-08T15:00:00Z" in values["scope"]
+    assert "this enrollment's reports are excluded" in values["scope"]
 
 
 def _document_launch_methods(namespace):

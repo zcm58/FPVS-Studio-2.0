@@ -18,5 +18,10 @@ points, validates bounded regular files and replaces atomically. Malformed recor
 are actionable errors, never deleted or silently skipped. Reuse the existing
 project reporting lock for atomic state transitions across threads and processes.
 
-The canonical contract, operator workflow, explicit archive behavior and pending
+Reuse receipt-first archive cleanup after upload and before startup recovery.
+Startup delivery rechecks saved protocol/scope/opt-in, preserves held reports and
+skips comparison requests for unopened projects. A cleanup failure must not change
+accepted status or cause another upload of an acknowledged record.
+
+The canonical contract, operator workflow, automatic archive behavior and pending
 live/visible acceptance are in `docs/DATA_SHARING.md` from the repository root.

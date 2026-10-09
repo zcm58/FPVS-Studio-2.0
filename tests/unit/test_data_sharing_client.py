@@ -39,6 +39,41 @@ def test_pending_results_approval_has_an_actionable_message():
     assert not error.retryable
 
 
+def test_storage_budget_requires_attention_and_throttling_keeps_backoff():
+    error = _status_error(429, {
+        "schema_version": "1.0", "error": "project_storage_limit", "message": "Private text",
+    })
+    assert error.code == "storage_limit" and not error.retryable
+    assert "administrator" in str(error) and "Private text" not in str(error)
+    throttled = _status_error(429, {
+        "schema_version": "1.0", "error": "rate_limit", "message": "Private text",
+    })
+    assert throttled.code == "throttled" and throttled.retryable
+
+
+@pytest.mark.parametrize("status,body,code", [
+    (429, {"schema_version": "1.0", "error": "project_storage_limit", "message": "Private"},
+     "storage_limit"),
+    (429, {"schema_version": "1.0", "error": "rate_limit", "message": "Private"}, "throttled"),
+])
+def test_http_budget_and_throttle_errors_are_bounded_and_close_response(
+    monkeypatch, status, body, code,
+):
+    import fpvs_studio.data_sharing.client as module
+
+    headers, stream = Message(), BytesIO(json.dumps(body).encode())
+    headers["Content-Type"] = "application/json"
+
+    class Opener:
+        def open(self, *args, **kwargs):
+            raise HTTPError(ORIGIN, status, "Too many requests", headers, stream)
+
+    monkeypatch.setattr(module, "build_opener", lambda *args: Opener())
+    with pytest.raises(DataSharingError) as failure:
+        http_transport("POST", ORIGIN + "/results/v1/experiments/study/reports", b"{}", {}, Event())
+    assert failure.value.code == code and stream.closed
+
+
 @pytest.mark.parametrize("payload, expected", [
     (b'{"schema_version":"1.0","error":"results_approval_required","message":"private"}',
      "administrator"),

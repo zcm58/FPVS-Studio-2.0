@@ -72,6 +72,16 @@ class _NoRedirect(HTTPRedirectHandler):
 
 
 def _status_error(status: int, body: object = None) -> DataSharingError:
+    if (status == 429 and isinstance(body, dict)
+            and set(body) == {"schema_version", "error", "message"}
+            and body["schema_version"] == "1.0" and body["error"] == "project_storage_limit"
+            and isinstance(body["message"], str)):
+        return DataSharingError(
+            "This OpenFPVS project or lab has reached its reporting budget. "
+            "Ask its administrator to review capacity, then Retry pending. "
+            "The local report is retained.",
+            code="storage_limit",
+        )
     if (status == 403 and isinstance(body, dict)
             and set(body) == {"schema_version", "error", "message"}
             and body["schema_version"] == "1.0" and body["error"] == "results_approval_required"
@@ -150,7 +160,7 @@ def http_transport(
     except HTTPError as error:
         error_body: object = None
         try:
-            if (error.code == 403 and error.headers.get_content_type() == "application/json"
+            if (error.code in (403, 429) and error.headers.get_content_type() == "application/json"
                     and error.headers.get("Content-Encoding", "identity") == "identity"):
                 check_cancel(cancel)
                 payload = error.read(2049)

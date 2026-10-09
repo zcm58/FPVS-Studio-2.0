@@ -6,6 +6,9 @@ not ongoing compilation, runtime execution, or engine control."""
 from __future__ import annotations
 
 import json
+import logging
+import stat
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -32,6 +35,7 @@ from fpvs_studio.core.models import (
 from fpvs_studio.core.paths import (
     cache_dir,
     filesystem_path,
+    is_reserved_root_entry_name,
     logs_dir,
     project_dir,
     project_json_path,
@@ -57,6 +61,40 @@ class ProjectScaffold:
 
     project_root: Path
     project: ProjectFile
+
+
+def discover_project_roots(
+    root: Path, *, cancelled: Callable[[], bool] = lambda: False,
+) -> list[Path]:
+    """Find projects beneath one configured root without entering project assets or links."""
+    projects: list[Path] = []
+    pending = [root]
+    while pending:
+        if cancelled():
+            raise InterruptedError("Project discovery cancelled.")
+        directory = pending.pop()
+        path = filesystem_path(directory)
+        try:
+            info = path.lstat()
+            if not stat.S_ISDIR(info.st_mode) or (
+                getattr(info, "st_file_attributes", 0)
+                & getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0)
+            ):
+                continue
+            if filesystem_path(project_json_path(directory)).is_file():
+                projects.append(directory)
+                continue
+            pending.extend(
+                directory / child.name for child in path.iterdir()
+                if directory != root or not is_reserved_root_entry_name(child.name)
+            )
+        except FileNotFoundError:
+            continue
+        except OSError as error:
+            logging.getLogger(__name__).warning(
+                "Could not discover projects in %s: %s", directory, error,
+            )
+    return sorted(projects)
 
 
 def rename_project(project_root: Path, name: str) -> ProjectMeta:

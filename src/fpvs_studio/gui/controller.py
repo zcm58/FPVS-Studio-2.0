@@ -41,7 +41,6 @@ from fpvs_studio.core.models import ConditionTemplateProfile, ProjectFile
 from fpvs_studio.core.paths import (
     condition_template_library_path,
     filesystem_path,
-    is_reserved_root_entry_name,
     project_json_path,
 )
 from fpvs_studio.core.project_bundle import (
@@ -53,7 +52,7 @@ from fpvs_studio.core.project_bundle import (
     read_project_bundle_manifest,
 )
 from fpvs_studio.core.project_config import create_project_from_config, read_project_config
-from fpvs_studio.core.project_service import ProjectScaffold, rename_project
+from fpvs_studio.core.project_service import ProjectScaffold, discover_project_roots, rename_project
 from fpvs_studio.core.serialization import load_project_file
 from fpvs_studio.developer.mode import DeveloperMode
 from fpvs_studio.gui.bundle_import_dialog import (
@@ -207,6 +206,8 @@ class StudioController(QObject):
         self.welcome_window.raise_()
         self.welcome_window.activateWindow()
         self._schedule_startup_update_check()
+        assert self._fpvs_root_dir is not None
+        self._data_sharing().startup(self._fpvs_root_dir, tuple(self.load_recent_project_roots()))
 
     def _schedule_startup_update_check(self) -> None:
         if not self.startup_update_checks_enabled or self._startup_update_check_started:
@@ -934,8 +935,15 @@ class StudioController(QObject):
 
             self._data_sharing_controller = DataSharingController(
                 self._app, current_window=lambda: self.main_window,
+                startup_status=self._show_startup_sharing_status,
             )
         return self._data_sharing_controller
+
+    def _show_startup_sharing_status(self, message: str) -> None:
+        if self.welcome_window is not None:
+            self.welcome_window.set_sharing_status(message)
+        if self.main_window is not None and not self.main_window.is_launch_busy():
+            self.main_window.statusBar().showMessage(message, 10000)
 
     def show_data_sharing(self) -> None:
         window = self.main_window
@@ -972,9 +980,8 @@ class StudioController(QObject):
             self._library_submission_controller = LibrarySubmissionController(self._app)
         self._library_submission_controller.show(
             project_root=window.document.project_root,
-            conditions=[
-                (item.condition_id, item.name) for item in window.document.project.conditions
-            ],
+            title=window.document.project.meta.name,
+            description=window.document.project.meta.description,
             save_project=lambda: self._can_publish_from(window) and window.save_project(),
         )
 
@@ -1477,31 +1484,7 @@ class StudioController(QObject):
 
     def _discover_project_roots(self) -> list[Path]:
         root_dir = self._fpvs_root_dir
-        if root_dir is None or not filesystem_path(root_dir).is_dir():
-            return []
-        project_roots: list[Path] = []
-        pending_dirs = [root_dir]
-        while pending_dirs:
-            current_dir = pending_dirs.pop()
-            if not self._is_within_configured_root(current_dir):
-                continue
-            if filesystem_path(project_json_path(current_dir)).is_file():
-                project_roots.append(current_dir)
-                continue
-            try:
-                children = [
-                    current_dir / child.name for child in filesystem_path(current_dir).iterdir()
-                ]
-            except OSError:
-                continue
-            if current_dir == root_dir:
-                children = [
-                    child
-                    for child in children
-                    if not is_reserved_root_entry_name(child.name)
-                ]
-            pending_dirs.extend(child for child in children if filesystem_path(child).is_dir())
-        return project_roots
+        return discover_project_roots(root_dir) if root_dir is not None else []
 
     def _project_management_entry(self, project_root: Path) -> ProjectManagementEntry:
         normalized_root = self._normalize_path(project_root)

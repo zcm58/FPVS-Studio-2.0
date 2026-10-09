@@ -36,7 +36,7 @@ local verification, and no additional service or storage provider is required.
   after research writes and before derived participant workbooks. It checks actual
   launch flags, complete frames/tasks/occurrences and completion-screen outcomes.
 - `data_sharing/storage.py` owns private project-local settings, immutable outbox
-  bytes/digests/attempts/receipts, safe state transitions and explicit local archive.
+  bytes/digests/attempts/receipts, safe state transitions and receipt-first local archive.
   OS credentials and fixed-origin HTTP remain in dedicated neutral modules.
 - GUI `data_sharing_controller.py` uses app-owned cancelable jobs and captured project
   snapshots. View > Data Sharing & Comparison supplies enrollment, separate opt-in,
@@ -83,7 +83,7 @@ also checks actual local provenance against the returned uniform reference metho
 Accuracy pools hits/targets; RT uses observation weighting. This is descriptive
 comparison, not a repeated-measures or causal analysis.
 
-Explicit Archive uploaded history moves older acknowledged records and matching
+Receipt-first automatic cleanup and explicit Archive uploaded history move older acknowledged records and matching
 finalized mappings into guarded project archive files. The latest uploaded record
 per scope stays active. Unsent/unfinished captures and raw research exports are
 preserved; receipts and mapping survive for audit. Archive makes no network request
@@ -183,9 +183,11 @@ The capacity limitation for ordinary aborted/protocol-mismatch terminal intents
 remains: these consume the 512 active records, and uploaded-history archiving cannot
 free them. Add an explicit review/archive workflow that preserves their evidence
 before treating long-running collection capacity as complete.
-The user-requested future work is recorded in
-[Long-running results reporting](../planned/long-running-results-reporting.md);
-that plan remains unimplemented.
+Terminal-capture review/archive remains deferred. The narrower user-requested work
+landed in [Reporting upload lifecycle](../completed/long-running-results-reporting.md):
+acknowledged-history retirement, offline startup retry and compact cloud storage.
+Local acceptance is complete; visible/live qualification remains documented. That
+lifecycle does not resolve terminal-capture capacity.
 
 Integration completion requires a reviewed experiment/version/protocol grant map,
 an admin Contributions section, server-authoritative lab/PC/grant revocation, and a
@@ -294,6 +296,31 @@ repo precommit for cross-layer changes. Follow the GUI route without local Qt;
 registered Qt execution needs explicit user approval in a safe visible environment.
 Do not use offscreen Qt. The service README owns local synthetic Node test/check
 commands and the separately authorized deployment procedure.
+
+## Dialog copy refinement (2026-10-08)
+
+The user's 2026-10-08 dialog simplification removes secondary explanations from the
+main view, keeps optional privacy/identity/cohort detail in tooltips, and preserves
+current status and explicit actions. The compact minimum/default sizes are `820x480`
+and `880x540`; registered geometry/copy coverage is updated, while approved visible
+acceptance of this revision remains pending. See the canonical
+[GUI workflow](../../GUI_WORKFLOW.md#private-experiment-sharing).
+
+Files changed for this refinement:
+
+- `src/fpvs_studio/gui/data_sharing_dialog.py` and `data_sharing_controller.py`
+- `tests/gui/test_data_sharing_dialog.py` and `tests/unit/test_data_sharing_gui_jobs.py`
+- `docs/GUI_WORKFLOW.md`, `docs/FRONTEND.md`, `docs/DATA_SHARING.md` and this plan
+- `.agents/verification.toml` (manual smoke sizes and tooltip checks only)
+
+Verification: GUI focused passes 17 safe checks; the directly selected non-Qt
+`tests/unit/test_data_sharing_gui_jobs.py` module passes 41 checks. Docs focused passes
+10 checks and `-CheckConfig` validates 14 scopes. Changed-file Ruff/compilation and
+`git diff --check` pass. The broader data-sharing focused run was stopped during the
+existing 1,500-session storage-volume test to avoid duplicating unrelated backend
+verification; it is not claimed as a passing complete run. No Qt, HTTP, presentation
+or hardware was launched. The registered GUI checks cover both compact sizes and
+empty/ready/busy/error/validation/offline states; execution remains visible opt-in.
 
 ## Future work
 
