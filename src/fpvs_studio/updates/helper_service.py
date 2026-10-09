@@ -285,6 +285,7 @@ def run_apply(
     *,
     cancel_event: Event | None = None,
     phase_callback: Callable[[UpdatePhase], None] | None = None,
+    progress_window: int | None = None,
 ) -> None:
     """Prepare, acknowledge, explicitly accept, then install in a GUI worker.
 
@@ -351,7 +352,9 @@ def run_apply(
         check_cancel(cancel)
         watchdog.disarm()
         accepted = True
-        prepared.run(cancel_event=cancel, phase_callback=phase_callback)
+        prepared.run(
+            cancel_event=cancel, phase_callback=phase_callback, progress_window=progress_window
+        )
     except (EOFError, OSError, UpdateError, ValueError, TypeError) as error:
         if not accepted:
             try:

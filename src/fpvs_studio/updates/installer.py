@@ -22,6 +22,7 @@ def launch_installer(
     install_root: Path | None = None,
     verify_patch_files: bool = True,
     managed: bool = False,
+    progress_window: int | None = None,
 ) -> subprocess.Popen[bytes]:
     """Final worker stage after explicit confirmation/save, never a GUI-thread hash.
 
@@ -35,6 +36,10 @@ def launch_installer(
         raise UpdateError("Deferred patch verification requires the independent updater.")
     if managed and install_root is None:
         raise UpdateError("The independent updater requires a registered installation directory.")
+    if progress_window is not None and (
+        not managed or type(progress_window) is not int or not 0 < progress_window <= 0xFFFFFFFF
+    ):
+        raise UpdateError("Installation progress requires a valid managed updater window.")
     if install_root is not None:
         install_root = validate_cache_path(install_root)
     validate_asset_identity(downloaded.asset)
@@ -70,6 +75,8 @@ def launch_installer(
                         "/NOLAUNCH=1",
                     ]
                 )
+                if progress_window is not None:
+                    command.append(f"/PROGRESSWND={progress_window}")
             elif relaunch_after_install:
                 command.append("/RELAUNCH=1")
             check_cancel(cancel_event)

@@ -343,6 +343,7 @@ class PreparedInstall:
         *,
         cancel_event: Event | None = None,
         phase_callback: Callable[[UpdatePhase], None] | None = None,
+        progress_window: int | None = None,
     ) -> None:
         try:
             # The payload cache lock ends after guarded Popen. This independent
@@ -351,7 +352,11 @@ class PreparedInstall:
             with locked_cache(
                 default_update_cache_dir().parent / "updater-install", cancel_event=cancel_event
             ):
-                self._run_locked(cancel_event=cancel_event, phase_callback=phase_callback)
+                self._run_locked(
+                    cancel_event=cancel_event,
+                    phase_callback=phase_callback,
+                    progress_window=progress_window,
+                )
         finally:
             self.close()
 
@@ -360,6 +365,7 @@ class PreparedInstall:
         *,
         cancel_event: Event | None,
         phase_callback: Callable[[UpdatePhase], None] | None,
+        progress_window: int | None,
     ) -> None:
         try:
             if self.parent is not None:
@@ -380,6 +386,7 @@ class PreparedInstall:
                 managed=True,
                 relaunch_after_install=False,
                 cancel_event=cancel_event,
+                progress_window=progress_window,
             )
             # Setup owns mutations from here. Never kill it or pretend that a
             # cancellation can safely interrupt its replacement/recovery steps.

@@ -319,11 +319,12 @@ def test_run_ignores_cancellation_after_setup_and_restarts_only_verified_target(
     )
     phases = []
     PreparedInstall(_downloaded(tmp_path), installation, None).run(
-        cancel_event=cancel, phase_callback=phases.append
+        cancel_event=cancel, phase_callback=phases.append, progress_window=123456
     )
     assert calls[0]["managed"] is True
     assert calls[0]["verify_patch_files"] is False
     assert calls[0]["relaunch_after_install"] is False
+    assert calls[0]["progress_window"] == 123456
     assert calls[1] == [str(executable)]
     assert len([phase for phase in phases if phase.install_committed]) == 1
 
@@ -381,7 +382,8 @@ def test_apply_handoff_requires_matching_accept_before_running(
     downloaded = _downloaded(tmp_path)
     events = []
     prepared = SimpleNamespace(
-        run=lambda **k: events.append("run"), close=lambda: events.append("close")
+        run=lambda **k: events.append(("run", k["progress_window"])),
+        close=lambda: events.append("close"),
     )
     monkeypatch.setattr(helper_service, "prepare_install", lambda *a, **k: prepared)
     input_stream, sender = _pipe()
@@ -394,7 +396,9 @@ def test_apply_handoff_requires_matching_accept_before_running(
             downloaded=helper_protocol.download_to_dict(downloaded),
             parent_pid=None,
         )
-        future = pool.submit(helper_service.run_apply, input_stream, output_stream)
+        future = pool.submit(
+            helper_service.run_apply, input_stream, output_stream, progress_window=123456
+        )
         ready = helper_protocol.read_message(receiver)
         assert ready["kind"] == "ready"
         assert not events
@@ -403,7 +407,7 @@ def test_apply_handoff_requires_matching_accept_before_running(
         )
         if accept:
             future.result(timeout=5)
-            assert events == ["run", "close"]
+            assert events == [("run", 123456), "close"]
         else:
             with pytest.raises(UpdateError, match="did not accept"):
                 future.result(timeout=5)

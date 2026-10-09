@@ -453,8 +453,9 @@ def test_deferred_patch_download_starts_transfer_and_still_verifies_package(
 
 
 @pytest.mark.parametrize("kind", ["patch", "full"])
+@pytest.mark.parametrize("progress_window", [None, 123456])
 def test_managed_launch_passes_registered_root_and_leaves_restart_to_helper(
-    fixture, tmp_path, monkeypatch, kind
+    fixture, tmp_path, monkeypatch, kind, progress_window
 ):
     root, patch_asset, _, release = fixture
     asset = (
@@ -483,12 +484,15 @@ def test_managed_launch_passes_registered_root_and_leaves_restart_to_helper(
         lambda command, **kwargs: calls.append((command, kwargs)) or process,
     )
     assert (
-        launch_installer(downloaded, install_root=root, managed=True, verify_patch_files=False)
+        launch_installer(
+            downloaded, install_root=root, managed=True, verify_patch_files=False,
+            progress_window=progress_window,
+        )
         is process
     )
     assert len(calls) == 1
     command, options = calls[0]
-    assert command == [
+    expected_command = [
         str(downloaded.path),
         f"/DIR={root}",
         "/VERYSILENT",
@@ -497,6 +501,9 @@ def test_managed_launch_passes_registered_root_and_leaves_restart_to_helper(
         "/NOCLOSEAPPLICATIONS",
         "/NOLAUNCH=1",
     ]
+    if progress_window is not None:
+        expected_command.append(f"/PROGRESSWND={progress_window}")
+    assert command == expected_command
     assert options["close_fds"] is True
     assert options["env"]["PYINSTALLER_RESET_ENVIRONMENT"] == "1"
     downloaded.path.write_bytes(b"evil!" if kind == "patch" else b"evil installer")

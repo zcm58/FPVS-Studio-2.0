@@ -259,6 +259,7 @@ def test_inno_runtime_constant_literals_are_known() -> None:
     known_constants = {
         "app", "localappdata", "userappdata", "userdocs", "userdesktop",
         "commonappdata", "commonpf", "commoncf", "win", "sys", "tmp",
+        "param:progresswnd|0",
     }
     source = "\n".join(
         path.read_text(encoding="utf-8")

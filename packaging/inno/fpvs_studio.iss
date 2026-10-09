@@ -86,6 +86,29 @@ Filename: "{app}\{#AppExeName}"; Description: "Launch {#AppName}"; Flags: nowait
 
 function RelaunchRequested: Boolean; forward;
 
+var
+  InstallProgressStarted: Boolean;
+  LastInstallPercent: Integer;
+
+procedure CurInstallProgressChanged(CurProgress, MaxProgress: Integer);
+var
+  Percent: Integer;
+  ProgressWindow: HWND;
+begin
+  if MaxProgress <= 0 then
+    Exit;
+  Percent := Round(100.0 * CurProgress / MaxProgress);
+  if InstallProgressStarted and (Percent = LastInstallPercent) then
+    Exit;
+  InstallProgressStarted := True;
+  LastInstallPercent := Percent;
+  WizardForm.StatusLabel.Caption := 'Installing FPVS Studio... ' + IntToStr(Percent) + '%';
+  ProgressWindow := StrToInt64Def(ExpandConstant('{param:PROGRESSWND|0}'), 0);
+  if ProgressWindow <> 0 then
+    // WM_APP + 1; queued notification never waits for the updater UI.
+    PostMessage(ProgressWindow, $8001, Percent, 0);
+end;
+
 function PrepareToInstall(var NeedsRestart: Boolean): String;
 begin
   try

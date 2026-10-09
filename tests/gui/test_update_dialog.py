@@ -3,13 +3,15 @@
 from __future__ import annotations
 
 import hashlib
+import sys
 from collections.abc import Callable
+from ctypes import addressof, wintypes
 from dataclasses import replace
 from pathlib import Path
 from threading import Event
 
 import pytest
-from PySide6.QtCore import QCoreApplication, QEvent, Qt, QThread, QTimer
+from PySide6.QtCore import QByteArray, QCoreApplication, QEvent, Qt, QThread, QTimer
 from PySide6.QtWidgets import QLabel, QMessageBox, QWidget
 from shiboken6 import isValid
 from tests.gui.helpers import assert_visible_children_within_parent, open_created_project
@@ -1263,6 +1265,23 @@ def test_apply_progress_is_minimal_and_preserves_target_version(qtbot, deferred_
     assert not window.close_button.isVisible()
     assert window.progress_bar.isVisible()
     assert window.progress_bar.minimum() == window.progress_bar.maximum() == 0
+    assert not window.progress_bar.isTextVisible()
+    if sys.platform == "win32":
+        native = wintypes.MSG()
+        native.message = window.INSTALL_PROGRESS_MESSAGE
+        native.wParam = 37
+        window.nativeEvent(b"windows_generic_MSG", addressof(native))
+        assert window.progress_bar.maximum() == 0
+        window._committed.set()
+        for percent, expected in ((0, 0), (37, 37), (99, 99), (100, 99), (101, 99)):
+            native.wParam = percent
+            assert window.nativeEvent(QByteArray(b"windows_generic_MSG"), addressof(native)) == (
+                True, 0,
+            )
+            assert window.progress_bar.maximum() == 100
+            assert window.progress_bar.value() == expected
+            assert window.progress_bar.isTextVisible()
+            assert window.progress_bar.text() == f"{expected}%"
     qtbot.wait(1)
     assert window.status_label.height() >= window.status_label.heightForWidth(
         window.status_label.width()
@@ -1270,6 +1289,11 @@ def test_apply_progress_is_minimal_and_preserves_target_version(qtbot, deferred_
     assert_visible_children_within_parent(window)
     jobs[-1].finish()
     assert window.progress_bar.value() == window.progress_bar.maximum() == 100
+    assert window.progress_bar.text() == "100%"
+    if sys.platform == "win32":
+        native.wParam = 37
+        window.nativeEvent(b"windows_generic_MSG", addressof(native))
+        assert window.progress_bar.text() == "100%"
     assert not window.details_label.isVisible()
 
 

@@ -113,6 +113,9 @@ bounded helper staging, and install/restart ownership. `updater_main.py` is the 
 entry; `gui/update_dialog.py` remains Studio's update surface, while `gui/updater_window.py`
 provides standalone Update & Repair and installation progress. `UpdatePhase` reports
 status and an explicit installation-committed state through the existing worker lifecycle.
+Actual setup percentages use the shared Inno `CurInstallProgressChanged` callback and
+`/PROGRESSWND` native notifications handled by `gui/updater_window.py`. The percentage
+reaches 100 only after verified managed success; details live in the Packaging contract.
 
 `updates/patches.py` authenticates patch candidates and the installed inventory without
 scanning payload files at discovery/download. Keep complete baseline/target verification

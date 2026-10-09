@@ -890,9 +890,13 @@ action supports the currently installed version and requires all Studio windows 
 before installation. It works independently of Studio's authoring/runtime dependencies.
 The managed install-progress dialog has a `480x140` minimum and `560x160` default. Its
 normal surface contains only "Updating FPVS Studio to version X... Please wait..." and
-an animated progress bar. The target version comes from the installation handoff, not
-the running helper's version. The bar stays indeterminate because setup does not report
-an installation percentage; no elapsed-time percentage is invented. Error details and
+an installation progress bar with a visible percentage. The target version comes from
+the installation handoff, not the running helper's version. Preparation stays animated;
+both patch and full setup report actual Inno installation progress to the window. The
+percentage stops at 99% until setup exits successfully, registration is verified and
+Studio restarts; 100% means the managed update succeeded. Older setup builds without
+progress reporting remain animated. No elapsed-time percentage or ETA is invented.
+Error details and
 action buttons remain hidden during installation. Failure expands the dialog to a
 `480x300` minimum and `560x340` default, with a read-only scrolling error field.
 Closing the window cancels before setup begins and is ignored after explicit installation

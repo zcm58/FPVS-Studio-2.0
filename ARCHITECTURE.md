@@ -176,6 +176,9 @@ the public contract is in [Bug reporting](docs/BUG_REPORTING.md).
   recovery, and target verification. The retained full Python verifier uses scoped
   directory pins and reusable Windows bindings. Typed phase events keep progress and
   installation commitment separate from GUI presentation.
+  Inno posts actual installation percentages to the managed updater window; the
+  notification is display-only. Completion still requires setup exit, registration
+  verification and restart; see `docs/PACKAGING.md`.
 - `src/fpvs_studio/updater_main.py`: independent entry for backend pipe operations,
   the managed install-progress window, and standalone Update & Repair. Its GUI reuses
   `gui/update_dialog.py`, `gui/updater_window.py`, and the existing worker lifecycle;

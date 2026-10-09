@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import json
 import sys
+from ctypes import wintypes
 from pathlib import Path
 from threading import Event
 
-from PySide6.QtCore import Qt, QTimer, Slot
+from PySide6.QtCore import QByteArray, Qt, QTimer, Slot
 from PySide6.QtGui import QCloseEvent
 from PySide6.QtWidgets import (
     QApplication,
@@ -145,6 +146,9 @@ class UpdaterWindow(UpdateDialog):
 class ApplyUpdateDialog(QDialog):
     """Keep installation progress visible after the main Studio process exits."""
 
+    # Shared with CurInstallProgressChanged in packaging/inno/fpvs_studio.iss.
+    INSTALL_PROGRESS_MESSAGE = 0x8001
+
     def __init__(
         self, callback: UpdateCallback, *, lifecycle: UpdateLifecycle | None = None
     ) -> None:
@@ -175,6 +179,7 @@ class ApplyUpdateDialog(QDialog):
         self.progress_bar = QProgressBar(self)
         self.progress_bar.setRange(0, 0)
         self.progress_bar.setTextVisible(False)
+        self.progress_bar.setFormat("%p%")
         layout.addWidget(self.progress_bar)
         layout.addStretch(1)
         self.repair_button = QPushButton("Open Update && Repair", self)
@@ -220,6 +225,21 @@ class ApplyUpdateDialog(QDialog):
             if phase.install_committed:
                 self.close_button.setEnabled(False)
 
+    def nativeEvent(  # noqa: N802
+        self, eventType: QByteArray | bytes | bytearray | memoryview, message: int
+    ) -> object:
+        event_type = eventType.data() if isinstance(eventType, QByteArray) else bytes(eventType)
+        if sys.platform == "win32" and event_type == b"windows_generic_MSG":
+            native = wintypes.MSG.from_address(int(message))
+            if native.message == self.INSTALL_PROGRESS_MESSAGE:
+                if self._job is not None and self._committed.is_set() and 0 <= native.wParam <= 100:
+                    self.progress_bar.setRange(0, 100)
+                    # Setup still has target verification/cleanup and must exit successfully.
+                    self.progress_bar.setValue(min(native.wParam, 99))
+                    self.progress_bar.setTextVisible(True)
+                return True, 0
+        return super().nativeEvent(eventType, message)
+
     @Slot(object)
     def _finished(self, outcome: object) -> None:
         self._job = None
@@ -234,6 +254,7 @@ class ApplyUpdateDialog(QDialog):
             self.status_label.setText("FPVS Studio was updated and restarted successfully.")
             self.progress_bar.setRange(0, 100)
             self.progress_bar.setValue(100)
+            self.progress_bar.setTextVisible(True)
             self.progress_bar.setVisible(True)
             QTimer.singleShot(1500, self.accept)
         elif (
@@ -315,8 +336,11 @@ def run_updater_gui(
                 outgoing,
                 cancel_event=cancel,
                 phase_callback=lambda phase: progress(phase, None),
+                progress_window=progress_window,
             )
         )
+        # Capture the native handle on the GUI thread before the worker starts.
+        progress_window = int(window.winId())
     else:
         window = UpdaterWindow()
     window.show()

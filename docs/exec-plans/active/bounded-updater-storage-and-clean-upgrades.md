@@ -2,6 +2,36 @@
 
 Status: Active
 
+## Installation percentage follow-up (October 9, 2026)
+
+The managed updater's existing bar now shows actual Inno installation percentages for
+patch and full setup. The shared native callback posts to the updater window without
+blocking installation; existing acceptance, locks, verification and restart retain
+ownership. The percentage stays at 99 until managed success is confirmed. Preparation
+and older installers without reporting keep the animated state.
+
+Changed owners: `packaging/inno/fpvs_studio.iss`,
+`src/fpvs_studio/gui/updater_window.py`, `src/fpvs_studio/updates/installer.py`,
+`src/fpvs_studio/updates/helper_runtime.py` and
+`src/fpvs_studio/updates/helper_service.py`.
+Focused coverage: `tests/unit/test_update_patch.py`, `tests/unit/test_update_helper.py`,
+`tests/unit/test_package_metadata.py` (exact reviewed progress-window constant), and
+registered `tests/gui/test_update_dialog.py`; canonical UI/installation contracts are
+`docs/GUI_WORKFLOW.md` and `docs/PACKAGING.md`, routed from `ARCHITECTURE.md` and
+`docs/agent/agent-index.md`.
+
+Acceptance: focused checks pass for updates (311 tests, four Windows permission skips),
+packaging (181), GUI (17 safe non-Qt tests) and docs (10). Repo precommit passes with
+2,921 tests, 20 subtests and 11 Windows symlink-permission skips, plus Ruff, Python
+compilation, mypy (234 source files) and repository/doc audits. The shared Inno script
+compiles with a tiny synthetic bundle; its temporary fixture is removed automatically.
+Registered Qt coverage at 480x140 and 560x160 is added but not run.
+Visible smoke: in an approved Windows session, use a synthetic
+apply job to post 0, 37, 99 and 100 percent; confirm the percentage fits at both sizes,
+100 is withheld until success, late progress cannot overwrite completion, and failure
+still exposes complete error details and repair. Installed patch/full acceptance and
+release artifact rebuild remain separate, unperformed checks.
+
 ## Native worker teardown follow-up (October 8, 2026)
 
 The [Studio crash reliability work](../completed/studio-crash-reliability.md) also hardens updater,

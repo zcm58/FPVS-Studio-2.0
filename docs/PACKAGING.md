@@ -52,7 +52,7 @@ The PyInstaller spec includes package metadata in the bundled app.
 The package distribution name is `fpvs-studio`; the GUI and executable still use the
 display name `FPVS Studio`.
 
-For the current release package, use the PEP 440-compatible package version `2.4.2`.
+For the current release package, use the PEP 440-compatible package version `2.4.3`.
 The GitHub Release title can use a friendlier beta label, but the release tag and
 installer filename must use the exact package version.
 
@@ -60,7 +60,9 @@ Write release notes as bullet points, with one or two sentences per major change
 Keep verification summaries and installer instructions out of the release notes;
 retain audit evidence and check boundaries in the release record instead.
 
-The [v2.4.2 release record](exec-plans/completed/release-2.4.2.md) tracks the published
+The [v2.4.3 release record](exec-plans/active/release-2.4.3.md) tracks the updater GUI
+percentage release and its artifact checks. The
+[v2.4.2 release record](exec-plans/completed/release-2.4.2.md) tracks the published
 startup crash fixes and their artifact checks. The
 [v2.4.1 release record](exec-plans/completed/release-2.4.1.md) tracks the signed
 experiment transfer security release and its exact artifact/native checks.
@@ -582,8 +584,18 @@ Registered Qt coverage requires a separately approved safe visible environment.
 The updates route includes `test_update_helper.py` for IPC, staging, registration, locks,
 and handoff, plus `test_updater_main.py` for the GUI-free diagnostic entry. Candidate
 selection and deferred-download/managed-launch checks remain in `test_update_patch.py`.
+The shared Inno `CurInstallProgressChanged` callback reports actual installation
+percentages for patches and full installers. Managed setup receives `/PROGRESSWND`
+with the updater's native window handle and posts `WM_APP + 1` (`0x8001`), once per
+changed percentage. This display-only notification cannot accept an install, change
+commitment, cancel setup, or establish success. Preparation (including patch baseline
+verification) stays animated; post-install target verification/cleanup waits at 99%.
+Only the existing successful setup exit, registration check and restart complete the
+bar at 100%. Older installer builds that do not send these notifications keep the
+animated bar. Direct setup also shows the percentage in its existing status label.
+
 The registered `tests/gui/test_update_dialog.py` covers standalone repair and apply
-progress, including commitment and cancellation. See
+progress, including percentages at minimum/default size, commitment and cancellation. See
 [GUI workflow](GUI_WORKFLOW.md#gui-implementation-map) for ownership and acceptance sizes.
 
 A safe native syntax check compiles the actual Inno script against a tiny,
