@@ -297,6 +297,31 @@ registered Qt execution needs explicit user approval in a safe visible environme
 Do not use offscreen Qt. The service README owns local synthetic Node test/check
 commands and the separately authorized deployment procedure.
 
+## Dialog copy refinement (2026-10-08)
+
+The user's 2026-10-08 dialog simplification removes secondary explanations from the
+main view, keeps optional privacy/identity/cohort detail in tooltips, and preserves
+current status and explicit actions. The compact minimum/default sizes are `820x480`
+and `880x540`; registered geometry/copy coverage is updated, while approved visible
+acceptance of this revision remains pending. See the canonical
+[GUI workflow](../../GUI_WORKFLOW.md#private-experiment-sharing).
+
+Files changed for this refinement:
+
+- `src/fpvs_studio/gui/data_sharing_dialog.py` and `data_sharing_controller.py`
+- `tests/gui/test_data_sharing_dialog.py` and `tests/unit/test_data_sharing_gui_jobs.py`
+- `docs/GUI_WORKFLOW.md`, `docs/FRONTEND.md`, `docs/DATA_SHARING.md` and this plan
+- `.agents/verification.toml` (manual smoke sizes and tooltip checks only)
+
+Verification: GUI focused passes 17 safe checks; the directly selected non-Qt
+`tests/unit/test_data_sharing_gui_jobs.py` module passes 41 checks. Docs focused passes
+10 checks and `-CheckConfig` validates 14 scopes. Changed-file Ruff/compilation and
+`git diff --check` pass. The broader data-sharing focused run was stopped during the
+existing 1,500-session storage-volume test to avoid duplicating unrelated backend
+verification; it is not claimed as a passing complete run. No Qt, HTTP, presentation
+or hardware was launched. The registered GUI checks cover both compact sizes and
+empty/ready/busy/error/validation/offline states; execution remains visible opt-in.
+
 ## Future work
 
 Public dataset publication, raw EEG/files, task-specific result schemas, longitudinal

@@ -20,8 +20,8 @@ Open **View > Data Sharing & Comparison** in the active experiment. Enter the
 existing lab code and the website's **OpenFPVS project ID**, choose **Connect**,
 then ask the administrator to approve a new results enrollment on its project page.
 Reconnect with the same code/project after approval;
-review the registered study, version and field list, then enable **Automatically
-share completed sessions for this experiment**. Connecting alone does not enable
+review the registered study, version and field list through the study-title and sharing
+checkbox tooltips, then enable **Automatically share completed sessions**. Connecting alone does not enable
 sharing or upload history. **View OpenFPVS project** opens the private dashboard.
 Locally authored experiments can enroll without a Library download. A Library
 view/download grant alone does not authorize reporting: the lab needs an explicit
@@ -375,13 +375,18 @@ confirm real layout or live service acceptance.
 ./scripts/verify.ps1 -Scope repo -Tier precommit
 ```
 
-The user-approved synthetic native layout check passes at `820x620` minimum and
-`880x700` default in both themes, at 125% and 150% scaling. It checks both tabs,
+The earlier user-approved synthetic native layout check passed at `820x620` minimum and
+`880x700` default in both themes, at 125% and 150% scaling. It checked both tabs,
 long profiles/condition labels, empty/ready/busy/error/validation states, and explicit
 opt-out and cancel actions. No controller, HTTP client, presentation or hardware is
 instantiated. Request lifecycle checks with project switching and application shutdown
 remain separate end-to-end acceptance. Registered Qt tests require a user-approved
 safe visible environment; never use local offscreen Qt.
+
+The compact dialog now uses `820x480` minimum and `880x540` default. Registered tests
+cover those sizes, including offline status, full-value tooltips and concise comparison
+notices. This revised layout has not yet had an approved visible check. See
+[GUI workflow](GUI_WORKFLOW.md#private-experiment-sharing) for the manual smoke path.
 
 Live acceptance remains pending: authorize and provision an isolated Results
 Worker/D1 scope, enroll two or more machines with synthetic sessions, check exported

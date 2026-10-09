@@ -13,48 +13,55 @@ policy and does not establish the safety of arbitrarily renamed file bytes.
 
 ## Desktop workflow
 
-### Request condition publication
+### Upload a project for review
 
-**File > Export > Request Library publication...** is available to normal Studio
-users. Connect the computer to OpenFPVS first through Library settings. Select one
-condition, supply a title, description and contact, and choose **Prepare condition**.
-Review the exact local inventory and confirm distribution rights before **Submit
-for review**. The dialog is minimum `860x740`, default `940x800`; **My requests**
-refreshes decisions for this enrolled computer.
+**File > Export > Upload Project for Review...** is available to normal Studio
+users without Library enrollment, a contributor grant or a GitHub account. The
+title and description come from the current project. Enter your name/contact,
+confirm sharing permission and choose **Upload for Review**. That one action saves,
+prepares and uploads the whole project. The dialog is minimum `760x600`, default
+`820x660`. **Files** holds the optional inventory; **My Uploads** refreshes decisions.
 
-Preparation copies that condition, referenced stimulus pools/variants, bound tasks,
-and its modifier's required modules/baseline into an ordinary runnable experiment
+Preparation copies all conditions, required stimulus pools/variants, bound tasks,
+and modifier dependencies into an ordinary runnable experiment
 bundle. The original project is unchanged. Participant history, results, logs,
-credentials and unrelated tasks are excluded by the existing clean exporter. A
-masking catch condition depends on other conditions and cannot be submitted alone.
+credentials and unrelated tasks are excluded by the existing clean exporter.
 This workflow does not add condition merging to the existing Library importer.
 
-Submission uses native `/v2/submissions` and `/v2/submissions/<UUID>/bundle`; the
+Submission uses `/submissions/v1` and `/submissions/v1/<UUID>/bundle`; the
 private OpenFPVS project owns its additive review schema and GitHub writes. Uploads
 are capped at 64 MiB. The UUID, metadata, byte size and SHA-256 remain fixed on an
 exact retry; confirmed requests cannot have their bundles replaced. Cancel or an
-uncertain upload retains prepared files. **My requests** remains available after a
-restart with the same enrolled computer; resuming upload from retained preparation
+uncertain upload retains prepared files and **Retry Upload** reuses them. An independent
+OS-protected upload token allows only this computer/user's uploads and status. It grants
+no Library or administrator access. **My Uploads** remains available after a
+restart with the same OS credential; resuming upload from retained preparation
 is currently an in-session operation. A new submission has a new UUID and review.
 
-The OpenFPVS Administrator's **Experiments** tab lists condition requests and
-offers protected bundle download, rejection with notes, and **Accept and publish**.
-Acceptance requires the exact digest and explicit confirmation of import/testing
-on the latest published stable Studio build, checked again by the service. Pending,
-rejected and interrupted publications stay outside both website/native catalogs.
+After a complete upload, OpenFPVS emails the administrator with GitHub/admin links.
+Delivery failures preserve the submission and retry with a stable email idempotency
+key and bounded backoff. The administrator's **Experiments** tab offers protected
+bundle download, rejection and **Review & publish on GitHub**. Validate and test the
+project, then publish that same draft on GitHub. Catalog/status refresh reconciles
+the exact published asset automatically. Signed bundle validation remains required;
+unvalidated, incomplete, altered, rejected and withdrawn assets stay withheld.
 Accepted entries retain the ordinary strict experiment catalog and importer.
 Approval publishes only those reviewed bytes; it never grants ongoing publishing
 permission or experimental results-upload access. The Library audience remains
 the existing lab-code/account audience.
 
 Bundles are stored as draft Releases in the existing private GitHub repository.
-An explicit administrator acceptance publishes the release and enables its exact
-asset through a D1-backed accepted catalog overlay; the ordinary committed catalog
+Publishing the draft enables its exact validated asset through a D1-backed accepted
+catalog overlay; the ordinary committed catalog
 continues to use the existing maintainer publisher. Both sources require current
 published asset IDs, sizes and digests. Browsing requests read-only installation
 tokens. Review uploads/publication require separately requested Contents write
 tokens restricted to the same private repository and explicit server activation.
 Neither the GUI nor submitted projects receive GitHub credentials.
+
+The existing enrolled `/v2/submissions` condition API remains available for older
+clients, with its original lab permission and explicit acceptance rules. New project
+items use `submitted-<UUID>`; legacy `reviewed-<UUID>` safety proofs stay single-condition.
 
 Service activation requires App permission, the additive migration and deployment
 as documented in the private project's README. The review service was activated
@@ -700,7 +707,7 @@ with controlled clients/importers; it does not access the live service.
 | Welcome with four project actions | 760×520 | 1120×720 |
 | Create Project, all three pages | 760×500 | 800×500 |
 | Developer publisher | 860×680 | 940×760 |
-| Request Library publication | 860×740 | 940×800 |
+| Upload Project for Review | 760×600 | 820×660 |
 | Settings with Library access | 700×604 | Minimum |
 | Settings with local Test Mode | 700×694 | Minimum |
 | Settings with AB Pilot Mode | 700×764 | Minimum |

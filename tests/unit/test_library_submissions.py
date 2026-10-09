@@ -20,10 +20,14 @@ from fpvs_studio.core.project_bundle import ProjectBundleError, import_project_b
 from fpvs_studio.core.project_service import create_project
 from fpvs_studio.core.serialization import load_project_file, save_project_file
 from fpvs_studio.core.task_models import TaskBinding
-from fpvs_studio.developer.library_publisher import PreparedPublication, PublicationRequest
+from fpvs_studio.developer.library_publisher import (
+    PreparedPublication,
+    PublicationRequest,
+    PublisherService,
+)
 from fpvs_studio.library.client import LibraryClient
 from fpvs_studio.library.errors import LibraryCancelled, LibraryError
-from fpvs_studio.library.submissions import list_submissions, submit_condition
+from fpvs_studio.library.submissions import list_submissions, submit_condition, submit_project
 from fpvs_studio.preprocessing.manifest import create_empty_manifest, write_stimulus_manifest
 
 
@@ -284,3 +288,126 @@ def test_status_list_validates_server_metadata(submission, monkeypatch):
     )
     with pytest.raises(LibraryError, match="statuses"):
         list_submissions(client)
+
+
+def test_whole_project_preparation_preserves_conditions_and_source(
+    tmp_path,
+    multi_condition_project,
+    multi_condition_project_root,
+    monkeypatch,
+):
+    project, root = multi_condition_project, multi_condition_project_root
+    _ready_project(root, project)
+    results = root / "results"
+    results.mkdir(exist_ok=True)
+    (results / "participant.csv").write_text("private", encoding="utf-8")
+    before = _snapshot(root)
+    monkeypatch.setattr(
+        "fpvs_studio.developer.library_publisher.tempfile.gettempdir", lambda: str(tmp_path)
+    )
+    service = PublisherService()
+    prepared = service.prepare(
+        root,
+        PublicationRequest(
+            f"submitted-{uuid4()}",
+            "Whole project",
+            "1.0.0",
+            "Purpose",
+            "2.2.7",
+        ),
+    )
+    with zipfile.ZipFile(prepared.bundle_path) as archive:
+        exported = type(project).model_validate_json(archive.read("project.json"))
+        assert "results/participant.csv" not in archive.namelist()
+    assert [item.condition_id for item in exported.conditions] == [
+        item.condition_id for item in project.conditions
+    ]
+    assert prepared.report.condition_count == len(project.conditions)
+    assert _snapshot(root) == before
+
+
+def test_unenrolled_project_upload_uses_separate_persisted_identity_and_exact_retry(
+    submission, monkeypatch
+):
+    client, prepared, status, calls = submission
+    upload_store = MemoryStore(connected=False)
+    prepared = replace(
+        prepared,
+        request=replace(
+            prepared.request, item_id=prepared.request.item_id.replace("reviewed-", "submitted-")
+        ),
+        report=replace(prepared.report, condition_count=2),
+    )
+    monkeypatch.setattr(
+        client,
+        "_credential",
+        lambda: pytest.fail("Project upload must not require Library enrollment"),
+    )
+    result = submit_project(
+        client,
+        prepared,
+        author_name="Researcher",
+        author_email="researcher@example.test",
+        upload_store=upload_store,
+    )
+    assert result.status == "pending"
+    assert len(upload_store.saved) == 1
+    token = upload_store.value.token
+    assert token != "t" * 43
+    assert upload_store.value.connection is None
+    assert calls[0][1] == "/submissions/v1"
+    assert calls[0][2]["payload"]["condition_id"] == "__project__"
+    assert calls[1][2]["token"] == token
+    assert calls[1][1].startswith("/submissions/v1/")
+    original_metadata = calls[0][2]["payload"]
+    status["status"] = "pending"
+    submit_project(
+        client,
+        prepared,
+        author_name="Researcher",
+        author_email="researcher@example.test",
+        upload_store=upload_store,
+    )
+    assert len(calls) == 3
+    assert calls[2][2]["payload"] == original_metadata
+    assert calls[2][2]["token"] == token
+    assert len(upload_store.saved) == 1
+
+
+def test_project_history_never_uses_library_enrollment(submission, monkeypatch):
+    client, _, _, calls = submission
+    store = MemoryStore(connected=False)
+
+    def history(method, path, **kwargs):
+        calls.append((method, path, kwargs))
+        return {"schema_version": "1.0", "submissions": []}
+
+    monkeypatch.setattr(client, "_json_request", history)
+    monkeypatch.setattr(client, "_credential", lambda: pytest.fail("No Library enrollment"))
+    assert not list_submissions(client, project_uploads=True, upload_store=store).submissions
+    assert calls[0][1] == "/submissions/v1"
+    assert calls[0][2]["token"] == store.value.token
+
+
+def test_default_upload_store_has_an_independent_origin_namespace(submission, monkeypatch):
+    client, _, _, _ = submission
+    upload_store = MemoryStore(connected=False)
+    namespaces = []
+
+    def store_factory(identity):
+        namespaces.append(identity)
+        return upload_store
+
+    monkeypatch.setattr("fpvs_studio.library.submissions.credential_store", store_factory)
+    monkeypatch.setattr(
+        client,
+        "_json_request",
+        lambda *_args, **_kwargs: {
+            "schema_version": "1.0",
+            "submissions": [],
+        },
+    )
+    list_submissions(client, project_uploads=True)
+    assert namespaces == [client.service_url + "/submissions"]
+    assert client._credential().token == "t" * 43
+    assert upload_store.value.token != client._credential().token

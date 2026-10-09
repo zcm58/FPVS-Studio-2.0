@@ -699,6 +699,35 @@ def test_comparison_never_renders_unrelated_experiment_version_or_protocol(state
     state.controller._render()
     assert renders[0][0][0].shared == "Not enough compatible reference data"
     assert "does not match" in renders[0][1]["notice"]
+    assert "requires at least" not in renders[0][1]["notice"]
+    assert "does not measure EEG quality" in renders[0][1]["details"]
+
+
+@pytest.mark.parametrize("message", ["", "Not enough compatible reference data."])
+def test_comparison_keeps_cohort_rules_separate_from_current_notice(state, message):
+    row = ConditionAggregate("condition-1", "Condition", 100, 90, 10, 220.0, 90.0, 3)
+    remote = ComparisonView(
+        "available", "reviewed-study", "1.0.0", "a" * 64, (row,), 24, 4, message,
+    )
+    state.controller._protocol = "a" * 64
+    state.controller._view = SharingView(
+        SharingSettings(profile=_profile(), enabled=True), local_conditions=(row,), remote=remote,
+        latest_completed_at="2026-10-08T15:00:00Z",
+    )
+    renders = []
+    state.controller.dialog = SimpleNamespace(
+        set_state=lambda **_values: None, set_busy=lambda *_values: None,
+        set_project_url=lambda _url: None,
+        set_comparison=lambda rows, **values: renders.append((rows, values)),
+    )
+    state.controller._render()
+    rows, values = renders[0]
+    assert rows[0].shared != "Not enough compatible reference data"
+    assert values["notice"] == message
+    assert "24 session reports from 4 device enrollments" in values["details"]
+    assert "does not measure EEG quality" in values["details"]
+    assert "2026-10-08T15:00:00Z" in values["scope"]
+    assert "this enrollment's reports are excluded" in values["scope"]
 
 
 def _document_launch_methods(namespace):

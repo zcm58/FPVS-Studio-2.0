@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import pytest
 from PySide6.QtCore import QRect, Qt
-from PySide6.QtWidgets import QLabel, QLineEdit
+from PySide6.QtWidgets import QCheckBox, QLabel, QLineEdit, QPushButton
 from tests.gui.helpers import assert_visible_children_within_parent
 
 from fpvs_studio.gui.data_sharing_dialog import ComparisonRow, DataSharingDialog
 
 
-@pytest.mark.parametrize("size", [(820, 620), (880, 700)])
+@pytest.mark.parametrize("size", [(820, 480), (880, 540)])
 @pytest.mark.parametrize("state", ["empty", "ready", "busy", "error", "validation", "offline"])
 def test_sharing_dialog_fits_long_content_and_all_tabs(qtbot, size, state):
     dialog = DataSharingDialog(configured=True)
@@ -41,7 +41,8 @@ def test_sharing_dialog_fits_long_content_and_all_tabs(qtbot, size, state):
     dialog.set_comparison(
         rows, scope="Local: latest eligible completed session (2026-10-05T15:30:00+00:00).\n"
         "Shared: same experiment/version/protocol; this device's reports are excluded.",
-        notice="Not enough compatible reference data. Shared accuracy requires at least 10 "
+        notice="Not enough compatible reference data.",
+        details="Shared accuracy requires at least 10 "
         "session reports from 3 devices per condition. Task accuracy does not measure EEG quality.",
     )
     dialog.set_busy(
@@ -52,6 +53,11 @@ def test_sharing_dialog_fits_long_content_and_all_tabs(qtbot, size, state):
     dialog.show()
     assert "Retained uploaded: 9,999" in dialog.counts_label.text()
     assert "cloud contributions remain" in dialog.counts_label.toolTip()
+    assert dialog.profile_label.text() == profile.partition("\n")[0]
+    assert dialog.profile_label.toolTip() == profile
+    assert dialog.profile_label.isVisible() == (state not in {"empty", "validation"})
+    assert not dialog.header.subtitle_label.isVisible()
+    assert "Protocol SHA-256" not in dialog.profile_label.text()
     for index in range(dialog.tabs.count()):
         dialog.tabs.setCurrentIndex(index)
         qtbot.wait(10)
@@ -65,6 +71,11 @@ def test_sharing_dialog_fits_long_content_and_all_tabs(qtbot, size, state):
                 Qt.TextFlag.TextWordWrap, label.text(),
             )
             assert label.contentsRect().height() >= bounds.height() - 2
+        for control in dialog.findChildren(QPushButton) + dialog.findChildren(QCheckBox):
+            if control.isVisible():
+                assert control.contentsRect().width() >= (
+                    control.fontMetrics().horizontalAdvance(control.text())
+                )
     if rows:
         assert full_name in dialog.comparison_table.item(0, 0).toolTip()
         assert "condition-id-with-protocol-specific-identity" in (
@@ -135,8 +146,11 @@ def test_busy_unconfigured_and_cancel_states(qtbot):
     dialog.set_busy(False, "Enter the lab-issued invitation code.")
     assert not dialog.cancel_button.isVisible()
     assert "invitation code" in dialog.status_label.text()
-    assert "No participant IDs" in dialog.consent_label.text()
-    assert "does not measure EEG quality" in dialog.comparison_notice.text()
+    assert "No participant IDs" in dialog.enabled_checkbox.toolTip()
+    assert "does not enable sharing" in dialog.connect_button.toolTip()
+    assert "received reports with the owner" in dialog.disconnect_button.toolTip()
+    assert "does not measure EEG quality" in dialog.comparison_table.toolTip()
+    assert not dialog.comparison_notice.isVisible()
 
 
 def test_project_setup_and_website_actions_are_explicit(qtbot):
@@ -160,3 +174,36 @@ def test_project_setup_and_website_actions_are_explicit(qtbot):
     dialog.set_busy(True)
     assert not dialog.website_button.isEnabled()
     assert not dialog.protocol_button.isEnabled()
+
+
+def test_available_comparison_keeps_details_in_tooltips(qtbot):
+    dialog = DataSharingDialog(configured=True)
+    qtbot.addWidget(dialog)
+    scope = (
+        "Local: latest eligible completed session (2026-10-08T15:30:00+00:00).\n"
+        "Shared: same experiment/version/protocol; this enrollment's reports are excluded."
+    )
+    details = (
+        "Shared accuracy requires 10 session reports from 3 devices per condition. "
+        "Task performance does not measure EEG quality."
+    )
+    dialog.set_comparison(
+        [ComparisonRow("Condition", "condition-1", "92.0%", "89.5%")],
+        scope=scope, notice="", details=details,
+    )
+    dialog.tabs.setCurrentIndex(1)
+    dialog.show()
+    qtbot.wait(10)
+    assert not dialog.comparison_notice.isVisible()
+    assert scope in dialog.comparison_table.toolTip()
+    assert details in dialog.comparison_table.horizontalHeaderItem(2).toolTip()
+    assert dialog.comparison_table.item(0, 2).text() == "89.5%"
+    assert not any(
+        "does not measure EEG quality" in label.text()
+        for label in dialog.findChildren(QLabel) if label.isVisible()
+    )
+    dialog.set_comparison(
+        [], scope=scope, notice="The reference protocol changed.", details=details,
+    )
+    assert dialog.comparison_notice.isVisible()
+    assert dialog.comparison_notice.text() == "The reference protocol changed."

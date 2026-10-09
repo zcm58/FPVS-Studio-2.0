@@ -33,10 +33,12 @@ lazily only inside the engine package.
   for each browse/download. Native access connects directly to `https://openfpvs.com`;
   core's exact origin policy preserves receipt identity without transferring credentials.
   See `docs/EXPERIMENT_LIBRARY.md`.
-  `library/submissions.py` handles enrolled-device condition review uploads/status;
+  `library/submissions.py` handles independent whole-project review uploads/status
+  and the retained enrolled condition API;
   `gui/library_submission_controller.py` owns app jobs and explicit distribution
-  confirmation. Clean preparation selects one condition through the existing
-  exporter. The private service owns GitHub draft storage, manual review and an
+  confirmation. Clean preparation reuses the existing whole-project exporter and
+  OS credential owner with a separate upload namespace. The private service owns
+  GitHub draft storage, upload notification, publication reconciliation and an
   accepted-only catalog overlay; approval never grants future publishing authority.
   The same private repository owns the website at `https://openfpvs.com`: lab-code
   discovery, exact-version publications, bundle downloads, recorded download starts

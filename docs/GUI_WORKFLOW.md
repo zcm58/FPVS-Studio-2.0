@@ -17,20 +17,25 @@ enrollment remains saved. Errors leave retry/offline choices available. View-onl
 access permits catalog browsing and disables download; the server remains the
 authority for permission and revocation. See [Experiment Library](EXPERIMENT_LIBRARY.md).
 
-## Condition publication requests
+## Project review uploads
 
-File > Export > Request Library publication opens the condition review dialog at
-minimum `860x740`, default `940x800`. Select one condition, enter its title/contact,
-prepare an immutable clean copy and explicitly confirm distribution rights before
-upload. My requests refreshes per-computer review decisions. Preparation, hashing,
+File > Export > Upload Project for Review opens a compact form at
+minimum `760x600`, default `820x660`. Title/description are prefilled; enter contact,
+confirm sharing permission and upload the whole project with one action. Library
+enrollment is unnecessary. My Uploads refreshes per-computer decisions; Files holds
+optional inventory. Preparation, hashing,
 HTTPS and temporary-file cleanup run in app-owned jobs; close/shutdown cancels
 without discarding an uncertain submission. See [Experiment Library](EXPERIMENT_LIBRARY.md)
 for dependency closure, exclusions, bounds, review and manual smoke acceptance.
 
 ## Private experiment sharing
 
-View > Data Sharing & Comparison opens a two-tab dialog at `880x700`, minimum
-`820x620`. Existing lab-code and OpenFPVS project-ID enrollment leaves sharing off until the operator explicitly
+View > Data Sharing & Comparison opens a two-tab dialog at `880x540`, minimum
+`820x480`. The main view shows controls, sharing status, queue counts and the enrolled
+study title. Privacy fields, action explanations, full enrollment identity and comparison
+scope/cohort rules are available through the relevant control, title and table-header
+tooltips. Comparison notices show only the current unavailable/error state.
+Existing lab-code and OpenFPVS project-ID enrollment leaves sharing off until the operator explicitly
 enables it. App-owned jobs handle hashing, delivery and descriptive comparison after
 completed sessions, with opt-out/backlog release and cancel/shutdown guards.
 Accepted uploads automatically archive older local history, keeping the latest
@@ -41,8 +46,11 @@ active local cache. Archive uploaded history remains a local retry without HTTP.
 Copy protocol fingerprint supplies the hash for administrator project setup;
 View OpenFPVS project opens the private website dashboard after enrollment.
 See [Data sharing](DATA_SHARING.md) for exact fields, cohort limits and activation.
-Synthetic visible checks cover both tabs and connection states at minimum/default
-sizes; production multi-machine acceptance remains a separate service check.
+Registered checks cover both tabs and connection states at minimum/default sizes.
+For visible acceptance, open View > Data Sharing & Comparison, inspect both tabs at
+those sizes, hover the checkbox/title/table headers for details, and exercise opt-in/out,
+retry, archive and cancellation with a fake service. The compact layout still requires
+an approved visible check; production multi-machine acceptance remains a separate service check.
 
 ## Bug reporting
 

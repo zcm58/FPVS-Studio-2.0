@@ -127,6 +127,11 @@ interaction.
 
 ## Setup text hierarchy
 
+The user prefers application GUIs without secondary explanatory text. Keep headings,
+control labels, essential current status and actionable errors visible; put optional
+explanations and technical detail in tooltips instead of subtitles and help paragraphs.
+Preserve participant-authored instructions and information needed for the current decision.
+
 Use one task heading per step. Compact forms are horizontally centered at bounded
 widths; Conditions and Design keep their wider workspaces. Field labels belong close
 to their controls: Project and Timing use stacked labels, while denser forms align

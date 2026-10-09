@@ -969,9 +969,8 @@ class StudioController(QObject):
             self._library_submission_controller = LibrarySubmissionController(self._app)
         self._library_submission_controller.show(
             project_root=window.document.project_root,
-            conditions=[
-                (item.condition_id, item.name) for item in window.document.project.conditions
-            ],
+            title=window.document.project.meta.name,
+            description=window.document.project.meta.description,
             save_project=lambda: self._can_publish_from(window) and window.save_project(),
         )
 

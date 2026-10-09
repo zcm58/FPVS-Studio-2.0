@@ -122,6 +122,7 @@ manual_smoke = []
 checks = []
 tests = [
   "tests/unit/test_library_submissions.py",
+  "tests/unit/test_library_submission_jobs.py",
   "tests/unit/test_library_installations.py",
   "tests/unit/test_library_origin.py",
   "tests/unit/test_library_project_updates.py",
@@ -134,7 +135,7 @@ tests = [
   "tests/unit/test_developer_mode.py",
   "tests/unit/test_catalog_publisher.py",
 ]
-full_tests = []
+full_tests = ["tests/gui/test_library_submission_dialog.py"]
 include = [
   "src/fpvs_studio/library/**",
   "src/fpvs_studio/developer/**",
@@ -152,10 +153,12 @@ include = [
   "tests/unit/test_catalog_publisher.py",
   "tests/gui/test_library_dialog.py",
   "tests/gui/test_library_publisher_dialog.py",
+  "tests/gui/test_library_submission_dialog.py",
   "tests/gui/test_project_update_controller.py",
   "tests/gui/test_project_version_dialog.py",
 ]
 manual_smoke = [
+  "Without Library enrollment, open Upload Project for Review, confirm rights, and upload a multi-condition project with one action. Check progress/cancel, exact retry after network failure, My Uploads, and all tabs at 760x600 and 820x660 in an approved visible session.",
   "Open a linked project, review a newer Library version on Home, and explicitly import it separately; confirm old edits and participant data remain intact. Check offline, unknown origin, auto-check toggle, cancellation and stale-window cases.",
   "Enroll two machine/user profiles and install a whole project from the Experiment Library; inspect Setup and reopen offline.",
   "Use an approved visible session to check cancellation, revocation, and dialog sizes documented in docs/EXPERIMENT_LIBRARY.md.",
@@ -201,7 +204,7 @@ include = [
   "docs/REPORTING_STORAGE.md",
 ]
 manual_smoke = [
-  "In an approved visible Windows session inspect both tabs at 820x620 and 880x700; exercise enrollment, opt-in/out, retry and archive with a fake service.",
+  "In an approved visible Windows session inspect both tabs at 820x480 and 880x540; check detail tooltips and exercise enrollment, opt-in/out, retry and archive with a fake service.",
   "At Welcome 760x520 and 1120x720 check passive startup status with synthetic pending projects; start presentation while another project is sending and confirm cancellation, then resume after the run.",
   "Run sibling OpenFPVS npm test and npm run check; Python verification does not run backend tests.",
   "After an approved staging deployment, enroll two machines, complete production sessions and check scoped receipts, offline retries, revocation and threshold suppression.",

@@ -552,25 +552,26 @@ class DataSharingController(QObject):
             ))
         minimum = remote.minimum_sessions if remote is not None else 10
         devices = remote.minimum_devices if remote is not None else 3
-        notice = (
+        details = (
             f"Shared accuracy requires at least {minimum} session reports from "
             f"{devices} device enrollments "
             "per condition with compatible scoring. "
             "This task performance does not measure EEG quality."
         )
+        notice = ""
         if remote is not None and remote.message:
-            notice = remote.message + " " + notice
+            notice = remote.message
         elif remote is not None and not matches:
-            notice = "The reference protocol does not match this experiment. " + notice
+            notice = "The reference protocol does not match this experiment."
         elif not view.local_conditions:
-            notice = "No eligible completed session is available locally. " + notice
+            notice = "No eligible completed session is available locally."
         elif not view.settings.enabled:
-            notice = "Enable sharing to retrieve a private aggregate comparison. " + notice
+            notice = "Enable sharing to retrieve a private aggregate comparison."
         timestamp = f" ({view.latest_completed_at})" if view.latest_completed_at else ""
         dialog.set_comparison(
             rows, scope=f"Local: latest eligible completed session{timestamp}.\n"
             "Shared: same experiment/version/protocol; this enrollment's reports are excluded.",
-            notice=notice,
+            notice=notice, details=details,
         )
         dialog.set_busy(False)
 

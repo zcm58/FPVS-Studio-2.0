@@ -1,9 +1,10 @@
-"""Condition review contracts and bounded, enrolled-device submission transport."""
+"""Review contracts and bounded transport for project and legacy condition uploads."""
 
 from __future__ import annotations
 
 import hashlib
 import json
+import secrets
 import time
 import zipfile
 from threading import Event
@@ -16,6 +17,7 @@ from fpvs_studio import __version__
 from fpvs_studio.developer.library_publisher import PreparedPublication
 from fpvs_studio.library.cache import check_cancel
 from fpvs_studio.library.client import METADATA_TOTAL_SECONDS, LibraryClient
+from fpvs_studio.library.credentials import CredentialStore, DeviceCredential, credential_store
 from fpvs_studio.library.errors import LibraryError
 
 MAX_SUBMISSION_BYTES = 64 * 1024 * 1024
@@ -69,12 +71,32 @@ def _receipt(raw: object) -> SubmissionStatus:
         raise LibraryError("OpenFPVS returned invalid submission metadata.") from None
 
 
-def list_submissions(client: LibraryClient, cancel_event: Event | None = None) -> SubmissionList:
+def _upload_token(client: LibraryClient, store: CredentialStore | None) -> str:
+    # Upload identity is independent of Library enrollment and grants no download access.
+    store = store if store is not None else credential_store(client.service_url + "/submissions")
+    credential = store.load()
+    if credential is None:
+        credential = DeviceCredential(
+            token=secrets.token_urlsafe(32), device_name="Project uploads"
+        )
+        store.save(credential)
+    return credential.token
+
+
+def list_submissions(
+    client: LibraryClient,
+    cancel_event: Event | None = None,
+    *,
+    upload_store: CredentialStore | None = None,
+    project_uploads: bool = False,
+) -> SubmissionList:
     with client._operation(cancel_event):
         raw = client._json_request(
             "GET",
-            "/v2/submissions",
-            token=client._credential().token,
+            "/submissions/v1" if project_uploads else "/v2/submissions",
+            token=_upload_token(client, upload_store)
+            if project_uploads
+            else client._credential().token,
             cancel_event=cancel_event,
         )
         try:
@@ -93,11 +115,63 @@ def submit_condition(
     author_email: str,
     cancel_event: Event | None = None,
 ) -> SubmissionStatus:
-    """Retry the same UUID and exact bytes after uncertain network completion."""
-    submission_id = str(UUID(prepared.request.item_id.removeprefix("reviewed-")))
-    report = prepared.report
-    if report.condition_count != 1 or not 0 < report.size_bytes <= MAX_SUBMISSION_BYTES:
+    if (
+        prepared.report.condition_count != 1
+        or not 0 < prepared.report.size_bytes <= MAX_SUBMISSION_BYTES
+    ):
         raise LibraryError("Submit one condition in a bundle no larger than 64 MiB.")
+    return _submit(
+        client,
+        prepared,
+        condition_id=condition_id,
+        condition_name=condition_name,
+        author_name=author_name,
+        author_email=author_email,
+        cancel_event=cancel_event,
+    )
+
+
+def submit_project(
+    client: LibraryClient,
+    prepared: PreparedPublication,
+    *,
+    author_name: str,
+    author_email: str,
+    cancel_event: Event | None = None,
+    upload_store: CredentialStore | None = None,
+) -> SubmissionStatus:
+    """Upload the entire clean project without requesting Library access."""
+    return _submit(
+        client,
+        prepared,
+        condition_id="__project__",
+        condition_name="Whole project",
+        author_name=author_name,
+        author_email=author_email,
+        cancel_event=cancel_event,
+        project_uploads=True,
+        upload_store=upload_store,
+    )
+
+
+def _submit(
+    client: LibraryClient,
+    prepared: PreparedPublication,
+    *,
+    condition_id: str,
+    condition_name: str,
+    author_name: str,
+    author_email: str,
+    cancel_event: Event | None,
+    project_uploads: bool = False,
+    upload_store: CredentialStore | None = None,
+) -> SubmissionStatus:
+    """Retry the same UUID and exact bytes after uncertain network completion."""
+    prefix = "submitted-" if project_uploads else "reviewed-"
+    submission_id = str(UUID(prepared.request.item_id.removeprefix(prefix)))
+    report = prepared.report
+    if report.condition_count < 1 or not 0 < report.size_bytes <= MAX_SUBMISSION_BYTES:
+        raise LibraryError("Upload a project bundle no larger than 64 MiB.")
     if not author_name.strip() or len(author_name) > 200:
         raise LibraryError("Enter your name (up to 200 characters).")
     if not author_email.strip() or len(author_email) > 254 or "@" not in author_email:
@@ -138,10 +212,13 @@ def submit_condition(
                 "min_studio_version": report.minimum_studio_version,
             },
         }
-        token = client._credential().token
+        token = (
+            _upload_token(client, upload_store) if project_uploads else client._credential().token
+        )
+        endpoint = "/submissions/v1" if project_uploads else "/v2/submissions"
         raw = client._json_request(
             "POST",
-            "/v2/submissions",
+            endpoint,
             token=token,
             payload=metadata,
             cancel_event=cancel_event,
@@ -153,7 +230,7 @@ def submit_condition(
             return status
         with client._response(
             "PUT",
-            f"/v2/submissions/{submission_id}/bundle",
+            f"{endpoint}/{submission_id}/bundle",
             token=token,
             data=cast(BinaryIO, _UploadReader(source, cancel_event)),
             content_length=report.size_bytes,

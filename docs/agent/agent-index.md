@@ -122,12 +122,15 @@ acceptance; source checks do not establish an installed update or clean-PC repai
 
 ## Library Project Versions
 
-For condition publication requests, begin with `core/library_publish.py`,
+For whole-project review uploads, begin with `core/library_publish.py`,
 `library/submissions.py`, `gui/library_submission_controller.py` and
 `docs/EXPERIMENT_LIBRARY.md`. Implementation history is in the completed
-condition Library review plan. The standalone private
+condition Library review plan; current work is in
+`docs/exec-plans/active/streamlined-project-submission.md`. The standalone private
 `../OpenFPVS` service owns `src/submissions.js`, GitHub draft writes, additive
-`0008_library_submissions.sql`, review controls and the accepted catalog overlay.
+`0008_library_submissions.sql` plus `0014_project_submissions.sql`, email notification,
+review controls and the accepted catalog overlay. Project submission is independent
+of Library access; publishing the validated original draft is final approval.
 Use Library/GUI/docs focused scopes and safe repo precommit; private-service
 tests mock GitHub and never publish content. GUI tests remain visible opt-in.
 

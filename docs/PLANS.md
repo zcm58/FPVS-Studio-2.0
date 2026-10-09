@@ -89,3 +89,4 @@ cross-cutting.
 - Product direction: `PRODUCT_SENSE.md`
 - Architecture map: `../ARCHITECTURE.md`
 - Current technical debt: `exec-plans/tech-debt-tracker.md`
+- [Streamlined project review uploads](exec-plans/active/streamlined-project-submission.md)
