@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
-import atexit
 from collections.abc import Callable
 
-from PySide6.QtCore import QCoreApplication, QObject, Qt, QThread, Signal, Slot
+from PySide6.QtCore import QObject, Qt, QThread, Signal, Slot
 from PySide6.QtWidgets import QProgressDialog, QWidget
+from shiboken6 import isValid
+
+from fpvs_studio.gui.update_lifecycle import update_lifecycle
 
 ProgressDialogFactory = Callable[[str, str, int, int, QWidget], QProgressDialog]
 
@@ -77,7 +79,6 @@ class PersistentThreadTaskWorker(QObject):
 
 _persistent_thread: QThread | None = None
 _persistent_worker: PersistentThreadTaskWorker | None = None
-_persistent_thread_shutdown_connected = False
 
 
 def _presentation_worker() -> PersistentThreadTaskWorker:
@@ -85,7 +86,6 @@ def _presentation_worker() -> PersistentThreadTaskWorker:
 
     global _persistent_thread
     global _persistent_worker
-    global _persistent_thread_shutdown_connected
 
     if (
         _persistent_thread is not None
@@ -94,15 +94,13 @@ def _presentation_worker() -> PersistentThreadTaskWorker:
     ):
         return _persistent_worker
 
-    app = QCoreApplication.instance()
-    thread = QThread(app)
+    lifecycle = update_lifecycle()
+    thread = QThread(lifecycle)
     thread.setObjectName("fpvs-studio-presentation-thread")
     worker = PersistentThreadTaskWorker()
     worker.moveToThread(thread)
     thread.finished.connect(worker.deleteLater)
-    if app is not None and not _persistent_thread_shutdown_connected:
-        app.aboutToQuit.connect(_shutdown_presentation_worker)
-        _persistent_thread_shutdown_connected = True
+    lifecycle.track_thread(thread, on_finished=_presentation_thread_finished)
 
     _persistent_thread = thread
     _persistent_worker = worker
@@ -110,21 +108,14 @@ def _presentation_worker() -> PersistentThreadTaskWorker:
     return worker
 
 
-def _shutdown_presentation_worker() -> None:
-    """Stop the app-wide presentation worker during Qt shutdown."""
+def _presentation_thread_finished() -> None:
+    """Release presentation wrappers only after the native thread has stopped."""
 
     global _persistent_thread
     global _persistent_worker
 
-    thread = _persistent_thread
-    if thread is not None and thread.isRunning():
-        thread.quit()
-        thread.wait(5000)
     _persistent_thread = None
     _persistent_worker = None
-
-
-atexit.register(_shutdown_presentation_worker)
 
 
 class ProgressTask(QObject):
@@ -144,8 +135,10 @@ class ProgressTask(QObject):
         window_title: str | None = None,
         persistent_thread: bool = False,
     ) -> None:
-        super().__init__(parent_widget)
+        super().__init__(update_lifecycle())
         self._parent_widget = parent_widget
+        self._owner_alive = True
+        parent_widget.destroyed.connect(self._owner_destroyed)
         self._label = label
         self._callback = callback
         self._dialog_factory = dialog_factory
@@ -177,7 +170,7 @@ class ProgressTask(QObject):
             persistent_worker.task_requested.emit(self._callback)
             return
 
-        thread = QThread(self)
+        thread = QThread(update_lifecycle())
         gui_worker = GuiTaskWorker(self._callback)
         gui_worker.moveToThread(thread)
 
@@ -185,10 +178,10 @@ class ProgressTask(QObject):
         gui_worker.succeeded.connect(self._handle_succeeded)
         gui_worker.failed.connect(self._handle_failed)
         gui_worker.finished.connect(self._handle_worker_finished)
-        gui_worker.finished.connect(thread.quit)
+        gui_worker.finished.connect(thread.quit, Qt.ConnectionType.DirectConnection)
         gui_worker.finished.connect(gui_worker.deleteLater)
-        thread.finished.connect(thread.deleteLater)
-        thread.finished.connect(self._handle_thread_finished)
+        completion = update_lifecycle().track_thread(thread)
+        completion.finished.connect(self._handle_thread_finished)
 
         self._dialog = dialog
         self._thread = thread
@@ -197,11 +190,18 @@ class ProgressTask(QObject):
 
     @Slot(object)
     def _handle_succeeded(self, result: object) -> None:
-        self.succeeded.emit(result)
+        if self._owner_alive and not update_lifecycle().is_shutting_down:
+            self.succeeded.emit(result)
 
     @Slot(object)
     def _handle_failed(self, error: object) -> None:
-        self.failed.emit(error)
+        if self._owner_alive and not update_lifecycle().is_shutting_down:
+            self.failed.emit(error)
+
+    @Slot()
+    def _owner_destroyed(self) -> None:
+        self._owner_alive = False
+        self._dialog = None
 
     @Slot()
     def _handle_worker_finished(self) -> None:
@@ -211,14 +211,15 @@ class ProgressTask(QObject):
     @Slot()
     def _handle_persistent_task_finished(self) -> None:
         worker = self._persistent_worker
-        if worker is not None:
+        if worker is not None and isValid(worker):
             worker.succeeded.disconnect(self._handle_succeeded)
             worker.failed.disconnect(self._handle_failed)
             worker.finished.disconnect(self._handle_worker_finished)
             worker.finished.disconnect(self._handle_persistent_task_finished)
         self._persistent_worker = None
         self._dialog = None
-        self.finished.emit()
+        if self._owner_alive:
+            self.finished.emit()
         self.deleteLater()
 
     @Slot()
@@ -226,7 +227,8 @@ class ProgressTask(QObject):
         self._thread = None
         self._worker = None
         self._dialog = None
-        self.finished.emit()
+        if self._owner_alive:
+            self.finished.emit()
         self.deleteLater()
 
 
@@ -243,31 +245,48 @@ class BackgroundTask(QObject):
         parent_widget: QWidget,
         callback: Callable[[], object],
     ) -> None:
-        super().__init__(parent_widget)
+        super().__init__(update_lifecycle())
+        self._owner_alive = True
+        parent_widget.destroyed.connect(self._owner_destroyed)
         self._callback = callback
         self._thread: QThread | None = None
         self._worker: GuiTaskWorker | None = None
 
     def start(self) -> None:
-        thread = QThread(self)
+        thread = QThread(update_lifecycle())
         gui_worker = GuiTaskWorker(self._callback)
         gui_worker.moveToThread(thread)
 
         thread.started.connect(gui_worker.run)
-        gui_worker.succeeded.connect(self.succeeded)
-        gui_worker.failed.connect(self.failed)
-        gui_worker.finished.connect(thread.quit)
+        gui_worker.succeeded.connect(self._handle_succeeded)
+        gui_worker.failed.connect(self._handle_failed)
+        gui_worker.finished.connect(thread.quit, Qt.ConnectionType.DirectConnection)
         gui_worker.finished.connect(gui_worker.deleteLater)
-        thread.finished.connect(thread.deleteLater)
-        thread.finished.connect(self._handle_thread_finished)
+        completion = update_lifecycle().track_thread(thread)
+        completion.finished.connect(self._handle_thread_finished)
 
         self._thread = thread
         self._worker = gui_worker
         thread.start()
 
     @Slot()
+    def _owner_destroyed(self) -> None:
+        self._owner_alive = False
+
+    @Slot(object)
+    def _handle_succeeded(self, result: object) -> None:
+        if self._owner_alive and not update_lifecycle().is_shutting_down:
+            self.succeeded.emit(result)
+
+    @Slot(object)
+    def _handle_failed(self, error: object) -> None:
+        if self._owner_alive and not update_lifecycle().is_shutting_down:
+            self.failed.emit(error)
+
+    @Slot()
     def _handle_thread_finished(self) -> None:
         self._thread = None
         self._worker = None
-        self.finished.emit()
+        if self._owner_alive:
+            self.finished.emit()
         self.deleteLater()

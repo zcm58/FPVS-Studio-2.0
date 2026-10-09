@@ -1,5 +1,13 @@
 # GUI Workflow
 
+Settings > Diagnostics exposes default-on automatic crash reporting at the existing
+Settings minimum/default sizes. The Diagnostics tab fits 700x560 and 700x650 with
+wrapped preference, registration, enabled and error states. The switch stays usable
+while connecting; closing Settings preserves the choice and does not interrupt
+background registration. Network and storage run through the application-owned
+crash controller. Existing saved opt-outs remain off. See
+[Bug reporting](BUG_REPORTING.md) for preferences, wire contracts and activation status.
+
 ## Lab Library access on startup
 
 After root-folder setup and Welcome, Studio reads local protected Library access
@@ -934,9 +942,16 @@ preprocessing services but must not silently mutate the active project.
   `src/fpvs_studio/updater_main.py` selects backend pipe, standalone, or apply mode.
   Protocol, staging, registered identity, package trust, and installation coordination
   stay in `updates/helper_*`; complete patch checks and file replacement remain in Inno.
-- App-owned updater worker/cancellation lifetime lives in
+- App-owned worker/cancellation lifetime lives in
   `src/fpvs_studio/gui/update_lifecycle.py`; `application.py` owns startup and the final
   asynchronous shutdown drain. These contain no cache-retention or installer-trust rules.
+  This includes ordinary background/progress tasks and the persistent presentation
+  thread. Closing or destroying a requester never destroys its running thread;
+  late results for a destroyed requester or during shutdown are suppressed.
+  `thread_completion.py` uses a join monitor outside the GUI to wait for Qt's deferred
+  deletion and native thread cleanup after `QThread.finished`. Only then are worker
+  wrappers released and completion delivered. Presentation reuse remains unchanged;
+  shutdown has no five-second cutoff and never abandons a running presentation.
 - Startup offline cache-housekeeping and one-shot metadata-check orchestration live in
   `src/fpvs_studio/gui/controller.py`; housekeeping errors are nonfatal/logged, and the
   metadata check should stay silent unless a newer release is available.

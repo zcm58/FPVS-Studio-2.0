@@ -281,7 +281,9 @@ def test_welcome_bundle_drop_starts_project_bundle_import(
         selected_root_dir: Path,
         *,
         progress_callback=None,
+        library_origin=None,
     ):
+        assert library_origin is None
         captured["bundle_path"] = selected_bundle_path
         captured["root_dir"] = selected_root_dir
         return create_project(selected_root_dir, "Dropped Bundle Project")

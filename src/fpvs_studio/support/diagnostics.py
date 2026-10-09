@@ -3,22 +3,44 @@
 from __future__ import annotations
 
 import copy
+import faulthandler
 import logging
 import logging.handlers
+import os
+import platform
 import queue
 import re
 import sys
 import threading
 import time
+import traceback
 from pathlib import Path
 from types import TracebackType
-from uuid import uuid4
+from typing import BinaryIO
+from uuid import UUID, uuid4
 
+from fpvs_studio.support.crash_reporting import CrashSession, CrashStore, StackFrame, safe_frame
 from fpvs_studio.support.models import MAX_LOG_BYTES
 from fpvs_studio.support.storage import owned_folder, support_directory
 
-_LOG_NAME = re.compile(r"session-[0-9a-f]{32}\.log(?:\.[12])?\Z")
+_LOG_NAME = re.compile(r"session-[0-9a-f]{32}(?:-native)?\.log(?:\.[12])?\Z")
 _logging_notice = ""
+_native_diagnostic_fd: int | None = None
+
+
+def record_qt_fatal(message: str) -> None:
+    """Write one redacted breadcrumb before Qt aborts and the log queue is lost."""
+
+    descriptor = _native_diagnostic_fd
+    if descriptor is not None:
+        try:
+            text = "Qt fatal: " + redact(bounded_text(message, 8192)) + "\n"
+            os.write(descriptor, text.encode("utf-8", errors="replace"))
+            # Windows fast-fail exits can bypass Python's installed signal handler.
+            # Qt gives us this last callback before aborting, so capture stacks now.
+            faulthandler.dump_traceback(file=descriptor, all_threads=True)
+        except OSError:
+            pass
 
 
 def bounded_text(text: str, limit: int = MAX_LOG_BYTES) -> str:
@@ -114,8 +136,16 @@ class _LogFile(logging.handlers.RotatingFileHandler):
 class DiagnosticLogging:
     """File I/O and exception formatting happen on one daemon thread, not the GUI."""
 
-    def __init__(self, root: Path) -> None:
+    def __init__(self, root: Path, *, capture_native: bool = False) -> None:
         self.root = root
+        self.capture_native = capture_native
+        self.session_id = uuid4().hex
+        self._crash_store: CrashStore | None = None
+        self._crash_session: CrashSession | None = None
+        self._failure_stack: list[StackFrame] | None = None
+        self.ready = threading.Event()
+        self._native_file: BinaryIO | None = None
+        self._owns_fault_handler = False
         self.records: queue.Queue[logging.LogRecord] = queue.Queue(maxsize=256)
         self.handler = _QueueHandler(self.records)
         self.stop_event = threading.Event()
@@ -131,6 +161,10 @@ class DiagnosticLogging:
         sys.excepthook = self._exception
         threading.excepthook = self._thread_exception
         self.thread.start()
+        if self.capture_native:
+            # Bootstrap calls this before importing Qt or creating its event loop.
+            # Avoid delaying startup indefinitely if app-local storage is unavailable.
+            self.ready.wait(timeout=0.5)
 
     def _exception(
         self, kind: type[BaseException], value: BaseException, tb: TracebackType | None
@@ -149,8 +183,15 @@ class DiagnosticLogging:
         )
         self.previous_thread_hook(args)
 
+    def record_failure(self, error: BaseException) -> None:
+        """Remember only source locations; persistence remains on the logging thread."""
+        self._failure_stack = [
+            safe_frame(frame.f_code.co_filename, frame.f_code.co_name, line)
+            for frame, line in traceback.walk_tb(error.__traceback__)
+        ][-40:]
+
     def _run(self) -> None:
-        global _logging_notice
+        global _logging_notice, _native_diagnostic_fd
         sink: logging.handlers.RotatingFileHandler | None = None
         try:
             folder = owned_folder(self.root, "logs")
@@ -168,14 +209,41 @@ class DiagnosticLogging:
                     path.unlink(missing_ok=True)
             if retained > 7 * 1024 * 1024:
                 raise OSError("Recent support logs already occupy the local logging budget.")
+            session_id = self.session_id
             sink = _LogFile(
-                folder / f"session-{uuid4().hex}.log",
+                folder / f"session-{session_id}.log",
                 maxBytes=1024 * 1024,
                 backupCount=2,
                 encoding="utf-8",
             )
             sink.setFormatter(_SafeFormatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
+            if self.capture_native:
+                try:
+                    self._crash_store = CrashStore(self.root)
+                    self._crash_store.prune_sessions()
+                    consent = self._crash_store.consent()
+                    self._crash_session = CrashSession(
+                        session_id=UUID(session_id), pid=os.getpid(),
+                        os_version=f"{platform.system()} {platform.release()}",
+                        installation_id=(
+                            consent.installation_id
+                            if consent.enabled and not consent.revoke_pending else None
+                        ),
+                    )
+                    self._crash_store.save_session(self._crash_session)
+                except (OSError, ValueError):
+                    _logging_notice = "Automatic crash capture could not access its local settings."
+            if self.capture_native and not faulthandler.is_enabled():
+                self._native_file = (folder / f"session-{session_id}-native.log").open("xb")
+                faulthandler.enable(file=self._native_file, all_threads=True)
+                self._owns_fault_handler = True
+                _native_diagnostic_fd = self._native_file.fileno()
+            self.ready.set()
             while not self.stop_event.is_set() or not self.records.empty():
+                # Windows can report recoverable native exceptions too. Stop capture
+                # at the budget rather than accumulating unlimited raw tracebacks.
+                if self._native_file is not None and self._native_file.tell() >= 1024 * 1024:
+                    self._close_native_capture()
                 try:
                     record = self.records.get(timeout=0.1)
                 except queue.Empty:
@@ -192,8 +260,29 @@ class DiagnosticLogging:
         except Exception:
             _logging_notice = "Persistent application logs are unavailable on this machine."
         finally:
+            self.ready.set()
+            if self._crash_session is not None and self._crash_store is not None:
+                try:
+                    self._crash_session.state = (
+                        "failed" if self._failure_stack is not None else "clean"
+                    )
+                    self._crash_session.stack = self._failure_stack or []
+                    self._crash_store.save_session(self._crash_session)
+                except (OSError, ValueError):
+                    _logging_notice = "Automatic crash capture could not finish its local record."
+            self._close_native_capture()
             if sink is not None:
                 sink.close()
+
+    def _close_native_capture(self) -> None:
+        global _native_diagnostic_fd
+        if self._owns_fault_handler:
+            _native_diagnostic_fd = None
+            faulthandler.disable()
+            self._owns_fault_handler = False
+        if self._native_file is not None:
+            self._native_file.close()
+            self._native_file = None
 
     def close(self) -> None:
         self.logger.removeHandler(self.handler)
@@ -209,7 +298,7 @@ class DiagnosticLogging:
 def start_diagnostic_logging() -> DiagnosticLogging | None:
     global _logging_notice
     try:
-        session = DiagnosticLogging(support_directory())
+        session = DiagnosticLogging(support_directory(), capture_native=True)
         session.start()
         return session
     except OSError:

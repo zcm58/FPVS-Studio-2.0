@@ -5,6 +5,7 @@ tests/gui/test_components.py
 tests/gui/test_condition_modifier_dialog.py
 tests/gui/test_condition_task_dialog.py
 tests/gui/test_conditions_session_fixation.py
+tests/gui/test_crash_reporting.py
 tests/gui/test_create_project_dialog.py
 tests/gui/test_data_sharing_dialog.py
 tests/gui/test_design_setup_step.py
@@ -27,6 +28,7 @@ tests/gui/test_presentation_settings_dialog.py
 tests/gui/test_project_config_import_export.py
 tests/gui/test_project_update_controller.py
 tests/gui/test_project_version_dialog.py
+tests/gui/test_qt_diagnostics.py
 tests/gui/test_recording_setup.py
 tests/gui/test_report_bug_dialog.py
 tests/gui/test_run_page_launch.py

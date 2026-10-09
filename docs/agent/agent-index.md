@@ -84,6 +84,16 @@ in [RunSpec](../RUNSPEC.md#triggerevent). Use compiler/engine/runtime routes and
 Read a selected skill completely before acting. A passing skill audit is sufficient
 evidence for its invariant unless the task changes that audit or boundary.
 
+For native crashes or worker teardown, start with `gui/workers.py`,
+`gui/update_lifecycle.py`, `gui/thread_completion.py`, and `gui/qt_diagnostics.py`.
+App-owned workers stay retained through native cleanup, including when their requester
+is destroyed. The crash-log contract lives in `docs/BUG_REPORTING.md`. Use gui focused,
+support unit tests, and repo precommit; visible worker/startup/online tests require the
+same explicit Qt approval as other registered GUI tests.
+Approved Qt runs explicitly route INI UserScope and SystemScope settings into the
+process's workspace test profile. Windows native known-folder resolution ignores
+APPDATA overrides; standalone Qt subprocess tests must set QSettings paths too.
+
 ## Backend Reliability And Compilation Efficiency
 
 For backend reliability or compilation-efficiency regressions, start with
@@ -174,6 +184,16 @@ the current version or downloading separately. Preserve the original experiment 
 its reporting scope; individual-condition merging is a separate deferred workflow.
 
 ## Bug Reporting
+
+Automatic crash reports additionally use `support/crash_reporting.py` and
+`gui/crash_report_controller.py`, with an account-local default-on preference and
+persistent opt-out. Background registration replaces desktop browser enrollment;
+the active plan records the explicit service approval and pending activation gates.
+Read `docs/BUG_REPORTING.md` and the active automatic-crash plan before changing
+consent, recovery or HTTP. Use `tests/unit/test_automatic_crash_reporting.py`,
+registered `tests/gui/test_crash_reporting.py`, GUI focused and repo precommit.
+The separate `../FPVS-Studio-Feedback` service owns grants and email delivery;
+run its synthetic `pnpm test` and Wrangler deployment dry-run separately.
 
 For File > Report a Bug or Request a Feature, begin with `support/AGENTS.md`, `docs/BUG_REPORTING.md`,
 `gui/report_bug_dialog.py`, and `gui/bug_report_controller.py`. Support owns the

@@ -26,7 +26,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         from fpvs_studio.gui.application import run_gui_app
 
         return run_gui_app(args if argv is not None else None)
-    except Exception:
+    except Exception as error:
+        if diagnostic_logging is not None:
+            diagnostic_logging.record_failure(error)
         logging.getLogger(__name__).exception("Application stopped unexpectedly")
         raise
     finally:

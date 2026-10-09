@@ -13,7 +13,9 @@ from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication, QStyle
 
 from fpvs_studio.gui.controller import StudioController
+from fpvs_studio.gui.crash_report_controller import crash_report_controller
 from fpvs_studio.gui.error_dialogs import install_error_reporting
+from fpvs_studio.gui.qt_diagnostics import install_qt_diagnostics
 from fpvs_studio.gui.update_lifecycle import update_lifecycle
 
 _APP_ICON_PATH = Path(__file__).resolve().parent.parent / "assets" / "fpvs-studio.ico"
@@ -35,6 +37,7 @@ def _ensure_application_icon(app: QApplication) -> None:
 def create_application(argv: list[str] | None = None) -> QApplication:
     """Create or reuse the shared QApplication instance."""
 
+    install_qt_diagnostics()
     instance = QApplication.instance()
     if isinstance(instance, QApplication):
         app = instance
@@ -54,6 +57,7 @@ def run_gui_app(argv: list[str] | None = None) -> int:
     controller = StudioController(app)
     lifecycle = update_lifecycle(app)
     lifecycle.begin_startup()
+    crash_report_controller().start()
     startup_errors: list[Exception] = []
 
     def _show_initial_window() -> None:
@@ -74,7 +78,7 @@ def run_gui_app(argv: list[str] | None = None) -> int:
     QTimer.singleShot(0, _show_initial_window)
     exit_code = app.exec()
     # A direct QApplication.exit() can bypass the Quit event guard. Continue ordinary
-    # event processing until updater cancellation finishes; never block on thread.wait.
+    # event processing until all workers finish; never block on thread.wait.
     while lifecycle.has_active_jobs:
         lifecycle.request_shutdown()
         app.exec()

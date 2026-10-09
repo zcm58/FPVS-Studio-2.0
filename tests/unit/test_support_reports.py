@@ -261,6 +261,49 @@ def test_queued_logging_writes_redacted_trace_and_restores_hooks(tmp_path):
     assert "do-not-export" not in text
 
 
+def test_native_capture_retains_descriptor_and_redacts_collected_trace(tmp_path, monkeypatch):
+    opened = []
+    disabled = []
+    monkeypatch.setattr(diagnostics.faulthandler, "is_enabled", lambda: False)
+    monkeypatch.setattr(
+        diagnostics.faulthandler, "enable",
+        lambda *, file, all_threads: opened.append((file, all_threads)),
+    )
+    monkeypatch.setattr(diagnostics.faulthandler, "disable", lambda: disabled.append(True))
+    session = DiagnosticLogging(tmp_path, capture_native=True)
+    session.start()
+    try:
+        assert session.ready.wait(1)
+        stream, all_threads = opened[0]
+        assert all_threads
+        assert not stream.closed
+        os.write(stream.fileno(), b'File "C:\\Users\\synthetic\\worker.py", line 9\n')
+        diagnostics.record_qt_fatal("Synthetic Qt failure token=private-secret")
+    finally:
+        session.close()
+    assert stream.closed
+    assert disabled == [True]
+    text = collect_diagnostics(tmp_path)
+    assert "worker.py" in text
+    assert "Synthetic Qt failure" in text
+    assert "private-secret" not in text
+    assert "synthetic" not in text
+
+
+def test_native_capture_preserves_existing_fault_handler(tmp_path, monkeypatch):
+    monkeypatch.setattr(diagnostics.faulthandler, "is_enabled", lambda: True)
+    monkeypatch.setattr(
+        diagnostics.faulthandler, "enable", lambda **_kwargs: pytest.fail("replaced handler")
+    )
+    monkeypatch.setattr(
+        diagnostics.faulthandler, "disable", lambda: pytest.fail("disabled external handler")
+    )
+    session = DiagnosticLogging(tmp_path, capture_native=True)
+    session.start()
+    session.close()
+    assert not list((tmp_path / "logs").glob("*-native.log"))
+
+
 def test_collection_does_not_follow_symlink(tmp_path):
     folder = tmp_path / "logs"
     folder.mkdir()

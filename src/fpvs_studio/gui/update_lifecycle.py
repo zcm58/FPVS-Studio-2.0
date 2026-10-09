@@ -1,4 +1,4 @@
-"""App-owned, cancellable updater jobs and asynchronous shutdown coordination.
+"""App-owned workers and asynchronous shutdown coordination.
 
 Updater jobs outlive the window that requested them. Their results become visible only
 after the worker thread has stopped, and application quit is deferred while cancellation
@@ -15,6 +15,7 @@ from typing import cast
 from PySide6.QtCore import QEvent, QObject, Qt, QThread, QTimer, Signal, Slot
 from PySide6.QtWidgets import QApplication
 
+from fpvs_studio.gui.thread_completion import ThreadCompletion
 from fpvs_studio.updates.models import UpdateCancelled, UpdatePhase
 
 ProgressReporter = Callable[[int | UpdatePhase, int | None], None]
@@ -23,7 +24,7 @@ UpdateCallback = Callable[[ProgressReporter, Event], object]
 
 @dataclass(frozen=True)
 class UpdateTaskResult:
-    """Outcome delivered on the GUI thread only after the native thread finishes."""
+    """Outcome delivered on the GUI thread after native cleanup completes."""
 
     value: object = None
     error: Exception | None = None
@@ -69,7 +70,7 @@ class _UpdateWorker(QObject):
 
 
 class UpdateJob(QObject):
-    """Own one worker until ``QThread.finished``, even if its dialog disappears."""
+    """Retain one worker through native cleanup, even if its dialog disappears."""
 
     finished = Signal(object)
     progress_changed = Signal(object, object)
@@ -83,12 +84,14 @@ class UpdateJob(QObject):
     ) -> None:
         super().__init__(parent)
         self.callback = callback
+        self._thread_owner = parent
         self.cancel_event = Event()
         self.keep_success_on_cancel = keep_success_on_cancel
         self.finish_on_shutdown = False
         self._outcome = _WorkerOutcome()
         self._thread: QThread | None = None
         self._worker: _UpdateWorker | None = None
+        self._completion: ThreadCompletion | None = None
         self._started = False
         self._running = False
 
@@ -105,7 +108,7 @@ class UpdateJob(QObject):
             raise RuntimeError("An updater job can only be started once.")
         self._started = True
         self._running = True
-        thread = QThread(self)
+        thread = QThread(self._thread_owner)
         thread.setObjectName("fpvs-studio-update-thread")
         worker = _UpdateWorker(self.callback, self.cancel_event, self._outcome)
         worker.moveToThread(thread)
@@ -115,10 +118,11 @@ class UpdateJob(QObject):
         # the result still waits for the subsequent queued QThread.finished delivery.
         worker.finished.connect(thread.quit, Qt.ConnectionType.DirectConnection)
         worker.finished.connect(worker.deleteLater)
-        thread.finished.connect(self._finish)
-        thread.finished.connect(thread.deleteLater)
+        completion = ThreadCompletion(thread, parent=self._thread_owner)
+        completion.finished.connect(self._finish)
         self._thread = thread
         self._worker = worker
+        self._completion = completion
         thread.start()
 
     @Slot()
@@ -130,6 +134,7 @@ class UpdateJob(QObject):
         self._running = False
         self._thread = None
         self._worker = None
+        self._completion = None
         error = self._outcome.error
         cancelled = isinstance(error, UpdateCancelled) or (
             self.cancel_event.is_set()
@@ -141,7 +146,7 @@ class UpdateJob(QObject):
 
 
 class UpdateLifecycle(QObject):
-    """Keep updater jobs alive and make Quit/last-window shutdown cancellation-safe."""
+    """Keep workers alive and make Quit/last-window shutdown teardown-safe."""
 
     shutdown_started = Signal()
     manual_check_requested = Signal()
@@ -158,6 +163,8 @@ class UpdateLifecycle(QObject):
         self._app = app
         self._quit_callback = quit_callback or app.quit
         self._jobs: set[UpdateJob] = set()
+        self._threads: set[QThread] = set()
+        self._thread_finished_callbacks: dict[QThread, Callable[[], None]] = {}
         self._committed_callbacks: dict[UpdateJob, Callable[[], None]] = {}
         self._restore_quit_on_last_window_closed: bool | None = None
         self._startup_pending = False
@@ -170,7 +177,35 @@ class UpdateLifecycle(QObject):
 
     @property
     def has_active_jobs(self) -> bool:
-        return bool(self._jobs)
+        return bool(self._jobs or self._threads)
+
+    def track_thread(
+        self, thread: QThread, *, on_finished: Callable[[], None] | None = None
+    ) -> ThreadCompletion:
+        """Drain an app-owned GUI task or presentation thread before process exit.
+
+        Register before start, with an application-owned parent. quit() stops the
+        event loop after the current callback returns; it never interrupts its work.
+        """
+
+        if self._shutdown_requested:
+            raise RuntimeError("FPVS Studio is closing; no worker can be started.")
+        self._hold_application_open()
+        self._threads.add(thread)
+        if on_finished is not None:
+            self._thread_finished_callbacks[thread] = on_finished
+        completion = ThreadCompletion(thread, parent=self)
+        completion.finished.connect(self._tracked_thread_finished)
+        return completion
+
+    @Slot()
+    def _tracked_thread_finished(self) -> None:
+        thread = cast(ThreadCompletion, self.sender()).worker_thread
+        self._threads.discard(thread)
+        completed = self._thread_finished_callbacks.pop(thread, None)
+        if completed is not None:
+            completed()
+        self._workers_drained()
 
     @property
     def is_shutting_down(self) -> bool:
@@ -218,7 +253,7 @@ class UpdateLifecycle(QObject):
             self._app.setQuitOnLastWindowClosed(False)
 
     def _restore_auto_quit_if_idle(self) -> None:
-        if self._jobs or self._startup_pending:
+        if self.has_active_jobs or self._startup_pending:
             return
         if self._restore_quit_on_last_window_closed is not None:
             self._app.setQuitOnLastWindowClosed(self._restore_quit_on_last_window_closed)
@@ -232,12 +267,14 @@ class UpdateLifecycle(QObject):
         for job in tuple(self._jobs):
             if not job.finish_on_shutdown:
                 job.cancel()
-        if not self._jobs:
+        for thread in tuple(self._threads):
+            thread.quit()
+        if not self.has_active_jobs:
             self._schedule_quit()
 
     def eventFilter(self, watched: QObject, event: QEvent) -> bool:  # noqa: N802
         if watched is self._app and event.type() == QEvent.Type.Quit:
-            if self._jobs and not self._allow_quit:
+            if self.has_active_jobs and not self._allow_quit:
                 self.request_shutdown()
                 return True
         return super().eventFilter(watched, event)
@@ -257,7 +294,10 @@ class UpdateLifecycle(QObject):
             # The installer has launched even if its dialog was destroyed during the
             # final worker stage. The application, not that dialog, owns this handoff.
             QTimer.singleShot(0, committed_callback)
-        if self._jobs:
+        self._workers_drained()
+
+    def _workers_drained(self) -> None:
+        if self.has_active_jobs:
             return
         self._restore_auto_quit_if_idle()
         self.idle.emit()
@@ -267,7 +307,7 @@ class UpdateLifecycle(QObject):
     @Slot()
     def _last_window_closed(self) -> None:
         if (
-            self._jobs
+            self.has_active_jobs
             and not self._startup_pending
             and self._restore_quit_on_last_window_closed
         ):
@@ -287,7 +327,7 @@ class UpdateLifecycle(QObject):
     @Slot()
     def _finish_shutdown(self) -> None:
         self._quit_scheduled = False
-        if self._jobs:
+        if self.has_active_jobs:
             return
         self._allow_quit = True
         self._quit_callback()

@@ -2,6 +2,14 @@
 
 Status: Active
 
+## Native worker teardown follow-up (October 8, 2026)
+
+The [Studio crash reliability work](../completed/studio-crash-reliability.md) also hardens updater,
+Library and reporting job teardown. App-owned native threads and worker wrappers now
+remain retained through native cleanup, with joins performed outside the GUI thread.
+This preserves cancellation, installer handoff and trust/storage rules. Installed
+release acceptance in this plan remains separate from source-level synthetic tests.
+
 ## Independent updater implementation (2026-09-14)
 
 The [separate updater implementation](../completed/independent-updater.md) is complete

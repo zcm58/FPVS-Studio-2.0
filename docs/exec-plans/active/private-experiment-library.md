@@ -4,6 +4,14 @@ Status: Active
 
 Date: 2026-09-16
 
+## Startup recovery follow-up (October 8, 2026)
+
+The [Studio crash reliability work](../completed/studio-crash-reliability.md) defers startup client
+construction to its application-owned job. Invalid/unavailable Library cache settings
+now produce the existing recoverable prompt with Continue offline rather than terminating
+Studio startup. Native job teardown is retained through full thread cleanup. Enrollment,
+fixed origin, credentials and publication authorization are unchanged.
+
 ## Website repository rename (October 7, 2026)
 
 The user authorized consolidating the website/service onto `main` and renaming

@@ -1,4 +1,4 @@
-"""Opt-in, fixed-origin report-service client. No GitHub credentials live here."""
+"""Fixed-origin report-service client. No GitHub credentials live here."""
 
 from __future__ import annotations
 
@@ -10,11 +10,15 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from http.client import HTTPException
 from threading import Event
+from typing import TYPE_CHECKING
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlencode
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 from fpvs_studio.support.models import Draft, Intent
+
+if TYPE_CHECKING:
+    from fpvs_studio.support.crash_reporting import CrashConsent, CrashEvent
 
 SERVICE_ORIGIN = "https://reports.zack-murphy.com"
 MAX_RESPONSE_BYTES = 16 * 1024
@@ -24,6 +28,10 @@ Transport = Callable[[str, str, bytes | None, dict[str, str]], bytes]
 
 class ReportServiceError(Exception):
     """Safe user-facing network/protocol failure, without echoing secrets or bodies."""
+
+    def __init__(self, message: str, *, status: int | None = None) -> None:
+        super().__init__(message)
+        self.status = status
 
 
 class ReportCancelled(ReportServiceError):
@@ -75,7 +83,7 @@ def http_transport(method: str, url: str, data: bytes | None, headers: dict[str,
             raise ReportServiceError("The reporting service is busy. Try again later.") from None
         if status in (401, 403, 410):
             raise ReportServiceError(
-                "Verification or receipt access expired. Keep your saved report."
+                "Verification or receipt access expired. Keep your saved report.", status=status,
             ) from None
         raise ReportServiceError(
             f"The reporting service could not complete the request ({status})."
@@ -183,6 +191,46 @@ class ReportClient:
         if state not in ("pending", "verified", "expired"):
             raise ReportServiceError("The verification response was not understood.")
         return str(state)
+
+    def register_crashes(self, consent: CrashConsent, cancel: Event) -> None:
+        """Register a random installation capability; no browser or service secrets."""
+        body = json.dumps({
+            "schema_version": "1", "installation_id": str(consent.installation_id),
+        }).encode()
+        response = self._request("POST", "/v1/crash-installations", data=body,
+                                 token=consent.token, cancel=cancel)
+        if (response.get("installation_id") != str(consent.installation_id)
+                or response.get("state") != "registered"):
+            raise ReportServiceError("Invalid automatic-report registration data.")
+
+    def revoke_crashes(self, consent: CrashConsent, cancel: Event) -> None:
+        try:
+            response = self._request(
+                "POST", f"/v1/crash-installations/{consent.installation_id}/revoke", data=b"{}",
+                token=consent.token, cancel=cancel,
+            )
+        except ReportServiceError as error:
+            if error.status == 401:
+                return  # A cleaned-up/unknown grant cannot authorize any uploads.
+            raise
+        if response.get("state") != "revoked":
+            raise ReportServiceError("Automatic-report access could not be revoked.")
+
+    def submit_crash(self, event: CrashEvent, token: str, cancel: Event) -> Receipt:
+        """Idempotent automatic intake uses the saved report ID and immutable payload."""
+        body = json.dumps({
+            "report": event.report.model_dump(mode="json"),
+            "receipt_token_sha256": hashlib.sha256(event.receipt_token.encode()).hexdigest(),
+        }, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
+        if len(body) > 32 * 1024:
+            raise ReportServiceError("The automatic crash report exceeds its size limit.")
+        response = self._request("POST", "/v1/crash-reports", data=body, token=token, cancel=cancel)
+        state = response.get("state")
+        if response.get("report_id") != str(event.report.report_id) or state not in (
+            "received", "submitted",
+        ):
+            raise ReportServiceError("Invalid automatic crash-report receipt.")
+        return Receipt(str(event.report.report_id), str(state))
 
     def submit(self, draft: Draft, intent: Intent, cancel: Event) -> Receipt:
         # The caller MUST durably save delivery='uncertain' before this method.

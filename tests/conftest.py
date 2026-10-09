@@ -62,6 +62,18 @@ def _apply_workspace_test_env() -> Path:
     os.environ["HOME"] = str(directories["home"])
     os.environ["USERPROFILE"] = str(directories["userprofile"])
     tempfile.tempdir = str(directories["tmp"])
+    if qt_tests_requested(cli_opt_in="--allow-qt-tests" in sys.argv, environ=os.environ):
+        # Windows Qt resolves known folders through native APIs, ignoring APPDATA.
+        # Set the actual INI roots before any test constructs Studio's QSettings.
+        from PySide6.QtCore import QSettings
+
+        for scope, name in (
+            (QSettings.Scope.UserScope, "user"),
+            (QSettings.Scope.SystemScope, "system"),
+        ):
+            settings_root = root / "qt-settings" / name
+            settings_root.mkdir(parents=True, exist_ok=True)
+            QSettings.setPath(QSettings.Format.IniFormat, scope, str(settings_root))
     return root
 
 

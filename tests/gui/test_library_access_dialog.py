@@ -173,6 +173,29 @@ def test_local_storage_error_is_visible_and_offline_remains_available(setup, qtb
     assert controller.dialog.offline_button.isEnabled()
 
 
+def test_client_construction_failure_keeps_startup_recoverable(qapp, qtbot, monkeypatch):
+    lifecycle = _Lifecycle(qapp)
+    monkeypatch.setattr(module, "update_lifecycle", lambda _app: lifecycle)
+    attempts = []
+
+    def unavailable():
+        attempts.append(True)
+        raise LibraryError("The Windows per-user Library cache location is unavailable.")
+
+    monkeypatch.setattr(module, "LibraryClient", unavailable)
+    controller = module.LibraryAccessController(qapp)
+    assert attempts == []
+    controller.check()
+    lifecycle.jobs[-1].finish()
+    dialog = controller.dialog
+    qtbot.addWidget(dialog)
+    assert attempts == [True]
+    assert "cache location is unavailable" in dialog.status_label.text()
+    assert dialog.offline_button.isEnabled()
+    qtbot.mouseClick(dialog.offline_button, Qt.MouseButton.LeftButton)
+    assert not dialog.isVisible()
+
+
 def test_shutdown_does_not_open_a_late_startup_prompt(setup):
     controller, lifecycle, _client, _reads, _enrollments = setup
     controller.check()

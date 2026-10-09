@@ -64,6 +64,9 @@ backend-driven.
   persistence may use `finish_on_shutdown` jobs; network operations must remain
   cancelable. See `docs/BUG_REPORTING.md` for the offline workflow and API contract.
 - Route updater work through the application-owned `update_lifecycle.py` coordinator.
+  Ordinary background/progress tasks and the reusable presentation thread use the same
+  shutdown owner. Keep worker wrappers until `thread_completion.py` confirms native
+  cleanup; its join monitor never waits on the GUI thread or accesses widgets.
   Keep offline startup cache housekeeping independent of root-folder setup and metadata
   checks. Dialog close/app quit must cancel or defer teardown until worker threads really
   finish; never wait on a worker from the GUI thread or parent it to a disposable dialog.

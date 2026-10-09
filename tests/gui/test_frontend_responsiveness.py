@@ -1,5 +1,8 @@
 """Visible, isolated checks for project loading and authoring save feedback."""
 
+import subprocess
+import sys
+import textwrap
 from threading import Event
 
 import pytest
@@ -10,6 +13,74 @@ from tests.gui.helpers import _open_created_project, assert_visible_children_wit
 
 from fpvs_studio.gui import document as document_module
 from fpvs_studio.gui.document import ProjectDocument
+
+
+@pytest.mark.parametrize("scenario", ["offline", "cache-error", "close-during-check"])
+def test_native_studio_startup_and_shutdown_with_synthetic_library(tmp_path, scenario):
+    # Exercise the real QApplication/controller/bootstrap in its own visible process,
+    # including startup jobs. No live service or credential store is contacted.
+    script = textwrap.dedent('''\
+        import time
+        from pathlib import Path
+        from PySide6.QtCore import QSettings, QTimer
+        root = Path(ROOT)
+        for scope in (QSettings.UserScope, QSettings.SystemScope):
+            QSettings.setPath(QSettings.IniFormat, scope, str(root / "qt-settings"))
+        from fpvs_studio.gui import application
+        from fpvs_studio.gui import library_access_dialog
+        from fpvs_studio.gui.controller import StudioController
+        from fpvs_studio.library.errors import LibraryError
+        scenario = SCENARIO
+        controllers = []
+        observed = []
+        class SyntheticClient:
+            def __init__(self):
+                if scenario == "cache-error":
+                    raise LibraryError("Synthetic unavailable Library cache")
+            def connection_info(self):
+                if scenario == "close-during-check":
+                    time.sleep(0.5)
+                return None
+        library_access_dialog.LibraryClient = SyntheticClient
+        class SyntheticController(StudioController):
+            def __init__(self, app):
+                super().__init__(app)
+                self.startup_update_checks_enabled = False
+                self.save_fpvs_root_dir(root)
+                self._startup_cache_cleanup_callback = lambda *_args, **_kwargs: None
+                controllers.append(self)
+                self._app = app
+                QTimer.singleShot(100, inspect)
+        def inspect():
+            controller = controllers[0]
+            if scenario == "close-during-check":
+                assert controller._library_access_controller._job is not None
+                observed.append("busy")
+                controller._app.quit()
+                return
+            access = controller._library_access_controller
+            if access is None or access.dialog is None:
+                QTimer.singleShot(10, inspect)
+                return
+            dialog = access.dialog
+            assert dialog.isVisible() and dialog.offline_button.isEnabled()
+            if scenario == "cache-error":
+                assert "unavailable Library cache" in dialog.status_label.text()
+            observed.append("offline available")
+            dialog.reject()
+            controller.welcome_window.close()
+        application.StudioController = SyntheticController
+        assert application.run_gui_app([]) == 0
+        assert observed
+        assert not controllers[0]._update_lifecycle.has_active_jobs
+        print("startup and shutdown complete", flush=True)
+    ''').replace("SCENARIO", repr(scenario)).replace("ROOT", repr(str(tmp_path)))
+    result = subprocess.run(
+        [sys.executable, "-X", "faulthandler", "-c", script],
+        capture_output=True, text=True, timeout=20, check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "startup and shutdown complete" in result.stdout
 
 
 @pytest.mark.parametrize("outcome", ["success", "cancel", "error"])

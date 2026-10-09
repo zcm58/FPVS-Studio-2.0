@@ -32,6 +32,86 @@ persistence. Local Qt execution remains opt-in; no live service is used.
 
 ## Desktop scope
 
+### Automatic crash reports
+
+Settings > Diagnostics offers **Automatically send crash reports**, on by default
+in desktop source. A saved off choice remains off across upgrades and restarts.
+The switch remains usable during network work. Registration happens in a worker
+without opening a browser, and closing Settings preserves the preference.
+An explicitly disabled reporting origin pauses registration and uploads.
+
+The matching service source implements browser-free background registration, explicitly
+approved by the maintainer. Automatic intake remains disabled pending authenticated
+deployment acceptance. Live use requires that deployed backend and an updated desktop
+build; manual bug and feature reports retain their browser/Turnstile verification.
+
+After an unexpected exit, the next Studio startup recovers eligible app-owned
+session records in a background worker. The first launch persists a stable random
+installation identity before capture, even if registration is offline. Only sessions
+started with reporting enabled in the active preference generation are eligible;
+sessions created while off and prior historical sessions are never backfilled.
+Python failures and native trace evidence
+have separate categories; without native evidence the report says **unclean shutdown**,
+which can also mean forced termination or power loss. Healthy active processes and
+clean exits are excluded. This is best-effort recovery, not a guaranteed minidump.
+
+Automatic payloads contain Studio/OS versions, timestamp, failure category and at
+most 40 sanitized stack locations. Only package-relative Studio source paths,
+function names and line numbers survive; external paths/names become `<external>`.
+No exception messages, full logs, environment, hostname, hardware identifier,
+project/stimulus data, participant records or attachments are collected. The service
+emails `zmurphy@abe.msstate.edu` a summary, up to 8 KiB of sanitized stack locations
+and a private issue link. Manual report contents retain their existing review rules.
+
+The account-local `support/automatic-crashes/` directory owns consent and a random
+installation capability, session snapshots and queued payloads/receipt capabilities.
+These use the existing protected account directory and atomic files (0600 on POSIX),
+without separate encryption. No service credentials are included in Studio. Local
+records expire after seven days; at most 100 inactive session snapshots and ten
+queued reports remain. Active sessions are never pruned. The outbox reuses the same
+UUID and exact payload after ambiguous delivery, with 15-minute to 24-hour backoff
+and at most three attempts per worker pass. A timer revisits delivery every 15 minutes.
+
+Disabling first persists local opt-out and discards the outbox, then revokes access
+when connected. Pending revocation is retried at startup, every 15 minutes and before
+registering a fresh generation after re-enabling. Network failure does not turn an
+enabled preference off, and remote revocation never resets a saved opt-out to on.
+Already sent/in-flight reports cannot be recalled. Network work is cancellable and
+application-owned; only local opt-out persistence may finish during shutdown.
+
+The separate feedback service needs additive migration `0005_crash_reporting.sql`
+and `CRASH_REPORTS_ENABLED=true` after deployment acceptance. Its scoped grant lasts
+one year and can be revoked. Expired/missing grants are registered again with the
+same capability after a failed upload, preserving queued identities and retry backoff.
+Registration shares the 1,000/day intent budget and a
+10,000-installation metadata cap. Accepted automatic reports are limited transactionally
+to three per installation/day and share the existing 100/day global report/storage
+limits. Duplicate acceptance cannot create another issue or completed notification.
+Ambiguous email delivery can still repeat a notification through the existing queue.
+
+Opt-out protocol: POST `/v1/crash-installations` uses the random installation
+bearer token and exactly `{schema_version: "1", installation_id}` to register a UUID.
+Only its capability hash is stored by the service. Registration retries reuse the
+same identity/token; mismatched tokens and revoked identities cannot register.
+POST `/v1/crash-reports` authenticates the
+installation capability and accepts exactly `{report, receipt_token_sha256}`;
+the report fields are `schema_version: "1"`, `kind: "crash"`, `report_id`, `created_at`,
+`app_version`, `os_version`, `crash_type`, and `stack`. Each stack frame has exactly
+`module`, `function`, and `line`; the complete envelope is capped at 32 KiB.
+POST `/v1/crash-installations/{id}/revoke` revokes that installation. Installation and
+receipt capabilities cannot authorize manual reports, which retain browser verification.
+This unattended registration flow permits more automated abuse than a browser check;
+fixed-origin validation, IP limits, transactional registration/storage/report quotas
+remain in the service. Registration retries and renewals do not consume another
+registration quota. Never ship a shared service secret as a substitute.
+
+Source implementation and rollout evidence are tracked in
+[the automatic-crash plan](exec-plans/active/automatic-crash-reporting.md).
+Existing installed executables require an updated build; source edits alone do not
+enable this preference in shipped installations.
+
+### Manual bug reports
+
 The native desktop implementation is available independently of Cloudflare.
 **File > Report a Bug...** opens Details and Diagnostics tabs. Error popups also
 offer **Report this bug. Please!**, including errors before a project is open or
@@ -83,7 +163,15 @@ The thin `app/main.py` entry point installs a queue-backed log handler on the
 formatting, redaction, and writes occur on a daemon logging thread. Close drains
 the queue with a bounded wait only after the GUI event loop exits. No engine imports,
 hardware probes, project-file reads, or per-frame disk logging are introduced.
-Abrupt process/native crashes may not leave complete logs.
+`gui/qt_diagnostics.py` forwards Qt warnings to the same logger and preserves a small
+redacted fatal breadcrumb and thread tracebacks before Qt aborts (Windows fast-fail
+can bypass ordinary fault handlers). Bootstrap also enables Python's fault
+handler before importing Qt, unless another fault handler is already enabled. Native
+tracebacks use a separate `session-<id>-native.log` in the same app-owned logs directory;
+the descriptor stays open until capture is disabled. These local traces contain stack
+filenames/function names, not source text or project data. Collection redacts them and
+requires the same explicit review/submission as other diagnostics. Abrupt native exits
+can still prevent complete capture; these traces do not replace native minidumps.
 
 Support storage is independent of the active project root:
 
@@ -98,6 +186,11 @@ Recent logs are not deleted to make room for another process. Logging stops with
 a collection notice at the 10 MiB budget; simultaneous processes may exceed that
 threshold briefly by a bounded record per writer. The queue holds 256 records;
 overload drops logs with a notice instead of blocking presentation.
+Native capture stops after reaching 1 MiB; an in-flight traceback may exceed that
+threshold, bounded by Python's limits of 100 threads/100 frames and 500 characters per
+string. Native files share the existing retention and overall budget. Only fatal Qt
+breadcrumbs and catastrophic native tracebacks write directly to the open descriptor;
+ordinary formatting and file writes remain on the logging thread.
 
 Drafts use atomic writes and retain at most five files, each up to 256 KiB, for
 seven days. Closing saves the current draft; Discard Draft explicitly deletes it.

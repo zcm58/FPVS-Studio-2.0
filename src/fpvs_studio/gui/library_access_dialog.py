@@ -133,13 +133,25 @@ class LibraryAccessController(QObject):
 
     def __init__(self, app: QApplication, *, client: LibraryClient | None = None) -> None:
         super().__init__(app)
-        self.client = client or LibraryClient()
+        self._client = client
         self.dialog: LibraryAccessDialog | None = None
         self._lifecycle = update_lifecycle(app)
         self._job: UpdateJob | None = None
         self._started = False
         self._dismissed = False
         self._lifecycle.shutdown_started.connect(self._dismiss)
+
+    @property
+    def client(self) -> LibraryClient:
+        # Construct in the job callback: unavailable app-local cache settings must
+        # use the recoverable/offline error path rather than abort GUI startup.
+        if self._client is None:
+            self._client = LibraryClient()
+        return self._client
+
+    @client.setter
+    def client(self, value: LibraryClient) -> None:
+        self._client = value
 
     def check(self) -> None:
         if self._started or self._lifecycle.is_shutting_down:

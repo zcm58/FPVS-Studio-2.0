@@ -13,6 +13,13 @@ lazily only inside the engine package.
 
 ## Package Map
 
+Automatic crash recovery/consent and the bounded sanitized outbox live in
+`support/crash_reporting.py`; `gui/crash_report_controller.py` owns app-lived
+registration/delivery jobs and Settings > Diagnostics with a default-on preference
+and persistent opt-out. Fault handlers perform no HTTP.
+The separate feedback service owns scoped grants, transactional intake and emails;
+the public contract is in [Bug reporting](docs/BUG_REPORTING.md).
+
 - `src/fpvs_studio/app/`: thin application entry points and startup wiring.
 - `src/fpvs_studio/library/`: GUI-neutral experiment catalog, device enrollment,
   native protected credential storage, and bounded verified bundle downloads.
@@ -63,6 +70,8 @@ lazily only inside the engine package.
   See `docs/BUG_REPORTING.md` for the wire contract and activation.
   GUI-neutral common-error explanations live here; `gui/error_dialogs.py` adds
   plain-language guidance and an explicit error-report action to Studio popups.
+  Native tracebacks remain in app-owned local support logs; `gui/qt_diagnostics.py`
+  forwards Qt warnings/fatal breadcrumbs. Collection redacts and bounds their text.
 - `src/fpvs_studio/data_sharing/`: GUI-neutral per-experiment consent, native OS
   credentials, immutable durable upload outbox and bounded HTTPS delivery.
   `core/data_sharing.py` owns strict wire contracts and authored protocol identity;
@@ -88,6 +97,9 @@ lazily only inside the engine package.
   User-selected project reads use the app-owned job lifecycle; GUI documents/windows
   are constructed after completion on the GUI thread. Authoring save feedback and
   per-editor thumbnail reuse are specified in `docs/GUI_WORKFLOW.md`.
+  `gui/update_lifecycle.py` also owns ordinary GUI tasks and the reusable presentation
+  thread through shutdown. `gui/thread_completion.py` waits for native cleanup outside
+  the GUI thread before releasing Python worker wrappers and reporting completion.
   Conditions confirms populated image/word switches before the document replaces only
   the selected condition's source associations. Its list and text editors expand
   vertically within the shared wizard surface; see `docs/GUI_WORKFLOW.md`.

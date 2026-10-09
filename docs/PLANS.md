@@ -1,5 +1,10 @@
 # Plans
 
+Automatic crash-report implementation and service rollout are tracked in
+[the active plan](exec-plans/active/automatic-crash-reporting.md), with default-on
+desktop preferences, persistent opt-out and existing maintainer email delivery.
+Browser-free service registration is implemented; live activation remains pending there.
+
 Use this page to find planning material before making feature-sized changes.
 
 ## Execution Plans
@@ -40,6 +45,10 @@ luminance/RMS algorithm investigation instead of duplicating its scientific deci
 
 Completed plans are historical implementation notes. Read their directory only when
 the current contracts do not explain why a landed decision exists.
+
+Recent completion: [Studio crash reliability](exec-plans/completed/studio-crash-reliability.md)
+(native worker cleanup, shutdown, startup recovery and local crash diagnostics; packaged
+and physical runtime acceptance remain separate).
 
 Recent completion: [FPVS Studio 2.2.6 Library reconnection release](exec-plans/completed/release-2.2.6.md).
 

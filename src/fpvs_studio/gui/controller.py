@@ -807,6 +807,9 @@ class StudioController(QObject):
         root_dir = self._fpvs_root_dir
         if root_dir is None:
             return
+        from fpvs_studio.gui.crash_report_controller import crash_report_controller
+
+        automatic_reports = crash_report_controller()
         dialog = AppSettingsDialog(
             fpvs_root_dir=root_dir,
             recording_configuration=self.load_recording_configuration(),
@@ -816,6 +819,9 @@ class StudioController(QObject):
             developer_mode_active=self._developer_mode.active,
             developer_mode_requested=self._developer_mode.requested,
             on_developer_mode_changed=self._developer_mode.configure,
+            automatic_crash_reports_enabled=automatic_reports.enabled,
+            automatic_crash_reports_status=automatic_reports.status,
+            on_automatic_crash_reports_changed=automatic_reports.configure,
             on_show_root_folder_setup=self.show_root_folder_setup,
             on_manage_condition_templates=self._show_condition_template_manager,
             on_show_library=self.show_library,
@@ -842,7 +848,12 @@ class StudioController(QObject):
             on_attentional_blink_pilot_mode_changed=self.set_attentional_blink_pilot_mode_enabled,
             parent=parent,
         )
+        automatic_reports.changed.connect(dialog.set_crash_reporting_state)
+        dialog.set_crash_reporting_state(
+            automatic_reports.enabled, automatic_reports.status, automatic_reports.busy,
+        )
         dialog.exec()
+        automatic_reports.changed.disconnect(dialog.set_crash_reporting_state)
 
     def show_library(self) -> None:
         """Open the app-owned Experiment Library without changing the current project."""

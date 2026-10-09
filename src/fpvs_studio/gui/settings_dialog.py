@@ -61,6 +61,9 @@ class AppSettingsDialog(QDialog):
         developer_mode_active: bool = False,
         developer_mode_requested: bool = False,
         on_developer_mode_changed: Callable[[bool, str], bool] | None = None,
+        automatic_crash_reports_enabled: bool = True,
+        automatic_crash_reports_status: str = "Automatic crash reporting is on by default.",
+        on_automatic_crash_reports_changed: Callable[[bool], None] | None = None,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
@@ -73,6 +76,7 @@ class AppSettingsDialog(QDialog):
         self.resize(self.minimumSize())
 
         self._developer_mode_active = developer_mode_active
+        self._on_automatic_crash_reports_changed = on_automatic_crash_reports_changed
         self._recording_configuration = dict(recording_configuration or {
             "recording_backend": None, "unicorn_udp_port": 1000,
         })
@@ -344,10 +348,59 @@ class AppSettingsDialog(QDialog):
         advanced_layout.addStretch(1)
         self.tabs.addTab(advanced, "Advanced")
         self.tabs.addTab(recording, "Recording")
+        diagnostics = QWidget(self.tabs)
+        diagnostics_layout = QVBoxLayout(diagnostics)
+        diagnostics_layout.setContentsMargins(16, 16, 16, 16)
+        diagnostics_layout.setSpacing(12)
+        self.crash_reports_checkbox = QCheckBox("Automatically send crash reports", diagnostics)
+        self.crash_reports_checkbox.setObjectName("automatic_crash_reports_checkbox")
+        self.crash_reports_checkbox.setChecked(automatic_crash_reports_enabled)
+        self.crash_reports_checkbox.setEnabled(on_automatic_crash_reports_changed is not None)
+        self.crash_reports_checkbox.toggled.connect(self._configure_crash_reports)
+        diagnostics_layout.addWidget(self.crash_reports_checkbox)
+        crash_help = QLabel(
+            "After Studio stops unexpectedly, send a small report when you next open it. "
+            "Reports contain the Studio and OS versions, failure category and sanitized "
+            "stack locations. They exclude error messages, full logs, projects, stimuli "
+            "and participant records. Reports go to the FPVS Studio maintainer through "
+            "the reporting service, which sends an email notification.", diagnostics,
+        )
+        crash_help.setWordWrap(True)
+        crash_help.setProperty("dialogHelp", "true")
+        diagnostics_layout.addWidget(crash_help)
+        consent_help = QLabel(
+            "On by default. You can turn this off at any time using the switch above. "
+            "Your choice is saved on this computer. Turning it off discards queued reports "
+            "and revokes access when connected. Reports already sent or in flight "
+            "cannot be recalled. "
+            "Manual bug reports remain available in the File menu.", diagnostics,
+        )
+        consent_help.setWordWrap(True)
+        consent_help.setProperty("dialogHelp", "true")
+        diagnostics_layout.addWidget(consent_help)
+        self.crash_reports_status = QLabel(automatic_crash_reports_status, diagnostics)
+        self.crash_reports_status.setObjectName("automatic_crash_reports_status")
+        self.crash_reports_status.setWordWrap(True)
+        diagnostics_layout.addWidget(self.crash_reports_status)
+        diagnostics_layout.addStretch(1)
+        self.tabs.addTab(diagnostics, "Diagnostics")
         self._refresh_developer_status()
         layout.addWidget(self.tabs, 1)
         layout.addLayout(footer_layout)
         apply_dialog_theme(self)
+
+    def _configure_crash_reports(self, enabled: bool) -> None:
+        if self._on_automatic_crash_reports_changed is not None:
+            self._on_automatic_crash_reports_changed(enabled)
+
+    def set_crash_reporting_state(self, enabled: bool, status: str, busy: bool) -> None:
+        self.crash_reports_checkbox.blockSignals(True)
+        self.crash_reports_checkbox.setChecked(enabled)
+        self.crash_reports_checkbox.blockSignals(False)
+        self.crash_reports_checkbox.setEnabled(
+            self._on_automatic_crash_reports_changed is not None,
+        )
+        self.crash_reports_status.setText(status)
 
     def _show_recording_setup(self) -> None:
         dialog = RecordingSetupDialog(self._recording_configuration, self)

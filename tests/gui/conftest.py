@@ -28,6 +28,12 @@ def controller(qtbot, qapp, tmp_path: Path) -> StudioController:
 
 
 @pytest.fixture(autouse=True)
+def _disable_unmocked_reporting_service(monkeypatch) -> None:
+    """Default-on diagnostics must never register a real installation from a GUI test."""
+    monkeypatch.setenv("FPVS_REPORT_SERVICE_URL", "")
+
+
+@pytest.fixture(autouse=True)
 def _disable_launch_interstitial_delay(monkeypatch) -> None:
     monkeypatch.setattr("fpvs_studio.gui.main_window._LAUNCH_INTERSTITIAL_DURATION_MS", 0)
 

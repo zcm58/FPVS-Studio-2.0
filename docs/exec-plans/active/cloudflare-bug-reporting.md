@@ -4,6 +4,28 @@ Status: Active
 
 Date: 2026-09-12
 
+## Automatic crash reporting follow-up (October 8, 2026)
+
+The user authorized automatic emails to the existing maintainer address from all
+installations, initially with explicit opt-in and subsequently requested as opt-out.
+This adds a separate scoped installation grant
+and sanitized crash-only intake; manual reviewed submissions retain their existing
+verification and receipt contracts. Desktop/service implementation and live activation
+are tracked in [the automatic-crash plan](automatic-crash-reporting.md). This later
+authorization supersedes the earlier no-automatic-upload constraint only for that
+separate crash-only workflow. Desktop source now defaults on and preserves saved
+opt-outs. The user explicitly approved removing the automatic-report service browser
+check after automatic review requested exact authorization; background registration
+is implemented. Live automatic intake remains disabled pending deployment acceptance.
+
+## Native diagnostics follow-up (October 8, 2026)
+
+The [Studio crash reliability work](../completed/studio-crash-reliability.md) adds app-owned local
+native tracebacks and Qt warnings/fatal breadcrumbs. Collection uses the existing
+redaction, size limits, preview and explicit submission. No service changes, automatic
+upload or feature-request log collection are introduced. Worker wrappers remain alive
+through native cleanup; the GUI continues processing events during shutdown.
+
 ## Error reporting follow-up (October 2, 2026)
 
 The user requested common-error explanations and a Report this bug. Please!

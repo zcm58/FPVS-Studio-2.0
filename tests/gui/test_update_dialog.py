@@ -71,9 +71,11 @@ def test_main_window_file_menu_groups_actions(
 
     assert menu_entries == [
         "Manage Projects...",
+        "Save",
         "---",
         "Import",
         "Export",
+        "Update Project Version...",
         "---",
         "Settings...",
         "---",
@@ -91,6 +93,7 @@ def test_main_window_file_menu_groups_actions(
         "FPVS Toolbox Config...",
         "Completed Project Config...",
         "Group Summary...",
+        "Request Library publication...",
     ]
 
 
