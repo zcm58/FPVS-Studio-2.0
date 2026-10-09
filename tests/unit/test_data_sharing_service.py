@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from datetime import datetime, timedelta, timezone
 from threading import Event
+from unittest.mock import Mock
 from uuid import uuid4
 
 import pytest
@@ -650,3 +651,31 @@ def test_archive_service_uses_no_network_and_retains_latest_local_session(tmp_pa
     assert result.latest_completed_at == latest.completed_at.isoformat()
     assert "Archived 1" in result.error
     assert len(tuple((tmp_path / "logs/data-sharing/archive").glob("*/report.json"))) == 1
+
+
+def test_default_512_capture_limit_is_visible_with_ordinary_aborted_history(tmp_path):
+    from tests.unit.test_data_sharing_storage import _excluded_capture
+
+    enable(tmp_path)
+    for _ in range(512):
+        _excluded_capture(tmp_path)
+    view = load_view(tmp_path, HASH, Event())
+    assert view.settings.enabled and view.status == "failed"
+    assert view.capture_count == view.capture_limit == view.reviewable_capture_count == 512
+    assert "full (512/512)" in view.error and "Review captures" in view.error
+
+
+def test_capture_review_and_confirmed_archive_are_local_without_http(tmp_path, monkeypatch):
+    from tests.unit.test_data_sharing_storage import _excluded_capture
+
+    from fpvs_studio.data_sharing.service import archive_captures_project, review_captures_project
+
+    enable(tmp_path)
+    _excluded_capture(tmp_path)
+    monkeypatch.setattr(
+        DataSharingClient, "configured", Mock(side_effect=AssertionError("HTTP owner"))
+    )
+    review = review_captures_project(tmp_path, HASH, Event()).capture_review
+    assert review is not None and len(review.captures) == 1
+    view = archive_captures_project(tmp_path, HASH, Event(), review=review)
+    assert view.capture_count == 0 and "Archived 1 reviewed excluded capture" in view.error

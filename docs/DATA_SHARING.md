@@ -35,7 +35,8 @@ follow-up retries per cycle. **Retry pending** explicitly releases held reports 
 the current registered scope. Authentication, schema, version and digest conflicts
 require operator attention. Closing the dialog cancels its current operation.
 Starting a Home or Setup launch cancels background reporting and waits asynchronously
-for its bounded request to finish before starting runtime work. An in-flight request
+for its bounded request and any noncancelable local opt-out persistence to finish
+before starting runtime work. An in-flight request
 may already have reached the service; no new request starts during presentation.
 Projects that have never enrolled and leave sharing off skip protocol hashing and
 network access. Enrolled protocol hashing checks cancellation between asset chunks
@@ -283,7 +284,7 @@ devices' individual reports.
 | `logs/data-sharing/intents/<UUID>.json` | Private launch, completion and commit proof |
 | `logs/data-sharing/outbox/<UUID>.json` | Immutable report JSON/digest, attempts, state and receipt |
 | `logs/data-sharing/archive/<UUID>/report.json` | Archived acknowledged record |
-| `logs/data-sharing/archive/<UUID>/capture.json` | Corresponding finalized private mapping, when present |
+| `logs/data-sharing/archive/<UUID>/capture.json` | Finalized private mapping or reviewed excluded capture evidence |
 
 Files stay beneath the active project root, reject links/reparse points and require
 private regular files. Settings are bounded to 16 KiB, each intent/outbox record to
@@ -317,12 +318,18 @@ Reports already use compact JSON and one exact cloud payload per accepted sessio
 [Storage measurements](REPORTING_STORAGE.md) record representative wire/SQLite
 sizes, the read-only D1 snapshot and source-defined project/lab/service budgets.
 
-Ordinary aborted and protocol-mismatched capture intents remain active and still
-count toward the 512-record limit. **Archive uploaded history** cannot free these
-records because they have no acknowledged report/finalized capture pair. A full
-capture collection can therefore hold new reporting while local execution continues.
-An explicit review/archive workflow for these retained captures is still required;
-the implementation does not silently delete their evidence.
+The sharing dialog displays active capture capacity against the 512-record limit.
+At capacity it reports an actionable local error while experiment execution remains
+available. **Review captures…** reads a bounded snapshot of terminal excluded
+captures and their reason counts without HTTP. After explicit confirmation, it
+archives only those unchanged records with an exclusion reason and no outbox report.
+The reviewed project, UUIDs, contents and guarded destinations are revalidated under
+the reporting lock before moves. New or changed evidence requires another review;
+existing archive targets are never overwritten. Running, eligible and finalized
+captures, every pending/held/failed report and accepted receipts remain protected.
+Excluded evidence moves to the private archive without changing research exports or
+the shared dataset. **Archive uploaded history** continues to retire accepted report
+pairs independently.
 
 ## Maintainer setup
 

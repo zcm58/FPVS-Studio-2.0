@@ -16,7 +16,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from fpvs_studio import __version__
 from fpvs_studio.developer.library_publisher import PreparedPublication
 from fpvs_studio.library.cache import check_cancel
-from fpvs_studio.library.client import METADATA_TOTAL_SECONDS, LibraryClient
+from fpvs_studio.library.client import METADATA_TOTAL_SECONDS, CredentialOwner, LibraryClient
 from fpvs_studio.library.credentials import CredentialStore, DeviceCredential, credential_store
 from fpvs_studio.library.errors import LibraryError
 
@@ -98,6 +98,7 @@ def list_submissions(
             if project_uploads
             else client._credential().token,
             cancel_event=cancel_event,
+            credential_owner="project_upload" if project_uploads else "library",
         )
         try:
             return SubmissionList.model_validate(raw)
@@ -216,12 +217,14 @@ def _submit(
             _upload_token(client, upload_store) if project_uploads else client._credential().token
         )
         endpoint = "/submissions/v1" if project_uploads else "/v2/submissions"
+        credential_owner: CredentialOwner = "project_upload" if project_uploads else "library"
         raw = client._json_request(
             "POST",
             endpoint,
             token=token,
             payload=metadata,
             cancel_event=cancel_event,
+            credential_owner=credential_owner,
         )
         status = _receipt(raw)
         if str(status.submission_id) != submission_id or status.sha256 != report.sha256:
@@ -235,6 +238,7 @@ def _submit(
             data=cast(BinaryIO, _UploadReader(source, cancel_event)),
             content_length=report.size_bytes,
             cancel_event=cancel_event,
+            credential_owner=credential_owner,
         ) as response:
             raw = json.loads(
                 b"".join(

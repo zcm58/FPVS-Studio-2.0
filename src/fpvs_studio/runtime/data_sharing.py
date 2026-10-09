@@ -6,6 +6,7 @@ import csv
 import hashlib
 import json
 from collections.abc import Mapping
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
@@ -375,15 +376,15 @@ def recover_captures(root: Path) -> tuple[str, ...]:
     return tuple(warnings)
 
 
-def capture_errors(root: Path) -> tuple[str, ...]:
-    """Safe status summaries, without participant identity or research answers."""
+def read_capture_intents(root: Path) -> tuple[CaptureIntent, ...]:
+    """Read every bounded private capture; malformed evidence remains actionable."""
     directory = _private_path(root, "logs/data-sharing/intents")
     if not directory.exists():
         return ()
     paths = list(directory.glob("*.json"))
     if len(paths) > MAX_RECORDS:
         raise SharingStorageError("Sharing capture history exceeds its bounded record limit.")
-    warnings = []
+    intents = []
     for path in sorted(paths):
         intent = read_bounded_model(
             _private_path(root, _intent_relative(path.stem)),
@@ -392,6 +393,33 @@ def capture_errors(root: Path) -> tuple[str, ...]:
         )
         if intent.report_id != path.stem:
             raise SharingStorageError("Sharing capture filename does not match its UUID.")
+        intents.append(intent)
+    return tuple(intents)
+
+
+@dataclass(frozen=True)
+class CaptureStatus:
+    active_count: int
+    limit: int
+    reviewable_count: int
+    errors: tuple[str, ...]
+
+
+def capture_status(root: Path) -> CaptureStatus:
+    """Expose capture capacity without participant identity or research answers."""
+    intents = read_capture_intents(root)
+    reviewable = sum(
+        intent.state == "ineligible" and intent.reason is not None for intent in intents
+    )
+    warnings = []
+    if len(intents) >= MAX_RECORDS:
+        action = (
+            "Use Review captures to archive excluded sessions."
+            if reviewable else
+            "Review pending recovery and uploads; no excluded captures can be archived."
+        )
+        warnings.append(f"Sharing capture history is full ({len(intents)}/{MAX_RECORDS}). {action}")
+    for intent in intents:
         if intent.state in {"running", "eligible"}:
             detail = (
                 "local queue completion is pending"
@@ -403,4 +431,9 @@ def capture_errors(root: Path) -> tuple[str, ...]:
             warnings.append(
                 f"Capture {intent.report_id}: {intent.reason.replace('_', ' ')}; retained locally."
             )
-    return tuple(warnings)
+    return CaptureStatus(len(intents), MAX_RECORDS, reviewable, tuple(warnings))
+
+
+def capture_errors(root: Path) -> tuple[str, ...]:
+    """Safe status summaries, without participant identity or research answers."""
+    return capture_status(root).errors

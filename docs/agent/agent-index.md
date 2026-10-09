@@ -227,6 +227,9 @@ retains standalone reference source and shared synthetic wire fixtures.
 For linked Library identity checks, use `data_sharing/library_scope.py` and core's
 canonical `library_origin.py` receipt reader. The separate Results credentials,
 project UUID and explicit opt-in rules are in the canonical guide.
+For capture-capacity recovery, begin with `runtime/data_sharing.py` status and
+`data_sharing/storage.py` reviewed archival. The existing controller gates launch
+until both reporting and local opt-out persistence finish; see the canonical guide.
 
 Use the data-sharing focused route, runtime for launch/finalization changes, and repo
 precommit for shared behavior. Run OpenFPVS's `npm test` and `npm run check` separately;

@@ -187,6 +187,8 @@ class StudioMainWindow(QMainWindow):
         self._session_seed_ready = False
         self._session_seed_task: BackgroundTask | None = None
         self._launch_after_session_seed_ready = False
+        self._handoff_close_approved = False
+        self._closing_for_handoff = False
         self._active_launch_task: ProgressTask | None = None
         self._active_participant_session_check: ParticipantSessionCheckTask | None = None
         self._active_launch_participant_number: str | None = None
@@ -232,6 +234,8 @@ class StudioMainWindow(QMainWindow):
         self._show_initial_workflow_surface()
 
     def _wire_document(self) -> None:
+        self.document.project_changed.connect(self._invalidate_handoff_approval)
+        self.document.manifest_changed.connect(self._invalidate_handoff_approval)
         self.document.project_changed.connect(self._update_window_title)
         self.document.project_changed.connect(self._sync_home_after_document_update)
         self.document.session_plan_changed.connect(self._sync_home_after_document_update)
@@ -256,6 +260,7 @@ class StudioMainWindow(QMainWindow):
             page.run_page.session_completed.connect(self._notify_session_completed)
             page.run_page.set_launch_gate(self._notify_session_started)
             page.pending_edits_changed.connect(self._update_save_state)
+            page.pending_edits_changed.connect(self._invalidate_handoff_approval)
             self.main_stack.addWidget(page)
             self._install_button_hover_animations()
         return self._setup_wizard_page
@@ -1328,6 +1333,26 @@ class StudioMainWindow(QMainWindow):
         self.statusBar().showMessage(f"{status_label} exported: {path}", 3000)
         return True
 
+    def _invalidate_handoff_approval(self) -> None:
+        self._handoff_close_approved = False
+
+    def prepare_project_handoff(self) -> bool:
+        """Approve this draft once without discarding it before a successful read."""
+        self._handoff_close_approved = False
+        if not self.maybe_save_changes():
+            return False
+        self._handoff_close_approved = True
+        return True
+
+    def close_for_project_handoff(self) -> bool:
+        """Consume approval for this close only; ordinary Quit still checks edits."""
+        self._closing_for_handoff = self._handoff_close_approved
+        try:
+            return self.close()
+        finally:
+            self._closing_for_handoff = False
+            self._handoff_close_approved = False
+
     def maybe_save_changes(self) -> bool:
         if not self._allow_project_handoff_during_launch():
             return False
@@ -1340,6 +1365,8 @@ class StudioMainWindow(QMainWindow):
                 "Wait for the image operation to finish before closing or changing experiments.",
             )
             return False
+        if self._closing_for_handoff:
+            return True
         flushed = self.flush_pending_edits()
         if flushed and not self.document.dirty:
             return True
@@ -1417,13 +1444,13 @@ class StudioMainWindow(QMainWindow):
     def _request_new_project(self) -> None:
         if not self._allow_project_handoff_during_fixation_load():
             return
-        if self.maybe_save_changes():
+        if self.prepare_project_handoff():
             self._on_request_new_project()
 
     def _request_open_project(self) -> None:
         if not self._allow_project_handoff_during_fixation_load():
             return
-        if self.maybe_save_changes():
+        if self.prepare_project_handoff():
             self._on_request_open_project()
 
     def _request_manage_projects(self) -> None:
@@ -1436,13 +1463,13 @@ class StudioMainWindow(QMainWindow):
     def _request_import_project_config(self) -> None:
         if not self._allow_project_handoff_during_fixation_load():
             return
-        if self.maybe_save_changes():
+        if self.prepare_project_handoff():
             self._on_request_import_project_config()
 
     def _request_import_project_bundle(self) -> None:
         if not self._allow_project_handoff_during_fixation_load():
             return
-        if self.maybe_save_changes():
+        if self.prepare_project_handoff():
             self._on_request_import_project_bundle()
 
     def _request_settings(self) -> None:

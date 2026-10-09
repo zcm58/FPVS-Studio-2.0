@@ -174,3 +174,12 @@ production's bounded retry intact. All eight serialization cases pass in a fresh
 recheck (`build/merge-serialization-recheck.xml`). No unrelated project-I/O or test
 change was added, and the original full gate's failed result is retained here.
 This source integration does not activate live crash intake or release an installer.
+
+## October 9 reliability follow-up
+
+The 2.4.4 fix serializes local preference writes independently of blocked HTTP and
+rejects stale load/network results. Logging budget or sink failure retains the active
+session snapshot until actual shutdown. Synthetic support and visible GUI checks cover
+blocked delivery, rapid toggles, shutdown persistence and later crash recovery.
+The canonical contract remains in [Bug reporting](../../BUG_REPORTING.md); authenticated
+live crash-service activation remains a separate rollout item.

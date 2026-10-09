@@ -1,6 +1,7 @@
 """Atomic outbox replay, opt-out, capacity and hostile path regressions."""
 
 from datetime import datetime, timedelta, timezone
+from threading import Event
 from unittest.mock import Mock
 from uuid import uuid4
 
@@ -279,3 +280,139 @@ def test_partial_archive_retains_receipt_and_resumes_without_overwrite(tmp_path,
     monkeypatch.setattr(type(path), "rename", original)
     assert storage.archive_uploaded(tmp_path) == 1
     assert len(storage.list_records(tmp_path)) == 1
+
+
+def _excluded_capture(root, *, reason="incomplete_session", report_id=None):
+    from fpvs_studio.runtime.data_sharing import CaptureIntent, _save_intent
+
+    intent = CaptureIntent(
+        report_id=report_id or str(uuid4()), profile=storage.load_settings(root).profile,
+        actual_protocol_sha256="a" * 64, project_id="local", session_id="session1",
+        participant_number="0007", participant_session_number=1, run_ids=("run1",),
+        experiment_test_mode=False, pilot_mode=False, state="ineligible", reason=reason,
+    )
+    _save_intent(root, intent)
+    return intent
+
+
+def test_reviewed_archive_preserves_bytes_and_all_report_recovery_evidence(tmp_path):
+    from fpvs_studio.runtime.data_sharing import _save_intent
+
+    enable(tmp_path)
+    first = _excluded_capture(tmp_path)
+    second = _excluded_capture(tmp_path, reason="protocol_mismatch")
+    running = first.model_copy(update={
+        "report_id": str(uuid4()), "state": "running", "reason": None,
+    })
+    _save_intent(tmp_path, running)
+    eligible_report = report_fixture()
+    _capture(tmp_path, eligible_report, state="eligible")
+    acknowledged = report_fixture()
+    _upload(tmp_path, acknowledged)
+    _capture(tmp_path, acknowledged)
+    for state in ("pending", "held", "failed"):
+        record = storage.queue_report(tmp_path, report_fixture())
+        storage.update_record(tmp_path, record.model_copy(update={"state": state}))
+    records = storage.list_records(tmp_path)
+    sources = tmp_path / "logs/data-sharing/intents"
+    original = {path.name: path.read_bytes() for path in sources.iterdir()}
+    research = tmp_path / "logs/research.csv"
+    research.write_bytes(b"private research remains unchanged")
+    review = storage.review_terminal_captures(tmp_path, cancel=Event())
+    assert {item.report_id for item in review.captures} == {first.report_id, second.report_id}
+    assert review.reason_counts == (("incomplete_session", 1), ("protocol_mismatch", 1))
+    assert all((sources / filename).exists() for filename in original)  # Review has no moves.
+    assert storage.archive_reviewed_captures(tmp_path, review, cancel=Event()) == 2
+    for intent in (first, second):
+        destination = tmp_path / "logs/data-sharing/archive" / intent.report_id / "capture.json"
+        assert destination.read_bytes() == original[f"{intent.report_id}.json"]
+        assert not (sources / f"{intent.report_id}.json").exists()
+    for identity in (running.report_id, eligible_report.report_id, acknowledged.report_id):
+        assert (sources / f"{identity}.json").read_bytes() == original[f"{identity}.json"]
+    assert storage.list_records(tmp_path) == records
+    assert research.read_bytes() == b"private research remains unchanged"
+
+
+@pytest.mark.parametrize("change", ["changed", "malformed", "destination", "report", "hardlink"])
+def test_review_revalidates_all_evidence_before_any_archive_move(tmp_path, change):
+    import os
+
+    from fpvs_studio.runtime.data_sharing import _save_intent
+
+    enable(tmp_path)
+    first, second = _excluded_capture(tmp_path), _excluded_capture(tmp_path)
+    review = storage.review_terminal_captures(tmp_path, cancel=Event())
+    source = tmp_path / "logs/data-sharing/intents" / f"{second.report_id}.json"
+    if change == "changed":
+        _save_intent(tmp_path, second.model_copy(update={"participant_number": "different"}))
+    elif change == "malformed":
+        source.write_bytes(b"malformed evidence must remain intact")
+    elif change == "destination":
+        target = tmp_path / "logs/data-sharing/archive" / second.report_id / "capture.json"
+        target.parent.mkdir(parents=True)
+        target.write_bytes(b"existing evidence must not be replaced")
+    elif change == "report":
+        storage.queue_report(tmp_path, report_fixture(report_id=second.report_id))
+    else:
+        os.link(source, tmp_path / "linked-evidence.json")
+    before = {path.name: path.read_bytes() for path in source.parent.iterdir()}
+    with pytest.raises(storage.SharingStorageError):
+        storage.archive_reviewed_captures(tmp_path, review, cancel=Event())
+    assert {path.name: path.read_bytes() for path in source.parent.iterdir()} == before
+    assert (source.parent / f"{first.report_id}.json").exists()
+    if change == "destination":
+        assert target.read_bytes() == b"existing evidence must not be replaced"
+
+
+def test_new_capture_after_review_is_not_silently_included_and_wrong_root_is_rejected(tmp_path):
+    enable(tmp_path)
+    first = _excluded_capture(tmp_path)
+    review = storage.review_terminal_captures(tmp_path, cancel=Event())
+    later = _excluded_capture(tmp_path)
+    other_root = tmp_path / "other-project"
+    other_root.mkdir()
+    with pytest.raises(storage.SharingStorageError, match="another project"):
+        storage.archive_reviewed_captures(other_root, review, cancel=Event())
+    assert storage.archive_reviewed_captures(tmp_path, review, cancel=Event()) == 1
+    assert (tmp_path / "logs/data-sharing/intents" / f"{later.report_id}.json").exists()
+    assert (tmp_path / "logs/data-sharing/archive" / first.report_id / "capture.json").exists()
+
+
+def test_partial_reviewed_archive_preserves_evidence_and_can_be_reviewed_again(
+    tmp_path, monkeypatch,
+):
+    enable(tmp_path)
+    _excluded_capture(tmp_path)
+    _excluded_capture(tmp_path)
+    review = storage.review_terminal_captures(tmp_path, cancel=Event())
+    rename = type(tmp_path).rename
+    second = review.captures[1].report_id
+
+    def interrupted(source, destination):
+        if source.stem == second:
+            raise PermissionError("synthetic second move failure")
+        return rename(source, destination)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(type(tmp_path), "rename", interrupted)
+        with pytest.raises(storage.SharingStorageError, match="Evidence is retained"):
+            storage.archive_reviewed_captures(tmp_path, review, cancel=Event())
+    remaining = storage.review_terminal_captures(tmp_path, cancel=Event())
+    assert len(remaining.captures) == 1 and remaining.captures[0].report_id == second
+    assert storage.archive_reviewed_captures(tmp_path, remaining, cancel=Event()) == 1
+    assert len(list((tmp_path / "logs/data-sharing/archive").glob("*/capture.json"))) == 2
+
+
+def test_canceled_capture_review_and_archive_never_move_evidence(tmp_path):
+    from fpvs_studio.data_sharing.errors import DataSharingCancelled
+
+    enable(tmp_path)
+    intent = _excluded_capture(tmp_path)
+    review = storage.review_terminal_captures(tmp_path, cancel=Event())
+    canceled = Event()
+    canceled.set()
+    with pytest.raises(DataSharingCancelled):
+        storage.review_terminal_captures(tmp_path, cancel=canceled)
+    with pytest.raises(DataSharingCancelled):
+        storage.archive_reviewed_captures(tmp_path, review, cancel=canceled)
+    assert (tmp_path / "logs/data-sharing/intents" / f"{intent.report_id}.json").exists()

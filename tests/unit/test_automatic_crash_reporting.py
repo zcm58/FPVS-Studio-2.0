@@ -305,3 +305,62 @@ session.close()
             "python_exception" if outcome == "python" else "unclean_shutdown"
         )
         assert "private" not in events[0].model_dump_json()
+
+
+@pytest.mark.parametrize("failure", ["budget", "startup_budget", "io"])
+@pytest.mark.parametrize("outcome", ["clean", "abrupt", "python"])
+def test_log_sink_failure_preserves_the_actual_application_lifecycle(tmp_path, failure, outcome):
+    script = """
+import os, sys, time
+from pathlib import Path
+import fpvs_studio.support.diagnostics as diagnostics
+from fpvs_studio.support.crash_reporting import CrashSession
+root = Path(sys.argv[1])
+failure, outcome = sys.argv[2:]
+logs = root / "logs"
+logs.mkdir()
+synthetic = logs / ("session-" + "a" * 32 + ".log")
+if failure == "startup_budget":
+    synthetic.write_bytes(b"x" * (10 * 1024 * 1024))
+session = diagnostics.DiagnosticLogging(root, capture_native=True)
+session.start()
+assert session.ready.wait(5)
+if failure == "budget":
+    synthetic.write_bytes(b"x" * (10 * 1024 * 1024))
+elif failure == "io":
+    def unavailable(*args):
+        raise OSError("Synthetic log sink failure")
+    diagnostics._LogFile.handle = unavailable
+session.logger.warning("Synthetic diagnostic record")
+deadline = time.monotonic() + 5
+while not diagnostics._logging_notice:
+    assert time.monotonic() < deadline
+    time.sleep(0.01)
+snapshot = root / "automatic-crashes" / f"session-{session.session_id}.json"
+assert CrashSession.model_validate_json(snapshot.read_bytes()).state == "active"
+assert session.thread.is_alive()
+if outcome == "abrupt":
+    os._exit(17)
+if outcome == "python":
+    try:
+        raise RuntimeError("private participant message")
+    except Exception as error:
+        session.record_failure(error)
+session.close()
+assert not session.thread.is_alive()
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", script, str(tmp_path), failure, outcome],
+        capture_output=True,
+        timeout=15,
+    )
+    assert result.returncode == (17 if outcome == "abrupt" else 0), result.stderr.decode()
+    events = CrashStore(tmp_path).recover()
+    if outcome == "clean":
+        assert events == []
+    else:
+        assert len(events) == 1
+        assert events[0].report.crash_type == (
+            "python_exception" if outcome == "python" else "unclean_shutdown"
+        )
+        assert "private" not in events[0].model_dump_json()

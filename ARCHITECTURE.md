@@ -74,6 +74,8 @@ the public contract is in [Bug reporting](docs/BUG_REPORTING.md).
   plain-language guidance and an explicit error-report action to Studio popups.
   Native tracebacks remain in app-owned local support logs; `gui/qt_diagnostics.py`
   forwards Qt warnings/fatal breadcrumbs. Collection redacts and bounds their text.
+  Automatic crash preference writes drain independently of network work; log-sink
+  failure retains the active session for later recovery. See `docs/BUG_REPORTING.md`.
 - `src/fpvs_studio/data_sharing/`: GUI-neutral per-experiment consent, native OS
   credentials, immutable durable upload outbox and bounded HTTPS delivery.
   `core/data_sharing.py` owns strict wire contracts and authored protocol identity;
@@ -85,6 +87,8 @@ the public contract is in [Bug reporting](docs/BUG_REPORTING.md).
   configured-root/remembered projects, reusing neutral `core/project_service.py`
   discovery and `data_sharing/service.py` delivery without comparison requests.
   Receipt-first cleanup archives older acknowledged local evidence after uploads.
+  Reviewed local archival of terminal excluded captures restores bounded capacity;
+  launch waits for reporting and local opt-out persistence to drain.
   The OpenFPVS Worker in sibling `../OpenFPVS` owns explicit
   lab/project grants, `/results/v1`, dedicated D1 tables and private browser project
   aggregates. Studio defaults to `https://openfpvs.com`; enrollment requires an

@@ -21,13 +21,17 @@ from fpvs_studio.data_sharing.client import DataSharingClient, check_cancel
 from fpvs_studio.data_sharing.errors import DataSharingCancelled, DataSharingError
 from fpvs_studio.data_sharing.library_scope import validate_library_scope
 from fpvs_studio.data_sharing.storage import (
+    MAX_RECORDS,
+    CaptureArchiveReview,
     OutboxRecord,
     SharingStorageError,
+    archive_reviewed_captures,
     archive_uploaded,
     list_pending,
     list_records,
     load_settings,
     read_payload,
+    review_terminal_captures,
     save_settings,
     update_record,
 )
@@ -71,6 +75,10 @@ class SharingView:
     held_count: int = 0
     uploaded_count: int = 0
     remote: ComparisonView | None = None
+    capture_count: int = 0
+    capture_limit: int = MAX_RECORDS
+    reviewable_capture_count: int = 0
+    capture_review: CaptureArchiveReview | None = None
 
 
 def configured() -> bool:
@@ -173,12 +181,13 @@ def load_view(
             status = "waiting_connection"
     if settings.enabled and not counts["pending"] and not error:
         status = "uploaded" if counts["uploaded"] else "ready"
-    from fpvs_studio.runtime.data_sharing import capture_errors
+    from fpvs_studio.runtime.data_sharing import capture_status
 
-    capture_issues = capture_errors(root)
+    captures = capture_status(root)
+    capture_issues = captures.errors
     if capture_issues:
         status = "failed" if status != "protocol_mismatch" else status
-        error = error or f"{len(capture_issues)} local capture(s) need review: {capture_issues[0]}"
+        error = error or capture_issues[0]
     return SharingView(
         settings=settings,
         local_conditions=_local_rows(latest) if latest else (),
@@ -188,6 +197,9 @@ def load_view(
         pending_count=counts["pending"],
         held_count=counts["held"],
         uploaded_count=counts["uploaded"],
+        capture_count=captures.active_count,
+        capture_limit=captures.limit,
+        reviewable_capture_count=captures.reviewable_count,
     )
 
 
@@ -483,3 +495,22 @@ def archive_project(
     archived = archive_uploaded(root)
     view = load_view(root, protocol_sha256, Event(), client=client)
     return replace(view, error=f"Archived {archived} older accepted report(s) locally.")
+
+
+def review_captures_project(root: Path, protocol_sha256: str, cancel: Event) -> SharingView:
+    """Read excluded capture counts and a bounded local snapshot without HTTP."""
+    check_cancel(cancel)
+    review = review_terminal_captures(root, cancel=cancel)
+    return replace(load_view(root, protocol_sha256, cancel), capture_review=review)
+
+
+def archive_captures_project(
+    root: Path, protocol_sha256: str, cancel: Event, *, review: CaptureArchiveReview,
+) -> SharingView:
+    check_cancel(cancel)
+    archived = archive_reviewed_captures(root, review, cancel=cancel)
+    view = load_view(root, protocol_sha256, Event())
+    message = (
+        f"Archived {archived} reviewed excluded capture(s) locally. Research results are unchanged."
+    )
+    return replace(view, error=message + (f" {view.error}" if view.error else ""))

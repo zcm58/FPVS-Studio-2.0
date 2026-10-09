@@ -12,7 +12,7 @@ from contextlib import contextmanager
 from http.client import HTTPException
 from pathlib import Path
 from threading import Event
-from typing import Any, BinaryIO
+from typing import Any, BinaryIO, Literal
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
@@ -47,6 +47,7 @@ METADATA_TOTAL_SECONDS = 30
 DOWNLOAD_TOTAL_SECONDS = 30 * 60
 _VIEW_ONLY_MESSAGE = "Your lab has view-only Library access. Downloads are not permitted."
 ProgressCallback = Callable[[int, int], None]
+CredentialOwner = Literal["library", "project_upload"]
 
 
 class _NoRedirect(HTTPRedirectHandler):
@@ -135,6 +136,7 @@ class LibraryClient:
     def _response(
         self, method: str, path: str, *, token: str = "", data: bytes | BinaryIO | None = None,
         cancel_event: Event | None = None, content_length: int | None = None,
+        credential_owner: CredentialOwner = "library",
     ) -> Iterator[Any]:
         url = self.service_url + path
         headers = {
@@ -168,6 +170,13 @@ class LibraryClient:
             if view_only:
                 raise LibraryError(_VIEW_ONLY_MESSAGE) from None
             if token and status in (401, 403):
+                if credential_owner == "project_upload":
+                    # This identity also owns existing immutable upload requests. Retain it
+                    # for recovery rather than rotating it or deleting Library enrollment.
+                    raise LibraryAuthorizationError(
+                        "Project upload access was rejected. Your upload identity was retained "
+                        "for existing requests. Retry later or contact support."
+                    ) from None
                 # A revoked token cannot enroll again. Keep failed invitation tokens
                 # pending, but remove rejected device access so reconnect starts fresh.
                 self.store.delete()
@@ -234,12 +243,14 @@ class LibraryClient:
         payload: dict[str, Any] | None = None,
         cancel_event: Event | None = None,
         limit: int = MAX_CATALOG_BYTES,
+        credential_owner: CredentialOwner = "library",
     ) -> object:
         check_cancel(cancel_event)
         data = json.dumps(payload).encode("utf-8") if payload is not None else None
         deadline = time.monotonic() + METADATA_TOTAL_SECONDS
         with self._response(
             method, path, token=token, data=data, cancel_event=cancel_event,
+            credential_owner=credential_owner,
         ) as response:
             if response.headers.get_content_type() != "application/json":
                 raise LibraryError("The Library service returned an unexpected response type.")

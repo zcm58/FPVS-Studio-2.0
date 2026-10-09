@@ -6,6 +6,7 @@ import hashlib
 import stat
 from collections.abc import Iterator
 from contextlib import contextmanager
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from threading import Event
@@ -331,6 +332,108 @@ def delete_pending(root: Path, report_id: str) -> None:
         if record.state == "uploaded":
             raise SharingStorageError("Accepted receipts cannot be deleted as pending reports.")
         path.unlink()
+
+
+@dataclass(frozen=True)
+class ReviewedCapture:
+    report_id: str
+    digest: str
+    reason: str
+
+
+@dataclass(frozen=True)
+class CaptureArchiveReview:
+    project_root: Path
+    captures: tuple[ReviewedCapture, ...]
+
+    @property
+    def reason_counts(self) -> tuple[tuple[str, int], ...]:
+        reasons = sorted({item.reason for item in self.captures})
+        return tuple(
+            (reason, sum(item.reason == reason for item in self.captures)) for reason in reasons
+        )
+
+
+def _capture_digest(intent: SharingModel) -> str:
+    return hashlib.sha256(intent.model_dump_json().encode("utf-8")).hexdigest()
+
+
+def review_terminal_captures(root: Path, *, cancel: Event) -> CaptureArchiveReview:
+    """Snapshot explicit excluded captures for an operator's local archive review."""
+    from fpvs_studio.runtime.data_sharing import read_capture_intents
+
+    if cancel.is_set():
+        raise DataSharingCancelled()
+    with _storage_lock(root):
+        records = {record.report_id for record in _records(root)}
+        reviewed = []
+        for intent in read_capture_intents(root):
+            if cancel.is_set():
+                raise DataSharingCancelled()
+            if intent.state != "ineligible" or intent.reason is None:
+                continue
+            if intent.report_id in records:
+                raise SharingStorageError(
+                    "An excluded capture still has a report; review its evidence."
+                )
+            reviewed.append(ReviewedCapture(
+                intent.report_id,
+                _capture_digest(intent),
+                intent.reason,
+            ))
+        return CaptureArchiveReview(filesystem_path(root).resolve(), tuple(reviewed))
+
+
+def archive_reviewed_captures(root: Path, review: CaptureArchiveReview, *, cancel: Event) -> int:
+    """Move only unchanged, explicitly reviewed excluded evidence; never send or delete."""
+    from fpvs_studio.runtime.data_sharing import read_capture_intents
+
+    if cancel.is_set():
+        raise DataSharingCancelled()
+    if filesystem_path(root).resolve() != review.project_root:
+        raise SharingStorageError("The capture review belongs to another project.")
+    if len({item.report_id for item in review.captures}) != len(review.captures):
+        raise SharingStorageError("The capture review contains duplicate identities.")
+    with _storage_lock(root):
+        records = {record.report_id for record in _records(root)}
+        intents = {intent.report_id: intent for intent in read_capture_intents(root)}
+        selected = []
+        for item in review.captures:
+            if cancel.is_set():
+                raise DataSharingCancelled()
+            intent = intents.get(item.report_id)
+            if (
+                intent is None or intent.state != "ineligible" or intent.reason is None
+                or intent.reason != item.reason or intent.report_id in records
+                or _capture_digest(intent) != item.digest
+            ):
+                raise SharingStorageError(
+                    "Reviewed capture evidence changed; review again before archiving."
+                )
+            source = _private_path(root, f"logs/data-sharing/intents/{item.report_id}.json")
+            destination = _private_path(
+                root, f"logs/data-sharing/archive/{item.report_id}/capture.json"
+            )
+            receipt = _private_path(root, f"logs/data-sharing/archive/{item.report_id}/report.json")
+            if destination.exists() or receipt.exists():
+                raise SharingStorageError(
+                    "Archived evidence already exists; review before archiving."
+                )
+            selected.append((source, destination))
+        # Validate all reviewed sources and destinations before the first move.
+        try:
+            for source, destination in selected:
+                if cancel.is_set():
+                    raise DataSharingCancelled()
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                _private_path(root, f"logs/data-sharing/archive/{source.stem}/capture.json")
+                source.rename(destination)
+        except OSError as exc:
+            raise SharingStorageError(
+                "Capture archive could not finish. Evidence is retained; "
+                "review remaining captures again.",
+            ) from exc
+        return len(selected)
 
 
 def archive_uploaded(root: Path, *, cancel: Event | None = None) -> int:

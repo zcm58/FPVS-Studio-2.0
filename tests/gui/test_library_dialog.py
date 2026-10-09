@@ -416,7 +416,8 @@ def test_existing_library_review_respects_handoff_and_save_guards(
 ):
     window = SimpleNamespace(
         document=SimpleNamespace(project_root=tmp_path / "current"),
-        maybe_save_changes=lambda: save,
+        prepare_project_handoff=lambda: save,
+        is_launch_busy=lambda: True,
     )
     monkeypatch.setattr(controller, "main_window", window)
     monkeypatch.setattr(controller, "_can_publish_from", lambda target: allow_handoff)

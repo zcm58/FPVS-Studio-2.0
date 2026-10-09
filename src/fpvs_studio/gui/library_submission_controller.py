@@ -48,6 +48,8 @@ class LibrarySubmissionController(QObject):
         self._source: Path | None = None
         self._save: Callable[[], bool] | None = None
         self._identity: tuple[str, str] | None = None
+        self._current_project: tuple[Path, str, str, Callable[[], bool]] | None = None
+        self._retained_uploads: dict[str, tuple[PreparedPublication, tuple[str, str]]] = {}
 
     def show(
         self,
@@ -57,14 +59,22 @@ class LibrarySubmissionController(QObject):
         description: str,
         save_project: Callable[[], bool],
     ) -> None:
+        changed_project = self._current_project is None or self._current_project[0] != project_root
+        self._current_project = project_root, title, description, save_project
         if self._prepared is None and self._job is None:
-            self._source, self._save = project_root, save_project
-            self.dialog.title_edit.setText(title)
-            self.dialog.description.setPlainText(description)
+            self._bind_current_project()
+            if changed_project:
+                self.dialog.rights.setChecked(False)
             self.dialog.set_state(False, False, False)
         self.dialog.show()
         self.dialog.raise_()
         self.dialog.activateWindow()
+
+    def _bind_current_project(self) -> None:
+        if self._current_project is not None:
+            self._source, title, description, self._save = self._current_project
+            self.dialog.title_edit.setText(title)
+            self.dialog.description.setPlainText(description)
 
     def _status(self, text: str) -> None:
         self.dialog.status.setText(text if len(text) <= 240 else text[:237] + "…")
@@ -100,6 +110,12 @@ class LibrarySubmissionController(QObject):
                 self._status(detail)
             else:
                 finished(result.value)
+            if (
+                self._job is None and self._prepared is None and self._current_project is not None
+                and self._save is not self._current_project[3]
+            ):
+                self._bind_current_project()
+                self.dialog.rights.setChecked(False)
             self.dialog.set_state(
                 self._job is not None, self._prepared is not None, self._attempted, self._completed
             )
@@ -179,6 +195,8 @@ class LibrarySubmissionController(QObject):
         elif action == "new" and self._prepared is not None:
             prepared = self._prepared
             if self._attempted:
+                if self._identity is not None:
+                    self._retained_uploads[prepared.request.item_id] = prepared, self._identity
                 self._reset(None)
                 self.dialog.review.setPlainText(
                     f"Earlier submission files retained for an exact retry:\n{prepared.bundle_path}"
@@ -242,6 +260,7 @@ class LibrarySubmissionController(QObject):
         self._attempted = False
         self._completed = False
         self._identity = None
+        self._bind_current_project()
         self.dialog.rights.setChecked(False)
         self.dialog.review.clear()
         self._status("")

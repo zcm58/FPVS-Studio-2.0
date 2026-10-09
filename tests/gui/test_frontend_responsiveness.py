@@ -8,11 +8,24 @@ from threading import Event
 import pytest
 from PySide6.QtCore import Qt, QThread, QTimer
 from PySide6.QtGui import QColor, QKeySequence, QPalette
-from PySide6.QtWidgets import QApplication, QPushButton
+from PySide6.QtWidgets import QApplication, QFileDialog, QMessageBox, QPushButton, QWidget
+from shiboken6 import delete
 from tests.gui.helpers import _open_created_project, assert_visible_children_within_parent
 
 from fpvs_studio.gui import document as document_module
 from fpvs_studio.gui.document import ProjectDocument
+
+
+def test_late_startup_sharing_status_ignores_destroyed_windows(controller):
+    previous_welcome, previous_main = controller.welcome_window, controller.main_window
+    disposed_welcome, disposed_main = QWidget(), QWidget()
+    delete(disposed_welcome)
+    delete(disposed_main)
+    controller.welcome_window, controller.main_window = disposed_welcome, disposed_main
+    try:
+        controller._show_startup_sharing_status("Checking saved captures")
+    finally:
+        controller.welcome_window, controller.main_window = previous_welcome, previous_main
 
 
 @pytest.mark.parametrize("scenario", ["offline", "cache-error", "close-during-check"])
@@ -304,3 +317,106 @@ def test_canceled_project_read_cannot_replace_a_later_selection(
     finally:
         release.set()
         qtbot.waitUntil(lambda: not first_job.is_running)
+
+
+@pytest.mark.parametrize("decision", ["discard", "cancel"])
+def test_project_handoff_uses_one_unsaved_decision(
+    qtbot, controller, tmp_path, monkeypatch, decision,
+):
+    _, previous = _open_created_project(controller, qtbot, tmp_path, "Edited project")
+    qtbot.waitUntil(lambda: previous._session_seed_task is None)
+    incoming = ProjectDocument.create_new(parent_dir=tmp_path, project_name="Next project")
+    previous.document.update_project_name("Keep these unsaved edits")
+    prompts = []
+
+    def question(*args, **kwargs):
+        prompts.append(args[1])
+        assert len(prompts) == 1, "Project switching asked twice about the same draft"
+        return (QMessageBox.StandardButton.Discard if decision == "discard"
+                else QMessageBox.StandardButton.Cancel)
+
+    monkeypatch.setattr(QMessageBox, "question", question)
+    monkeypatch.setattr(QFileDialog, "getExistingDirectory",
+                        lambda *a, **kw: str(incoming.project_root))
+    previous._request_open_project()
+    if decision == "discard":
+        qtbot.waitUntil(lambda: controller._project_open_job is None)
+        qtbot.waitUntil(lambda: not previous.isVisible())
+        current = controller.main_window
+        qtbot.addWidget(current)
+        assert current.document.project_root == incoming.project_root
+        assert current.isVisible()
+    else:
+        assert controller._project_open_job is None
+        assert controller.main_window is previous
+        assert previous.isVisible() and previous.document.dirty
+    assert prompts == ["Unsaved Changes"]
+    # Test cleanup should not be mistaken for a second user handoff.
+    monkeypatch.setattr(QMessageBox, "question",
+                        lambda *a, **kw: QMessageBox.StandardButton.Discard)
+
+
+def test_handoff_failure_preserves_draft_and_normal_close_still_prompts(
+    qtbot, controller, tmp_path, monkeypatch,
+):
+    _, previous = _open_created_project(controller, qtbot, tmp_path, "Keep the draft")
+    qtbot.waitUntil(lambda: previous._session_seed_task is None)
+    previous.document.update_project_name("Unsaved before failed read")
+    prompts = []
+    errors = []
+    monkeypatch.setattr(QMessageBox, "question",
+                        lambda *a, **kw: prompts.append(a[1]) or QMessageBox.StandardButton.Discard)
+    monkeypatch.setattr(QFileDialog, "getExistingDirectory",
+                        lambda *a, **kw: str(tmp_path / "missing"))
+    monkeypatch.setattr("fpvs_studio.gui.controller._show_error", lambda *a: errors.append(a))
+    previous._request_open_project()
+    qtbot.waitUntil(lambda: controller._project_open_job is None)
+    assert errors and previous.document.dirty
+    assert controller.main_window is previous and previous.isVisible()
+    assert previous.close()
+    assert prompts == ["Unsaved Changes", "Unsaved Changes"]
+
+
+def test_edit_during_project_read_invalidates_discard_and_cancels_handoff(
+    qtbot, qapp, controller, tmp_path, monkeypatch,
+):
+    _, previous = _open_created_project(controller, qtbot, tmp_path, "Current draft")
+    qtbot.waitUntil(lambda: previous._session_seed_task is None)
+    incoming = ProjectDocument.create_new(parent_dir=tmp_path, project_name="Incoming draft")
+    entered, release = Event(), Event()
+    original = document_module.load_project_file
+    prompts = []
+
+    def question(*args, **kwargs):
+        prompts.append(args[1])
+        return (QMessageBox.StandardButton.Discard if len(prompts) == 1
+                else QMessageBox.StandardButton.Cancel)
+
+    def delayed_read(path):
+        entered.set()
+        assert release.wait(5)
+        return original(path)
+
+    previous.document.update_project_name("Initially discarded")
+    monkeypatch.setattr(QMessageBox, "question", question)
+    monkeypatch.setattr(QFileDialog, "getExistingDirectory",
+                        lambda *a, **kw: str(incoming.project_root))
+    monkeypatch.setattr(document_module, "load_project_file", delayed_read)
+    try:
+        previous._request_open_project()
+        qtbot.waitUntil(entered.is_set)
+        previous.document.update_project_name("New edits must survive")
+        release.set()
+        qtbot.waitUntil(lambda: len(prompts) == 2)
+        assert controller.main_window is previous
+        assert previous.isVisible() and previous.document.dirty
+        assert previous.document.project.meta.name == "New edits must survive"
+        from fpvs_studio.gui.main_window import StudioMainWindow
+
+        assert [w for w in qapp.topLevelWidgets()
+                if isinstance(w, StudioMainWindow) and w.isVisible()] == [previous]
+    finally:
+        release.set()
+        qtbot.waitUntil(lambda: controller._project_open_job is None)
+        monkeypatch.setattr(QMessageBox, "question",
+                            lambda *a, **kw: QMessageBox.StandardButton.Discard)

@@ -36,6 +36,14 @@ HTTPS and temporary-file cleanup run in app-owned jobs; close/shutdown cancels
 without discarding an uncertain submission. See [Experiment Library](EXPERIMENT_LIBRARY.md)
 for dependency closure, exclusions, bounds, review and manual smoke acceptance.
 
+## Project switching
+
+Project switches ask once for Save/Discard/Cancel and retain the current draft until
+the replacement loads. New edits invalidate that approval. If closing is declined,
+the replacement is disposed and the controller restores the original window.
+Failed reads and canceled pickers leave ordinary close/save checks intact. Late
+startup sharing status ignores disposed Welcome and project windows.
+
 ## Private experiment sharing
 
 View > Data Sharing & Comparison opens a two-tab dialog at `880x540`, minimum
@@ -51,6 +59,8 @@ comparison and exact receipts/mappings. Startup retries eligible pending reports
 for known projects without reopening them; waiting-for-connection status is passive
 and presentation cancels reporting across projects. Retained uploaded counts the
 active local cache. Archive uploaded history remains a local retry without HTTP.
+Active capture capacity is visible; Review captures offers confirmed local archival
+of unchanged terminal excluded evidence when capacity needs recovery.
 Copy protocol fingerprint supplies the hash for administrator project setup;
 View OpenFPVS project opens the private website dashboard after enrollment.
 See [Data sharing](DATA_SHARING.md) for exact fields, cohort limits and activation.

@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import hashlib
+import io
+import json
 import zipfile
 from contextlib import contextmanager
 from dataclasses import replace
 from threading import Event
+from urllib.error import HTTPError
 from uuid import uuid4
 
 import pytest
@@ -411,3 +414,66 @@ def test_default_upload_store_has_an_independent_origin_namespace(submission, mo
     assert namespaces == [client.service_url + "/submissions"]
     assert client._credential().token == "t" * 43
     assert upload_store.value.token != client._credential().token
+
+
+@pytest.mark.parametrize("status_code", [401, 403])
+@pytest.mark.parametrize("rejected_method", ["POST", "PUT", "GET"])
+def test_project_upload_rejection_preserves_both_identities_and_exact_retry(
+    submission, monkeypatch, status_code, rejected_method,
+):
+    client, prepared, status, _ = submission
+    prepared = replace(
+        prepared,
+        request=replace(
+            prepared.request, item_id=prepared.request.item_id.replace("reviewed-", "submitted-")
+        ),
+    )
+    status["item_id"] = prepared.request.item_id
+    enrolled = client.store.load()
+    upload_store = MemoryStore(connected=False)
+    requests = []
+    reject = True
+
+    class Opener:
+        def open(self, request, timeout):
+            requests.append(request)
+            assert request.headers["Authorization"] == f"Bearer {upload_store.value.token}"
+            if reject and request.method == rejected_method:
+                raise HTTPError(request.full_url, status_code, "synthetic denial", {}, io.BytesIO())
+            value = (
+                {"schema_version": "1.0", "submissions": []}
+                if request.method == "GET"
+                else {
+                    "schema_version": "1.0",
+                    "submission": {
+                        **status, "status": "pending" if request.method == "PUT" else "uploading",
+                    },
+                }
+            )
+            return Response(value, request.full_url)
+
+    # Exercise the real shared transport, not the submission fixture's response mocks.
+    monkeypatch.setattr(client, "_json_request", LibraryClient._json_request.__get__(client))
+    monkeypatch.setattr(client, "_response", LibraryClient._response.__get__(client))
+    monkeypatch.setattr("fpvs_studio.library.client.build_opener", lambda *_handlers: Opener())
+
+    def operation():
+        if rejected_method == "GET":
+            return list_submissions(client, upload_store=upload_store, project_uploads=True)
+        return submit_project(
+            client, prepared, author_name="Researcher", author_email="researcher@example.test",
+            upload_store=upload_store,
+        )
+
+    with pytest.raises(LibraryError, match="Project upload access was rejected"):
+        operation()
+    original_upload_identity = upload_store.load()
+    assert client.store.load() is enrolled
+    assert original_upload_identity is not None
+    reject = False
+    operation()
+    assert client.store.load() is enrolled
+    assert upload_store.load() is original_upload_identity
+    assert len(upload_store.saved) == 1
+    metadata = [json.loads(request.data) for request in requests if request.method == "POST"]
+    assert all(value == metadata[0] for value in metadata)

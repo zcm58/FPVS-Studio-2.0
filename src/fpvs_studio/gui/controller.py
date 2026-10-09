@@ -28,6 +28,7 @@ from PySide6.QtWidgets import (
     QProgressDialog,
     QWidget,
 )
+from shiboken6 import isValid
 
 from fpvs_studio import __version__
 from fpvs_studio.core.condition_template_profiles import (
@@ -893,7 +894,7 @@ class StudioController(QObject):
             if window.document.project_root.resolve() == root.resolve():
                 self.show_project_versions()
                 return
-            if not window.maybe_save_changes():
+            if not window.prepare_project_handoff():
                 return
         self.request_open_project(root, on_opened=self.show_project_versions)
 
@@ -905,7 +906,7 @@ class StudioController(QObject):
         if window is not None and (
             not window._allow_project_handoff_during_launch()
             or not window._allow_project_handoff_during_fixation_load()
-            or not window.maybe_save_changes()
+            or not window.prepare_project_handoff()
         ):
             finished(None)
             return
@@ -940,9 +941,12 @@ class StudioController(QObject):
         return self._data_sharing_controller
 
     def _show_startup_sharing_status(self, message: str) -> None:
-        if self.welcome_window is not None:
+        if self.welcome_window is not None and isValid(self.welcome_window):
             self.welcome_window.set_sharing_status(message)
-        if self.main_window is not None and not self.main_window.is_launch_busy():
+        if (
+            self.main_window is not None and isValid(self.main_window)
+            and not self.main_window.is_launch_busy()
+        ):
             self.main_window.statusBar().showMessage(message, 10000)
 
     def show_data_sharing(self) -> None:
@@ -1067,7 +1071,14 @@ class StudioController(QObject):
         if self.welcome_window is not None:
             self.welcome_window.hide()
         if previous_window is not None and previous_window is not target_window:
-            previous_window.close()
+            if not previous_window.close_for_project_handoff():
+                self.main_window = previous_window
+                target_window.hide()
+                target_window.deleteLater()
+                previous_window.show()
+                previous_window.raise_()
+                previous_window.activateWindow()
+                return
         self._project_versions().opened(target_window)
         self._data_sharing().opened(target_window)
 
@@ -1517,7 +1528,7 @@ class StudioController(QObject):
         )
 
     def _open_managed_project(self, dialog: ManageProjectsDialog, project_root: str) -> None:
-        if self.main_window is not None and not self.main_window.maybe_save_changes():
+        if self.main_window is not None and not self.main_window.prepare_project_handoff():
             return
         dialog.accept()
         self.request_open_project(Path(project_root))

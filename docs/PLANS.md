@@ -18,6 +18,7 @@ Use this page to find planning material before making feature-sized changes.
 
 Current implementation:
 
+- [Studio 2.4.4 minor bug fixes](exec-plans/active/release-2.4.4.md)
 - [Opt-in experiment data sharing and comparison](exec-plans/active/remote-experiment-results-reporting.md)
 - [Unicorn Hybrid Black recording support](exec-plans/active/unicorn-hybrid-black-support.md) (normal marker output enabled; full receiver, Toolbox and physical timing validation pending)
 - [Experiment Library: Phase 1 whole projects](exec-plans/active/private-experiment-library.md)

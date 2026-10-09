@@ -4,17 +4,23 @@ from __future__ import annotations
 
 import pytest
 from PySide6.QtCore import QRect, Qt
-from PySide6.QtWidgets import QCheckBox, QLabel, QLineEdit, QPushButton
+from PySide6.QtGui import QColor, QPalette
+from PySide6.QtWidgets import QCheckBox, QLabel, QLineEdit, QMessageBox, QPushButton
 from tests.gui.helpers import assert_visible_children_within_parent
 
+from fpvs_studio.data_sharing.storage import CaptureArchiveReview, ReviewedCapture
 from fpvs_studio.gui.data_sharing_dialog import ComparisonRow, DataSharingDialog
 
 
 @pytest.mark.parametrize("size", [(820, 480), (880, 540)])
-@pytest.mark.parametrize("state", ["empty", "ready", "busy", "error", "validation", "offline"])
-def test_sharing_dialog_fits_long_content_and_all_tabs(qtbot, size, state):
+@pytest.mark.parametrize(
+    "state", ["empty", "ready", "busy", "error", "validation", "offline", "full"]
+)
+@pytest.mark.parametrize("background", ["#202124", "#f4f7fb"])
+def test_sharing_dialog_fits_long_content_and_all_tabs(qtbot, size, state, background):
     dialog = DataSharingDialog(configured=True)
     qtbot.addWidget(dialog)
+    dialog.setPalette(QPalette(QColor(background)))
     profile = (
         "A registered experimental protocol with a long but realistic study title " * 2
         + "\nExperiment: " + "study-" * 12 + "\nVersion: " + "2026.10.05+reviewed-" * 3
@@ -27,8 +33,12 @@ def test_sharing_dialog_fits_long_content_and_all_tabs(qtbot, size, state):
         "the connection is available." if state == "error" else
         "Enter the lab-issued invitation code for the reviewed experiment version."
         if state == "validation" else "Waiting for connection. Reports are saved locally; "
-        "Studio will retry on its next launch." if state == "offline" else "Sharing is enabled.",
+        "Studio will retry on its next launch." if state == "offline" else
+        "Sharing capture history is full (512/512). "
+        "Use Review captures to archive excluded sessions."
+        if state == "full" else "Sharing is enabled.",
         pending=9999, held=9999, uploaded=9999,
+        captures=512 if state == "full" else 32, capture_limit=512, reviewable_captures=31,
     )
     dialog.project_id_edit.setText("01234567-89ab-cdef-0123-456789abcdef")
     dialog.set_project_url("https://openfpvs.com/projects/01234567-89ab-cdef-0123-456789abcdef")
@@ -53,6 +63,8 @@ def test_sharing_dialog_fits_long_content_and_all_tabs(qtbot, size, state):
     dialog.show()
     assert "Retained uploaded: 9,999" in dialog.counts_label.text()
     assert "cloud contributions remain" in dialog.counts_label.toolTip()
+    assert f"Captures: {512 if state == 'full' else 32}/512" in dialog.counts_label.text()
+    assert dialog.review_captures_button.isEnabled() == (state != "busy")
     assert dialog.profile_label.text() == profile.partition("\n")[0]
     assert dialog.profile_label.toolTip() == profile
     assert dialog.profile_label.isVisible() == (state not in {"empty", "validation"})
@@ -128,7 +140,8 @@ def test_busy_unconfigured_and_cancel_states(qtbot):
     assert "not configured" in dialog.status_label.text()
     dialog.invitation_edit.setText("private-code")
     assert not dialog.connect_button.isEnabled()
-    dialog.set_state(connected=True, enabled=True, profile="Study v1", status="Offline.")
+    dialog.set_state(connected=True, enabled=True, profile="Study v1", status="Offline.",
+                     reviewable_captures=1)
     assert dialog.enabled_checkbox.isEnabled()  # Off remains available without a service.
     assert dialog.disconnect_button.isEnabled()
     dialog.show()
@@ -136,6 +149,7 @@ def test_busy_unconfigured_and_cancel_states(qtbot):
     assert dialog.cancel_button.isVisible()
     for button in (
         dialog.connect_button, dialog.disconnect_button, dialog.retry_button, dialog.archive_button,
+        dialog.review_captures_button,
     ):
         assert not button.isEnabled()
     assert dialog.enabled_checkbox.isEnabled()  # Opt-out is available while a transfer is busy.
@@ -151,6 +165,36 @@ def test_busy_unconfigured_and_cancel_states(qtbot):
     assert "received reports with the owner" in dialog.disconnect_button.toolTip()
     assert "does not measure EEG quality" in dialog.comparison_table.toolTip()
     assert not dialog.comparison_notice.isVisible()
+
+
+@pytest.mark.parametrize("answer", [QMessageBox.StandardButton.No, QMessageBox.StandardButton.Yes])
+def test_excluded_capture_archive_confirmation_is_explicit_and_defaults_to_no(
+    qtbot, tmp_path, monkeypatch, answer,
+):
+    dialog = DataSharingDialog(configured=False)
+    qtbot.addWidget(dialog)
+    review = CaptureArchiveReview(tmp_path, (
+        ReviewedCapture("first", "a" * 64, "incomplete_session"),
+        ReviewedCapture("second", "b" * 64, "protocol_mismatch"),
+    ))
+    questions = []
+    monkeypatch.setattr(QMessageBox, "question", lambda *args: questions.append(args) or answer)
+    assert dialog.confirm_capture_archive(review) is (answer == QMessageBox.StandardButton.Yes)
+    question = questions[0]
+    assert question[1] == "Archive excluded captures?"
+    assert "Archive 2 excluded capture(s)" in question[2]
+    assert "Incomplete session: 1" in question[2] and "Protocol mismatch: 1" in question[2]
+    assert "captures needing recovery stay unchanged" in question[2]
+    assert question[-1] == QMessageBox.StandardButton.No
+    dialog.set_state(connected=False, enabled=False, profile="", status="Sharing is off.",
+                     captures=2, reviewable_captures=2)
+    actions = []
+    dialog.action_requested.connect(actions.append)
+    assert dialog.review_captures_button.isEnabled()  # Local review works offline and while off.
+    dialog.review_captures_button.click()
+    assert actions == ["review"]
+    dialog.set_state(connected=False, enabled=False, profile="", status="Archived.")
+    assert not dialog.review_captures_button.isEnabled()
 
 
 def test_project_setup_and_website_actions_are_explicit(qtbot):

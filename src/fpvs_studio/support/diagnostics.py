@@ -194,6 +194,22 @@ class DiagnosticLogging:
         global _logging_notice, _native_diagnostic_fd
         sink: logging.handlers.RotatingFileHandler | None = None
         try:
+            if self.capture_native:
+                try:
+                    self._crash_store = CrashStore(self.root)
+                    self._crash_store.prune_sessions()
+                    consent = self._crash_store.consent()
+                    self._crash_session = CrashSession(
+                        session_id=UUID(self.session_id), pid=os.getpid(),
+                        os_version=f"{platform.system()} {platform.release()}",
+                        installation_id=(
+                            consent.installation_id
+                            if consent.enabled and not consent.revoke_pending else None
+                        ),
+                    )
+                    self._crash_store.save_session(self._crash_session)
+                except (OSError, ValueError):
+                    _logging_notice = "Automatic crash capture could not access its local settings."
             folder = owned_folder(self.root, "logs")
             files = [
                 p
@@ -217,22 +233,6 @@ class DiagnosticLogging:
                 encoding="utf-8",
             )
             sink.setFormatter(_SafeFormatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
-            if self.capture_native:
-                try:
-                    self._crash_store = CrashStore(self.root)
-                    self._crash_store.prune_sessions()
-                    consent = self._crash_store.consent()
-                    self._crash_session = CrashSession(
-                        session_id=UUID(session_id), pid=os.getpid(),
-                        os_version=f"{platform.system()} {platform.release()}",
-                        installation_id=(
-                            consent.installation_id
-                            if consent.enabled and not consent.revoke_pending else None
-                        ),
-                    )
-                    self._crash_store.save_session(self._crash_session)
-                except (OSError, ValueError):
-                    _logging_notice = "Automatic crash capture could not access its local settings."
             if self.capture_native and not faulthandler.is_enabled():
                 self._native_file = (folder / f"session-{session_id}-native.log").open("xb")
                 faulthandler.enable(file=self._native_file, all_threads=True)
@@ -261,6 +261,15 @@ class DiagnosticLogging:
             _logging_notice = "Persistent application logs are unavailable on this machine."
         finally:
             self.ready.set()
+            self._close_native_capture()
+            # A full or unavailable log sink must not finish the running app's
+            # session. Drain the bounded queue until explicit app shutdown; a
+            # later abrupt exit still recovers the active snapshot honestly.
+            while not self.stop_event.is_set():
+                try:
+                    self.records.get(timeout=0.1)
+                except queue.Empty:
+                    pass
             if self._crash_session is not None and self._crash_store is not None:
                 try:
                     self._crash_session.state = (
@@ -270,7 +279,6 @@ class DiagnosticLogging:
                     self._crash_store.save_session(self._crash_session)
                 except (OSError, ValueError):
                     _logging_notice = "Automatic crash capture could not finish its local record."
-            self._close_native_capture()
             if sink is not None:
                 sink.close()
 

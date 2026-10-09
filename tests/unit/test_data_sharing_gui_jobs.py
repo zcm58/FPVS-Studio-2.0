@@ -20,6 +20,7 @@ from fpvs_studio.core.paths import filesystem_path, project_json_path
 from fpvs_studio.core.project_service import discover_project_roots
 from fpvs_studio.data_sharing.errors import DataSharingCancelled, DataSharingError
 from fpvs_studio.data_sharing.service import ComparisonView, ConditionAggregate, SharingView
+from fpvs_studio.data_sharing.storage import CaptureArchiveReview, ReviewedCapture
 
 
 class _Signal:
@@ -149,6 +150,14 @@ class _Backend:
         self.calls.append(("archive", root, fingerprint))
         return self.view
 
+    def review_captures_project(self, root, fingerprint, _cancel):
+        self.calls.append(("review", root, fingerprint))
+        return self.view
+
+    def archive_captures_project(self, root, fingerprint, _cancel, *, review):
+        self.calls.append(("archive_captures", root, review))
+        return replace(self.view, capture_review=None)
+
 
 def _coordinator(lifecycle, fingerprint, load_preferences):
     path = Path(__file__).resolve().parents[2] / "src/fpvs_studio/gui/data_sharing_controller.py"
@@ -171,6 +180,7 @@ def _coordinator(lifecycle, fingerprint, load_preferences):
         "discover_project_roots": discover_project_roots,
         "filesystem_path": filesystem_path, "project_json_path": project_json_path,
         "Path": Path,
+        "CaptureArchiveReview": CaptureArchiveReview,
     }
     exec(compile(ast.fix_missing_locations(module), str(path), "exec"), namespace)
     return namespace["DataSharingController"]
@@ -602,6 +612,50 @@ def test_launch_gate_is_immediate_when_idle_and_never_resumes_after_shutdown(sta
     assert launched == ["idle"]
 
 
+@pytest.mark.parametrize("network_running", [False, True])
+@pytest.mark.parametrize("completion_order", ["off_first", "network_first"])
+def test_launch_waits_for_durable_optout_and_any_network_job(
+    state, network_running, completion_order,
+):
+    state.backend.view = SharingView(SharingSettings(profile=_profile(), enabled=True))
+    state.controller.opened(state.window)
+    state.lifecycle.jobs[-1].run()
+    network_job = None
+    if network_running:
+        state.controller._request("sync")
+        network_job = state.lifecycle.jobs[-1]
+    state.controller._enable(False)
+    off_job = state.lifecycle.jobs[-1]
+    state.controller._close()  # Closing the modeless dialog must retain the durable opt-out.
+    launched = []
+    state.window.busy = True
+    state.controller.session_started(state.window, lambda: launched.append(True))
+    assert not launched and state.backend.view.settings.enabled
+    jobs = [off_job] + ([network_job] if network_job is not None else [])
+    if completion_order == "network_first":
+        jobs.reverse()
+    for job in jobs[:-1]:
+        job.run()
+        assert not launched
+    jobs[-1].run()
+    assert launched == [True] and not state.backend.view.settings.enabled
+
+
+def test_shutdown_during_optout_launch_wait_never_starts_presentation(state):
+    state.backend.view = SharingView(SharingSettings(profile=_profile(), enabled=True))
+    state.controller.opened(state.window)
+    state.lifecycle.jobs[-1].run()
+    state.controller._enable(False)
+    off_job = state.lifecycle.jobs[-1]
+    launched = []
+    state.window.busy = True
+    state.controller.session_started(state.window, lambda: launched.append(True))
+    state.lifecycle.is_shutting_down = True
+    state.lifecycle.shutdown_started.emit()
+    off_job.run()
+    assert not launched and not state.backend.view.settings.enabled
+
+
 def test_project_handoff_cancels_old_job_and_uses_new_root(state, tmp_path):
     state.controller.opened(state.window)
     old_job = state.lifecycle.jobs[-1]
@@ -677,6 +731,54 @@ def test_archiving_keeps_comparison_for_the_retained_latest_session(state):
     state.controller._request("archive")
     state.lifecycle.jobs[-1].run()
     assert state.controller._view.remote is remote
+
+
+@pytest.mark.parametrize("confirmed", [False, True])
+def test_capture_archive_requires_explicit_confirmation_of_reviewed_snapshot(state, confirmed):
+    review = CaptureArchiveReview(state.root.resolve(), (ReviewedCapture("synthetic-id", "a" * 64,
+                                                                         "incomplete_session"),))
+    state.backend.view = SharingView(SharingSettings(), capture_review=review)
+    state.controller.opened(state.window)
+    state.lifecycle.jobs[-1].run()
+    reviewed = []
+    state.controller.dialog = SimpleNamespace(
+        set_state=lambda **_values: None, set_project_url=lambda _url: None,
+        set_comparison=lambda *_args, **_values: None, set_busy=lambda *_args: None,
+        confirm_capture_archive=lambda value: reviewed.append(value) or confirmed,
+    )
+    fingerprints = len(state.fingerprints)
+    state.controller._request("review")
+    state.lifecycle.jobs[-1].run()
+    assert reviewed == [review] and len(state.fingerprints) == fingerprints
+    assert not any(call[0] == "archive_captures" for call in state.backend.calls)
+    if confirmed:
+        state.lifecycle.jobs[-1].run()
+        assert state.backend.calls[-1] == ("archive_captures", state.root, review)
+    assert not any(call[0] == "sync" for call in state.backend.calls)
+
+
+def test_capture_review_project_handoff_cannot_archive_in_another_project(state):
+    review = CaptureArchiveReview(state.root.resolve(), (ReviewedCapture("synthetic-id", "a" * 64,
+                                                                         "incomplete_session"),))
+    state.backend.view = SharingView(SharingSettings(), capture_review=review)
+    state.controller.opened(state.window)
+    state.lifecycle.jobs[-1].run()
+
+    def switch_project(_review):
+        replacement = _Window(state.root / "replacement", state.window.document.project)
+        state.current[0] = replacement
+        state.controller.opened(replacement)
+        return True
+
+    state.controller.dialog = SimpleNamespace(
+        set_state=lambda **_values: None, set_project_url=lambda _url: None,
+        set_comparison=lambda *_args, **_values: None, set_busy=lambda *_args: None,
+        confirm_capture_archive=switch_project, hide=lambda: None, deleteLater=lambda: None,
+    )
+    state.controller._request("review")
+    state.lifecycle.jobs[-1].run()
+    state.lifecycle.jobs[-1].run()
+    assert not any(call[0] == "archive_captures" for call in state.backend.calls)
 
 
 @pytest.mark.parametrize("mismatch", ["experiment_id", "experiment_version", "protocol_sha256"])

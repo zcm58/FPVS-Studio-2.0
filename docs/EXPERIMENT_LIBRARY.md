@@ -37,6 +37,11 @@ OS-protected upload token allows only this computer/user's uploads and status. I
 no Library or administrator access. **My Uploads** remains available after a
 restart with the same OS credential; resuming upload from retained preparation
 is currently an in-session operation. A new submission has a new UUID and review.
+**New Upload** uses the currently selected project's root, save operation, title and
+description, and requires fresh sharing permission. Earlier attempted preparation
+retains its exact bytes and author identity. Upload HTTP 401/403 reports an upload
+authorization failure while preserving its identity and unrelated Library enrollment;
+it cannot rotate credentials and retry under a different owner.
 
 After a complete upload, OpenFPVS emails the administrator with GitHub/admin links.
 Delivery failures preserve the submission and retry with a stable email idempotency
@@ -142,7 +147,7 @@ Closing Studio cancels app-owned work and defers teardown until the worker threa
 and clears recognized Library cache files. Network failure retains retryable connection
 state; an already-revoked credential can still be removed. Previously installed projects
 remain editable and usable offline. Disconnecting cannot remove copies on other machines.
-A protected request rejected with HTTP 401/403 removes that device's local credential
+A protected Library request rejected with HTTP 401/403 removes that device's local credential
 and returns the Library to its connection fields. Reconnecting creates a fresh token;
 it never reuses revoked access. A rejected invitation preserves its pending token for
 idempotent retry, and ordinary network failures preserve existing enrollment.

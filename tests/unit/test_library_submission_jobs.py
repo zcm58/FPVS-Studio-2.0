@@ -65,6 +65,12 @@ class Dialog:
     def set_state(self, *state):
         self.states.append(state)
 
+    def show(self):
+        pass
+
+    raise_ = show
+    activateWindow = show
+
 
 @pytest.fixture
 def state(tmp_path):
@@ -208,3 +214,73 @@ def test_prefilled_long_title_is_not_changed_and_validation_precedes_preparation
     assert not state.lifecycle.jobs
     assert not state.saves
     assert controller.dialog.status.text()
+
+
+@pytest.mark.parametrize("completed", [False, True])
+def test_new_upload_after_project_switch_uses_current_project_and_preserves_old_request(
+    state, completed,
+):
+    c = state.controller
+    old_root = c._source
+    c.show(project_root=old_root, title="Project A", description="A", save_project=lambda: False)
+    c._prepared, c._attempted, c._completed = state.prepared, True, completed
+    old_identity = ("Researcher A", "a@example.test")
+    c._identity = old_identity
+    new_root = old_root / "project-b"
+    saves = []
+    c.show(
+        project_root=new_root, title="Project B", description="B",
+        save_project=lambda: saves.append("B") or True,
+    )
+    assert c._prepared is state.prepared
+    assert c._identity == old_identity
+    assert c._source == old_root  # A retry still uses the original immutable request.
+    c._action("new")
+    assert c._retained_uploads[state.prepared.request.item_id] == (state.prepared, old_identity)
+    assert c._source == new_root
+    assert c.dialog.title_edit.text() == "Project B"
+    assert c.dialog.description.toPlainText() == "B"
+    assert not c.dialog.rights.isChecked()
+    c._action("submit")
+    assert not state.lifecycle.jobs
+    c.dialog.rights.setChecked(True)
+    c._action("submit")
+    state.lifecycle.jobs[0].run()
+    assert saves == ["B"]
+    assert state.calls[0][1] == new_root
+    assert state.calls[0][2].title == "Project B"
+
+
+def test_project_switch_before_preparation_requires_fresh_sharing_confirmation(state):
+    c = state.controller
+    c.show(project_root=c._source, title="A", description="A", save_project=lambda: True)
+    c.dialog.rights.setChecked(True)
+    c.show(
+        project_root=c._source / "project-b", title="B", description="B",
+        save_project=lambda: True,
+    )
+    assert not c.dialog.rights.isChecked()
+    c._action("submit")
+    assert not state.lifecycle.jobs
+
+
+def test_project_switch_during_cancelled_preparation_rebinds_when_worker_finishes(state):
+    c = state.controller
+    old_root = c._source
+    c.show(project_root=old_root, title="A", description="A", save_project=lambda: True)
+    c.dialog.rights.setChecked(True)
+    c._action("submit")
+    c.dialog.closing.emit()
+    saves = []
+    new_root = old_root / "project-b"
+    c.show(
+        project_root=new_root, title="B", description="B",
+        save_project=lambda: saves.append("B") or True,
+    )
+    state.lifecycle.jobs[0].finished.emit(_Result(cancelled=True))
+    assert c._source == new_root
+    assert c.dialog.title_edit.text() == "B"
+    assert not c.dialog.rights.isChecked()
+    c.dialog.rights.setChecked(True)
+    c._action("submit")
+    assert saves == ["B"]

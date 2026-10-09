@@ -322,6 +322,15 @@ verification; it is not claimed as a passing complete run. No Qt, HTTP, presenta
 or hardware was launched. The registered GUI checks cover both compact sizes and
 empty/ready/busy/error/validation/offline states; execution remains visible opt-in.
 
+## October 9 reliability follow-up
+
+The 2.4.4 reliability follow-up exposes the bounded capture capacity and adds Review
+captures for confirmed archival of unchanged terminal excluded evidence. The launch
+gate also drains local opt-out persistence before runtime starts. See
+[Data sharing](../../DATA_SHARING.md#local-persistence-and-credentials) for the
+canonical storage protections and archive workflow. Visible synthetic qualification
+and the complete non-Qt gate are recorded in the 2.4.4 release plan.
+
 ## Future work
 
 Public dataset publication, raw EEG/files, task-specific result schemas, longitudinal

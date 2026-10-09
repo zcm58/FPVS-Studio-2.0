@@ -36,7 +36,9 @@ persistence. Local Qt execution remains opt-in; no live service is used.
 
 Settings > Diagnostics offers **Automatically send crash reports**, on by default
 in desktop source. A saved off choice remains off across upgrades and restarts.
-The switch remains usable during network work. Registration happens in a worker
+The switch remains usable during network work. Local preference writes run independently
+of blocked HTTP, serialize repeated changes and finish during ordinary shutdown.
+Stale network/load results cannot restore an earlier preference. Registration happens in a worker
 without opening a browser, and closing Settings preserves the preference.
 An explicitly disabled reporting origin pauses registration and uploads.
 
@@ -78,6 +80,10 @@ registering a fresh generation after re-enabling. Network failure does not turn 
 enabled preference off, and remote revocation never resets a saved opt-out to on.
 Already sent/in-flight reports cannot be recalled. Network work is cancellable and
 application-owned; only local opt-out persistence may finish during shutdown.
+
+Exhausting the log budget or losing the log sink leaves the running session snapshot
+active until Studio actually closes. A later unexpected exit can still recover as
+an unclean shutdown even when bounded native/log capture has stopped.
 
 The separate feedback service needs additive migration `0005_crash_reporting.sql`
 and `CRASH_REPORTS_ENABLED=true` after deployment acceptance. Its scoped grant lasts

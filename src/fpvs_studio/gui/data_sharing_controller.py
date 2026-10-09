@@ -22,7 +22,7 @@ from fpvs_studio.data_sharing import service
 from fpvs_studio.data_sharing.client import DataSharingClient
 from fpvs_studio.data_sharing.errors import DataSharingCancelled, DataSharingError
 from fpvs_studio.data_sharing.service import ConditionAggregate, SharingView
-from fpvs_studio.data_sharing.storage import load_settings
+from fpvs_studio.data_sharing.storage import CaptureArchiveReview, load_settings
 from fpvs_studio.gui.data_sharing_dialog import ComparisonRow, DataSharingDialog
 from fpvs_studio.gui.update_lifecycle import (
     ProgressReporter,
@@ -37,6 +37,7 @@ if TYPE_CHECKING:
 _LOGGER = logging.getLogger(__name__)
 _RETRY_LIMIT = 4
 _STOPPING_MESSAGE = "Stopping uploads… An in-flight report may already have been received."
+ActionValue = str | bool | tuple[str, str] | CaptureArchiveReview | None
 
 
 class DataSharingController(QObject):
@@ -61,7 +62,7 @@ class DataSharingController(QObject):
         self._off_job: UpdateJob | None = None
         self._off_error = ""
         self._launch_waiter: tuple[StudioMainWindow, Callable[[], None]] | None = None
-        self._pending: tuple[str, str | bool | tuple[str, str] | None] | None = None
+        self._pending: tuple[str, ActionValue] | None = None
         self._generation = 0
         self._view: SharingView | None = None
         self._protocol = ""
@@ -227,7 +228,7 @@ class DataSharingController(QObject):
                 self._release_launch_gate()
 
     def _release_launch_gate(self) -> None:
-        if self._job is not None:
+        if self._job is not None or self._off_job is not None:
             return
         waiter, self._launch_waiter = self._launch_waiter, None
         if waiter is not None and self._current(waiter[0]):
@@ -238,7 +239,7 @@ class DataSharingController(QObject):
             self._retries = 0
             self._request("sync")
 
-    def _request(self, operation: str, value: str | bool | tuple[str, str] | None = None) -> None:
+    def _request(self, operation: str, value: ActionValue = None) -> None:
         window = self._window
         if window is None or not self._current(window):
             return
@@ -280,7 +281,7 @@ class DataSharingController(QObject):
                 raise DataSharingCancelled()
             fingerprint = (
                 cached_protocol
-                if operation in {"disconnect", "archive"} or (
+                if operation in {"disconnect", "archive", "review", "archive_captures"} or (
                     settings is not None and settings.profile is None and not settings.enabled
                 )
                 else protocol_fingerprint(project, root, cancelled=cancel.is_set)
@@ -303,8 +304,15 @@ class DataSharingController(QObject):
                     result = replace(
                         backend.load_view(root, fingerprint, cancel), error=str(error),
                     )
-            elif operation == "archive":
-                result = backend.archive_project(root, fingerprint, cancel)
+            elif operation in {"archive", "review", "archive_captures"}:
+                if operation == "review":
+                    result = backend.review_captures_project(root, fingerprint, cancel)
+                elif operation == "archive_captures":
+                    result = backend.archive_captures_project(
+                        root, fingerprint, cancel, review=cast(CaptureArchiveReview, value),
+                    )
+                else:
+                    result = backend.archive_project(root, fingerprint, cancel)
                 if (
                     previous_view is not None
                     and result.settings.profile == previous_view.settings.profile
@@ -355,6 +363,21 @@ class DataSharingController(QObject):
                             "Protocol fingerprint copied. Ask the OpenFPVS administrator "
                             "to enable this project."
                         )
+                    if operation == "review" and self.dialog is not None:
+                        review = self._view.capture_review
+                        if review is not None and review.captures:
+                            reviewer = self.dialog
+                            if (
+                                reviewer.confirm_capture_archive(review)
+                                and self._current(window) and generation == self._generation
+                                and self.dialog is reviewer and isValid(reviewer)
+                            ):
+                                self._request("archive_captures", review)
+                        else:
+                            self.dialog.status_label.setText(
+                                "No excluded captures can be archived. "
+                                "Recovery and report evidence stay protected."
+                            )
                     self._schedule_retry()
             elif current and self.dialog is not None:
                 if self._off_job is not None:
@@ -406,7 +429,7 @@ class DataSharingController(QObject):
                 QDesktopServices.openUrl(QUrl(
                     f"{DataSharingClient.configured().origin}/projects/{profile.project_id}"
                 ))
-        elif action in {"retry", "disconnect", "archive", "protocol"}:
+        elif action in {"retry", "disconnect", "archive", "protocol", "review"}:
             self._retries = 0
             self._request(action)
 
@@ -526,6 +549,8 @@ class DataSharingController(QObject):
             connected=profile is not None, enabled=view.settings.enabled,
             profile=profile_text, status=status, pending=view.pending_count,
             held=view.held_count, uploaded=view.uploaded_count,
+            captures=view.capture_count, capture_limit=view.capture_limit,
+            reviewable_captures=view.reviewable_capture_count,
         )
         dialog.set_project_url(
             f"{DataSharingClient.configured().origin}/projects/{profile.project_id}"

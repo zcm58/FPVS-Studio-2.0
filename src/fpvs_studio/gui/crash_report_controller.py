@@ -6,7 +6,7 @@ import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from threading import Event
+from threading import Event, RLock
 
 from PySide6.QtCore import QObject, QTimer, Signal, Slot
 from PySide6.QtWidgets import QApplication
@@ -38,6 +38,7 @@ class CrashReportController(QObject):
         self.setObjectName("fpvs_automatic_crash_controller")
         self._root = root
         self._store: CrashStore | None = None
+        self._store_lock = RLock()
         try:
             self.client = client if client is not None else ReportClient.configured()
         except ValueError:
@@ -47,8 +48,11 @@ class CrashReportController(QObject):
         self.busy = False
         self._consent: CrashConsent | None = None
         self._job: UpdateJob | None = None
+        self._preference_job: UpdateJob | None = None
         self._stage = ""
         self._requested: bool | None = None
+        self._preference_revision = 0
+        self._job_revision = 0
         self._delivery_notice = ""
         self._lifecycle = update_lifecycle(app)
         self._lifecycle.shutdown_started.connect(self._shutdown)
@@ -57,16 +61,19 @@ class CrashReportController(QObject):
         self._retry.timeout.connect(self._upload)
 
     def store(self) -> CrashStore:
-        if self._store is None:
-            self._store = CrashStore(self._root if self._root is not None else support_directory())
-        return self._store
+        with self._store_lock:
+            if self._store is None:
+                self._store = CrashStore(
+                    self._root if self._root is not None else support_directory()
+                )
+            return self._store
 
     def _notify(self, message: str) -> None:
         self.status = message
         self.changed.emit(self.enabled, self.status, self.busy)
 
     def start(self) -> None:
-        if self._job is None:
+        if self._job is None and self._preference_job is None:
             self._start("load", lambda cancel: self.store().consent())
 
     def _start(
@@ -75,6 +82,7 @@ class CrashReportController(QObject):
         if self._job is not None or (self._lifecycle.is_shutting_down and not saving):
             return
         self._stage = stage
+        self._job_revision = self._preference_revision
         self.busy = stage == "sync"
         self._job = self._lifecycle.start_task(
             lambda progress, cancel: callback(cancel),
@@ -87,20 +95,51 @@ class CrashReportController(QObject):
     @Slot(bool)
     def configure(self, enabled: bool) -> None:
         self.enabled = enabled  # The opt-out control stays usable during every network stage.
+        self._preference_revision += 1
         self._delivery_notice = ""
         if not enabled:
             self._retry.stop()
         if self._job is not None:
-            self._requested = enabled
             self._job.cancel()
-            self._notify("Saving your crash reporting preference…")
+        self._notify("Saving your crash reporting preference…")
+        if self._preference_job is not None:
+            self._requested = enabled
             return
         self._requested = None
-        self._notify("Saving your crash reporting preference…")
-        self._start(
-            "enable" if enabled else "disable",
-            lambda cancel: self.store().enable() if enabled else self.store().disable(),
-            saving=True,
+        # Local consent never waits for a blocked HTTP request. Serialize only
+        # preference writes, and keep them alive through ordinary shutdown.
+        self._preference_job = self._lifecycle.start_task(
+            lambda progress, cancel: self.store().enable() if enabled else self.store().disable(),
+            keep_success_on_cancel=True,
+            finish_on_shutdown=True,
+        )
+        self._preference_job.finished.connect(self._preference_done)
+
+    @Slot(object)
+    def _preference_done(self, result: UpdateTaskResult) -> None:
+        self._preference_job = None
+        if self._requested is not None:
+            requested, self._requested = self._requested, None
+            self.configure(requested)
+            return
+        if self._lifecycle.is_shutting_down:
+            return
+        if result.error is not None or result.cancelled:
+            self._preference_failed()
+            return
+        if isinstance(result.value, CrashConsent):
+            self._consent = result.value
+            self.enabled = self._consent.enabled
+        self._report_state()
+        self._upload()
+
+    def _preference_failed(self) -> None:
+        self.enabled = False
+        self._consent = None
+        self._retry.stop()
+        self._notify(
+            "Crash reporting could not save or read your preference. "
+            "No further reports will be sent during this launch."
         )
 
     def _sync(self, cancel: Event) -> _SyncResult:
@@ -128,7 +167,12 @@ class CrashReportController(QObject):
     @Slot()
     def _upload(self) -> None:
         pending_revocation = self._consent is not None and self._consent.revoke_pending
-        if (self.enabled or pending_revocation) and self.client.enabled and self._job is None:
+        if (
+            (self.enabled or pending_revocation)
+            and self.client.enabled
+            and self._job is None
+            and self._preference_job is None
+        ):
             self._start("sync", self._sync)
 
     @Slot(object)
@@ -136,22 +180,16 @@ class CrashReportController(QObject):
         stage = self._stage
         self._job = None
         self.busy = False
-        if self._requested is not None:
-            requested, self._requested = self._requested, None
-            self.configure(requested)
-            return
         if self._lifecycle.is_shutting_down:
+            return
+        if self._job_revision != self._preference_revision:
+            # A canceled load/network result predates the operator's choice.
+            self._upload()
             return
         if result.error is not None or result.cancelled:
             _LOGGER.warning("Automatic crash-report operation failed (%s)", stage)
-            if stage in ("load", "enable", "disable"):
-                self.enabled = False
-                self._consent = None
-                self._retry.stop()
-                self._notify(
-                    "Crash reporting could not save or read your preference. "
-                    "No further reports will be sent during this launch."
-                )
+            if stage == "load":
+                self._preference_failed()
                 return
             self._retry.start()
             self._delivery_notice = (
@@ -170,6 +208,11 @@ class CrashReportController(QObject):
             self.enabled = self._consent.enabled
             if result.value.connected:
                 self._delivery_notice = ""
+        self._report_state()
+        if stage == "load":
+            self._upload()
+
+    def _report_state(self) -> None:
         pending_revocation = self._consent is not None and self._consent.revoke_pending
         if self.enabled or pending_revocation:
             self._retry.start()
@@ -184,23 +227,12 @@ class CrashReportController(QObject):
             or "On. Sanitized crash reports are sent at the next startup. "
             "You can turn this off here at any time."
         )
-        if stage in ("load", "enable", "disable"):
-            self._upload()
 
     @Slot()
     def _shutdown(self) -> None:
         self._retry.stop()
-        if self._job is not None and self._stage not in ("enable", "disable"):
+        if self._job is not None:
             self._job.cancel()
-        if self._requested is not None:
-            requested, self._requested = self._requested, None
-            self._lifecycle.start_task(
-                lambda progress, cancel: (
-                    self.store().enable() if requested else self.store().disable()
-                ),
-                finish_on_shutdown=True,
-                keep_success_on_cancel=True,
-            )
 
 
 def crash_report_controller() -> CrashReportController:

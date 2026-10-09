@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
     QHeaderView,
     QLabel,
     QLineEdit,
+    QMessageBox,
     QPushButton,
     QSizePolicy,
     QTableWidget,
@@ -24,6 +25,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from fpvs_studio.data_sharing.storage import CaptureArchiveReview
 from fpvs_studio.gui.components import (
     DialogHeader,
     apply_dialog_theme,
@@ -60,6 +62,7 @@ class DataSharingDialog(QDialog):
         self._busy = False
         self._updating = False
         self._project_url = ""
+        self._reviewable_captures = 0
         layout = QVBoxLayout(self)
         layout.setContentsMargins(20, 16, 20, 16)
         layout.setSpacing(8)
@@ -149,6 +152,15 @@ class DataSharingDialog(QDialog):
         self.website_button.clicked.connect(lambda: self.action_requested.emit("website"))
         mark_secondary_action(self.website_button)
         project_actions.addWidget(self.website_button)
+        self.review_captures_button = QPushButton("Review captures…", self)
+        self.review_captures_button.setObjectName("sharing_review_captures")
+        self.review_captures_button.setToolTip(
+            "Review excluded sessions before archiving their local reporting evidence. "
+            "Research results, queued reports and captures needing recovery are preserved."
+        )
+        self.review_captures_button.clicked.connect(lambda: self.action_requested.emit("review"))
+        mark_secondary_action(self.review_captures_button)
+        project_actions.addWidget(self.review_captures_button)
         project_actions.addStretch(1)
         sharing_layout.addLayout(project_actions)
         sharing_layout.addStretch(1)
@@ -227,9 +239,11 @@ class DataSharingDialog(QDialog):
     def set_state(
         self, *, connected: bool, enabled: bool, profile: str, status: str,
         pending: int = 0, held: int = 0, uploaded: int = 0,
+        captures: int = 0, capture_limit: int = 512, reviewable_captures: int = 0,
     ) -> None:
         self._connected, self._enabled = connected, enabled
         self._loaded = True
+        self._reviewable_captures = reviewable_captures
         self._updating = True
         self.enabled_checkbox.setChecked(enabled)
         self._updating = False
@@ -237,13 +251,33 @@ class DataSharingDialog(QDialog):
         self.profile_label.setToolTip(profile)
         self.status_label.setText(status)
         self.counts_label.setText(
-            f"Pending: {pending:,} · Held: {held:,} · Retained uploaded: {uploaded:,}"
+            f"Pending: {pending:,} · Held: {held:,} · Retained uploaded: {uploaded:,} "
+            f"· Captures: {captures:,}/{capture_limit:,}"
         )
         self.counts_label.setToolTip(
             "Uploaded counts the retained local comparison cache. Older accepted reports "
             "are archived locally; their cloud contributions remain."
+            " Active captures include excluded and unfinished sessions. Review captures "
+            "archives only confirmed excluded evidence to free capture capacity."
         )
         self._update_controls()
+
+    def confirm_capture_archive(self, review: CaptureArchiveReview) -> bool:
+        reasons = "\n".join(
+            f"{reason.replace('_', ' ').capitalize()}: {count:,}"
+            for reason, count in review.reason_counts
+        )
+        answer = QMessageBox.question(
+            self, "Archive excluded captures?",
+            f"Archive {len(review.captures):,} excluded capture(s) from this experiment's "
+            f"local reporting history?\n\n{reasons}\n\n"
+            "These sessions were not eligible for sharing. Their evidence will be kept "
+            "in the local archive. Research results, queued reports, accepted receipts "
+            "and captures needing recovery stay unchanged.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        return answer == QMessageBox.StandardButton.Yes
 
     def set_comparison(
         self, rows: Sequence[ComparisonRow], *, scope: str, notice: str, details: str,
@@ -289,6 +323,9 @@ class DataSharingDialog(QDialog):
         )
         self.retry_button.setEnabled(ready and self._connected and self._enabled)
         self.archive_button.setEnabled(not self._busy and self._loaded)
+        self.review_captures_button.setEnabled(
+            not self._busy and self._loaded and self._reviewable_captures > 0
+        )
         self.cancel_button.setVisible(self._busy)
 
     def _enabled_changed(self, enabled: bool) -> None:

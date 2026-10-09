@@ -355,6 +355,8 @@ def test_real_worker_keeps_gui_responsive_and_retains_opt_out_after_settings_clo
     tmp_path,
     monkeypatch,
 ):
+    from uuid import uuid4
+
     from PySide6.QtCore import QThread, QTimer
 
     from fpvs_studio.gui.update_lifecycle import UpdateLifecycle
@@ -365,6 +367,14 @@ def test_real_worker_keeps_gui_responsive_and_retains_opt_out_after_settings_clo
     qapp.setQuitOnLastWindowClosed(False)
     lifecycle = UpdateLifecycle(qapp, quit_callback=lambda: None)
     monkeypatch.setattr(qapp, "_fpvs_update_lifecycle", lifecycle, raising=False)
+    monkeypatch.setattr("fpvs_studio.support.crash_reporting.process_alive", lambda pid: False)
+    store = CrashStore(tmp_path)
+    consent = store.consent()
+    store.save_session(CrashSession(
+        session_id=uuid4(), pid=123456, os_version="Synthetic OS",
+        installation_id=consent.installation_id,
+    ))
+    assert len(store.recover()) == 1
 
     def transport(method, url, data, headers):
         assert QThread.currentThread() != qapp.thread()
@@ -396,6 +406,13 @@ def test_real_worker_keeps_gui_responsive_and_retains_opt_out_after_settings_clo
         assert value.busy and dialog.crash_reports_checkbox.isEnabled()
         dialog.crash_reports_checkbox.click()
         assert not value.enabled
+        qtbot.waitUntil(lambda: value._preference_job is None, timeout=5000)
+        assert not release.is_set()  # The HTTP request is still blocked.
+        assert lifecycle.has_active_jobs
+        restarted_store = CrashStore(tmp_path)
+        assert not restarted_store.consent().enabled
+        assert restarted_store.pending() == []
+        assert restarted_store.recover() == []  # A crash/restart cannot restore reporting.
         dialog.close()
         release.set()
         qtbot.waitUntil(lambda: not lifecycle.has_active_jobs, timeout=5000)
@@ -412,3 +429,35 @@ def test_real_worker_keeps_gui_responsive_and_retains_opt_out_after_settings_clo
         value.deleteLater()
         lifecycle.deleteLater()
         qapp.setQuitOnLastWindowClosed(original_auto_quit)
+
+
+def test_shutdown_preserves_latest_choice_while_a_preference_write_is_pending(
+    tmp_path, monkeypatch,
+):
+    value, lifecycle = controller(tmp_path, monkeypatch, lambda *args: pytest.fail("HTTP"))
+    value.configure(True)
+    first_save = lifecycle.jobs[-1][0]
+    value.configure(False)
+    assert len(lifecycle.jobs) == 1
+    lifecycle.is_shutting_down = True
+    lifecycle.shutdown_started.emit()
+    first_save.complete()
+    last_save, options = lifecycle.jobs[-1]
+    assert options["finish_on_shutdown"]
+    assert len(lifecycle.jobs) == 2
+    last_save.complete()
+    assert not CrashStore(tmp_path).consent().enabled
+    value.deleteLater()
+
+
+def test_stale_successful_load_cannot_restore_reporting_after_opt_out(tmp_path, monkeypatch):
+    previous = CrashStore(tmp_path).consent()
+    value, lifecycle = controller(tmp_path, monkeypatch, lambda *args: pytest.fail("HTTP"))
+    value.start()
+    load = lifecycle.jobs[-1][0]
+    value.configure(False)
+    lifecycle.jobs[-1][0].complete()  # Save independently of the old load's completion.
+    assert not value.enabled and not CrashStore(tmp_path).consent().enabled
+    load.finished.emit(UpdateTaskResult(value=previous))
+    assert not value.enabled and not CrashStore(tmp_path).consent().enabled
+    value.deleteLater()

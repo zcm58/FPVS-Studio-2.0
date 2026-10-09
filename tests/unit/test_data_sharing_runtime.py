@@ -1,5 +1,7 @@
 """Reporting boundaries: completion proof, research commits, crashes and local-only runs."""
 
+from threading import Event
+from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
@@ -105,6 +107,43 @@ def test_local_testing_with_full_capture_history_preserves_existing_capture(
     assert intent_path.read_bytes() == before
     assert len(tuple((root / "logs/data-sharing/intents").glob("*.json"))) == 1
     assert not any("capture could not be initialized" in warning for warning in summary.warnings)
+
+
+def test_aborted_capture_capacity_is_actionable_and_review_restores_new_reporting(
+    execution, monkeypatch,
+):
+    from fpvs_studio.data_sharing.service import (
+        archive_captures_project,
+        load_view,
+        review_captures_project,
+    )
+
+    root, plan = execution
+    monkeypatch.setattr(data_sharing, "MAX_RECORDS", 1)
+    capture = data_sharing.SharingCapture.begin(
+        root, plan, participant_number="0007", participant_session_number=1,
+        runtime_options={"sharing_protocol_sha256": "a" * 64},
+    )
+    capture.terminal(SimpleNamespace(aborted=True))
+    original = next((root / "logs/data-sharing/intents").glob("*.json")).read_bytes()
+    view = load_view(root, "a" * 64, Event())
+    assert view.settings.enabled and view.status == "failed"
+    assert view.capture_count == view.capture_limit == view.reviewable_capture_count == 1
+    assert "history is full" in view.error and "Review captures" in view.error
+    before_archive = execute(execution, participant="0008")
+    assert not before_archive.aborted and not list_records(root)
+    assert any("capture could not be initialized" in warning for warning in before_archive.warnings)
+    review = review_captures_project(root, "a" * 64, Event()).capture_review
+    assert review is not None
+    restored = archive_captures_project(root, "a" * 64, Event(), review=review)
+    assert restored.capture_count == 0 and restored.reviewable_capture_count == 0
+    archived = root / "logs/data-sharing/archive" / capture.intent.report_id / "capture.json"
+    assert archived.read_bytes() == original
+    after_archive = execute(execution, participant="0009")
+    assert not after_archive.aborted and len(list_records(root)) == 1
+    assert not any(
+        "capture could not be initialized" in warning for warning in after_archive.warnings
+    )
 
 
 @pytest.mark.parametrize(
