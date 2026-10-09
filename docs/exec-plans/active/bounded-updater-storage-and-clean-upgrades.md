@@ -401,6 +401,13 @@ pending until a suitable environment is available.
 
 ## Verification
 
+The installation-percentage follow-up was published in
+[Studio 2.4.3](../completed/release-2.4.3.md) on 2026-10-09, with a full installer
+and authenticated direct 2.4.2 patch. Exact payload reconstruction, frozen updater
+source, asset digests, signed GitHub release/assets and live updater selection passed.
+Registered Qt, visible GUI and actual installed-update checks remain unrun; the
+earlier Windows lifecycle acceptance below remains separate.
+
 Run the `updates`, `gui`, and `packaging` focused scopes, followed by repo precommit.
 Run registered Qt coverage only when the user approves a safe visible environment.
 Complete the documented Windows fresh-install, update-over-old, and uninstall smoke
