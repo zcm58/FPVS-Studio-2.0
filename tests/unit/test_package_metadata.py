@@ -643,7 +643,10 @@ def test_updater_is_self_contained_windowed_and_keeps_a_narrow_dependency_graph(
 ) -> None:
     actual = _evaluate_updater_spec(
         monkeypatch,
-        ["fpvs_studio", "fpvs_studio.updates.models", "fpvs_studio.gui.updater_window"],
+        [
+            "fpvs_studio", "fpvs_studio.updates.models", "fpvs_studio.gui.updater_window",
+            "fpvs_studio.gui.update_lifecycle", "fpvs_studio.gui.thread_completion",
+        ],
     )
     entries, analysis = actual["calls"]["analysis"]
     assert entries == [str(REPO_ROOT / "src" / "fpvs_studio" / "updater_main.py")]

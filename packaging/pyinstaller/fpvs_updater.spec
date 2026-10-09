@@ -18,6 +18,7 @@ allowed_gui_modules = {
     "fpvs_studio.gui.updater_window",
     "fpvs_studio.gui.update_dialog",
     "fpvs_studio.gui.update_lifecycle",
+    "fpvs_studio.gui.thread_completion",
     "fpvs_studio.gui.components",
     "fpvs_studio.gui.design_system",
 }

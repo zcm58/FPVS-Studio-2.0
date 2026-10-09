@@ -36,7 +36,7 @@ remain separate and must not be claimed as passed.
 - [x] Confirm latest public release and crash-fix ancestry; fetch current remote refs.
 - [x] Run initial packaging focused checks (181 passed).
 - [x] Authenticate/download/extract the exact 2.4.1 baseline and preserve its inventory.
-- [ ] Bump/verify 2.4.2 metadata, commit and push the exact build candidate.
+- [x] Bump/verify 2.4.2 metadata, commit and push the initial build candidate.
 - [ ] Build full installer, direct patch, update JSON and checksum sidecars.
 - [ ] Verify frozen source/native inputs, complete ownership and patch reconstruction.
 - [ ] Run approved visible packaged startup/shutdown and updater smoke checks.
@@ -65,3 +65,12 @@ Version 2.4.2 source/editable metadata and the candidate packaging focused check
 pass (181 tests); documentation focused passes ten. Runtime constraints are derived
 from the authenticated baseline's package metadata, including Qt 6.11.2 and
 cryptography 50.0.2. Evidence remains in ignored `build/release-2.4.2-baseline/`.
+
+Initial candidate `33e6a13` and the crash/merge commits are pushed. Additional frozen
+version inspection found idna 3.18 on this host versus baseline 3.20; the packaging
+environment was aligned before rebuilding. All 29 checked package versions now match
+the authenticated baseline. The interrupted build/verification logs are retained.
+The Studio executable builds successfully. The independent updater's packaging guard
+needed the shared `gui.thread_completion` module added to its narrow GUI allowlist;
+the scientific/runtime exclusions remain intact. Rebuild the updater and installer
+with that packaging correction before publication.
