@@ -52,7 +52,7 @@ The PyInstaller spec includes package metadata in the bundled app.
 The package distribution name is `fpvs-studio`; the GUI and executable still use the
 display name `FPVS Studio`.
 
-For the current release candidate, use the PEP 440-compatible package version `2.4.2`.
+For the current release package, use the PEP 440-compatible package version `2.4.2`.
 The GitHub Release title can use a friendlier beta label, but the release tag and
 installer filename must use the exact package version.
 
@@ -60,8 +60,8 @@ Write release notes as bullet points, with one or two sentences per major change
 Keep verification summaries and installer instructions out of the release notes;
 retain audit evidence and check boundaries in the release record instead.
 
-The [v2.4.2 release plan](exec-plans/active/release-2.4.2.md) tracks the startup crash
-fixes candidate and its artifact checks. The
+The [v2.4.2 release record](exec-plans/completed/release-2.4.2.md) tracks the published
+startup crash fixes and their artifact checks. The
 [v2.4.1 release record](exec-plans/completed/release-2.4.1.md) tracks the signed
 experiment transfer security release and its exact artifact/native checks.
 The previous [v2.4.0 release record](exec-plans/completed/release-2.4.0.md) records the
@@ -148,6 +148,9 @@ dependencies, so damage to Studio's `_internal` directory does not prevent the h
 from starting. It does not compile Studio on the user's machine. The ordinary Inno
 installer supplies the **FPVS Studio Update & Repair** Start Menu shortcut when the
 helper is present and shortcuts have not been disabled.
+
+The repair GUI uses the shared worker completion owner in `gui/thread_completion.py`;
+keep that module in the updater spec's narrow GUI allowlist.
 
 Studio's `HelperClient` and the Start Menu entry stage the helper outside the installation
 before running it. `%LOCALAPPDATA%\FPVS Studio\updater-helper` contains a flat set of
@@ -280,7 +283,7 @@ Then build the setup EXE:
 Expected output for the current package:
 
 ```text
-dist\installer\FPVS-Studio-Setup-2.2.5.exe
+dist\installer\FPVS-Studio-Setup-2.4.2.exe
 ```
 
 The installer build validates that the PyInstaller bundle has an `_internal` folder and

@@ -2,8 +2,8 @@
 
 Status: Active
 
-Source complete; visible synthetic Qt verification passes. Production activation
-remains pending.
+Desktop source ships in Studio 2.4.2; visible synthetic Qt verification passes.
+Production service activation remains pending.
 
 Date: 2026-10-08
 
@@ -85,8 +85,9 @@ were removed. Screenshots/snapshots are retained under that folder's `browser-ch
 
 At initial source acceptance, local Qt execution and live submission/email/publication
 were unperformed. The October 9 integration verification below records subsequent
-visible Qt acceptance. No live submission/email/publication or Studio installer release
-has been made. Initial production preflight
+visible Qt acceptance. Live submission/email/publication remain unperformed; the
+desktop changes ship in [Studio 2.4.2](../completed/release-2.4.2.md).
+Initial production preflight
 returned Cloudflare D1 code 7403; a later retry using the same limited login succeeded
 without changing account scopes. Only migration 0014 is pending. The existing D1
 database was exported to sibling ignored private backup

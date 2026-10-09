@@ -18,7 +18,6 @@ Use this page to find planning material before making feature-sized changes.
 
 Current implementation:
 
-- [Studio 2.4.2 crash fixes release](exec-plans/active/release-2.4.2.md)
 - [Opt-in experiment data sharing and comparison](exec-plans/active/remote-experiment-results-reporting.md)
 - [Unicorn Hybrid Black recording support](exec-plans/active/unicorn-hybrid-black-support.md) (normal marker output enabled; full receiver, Toolbox and physical timing validation pending)
 - [Experiment Library: Phase 1 whole projects](exec-plans/active/private-experiment-library.md)
@@ -37,6 +36,8 @@ the current contracts do not explain why a landed decision exists.
 Recent completion: [Studio crash reliability](exec-plans/completed/studio-crash-reliability.md)
 (native worker cleanup, shutdown, startup recovery and local crash diagnostics; packaged
 and physical runtime acceptance remain separate).
+
+Recent completion: [Studio 2.4.2 startup crash fixes release](exec-plans/completed/release-2.4.2.md).
 
 Recent completion: [Reporting upload lifecycle](exec-plans/completed/long-running-results-reporting.md)
 (automatic local retirement and offline startup retry; visible/live qualification

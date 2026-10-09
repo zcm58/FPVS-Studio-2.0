@@ -92,6 +92,11 @@ not require another desktop or visible Qt run.
 
 ## Delivery status
 
+The desktop source now ships in the public
+[Studio 2.4.2 release](../completed/release-2.4.2.md). The independent service remains
+inactive: no new Cloudflare authentication, migration, deployment or live email test
+was performed during that release. Its rollout remains the open item in this plan.
+
 The earlier opt-in desktop and independent service source were implemented in their
 working trees. Desktop and service source now implement the requested opt-out workflow,
 including browser-free automatic registration.
