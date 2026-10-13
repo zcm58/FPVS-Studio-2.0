@@ -382,15 +382,14 @@ fixtures, repeated/boundary/rate tests, loss evidence, and the no-purchase timin
 `candidate_receiver_validation_pending`: a Studio software contract awaiting the
 companion Toolbox validation, not a qualified interchange claim.
 
-When Unicorn is selected, each execution writes
+Each BioSemi/Unicorn execution writes
 `logs/acquisition/<execution_id>.acquisition-v1.json` beneath the active project in
 both full and compact modes. `execution_id` is a new UUID, so repeat visits or reusing
 a compiled plan cannot overwrite an earlier execution. The payload carries Studio
 version, project ID, participant number, reserved visit number (when applicable),
 session ID, ordered run/condition IDs and names. Full mode keeps its existing event
 and trigger files as well. Compact evidence survives successful removal of recovery
-checkpoints and does not create a detailed `runs/` directory. BioSemi exports do not
-gain this sidecar.
+checkpoints and does not create a detailed `runs/` directory.
 
 The recording snapshot records selected/effective transport, legacy, local or project selection
 source, loopback endpoint, operator-reported recording association and Recorder version
@@ -418,6 +417,49 @@ from compiled intent or infer a successful recording from a completed Studio ses
 
 These software checks do not prove physical display onset timing. Lab timing precision
 still needs BioSemi/BDF and photodiode validation on the actual machine and display.
+
+### Completed Toolbox handoff
+
+Core's `recording_hardware.py` owns the hardware declarations. Saved
+`ProjectSettings.recording.acquisition_profile`, `.fpvsconfig`'s
+`toolbox.acquisition_profile`, runtime recording snapshots and acquisition evidence
+use the same exact Toolbox IDs/versions. Legacy missing fields stay readable;
+recording-setting saves add the declaration without rewriting an opened project.
+The existing project/config/execution envelope versions are retained because this is
+optional metadata. `toolbox.handoff_schema_version` is `"1.0"`.
+
+| Recording choice | Profile / montage / decoder version 1.0 | Reference |
+| --- | --- | --- |
+| BioSemi ActiveTwo 64 | `biosemi_active_two_64` / `biosemi64` / `biosemi_edge` | `biosemi_exg_pair_then_average` |
+| Unicorn Hybrid Black | `unicorn_hybrid_black` / `unicorn8` / `unicorn_sample` | `average_scalp` |
+
+The Unicorn definition declares `EEG 1` through `EEG 8` as Fz, C3, Cz, C4, Pz,
+PO7, Oz, PO8 using `source_to_canonical` and `label_mapping_evidence.status="declared"`.
+This is the selected factory wiring contract, not measured electrode qualification.
+No map is guessed from transport at Toolbox ingestion. Raw-file marker/channel,
+sample integrity, native sampling and timing checks remain Toolbox responsibilities.
+
+For current native GUI session launches, the launch worker exports a neutral
+prelaunch config snapshot. After successful local research finalization, runtime
+atomically writes `logs/acquisition/<execution_id>-completed.fpvsconfig`, in both full
+and compact modes. `completed_session` retains the realized plan/order/seeds, explicit
+execution/participant/visit/session identity and the complete `acquisition_evidence`
+with actual `sent`/`error` attempts and clock semantics. Its `source_run_dir` points
+to `logs/acquisition`; compact mode does not invent a detailed run directory.
+Aborted/interrupted and Test/Pilot sessions retain evidence but produce no completed
+recording handoff. A stale externally supplied compiled plan has no current native
+snapshot; callers may explicitly provide a matching `LaunchSettings.toolbox_handoff_config`.
+
+`toolbox.experiment_id` is the explicit Library item ID or authored project ID;
+`experiment_version` uses the installed Library version when known. A current matching
+results enrollment adds `experiment_id`, `experiment_version` and `study_id` (the
+OpenFPVS project UUID) when its protocol matches, including when sharing is off.
+The prelaunch worker computes `protocol_sha256` from the authored protocol and actual
+assets independently of contribution preferences. Missing identity stays missing,
+never latest or guessed. Enrollment settings and credentials remain excluded from
+authored config.
+Toolbox verifies the metadata and lets the researcher register the raw recording;
+Studio does not start/stop Recorder, read EEG, overwrite raw files or perform HTTP.
 
 ## Fixation logging
 

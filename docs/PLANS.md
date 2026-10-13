@@ -18,7 +18,9 @@ Use this page to find planning material before making feature-sized changes.
 
 Current implementation:
 
-- [Opt-in experiment data sharing and comparison](exec-plans/active/remote-experiment-results-reporting.md)
+- [Studio 2.4.5 release](exec-plans/active/release-2.4.5.md)
+- [Studio to Toolbox and OpenFPVS integration](exec-plans/active/studio-toolbox-integration.md)
+- [Experiment data sharing and comparison](exec-plans/active/remote-experiment-results-reporting.md)
 - [Unicorn Hybrid Black recording support](exec-plans/active/unicorn-hybrid-black-support.md) (normal marker output enabled; full receiver, Toolbox and physical timing validation pending)
 - [Experiment Library: Phase 1 whole projects](exec-plans/active/private-experiment-library.md)
 - [Cloudflare bug reporting: desktop implementation](exec-plans/active/cloudflare-bug-reporting.md)

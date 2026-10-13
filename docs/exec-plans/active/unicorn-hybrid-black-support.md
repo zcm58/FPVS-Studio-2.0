@@ -13,6 +13,12 @@ and physical timing qualification remain pending; exports retain that evidence s
 Automated verification uses fakes. Hardware and timing acceptance remain separate from
 software checks.
 
+The 2026-10-12 [Studio/Toolbox integration decision](studio-toolbox-integration.md)
+adds a core-owned built-in hardware declaration registry and automatic completed-session
+config handoffs for both existing recording choices. This supersedes the earlier
+registry exclusion only for metadata declarations; Recorder still owns EEG acquisition.
+The declared factory montage does not qualify measured wiring or physical timing.
+
 ## Outcome And User Decisions
 
 Allow the existing Unicorn Hybrid Black headset to record experiments presented by

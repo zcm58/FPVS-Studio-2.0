@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from typing import cast
 
 from fpvs_studio.core.execution import RecordingSnapshot
+from fpvs_studio.core.recording_hardware import acquisition_profile_for_recording
 from fpvs_studio.triggers.serial_backend import resolve_serial_port
 
 UNICORN_VALIDATION_NOTE = (
@@ -96,11 +98,12 @@ def recording_snapshot(options: Mapping[str, object] | None = None) -> Recording
 
     values = options or {}
     effective = validate_recording_configuration(values)
-    selected = values.get("recording_backend") or "serial"
+    selected = cast(str, values.get("recording_backend") or "serial")
     serial_port = values.get("serial_port")
     return RecordingSnapshot.model_validate(
         {
             "selected_backend": selected,
+            "acquisition_profile": acquisition_profile_for_recording(selected),
             "effective_backend": effective,
             "selection_source": (
                 "legacy_project"

@@ -39,7 +39,9 @@ from fpvs_studio.core.enums import (
     StimulusVariant,
     TriggerBackendKind,
 )
+from fpvs_studio.core.execution import AcquisitionEvidence
 from fpvs_studio.core.experiment_categories import require_valid_experiment_category
+from fpvs_studio.core.library_origin import load_library_origin
 from fpvs_studio.core.models import (
     AttentionalBlinkSettings,
     AttentionalBlinkStreamSettings,
@@ -78,7 +80,11 @@ from fpvs_studio.core.paths import (
 )
 from fpvs_studio.core.presentation import legacy_project_presentation_settings
 from fpvs_studio.core.project_service import ProjectScaffold
-from fpvs_studio.core.serialization import read_json_file, save_project_file
+from fpvs_studio.core.recording_hardware import (
+    AcquisitionProfile,
+    acquisition_profile_for_recording,
+)
+from fpvs_studio.core.serialization import atomic_text_write, read_json_file, save_project_file
 from fpvs_studio.core.session_plan import SessionPlan
 from fpvs_studio.core.task_assets import owned_image_references
 from fpvs_studio.core.task_models import (
@@ -280,6 +286,12 @@ class ProjectConfigToolbox(FPVSBaseModel):
     project_title: str
     event_map: dict[str, StrictInt] = Field(default_factory=dict)
     oddball_trigger_code: StrictInt = Field(ge=1, le=255)
+    handoff_schema_version: Literal["1.0"] | None = None
+    acquisition_profile: AcquisitionProfile | None = None
+    experiment_id: str | None = None
+    experiment_version: str | None = None
+    protocol_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    study_id: str | None = None
 
 
 class ProjectConfigTriggerEvent(FPVSBaseModel):
@@ -318,6 +330,10 @@ class ProjectConfigCompletedSession(FPVSBaseModel):
     block_orders: list[list[str]] = Field(default_factory=list)
     source_run_dir: str
     ordered_runs: list[ProjectConfigCompletedRun] = Field(default_factory=list)
+    execution_id: str | None = None
+    participant_number: str | None = None
+    participant_session_number: StrictInt | None = Field(default=None, ge=1)
+    acquisition_evidence: AcquisitionEvidence | None = None
 
     @field_validator("source_run_dir")
     @classmethod
@@ -574,7 +590,7 @@ def export_project_config(
         ),
         session=_session_config(project.settings.session),
         triggers=_trigger_config(project.settings.triggers),
-        toolbox=_toolbox_config(project),
+        toolbox=_toolbox_config(project, project_root),
         stimulus_provenance=_stimulus_provenance(resolved_manifest),
         completed_session=(
             _completed_session_config(project_root, completed_session_dir, session_plan)
@@ -584,17 +600,64 @@ def export_project_config(
     )
 
 
+def completed_toolbox_config(
+    config: ProjectConfigFile, project_root: Path, session_plan: SessionPlan,
+    evidence: AcquisitionEvidence,
+) -> ProjectConfigFile:
+    """Join a prelaunch config snapshot with the exact completed session evidence.
+
+    Compact sessions use their retained acquisition directory rather than pretending
+    a detailed run directory exists. No recording identity is guessed from timestamps.
+    """
+
+    entries = session_plan.ordered_entries()
+    if (
+        config.project.project_id != session_plan.project_id
+        or evidence.project_id != session_plan.project_id
+        or evidence.session_id != session_plan.session_id
+        or [run.run_id for run in evidence.runs] != [entry.run_id for entry in entries]
+    ):
+        raise ProjectConfigError(
+            "Completed handoff project, session or run identity does not match."
+        )
+    if evidence.state != "completed" or evidence.export_error or any(
+        run.state != "completed" for run in evidence.runs
+    ):
+        raise ProjectConfigError(
+            "Completed handoff requires successfully finalized session evidence."
+        )
+    if evidence.recording.effective_backend == "null":
+        raise ProjectConfigError(
+            "Test/Pilot sessions do not produce a completed recording handoff."
+        )
+    profile = evidence.acquisition_profile
+    if profile is None or config.toolbox.acquisition_profile != profile:
+        raise ProjectConfigError(
+            "Completed handoff hardware does not match its prelaunch snapshot."
+        )
+    completed = _completed_session_config(
+        project_root, project_root / "logs" / "acquisition", session_plan,
+    )
+    completed = completed.model_copy(update={
+        "execution_id": evidence.execution_id,
+        "participant_number": evidence.participant_number,
+        "participant_session_number": evidence.participant_session_number,
+        "acquisition_evidence": evidence.model_copy(deep=True),
+    })
+    return config.model_copy(deep=True, update={"completed_session": completed})
+
+
 def write_project_config(path: Path, config: ProjectConfigFile) -> None:
     """Write a `.fpvsconfig` file as UTF-8 JSON."""
 
     _require_config_category(config)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
+    atomic_text_write(
+        path,
         config.model_dump_json(
             indent=2, exclude_none=True,
             exclude={"condition_modifiers"} if not config.condition_modifiers else set(),
         ),
-        encoding="utf-8",
     )
 
 
@@ -928,7 +991,9 @@ def _trigger_config(triggers: TriggerSettings) -> ProjectConfigTriggers:
     )
 
 
-def _toolbox_config(project: ProjectFile) -> ProjectConfigToolbox:
+def _toolbox_config(
+    project: ProjectFile, project_root: Path | None = None,
+) -> ProjectConfigToolbox:
     from fpvs_studio.core.masking import condition_masking, validate_masking_catch_trials
 
     validate_masking_catch_trials(project, project.conditions)
@@ -946,10 +1011,21 @@ def _toolbox_config(project: ProjectFile) -> ProjectConfigToolbox:
             )
         event_map[label] = masking.catch_trial.trigger_code
         seen_variants.add(masking.variant)
+    recording_backend = (
+        project.settings.recording.recording_backend if project.settings.recording else "serial"
+    )
+    origin = (
+        load_library_origin(project_root)
+        if project_root is not None and project_root.is_dir() else None
+    )
     return ProjectConfigToolbox(
         project_title=project.meta.name,
         event_map=event_map,
         oddball_trigger_code=oddball_trigger_code,
+        handoff_schema_version="1.0",
+        acquisition_profile=acquisition_profile_for_recording(recording_backend),
+        experiment_id=origin.item_id if origin else project.meta.project_id,
+        experiment_version=origin.installed_version if origin else None,
     )
 
 

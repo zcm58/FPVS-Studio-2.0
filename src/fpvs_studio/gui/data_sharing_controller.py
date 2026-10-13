@@ -1,4 +1,4 @@
-"""App-owned reporting jobs with explicit opt-in and stale-project guards."""
+"""App-owned reporting jobs with saved sharing preferences and stale-project guards."""
 
 from __future__ import annotations
 
@@ -527,7 +527,10 @@ class DataSharingController(QObject):
         status = self._off_error or view.error or {
             "disabled": "Sharing is off. Unsent reports are paused.",
             "off": "Sharing is off. Unsent reports are paused.",
-            "not_enrolled": "Connect with a lab-issued code, then enable sharing explicitly.",
+            "not_enrolled": (
+                "Connect with a lab-issued code. "
+                "New enrollments share completed sessions automatically."
+            ),
             "protocol_mismatch": (
                 "The protocol has changed. Register this protocol before sharing resumes."
             ),

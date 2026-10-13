@@ -21,6 +21,7 @@ from fpvs_studio.core.data_sharing import (
     SessionReport,
     Sha256,
     SharingModel,
+    SharingProfile,
     SharingSettings,
     VersionText,
     _utc,
@@ -210,16 +211,34 @@ def save_settings(root: Path, settings: SharingSettings) -> None:
     _settings_path(root)
     with _storage_lock(root):
         previous = load_settings(root)
-        # Opt-out closes the send gate even if an outbox record needs repair.
-        if not settings.enabled:
-            _write(root, ".fpvs-data-sharing/settings.json", settings, MAX_SETTINGS_BYTES)
-        records = _records(root)
-        if not settings.enabled or not previous.enabled or settings.profile != previous.profile:
-            for record in records:
-                if record.state == "pending":
-                    _save_record(root, record.model_copy(update={"state": "held"}))
-        if settings.enabled:
-            _write(root, ".fpvs-data-sharing/settings.json", settings, MAX_SETTINGS_BYTES)
+        _save_settings_locked(root, settings, previous)
+
+
+def save_enrollment_settings(root: Path, profile: SharingProfile) -> None:
+    """Default a first enrollment on, preserving a saved choice even during enrollment."""
+
+    with _storage_lock(root):
+        saved_choice = _settings_path(root).exists()
+        previous = load_settings(root)
+        settings = SharingSettings(
+            profile=profile, enabled=previous.enabled if saved_choice else True,
+        )
+        _save_settings_locked(root, settings, previous)
+
+
+def _save_settings_locked(
+    root: Path, settings: SharingSettings, previous: SharingSettings,
+) -> None:
+    # Opt-out closes the send gate even if an outbox record needs repair.
+    if not settings.enabled:
+        _write(root, ".fpvs-data-sharing/settings.json", settings, MAX_SETTINGS_BYTES)
+    records = _records(root)
+    if not settings.enabled or not previous.enabled or settings.profile != previous.profile:
+        for record in records:
+            if record.state == "pending":
+                _save_record(root, record.model_copy(update={"state": "held"}))
+    if settings.enabled:
+        _write(root, ".fpvs-data-sharing/settings.json", settings, MAX_SETTINGS_BYTES)
 
 
 def queue_report(

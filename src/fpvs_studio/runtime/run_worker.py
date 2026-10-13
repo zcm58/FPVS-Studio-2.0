@@ -694,6 +694,7 @@ class RuntimeWorker:
                     path.unlink(missing_ok=True)
                 if compact_task_checkpoint is not None:
                     compact_task_checkpoint.discard()
+                acquisition.write_completed_handoff(session_plan)
         except Exception as export_error:
             _finish_acquisition_after_error(
                 acquisition, execution_error or export_error,

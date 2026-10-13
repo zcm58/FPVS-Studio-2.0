@@ -361,7 +361,7 @@ def library_origin(root, *, item_id="study", version="1.0"):
     )
 
 
-def test_library_enrollment_sends_exact_installed_identity_without_opting_in(tmp_path):
+def test_library_enrollment_sends_exact_installed_identity_and_defaults_on(tmp_path):
     library_origin(tmp_path)
     bodies = []
 
@@ -370,7 +370,7 @@ def test_library_enrollment_sends_exact_installed_identity_without_opting_in(tmp
         return profile().model_dump_json().encode()
 
     result = enroll_project(tmp_path, "code", HASH, Event(), client=client(transport, Store()))
-    assert not result.settings.enabled
+    assert result.settings.enabled
     assert bodies[0]["experiment_id"] == "study"
     assert bodies[0]["experiment_version"] == "1.0"
 
@@ -430,7 +430,7 @@ def test_unrelated_enrollment_response_cannot_be_saved_for_a_library_project(tmp
     assert store.value is not None and store.value.connection is None
 
 
-def test_enrollment_does_not_opt_in_or_submit_existing_history(tmp_path):
+def test_first_enrollment_defaults_on_without_submitting_existing_history(tmp_path):
     calls = []
 
     def transport(method, url, body, headers, cancel):
@@ -438,9 +438,24 @@ def test_enrollment_does_not_opt_in_or_submit_existing_history(tmp_path):
         return profile().model_dump_json().encode()
 
     result = enroll_project(tmp_path, "code", HASH, Event(), client=client(transport, Store()))
-    assert not result.settings.enabled
+    assert result.settings.enabled
     assert calls == [ORIGIN + "/results/v1/enroll"]
     assert list_records(tmp_path) == ()
+
+
+@pytest.mark.parametrize("during_request", [False, True])
+def test_enrollment_preserves_saved_off_including_late_optout(tmp_path, during_request):
+    if not during_request:
+        save_settings(tmp_path, SharingSettings(enabled=False))
+
+    def transport(method, url, body, headers, cancel):
+        if during_request:
+            save_settings(tmp_path, SharingSettings(enabled=False))
+        return profile().model_dump_json().encode()
+
+    result = enroll_project(tmp_path, "code", HASH, Event(), client=client(transport, Store()))
+    assert result.settings.profile == profile()
+    assert not result.settings.enabled
 
 
 def test_off_and_changed_protocol_cannot_send_or_compare(tmp_path):

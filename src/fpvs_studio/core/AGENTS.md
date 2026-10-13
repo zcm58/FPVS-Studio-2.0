@@ -10,6 +10,9 @@ This directory is the most important foundation in the repo. It should remain im
 
 - persistent project/data models, including optional project-owned recording device/port
   configuration; runtime resolves transport outside compiled contracts
+- `recording_hardware.py` owns versioned hardware/montage/decoder declarations used
+  by recording settings, config and acquisition exports. Factory mapping is declared,
+  never measured device qualification.
 - dedicated `RunSpec` schemas in `run_spec.py`
 - dedicated `SessionPlan` schemas in `session_plan.py`
 - dedicated execution-result schemas in `execution.py`
@@ -19,7 +22,8 @@ This directory is the most important foundation in the repo. It should remain im
   `docs/DATA_SHARING.md` from the repository root.
 - neutral, versioned recording snapshots and acquisition attempt evidence in
   `execution.py`; runtime owns qualification, transport selection and file writing.
-  These execution metadata fields never enter `ProjectFile`, `RunSpec` or `SessionPlan`.
+  Runtime observations never enter `ProjectFile`, `RunSpec` or `SessionPlan`;
+  selected hardware declarations may persist in project recording settings.
 - reusable declarative condition-task schemas in `task_models.py`
 - compilation of condition-task bindings into `SessionEntry` task specs
 - project-contained task-media services in `task_assets.py`

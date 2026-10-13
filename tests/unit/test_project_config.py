@@ -18,6 +18,7 @@ from fpvs_studio.core.enums import (
 from fpvs_studio.core.models import (
     ImageGeometrySettings,
     ImageResolution,
+    ProjectRecordingSettings,
     StimulusPresentationOverride,
     TextHeightScheduleSettings,
 )
@@ -29,6 +30,7 @@ from fpvs_studio.core.project_config import (
     read_project_config,
     write_project_config,
 )
+from fpvs_studio.core.recording_hardware import acquisition_profile_for_recording
 from fpvs_studio.core.serialization import load_project_file, write_json_file
 from fpvs_studio.preprocessing.models import (
     DerivedImageRecord,
@@ -63,6 +65,46 @@ def test_setup_config_exports_project_conditions_and_toolbox_event_map(sample_pr
     assert config.display.stimulus_width_cm > 0
     assert config.display.stimulus_width_px > 0
     assert config.completed_session is None
+
+
+@pytest.mark.parametrize("backend,profile_id,montage", [
+    ("serial", "biosemi_active_two_64", "biosemi64"),
+    ("unicorn_udp", "unicorn_hybrid_black", "unicorn8"),
+])
+def test_setup_handoff_declares_selected_hardware_without_changing_schema(
+    sample_project, tmp_path, backend, profile_id, montage,
+):
+    sample_project.settings.recording = ProjectRecordingSettings(recording_backend=backend)
+    config = export_project_config(sample_project, project_root=None)
+    assert config.schema_version == "1.2.0"
+    assert config.toolbox.handoff_schema_version == "1.0"
+    profile = config.toolbox.acquisition_profile
+    assert profile.id == profile_id and profile.montage_id == montage
+    assert profile.version == profile.montage_version == profile.event_decoder_version == "1.0"
+    if backend == "unicorn_udp":
+        assert list(profile.source_to_canonical.values()) == [
+            "Fz", "C3", "Cz", "C4", "Pz", "PO7", "Oz", "PO8",
+        ]
+        assert profile.label_mapping_evidence.status == "declared"
+    path = tmp_path / "selected.fpvsconfig"
+    write_project_config(path, config)
+    written_profile = json.loads(path.read_text(encoding="utf-8"))["toolbox"]["acquisition_profile"]
+    assert ("source_to_canonical" in written_profile) == (backend == "unicorn_udp")
+    assert read_project_config(path).toolbox == config.toolbox
+    legacy = config.model_dump(mode="json")
+    legacy["toolbox"] = {key: legacy["toolbox"][key] for key in (
+        "project_title", "event_map", "oddball_trigger_code",
+    )}
+    path.write_text(json.dumps(legacy), encoding="utf-8")
+    assert read_project_config(path).toolbox.acquisition_profile is None
+
+
+def test_hardware_registry_does_not_allow_mapping_mutation_or_unknown_choices():
+    selected = acquisition_profile_for_recording("unicorn_udp")
+    selected.source_to_canonical["EEG 1"] = "Incorrect"
+    assert acquisition_profile_for_recording("unicorn_udp").source_to_canonical["EEG 1"] == "Fz"
+    with pytest.raises(ValueError, match="Unsupported recording hardware"):
+        acquisition_profile_for_recording("unknown")
 
 
 def test_config_export_rejects_nonstandard_oddball_without_explicit_override(

@@ -15,13 +15,16 @@ from fpvs_studio.core.data_sharing import protocol_fingerprint
 from fpvs_studio.core.enums import EngineName
 from fpvs_studio.core.execution import ParticipantMetadata
 from fpvs_studio.core.models import ProjectFile, ProjectValidationReport
+from fpvs_studio.core.project_config import export_project_config
 from fpvs_studio.core.session_plan import SessionPlan
 from fpvs_studio.core.validation import (
     ConditionFixationGuidance,
     condition_fixation_guidance,
     validate_project,
 )
-from fpvs_studio.data_sharing.storage import load_settings
+from fpvs_studio.data_sharing.errors import DataSharingError
+from fpvs_studio.data_sharing.library_scope import validate_library_scope
+from fpvs_studio.data_sharing.storage import SharingStorageError, load_settings
 from fpvs_studio.gui.document_support import (
     DocumentError,
     LaunchSummary,
@@ -51,6 +54,37 @@ def _sharing_protocol(project: ProjectFile, project_root: Path) -> str | None:
             exc_info=True,
         )
     return None
+
+
+def _toolbox_handoff_config(
+    project: ProjectFile, project_root: Path, protocol_sha256: str | None,
+) -> dict[str, object]:
+    config = export_project_config(project, project_root)
+    protocol_sha256 = protocol_sha256 or protocol_fingerprint(project, project_root)
+    config.toolbox = config.toolbox.model_copy(update={"protocol_sha256": protocol_sha256})
+    try:
+        profile = load_settings(project_root).profile
+    except SharingStorageError:
+        logging.getLogger(__name__).warning(
+            "toolbox_handoff_sharing_settings_invalid: Review Data Sharing settings; "
+            "local recording identity is retained.",
+        )
+        return config.model_dump(mode="json")
+    if profile is not None and profile.protocol_sha256 == protocol_sha256:
+        try:
+            validate_library_scope(project_root, profile)
+        except DataSharingError:
+            logging.getLogger(__name__).warning(
+                "toolbox_handoff_enrollment_scope_mismatch: Reconnect Data Sharing "
+                "for the installed Library version; local recording identity is retained.",
+            )
+        else:
+            config.toolbox = config.toolbox.model_copy(update={
+                "experiment_id": profile.experiment_id,
+                "experiment_version": profile.experiment_version,
+                "study_id": profile.project_id,
+            })
+    return config.model_dump(mode="json")
 
 
 class DocumentRuntimeMixin:
@@ -236,6 +270,10 @@ class DocumentRuntimeMixin:
                 participant_session_number = 1
             self.validate_recording_launch()
             trigger_settings = self._project.settings.triggers
+            sharing_protocol = (
+                _sharing_protocol(self._project, self._project_root)
+                if session_plan is self._last_session_plan else None
+            )
             launch_kwargs = {
                 "participant_number": participant_number,
                 "launch_settings": LaunchSettings(
@@ -265,8 +303,9 @@ class DocumentRuntimeMixin:
                     pilot_mode=self.attentional_blink_pilot_mode_enabled,
                     completion_screen_seconds=0.5,
                     export_mode=self._session_export_mode,
-                    sharing_protocol_sha256=(
-                        _sharing_protocol(self._project, self._project_root)
+                    sharing_protocol_sha256=sharing_protocol,
+                    toolbox_handoff_config=(
+                        _toolbox_handoff_config(self._project, self._project_root, sharing_protocol)
                         if session_plan is self._last_session_plan else None
                     ),
                 ),

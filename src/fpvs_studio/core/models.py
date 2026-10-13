@@ -43,6 +43,10 @@ from fpvs_studio.core.enums import (
     ValidationSeverity,
 )
 from fpvs_studio.core.paths import validate_project_relative_path
+from fpvs_studio.core.recording_hardware import (
+    AcquisitionProfile,
+    acquisition_profile_for_recording,
+)
 from fpvs_studio.core.task_models import (
     TaskBinding,
     TaskModule,
@@ -591,6 +595,16 @@ class ProjectRecordingSettings(FPVSBaseModel):
 
     recording_backend: Literal["serial", "unicorn_udp"] = "serial"
     unicorn_udp_port: StrictInt = Field(default=1000, ge=1, le=65535)
+    acquisition_profile: AcquisitionProfile | None = None
+
+    @model_validator(mode="after")
+    def resolve_hardware_declaration(self) -> ProjectRecordingSettings:
+        declared = acquisition_profile_for_recording(self.recording_backend)
+        if self.acquisition_profile is None:
+            self.acquisition_profile = declared
+        elif self.acquisition_profile != declared:
+            raise ValueError("Acquisition profile does not match the selected recording hardware.")
+        return self
 
 
 class ProjectSettings(FPVSBaseModel):

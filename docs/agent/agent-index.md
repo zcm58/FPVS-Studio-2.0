@@ -96,6 +96,12 @@ APPDATA overrides; standalone Qt subprocess tests must set QSettings paths too.
 
 ## Backend Reliability And Compilation Efficiency
 
+For Studio/Toolbox completed handoff, start with `core/recording_hardware.py`,
+`core/project_config.py`, `runtime/acquisition_evidence.py` and
+`docs/exec-plans/active/studio-toolbox-integration.md`. Use project-io/runtime/data-sharing
+focused routes and repo precommit. The runtime contract owns field and path semantics;
+synthetic verification never qualifies real headset timing or wiring.
+
 For backend reliability or compilation-efficiency regressions, start with
 `core/serialization.py`, `core/compiler_inputs.py`, `core/compiler_tasks.py`,
 `preprocessing/importer.py`, and `runtime/session_export.py` as appropriate.

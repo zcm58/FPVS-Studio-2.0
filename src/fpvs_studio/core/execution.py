@@ -16,6 +16,7 @@ from fpvs_studio.core.models import (
     normalize_manual_removed_electrodes,
     validate_project_relative_path,
 )
+from fpvs_studio.core.recording_hardware import AcquisitionProfile
 from fpvs_studio.core.task_models import TaskResponseRecord
 
 FixationOutcome = Literal["hit", "miss"]
@@ -122,6 +123,7 @@ class RecordingSnapshot(FPVSBaseModel):
     recorded_marker_integrity: Literal["unknown"] = "unknown"
     physical_timing: Literal["uncharacterized"] = "uncharacterized"
     acquisition_status: Literal["unknown"] = "unknown"
+    acquisition_profile: AcquisitionProfile | None = None
 
 
 class RuntimeMetadata(FPVSBaseModel):
@@ -342,6 +344,7 @@ class AcquisitionEvidence(FPVSBaseModel):
     participant_session_number: int | None = Field(default=None, ge=1)
     session_id: str | None = None
     recording: RecordingSnapshot
+    acquisition_profile: AcquisitionProfile | None = None
     created_at_utc: datetime
     updated_at_utc: datetime
     wall_clock_meaning: Literal["UTC evidence write time; not EEG synchronization"] = (

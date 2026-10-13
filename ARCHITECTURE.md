@@ -92,7 +92,8 @@ the public contract is in [Bug reporting](docs/BUG_REPORTING.md).
   The OpenFPVS Worker in sibling `../OpenFPVS` owns explicit
   lab/project grants, `/results/v1`, dedicated D1 tables and private browser project
   aggregates. Studio defaults to `https://openfpvs.com`; enrollment requires an
-  approved project scope and never enables sharing. `services/results/` is an
+  approved project scope; first enrollment defaults sharing on while preserving every
+  saved off choice. `services/results/` is an
   undeployed standalone reference. Canonical desktop privacy, comparison and
   recovery rules are in `docs/DATA_SHARING.md`; backend ownership is in OpenFPVS's
   `PROJECT_REPORTING.md`.
@@ -317,6 +318,8 @@ owns endpoint estimates and task-response checkpoints. Details and acceptance ar
   The trigger backend contract declares external-marker capability; playback rejects
   log-only backends outside explicit test/pilot launches and empty trigger schedules.
 - `ProjectSettings.recording` persists each project's BioSemi/Unicorn choice and UDP port;
+  core's `recording_hardware.py` supplies the selected versioned acquisition/montage/
+  decoder declaration, exported to Toolbox without claiming measured wiring.
   `project_service.py` atomically saves only those fields. `runtime/recording.py` resolves
   that choice independently of project trigger fields and compiled timing. Unicorn's loopback UDP adapter uses prepared ASCII markers;
   normal launches send real markers after configuration and Recorder readiness pass.
@@ -328,6 +331,9 @@ owns endpoint estimates and task-response checkpoints. Details and acceptance ar
   confirmation, recorded-marker integrity and physical timing remain separate evidence
   levels; see [Runtime execution](docs/RUNTIME_EXECUTION.md#trigger-behavior).
 - Full export mode writes each numbered visit under `runs/P<PID>_session<NN>/`.
+  Current native session launches also write a completed Toolbox config under
+  `logs/acquisition/` after research finalization, embedding actual event evidence and
+  known experiment/study identity. See the runtime contract for full/compact handoff.
   Compact mode keeps reporting and visit reservations under `logs/` without detailed
   run folders. Historical outputs remain in place.
 - GUI project-bundle import/export is implemented; its current workflow and contracts
@@ -359,7 +365,7 @@ owns endpoint estimates and task-response checkpoints. Details and acceptance ar
 - Run/session/runtime contracts: `docs/RUNSPEC.md`, `docs/SESSION_PLAN.md`, and
   `docs/RUNTIME_EXECUTION.md`
 - Engine boundary: `docs/ENGINE_INTERFACE.md`
-- Opt-in experiment contributions and comparisons: `docs/DATA_SHARING.md`
+- Experiment contribution preferences and comparisons: `docs/DATA_SHARING.md`
 - Environment and packaging: `docs/ENVIRONMENT.md` and `docs/PACKAGING.md`
 - Transfer trust boundaries and dependency exceptions: `docs/SECURITY.md`
 - Plans and technical debt: `docs/PLANS.md` and `docs/exec-plans/`

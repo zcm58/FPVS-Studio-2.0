@@ -2,7 +2,8 @@
 
 FPVS Studio can contribute fixation-task summaries for an enrolled experiment and
 compare its latest eligible local session with compatible shared results. Sharing
-is off by default. OpenFPVS owns the private lab project dashboard and the
+defaults on for first successful results enrollment. Saved off choices stay off;
+unenrolled projects remain local. OpenFPVS owns the private lab project dashboard and the
 `/results/v1` service in the sibling `../OpenFPVS` repository. Its canonical backend
 contract is `PROJECT_REPORTING.md`. The integration is included in the published
 Studio 2.4.0 Windows installer, and the existing OpenFPVS backend is activated.
@@ -21,8 +22,10 @@ existing lab code and the website's **OpenFPVS project ID**, choose **Connect**,
 then ask the administrator to approve a new results enrollment on its project page.
 Reconnect with the same code/project after approval;
 review the registered study, version and field list through the study-title and sharing
-checkbox tooltips, then enable **Automatically share completed sessions**. Connecting alone does not enable
-sharing or upload history. **View OpenFPVS project** opens the private dashboard.
+checkbox tooltips. **Automatically share completed sessions** defaults on for new
+enrollments; clear it to opt out. Saved off choices survive reconnection, including
+an off choice saved while enrollment is in flight. Enrollment never uploads history.
+**View OpenFPVS project** opens the private dashboard.
 Locally authored experiments can enroll without a Library download. A Library
 view/download grant alone does not authorize reporting: the lab needs an explicit
 project grant, and Results credentials remain separate from Library credentials.
@@ -46,7 +49,7 @@ On Studio startup, one sequential background pass discovers projects beneath the
 configured root and checks remembered existing project paths. It retries eligible
 pending deliveries without reopening projects or retrieving their comparison
 snapshots. Projects without pending/recoverable work skip hashing and HTTP. Saved
-opt-in, Library scope, authored protocol and OS credentials are rechecked before
+the enabled preference, Library scope, authored protocol and OS credentials are rechecked before
 delivery. Held reports still require explicit Retry. Missing/moved projects are
 skipped; malformed metadata remains intact and produces non-modal attention status
 and a log identifying the affected project. Startup shares the same job ownership
@@ -130,8 +133,8 @@ With automatic checks enabled, Library-linked projects check for new experiment
 versions on open. The version review
 warns about changing an ongoing study and offers keeping the current version or
 downloading a separate project for inspection. Keeping the current version preserves
-its enrollment and reporting scope. The new copy needs its own enrollment and explicit
-opt-in; an available update never relabels earlier reports or changes conditions.
+its enrollment and reporting scope. The new copy needs its own enrollment and keeps
+its own sharing preference; an available update never relabels earlier reports or changes conditions.
 See [Project version checks](EXPERIMENT_LIBRARY.md#project-version-checks).
 
 ## Private OpenFPVS project reporting
@@ -152,7 +155,7 @@ reloading or restoring the page reads fresh, non-cached aggregates. Failures cle
 the displayed results and offer a retry rather than displaying stale totals.
 
 Session counts are not unique participant counts. Repeat visits count separately,
-and only newly completed eligible sessions reported after opt-in contribute. The
+and only newly completed eligible sessions while sharing is enabled contribute. The
 dashboard does not expose raw report envelopes or participant identities. Toolbox
 summary spreadsheets and public result publication are deferred.
 
@@ -280,7 +283,7 @@ devices' individual reports.
 
 | Project-local path | Purpose |
 | --- | --- |
-| `.fpvs-data-sharing/settings.json` | Bounded local profile and explicit opt-in |
+| `.fpvs-data-sharing/settings.json` | Bounded local profile and saved contribution preference |
 | `logs/data-sharing/intents/<UUID>.json` | Private launch, completion and commit proof |
 | `logs/data-sharing/outbox/<UUID>.json` | Immutable report JSON/digest, attempts, state and receipt |
 | `logs/data-sharing/archive/<UUID>/report.json` | Archived acknowledged record |

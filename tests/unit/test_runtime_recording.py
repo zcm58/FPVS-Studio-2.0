@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from unittest.mock import Mock
 
 import pytest
@@ -9,6 +10,13 @@ from tests.unit.runtime_launcher_helpers import StubEngine
 
 from fpvs_studio.core.compiler import compile_session_plan
 from fpvs_studio.core.execution import AcquisitionEvidence
+from fpvs_studio.core.models import ProjectRecordingSettings
+from fpvs_studio.core.project_config import (
+    ProjectConfigError,
+    completed_toolbox_config,
+    export_project_config,
+    read_project_config,
+)
 from fpvs_studio.core.serialization import read_json_file
 from fpvs_studio.runtime import launcher, triggers
 from fpvs_studio.runtime.acquisition_evidence import AcquisitionEvidenceRecorder
@@ -62,6 +70,12 @@ class FakeUnicorn(NullBackend):
         self.closed = True
         if self.fail_close:
             raise OSError("socket cleanup failed")
+
+
+class FakeSerial(FakeUnicorn):
+    @property
+    def backend_name(self):
+        return "serial"
 
 
 @pytest.fixture
@@ -471,3 +485,103 @@ def test_project_recording_selection_is_identified_in_export_snapshot():
     })
     assert snapshot.selection_source == "project_settings"
     assert snapshot.udp_port == 2345
+
+
+@pytest.mark.parametrize("export_mode", ["compact", "full"])
+@pytest.mark.parametrize("backend", ["serial", "unicorn_udp"])
+def test_completed_handoff_automatically_retains_hardware_identity_and_event_evidence(
+    execution, sample_project, monkeypatch, export_mode, backend,
+):
+    root, plan = execution
+    sample_project.settings.recording = ProjectRecordingSettings(recording_backend=backend)
+    config = export_project_config(sample_project, root)
+    output = FakeSerial() if backend == "serial" else FakeUnicorn()
+    if backend == "serial":
+        monkeypatch.setattr(triggers, "SerialBackend", lambda *_args, **_kwargs: output)
+    else:
+        _fake_output(monkeypatch, output)
+    summary = _execute(
+        root, plan, RuntimeWorker(StubEngine({})), export_mode=export_mode,
+        recording_backend=backend, toolbox_handoff_config=config.model_dump(mode="json"),
+    )
+    assert not summary.aborted
+    evidence = _evidence(root)
+    path = root / "logs" / "acquisition" / f"{evidence.execution_id}-completed.fpvsconfig"
+    completed = read_project_config(path)
+    assert completed.schema_version == config.schema_version
+    assert completed.toolbox.acquisition_profile == evidence.acquisition_profile
+    assert completed.completed_session.execution_id == evidence.execution_id
+    assert completed.completed_session.participant_number == "007"
+    assert completed.completed_session.participant_session_number == 1
+    assert completed.completed_session.acquisition_evidence == evidence
+    assert [run.run_id for run in completed.completed_session.ordered_runs] == [
+        entry.run_id for entry in plan.ordered_entries()
+    ]
+    assert all(run.attempted_events for run in evidence.runs)
+    assert (root / "runs").exists() == (export_mode == "full")
+
+
+def test_compact_cleanup_failure_retains_evidence_without_completed_handoff(
+    execution, sample_project, monkeypatch,
+):
+    root, plan = execution
+    sample_project.settings.recording = ProjectRecordingSettings(recording_backend="unicorn_udp")
+    config = export_project_config(sample_project, root)
+    _fake_output(monkeypatch, FakeUnicorn())
+    unlink = Path.unlink
+    failed_paths = []
+
+    def fail_session_checkpoint_cleanup(path, *args, **kwargs):
+        if path.parent.name == ".task-response-checkpoints" and path.name.endswith(".session.json"):
+            failed_paths.append(path)
+            raise PermissionError("session checkpoint locked")
+        return unlink(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "unlink", fail_session_checkpoint_cleanup)
+    with pytest.raises(PermissionError, match="session checkpoint locked"):
+        _execute(root, plan, RuntimeWorker(StubEngine({})),
+            toolbox_handoff_config=config.model_dump(mode="json"))
+    evidence = _evidence(root)
+    assert len(failed_paths) == 1 and failed_paths[0].exists()
+    assert evidence.state == "interrupted"
+    assert evidence.export_error == "session checkpoint locked"
+    assert all(run.attempted_events for run in evidence.runs)
+    assert not list((root / "logs" / "acquisition").glob("*-completed.fpvsconfig"))
+
+
+def test_aborted_session_retains_evidence_without_completed_handoff(
+    execution, sample_project, monkeypatch,
+):
+    root, plan = execution
+    sample_project.settings.recording = ProjectRecordingSettings(recording_backend="unicorn_udp")
+    config = export_project_config(sample_project, root)
+    _fake_output(monkeypatch, FakeUnicorn(fail_send=True))
+    summary = _execute(root, plan, RuntimeWorker(StubEngine({})),
+        toolbox_handoff_config=config.model_dump(mode="json"))
+    assert summary.aborted and _evidence(root).state == "aborted"
+    assert not list((root / "logs" / "acquisition").glob("*-completed.fpvsconfig"))
+
+
+def test_handoff_rejects_wrong_selected_hardware_before_any_marker_output(
+    execution, sample_project, monkeypatch,
+):
+    root, plan = execution
+    config = export_project_config(sample_project, root)
+    output = FakeUnicorn()
+    _fake_output(monkeypatch, output)
+    with pytest.raises(ProjectConfigError, match="hardware selection does not match"):
+        _execute(root, plan, RuntimeWorker(StubEngine({})),
+            toolbox_handoff_config=config.model_dump(mode="json"))
+    assert output.count == 0
+
+
+def test_completed_helper_rejects_wrong_session_association(execution, sample_project, monkeypatch):
+    root, plan = execution
+    _fake_output(monkeypatch, FakeUnicorn())
+    _execute(root, plan, RuntimeWorker(StubEngine({})))
+    sample_project.settings.recording = ProjectRecordingSettings(recording_backend="unicorn_udp")
+    config = export_project_config(sample_project, root)
+    evidence = _evidence(root)
+    evidence.session_id = "wrong-session"
+    with pytest.raises(ProjectConfigError, match="session or run identity does not match"):
+        completed_toolbox_config(config, root, plan, evidence)

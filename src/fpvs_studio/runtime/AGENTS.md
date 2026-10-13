@@ -67,11 +67,14 @@ This phase should establish:
   must be exported as `error` records and abort the current run/session cleanly
 - keep trigger timestamps run-playback-relative; do not include timing warmup frames in
   exported trigger `time_s`
-- `acquisition_evidence.py` owns versioned Unicorn evidence beneath active-project
+- `acquisition_evidence.py` owns versioned BioSemi/Unicorn evidence beneath active-project
   `logs/acquisition/` in both export modes, separate from deleted recovery checkpoints.
   Persist configuration, explicit operator association, planned code maps and actual
   sent/error attempts at run boundaries and orderly failure. No disk writes enter
   the frame loop; abrupt process loss can omit the current run's attempts.
+  A prelaunch neutral config enables an atomic completed Toolbox config after
+  research finalization, preserving participant/session/marker evidence in both
+  export modes. See `docs/RUNTIME_EXECUTION.md` for the completed handoff contract.
 - keep local transport submission, operator confirmation, recorded-marker integrity
   and physical timing qualification distinct; none implies the next. The prelaunch
   process/file check observes current raw recording activity only; marker integrity
@@ -139,9 +142,12 @@ Even if the exporter is skeletal in this phase, define a stable shape for:
 - `responses.csv`
 - `frame_intervals.csv`
 - `trigger_log.csv`
-- `logs/acquisition/<execution_id>.acquisition-v1.json` retains candidate Unicorn
-  handoff evidence, including participant visit/session/run identity, after successful
-  compact finalization; it does not establish a qualified Toolbox import contract.
+- `logs/acquisition/<execution_id>.acquisition-v1.json` retains selected BioSemi or
+  Unicorn profile and event evidence, including participant visit/session/run identity,
+  after successful compact finalization; receiver/physical timing qualification remains
+  separate.
+- `logs/acquisition/<execution_id>-completed.fpvsconfig` is the automatic completed
+  Toolbox handoff for current native session launches in either export mode.
 - `attentional_blink_stream_events_v1.csv` for native AB characters, including
   symbol/phase/cycle, requested/achieved SOA and planned/observed onsets; retain legacy
   image-pair event headers. Revalidate complete exact-grid character coverage and

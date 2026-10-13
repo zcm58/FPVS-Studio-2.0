@@ -51,8 +51,9 @@ View > Data Sharing & Comparison opens a two-tab dialog at `880x540`, minimum
 study title. Privacy fields, action explanations, full enrollment identity and comparison
 scope/cohort rules are available through the relevant control, title and table-header
 tooltips. Comparison notices show only the current unavailable/error state.
-Existing lab-code and OpenFPVS project-ID enrollment leaves sharing off until the operator explicitly
-enables it. App-owned jobs handle hashing, delivery and descriptive comparison after
+First successful lab-code/OpenFPVS project enrollment defaults sharing on; every saved
+off choice stays off. Enrollment never backfills history. App-owned jobs handle hashing,
+delivery and descriptive comparison after
 completed sessions, with opt-out/backlog release and cancel/shutdown guards.
 Accepted uploads automatically archive older local history, keeping the latest
 comparison and exact receipts/mappings. Startup retries eligible pending reports

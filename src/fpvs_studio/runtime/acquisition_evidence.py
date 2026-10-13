@@ -1,4 +1,4 @@
-"""Durable, project-contained Unicorn evidence outside the presentation frame loop."""
+"""Durable recording evidence and completed handoff outside the frame loop."""
 
 from __future__ import annotations
 
@@ -16,8 +16,15 @@ from fpvs_studio.core.execution import (
     TriggerRecord,
 )
 from fpvs_studio.core.paths import resolve_project_relative_path
+from fpvs_studio.core.project_config import (
+    ProjectConfigError,
+    ProjectConfigFile,
+    completed_toolbox_config,
+    write_project_config,
+)
 from fpvs_studio.core.run_spec import RunSpec
 from fpvs_studio.core.serialization import write_json_file
+from fpvs_studio.core.session_plan import SessionPlan
 from fpvs_studio.runtime.recording import recording_snapshot
 
 
@@ -35,8 +42,19 @@ class AcquisitionEvidenceRecorder:
         self.evidence: AcquisitionEvidence | None = None
         self._active_run_id: str | None = None
         self._trigger_start_index = 0
-        if (runtime_options or {}).get("recording_backend") != "unicorn_udp":
-            return
+        self._project_root = project_root
+        config_payload = (runtime_options or {}).get("toolbox_handoff_config")
+        self._config = (
+            ProjectConfigFile.model_validate(config_payload) if config_payload is not None else None
+        )
+        snapshot = recording_snapshot(runtime_options)
+        if self._config is not None and (
+            self._config.project.project_id != project_id
+            or self._config.toolbox.acquisition_profile != snapshot.acquisition_profile
+        ):
+            raise ProjectConfigError(
+                "Prelaunch handoff project or hardware selection does not match."
+            )
         now = datetime.now(timezone.utc)
         execution_id = uuid4().hex
         self.path = resolve_project_relative_path(
@@ -47,7 +65,8 @@ class AcquisitionEvidenceRecorder:
             project_id=project_id,
             participant_number=participant_number,
             participant_session_number=participant_session_number,
-            session_id=session_id, recording=recording_snapshot(runtime_options),
+            session_id=session_id, recording=snapshot,
+            acquisition_profile=snapshot.acquisition_profile,
             created_at_utc=now, updated_at_utc=now,
             runs=[
                 AcquisitionRunEvidence(
@@ -64,6 +83,24 @@ class AcquisitionEvidenceRecorder:
             ],
         )
         self._write()
+
+    def write_completed_handoff(self, session_plan: SessionPlan) -> Path | None:
+        """Write only after research finalization; aborted/test evidence stays separate."""
+
+        evidence = self.evidence
+        if (
+            self._config is None or evidence is None or evidence.state != "completed"
+            or evidence.recording.effective_backend == "null"
+        ):
+            return None
+        config = completed_toolbox_config(
+            self._config, self._project_root, session_plan, evidence,
+        )
+        path = resolve_project_relative_path(
+            self._project_root, f"logs/acquisition/{evidence.execution_id}-completed.fpvsconfig",
+        )
+        write_project_config(path, config)
+        return path
 
     def _write(self) -> None:
         if self.evidence is not None and self.path is not None:

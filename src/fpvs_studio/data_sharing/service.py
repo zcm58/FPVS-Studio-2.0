@@ -32,6 +32,7 @@ from fpvs_studio.data_sharing.storage import (
     load_settings,
     read_payload,
     review_terminal_captures,
+    save_enrollment_settings,
     save_settings,
     update_record,
 )
@@ -219,8 +220,8 @@ def enroll_project(
             "Disconnect the current enrollment before reconnecting.", code="enrollment"
         )
     profile = transport.enroll(root, code, protocol_sha256, cancel, project_id=project_id)
-    # Completing enrollment, including a late cancellation, never grants opt-in.
-    save_settings(root, SharingSettings(profile=profile, enabled=False))
+    # A saved off choice outranks first-enrollment defaults, including a late opt-out.
+    save_enrollment_settings(root, profile)
     return load_view(root, protocol_sha256, Event(), client=transport)
 
 

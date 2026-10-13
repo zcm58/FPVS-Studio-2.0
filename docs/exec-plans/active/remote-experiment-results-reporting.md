@@ -13,8 +13,14 @@ until production activation and packaged Studio acceptance are resolved.
 
 ## Outcome and approved scope
 
-The user selected per-experiment opt-in, lab-issued invitation codes, automatic
-reporting after completion and easy comparison with compatible shared results.
+The 2026-10-12 integration decision supersedes the earlier default-off preference:
+first successful results enrollment defaults sharing on, saved off choices remain
+off, and only newly completed eligible sessions contribute. No history is backfilled;
+project grants, approved device identity and presentation HTTP gating remain.
+See [the integration plan](studio-toolbox-integration.md).
+
+The initial workflow used per-experiment opt-in, lab-issued invitation codes,
+automatic reporting after completion and comparison with compatible shared results.
 V1 implements private fixation summaries for newly completed multi-condition
 session launches, including single-occurrence sessions. Local research results
 remain authoritative; the standalone stream-only execution API does not capture.

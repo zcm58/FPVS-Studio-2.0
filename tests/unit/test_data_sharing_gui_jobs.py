@@ -16,11 +16,20 @@ from pydantic import ValidationError
 from fpvs_studio.core.compiler import CompileError, compile_session_plan
 from fpvs_studio.core.data_sharing import SharingProfile, SharingSettings, protocol_fingerprint
 from fpvs_studio.core.enums import EngineName
+from fpvs_studio.core.library_origin import LibraryProjectOrigin, save_library_origin
 from fpvs_studio.core.paths import filesystem_path, project_json_path
+from fpvs_studio.core.project_config import export_project_config
 from fpvs_studio.core.project_service import discover_project_roots
 from fpvs_studio.data_sharing.errors import DataSharingCancelled, DataSharingError
+from fpvs_studio.data_sharing.library_scope import validate_library_scope
 from fpvs_studio.data_sharing.service import ComparisonView, ConditionAggregate, SharingView
-from fpvs_studio.data_sharing.storage import CaptureArchiveReview, ReviewedCapture
+from fpvs_studio.data_sharing.storage import (
+    CaptureArchiveReview,
+    ReviewedCapture,
+    SharingStorageError,
+    load_settings,
+    save_settings,
+)
 
 
 class _Signal:
@@ -852,6 +861,110 @@ def _document_launch_methods(namespace):
     return namespace
 
 
+def _completed_handoff_config(project, project_root):
+    source = (
+        Path(__file__).resolve().parents[2] / "src/fpvs_studio/gui/document_runtime.py"
+    )
+    parsed = ast.parse(source.read_text(encoding="utf-8"))
+    helper = next(node for node in parsed.body
+                  if isinstance(node, ast.FunctionDef) and node.name == "_toolbox_handoff_config")
+    module = ast.Module(body=[
+        ast.ImportFrom(module="__future__", names=[ast.alias(name="annotations")], level=0),
+        helper,
+    ], type_ignores=[])
+    namespace = {
+        "export_project_config": export_project_config,
+        "protocol_fingerprint": protocol_fingerprint,
+        "load_settings": load_settings,
+        "SharingStorageError": SharingStorageError,
+        "DataSharingError": DataSharingError,
+        "validate_library_scope": validate_library_scope,
+        "logging": logging,
+    }
+    exec(compile(ast.fix_missing_locations(module), str(source), "exec"), namespace)
+    return namespace["_toolbox_handoff_config"](project, project_root, None)
+
+
+@pytest.mark.parametrize("matching_enrollment", [False, True])
+def test_completed_handoff_identity_survives_optout_without_using_stale_enrollment(
+    sample_project, sample_project_root, matching_enrollment,
+):
+    fingerprint = protocol_fingerprint(sample_project, sample_project_root)
+    profile = _profile().model_copy(update={
+        "protocol_sha256": fingerprint if matching_enrollment else "b" * 64,
+        "project_id": "7cfa432a-3a31-4b46-b699-510ca41f0594",
+    })
+    save_settings(sample_project_root, SharingSettings(profile=profile, enabled=False))
+    toolbox = _completed_handoff_config(sample_project, sample_project_root)["toolbox"]
+    assert toolbox["protocol_sha256"] == fingerprint
+    assert not load_settings(sample_project_root).enabled
+    if matching_enrollment:
+        assert toolbox["experiment_id"] == profile.experiment_id
+        assert toolbox["experiment_version"] == profile.experiment_version
+        assert toolbox["study_id"] == profile.project_id
+    else:
+        assert toolbox["experiment_id"] == sample_project.meta.project_id
+        assert toolbox["experiment_version"] is None
+        assert toolbox["study_id"] is None
+
+
+def test_completed_handoff_preserves_local_launch_with_malformed_sharing_settings(
+    sample_project, sample_project_root, caplog,
+):
+    settings = sample_project_root / ".fpvs-data-sharing/settings.json"
+    settings.parent.mkdir()
+    settings.write_text("{invalid-json", encoding="utf-8")
+    toolbox = _completed_handoff_config(sample_project, sample_project_root)["toolbox"]
+    assert toolbox["protocol_sha256"] == protocol_fingerprint(sample_project, sample_project_root)
+    assert toolbox["experiment_id"] == sample_project.meta.project_id
+    assert toolbox["experiment_version"] is None
+    assert toolbox["study_id"] is None
+    assert settings.read_text(encoding="utf-8") == "{invalid-json"
+    assert "toolbox_handoff_sharing_settings_invalid" in caplog.text
+
+
+def test_completed_handoff_does_not_suppress_protocol_hash_failure(
+    sample_project, sample_project_root, monkeypatch,
+):
+    def failed_hash(*_args):
+        raise OSError("Synthetic asset read failure")
+
+    monkeypatch.setitem(_completed_handoff_config.__globals__, "protocol_fingerprint", failed_hash)
+    with pytest.raises(OSError, match="Synthetic asset read failure"):
+        _completed_handoff_config(sample_project, sample_project_root)
+
+
+@pytest.mark.parametrize("matching_scope", ["matching", "wrong_item", "wrong_version"])
+def test_completed_handoff_requires_exact_library_scope_for_same_protocol_enrollment(
+    sample_project, sample_project_root, caplog, matching_scope,
+):
+    origin = LibraryProjectOrigin(
+        service_url="https://openfpvs.com", item_id="current-library-item",
+        installed_version="2.0", local_project_id=sample_project.meta.project_id,
+    )
+    save_library_origin(sample_project_root, origin)
+    profile = _profile().model_copy(update={
+        "experiment_id": "other-item" if matching_scope == "wrong_item" else origin.item_id,
+        "experiment_version": (
+            "1.0" if matching_scope == "wrong_version" else origin.installed_version
+        ),
+        "protocol_sha256": protocol_fingerprint(sample_project, sample_project_root),
+        "project_id": "7cfa432a-3a31-4b46-b699-510ca41f0594",
+    })
+    save_settings(sample_project_root, SharingSettings(profile=profile, enabled=False))
+    toolbox = _completed_handoff_config(sample_project, sample_project_root)["toolbox"]
+    assert toolbox["experiment_id"] == origin.item_id
+    assert toolbox["experiment_version"] == origin.installed_version
+    assert load_settings(sample_project_root).profile == profile
+    assert not load_settings(sample_project_root).enabled
+    if matching_scope == "matching":
+        assert toolbox["study_id"] == profile.project_id
+        assert "toolbox_handoff_enrollment_scope_mismatch" not in caplog.text
+    else:
+        assert toolbox["study_id"] is None
+        assert "toolbox_handoff_enrollment_scope_mismatch" in caplog.text
+
+
 @pytest.mark.parametrize("edited_after_compilation", [False, True])
 def test_launch_hash_belongs_to_current_compiled_plan_only(
     sample_project, sample_project_root, edited_after_compilation,
@@ -872,6 +985,7 @@ def test_launch_hash_belongs_to_current_compiled_plan_only(
         "DocumentError": RuntimeError, "LaunchSummary": object,
         "LaunchSettings": lambda **values: SimpleNamespace(**values),
         "_sharing_protocol": sharing_hash, "_document_dependency": lambda _name: launch,
+        "_toolbox_handoff_config": lambda *_args: {"synthetic": True},
         "category_conflict_condition_ids": lambda _project: (),
     })
     document = SimpleNamespace(

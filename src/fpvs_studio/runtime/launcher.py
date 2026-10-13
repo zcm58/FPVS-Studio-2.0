@@ -70,6 +70,7 @@ class LaunchSettings:
     pilot_mode: bool = False
     experiment_test_mode: bool = False
     sharing_protocol_sha256: str | None = None
+    toolbox_handoff_config: dict[str, object] | None = None
 
     def as_runtime_options(self) -> dict[str, object]:
         """Return a generic engine-facing runtime options mapping."""
@@ -77,6 +78,8 @@ class LaunchSettings:
         options = asdict(self)
         if self.sharing_protocol_sha256 is None:
             options.pop("sharing_protocol_sha256")
+        if self.toolbox_handoff_config is None:
+            options.pop("toolbox_handoff_config")
         if resolve_recording_backend(options) == "serial":
             options["serial_port"] = resolve_serial_port(self.serial_port)
         engine_name = options["engine_name"]
