@@ -227,6 +227,56 @@ def test_same_compiled_plan_produces_distinct_visits_and_preserves_first_session
     workbook.close()
 
 
+@pytest.mark.parametrize("removed", [None, [], ["A1"]])
+@pytest.mark.parametrize("export_mode", ["full", "compact"])
+def test_history_preserves_unknown_reviewed_empty_and_nonempty_electrodes(
+    multi_condition_project, multi_condition_project_root, removed, export_mode,
+):
+    root = multi_condition_project_root
+    plan = compile_session_plan(multi_condition_project, project_root=root, refresh_hz=60)
+    register_engine("stub-electrodes", lambda: StubEngine({}))
+    try:
+        launch_session(
+            root, plan, participant_number="001",
+            participant_metadata=ParticipantMetadata(manual_removed_electrodes=removed),
+            launch_settings=LaunchSettings(
+                experiment_test_mode=True, serial_enabled=False, engine_name="stub-electrodes",
+                export_mode=export_mode, verify_refresh_rate=False,
+            ),
+        )
+    finally:
+        unregister_engine("stub-electrodes")
+    records = find_completed_sessions_for_participant(root, "001")
+    assert len(records) == 1
+    assert records[0].summary.participant_metadata.manual_removed_electrodes == removed
+    rows = _read_csv_rows(root / "logs" / "session_condition_history.csv")
+    assert {row["manual_removed_electrodes_recorded"] for row in rows} == {
+        str(removed is not None),
+    }
+
+
+def test_legacy_blank_electrode_history_stays_unknown(tmp_path):
+    _write_condition_history_rows(tmp_path, [{
+        "participant_number": "001", "participant_session_number": "1",
+        "session_id": "legacy", "run_aborted": "False",
+        "session_aborted": "False", "manual_removed_electrodes": "",
+        "manual_removed_electrodes_recorded": "",
+    }])
+    records = find_completed_sessions_for_participant(tmp_path, "001")
+    assert len(records) == 1
+    assert records[0].summary.participant_metadata.manual_removed_electrodes is None
+
+
+@pytest.mark.parametrize("flag,labels", [("unexpected", ""), ("False", "A1")])
+def test_invalid_electrode_history_flags_are_not_silently_reconstructed(tmp_path, flag, labels):
+    _write_condition_history_rows(tmp_path, [{
+        "participant_number": "001", "session_id": "invalid",
+        "manual_removed_electrodes": labels, "manual_removed_electrodes_recorded": flag,
+    }])
+    with pytest.raises(ValueError, match="electrode"):
+        find_completed_sessions_for_participant(tmp_path, "001")
+
+
 def test_failed_preflight_does_not_reserve_a_visit(
     multi_condition_project,
     multi_condition_project_root: Path,

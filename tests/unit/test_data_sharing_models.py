@@ -13,7 +13,9 @@ from fpvs_studio.core import data_sharing
 from fpvs_studio.core.data_sharing import (
     ComparisonCondition,
     ComparisonSnapshot,
+    ElectrodeExclusions,
     FixationOccurrence,
+    ParticipantSummary,
     SessionReport,
     SharingSettings,
     protocol_fingerprint,
@@ -52,6 +54,73 @@ def report_fixture(**changes):
 def test_report_rejects_private_extra_fields(field):
     with pytest.raises(ValidationError):
         SessionReport.model_validate({**report_fixture().model_dump(), field: "private"})
+
+
+@pytest.mark.parametrize("removed", [None, (), ("A1", "CUSTOM-REF", "OZ")])
+def test_electrode_reports_preserve_unknown_empty_and_known_labels(removed):
+    exclusions = ElectrodeExclusions(
+        execution_id="1" * 32, visit_id=2, removed_electrodes=removed,
+    )
+    data = {**report_fixture().model_dump(), "schema_version": "1.1",
+            "electrode_exclusions": exclusions, "occurrences": ()}
+    report = SessionReport.model_validate(data)
+    assert SessionReport.model_validate_json(report.model_dump_json()) == report
+    assert report.electrode_exclusions.removed_electrodes == removed
+
+
+@pytest.mark.parametrize("changes", [
+    {"execution_id": "X" * 32}, {"execution_id": "1" * 31},
+    {"visit_id": True}, {"visit_id": 0}, {"visit_id": 1_000_000_000},
+    {"removed_electrodes": ("ft7",)}, {"removed_electrodes": ("A1", "A1")},
+    {"removed_electrodes": ("participant notes",)},
+    {"removed_electrodes": ("A" * 81,)},
+    {"removed_electrodes": tuple(f"A{index}" for index in range(257))},
+    {"removed_electrodes": ({"name": "private"},)},
+    {"participant_number": "0007"},
+])
+def test_electrode_report_rejects_invalid_or_private_fields(changes):
+    with pytest.raises(ValidationError):
+        ElectrodeExclusions.model_validate({
+            "execution_id": "1" * 32, "visit_id": 1, "removed_electrodes": (), **changes,
+        })
+
+
+def test_report_versions_require_their_exact_electrode_contract():
+    legacy = report_fixture().model_dump()
+    with pytest.raises(ValidationError):
+        SessionReport.model_validate({**legacy, "electrode_exclusions": None})
+    with pytest.raises(ValidationError):
+        SessionReport.model_validate({**legacy, "schema_version": "1.1"})
+    with pytest.raises(ValidationError):
+        SessionReport.model_validate({**legacy, "occurrences": ()})
+
+
+@pytest.mark.parametrize("changes", [
+    {"age": True}, {"age": 0}, {"age": 121}, {"age": 23.5},
+    {"sex": "Other"}, {"handedness": "Left"}, {"colorblind": 1},
+    {"subject_id": "0007"}, {"participant_number": "0007"}, {"notes": "private"},
+])
+def test_participant_summary_is_a_strict_private_allowlist(changes):
+    with pytest.raises(ValidationError):
+        ParticipantSummary.model_validate({
+            "subject_id": str(uuid4()), "age": None, "sex": None,
+            "handedness": None, "colorblind": None, **changes,
+        })
+
+
+def test_participant_summary_is_required_only_for_version_1_2():
+    exclusions = ElectrodeExclusions(execution_id="1" * 32, visit_id=1, removed_electrodes=())
+    summary = ParticipantSummary(subject_id=str(uuid4()), age=None, sex=None,
+                                 handedness=None, colorblind=None)
+    base = {**report_fixture().model_dump(), "electrode_exclusions": exclusions}
+    with pytest.raises(ValidationError):
+        SessionReport.model_validate({**base, "schema_version": "1.2"})
+    with pytest.raises(ValidationError):
+        SessionReport.model_validate({**base, "schema_version": "1.1",
+                                      "participant_summary": summary})
+    report = SessionReport.model_validate({**base, "schema_version": "1.2",
+                                          "participant_summary": summary})
+    assert SessionReport.model_validate_json(report.model_dump_json()) == report
 
 
 @pytest.mark.parametrize(

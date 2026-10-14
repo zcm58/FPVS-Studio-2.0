@@ -51,6 +51,10 @@ View > Data Sharing & Comparison opens a two-tab dialog at `880x540`, minimum
 study title. Privacy fields, action explanations, full enrollment identity and comparison
 scope/cohort rules are available through the relevant control, title and table-header
 tooltips. Comparison notices show only the current unavailable/error state.
+The sharing tooltip lists age, sex, handedness, colorblind status, reviewed electrodes,
+opaque study/session identity and available fixation metrics. Original participant
+numbers, names, notes, EEG and individual task answers remain local. AB recall summaries
+are not uploaded; the Comparison tab remains a fixation-task comparison.
 First successful lab-code/OpenFPVS project enrollment defaults sharing on; every saved
 off choice stays off. Enrollment never backfills history. App-owned jobs handle hashing,
 delivery and descriptive comparison after

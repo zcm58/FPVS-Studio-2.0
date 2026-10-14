@@ -446,6 +446,9 @@ and compact modes. `completed_session` retains the realized plan/order/seeds, ex
 execution/participant/visit/session identity and the complete `acquisition_evidence`
 with actual `sent`/`error` attempts and clock semantics. Its `source_run_dir` points
 to `logs/acquisition`; compact mode does not invent a detailed run directory.
+The completed session also carries nullable `manual_removed_electrodes` from the same
+frozen launch snapshot used by reporting: null is unknown, and `[]` is reviewed empty.
+It never uses a later edit to the participant prefill map.
 Aborted/interrupted and Test/Pilot sessions retain evidence but produce no completed
 recording handoff. A stale externally supplied compiled plan has no current native
 snapshot; callers may explicitly provide a matching `LaunchSettings.toolbox_handoff_config`.
@@ -576,6 +579,8 @@ deterministic inferred numbers when a summary is regenerated, without rewriting 
 raw recordings. New participant metadata also snapshots the reviewed manually removed
 electrodes. The project PID map remains the latest prefill, while an earlier visit's
 snapshot stays with that visit. Missing historical electrode snapshots stay unknown.
+New CSV rows append `manual_removed_electrodes_recorded` so reviewed empty lists survive
+compact-history reconstruction. Legacy blank cells without this evidence stay unknown.
 CSV header migration and shared report writes hold an OS lock under
 `logs/.reporting.lock`; process exit releases ownership, and concurrent writers wait
 up to 30 seconds before reporting a timeout. Reading old history to regenerate a

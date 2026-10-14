@@ -12,6 +12,7 @@ from fpvs_studio.core.execution import (
     AcquisitionCodeMapEntry,
     AcquisitionEvidence,
     AcquisitionRunEvidence,
+    ParticipantMetadata,
     RunExecutionSummary,
     TriggerRecord,
 )
@@ -37,12 +38,15 @@ class AcquisitionEvidenceRecorder:
         runtime_options: Mapping[str, object] | None,
         participant_number: str, participant_session_number: int | None = None,
         session_id: str | None = None,
+        participant_metadata: ParticipantMetadata | None = None,
     ) -> None:
         self.path: Path | None = None
         self.evidence: AcquisitionEvidence | None = None
         self._active_run_id: str | None = None
         self._trigger_start_index = 0
         self._project_root = project_root
+        electrodes = (participant_metadata or ParticipantMetadata()).manual_removed_electrodes
+        self._manual_removed_electrodes = tuple(electrodes) if electrodes is not None else None
         config_payload = (runtime_options or {}).get("toolbox_handoff_config")
         self._config = (
             ProjectConfigFile.model_validate(config_payload) if config_payload is not None else None
@@ -95,6 +99,7 @@ class AcquisitionEvidenceRecorder:
             return None
         config = completed_toolbox_config(
             self._config, self._project_root, session_plan, evidence,
+            manual_removed_electrodes=self._manual_removed_electrodes,
         )
         path = resolve_project_relative_path(
             self._project_root, f"logs/acquisition/{evidence.execution_id}-completed.fpvsconfig",

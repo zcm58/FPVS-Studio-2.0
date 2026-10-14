@@ -157,6 +157,7 @@ def test_session_export_captures_seed_and_runtime_logs(
             "participant_colorblind": "Yes",
             "participant_session_number": "1",
             "manual_removed_electrodes": "",
+            "manual_removed_electrodes_recorded": "False",
         }
     ]
     assert all(row["participant_age"] == "72" for row in condition_history_rows)

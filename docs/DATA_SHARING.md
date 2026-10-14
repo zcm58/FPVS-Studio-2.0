@@ -1,6 +1,6 @@
 # Private experiment data sharing
 
-FPVS Studio can contribute fixation-task summaries for an enrolled experiment and
+FPVS Studio can contribute completed-session summaries for an enrolled experiment and
 compare its latest eligible local session with compatible shared results. Sharing
 defaults on for first successful results enrollment. Saved off choices stay off;
 unenrolled projects remain local. OpenFPVS owns the private lab project dashboard and the
@@ -157,8 +157,9 @@ the displayed results and offer a retry rather than displaying stale totals.
 
 Session counts are not unique participant counts. Repeat visits count separately,
 and only newly completed eligible sessions while sharing is enabled contribute. The
-dashboard does not expose raw report envelopes or participant identities. Toolbox
-summary spreadsheets and public result publication are deferred.
+dashboard does not expose raw report envelopes or original participant identities.
+OpenFPVS and Toolbox own private study views and canonical CSV snapshots; public
+result publication remains outside this contract.
 
 `services/results/` remains an undeployed standalone reference and synthetic wire
 fixture source. Production backend changes and tests belong in `../OpenFPVS`,
@@ -207,15 +208,46 @@ not backfill historical results.
 ## Private wire contract
 
 `core/data_sharing.py` owns strict Pydantic models with unknown fields forbidden.
-The Worker independently validates the same contract. The report contains exactly:
+The Worker independently validates the same contract. Legacy version 1.0 remains
+readable with its original eight fields and unchanged serialized bytes. Version 1.1
+adds only `electrode_exclusions`; current source version 1.2 additionally requires
+`participant_summary`. The active
+[reporting plan](exec-plans/active/electrode-exclusion-sharing.md) records this source
+work separately from published Studio 2.4.5 artifacts. The common report fields are:
 
 | Envelope | Meaning |
 | --- | --- |
-| `schema_version` | `"1.0"` |
+| `schema_version` | `"1.0"`, `"1.1"` or `"1.2"` |
 | `report_id` | Canonical UUID generated for this execution |
 | `experiment_id`, `experiment_version`, `protocol_sha256` | Immutable enrolled scope |
 | `completed_at`, `studio_version` | UTC completion time and Studio release |
 | `occurrences` | Ordered, distinct condition occurrences |
+
+`electrode_exclusions` contains exactly `schema_version: "1.0"`, the existing fresh
+32-character lowercase hexadecimal `execution_id`, positive integer `visit_id`
+(at most 999,999,999), and nullable `removed_electrodes`. Null means no snapshot was
+recorded; `[]` means the launch review recorded no removed electrodes. Nonempty lists
+retain normalized uppercase unique labels, bounded to 256 labels of 1–80 characters
+matching `[A-Z0-9][A-Z0-9_.+-]{0,79}`. Invalid labels/bounds require review; nothing is
+silently removed or truncated. The durable launch intent freezes this snapshot before
+presentation. Recovery never reads the project's latest participant prefill map.
+
+`participant_summary` contains exactly `schema_version: "1.0"`, an opaque canonical
+UUID `subject_id`, nullable integer `age` (1–120), nullable `sex` (`Female` or `Male`),
+nullable `handedness` (`Right handed`, `Left handed` or `Ambidextrous`), and nullable
+boolean `colorblind`. These user-authorized fields are launch snapshots, not values
+reconstructed from later edits. A private atomic project-local PID-to-random-UUID map
+keeps repeat visits together within the enrolled study. Leading-zero PIDs remain
+distinct; other project directories and studies create separate identities. Copying
+the private mapping preserves its UUIDs; OpenFPVS additionally scopes subjects by lab.
+No public hash of a guessable PID is used.
+
+All ordinary completed session categories can contribute these snapshots, including
+Attentional Blink and fixation-disabled projects. Structural completion and committed
+research proof remain mandatory. If fixation metrics are absent or invalid, new reports
+carry `occurrences: []` while preserving the session evidence. This reports completion
+and reviewed exclusions without claiming fixation accuracy, EEG quality or AB recall
+performance. Legacy 1.0 reports still require at least one valid fixation occurrence.
 
 Each occurrence contains `condition_id`, one-based `occurrence_index`,
 `total_targets`, `hit_count`, `miss_count`, `false_alarm_count`, `accuracy_percent`,
@@ -229,17 +261,19 @@ Counts conserve targets: hits plus misses equal targets. Accuracy is
 `100 * hits / targets`; it is null when targets are zero. False alarms remain a
 separate count. Mean RT comes from existing hit scoring and is null exactly when
 the RT observation count is zero. RT observation count cannot exceed hits.
-Disabled fixation tasks produce zero counts and null accuracy/RT. No composite
+Legacy disabled fixation occurrences contain zero counts and null accuracy/RT; new
+sessions without fixation metrics use an empty occurrence list. No composite
 attention score or EEG quality inference is introduced.
 
-Reports contain no participant numbers, names, demographics, hostnames, paths,
+Reports contain no participant numbers, names, hostnames, paths,
 raw keypresses, questionnaire answers, logs, stimulus files or EEG. Stream/task
 completion flags and participant-to-report mappings remain in private local
 capture evidence. The remote endpoint still receives completion timestamps and
 an authenticated enrollment link; these summaries are private research data,
 not an anonymous public dataset.
 
-Reports are bounded to 128 KiB, 1–4,096 occurrences and at most 512 distinct condition
+Reports are bounded to 128 KiB, 0–4,096 occurrences (1–4,096 for legacy version 1.0)
+and at most 512 distinct condition
 IDs. Per-occurrence integer counts are bounded to 1,000,000; booleans cannot stand
 in for counts. Refresh rates are 1–1,000 Hz and RT/window values are 0–600,000 ms.
 Nonfinite numbers, malformed UTC timestamps and inconsistent metrics are rejected.
@@ -285,6 +319,7 @@ devices' individual reports.
 | Project-local path | Purpose |
 | --- | --- |
 | `.fpvs-data-sharing/settings.json` | Bounded local profile and saved contribution preference |
+| `.fpvs-data-sharing/subjects.json` | Private study/PID mapping to random subject UUIDs |
 | `logs/data-sharing/intents/<UUID>.json` | Private launch, completion and commit proof |
 | `logs/data-sharing/outbox/<UUID>.json` | Immutable report JSON/digest, attempts, state and receipt |
 | `logs/data-sharing/archive/<UUID>/report.json` | Archived acknowledged record |
@@ -292,7 +327,8 @@ devices' individual reports.
 
 Files stay beneath the active project root, reject links/reparse points and require
 private regular files. Settings are bounded to 16 KiB, each intent/outbox record to
-256 KiB, and each active collection to 512 records. Reads reject malformed data
+256 KiB, the subject map to 1 MiB/10,000 identities, and each active collection to 512 records.
+Reads reject malformed data
 visibly; no pending report is silently skipped or discarded. Recovery reads at most
 64 MiB of committed condition history. Atomic replacements and the existing project
 reporting lock preserve writes across threads/processes.
@@ -365,10 +401,10 @@ The registration script emits SQL for review and does not deploy or execute it.
 Resolve owner access, private-data retention/deletion, backups, research approval
 and current Cloudflare capacity before authorizing a live installation.
 
-`services/results/` owns Worker/D1 enrollment, intake, receipts, revocation and
-aggregate comparison. It has separate credentials and deployment from Library
-and Feedback. Public publication, raw EEG upload, researcher dashboards, owner CSV
-exports and longitudinal joins are future work.
+Production Worker/D1 administration belongs in sibling OpenFPVS; `services/results/`
+remains an undeployed reference. Results credentials stay separate from Library and
+Feedback. Public publication, raw EEG upload and cross-study participant linkage are
+outside this contract.
 
 ## Verification and remaining acceptance
 

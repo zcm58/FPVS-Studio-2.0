@@ -1,4 +1,4 @@
-"""Allowlisted remote fixation reports and local experiment sharing preferences."""
+"""Allowlisted remote session reports and local experiment sharing preferences."""
 
 from __future__ import annotations
 
@@ -10,9 +10,21 @@ from pathlib import Path
 from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, StrictInt, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    SerializerFunctionWrapHandler,
+    StrictBool,
+    StrictInt,
+    ValidationInfo,
+    field_validator,
+    model_serializer,
+    model_validator,
+)
 
 from fpvs_studio.core.compiler_assets import load_manifest, resolve_image_paths
+from fpvs_studio.core.execution import PARTICIPANT_HANDEDNESS_VALUES, PARTICIPANT_SEX_VALUES
 from fpvs_studio.core.models import ProjectFile
 from fpvs_studio.core.paths import resolve_project_relative_path
 
@@ -109,21 +121,88 @@ class FixationOccurrence(SharingModel):
         return self
 
 
-class SessionReport(SharingModel):
+class ElectrodeExclusions(SharingModel):
+    """Reviewed per-execution labels, without participant identity or free-form notes."""
+
     schema_version: Literal["1.0"] = "1.0"
+    execution_id: str = Field(pattern=r"^[0-9a-f]{32}$")
+    visit_id: StrictInt = Field(ge=1, le=999_999_999)
+    removed_electrodes: tuple[
+        Annotated[str, Field(pattern=r"^[A-Z0-9][A-Z0-9_.+-]{0,79}$")], ...
+    ] | None = Field(max_length=256)
+
+    @field_validator("removed_electrodes", mode="before")
+    @classmethod
+    def validate_labels(cls, value: object) -> object:
+        if isinstance(value, list):
+            value = tuple(value)
+        if isinstance(value, tuple):
+            if any(not isinstance(label, str) for label in value):
+                raise ValueError("Removed electrode labels must be text.")
+            if len(set(value)) != len(value):
+                raise ValueError("Removed electrode labels must be unique.")
+        return value
+
+
+class ParticipantSummary(SharingModel):
+    """User-authorized categorical/demographic summary under an opaque study identity."""
+
+    schema_version: Literal["1.0"] = "1.0"
+    subject_id: str
+    age: StrictInt | None = Field(ge=1, le=120)
+    sex: str | None
+    handedness: str | None
+    colorblind: StrictBool | None
+
+    _validate_subject = field_validator("subject_id")(_uuid)
+
+    @field_validator("sex", "handedness")
+    @classmethod
+    def validate_categories(cls, value: str | None, info: ValidationInfo) -> str | None:
+        allowed = (
+            PARTICIPANT_SEX_VALUES if info.field_name == "sex" else PARTICIPANT_HANDEDNESS_VALUES
+        )
+        if value is not None and value not in allowed:
+            raise ValueError("Participant summary category is not supported.")
+        return value
+
+
+class SessionReport(SharingModel):
+    schema_version: Literal["1.0", "1.1", "1.2"] = "1.0"
     report_id: str
     experiment_id: Identifier
     experiment_version: VersionText
     protocol_sha256: Sha256
     completed_at: datetime
     studio_version: VersionText
-    occurrences: tuple[FixationOccurrence, ...] = Field(min_length=1, max_length=4096)
+    occurrences: tuple[FixationOccurrence, ...] = Field(max_length=4096)
+    electrode_exclusions: ElectrodeExclusions | None = None
+    participant_summary: ParticipantSummary | None = None
 
     _validate_id = field_validator("report_id")(_uuid)
     _validate_time = field_validator("completed_at")(_utc)
 
+    @model_serializer(mode="wrap")
+    def serialize_version(self, serializer: SerializerFunctionWrapHandler) -> dict[str, object]:
+        data: dict[str, object] = serializer(self)
+        if self.schema_version == "1.0":
+            data.pop("electrode_exclusions", None)
+        if self.schema_version != "1.2":
+            data.pop("participant_summary", None)
+        return data
+
     @model_validator(mode="after")
     def validate_occurrences(self) -> SessionReport:
+        if self.schema_version == "1.0" and "electrode_exclusions" in self.model_fields_set:
+            raise ValueError("Legacy reports cannot contain electrode exclusions.")
+        if self.schema_version != "1.2" and "participant_summary" in self.model_fields_set:
+            raise ValueError("Earlier reports cannot contain participant summaries.")
+        if self.schema_version == "1.0" and not self.occurrences:
+            raise ValueError("Legacy reports require fixation occurrences.")
+        if self.schema_version != "1.0" and self.electrode_exclusions is None:
+            raise ValueError("New reports require an electrode exclusion snapshot.")
+        if self.schema_version == "1.2" and self.participant_summary is None:
+            raise ValueError("Version 1.2 requires a participant summary snapshot.")
         indices = [item.occurrence_index for item in self.occurrences]
         if len(set(indices)) != len(indices):
             raise ValueError("Report occurrence indices must be unique.")

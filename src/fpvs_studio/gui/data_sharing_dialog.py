@@ -101,11 +101,14 @@ class DataSharingDialog(QDialog):
         self.enabled_checkbox.setToolTip(
             "Share newly completed sessions for this experiment. Turning sharing off pauses "
             "unsent reports; Retry pending resumes them explicitly.\n\n"
-            "Private reports include experiment/version, protocol fingerprint, random report ID, "
+            "Private reports include age, sex, handedness, colorblind status, reviewed removed "
+            "electrodes and opaque study/session IDs for repeat visits; experiment/version, "
+            "protocol fingerprint, random report ID, "
             "Studio version, completion time, condition IDs/order, fixation targets/hits/misses/"
             "false alarms/accuracy, mean response time and observation count, scoring method, "
-            "refresh rate and response window. No participant IDs, demographics, raw EEG or "
-            "individual answers. You see aggregate comparison only."
+            "refresh rate and response window when available. No original participant numbers, "
+            "names, notes, raw EEG or individual answers. The project dashboard shows private "
+            "study summaries; comparison remains fixation-only."
         )
         connection = QHBoxLayout()
         connection.setSpacing(8)
@@ -120,7 +123,10 @@ class DataSharingDialog(QDialog):
         self.connect_button = QPushButton("Connect", self)
         self.connect_button.setObjectName("sharing_connect")
         self.connect_button.setAutoDefault(False)
-        self.connect_button.setToolTip("Connecting does not enable sharing or upload old sessions.")
+        self.connect_button.setToolTip(
+            "First approved connection enables sharing unless you saved an opt-out. "
+            "Connecting never uploads old sessions."
+        )
         self.connect_button.clicked.connect(lambda: self.action_requested.emit("connect"))
         mark_primary_action(self.connect_button)
         connection.addWidget(self.connect_button)

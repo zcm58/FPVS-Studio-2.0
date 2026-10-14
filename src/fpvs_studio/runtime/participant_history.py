@@ -303,6 +303,12 @@ def _iter_session_condition_history_summaries(
         participant_number, session_id, output_dir, _visit_identity
     ), session_rows in grouped_rows.items():
         first_row = session_rows[0]
+        recorded_text = first_row.get("manual_removed_electrodes_recorded", "")
+        recorded = _csv_bool_or_none(recorded_text)
+        if recorded_text and recorded is None:
+            raise ValueError("Participant history contains an invalid electrode review flag.")
+        if recorded is False and first_row.get("manual_removed_electrodes"):
+            raise ValueError("Unknown electrode snapshots cannot contain recorded labels.")
         session_aborted = any(_csv_bool(row.get("session_aborted")) for row in session_rows)
         total_condition_count = len(session_rows)
         completed_condition_count = sum(
@@ -336,7 +342,9 @@ def _iter_session_condition_history_summaries(
                         ),
                         manual_removed_electrodes=(
                             first_row["manual_removed_electrodes"].split(";")
-                            if first_row.get("manual_removed_electrodes") else None
+                            if first_row.get("manual_removed_electrodes") else (
+                                [] if recorded is True else None
+                            )
                         ),
                     ),
                     random_seed=_csv_int(first_row.get("session_seed")),

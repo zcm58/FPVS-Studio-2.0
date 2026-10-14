@@ -334,6 +334,16 @@ class ProjectConfigCompletedSession(FPVSBaseModel):
     participant_number: str | None = None
     participant_session_number: StrictInt | None = Field(default=None, ge=1)
     acquisition_evidence: AcquisitionEvidence | None = None
+    manual_removed_electrodes: list[str] | None = None
+
+    @model_serializer(mode="wrap")
+    def serialize_electrode_snapshot(
+        self, handler: SerializerFunctionWrapHandler,
+    ) -> dict[str, Any]:
+        payload: dict[str, Any] = handler(self)
+        if "manual_removed_electrodes" in self.model_fields_set:
+            payload["manual_removed_electrodes"] = self.manual_removed_electrodes
+        return payload
 
     @field_validator("source_run_dir")
     @classmethod
@@ -603,6 +613,7 @@ def export_project_config(
 def completed_toolbox_config(
     config: ProjectConfigFile, project_root: Path, session_plan: SessionPlan,
     evidence: AcquisitionEvidence,
+    *, manual_removed_electrodes: tuple[str, ...] | None = None,
 ) -> ProjectConfigFile:
     """Join a prelaunch config snapshot with the exact completed session evidence.
 
@@ -643,6 +654,9 @@ def completed_toolbox_config(
         "participant_number": evidence.participant_number,
         "participant_session_number": evidence.participant_session_number,
         "acquisition_evidence": evidence.model_copy(deep=True),
+        "manual_removed_electrodes": (
+            list(manual_removed_electrodes) if manual_removed_electrodes is not None else None
+        ),
     })
     return config.model_copy(deep=True, update={"completed_session": completed})
 

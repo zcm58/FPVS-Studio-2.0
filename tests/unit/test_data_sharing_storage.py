@@ -1,5 +1,7 @@
 """Atomic outbox replay, opt-out, capacity and hostile path regressions."""
 
+import shutil
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from threading import Event
 from unittest.mock import Mock
@@ -8,7 +10,14 @@ from uuid import uuid4
 import pytest
 from tests.unit.test_data_sharing_models import report_fixture
 
-from fpvs_studio.core.data_sharing import DeliveryReceipt, SharingProfile, SharingSettings
+from fpvs_studio.core.data_sharing import (
+    DeliveryReceipt,
+    ElectrodeExclusions,
+    ParticipantSummary,
+    SessionReport,
+    SharingProfile,
+    SharingSettings,
+)
 from fpvs_studio.data_sharing import storage
 
 
@@ -23,6 +32,67 @@ def enable(root):
     settings = SharingSettings(enabled=True, profile=profile)
     storage.save_settings(root, settings)
     return settings
+
+
+def test_subject_uuids_are_stable_scoped_and_keep_leading_zero_ids(tmp_path):
+    first_root, second_root = tmp_path / "first", tmp_path / "second"
+    first_root.mkdir()
+    second_root.mkdir()
+    profile = enable(first_root).profile.model_copy(update={"project_id": str(uuid4())})
+    first = storage.subject_identity(first_root, profile, "0007")
+    assert storage.subject_identity(first_root, profile, "0007") == first
+    assert storage.subject_identity(first_root, profile, "7") != first
+    other_study = profile.model_copy(update={"project_id": str(uuid4())})
+    assert storage.subject_identity(first_root, other_study, "0007") != first
+    assert storage.subject_identity(second_root, profile, "0007") != first
+    copied_root = tmp_path / "copied"
+    shutil.copytree(first_root, copied_root)
+    assert storage.subject_identity(copied_root, profile, "0007") == first
+
+
+def test_subject_uuid_creation_is_atomic_across_concurrent_captures(tmp_path):
+    profile = enable(tmp_path).profile
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        identifiers = list(pool.map(
+            lambda _: storage.subject_identity(tmp_path, profile, "0007"), range(8),
+        ))
+    assert len(set(identifiers)) == 1
+
+
+def test_subject_map_failure_preserves_prior_identities(tmp_path, monkeypatch):
+    profile = enable(tmp_path).profile
+    first = storage.subject_identity(tmp_path, profile, "0007")
+    path = tmp_path / ".fpvs-data-sharing" / "subjects.json"
+    original = path.read_bytes()
+    monkeypatch.setattr(storage, "atomic_text_write", Mock(side_effect=PermissionError("replace")))
+    with pytest.raises(storage.SharingStorageError, match="could not be saved"):
+        storage.subject_identity(tmp_path, profile, "0008")
+    assert path.read_bytes() == original
+    assert storage.subject_identity(tmp_path, profile, "0007") == first
+
+
+def test_new_participant_report_outbox_retries_keep_exact_original_bytes(tmp_path):
+    profile = enable(tmp_path).profile
+    subject = storage.subject_identity(tmp_path, profile, "0007")
+    report = SessionReport.model_validate({
+        **report_fixture().model_dump(), "schema_version": "1.2",
+        "electrode_exclusions": ElectrodeExclusions(
+            execution_id="1" * 32, visit_id=1, removed_electrodes=(),
+        ),
+        "participant_summary": ParticipantSummary(
+            subject_id=subject, age=25, sex="Female", handedness=None, colorblind=False,
+        ),
+    })
+    record = storage.queue_report(tmp_path, report)
+    before = storage.read_payload(tmp_path, report.report_id)
+    assert storage.queue_report(tmp_path, report) == record
+    changed = report.model_copy(update={
+        "participant_summary": report.participant_summary.model_copy(update={"age": 26}),
+    })
+    with pytest.raises(storage.SharingStorageError, match="different immutable bytes"):
+        storage.queue_report(tmp_path, changed)
+    assert storage.read_payload(tmp_path, report.report_id) == before
+    assert b'"0007"' not in before
 
 
 def test_queue_is_immutable_and_idempotent(tmp_path):

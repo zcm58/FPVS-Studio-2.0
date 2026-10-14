@@ -1017,3 +1017,23 @@ def test_launch_hash_belongs_to_current_compiled_plan_only(
     else:
         assert supplied == protocol_fingerprint(sample_project, sample_project_root)
         assert hashed_projects == [sample_project]
+
+
+def test_sharing_privacy_tooltips_describe_current_fields_without_importing_qt():
+    source = Path(__file__).resolve().parents[2] / "src/fpvs_studio/gui/data_sharing_dialog.py"
+    tree = ast.parse(source.read_text(encoding="utf-8"))
+    tooltips = {}
+    for node in ast.walk(tree):
+        if (
+            isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "setToolTip" and isinstance(node.func.value, ast.Attribute)
+            and node.args and isinstance(node.args[0], ast.Constant)
+        ):
+            tooltips[node.func.value.attr] = node.args[0].value
+    privacy = tooltips["enabled_checkbox"]
+    for field in ("age", "sex", "handedness", "colorblind", "electrodes", "opaque"):
+        assert field in privacy
+    assert "No original participant numbers" in privacy
+    assert "fixation-only" in privacy
+    assert "saved an opt-out" in tooltips["connect_button"]
+    assert "never uploads old sessions" in tooltips["connect_button"]

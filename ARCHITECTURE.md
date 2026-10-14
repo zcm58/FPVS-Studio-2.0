@@ -82,6 +82,9 @@ the public contract is in [Bug reporting](docs/BUG_REPORTING.md).
   `data_sharing/library_scope.py` gates linked projects against the canonical Library
   origin receipt's exact item/version before enrollment, capture, send and comparison.
   `runtime/data_sharing.py` captures eligible completed sessions after research commits.
+  New reports retain nullable launch electrode/demographic snapshots and a study-scoped
+  random subject UUID; `data_sharing/storage.py` owns its private atomic PID mapping.
+  Electrode/session capture is independent of fixation-metric eligibility.
   View > Data Sharing & Comparison uses app-owned jobs, with all network activity
   outside presentation. The same controller runs one sequential startup pass over
   configured-root/remembered projects, reusing neutral `core/project_service.py`

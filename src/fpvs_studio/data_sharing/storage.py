@@ -11,6 +11,7 @@ from datetime import datetime
 from pathlib import Path
 from threading import Event
 from typing import Literal, TypeVar
+from uuid import uuid4
 
 from pydantic import Field, StrictInt, ValidationError, field_validator, model_validator
 
@@ -34,11 +35,57 @@ from fpvs_studio.data_sharing.errors import DataSharingCancelled
 MAX_RECORDS = 512
 MAX_RECORD_BYTES = 256 * 1024
 MAX_SETTINGS_BYTES = 16 * 1024
+MAX_SUBJECT_BYTES = 1024 * 1024
 _ModelT = TypeVar("_ModelT", bound=SharingModel)
 
 
 class SharingStorageError(ValueError):
     """Sharing metadata cannot be read or changed safely; existing files remain intact."""
+
+
+class SubjectIdentities(SharingModel):
+    """Private PID-to-random-UUID mapping, independently scoped to each study."""
+
+    schema_version: Literal["1.0"] = "1.0"
+    subjects: dict[str, dict[str, str]] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def validate_identities(self) -> SubjectIdentities:
+        identifiers: list[str] = []
+        for scope, participants in self.subjects.items():
+            if not scope or len(scope) > 255:
+                raise ValueError("Subject identity scope is invalid.")
+            for participant, identifier in participants.items():
+                if not participant.isdigit() or len(participant) > 255:
+                    raise ValueError("Subject identity participant key is invalid.")
+                identifiers.append(_uuid(identifier))
+        if len(identifiers) > 10_000 or len(set(identifiers)) != len(identifiers):
+            raise ValueError("Subject identities are duplicated or exceed capacity.")
+        return self
+
+
+def subject_identity(root: Path, profile: SharingProfile, participant_number: str) -> str:
+    """Reuse an atomic local identity; never derive a public identity from the PID."""
+
+    scope = profile.project_id or (
+        f"{profile.experiment_id}/{profile.experiment_version}/{profile.protocol_sha256}"
+    )
+    relative = ".fpvs-data-sharing/subjects.json"
+    with _storage_lock(root):
+        path = _private_path(root, relative)
+        identities = (
+            read_bounded_model(path, SubjectIdentities, MAX_SUBJECT_BYTES)
+            if path.exists() else SubjectIdentities()
+        )
+        prior = identities.subjects.get(scope, {}).get(participant_number)
+        if prior is not None:
+            return prior
+        subjects = {key: dict(value) for key, value in identities.subjects.items()}
+        identifier = str(uuid4())
+        subjects.setdefault(scope, {})[participant_number] = identifier
+        updated = SubjectIdentities(subjects=subjects)
+        _write(root, relative, updated, MAX_SUBJECT_BYTES)
+        return identifier
 
 
 @contextmanager

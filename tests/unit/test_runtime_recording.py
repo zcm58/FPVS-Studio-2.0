@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from unittest.mock import Mock
 
@@ -9,7 +10,7 @@ import pytest
 from tests.unit.runtime_launcher_helpers import StubEngine
 
 from fpvs_studio.core.compiler import compile_session_plan
-from fpvs_studio.core.execution import AcquisitionEvidence
+from fpvs_studio.core.execution import AcquisitionEvidence, ParticipantMetadata
 from fpvs_studio.core.models import ProjectRecordingSettings
 from fpvs_studio.core.project_config import (
     ProjectConfigError,
@@ -90,10 +91,11 @@ def _fake_output(monkeypatch, backend):
     monkeypatch.setattr(triggers, "UnicornUDPBackend", lambda port: backend)
 
 
-def _execute(root, plan, worker, *, export_mode="compact", visit=1, **options):
+def _execute(root, plan, worker, *, export_mode="compact", visit=1, metadata=None, **options):
     return worker.execute_session(
         root, plan, root / "runs" / f"P007_session{visit:02d}",
         participant_number="007", participant_session_number=visit,
+        participant_metadata=metadata,
         relative_output_dir=f"runs/P007_session{visit:02d}",
         runtime_options={
             "recording_backend": "unicorn_udp", "unicorn_udp_port": 1000,
@@ -519,6 +521,37 @@ def test_completed_handoff_automatically_retains_hardware_identity_and_event_evi
     ]
     assert all(run.attempted_events for run in evidence.runs)
     assert (root / "runs").exists() == (export_mode == "full")
+
+
+@pytest.mark.parametrize("removed", [None, [], [" a1 ", "A1", "oz"]])
+@pytest.mark.parametrize("export_mode", ["compact", "full"])
+def test_completed_handoff_keeps_immutable_nullable_electrode_snapshot(
+    execution, sample_project, monkeypatch, removed, export_mode,
+):
+    root, plan = execution
+    config = export_project_config(sample_project, root)
+    metadata = ParticipantMetadata(manual_removed_electrodes=removed)
+    expected = None if removed is None else list(metadata.manual_removed_electrodes)
+    monkeypatch.setattr(triggers, "SerialBackend", lambda *_args, **_kwargs: FakeSerial())
+    original_open = StubEngine.open_session
+
+    def open_session(engine, **kwargs):
+        metadata.manual_removed_electrodes = ["C3"]
+        sample_project.manual_removed_electrodes = {"007": ["B2"]}
+        return original_open(engine, **kwargs)
+
+    monkeypatch.setattr(StubEngine, "open_session", open_session)
+    _execute(root, plan, RuntimeWorker(StubEngine({})), export_mode=export_mode,
+             recording_backend="serial", metadata=metadata,
+             toolbox_handoff_config=config.model_dump(mode="json"))
+    evidence = _evidence(root)
+    path = root / "logs" / "acquisition" / f"{evidence.execution_id}-completed.fpvsconfig"
+    completed = read_project_config(path)
+    assert json.loads(path.read_text(encoding="utf-8"))["completed_session"][
+        "manual_removed_electrodes"
+    ] == expected
+    assert completed.completed_session.manual_removed_electrodes == expected
+    assert completed.completed_session.execution_id == evidence.execution_id
 
 
 def test_compact_cleanup_failure_retains_evidence_without_completed_handoff(

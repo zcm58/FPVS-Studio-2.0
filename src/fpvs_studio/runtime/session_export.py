@@ -119,6 +119,7 @@ SESSION_CONDITION_HISTORY_HEADER = [
     "block_accuracy_percent",
     "participant_session_number",
     "manual_removed_electrodes",
+    "manual_removed_electrodes_recorded",
 ]
 PARTICIPANT_SUMMARY_HEADER = [
     "PID",
@@ -764,6 +765,7 @@ def write_session_artifacts(
             "participant_colorblind",
             "participant_session_number",
             "manual_removed_electrodes",
+            "manual_removed_electrodes_recorded",
         ],
         [
             (
@@ -776,6 +778,7 @@ def write_session_artifacts(
                 _participant_colorblind_value(summary.participant_metadata.colorblind),
                 summary.participant_session_number or "",
                 ";".join(summary.participant_metadata.manual_removed_electrodes or []),
+                summary.participant_metadata.manual_removed_electrodes is not None,
             )
         ],
     )
@@ -1395,6 +1398,7 @@ def _session_condition_history_row(
         _float_value(block_accuracy_percent),
         summary.participant_session_number or "",
         ";".join(summary.participant_metadata.manual_removed_electrodes or []),
+        summary.participant_metadata.manual_removed_electrodes is not None,
     ]
 
 

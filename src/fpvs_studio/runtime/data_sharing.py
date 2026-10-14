@@ -16,14 +16,16 @@ from pydantic import Field, StrictInt, field_validator, model_validator
 
 from fpvs_studio import __version__
 from fpvs_studio.core.data_sharing import (
+    ElectrodeExclusions,
     FixationOccurrence,
+    ParticipantSummary,
     SessionReport,
     Sha256,
     SharingModel,
     SharingProfile,
     _uuid,
 )
-from fpvs_studio.core.execution import SessionExecutionSummary
+from fpvs_studio.core.execution import ParticipantMetadata, SessionExecutionSummary
 from fpvs_studio.core.session_plan import SessionPlan
 from fpvs_studio.data_sharing.library_scope import validate_library_scope
 from fpvs_studio.data_sharing.storage import (
@@ -34,6 +36,7 @@ from fpvs_studio.data_sharing.storage import (
     load_settings,
     queue_report,
     read_bounded_model,
+    subject_identity,
 )
 
 MAX_INTENT_BYTES = 256 * 1024
@@ -54,6 +57,8 @@ class CaptureIntent(SharingModel):
     run_ids: tuple[str, ...] = Field(max_length=4096)
     experiment_test_mode: bool
     pilot_mode: bool
+    electrode_exclusions: ElectrodeExclusions | None = None
+    participant_summary: ParticipantSummary | None = None
     state: Literal["running", "eligible", "ineligible", "finalized"] = "running"
     reason: (
         Literal[
@@ -75,6 +80,13 @@ class CaptureIntent(SharingModel):
     def validate_proof(self) -> CaptureIntent:
         if len(set(self.run_ids)) != len(self.run_ids):
             raise ValueError("Capture run IDs must be unique.")
+        if (
+            self.electrode_exclusions is not None
+            and self.electrode_exclusions.visit_id != self.participant_session_number
+        ):
+            raise ValueError("Electrode snapshot visit differs from its private research identity.")
+        if self.participant_summary is not None and self.electrode_exclusions is None:
+            raise ValueError("Participant snapshots require their execution snapshot.")
         if self.state in {"eligible", "finalized"}:
             if self.report is None or self.reason is not None:
                 raise ValueError("Eligible captures require an explicit report and no exclusion.")
@@ -83,6 +95,10 @@ class CaptureIntent(SharingModel):
                     raise ValueError("Capture profile differs from its immutable report.")
             if self.report.report_id != self.report_id:
                 raise ValueError("Capture UUID differs from its immutable report.")
+            if self.report.electrode_exclusions != self.electrode_exclusions:
+                raise ValueError("Report electrodes differ from the launch snapshot.")
+            if self.report.participant_summary != self.participant_summary:
+                raise ValueError("Report participant summary differs from the launch snapshot.")
             if (
                 self.experiment_test_mode
                 or self.pilot_mode
@@ -140,7 +156,34 @@ def _history_evidence(root: Path, intent: CaptureIntent) -> str:
         raise SharingStorageError(
             "Committed sharing evidence does not cover every planned occurrence."
         )
-    for run_id, occurrence in zip(intent.run_ids, intent.report.occurrences, strict=True):
+    if intent.electrode_exclusions is not None:
+        electrodes = intent.electrode_exclusions.removed_electrodes
+        for row in selected.values():
+            if (
+                row.get("manual_removed_electrodes_recorded", "").lower()
+                != str(electrodes is not None).lower()
+                or row.get("manual_removed_electrodes", "") != ";".join(electrodes or ())
+            ):
+                raise SharingStorageError("Committed electrodes differ from the launch snapshot.")
+    if intent.participant_summary is not None:
+        participant = intent.participant_summary
+        expected = {
+            "participant_age": str(participant.age) if participant.age is not None else "",
+            "participant_sex": participant.sex or "",
+            "participant_handedness": participant.handedness or "",
+            "participant_colorblind": (
+                "Yes" if participant.colorblind else "No"
+            ) if participant.colorblind is not None else "",
+        }
+        if any(
+            row.get(key, "") != value
+            for row in selected.values() for key, value in expected.items()
+        ):
+            raise SharingStorageError(
+                "Committed participant data differs from the launch snapshot."
+            )
+    metric_rows = intent.run_ids if intent.report.occurrences else ()
+    for run_id, occurrence in zip(metric_rows, intent.report.occurrences, strict=True):
         row = selected[run_id]
         if row.get("condition_id") != occurrence.condition_id:
             raise SharingStorageError(
@@ -175,8 +218,7 @@ def build_session_report(
         or summary.total_condition_count != len(entries)
     ):
         raise ValueError("Only complete sessions can be shared.")
-    occurrences: list[FixationOccurrence] = []
-    for index, (entry, result) in enumerate(zip(entries, summary.run_results, strict=True), 1):
+    for entry, result in zip(entries, summary.run_results, strict=True):
         if (
             result.run_id != entry.run_id
             or result.condition_id != entry.condition_id
@@ -186,6 +228,40 @@ def build_session_report(
             or result.task_flow_aborted
         ):
             raise ValueError("Every planned stream and task must finish before sharing.")
+    try:
+        occurrences = (
+            () if intent.electrode_exclusions is not None
+            and all(result.fixation_task_summary is None for result in summary.run_results)
+            else _fixation_occurrences(plan, summary)
+        )
+    except ValueError:
+        if intent.electrode_exclusions is None:
+            raise
+        occurrences = ()
+    fields: dict[str, object] = {}
+    if intent.electrode_exclusions is not None:
+        fields = {"schema_version": "1.1", "electrode_exclusions": intent.electrode_exclusions}
+    if intent.participant_summary is not None:
+        fields.update(schema_version="1.2", participant_summary=intent.participant_summary)
+    return SessionReport.model_validate({
+        "report_id": intent.report_id,
+        "experiment_id": intent.profile.experiment_id,
+        "experiment_version": intent.profile.experiment_version,
+        "protocol_sha256": intent.profile.protocol_sha256,
+        "completed_at": datetime.now(timezone.utc),
+        "studio_version": __version__,
+        "occurrences": occurrences,
+        **fields,
+    })
+
+
+def _fixation_occurrences(
+    plan: SessionPlan, summary: SessionExecutionSummary,
+) -> tuple[FixationOccurrence, ...]:
+    occurrences: list[FixationOccurrence] = []
+    for index, (entry, result) in enumerate(
+        zip(plan.ordered_entries(), summary.run_results, strict=True), 1,
+    ):
         fixation = result.fixation_task_summary
         if entry.run_spec.fixation.accuracy_task_enabled and fixation is None:
             raise ValueError("Enabled fixation scoring requires a completed summary.")
@@ -227,15 +303,7 @@ def build_session_report(
                 ),
             )
         )
-    return SessionReport(
-        report_id=intent.report_id,
-        experiment_id=intent.profile.experiment_id,
-        experiment_version=intent.profile.experiment_version,
-        protocol_sha256=intent.profile.protocol_sha256,
-        completed_at=datetime.now(timezone.utc),
-        studio_version=__version__,
-        occurrences=tuple(occurrences),
-    )
+    return tuple(occurrences)
 
 
 class SharingCapture:
@@ -255,6 +323,8 @@ class SharingCapture:
         participant_number: str,
         participant_session_number: int | None,
         runtime_options: Mapping[str, object] | None,
+        execution_id: str | None = None,
+        participant_metadata: ParticipantMetadata | None = None,
     ) -> SharingCapture | None:
         settings = load_settings(root)
         if not settings.enabled or settings.profile is None:
@@ -271,6 +341,23 @@ class SharingCapture:
         if directory.exists() and len(list(directory.glob("*.json"))) >= MAX_RECORDS:
             raise SharingStorageError("Sharing capture history is full; review prior captures.")
         actual = options.get("sharing_protocol_sha256")
+        metadata = participant_metadata or ParticipantMetadata()
+        electrodes = None
+        if execution_id is not None:
+            if participant_session_number is None:
+                raise ValueError("Session capture requires its reserved participant visit number.")
+            removed = metadata.manual_removed_electrodes
+            electrodes = ElectrodeExclusions(
+                execution_id=execution_id, visit_id=participant_session_number,
+                removed_electrodes=tuple(removed) if removed is not None else None,
+            )
+        participant = (
+            ParticipantSummary(
+                subject_id=subject_identity(root, settings.profile, participant_number),
+                age=metadata.age, sex=metadata.sex, handedness=metadata.handedness,
+                colorblind=metadata.colorblind,
+            ) if electrodes is not None else None
+        )
         intent = CaptureIntent(
             report_id=str(uuid4()),
             profile=settings.profile,
@@ -282,6 +369,8 @@ class SharingCapture:
             run_ids=tuple(entry.run_id for entry in plan.ordered_entries()),
             experiment_test_mode=bool(options.get("experiment_test_mode", False)),
             pilot_mode=bool(options.get("pilot_mode", False)),
+            electrode_exclusions=electrodes,
+            participant_summary=participant,
         )
         _save_intent(root, intent)
         return cls(root, plan, intent)

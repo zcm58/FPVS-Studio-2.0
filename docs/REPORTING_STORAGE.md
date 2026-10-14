@@ -1,10 +1,12 @@
 # Reporting storage measurements
 
 Measured 2026-10-08 with synthetic reports and the sibling OpenFPVS migration
-schema, including UUID/digest/receipt metadata and all report indexes. The current
-summary-only schema 1.0 uses compact JSON and stores each report once. Retries reuse
+schema, including UUID/digest/receipt metadata and all report indexes. These historical
+summary-only schema 1.0 measurements use compact JSON and store each report once. Retries reuse
 its exact bytes and UUID. Local captures and archives are never uploaded.
 See [Data sharing](DATA_SHARING.md) for the allowlist.
+Current source schema 1.2 adds electrode and participant snapshots; those fields and
+the private subject mapping are not included in the historical measurements below.
 
 ## Reproduce
 

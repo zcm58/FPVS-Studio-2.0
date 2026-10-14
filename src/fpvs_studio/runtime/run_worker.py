@@ -244,6 +244,7 @@ class RuntimeWorker:
     ) -> SessionExecutionSummary:
         """Run every entry in a session plan and write session-level artifacts."""
 
+        participant_metadata = (participant_metadata or ParticipantMetadata()).model_copy(deep=True)
         session_plan = _session_plan_for_participant(session_plan, participant_metadata)
         write_detailed_exports = _writes_detailed_exports(runtime_options)
         acquisition = AcquisitionEvidenceRecorder(
@@ -252,6 +253,7 @@ class RuntimeWorker:
             runtime_options=runtime_options, participant_number=participant_number,
             participant_session_number=participant_session_number,
             session_id=session_plan.session_id,
+            participant_metadata=participant_metadata,
         )
         try:
             trigger_backend, trigger_warnings = _build_and_connect_trigger_backend(runtime_options)
@@ -266,6 +268,8 @@ class RuntimeWorker:
                 project_root, session_plan, participant_number=participant_number,
                 participant_session_number=participant_session_number,
                 runtime_options=runtime_options,
+                execution_id=acquisition.evidence.execution_id if acquisition.evidence else None,
+                participant_metadata=participant_metadata,
             )
         except Exception:
             LOGGER.warning(
