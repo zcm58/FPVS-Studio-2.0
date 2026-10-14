@@ -1,10 +1,10 @@
 # Electrode and participant session reporting
 
-Status: Active
+Status: Completed
 
-Source implementation and safe verification are complete on
-`codex/electrode-exclusion-sharing`. The user has authorized committing, building
-and publishing these changes as Studio 2.4.6; see the active release plan.
+Source implementation, safe verification and publication are complete in
+[Studio 2.4.6](release-2.4.6.md), committed and pushed to master. The published
+installer and direct 2.4.5 patch contain the exact verified source candidate.
 Sibling OpenFPVS acceptance is complete, including the approved three-lab dummy
 study and the subsequent load-on-demand website refinement.
 
@@ -51,7 +51,10 @@ ignored `build/electrode-fixture/`: one known participant's two visits plus two 
 subjects, including known/empty/unknown electrode snapshots and nullable demographics.
 All share the compiled study/protocol; earlier immutable report bytes were not rewritten.
 
-The user subsequently authorized the Studio 2.4.6 release sequence. Safe non-Qt
-verification, authenticated packaging, commit/push and GitHub publication are in
-scope. Visible Qt, installed upgrade and physical EEG qualification remain unrun.
-Synthetic local exports and live dummy acceptance do not qualify physical EEG.
+The user subsequently authorized and completed the Studio 2.4.6 release sequence.
+Its fresh safe precommit passed 3,043 tests and 20 subtests with 11 existing Windows
+symlink skips, including the archival stress case. Authenticated installer/patch
+extraction, frozen source and native dependency audits, six public asset digests,
+signed attestations and 11 updater cases pass. Visible Qt, installed upgrade and
+physical EEG qualification remain unrun. Synthetic local exports and live dummy
+acceptance do not qualify physical EEG.

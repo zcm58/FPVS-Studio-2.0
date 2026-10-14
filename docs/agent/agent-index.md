@@ -32,8 +32,8 @@ cross-layer behavior require it.
 | `data-sharing` | Experiment contribution consent, credentials, completion capture, upload retirement, offline startup delivery or matched comparisons | `src/fpvs_studio/data_sharing/AGENTS.md`, `docs/DATA_SHARING.md`, `docs/REPORTING_STORAGE.md` for budgets, and sibling `../OpenFPVS/PROJECT_REPORTING.md` for backend work |
 | `packaging` | Versioning, PyInstaller, Inno Setup, sparse patches, owned-file upgrade reconciliation, branding, isolated beta/executable builds, or packaged smoke | `packaging/AGENTS.md`, `docs/PACKAGING.md`, and `pyproject.toml` |
 
-The active [electrode and participant reporting plan](../exec-plans/active/electrode-exclusion-sharing.md)
-coordinates immutable launch snapshots, completed Toolbox handoffs and the versioned
+The completed [electrode and participant reporting plan](../exec-plans/completed/electrode-exclusion-sharing.md)
+records immutable launch snapshots, completed Toolbox handoffs and the versioned
 OpenFPVS report envelope. Use data-sharing, runtime and project-io focused verification.
 
 Run a route with:
