@@ -18,7 +18,6 @@ Use this page to find planning material before making feature-sized changes.
 
 Current implementation:
 
-- [Studio 2.4.5 release](exec-plans/active/release-2.4.5.md)
 - [Studio to Toolbox and OpenFPVS integration](exec-plans/active/studio-toolbox-integration.md)
 - [Experiment data sharing and comparison](exec-plans/active/remote-experiment-results-reporting.md)
 - [Unicorn Hybrid Black recording support](exec-plans/active/unicorn-hybrid-black-support.md) (normal marker output enabled; full receiver, Toolbox and physical timing validation pending)
@@ -42,6 +41,11 @@ and physical runtime acceptance remain separate).
 Recent completion: [Studio 2.4.2 startup crash fixes release](exec-plans/completed/release-2.4.2.md).
 
 Recent completion: [Studio 2.4.3 updater GUI release](exec-plans/completed/release-2.4.3.md).
+
+Recent completion: [Studio 2.4.5 Toolbox handoff and shared reporting](exec-plans/completed/release-2.4.5.md)
+(hardware declarations, automatic completed handoff and default-on first enrollment;
+full installer, direct 2.4.4 patch and public updater checks pass; manual hardware
+and compatible Toolbox release qualification remain separate).
 
 Recent completion: [Studio 2.4.4 minor bug fixes](exec-plans/completed/release-2.4.4.md)
 (project handoff, upload ownership/context, durable opt-out, capture review and crash

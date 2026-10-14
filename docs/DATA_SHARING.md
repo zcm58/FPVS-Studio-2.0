@@ -5,10 +5,11 @@ compare its latest eligible local session with compatible shared results. Sharin
 defaults on for first successful results enrollment. Saved off choices stay off;
 unenrolled projects remain local. OpenFPVS owns the private lab project dashboard and the
 `/results/v1` service in the sibling `../OpenFPVS` repository. Its canonical backend
-contract is `PROJECT_REPORTING.md`. The integration is included in the published
-Studio 2.4.0 Windows installer, and the existing OpenFPVS backend is activated.
-Packaging evidence and operational check boundaries are in the
-[2.4.0 release record](exec-plans/completed/release-2.4.0.md).
+contract is `PROJECT_REPORTING.md`. The reporting client was first published in
+Studio 2.4.0; default-on first enrollment and completed hardware-aware Toolbox handoff
+are released in Studio 2.4.5. The existing OpenFPVS backend is activated. Current
+packaging evidence and operational check boundaries are in the
+[2.4.5 release record](exec-plans/completed/release-2.4.5.md).
 
 ## Operator workflow
 

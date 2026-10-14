@@ -88,8 +88,8 @@ preference races. They do not qualify Recorder/BDF+ receiver behavior, EEG acqui
 actual electrode wiring or physical timing. Factory mapping is a declaration.
 Unicorn remains native 250 Hz in Toolbox, without resampling or interpolation.
 
-Studio adds no new Cognitive Load preset/category. The authorized desktop release
-is tracked separately in [Studio 2.4.5](release-2.4.5.md); this integration plan
+Studio adds no new Cognitive Load preset/category. The published desktop release
+is tracked separately in [Studio 2.4.5](../completed/release-2.4.5.md); this integration plan
 retains the manual workflow and hardware qualification items. Existing native
 authoring, runtime timing and participant visit ownership remain authoritative.
 

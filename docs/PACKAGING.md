@@ -60,8 +60,8 @@ Write release notes as bullet points, with one or two sentences per major change
 Keep verification summaries and installer instructions out of the release notes;
 retain audit evidence and check boundaries in the release record instead.
 
-The [v2.4.5 release plan](exec-plans/active/release-2.4.5.md) tracks the Studio/Toolbox
-completed handoff and shared-reporting release. The
+The [v2.4.5 release record](exec-plans/completed/release-2.4.5.md) tracks the published
+Studio/Toolbox completed handoff and shared-reporting release. The
 [v2.4.4 release record](exec-plans/completed/release-2.4.4.md) tracks the lifecycle,
 reporting and upload fixes. The
 [v2.4.3 release record](exec-plans/completed/release-2.4.3.md) tracks the updater GUI
