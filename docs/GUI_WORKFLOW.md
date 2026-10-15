@@ -247,6 +247,44 @@ Mode for explicit no-hardware verification launches; packaged builds hide it.
 
 ## Main Window
 
+### Authoring and project discovery responsiveness
+
+Manage Projects shows its loading state before discovery and project JSON reads run
+in an application-owned job. Close remains available; list/search/mutation controls
+enable after a successful scan. Read failures offer **Try Again** inline. Closing the
+dialog cancels its scan, and closed/superseded/shutdown results cannot replace the
+current list. Rename and Recycle Bin actions retain their existing persistence and
+confirmation behavior, then rescan asynchronously; a successful rename remains selected.
+The controller snapshots paths before starting work and constructs/updates widgets only
+on the GUI thread. The synchronous metadata helper remains for internal callers.
+
+Hidden Home, Assets and Run surfaces coalesce document notifications into one refresh
+when shown. Explicit refresh calls remain immediate, and visible surfaces still update
+synchronously. Validation remains authoritative when a surface refreshes or launch
+is requested; there is no persistent validation cache. Closed Find Action skips QAction
+updates and reads current enabled/visible/text/shortcut state when reopened.
+
+Attentional-Blink Design shares each condition description across validation, digit
+counts and the selected preview during one update. The next edit always recalculates,
+including recovery from invalid input. Existing digit cells are reused when their
+values are unchanged. Experiment state, timing and pending edits are unaffected.
+
+Registered coverage: `test_hidden_page_refresh.py`, `test_manage_projects_responsiveness.py`,
+`test_attentional_blink_stream_designer.py` and `test_action_palette.py` in `tests/gui/`.
+Run GUI focused and repo precommit checks without Qt. In an approved visible session:
+
+1. Edit several Setup fields, then return Home and revisit Run; confirm current names,
+   summaries and readiness. Check all eight Setup steps at `1120x820`.
+2. In AB Design, change rate/SOAs and character pools; confirm immediate errors, correction,
+   digit counts and preview. Leave/revisit Design and verify drafts still apply/discard normally.
+3. Open Manage Projects at `860x520` in both themes with many projects. Check loading,
+   Close/reopen, selection after Rename, Recycle Bin rescan and failed-read retry. A
+   controlled delayed reader in the registered test checks event-loop responsiveness.
+4. Close Find Action, change project/action availability, then reopen with Ctrl+F;
+   confirm current labels, shortcuts and disabled actions, and keyboard dispatch.
+
+### Project opening and saving
+
 User-selected projects (Recent, Open Project and Manage Projects) load through the
 application-owned worker lifecycle. The current project stays open behind an
 indeterminate, cancelable Opening project dialog. Only the latest successful request

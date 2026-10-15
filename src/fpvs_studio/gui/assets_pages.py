@@ -6,6 +6,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 from PySide6.QtCore import QSignalBlocker, Qt
+from PySide6.QtGui import QShowEvent
 from PySide6.QtWidgets import (
     QCheckBox,
     QFileDialog,
@@ -48,6 +49,7 @@ class AssetsPage(QWidget):
     def __init__(self, document: ProjectDocument, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._document = document
+        self._refresh_pending = False
         self._variant_checkboxes: dict[StimulusVariant, QCheckBox] = {}
         self._active_task: ProgressTask | None = None
         self._active_task_error_title = "Asset Task Error"
@@ -136,11 +138,23 @@ class AssetsPage(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self.shell)
 
-        self._document.project_changed.connect(self.refresh)
-        self._document.manifest_changed.connect(self.refresh)
+        self._document.project_changed.connect(self._refresh_after_document_update)
+        self._document.manifest_changed.connect(self._refresh_after_document_update)
         self.refresh()
 
+    def _refresh_after_document_update(self) -> None:
+        if not self.isVisible():
+            self._refresh_pending = True
+            return
+        self.refresh()
+
+    def showEvent(self, event: QShowEvent) -> None:  # noqa: N802
+        if self._refresh_pending:
+            self.refresh()
+        super().showEvent(event)
+
     def refresh(self) -> None:
+        self._refresh_pending = False
         supported_variants = set(self._document.project.settings.supported_variants)
         for variant, checkbox in self._variant_checkboxes.items():
             with QSignalBlocker(checkbox):

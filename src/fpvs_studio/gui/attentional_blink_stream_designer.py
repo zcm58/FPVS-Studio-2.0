@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 
 from pydantic import ValidationError
 from PySide6.QtCore import QRectF, Qt, QTimer, Signal
@@ -494,6 +494,11 @@ class AttentionalBlinkStreamDesigner(QWidget):
         )
 
     def validation_message(self) -> str:
+        return self._validation_message(self._description)
+
+    def _validation_message(
+        self, describe: Callable[[str], AttentionalBlinkStreamDescription],
+    ) -> str:
         try:
             validate_attentional_blink_stream_symbols(
                 _characters(self.base_edit.text()),
@@ -501,7 +506,7 @@ class AttentionalBlinkStreamDesigner(QWidget):
                 _characters(self.t2_edit.text()),
             )
             for condition_id in self._condition_ids:
-                description = self._description(condition_id)
+                description = describe(condition_id)
                 AttentionalBlinkStreamSettings(
                     soa_ms=description.soa_ms,
                     t2_slot_index=description.t2_slot_index,
@@ -525,7 +530,21 @@ class AttentionalBlinkStreamDesigner(QWidget):
         self.draft_changed.emit()
 
     def _update_preview(self) -> None:
-        message = self.validation_message()
+        descriptions: dict[str, AttentionalBlinkStreamDescription | ValueError] = {}
+
+        def describe(condition_id: str) -> AttentionalBlinkStreamDescription:
+            # Share work only within this update: the next edit must see fresh values.
+            if condition_id not in descriptions:
+                try:
+                    descriptions[condition_id] = self._description(condition_id)
+                except ValueError as error:
+                    descriptions[condition_id] = error
+            result = descriptions[condition_id]
+            if isinstance(result, ValueError):
+                raise result
+            return result
+
+        message = self._validation_message(describe)
         self.validation_label.setText(message)
         self.validation_label.setVisible(bool(message))
         self.preview_button.setEnabled(not message)
@@ -535,20 +554,24 @@ class AttentionalBlinkStreamDesigner(QWidget):
         for row, condition_id in enumerate(self._condition_ids):
             digit_text = "—"
             try:
-                description = self._description(condition_id)
+                description = describe(condition_id)
                 digit_text = str(description.intervening_digits)
             except ValueError:
                 # The validation label explains invalid SOAs beside the designer.
                 pass
-            digit_item = QTableWidgetItem(digit_text)
-            digit_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-            self.condition_table.setItem(row, 2, digit_item)
+            digit_item = self.condition_table.item(row, 2)
+            if digit_item is None:
+                digit_item = QTableWidgetItem(digit_text)
+                digit_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                self.condition_table.setItem(row, 2, digit_item)
+            elif digit_item.text() != digit_text:
+                digit_item.setText(digit_text)
         if message:
             self.rate_label.setText("Timing needs correction")
             self.cycle_summary.clear()
             self.burst_summary.clear()
             return
-        description = self._description(self._selected_id)
+        description = describe(self._selected_id)
         self.timeline.description = description
         preview_available = self._preview_interval_ms() is not None
         self.preview_button.setEnabled(preview_available)

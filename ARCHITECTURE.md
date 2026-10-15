@@ -112,7 +112,9 @@ the public contract is in [Bug reporting](docs/BUG_REPORTING.md).
   then project details; Library downloads reuse bundle import. Setup composes eight
   model-backed pages (Project, Conditions, Design, Timing & Session, Image Size, Fixation,
   Response, Review); shared dialog/form styling remains in `gui/components.py`.
-  User-selected project reads use the app-owned job lifecycle; GUI documents/windows
+  User-selected project reads and Manage Projects discovery use the app-owned job lifecycle;
+  discovery consumes path snapshots and canceled/stale results cannot update a closed dialog.
+  GUI documents/windows
   are constructed after completion on the GUI thread. Authoring save feedback and
   per-editor thumbnail reuse are specified in `docs/GUI_WORKFLOW.md`.
   `gui/update_lifecycle.py` also owns ordinary GUI tasks and the reusable presentation

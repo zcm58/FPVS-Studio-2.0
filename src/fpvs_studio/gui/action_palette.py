@@ -111,15 +111,21 @@ class ActionPaletteDialog(QDialog):
         self.results.currentItemChanged.connect(self._update_open_button)
         self.results.itemActivated.connect(self._activate_current)
         for entry in self._entries:
-            entry.action.changed.connect(self._refresh_results)
+            entry.action.changed.connect(self._on_action_changed)
         apply_action_palette_theme(self)
         self._refresh_results()
 
     def open(self) -> None:
-        self.search_edit.clear()
+        with QSignalBlocker(self.search_edit):
+            self.search_edit.clear()
         self._refresh_results()
         super().open()
         self.search_edit.setFocus(Qt.FocusReason.ShortcutFocusReason)
+
+    def _on_action_changed(self) -> None:
+        # The retained dialog rebuilds from current actions when reopened.
+        if self.isVisible():
+            self._refresh_results()
 
     def _refresh_results(self, *_args: object) -> None:
         previous = self.results.currentItem()

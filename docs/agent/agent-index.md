@@ -355,12 +355,19 @@ For Manage Projects renaming, start with `gui/manage_projects_dialog.py`, its
 controller bindings and `core/project_service.py`. Verify metadata-only persistence
 and open-document draft preservation with `tests/unit/test_project_service.py` and
 registered `tests/gui/test_manage_projects_rename.py`. The dialog fits `860x520`.
+Discovery/metadata reads run through the app-owned worker lifecycle using path
+snapshots in `gui/controller.py`; loading, retry, cancellation and stale results are
+covered by `tests/gui/test_manage_projects_responsiveness.py`.
 
 For project-opening responsiveness and save feedback, start with `gui/controller.py`,
 `gui/document.py`, `gui/main_window.py`, and registered
 `tests/gui/test_frontend_responsiveness.py`. Preview reuse/error recovery is covered
 by `tests/gui/test_design_setup_step.py`. Use the existing application-owned job
 lifecycle for project reads and keep document/widget construction on the GUI thread.
+Hidden Home/Assets/Run refresh behavior is covered by `tests/gui/test_hidden_page_refresh.py`.
+AB preview reuse is scoped to one update in `gui/attentional_blink_stream_designer.py`;
+do not cache mutable project validation across edits. See the responsiveness contract
+and manual smoke path in `docs/GUI_WORKFLOW.md`.
 
 The eight-step Setup flow and shared dialog acceptance sizes are documented in
 [GUI workflow](../GUI_WORKFLOW.md#setup-design-and-manual-acceptance). Use the GUI

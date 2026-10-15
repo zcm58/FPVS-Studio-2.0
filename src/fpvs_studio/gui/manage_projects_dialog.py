@@ -53,6 +53,7 @@ class ManageProjectsDialog(QDialog):
     open_requested = Signal(str)
     delete_requested = Signal(str)
     rename_requested = Signal(str)
+    retry_requested = Signal()
 
     def __init__(
         self,
@@ -67,6 +68,8 @@ class ManageProjectsDialog(QDialog):
         self._entries: list[ProjectManagementEntry] = []
         self._entries_by_root: dict[str, ProjectManagementEntry] = {}
         self._items_by_root: dict[str, QListWidgetItem] = {}
+        self._loading = False
+        self._load_error = ""
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(18, 18, 18, 18)
@@ -141,6 +144,12 @@ class ManageProjectsDialog(QDialog):
         self.empty_label.setObjectName("manage_projects_empty_label")
         self.empty_label.setWordWrap(True)
         detail_layout.addWidget(self.empty_label)
+        self.retry_button = QPushButton("Try Again", detail_panel)
+        self.retry_button.setObjectName("manage_projects_retry_button")
+        mark_secondary_action(self.retry_button)
+        self.retry_button.clicked.connect(self.retry_requested.emit)
+        self.retry_button.hide()
+        detail_layout.addWidget(self.retry_button, 0, Qt.AlignmentFlag.AlignLeft)
         detail_layout.addStretch(1)
 
         action_row = QHBoxLayout()
@@ -189,6 +198,8 @@ class ManageProjectsDialog(QDialog):
     ) -> None:
         """Replace the project list after controller-owned state changes."""
 
+        self._loading = False
+        self._load_error = ""
         self._entries = list(entries)
         self._entries_by_root = {str(entry.root): entry for entry in self._entries}
         self.project_list.clear()
@@ -204,6 +215,20 @@ class ManageProjectsDialog(QDialog):
             selected_item = self._items_by_root.get(selected_root)
             if selected_item is not None and self.project_list.row(selected_item) >= 0:
                 self.project_list.setCurrentItem(selected_item)
+
+    def set_loading(self) -> None:
+        """Keep Close available while the controller reads project metadata."""
+
+        self.set_project_entries([])
+        self._loading = True
+        self._sync_selection(-1)
+
+    def set_load_error(self, error: Exception) -> None:
+        """Offer a retry without leaving stale project actions available."""
+
+        self.set_project_entries([])
+        self._load_error = str(error) or type(error).__name__
+        self._sync_selection(-1)
 
     def _apply_filter(self, _filter_text: str = "") -> None:
         with QSignalBlocker(self.project_list):
@@ -243,7 +268,17 @@ class ManageProjectsDialog(QDialog):
     def _sync_selection(self, _row: int) -> None:
         entry = self._selected_entry()
         has_entry = entry is not None
+        self.filter_edit.setEnabled(not self._loading and not self._load_error)
+        self.project_list.setEnabled(not self._loading and not self._load_error)
+        self.retry_button.setVisible(bool(self._load_error))
         self.empty_label.setVisible(not has_entry)
+        self.empty_label.setText(
+            "Loading projects…" if self._loading else
+            "Could not load projects. Check the root folder and try again." if self._load_error else
+            "No projects are available to manage."
+        )
+        self.empty_label.setToolTip(self._load_error)
+        self.empty_label.setAccessibleDescription(self._load_error)
         guidance_text = entry.guidance_text if entry is not None else ""
         self.guidance_label.setText(guidance_text)
         self.guidance_label.setVisible(bool(guidance_text))
@@ -254,7 +289,11 @@ class ManageProjectsDialog(QDialog):
         self.rename_button.setEnabled(entry.can_rename if entry else False)
 
         if entry is None:
-            self.status_badge.set_state("pending", "No Selection")
+            self.status_badge.set_state(
+                "warning" if self._load_error else "pending",
+                "Load Failed" if self._load_error else
+                "Loading" if self._loading else "No Selection",
+            )
             self.name_label.setText("No project selected")
             self.path_label.set_path_text("No project selected")
             return

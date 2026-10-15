@@ -18,6 +18,7 @@ Use this page to find planning material before making feature-sized changes.
 
 Current implementation:
 
+- [GUI responsiveness during authoring and project discovery](exec-plans/active/ui-responsiveness.md)
 - [Studio to Toolbox and OpenFPVS integration](exec-plans/active/studio-toolbox-integration.md)
 - [Experiment data sharing and comparison](exec-plans/active/remote-experiment-results-reporting.md)
 - [Unicorn Hybrid Black recording support](exec-plans/active/unicorn-hybrid-black-support.md) (normal marker output enabled; full receiver, Toolbox and physical timing validation pending)

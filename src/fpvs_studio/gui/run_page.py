@@ -6,7 +6,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 
 from PySide6.QtCore import QObject, Qt, Signal
-from PySide6.QtGui import QIntValidator
+from PySide6.QtGui import QIntValidator, QShowEvent
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -777,8 +777,9 @@ class RunPage(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self.shell)
 
-        self._document.project_changed.connect(self.refresh)
-        self._document.session_plan_changed.connect(self._refresh_summary)
+        self._refresh_pending = False
+        self._document.project_changed.connect(self._refresh_after_document_update)
+        self._document.session_plan_changed.connect(self._refresh_summary_after_document_update)
         self._refresh_run_output_actions()
         self.refresh()
 
@@ -791,7 +792,25 @@ class RunPage(QWidget):
             refresh_hz=self.current_refresh_hz(),
         )
 
+    def _refresh_after_document_update(self) -> None:
+        if not self.isVisible():
+            self._refresh_pending = True
+            return
+        self.refresh()
+
+    def _refresh_summary_after_document_update(self) -> None:
+        if not self.isVisible():
+            self._refresh_pending = True
+            return
+        self._refresh_summary()
+
+    def showEvent(self, event: QShowEvent) -> None:  # noqa: N802
+        if self._refresh_pending:
+            self.refresh()
+        super().showEvent(event)
+
     def refresh(self) -> None:
+        self._refresh_pending = False
         self.runtime_settings_editor.refresh()
         self._refresh_summary()
 

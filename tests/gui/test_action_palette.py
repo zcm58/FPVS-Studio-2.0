@@ -117,6 +117,39 @@ def test_action_changes_refresh_results_and_hidden_actions_stay_hidden(qtbot):
     assert len(_visible_rows(dialog)) == 1
 
 
+def test_closed_palette_defers_action_updates_and_reopens_with_current_state(qtbot, monkeypatch):
+    action = QAction("Old name")
+    hidden = QAction("Hidden command")
+    dialog = _open_palette(qtbot, [ActionEntry(action, "View"), ActionEntry(hidden, "View")])
+    dialog.search_edit.setText("old")
+    dialog.reject()
+    refreshes = []
+    original_refresh = dialog._refresh_results
+
+    def refresh(*args):
+        refreshes.append(True)
+        original_refresh(*args)
+
+    monkeypatch.setattr(dialog, "_refresh_results", refresh)
+    action.setEnabled(False)
+    action.setText("New name")
+    action.setShortcut(QKeySequence("Ctrl+Alt+N"))
+    hidden.setVisible(False)
+    QApplication.processEvents()
+    assert refreshes == []
+
+    dialog.open()
+    QApplication.processEvents()
+    assert refreshes == [True]
+    assert dialog.search_edit.text() == ""
+    rows = _visible_rows(dialog)
+    assert len(rows) == 1
+    assert rows[0].text(0) == "New name"
+    assert rows[0].text(2) == action.shortcut().toString(QKeySequence.SequenceFormat.NativeText)
+    assert rows[0].isDisabled()
+    assert not dialog.open_button.isEnabled()
+
+
 def test_search_arrow_keys_choose_command_and_enter_dispatches_once(qtbot):
     actions = [QAction("Alpha command"), QAction("Beta command")]
     triggered = []

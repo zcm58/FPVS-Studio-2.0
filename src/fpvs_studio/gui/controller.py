@@ -115,6 +115,68 @@ _MAX_RECENT_PROJECTS = 8
 _LOGGER = logging.getLogger(__name__)
 
 
+def _read_project_management_entry(
+    project_root: Path, current_root: Path | None,
+) -> ProjectManagementEntry:
+    """Read display metadata without consulting live document or widget state."""
+
+    is_current = project_root == current_root
+    try:
+        project = load_project_file(project_json_path(project_root))
+    except Exception:
+        return ProjectManagementEntry(
+            name=project_root.name,
+            root=project_root,
+            status_text="Invalid Project",
+            status_state="warning",
+            can_open=False,
+            can_delete=False,
+            guidance_text=(
+                "FPVS Studio could not read this folder as a valid FPVS Studio "
+                "project. Double-check that you selected the correct FPVS Studio "
+                "Root Folder. If the root is correct, verify that this project was "
+                "created or imported by a compatible version of FPVS Studio."
+            ),
+        )
+    return ProjectManagementEntry(
+        name=project.meta.name,
+        root=project_root,
+        status_text="Open Project" if is_current else "Ready",
+        status_state="info" if is_current else "ready",
+        can_open=not is_current,
+        can_delete=not is_current,
+        can_rename=True,
+    )
+
+
+def _read_project_management_entries(
+    root_dir: Path | None,
+    current_root: Path | None,
+    *,
+    roots: list[Path] | None = None,
+    cancelled: Callable[[], bool] = lambda: False,
+) -> list[ProjectManagementEntry]:
+    """Discover, validate and sort project metadata from immutable path snapshots."""
+
+    if root_dir is None:
+        return []
+    normalized_root = root_dir.expanduser().resolve()
+    current_root = current_root.expanduser().resolve() if current_root is not None else None
+    if roots is None:
+        roots = discover_project_roots(root_dir, cancelled=cancelled)
+    seen: set[Path] = set()
+    entries: list[ProjectManagementEntry] = []
+    for root in roots:
+        if cancelled():
+            raise InterruptedError("Project discovery cancelled.")
+        project_root = root.expanduser().resolve()
+        if project_root in seen or not project_root.is_relative_to(normalized_root):
+            continue
+        seen.add(project_root)
+        entries.append(_read_project_management_entry(project_root, current_root))
+    return sorted(entries, key=lambda entry: entry.name.casefold())
+
+
 def _condition_template_library_signature(root_dir: Path) -> tuple[int, int, int] | None:
     try:
         file_stat = condition_template_library_path(root_dir).stat()
@@ -161,6 +223,8 @@ class StudioController(QObject):
         self._active_import_bundle_task: BackgroundTask | None = None
         self._project_open_job: UpdateJob | None = None
         self._project_open_dialog: QProgressDialog | None = None
+        self._manage_projects_dialog: ManageProjectsDialog | None = None
+        self._manage_projects_job: UpdateJob | None = None
         self._library_import_job: UpdateJob | None = None
         self._library_import_finished: Callable[[Path | None], None] | None = None
         self._library_import_result: Path | None = None
@@ -675,19 +739,86 @@ class StudioController(QObject):
     def show_manage_projects_dialog(self) -> None:
         """Show the project management dialog for known FPVS projects."""
 
+        if self._manage_projects_dialog is not None and isValid(self._manage_projects_dialog):
+            self._manage_projects_dialog.raise_()
+            self._manage_projects_dialog.activateWindow()
+            return
         if not self.ensure_fpvs_root_configured():
             return
         if not self._normalize_fpvs_root_layout():
             return
         parent = self.main_window if self.main_window is not None else self.welcome_window
         dialog = ManageProjectsDialog(
-            entries=self.load_manageable_project_entries(),
+            entries=[],
             parent=parent,
         )
         dialog.open_requested.connect(lambda root: self._open_managed_project(dialog, root))
         dialog.delete_requested.connect(lambda root: self._delete_managed_project(dialog, root))
         dialog.rename_requested.connect(lambda root: self._rename_managed_project(dialog, root))
-        dialog.exec()
+        dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+        dialog.setWindowModality(Qt.WindowModality.ApplicationModal)
+        self._refresh_managed_projects(dialog)
+        dialog.show()
+
+    def _refresh_managed_projects(
+        self, dialog: ManageProjectsDialog, *, selected_root: str | None = None,
+    ) -> None:
+        """Refresh a visible manager while all filesystem work stays in its owned job."""
+
+        if self._update_lifecycle.is_shutting_down:
+            return
+        if self._manage_projects_job is not None:
+            self._manage_projects_job.cancel()
+        if dialog is not self._manage_projects_dialog:
+            self._manage_projects_dialog = dialog
+            dialog.finished.connect(lambda _result: self._close_managed_projects(dialog))
+            dialog.destroyed.connect(lambda: self._close_managed_projects(dialog))
+            dialog.retry_requested.connect(lambda: self._refresh_managed_projects(dialog))
+        root_dir = self._fpvs_root_dir
+        current_root = (
+            self.main_window.document.project_root if self.main_window is not None else None
+        )
+        dialog.set_loading()
+
+        def read_entries(
+            _progress: ProgressReporter, cancel: Event,
+        ) -> list[ProjectManagementEntry]:
+            return _read_project_management_entries(
+                root_dir, current_root, cancelled=cancel.is_set,
+            )
+
+        job = self._update_lifecycle.start_task(read_entries)
+        self._manage_projects_job = job
+        job.finished.connect(
+            lambda result: self._finish_managed_projects(dialog, job, result, selected_root),
+        )
+
+    def _close_managed_projects(self, dialog: ManageProjectsDialog) -> None:
+        if dialog is not self._manage_projects_dialog:
+            return
+        self._manage_projects_dialog = None
+        if self._manage_projects_job is not None:
+            self._manage_projects_job.cancel()
+            self._manage_projects_job = None
+
+    def _finish_managed_projects(
+        self, dialog: ManageProjectsDialog, job: UpdateJob, result: UpdateTaskResult,
+        selected_root: str | None,
+    ) -> None:
+        if dialog is not self._manage_projects_dialog or job is not self._manage_projects_job:
+            return
+        self._manage_projects_job = None
+        if result.cancelled or self._update_lifecycle.is_shutting_down or not isValid(dialog):
+            return
+        if result.error is not None:
+            _LOGGER.warning("Could not load managed projects", exc_info=(
+                type(result.error), result.error, result.error.__traceback__,
+            ))
+            dialog.set_load_error(result.error)
+            return
+        dialog.set_project_entries(
+            cast(list[ProjectManagementEntry], result.value), selected_root=selected_root,
+        )
 
     def create_project(
         self,
@@ -1478,53 +1609,17 @@ class StudioController(QObject):
         """Return projects contained by the configured FPVS Studio root."""
 
         self.load_fpvs_root_dir()
-        roots: list[Path] = []
-        seen: set[Path] = set()
-        for project_root in self._discover_project_roots():
-            normalized_root = self._normalize_path(project_root)
-            if (
-                normalized_root in seen
-                or not self._is_within_configured_root(normalized_root)
-            ):
-                continue
-            seen.add(normalized_root)
-            roots.append(normalized_root)
-
-        entries = [self._project_management_entry(root) for root in roots]
-        return sorted(entries, key=lambda entry: entry.name.casefold())
+        return _read_project_management_entries(
+            self._fpvs_root_dir, self._current_project_root(), roots=self._discover_project_roots(),
+        )
 
     def _discover_project_roots(self) -> list[Path]:
         root_dir = self._fpvs_root_dir
         return discover_project_roots(root_dir) if root_dir is not None else []
 
     def _project_management_entry(self, project_root: Path) -> ProjectManagementEntry:
-        normalized_root = self._normalize_path(project_root)
-        is_current = self._current_project_root() == normalized_root
-        try:
-            project = load_project_file(project_json_path(project_root))
-        except Exception:
-            return ProjectManagementEntry(
-                name=project_root.name,
-                root=project_root,
-                status_text="Invalid Project",
-                status_state="warning",
-                can_open=False,
-                can_delete=False,
-                guidance_text=(
-                    "FPVS Studio could not read this folder as a valid FPVS Studio "
-                    "project. Double-check that you selected the correct FPVS Studio "
-                    "Root Folder. If the root is correct, verify that this project was "
-                    "created or imported by a compatible version of FPVS Studio."
-                ),
-            )
-        return ProjectManagementEntry(
-            name=project.meta.name,
-            root=project_root,
-            status_text="Open Project" if is_current else "Ready",
-            status_state="info" if is_current else "ready",
-            can_open=not is_current,
-            can_delete=not is_current,
-            can_rename=True,
+        return _read_project_management_entry(
+            self._normalize_path(project_root), self._current_project_root(),
         )
 
     def _open_managed_project(self, dialog: ManageProjectsDialog, project_root: str) -> None:
@@ -1535,7 +1630,7 @@ class StudioController(QObject):
 
     def _delete_managed_project(self, dialog: ManageProjectsDialog, project_root: str) -> None:
         self.delete_project(Path(project_root), parent=dialog)
-        dialog.set_project_entries(self.load_manageable_project_entries())
+        self._refresh_managed_projects(dialog)
 
     def _rename_managed_project(self, dialog: ManageProjectsDialog, project_root: str) -> None:
         root = Path(project_root)
@@ -1566,9 +1661,7 @@ class StudioController(QObject):
             _show_error(dialog, "Rename Project Error", error)
             return
         dialog.filter_edit.clear()
-        dialog.set_project_entries(
-            self.load_manageable_project_entries(), selected_root=project_root,
-        )
+        self._refresh_managed_projects(dialog, selected_root=project_root)
 
     def delete_project(self, project_root: Path, *, parent: QWidget | None = None) -> bool:
         """Move an existing FPVS project folder to the Recycle Bin after confirmation."""
