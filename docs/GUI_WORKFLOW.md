@@ -472,10 +472,10 @@ The authoring window is organized around two user-facing modes:
     places oddball repeat guidance behind a compact lower-right information action.
     Conditions fills the available height with a 16-pixel inset above and below.
     The condition list, instructions and word editors grow with the window. Ready
-    conditions omit the list hint so the list and editor share the same top edge;
+    conditions omit the list hint so the navigator search and editor share the same top edge;
     incomplete and legacy-repair guidance remains visible when needed.
     Visible acceptance: use six populated conditions at 1120x820, then enlarge to
-    1120x960 and 1448x1086. Check aligned list/editor tops, growing text editors,
+    1120x960 and 1448x1086. Check aligned navigator/editor tops, growing text editors,
     the three image-mode labels and two word-mode labels, and no page scrolling.
     Changing a populated condition between Images and Words shows a Yes/No warning
     (No by default). Yes clears that condition's base/oddball selections and opens
@@ -1171,6 +1171,57 @@ Actual installer/upgrade lifecycle checks remain separately documented in
 `docs/PACKAGING.md`; this smoke must not launch a real installer or clean a real cache.
 The completed independent-updater plan records verification performed and remaining installed
 or clean-PC acceptance; implementing these surfaces does not establish those results.
+
+## Action Discovery And Condition Search
+
+Find Action is available from File > Find Action and `Ctrl+F`.
+The native dialog searches action names, menu locations, shortcut
+text and common terms such as recording, pilot, results and stimuli. Its Action,
+Location and Shortcut columns disambiguate Import and Export commands. Up/Down moves
+through available results while focus stays in search; Enter or Open invokes the
+selected existing QAction once, and Escape cancels. Hidden actions are omitted;
+disabled actions remain visible and cannot run. Empty searches provide a recovery
+message. Intentionally elided rows retain complete text through tooltips and their
+accessible text. Launch and publication stay on their dedicated surfaces.
+
+Opening search does not construct Setup, compile a session or read project assets.
+Dispatch uses the existing command handlers. Home navigation respects pending-edit
+validation; Complete Setup retains Home's earliest-incomplete-step decision. Opening
+Setup from search while already editing leaves the current step intact. Launch,
+bundle transfer/result, stimulus processing and image-resizer work block the palette
+with a nonmodal status message. The guard is checked again before dispatch.
+
+Conditions has an inline name/trigger-code filter with a native clear button.
+Filtering preserves authored order and selected condition identity. A selected
+nonmatching condition remains visible, with explicit match feedback, so the visible
+editor never silently refers to a hidden row. Choosing a matching condition uses the
+existing selection/commit path. Search itself does not flush or reload drafts;
+ordinary editor focus-loss/debounce commits still apply. Full names and trigger codes
+remain available in row tooltips and accessible text.
+
+Visible acceptance (not run by safe local verification):
+
+1. In both themes, inspect Home at `760x520` and `1120x720`, and Setup at `1120x820`.
+   Saved, Unsaved changes, Save blocked and Save failed must all fit the menu chrome
+   without colliding with menus. Inspect at 125/150% display scaling.
+2. Open Find Action from the File menu and shortcut. Confirm there is no separate
+   Find Action button or View-menu entry. Check its `600x400`
+   minimum and `680x460` default. Search `import bundle`, `export bundle`, `recording`
+   and an unmatched term; clear search, use arrows/Enter/Escape, and inspect the full
+   tooltip for a long row. Verify Settings opens once and Cancel runs nothing.
+3. With controlled synthetic callbacks, check unavailable commands and active launch,
+   transfer and image work. These checks must not launch a real experiment or transfer.
+   Verify an incomplete project still enters the earliest incomplete Setup step.
+4. At `1120x820`, search six or more long-named image, word and AB conditions by
+   partial name and trigger. Edit an instruction/word draft, filter out its condition,
+   clear, rename, add, duplicate and remove. Check retained selection, match feedback,
+   keyboard focus, row tooltips and editor/list bounds. Scrollable condition lists
+   remain intentional; the wizard itself must not require scrolling.
+
+Registered coverage: `tests/gui/test_action_palette.py`,
+`tests/gui/test_condition_search.py`, and the updated Conditions layout test.
+Research and implementation rationale are recorded in the
+[UI action-discovery plan](exec-plans/completed/ui-action-discovery.md).
 
 ## Setup Design And Manual Acceptance
 

@@ -81,6 +81,7 @@ __all__ = [
     "apply_condition_template_details_header_style",
     "apply_attentional_blink_stream_theme",
     "apply_dialog_theme",
+    "apply_action_palette_theme",
     "apply_experiment_designer_theme",
     "apply_error_text_style",
     "apply_fixation_settings_theme",
@@ -1171,6 +1172,45 @@ def dialog_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
 def apply_dialog_theme(widget: QWidget) -> None:
     widget.setProperty("studioDialog", "true")
     _apply_palette_stylesheet(widget, dialog_stylesheet)
+
+
+def action_palette_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
+    """Use the shared dialog and focus treatment for searchable command lists."""
+
+    theme = _resolved_theme(theme)
+    return dialog_stylesheet(theme) + f"""
+    QTreeWidget#action_palette_results {{
+        background-color: {theme.surface};
+        color: {theme.text_primary};
+        border: 1px solid {theme.border};
+        border-radius: 6px;
+        outline: none;
+    }}
+    QTreeWidget#action_palette_results::item {{
+        padding: 8px 6px;
+    }}
+    QTreeWidget#action_palette_results::item:selected {{
+        background-color: {theme.primary};
+        color: {theme.selected_text};
+    }}
+    QTreeWidget#action_palette_results::item:disabled {{
+        color: {theme.disabled_text};
+    }}
+    QTreeWidget#action_palette_results:focus {{
+        border-color: {theme.focus_ring};
+    }}
+    QTreeWidget#action_palette_results QHeaderView::section {{
+        color: {theme.text_secondary};
+        background-color: {theme.surface_alt};
+        border: none;
+        padding: 6px;
+    }}
+    """
+
+
+def apply_action_palette_theme(widget: QWidget) -> None:
+    widget.setProperty("studioDialog", "true")
+    _apply_palette_stylesheet(widget, action_palette_stylesheet)
 
 
 def condition_modifier_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:

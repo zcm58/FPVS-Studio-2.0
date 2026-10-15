@@ -333,6 +333,16 @@ Use GUI/core/compiler/runtime focused checks and the visible acceptance path in
 
 ## Setup Design Verification
 
+For substantial frontend design work, use the compact brief and review criteria in
+[agent UI design guidance](../design-docs/agent-ui-design.md). Preserve the product
+contracts in `docs/FRONTEND.md`; visual checks use the existing approved-visible route.
+
+For Find Action and condition search, start with `gui/action_palette.py`,
+`gui/main_window.py`, `gui/condition_setup_step.py` and the action-discovery section of
+`docs/GUI_WORKFLOW.md`. Registered coverage lives in `tests/gui/test_action_palette.py`
+and `tests/gui/test_condition_search.py`. Use GUI focused and repo precommit for the
+shared menu/theme changes; visible keyboard and sizing acceptance remains opt-in.
+
 For Conditions stimulus-type switching, read `gui/condition_setup_step.py` and
 `gui/document_conditions.py`. Safe regressions are in `tests/unit/test_condition_modality.py`;
 Yes/No, pending word edits and layout coverage are registered in

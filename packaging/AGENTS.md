@@ -31,6 +31,10 @@ settings, templates, or runtime/session contracts.
 
 ## Restrictions
 
+- When changing installer presentation or branding, preserve native Windows control
+  conventions, concise action labels and a clear next step. Check text and asset
+  legibility at relevant scaling in an explicitly authorized installer smoke session;
+  documentation or asset edits alone do not authorize running an installer.
 - Do not write installer/build logic that deletes or rewrites QSettings, project roots,
   `.fpvs-studio/templates/`, `runs/`, or `logs/`.
 - Do not vendor PyInstaller or third-party wheels into the repository.

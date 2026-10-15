@@ -906,7 +906,7 @@ def test_conditions_six_condition_layout_expands_with_aligned_panels(
         guide.refresh()
         QApplication.processEvents()
         # The queued wizard refresh can hide the hint and post another layout pass.
-        qtbot.waitUntil(lambda: step.condition_list.y() == 0)
+        qtbot.waitUntil(lambda: step.condition_search_edit.y() == 0)
         assert (window.width(), window.height()) == window_size
         assert step.condition_list.count() == 6
         assert step.instructions_edit.toPlainText() == instructions
@@ -949,11 +949,13 @@ def test_conditions_six_condition_layout_expands_with_aligned_panels(
                     label.objectName(),
                     other.objectName(),
                 )
-        list_top = step.condition_list.mapTo(step, step.condition_list.rect().topLeft()).y()
+        navigator_top = step.condition_search_edit.mapTo(
+            step, step.condition_search_edit.rect().topLeft()
+        ).y()
         details_top = step.condition_details_section.mapTo(
             step, step.condition_details_section.rect().topLeft()
         ).y()
-        assert abs(list_top - details_top) <= 1
+        assert abs(navigator_top - details_top) <= 1
         surface = guide.conditions_step_surface
         content_top = step.mapTo(surface, step.rect().topLeft()).y()
         assert abs(content_top - 16) <= 1

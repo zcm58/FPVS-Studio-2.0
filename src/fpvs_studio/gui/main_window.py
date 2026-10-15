@@ -43,6 +43,7 @@ from fpvs_studio.core.project_bundle import (
 )
 from fpvs_studio.core.project_config import PROJECT_CONFIG_SUFFIX, project_config_filename
 from fpvs_studio.gui import folder_actions
+from fpvs_studio.gui.action_palette import ActionEntry, ActionPaletteDialog
 from fpvs_studio.gui.animations import ButtonHoverAnimator
 from fpvs_studio.gui.attentional_blink_data_dialog import AttentionalBlinkDataDialog
 from fpvs_studio.gui.bundle_export_dialog import BundleExportOptionsDialog
@@ -180,6 +181,7 @@ class StudioMainWindow(QMainWindow):
         self._bundle_import_processing_page: BundleImportProcessingPage | None = None
         self._fixation_cross_data_dialog: FixationCrossDataDialog | None = None
         self._attentional_blink_data_dialog: AttentionalBlinkDataDialog | None = None
+        self._action_palette: ActionPaletteDialog | None = None
         self._on_load_condition_template_profiles = on_load_condition_template_profiles
         self._on_manage_condition_templates = on_manage_condition_templates
         self._on_load_fpvs_root_dir = on_load_fpvs_root_dir
@@ -611,6 +613,92 @@ class StudioMainWindow(QMainWindow):
         self.fixation_cross_data_action = QAction(accuracy_label, self)
         self.fixation_cross_data_action.setObjectName("fixation_cross_data_action")
         self.fixation_cross_data_action.triggered.connect(self.show_task_accuracy)
+        self.home_action = QAction("Home", self)
+        self.home_action.triggered.connect(self._return_home_from_palette)
+        self.setup_action = QAction("Complete Setup", self)
+        self.setup_action.triggered.connect(self._open_setup_from_palette)
+        self.find_action_action = QAction("Find Action...", self)
+        self.find_action_action.setObjectName("find_action_action")
+        self.find_action_action.setShortcut(QKeySequence("Ctrl+F"))
+        self.find_action_action.triggered.connect(self.show_action_palette)
+        self.addAction(self.find_action_action)
+
+    def _action_palette_entries(self) -> tuple[ActionEntry, ...]:
+        """Describe existing commands; dispatch still belongs to their QAction handlers."""
+
+        return (
+            ActionEntry(self.home_action, "Navigate", "return overview launch"),
+            ActionEntry(self.setup_action, "Navigate", "wizard conditions design timing fixation"),
+            ActionEntry(self.save_project_action, "File", "save project changes"),
+            ActionEntry(self.settings_action, "File", "preferences recording test pilot root"),
+            ActionEntry(self.new_project_action, "Home", "create new experiment"),
+            ActionEntry(self.open_project_action, "Home", "open existing experiment"),
+            ActionEntry(self.manage_projects_action, "File", "rename projects"),
+            ActionEntry(self.import_project_bundle_action, "File / Import", "import fpvsbundle"),
+            ActionEntry(self.import_project_config_action, "File / Import", "import fpvsconfig"),
+            ActionEntry(self.export_project_bundle_action, "File / Export", "export fpvsbundle"),
+            ActionEntry(self.export_project_config_action, "File / Export", "export toolbox"),
+            ActionEntry(
+                self.export_completed_project_config_action, "File / Export", "export config",
+            ),
+            ActionEntry(self.export_group_summary_action, "File / Export", "export excel results"),
+            ActionEntry(
+                self.fixation_cross_data_action, "View", "results accuracy responses t1 t2",
+            ),
+            ActionEntry(self.data_sharing_action, "View", "reporting comparison consent"),
+            ActionEntry(self.library_action, "View", "download experiments catalog"),
+            ActionEntry(self.project_update_action, "File", "library project version"),
+            ActionEntry(self.image_resizer_action, "Tools", "resize images stimuli png"),
+            ActionEntry(self.check_updates_action, "File", "software version update"),
+            ActionEntry(self.report_bug_action, "File", "help bug support issue"),
+            ActionEntry(self.request_feature_action, "File", "help suggestion feedback"),
+            ActionEntry(self.about_action, "File", "version information"),
+        )
+
+    def _action_palette_available(self) -> bool:
+        """Inspect active work without constructing the lazy Setup or utility pages."""
+
+        setup = self._setup_wizard_page
+        busy = (
+            self.is_launch_busy()
+            or self._launch_after_session_seed_ready
+            or self._active_bundle_export_task is not None
+            or self._bundle_import_processing_active
+            or self.main_stack.currentWidget() is self._bundle_export_result_page
+            or (setup is not None and (
+                setup.design_setup_step.is_busy() or setup._condition_image_task_active()
+            ))
+            or (self._image_resizer_page is not None
+                and self._image_resizer_page._active_task is not None)
+        )
+        if busy:
+            self.statusBar().show()
+            self.statusBar().showMessage(
+                "Finish the current operation before using Find Action.", 4000,
+            )
+        return not busy
+
+    def show_action_palette(self) -> None:
+        if not self._action_palette_available():
+            return
+        self.setup_action.setText(self.home_page.edit_setup_button.text())
+        if self._action_palette is None:
+            self._action_palette = ActionPaletteDialog(
+                self._action_palette_entries(), self, can_dispatch=self._action_palette_available,
+            )
+        self._action_palette.open()
+
+    def _open_setup_from_palette(self) -> None:
+        if self.main_stack.currentWidget() is not self._setup_wizard_page:
+            # Reuse Home's ready/incomplete decision and earliest-incomplete-step gate.
+            self.home_page.edit_setup_button.click()
+
+    def _return_home_from_palette(self) -> None:
+        setup = self._setup_wizard_page
+        if setup is not None and self.main_stack.currentWidget() is setup:
+            setup._return_home()
+        else:
+            self.show_home()
 
     def _create_menu_and_toolbar(self) -> None:
         self.file_menu = self.menuBar().addMenu("File")
@@ -643,6 +731,7 @@ class StudioMainWindow(QMainWindow):
         self.file_menu.addMenu(self.export_menu)
         self.file_menu.addAction(self.project_update_action)
         self.file_menu.addSeparator()
+        self.file_menu.addAction(self.find_action_action)
         self.file_menu.addAction(self.settings_action)
         self.file_menu.addSeparator()
         self.file_menu.addAction(self.check_updates_action)

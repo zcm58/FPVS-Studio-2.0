@@ -6,6 +6,7 @@ fast returning-user launches, low-friction setup, and clear scientific/runtime s
 ## Current Design Sources
 
 - Core UX beliefs: `design-docs/core-beliefs.md`
+- Agent design brief, research and review: [agent UI design guidance](design-docs/agent-ui-design.md)
 - PySide6 GUI workflow and test guidance: `GUI_WORKFLOW.md`
 - Public GUI component/theme surface: `../src/fpvs_studio/gui/components.py`
 - GUI package guidance: `../src/fpvs_studio/gui/AGENTS.md`

@@ -34,6 +34,10 @@ Concrete planned work:
 Completed plans are historical implementation notes. Read their directory only when
 the current contracts do not explain why a landed decision exists.
 
+Recent completion: [UI action discovery and condition navigation](exec-plans/completed/ui-action-discovery.md)
+(File > Find Action with Ctrl+F, condition filtering, and frontend agent guidance;
+registered Qt and full visible acceptance remain documented).
+
 Recent completion: [Studio crash reliability](exec-plans/completed/studio-crash-reliability.md)
 (native worker cleanup, shutdown, startup recovery and local crash diagnostics; packaged
 and physical runtime acceptance remain separate).
