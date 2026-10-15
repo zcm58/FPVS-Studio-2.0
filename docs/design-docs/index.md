@@ -6,6 +6,7 @@ implementation pass.
 ## Current Docs
 
 - Core beliefs: `core-beliefs.md`
+- Agent UI design guidance and research: [agent-ui-design.md](agent-ui-design.md)
 - Design hub: `../DESIGN.md`
 - GUI workflow: `../GUI_WORKFLOW.md`
 

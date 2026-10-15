@@ -13,6 +13,10 @@ the active app.
 
 ## Skill Routing for GUI Work
 
+For substantial interface changes, use the brief, research and review criteria in
+[agent UI design guidance](design-docs/agent-ui-design.md). The owning AGENTS.md files
+carry concise local rules; keep this document's existing product contracts authoritative.
+
 FPVS Studio's frontend remains PySide6. Global UI skills may help agents reason about
 the product experience, but implementation must keep using PySide6 widgets, the shared
 component layer, Qt worker patterns, and registered pytest-qt coverage.
@@ -61,6 +65,10 @@ interaction.
   launch action.
 - Welcome and Home share the same launch-surface frame/styling so opening a ready
   project keeps a stable outer window and card treatment.
+- File > Find Action opens searchable existing commands
+  with `Ctrl+F`. Conditions has a name/trigger filter that retains the selected
+  editor context. Interaction and sizing contracts live in
+  [GUI workflow](GUI_WORKFLOW.md#action-discovery-and-condition-search).
 - Setup Wizard is the guided setup/editing surface at `1120x820`. Its eight steps are
   Project, Conditions, Design, Timing & Session, Image Size (Character Size for native AB),
   Fixation, Response, and Review. All steps share the Design page's frameless
@@ -74,7 +82,7 @@ interaction.
   `This condition` fields. Image sources have keyboard-accessible full-path details
   and copy. Conditions uses the available vertical space for its list, instructions
   and word editors; other compact steps retain centered content. Ready Conditions
-  has aligned list/editor tops without a routine hint above the list. See
+  has aligned navigator/editor tops, with search above the list and no routine hint. See
   [GUI workflow](GUI_WORKFLOW.md) for mode labels and sizing acceptance.
   Raw image-folder selection is permissive; uniform rectangular sets are valid native inputs, while inconsistent
   dimensions within a set are handled by the guided normalization flow before leaving

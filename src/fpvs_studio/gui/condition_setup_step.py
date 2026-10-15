@@ -347,7 +347,26 @@ class ConditionSetupStep(QWidget):
         self.condition_list.setObjectName("setup_wizard_condition_list")
         self.condition_list.setSelectionMode(QListWidget.SelectionMode.SingleSelection)
         self.condition_list.setAlternatingRowColors(True)
+        self.condition_list.setTextElideMode(Qt.TextElideMode.ElideRight)
+        self.condition_list.setAccessibleName("Conditions")
         self.condition_list.currentItemChanged.connect(self._handle_current_condition_changed)
+
+        self.condition_search_edit = QLineEdit(self)
+        self.condition_search_edit.setObjectName("setup_conditions_search_edit")
+        self.condition_search_edit.setPlaceholderText("Search name or trigger")
+        self.condition_search_edit.setAccessibleName("Search conditions by name or trigger")
+        self.condition_search_edit.setClearButtonEnabled(True)
+        self.condition_search_edit.setToolTip(
+            "Search condition names or trigger codes. The selected condition stays visible "
+            "so you can keep editing it. Clear the search to show all conditions."
+        )
+        self.condition_search_edit.textChanged.connect(self._apply_condition_search)
+        self.condition_search_status = QLabel(self)
+        self.condition_search_status.setObjectName("setup_conditions_search_status")
+        self.condition_search_status.setProperty("setupMetricLabel", "true")
+        self.condition_search_status.setWordWrap(True)
+        self.condition_search_status.setMinimumWidth(0)
+        self.condition_search_status.hide()
 
         self.add_condition_button = QPushButton("+ Add Condition", self)
         self.add_condition_button.setObjectName("setup_wizard_add_condition_button")
@@ -384,7 +403,10 @@ class ConditionSetupStep(QWidget):
         self.condition_list_hint.setProperty("setupMetricLabel", "true")
         self.condition_list_hint.setWordWrap(True)
         list_layout.addWidget(self.condition_list_hint)
+        list_layout.addWidget(self.condition_search_edit)
+        list_layout.addWidget(self.condition_search_status)
         list_layout.addWidget(self.condition_list, 1)
+        QWidget.setTabOrder(self.condition_search_edit, self.condition_list)
         action_grid = QGridLayout()
         action_grid.setContentsMargins(0, 0, 0, 0)
         action_grid.setHorizontalSpacing(8)
@@ -810,16 +832,30 @@ class ConditionSetupStep(QWidget):
                 )
                 item = QListWidgetItem(f"{condition.name}\n{detail_text}")
                 item.setToolTip(
-                    f"{condition.name}\n{timing_label}\n"
+                    f"{condition.name}\nTrigger {condition.trigger_code}\n{timing_label}\n"
                     f"{self._condition_status_text(condition)}"
                 )
                 item.setSizeHint(QSize(0, 48))
                 item.setData(Qt.ItemDataRole.UserRole, condition.condition_id)
+                item.setData(
+                    Qt.ItemDataRole.UserRole + 1,
+                    f"{condition.name} {condition.trigger_code}".casefold(),
+                )
+                item.setData(Qt.ItemDataRole.AccessibleTextRole, item.toolTip())
                 self.condition_list.addItem(item)
                 if condition.condition_id == selected_condition_id:
                     self.condition_list.setCurrentItem(item)
-            if selected_condition_id is None and self.condition_list.count() > 0:
-                self.condition_list.setCurrentRow(0)
+            if self.condition_list.currentItem() is None and self.condition_list.count() > 0:
+                first_match = next(
+                    (
+                        self.condition_list.item(index)
+                        for index in range(self.condition_list.count())
+                        if self._matches_condition_search(self.condition_list.item(index))
+                    ),
+                    self.condition_list.item(0),
+                )
+                self.condition_list.setCurrentItem(first_match)
+        self._apply_condition_search()
         self._refresh_editor()
         conflicts = category_conflict_condition_ids(self._document.project)
         can_separate = (
@@ -907,7 +943,40 @@ class ConditionSetupStep(QWidget):
 
     def _handle_current_condition_changed(self, *_args: object) -> None:
         self.flush_pending_edits()
+        self._apply_condition_search()
         self._refresh_editor()
+
+    def _matches_condition_search(self, item: QListWidgetItem) -> bool:
+        terms = self.condition_search_edit.text().casefold().split()
+        searchable_text = str(item.data(Qt.ItemDataRole.UserRole + 1))
+        return all(term in searchable_text for term in terms)
+
+    def _apply_condition_search(self, *_args: object) -> None:
+        """Filter navigation without changing the selected condition or its draft."""
+
+        current_item = self.condition_list.currentItem()
+        matches = 0
+        selected_outside_search = False
+        with QSignalBlocker(self.condition_list):
+            for index in range(self.condition_list.count()):
+                item = self.condition_list.item(index)
+                matched = self._matches_condition_search(item)
+                matches += int(matched)
+                selected = item is current_item
+                selected_outside_search |= selected and not matched
+                item.setHidden(not matched and not selected)
+        if not self.condition_search_edit.text().strip():
+            self.condition_search_status.clear()
+            self.condition_search_status.hide()
+            return
+        result_text = (
+            "No matches." if matches == 0 else
+            "1 match." if matches == 1 else f"{matches} matches."
+        )
+        if selected_outside_search:
+            result_text += " Selected condition kept visible."
+        self.condition_search_status.setText(result_text)
+        self.condition_search_status.show()
 
     def _condition_status_text(self, condition: Condition) -> str:
         if condition.condition_id in category_conflict_condition_ids(self._document.project):

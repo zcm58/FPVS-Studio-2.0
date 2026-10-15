@@ -54,6 +54,10 @@ package map.
 
 ## Change Discipline
 
+- For user-facing source changes, follow `src/fpvs_studio/gui/AGENTS.md` and
+  `docs/FRONTEND.md` from the repo root. Expose truthful backend states through the
+  existing GUI bindings; visual improvements must preserve drafts, selection,
+  persisted formats, and execution ownership.
 - Preserve existing JSON, `RunSpec`, `SessionPlan`, and export formats unless a
   user explicitly asks to change a contract.
 - Prefer small direct edits over speculative abstractions.

@@ -66,6 +66,16 @@ contracts live in the nearest package `AGENTS.md` and the focused docs linked fr
 
 ## GUI Acceptance
 
+- For substantial UI work, define the user's task, primary action, affected states,
+  and observable success criteria before styling. Use existing screens and relevant
+  visual references to make choices concrete; routine fixes need no design ceremony.
+- Preserve Studio's quiet scientific-tool character and current user preferences.
+  Complete the requested interaction and its recovery paths, then refine appearance.
+  Make routine in-scope design decisions without an extra approval checkpoint.
+- Keep guidance concise and scoped: root rules apply throughout the repo; package
+  files add local requirements rather than repeating a general design prompt.
+  For design work, use [agent UI design guidance](docs/design-docs/agent-ui-design.md)
+  and the current contracts in `docs/FRONTEND.md`.
 - Use `src/fpvs_studio/gui/components.py` before adding local visual primitives or
   one-off styles.
 - No clipping is the default. Every changed surface must fit at its documented

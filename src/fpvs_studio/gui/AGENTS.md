@@ -85,6 +85,28 @@ backend-driven.
   Prefer responsive sizing, wrapping, or intentional elision with a tooltip/copy path;
   never depend on the user enlarging a window to reveal required controls or text.
 
+## Design quality
+
+- For substantial layout work, use the short brief and review criteria in
+  [agent UI design guidance](../../../docs/design-docs/agent-ui-design.md).
+  Record decisions in the current plan or task notes; a new approval stage is unnecessary.
+- Build hierarchy with existing typography, spacing, alignment and semantic button
+  roles. Keep related fields together and emphasize the next meaningful action.
+  Preserve the established shells and section cards; avoid adding decorative containers.
+- Put frequent commands near their task and occasional commands in existing menus.
+  Find Action belongs in File with Ctrl+F, not a permanent main-window button.
+  Reuse QAction enabled/visible state and existing navigation guards.
+- Keep headings, field labels, essential status and actionable errors visible.
+  Optional explanation belongs in tooltips; do not add routine subtitles or help
+  paragraphs. Preserve participant instructions and decision-critical information.
+- Account for applicable empty, populated, busy, disabled, invalid, failed, successful
+  and unsaved states. Provide a useful next action and preserve drafts during recovery.
+- Retain logical keyboard focus, Tab order, shortcuts and accessible names. Pair
+  status colors with text or symbols; prefer native controls and existing icons.
+- When visible verification is authorized, inspect the actual rendered changes,
+  correct concrete hierarchy/layout/interaction defects and recheck affected states.
+  Report the sizes, themes and scaling observed; source checks alone are not visual proof.
+
 ## Hard restrictions
 
 - Do not import PsychoPy directly anywhere in this package.

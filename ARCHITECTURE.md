@@ -3,6 +3,10 @@
 This is FPVS Studio's compact repository map. Detailed workflow and method contracts
 belong in the focused documents routed by `docs/agent/agent-index.md`.
 
+Frontend design briefs and visual review criteria live in
+[agent UI design guidance](docs/design-docs/agent-ui-design.md); implementation and
+acceptance contracts remain in `docs/FRONTEND.md` and `docs/GUI_WORKFLOW.md`.
+
 ## Application Shape
 
 FPVS Studio is a Windows-focused PySide6 authoring application with local
@@ -141,6 +145,9 @@ the public contract is in [Bug reporting](docs/BUG_REPORTING.md).
   skip cross preparation/drawing while preserving lead-in and stream frame timing.
   Manage Projects routes metadata-only renaming through `core/project_service.py`;
   the live document synchronizes the new name without saving other pending edits.
+  `gui/action_palette.py` searches existing GUI actions; `main_window.py` owns its
+  command catalog and work-in-progress guards. Condition search filters the existing
+  navigator without changing document selection or experiment order.
 - `src/fpvs_studio/core/`: editable models, validation, compilation, `RunSpec`,
   `SessionPlan`, reusable condition-task definitions, execution results, persistence,
   `.fpvsconfig` interchange, portable `.fpvsbundle` services, and other engine-neutral

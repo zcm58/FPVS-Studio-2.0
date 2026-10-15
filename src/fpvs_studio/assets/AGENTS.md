@@ -8,6 +8,11 @@ the installed GUI at runtime, such as the FPVS Studio window icon.
 ## Requirements
 
 - Keep assets small and release-facing.
+- Reuse the established icon and branding language. Add imagery only when it helps
+  identify an action, explain experiment content, or communicate state.
+- For changed GUI assets, inspect legibility at actual displayed sizes in light/dark
+  themes and relevant Windows scaling during approved visible acceptance. Use Qt's
+  high-DPI asset handling; do not assume widget coordinates are physical pixels.
 - Keep source branding assets and release-tooling icons documented in `docs/PACKAGING.md`.
 - Do not place project data, user templates, generated stimuli, logs, or runtime outputs
   in this package.
