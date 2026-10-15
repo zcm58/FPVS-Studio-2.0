@@ -823,6 +823,7 @@ def test_manage_projects_refreshes_dialog_after_failed_recycle(
     )
 
     controller._delete_managed_project(dialog, str(scaffold.project_root))
+    qtbot.waitUntil(lambda: controller._manage_projects_job is None)
 
     project_list = dialog.findChild(QListWidget, "manage_projects_list")
     assert project_list is not None

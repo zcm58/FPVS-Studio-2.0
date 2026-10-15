@@ -259,6 +259,95 @@ def test_three_soas_show_core_target_positions_and_intervening_digits(qtbot, str
         )
 
 
+@pytest.mark.parametrize("repeated_targets", [False, True])
+def test_preview_reuses_descriptions_and_digit_cells_within_each_edit(
+    qtbot, stream_document, monkeypatch, repeated_targets,
+):
+    if repeated_targets:
+        _use_repeated_targets(stream_document)
+    _, editor = _editor(qtbot, stream_document)
+    condition_ids = list(editor.soa_edits)
+    original_description = editor._description
+    calls = []
+
+    def counted_description(condition_id):
+        calls.append(condition_id)
+        return original_description(condition_id)
+
+    monkeypatch.setattr(editor, "_description", counted_description)
+    digit_items = [editor.condition_table.item(row, 2) for row in range(3)]
+    before = stream_document.project.model_dump(mode="json")
+
+    for rate in ("20", "10.0"):
+        calls.clear()
+        editor.rate_edit.setText(rate)
+        assert calls == condition_ids
+        assert not editor.validation_label.text()
+        assert editor.timeline.description.base_hz == float(rate)
+        for row, condition_id in enumerate(condition_ids):
+            item = editor.condition_table.item(row, 2)
+            assert item is digit_items[row]
+            assert item.text() == str(original_description(condition_id).intervening_digits)
+
+    # An unrelated burst-count draft retains the unchanged derived table values too.
+    calls.clear()
+    editor.bursts_per_soa_spin.setValue(20)
+    assert calls == condition_ids
+    assert all(editor.condition_table.item(row, 2) is item
+               for row, item in enumerate(digit_items))
+    assert stream_document.project.model_dump(mode="json") == before
+
+
+@pytest.mark.parametrize("invalid_soa", ["250", "", "nan"])
+def test_preview_reuses_failed_descriptions_and_recovers_on_the_next_edit(
+    qtbot, stream_document, monkeypatch, invalid_soa,
+):
+    _, editor = _editor(qtbot, stream_document)
+    condition_ids = list(editor.soa_edits)
+    original_description = editor._description
+    calls = []
+
+    def counted_description(condition_id):
+        calls.append(condition_id)
+        return original_description(condition_id)
+
+    monkeypatch.setattr(editor, "_description", counted_description)
+    soa_edit = editor.soa_edits[condition_ids[0]]
+    soa_edit.setText(invalid_soa)
+    assert calls == condition_ids
+    assert editor.validation_label.text() == editor.validation_message()
+    assert editor.validation_label.text()
+    assert not editor.preview_button.isEnabled()
+    assert not editor.timeline.isEnabled()
+    assert [editor.condition_table.item(row, 2).text() for row in range(3)] == ["—", "2", "4"]
+
+    calls.clear()
+    soa_edit.setText("200")
+    assert calls == condition_ids
+    assert not editor.validation_label.text()
+    assert editor.preview_button.isEnabled()
+    assert editor.timeline.isEnabled()
+    assert editor.timeline.description.soa_ms == 200
+    assert [editor.condition_table.item(row, 2).text() for row in range(3)] == ["1", "2", "4"]
+
+
+def test_preview_preserves_symbol_error_priority_over_condition_timing(qtbot, stream_document):
+    _, editor = _editor(qtbot, stream_document)
+    condition_id = next(iter(editor.soa_edits))
+    editor.soa_edits[condition_id].setText("250")
+    timing_error = editor.validation_label.text()
+    assert "whole multiple of 100 ms" in timing_error
+
+    editor.base_edit.setText("A")
+    assert editor.validation_label.text() == (
+        "The base stream needs at least two different single letters or digits."
+    )
+    assert editor.validation_label.text() == editor.validation_message()
+    assert editor.condition_table.item(0, 2).text() == "—"
+    editor.base_edit.setText("ABCD")
+    assert editor.validation_label.text() == timing_error
+
+
 def test_shared_edits_stay_drafts_until_next_and_invalid_soa_is_blocked(qtbot, stream_document):
     step, editor = _editor(qtbot, stream_document)
     before = stream_document.project.model_dump(mode="json")

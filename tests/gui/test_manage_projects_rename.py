@@ -27,6 +27,7 @@ def test_rename_updates_filtered_list_and_reopens_under_new_name(qtbot, controll
     dialog.filter_edit.setText("Original name")
     monkeypatch.setattr(QInputDialog, "getText", lambda *args, **kwargs: ("Renamed project", True))
     dialog.rename_button.click()
+    qtbot.waitUntil(lambda: controller._manage_projects_job is None)
     assert dialog.name_label.text() == "Renamed project"
     assert dialog.project_list.currentItem().text() == "Renamed project"
     assert dialog.filter_edit.text() == ""
@@ -54,6 +55,7 @@ def test_rename_open_project_preserves_unsaved_edits(qtbot, controller, monkeypa
     name = "Unsaved name" if dirty else "New project name"
     monkeypatch.setattr(QInputDialog, "getText", lambda *args, **kwargs: (name, True))
     dialog.rename_button.click()
+    qtbot.waitUntil(lambda: controller._manage_projects_job is None)
     saved = load_project_file(document.project_file_path)
     assert saved.meta.name == document.project.meta.name == name
     assert saved.meta.description == old_description

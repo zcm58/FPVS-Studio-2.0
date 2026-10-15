@@ -115,6 +115,11 @@ interaction.
   reintroduces them.
 - GUI code may coordinate document services and runtime launches, but core validation,
   compilation, session planning, and runtime flow remain outside widgets.
+- Keep presentation refreshes demand-driven: hidden Home/Assets/Run pages defer
+  document notifications until shown, and closed Find Action refreshes on reopening.
+  AB previews share derived descriptions within one edit only. Manage Projects scans
+  through the app-owned job lifecycle with loading, close and retry states; see
+  [GUI responsiveness](GUI_WORKFLOW.md#authoring-and-project-discovery-responsiveness).
 - Current runtime launch controls intentionally do not expose serial trigger settings,
   display selection, or fullscreen toggles; those remain backend/runtime contract values.
 

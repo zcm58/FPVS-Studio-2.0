@@ -17,6 +17,7 @@ tests/gui/test_experiment_designer.py
 tests/gui/test_fixation_cross_data_dialog.py
 tests/gui/test_fixation_settings_page.py
 tests/gui/test_frontend_responsiveness.py
+tests/gui/test_hidden_page_refresh.py
 tests/gui/test_home_launch_surface.py
 tests/gui/test_image_resizer_page.py
 tests/gui/test_library_access_dialog.py
@@ -24,6 +25,7 @@ tests/gui/test_library_dialog.py
 tests/gui/test_library_publisher_dialog.py
 tests/gui/test_library_submission_dialog.py
 tests/gui/test_manage_projects_rename.py
+tests/gui/test_manage_projects_responsiveness.py
 tests/gui/test_masking_conditions.py
 tests/gui/test_masking_modifier_dialog.py
 tests/gui/test_presentation_settings_dialog.py

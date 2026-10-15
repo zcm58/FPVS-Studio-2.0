@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from PySide6.QtCore import QEvent, QObject, Qt, QTimer
-from PySide6.QtGui import QAction, QColor, QPainter, QPaintEvent, QResizeEvent
+from PySide6.QtGui import QAction, QColor, QPainter, QPaintEvent, QResizeEvent, QShowEvent
 from PySide6.QtWidgets import (
     QFrame,
     QGridLayout,
@@ -152,6 +152,7 @@ class HomePage(QWidget):
     ) -> None:
         super().__init__(parent)
         self._document = document
+        self._refresh_pending = False
         self._load_condition_template_profiles = load_condition_template_profiles
         self._edit_setup_action: Callable[[], None] | None = None
         self._complete_setup_action: Callable[[], None] | None = None
@@ -351,8 +352,8 @@ class HomePage(QWidget):
         apply_home_page_theme(self)
         self._sync_launch_button_geometry()
 
-        self._document.project_changed.connect(self.refresh)
-        self._document.session_plan_changed.connect(self.refresh)
+        self._document.project_changed.connect(self._refresh_after_document_update)
+        self._document.session_plan_changed.connect(self._refresh_after_document_update)
         self.refresh()
 
     def changeEvent(self, event: QEvent) -> None:  # noqa: N802
@@ -453,7 +454,19 @@ class HomePage(QWidget):
         self._refresh_project_update_notice()
         self.project_update_notice.setVisible(bool(message))
 
+    def _refresh_after_document_update(self) -> None:
+        if not self.isVisible():
+            self._refresh_pending = True
+            return
+        self.refresh()
+
+    def showEvent(self, event: QShowEvent) -> None:  # noqa: N802
+        if self._refresh_pending:
+            self.refresh()
+        super().showEvent(event)
+
     def refresh(self) -> None:
+        self._refresh_pending = False
         project = self._document.project
         session_settings = project.settings.session
         fixation_settings = project.settings.fixation_task
