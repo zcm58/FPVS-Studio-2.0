@@ -329,7 +329,8 @@ owns endpoint estimates and task-response checkpoints. Details and acceptance ar
   presentation properties and never create project assets.
   The trigger backend contract declares external-marker capability; playback rejects
   log-only backends outside explicit test/pilot launches and empty trigger schedules.
-- `ProjectSettings.recording` persists each project's BioSemi/Unicorn choice and UDP port;
+- `ProjectSettings.recording` persists each project's BioSemi ActiveTwo/ActiveThree,
+  Brain Products TriggerBox or Unicorn choice and relevant endpoint/pulse settings;
   core's `recording_hardware.py` supplies the selected versioned acquisition/montage/
   decoder declaration, exported to Toolbox without claiming measured wiring.
   `project_service.py` atomically saves only those fields. `runtime/recording.py` resolves
@@ -342,6 +343,9 @@ owns endpoint estimates and task-response checkpoints. Details and acceptance ar
   versioned acquisition evidence in full and compact modes. Local submission, operator
   confirmation, recorded-marker integrity and physical timing remain separate evidence
   levels; see [Runtime execution](docs/RUNTIME_EXECUTION.md#trigger-behavior).
+  ActiveThree reuses the BioSemi serial adapter; TriggerBox uses a dedicated adapter
+  with synchronous event writes and worker-owned zero reset outside frame scheduling.
+  New devices retain selected identity without inventing Toolbox montage profiles.
 - Full export mode writes each numbered visit under `runs/P<PID>_session<NN>/`.
   Current native session launches also write a completed Toolbox config under
   `logs/acquisition/` after research finalization, embedding actual event evidence and

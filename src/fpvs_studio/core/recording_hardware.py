@@ -40,8 +40,10 @@ class RecordingHardwareDefinition(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     label: str
-    recording_backend: Literal["serial", "unicorn_udp"]
-    acquisition_profile: AcquisitionProfile
+    recording_backend: Literal[
+        "serial", "biosemi_active_three", "brainproducts_triggerbox", "unicorn_udp"
+    ]
+    acquisition_profile: AcquisitionProfile | None = None
 
 
 _HARDWARE = (
@@ -52,6 +54,13 @@ _HARDWARE = (
             montage_version="1.0", event_decoder_id="biosemi_edge",
             event_decoder_version="1.0", reference_policy="biosemi_exg_pair_then_average",
         ),
+    ),
+    RecordingHardwareDefinition(
+        label="BioSemi ActiveThree (128 channels)", recording_backend="biosemi_active_three",
+    ),
+    RecordingHardwareDefinition(
+        label="Brain Products TriggerBox / TriggerBox Plus",
+        recording_backend="brainproducts_triggerbox",
     ),
     RecordingHardwareDefinition(
         label="Unicorn Hybrid Black (factory 8 channels)", recording_backend="unicorn_udp",
@@ -78,10 +87,11 @@ def recording_hardware_definitions() -> tuple[RecordingHardwareDefinition, ...]:
     return tuple(item.model_copy(deep=True) for item in _HARDWARE)
 
 
-def acquisition_profile_for_recording(recording_backend: str) -> AcquisitionProfile:
+def acquisition_profile_for_recording(recording_backend: str) -> AcquisitionProfile | None:
     """Resolve the authored recording choice; unsupported choices fail explicitly."""
 
     for item in _HARDWARE:
         if item.recording_backend == recording_backend:
-            return item.acquisition_profile.model_copy(deep=True)
+            profile = item.acquisition_profile
+            return profile.model_copy(deep=True) if profile is not None else None
     raise ValueError(f"Unsupported recording hardware choice: {recording_backend}")

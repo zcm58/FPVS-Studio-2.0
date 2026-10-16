@@ -288,6 +288,12 @@ class DocumentRuntimeMixin:
                     unicorn_udp_port=cast(
                         int, self.recording_configuration.get("unicorn_udp_port", 1000),
                     ),
+                    brainproducts_serial_port=cast(
+                        str, self.recording_configuration.get("brainproducts_serial_port", "COM3"),
+                    ),
+                    brainproducts_pulse_width_ms=cast(
+                        int, self.recording_configuration.get("brainproducts_pulse_width_ms", 10),
+                    ),
                     recording_selection_source="project_settings",
                     recording_operator_confirmed=recording_operator_confirmed,
                     recording_association=recording_association,

@@ -18,6 +18,12 @@ adapter scaffolding.
   for explicit manual reset and must not be emitted for condition or oddball events.
 - Keep unavailable hardware behavior explicit; do not add silent fallbacks that hide
   failed trigger emission.
+- ActiveThree reuses BioSemi's serial byte protocol. Brain Products TriggerBox rev.02/
+  Plus uses a distinct adapter/identity at fixed 2,000,000 baud. Its connection-owned
+  worker clears a latched event after the configured pulse; sends never sleep or queue.
+  Reject active pulses/insufficient low intervals, retain asynchronous reset failures
+  until observed, and always close worker/port. Reset/close may drain a pulse only
+  outside presentation. Keep codes 1–255 intact and use zero solely for idle/reset.
 - Resolve unset/blank serial-port configuration to `COM3`, while preserving an
   explicit nonempty port. This is a configuration default, never a retry/fallback
   after a port fails to open or write.

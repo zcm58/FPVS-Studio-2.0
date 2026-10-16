@@ -55,6 +55,9 @@ class AcquisitionEvidenceRecorder:
         if self._config is not None and (
             self._config.project.project_id != project_id
             or self._config.toolbox.acquisition_profile != snapshot.acquisition_profile
+            or (
+                self._config.recording.recording_backend if self._config.recording else "serial"
+            ) != snapshot.selected_backend
         ):
             raise ProjectConfigError(
                 "Prelaunch handoff project or hardware selection does not match."

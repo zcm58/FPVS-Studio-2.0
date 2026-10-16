@@ -232,7 +232,9 @@ class ProjectDocument(
         return (
             self._require_biosemi_recording_confirmation
             and not self.local_testing_enabled
-            and self.recording_configuration.get("recording_backend") == "serial"
+            and self.recording_configuration.get("recording_backend") in (
+                "serial", "biosemi_active_three",
+            )
         )
 
     @property

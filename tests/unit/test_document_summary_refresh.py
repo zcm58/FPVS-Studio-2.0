@@ -232,7 +232,9 @@ def test_document_compile_session_filters_conditions_without_persisting_selectio
     assert document.last_session_plan is session_plan
 
 
-@pytest.mark.parametrize("selection", ["serial", "unicorn_udp"])
+@pytest.mark.parametrize("selection", [
+    "serial", "biosemi_active_three", "brainproducts_triggerbox", "unicorn_udp",
+])
 @pytest.mark.parametrize("test_mode", [False, True])
 def test_project_recording_selection_preserves_protocol_and_test_output(
     multi_condition_project,
@@ -253,16 +255,20 @@ def test_project_recording_selection_preserves_protocol_and_test_output(
         project=multi_condition_project.model_copy(deep=True),
     )
     original = document.project.model_dump(mode="json")
-    document.set_recording_configuration({"recording_backend": selection, "unicorn_udp_port": 4567})
+    document.set_recording_configuration({
+        "recording_backend": selection, "unicorn_udp_port": 4567,
+        "brainproducts_serial_port": "COM123", "brainproducts_pulse_width_ms": 20,
+    })
     document.set_experiment_test_mode_enabled(test_mode)
     changed = document.project.model_dump(mode="json")
     changed["settings"]["recording"] = original["settings"]["recording"]
     assert changed == original
     assert document.dirty
     assert document.require_biosemi_recording_confirmation == (
-        not test_mode and selection != "unicorn_udp"
+        not test_mode and selection in ("serial", "biosemi_active_three")
     )
-    assert document.validate_recording_launch() == ("null" if test_mode else selection or "serial")
+    effective = "serial" if selection == "biosemi_active_three" else selection
+    assert document.validate_recording_launch() == ("null" if test_mode else effective)
 
     # The document only assembles settings; runtime owns readiness and qualification.
     plan = compile_session_plan(
@@ -296,13 +302,15 @@ def test_project_recording_selection_preserves_protocol_and_test_output(
     settings = captured[0]
     assert settings.recording_backend == selection
     assert settings.unicorn_udp_port == 4567
+    assert settings.brainproducts_serial_port == "COM123"
+    assert settings.brainproducts_pulse_width_ms == 20
     assert settings.serial_port == original["settings"]["triggers"]["serial_port"]
     assert settings.serial_enabled is not test_mode
     assert settings.recording_operator_confirmed is confirmed
     assert settings.recording_association == ("participant-7-session-1" if confirmed else None)
     assert settings.recorder_version == ("unknown test build" if confirmed else None)
     assert validate_recording_configuration(settings.as_runtime_options()) == (
-        "null" if test_mode else selection or "serial"
+        "null" if test_mode else effective
     )
     probe.assert_not_called()
 
@@ -330,15 +338,20 @@ def test_invalid_local_recording_selection_is_actionable_not_repaired(
     assert document.validate_recording_launch() == "serial"
 
 
-def test_unicorn_selection_preserves_attentional_blink_pilot_null_mode(tmp_path) -> None:
+@pytest.mark.parametrize("selection", [
+    "unicorn_udp", "biosemi_active_three", "brainproducts_triggerbox",
+])
+def test_recording_selection_preserves_attentional_blink_pilot_null_mode(
+    tmp_path, selection,
+) -> None:
     from fpvs_studio.core.enums import ExperimentCategory
 
     document = ProjectDocument.create_new(
-        parent_dir=tmp_path, project_name="Unicorn pilot preparation",
+        parent_dir=tmp_path, project_name="EEG pilot preparation",
         experiment_category=ExperimentCategory.ATTENTIONAL_BLINK,
     )
     document.set_recording_configuration({
-        "recording_backend": "unicorn_udp", "unicorn_udp_port": 1000,
+        "recording_backend": selection, "unicorn_udp_port": 1000,
     })
     document.set_attentional_blink_pilot_mode_enabled(True)
     assert document.validate_recording_launch() == "null"

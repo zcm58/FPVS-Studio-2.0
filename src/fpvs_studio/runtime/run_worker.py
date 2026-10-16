@@ -34,7 +34,11 @@ from fpvs_studio.runtime.export_modes import EXPORT_MODE_FULL
 from fpvs_studio.runtime.fixation import build_fixation_task_summary, score_fixation_responses
 from fpvs_studio.runtime.masking_report import write_masking_plan_checkpoint
 from fpvs_studio.runtime.preflight import PreflightError
-from fpvs_studio.runtime.recording import recording_backend_label, recording_snapshot
+from fpvs_studio.runtime.recording import (
+    recording_backend_label,
+    recording_snapshot,
+    validate_recording_trigger_schedule,
+)
 from fpvs_studio.runtime.session_export import (
     append_compact_task_responses,
     append_session_condition_history,
@@ -104,6 +108,7 @@ class RuntimeWorker:
             participant_number=participant_number,
         )
         try:
+            validate_recording_trigger_schedule(run_spec, runtime_options)
             trigger_backend, trigger_warnings = _build_and_connect_trigger_backend(runtime_options)
         except Exception as exc:
             _finish_acquisition_after_error(acquisition, exc)
@@ -151,6 +156,7 @@ class RuntimeWorker:
                             runtime_options=runtime_options,
                             trigger_backend=trigger_backend,
                         )
+                        _finish_triggerbox_pulse(trigger_backend)
                     except TriggerEmissionError as exc:
                         run_summary = _build_trigger_aborted_summary(
                             run_spec,
@@ -256,6 +262,8 @@ class RuntimeWorker:
             participant_metadata=participant_metadata,
         )
         try:
+            for entry in session_plan.ordered_entries():
+                validate_recording_trigger_schedule(entry.run_spec, runtime_options)
             trigger_backend, trigger_warnings = _build_and_connect_trigger_backend(runtime_options)
         except Exception as exc:
             _finish_acquisition_after_error(acquisition, exc)
@@ -478,6 +486,7 @@ class RuntimeWorker:
                         runtime_options=runtime_options,
                         trigger_backend=trigger_backend,
                     )
+                    _finish_triggerbox_pulse(trigger_backend)
                 except TriggerEmissionError as exc:
                     run_summary = _build_trigger_aborted_summary(
                         entry.run_spec,
@@ -1051,6 +1060,16 @@ def _run_spec_with_accessible_fixation_colors(run_spec: RunSpec) -> RunSpec:
         }
     )
     return run_spec.model_copy(update={"fixation": fixation})
+
+
+def _finish_triggerbox_pulse(backend: LoggedTriggerBackend) -> None:
+    """Finish asynchronous resets between conditions, outside timed presentation."""
+
+    if backend.backend_name == "brainproducts_triggerbox":
+        try:
+            backend.reset()
+        except Exception as exc:
+            raise TriggerEmissionError(f"Brain Products pulse reset failed: {exc}") from exc
 
 
 def _build_and_connect_trigger_backend(

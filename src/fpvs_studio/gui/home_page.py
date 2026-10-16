@@ -47,6 +47,8 @@ _HOME_HERO_MIN_HEIGHT = 328
 # Add display names here as new recording backends become supported.
 _HOME_RECORDING_DEVICE_NAMES = {
     "serial": "BioSemi ActiveTwo",
+    "biosemi_active_three": "BioSemi ActiveThree (128 electrodes)",
+    "brainproducts_triggerbox": "Brain Products TriggerBox / TriggerBox Plus",
     "unicorn_udp": "Unicorn Black Mobile Headset",
 }
 _SOPHIA_MODE_TICKER_TEXT = (
@@ -515,6 +517,12 @@ class HomePage(QWidget):
         except DocumentError:
             device_name = None
         else:
+            if (
+                backend == "serial"
+                and self._document.recording_configuration.get("recording_backend")
+                == "biosemi_active_three"
+            ):
+                backend = "biosemi_active_three"
             device_name = _HOME_RECORDING_DEVICE_NAMES.get(backend)
         self.recording_summary.setText(
             f"Recording Device: {device_name}" if device_name else summary,

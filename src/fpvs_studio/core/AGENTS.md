@@ -12,7 +12,8 @@ This directory is the most important foundation in the repo. It should remain im
   configuration; runtime resolves transport outside compiled contracts
 - `recording_hardware.py` owns versioned hardware/montage/decoder declarations used
   by recording settings, config and acquisition exports. Factory mapping is declared,
-  never measured device qualification.
+  never measured device qualification. ActiveThree 128 and Brain Products TriggerBox
+  retain distinct hardware selections with no guessed Toolbox acquisition profile.
 - dedicated `RunSpec` schemas in `run_spec.py`
 - dedicated `SessionPlan` schemas in `session_plan.py`
 - dedicated execution-result schemas in `execution.py`

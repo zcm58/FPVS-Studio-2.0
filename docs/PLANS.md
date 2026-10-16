@@ -38,6 +38,10 @@ Recent completion: [GUI responsiveness during authoring and project discovery](e
 (background project scans, deferred hidden-page refreshes, and per-update AB preview
 reuse; safe verification passed, with visible GUI acceptance still documented).
 
+Recent completion: [ActiveThree and Brain Products recording support](exec-plans/completed/additional-eeg-hardware.md)
+(ActiveThree 128 via BioSemi serial and TriggerBox/Plus via pulse/reset adapter;
+hardware/visible qualification and unprofiled Toolbox montage support remain separate).
+
 Recent completion: [UI action discovery and condition navigation](exec-plans/completed/ui-action-discovery.md)
 (File > Find Action with Ctrl+F, condition filtering, and frontend agent guidance;
 registered Qt and full visible acceptance remain documented).

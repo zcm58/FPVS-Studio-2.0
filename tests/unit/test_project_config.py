@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 
 import pytest
 
@@ -15,6 +16,11 @@ from fpvs_studio.core.enums import (
     StimulusVariant,
     TextHeightMode,
 )
+from fpvs_studio.core.execution import (
+    AcquisitionEvidence,
+    AcquisitionRunEvidence,
+    RecordingSnapshot,
+)
 from fpvs_studio.core.models import (
     ImageGeometrySettings,
     ImageResolution,
@@ -24,13 +30,17 @@ from fpvs_studio.core.models import (
 )
 from fpvs_studio.core.project_config import (
     ProjectConfigError,
+    completed_toolbox_config,
     create_project_from_config,
     export_project_config,
     project_config_filename,
     read_project_config,
     write_project_config,
 )
-from fpvs_studio.core.recording_hardware import acquisition_profile_for_recording
+from fpvs_studio.core.recording_hardware import (
+    acquisition_profile_for_recording,
+    recording_hardware_definitions,
+)
 from fpvs_studio.core.serialization import load_project_file, write_json_file
 from fpvs_studio.preprocessing.models import (
     DerivedImageRecord,
@@ -105,6 +115,60 @@ def test_hardware_registry_does_not_allow_mapping_mutation_or_unknown_choices():
     assert acquisition_profile_for_recording("unicorn_udp").source_to_canonical["EEG 1"] == "Fz"
     with pytest.raises(ValueError, match="Unsupported recording hardware"):
         acquisition_profile_for_recording("unknown")
+
+
+@pytest.mark.parametrize("backend,label", [
+    ("biosemi_active_three", "BioSemi ActiveThree (128 channels)"),
+    ("brainproducts_triggerbox", "Brain Products TriggerBox / TriggerBox Plus"),
+])
+def test_new_hardware_declares_selection_without_inventing_toolbox_profile(backend, label):
+    definition = next(
+        item for item in recording_hardware_definitions() if item.recording_backend == backend
+    )
+    assert definition.label == label
+    assert definition.acquisition_profile is None
+    assert acquisition_profile_for_recording(backend) is None
+
+
+@pytest.mark.parametrize("backend", ["biosemi_active_three", "brainproducts_triggerbox"])
+def test_unprofiled_completed_handoff_requires_exact_selected_hardware(
+    sample_project, sample_project_root, tmp_path, backend,
+):
+    sample_project.settings.recording = ProjectRecordingSettings(recording_backend=backend)
+    config = export_project_config(sample_project, sample_project_root)
+    plan = compile_session_plan(
+        sample_project, project_root=sample_project_root, refresh_hz=60.0, random_seed=12,
+    )
+    snapshot = RecordingSnapshot(
+        selected_backend=backend,
+        effective_backend="serial" if backend == "biosemi_active_three" else backend,
+        selection_source="project_settings", receiver_validation="not_applicable",
+    )
+    evidence = AcquisitionEvidence(
+        studio_version="test", execution_id="synthetic-execution",
+        project_id=plan.project_id, participant_number="007", session_id=plan.session_id,
+        recording=snapshot, state="completed", created_at_utc=datetime.now(timezone.utc),
+        updated_at_utc=datetime.now(timezone.utc),
+        runs=[
+            AcquisitionRunEvidence(
+                run_id=entry.run_id, condition_id=entry.condition_id,
+                condition_name=entry.condition_name, planned_event_count=0, state="completed",
+            )
+            for entry in plan.ordered_entries()
+        ],
+    )
+    completed = completed_toolbox_config(config, sample_project_root, plan, evidence)
+    path = tmp_path / "completed.fpvsconfig"
+    write_project_config(path, completed)
+    loaded = read_project_config(path)
+    assert loaded.toolbox.acquisition_profile is None
+    assert loaded.completed_session.acquisition_evidence.recording.selected_backend == backend
+
+    evidence.recording.selected_backend = (
+        "brainproducts_triggerbox" if backend == "biosemi_active_three" else "biosemi_active_three"
+    )
+    with pytest.raises(ProjectConfigError, match="hardware does not match"):
+        completed_toolbox_config(config, sample_project_root, plan, evidence)
 
 
 def test_config_export_rejects_nonstandard_oddball_without_explicit_override(
@@ -405,12 +469,20 @@ def test_project_config_without_protocol_loads_current_defaults(tmp_path, sample
     assert loaded.protocol.oddball_every_n == 5
 
 
+@pytest.mark.parametrize("configuration", [
+    {"recording_backend": "unicorn_udp", "unicorn_udp_port": 2345},
+    {"recording_backend": "biosemi_active_three"},
+    {
+        "recording_backend": "brainproducts_triggerbox", "brainproducts_serial_port": "COM18",
+        "brainproducts_pulse_width_ms": 20,
+    },
+])
 def test_recording_device_and_port_survive_config_interchange(
-    tmp_path, sample_project, sample_project_root
+    tmp_path, sample_project, sample_project_root, configuration,
 ):
     from fpvs_studio.core.models import ProjectRecordingSettings
 
-    setting = ProjectRecordingSettings(recording_backend="unicorn_udp", unicorn_udp_port=2345)
+    setting = ProjectRecordingSettings(**configuration)
     sample_project.settings.recording = setting
     config = export_project_config(sample_project, sample_project_root)
     path = tmp_path / "device.fpvsconfig"

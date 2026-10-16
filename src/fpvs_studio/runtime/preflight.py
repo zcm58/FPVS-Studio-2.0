@@ -41,6 +41,10 @@ from fpvs_studio.runtime.display_refresh import (
     DisplayRefreshVerificationError,
     verify_primary_display_refresh,
 )
+from fpvs_studio.runtime.recording import (
+    RecordingConfigurationError,
+    validate_recording_trigger_schedule,
+)
 
 
 class PreflightError(ValueError):
@@ -704,6 +708,10 @@ def preflight_run_spec(
     _validate_stimulus_payloads(run_spec)
     _validate_fixation_timing(run_spec)
     _validate_trigger_timing(run_spec)
+    try:
+        validate_recording_trigger_schedule(run_spec, runtime_options)
+    except RecordingConfigurationError as exc:
+        raise PreflightError(str(exc)) from exc
     display_report = engine.validate_run_spec(run_spec)
     if not display_report.compatible:
         raise PreflightError(

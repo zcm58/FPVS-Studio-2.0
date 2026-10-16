@@ -19,6 +19,7 @@ from pydantic import (
     Field,
     SerializerFunctionWrapHandler,
     StrictInt,
+    StrictStr,
     field_validator,
     model_serializer,
     model_validator,
@@ -593,9 +594,21 @@ class SessionSettings(FPVSBaseModel):
 class ProjectRecordingSettings(FPVSBaseModel):
     """Saved recording-device choice, separate from compiled timing contracts."""
 
-    recording_backend: Literal["serial", "unicorn_udp"] = "serial"
+    recording_backend: Literal[
+        "serial", "biosemi_active_three", "brainproducts_triggerbox", "unicorn_udp"
+    ] = "serial"
     unicorn_udp_port: StrictInt = Field(default=1000, ge=1, le=65535)
+    brainproducts_serial_port: StrictStr = "COM3"
+    brainproducts_pulse_width_ms: StrictInt = Field(default=10, ge=1, le=1000)
     acquisition_profile: AcquisitionProfile | None = None
+
+    @field_validator("brainproducts_serial_port")
+    @classmethod
+    def validate_brainproducts_serial_port(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("Brain Products TriggerBox serial port may not be blank.")
+        return cleaned
 
     @model_validator(mode="after")
     def resolve_hardware_declaration(self) -> ProjectRecordingSettings:

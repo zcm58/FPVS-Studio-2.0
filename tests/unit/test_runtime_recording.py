@@ -18,6 +18,7 @@ from fpvs_studio.core.project_config import (
     export_project_config,
     read_project_config,
 )
+from fpvs_studio.core.run_spec import TriggerEvent
 from fpvs_studio.core.serialization import read_json_file
 from fpvs_studio.runtime import launcher, triggers
 from fpvs_studio.runtime.acquisition_evidence import AcquisitionEvidenceRecorder
@@ -34,6 +35,7 @@ from fpvs_studio.runtime.recording import (
     recording_snapshot,
     validate_production_recording,
     validate_recording_configuration,
+    validate_recording_trigger_schedule,
 )
 from fpvs_studio.runtime.run_worker import RuntimeWorker
 from fpvs_studio.runtime.unicorn_recorder import RecorderReadinessError
@@ -77,6 +79,12 @@ class FakeSerial(FakeUnicorn):
     @property
     def backend_name(self):
         return "serial"
+
+
+class FakeTriggerBox(FakeUnicorn):
+    @property
+    def backend_name(self):
+        return "brainproducts_triggerbox"
 
 
 @pytest.fixture
@@ -130,7 +138,8 @@ def test_selection_precedence_allows_explicit_unicorn_with_pending_validation():
 
 @pytest.mark.parametrize("mode", ["experiment_test_mode", "pilot_mode"])
 def test_test_and_pilot_always_null_even_when_serial_enabled(mode):
-    for selected in (None, "serial", "unicorn_udp"):
+    for selected in (None, "serial", "unicorn_udp", "biosemi_active_three",
+                     "brainproducts_triggerbox"):
         assert validate_production_recording({
             "recording_backend": selected, "serial_enabled": True, mode: True,
         }) == "null"
@@ -489,17 +498,126 @@ def test_project_recording_selection_is_identified_in_export_snapshot():
     assert snapshot.udp_port == 2345
 
 
+def test_triggerbox_factory_uses_project_endpoint_and_fixed_protocol(monkeypatch):
+    output = FakeTriggerBox()
+    adapter = Mock(return_value=output)
+    monkeypatch.setattr(triggers, "BrainProductsTriggerBoxBackend", adapter)
+    options = {
+        "recording_backend": "brainproducts_triggerbox",
+        "brainproducts_serial_port": " COM9 ", "brainproducts_pulse_width_ms": 20,
+        "serial_port": "COM99", "serial_baudrate": 9600, "serial_enabled": False,
+    }
+    backend, _ = triggers.build_trigger_backend(options)
+    adapter.assert_called_once_with(port="COM9", pulse_width_ms=20)
+    assert backend.backend_name == "brainproducts_triggerbox"
+    snapshot = recording_snapshot(options)
+    assert snapshot.serial_port == "COM9"
+    assert snapshot.serial_baudrate == 2_000_000
+    assert snapshot.trigger_pulse_width_ms == 20
+    assert snapshot.acquisition_profile is None
+
+
+@pytest.mark.parametrize("mode", ["experiment_test_mode", "pilot_mode"])
+def test_triggerbox_test_modes_never_construct_hardware(monkeypatch, mode):
+    adapter = Mock(side_effect=AssertionError("hardware must not be created"))
+    monkeypatch.setattr(triggers, "BrainProductsTriggerBoxBackend", adapter)
+    options = {"recording_backend": "brainproducts_triggerbox", mode: True}
+    backend, _ = triggers.build_trigger_backend(options)
+    assert backend.backend_name == "null"
+    snapshot = recording_snapshot(options)
+    assert snapshot.selected_backend == "brainproducts_triggerbox"
+    assert snapshot.serial_port is None
+    adapter.assert_not_called()
+
+
+@pytest.mark.parametrize("field,value", [
+    ("brainproducts_serial_port", " "), ("brainproducts_serial_port", None),
+    ("brainproducts_serial_port", 9), ("brainproducts_pulse_width_ms", True),
+    ("brainproducts_pulse_width_ms", 0), ("brainproducts_pulse_width_ms", 1001),
+    ("brainproducts_pulse_width_ms", "10"),
+])
+def test_invalid_triggerbox_configuration_rejected_even_in_test(field, value):
+    with pytest.raises(RecordingConfigurationError, match="Brain Products"):
+        validate_recording_configuration({
+            "recording_backend": "brainproducts_triggerbox", "experiment_test_mode": True,
+            field: value,
+        })
+
+
+def test_triggerbox_schedule_checks_high_and_low_intervals_including_frame_minus_one(execution):
+    _, plan = execution
+    spec = plan.ordered_entries()[0].run_spec
+    spec = spec.model_copy(update={"trigger_events": [
+        TriggerEvent(frame_index=-1, code=1, label="condition_start"),
+        TriggerEvent(frame_index=0, code=55, label="distractor_onset"),
+    ]})
+    options = {"recording_backend": "brainproducts_triggerbox"}
+    with pytest.raises(RecordingConfigurationError, match="frames -1 and 0"):
+        validate_recording_trigger_schedule(spec, options)
+    validate_recording_trigger_schedule(spec, {**options, "brainproducts_pulse_width_ms": 2})
+    validate_recording_trigger_schedule(spec, {**options, "experiment_test_mode": True})
+
+
+@pytest.mark.parametrize("launch_kind", ["run", "session"])
+def test_triggerbox_impossible_schedule_fails_before_visit_or_output(
+    execution, monkeypatch, launch_kind,
+):
+    root, plan = execution
+    monkeypatch.setattr(launcher, "create_engine", lambda _name: StubEngine({}))
+    reserve = Mock(side_effect=AssertionError("visit must not be reserved"))
+    monkeypatch.setattr(launcher, "reserve_participant_session", reserve)
+    adapter = Mock(side_effect=AssertionError("hardware must not be opened"))
+    monkeypatch.setattr(triggers, "BrainProductsTriggerBoxBackend", adapter)
+    with pytest.raises(PreflightError, match="TriggerBox needs more than"):
+        _launch_at_boundary(root, plan, launch_kind, LaunchSettings(
+            recording_backend="brainproducts_triggerbox", brainproducts_pulse_width_ms=1000,
+            verify_refresh_rate=False,
+        ))
+    reserve.assert_not_called()
+    adapter.assert_not_called()
+    assert not (root / "logs" / "acquisition").exists()
+
+
+def test_triggerbox_reset_failure_retains_interrupted_acquisition_without_completed_handoff(
+    execution, sample_project, monkeypatch,
+):
+    root, plan = execution
+    sample_project.settings.recording = ProjectRecordingSettings(
+        recording_backend="brainproducts_triggerbox",
+    )
+    config = export_project_config(sample_project, root)
+    output = FakeTriggerBox()
+    output.reset = Mock(side_effect=OSError("zero write failed"))
+    monkeypatch.setattr(triggers, "BrainProductsTriggerBoxBackend", lambda **_kwargs: output)
+    summary = _execute(root, plan, RuntimeWorker(StubEngine({})),
+                       recording_backend="brainproducts_triggerbox",
+                       toolbox_handoff_config=config.model_dump(mode="json"))
+    assert summary.aborted
+    assert "pulse reset failed" in summary.abort_reason
+    assert output.closed
+    evidence = _evidence(root)
+    assert evidence.state == "aborted"
+    assert evidence.runs[0].attempted_events
+    assert not list((root / "logs" / "acquisition").glob("*-completed.fpvsconfig"))
+
+
 @pytest.mark.parametrize("export_mode", ["compact", "full"])
-@pytest.mark.parametrize("backend", ["serial", "unicorn_udp"])
+@pytest.mark.parametrize("backend", [
+    "serial", "unicorn_udp", "biosemi_active_three", "brainproducts_triggerbox",
+])
 def test_completed_handoff_automatically_retains_hardware_identity_and_event_evidence(
     execution, sample_project, monkeypatch, export_mode, backend,
 ):
     root, plan = execution
     sample_project.settings.recording = ProjectRecordingSettings(recording_backend=backend)
     config = export_project_config(sample_project, root)
-    output = FakeSerial() if backend == "serial" else FakeUnicorn()
-    if backend == "serial":
+    output = FakeSerial() if backend in ("serial", "biosemi_active_three") else FakeUnicorn()
+    if backend in ("serial", "biosemi_active_three"):
         monkeypatch.setattr(triggers, "SerialBackend", lambda *_args, **_kwargs: output)
+    elif backend == "brainproducts_triggerbox":
+        output = FakeTriggerBox()
+        monkeypatch.setattr(triggers, "BrainProductsTriggerBoxBackend",
+                            lambda **_kwargs: output)
     else:
         _fake_output(monkeypatch, output)
     summary = _execute(
@@ -512,6 +630,11 @@ def test_completed_handoff_automatically_retains_hardware_identity_and_event_evi
     completed = read_project_config(path)
     assert completed.schema_version == config.schema_version
     assert completed.toolbox.acquisition_profile == evidence.acquisition_profile
+    assert completed.recording.recording_backend == backend
+    assert evidence.recording.selected_backend == backend
+    if backend in ("biosemi_active_three", "brainproducts_triggerbox"):
+        assert evidence.acquisition_profile is None
+        assert evidence.recording.receiver_validation == "pending"
     assert completed.completed_session.execution_id == evidence.execution_id
     assert completed.completed_session.participant_number == "007"
     assert completed.completed_session.participant_session_number == 1

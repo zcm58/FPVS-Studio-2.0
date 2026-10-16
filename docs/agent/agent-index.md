@@ -26,7 +26,7 @@ cross-layer behavior require it.
 | `preprocessing` | Image intake, inspection, normalization, variants, or manifests | `src/fpvs_studio/preprocessing/AGENTS.md` and the relevant asset/manifest tests |
 | `runtime` | Launch, preflight, modular-task sequencing, session flow, participant history, scoring, or exports | `src/fpvs_studio/runtime/AGENTS.md` and `docs/RUNTIME_EXECUTION.md` |
 | `engine` | Presentation interface, PsychoPy rendering, modular task screens, frame timing, or display screens | `src/fpvs_studio/engines/AGENTS.md`, `docs/ENGINE_INTERFACE.md`, and `docs/RUNSPEC.md` |
-| `triggers` | Trigger contracts, serial hardware adapters, marker writes, or trigger logs | `src/fpvs_studio/triggers/AGENTS.md` and the trigger sections of `docs/RUNTIME_EXECUTION.md` |
+| `triggers` | Trigger contracts, BioSemi/TriggerBox serial adapters, UDP markers, or trigger logs | `src/fpvs_studio/triggers/AGENTS.md` and the trigger sections of `docs/RUNTIME_EXECUTION.md` |
 | `updates` | Independent updater protocol/staging, release and repair selection, bounded cache/locking, verified downloads/launch, or update GUI shutdown coordination | `src/fpvs_studio/updates/AGENTS.md` and `docs/PACKAGING.md` |
 | `library` | View/Create Project library entry points, private catalog, enrollment, downloads, Advanced developer mode, and publishing | `src/fpvs_studio/library/AGENTS.md`, `src/fpvs_studio/developer/AGENTS.md` for publishing, `docs/EXPERIMENT_LIBRARY.md`, and the active private-library plan |
 | `data-sharing` | Experiment contribution consent, credentials, completion capture, upload retirement, offline startup delivery or matched comparisons | `src/fpvs_studio/data_sharing/AGENTS.md`, `docs/DATA_SHARING.md`, `docs/REPORTING_STORAGE.md` for budgets, and sibling `../OpenFPVS/PROJECT_REPORTING.md` for backend work |
@@ -99,6 +99,13 @@ process's workspace test profile. Windows native known-folder resolution ignores
 APPDATA overrides; standalone Qt subprocess tests must set QSettings paths too.
 
 ## Backend Reliability And Compilation Efficiency
+
+For ActiveThree 128 and Brain Products TriggerBox support, start with
+`core/recording_hardware.py`, `runtime/recording.py`, `triggers/brainproducts_backend.py`
+and `gui/recording_dialog.py`. Runtime owns pulse-spacing preflight and condition-boundary
+draining; no sleeps or reset scheduling enter compiled timing. Use triggers/runtime/gui
+focused routes and repo precommit. Setup and unprofiled Toolbox handoff limits are in
+[Runtime execution](../RUNTIME_EXECUTION.md#biosemi-activethree-and-brain-products-triggerbox).
 
 For Studio/Toolbox completed handoff, start with `core/recording_hardware.py`,
 `core/project_config.py`, `runtime/acquisition_evidence.py` and

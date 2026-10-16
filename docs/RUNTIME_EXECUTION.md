@@ -261,7 +261,8 @@ entry point also rejects a missing backend before opening its session.
 The shared backend contract defaults `emits_external_markers` to the legacy
 `emits_hardware_triggers` capability. Serial reports both; Unicorn reports external
 marker output without claiming direct hardware output. Logging wrappers preserve the
-capability and the distinct `serial`, `unicorn_udp`, or `null` transport identity.
+capability and the distinct `serial`, `brainproducts_triggerbox`, `unicorn_udp`, or
+`null` transport identity.
 Playback independently rejects a log-only backend unless an explicit boolean test or
 pilot flag is true, including callers that bypass runtime's factory. Preflight and
 playback also reject an empty trigger schedule instead of silently running without markers.
@@ -281,6 +282,58 @@ backend send failures record `error` before the run/session is aborted and expor
 The pre-run COM-port open check verifies OS-level serial availability; it does not prove
 that downstream EEG/status-channel cabling is physically correct.
 
+### BioSemi ActiveThree and Brain Products TriggerBox
+
+Settings > Recording also offers BioSemi ActiveThree (128 electrodes) and Brain
+Products TriggerBox / TriggerBox Plus. The selected identities are
+`biosemi_active_three` and `brainproducts_triggerbox`; Test/Pilot always resolves
+either to null output. No adapter starts or stops vendor EEG acquisition.
+
+ActiveThree reuses the BioSemi USB Trigger Interface and existing project serial
+settings: raw bytes 1–255, normally 115200 baud, 8N1, no flow control. Its effective
+transport is `serial`, while snapshots preserve the ActiveThree selection. BioSemi
+lists the interface for Active3, Active2.5 and Active2; its standard pulse resets
+automatically after 8 ms. Electrode count does not change the marker protocol.
+See [BioSemi compatibility](https://www.biosemi.com/faq/prices.htm) and the
+[USB Trigger Interface protocol](https://www.biosemi.com/faq/USB%20Trigger%20interface%20cable.htm).
+
+Brain Products support uses USB TriggerBox rev.02 or TriggerBox Plus with the
+amplifier-specific output cable. It does not connect directly to an amplifier or
+control BrainVision Recorder. Install the vendor driver, select the actual COM
+port, close Configuration/Test IO or other programs owning that port, and start
+recording in Recorder. On Plus, set lower-eight-bit switches to PC. Configure all
+eight Recorder bits as high-active Stimulus inputs so codes remain 1–255.
+See the vendor [programming examples](https://www.brainproducts.com/download/triggerbox-programming-examples/)
+and [setup diagram](https://www.brainproducts.com/download/how-to-set-up-the-triggerbox-plus/).
+
+The dedicated adapter always opens at 2,000,000 baud, 8N1, without flow control.
+`brainproducts_serial_port` defaults to COM3 and must be nonblank text;
+`brainproducts_pulse_width_ms` is a strict integer 1–1000, default 10 ms. It writes
+zero on connect, writes the event byte synchronously in the existing flip callback,
+then uses one connection-owned worker to reset to zero after the pulse. The adapter
+requires a low interval of the same duration before the next event. Send never
+sleeps, retries or queues events. Reset/close finish the final pulse outside timed
+presentation; runtime also drains it between conditions before tasks/feedback.
+Code zero is electrical idle, never a normal logged event; 255 remains a valid event.
+
+Preflight rejects adjacent scheduled events whose gap is at most twice the pulse
+width, including the optional AB condition marker at frame -1. The adapter separately
+rejects overlap or insufficient actual low time rather than merging events. Choose
+pulse width for the amplifier sampling rate: actiCHamp/LiveAmp needs at least 8 ms
+at 250 Hz; actiCHamp at 100 Hz needs 20 ms. A shorter pulse is appropriate only when
+the amplifier supports it; see the vendor
+[trigger guide](https://www.brainproducts.com/download/communication-with-the-trigger-port-a-beginners-guide/).
+Windows scheduling can extend pulses or low intervals. Open/write/short-write,
+overlap and asynchronous reset/cleanup failures surface explicitly and prevent a
+successful completed handoff. A successful event write alone does not qualify the
+later electrical reset or recorded marker timing.
+
+Snapshots record the actual COM port, fixed baudrate and requested pulse width;
+new-device receiver validation remains `pending`, physical timing `uncharacterized`.
+Inspect saved markers for boundary values, repeated codes, counts/order and the
+shortest event spacing, then characterize physical onset timing on the actual
+amplifier/display. Fake-serial tests verify software behavior only.
+
 ### Unicorn Recorder UDP: receiver validation pending
 
 Selecting Unicorn for the open project in Settings enables real marker output through the normal
@@ -298,7 +351,8 @@ interchange, Toolbox acceptance, loss handling or display/physical timing. The a
 plan tracks those remaining checks, and exported receiver-validation metadata stays
 `pending`.
 
-The project selection is `serial` or `unicorn_udp`; projects without saved recording
+The project selection is `serial`, `biosemi_active_three`, `brainproducts_triggerbox`
+or `unicorn_udp`; projects without saved recording
 settings use BioSemi. Invalid persisted values are rejected on load. The UDP port is a
 strict integer from 1 through 65535, initially 1000. The host is always `127.0.0.1`; there
 is no remote host option. `ProjectSettings.recording` persists the choice independently
@@ -382,7 +436,7 @@ fixtures, repeated/boundary/rate tests, loss evidence, and the no-purchase timin
 `candidate_receiver_validation_pending`: a Studio software contract awaiting the
 companion Toolbox validation, not a qualified interchange claim.
 
-Each BioSemi/Unicorn execution writes
+Each recording execution writes
 `logs/acquisition/<execution_id>.acquisition-v1.json` beneath the active project in
 both full and compact modes. `execution_id` is a new UUID, so repeat visits or reusing
 a compiled plan cannot overwrite an earlier execution. The payload carries Studio
@@ -423,7 +477,8 @@ still needs BioSemi/BDF and photodiode validation on the actual machine and disp
 Core's `recording_hardware.py` owns the hardware declarations. Saved
 `ProjectSettings.recording.acquisition_profile`, `.fpvsconfig`'s
 `toolbox.acquisition_profile`, runtime recording snapshots and acquisition evidence
-use the same exact Toolbox IDs/versions. Legacy missing fields stay readable;
+use the same exact Toolbox IDs/versions where a supported profile is declared.
+Legacy missing fields stay readable;
 recording-setting saves add the declaration without rewriting an opened project.
 The existing project/config/execution envelope versions are retained because this is
 optional metadata. `toolbox.handoff_schema_version` is `"1.0"`.
@@ -432,6 +487,12 @@ optional metadata. `toolbox.handoff_schema_version` is `"1.0"`.
 | --- | --- | --- |
 | BioSemi ActiveTwo 64 | `biosemi_active_two_64` / `biosemi64` / `biosemi_edge` | `biosemi_exg_pair_then_average` |
 | Unicorn Hybrid Black | `unicorn_hybrid_black` / `unicorn8` / `unicorn_sample` | `average_scalp` |
+
+ActiveThree 128 and Brain Products TriggerBox selections currently declare no
+Toolbox acquisition profile. Completed configs preserve their exact selected hardware
+and marker evidence with an absent profile; Toolbox must support/configure the actual
+montage and decoder before analysis. Studio never substitutes ActiveTwo 64 metadata
+or guesses a Brain Products amplifier/montage from its trigger interface.
 
 The Unicorn definition declares `EEG 1` through `EEG 8` as Fz, C3, Cz, C4, Pz,
 PO7, Oz, PO8 using `source_to_canonical` and `label_mapping_evidence.status="declared"`.

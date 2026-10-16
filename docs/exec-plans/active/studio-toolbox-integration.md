@@ -82,6 +82,12 @@ and the synthetic study was completed afterward. No real researcher data was use
 
 ## Acceptance boundaries
 
+The 2026-10-16 ActiveThree/Brain Products extension adds selectable trigger routes
+without adding Toolbox profile IDs. Their completed configs retain exact hardware
+selection and marker evidence with an absent acquisition profile; actual montage,
+decoder and Toolbox acceptance remain to be implemented/qualified separately.
+See the canonical [runtime contract](../../RUNTIME_EXECUTION.md#biosemi-activethree-and-brain-products-triggerbox).
+
 Synthetic tests cover selected-profile config round trips, exact event ordering and
 session association in both export modes, abort retention, legacy reads and sharing
 preference races. They do not qualify Recorder/BDF+ receiver behavior, EEG acquisition,

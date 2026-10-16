@@ -109,13 +109,16 @@ class RecordingSnapshot(FPVSBaseModel):
     """Versioned local configuration and human confirmation, never EEG telemetry."""
 
     schema_version: Literal[1] = 1
-    selected_backend: Literal["serial", "unicorn_udp"]
-    effective_backend: Literal["serial", "unicorn_udp", "null"]
+    selected_backend: Literal[
+        "serial", "biosemi_active_three", "brainproducts_triggerbox", "unicorn_udp"
+    ]
+    effective_backend: Literal["serial", "brainproducts_triggerbox", "unicorn_udp", "null"]
     selection_source: Literal["legacy_project", "local_settings", "project_settings"]
     udp_host: Literal["127.0.0.1"] | None = None
     udp_port: StrictInt | None = Field(default=None, ge=1, le=65535)
     serial_port: str | None = None
     serial_baudrate: StrictInt | None = Field(default=None, gt=0)
+    trigger_pulse_width_ms: StrictInt | None = Field(default=None, ge=1, le=1000)
     operator_confirmed_raw_bdf_recording: bool = False
     recording_association: str | None = None
     recorder_version: str | None = None

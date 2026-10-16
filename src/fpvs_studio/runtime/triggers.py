@@ -12,6 +12,7 @@ from fpvs_studio.core.execution import TriggerRecord, TriggerStatus
 from fpvs_studio.core.trigger_codes import validate_event_trigger_code
 from fpvs_studio.runtime.recording import validate_production_recording
 from fpvs_studio.triggers.base import TriggerBackend
+from fpvs_studio.triggers.brainproducts_backend import BrainProductsTriggerBoxBackend
 from fpvs_studio.triggers.null_backend import NullBackend
 from fpvs_studio.triggers.serial_backend import SerialBackend, resolve_serial_port
 from fpvs_studio.triggers.unicorn_udp_backend import UnicornUDPBackend
@@ -202,6 +203,16 @@ def build_trigger_backend(
                 _positive_int_option(options, "unicorn_udp_port", default=1000)
             ),
             backend_name="unicorn_udp",
+        ), []
+    if backend_name == "brainproducts_triggerbox":
+        return LoggedTriggerBackend(
+            BrainProductsTriggerBoxBackend(
+                port=str(options.get("brainproducts_serial_port", "COM3")).strip(),
+                pulse_width_ms=_positive_int_option(
+                    options, "brainproducts_pulse_width_ms", default=10,
+                ),
+            ),
+            backend_name="brainproducts_triggerbox",
         ), []
     return LoggedNullBackend(), []
 

@@ -208,7 +208,17 @@ def test_project_scaffolding_applies_sinusoidal_profile_background(tmp_path) -> 
     assert project.settings.display.background_color == "#808080"
 
 
-def test_recording_device_save_changes_only_recording_and_failure_keeps_file(tmp_path, monkeypatch):
+@pytest.mark.parametrize("configuration", [
+    {"recording_backend": "unicorn_udp", "unicorn_udp_port": 65535},
+    {"recording_backend": "biosemi_active_three"},
+    {
+        "recording_backend": "brainproducts_triggerbox", "brainproducts_serial_port": " COM18 ",
+        "brainproducts_pulse_width_ms": 20,
+    },
+])
+def test_recording_device_save_changes_only_recording_and_failure_keeps_file(
+    tmp_path, monkeypatch, configuration,
+):
     from fpvs_studio.core.models import ProjectRecordingSettings
     from fpvs_studio.core.project_service import save_project_recording_settings
     from fpvs_studio.core.serialization import load_project_file
@@ -216,7 +226,9 @@ def test_recording_device_save_changes_only_recording_and_failure_keeps_file(tmp
     scaffold = create_project(tmp_path, "Device configuration")
     path = scaffold.project_root / "project.json"
     original = json.loads(path.read_text())
-    setting = ProjectRecordingSettings(recording_backend="unicorn_udp", unicorn_udp_port=65535)
+    setting = ProjectRecordingSettings(**configuration)
+    if setting.recording_backend == "brainproducts_triggerbox":
+        assert setting.brainproducts_serial_port == "COM18"
     save_project_recording_settings(scaffold.project_root, setting)
     expected = dict(original)
     expected["settings"]["recording"] = setting.model_dump()
@@ -242,6 +254,14 @@ def test_recording_device_save_changes_only_recording_and_failure_keeps_file(tmp
         {"unicorn_udp_port": "1000"},
         {"unicorn_udp_port": 0},
         {"unicorn_udp_port": 65536},
+        {"brainproducts_serial_port": ""},
+        {"brainproducts_serial_port": " \t "},
+        {"brainproducts_serial_port": None},
+        {"brainproducts_serial_port": 3},
+        {"brainproducts_pulse_width_ms": True},
+        {"brainproducts_pulse_width_ms": "10"},
+        {"brainproducts_pulse_width_ms": 0},
+        {"brainproducts_pulse_width_ms": 1001},
     ],
 )
 def test_project_recording_rejects_invalid_device_or_port(configuration):
@@ -249,3 +269,17 @@ def test_project_recording_rejects_invalid_device_or_port(configuration):
 
     with pytest.raises(ValueError):
         ProjectRecordingSettings.model_validate(configuration)
+
+
+@pytest.mark.parametrize("backend", [
+    "serial", "biosemi_active_three", "brainproducts_triggerbox", "unicorn_udp",
+])
+def test_recording_rejects_profile_from_different_hardware(backend):
+    from fpvs_studio.core.models import ProjectRecordingSettings
+    from fpvs_studio.core.recording_hardware import acquisition_profile_for_recording
+
+    mismatched = acquisition_profile_for_recording(
+        "unicorn_udp" if backend == "serial" else "serial"
+    )
+    with pytest.raises(ValueError, match="does not match the selected recording hardware"):
+        ProjectRecordingSettings(recording_backend=backend, acquisition_profile=mismatched)

@@ -641,8 +641,14 @@ def completed_toolbox_config(
         raise ProjectConfigError(
             "Test/Pilot sessions do not produce a completed recording handoff."
         )
-    profile = evidence.acquisition_profile
-    if profile is None or config.toolbox.acquisition_profile != profile:
+    selected_backend = config.recording.recording_backend if config.recording else "serial"
+    declared_profile = acquisition_profile_for_recording(selected_backend)
+    if (
+        evidence.recording.selected_backend != selected_backend
+        or evidence.acquisition_profile != declared_profile
+        or evidence.recording.acquisition_profile != declared_profile
+        or config.toolbox.acquisition_profile != declared_profile
+    ):
         raise ProjectConfigError(
             "Completed handoff hardware does not match its prelaunch snapshot."
         )

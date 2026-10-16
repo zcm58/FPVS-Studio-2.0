@@ -18,6 +18,7 @@ from tests.gui.helpers import (
 
 from fpvs_studio.core.enums import ExperimentCategory, RunMode
 from fpvs_studio.core.execution import SessionExecutionSummary
+from fpvs_studio.core.models import ProjectRecordingSettings
 from fpvs_studio.gui import home_page as home_page_module
 from fpvs_studio.gui.document import ProjectDocument
 from fpvs_studio.gui.recording_dialog import RecordingSetupDialog
@@ -48,6 +49,7 @@ def _assert_labels_fit(widget) -> None:
 @pytest.mark.parametrize("background", ["#f4f7fb", "#202124"])
 @pytest.mark.parametrize("backend, port", [
     (None, 1000), ("serial", 1000), ("unicorn_udp", 65535),
+    ("biosemi_active_three", 1000), ("brainproducts_triggerbox", 1000),
     ("unicorn_udp", "broken saved port"), ("unknown old selection", 1000),
 ])
 def test_recording_setup_geometry_and_validation(qtbot, background, backend, port):
@@ -60,6 +62,10 @@ def test_recording_setup_geometry_and_validation(qtbot, background, backend, por
     QApplication.processEvents()
     assert (dialog.width(), dialog.height()) == (640, 560)
     _assert_labels_fit(dialog)
+    assert dialog.backend_combo.width() >= (
+        dialog.backend_combo.fontMetrics().horizontalAdvance(dialog.backend_combo.currentText())
+        + 32
+    )
     if backend == "unicorn_udp":
         assert UNICORN_VALIDATION_NOTE in dialog.guidance_label.text()
         assert dialog.guidance_label.toolTip() == UNICORN_VALIDATION_NOTE
@@ -68,6 +74,16 @@ def test_recording_setup_geometry_and_validation(qtbot, background, backend, por
         assert "raw BDF or BDF+" in dialog.guidance_label.text()
         assert "operator responsibilities" in dialog.guidance_label.text()
         assert dialog.apply_button.isEnabled() == isinstance(port, int)
+    elif backend == "brainproducts_triggerbox":
+        assert dialog.brainproducts_port_edit.isVisible()
+        assert dialog.brainproducts_pulse_edit.isVisible()
+        assert "Start recording in BrainVision Recorder" in dialog.guidance_label.text()
+        assert "high-active" in dialog.guidance_label.toolTip()
+        assert "eight output switches to PC" in dialog.guidance_label.toolTip()
+        assert dialog.apply_button.isEnabled()
+    elif backend == "biosemi_active_three":
+        assert "128-electrode" in dialog.guidance_label.toolTip()
+        assert dialog.apply_button.isEnabled()
     elif backend not in (None, "serial"):
         assert dialog.backend_combo.currentData() == backend
         assert backend in dialog.backend_combo.toolTip()
@@ -89,11 +105,111 @@ def test_recording_setup_apply_and_keyboard_cancel(qtbot):
     dialog.apply_button.setFocus()
     qtbot.keyClick(dialog.apply_button, Qt.Key.Key_Space)
     assert dialog.result() == int(QDialog.DialogCode.Accepted)
-    assert dialog.configuration == {"recording_backend": "unicorn_udp", "unicorn_udp_port": 65535}
+    assert dialog.configuration == {
+        "recording_backend": "unicorn_udp", "unicorn_udp_port": 65535,
+        "brainproducts_serial_port": "COM3", "brainproducts_pulse_width_ms": 10,
+    }
+
+
+@pytest.mark.parametrize("port, pulse, valid", [
+    ("COM123", "1000", True), (" ", "10", False),
+    ("COM123", "0", False), ("COM123", "1001", False),
+    ("COM123", "broken saved pulse", False),
+])
+def test_triggerbox_fields_validation_and_geometry(qtbot, port, pulse, valid):
+    dialog = RecordingSetupDialog({
+        "recording_backend": "brainproducts_triggerbox",
+        "brainproducts_serial_port": port,
+        "brainproducts_pulse_width_ms": pulse,
+    })
+    qtbot.addWidget(dialog)
+    dialog.show()
+    QApplication.processEvents()
+    assert (dialog.width(), dialog.height()) == (640, 560)
+    assert not dialog.port_edit.isEnabled()
+    assert not dialog.endpoint_label.isVisible()
+    assert dialog.apply_button.isEnabled() is valid
+    assert "250 Hz" in dialog.brainproducts_pulse_edit.toolTip()
+    assert "twice the pulse width" in dialog.brainproducts_pulse_edit.toolTip()
+    _assert_labels_fit(dialog)
+
+
+def test_triggerbox_drafts_survive_device_switch_and_cancel(qtbot):
+    original = ProjectRecordingSettings(
+        recording_backend="biosemi_active_three", unicorn_udp_port=3456,
+    ).model_dump(mode="json")
+    dialog = RecordingSetupDialog(original)
+    qtbot.addWidget(dialog)
+    dialog.show()
+    dialog.backend_combo.setCurrentIndex(dialog.backend_combo.findData("brainproducts_triggerbox"))
+    dialog.brainproducts_port_edit.setText(" COM123 ")
+    dialog.brainproducts_pulse_edit.setText("20")
+    dialog.backend_combo.setCurrentIndex(dialog.backend_combo.findData("biosemi_active_three"))
+    QApplication.processEvents()
+    assert not dialog.brainproducts_port_edit.isVisible()
+    assert not dialog.brainproducts_pulse_edit.isVisible()
+    dialog.backend_combo.setCurrentIndex(dialog.backend_combo.findData("brainproducts_triggerbox"))
+    assert dialog.brainproducts_port_edit.text() == " COM123 "
+    assert dialog.brainproducts_pulse_edit.text() == "20"
+    qtbot.keyClick(dialog, Qt.Key.Key_Escape)
+    assert dialog.configuration == original
+    dialog.show()
+    dialog.apply_button.click()
+    assert dialog.result() == int(QDialog.DialogCode.Accepted)
+    assert dialog.configuration == {
+        "recording_backend": "brainproducts_triggerbox", "unicorn_udp_port": 3456,
+        "brainproducts_serial_port": "COM123", "brainproducts_pulse_width_ms": 20,
+    }
+
+
+@pytest.mark.parametrize("edited_backend, selected_backend", [
+    ("brainproducts_triggerbox", "serial"),
+    ("brainproducts_triggerbox", "unicorn_udp"),
+    ("unicorn_udp", "brainproducts_triggerbox"),
+])
+def test_switch_from_invalid_device_draft_applies_last_valid_inactive_values(
+    qtbot, edited_backend, selected_backend,
+):
+    original = ProjectRecordingSettings(recording_backend=edited_backend).model_dump(mode="json")
+    dialog = RecordingSetupDialog(original)
+    qtbot.addWidget(dialog)
+    dialog.show()
+    if edited_backend == "unicorn_udp":
+        dialog.port_edit.setText("4321")
+        dialog.port_edit.clear()
+    else:
+        dialog.brainproducts_port_edit.setText("COM123")
+        dialog.brainproducts_pulse_edit.setText("20")
+        dialog.brainproducts_port_edit.clear()
+        dialog.brainproducts_pulse_edit.clear()
+    assert not dialog.apply_button.isEnabled()
+    dialog.backend_combo.setCurrentIndex(dialog.backend_combo.findData(selected_backend))
+    assert dialog.apply_button.isEnabled()
+    QApplication.processEvents()
+    _assert_labels_fit(dialog)
+    dialog.backend_combo.setCurrentIndex(dialog.backend_combo.findData(edited_backend))
+    assert not dialog.apply_button.isEnabled()
+    dialog.backend_combo.setCurrentIndex(dialog.backend_combo.findData(selected_backend))
+    dialog.apply_button.click()
+    accepted = ProjectRecordingSettings.model_validate(dialog.configuration)
+    assert accepted.recording_backend == selected_backend
+    assert accepted.unicorn_udp_port == (4321 if edited_backend == "unicorn_udp" else 1000)
+    assert accepted.brainproducts_serial_port == (
+        "COM123" if edited_backend == "brainproducts_triggerbox" else "COM3"
+    )
+    assert accepted.brainproducts_pulse_width_ms == (
+        20 if edited_backend == "brainproducts_triggerbox" else 10
+    )
+    assert original["recording_backend"] == edited_backend
 
 
 @pytest.mark.parametrize("accepted", [False, True])
-def test_settings_recording_subdialog_persists_only_apply(qtbot, tmp_path, monkeypatch, accepted):
+@pytest.mark.parametrize("backend", [
+    "unicorn_udp", "biosemi_active_three", "brainproducts_triggerbox",
+])
+def test_settings_recording_subdialog_persists_only_apply(
+    qtbot, tmp_path, monkeypatch, accepted, backend,
+):
     saved = []
     original = {"recording_backend": None, "unicorn_udp_port": 1000}
     dialog = AppSettingsDialog(
@@ -104,8 +220,10 @@ def test_settings_recording_subdialog_persists_only_apply(qtbot, tmp_path, monke
     dialog.tabs.setCurrentIndex(2)
     dialog.show()
     def fake_exec(child):
-        child.backend_combo.setCurrentIndex(child.backend_combo.findData("unicorn_udp"))
+        child.backend_combo.setCurrentIndex(child.backend_combo.findData(backend))
         child.port_edit.setText("2345")
+        child.brainproducts_port_edit.setText("COM123")
+        child.brainproducts_pulse_edit.setText("20")
         child.accept() if accepted else child.reject()
         return child.result()
     monkeypatch.setattr(RecordingSetupDialog, "exec", fake_exec)
@@ -117,8 +235,22 @@ def test_settings_recording_subdialog_persists_only_apply(qtbot, tmp_path, monke
     assert "require Recorder to be open and recording" in help_label.text()
     assert "blocked until" not in help_label.text()
     if accepted:
-        assert saved == [{"recording_backend": "unicorn_udp", "unicorn_udp_port": 2345}]
-        assert "2345" in dialog.recording_summary.text()
+        assert saved == [{
+            "recording_backend": backend,
+            "unicorn_udp_port": 2345 if backend == "unicorn_udp" else 1000,
+            "brainproducts_serial_port": (
+                "COM123" if backend == "brainproducts_triggerbox" else "COM3"
+            ),
+            "brainproducts_pulse_width_ms": 20 if backend == "brainproducts_triggerbox" else 10,
+        }]
+        assert "legacy" not in dialog.recording_summary.text()
+        assert "invalid" not in dialog.recording_summary.text()
+        if backend == "unicorn_udp":
+            assert "2345" in dialog.recording_summary.text()
+        elif backend == "brainproducts_triggerbox":
+            assert "COM123" in dialog.recording_summary.text()
+        else:
+            assert "ActiveThree" in dialog.recording_summary.text()
     else:
         assert saved == []
         assert "legacy" in dialog.recording_summary.text()
@@ -151,10 +283,9 @@ def test_project_device_reopen_and_switch_ignore_obsolete_global_choice(
     reopened = ProjectDocument.open_existing(first.project_root)
     controller._open_document(reopened)
     qtbot.addWidget(controller.main_window)
-    assert controller.load_recording_configuration() == {
-        "recording_backend": "unicorn_udp",
-        "unicorn_udp_port": 3456,
-    }
+    assert controller.load_recording_configuration() == ProjectRecordingSettings(
+        recording_backend="unicorn_udp", unicorn_udp_port=3456,
+    ).model_dump(mode="json")
     assert (
         ProjectDocument.open_existing(second.project_root).validate_recording_launch() == "serial"
     )
@@ -314,6 +445,11 @@ def test_ready_unicorn_reaches_runtime_execution_on_both_launch_surfaces(
     [
         (None, 1000, "Recording Device: BioSemi ActiveTwo"),
         ("serial", 1000, "Recording Device: BioSemi ActiveTwo"),
+        ("biosemi_active_three", 1000, "Recording Device: BioSemi ActiveThree (128 electrodes)"),
+        (
+            "brainproducts_triggerbox", 1000,
+            "Recording Device: Brain Products TriggerBox / TriggerBox Plus",
+        ),
         ("unicorn_udp", 65535, "Recording Device: Unicorn Black Mobile Headset"),
         (
             "unicorn_udp",
@@ -342,7 +478,9 @@ def test_home_recording_device_label_fits_and_preserves_output_details(
     monkeypatch.setattr(runtime_launcher, "require_unicorn_recorder_recording", recorder_probe)
     if backend is None:
         assert document.validate_recording_launch() == "serial"
-    elif backend not in ("serial", "unicorn_udp") or not isinstance(port, int):
+    elif backend not in (
+        "serial", "biosemi_active_three", "brainproducts_triggerbox", "unicorn_udp",
+    ) or not isinstance(port, int):
         # Corrupt drafts remain actionable; disk loading rejects malformed typed settings.
         monkeypatch.setattr(
             document,
@@ -377,7 +515,9 @@ def test_home_recording_device_label_fits_and_preserves_output_details(
         assert label.geometry().bottom() < page.launch_button.geometry().top()
         _assert_labels_fit(page)
 
-    if backend in (None, "serial", "unicorn_udp") and isinstance(port, int):
+    if backend in (
+        None, "serial", "biosemi_active_three", "brainproducts_triggerbox", "unicorn_udp",
+    ) and isinstance(port, int):
         document.set_experiment_test_mode_enabled(True)
         QApplication.processEvents()
         assert label.text() == "No marker output (Test/Pilot)"
@@ -427,6 +567,8 @@ def test_home_recording_device_name_extension_and_pilot_output(
     "backend, port",
     [
         (None, 1000),
+        ("biosemi_active_three", 1000),
+        ("brainproducts_triggerbox", 1000),
         ("unicorn_udp", 65535),
         ("invalid", 1000),
     ],

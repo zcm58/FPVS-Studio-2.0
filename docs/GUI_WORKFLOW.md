@@ -718,13 +718,15 @@ requires typing `Confirm` before the runtime task starts; cancelling that check 
 to FPVS Studio without starting the experiment.
 
 Project recording configuration is validated before participant collection. **Settings > Recording >
-Recording Setup…** edits the open project's BioSemi serial / Unicorn Recorder UDP choice
-and loopback UDP port. Apply atomically saves only `settings.recording` in that project's
+Recording Setup…** edits the open project's BioSemi ActiveTwo, BioSemi ActiveThree
+(128 electrodes), Brain Products TriggerBox / TriggerBox Plus, or Unicorn Recorder
+UDP choice. Unicorn exposes its loopback port; Brain Products exposes its COM port
+and pulse width. Apply atomically saves only `settings.recording` in that project's
 `project.json`; Cancel keeps the saved choice, and failed saves retain the accepted device.
 Other unsaved setup edits remain pending. Recording Setup is disabled without an open
 project. The obsolete computer-wide recording preference is ignored.
-Home shows a centered `Recording Device: BioSemi ActiveTwo` or
-`Recording Device: Unicorn Black Mobile Headset` immediately above Launch Experiment.
+Home shows a centered `Recording Device: <selected device>` immediately above Launch
+Experiment, including the ActiveThree 128-electrode and TriggerBox/Plus identities.
 Its GUI-only display-name map in `gui/home_page.py` can be extended when recording
 backends are added. The existing effective transport, endpoint and Recorder-check
 details remain in the label's tooltip and accessible description; Run retains its
@@ -733,8 +735,11 @@ actionable invalid-setting messages. The device label identifies the configurati
 not a detected connection or recording-readiness result.
 Projects without `settings.recording` use BioSemi. Save/reopen and project switching
 restore each project's choice; `.fpvsconfig` and `.fpvsbundle` transfers preserve it.
-The optional typed settings contain `recording_backend` (`serial` or `unicorn_udp`)
-and `unicorn_udp_port` (integer 1-65535, default 1000). Malformed saved configurations
+The optional typed settings contain `recording_backend` (`serial`,
+`biosemi_active_three`, `brainproducts_triggerbox`, or `unicorn_udp`),
+`unicorn_udp_port` (integer 1-65535, default 1000), `brainproducts_serial_port`
+(nonblank text, default COM3) and `brainproducts_pulse_width_ms` (integer 1-1000,
+default 10). Malformed saved configurations
 are rejected on load. Recording choice does not alter existing project serial fields
 or compiled experiment timing.
 
@@ -752,6 +757,14 @@ authority if callers bypass the GUI; see
 [Runtime execution](RUNTIME_EXECUTION.md#unicorn-recorder-udp-receiver-validation-pending).
 
 Recording setup has a `640x560` minimum/default size.
+ActiveThree retains project serial settings and the BioSemi Sophia prompt.
+TriggerBox uses its own port and fixed vendor baudrate; its guidance describes
+Recorder startup, and tooltips expose driver/cable, Plus PC-switch, lower-eight-bit
+Stimulus and amplifier-sampling requirements. It has no automatic Recorder probe
+or Sophia confirmation. Home identifies the selected device independently of
+ActiveThree's shared serial transport. Test/Pilot remains no-output for all choices.
+The [runtime contract](RUNTIME_EXECUTION.md#biosemi-activethree-and-brain-products-triggerbox)
+owns pulse/low-interval scheduling, errors and hardware acceptance.
 The additional Settings tab preserves the existing parent size budgets documented
 above; Home and Run retain the `1120x720` main-window minimum. Registered
 `tests/gui/test_recording_setup.py` covers Apply/Cancel, project reopen/switch, failed saves, invalid saved
@@ -774,6 +787,14 @@ and verify the label says no marker output and no Recorder probe runs;
 restore the original setting afterward. Check an invalid saved choice and nonnumeric
 port, keyboard navigation, and both light/dark themes. No visible smoke here establishes
 actual BDF receipt or physical timing.
+
+Also choose ActiveThree and TriggerBox at `640x560` in both themes. Verify full device
+names, conditional COM/pulse fields, validation, keyboard navigation and Apply/Cancel;
+save/reopen and switch projects to verify independent settings. On Home/Run at
+`1120x720`, check selected identity and COM/pulse details. With a configured vendor
+setup, verify boundary/repeated markers and acquisition evidence in a synthetic
+normal launch. Repeat in Test/Pilot to verify no interface opens. Hardware receipt
+and physical timing require inspection of the saved recording and measurement.
 
 When Experiment Test Mode is enabled, launch first applies the same full-project
 validation gate as a production launch, then replaces participant collection with an

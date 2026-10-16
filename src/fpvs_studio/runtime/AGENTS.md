@@ -67,7 +67,7 @@ This phase should establish:
   must be exported as `error` records and abort the current run/session cleanly
 - keep trigger timestamps run-playback-relative; do not include timing warmup frames in
   exported trigger `time_s`
-- `acquisition_evidence.py` owns versioned BioSemi/Unicorn evidence beneath active-project
+- `acquisition_evidence.py` owns versioned recording-hardware evidence beneath active-project
   `logs/acquisition/` in both export modes, separate from deleted recovery checkpoints.
   Persist configuration, explicit operator association, planned code maps and actual
   sent/error attempts at run boundaries and orderly failure. No disk writes enter
@@ -120,6 +120,10 @@ This phase should establish:
 - Do not add null-trigger fallback after a configured serial backend fails to open or
   write.
 - Normal launches default to serial output unless an explicit local selection exists.
+  ActiveThree retains its selected identity while using serial. Brain Products uses
+  its own TriggerBox endpoint and fixed protocol; preflight rejects schedules without
+  enough high/low time, and condition-boundary reset drains the final pulse outside
+  playback before tasks/feedback. New devices have no guessed Toolbox montage profile.
   Invalid saved selections are actionable errors, never fallback. Normal Unicorn
   launches send real markers after configuration and Recorder readiness pass. Full
   receiver/timing qualification remains pending metadata and does not block launch.
@@ -142,8 +146,8 @@ Even if the exporter is skeletal in this phase, define a stable shape for:
 - `responses.csv`
 - `frame_intervals.csv`
 - `trigger_log.csv`
-- `logs/acquisition/<execution_id>.acquisition-v1.json` retains selected BioSemi or
-  Unicorn profile and event evidence, including participant visit/session/run identity,
+- `logs/acquisition/<execution_id>.acquisition-v1.json` retains selected hardware,
+  any supported profile and event evidence, including participant visit/session/run identity,
   after successful compact finalization; receiver/physical timing qualification remains
   separate.
 - `logs/acquisition/<execution_id>-completed.fpvsconfig` is the automatic completed
