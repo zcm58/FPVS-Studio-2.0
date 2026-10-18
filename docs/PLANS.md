@@ -34,6 +34,11 @@ Concrete planned work:
 Completed plans are historical implementation notes. Read their directory only when
 the current contracts do not explain why a landed decision exists.
 
+Recent completion: [Behavior-preserving cleanup](exec-plans/completed/behavior-preserving-cleanup.md)
+(dead-code removal and shared compiler, export and image-size logic; 421 fewer production
+lines, focused/visible checks passed, with baseline-reproduced Windows bundle rename
+failures documented for the broader precommit suite).
+
 Recent completion: [GUI responsiveness during authoring and project discovery](exec-plans/completed/ui-responsiveness.md)
 (background project scans, deferred hidden-page refreshes, and per-update AB preview
 reuse; safe verification passed, with visible GUI acceptance still documented).

@@ -1,6 +1,6 @@
 # Behavior-preserving cleanup
 
-Status: Active
+Status: Completed
 
 Date: 2026-10-18
 
@@ -49,7 +49,7 @@ recovery and child-widget bounds. Use synthetic projects and isolated preference
 - [x] Implement all ten proposals and inspect the combined diff.
 - [x] Complete focused checks and exact-output regressions.
 - [x] Complete repository precommit and independent review; record existing failures.
-- [ ] Record line counts, verification limits, and merge/branch cleanup.
+- [x] Record line counts, verification limits, and merge/branch cleanup.
 
 ## Verification evidence
 
@@ -93,5 +93,9 @@ recovery and child-widget bounds. Use synthetic projects and isolated preference
   with no reason beyond "blocked by policy". It remains outside the repository at
   `C:/Users/zcm58/.codex/tmp/fpvs-gui-baseline-73db68175a9e4882a75473feb381ff08`,
   including the baseline failure log. No further deletion attempts were made.
-- `codex/experiment-library` contains unique commit `59cee23` and will be preserved.
-  `feature/ui-action-discovery` and `feature/ui-responsiveness` are ancestors of master.
+- Cleanup commit `8041b53` was fast-forward merged into the previous branch, `master`.
+  The merged local branches `cleanup/behavior-preserving-audit`,
+  `feature/ui-action-discovery` and `feature/ui-responsiveness` were deleted with
+  `git branch -d` after verifying their tips were ancestors of master.
+  `codex/experiment-library` was preserved because commit `59cee23` is unique and
+  not patch-equivalent to master. Remote branches were not changed; nothing was pushed.
