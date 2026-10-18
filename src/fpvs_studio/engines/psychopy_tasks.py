@@ -14,6 +14,7 @@ from typing import Any, TypedDict
 
 from fpvs_studio.assets import bundled_task_font_path
 from fpvs_studio.core.paths import resolve_project_relative_path
+from fpvs_studio.core.task_models import numeric_step_aligned
 from fpvs_studio.engines.base import ResolvedTaskItem, ResolvedTaskStep, TaskEngineInput
 
 _TEXT_RESPONSE_KINDS = frozenset({"short_text", "long_text", "numeric"})
@@ -764,7 +765,7 @@ def _completed_input(
         if (
             step.numeric_step is not None
             and step.numeric_minimum is not None
-            and not _is_numeric_step_aligned(
+            and not numeric_step_aligned(
                 numeric_value,
                 minimum=step.numeric_minimum,
                 step=step.numeric_step,
@@ -931,7 +932,7 @@ def _validation_message(
         if (
             step.numeric_step is not None
             and step.numeric_minimum is not None
-            and not _is_numeric_step_aligned(
+            and not numeric_step_aligned(
                 numeric_value,
                 minimum=step.numeric_minimum,
                 step=step.numeric_step,
@@ -988,13 +989,6 @@ def _text_for_key(key_name: str) -> str | None:
     if len(key_name) == 1 and key_name.isprintable():
         return key_name
     return None
-
-
-def _is_numeric_step_aligned(value: float, *, minimum: float, step: float) -> bool:
-    if step == 1 and float(minimum).is_integer():
-        return float(value).is_integer()
-    offset_steps = (value - minimum) / step
-    return abs(offset_steps - round(offset_steps)) <= 1e-9
 
 
 def _footer_text(step: ResolvedTaskStep) -> str:

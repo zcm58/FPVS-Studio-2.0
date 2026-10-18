@@ -10,7 +10,6 @@ from PySide6.QtGui import QShowEvent
 from PySide6.QtWidgets import (
     QCheckBox,
     QFileDialog,
-    QGridLayout,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -28,14 +27,12 @@ from fpvs_studio.core.models import StimulusSet
 from fpvs_studio.gui.components import (
     PAGE_SECTION_GAP,
     NonHomePageShell,
-    SectionCard,
     mark_primary_action,
 )
 from fpvs_studio.gui.design_system import elide_middle
 from fpvs_studio.gui.document import ConditionStimulusRow, ProjectDocument
 from fpvs_studio.gui.window_helpers import (
     _coerce_exception,
-    _prefixed_object_name,
     _resolution_text,
     _show_error_dialog,
     _variant_label,
@@ -371,194 +368,3 @@ class AssetsPage(QWidget):
     def _on_background_task_finished(self) -> None:
         self._active_task = None
         self._update_buttons()
-
-
-class AssetsReadinessEditor(QWidget):
-    """Compact assets readiness snapshot and actions."""
-
-    def __init__(
-        self,
-        document: ProjectDocument,
-        *,
-        object_name_prefix: str = "",
-        parent: QWidget | None = None,
-    ) -> None:
-        super().__init__(parent)
-        self._document = document
-        self._variant_checkboxes: dict[StimulusVariant, QCheckBox] = {}
-        self._active_task: ProgressTask | None = None
-        self._active_task_error_title = "Asset Task Error"
-
-        self.card = SectionCard(
-            title="Assets Readiness",
-            subtitle="Variant support, inspection status, and build actions.",
-            object_name=_prefixed_object_name(object_name_prefix, "assets_readiness_card"),
-            parent=self,
-        )
-        self.card.card_layout.setContentsMargins(12, 10, 12, 10)
-        self.card.card_layout.setSpacing(8)
-        self.card.body_layout.setSpacing(8)
-
-        variants_row = QWidget(self.card)
-        variants_layout = QHBoxLayout(variants_row)
-        variants_layout.setContentsMargins(0, 0, 0, 0)
-        variants_layout.setSpacing(6)
-        for variant in StimulusVariant:
-            checkbox = QCheckBox(_variant_label(variant), variants_row)
-            checkbox.setObjectName(
-                _prefixed_object_name(object_name_prefix, f"variant_checkbox_{variant.value}")
-            )
-            checkbox.stateChanged.connect(self._apply_supported_variants)
-            if variant == StimulusVariant.ORIGINAL:
-                checkbox.setEnabled(False)
-            self._variant_checkboxes[variant] = checkbox
-            variants_layout.addWidget(checkbox)
-        variants_layout.addStretch(1)
-
-        self.condition_rows_value = QLabel(self.card)
-        self.condition_rows_value.setObjectName(
-            _prefixed_object_name(object_name_prefix, "assets_condition_rows_value")
-        )
-        self.manifest_status_value = QLabel(self.card)
-        self.manifest_status_value.setObjectName(
-            _prefixed_object_name(object_name_prefix, "assets_manifest_status_value")
-        )
-        self.manifest_status_value.setWordWrap(True)
-        self.materialization_status_value = QLabel(self.card)
-        self.materialization_status_value.setObjectName(
-            _prefixed_object_name(object_name_prefix, "assets_materialization_status_value")
-        )
-        self.materialization_status_value.setWordWrap(True)
-        summary_grid = QGridLayout()
-        summary_grid.setContentsMargins(0, 0, 0, 0)
-        summary_grid.setHorizontalSpacing(10)
-        summary_grid.setVerticalSpacing(6)
-        summary_grid.addWidget(QLabel("Rows", self.card), 0, 0)
-        summary_grid.addWidget(self.condition_rows_value, 0, 1)
-        summary_grid.addWidget(QLabel("Manifest", self.card), 1, 0)
-        summary_grid.addWidget(self.manifest_status_value, 1, 1)
-        summary_grid.addWidget(QLabel("Build", self.card), 2, 0)
-        summary_grid.addWidget(self.materialization_status_value, 2, 1)
-        summary_grid.setColumnStretch(1, 1)
-
-        self.refresh_button = QPushButton("Refresh Inspection", self.card)
-        self.refresh_button.setObjectName(
-            _prefixed_object_name(object_name_prefix, "assets_refresh_button")
-        )
-        self.refresh_button.clicked.connect(self._refresh_inspection)
-        self.materialize_button = QPushButton("Materialize Supported Variants", self.card)
-        self.materialize_button.setObjectName(
-            _prefixed_object_name(object_name_prefix, "materialize_assets_button")
-        )
-        self.materialize_button.clicked.connect(self._materialize_assets)
-
-        actions_row = QWidget(self.card)
-        actions_layout = QHBoxLayout(actions_row)
-        actions_layout.setContentsMargins(0, 0, 0, 0)
-        actions_layout.setSpacing(8)
-        actions_layout.addWidget(self.refresh_button)
-        actions_layout.addWidget(self.materialize_button)
-        actions_layout.addStretch(1)
-
-        self.card.body_layout.addWidget(variants_row)
-        self.card.body_layout.addLayout(summary_grid)
-        self.card.body_layout.addWidget(actions_row)
-
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.addWidget(self.card)
-
-        self._document.project_changed.connect(self.refresh)
-        self._document.manifest_changed.connect(self.refresh)
-        self.refresh()
-
-    def refresh(self) -> None:
-        supported_variants = set(self._document.project.settings.supported_variants)
-        for variant, checkbox in self._variant_checkboxes.items():
-            with QSignalBlocker(checkbox):
-                checkbox.setChecked(variant in supported_variants)
-
-        rows = self._document.condition_rows()
-        self.condition_rows_value.setText(f"Condition stimulus rows: {len(rows)}")
-        manifest = self._document.manifest
-        if manifest is None:
-            self.manifest_status_value.setText("Manifest status: no manifest loaded yet.")
-        else:
-            self.manifest_status_value.setText(
-                "Manifest status: "
-                f"{len(manifest.sets)} set(s), generated {manifest.generated_at.isoformat()}."
-            )
-        refresh_hz = self._document.project.settings.display.preferred_refresh_hz or 60.0
-        validation = self._document.validation_report(refresh_hz=refresh_hz)
-        issue_count = len(validation.issues)
-        if issue_count == 0:
-            self.materialization_status_value.setText(
-                "Materialization readiness: clear validation checks."
-            )
-        else:
-            self.materialization_status_value.setText(
-                f"Materialization readiness: {issue_count} validation issue(s) need attention."
-            )
-
-    def _apply_supported_variants(self) -> None:
-        variants = [
-            variant
-            for variant, checkbox in self._variant_checkboxes.items()
-            if checkbox.isChecked()
-        ]
-        try:
-            self._document.set_supported_variants(variants)
-        except Exception as error:
-            _show_error_dialog(self, "Supported Variants Error", error)
-            self.refresh()
-
-    def _refresh_inspection(self) -> None:
-        self._run_with_progress(
-            "Refreshing source inspection...",
-            self._document.refresh_stimulus_inspection,
-            error_title="Inspection Error",
-        )
-
-    def _materialize_assets(self) -> None:
-        self._run_with_progress(
-            "Materializing project assets...",
-            self._document.materialize_assets,
-            error_title="Materialization Error",
-        )
-
-    def _run_with_progress(
-        self,
-        label: str,
-        callback: Callable[[], object],
-        *,
-        error_title: str,
-    ) -> None:
-        if self._active_task is not None:
-            return
-        self._active_task_error_title = error_title
-        task = ProgressTask(parent_widget=self, label=label, callback=callback)
-        self._active_task = task
-        self._update_task_buttons()
-        task.succeeded.connect(self._on_background_task_succeeded)
-        task.failed.connect(self._on_background_task_failed)
-        task.finished.connect(self._on_background_task_finished)
-        task.start()
-
-    def _update_task_buttons(self) -> None:
-        is_busy = self._active_task is not None
-        self.refresh_button.setEnabled(not is_busy)
-        self.materialize_button.setEnabled(not is_busy)
-
-    def _on_background_task_succeeded(self, _result: object) -> None:
-        self.refresh()
-
-    def _on_background_task_failed(self, error: object) -> None:
-        _show_error_dialog(
-            self,
-            self._active_task_error_title,
-            _coerce_exception(error),
-        )
-
-    def _on_background_task_finished(self) -> None:
-        self._active_task = None
-        self._update_task_buttons()

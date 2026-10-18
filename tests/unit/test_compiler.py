@@ -1127,6 +1127,65 @@ def test_stimulus_sequence_preserves_each_role_bag_across_multiple_cycles() -> N
         )
 
 
+@pytest.mark.parametrize(
+    ("total_stimuli", "oddball_every_n", "expected_base", "expected_oddball"),
+    [
+        (12, 1, [], [4.0, 3.0] * 6),
+        (12, 50, [2.0, 1.0] * 6, []),
+        (13, 5, [2.0, 1.0] * 4 + [1.0, 2.0, 1.0], [4.0, 3.0]),
+        (10, 5, [2.0, 1.0] * 4, [4.0, 3.0]),
+        (13, -5, [2.0, 1.0] * 4 + [1.0, 2.0, 1.0], [4.0, 3.0]),
+    ],
+    ids=["all-oddball", "all-base", "partial-cycle", "complete-cycle", "negative-direct-call"],
+)
+def test_text_height_fallback_preserves_seeded_cadence_boundaries(
+    total_stimuli: int,
+    oddball_every_n: int,
+    expected_base: list[float],
+    expected_oddball: list[float],
+) -> None:
+    # Frozen outputs from the original forward-scan implementation; disjoint pools
+    # select the fallback scheduler. Negative cadence is a historical direct-call case.
+    settings = {
+        role: TextHeightScheduleSettings(mode=TextHeightMode.BALANCED_RANDOMIZED, values=values)
+        for role, values in (("base", [1.0, 2.0]), ("oddball", [3.0, 4.0]))
+    }
+
+    result = build_interleaved_text_height_values(
+        settings,
+        total_stimuli=total_stimuli,
+        oddball_every_n=oddball_every_n,
+        random_seed=19,
+    )
+
+    assert result == {"base": expected_base, "oddball": expected_oddball}
+
+
+def test_text_height_fallback_preserves_seeded_forced_height_lookahead() -> None:
+    # This overlapping pool exceeds the exact planner's state budget and reaches
+    # the fallback's lookahead to the fixed oddball height.
+    result = build_interleaved_text_height_values(
+        {
+            "base": TextHeightScheduleSettings(
+                mode=TextHeightMode.BALANCED_RANDOMIZED,
+                values=list(range(1, 17)),
+            ),
+            "oddball": TextHeightScheduleSettings(values=[1.0]),
+        },
+        total_stimuli=24,
+        oddball_every_n=5,
+        random_seed=19,
+    )
+
+    assert result == {
+        "base": [
+            1.0, 12.0, 11.0, 7.0, 16.0, 9.0, 10.0, 2.0, 15.0, 8.0,
+            13.0, 5.0, 4.0, 14.0, 3.0, 6.0, 11.0, 7.0, 1.0, 14.0,
+        ],
+        "oddball": [1.0] * 4,
+    }
+
+
 def test_text_height_schedule_looks_ahead_to_fixed_oddball_height() -> None:
     values = build_interleaved_text_height_values(
         {

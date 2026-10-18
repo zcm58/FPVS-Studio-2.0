@@ -93,6 +93,10 @@ response collected so far. A post-task abort leaves a successfully completed FPV
 marked complete while recording the separate task-flow abort stage and ending the
 session.
 
+Numeric-response step alignment uses core's `numeric_step_aligned`
+in both runtime acceptance and engine input validation, preserving integer precision
+and the existing fractional-step tolerance.
+
 Task assets are preflighted as contained project-relative paths before participant
 screens open. Routine preflight checks existence; deep preflight also decodes task
 images. The selected engine must advertise the neutral modular-task rendering seam.

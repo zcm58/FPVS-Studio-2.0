@@ -24,6 +24,7 @@ from fpvs_studio.core.task_models import (
     TaskStepKind,
     TaskStepResult,
     TaskStepSpec,
+    numeric_step_aligned,
     validate_task_module_repeat_capacity,
 )
 from fpvs_studio.engines.base import (
@@ -998,7 +999,7 @@ def _response_is_valid(
             and question.min_value <= result.numeric_value <= question.max_value
             and (
                 question.step is None
-                or _numeric_step_aligned(
+                or numeric_step_aligned(
                     result.numeric_value,
                     minimum=question.min_value,
                     step=question.step,
@@ -1006,13 +1007,6 @@ def _response_is_valid(
             )
         )
     return True
-
-
-def _numeric_step_aligned(value: float, *, minimum: float, step: float) -> bool:
-    if step == 1 and float(minimum).is_integer():
-        return float(value).is_integer()
-    offset_steps = (value - minimum) / step
-    return abs(offset_steps - round(offset_steps)) <= 1e-9
 
 
 def _rating_option_ids(question: TaskQuestion) -> list[str]:

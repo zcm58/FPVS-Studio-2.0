@@ -430,16 +430,6 @@ def _new_task_step_draft(
     return step
 
 
-def condition_task_summary_from_draft(draft: ConditionTaskFlowDraft) -> str:
-    """Return compact condition-row copy for one editable task flow."""
-
-    pre_count = len(draft.pre_modules)
-    post_count = len(draft.post_modules)
-    if pre_count == 0 and post_count == 0:
-        return "No pre/post tasks"
-    return f"{pre_count} pre, {post_count} post"
-
-
 class TaskParticipantPreview(QWidget):
     """Small non-runtime rendering of the selected participant task step."""
 
@@ -2732,19 +2722,6 @@ def condition_task_flow_from_document(
         pre_modules=bound_modules(condition.pre_task_bindings),
         post_modules=bound_modules(condition.post_task_bindings),
     )
-
-
-def condition_task_summary(document: ProjectDocument, condition_id: str) -> str:
-    """Return a compact saved-task summary for the Conditions step."""
-
-    condition = document.get_condition(condition_id)
-    if condition is None:
-        return "No condition selected"
-    pre_count = len(condition.pre_task_bindings)
-    post_count = len(condition.post_task_bindings)
-    if pre_count == 0 and post_count == 0:
-        return "No pre/post tasks"
-    return f"{pre_count} pre, {post_count} post"
 
 
 def _module_to_draft(module: TaskModule, binding: TaskBinding) -> TaskModuleDraft:

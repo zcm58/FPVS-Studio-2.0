@@ -384,27 +384,6 @@ class StudioController(QObject):
         self._settings.sync()
         return recent_paths
 
-    def load_recent_project_entries(self) -> list[tuple[str, str]]:
-        """Return display names and root paths for valid recent projects."""
-
-        entries: list[tuple[str, str]] = []
-        valid_roots: list[Path] = []
-        recent_roots = self.load_recent_project_roots()
-        for project_root in recent_roots:
-            try:
-                project = load_project_file(project_json_path(project_root))
-            except Exception:
-                continue
-            entries.append((project.meta.name, str(project_root)))
-            valid_roots.append(project_root)
-        if len(valid_roots) != len(recent_roots):
-            self._settings.setValue(
-                _RECENT_PROJECT_ROOTS_KEY,
-                [str(path) for path in valid_roots],
-            )
-            self._settings.sync()
-        return entries
-
     def record_recent_project_root(self, project_root: Path) -> None:
         """Persist a project root as the most recent launch/open target."""
 
@@ -1616,11 +1595,6 @@ class StudioController(QObject):
     def _discover_project_roots(self) -> list[Path]:
         root_dir = self._fpvs_root_dir
         return discover_project_roots(root_dir) if root_dir is not None else []
-
-    def _project_management_entry(self, project_root: Path) -> ProjectManagementEntry:
-        return _read_project_management_entry(
-            self._normalize_path(project_root), self._current_project_root(),
-        )
 
     def _open_managed_project(self, dialog: ManageProjectsDialog, project_root: str) -> None:
         if self.main_window is not None and not self.main_window.prepare_project_handoff():

@@ -100,6 +100,11 @@ APPDATA overrides; standalone Qt subprocess tests must set QSettings paths too.
 
 ## Backend Reliability And Compilation Efficiency
 
+Numeric task-step validation is shared through `core/task_models.py`; runtime and
+engine consumers remain in `runtime/task_runner.py` and `engines/psychopy_tasks.py`.
+Use runtime/engine focused checks and `tests/unit/test_runtime_tasks.py` when changing
+its integer precision or step tolerance; schema validation remains separate.
+
 For ActiveThree 128 and Brain Products TriggerBox support, start with
 `core/recording_hardware.py`, `runtime/recording.py`, `triggers/brainproducts_backend.py`
 and `gui/recording_dialog.py`. Runtime owns pulse-spacing preflight and condition-boundary

@@ -60,6 +60,14 @@ def validate_task_slug(value: str, *, field_name: str) -> str:
     return value
 
 
+def numeric_step_aligned(value: float, *, minimum: float, step: float) -> bool:
+    """Check a task response against its numeric step without rounding integers."""
+    if step == 1 and float(minimum).is_integer():
+        return float(value).is_integer()
+    offset_steps = (value - minimum) / step
+    return abs(offset_steps - round(offset_steps)) <= 1e-9
+
+
 def _validate_response_key_name(value: str) -> str:
     cleaned = value.strip().lower()
     if not cleaned:

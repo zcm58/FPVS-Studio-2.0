@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import io
 import os
 from pathlib import Path
 
@@ -15,7 +16,17 @@ from tests.unit.runtime_launcher_helpers import (
 )
 
 from fpvs_studio.core.compiler import compile_session_plan
-from fpvs_studio.core.execution import ParticipantMetadata, SessionExecutionSummary
+from fpvs_studio.core.execution import (
+    FixationResponseRecord,
+    FrameIntervalRecord,
+    ParticipantMetadata,
+    ResponseRecord,
+    RunExecutionSummary,
+    RuntimeMetadata,
+    SessionExecutionSummary,
+    TriggerRecord,
+)
+from fpvs_studio.core.run_spec import StimulusEvent
 from fpvs_studio.core.serialization import read_json_file, write_json_file
 from fpvs_studio.engines.registry import register_engine, unregister_engine
 from fpvs_studio.runtime.display_mode import NativeDisplayMode
@@ -27,9 +38,12 @@ from fpvs_studio.runtime.launcher import (
 from fpvs_studio.runtime.session_export import (
     GROUP_SUMMARY_XLSX_SHEET_NAME,
     SESSION_CONDITION_HISTORY_HEADER,
+    _weighted_mean_rt_ms,
     refresh_participant_summary_if_stale,
     write_group_summary,
     write_participant_summary,
+    write_run_artifacts,
+    write_session_artifacts,
 )
 
 
@@ -46,6 +60,137 @@ def _stable_native_display_mode(monkeypatch: pytest.MonkeyPatch) -> None:
             mode_reference="60/1",
         ),
     )
+
+
+@pytest.mark.parametrize("scoring_source", ["absent", None, "hardware_timestamp"])
+@pytest.mark.parametrize("empty", [False, True])
+def test_run_and_session_csv_bytes_preserve_existing_contract(
+    multi_condition_project, multi_condition_project_root, tmp_path, scoring_source, empty,
+) -> None:
+    """Keep pre-cleanup headers, quoting, nulls, order and run-id prefixes exact."""
+    plan = compile_session_plan(
+        multi_condition_project, project_root=multi_condition_project_root,
+        refresh_hz=60.0, random_seed=77,
+    )
+    entries = plan.ordered_entries()
+    expected_events = {}
+    results = []
+    for index, entry in enumerate(entries):
+        word = index % 2 == 1
+        payload = {"text": 'A, "β"\nB'} if word else {"image_path": "stimuli/face,1.png"}
+        entry.run_spec.stimulus_sequence = [] if empty else [StimulusEvent(
+            sequence_index=0, role="base", stimulus_modality="word" if word else "image",
+            stimulus_id="stimulus-1", on_start_frame=0, on_frames=5, off_frames=5, **payload,
+        )]
+        expected_events[entry.run_id] = [] if empty else [
+            (0, "base", "word", "stimulus-1", 'A, "β"\nB', None, 'A, "β"\nB', 0, 5, 5)
+            if word else
+            (0, "base", "image", "stimulus-1", "stimuli/face,1.png", "stimuli/face,1.png",
+             None, 0, 5, 5)
+        ]
+        results.append(RunExecutionSummary(
+            project_id=plan.project_id, session_id=plan.session_id, run_id=entry.run_id,
+            condition_id=entry.condition_id, condition_name=entry.condition_name,
+            engine_name="stub", run_mode="session",
+            runtime_metadata=None if scoring_source == "absent" else RuntimeMetadata(
+                engine_name="stub", fixation_rt_scoring_source=scoring_source,
+            ),
+            fixation_responses=[] if empty else [
+                FixationResponseRecord(event_index=0, start_frame=10, duration_frames=3,
+                                       responded=False, outcome="miss"),
+                FixationResponseRecord(event_index=1, start_frame=20, duration_frames=3,
+                                       responded=True, outcome="hit", first_response_key="space",
+                                       response_frame=23, rt_frames=3, response_time_s=0.4,
+                                       target_onset_time_s=0.35, rt_s=0.05),
+            ],
+            response_log=[] if empty else [
+                ResponseRecord(response_index=0, key="space", frame_index=23, time_s=0.4,
+                               matched_event_index=1, rt_frames=3, correct=True,
+                               outcome="hit", rt_s=0.05),
+                ResponseRecord(response_index=1, key="space", frame_index=30),
+            ],
+            frame_intervals=[] if empty else [FrameIntervalRecord(frame_index=0, interval_s=0.02)],
+            trigger_log=[] if empty else [
+                TriggerRecord(trigger_index=0, frame_index=-1, code=1, label="condition_start",
+                              backend_name="null"),
+                TriggerRecord(trigger_index=1, frame_index=0, time_s=0.0, code=255,
+                              label="oddball", backend_name="serial", status="error",
+                              message='Failed, "port"\nretry'),
+            ],
+        ))
+
+    source = None if scoring_source == "absent" else scoring_source
+    contracts = {
+        "events.csv": (
+            "sequence_index,role,stimulus_modality,stimulus_id,stimulus_value,image_path,text,"
+            "on_start_frame,on_frames,off_frames", [],
+        ),
+        "fixation_events.csv": (
+            "event_index,start_frame,duration_frames,responded,first_response_key,response_frame,"
+            "response_time_s,rt_frames,outcome,target_onset_time_s,rt_s,rt_scoring_source",
+            [(0, 10, 3, False, None, None, None, None, "miss", None, None, source),
+             (1, 20, 3, True, "space", 23, 0.4, 3, "hit", 0.35, 0.05, source)],
+        ),
+        "responses.csv": (
+            "response_index,key,frame_index,time_s,matched_event_index,rt_frames,correct,outcome,"
+            "rt_s,rt_scoring_source",
+            [(0, "space", 23, 0.4, 1, 3, True, "hit", 0.05, source),
+             (1, "space", 30, None, None, None, None, None, None, source)],
+        ),
+        "frame_intervals.csv": ("frame_index,interval_s", [(0, 0.02)]),
+        "trigger_log.csv": (
+            "trigger_index,frame_index,time_s,code,label,backend_name,status,message",
+            [(0, -1, None, 1, "condition_start", "null", "sent", None),
+             (1, 0, 0.0, 255, "oddball", "serial", "error", 'Failed, "port"\nretry')],
+        ),
+    }
+    # Serialized event order follows the plan; observed logs follow result order.
+    results.reverse()
+    plan.blocks.reverse()
+    for block in plan.blocks:
+        block.entries.reverse()
+    session = SessionExecutionSummary(
+        project_id=plan.project_id, session_id=plan.session_id, engine_name="stub",
+        run_mode="session", run_results=results,
+    )
+    write_session_artifacts(tmp_path / "session", plan, session)
+    result_by_id = {result.run_id: result for result in results}
+    for entry in entries:
+        write_run_artifacts(tmp_path / entry.run_id, entry.run_spec, result_by_id[entry.run_id])
+    for name, (header, populated_rows) in contracts.items():
+        rows = [] if empty else populated_rows
+        ordered_runs = entries if name == "events.csv" else results
+        session_rows = []
+        for run in ordered_runs:
+            run_rows = expected_events[run.run_id] if name == "events.csv" else rows
+            expected = io.StringIO(newline="")
+            writer = csv.writer(expected)
+            writer.writerow(header.split(","))
+            writer.writerows(run_rows)
+            assert (tmp_path / run.run_id / name).read_bytes() == expected.getvalue().encode(
+                "utf-8"
+            )
+            session_rows.extend((run.run_id, *row) for row in run_rows)
+        expected = io.StringIO(newline="")
+        writer = csv.writer(expected)
+        writer.writerow(["run_id", *header.split(",")])
+        writer.writerows(session_rows)
+        assert (tmp_path / "session" / name).read_bytes() == expected.getvalue().encode("utf-8")
+
+
+@pytest.mark.parametrize("participant_columns", [False, True])
+def test_weighted_rt_keeps_missing_and_nonpositive_hit_exclusions(participant_columns):
+    values = [("1", "100"), ("3", "300"), ("0", "999"), ("-2", "999"),
+              ("", "999"), ("bad", "999"), ("2", ""), ("2", "bad"), (None, None)]
+    options = {
+        "hit_count_column": "Hits",
+        "mean_rt_column": "Mean Reaction Time Across All Conditions (ms)",
+    } if participant_columns else {}
+    hit_key = options.get("hit_count_column", "hit_count")
+    rt_key = options.get("mean_rt_column", "mean_rt_ms")
+    rows = [{hit_key: hits, rt_key: rt} for hits, rt in values]
+    assert _weighted_mean_rt_ms(rows, **options) == 250.0
+    assert _weighted_mean_rt_ms(rows[2:], **options) is None
 
 
 def test_session_export_captures_seed_and_runtime_logs(

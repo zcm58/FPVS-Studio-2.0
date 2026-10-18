@@ -122,20 +122,18 @@ def build_interleaved_text_height_values(
         for role in ("base", "oddball")
     }
     active_bags: dict[StimulusRole, list[float]] = {"base": [], "oddball": []}
-    results: dict[StimulusRole, list[float]] = {"base": [], "oddball": []}
     interleaved_results: list[float] = []
     previous_height: float | None = None
+    role_period = abs(oddball_every_n)
 
     for index in range(total_stimuli):
         role: StimulusRole = "oddball" if (index + 1) % oddball_every_n == 0 else "base"
         settings = settings_by_role[role]
-        next_role_change_index = next(
-            (
-                candidate_index
-                for candidate_index in range(index + 1, total_stimuli)
-                if ("oddball" if (candidate_index + 1) % oddball_every_n == 0 else "base") != role
-            ),
-            None,
+        candidate_index = (
+            index + 1 if role == "oddball" else (index // role_period + 1) * role_period - 1
+        )
+        next_role_change_index = (
+            candidate_index if role_period > 1 and candidate_index < total_stimuli else None
         )
         next_role: StimulusRole = (
             ("oddball" if (next_role_change_index + 1) % oddball_every_n == 0 else "base")
@@ -169,7 +167,6 @@ def build_interleaved_text_height_values(
                     next_role_change_index - index - 1 if next_role_change_index is not None else 0
                 ),
             )
-        results[role].append(selected)
         interleaved_results.append(selected)
         previous_height = selected
 

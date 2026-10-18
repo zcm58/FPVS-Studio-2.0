@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 
-from PySide6.QtCore import QSignalBlocker, Qt, Signal
+from PySide6.QtCore import QObject, QSignalBlocker, Qt, Signal
 from PySide6.QtGui import QColor, QPainter, QPaintEvent, QPen, QShowEvent
 from PySide6.QtWidgets import (
     QApplication,
@@ -756,6 +757,109 @@ class ImageSizePreview(QWidget):
         painter.drawRect(left, top, preview_width, preview_height)
 
 
+class _ImageSizeControls:
+    """Shared calibration controls; each host retains its layout and signal receiver."""
+
+    def __init__(
+        self,
+        document: ProjectDocument,
+        parent: QWidget,
+        *,
+        object_name_prefix: str,
+        on_changed: Callable[[], None],
+        on_refresh: Callable[[], None],
+    ) -> None:
+        self._document = document
+        self._parent = parent
+        self._on_refresh = on_refresh
+        self.width_degrees_spin = _image_size_spin_box(
+            parent=parent,
+            object_name=f"{object_name_prefix}stimulus_width_degrees_spin",
+            minimum=0.1,
+            maximum=90.0,
+            decimals=1,
+            step=0.5,
+            suffix=" deg",
+        )
+        self.viewing_distance_spin = _image_size_spin_box(
+            parent=parent,
+            object_name=f"{object_name_prefix}viewing_distance_cm_spin",
+            minimum=1.0,
+            maximum=500.0,
+            decimals=1,
+            step=5.0,
+            suffix=" cm",
+        )
+        self.screen_width_spin = _image_size_spin_box(
+            parent=parent,
+            object_name=f"{object_name_prefix}screen_width_cm_spin",
+            minimum=1.0,
+            maximum=500.0,
+            decimals=2,
+            step=0.25,
+            suffix=" cm",
+        )
+        self.use_current_resolution_checkbox = QCheckBox(
+            "Use current primary screen resolution", parent,
+        )
+        self.use_current_resolution_checkbox.setObjectName(
+            f"{object_name_prefix}use_current_screen_resolution_checkbox"
+        )
+        self.screen_width_px_spin = _resolution_spin_box(
+            parent=parent, object_name=f"{object_name_prefix}screen_width_px_spin",
+        )
+        self.screen_height_px_spin = _resolution_spin_box(
+            parent=parent, object_name=f"{object_name_prefix}screen_height_px_spin",
+        )
+        self.width_degrees_spin.valueChanged.connect(on_changed)
+        self.viewing_distance_spin.valueChanged.connect(on_changed)
+        self.screen_width_spin.valueChanged.connect(on_changed)
+        self.use_current_resolution_checkbox.toggled.connect(on_changed)
+        self.screen_width_px_spin.valueChanged.connect(on_changed)
+        self.screen_height_px_spin.valueChanged.connect(on_changed)
+
+    def refresh(self) -> None:
+        display = self._document.project.settings.display
+        geometry = self._document.project.settings.presentation.defaults.image_geometry
+        width_is_authoritative = geometry.width_degrees is not None
+        with QSignalBlocker(self.width_degrees_spin):
+            self.width_degrees_spin.setValue(display.stimulus_width_degrees)
+        self.width_degrees_spin.setEnabled(width_is_authoritative)
+        self.width_degrees_spin.setToolTip(
+            "Updates the authored presentation width."
+            if width_is_authoritative
+            else "Presentation is height-constrained. Use Configure Presentation to change it."
+        )
+        with QSignalBlocker(self.viewing_distance_spin):
+            self.viewing_distance_spin.setValue(display.viewing_distance_cm)
+        with QSignalBlocker(self.screen_width_spin):
+            self.screen_width_spin.setValue(display.screen_width_cm)
+        with QSignalBlocker(self.use_current_resolution_checkbox):
+            self.use_current_resolution_checkbox.setChecked(display.use_current_screen_resolution)
+        with QSignalBlocker(self.screen_width_px_spin):
+            self.screen_width_px_spin.setValue(display.screen_width_px)
+        with QSignalBlocker(self.screen_height_px_spin):
+            self.screen_height_px_spin.setValue(display.screen_height_px)
+        self.screen_width_px_spin.setEnabled(not display.use_current_screen_resolution)
+        self.screen_height_px_spin.setEnabled(not display.use_current_screen_resolution)
+
+    def apply(self, sender: QObject | None) -> None:
+        try:
+            updates = {
+                "viewing_distance_cm": self.viewing_distance_spin.value(),
+                "screen_width_cm": self.screen_width_spin.value(),
+                "screen_width_px": self.screen_width_px_spin.value(),
+                "screen_height_px": self.screen_height_px_spin.value(),
+                "use_current_screen_resolution": self.use_current_resolution_checkbox.isChecked(),
+            }
+            if sender is None or sender is self.width_degrees_spin:
+                updates["stimulus_width_degrees"] = self.width_degrees_spin.value()
+            self._document.update_display_settings(**updates)
+        except Exception as error:
+            _show_error_dialog(self._parent, "Image Size Error", error)
+            self._on_refresh()
+
+
 class ImageSizePreviewDialog(QDialog):
     """Full-screen actual-size stimulus preview."""
 
@@ -774,54 +878,20 @@ class ImageSizePreviewDialog(QDialog):
         self.preview_value_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.preview_value_label.setWordWrap(True)
 
-        self.width_degrees_spin = _image_size_spin_box(
-            parent=self,
-            object_name="preview_stimulus_width_degrees_spin",
-            minimum=0.1,
-            maximum=90.0,
-            decimals=1,
-            step=0.5,
-            suffix=" deg",
+        self._image_size_controls = _ImageSizeControls(
+            document, self,
+            object_name_prefix="preview_",
+            on_changed=self._apply_image_display_settings,
+            on_refresh=self.refresh,
         )
-        self.viewing_distance_spin = _image_size_spin_box(
-            parent=self,
-            object_name="preview_viewing_distance_cm_spin",
-            minimum=1.0,
-            maximum=500.0,
-            decimals=1,
-            step=5.0,
-            suffix=" cm",
+        self.width_degrees_spin = self._image_size_controls.width_degrees_spin
+        self.viewing_distance_spin = self._image_size_controls.viewing_distance_spin
+        self.screen_width_spin = self._image_size_controls.screen_width_spin
+        self.use_current_resolution_checkbox = (
+            self._image_size_controls.use_current_resolution_checkbox
         )
-        self.screen_width_spin = _image_size_spin_box(
-            parent=self,
-            object_name="preview_screen_width_cm_spin",
-            minimum=1.0,
-            maximum=500.0,
-            decimals=2,
-            step=0.25,
-            suffix=" cm",
-        )
-        self.use_current_resolution_checkbox = QCheckBox(
-            "Use current primary screen resolution",
-            self,
-        )
-        self.use_current_resolution_checkbox.setObjectName(
-            "preview_use_current_screen_resolution_checkbox"
-        )
-        self.screen_width_px_spin = _resolution_spin_box(
-            parent=self,
-            object_name="preview_screen_width_px_spin",
-        )
-        self.screen_height_px_spin = _resolution_spin_box(
-            parent=self,
-            object_name="preview_screen_height_px_spin",
-        )
-        self.width_degrees_spin.valueChanged.connect(self._apply_image_display_settings)
-        self.viewing_distance_spin.valueChanged.connect(self._apply_image_display_settings)
-        self.screen_width_spin.valueChanged.connect(self._apply_image_display_settings)
-        self.use_current_resolution_checkbox.toggled.connect(self._apply_image_display_settings)
-        self.screen_width_px_spin.valueChanged.connect(self._apply_image_display_settings)
-        self.screen_height_px_spin.valueChanged.connect(self._apply_image_display_settings)
+        self.screen_width_px_spin = self._image_size_controls.screen_width_px_spin
+        self.screen_height_px_spin = self._image_size_controls.screen_height_px_spin
 
         self.exit_button = QPushButton("Exit Preview", self)
         self.exit_button.setObjectName("image_size_preview_exit_button")
@@ -884,27 +954,7 @@ class ImageSizePreviewDialog(QDialog):
     def refresh(self) -> None:
         display = self._document.project.settings.display
         geometry = self._document.project.settings.presentation.defaults.image_geometry
-        width_is_authoritative = geometry.width_degrees is not None
-        with QSignalBlocker(self.width_degrees_spin):
-            self.width_degrees_spin.setValue(display.stimulus_width_degrees)
-        self.width_degrees_spin.setEnabled(width_is_authoritative)
-        self.width_degrees_spin.setToolTip(
-            "Updates the authored presentation width."
-            if width_is_authoritative
-            else "Presentation is height-constrained. Use Configure Presentation to change it."
-        )
-        with QSignalBlocker(self.viewing_distance_spin):
-            self.viewing_distance_spin.setValue(display.viewing_distance_cm)
-        with QSignalBlocker(self.screen_width_spin):
-            self.screen_width_spin.setValue(display.screen_width_cm)
-        with QSignalBlocker(self.use_current_resolution_checkbox):
-            self.use_current_resolution_checkbox.setChecked(display.use_current_screen_resolution)
-        with QSignalBlocker(self.screen_width_px_spin):
-            self.screen_width_px_spin.setValue(display.screen_width_px)
-        with QSignalBlocker(self.screen_height_px_spin):
-            self.screen_height_px_spin.setValue(display.screen_height_px)
-        self.screen_width_px_spin.setEnabled(not display.use_current_screen_resolution)
-        self.screen_height_px_spin.setEnabled(not display.use_current_screen_resolution)
+        self._image_size_controls.refresh()
         width_degrees = geometry.width_degrees
         height_degrees = geometry.height_degrees
         reference_degrees = width_degrees or height_degrees or display.stimulus_width_degrees
@@ -948,21 +998,7 @@ class ImageSizePreviewDialog(QDialog):
         self.preview.refresh()
 
     def _apply_image_display_settings(self) -> None:
-        try:
-            updates = {
-                "viewing_distance_cm": self.viewing_distance_spin.value(),
-                "screen_width_cm": self.screen_width_spin.value(),
-                "screen_width_px": self.screen_width_px_spin.value(),
-                "screen_height_px": self.screen_height_px_spin.value(),
-                "use_current_screen_resolution": (self.use_current_resolution_checkbox.isChecked()),
-            }
-            sender = self.sender()
-            if sender is None or sender is self.width_degrees_spin:
-                updates["stimulus_width_degrees"] = self.width_degrees_spin.value()
-            self._document.update_display_settings(**updates)
-        except Exception as error:
-            _show_error_dialog(self, "Image Size Error", error)
-            self.refresh()
+        self._image_size_controls.apply(self.sender())
 
 
 class ImageDisplaySizeEditor(QWidget):
@@ -973,54 +1009,20 @@ class ImageDisplaySizeEditor(QWidget):
         self.setObjectName("image_display_size_editor")
         self._document = document
 
-        self.width_degrees_spin = _image_size_spin_box(
-            parent=self,
-            object_name="stimulus_width_degrees_spin",
-            minimum=0.1,
-            maximum=90.0,
-            decimals=1,
-            step=0.5,
-            suffix=" deg",
+        self._image_size_controls = _ImageSizeControls(
+            document, self,
+            object_name_prefix="",
+            on_changed=self._apply_image_display_settings,
+            on_refresh=self.refresh,
         )
-        self.width_degrees_spin.valueChanged.connect(self._apply_image_display_settings)
-
-        self.viewing_distance_spin = _image_size_spin_box(
-            parent=self,
-            object_name="viewing_distance_cm_spin",
-            minimum=1.0,
-            maximum=500.0,
-            decimals=1,
-            step=5.0,
-            suffix=" cm",
+        self.width_degrees_spin = self._image_size_controls.width_degrees_spin
+        self.viewing_distance_spin = self._image_size_controls.viewing_distance_spin
+        self.screen_width_spin = self._image_size_controls.screen_width_spin
+        self.use_current_resolution_checkbox = (
+            self._image_size_controls.use_current_resolution_checkbox
         )
-        self.viewing_distance_spin.valueChanged.connect(self._apply_image_display_settings)
-
-        self.screen_width_spin = _image_size_spin_box(
-            parent=self,
-            object_name="screen_width_cm_spin",
-            minimum=1.0,
-            maximum=500.0,
-            decimals=2,
-            step=0.25,
-            suffix=" cm",
-        )
-        self.screen_width_spin.valueChanged.connect(self._apply_image_display_settings)
-        self.use_current_resolution_checkbox = QCheckBox(
-            "Use current primary screen resolution",
-            self,
-        )
-        self.use_current_resolution_checkbox.setObjectName("use_current_screen_resolution_checkbox")
-        self.screen_width_px_spin = _resolution_spin_box(
-            parent=self,
-            object_name="screen_width_px_spin",
-        )
-        self.screen_height_px_spin = _resolution_spin_box(
-            parent=self,
-            object_name="screen_height_px_spin",
-        )
-        self.use_current_resolution_checkbox.toggled.connect(self._apply_image_display_settings)
-        self.screen_width_px_spin.valueChanged.connect(self._apply_image_display_settings)
-        self.screen_height_px_spin.valueChanged.connect(self._apply_image_display_settings)
+        self.screen_width_px_spin = self._image_size_controls.screen_width_px_spin
+        self.screen_height_px_spin = self._image_size_controls.screen_height_px_spin
 
         self.preview_value_label = QLabel(self)
         self.preview_value_label.setObjectName("image_size_preview_value_label")
@@ -1085,30 +1087,10 @@ class ImageDisplaySizeEditor(QWidget):
             width_label.setVisible(not masking)
         self.full_screen_preview_button.setVisible(not masking)
         self.configure_presentation_button.setVisible(not masking)
-        width_is_authoritative = geometry.width_degrees is not None
         height_driven_natural = (
             geometry.mode == ImageGeometryMode.NATURAL_ASPECT and geometry.width_degrees is None
         )
-        with QSignalBlocker(self.width_degrees_spin):
-            self.width_degrees_spin.setValue(display.stimulus_width_degrees)
-        self.width_degrees_spin.setEnabled(width_is_authoritative)
-        self.width_degrees_spin.setToolTip(
-            "Updates the authored presentation width."
-            if width_is_authoritative
-            else "Presentation is height-constrained. Use Configure Presentation to change it."
-        )
-        with QSignalBlocker(self.viewing_distance_spin):
-            self.viewing_distance_spin.setValue(display.viewing_distance_cm)
-        with QSignalBlocker(self.screen_width_spin):
-            self.screen_width_spin.setValue(display.screen_width_cm)
-        with QSignalBlocker(self.use_current_resolution_checkbox):
-            self.use_current_resolution_checkbox.setChecked(display.use_current_screen_resolution)
-        with QSignalBlocker(self.screen_width_px_spin):
-            self.screen_width_px_spin.setValue(display.screen_width_px)
-        with QSignalBlocker(self.screen_height_px_spin):
-            self.screen_height_px_spin.setValue(display.screen_height_px)
-        self.screen_width_px_spin.setEnabled(not display.use_current_screen_resolution)
-        self.screen_height_px_spin.setEnabled(not display.use_current_screen_resolution)
+        self._image_size_controls.refresh()
         if masking:
             self.preview_value_label.setText(
                 "Calibrate the display here. Each masking modifier preserves its own "
@@ -1158,21 +1140,7 @@ class ImageDisplaySizeEditor(QWidget):
         )
 
     def _apply_image_display_settings(self) -> None:
-        try:
-            updates = {
-                "viewing_distance_cm": self.viewing_distance_spin.value(),
-                "screen_width_cm": self.screen_width_spin.value(),
-                "screen_width_px": self.screen_width_px_spin.value(),
-                "screen_height_px": self.screen_height_px_spin.value(),
-                "use_current_screen_resolution": (self.use_current_resolution_checkbox.isChecked()),
-            }
-            sender = self.sender()
-            if sender is None or sender is self.width_degrees_spin:
-                updates["stimulus_width_degrees"] = self.width_degrees_spin.value()
-            self._document.update_display_settings(**updates)
-        except Exception as error:
-            _show_error_dialog(self, "Image Size Error", error)
-            self.refresh()
+        self._image_size_controls.apply(self.sender())
 
     def _show_full_screen_preview(self) -> None:
         dialog = ImageSizePreviewDialog(self._document, self)

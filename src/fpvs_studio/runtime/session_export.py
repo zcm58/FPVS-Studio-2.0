@@ -21,13 +21,21 @@ from openpyxl import Workbook, load_workbook  # type: ignore[import-untyped]
 from openpyxl.styles import Alignment, Font, PatternFill  # type: ignore[import-untyped]
 from openpyxl.utils import get_column_letter  # type: ignore[import-untyped]
 
-from fpvs_studio.core.execution import RunExecutionSummary, SessionExecutionSummary
+from fpvs_studio.core.execution import (
+    FixationResponseRecord,
+    FrameIntervalRecord,
+    ResponseRecord,
+    RunExecutionSummary,
+    SessionExecutionSummary,
+    TriggerRecord,
+)
 from fpvs_studio.core.models import DisplayValidationReport, validate_project_relative_path
 from fpvs_studio.core.paths import from_project_relative_posix, logs_dir
 from fpvs_studio.core.run_spec import (
     AttentionalBlinkRunSpec,
     AttentionalBlinkStreamRunSpec,
     RunSpec,
+    StimulusEvent,
 )
 from fpvs_studio.core.serialization import (
     atomic_text_write,
@@ -185,6 +193,64 @@ _GROUP_SUMMARY_INTEGER_COLUMNS = frozenset(
     }
 )
 _GROUP_SUMMARY_FLOAT_COLUMNS = _PARTICIPANT_SUMMARY_FLOAT_COLUMNS
+
+
+_EVENTS_HEADER = [
+    "sequence_index",
+    "role",
+    "stimulus_modality",
+    "stimulus_id",
+    "stimulus_value",
+    "image_path",
+    "text",
+    "on_start_frame",
+    "on_frames",
+    "off_frames",
+]
+
+_FIXATION_EVENTS_HEADER = [
+    "event_index",
+    "start_frame",
+    "duration_frames",
+    "responded",
+    "first_response_key",
+    "response_frame",
+    "response_time_s",
+    "rt_frames",
+    "outcome",
+    "target_onset_time_s",
+    "rt_s",
+    "rt_scoring_source",
+]
+
+_RESPONSES_HEADER = [
+    "response_index",
+    "key",
+    "frame_index",
+    "time_s",
+    "matched_event_index",
+    "rt_frames",
+    "correct",
+    "outcome",
+    "rt_s",
+    "rt_scoring_source",
+]
+
+_FRAME_INTERVALS_HEADER = [
+    "frame_index",
+    "interval_s",
+]
+
+_TRIGGER_LOG_HEADER = [
+    "trigger_index",
+    "frame_index",
+    "time_s",
+    "code",
+    "label",
+    "backend_name",
+    "status",
+    "message",
+]
 
 
 def _write_csv(path: Path, header: Iterable[str], rows: Iterable[Iterable[object]] = ()) -> None:
@@ -534,6 +600,80 @@ def _append_compact_task_responses_unlocked(
     return path
 
 
+def _event_row(event: StimulusEvent) -> tuple[object, ...]:
+    return (
+        event.sequence_index,
+        event.role,
+        event.stimulus_modality.value,
+        event.stimulus_id,
+        _stimulus_value(event),
+        event.image_path,
+        event.text,
+        event.on_start_frame,
+        event.on_frames,
+        event.off_frames,
+    )
+
+
+def _fixation_response_row(
+    event: FixationResponseRecord, summary: RunExecutionSummary,
+) -> tuple[object, ...]:
+    return (
+        event.event_index,
+        event.start_frame,
+        event.duration_frames,
+        event.responded,
+        event.first_response_key,
+        event.response_frame,
+        event.response_time_s,
+        event.rt_frames,
+        event.outcome,
+        event.target_onset_time_s,
+        event.rt_s,
+        (
+            summary.runtime_metadata.fixation_rt_scoring_source
+            if summary.runtime_metadata is not None
+            else ""
+        ),
+    )
+
+
+def _response_row(response: ResponseRecord, summary: RunExecutionSummary) -> tuple[object, ...]:
+    return (
+        response.response_index,
+        response.key,
+        response.frame_index,
+        response.time_s,
+        response.matched_event_index,
+        response.rt_frames,
+        response.correct,
+        response.outcome,
+        response.rt_s,
+        (
+            summary.runtime_metadata.fixation_rt_scoring_source
+            if summary.runtime_metadata is not None
+            else ""
+        ),
+    )
+
+
+def _frame_interval_row(interval: FrameIntervalRecord) -> tuple[object, ...]:
+    return (interval.frame_index, interval.interval_s)
+
+
+def _trigger_row(trigger: TriggerRecord) -> tuple[object, ...]:
+    return (
+        trigger.trigger_index,
+        trigger.frame_index,
+        trigger.time_s,
+        trigger.code,
+        trigger.label,
+        trigger.backend_name,
+        trigger.status,
+        trigger.message,
+    )
+
+
 def write_run_artifacts(output_dir: Path, run_spec: RunSpec, summary: RunExecutionSummary) -> None:
     """Write the per-run artifact set for one executed `RunSpec`."""
 
@@ -561,136 +701,28 @@ def write_run_artifacts(output_dir: Path, run_spec: RunSpec, summary: RunExecuti
 
     _write_csv(
         output_dir / "events.csv",
-        [
-            "sequence_index",
-            "role",
-            "stimulus_modality",
-            "stimulus_id",
-            "stimulus_value",
-            "image_path",
-            "text",
-            "on_start_frame",
-            "on_frames",
-            "off_frames",
-        ],
-        [
-            (
-                event.sequence_index,
-                event.role,
-                event.stimulus_modality.value,
-                event.stimulus_id,
-                _stimulus_value(event),
-                event.image_path,
-                event.text,
-                event.on_start_frame,
-                event.on_frames,
-                event.off_frames,
-            )
-            for event in run_spec.stimulus_sequence
-        ],
+        _EVENTS_HEADER,
+        [_event_row(event) for event in run_spec.stimulus_sequence],
     )
     _write_csv(
         output_dir / "fixation_events.csv",
-        [
-            "event_index",
-            "start_frame",
-            "duration_frames",
-            "responded",
-            "first_response_key",
-            "response_frame",
-            "response_time_s",
-            "rt_frames",
-            "outcome",
-            "target_onset_time_s",
-            "rt_s",
-            "rt_scoring_source",
-        ],
-        [
-            (
-                event.event_index,
-                event.start_frame,
-                event.duration_frames,
-                event.responded,
-                event.first_response_key,
-                event.response_frame,
-                event.response_time_s,
-                event.rt_frames,
-                event.outcome,
-                event.target_onset_time_s,
-                event.rt_s,
-                (
-                    summary.runtime_metadata.fixation_rt_scoring_source
-                    if summary.runtime_metadata is not None
-                    else ""
-                ),
-            )
-            for event in summary.fixation_responses
-        ],
+        _FIXATION_EVENTS_HEADER,
+        [_fixation_response_row(event, summary) for event in summary.fixation_responses],
     )
     _write_csv(
         output_dir / "responses.csv",
-        [
-            "response_index",
-            "key",
-            "frame_index",
-            "time_s",
-            "matched_event_index",
-            "rt_frames",
-            "correct",
-            "outcome",
-            "rt_s",
-            "rt_scoring_source",
-        ],
-        [
-            (
-                response.response_index,
-                response.key,
-                response.frame_index,
-                response.time_s,
-                response.matched_event_index,
-                response.rt_frames,
-                response.correct,
-                response.outcome,
-                response.rt_s,
-                (
-                    summary.runtime_metadata.fixation_rt_scoring_source
-                    if summary.runtime_metadata is not None
-                    else ""
-                ),
-            )
-            for response in summary.response_log
-        ],
+        _RESPONSES_HEADER,
+        [_response_row(response, summary) for response in summary.response_log],
     )
     _write_csv(
         output_dir / "frame_intervals.csv",
-        ["frame_index", "interval_s"],
-        [(interval.frame_index, interval.interval_s) for interval in summary.frame_intervals],
+        _FRAME_INTERVALS_HEADER,
+        [_frame_interval_row(interval) for interval in summary.frame_intervals],
     )
     _write_csv(
         output_dir / "trigger_log.csv",
-        [
-            "trigger_index",
-            "frame_index",
-            "time_s",
-            "code",
-            "label",
-            "backend_name",
-            "status",
-            "message",
-        ],
-        [
-            (
-                trigger.trigger_index,
-                trigger.frame_index,
-                trigger.time_s,
-                trigger.code,
-                trigger.label,
-                trigger.backend_name,
-                trigger.status,
-                trigger.message,
-            )
-            for trigger in summary.trigger_log
-        ],
+        _TRIGGER_LOG_HEADER,
+        [_trigger_row(trigger) for trigger in summary.trigger_log],
     )
     _write_csv(
         output_dir / "task_responses.csv",
@@ -713,7 +745,8 @@ def write_session_artifacts(
     write_json_file(output_dir / "session_plan.json", session_plan)
     _write_execution_summary(output_dir / "session_summary.json", summary)
     ab_results = {result.run_id: result for result in summary.run_results}
-    scene_entries = [entry for entry in session_plan.ordered_entries()
+    ordered_entries = session_plan.ordered_entries()
+    scene_entries = [entry for entry in ordered_entries
                      if entry.run_spec.scene_stream is not None and entry.run_id in ab_results]
     if scene_entries:
         _write_csv(
@@ -723,7 +756,7 @@ def write_session_artifacts(
             )),
         )
     ab_entries = [
-        entry for entry in session_plan.ordered_entries()
+        entry for entry in ordered_entries
         if isinstance(entry.run_spec.attentional_blink, AttentionalBlinkRunSpec)
         and entry.run_id in ab_results
     ]
@@ -737,7 +770,7 @@ def write_session_artifacts(
             ),
         )
     stream_entries = [
-        entry for entry in session_plan.ordered_entries()
+        entry for entry in ordered_entries
         if isinstance(entry.run_spec.attentional_blink, AttentionalBlinkStreamRunSpec)
         and entry.run_id in ab_results
     ]
@@ -802,158 +835,50 @@ def write_session_artifacts(
                 entry.condition_name,
                 entry.run_id,
             )
-            for entry in session_plan.ordered_entries()
+            for entry in ordered_entries
         ],
     )
     _write_csv(
         output_dir / "events.csv",
+        ["run_id", *_EVENTS_HEADER],
         [
-            "run_id",
-            "sequence_index",
-            "role",
-            "stimulus_modality",
-            "stimulus_id",
-            "stimulus_value",
-            "image_path",
-            "text",
-            "on_start_frame",
-            "on_frames",
-            "off_frames",
-        ],
-        [
-            (
-                entry.run_id,
-                event.sequence_index,
-                event.role,
-                event.stimulus_modality.value,
-                event.stimulus_id,
-                _stimulus_value(event),
-                event.image_path,
-                event.text,
-                event.on_start_frame,
-                event.on_frames,
-                event.off_frames,
-            )
-            for entry in session_plan.ordered_entries()
+            (entry.run_id, *_event_row(event))
+            for entry in ordered_entries
             for event in entry.run_spec.stimulus_sequence
         ],
     )
     _write_csv(
         output_dir / "fixation_events.csv",
+        ["run_id", *_FIXATION_EVENTS_HEADER],
         [
-            "run_id",
-            "event_index",
-            "start_frame",
-            "duration_frames",
-            "responded",
-            "first_response_key",
-            "response_frame",
-            "response_time_s",
-            "rt_frames",
-            "outcome",
-            "target_onset_time_s",
-            "rt_s",
-            "rt_scoring_source",
-        ],
-        [
-            (
-                run_result.run_id,
-                event.event_index,
-                event.start_frame,
-                event.duration_frames,
-                event.responded,
-                event.first_response_key,
-                event.response_frame,
-                event.response_time_s,
-                event.rt_frames,
-                event.outcome,
-                event.target_onset_time_s,
-                event.rt_s,
-                (
-                    run_result.runtime_metadata.fixation_rt_scoring_source
-                    if run_result.runtime_metadata is not None
-                    else ""
-                ),
-            )
+            (run_result.run_id, *_fixation_response_row(event, run_result))
             for run_result in summary.run_results
             for event in run_result.fixation_responses
         ],
     )
     _write_csv(
         output_dir / "responses.csv",
+        ["run_id", *_RESPONSES_HEADER],
         [
-            "run_id",
-            "response_index",
-            "key",
-            "frame_index",
-            "time_s",
-            "matched_event_index",
-            "rt_frames",
-            "correct",
-            "outcome",
-            "rt_s",
-            "rt_scoring_source",
-        ],
-        [
-            (
-                run_result.run_id,
-                response.response_index,
-                response.key,
-                response.frame_index,
-                response.time_s,
-                response.matched_event_index,
-                response.rt_frames,
-                response.correct,
-                response.outcome,
-                response.rt_s,
-                (
-                    run_result.runtime_metadata.fixation_rt_scoring_source
-                    if run_result.runtime_metadata is not None
-                    else ""
-                ),
-            )
+            (run_result.run_id, *_response_row(response, run_result))
             for run_result in summary.run_results
             for response in run_result.response_log
         ],
     )
     _write_csv(
         output_dir / "frame_intervals.csv",
-        ["run_id", "frame_index", "interval_s"],
+        ["run_id", *_FRAME_INTERVALS_HEADER],
         [
-            (
-                run_result.run_id,
-                interval.frame_index,
-                interval.interval_s,
-            )
+            (run_result.run_id, *_frame_interval_row(interval))
             for run_result in summary.run_results
             for interval in run_result.frame_intervals
         ],
     )
     _write_csv(
         output_dir / "trigger_log.csv",
+        ["run_id", *_TRIGGER_LOG_HEADER],
         [
-            "run_id",
-            "trigger_index",
-            "frame_index",
-            "time_s",
-            "code",
-            "label",
-            "backend_name",
-            "status",
-            "message",
-        ],
-        [
-            (
-                run_result.run_id,
-                trigger.trigger_index,
-                trigger.frame_index,
-                trigger.time_s,
-                trigger.code,
-                trigger.label,
-                trigger.backend_name,
-                trigger.status,
-                trigger.message,
-            )
+            (run_result.run_id, *_trigger_row(trigger))
             for run_result in summary.run_results
             for trigger in run_result.trigger_log
         ],
@@ -1123,8 +1048,9 @@ def _append_attentional_blink_events(
 ) -> None:
     """Preserve phase timing and observed onsets in both compact and full sessions."""
     results = {result.run_id: result for result in summary.run_results}
+    ordered_entries = session_plan.ordered_entries()
     entries = [
-        entry for entry in session_plan.ordered_entries()
+        entry for entry in ordered_entries
         if isinstance(entry.run_spec.attentional_blink, AttentionalBlinkRunSpec)
         and entry.run_spec.run_id in results
     ]
@@ -1139,7 +1065,7 @@ def _append_attentional_blink_events(
                       "session_id", "run_id", "sequence_index"),
         )
     stream_entries = [
-        entry for entry in session_plan.ordered_entries()
+        entry for entry in ordered_entries
         if isinstance(entry.run_spec.attentional_blink, AttentionalBlinkStreamRunSpec)
         and entry.run_spec.run_id in results
     ]
@@ -1244,10 +1170,6 @@ def write_group_summary(project_root: Path, output_path: Path) -> Path:
     generated_at = datetime.now(timezone.utc).isoformat()
     _write_group_summary_xlsx(path, participant_rows, generated_at=generated_at)
     return path
-
-
-def _upgrade_session_condition_history_header(path: Path) -> None:
-    _upgrade_csv_header(path, SESSION_CONDITION_HISTORY_HEADER)
 
 
 def _upgrade_csv_header(path: Path, header: list[str]) -> None:
@@ -1619,7 +1541,11 @@ def _group_summary_rows(
     hit_count = sum(_csv_int(row.get("Hits")) or 0 for row in included_rows)
     false_alarm_count = sum(_csv_int(row.get("False Alarms")) or 0 for row in included_rows)
     mean_accuracy = (hit_count / total_targets) * 100.0 if total_targets > 0 else None
-    mean_rt_ms = _weighted_participant_mean_rt_ms(included_rows)
+    mean_rt_ms = _weighted_mean_rt_ms(
+        included_rows,
+        hit_count_column="Hits",
+        mean_rt_column="Mean Reaction Time Across All Conditions (ms)",
+    )
     included_aborted = any(
         row.get("Aborted Y/N", "").strip().upper() == "Y" for row in included_rows
     )
@@ -1646,19 +1572,6 @@ def _group_summary_rows(
         for row in participant_rows
     ]
     return [group_row, *session_rows]
-
-
-def _weighted_participant_mean_rt_ms(rows: list[dict[str, str]]) -> float | None:
-    weighted_rt_sum = 0.0
-    hit_count_for_rt = 0
-    for row in rows:
-        hit_count = _csv_int(row.get("Hits"))
-        mean_rt_ms = _csv_float(row.get("Mean Reaction Time Across All Conditions (ms)"))
-        if hit_count is None or hit_count <= 0 or mean_rt_ms is None:
-            continue
-        weighted_rt_sum += mean_rt_ms * hit_count
-        hit_count_for_rt += hit_count
-    return weighted_rt_sum / hit_count_for_rt if hit_count_for_rt > 0 else None
 
 
 def _summary_xlsx_value(
@@ -1718,12 +1631,17 @@ def _condition_history_order_key(row: dict[str, str]) -> tuple[int, str]:
     return (_csv_int(row.get("global_order_index")) or 0, row.get("run_id", ""))
 
 
-def _weighted_mean_rt_ms(rows: list[dict[str, str]]) -> float | None:
+def _weighted_mean_rt_ms(
+    rows: list[dict[str, str]],
+    *,
+    hit_count_column: str = "hit_count",
+    mean_rt_column: str = "mean_rt_ms",
+) -> float | None:
     weighted_rt_sum = 0.0
     hit_count_for_rt = 0
     for row in rows:
-        hit_count = _csv_int(row.get("hit_count"))
-        mean_rt_ms = _csv_float(row.get("mean_rt_ms"))
+        hit_count = _csv_int(row.get(hit_count_column))
+        mean_rt_ms = _csv_float(row.get(mean_rt_column))
         if hit_count is None or hit_count <= 0 or mean_rt_ms is None:
             continue
         weighted_rt_sum += mean_rt_ms * hit_count

@@ -22,11 +22,8 @@ from fpvs_studio.core.paths import (
     to_project_relative_posix,
 )
 from fpvs_studio.core.serialization import read_json_file
-from fpvs_studio.preprocessing.models import (
-    StimulusAssetRecord,
-    StimulusManifest,
-    StimulusSetManifest,
-)
+from fpvs_studio.preprocessing.manifest import asset_variant_path, find_manifest_set
+from fpvs_studio.preprocessing.models import StimulusManifest
 
 
 def load_manifest(
@@ -51,36 +48,6 @@ def load_manifest(
     return read_json_file(manifest_path, StimulusManifest)
 
 
-def _resolve_manifest_set(
-    stimulus_set: StimulusSet,
-    *,
-    manifest: StimulusManifest | None,
-) -> StimulusSetManifest | None:
-    """Return the matching manifest set when present."""
-
-    if manifest is None:
-        return None
-    for manifest_set in manifest.sets:
-        if manifest_set.set_id == stimulus_set.set_id:
-            return manifest_set
-    return None
-
-
-def _resolve_manifest_asset_path(
-    asset: StimulusAssetRecord,
-    *,
-    variant: StimulusVariant,
-) -> str | None:
-    """Resolve one asset path from the manifest for the requested variant."""
-
-    if variant == StimulusVariant.ORIGINAL:
-        return asset.source.relative_path
-    for derivative in asset.derivatives:
-        if derivative.variant == variant:
-            return derivative.relative_path
-    return None
-
-
 def _resolve_manifest_image_paths(
     stimulus_set: StimulusSet,
     *,
@@ -90,13 +57,15 @@ def _resolve_manifest_image_paths(
 ) -> list[str] | None:
     """Resolve ordered asset paths from the preprocessing manifest."""
 
-    manifest_set = _resolve_manifest_set(stimulus_set, manifest=manifest)
+    manifest_set = (
+        find_manifest_set(manifest, set_id=stimulus_set.set_id) if manifest is not None else None
+    )
     if manifest_set is None or not manifest_set.assets:
         return None
 
     resolved: list[str] = []
     for asset in sorted(manifest_set.assets, key=lambda item: item.source.relative_path.lower()):
-        relative_path = _resolve_manifest_asset_path(asset, variant=variant)
+        relative_path = asset_variant_path(asset, variant=variant)
         if relative_path is None:
             raise CompileError(
                 f"Stimulus variant '{variant.value}' is missing from the manifest for set "

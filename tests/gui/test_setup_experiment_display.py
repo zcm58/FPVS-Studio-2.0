@@ -28,9 +28,14 @@ from tests.gui.helpers import (
     _open_created_project,
 )
 
-from fpvs_studio.core.enums import DutyCycleMode
+from fpvs_studio.core.enums import DutyCycleMode, ImageGeometryMode
+from fpvs_studio.core.models import (
+    ImageGeometrySettings,
+    ProjectPresentationSettings,
+    StimulusPresentationDefaults,
+)
 from fpvs_studio.gui.controller import StudioController
-from fpvs_studio.gui.runtime_settings_page import ImageSizePreview
+from fpvs_studio.gui.runtime_settings_page import ImageSizePreview, ImageSizePreviewDialog
 from fpvs_studio.runtime.display_mode import NativeDisplayMode
 from fpvs_studio.runtime.display_refresh import DisplayRefreshVerification
 
@@ -117,7 +122,7 @@ def test_setup_wizard_combines_timing_and_session_with_separate_image_size(
         ("experiment", guide.experiment_step_surface, editor),
         ("image_size", guide.image_size_step_surface, guide.image_display_size_editor),
     )
-    for width, height in ((1120, 720), (1180, 760)):
+    for width, height in ((1120, 820), (1180, 860)):
         window.resize(width, height)
         for key, surface, page_editor in pages:
             guide.open_wizard(step_key=key)
@@ -331,7 +336,7 @@ def test_setup_wizard_fpvs_rates_persist_and_report_exact_or_approximate_timing(
     assert "dropped or late frames" in editor.timing_status_label.toolTip()
     assert guide.setup_wizard_next_button.isEnabled()
 
-    window.resize(1120, 720)
+    window.resize(1120, 820)
     QApplication.processEvents()
     assert guide.shell.page_container.scroll_area.verticalScrollBar().maximum() == 0
     qtbot.waitUntil(lambda: editor.height() >= editor.heightForWidth(editor.width()))
@@ -696,13 +701,95 @@ def test_setup_wizard_experiment_image_size_controls_update_preview_and_review(
         assert preview_right <= fixation_panel.width()
 
 
+@pytest.mark.parametrize("surface", ["editor", "preview"])
+@pytest.mark.parametrize("height_constrained", [False, True])
+def test_image_size_calibration_preserves_geometry_and_recovers_from_failed_edits(
+    qtbot, controller, tmp_path, monkeypatch, surface, height_constrained,
+):
+    document, window = _open_created_project(
+        controller, qtbot, tmp_path, "Image Size Calibration With Precise Authored Geometry",
+    )
+    geometry = ImageGeometrySettings(
+        mode=(
+            ImageGeometryMode.NATURAL_ASPECT if height_constrained else ImageGeometryMode.EXACT_BOX
+        ),
+        width_degrees=None if height_constrained else 5.125,
+        height_degrees=6.25,
+    )
+    document.set_project_presentation(ProjectPresentationSettings(
+        defaults=StimulusPresentationDefaults(image_geometry=geometry),
+    ))
+    window.show_setup_wizard(step_key="image_size")
+    window.resize(1120, 820)
+    window.show()
+    editor = window.setup_wizard_page.image_display_size_editor
+    if surface == "preview":
+        controls = ImageSizePreviewDialog(document, window)
+        qtbot.addWidget(controls)
+        controls.resize(1120, 820)
+        controls.show()
+    else:
+        controls = editor
+    QApplication.processEvents()
+    _assert_visible_children_within_parent(controls)
+    assert controls.width_degrees_spin.isEnabled() is not height_constrained
+    prefix = "preview_" if surface == "preview" else ""
+    assert controls.width_degrees_spin.objectName() == f"{prefix}stimulus_width_degrees_spin"
+
+    # The displayed one-decimal width must never round the authored 5.125-degree
+    # width merely because an unrelated calibration field changed.
+    controls.viewing_distance_spin.setValue(78.0)
+    controls.screen_width_spin.setValue(60.25)
+    controls.screen_width_px_spin.setValue(1600)
+    controls.screen_height_px_spin.setValue(900)
+    controls.use_current_resolution_checkbox.setChecked(True)
+    QApplication.processEvents()
+    assert document.project.settings.presentation.defaults.image_geometry == geometry
+    display = document.project.settings.display
+    assert display.viewing_distance_cm == 78.0
+    assert display.screen_width_cm == 60.25
+    assert display.screen_width_px == 1600
+    assert display.screen_height_px == 900
+    assert display.use_current_screen_resolution is True
+    assert not controls.screen_width_px_spin.isEnabled()
+    assert not controls.screen_height_px_spin.isEnabled()
+    controls.use_current_resolution_checkbox.setChecked(False)
+    assert controls.screen_width_px_spin.isEnabled()
+    assert controls.screen_height_px_spin.isEnabled()
+
+    if not height_constrained:
+        controls.width_degrees_spin.setValue(7.5)
+        assert document.project.settings.display.stimulus_width_degrees == 7.5
+        updated = document.project.settings.presentation.defaults.image_geometry
+        assert updated.width_degrees == 7.5
+        assert updated.height_degrees == 6.25
+        assert updated.mode == ImageGeometryMode.EXACT_BOX
+        assert editor.width_degrees_spin.value() == 7.5
+
+    errors = []
+    before_failure = document.project.model_copy(deep=True)
+
+    def reject_update(**updates):
+        raise ValueError("Calibration rejected")
+
+    monkeypatch.setattr(document, "update_display_settings", reject_update)
+    monkeypatch.setattr(
+        "fpvs_studio.gui.runtime_settings_page._show_error_dialog",
+        lambda parent, title, error: errors.append((parent, title, str(error))),
+    )
+    controls.viewing_distance_spin.setValue(90.0)
+    QApplication.processEvents()
+    assert errors == [(controls, "Image Size Error", "Calibration rejected")]
+    assert document.project == before_failure
+    assert controls.viewing_distance_spin.value() == 78.0
+    _assert_visible_children_within_parent(controls)
+
+
 def test_full_screen_image_size_preview_edits_sync_with_experiment_page(
     qtbot,
     controller: StudioController,
     tmp_path: Path,
 ) -> None:
-    from fpvs_studio.gui.runtime_settings_page import ImageSizePreviewDialog
-
     _, window = _open_created_project(controller, qtbot, tmp_path, "Image Size Preview Edit")
     guide = window.setup_wizard_page
     guide.open_wizard(step_key="image_size")

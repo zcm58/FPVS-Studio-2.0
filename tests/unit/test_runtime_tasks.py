@@ -1390,18 +1390,38 @@ def test_explicit_single_choice_and_rating_submit_selected_item() -> None:
         assert result.selected_item_ids == ("answer",)
 
 
-def test_numeric_off_step_value_is_invalid(
+@pytest.mark.parametrize(
+    ("minimum", "maximum", "step_size", "value", "accepted"),
+    [
+        (0, 10, 2, 3, False),
+        (0, 10, 2, 4, True),
+        (0, 10, 0.1, 0.3, True),
+        (0, 10, 0.1, 0.35, False),
+        (0, 10, 2, 2 + 5e-10, True),
+        (0, 10, 2, 2 + 5e-9, False),
+        (0, 10, 1, 1 + 5e-10, False),
+        (0.5, 10.5, 1, 1.5, True),
+        (-(2**53 - 1), 2**53 - 1, 1, 100.5, False),
+        (-(2**53 - 1), 2**53 - 1, 1, 2**53 - 1, True),
+    ],
+)
+def test_numeric_step_acceptance_matches_renderer(
     sample_project,
     sample_project_root,
+    minimum,
+    maximum,
+    step_size,
+    value,
+    accepted,
 ) -> None:
     questions = [
         TaskQuestion(
             question_id="amount",
             kind=TaskQuestionKind.NUMERIC,
             prompt="Amount",
-            min_value=0,
-            max_value=10,
-            step=2,
+            min_value=minimum,
+            max_value=maximum,
+            step=step_size,
         )
     ]
     step = TaskStepSpec(
@@ -1412,7 +1432,7 @@ def test_numeric_off_step_value_is_invalid(
     )
     engine = _TaskEngine(
         [
-            TaskEngineInput(numeric_value=3),
+            TaskEngineInput(numeric_value=value),
         ]
     )
 
@@ -1425,8 +1445,18 @@ def test_numeric_off_step_value_is_invalid(
         global_order_index=0,
     )
 
-    assert outcome.aborted is True
-    assert [record.valid for record in outcome.responses] == [False]
+    assert outcome.aborted is not accepted
+    assert [record.valid for record in outcome.responses] == [accepted]
+    rendered = _completed_input(
+        ResolvedTaskStep(
+            task_id="questionnaire", step_id="numeric", kind="questionnaire",
+            response_kind="numeric", numeric_minimum=minimum, numeric_maximum=maximum,
+            numeric_step=step_size,
+        ),
+        key="return", selected_item_ids=[], response_text=str(value),
+        reaction_time_s=0.5, displayed_item_ids=(),
+    )
+    assert (rendered is not None) is accepted
 
 
 def test_external_text_over_authored_limit_is_invalid(

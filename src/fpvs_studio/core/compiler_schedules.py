@@ -549,21 +549,6 @@ def _bag_rotation_candidates(
             )
 
 
-def _shuffled_pool(
-    stimuli: list[StimulusScheduleItem],
-    *,
-    rng: random.Random,
-) -> list[StimulusScheduleItem]:
-    """Return a shuffled copy while keeping callers' resolved stimulus lists immutable."""
-
-    return boundary_aware_shuffled_bag(
-        stimuli,
-        rng=rng,
-        previous_key=None,
-        key=_stimulus_display_key,
-    )
-
-
 def boundary_aware_shuffled_bag(
     items: Sequence[ItemT],
     *,
@@ -934,17 +919,6 @@ def _capped_state_product(values: Sequence[int], *, cap: int) -> int:
             return cap + 1
         result *= value
     return result
-
-
-def _forced_stimulus_key(
-    active_bag: Sequence[StimulusScheduleItem],
-    source_pool: Sequence[StimulusScheduleItem],
-) -> tuple[StimulusModality, str] | None:
-    candidates = active_bag if active_bag else source_pool
-    unique_keys = {_stimulus_display_key(item) for item in candidates}
-    if len(unique_keys) == 1:
-        return next(iter(unique_keys))
-    return None
 
 
 def _stimulus_display_key(
