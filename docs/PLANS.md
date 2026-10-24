@@ -18,9 +18,6 @@ Use this page to find planning material before making feature-sized changes.
 
 Current implementation:
 
-- [Graphics crash repair and condition recovery](exec-plans/active/crash-condition-recovery.md)
-- [Studio 2.4.7 release](exec-plans/active/release-2.4.7.md)
-
 - [Studio to Toolbox and OpenFPVS integration](exec-plans/active/studio-toolbox-integration.md)
 - [Experiment data sharing and comparison](exec-plans/active/remote-experiment-results-reporting.md)
 - [Unicorn Hybrid Black recording support](exec-plans/active/unicorn-hybrid-black-support.md) (normal marker output enabled; full receiver, Toolbox and physical timing validation pending)
@@ -36,6 +33,13 @@ Concrete planned work:
 
 Completed plans are historical implementation notes. Read their directory only when
 the current contracts do not explain why a landed decision exists.
+
+Recent completion: [Graphics crash repair and condition recovery](exec-plans/completed/crash-condition-recovery.md)
+(graphics-thread cleanup, durable interrupted-condition guidance and targeted reruns
+that preserve completed results). Published in
+[Studio 2.4.7](exec-plans/completed/release-2.4.7.md), with full/patch payloads,
+signed release assets and public updater selection verified. Visible and physical
+acceptance remain documented; automatic-email service activation is separate.
 
 Recent completion: [Behavior-preserving cleanup](exec-plans/completed/behavior-preserving-cleanup.md)
 (dead-code removal and shared compiler, export and image-size logic; 421 fewer production

@@ -1,6 +1,6 @@
 # Graphics crash repair and interrupted-condition recovery
 
-Status: Active
+Status: Completed
 
 Date: 2026-10-24
 
@@ -59,18 +59,19 @@ This release does not claim to activate that separate service.
 - [x] Confirm latest published baseline `v2.4.6` and safe GUI baseline (17 tests).
 - [x] Implement graphics lifetime repair and regression checks.
 - [x] Implement local recovery query, targeted rerun and GUI coverage.
-- [ ] Complete verification and release artifact checks.
-- [ ] Commit, push and publish the release.
+- [x] Complete safe verification and release artifact checks; record unperformed
+  visible and hardware acceptance.
+- [x] Commit, push and publish the release.
 
 ## Verification record
 
-- Engine focused: 386 passing tests; no change to compiled timing or trigger order.
+- Final engine focused: 389 passing tests; no change to compiled timing or trigger order.
 - Runtime focused before review follow-up: 639 passing tests, three Windows symlink skips.
 - GUI safe focused: 17 passing tests; new registered visible tests are prepared.
 - Packaging focused: 181 passing tests; authenticated 2.4.6 baseline inventory verified.
-- Initial repo precommit: 3,169 passing tests, 12 Windows symlink skips, with Ruff,
-  compilation, mypy and repo audits passing. Review follow-ups receive focused checks
-  and a final precommit run before publication.
+- Final repo precommit: 3,198 passing tests, 20 passing subtests and 12 Windows
+  symlink skips, with Ruff, compilation, mypy and repo audits passing. The final
+  Windows packaging policy follow-up independently passes 181 focused tests.
 - The actual Cognitive Decline receipt was queried read-only: run six, Emotional
   Processing, five completed and two not started; the receipt hash was unchanged.
 - Independent review covered late project-close callbacks, seed readiness, malformed
@@ -80,3 +81,27 @@ This release does not claim to activate that separate service.
   labeled "armed" because writes cannot observe frame zero without disturbing timing.
 - Visible Qt and native graphics acceptance requested in this task; not executed
   without the user's explicit approval. No offscreen tests or real EEG markers.
+
+## Published outcome
+
+Source commit `8547d7a9ebbe8a26235f62de4b3e0ffbdbcf2d4c` is pushed to master and
+tagged as immutable release
+[FPVS Studio 2.4.7](https://github.com/zcm58/FPVS-Studio-2.0/releases/tag/v2.4.7).
+The [release record](release-2.4.7.md) contains installer/patch hashes, exact
+source/native/dependency checks, public updater verification and qualification limits.
+
+Graphics cleanup uses the presentation thread, including partially constructed
+resources retained by chained or suppressed exceptions. Untimed text screens reuse
+their text objects. Project-local checkpoints identify an interrupted occurrence,
+preserve completed outputs, and support a one-condition rerun as a new visit.
+The dialog distinguishes unfinished playback, unfinished later activities and
+not-started occurrences. Older evidence requires confirmation that the session is
+no longer running; when its saved plan is missing, the user explicitly confirms a
+replacement based on the current setup. The Cognitive Decline record identifies
+run six, Emotional Processing, after five completed runs and before two not-started
+runs. No original research files were modified.
+
+The deployed feedback service still lacks active automatic-crash registration and
+intake. Desktop registration failure prevented email delivery. Activation remains
+separate work in the [automatic crash-reporting plan](../active/automatic-crash-reporting.md).
+This local recovery workflow is independent of that service.
