@@ -772,7 +772,48 @@ Per run, full export mode:
 - `task_responses.jsonl` (append-only partial-response checkpoint)
 - `warnings.log`
 
-Compact sessions checkpoint each completed run beneath
+### Interrupted condition recovery
+
+`runtime/condition_recovery.py` writes a separate project-local checkpoint beneath
+`logs/.condition-recovery/` for each session execution, independently of crash-report
+consent, registration and network delivery. Before presentation it saves the frozen
+compiled session plan and holds an OS file lock for that execution's lifetime. Process
+exit releases the lock; discovery never treats a still-held or unreadable lock as proof
+of interruption. Read-only inspection does not create, repair or delete research files.
+
+At safe boundaries the snapshot records the exact run occurrence, original ordinal,
+condition, participant/visit, completed playback runs and runs not yet reached. Stages
+distinguish pre-condition tasks, transition, playback, post-condition tasks, feedback,
+between-condition screens and finalization. Native authored scenes instead persist
+an `armed` intent before pre-condition tasks and perform no recovery writes between
+those tasks and playback returning. An interrupted `armed` record cannot distinguish
+pre-condition tasks from playback or establish that frame zero was presented. This
+preserves the timed fixation-to-frame-zero boundary. A completed playback followed by a later
+task or feedback failure is explicitly reported as completed playback. Ordinary Escape
+cancellation and successful sessions are excluded from interruption notices. Large
+duplicate plan snapshots are retired after those terminal outcomes; interrupted plans
+and their evidence remain available for review.
+
+The query can also inspect older `logs/acquisition/*.acquisition-v1.json` receipts.
+Their ordered run IDs identify repeated occurrences, but they lack lifetime evidence
+and are labelled **Session ended without completion confirmation**. The operator must
+confirm that the old session is no longer running before rerunning an available original
+plan. A missing saved plan remains actionable diagnostic information; the application
+does not silently compile the current project to replace the missing original. An
+explicit **Re-run with Current Setup** action may instead compile the surviving
+condition after warning that current settings and a new random seed replace the missing
+original schedule. `build_replacement_session_plan` restricts that new compilation to
+one occurrence, even when the condition repeats across blocks.
+
+An explicit rerun selects exactly one saved occurrence, retaining its original RunSpec,
+seed and pre/post tasks, and creates a new session UUID. It repeats the complete selected
+occurrence, including its tasks; it does not resume a partially presented stimulus stream.
+Normal participant-repeat permission, visit reservation, hardware readiness and preflight
+still apply. Prior outputs remain intact, and the original run ID links the new execution
+to the occurrence reviewed by the operator. No network action is part of this workflow.
+
+Full sessions now save the completed playback artifacts before post-condition tasks as
+well as after task completion. Compact sessions checkpoint each completed run beneath
 `logs/.task-response-checkpoints/` before post-condition tasks and feedback, and
 update that run's checkpoint after its task flow completes. These atomic `.run.json`
 files retain neutral execution results without raw task answers; task answers remain

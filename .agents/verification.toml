@@ -213,6 +213,7 @@ manual_smoke = [
 [scopes.runtime]
 checks = []
 tests = [
+  "tests/unit/test_condition_recovery.py",
   "tests/unit/test_masking_runtime.py",
   "tests/unit/test_masking_catch_preflight.py",
   "tests/unit/test_runtime_result_durability.py",

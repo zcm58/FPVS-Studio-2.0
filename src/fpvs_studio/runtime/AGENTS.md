@@ -85,6 +85,15 @@ This phase should establish:
   abort, and keep raw task answers out of application logs and summary workbooks
 - checkpoint completed compact run results before later task/feedback screens; retain
   recovery files on interruption/export failure and preserve the original runtime error
+- `condition_recovery.py` owns independent project-local interruption snapshots and
+  exact-occurrence rerun plans. Hold its OS lifetime lock throughout execution; persist
+  stage boundaries outside the frame loop in both export modes. Native scenes persist
+  armed intent before timed pre-tasks with no recovery I/O
+  until playback returns; armed intent is not observed frame-zero evidence. Validate
+  record/plan project, session and ordered occurrence identity before exact reruns.
+  Discovery is read-only, excludes live/completed/cancelled launches, and treats old acquisition receipts without
+  lifetime evidence as unverified. Never recompile missing original plans or overwrite
+  earlier participant visits; completed playback is distinct from later task completion.
 - commit numbered research rows idempotently before generating derived spreadsheets;
   preserve legacy rows, visit identity, and prior files if atomic replacement fails
 - `attentional_blink_report.py` checkpoints native burst targets and per-question

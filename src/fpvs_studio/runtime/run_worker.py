@@ -29,6 +29,7 @@ from fpvs_studio.engines.base import PresentationEngine
 from fpvs_studio.runtime.acquisition_evidence import AcquisitionEvidenceRecorder
 from fpvs_studio.runtime.attentional_blink_report import AttentionalBlinkSessionRecorder
 from fpvs_studio.runtime.backward_counting import BackwardCountingSession
+from fpvs_studio.runtime.condition_recovery import ConditionRecoveryRecorder
 from fpvs_studio.runtime.data_sharing import SharingCapture
 from fpvs_studio.runtime.export_modes import EXPORT_MODE_FULL
 from fpvs_studio.runtime.fixation import build_fixation_task_summary, score_fixation_responses
@@ -252,6 +253,36 @@ class RuntimeWorker:
 
         participant_metadata = (participant_metadata or ParticipantMetadata()).model_copy(deep=True)
         session_plan = _session_plan_for_participant(session_plan, participant_metadata)
+        recovery = ConditionRecoveryRecorder(
+            project_root, session_plan, participant_number=participant_number,
+            participant_session_number=participant_session_number,
+        )
+        try:
+            result = self._execute_session(
+                project_root, session_plan, output_dir, recovery=recovery,
+                participant_number=participant_number,
+                participant_session_number=participant_session_number,
+                participant_metadata=participant_metadata, runtime_options=runtime_options,
+                relative_output_dir=relative_output_dir,
+            )
+        except Exception:
+            try:
+                recovery.finish("interrupted")
+            except Exception:
+                LOGGER.exception("Condition recovery checkpoint also failed after interruption.")
+            raise
+        else:
+            recovery.finish("cancelled" if result.aborted else "completed")
+            return result
+        finally:
+            recovery.close()
+
+    def _execute_session(
+        self, project_root: Path, session_plan: SessionPlan, output_dir: Path, *,
+        recovery: ConditionRecoveryRecorder, participant_number: str,
+        participant_session_number: int | None, participant_metadata: ParticipantMetadata,
+        runtime_options: Mapping[str, object] | None, relative_output_dir: str | None,
+    ) -> SessionExecutionSummary:
         write_detailed_exports = _writes_detailed_exports(runtime_options)
         acquisition = AcquisitionEvidenceRecorder(
             project_root, [entry.run_spec for entry in session_plan.ordered_entries()],
@@ -260,6 +291,7 @@ class RuntimeWorker:
             participant_session_number=participant_session_number,
             session_id=session_plan.session_id,
             participant_metadata=participant_metadata,
+            execution_id=recovery.execution_id,
         )
         try:
             for entry in session_plan.ordered_entries():
@@ -345,7 +377,13 @@ class RuntimeWorker:
 
         def checkpoint_results(results: list[RunExecutionSummary]) -> None:
             acquisition.record_run(results[-1])
-            if not write_detailed_exports:
+            if write_detailed_exports:
+                completed = results[-1]
+                original = next(
+                    entry for entry in ordered_entries if entry.run_id == completed.run_id
+                )
+                write_run_artifacts(output_dir / completed.run_id, original.run_spec, completed)
+            else:
                 compact_run_paths.add(
                     write_compact_run_checkpoint(project_root, results[-1]),
                 )
@@ -372,6 +410,8 @@ class RuntimeWorker:
             for entry in ordered_entries:
                 if abort_reason is not None:
                     break
+                native_scene = entry.run_spec.scene_stream is not None
+                recovery.start_run(entry.run_id, playback_armed=native_scene)
                 acquisition.start_run(entry.run_id, len(trigger_backend.records))
                 _validate_configured_display_resolution(self._engine, entry.run_spec)
                 if entry.run_spec.scene_stream is not None:
@@ -432,6 +472,11 @@ class RuntimeWorker:
                             run_summary,
                         )
                     break
+                # Native authored tasks can end in a timed fixation immediately followed
+                # by prepared frame zero. Persist intent before those tasks, never fsync
+                # in that interval; "armed" deliberately does not claim observed playback.
+                if not native_scene:
+                    recovery.stage("transition")
                 if entry.show_condition_start_gate and self._show_transition(
                     entry,
                     session_plan,
@@ -472,13 +517,14 @@ class RuntimeWorker:
                         )
                     break
 
-                run_output_dir = output_dir / entry.run_id
                 run_relative_output_dir = (
                     f"{relative_output_dir}/{entry.run_id}"
                     if write_detailed_exports and relative_output_dir is not None
                     else None
                 )
                 trigger_start_index = len(trigger_backend.records)
+                if not native_scene:
+                    recovery.stage("playback")
                 try:
                     run_summary = self._engine.run_condition(
                         entry.run_spec,
@@ -527,6 +573,7 @@ class RuntimeWorker:
                 run_summary = run_summary.model_copy(update=task_summary_update)
                 run_results.append(run_summary)
                 checkpoint_results(run_results)
+                recovery.playback_finished(entry.run_id, aborted=run_summary.aborted)
                 running_post_tasks = True
                 run_summary = backward_counting.finish_run(
                     run_summary, entry.run_spec, checkpoint=task_checkpoint.append,
@@ -578,8 +625,6 @@ class RuntimeWorker:
                 warnings.extend(run_summary.warnings)
                 run_results[-1] = run_summary
                 checkpoint_results(run_results)
-                if write_detailed_exports:
-                    write_run_artifacts(run_output_dir, entry.run_spec, run_summary)
 
                 if abort_reason is not None:
                     break
@@ -587,6 +632,7 @@ class RuntimeWorker:
                     abort_reason = run_summary.abort_reason or f"Run '{entry.run_id}' was aborted."
                     break
 
+                recovery.stage("feedback")
                 if self._show_condition_feedback(
                     entry.run_spec,
                     run_summary,
@@ -598,6 +644,7 @@ class RuntimeWorker:
                     )
                     break
 
+                recovery.stage("between_conditions")
                 if (not session_plan.authored_task_flow
                         and self._show_block_break(entry, session_plan)):
                     abort_reason = (
@@ -653,6 +700,8 @@ class RuntimeWorker:
             abort_reason = (
                 f"Session interrupted: {type(execution_error).__name__}: {execution_error}"
             )
+        if execution_error is None:
+            recovery.stage("finalizing")
         session_summary = session_result(run_results, abort_reason)
         if sharing_capture is not None:
             try:

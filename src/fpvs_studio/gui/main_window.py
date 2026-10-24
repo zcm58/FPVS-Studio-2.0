@@ -48,6 +48,7 @@ from fpvs_studio.gui.animations import ButtonHoverAnimator
 from fpvs_studio.gui.attentional_blink_data_dialog import AttentionalBlinkDataDialog
 from fpvs_studio.gui.bundle_export_dialog import BundleExportOptionsDialog
 from fpvs_studio.gui.components import StatusBadgeLabel, apply_studio_theme
+from fpvs_studio.gui.condition_recovery_dialog import ConditionRecoveryController
 from fpvs_studio.gui.document import ProjectDocument
 from fpvs_studio.gui.document_support import DocumentError, format_validation_report
 from fpvs_studio.gui.fixation_cross_data_dialog import FixationCrossDataDialog
@@ -76,6 +77,11 @@ from fpvs_studio.gui.window_helpers import (
     _show_error_dialog,
 )
 from fpvs_studio.gui.workers import BackgroundTask, ProgressSignalBridge, ProgressTask
+from fpvs_studio.runtime.condition_recovery import (
+    InterruptedCondition,
+    build_recovery_session_plan,
+    build_replacement_session_plan,
+)
 from fpvs_studio.runtime.session_export import GROUP_SUMMARY_XLSX_FILENAME
 
 __all__ = [
@@ -194,6 +200,14 @@ class StudioMainWindow(QMainWindow):
         self._active_launch_task: ProgressTask | None = None
         self._active_participant_session_check: ParticipantSessionCheckTask | None = None
         self._active_launch_participant_number: str | None = None
+        self._condition_recovery = ConditionRecoveryController(
+            parent=self, project_root=self.document.project_root,
+            is_busy=self.is_launch_busy, rerun=self._launch_recovered_condition,
+            show_error=lambda error: _show_error_dialog(self, "Recovery Check Failed", error),
+            current_condition_ids=lambda: frozenset(
+                condition.condition_id for condition in self.document.ordered_conditions()
+            ),
+        )
         self._apply_compact_window_size()
 
         self.home_page = HomePage(
@@ -260,6 +274,7 @@ class StudioMainWindow(QMainWindow):
             )
             self._setup_wizard_page = page
             page.run_page.session_completed.connect(self._notify_session_completed)
+            page.run_page.launch_finished.connect(self._check_condition_recovery)
             page.run_page.set_launch_gate(self._notify_session_started)
             page.pending_edits_changed.connect(self._update_save_state)
             page.pending_edits_changed.connect(self._invalidate_handoff_approval)
@@ -477,6 +492,10 @@ class StudioMainWindow(QMainWindow):
             return
         self._deferred_open_tasks_started = True
         self._start_deferred_session_seed_task()
+        self._check_condition_recovery()
+
+    def _check_condition_recovery(self) -> None:
+        self._condition_recovery.check(automatic=True)
 
     def _start_deferred_session_seed_task(self) -> None:
         if self._session_seed_ready or self._session_seed_task is not None:
@@ -570,6 +589,11 @@ class StudioMainWindow(QMainWindow):
         self.data_sharing_action.setObjectName("data_sharing_action")
         self.data_sharing_action.setEnabled(self._on_request_data_sharing is not None)
         self.data_sharing_action.triggered.connect(self._request_data_sharing)
+        self.interrupted_sessions_action = QAction("Interrupted Sessions…", self)
+        self.interrupted_sessions_action.setObjectName("interrupted_sessions_action")
+        self.interrupted_sessions_action.triggered.connect(
+            lambda: self._condition_recovery.check(),
+        )
         self.publish_library_action: QAction | None = None
         self.submit_library_action = QAction("Upload Project for Review...", self)
         self.submit_library_action.setObjectName("request_library_publication_action")
@@ -646,6 +670,9 @@ class StudioMainWindow(QMainWindow):
                 self.fixation_cross_data_action, "View", "results accuracy responses t1 t2",
             ),
             ActionEntry(self.data_sharing_action, "View", "reporting comparison consent"),
+            ActionEntry(
+                self.interrupted_sessions_action, "View", "crash recovery condition rerun",
+            ),
             ActionEntry(self.library_action, "View", "download experiments catalog"),
             ActionEntry(self.project_update_action, "File", "library project version"),
             ActionEntry(self.image_resizer_action, "Tools", "resize images stimuli png"),
@@ -743,6 +770,7 @@ class StudioMainWindow(QMainWindow):
         self.view_menu.addSeparator()
         self.view_menu.addAction(self.fixation_cross_data_action)
         self.view_menu.addAction(self.data_sharing_action)
+        self.view_menu.addAction(self.interrupted_sessions_action)
         self.tools_menu.addAction(self.image_resizer_action)
 
     def show_task_accuracy(self) -> None:
@@ -965,6 +993,105 @@ class StudioMainWindow(QMainWindow):
         preferred_refresh = self.document.project.settings.display.preferred_refresh_hz
         return float(preferred_refresh if preferred_refresh is not None else 60.0)
 
+    def _launch_recovered_condition(self, record: InterruptedCondition) -> None:
+        """Launch one frozen occurrence through the ordinary recording/visit safeguards."""
+        if not self.isVisible() or self.is_launch_busy():
+            return
+        try:
+            if self.document.local_testing_enabled:
+                raise DocumentError(
+                    "Turn off Experiment Test Mode and Pilot Study Mode before re-running "
+                    "an interrupted participant condition."
+                )
+            if not self.document.project.settings.allow_repeated_participant_sessions:
+                raise DocumentError(
+                    "Enable Allow repeat participant sessions in Setup > Project to save "
+                    "the re-run as a new visit. The interrupted visit will be preserved."
+                )
+            self.document.validate_recording_launch()
+        except Exception as error:
+            _show_error_dialog(self, "Re-run Blocked", error)
+            return
+        if not self.flush_pending_edits():
+            return
+        replacement_plan = None
+        if not record.can_rerun:
+            if QMessageBox.question(
+                self, "Re-run with Current Setup",
+                f"The original compiled schedule for {record.condition_name} is unavailable.\n\n"
+                "Re-run this condition once using the current project settings and a new "
+                "randomized schedule? Review Setup first if settings have changed. "
+                "The original visit and completed outputs will be preserved.",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
+                QMessageBox.StandardButton.Cancel,
+            ) != QMessageBox.StandardButton.Yes:
+                return
+            if not self._session_seed_ready:
+                self._start_deferred_session_seed_task()
+                QMessageBox.information(
+                    self, "Preparing Re-run",
+                    "The new random order is still being prepared. Try Re-run again in a moment.",
+                )
+                return
+            try:
+                replacement_plan = build_replacement_session_plan(
+                    self.document.compile_session(
+                        refresh_hz=self._home_launch_refresh_hz(),
+                        condition_ids=(record.condition_id,),
+                    ), record.condition_id,
+                )
+            except Exception as error:
+                _show_error_dialog(self, "Re-run Blocked", error)
+                return
+        dialog = ParticipantNumberDialog(
+            self, manual_removed_electrodes=self.document.project.manual_removed_electrodes,
+        )
+        dialog.setWindowTitle("Re-run Condition — Confirm Participant Details")
+        dialog.participant_number_edit.setText(record.participant_number)
+        dialog.participant_number_edit.setReadOnly(True)
+        if dialog.exec() != int(dialog.DialogCode.Accepted):
+            return
+        details = dialog.participant_details
+        try:
+            self.document.update_manual_removed_electrodes(
+                details.participant_number, details.manual_removed_electrodes,
+            )
+            self.document.save()
+        except Exception as error:
+            _show_error_dialog(self, "Re-run Blocked", error)
+            return
+        if (self.document.require_biosemi_recording_confirmation
+                and not self._confirm_biosemi_recording_started()):
+            return
+
+        def launch() -> LaunchTaskResult:
+            plan = replacement_plan or build_recovery_session_plan(
+                self.document.project_root, record,
+                allow_unverified=record.status == "unverified",
+            )
+            summary = self.document.launch_compiled_session(
+                plan, participant_number=details.participant_number,
+                participant_metadata=details.participant_metadata,
+                participant_session_number=self.document.next_participant_session_number(
+                    details.participant_number,
+                ),
+                display_index=None, fullscreen=True,
+            )
+            return LaunchTaskResult(session_plan=plan, summary=summary)
+
+        self._condition_recovery.close_dialog()
+        self._active_launch_participant_number = details.participant_number
+        task = ProgressTask(
+            parent_widget=self, label=f"Preparing re-run: {record.condition_name}",
+            callback=launch, window_title="FPVS Studio", persistent_thread=True,
+        )
+        self._active_launch_task = task
+        self.launch_action.setEnabled(False)
+        task.succeeded.connect(self._on_home_launch_succeeded)
+        task.failed.connect(self._on_home_launch_failed)
+        task.finished.connect(self._on_home_launch_finished)
+        self._notify_session_started(task.start)
+
     def _prompt_participant_number(self) -> ParticipantLaunchDetails | None:
         dialog = ParticipantNumberDialog(
             self, manual_removed_electrodes=self.document.project.manual_removed_electrodes,
@@ -1061,6 +1188,8 @@ class StudioMainWindow(QMainWindow):
         self._active_launch_participant_number = None
         self.launch_action.setEnabled(True)
         self.home_page.refresh()
+
+        self._check_condition_recovery()
 
     def _show_home_launch_summary(
         self,
@@ -1526,6 +1655,7 @@ class StudioMainWindow(QMainWindow):
             event.ignore()
             return
         if self.maybe_save_changes():
+            self._condition_recovery.deactivate()
             event.accept()
         else:
             event.ignore()

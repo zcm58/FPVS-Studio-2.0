@@ -98,6 +98,13 @@ Approved Qt runs explicitly route INI UserScope and SystemScope settings into th
 process's workspace test profile. Windows native known-folder resolution ignores
 APPDATA overrides; standalone Qt subprocess tests must set QSettings paths too.
 
+For crashes between conditions and interrupted-run guidance, start with
+`engines/psychopy_graphics_lifetime.py`, `engines/psychopy_text_screens.py`,
+`runtime/condition_recovery.py` and `gui/condition_recovery_dialog.py`. Graphics
+cleanup remains engine-owned; occurrence checkpoints and retry plans remain runtime-owned.
+Use engine/runtime/gui focused routes and repo precommit. The local recovery workflow
+in [GUI workflow](../GUI_WORKFLOW.md#interrupted-conditions) works without email intake.
+
 ## Backend Reliability And Compilation Efficiency
 
 Numeric task-step validation is shared through `core/task_models.py`; runtime and

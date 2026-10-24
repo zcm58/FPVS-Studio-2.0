@@ -39,6 +39,7 @@ class AcquisitionEvidenceRecorder:
         participant_number: str, participant_session_number: int | None = None,
         session_id: str | None = None,
         participant_metadata: ParticipantMetadata | None = None,
+        execution_id: str | None = None,
     ) -> None:
         self.path: Path | None = None
         self.evidence: AcquisitionEvidence | None = None
@@ -63,7 +64,7 @@ class AcquisitionEvidenceRecorder:
                 "Prelaunch handoff project or hardware selection does not match."
             )
         now = datetime.now(timezone.utc)
-        execution_id = uuid4().hex
+        execution_id = execution_id or uuid4().hex
         self.path = resolve_project_relative_path(
             project_root, f"logs/acquisition/{execution_id}.acquisition-v1.json",
         )

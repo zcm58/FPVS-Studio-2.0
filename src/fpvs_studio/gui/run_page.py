@@ -617,6 +617,7 @@ class RunPage(QWidget):
     """Session compile and launch page with detailed runtime diagnostics."""
 
     session_completed = Signal()
+    launch_finished = Signal()
 
     def __init__(
         self,
@@ -984,6 +985,7 @@ class RunPage(QWidget):
         self._active_launch_task = None
         self._active_launch_participant_number = None
         self._update_launch_buttons()
+        self.launch_finished.emit()
 
     def _update_launch_buttons(
         self,

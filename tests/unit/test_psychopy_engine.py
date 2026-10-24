@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import gc
 import logging
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from threading import get_ident
+from traceback import extract_tb
 from types import SimpleNamespace
 from typing import Any
 
@@ -28,6 +32,7 @@ from fpvs_studio.engines.graphics_readiness import (
     GraphicsReadinessStatus,
 )
 from fpvs_studio.engines.psychopy_engine import PsychoPyEngine
+from fpvs_studio.engines.psychopy_graphics_lifetime import GraphicsLifetime
 from fpvs_studio.engines.psychopy_stimuli import (
     ConditionResourceCleanupError,
     release_stimuli,
@@ -3085,3 +3090,255 @@ def test_psychopy_engine_disables_frame_interval_recording_for_text_screens(
     assert not any(event_name == "psychopy_warning" for event_name, _message in events)
     assert window.recordFrameIntervals is True
     assert window.frameIntervals == []
+
+
+class _DeletionContext:
+    def __init__(self, object_space=None) -> None:
+        self.object_space = object_space or SimpleNamespace(
+            _doomed_textures=[], _doomed_buffers=[],
+        )
+        self.deleted: list[tuple[str, int]] = []
+
+    def delete_texture(self, texture_id: int) -> None:
+        self.deleted.append(("texture", texture_id))
+
+    def delete_buffer(self, buffer_id: int) -> None:
+        self.deleted.append(("buffer", buffer_id))
+
+
+def _deletion_window(context: _DeletionContext) -> object:
+    def switch_to() -> None:
+        # Match Pyglet's activation barrier, without native GL or a GUI import.
+        for kind in ("texture", "buffer"):
+            pending = getattr(context.object_space, f"_doomed_{kind}s")
+            context.deleted.extend((kind, item) for item in pending)
+            pending.clear()
+
+    return SimpleNamespace(
+        backend=SimpleNamespace(winHandle=SimpleNamespace(context=context, switch_to=switch_to)),
+    )
+
+
+def test_graphics_finalizers_defer_foreign_thread_gc_until_owner_activation() -> None:
+    context = _DeletionContext()
+    lifetime = GraphicsLifetime(_deletion_window(context))
+
+    class TextureCycle:
+        def __init__(self) -> None:
+            self.cycle = self
+
+        def __del__(self) -> None:
+            context.delete_texture(41)
+            context.delete_buffer(42)
+
+    gc_was_enabled = gc.isenabled()
+    gc.disable()
+    try:
+        texture = TextureCycle()
+        del texture
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            executor.submit(gc.collect).result(timeout=5)
+        assert context.deleted == []
+        assert context.object_space._doomed_textures == [41]
+        assert context.object_space._doomed_buffers == [42]
+        lifetime.activate()
+        assert context.deleted == [("texture", 41), ("buffer", 42)]
+        lifetime.activate()
+        assert len(context.deleted) == 2
+    finally:
+        lifetime.retire()
+        if gc_was_enabled:
+            gc.enable()
+
+
+def test_graphics_owner_deletes_normally_and_rejects_foreign_activation() -> None:
+    context = _DeletionContext()
+    lifetime = GraphicsLifetime(_deletion_window(context))
+    context.delete_texture(9)
+    assert context.deleted == [("texture", 9)]
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        for operation in (lifetime.activate, lifetime.retire):
+            with pytest.raises(RuntimeError, match="presentation thread"):
+                executor.submit(operation).result(timeout=5)
+    lifetime.retire()
+    with pytest.raises(RuntimeError, match="already been closed"):
+        lifetime.activate()
+
+
+def test_graphics_late_finalizers_after_close_defer_to_shared_live_context() -> None:
+    old_context = _DeletionContext()
+    old_lifetime = GraphicsLifetime(_deletion_window(old_context))
+    old_lifetime.retire()
+    # Even an owner-thread destructor must not call a destroyed context.
+    old_context.delete_texture(7)
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        executor.submit(old_context.delete_buffer, 8).result(timeout=5)
+    assert old_context.deleted == []
+    next_context = _DeletionContext(old_context.object_space)
+    next_lifetime = GraphicsLifetime(_deletion_window(next_context))
+    next_lifetime.activate()
+    assert next_context.deleted == [("texture", 7), ("buffer", 8)]
+    next_lifetime.retire()
+
+
+def test_graphics_cleanup_rejects_unrecognized_pyglet_interface() -> None:
+    context = SimpleNamespace(object_space=SimpleNamespace())
+    window = SimpleNamespace(winHandle=SimpleNamespace(context=context))
+    with pytest.raises(RuntimeError, match="cleanup interface is unsupported"):
+        GraphicsLifetime(window)
+
+
+@pytest.mark.parametrize("termination", ["space", "escape", "flip_error"])
+def test_text_screens_reuse_stimuli_and_release_on_all_exits(termination) -> None:
+    created = []
+
+    class TextStim:
+        def __init__(self, *args, text, **kwargs):
+            self.text = text
+            self.draw_count = 0
+            self.cleanup_count = 0
+            created.append(self)
+
+        def draw(self):
+            self.draw_count += 1
+
+        def clearTextures(self):
+            self.cleanup_count += 1
+
+    window = _FakeWindow(raise_on_flip_index=119 if termination == "flip_error" else None)
+    keyboard = _FakeKeyboard(
+        window,
+        key_batches=[[]] * 119 + [[SimpleNamespace(name=termination)]],
+    )
+    kwargs = dict(
+        visual=SimpleNamespace(TextStim=TextStim),
+        core=SimpleNamespace(Clock=lambda: _FakeClock(window)),
+        window=window, keyboard=keyboard,
+        is_aborted=lambda: False, set_aborted=lambda: None,
+        heading="Condition 6", body="Instructions", countdown_seconds=None,
+        continue_key="space", continue_prompt="Press Space to begin.",
+    )
+    if termination == "flip_error":
+        with pytest.raises(RuntimeError, match="flip failed"):
+            show_text_screen(**kwargs)
+    else:
+        assert show_text_screen(**kwargs) is (termination == "escape")
+    assert len(created) == 3
+    assert [item.draw_count for item in created] == [120, 120, 120]
+    assert [item.cleanup_count for item in created] == [1, 1, 1]
+
+
+def test_text_screens_release_partial_construction_and_preserve_original_error() -> None:
+    created = []
+
+    class TextStim:
+        def __init__(self, *args, **kwargs):
+            if created:
+                raise ValueError("text allocation failed")
+            self.cleaned = False
+            created.append(self)
+
+        def clearTextures(self):
+            self.cleaned = True
+            raise RuntimeError("secondary cleanup failure")
+
+    window = _FakeWindow()
+    with pytest.raises(ValueError, match="text allocation failed"):
+        show_text_screen(
+            visual=SimpleNamespace(TextStim=TextStim),
+            core=SimpleNamespace(Clock=lambda: _FakeClock(window)),
+            window=window, keyboard=_FakeKeyboard(window),
+            is_aborted=lambda: False, set_aborted=lambda: None,
+            heading="Condition", body="Instructions", countdown_seconds=None,
+            continue_key="space",
+        )
+    assert created[0].cleaned
+
+
+def test_session_close_retires_finalizers_even_when_context_activation_fails(monkeypatch) -> None:
+    captures = {}
+    engine = PsychoPyEngine()
+    _patch_fake_psychopy(monkeypatch, engine, _build_fake_psychopy(captures, flip_times=[]))
+    engine.open_session(runtime_options={"fullscreen": False})
+    window = captures["window"]
+    context = _DeletionContext()
+    guarded_window = _deletion_window(context)
+    engine._graphics_lifetime = GraphicsLifetime(guarded_window)
+
+    def fail_activation():
+        raise RuntimeError("lost context")
+
+    guarded_window.backend.winHandle.switch_to = fail_activation
+    with pytest.raises(RuntimeError, match="lost context"):
+        engine.close_session()
+    assert window.closed
+    assert engine._window is None
+    context.delete_texture(11)
+    assert context.deleted == []
+    assert context.object_space._doomed_textures == [11]
+    engine.close_session()
+
+
+def test_failed_text_constructor_releases_native_locals_before_worker_error_delivery() -> None:
+    destructions = []
+    worker_thread = []
+
+    class FailingTextStim:
+        def __init__(self, *args, **kwargs):
+            self.native_id = 123
+            raise ValueError("constructor failed after native allocation")
+
+        def __del__(self):
+            destructions.append((get_ident(), self.native_id))
+
+    def render():
+        worker_thread.append(get_ident())
+        window = _FakeWindow()
+        show_text_screen(
+            visual=SimpleNamespace(TextStim=FailingTextStim),
+            core=SimpleNamespace(Clock=lambda: _FakeClock(window)),
+            window=window, keyboard=_FakeKeyboard(window),
+            is_aborted=lambda: False, set_aborted=lambda: None,
+            heading="Condition", body=None, countdown_seconds=None,
+            continue_key="space",
+        )
+
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        error = executor.submit(render).exception(timeout=5)
+    assert isinstance(error, ValueError)
+    # The GUI can retain the error indefinitely without retaining its native id.
+    assert destructions == [(worker_thread[0], 123)]
+    assert worker_thread[0] != get_ident()
+    assert "__init__" in [frame.name for frame in extract_tb(error.__traceback__)]
+
+
+def test_engine_installs_context_guard_and_drains_after_feedback(monkeypatch) -> None:
+    captures = {}
+    fake = _build_fake_psychopy(
+        captures, flip_times=[], key_batches=[[SimpleNamespace(name="space")]],
+    )
+    original_window_factory = fake.visual.Window
+    context = _DeletionContext()
+
+    def create_window(**kwargs):
+        window = original_window_factory(**kwargs)
+        window.backend = _deletion_window(context).backend
+        return window
+
+    fake.visual.Window = create_window
+    engine = PsychoPyEngine()
+    _patch_fake_psychopy(monkeypatch, engine, fake)
+    engine.open_session(runtime_options={"fullscreen": False})
+    try:
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            executor.submit(context.delete_texture, 5).result(timeout=5)
+        assert context.deleted == []
+        engine.show_condition_feedback_screen(
+            heading="Feedback", body="Complete", continue_key="space",
+        )
+        assert context.deleted == [("texture", 5)]
+    finally:
+        engine.close_session()
+    context.delete_texture(6)
+    assert context.deleted == [("texture", 5)]
+    assert context.object_space._doomed_textures == [6]

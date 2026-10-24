@@ -171,6 +171,10 @@ the public contract is in [Bug reporting](docs/BUG_REPORTING.md).
 - `src/fpvs_studio/runtime/`: launch settings, preflight, session orchestration,
   participant history and atomic visit reservation, fixation reporting and explicit-path Excel export, fixation
   scoring, trigger coordination, and execution exports.
+  `runtime/condition_recovery.py` owns durable occurrence checkpoints, lifetime locks,
+  read-only interrupted-session queries and single-occurrence retry plans.
+  `gui/condition_recovery_dialog.py` presents this evidence after project open or a
+  failed launch; local recovery is independent of automatic crash-report delivery.
   Attentional-blink runs add phase onset records and event CSVs in full and compact
   exports; `runtime/attentional_blink_report.py` owns incremental burst records,
   independent T1/T2 scoring summaries and dedicated Excel export. View selects
@@ -181,6 +185,8 @@ the public contract is in [Bug reporting](docs/BUG_REPORTING.md).
   `docs/RUNTIME_EXECUTION.md`.
 - `src/fpvs_studio/engines/`: presentation interface, lazy PsychoPy implementation,
   condition-local GPU-ready resource ownership, and Windows graphics-budget probing.
+  `engines/psychopy_graphics_lifetime.py` keeps Pyglet texture/buffer deletion on the
+  presentation thread through context-owned deferred cleanup at untimed boundaries.
 - `src/fpvs_studio/triggers/`: optional hardware adapters used by runtime. Normal event
   codes are `1`-`255`; `0` is manual reset only. The `oddball_onset` code remains `55`
   unless the user explicitly enables and records

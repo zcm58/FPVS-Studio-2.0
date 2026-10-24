@@ -45,6 +45,10 @@ from fpvs_studio.engines.graphics_readiness import (
     observe_windows_graphics_budget,
     probe_renderer_from_gl,
 )
+from fpvs_studio.engines.psychopy_graphics_lifetime import (
+    GraphicsLifetime,
+    release_failed_graphics_frames,
+)
 from fpvs_studio.engines.psychopy_loader import load_psychopy_modules
 from fpvs_studio.engines.psychopy_metadata import runtime_metadata_for_run
 from fpvs_studio.engines.psychopy_scenes import (
@@ -122,6 +126,7 @@ class PsychoPyEngine(PresentationEngine):
         self._aborted = False
         self._active_run_clock: Any | None = None
         self._prepared_scene: _PreparedPlayback | None = None
+        self._graphics_lifetime: GraphicsLifetime | None = None
 
     @property
     def engine_id(self) -> str:
@@ -147,10 +152,18 @@ class PsychoPyEngine(PresentationEngine):
 
         visual = self._require_visual()
         probe_window = visual.Window(**build_refresh_probe_window_kwargs(runtime_options))
+        graphics_lifetime = None
         try:
+            graphics_lifetime = GraphicsLifetime(probe_window)
             return measure_window_refresh_hz(probe_window)
         finally:
-            probe_window.close()
+            try:
+                if graphics_lifetime is not None:
+                    graphics_lifetime.activate()
+            finally:
+                if graphics_lifetime is not None:
+                    graphics_lifetime.retire()
+                probe_window.close()
 
     def open_session(
         self,
@@ -158,6 +171,8 @@ class PsychoPyEngine(PresentationEngine):
         runtime_options: Mapping[str, object] | None = None,
     ) -> None:
         if self._window is not None:
+            if self._graphics_lifetime is not None:
+                self._graphics_lifetime.assert_owner()
             self._runtime_options = dict(runtime_options or {})
             return
 
@@ -169,10 +184,12 @@ class PsychoPyEngine(PresentationEngine):
         self._runtime_options = dict(runtime_options or {})
         self._window = visual.Window(**build_window_kwargs(self._runtime_options))
         try:
+            self._graphics_lifetime = GraphicsLifetime(self._window)
             self._window.recordFrameIntervals = True
             self._keyboard = keyboard_module.Keyboard()
             self._keyboard.clearEvents()
-        except BaseException:
+        except BaseException as error:
+            release_failed_graphics_frames(error)
             self.close_session()
             raise
         self._aborted = False
@@ -326,6 +343,7 @@ class PsychoPyEngine(PresentationEngine):
         window = self._require_window()
         resources: PreparedConditionResources | None = None
         try:
+            self._drain_graphics_deletions()
             if run_spec.scene_stream is not None:
                 window.colorSpace = "rgb"
                 window.color = run_spec.scene_stream.background_rgb
@@ -366,7 +384,8 @@ class PsychoPyEngine(PresentationEngine):
             return _PreparedPlayback(
                 run_spec, project_root, resources, default_fixation_stim, readiness, plan,
             )
-        except BaseException:
+        except BaseException as error:
+            release_failed_graphics_frames(error)
             if resources is not None:
                 resources.release()
             self.close_session()
@@ -701,7 +720,8 @@ class PsychoPyEngine(PresentationEngine):
 
             finished_at = datetime.now(timezone.utc)
             preparation_succeeded = True
-        except BaseException:
+        except BaseException as error:
+            release_failed_graphics_frames(error)
             condition_failed = True
             raise
         finally:
@@ -851,10 +871,15 @@ class PsychoPyEngine(PresentationEngine):
                 is_aborted=lambda: self._aborted,
                 set_aborted=self.abort,
             )
+        except BaseException as error:
+            release_failed_graphics_frames(error)
+            raise
         finally:
             window.recordFrameIntervals = previous_record_frame_intervals
             if hasattr(window, "frameIntervals"):
                 window.frameIntervals = []
+            if step.duration_frames is None:
+                self._drain_graphics_deletions()
 
     def show_completion_screen(
         self,
@@ -892,18 +917,27 @@ class PsychoPyEngine(PresentationEngine):
         )
 
     def close_session(self) -> None:
+        graphics_lifetime = self._graphics_lifetime
+        if graphics_lifetime is not None:
+            graphics_lifetime.assert_owner()
         window = self._window
         prepared_scene = self._prepared_scene
         self._prepared_scene = None
         cleanup_report = None
-        if prepared_scene is not None:
-            prepared_scene.playback_plan.clear()
-            cleanup_report = prepared_scene.resources.release()
-        self._window = None
-        self._keyboard = None
-        self._active_run_clock = None
-        if window is not None:
-            window.close()
+        try:
+            self._drain_graphics_deletions()
+            if prepared_scene is not None:
+                prepared_scene.playback_plan.clear()
+                cleanup_report = prepared_scene.resources.release()
+        finally:
+            self._window = None
+            self._keyboard = None
+            self._active_run_clock = None
+            self._graphics_lifetime = None
+            if graphics_lifetime is not None:
+                graphics_lifetime.retire()
+            if window is not None:
+                window.close()
         if cleanup_report is not None and not cleanup_report.succeeded:
             raise ConditionResourceCleanupError(cleanup_report)
 
@@ -1552,6 +1586,7 @@ class PsychoPyEngine(PresentationEngine):
             window.recordFrameIntervals = previous_record_frame_intervals
             if hasattr(window, "frameIntervals"):
                 window.frameIntervals = []
+            self._drain_graphics_deletions()
 
     def _tutorial_escape_pressed(self, keyboard: Any, *, key_list: list[str]) -> bool:
         keys = keyboard.getKeys(
@@ -1597,7 +1632,13 @@ class PsychoPyEngine(PresentationEngine):
     def _require_window(self) -> Any:
         if self._window is None:
             raise RuntimeError("PsychoPy session window has not been opened.")
+        if self._graphics_lifetime is not None:
+            self._graphics_lifetime.assert_owner()
         return self._window
+
+    def _drain_graphics_deletions(self) -> None:
+        if self._graphics_lifetime is not None:
+            self._graphics_lifetime.activate()
 
     def _require_keyboard(self) -> Any:
         if self._keyboard is None:

@@ -75,6 +75,35 @@ those sizes, hover the checkbox/title/table headers for details, and exercise op
 retry, archive and cancellation with a fake service. The compact layout still requires
 an approved visible check; production multi-machine acceptance remains a separate service check.
 
+## Interrupted conditions
+
+After opening a project, Studio checks local session evidence in a background worker.
+An interrupted-session window identifies the participant, visit, run occurrence,
+condition and last recorded stage. Completed runs and not-started runs are listed
+separately. A completed stimulus presentation with an unfinished follow-up activity
+is explicitly distinguished from incomplete playback. **View > Interrupted Sessions**
+reopens the same read-only view; it works offline and independently of crash-report email.
+
+**Re-run This Condition** uses the original saved compiled occurrence, including its
+before/after activities, in a new participant visit. The original results remain
+unchanged. Allow repeat participant sessions must be enabled in Setup > Project;
+normal participant details, recording confirmation, display and hardware checks still
+apply. Test/Pilot mode must be off for a participant retry. Older acquisition receipts
+require confirmation that the session is no longer running. If the original compiled
+plan is missing, **Re-run with Current Setup** offers one occurrence of the same
+condition using current project settings and a new randomized schedule, with an
+explicit confirmation. If the condition was removed, this action is disabled.
+
+The recovery dialog has a `640x440` minimum and `760x520` default size, with full
+condition names and paths in selectable, scrollable details and combo-box tooltips.
+Registered `tests/gui/test_condition_recovery_dialog.py` covers both sizes and themes,
+legacy confirmation, missing plans, completed playback, launch guards and background
+query behavior. Visible manual acceptance: open a synthetic interrupted project, verify
+run six is distinguished from five completed runs and two not-started runs, cancel
+participant collection, then retry one occurrence and verify a separate visit. Close
+and reopen the project and inspect View > Interrupted Sessions. No real EEG hardware
+or participant data is needed for this acceptance.
+
 ## Bug reporting
 
 File > Request a Feature opens a separate text-only draft using the same reporting

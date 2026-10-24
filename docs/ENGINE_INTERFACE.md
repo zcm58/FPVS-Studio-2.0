@@ -70,6 +70,24 @@ as PsychoPy. Runtime owns flow and calls engines through
   draw plans, and strong references, then calls `glFinish()` after deletion before
   runtime can advance. Cleanup failure closes the graphics context and surfaces an error;
   it is not treated as a successful release.
+- Each PsychoPy window belongs to its presentation thread. The Pyglet adapter in
+  `psychopy_graphics_lifetime.py` guards texture and buffer finalizers: collection on
+  another thread, or after the originating window closes, queues deletion in the
+  shared object space instead of issuing native GL calls. Context activation drains
+  those queues before resource preparation, after untimed screens and before close;
+  no new collection or deletion barrier runs inside condition playback or between
+  an authored timed scene fixation and its prepared stream. Late references retained
+  by exception tracebacks remain guarded after close. Python's process-wide garbage
+  collection policy is otherwise unchanged.
+- Engine exception boundaries release completed traceback-frame locals on the
+  presentation thread before closing the context or delivering errors to the GUI.
+  This also releases partial PsychoPy constructors whose direct display-list
+  finalizers are not managed by Pyglet. Exception messages and stack locations remain
+  available; native objects are not retained just to preserve traceback locals.
+- Transition, feedback, break and completion screens create their heading, body and
+  footer stimuli once per screen, update the countdown only when its displayed text
+  changes, and release them on continue, cancellation and exceptions. They never
+  allocate a replacement set of text stimuli on every display refresh.
 
 ## First Files
 
@@ -78,6 +96,7 @@ as PsychoPy. Runtime owns flow and calls engines through
 - PsychoPy implementation facade: `src/fpvs_studio/engines/psychopy_engine.py`
 - PsychoPy helpers:
   - `src/fpvs_studio/engines/psychopy_loader.py`
+  - `src/fpvs_studio/engines/psychopy_graphics_lifetime.py`
   - `src/fpvs_studio/engines/psychopy_tasks.py`
   - `src/fpvs_studio/engines/psychopy_text_screens.py`
   - `src/fpvs_studio/engines/psychopy_stimuli.py`

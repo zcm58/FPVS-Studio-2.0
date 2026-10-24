@@ -54,6 +54,11 @@ play compiled runs end to end.
 - Keep condition-task clocks separate from condition playback and never let task
   screens mutate `RunSpec`, frame timing, or trigger state.
 - Keep the public surface small and swappable.
+- Keep native graphics creation, use and cleanup on the window's presentation
+  thread. Guard Pyglet texture/buffer finalizers through `psychopy_graphics_lifetime`
+  for foreign-thread GC and references surviving window close. Drain deferred cleanup
+  at untimed boundaries, never inside playback or after a timed scene pre-task.
+  Reuse transition/feedback text stimuli and release them on every exit path.
 
 ## Hard restrictions
 
