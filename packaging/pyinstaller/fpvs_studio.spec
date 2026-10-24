@@ -127,6 +127,13 @@ for package in (
 ):
     binaries += _collect_binaries(package)
 
+excludedimports = ["PyQt5", "PyQt6", "PySide2"]
+if sys.platform == "win32":
+    # Preserve the published Windows runtime's OpenMP policy. This optional
+    # diagnostic/controller module changes KMP_DUPLICATE_LIB_OK on import.
+    # NumPy and SciPy support its absence; Studio does not use its APIs.
+    excludedimports.append("threadpoolctl")
+
 a = Analysis(
     [str(entrypoint)],
     pathex=[str(src_root)],
@@ -136,11 +143,7 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[
-        "PyQt5",
-        "PyQt6",
-        "PySide2",
-    ],
+    excludes=excludedimports,
     noarchive=False,
 )
 a.binaries = [binary for binary in a.binaries if not _is_host_icu_binary(binary)]

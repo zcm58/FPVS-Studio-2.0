@@ -39,6 +39,13 @@ application directories from the build process's `PATH`, while retaining verifie
 native dependency paths. Package-version pins alone do not prevent PyInstaller from
 collecting support DLLs from another installed application.
 
+The Windows Studio bundle excludes optional `threadpoolctl`, matching the published
+runtime. Merely importing that module sets `KMP_DUPLICATE_LIB_OK` when unset and can
+change native OpenMP duplicate-runtime handling. NumPy's diagnostic and SciPy's
+Matrix Market integration support its absence; Studio uses neither controller API.
+Keep this boundary explicit so unrelated packages in a build environment cannot
+silently change the frozen runtime's native policy. Linux collection is unchanged.
+
 ## Version The App
 
 Before building a release candidate, update the package metadata version:

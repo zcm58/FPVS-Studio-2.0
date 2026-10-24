@@ -160,7 +160,7 @@ def test_pyinstaller_rejects_path_resolved_host_icu_dlls() -> None:
 
 
 @pytest.mark.parametrize("platform", ["win32", "linux"])
-def test_studio_spec_collects_secure_library_backend_for_linux_only(
+def test_studio_spec_keeps_platform_dependency_boundaries(
     monkeypatch: pytest.MonkeyPatch, platform: str,
 ) -> None:
     hooks = ModuleType("PyInstaller.utils.hooks")
@@ -189,6 +189,7 @@ def test_studio_spec_collects_secure_library_backend_for_linux_only(
 
     def analysis(_entries: list[str], **kwargs: object) -> SimpleNamespace:
         if "hiddenimports" in kwargs:
+            assert ("threadpoolctl" in kwargs["excludes"]) == (platform == "win32")
             assert "fpvs_studio.developer" not in kwargs["excludes"]
             assert "fpvs_studio.gui.library_publisher_controller" not in kwargs["excludes"]
             assert "fpvs_studio.gui.library_publisher_dialog" not in kwargs["excludes"]
