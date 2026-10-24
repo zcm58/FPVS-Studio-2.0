@@ -32,7 +32,10 @@ from fpvs_studio.engines.graphics_readiness import (
     GraphicsReadinessStatus,
 )
 from fpvs_studio.engines.psychopy_engine import PsychoPyEngine
-from fpvs_studio.engines.psychopy_graphics_lifetime import GraphicsLifetime
+from fpvs_studio.engines.psychopy_graphics_lifetime import (
+    GraphicsLifetime,
+    release_failed_graphics_frames,
+)
 from fpvs_studio.engines.psychopy_stimuli import (
     ConditionResourceCleanupError,
     release_stimuli,
@@ -3279,7 +3282,10 @@ def test_session_close_retires_finalizers_even_when_context_activation_fails(mon
     engine.close_session()
 
 
-def test_failed_text_constructor_releases_native_locals_before_worker_error_delivery() -> None:
+@pytest.mark.parametrize("chaining", ["direct", "cause", "context"])
+def test_failed_text_constructor_releases_native_locals_before_worker_error_delivery(
+    chaining,
+) -> None:
     destructions = []
     worker_thread = []
 
@@ -3291,11 +3297,21 @@ def test_failed_text_constructor_releases_native_locals_before_worker_error_deli
         def __del__(self):
             destructions.append((get_ident(), self.native_id))
 
+    def construct(*args, **kwargs):
+        try:
+            return FailingTextStim(*args, **kwargs)
+        except ValueError as error:
+            if chaining == "cause":
+                raise RuntimeError("wrapped constructor failure") from error
+            if chaining == "context":
+                raise RuntimeError("cleanup also failed") from None
+            raise
+
     def render():
         worker_thread.append(get_ident())
         window = _FakeWindow()
         show_text_screen(
-            visual=SimpleNamespace(TextStim=FailingTextStim),
+            visual=SimpleNamespace(TextStim=construct),
             core=SimpleNamespace(Clock=lambda: _FakeClock(window)),
             window=window, keyboard=_FakeKeyboard(window),
             is_aborted=lambda: False, set_aborted=lambda: None,
@@ -3305,11 +3321,13 @@ def test_failed_text_constructor_releases_native_locals_before_worker_error_deli
 
     with ThreadPoolExecutor(max_workers=1) as executor:
         error = executor.submit(render).exception(timeout=5)
-    assert isinstance(error, ValueError)
+    assert isinstance(error, ValueError if chaining == "direct" else RuntimeError)
     # The GUI can retain the error indefinitely without retaining its native id.
     assert destructions == [(worker_thread[0], 123)]
     assert worker_thread[0] != get_ident()
-    assert "__init__" in [frame.name for frame in extract_tb(error.__traceback__)]
+    original = error.__cause__ or error.__context__ or error
+    assert isinstance(original, ValueError)
+    assert "__init__" in [frame.name for frame in extract_tb(original.__traceback__)]
 
 
 def test_engine_installs_context_guard_and_drains_after_feedback(monkeypatch) -> None:
@@ -3342,3 +3360,15 @@ def test_engine_installs_context_guard_and_drains_after_feedback(monkeypatch) ->
     context.delete_texture(6)
     assert context.deleted == [("texture", 5)]
     assert context.object_space._doomed_textures == [6]
+
+
+def test_graphics_failed_frame_cleanup_handles_cycles_without_changing_exception_chains() -> None:
+    first = RuntimeError("first")
+    second = ValueError("second")
+    first.__cause__ = second
+    second.__context__ = first
+    release_failed_graphics_frames(first)
+    assert first.__cause__ is second
+    assert second.__context__ is first
+    assert str(first) == "first"
+    assert str(second) == "second"

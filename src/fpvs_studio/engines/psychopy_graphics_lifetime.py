@@ -20,10 +20,23 @@ def release_failed_graphics_frames(error: BaseException) -> None:
     A failed TextStim constructor can retain an unmanaged display-list id in its
     traceback's ``self``. Preserve the exception/stack locations, but release the
     completed frames' locals before the GUI receives it or the context closes.
-    clear_frames deliberately leaves currently executing frames alone.
+    Wrapped and suppressed errors can retain the same native resources through
+    their cause/context chains. Keep every traceback and chain intact, including
+    cycles, while clearing their completed frames' locals. clear_frames deliberately
+    leaves currently executing frames alone.
     """
 
-    clear_frames(error.__traceback__)
+    pending = [error]
+    seen: set[int] = set()
+    while pending:
+        current = pending.pop()
+        if id(current) in seen:
+            continue
+        seen.add(id(current))
+        clear_frames(current.__traceback__)
+        for chained in (current.__cause__, current.__context__):
+            if chained is not None:
+                pending.append(chained)
 
 
 class GraphicsLifetime:
