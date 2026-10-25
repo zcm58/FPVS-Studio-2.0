@@ -18,6 +18,7 @@ Use this page to find planning material before making feature-sized changes.
 
 Current implementation:
 
+- [Studio 2.4.8 minor bug fixes release](exec-plans/active/release-2.4.8.md)
 - [Studio to Toolbox and OpenFPVS integration](exec-plans/active/studio-toolbox-integration.md)
 - [Experiment data sharing and comparison](exec-plans/active/remote-experiment-results-reporting.md)
 - [Unicorn Hybrid Black recording support](exec-plans/active/unicorn-hybrid-black-support.md) (normal marker output enabled; full receiver, Toolbox and physical timing validation pending)
@@ -37,7 +38,7 @@ the current contracts do not explain why a landed decision exists.
 Recent completion: [Runtime reliability audit](exec-plans/completed/runtime-reliability-audit.md)
 (task graphics lifetime, numeric input, result durability, interruption recovery and
 worker/launch races; Windows rename-test intermittency and native acceptance limits
-are documented). These source fixes follow the 2.4.7 release.
+are documented). These source fixes are included in the 2.4.8 release candidate.
 
 Recent completion: [Graphics crash repair and condition recovery](exec-plans/completed/crash-condition-recovery.md)
 (graphics-thread cleanup, durable interrupted-condition guidance and targeted reruns
