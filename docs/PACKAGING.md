@@ -67,7 +67,7 @@ Write release notes as bullet points, with one or two sentences per major change
 Keep verification summaries and installer instructions out of the release notes;
 retain audit evidence and check boundaries in the release record instead.
 
-The [v2.4.8 release record](exec-plans/active/release-2.4.8.md) tracks the minor bug
+The [v2.4.8 release record](exec-plans/completed/release-2.4.8.md) tracks the minor bug
 fixes release, including task graphics cleanup, result durability and worker lifecycle
 repairs. The [v2.4.7 release record](exec-plans/completed/release-2.4.7.md) tracks graphics crash
 repair, interrupted-condition recovery, authenticated build inputs and public
@@ -303,7 +303,7 @@ Then build the setup EXE:
 Expected output for the current package:
 
 ```text
-dist\installer\FPVS-Studio-Setup-2.4.2.exe
+dist\installer\FPVS-Studio-Setup-2.4.8.exe
 ```
 
 The installer build validates that the PyInstaller bundle has an `_internal` folder and
