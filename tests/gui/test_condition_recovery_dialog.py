@@ -214,7 +214,7 @@ def test_current_setup_waits_for_new_seed_without_starting_full_session(monkeypa
     window.launch_session.assert_not_called()
 
 
-@pytest.mark.parametrize("close_kind", ["hidden", "deactivated", "presentation"])
+@pytest.mark.parametrize("close_kind", ["hidden", "deactivated", "presentation", "shutdown"])
 def test_late_recovery_results_and_errors_cannot_reopen_old_project(
     qtbot, tmp_path, monkeypatch, close_kind,
 ):
@@ -223,6 +223,8 @@ def test_late_recovery_results_and_errors_cannot_reopen_old_project(
     qtbot.addWidget(window)
     window.show()
     busy = False
+    lifecycle = SimpleNamespace(is_shutting_down=False)
+    monkeypatch.setattr(module, "update_lifecycle", lambda: lifecycle)
     rerun, show_error = Mock(), Mock()
     controller = module.ConditionRecoveryController(
         parent=window, project_root=tmp_path, is_busy=lambda: busy,
@@ -234,6 +236,8 @@ def test_late_recovery_results_and_errors_cannot_reopen_old_project(
         window.hide()
     elif close_kind == "deactivated":
         controller.deactivate()
+    elif close_kind == "shutdown":
+        lifecycle.is_shutting_down = True
     else:
         busy = True
     task.succeeded.emit(ConditionRecoveryReport(records=(_record(),)))
@@ -243,3 +247,5 @@ def test_late_recovery_results_and_errors_cannot_reopen_old_project(
     assert controller._dialog is None
     rerun.assert_not_called()
     show_error.assert_not_called()
+    controller.check(automatic=True)
+    assert controller._task is None

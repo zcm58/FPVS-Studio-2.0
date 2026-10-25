@@ -95,6 +95,149 @@ def test_persistent_progress_task_runs_on_stable_presentation_thread(
     ]
 
 
+@pytest.mark.parametrize("first_fails", [False, True])
+def test_overlapping_presentation_tasks_deliver_only_their_own_outcomes(
+    qtbot, worker_lifecycle, first_fails,
+) -> None:
+    parent = QWidget()
+    qtbot.addWidget(parent)
+    first_started, first_release = Event(), Event()
+    second_started, second_release = Event(), Event()
+    outcomes: list[tuple[str, object]] = []
+    finished: list[str] = []
+
+    def first_callback():
+        first_started.set()
+        assert first_release.wait(5)
+        if first_fails:
+            raise RuntimeError("first error")
+        return "first result"
+
+    def second_callback():
+        second_started.set()
+        assert second_release.wait(5)
+        return "second result"
+
+    tasks = []
+    for label, callback in (("first", first_callback), ("second", second_callback)):
+        task = ProgressTask(
+            parent_widget=parent, label=label, callback=callback,
+            dialog_factory=_FakeProgressDialog, persistent_thread=True,
+        )
+        task.succeeded.connect(lambda value, label=label: outcomes.append((label, value)))
+        task.failed.connect(lambda error, label=label: outcomes.append((label, str(error))))
+        task.finished.connect(lambda label=label: finished.append(label))
+        tasks.append(task)
+    tasks[0].start()
+    try:
+        qtbot.waitUntil(first_started.is_set)
+        tasks[1].start()
+        second_dialog = tasks[1]._dialog
+        first_release.set()
+        qtbot.waitUntil(lambda: "first" in finished)
+        qtbot.waitUntil(second_started.is_set)
+        assert outcomes == [("first", "first error" if first_fails else "first result")]
+        assert finished == ["first"]
+        assert second_dialog is not None and not second_dialog.closed
+    finally:
+        first_release.set()
+        second_release.set()
+    qtbot.waitUntil(lambda: "second" in finished)
+    assert outcomes[-1] == ("second", "second result")
+    assert finished == ["first", "second"]
+
+
+def test_shutdown_finishes_queued_presentation_but_drains_active_callback(
+    qtbot, worker_lifecycle,
+) -> None:
+    lifecycle, quit_requests = worker_lifecycle
+    parent = QWidget()
+    qtbot.addWidget(parent)
+    started, release = Event(), Event()
+    executed: list[str] = []
+    finished: list[str] = []
+
+    def callback():
+        started.set()
+        assert release.wait(5)
+        executed.append("active")
+
+    active = ProgressTask(
+        parent_widget=parent, label="active", callback=callback,
+        dialog_factory=_FakeProgressDialog, persistent_thread=True,
+    )
+    queued = ProgressTask(
+        parent_widget=parent, label="queued", callback=lambda: executed.append("queued"),
+        dialog_factory=_FakeProgressDialog, persistent_thread=True,
+    )
+    active.finished.connect(lambda: finished.append("active"))
+    queued.finished.connect(lambda: finished.append("queued"))
+    active.start()
+    try:
+        qtbot.waitUntil(started.is_set)
+        queued.start()
+        lifecycle.request_shutdown()
+        assert finished == ["queued"]
+        assert lifecycle.has_active_jobs
+        assert not quit_requests
+    finally:
+        release.set()
+    qtbot.waitUntil(lambda: not lifecycle.has_active_jobs)
+    qtbot.waitUntil(lambda: "active" in finished)
+    assert executed == ["active"]
+    assert finished == ["queued", "active"]
+
+
+def test_destroying_queued_requester_skips_its_presentation(
+    qtbot, worker_lifecycle,
+) -> None:
+    active_parent, queued_parent = QWidget(), QWidget()
+    qtbot.addWidget(active_parent)
+    qtbot.addWidget(queued_parent)
+    started, release, destroyed = Event(), Event(), Event()
+    executed: list[str] = []
+    finished: list[str] = []
+
+    def callback():
+        started.set()
+        assert release.wait(5)
+        executed.append("active")
+
+    active = ProgressTask(
+        parent_widget=active_parent, label="active", callback=callback,
+        dialog_factory=_FakeProgressDialog, persistent_thread=True,
+    )
+    queued = ProgressTask(
+        parent_widget=queued_parent, label="queued", callback=lambda: executed.append("queued"),
+        dialog_factory=_FakeProgressDialog, persistent_thread=True,
+    )
+    sentinel = ProgressTask(
+        parent_widget=active_parent, label="sentinel",
+        callback=lambda: executed.append("sentinel"),
+        dialog_factory=_FakeProgressDialog, persistent_thread=True,
+    )
+    active.finished.connect(lambda: finished.append("active"))
+    queued.finished.connect(lambda: finished.append("queued"))
+    sentinel.finished.connect(lambda: finished.append("sentinel"))
+    queued_parent.destroyed.connect(destroyed.set)
+    active.start()
+    try:
+        qtbot.waitUntil(started.is_set)
+        queued.start()
+        sentinel.start()
+        queued_parent.deleteLater()
+        qtbot.waitUntil(destroyed.is_set)
+        assert not finished
+    finally:
+        release.set()
+    qtbot.waitUntil(lambda: "sentinel" in finished)
+    assert executed == ["active", "sentinel"]
+    assert finished == ["active", "sentinel"]
+    lifecycle, _quit_requests = worker_lifecycle
+    lifecycle.request_shutdown()
+    qtbot.waitUntil(lambda: not lifecycle.has_active_jobs)
+
+
 @pytest.mark.parametrize("kind", ["background", "progress", "presentation"])
 @pytest.mark.parametrize("fails", [False, True])
 def test_worker_survives_requester_destruction_and_shutdown(

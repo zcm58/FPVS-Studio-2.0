@@ -58,7 +58,8 @@ play compiled runs end to end.
   thread. Guard Pyglet texture/buffer finalizers through `psychopy_graphics_lifetime`
   for foreign-thread GC and references surviving window close. Drain deferred cleanup
   at untimed boundaries, never inside playback or after a timed scene pre-task.
-  Reuse transition/feedback text stimuli and release them on every exit path.
+  Reuse transition/feedback text stimuli and task-screen text/controls; release them
+  on every exit path rather than allocating new graphics on each frame.
 
 ## Hard restrictions
 

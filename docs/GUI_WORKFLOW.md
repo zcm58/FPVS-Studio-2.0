@@ -1066,6 +1066,13 @@ preprocessing services but must not silently mutate the active project.
   This includes ordinary background/progress tasks and the persistent presentation
   thread. Closing or destroying a requester never destroys its running thread;
   late results for a destroyed requester or during shutdown are suppressed.
+  Persistent presentation jobs route results, errors and completion by request identity;
+  overlapping queued jobs cannot consume each other's outcome. Shutdown or requester
+  destruction cancels queued work while the active callback retains its owner thread.
+  Deferred launch after seed preparation checks that its project window remains visible
+  and the application is not shutting down. Participant-history completion rechecks shutdown before
+  showing confirmation or continuing a launch. Recovery discovery does not start new
+  work while shutdown is draining existing workers.
   `thread_completion.py` uses a join monitor outside the GUI to wait for Qt's deferred
   deletion and native thread cleanup after `QThread.finished`. Only then are worker
   wrappers released and completion delivered. Presentation reuse remains unchanged;

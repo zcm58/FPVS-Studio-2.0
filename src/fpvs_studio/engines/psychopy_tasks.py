@@ -7,8 +7,11 @@ branching, correctness, and response persistence.
 
 from __future__ import annotations
 
+import logging
+from collections.abc import Callable
 from dataclasses import replace
 from importlib import import_module
+from math import isfinite
 from pathlib import Path
 from typing import Any, TypedDict
 
@@ -16,11 +19,17 @@ from fpvs_studio.assets import bundled_task_font_path
 from fpvs_studio.core.paths import resolve_project_relative_path
 from fpvs_studio.core.task_models import numeric_step_aligned
 from fpvs_studio.engines.base import ResolvedTaskItem, ResolvedTaskStep, TaskEngineInput
+from fpvs_studio.engines.psychopy_stimuli import (
+    ConditionResourceCleanupError,
+    ConditionResourcePreparationError,
+    release_stimuli,
+)
 
 _TEXT_RESPONSE_KINDS = frozenset({"short_text", "long_text", "numeric"})
 _CHOICE_RESPONSE_KINDS = frozenset({"single_choice", "multiple_choice", "rating"})
 _EDITABLE_TEXT_RESPONSE_KINDS = frozenset({"short_text", "long_text"})
 _REGISTERED_BUNDLED_TASK_FONTS: set[str] = set()
+LOGGER = logging.getLogger(__name__)
 
 
 class _KeyResult(TypedDict):
@@ -36,6 +45,29 @@ class _MouseClick(TypedDict):
     buttons: tuple[int, ...]
     button: int | None
     position: tuple[float, float]
+
+
+class _TaskScreenStimuli:
+    """Reuse each visible text/control slot for the lifetime of one task screen."""
+
+    def __init__(self, visual: Any, window: Any) -> None:
+        self._visual = visual
+        self._window = window
+        self.stimuli: dict[str, Any] = {}
+        self._properties: dict[str, dict[str, Any]] = {}
+
+    def draw(self, slot: str, kind: str, **properties: Any) -> None:
+        stimulus = self.stimuli.get(slot)
+        if stimulus is None:
+            stimulus = getattr(self._visual, kind)(self._window, **properties)
+            self.stimuli[slot] = stimulus
+        else:
+            previous_properties = self._properties[slot]
+            for name, value in properties.items():
+                if value != previous_properties[name]:
+                    setattr(stimulus, name, value)
+        self._properties[slot] = properties
+        stimulus.draw()
 
 
 def render_task_step(
@@ -60,6 +92,41 @@ def render_task_step(
         items=step.items,
         font_family=step.font_family,
     )
+    screen_stimuli = _TaskScreenStimuli(visual, window)
+    failed = False
+    try:
+        return _render_prepared_task_step(
+            visual=visual, core=core, event=event, window=window, keyboard=keyboard,
+            step=step, item_stimuli=item_stimuli, screen_stimuli=screen_stimuli,
+            is_aborted=is_aborted, set_aborted=set_aborted,
+        )
+    except BaseException:
+        failed = True
+        raise
+    finally:
+        report = release_stimuli(
+            item_stimuli, additional_stimuli=tuple(screen_stimuli.stimuli.values()),
+        )
+        screen_stimuli.stimuli.clear()
+        if not report.succeeded and not failed:
+            raise ConditionResourceCleanupError(report)
+
+
+def _render_prepared_task_step(
+    *,
+    visual: Any,
+    core: Any,
+    event: Any,
+    window: Any,
+    keyboard: Any,
+    step: ResolvedTaskStep,
+    item_stimuli: dict[str, Any],
+    screen_stimuli: _TaskScreenStimuli,
+    is_aborted: Any,
+    set_aborted: Any,
+) -> TaskEngineInput:
+    """Run one screen while its caller owns prepared items on every exit path."""
+
     displayed_item_ids = tuple(item.item_id for item in step.items)
     selected_item_ids: list[str] = []
     response_text = ""
@@ -73,45 +140,48 @@ def render_task_step(
         window=window,
         step=step,
     )
-    mouse_response_kinds = _CHOICE_RESPONSE_KINDS | _EDITABLE_TEXT_RESPONSE_KINDS
-    mouse = event.Mouse(win=window) if step.response_kind in mouse_response_kinds else None
-    previous_buttons = tuple(mouse.getPressed()) if mouse is not None else (0, 0, 0)
-    previous_mouse_visible = getattr(window, "mouseVisible", None)
-    if mouse is not None:
-        window.mouseVisible = True
-
-    call_on_flip = getattr(window, "callOnFlip", None)
-    reset_task_clock = getattr(task_clock, "reset", None)
-
-    def reset_text_input() -> None:
-        if text_box is not None:
-            text_box.text = ""
-            submitted_from_text_box[0] = False
-
-    if callable(call_on_flip):
-        call_on_flip(keyboard.clearEvents)
-        call_on_flip(reset_text_input)
-        keyboard_clock = getattr(keyboard, "clock", None)
-        reset_keyboard_clock = getattr(keyboard_clock, "reset", None)
-        if callable(reset_keyboard_clock):
-            call_on_flip(reset_keyboard_clock)
-        if callable(reset_task_clock):
-            call_on_flip(reset_task_clock)
-    else:
-        keyboard.clearEvents()
-        reset_text_input()
-        keyboard_clock = getattr(keyboard, "clock", None)
-        reset_keyboard_clock = getattr(keyboard_clock, "reset", None)
-        if callable(reset_keyboard_clock):
-            reset_keyboard_clock()
-        if callable(reset_task_clock):
-            reset_task_clock()
-
-    previous_background = (
-        (window.colorSpace, window.color) if step.background_rgb is not None else None
-    )
-    presented_frames = 0
+    previous_mouse_visible = None
+    previous_background = None
+    failed = False
     try:
+        previous_mouse_visible = getattr(window, "mouseVisible", None)
+        mouse_response_kinds = _CHOICE_RESPONSE_KINDS | _EDITABLE_TEXT_RESPONSE_KINDS
+        mouse = event.Mouse(win=window) if step.response_kind in mouse_response_kinds else None
+        previous_buttons = tuple(mouse.getPressed()) if mouse is not None else (0, 0, 0)
+        if mouse is not None:
+            window.mouseVisible = True
+
+        call_on_flip = getattr(window, "callOnFlip", None)
+        reset_task_clock = getattr(task_clock, "reset", None)
+
+        def reset_text_input() -> None:
+            if text_box is not None:
+                text_box.text = ""
+                submitted_from_text_box[0] = False
+
+        if callable(call_on_flip):
+            call_on_flip(keyboard.clearEvents)
+            call_on_flip(reset_text_input)
+            keyboard_clock = getattr(keyboard, "clock", None)
+            reset_keyboard_clock = getattr(keyboard_clock, "reset", None)
+            if callable(reset_keyboard_clock):
+                call_on_flip(reset_keyboard_clock)
+            if callable(reset_task_clock):
+                call_on_flip(reset_task_clock)
+        else:
+            keyboard.clearEvents()
+            reset_text_input()
+            keyboard_clock = getattr(keyboard, "clock", None)
+            reset_keyboard_clock = getattr(keyboard_clock, "reset", None)
+            if callable(reset_keyboard_clock):
+                reset_keyboard_clock()
+            if callable(reset_task_clock):
+                reset_task_clock()
+
+        previous_background = (
+            (window.colorSpace, window.color) if step.background_rgb is not None else None
+        )
+        presented_frames = 0
         if step.background_rgb is not None:
             window.colorSpace = "rgb"
             window.color = step.background_rgb
@@ -136,6 +206,7 @@ def render_task_step(
                 response_text=response_text,
                 validation_message=validation_message,
                 text_box=text_box,
+                screen_stimuli=screen_stimuli,
             )
             window.flip()
             presented_frames += 1
@@ -302,22 +373,53 @@ def render_task_step(
                     reaction_time_s=elapsed_s,
                     displayed_item_ids=displayed_item_ids,
                 )
+    except BaseException:
+        failed = True
+        raise
     finally:
-        if previous_background is not None:
-            window.colorSpace, window.color = previous_background
-        if step.response_kind in _EDITABLE_TEXT_RESPONSE_KINDS:
-            keyboard.clearEvents()
-        if text_box is not None:
-            if hasattr(text_box, "hasFocus"):
-                text_box.hasFocus = False
-            if hasattr(text_box, "editable"):
-                text_box.editable = False
-        if previous_mouse_visible is not None:
-            window.mouseVisible = previous_mouse_visible
-        for stimulus in item_stimuli.values():
-            clear_textures = getattr(stimulus, "clearTextures", None)
-            if callable(clear_textures):
-                clear_textures()
+        _restore_task_input_state(
+            window=window, keyboard=keyboard, step=step, text_box=text_box,
+            previous_background=previous_background, previous_mouse_visible=previous_mouse_visible,
+            failed=failed,
+        )
+
+
+def _restore_task_input_state(
+    *, window: Any, keyboard: Any, step: ResolvedTaskStep, text_box: Any | None,
+    previous_background: tuple[Any, Any] | None, previous_mouse_visible: Any, failed: bool,
+) -> None:
+    """Attempt every restoration without replacing a setup or rendering exception."""
+
+    operations: list[tuple[str, Callable[[], None]]] = []
+    if previous_background is not None:
+        operations.extend([
+            ("background color space", lambda: setattr(
+                window, "colorSpace", previous_background[0],
+            )),
+            ("background color", lambda: setattr(window, "color", previous_background[1])),
+        ])
+    if step.response_kind in _EDITABLE_TEXT_RESPONSE_KINDS:
+        operations.append(("keyboard events", lambda: keyboard.clearEvents()))
+    if text_box is not None:
+        operations.extend([
+            ("text focus", lambda: setattr(text_box, "hasFocus", False)
+             if hasattr(text_box, "hasFocus") else None),
+            ("text editing", lambda: setattr(text_box, "editable", False)
+             if hasattr(text_box, "editable") else None),
+        ])
+    if previous_mouse_visible is not None:
+        operations.append(("mouse visibility", lambda: setattr(
+            window, "mouseVisible", previous_mouse_visible,
+        )))
+    cleanup_error: Exception | None = None
+    for name, restore in operations:
+        try:
+            restore()
+        except Exception as error:
+            cleanup_error = cleanup_error or error
+            LOGGER.exception("Task-screen %s restoration failed.", name)
+    if cleanup_error is not None and not failed:
+        raise cleanup_error
 
 
 def _prepare_item_stimuli(
@@ -329,48 +431,54 @@ def _prepare_item_stimuli(
     font_family: str = "Arial",
 ) -> dict[str, Any]:
     stimuli: dict[str, Any] = {}
-    for item in items:
-        if item.shape == "circle":
-            stimuli[item.item_id] = visual.ShapeStim(
+    try:
+        for item in items:
+            if item.shape == "circle":
+                stimuli[item.item_id] = visual.ShapeStim(
+                    window,
+                    vertices=item.circle_edges if item.circle_edges is not None else "circle",
+                    units="pix",
+                    pos=item.position_px,
+                    size=item.size_px,
+                    colorSpace="rgb",
+                    fillColor=item.color,
+                    lineColor=item.line_color_rgb,
+                    lineWidth=item.line_width_px,
+                    interpolate=True,
+                    autoLog=False,
+                )
+                continue
+            if item.image_path is not None:
+                stimuli[item.item_id] = visual.ImageStim(
+                    window,
+                    image=str(resolve_project_relative_path(project_root, item.image_path)),
+                    units="pix",
+                    pos=item.position_px,
+                    size=item.size_px,
+                    color=item.color,
+                    colorSpace="rgb",
+                    autoLog=False,
+                )
+                continue
+            stimuli[item.item_id] = visual.TextStim(
                 window,
-                vertices=item.circle_edges if item.circle_edges is not None else "circle",
+                text=item.text or "",
+                font=font_family,
                 units="pix",
                 pos=item.position_px,
-                size=item.size_px,
-                colorSpace="rgb",
-                fillColor=item.color,
-                lineColor=item.line_color_rgb,
-                lineWidth=item.line_width_px,
-                interpolate=True,
-                autoLog=False,
-            )
-            continue
-        if item.image_path is not None:
-            stimuli[item.item_id] = visual.ImageStim(
-                window,
-                image=str(resolve_project_relative_path(project_root, item.image_path)),
-                units="pix",
-                pos=item.position_px,
-                size=item.size_px,
+                height=item.text_height_px,
                 color=item.color,
                 colorSpace="rgb",
+                wrapWidth=item.size_px[0] if item.size_px is not None else None,
                 autoLog=False,
+                **({"alignText": item.text_alignment, "anchorHoriz": "center"}
+                   if item.text_alignment != "center" else {}),
             )
-            continue
-        stimuli[item.item_id] = visual.TextStim(
-            window,
-            text=item.text or "",
-            font=font_family,
-            units="pix",
-            pos=item.position_px,
-            height=item.text_height_px,
-            color=item.color,
-            colorSpace="rgb",
-            wrapWidth=item.size_px[0] if item.size_px is not None else None,
-            autoLog=False,
-            **({"alignText": item.text_alignment, "anchorHoriz": "center"}
-               if item.text_alignment != "center" else {}),
-        )
+    except BaseException as error:
+        report = release_stimuli(stimuli)
+        if not report.succeeded and isinstance(error, Exception):
+            raise ConditionResourcePreparationError(report) from error
+        raise
     return stimuli
 
 
@@ -487,14 +595,16 @@ def _draw_step(
     response_text: str,
     validation_message: str | None,
     text_box: Any | None = None,
+    screen_stimuli: _TaskScreenStimuli | None = None,
 ) -> None:
+    drawables = screen_stimuli if screen_stimuli is not None else _TaskScreenStimuli(visual, window)
     window_height = _window_height(window)
     exact_primary_text = None
     if step.prompt_position_px is not None:
         exact_primary_text = step.prompt or step.body or step.heading
     if step.heading and exact_primary_text != step.heading:
-        visual.TextStim(
-            window,
+        drawables.draw(
+            "heading", "TextStim",
             text=step.heading,
             font=step.font_family,
             units="pix",
@@ -503,12 +613,12 @@ def _draw_step(
             wrapWidth=_window_width(window) * 0.88,
             color="white",
             autoLog=False,
-        ).draw()
+        )
     body = exact_primary_text or step.body or step.prompt
     if body:
         prompt_position = step.prompt_position_px or (0, window_height * 0.27)
-        visual.TextStim(
-            window,
+        drawables.draw(
+            "body", "TextStim",
             text=body,
             font=step.font_family,
             units="pix",
@@ -517,15 +627,15 @@ def _draw_step(
             wrapWidth=step.prompt_width_px or _window_width(window) * 0.9,
             color="white",
             autoLog=False,
-        ).draw()
+        )
     if (
         exact_primary_text is not None
         and step.prompt
         and step.body
         and step.prompt != step.body
     ):
-        visual.TextStim(
-            window,
+        drawables.draw(
+            "secondary-body", "TextStim",
             text=step.body,
             font=step.font_family,
             units="pix",
@@ -534,15 +644,15 @@ def _draw_step(
             wrapWidth=_window_width(window) * 0.9,
             color="white",
             autoLog=False,
-        ).draw()
+        )
     if (
         step.prompt
         and step.body
         and exact_primary_text is None
         and step.prompt != step.body
     ):
-        visual.TextStim(
-            window,
+        drawables.draw(
+            "secondary-prompt", "TextStim",
             text=step.prompt,
             font=step.font_family,
             units="pix",
@@ -551,12 +661,12 @@ def _draw_step(
             wrapWidth=_window_width(window) * 0.9,
             color="white",
             autoLog=False,
-        ).draw()
+        )
     for item in step.items:
         item_stimuli[item.item_id].draw()
         if item.item_id in selected_item_ids:
-            visual.TextStim(
-                window,
+            drawables.draw(
+                f"selected:{item.item_id}", "TextStim",
                 text="[selected]",
                 font=step.font_family,
                 units="pix",
@@ -567,7 +677,7 @@ def _draw_step(
                 ),
                 color="white",
                 autoLog=False,
-            ).draw()
+            )
     if text_box is not None:
         text_box.draw()
     elif step.response_kind in _TEXT_RESPONSE_KINDS:
@@ -576,8 +686,8 @@ def _draw_step(
             display_value = "Enter a number"
         elif not display_value:
             display_value = "Type your response"
-        visual.TextStim(
-            window,
+        drawables.draw(
+            "response", "TextStim",
             text=display_value,
             font=step.font_family,
             units="pix",
@@ -586,11 +696,11 @@ def _draw_step(
             wrapWidth=_window_width(window) * 0.82,
             color="white",
             autoLog=False,
-        ).draw()
+        )
     if _has_submit_control(step):
         button_width, button_height = _text_submit_size(window)
-        visual.Rect(
-            window,
+        drawables.draw(
+            "submit-button", "Rect",
             units="pix",
             width=button_width,
             height=button_height,
@@ -598,9 +708,9 @@ def _draw_step(
             lineColor="white",
             fillColor=None,
             autoLog=False,
-        ).draw()
-        visual.TextStim(
-            window,
+        )
+        drawables.draw(
+            "submit-label", "TextStim",
             text=step.submit_label,
             font=step.font_family,
             units="pix",
@@ -608,13 +718,13 @@ def _draw_step(
             pos=_text_submit_position(window),
             color="white",
             autoLog=False,
-        ).draw()
+        )
     footer = _footer_text(step) if step.show_footer else ""
     if validation_message:
         footer = f"{validation_message}\n{footer}"
     if footer:
-        visual.TextStim(
-            window,
+        drawables.draw(
+            "footer", "TextStim",
             text=footer,
             font=step.font_family,
             units="pix",
@@ -623,7 +733,7 @@ def _draw_step(
             wrapWidth=_window_width(window) * 0.9,
             color="white",
             autoLog=False,
-        ).draw()
+        )
 
 
 def _handle_keys(
@@ -757,6 +867,8 @@ def _completed_input(
         try:
             numeric_value = float(response_text)
         except ValueError:
+            return None
+        if not isfinite(numeric_value):
             return None
         if step.numeric_minimum is not None and numeric_value < step.numeric_minimum:
             return None
@@ -924,6 +1036,8 @@ def _validation_message(
         try:
             numeric_value = float(response_text)
         except ValueError:
+            return "Enter a valid number."
+        if not isfinite(numeric_value):
             return "Enter a valid number."
         if step.numeric_minimum is not None and numeric_value < step.numeric_minimum:
             return f"Enter a value of at least {step.numeric_minimum:g}."

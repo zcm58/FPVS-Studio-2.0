@@ -116,7 +116,9 @@ class RuntimeWorker:
             raise
         session_open = False
         execution_error: Exception | None = None
+        trigger_error: TriggerEmissionError | None = None
         run_summary: RunExecutionSummary | None = None
+        checkpointed_summary: RunExecutionSummary | None = None
         try:
             acquisition.start_run(run_spec.run_id, len(trigger_backend.records))
             self._engine.open_session(runtime_options=runtime_options)
@@ -157,8 +159,8 @@ class RuntimeWorker:
                             runtime_options=runtime_options,
                             trigger_backend=trigger_backend,
                         )
-                        _finish_triggerbox_pulse(trigger_backend)
                     except TriggerEmissionError as exc:
+                        trigger_error = exc
                         run_summary = _build_trigger_aborted_summary(
                             run_spec,
                             engine_name=self._engine.engine_id,
@@ -176,6 +178,9 @@ class RuntimeWorker:
                             session_id=None,
                         )
                     else:
+                        run_summary, trigger_error = _finish_playback_trigger_output(
+                            run_summary, trigger_backend,
+                        )
                         run_summary = self._finalize_run_summary(
                             run_summary,
                             run_spec,
@@ -188,6 +193,10 @@ class RuntimeWorker:
                             trigger_start_index=trigger_start_index,
                             warnings=run_warnings,
                         )
+                    if write_detailed_exports:
+                        write_run_artifacts(output_dir, run_spec, run_summary)
+                        checkpointed_summary = run_summary
+                    acquisition.record_run(run_summary)
                     if not run_summary.aborted and self._show_condition_feedback(
                         run_spec, run_summary
                     ):
@@ -204,17 +213,19 @@ class RuntimeWorker:
                             was_aborted=False,
                         )
         except Exception as exc:
-            execution_error = exc
+            execution_error = trigger_error or exc
+            if trigger_error is not None:
+                LOGGER.exception("Result processing also failed after trigger interruption.")
         finally:
             try:
                 if session_open:
                     self._engine.close_session()
             except Exception as exc:
-                execution_error = execution_error or exc
+                execution_error = execution_error or trigger_error or exc
             try:
                 trigger_backend.close()
             except Exception as exc:
-                execution_error = execution_error or exc
+                execution_error = execution_error or trigger_error or exc
 
         if execution_error is not None:
             _finish_acquisition_after_error(
@@ -228,12 +239,15 @@ class RuntimeWorker:
                 abort_reason=run_summary.abort_reason if run_summary.aborted else None,
                 records=trigger_backend.records,
             )
-            if write_detailed_exports:
+            if write_detailed_exports and run_summary is not checkpointed_summary:
                 write_run_artifacts(output_dir, run_spec, run_summary)
         except Exception as exc:
             _finish_acquisition_after_error(
-                acquisition, exc, records=trigger_backend.records, export_error=str(exc),
+                acquisition, trigger_error or exc,
+                records=trigger_backend.records, export_error=str(exc),
             )
+            if trigger_error is not None:
+                raise trigger_error from exc
             raise
         return run_summary
 
@@ -272,7 +286,8 @@ class RuntimeWorker:
                 LOGGER.exception("Condition recovery checkpoint also failed after interruption.")
             raise
         else:
-            recovery.finish("cancelled" if result.aborted else "completed")
+            if recovery.checkpoint.state != "interrupted":
+                recovery.finish("cancelled" if result.aborted else "completed")
             return result
         finally:
             recovery.close()
@@ -389,6 +404,7 @@ class RuntimeWorker:
                 )
 
         execution_error: Exception | None = None
+        trigger_error: TriggerEmissionError | None = None
         running_post_tasks = False
         task_checkpoint: TaskResponseCheckpoint | None = None
 
@@ -525,6 +541,7 @@ class RuntimeWorker:
                 trigger_start_index = len(trigger_backend.records)
                 if not native_scene:
                     recovery.stage("playback")
+                playback_completed = False
                 try:
                     run_summary = self._engine.run_condition(
                         entry.run_spec,
@@ -532,8 +549,8 @@ class RuntimeWorker:
                         runtime_options=runtime_options,
                         trigger_backend=trigger_backend,
                     )
-                    _finish_triggerbox_pulse(trigger_backend)
                 except TriggerEmissionError as exc:
+                    trigger_error = exc
                     run_summary = _build_trigger_aborted_summary(
                         entry.run_spec,
                         engine_name=self._engine.engine_id,
@@ -551,6 +568,10 @@ class RuntimeWorker:
                         session_id=session_plan.session_id,
                     )
                 else:
+                    playback_completed = not run_summary.aborted
+                    run_summary, trigger_error = _finish_playback_trigger_output(
+                        run_summary, trigger_backend,
+                    )
                     run_summary = self._finalize_run_summary(
                         run_summary,
                         entry.run_spec,
@@ -573,7 +594,8 @@ class RuntimeWorker:
                 run_summary = run_summary.model_copy(update=task_summary_update)
                 run_results.append(run_summary)
                 checkpoint_results(run_results)
-                recovery.playback_finished(entry.run_id, aborted=run_summary.aborted)
+                if playback_completed or trigger_error is None:
+                    recovery.playback_finished(entry.run_id, aborted=not playback_completed)
                 running_post_tasks = True
                 run_summary = backward_counting.finish_run(
                     run_summary, entry.run_spec, checkpoint=task_checkpoint.append,
@@ -662,7 +684,9 @@ class RuntimeWorker:
                 if completion_aborted:
                     abort_reason = "Session aborted while showing the completion screen."
         except Exception as exc:
-            execution_error = exc
+            execution_error = trigger_error or exc
+            if trigger_error is not None:
+                LOGGER.exception("Result processing also failed after trigger interruption.")
             if running_post_tasks:
                 run_results[-1] = run_results[-1].model_copy(update={
                     "task_flow_completed": False,
@@ -676,7 +700,7 @@ class RuntimeWorker:
                     task_checkpoint.flush()
             except Exception as exc:
                 if execution_error is None:
-                    execution_error = exc
+                    execution_error = trigger_error or exc
                 else:
                     LOGGER.exception("Task checkpoint also failed after session interruption.")
             try:
@@ -684,7 +708,7 @@ class RuntimeWorker:
                     self._engine.close_session()
             except Exception as exc:
                 if execution_error is None:
-                    execution_error = exc
+                    execution_error = trigger_error or exc
                 else:
                     LOGGER.exception("Engine cleanup also failed after session interruption.")
             finally:
@@ -692,7 +716,7 @@ class RuntimeWorker:
                     trigger_backend.close()
                 except Exception as exc:
                     if execution_error is None:
-                        execution_error = exc
+                        execution_error = trigger_error or exc
                     else:
                         LOGGER.exception("Runtime cleanup also failed after session interruption.")
 
@@ -700,7 +724,7 @@ class RuntimeWorker:
             abort_reason = (
                 f"Session interrupted: {type(execution_error).__name__}: {execution_error}"
             )
-        if execution_error is None:
+        if execution_error is None and trigger_error is None:
             recovery.stage("finalizing")
         session_summary = session_result(run_results, abort_reason)
         if sharing_capture is not None:
@@ -719,7 +743,8 @@ class RuntimeWorker:
             for result in run_results:
                 acquisition.record_run(result)
             acquisition.finish(
-                abort_reason=abort_reason, interrupted=execution_error is not None,
+                abort_reason=abort_reason,
+                interrupted=execution_error is not None,
                 records=trigger_backend.records,
             )
             compact_summary_path = (
@@ -749,7 +774,7 @@ class RuntimeWorker:
                         "Data sharing report could not be queued. Review Data Sharing and retry.",
                     )
             write_participant_summary(project_root)
-            if execution_error is None:
+            if execution_error is None and trigger_error is None:
                 if compact_summary_path is not None:
                     compact_summary_path.unlink(missing_ok=True)
                 for path in compact_run_paths:
@@ -759,15 +784,22 @@ class RuntimeWorker:
                 acquisition.write_completed_handoff(session_plan)
         except Exception as export_error:
             _finish_acquisition_after_error(
-                acquisition, execution_error or export_error,
+                acquisition, execution_error or trigger_error or export_error,
                 records=trigger_backend.records, export_error=str(export_error),
             )
             if execution_error is not None:
                 LOGGER.exception("Result finalization also failed after session interruption.")
                 raise execution_error from export_error
+            if trigger_error is not None:
+                raise trigger_error from export_error
             raise
         if execution_error is not None:
             raise execution_error
+        if trigger_error is not None:
+            try:
+                recovery.finish("interrupted")
+            except Exception as recovery_error:
+                raise trigger_error from recovery_error
         return session_summary
 
     def _finalize_run_summary(
@@ -1109,6 +1141,21 @@ def _run_spec_with_accessible_fixation_colors(run_spec: RunSpec) -> RunSpec:
         }
     )
     return run_spec.model_copy(update={"fixation": fixation})
+
+
+def _finish_playback_trigger_output(
+    summary: RunExecutionSummary, backend: LoggedTriggerBackend,
+) -> tuple[RunExecutionSummary, TriggerEmissionError | None]:
+    """Drain the last pulse without discarding results already returned by playback."""
+
+    try:
+        _finish_triggerbox_pulse(backend)
+    except TriggerEmissionError as error:
+        return summary.model_copy(update={
+            "aborted": True,
+            "abort_reason": f"Trigger output failed after condition playback: {error}",
+        }), error
+    return summary, None
 
 
 def _finish_triggerbox_pulse(backend: LoggedTriggerBackend) -> None:

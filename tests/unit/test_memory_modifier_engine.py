@@ -30,10 +30,10 @@ def test_recognition_clicks_allow_revision_and_explicit_submit(tmp_path, abort):
 
     class Stim:
         def __init__(self, *args, **kwargs):
-            if "text" in kwargs:
-                text_calls.append(kwargs["text"])
+            self.text = kwargs.get("text")
         def draw(self):
-            pass
+            if getattr(self, "text", None) is not None:
+                text_calls.append(self.text)
 
     class Rect(Stim):
         def __init__(self, *args, **kwargs):

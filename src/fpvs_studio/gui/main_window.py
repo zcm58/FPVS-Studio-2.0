@@ -71,6 +71,7 @@ from fpvs_studio.gui.run_page import (
 )
 from fpvs_studio.gui.setup_wizard_page import SetupWizardPage
 from fpvs_studio.gui.update_dialog import UpdateDialog
+from fpvs_studio.gui.update_lifecycle import update_lifecycle
 from fpvs_studio.gui.window_helpers import (
     _LAUNCH_INTERSTITIAL_DURATION_MS,
     _coerce_exception,
@@ -530,7 +531,12 @@ class StudioMainWindow(QMainWindow):
         self._session_seed_task = None
         if self._launch_after_session_seed_ready:
             self._launch_after_session_seed_ready = False
-            QTimer.singleShot(0, self.launch_session)
+            QTimer.singleShot(0, self._resume_deferred_launch)
+
+    def _resume_deferred_launch(self) -> None:
+        # A project can close or be handed off before this queued callback runs.
+        if self.isVisible() and not update_lifecycle().is_shutting_down:
+            self.launch_session()
 
     def _install_button_hover_animations(self) -> None:
         self._button_hover_animators.clear()

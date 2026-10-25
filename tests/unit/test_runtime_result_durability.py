@@ -9,11 +9,16 @@ import pytest
 from tests.unit.runtime_launcher_helpers import StubEngine, _read_csv_rows
 
 from fpvs_studio.core.compiler import compile_session_plan
-from fpvs_studio.core.execution import SessionExecutionSummary
+from fpvs_studio.core.execution import RunExecutionSummary, SessionExecutionSummary
 from fpvs_studio.core.serialization import read_json_file
 from fpvs_studio.core.task_models import TaskPhase, TaskResponseRecord
-from fpvs_studio.runtime import session_export
+from fpvs_studio.runtime import run_worker, session_export
+from fpvs_studio.runtime.condition_recovery import (
+    ConditionRecoveryRecorder,
+    query_condition_recovery,
+)
 from fpvs_studio.runtime.run_worker import RuntimeWorker
+from fpvs_studio.runtime.triggers import TriggerEmissionError
 
 
 @pytest.fixture
@@ -32,6 +37,156 @@ def _execute(root, plan, worker):
             "export_mode": "compact", "serial_enabled": False, "experiment_test_mode": True,
         },
     )
+
+
+@pytest.mark.parametrize("failure", ["feedback", "completion", "cleanup"])
+def test_single_run_preserves_completed_results_before_later_failure(
+    execution, monkeypatch, failure,
+):
+    root, plan = execution
+    run = plan.ordered_entries()[0].run_spec
+    output = root / "runs" / run.run_id
+    engine = StubEngine({})
+    worker = RuntimeWorker(engine)
+    original = RuntimeError(failure)
+
+    def fail_after_playback(*_args, **_kwargs):
+        saved = read_json_file(output / "run_summary.json", RunExecutionSummary)
+        assert saved.completed_frames == run.display.total_frames
+        assert not saved.aborted
+        raise original
+
+    if failure == "feedback":
+        monkeypatch.setattr(worker, "_show_condition_feedback", fail_after_playback)
+    else:
+        monkeypatch.setattr(
+            engine, "show_completion_screen" if failure == "completion" else "close_session",
+            fail_after_playback,
+        )
+    with pytest.raises(RuntimeError) as caught:
+        worker.execute(
+            root, run, output, participant_number="0007",
+            runtime_options={"experiment_test_mode": True},
+        )
+    assert caught.value is original
+    saved = read_json_file(output / "run_summary.json", RunExecutionSummary)
+    assert saved.completed_frames == run.display.total_frames
+
+
+@pytest.mark.parametrize("mode", ["single", "full", "compact"])
+def test_final_trigger_reset_failure_retains_returned_playback_results(
+    execution, monkeypatch, mode,
+):
+    root, plan = execution
+    first = plan.ordered_entries()[0]
+    engine = StubEngine({})
+    original = engine.run_condition
+    played = []
+
+    def capture_playback(*args, **kwargs):
+        result = original(*args, **kwargs)
+        played.append(result)
+        return result
+
+    monkeypatch.setattr(engine, "run_condition", capture_playback)
+    monkeypatch.setattr(
+        run_worker, "_finish_triggerbox_pulse",
+        Mock(side_effect=TriggerEmissionError("Brain Products pulse reset failed: fake reset")),
+    )
+    worker = RuntimeWorker(engine)
+    if mode == "single":
+        result = worker.execute(
+            root, first.run_spec, root / "runs" / "visit", participant_number="0007",
+            runtime_options={"experiment_test_mode": True},
+        )
+        saved_path = root / "runs" / "visit" / "run_summary.json"
+    else:
+        session = worker.execute_session(
+            root, plan, root / "runs" / "visit", participant_number="0007",
+            participant_session_number=1,
+            runtime_options={"export_mode": mode, "experiment_test_mode": True},
+        )
+        assert session.aborted
+        (result,) = session.run_results
+        if mode == "full":
+            saved_path = root / "runs" / "visit" / first.run_id / "run_summary.json"
+        else:
+            saved_path = next(
+                (root / "logs" / session_export.TASK_CHECKPOINT_DIRNAME).glob("*.run.json")
+            )
+        (recovery,) = query_condition_recovery(root).records
+        assert recovery.playback_completed
+        assert recovery.run_id == first.run_id
+        assert recovery.can_rerun
+    assert result.aborted
+    assert "fake reset" in result.abort_reason
+    (played_result,) = played
+    saved = read_json_file(saved_path, RunExecutionSummary)
+    for retained in (result, saved):
+        assert retained.completed_frames == first.run_spec.display.total_frames
+        assert retained.frame_intervals == played_result.frame_intervals
+        assert [(response.key, response.frame_index) for response in retained.response_log] == [
+            (response.key, response.frame_index) for response in played_result.response_log
+        ]
+        assert retained.runtime_metadata.actual_refresh_hz == 60.0
+
+
+@pytest.mark.parametrize("mode", ["single", "full", "compact"])
+@pytest.mark.parametrize("secondary_failure", ["cleanup", "export"])
+def test_original_trigger_error_survives_secondary_failure(
+    execution, monkeypatch, mode, secondary_failure,
+):
+    root, plan = execution
+    original = TriggerEmissionError("fake reset failed")
+    monkeypatch.setattr(
+        run_worker, "_finish_triggerbox_pulse", Mock(side_effect=original),
+    )
+    engine = StubEngine({})
+    secondary = OSError(f"secondary {secondary_failure} failed")
+    if secondary_failure == "cleanup":
+        monkeypatch.setattr(engine, "close_session", Mock(side_effect=secondary))
+    else:
+        monkeypatch.setattr(
+            run_worker,
+            "write_run_artifacts" if mode == "single" else "write_participant_summary",
+            Mock(side_effect=secondary),
+        )
+    worker = RuntimeWorker(engine)
+    with pytest.raises(TriggerEmissionError) as caught:
+        if mode == "single":
+            worker.execute(
+                root, plan.ordered_entries()[0].run_spec, root / "runs" / "visit",
+                participant_number="0007", runtime_options={"experiment_test_mode": True},
+            )
+        else:
+            worker.execute_session(
+                root, plan, root / "runs" / "visit", participant_number="0007",
+                runtime_options={"export_mode": mode, "experiment_test_mode": True},
+            )
+    assert caught.value is original
+
+
+@pytest.mark.parametrize("export_mode", ["full", "compact"])
+def test_final_recovery_write_preserves_original_trigger_error(
+    execution, monkeypatch, export_mode,
+):
+    root, plan = execution
+    original = TriggerEmissionError("fake reset failed")
+    secondary = OSError("recovery storage unavailable")
+    monkeypatch.setattr(
+        run_worker, "_finish_triggerbox_pulse", Mock(side_effect=original),
+    )
+    monkeypatch.setattr(ConditionRecoveryRecorder, "finish", Mock(side_effect=secondary))
+    with pytest.raises(TriggerEmissionError) as caught:
+        RuntimeWorker(StubEngine({})).execute_session(
+            root, plan, root / "runs" / "visit", participant_number="0007",
+            runtime_options={"export_mode": export_mode, "experiment_test_mode": True},
+        )
+    assert caught.value is original
+    assert caught.value.__cause__ is secondary
+    (recovery,) = query_condition_recovery(root).records
+    assert recovery.playback_completed
+    assert recovery.run_id == plan.ordered_entries()[0].run_id
 
 
 @pytest.mark.parametrize("failure", ["feedback", "next_condition", "cleanup", "feedback_cleanup"])

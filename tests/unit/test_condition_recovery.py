@@ -25,6 +25,7 @@ from fpvs_studio.runtime.condition_recovery import (
     query_condition_recovery,
 )
 from fpvs_studio.runtime.run_worker import RuntimeWorker
+from fpvs_studio.runtime.triggers import TriggerEmissionError
 
 
 @pytest.fixture
@@ -245,6 +246,43 @@ def test_normal_escape_does_not_create_interruption_notice(execution):
     )
     assert summary.aborted
     assert not query_condition_recovery(root).records
+
+
+@pytest.mark.parametrize("export_mode", ["full", "compact"])
+def test_trigger_failure_keeps_exact_interrupted_occurrence_available(
+    execution, monkeypatch, export_mode,
+):
+    root, plan = execution
+    engine = StubEngine({})
+    original = engine.run_condition
+    calls = 0
+
+    def fail_second(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            raise TriggerEmissionError("fake transport write failed")
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(engine, "run_condition", fail_second)
+    result = RuntimeWorker(engine).execute_session(
+        root, plan, root / "runs" / "visit", participant_number="0012",
+        runtime_options={"export_mode": export_mode, "experiment_test_mode": True},
+    )
+    assert result.aborted
+    assert "fake transport write failed" in result.abort_reason
+    (record,) = query_condition_recovery(root).records
+    assert record.status == "interrupted"
+    assert record.stage == "playback"
+    assert record.run_ordinal == 2
+    assert not record.playback_completed
+    assert record.completed_run_ids == (plan.ordered_entries()[0].run_id,)
+    assert record.can_rerun
+    assert build_recovery_session_plan(root, record).ordered_entries()[0] == (
+        plan.ordered_entries()[1].model_copy(
+            update={"global_order_index": 0, "block_index": 0, "index_within_block": 0},
+        )
+    )
 
 
 @pytest.mark.parametrize("export_mode", ["compact", "full"])

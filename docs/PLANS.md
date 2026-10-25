@@ -34,6 +34,11 @@ Concrete planned work:
 Completed plans are historical implementation notes. Read their directory only when
 the current contracts do not explain why a landed decision exists.
 
+Recent completion: [Runtime reliability audit](exec-plans/completed/runtime-reliability-audit.md)
+(task graphics lifetime, numeric input, result durability, interruption recovery and
+worker/launch races; Windows rename-test intermittency and native acceptance limits
+are documented). These source fixes follow the 2.4.7 release.
+
 Recent completion: [Graphics crash repair and condition recovery](exec-plans/completed/crash-condition-recovery.md)
 (graphics-thread cleanup, durable interrupted-condition guidance and targeted reruns
 that preserve completed results). Published in

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from threading import Event
 
 from PySide6.QtCore import QObject, Qt, QThread, Signal, Slot
 from PySide6.QtWidgets import QProgressDialog, QWidget
@@ -42,6 +43,15 @@ class GuiTaskWorker(QObject):
             self.finished.emit()
 
 
+class _PresentationRequest:
+    """Identify one callback and cancel it only while it is still queued."""
+
+    def __init__(self, callback: Callable[[], object]) -> None:
+        self.callback = callback
+        self.started = Event()
+        self.cancelled = Event()
+
+
 class PersistentThreadTaskWorker(QObject):
     """Run callbacks on one long-lived worker thread.
 
@@ -50,9 +60,9 @@ class PersistentThreadTaskWorker(QObject):
     """
 
     task_requested = Signal(object)
-    succeeded = Signal(object)
-    failed = Signal(object)
-    finished = Signal()
+    succeeded = Signal(object, object)
+    failed = Signal(object, object)
+    finished = Signal(object)
 
     def __init__(self) -> None:
         super().__init__()
@@ -60,21 +70,27 @@ class PersistentThreadTaskWorker(QObject):
         self.task_requested.connect(self._run_task, Qt.ConnectionType.QueuedConnection)
 
     @Slot(object)
-    def _run_task(self, callback: Callable[[], object]) -> None:
+    def _run_task(self, request: _PresentationRequest) -> None:
+        # Mark entry before checking cancellation: GUI shutdown can then finish a
+        # not-yet-started request even when QThread.quit discards its queued call.
+        request.started.set()
+        if request.cancelled.is_set():
+            self.finished.emit(request)
+            return
         if self._busy:
-            self.failed.emit(RuntimeError("A presentation task is already running."))
-            self.finished.emit()
+            self.failed.emit(request, RuntimeError("A presentation task is already running."))
+            self.finished.emit(request)
             return
         self._busy = True
         try:
-            result = callback()
+            result = request.callback()
         except Exception as error:
-            self.failed.emit(error)
+            self.failed.emit(request, error)
         else:
-            self.succeeded.emit(result)
+            self.succeeded.emit(request, result)
         finally:
             self._busy = False
-            self.finished.emit()
+            self.finished.emit(request)
 
 
 _persistent_thread: QThread | None = None
@@ -147,6 +163,7 @@ class ProgressTask(QObject):
         self._thread: QThread | None = None
         self._worker: GuiTaskWorker | None = None
         self._persistent_worker: PersistentThreadTaskWorker | None = None
+        self._persistent_request: _PresentationRequest | None = None
         self._dialog: QProgressDialog | None = None
 
     def start(self) -> None:
@@ -159,15 +176,21 @@ class ProgressTask(QObject):
         dialog.show()
 
         if self._persistent_thread:
+            request = _PresentationRequest(self._callback)
+            self._dialog = dialog
+            self._persistent_request = request
+            lifecycle = update_lifecycle()
+            lifecycle.shutdown_started.connect(self._cancel_pending_presentation)
+            if lifecycle.is_shutting_down:
+                self._cancel_pending_presentation()
+                return
             persistent_worker = _presentation_worker()
-            persistent_worker.succeeded.connect(self._handle_succeeded)
-            persistent_worker.failed.connect(self._handle_failed)
-            persistent_worker.finished.connect(self._handle_worker_finished)
+            persistent_worker.succeeded.connect(self._handle_persistent_succeeded)
+            persistent_worker.failed.connect(self._handle_persistent_failed)
             persistent_worker.finished.connect(self._handle_persistent_task_finished)
 
-            self._dialog = dialog
             self._persistent_worker = persistent_worker
-            persistent_worker.task_requested.emit(self._callback)
+            persistent_worker.task_requested.emit(request)
             return
 
         thread = QThread(update_lifecycle())
@@ -202,21 +225,45 @@ class ProgressTask(QObject):
     def _owner_destroyed(self) -> None:
         self._owner_alive = False
         self._dialog = None
+        self._cancel_pending_presentation()
 
     @Slot()
     def _handle_worker_finished(self) -> None:
         if self._dialog is not None:
             self._dialog.close()
 
+    @Slot(object, object)
+    def _handle_persistent_succeeded(self, request: object, result: object) -> None:
+        if request is self._persistent_request:
+            self._handle_succeeded(result)
+
+    @Slot(object, object)
+    def _handle_persistent_failed(self, request: object, error: object) -> None:
+        if request is self._persistent_request:
+            self._handle_failed(error)
+
     @Slot()
-    def _handle_persistent_task_finished(self) -> None:
+    def _cancel_pending_presentation(self) -> None:
+        request = self._persistent_request
+        if request is None:
+            return
+        request.cancelled.set()
+        if not request.started.is_set():
+            self._handle_persistent_task_finished(request)
+
+    @Slot(object)
+    def _handle_persistent_task_finished(self, request: object) -> None:
+        if request is not self._persistent_request:
+            return
+        self._handle_worker_finished()
         worker = self._persistent_worker
         if worker is not None and isValid(worker):
-            worker.succeeded.disconnect(self._handle_succeeded)
-            worker.failed.disconnect(self._handle_failed)
-            worker.finished.disconnect(self._handle_worker_finished)
+            worker.succeeded.disconnect(self._handle_persistent_succeeded)
+            worker.failed.disconnect(self._handle_persistent_failed)
             worker.finished.disconnect(self._handle_persistent_task_finished)
+        update_lifecycle().shutdown_started.disconnect(self._cancel_pending_presentation)
         self._persistent_worker = None
+        self._persistent_request = None
         self._dialog = None
         if self._owner_alive:
             self.finished.emit()

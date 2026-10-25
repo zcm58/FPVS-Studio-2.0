@@ -45,6 +45,7 @@ from fpvs_studio.gui.components import (
 from fpvs_studio.gui.document import LaunchSummary, ProjectDocument
 from fpvs_studio.gui.document_support import DocumentError, format_validation_report
 from fpvs_studio.gui.runtime_settings_page import DisplaySettingsEditor
+from fpvs_studio.gui.update_lifecycle import update_lifecycle
 from fpvs_studio.gui.window_helpers import (
     LauncherReadinessReport,
     _coerce_exception,
@@ -181,7 +182,9 @@ class ParticipantSessionCheckTask(QObject):
         self._session_number = result
 
     def _on_finished(self) -> None:
-        session_number = self._session_number
+        session_number = (
+            None if update_lifecycle().is_shutting_down else self._session_number
+        )
         if session_number is not None and session_number > 1:
             if not self._allow_repeated_sessions:
                 QMessageBox.warning(
@@ -199,7 +202,8 @@ class ParticipantSessionCheckTask(QObject):
                 if dialog.exec() != int(QDialog.DialogCode.Accepted):
                     session_number = None
         self.finished.emit()
-        if session_number is not None:
+        # A modal confirmation or a finished handler can begin shutdown too.
+        if session_number is not None and not update_lifecycle().is_shutting_down:
             self.confirmed.emit(session_number)
         self.deleteLater()
 

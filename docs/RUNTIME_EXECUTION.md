@@ -794,6 +794,11 @@ cancellation and successful sessions are excluded from interruption notices. Lar
 duplicate plan snapshots are retired after those terminal outcomes; interrupted plans
 and their evidence remain available for review.
 
+Trigger-output failures are interruptions, even when the runtime returns an aborted
+summary. They retain the frozen plan and incomplete occurrence for recovery instead
+of being retired as voluntary cancellation. A final TriggerBox reset failure retains
+the playback result already returned by the engine while marking the run aborted.
+
 The query can also inspect older `logs/acquisition/*.acquisition-v1.json` receipts.
 Their ordered run IDs identify repeated occurrences, but they lack lifetime evidence
 and are labelled **Session ended without completion confirmation**. The operator must
@@ -812,8 +817,10 @@ Normal participant-repeat permission, visit reservation, hardware readiness and 
 still apply. Prior outputs remain intact, and the original run ID links the new execution
 to the occurrence reviewed by the operator. No network action is part of this workflow.
 
-Full sessions now save the completed playback artifacts before post-condition tasks as
-well as after task completion. Compact sessions checkpoint each completed run beneath
+Full single-condition launches save completed playback before feedback, completion
+screens and shutdown, so later failures do not discard that result. Full sessions
+save completed playback artifacts before post-condition tasks as well as after task
+completion. Compact sessions checkpoint each completed run beneath
 `logs/.task-response-checkpoints/` before post-condition tasks and feedback, and
 update that run's checkpoint after its task flow completes. These atomic `.run.json`
 files retain neutral execution results without raw task answers; task answers remain

@@ -201,3 +201,12 @@ characters, Unicode, and multiline long text; long text submits through the visi
 Submit control. Task clocks and keyboard clocks reset and carried events clear on the
 first task flip, without altering the FPVS run clock, compiled frame sequence, or
 flip-locked trigger schedule.
+
+Each task screen reuses its text and controls across frames, updating them when the
+response, selection or validation state changes. Task graphics use the same
+deterministic texture, pixel-buffer and display-list cleanup as condition stimuli.
+Cleanup runs after completion, cancellation and rendering errors, rolls back partially
+prepared item sets, and attempts every item without replacing an existing presentation
+error. Input-state restoration covers setup failures too and attempts every restoration
+even when another cleanup step fails. Numeric input rejects NaN, infinity and overflow before
+step validation or result construction, allowing the participant to correct the entry.

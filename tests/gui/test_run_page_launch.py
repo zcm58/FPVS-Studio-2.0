@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from PySide6.QtCore import QThread
@@ -739,6 +740,38 @@ def test_participant_history_lookup_runs_off_gui_thread_and_finishes_before_conf
     qtbot.waitUntil(lambda: bool(confirmed))
     assert callback_threads[0] is not QApplication.instance().thread()
     assert confirmed == [(1, True)]
+
+
+@pytest.mark.parametrize("session_number", [1, 2])
+def test_participant_history_completion_after_shutdown_only_cleans_up(
+    qtbot, monkeypatch, session_number,
+) -> None:
+    parent = QWidget()
+    qtbot.addWidget(parent)
+    events = []
+    tasks = []
+    lifecycle = SimpleNamespace(is_shutting_down=False)
+
+    class HeldProgressTask(_ImmediateProgressTask):
+        def start(self):
+            tasks.append(self)
+
+    monkeypatch.setattr("fpvs_studio.gui.run_page.update_lifecycle", lambda: lifecycle)
+    monkeypatch.setattr(
+        ParticipantSessionConfirmationDialog, "exec",
+        lambda _dialog: pytest.fail("Shutdown must not open a repeat-session confirmation"),
+    )
+    check = ParticipantSessionCheckTask(
+        parent_widget=parent, participant_number="0007", allow_repeated_sessions=True,
+        callback=lambda: session_number, task_factory=HeldProgressTask,
+    )
+    check.finished.connect(lambda: events.append("finished"))
+    check.confirmed.connect(lambda number: events.append(("confirmed", number)))
+    check.start()
+    tasks[0].succeeded.emit(session_number)
+    lifecycle.is_shutting_down = True
+    tasks[0].finished.emit()
+    assert events == ["finished"]
 
 
 def test_participant_history_failure_stops_launch_and_restores_controls(

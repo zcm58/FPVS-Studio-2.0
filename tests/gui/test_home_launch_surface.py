@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from PySide6.QtCore import Qt, QTimer
@@ -186,6 +187,31 @@ def test_home_open_defers_setup_and_utility_pages_until_requested(
     assert window._setup_wizard_page is not None
     assert window.main_stack.currentWidget() is window.setup_wizard_page
     assert window._image_resizer_page is None
+
+
+@pytest.mark.parametrize("closed", [False, True])
+@pytest.mark.parametrize("shutting_down", [False, True])
+def test_queued_home_launch_checks_window_and_shutdown_at_dispatch(
+    qtbot, controller, tmp_path, monkeypatch, closed, shutting_down,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Queued Home Launch")
+    qtbot.waitUntil(lambda: window._session_seed_ready)
+    launches = []
+    dispatched = []
+    monkeypatch.setattr(window, "launch_session", lambda: launches.append(True))
+    monkeypatch.setattr(window, "maybe_save_changes", lambda: True)
+    monkeypatch.setattr(
+        "fpvs_studio.gui.main_window.update_lifecycle",
+        lambda: SimpleNamespace(is_shutting_down=shutting_down),
+    )
+    window._launch_after_session_seed_ready = True
+    window._on_deferred_session_seed_finished()
+    if closed:
+        assert window.close()
+    QTimer.singleShot(0, lambda: dispatched.append(True))
+    qtbot.waitUntil(lambda: bool(dispatched))
+    assert launches == ([True] if not closed and not shutting_down else [])
+    assert not window._launch_after_session_seed_ready
 
 
 def test_ready_home_launch_does_not_construct_setup_wizard(

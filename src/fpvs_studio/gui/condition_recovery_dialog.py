@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
 )
 
 from fpvs_studio.gui.components import apply_studio_theme, mark_primary_action
+from fpvs_studio.gui.update_lifecycle import update_lifecycle
 from fpvs_studio.gui.workers import BackgroundTask
 from fpvs_studio.runtime.condition_recovery import (
     ConditionRecoveryReport,
@@ -180,7 +181,10 @@ class ConditionRecoveryController(QObject):
         self._active = True
 
     def _available(self) -> bool:
-        return self._active and self._window.isVisible() and not self._is_busy()
+        return (
+            self._active and self._window.isVisible() and not self._is_busy()
+            and not update_lifecycle().is_shutting_down
+        )
 
     def check(self, *, automatic: bool = False) -> None:
         if self._task is not None or not self._available():
