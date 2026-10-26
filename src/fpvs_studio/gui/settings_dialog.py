@@ -294,7 +294,7 @@ class AppSettingsDialog(QDialog):
         self.recording_setup_button.clicked.connect(self._show_recording_setup)
         recording_layout.addWidget(self.recording_setup_button)
         recording_help = QLabel(
-            "Choose BioSemi ActiveTwo/ActiveThree, Brain Products TriggerBox, "
+            "Choose BioSemi ActiveTwo/ActiveThree, Brain Products / BrainVision, "
             "or Unicorn Recorder UDP. "
             "Unicorn launches require Recorder to be open and recording. "
             "The device and port are saved for the open project only. "

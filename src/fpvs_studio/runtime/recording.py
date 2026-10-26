@@ -126,7 +126,7 @@ def recording_backend_label(options: Mapping[str, object] | None = None) -> str:
     if effective == "brainproducts_triggerbox":
         values = options or {}
         return (
-            f"Brain Products TriggerBox / Plus — "
+            f"Brain Products / BrainVision (TriggerBox/Plus) — "
             f"{values.get('brainproducts_serial_port', 'COM3')} "
             f"({values.get('brainproducts_pulse_width_ms', 10)} ms pulse)"
         )

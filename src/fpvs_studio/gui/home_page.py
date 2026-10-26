@@ -48,7 +48,7 @@ _HOME_HERO_MIN_HEIGHT = 328
 _HOME_RECORDING_DEVICE_NAMES = {
     "serial": "BioSemi ActiveTwo",
     "biosemi_active_three": "BioSemi ActiveThree (128 electrodes)",
-    "brainproducts_triggerbox": "Brain Products TriggerBox / TriggerBox Plus",
+    "brainproducts_triggerbox": "Brain Products / BrainVision (TriggerBox/Plus)",
     "unicorn_udp": "Unicorn Black Mobile Headset",
 }
 _SOPHIA_MODE_TICKER_TEXT = (

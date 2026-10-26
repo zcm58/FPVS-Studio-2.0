@@ -98,6 +98,12 @@ Approved Qt runs explicitly route INI UserScope and SystemScope settings into th
 process's workspace test profile. Windows native known-folder resolution ignores
 APPDATA overrides; standalone Qt subprocess tests must set QSettings paths too.
 
+For participant mouse choices, start with `engines/psychopy_tasks.py` and
+`tests/unit/test_psychopy_task_mouse.py`. The engine focused route covers native
+press/release retention, pixel coordinates and per-screen handler cleanup without
+opening a presentation window. See [Engine interface](../ENGINE_INTERFACE.md#modular-task-rendering)
+for the capture contract; verify the affected grid visibly on the presentation machine.
+
 For crashes between conditions and interrupted-run guidance, start with
 `engines/psychopy_graphics_lifetime.py`, `engines/psychopy_text_screens.py`,
 `runtime/condition_recovery.py` and `gui/condition_recovery_dialog.py`. Graphics

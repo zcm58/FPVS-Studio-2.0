@@ -749,7 +749,7 @@ to FPVS Studio without starting the experiment.
 
 Project recording configuration is validated before participant collection. **Settings > Recording >
 Recording Setup…** edits the open project's BioSemi ActiveTwo, BioSemi ActiveThree
-(128 electrodes), Brain Products TriggerBox / TriggerBox Plus, or Unicorn Recorder
+(128 electrodes), Brain Products / BrainVision (TriggerBox/Plus), or Unicorn Recorder
 UDP choice. Unicorn exposes its loopback port; Brain Products exposes its COM port
 and pulse width. Apply atomically saves only `settings.recording` in that project's
 `project.json`; Cancel keeps the saved choice, and failed saves retain the accepted device.

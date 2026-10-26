@@ -82,7 +82,7 @@ class RecordingSetupDialog(QDialog):
         self.backend_combo.addItem("BioSemi ActiveTwo (serial)", "serial")
         self.backend_combo.addItem("BioSemi ActiveThree (128 electrodes)", "biosemi_active_three")
         self.backend_combo.addItem(
-            "Brain Products TriggerBox / TriggerBox Plus", "brainproducts_triggerbox",
+            "Brain Products / BrainVision (TriggerBox/Plus)", "brainproducts_triggerbox",
         )
         self.backend_combo.addItem("Unicorn Recorder UDP", "unicorn_udp")
         backend = configuration.get("recording_backend") or "serial"
