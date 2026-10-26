@@ -52,9 +52,8 @@ class _TaskMousePresses:
     """Retain Pyglet presses even when a release arrives in the same event pump."""
 
     def __init__(self, window: Any) -> None:
+        self._window = window
         self._handle = window.winHandle
-        self._scale = float(window.getContentScaleFactor())
-        self._center = (_window_width(window) / 2.0, _window_height(window) / 2.0)
         self._pending: deque[tuple[int, tuple[float, float]]] = deque()
         self._armed = False
         self._handle.push_handlers(on_mouse_press=self._on_mouse_press)
@@ -65,20 +64,24 @@ class _TaskMousePresses:
             return
         button_index = {1: 0, 2: 1, 4: 2}.get(button)
         if button_index is not None:
+            scale = float(self._window.getContentScaleFactor())
             position = (
-                float(x) * self._scale - self._center[0],
-                float(y) * self._scale - self._center[1],
+                float(x) * scale - _window_width(self._window) / 2.0,
+                float(y) * scale - _window_height(self._window) / 2.0,
             )
             self._pending.append((button_index, position))
 
     def arm(self) -> None:
         self._armed = True
 
-    def next_click(self, polled: _MouseClick) -> _MouseClick:
+    def next_click(self) -> _MouseClick:
+        # Use this window's native input throughout; legacy Mouse has separate global state.
+        self._handle.dispatch_events()
+        buttons = (0, 0, 0)
         if not self._pending:
-            return {**polled, "button": None}
+            return {"buttons": buttons, "button": None, "position": (0.0, 0.0)}
         button, position = self._pending.popleft()
-        return {"buttons": polled["buttons"], "button": button, "position": position}
+        return {"buttons": buttons, "button": button, "position": position}
 
     def close(self) -> None:
         self._armed = False
@@ -182,16 +185,19 @@ def _render_prepared_task_step(
     previous_mouse_visible = None
     previous_background = None
     mouse_presses = None
+    mouse = None
+    previous_buttons: tuple[int, ...] = (0, 0, 0)
     failed = False
     try:
         previous_mouse_visible = getattr(window, "mouseVisible", None)
         mouse_response_kinds = _CHOICE_RESPONSE_KINDS | _EDITABLE_TEXT_RESPONSE_KINDS
-        mouse = event.Mouse(win=window) if step.response_kind in mouse_response_kinds else None
-        previous_buttons = tuple(mouse.getPressed()) if mouse is not None else (0, 0, 0)
-        if mouse is not None:
+        if step.response_kind in mouse_response_kinds:
             window.mouseVisible = True
             if getattr(window, "winType", None) == "pyglet":
                 mouse_presses = _TaskMousePresses(window)
+            else:
+                mouse = event.Mouse(win=window)
+                previous_buttons = tuple(mouse.getPressed())
 
         call_on_flip = getattr(window, "callOnFlip", None)
         reset_task_clock = getattr(task_clock, "reset", None)
@@ -286,11 +292,12 @@ def _render_prepared_task_step(
                     displayed_item_ids=displayed_item_ids,
                 )
 
-            if mouse is not None:
-                click = _new_mouse_click(mouse, previous_buttons)
-                previous_buttons = click["buttons"]
+            if mouse_presses is not None or mouse is not None:
                 if mouse_presses is not None:
-                    click = mouse_presses.next_click(click)
+                    click = mouse_presses.next_click()
+                else:
+                    click = _new_mouse_click(mouse, previous_buttons)
+                    previous_buttons = click["buttons"]
                 click_button = click["button"]
                 click_position = click["position"]
                 if click_button is not None:

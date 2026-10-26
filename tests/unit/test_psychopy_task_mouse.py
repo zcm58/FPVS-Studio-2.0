@@ -18,6 +18,10 @@ class _Handle:
         self.removed = []
         self.callback_results = []
         self.downstream_presses = []
+        self.dispatches = 0
+
+    def dispatch_events(self):
+        self.dispatches += 1
 
     def push_handlers(self, **handlers):
         self.handlers.append(handlers)
@@ -66,7 +70,7 @@ class _Screen:
         self.actions = []
         self.keys = []
         self.buttons = (0, 0, 0)
-        self.visual = SimpleNamespace(TextStim=_Stimulus, Rect=_Stimulus)
+        self.visual = SimpleNamespace(TextStim=_Stimulus, ImageStim=_Stimulus, Rect=_Stimulus)
         self.event = SimpleNamespace(Mouse=lambda **kwargs: SimpleNamespace(
             getPressed=lambda: self.buttons,
             # A queued click must retain its own location, even after movement.
@@ -109,6 +113,9 @@ class _Screen:
             raise RuntimeError("display failed")
         elif action is not None:
             kind, position, button = action
+            if kind == "geometry":
+                self.size = position
+                self.scale = button
             if kind in {"click", "press"}:
                 self.buttons = tuple(int(bool(button & mask)) for mask in (1, 2, 4))
                 x = (position[0] + self.size[0] / 2) / self.scale
@@ -130,7 +137,7 @@ class _Screen:
 
 def _recognition_step():
     return ResolvedTaskStep(
-        task_id="cognitive-decline-word-recognition-selection",
+        task_id="custom-recognition",
         step_id="recognition-grid", kind="choice_grid", response_kind="single_choice",
         show_footer=False,
         items=(
@@ -235,4 +242,66 @@ def test_short_native_click_submits_editable_response(tmp_path):
     assert result.key == "mouse-submit"
     assert result.mouse_position_px == (0, -720 * 0.32)
     assert result.mouse_button == 0
+    _assert_handlers_released(screen)
+
+
+def test_native_capture_does_not_construct_or_poll_legacy_mouse(tmp_path):
+    screen = _Screen()
+    screen.actions = [None, ("click", (200, -120), 1)]
+
+    def legacy_mouse(**kwargs):
+        raise AssertionError("Native choices must not depend on the legacy mouse device")
+
+    screen.event.Mouse = legacy_mouse
+
+    result = screen.render(tmp_path)
+
+    assert result.selected_item_ids == ("lamp-target",)
+    assert screen.winHandle.dispatches == 2
+    _assert_handlers_released(screen)
+
+
+def test_click_mapping_tracks_current_window_size_and_scale(tmp_path):
+    screen = _Screen()
+    screen.actions = [
+        None, ("geometry", (1600, 1000), 1.5), ("click", (200, -120), 1),
+    ]
+
+    result = screen.render(tmp_path)
+
+    assert result.selected_item_ids == ("lamp-target",)
+    assert result.mouse_position_px == pytest.approx((200, -120))
+    _assert_handlers_released(screen)
+
+
+@pytest.mark.parametrize("modality", ["text", "image"])
+@pytest.mark.parametrize("response_kind", ["single_choice", "multiple_choice", "rating"])
+def test_shared_choice_modes_accept_native_clicks_from_arbitrary_modifiers(
+    tmp_path, modality, response_kind,
+):
+    screen = _Screen()
+    step = _recognition_step()
+    if modality == "image":
+        step = replace(step, items=tuple(
+            replace(item, text=None, image_path=f"stimuli/task-assets/custom/{item.item_id}.png")
+            for item in step.items
+        ))
+    step = replace(step, response_kind=response_kind)
+    screen.actions = [None, ("click", (-200, -120), 1)]
+    if response_kind == "multiple_choice":
+        step = replace(
+            step, submission_mode="explicit", minimum_selections=2, maximum_selections=2,
+        )
+        screen.actions.extend([
+            ("click", (200, -120), 1), ("click", (0, -720 * 0.32), 1),
+        ])
+
+    result = screen.render(tmp_path, step=step)
+
+    expected = (
+        ("pen-target", "lamp-target") if response_kind == "multiple_choice" else ("pen-target",)
+    )
+    assert result.selected_item_ids == expected
+    if response_kind == "multiple_choice":
+        assert result.key == "mouse-submit"
     _assert_handlers_released(screen)
