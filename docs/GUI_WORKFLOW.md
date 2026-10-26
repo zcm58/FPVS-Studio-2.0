@@ -323,9 +323,10 @@ available for internal callers and focused tests.
 
 File > Save and Ctrl+S share the existing save/navigation gates. Keyboard saving first
 commits the focused name field and pending text/design edits. The menu area's compact
-save indicator is visible on Home and Setup: Saved, Unsaved changes, Save blocked, or
-Save failed. Failures retain the open edits and expose the reason in the tooltip and
-existing error dialog. This adds no footer or extra height to the guided content.
+save indicator stays hidden when the project is saved. On Home and Setup it appears
+for Unsaved changes, Save blocked, or Save failed. Failures retain the open edits and
+expose the reason in the tooltip and existing error dialog. This adds no footer or
+extra height to the guided content.
 
 Home elides long project titles to the available width while keeping the complete name
 in a tooltip and accessible description. Its launch panel reserves the height needed
@@ -1003,9 +1004,9 @@ Error details and
 action buttons remain hidden during installation. Failure expands the dialog to a
 `480x300` minimum and `560x340` default, with a read-only scrolling error field.
 Closing the window cancels before setup begins and is ignored after explicit installation
-commitment. Late cancellation
-cannot turn a failed installation into a false cancellation message. Failure exposes
-**Open Update & Repair**; successful installation closes the progress window after restart.
+commitment. Late cancellation cannot turn a failed handoff or installation into a false
+cancellation message. Failure exposes **Open Update & Repair**; successful installation
+closes the progress window after restart.
 Helper staging, trust, locks, and native installation contracts are in `docs/PACKAGING.md`.
 
 The Home
@@ -1297,8 +1298,9 @@ remain available in row tooltips and accessible text.
 Visible acceptance (not run by safe local verification):
 
 1. In both themes, inspect Home at `760x520` and `1120x720`, and Setup at `1120x820`.
-   Saved, Unsaved changes, Save blocked and Save failed must all fit the menu chrome
-   without colliding with menus. Inspect at 125/150% display scaling.
+   The saved state must leave the menu corner empty. Unsaved changes, Save blocked
+   and Save failed must fit the menu chrome without colliding with menus; saving
+   successfully must hide the indicator again. Inspect at 125/150% display scaling.
 2. Open Find Action from the File menu and shortcut. Confirm there is no separate
    Find Action button or View-menu entry. Check its `600x400`
    minimum and `680x460` default. Search `import bundle`, `export bundle`, `recording`

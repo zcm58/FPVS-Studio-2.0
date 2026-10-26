@@ -165,7 +165,7 @@ def test_save_feedback_and_shortcut_work_on_home_and_setup(
         assert window.save_project_action in window.file_menu.actions()
         assert window.save_project_action.shortcut() == QKeySequence(QKeySequence.StandardKey.Save)
         assert badge.text() == "Saved"
-        assert badge.isVisible()
+        assert not badge.isVisible()
         window.show_setup_wizard(step_key="project", allow_step_jumps=True)
         window.raise_()
         window.activateWindow()
@@ -174,6 +174,7 @@ def test_save_feedback_and_shortcut_work_on_home_and_setup(
         description.setFocus()
         qtbot.keyClicks(description, "A new study description.")
         assert badge.text() == "Unsaved changes"
+        assert badge.isVisible()
         QApplication.processEvents()
         assert badge.width() >= badge.sizeHint().width()
         assert badge.geometry().right() < window.menuBar().width()
@@ -182,17 +183,20 @@ def test_save_feedback_and_shortcut_work_on_home_and_setup(
         assert not window.document.dirty
         assert window.document.project.meta.description.endswith("A new study description.")
         assert badge.text() == "Saved"
+        assert not badge.isVisible()
 
         original_flush = window.flush_pending_edits
         monkeypatch.setattr(window, "flush_pending_edits", lambda: False)
         assert not window.save_project()
         assert badge.text() == "Save blocked"
+        assert badge.isVisible()
         QApplication.processEvents()
         assert badge.width() >= badge.sizeHint().width()
         assert badge.geometry().right() < window.menuBar().width()
         monkeypatch.setattr(window, "flush_pending_edits", original_flush)
         window.document.update_project_name("An edited study")
         assert badge.text() == "Unsaved changes"
+        assert badge.isVisible()
         original_save = window.document.save
         errors = []
         monkeypatch.setattr(
@@ -206,6 +210,7 @@ def test_save_feedback_and_shortcut_work_on_home_and_setup(
         assert not window.save_project()
         assert window.document.dirty
         assert badge.text() == "Save failed"
+        assert badge.isVisible()
         QApplication.processEvents()
         assert badge.width() >= badge.sizeHint().width()
         assert badge.geometry().right() < window.menuBar().width()
@@ -216,9 +221,7 @@ def test_save_feedback_and_shortcut_work_on_home_and_setup(
         window.show_home()
         QApplication.processEvents()
         assert badge.text() == "Saved"
-        assert badge.isVisible()
-        assert badge.width() >= badge.fontMetrics().horizontalAdvance(badge.text())
-        assert badge.geometry().right() <= window.menuBar().width()
+        assert not badge.isVisible()
     finally:
         qapp.setPalette(palette)
 
@@ -241,6 +244,7 @@ def test_save_shortcut_commits_the_focused_name(qtbot, controller, tmp_path, fie
     edit.selectAll()
     qtbot.keyClicks(edit, "A revised name")
     assert window.save_state_label.text() == "Unsaved changes"
+    assert window.save_state_label.isVisible()
     qtbot.keyClick(edit, Qt.Key.Key_S, Qt.KeyboardModifier.ControlModifier)
     QApplication.processEvents()
     actual = (window.document.project.meta.name if field == "project"
@@ -248,6 +252,7 @@ def test_save_shortcut_commits_the_focused_name(qtbot, controller, tmp_path, fie
     assert actual == "A revised name"
     assert not window.document.dirty
     assert window.save_state_label.text() == "Saved"
+    assert not window.save_state_label.isVisible()
 
 
 @pytest.mark.parametrize("dark", [False, True])

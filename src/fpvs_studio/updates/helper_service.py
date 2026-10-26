@@ -294,18 +294,29 @@ def run_apply(
     """
     cancel = cancel_event if cancel_event is not None else Event()
     controls: queue.Queue[dict[str, Any] | BaseException] = queue.Queue(maxsize=1)
+    control_lock = Lock()
+    terminal = Event()
     prepared = None
     accepted = False
     watchdog: _CancellationWatchdog | None = None
+
+    def request_control_cancel() -> None:
+        with control_lock:
+            if not terminal.is_set():
+                cancel.set()
+
+    def finish_control() -> None:
+        with control_lock:
+            terminal.set()
 
     def read_control() -> None:
         try:
             control = read_message(input_stream)
             if control["kind"] == "cancel":
-                cancel.set()
+                request_control_cancel()
             controls.put(control)
         except (EOFError, OSError, UpdateError) as error:
-            cancel.set()
+            request_control_cancel()
             controls.put(error)
 
     try:
@@ -356,6 +367,9 @@ def run_apply(
             cancel_event=cancel, phase_callback=phase_callback, progress_window=progress_window
         )
     except (EOFError, OSError, UpdateError, ValueError, TypeError) as error:
+        # Studio closes its input after receiving a terminal error. That EOF is
+        # cleanup, not user cancellation, and must not hide the original failure.
+        finish_control()
         if not accepted:
             try:
                 write_message(
@@ -368,6 +382,7 @@ def run_apply(
                 pass
         raise
     finally:
+        finish_control()
         if watchdog is not None:
             watchdog.disarm()
         if prepared is not None:

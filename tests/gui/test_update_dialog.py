@@ -1339,6 +1339,38 @@ def test_apply_late_cancel_cannot_hide_installer_failure(qtbot, deferred_updates
     assert window.repair_button.isVisible()
 
 
+@pytest.mark.parametrize("size", [(480, 140), (560, 160)])
+def test_apply_late_cancel_cannot_hide_handoff_timeout(qtbot, deferred_updates, size):
+    lifecycle, jobs, _ = deferred_updates
+
+    def apply(_progress, cancel):
+        # Studio closes its pipe after receiving the timeout; EOF can mark the
+        # shared event canceled before this worker's failure reaches the GUI.
+        cancel.set()
+        raise UpdateError("GitHub update check timed out.")
+
+    window = ApplyUpdateDialog(apply, lifecycle=lifecycle)
+    qtbot.addWidget(window)
+    window.resize(*size)
+    window.show()
+    qtbot.waitUntil(lambda: bool(jobs) and jobs[-1]._started)
+    jobs[-1].run_callback()
+    jobs[-1].finish()
+    assert not window._committed.is_set()
+    assert window.status_label.text() == "The update could not be completed."
+    assert window.details_label.toPlainText() == "GitHub update check timed out."
+    assert window.details_label.isVisible()
+    assert window.repair_button.isVisible()
+    assert window.repair_button.isEnabled()
+    assert window.close_button.isVisible()
+    assert window.close_button.isEnabled()
+    assert not window.progress_bar.isVisible()
+    qtbot.wait(1)
+    assert_visible_children_within_parent(window)
+    for button in (window.repair_button, window.close_button):
+        assert button.width() >= button.fontMetrics().horizontalAdvance(button.text())
+
+
 def test_apply_close_before_deferred_start_does_not_launch(qtbot, deferred_updates):
     lifecycle, jobs, _ = deferred_updates
     window = ApplyUpdateDialog(

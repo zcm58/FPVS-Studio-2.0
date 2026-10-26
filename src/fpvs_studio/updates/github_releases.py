@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import time
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import replace
@@ -40,6 +41,9 @@ _SUMMARY_LIMIT = 600
 _MAX_METADATA_BYTES = 2 * 1024 * 1024
 METADATA_TIMEOUT_SECONDS = 5
 MAX_METADATA_SECONDS = 30
+METADATA_ATTEMPTS = 3
+METADATA_RETRY_DELAY_SECONDS = 0.5
+_LOG = logging.getLogger(__name__)
 
 
 def check_for_updates(
@@ -83,34 +87,48 @@ def fetch_release_metadata(
             "User-Agent": f"FPVS-Studio/{__version__}",
         },
     )
-    try:
-        started = time.monotonic()
-        with managed_response(urlopen(request, timeout=METADATA_TIMEOUT_SECONDS)) as response:
-            validate_response_url(response)
-            payload = bytearray()
-            read = getattr(response, "read1", response.read)
-            while True:
-                check_cancel(cancel_event)
-                if time.monotonic() - started > MAX_METADATA_SECONDS:
-                    raise UpdateError("GitHub update check exceeded its time limit.")
-                chunk = read(64 * 1024)
-                check_cancel(cancel_event)
-                if time.monotonic() - started > MAX_METADATA_SECONDS:
-                    raise UpdateError("GitHub update check exceeded its time limit.")
-                if not chunk:
-                    break
-                if len(payload) + len(chunk) > _MAX_METADATA_BYTES:
-                    raise UpdateError("GitHub release metadata exceeded its size limit.")
-                payload.extend(chunk)
-    except HTTPError as error:
-        error.close()
-        raise UpdateError(f"GitHub update check failed with HTTP {error.code}.") from error
-    except URLError as error:
-        raise UpdateError(f"Could not reach GitHub Releases: {error.reason}") from error
-    except TimeoutError as error:
-        raise UpdateError("GitHub update check timed out.") from error
-    except OSError as error:
-        raise UpdateError(f"Could not read GitHub release metadata: {error}") from error
+    started = time.monotonic()
+    for attempt in range(METADATA_ATTEMPTS):
+        check_cancel(cancel_event)
+        try:
+            if time.monotonic() - started > MAX_METADATA_SECONDS:
+                raise UpdateError("GitHub update check exceeded its time limit.")
+            with managed_response(urlopen(request, timeout=METADATA_TIMEOUT_SECONDS)) as response:
+                validate_response_url(response)
+                payload = bytearray()
+                read = getattr(response, "read1", response.read)
+                while True:
+                    check_cancel(cancel_event)
+                    if time.monotonic() - started > MAX_METADATA_SECONDS:
+                        raise UpdateError("GitHub update check exceeded its time limit.")
+                    chunk = read(64 * 1024)
+                    check_cancel(cancel_event)
+                    if time.monotonic() - started > MAX_METADATA_SECONDS:
+                        raise UpdateError("GitHub update check exceeded its time limit.")
+                    if not chunk:
+                        break
+                    if len(payload) + len(chunk) > _MAX_METADATA_BYTES:
+                        raise UpdateError("GitHub release metadata exceeded its size limit.")
+                    payload.extend(chunk)
+            break
+        except HTTPError as error:
+            error.close()
+            raise UpdateError(f"GitHub update check failed with HTTP {error.code}.") from error
+        except (URLError, TimeoutError) as error:
+            if isinstance(error, URLError) and not isinstance(error.reason, TimeoutError):
+                raise UpdateError(f"Could not reach GitHub Releases: {error.reason}") from error
+            check_cancel(cancel_event)
+            if time.monotonic() - started > MAX_METADATA_SECONDS:
+                raise UpdateError("GitHub update check exceeded its time limit.") from error
+            if attempt + 1 == METADATA_ATTEMPTS:
+                raise UpdateError("GitHub update check timed out.") from error
+            _LOG.info("updater_metadata_timeout_retry", extra={"attempt": attempt + 1})
+            if cancel_event is None:
+                time.sleep(METADATA_RETRY_DELAY_SECONDS)
+            else:
+                cancel_event.wait(METADATA_RETRY_DELAY_SECONDS)
+        except OSError as error:
+            raise UpdateError(f"Could not read GitHub release metadata: {error}") from error
 
     try:
         decoded = json.loads(payload.decode("utf-8"))

@@ -2,6 +2,45 @@
 
 Status: Active
 
+## Installed 2.4.7 handoff failure (October 26, 2026)
+
+The installed 2.4.7 app reports a GitHub timeout while preparing the 2.4.8 updater,
+followed by a misleading "canceled before installation" message. The complete cached
+2.4.8 installer matches the live official asset's identity, size and SHA-256
+(`b06a20817ca2cf65a52edd8b6aff33a65c23dfefb585d1bbbcdcf3ea47cd5ef8`).
+Registration remains 2.4.7; no installer was launched during diagnosis.
+
+A deterministic pipe regression reproduces the misleading cancellation: preparation
+reports its real error, Studio closes input, and the helper's reader marks the shared
+worker cancellation event during failure cleanup. Terminal control state now prevents
+that late EOF/cancel from overwriting the failure, while genuine earlier EOF/cancel
+still prevents handoff. The progress dialog also preserves concrete errors and repair
+controls despite a late cancellation flag. Metadata timeouts receive up to three
+attempts within the existing overall budget, with cancelable retry waits and unchanged
+release identity/hash verification. No trust or malformed-response failure is retried.
+Studio now also preserves the helper's recovery window after a strictly validated
+terminal apply error, instead of treating that visible window as a stalled worker and
+terminating it after the cleanup grace period. Invalid/unfinished workers retain forced
+cleanup. Synthetic subprocess regressions cover both behaviors without Qt or setup.
+
+Coverage is in `test_update_helper.py`, `test_update_check.py`, and the registered
+`tests/gui/test_update_dialog.py` minimum/default-size timeout regression. Updates focused
+passes with 333 tests and four symlink-permission skips; GUI focused passes with 17 safe
+tests; docs focused passes with ten tests. Ruff, compilation, and mypy (237 source files)
+pass. Repo precommit ran with 3,149 passes, 11 skips and four Windows bundle permission
+failures outside the updater. Three exact failures pass unchanged on rerun; the developer
+publisher's source-preservation test still reports bundle access denied. This is not an
+all-green precommit run. Registered Qt coverage remains unrun.
+After integrating the current remote master for commit/push, focused checks pass again:
+333 updater tests (four permission skips), 48 safe GUI tests, and ten docs tests, plus
+changed-file Ruff and compilation. The newer GUI route includes launch-lifecycle checks.
+
+A metadata-only check through the actual installed frozen updater finds 2.4.8 in
+2.422 seconds; no GUI or installer is launched by that diagnostic. Source fixes need
+a later Studio/updater rebuild and packaged release; they cannot change the already
+installed binaries. The verified full 2.4.8 installer provides a direct recovery path
+for this installation. Its execution awaits the user's explicit confirmation.
+
 ## Installation percentage follow-up (October 9, 2026)
 
 The managed updater's existing bar now shows actual Inno installation percentages for

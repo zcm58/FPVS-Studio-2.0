@@ -463,12 +463,16 @@ def test_menu_save_feedback_fits_home_and_setup(
         ("warning", "Unsaved changes"),
         ("error", "Save blocked"),
         ("error", "Save failed"),
+        ("ready", "Saved"),
     ):
         window._set_save_feedback(state, text, "Full save state explanation")
         QApplication.processEvents()
         corner = window.save_state_label
         assert window.menuBar().cornerWidget() is corner
         assert window.size().toTuple() == size
+        if state == "ready":
+            assert not corner.isVisible()
+            continue
         assert window.save_state_label.isVisible()
         assert window.menuBar().rect().contains(corner.geometry())
         assert window.save_state_label.width() >= window.save_state_label.sizeHint().width()

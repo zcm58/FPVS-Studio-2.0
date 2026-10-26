@@ -81,6 +81,7 @@ class HelperClient:
         check_cancel(cancel_event)
         process = _spawn(self._command_factory("--apply" if command == "apply" else "--stdio"))
         accepted = False
+        terminal_apply_error = False
         messages: queue.Queue[dict[str, Any] | BaseException] = queue.Queue(maxsize=128)
         assert process.stdin is not None and process.stdout is not None
         output_stream = process.stdout
@@ -136,9 +137,16 @@ class HelperClient:
                         progress_callback(downloaded, total)
                 elif kind == "error":
                     error_text = message.get("message")
-                    if not isinstance(error_text, str):
+                    if (
+                        set(message) != {"protocol", "kind", "message", "cancelled"}
+                        or not isinstance(error_text, str)
+                        or type(message["cancelled"]) is not bool
+                    ):
                         raise UpdateError("The updater returned an invalid error message.")
-                    if message.get("cancelled") is True:
+                    # A completed apply failure leaves the independent recovery
+                    # window open. Its GUI is not a stalled operation to terminate.
+                    terminal_apply_error = command == "apply"
+                    if message["cancelled"]:
                         raise UpdateCancelled(error_text)
                     raise UpdateError(error_text)
                 elif kind == "ready" and command == "apply":
@@ -160,7 +168,7 @@ class HelperClient:
                 else:
                     raise UpdateError("The updater returned an unexpected operation state.")
         finally:
-            if not accepted:
+            if not accepted and not terminal_apply_error:
                 try:
                     _stop_uncommitted(process)
                 except (OSError, subprocess.SubprocessError):

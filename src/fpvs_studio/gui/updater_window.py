@@ -46,6 +46,7 @@ from fpvs_studio.updates.helper_service import (
 from fpvs_studio.updates.models import (
     DownloadedInstaller,
     InstallerAsset,
+    UpdateCancelled,
     UpdateCheckResult,
     UpdateError,
     UpdatePhase,
@@ -260,6 +261,7 @@ class ApplyUpdateDialog(QDialog):
         elif (
             isinstance(outcome, UpdateTaskResult)
             and outcome.cancelled
+            and (outcome.error is None or isinstance(outcome.error, UpdateCancelled))
             and not self._committed.is_set()
         ):
             self.status_label.setText("The update was canceled before installation.")

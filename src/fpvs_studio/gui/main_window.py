@@ -1767,3 +1767,4 @@ class StudioMainWindow(QMainWindow):
             # QMenuBar retains its corner widget geometry when only the text changes.
             self.menuBar().setCornerWidget(self.save_state_label)
         self.save_state_label.setToolTip(tooltip)
+        self.save_state_label.setVisible(state != "ready")

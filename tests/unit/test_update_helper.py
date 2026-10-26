@@ -11,7 +11,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from pathlib import Path
-from threading import Event
+from threading import Event, Thread
 from types import SimpleNamespace
 
 import pytest
@@ -414,8 +414,9 @@ def test_apply_handoff_requires_matching_accept_before_running(
             assert events == ["close"]
 
 
+@pytest.mark.parametrize("disconnect", [False, True], ids=["cancel", "eof"])
 def test_apply_cancellation_during_prepare_never_acknowledges_ready(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, disconnect: bool
 ) -> None:
     downloaded = _downloaded(tmp_path)
     observed = Event()
@@ -437,11 +438,72 @@ def test_apply_cancellation_during_prepare_never_acknowledges_ready(
             parent_pid=None,
         )
         future = pool.submit(helper_service.run_apply, input_stream, output_stream)
-        helper_protocol.write_message(sender, "cancel")
+        if disconnect:
+            sender.close()
+        else:
+            helper_protocol.write_message(sender, "cancel")
         with pytest.raises(UpdateCancelled):
             future.result(timeout=5)
         assert observed.is_set()
         assert helper_protocol.read_message(receiver)["kind"] == "error"
+
+
+@pytest.mark.parametrize("disconnect", [False, True], ids=["cancel", "eof"])
+def test_apply_failure_is_not_canceled_by_terminal_pipe_cleanup(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, disconnect: bool
+) -> None:
+    downloaded = _downloaded(tmp_path)
+    cancel = Event()
+    control_finished = Event()
+    failure = UpdateError("GitHub update check timed out.")
+
+    class ObservedThread(Thread):
+        def run(self) -> None:
+            try:
+                super().run()
+            finally:
+                if self.name == "updater-handoff":
+                    control_finished.set()
+
+    def prepare(*args, **kwargs):
+        raise failure
+
+    def write_response(stream, kind, **payload):
+        helper_protocol.write_message(stream, kind, **payload)
+        if kind == "error":
+            # Studio closes its pipe after reading this failure. Hold the worker
+            # here until that cleanup reaches the control reader, before unwind.
+            assert control_finished.wait(5)
+
+    monkeypatch.setattr(helper_service, "Thread", ObservedThread)
+    monkeypatch.setattr(helper_service, "prepare_install", prepare)
+    monkeypatch.setattr(helper_service, "write_message", write_response)
+    input_stream, sender = _pipe()
+    receiver, output_stream = _pipe()
+    with input_stream, sender, receiver, output_stream, ThreadPoolExecutor(max_workers=1) as pool:
+        helper_protocol.write_message(
+            sender,
+            "request",
+            command="apply",
+            downloaded=helper_protocol.download_to_dict(downloaded),
+            parent_pid=None,
+        )
+        future = pool.submit(
+            helper_service.run_apply, input_stream, output_stream, cancel_event=cancel
+        )
+        response = helper_protocol.read_message(receiver)
+        assert response["kind"] == "error"
+        assert response["message"] == str(failure)
+        assert response["cancelled"] is False
+        if disconnect:
+            sender.close()
+        else:
+            helper_protocol.write_message(sender, "cancel")
+        with pytest.raises(UpdateError, match="GitHub update check timed out") as raised:
+            future.result(timeout=5)
+        assert raised.value is failure
+        assert control_finished.is_set()
+        assert not cancel.is_set()
 
 
 def test_apply_acceptance_timeout_never_runs_setup(
@@ -531,6 +593,100 @@ Path(sys.argv[1]).write_text('accepted synthetic handoff; no installer executed'
     process = client.launch_install(_downloaded(tmp_path), parent_pid=None)
     assert process.wait(timeout=5) == 0
     assert marker.read_text().startswith("accepted synthetic handoff")
+
+
+@pytest.mark.parametrize("cancelled", [False, True])
+def test_client_leaves_terminal_apply_error_process_alive_for_recovery(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, cancelled: bool
+) -> None:
+    script = """
+import sys
+from threading import Event
+from fpvs_studio.updates.helper_service import binary_stdio
+from fpvs_studio.updates.helper_protocol import read_message, write_message
+source, target = binary_stdio()
+assert read_message(source)['command'] == 'apply'
+write_message(
+    target, 'error', message='Synthetic preparation failure', cancelled=sys.argv[1] == '1'
+)
+Event().wait(30)  # Simulate the recovery window; no Qt or installer is loaded.
+"""
+    processes = []
+    spawn = helper_client._spawn
+
+    def record_spawn(command):
+        process = spawn(command)
+        processes.append(process)
+        return process
+
+    monkeypatch.setattr(helper_client, "_spawn", record_spawn)
+    monkeypatch.setattr(helper_client, "_CANCEL_GRACE_SECONDS", 0.05)
+    client = helper_client.HelperClient(
+        lambda *args: [sys.executable, "-c", script, "1" if cancelled else "0"]
+    )
+    try:
+        error_type = UpdateCancelled if cancelled else UpdateError
+        with pytest.raises(error_type, match="Synthetic preparation failure"):
+            client.launch_install(_downloaded(tmp_path))
+        assert len(processes) == 1
+        process = processes[0]
+        assert process.poll() is None
+        assert process.stdin.closed and process.stdout.closed
+    finally:
+        for process in processes:
+            if process.poll() is None:
+                process.terminate()
+            process.wait(timeout=5)
+
+
+@pytest.mark.parametrize(
+    "fields",
+    [
+        {"message": 123, "cancelled": False},
+        {"message": "failure", "cancelled": 1},
+        {"message": "failure"},
+        {"message": "failure", "cancelled": False, "unexpected": True},
+    ],
+    ids=["message-type", "cancelled-type", "missing-field", "extra-field"],
+)
+def test_client_invalid_apply_error_still_stops_uncommitted_process(
+    monkeypatch: pytest.MonkeyPatch, fields: dict,
+) -> None:
+    process = SimpleNamespace(
+        stdin=io.BytesIO(),
+        stdout=io.BytesIO(helper_protocol.encode_message("error", **fields)),
+    )
+    stopped = []
+    monkeypatch.setattr(helper_client, "_spawn", lambda command: process)
+    monkeypatch.setattr(helper_client, "_stop_uncommitted", stopped.append)
+    with pytest.raises(UpdateError, match="invalid error message"):
+        helper_client.HelperClient(lambda *args: [])._exchange("apply", {}, cancel_event=None)
+    assert stopped == [process]
+    assert process.stdin.closed and process.stdout.closed
+
+
+@pytest.mark.parametrize(
+    "command, response",
+    [
+        ("check", helper_protocol.encode_message("error", message="failure", cancelled=False)),
+        ("download", helper_protocol.encode_message("error", message="canceled", cancelled=True)),
+        ("apply", b""),
+        ("apply", b"invalid protocol\n"),
+        ("apply", helper_protocol.encode_message("ready", nonce="invalid")),
+    ],
+    ids=["check-error", "download-canceled", "apply-eof", "protocol", "invalid-ready"],
+)
+def test_client_unfinished_or_stdio_failure_still_stops_uncommitted_process(
+    monkeypatch: pytest.MonkeyPatch, command: str, response: bytes,
+) -> None:
+    process = SimpleNamespace(stdin=io.BytesIO(), stdout=io.BytesIO(response))
+    stopped = []
+    monkeypatch.setattr(helper_client, "_spawn", lambda command: process)
+    monkeypatch.setattr(helper_client, "_stop_uncommitted", stopped.append)
+    with pytest.raises(UpdateError):
+        helper_client.HelperClient(lambda *args: [])._exchange(command, {}, cancel_event=None)
+    assert stopped == [process]
+    assert process.stdin.closed and process.stdout.closed
 
 
 def test_independent_environment_resets_onefile_and_excludes_only_frozen_paths(

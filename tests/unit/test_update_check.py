@@ -5,6 +5,7 @@ from __future__ import annotations
 import io
 import json
 from threading import Event
+from urllib.error import HTTPError, URLError
 
 import pytest
 
@@ -247,6 +248,125 @@ def test_metadata_fetch_remains_metadata_only_with_finite_timeout(
     assert response.closed
 
 
+@pytest.mark.parametrize("wrapped", [False, True])
+def test_metadata_retries_transient_connection_timeout(
+    monkeypatch: pytest.MonkeyPatch, wrapped: bool,
+) -> None:
+    response = _MetadataResponse(json.dumps([_release("v2.0.0")]).encode())
+    calls = 0
+
+    def urlopen(_request: object, **_kwargs: object) -> _MetadataResponse:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            error = TimeoutError("slow connection")
+            raise URLError(error) if wrapped else error
+        return response
+
+    monkeypatch.setattr(github_releases, "urlopen", urlopen)
+    monkeypatch.setattr(github_releases, "METADATA_RETRY_DELAY_SECONDS", 0)
+    result = check_for_updates(current_version="1.3.0")
+    assert result.latest_version == "2.0.0"
+    assert calls == 2
+    assert response.closed
+
+
+def test_metadata_read_timeout_closes_response_and_discards_partial_bytes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    partial = _MetadataResponse(b"[")
+    complete = _MetadataResponse(b"[]")
+    reads = 0
+
+    def read(_size: int) -> bytes:
+        nonlocal reads
+        reads += 1
+        if reads == 1:
+            return b"["
+        raise TimeoutError("stalled response")
+
+    responses = iter([partial, complete])
+    monkeypatch.setattr(partial, "read1", read)
+    monkeypatch.setattr(github_releases, "urlopen", lambda *_args, **_kwargs: next(responses))
+    monkeypatch.setattr(github_releases, "METADATA_RETRY_DELAY_SECONDS", 0)
+    assert fetch_release_metadata(github_releases.DEFAULT_RELEASES_API_URL) == []
+    assert partial.closed and complete.closed
+
+
+def test_metadata_repeated_timeouts_are_bounded(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = 0
+
+    def urlopen(_request: object, **_kwargs: object) -> None:
+        nonlocal calls
+        calls += 1
+        raise TimeoutError("offline")
+
+    monkeypatch.setattr(github_releases, "urlopen", urlopen)
+    monkeypatch.setattr(github_releases, "METADATA_RETRY_DELAY_SECONDS", 0)
+    with pytest.raises(UpdateError, match="timed out"):
+        fetch_release_metadata(github_releases.DEFAULT_RELEASES_API_URL)
+    assert calls == 3
+
+
+def test_metadata_cancel_during_retry_wait_prevents_another_request(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cancel = Event()
+    calls = 0
+
+    def urlopen(_request: object, **_kwargs: object) -> None:
+        nonlocal calls
+        calls += 1
+        raise TimeoutError("slow connection")
+
+    def wait(_timeout: float) -> bool:
+        cancel.set()
+        return True
+
+    monkeypatch.setattr(github_releases, "urlopen", urlopen)
+    monkeypatch.setattr(cancel, "wait", wait)
+    with pytest.raises(UpdateCancelled):
+        fetch_release_metadata(github_releases.DEFAULT_RELEASES_API_URL, cancel_event=cancel)
+    assert calls == 1
+
+
+@pytest.mark.parametrize(
+    "error", [URLError("unreachable"), HTTPError("url", 403, "denied", {}, None)],
+)
+def test_metadata_does_not_retry_non_timeout_errors(
+    monkeypatch: pytest.MonkeyPatch, error: URLError,
+) -> None:
+    calls = 0
+
+    def urlopen(_request: object, **_kwargs: object) -> None:
+        nonlocal calls
+        calls += 1
+        raise error
+
+    monkeypatch.setattr(github_releases, "urlopen", urlopen)
+    with pytest.raises(UpdateError):
+        fetch_release_metadata(github_releases.DEFAULT_RELEASES_API_URL)
+    assert calls == 1
+
+
+def test_metadata_timeouts_share_total_deadline(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = 0
+    elapsed = 0.0
+
+    def urlopen(_request: object, **_kwargs: object) -> None:
+        nonlocal calls, elapsed
+        calls += 1
+        elapsed += 16
+        raise TimeoutError("slow connection")
+
+    monkeypatch.setattr(github_releases, "urlopen", urlopen)
+    monkeypatch.setattr(github_releases.time, "monotonic", lambda: elapsed)
+    monkeypatch.setattr(github_releases, "METADATA_RETRY_DELAY_SECONDS", 0)
+    with pytest.raises(UpdateError, match="time limit"):
+        fetch_release_metadata(github_releases.DEFAULT_RELEASES_API_URL)
+    assert calls == 2
+
+
 @pytest.mark.parametrize(
     "url",
     [
@@ -289,7 +409,7 @@ def test_metadata_total_deadline_is_checked_after_each_read(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     response = _MetadataResponse(b"[]")
-    ticks = iter([0, 0, github_releases.MAX_METADATA_SECONDS + 1])
+    ticks = iter([0, 0, 0, github_releases.MAX_METADATA_SECONDS + 1])
     monkeypatch.setattr(github_releases.time, "monotonic", lambda: next(ticks))
     monkeypatch.setattr(github_releases, "urlopen", lambda *_args, **_kwargs: response)
     with pytest.raises(UpdateError, match="time limit"):

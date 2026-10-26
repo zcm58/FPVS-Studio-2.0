@@ -560,6 +560,11 @@ Private messages have a versioned, bounded schema. The helper sends a fresh read
 Studio must accept that nonce before the helper can proceed. Studio exits only after its
 handoff worker finishes successfully. An early EOF, cancellation, or missing acceptance
 cannot start setup.
+After a terminal preparation failure is reported, pipe cleanup cannot mark that failure
+as user cancellation. Studio closes the pipes without terminating the completed helper's
+recovery window after a valid terminal apply-error response. Missing or malformed
+responses and unfinished operations retain forced cleanup. The progress window preserves
+the actual error and repair action.
 
 The helper holds a separate `%LOCALAPPDATA%\FPVS Studio\updater-install` lock through
 the bounded process wait, final registration/other-instance check, installation, and
@@ -586,9 +591,13 @@ cancellation and defers teardown until updater work finishes. Application quit s
 cancels/finishes app-owned updater jobs without destroying running Qt threads or blocking
 the GUI thread. Metadata checks, hashing, cache housekeeping, and download I/O all stay
 off the GUI thread. Startup never downloads an installer or launches setup automatically.
-Network work uses cancellation checkpoints and bounded socket reads. For private pipe
-workers, cancellation or EOF also starts an eight-second watchdog for stalled DNS; it
-exits the unaccepted worker while its bootloader remains alive to clean temporary files.
+Network work uses cancellation checkpoints and bounded socket reads. Release metadata
+connection/read timeouts retry up to three attempts, restarting the response within
+the existing 30-second overall budget and five-second socket timeout.
+Retry waits are cancelable; HTTP, malformed metadata, and trust failures are not retried.
+For private pipe workers, cancellation or EOF also starts an eight-second watchdog for
+stalled DNS; it exits the unaccepted worker while its bootloader remains alive to clean
+temporary files.
 The client closes input and allows that cleanup before forced termination as a last resort.
 Acceptance atomically disarms this watchdog before installation can begin. The standalone
 window's local check/download workers still wait for their network call to return on cancel.
