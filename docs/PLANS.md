@@ -18,7 +18,6 @@ Use this page to find planning material before making feature-sized changes.
 
 Current implementation:
 
-- [Studio 2.5.0 release](exec-plans/active/release-2.5.0.md)
 - [Studio to Toolbox and OpenFPVS integration](exec-plans/active/studio-toolbox-integration.md)
 - [Experiment data sharing and comparison](exec-plans/active/remote-experiment-results-reporting.md)
 - [Unicorn Hybrid Black recording support](exec-plans/active/unicorn-hybrid-black-support.md) (normal marker output enabled; full receiver, Toolbox and physical timing validation pending)
@@ -37,11 +36,15 @@ the current contracts do not explain why a landed decision exists.
 
 Recent completion: [Computer default EEG hardware](exec-plans/completed/default-eeg-hardware.md)
 (first-run hardware choice, computer defaults, project overrides/reset and captured
-completed-session export; safe precommit passed, visible GUI acceptance remains).
+completed-session export; source and visible GUI checks passed in 2.5.0).
 
 Recent completion: [TriggerBox discovery and pulse validation](exec-plans/completed/triggerbox-recording-setup.md)
 (editable detected COM ports, amplifier/rate pulse limits and verified compiled
-6 Hz / 60 Hz marker spacing; visible GUI and physical hardware acceptance remain).
+6 Hz / 60 Hz marker spacing; visible GUI passed in 2.5.0; physical hardware acceptance remains).
+
+Recent completion: [Studio 2.5.0 release](exec-plans/completed/release-2.5.0.md)
+(BrainVision setup, default EEG hardware, full installer and direct 2.4.8 patch;
+visible GUI, artifact hashes, public downloads and updater checks passed).
 
 Recent completion: [Studio 2.4.8 minor bug fixes release](exec-plans/completed/release-2.4.8.md)
 (full installer, direct 2.4.7 patch, public updater checks, downloaded bytes and
