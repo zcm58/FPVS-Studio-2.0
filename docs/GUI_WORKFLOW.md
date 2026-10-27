@@ -832,13 +832,17 @@ authority if callers bypass the GUI; see
 
 Recording setup has a `700x640` minimum/default size.
 ActiveThree retains project serial settings and the BioSemi Sophia prompt.
-TriggerBox discovery starts when its setup is first shown and Detect refreshes it.
-It reads device metadata on an app-owned worker without opening ports or sending
-triggers. A single match fills the default COM3; custom ports and manual edits survive
-discovery. Multiple matches require a choice; empty/error states retain manual entry.
+TriggerBox discovery starts when its setup is first shown and reads device metadata
+without opening ports. Detect refreshes the list and checks recognized candidates by
+opening and closing them at 2,000,000 baud / 8N1 without sending or reading bytes.
+Both operations use an app-owned worker. A single match fills the default COM3; custom
+ports and manual edits survive discovery. Multiple matches require a choice;
+empty/error states retain manual entry. Access failures keep candidates visible and
+expose their errors; successful access applies only to the checked port at that moment.
 Cancel/Apply cancels outstanding discovery without waiting on the GUI thread; late
-results cannot modify the accepted or dismissed draft. Detected names are available
-in port-list tooltips, and detection is not a marker-receipt or recording check.
+results cannot modify the accepted or dismissed draft. Full detected names and access
+errors are available in tooltips. Detection and access checks do not establish marker
+receipt or recording readiness; marker testing remains a separate manual task.
 The amplifier/rate dropdowns use the vendor table and show the minimum pulse. Invalid
 pulse settings disable Apply; runtime rechecks them and compiled marker spacing.
 TriggerBox uses its own port and fixed vendor baudrate; its guidance describes

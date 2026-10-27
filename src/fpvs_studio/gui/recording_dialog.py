@@ -142,6 +142,8 @@ class RecordingSetupDialog(QDialog):
         self._port_detection_job: UpdateJob | None = None
         self._detection_started = False
         self._discovery_dismissed = False
+        self._port_detection_candidates: tuple[TriggerBoxPortCandidate, ...] | None = None
+        self._port_access_checked = False
         self._manual_port_override = (
             configuration.get("brainproducts_serial_port", "COM3") != "COM3"
         )
@@ -218,7 +220,8 @@ class RecordingSetupDialog(QDialog):
         self.detect_ports_button.setAutoDefault(False)
         self.detect_ports_button.setAccessibleName("Detect TriggerBox COM ports")
         self.detect_ports_button.setToolTip(
-            "Refresh device names without opening ports or sending triggers.",
+            "Refresh TriggerBox ports and check access by opening and closing recognized ports. "
+            "No marker bytes are sent.",
         )
         mark_secondary_action(self.detect_ports_button)
         port_layout.addWidget(self.detect_ports_button)
@@ -306,6 +309,7 @@ class RecordingSetupDialog(QDialog):
         self.backend_combo.currentIndexChanged.connect(self._refresh)
         self.port_edit.textChanged.connect(self._refresh)
         self.brainproducts_port_edit.textChanged.connect(self._refresh)
+        self.brainproducts_port_edit.textChanged.connect(self._refresh_port_detection_status)
         self.brainproducts_pulse_edit.textChanged.connect(self._refresh)
         self.brainproducts_amplifier_combo.currentIndexChanged.connect(self._amplifier_changed)
         self.brainproducts_sampling_rate_combo.currentIndexChanged.connect(self._refresh)
@@ -348,21 +352,37 @@ class RecordingSetupDialog(QDialog):
     def _maybe_detect_ports(self) -> None:
         if (self.isVisible() and not self._detection_started
                 and self.backend_combo.currentData() == "brainproducts_triggerbox"):
-            self._detect_ports()
+            self._start_port_detection(check_access=False)
 
     def _manual_port_edited(self, _value: object = None) -> None:
         self._manual_port_override = True
+        self._refresh_port_detection_status()
 
     def _detect_ports(self) -> None:
+        self._start_port_detection(check_access=True)
+
+    def _start_port_detection(self, *, check_access: bool) -> None:
         if self._port_detection_job is not None or self._discovery_dismissed:
             return
         self._detection_started = True
+        for index, candidate in enumerate(self._port_detection_candidates or ()):
+            self.brainproducts_port_combo.setItemData(
+                index, candidate.description, Qt.ItemDataRole.ToolTipRole,
+            )
+        self._port_detection_candidates = None
+        self._port_access_checked = check_access
         self.detect_ports_button.setEnabled(False)
-        self.detection_status_label.setText("Detecting TriggerBox ports…")
+        self.detection_status_label.setText(
+            "Checking TriggerBox port access…" if check_access else "Detecting TriggerBox ports…",
+        )
+        self.detection_status_label.setToolTip("")
+        self.detection_status_label.setAccessibleDescription("")
         try:
             lifecycle = update_lifecycle()
             self._port_detection_job = lifecycle.start_task(
-                lambda _progress, _cancel: discover_triggerbox_ports(),
+                lambda _progress, cancel: discover_triggerbox_ports(
+                    check_access=check_access, cancel_event=cancel,
+                ),
             )
         except RuntimeError as exc:
             self._port_detection_finished(UpdateTaskResult(error=exc))
@@ -385,8 +405,10 @@ class RecordingSetupDialog(QDialog):
                 "Port detection failed. Retry or enter the COM port.",
             )
             self.detection_status_label.setToolTip(str(result.error))
+            self.detection_status_label.setAccessibleDescription(str(result.error))
             return
         candidates = cast(tuple[TriggerBoxPortCandidate, ...], result.value)
+        self._port_detection_candidates = candidates
         previous = self.brainproducts_port_edit.text()
         self.brainproducts_port_combo.blockSignals(True)
         self.brainproducts_port_edit.blockSignals(True)
@@ -394,7 +416,7 @@ class RecordingSetupDialog(QDialog):
         for candidate in candidates:
             self.brainproducts_port_combo.addItem(candidate.port)
             self.brainproducts_port_combo.setItemData(
-                self.brainproducts_port_combo.count() - 1, candidate.description,
+                self.brainproducts_port_combo.count() - 1, self._port_candidate_details(candidate),
                 Qt.ItemDataRole.ToolTipRole,
             )
         port = previous
@@ -406,9 +428,50 @@ class RecordingSetupDialog(QDialog):
         self.brainproducts_port_combo.setEditText(port)
         self.brainproducts_port_edit.blockSignals(False)
         self.brainproducts_port_combo.blockSignals(False)
-        self.detection_status_label.setToolTip(
-            "\n".join(f"{item.port}: {item.description}" for item in candidates),
+        self._refresh_port_detection_status()
+        self._refresh()
+
+    @staticmethod
+    def _port_candidate_details(candidate: TriggerBoxPortCandidate) -> str:
+        details = candidate.description
+        if candidate.accessible is True:
+            details += "\nPort accessible."
+        elif candidate.accessible is False:
+            details += "\nPort unavailable."
+            if candidate.access_error:
+                details += f"\n{candidate.access_error}"
+        return details
+
+    def _refresh_port_detection_status(self) -> None:
+        candidates = self._port_detection_candidates
+        if candidates is None or self._discovery_dismissed:
+            return
+        details = "\n".join(
+            f"{item.port}: {self._port_candidate_details(item)}" for item in candidates
         )
+        self.detection_status_label.setToolTip(details)
+        self.detection_status_label.setAccessibleDescription(details)
+        port = self.brainproducts_port_edit.text().strip().upper()
+        selected = next((item for item in candidates if item.port.upper() == port), None)
+        if self._port_access_checked and candidates:
+            if selected is not None:
+                if selected.accessible is True:
+                    text = f"{selected.port}: Port accessible."
+                elif selected.accessible is False:
+                    text = f"{selected.port}: Port unavailable. See details."
+                else:
+                    text = f"{selected.port}: Access was not checked."
+            elif port:
+                text = "Selected port was not checked. Choose a detected port or enter one."
+            else:
+                accessible = sum(item.accessible is True for item in candidates)
+                unavailable = sum(item.accessible is False for item in candidates)
+                text = (
+                    f"{len(candidates)} ports checked: {accessible} accessible, "
+                    f"{unavailable} unavailable. Choose a port."
+                )
+            self.detection_status_label.setText(text)
+            return
         if len(candidates) == 1:
             text = f"Detected TriggerBox on {candidates[0].port}."
             if self._manual_port_override and port != candidates[0].port:
@@ -418,7 +481,6 @@ class RecordingSetupDialog(QDialog):
         else:
             text = "No TriggerBox found. Connect it and retry, or enter its COM port."
         self.detection_status_label.setText(text)
-        self._refresh()
 
     def _cancel_port_detection(self, _result: int) -> None:
         self._discovery_dismissed = True

@@ -364,9 +364,10 @@ owns endpoint estimates and task-response checkpoints. Details and acceptance ar
   levels; see [Runtime execution](docs/RUNTIME_EXECUTION.md#trigger-behavior).
   ActiveThree reuses the BioSemi serial adapter; TriggerBox uses a dedicated adapter
   with synchronous event writes and worker-owned zero reset outside frame scheduling.
-  `triggers/brainproducts_discovery.py` enumerates named COM-port candidates without
-  opening them; Recording Setup runs discovery through the app-owned worker lifecycle
-  and retains manual entry. Core's `brainproducts.py` owns the vendor amplifier/rate
+  `triggers/brainproducts_discovery.py` owns named COM-port candidates and explicit
+  open/close access checks without marker bytes. Recording Setup keeps automatic
+  discovery metadata-only and runs Detect checks through the app-owned worker lifecycle,
+  retaining manual entry. Core's `brainproducts.py` owns the vendor amplifier/rate
   pulse table. Runtime validates the explicit selection and compiled marker spacing.
   New devices retain selected identity without inventing Toolbox montage profiles.
 - Full export mode writes each numbered visit under `runs/P<PID>_session<NN>/`.
