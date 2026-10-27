@@ -261,6 +261,21 @@ def test_queued_logging_writes_redacted_trace_and_restores_hooks(tmp_path):
     assert "do-not-export" not in text
 
 
+def test_queued_logging_preserves_records_with_malformed_unicode(tmp_path, monkeypatch):
+    monkeypatch.setattr(diagnostics, "_logging_notice", "")
+    session = DiagnosticLogging(tmp_path)
+    session.start()
+    try:
+        logging.getLogger("fpvs_studio.test").warning("Synthetic filename: bad\ud800name")
+    finally:
+        session.close()
+
+    text = collect_diagnostics(tmp_path)
+    assert "Synthetic filename: bad?name" in text
+    assert text.encode("utf-8")
+    assert diagnostics._logging_notice == ""
+
+
 def test_native_capture_retains_descriptor_and_redacts_collected_trace(tmp_path, monkeypatch):
     opened = []
     disabled = []

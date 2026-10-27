@@ -46,7 +46,7 @@ def record_qt_fatal(message: str) -> None:
 def bounded_text(text: str, limit: int = MAX_LOG_BYTES) -> str:
     data = text.encode("utf-8", errors="replace")
     if len(data) <= limit:
-        return text
+        return data.decode("utf-8")
     prefix = "[Earlier text omitted to fit the diagnostic limit.]\n"
     return prefix + data[-(limit - len(prefix.encode())) :].decode("utf-8", errors="ignore")
 

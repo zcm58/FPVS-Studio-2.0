@@ -35,6 +35,10 @@ Concrete planned work:
 Completed plans are historical implementation notes. Read their directory only when
 the current contracts do not explain why a landed decision exists.
 
+Recent completion: [TriggerBox serial-port access checks](exec-plans/completed/triggerbox-port-access-check.md)
+(explicit Detect opens/closes recognized candidates without marker bytes; automatic
+discovery stays metadata-only, with fake serial and registered GUI coverage).
+
 Recent completion: [Computer default EEG hardware](exec-plans/completed/default-eeg-hardware.md)
 (first-run hardware choice, computer defaults, project overrides/reset and captured
 completed-session export; source and visible GUI checks passed in 2.5.0).

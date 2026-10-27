@@ -5,6 +5,7 @@ from __future__ import annotations
 import errno
 import re
 from dataclasses import dataclass
+from zipfile import BadZipFile
 
 
 @dataclass(frozen=True)
@@ -63,7 +64,7 @@ def explain_error(
             "Check that the drive is connected and the files haven't moved. "
             "Choose the correct folder or download the experiment again, then retry.",
         )
-    if re.search(
+    if any(isinstance(cause, BadZipFile) for cause in causes) or re.search(
         r"badzipfile|checksum mismatch|checksum does not match|checksum differs|"
         r"hash mismatch|corrupt(?:ed)? archive|not a zip file|bad crc",
         text,
@@ -73,7 +74,9 @@ def explain_error(
             "Download a fresh copy and try again. If the fresh copy also fails, report this error.",
         )
     if re.search(
-        r"requires (?:a )?newer|newer (?:fpvs )?studio|unsupported (?:project )?schema", text
+        r"requires (?:a )?newer|newer (?:fpvs )?studio|"
+        r"unsupported (?:project (?:config )?)?schema",
+        text,
     ):
         return ErrorExplanation(
             "This experiment uses a format this version of FPVS Studio can't read.",

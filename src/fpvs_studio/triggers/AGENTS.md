@@ -18,9 +18,11 @@ adapter scaffolding.
   for explicit manual reset and must not be emitted for condition or oddball events.
 - Keep unavailable hardware behavior explicit; do not add silent fallbacks that hide
   failed trigger emission.
-- TriggerBox discovery reads named COM-port metadata only. Never open ports or emit
-  probe bytes; candidates do not prove connection or marker receipt. GUI callers run
-  enumeration on the app-owned worker and retain manual selection.
+- Automatic TriggerBox discovery reads named COM-port metadata only. Explicit Detect
+  may open and close recognized candidates on the app-owned worker to check access;
+  never issue probe reads, marker writes or explicit reset/flush calls. Close constructed
+  connections on failure/cancellation, stop between candidates, and retain manual
+  selection. Metadata and successful port access do not prove identity or marker receipt.
 - ActiveThree reuses BioSemi's serial byte protocol. Brain Products TriggerBox rev.02/
   Plus uses a distinct adapter/identity at fixed 2,000,000 baud. Its connection-owned
   worker clears a latched event after the configured pulse; sends never sleep or queue.

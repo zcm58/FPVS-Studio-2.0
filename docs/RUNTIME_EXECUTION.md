@@ -311,12 +311,23 @@ See the vendor [programming examples](https://www.brainproducts.com/download/tri
 and [setup diagram](https://www.brainproducts.com/download/how-to-set-up-the-triggerbox-plus/).
 
 Recording Setup automatically enumerates explicitly named TriggerBox COM ports on an
-app-owned worker, without opening ports or sending probe bytes. One candidate fills
-the default port; an explicit custom port or a manual edit is retained. Multiple
-candidates require selection or manual entry. Detect refreshes the list. No match or
-enumeration failure leaves manual entry available. Metadata is not connection proof:
-the rev.02 virtual port can remain listed when unplugged. Both models use the same
-serial settings, so driver/model detection never changes baudrate or pulse width.
+app-owned worker without opening them. Both `VirtualSerial` and `Virtual Serial`
+driver-name spellings are recognized. One candidate fills the default port; an explicit
+custom port or a manual edit is retained. Multiple candidates require selection or
+manual entry. No match or enumeration failure leaves manual entry available.
+
+Pressing Detect also checks access to recognized candidates at 2,000,000 baud / 8N1
+without flow control. It opens and closes each candidate without issuing probe reads,
+marker writes or explicit reset/flush calls. Constructed ports are closed on
+errors/cancellation, and cancellation stops further candidates. Failed candidates remain
+visible with their access errors; success establishes port access at that moment only. Metadata is not
+connection proof: the rev.02 virtual port can remain listed when unplugged. Opening a
+port does not establish TriggerBox identity or marker receipt, and an unavailable port
+may belong to another application. There is no marker test in this workflow.
+The access check requests inactive RTS/DTR before opening, although the OS/driver may
+change control lines during serial-port initialization. Both models use the same serial
+settings, so detection never changes saved baudrate or pulse width. Runtime still
+performs its separate prelaunch serial-open check.
 
 The dedicated adapter always opens at 2,000,000 baud, 8N1, without flow control.
 `brainproducts_serial_port` defaults to COM3 and must be nonblank text;
