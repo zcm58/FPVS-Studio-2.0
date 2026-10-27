@@ -2,7 +2,7 @@
 
 Status: Completed
 
-Date: 2026-10-26
+Date: 2026-10-27
 
 ## Authorized outcome and user flow
 
@@ -85,6 +85,26 @@ intact. New interruptions still prompt; acknowledgements travel with project log
 - Independent review found no remaining material data-loss, suppression, worker-state
   or rerun regression. Evidence and synthetic captures remain under ignored
   `build/interruption-acknowledgement-evidence/`.
+
+## Concurrent upstream changes
+
+The first push was rejected because another PC advanced master with Welcome-screen
+copy changes `08ea16a` and `fff2b77`. These merged cleanly in `3d7470d`, retaining
+the interruption fix `ed3ca56` and the other PC's removal of routine Welcome hints.
+No force push or overwrite was used.
+
+After the merge, mypy again passed all 243 source files, relevant Ruff checks passed,
+and the safe GUI focused route passed all 83 tests. The combined visible recovery,
+Welcome, default-hardware and component run initially hit an existing clipboard
+integration test: Windows returned `OleSetClipboard` / `0x800401d0 OpenClipboard
+Failed`, also stalling Qt shutdown. The exact Welcome test reproduced that platform
+failure. No clipboard production behavior or assertions were changed to hide it.
+
+The post-merge visible run passed 189 cases with the two clipboard-dependent cases
+explicitly deselected. It includes every interruption-dialog check. The excluded
+cases were `test_manage_projects_dialog_lists_projects_from_saved_root` and
+`test_source_details_exposes_and_copies_full_long_path`; their platform limitation
+and the interrupted attempt remain in the retained evidence logs.
 
 ## Delivery boundary
 
