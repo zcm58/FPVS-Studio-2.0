@@ -64,13 +64,11 @@ class WelcomeWindow(QWidget):
         self.headline_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         hero_layout.addWidget(self.headline_label)
 
-        self.bundle_drop_hint_label = QLabel(
-            "Tip: Drop a .fpvsbundle file anywhere on this window.",
-            self.hero_container,
-        )
+        self.bundle_drop_hint_label = QLabel("", self.hero_container)
         self.bundle_drop_hint_label.setObjectName("welcome_bundle_drop_hint")
         self.bundle_drop_hint_label.setProperty("bundleWorkflowRole", "meta")
         self.bundle_drop_hint_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.bundle_drop_hint_label.hide()
         hero_layout.addWidget(self.bundle_drop_hint_label)
 
         self.sharing_status_label = QLabel("", self.hero_container)
@@ -172,8 +170,9 @@ class WelcomeWindow(QWidget):
         self.bundle_drop_hint_label.setText(
             "Import in progress… Keep FPVS Studio open."
             if self._import_busy
-            else "Tip: Drop a .fpvsbundle file anywhere on this window."
+            else ""
         )
+        self.bundle_drop_hint_label.setVisible(self._import_busy)
 
     def set_sharing_status(self, message: str) -> None:
         """Display passive startup delivery status without blocking project actions."""

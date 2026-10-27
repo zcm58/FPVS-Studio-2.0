@@ -276,9 +276,9 @@ registered designer coverage also checks repeated replacement.
 Importing a new project from Welcome uses the same `.fpvsbundle` import workflow as
 `File > Import > Project Bundle...`. Dropping a local `.fpvsbundle` file onto the
 Welcome window starts that project-import workflow for the dropped bundle. The Welcome
-surface includes a visible drop hint, shows a modal staged progress surface during the
-background import, disables all Welcome actions until the operation finishes, and does
-not allow the Welcome window or progress surface to close while the import is active.
+surface shows modal staged progress during background import, disables all Welcome
+actions until the operation finishes, and does not allow the Welcome window or progress
+surface to close while the import is active.
 
 Condition-template profiles are app-level metadata for the configured FPVS Studio Root
 Folder. They are stored under `.fpvs-studio/templates/condition_templates.json`, keeping
