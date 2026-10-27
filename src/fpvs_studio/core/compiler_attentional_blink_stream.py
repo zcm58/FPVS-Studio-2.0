@@ -6,6 +6,7 @@ from fpvs_studio.core.attentional_blink_stream import (
     iter_attentional_blink_stream_cycles,
     preview_attentional_blink_stream,
 )
+from fpvs_studio.core.compiler_support import check_compilation_cancelled
 from fpvs_studio.core.enums import StimulusModality
 from fpvs_studio.core.models import (
     AttentionalBlinkStreamSettings,
@@ -65,7 +66,9 @@ def compile_attentional_blink_stream_sequence(
     )
     events: list[StimulusEvent] = []
     for cycle_index, symbols in zip(range(total_cycles), cycles, strict=False):
+        check_compilation_cancelled()
         for cycle_slot, (phase, symbol) in enumerate(zip(description.roles, symbols, strict=True)):
+            check_compilation_cancelled(cycle_slot)
             if phase == "base":
                 source_id = base_set.set_id
             else:

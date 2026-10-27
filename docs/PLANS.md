@@ -18,6 +18,7 @@ Use this page to find planning material before making feature-sized changes.
 
 Current implementation:
 
+- [Branch feature consolidation and cleanup](exec-plans/active/branch-consolidation-2026-10-26.md)
 - [Studio to Toolbox and OpenFPVS integration](exec-plans/active/studio-toolbox-integration.md)
 - [Experiment data sharing and comparison](exec-plans/active/remote-experiment-results-reporting.md)
 - [Unicorn Hybrid Black recording support](exec-plans/active/unicorn-hybrid-black-support.md) (normal marker output enabled; full receiver, Toolbox and physical timing validation pending)
@@ -27,6 +28,7 @@ Current implementation:
 
 Concrete planned work:
 
+- [Optional image pool reset policy](exec-plans/planned/image-pool-reset-policy.md) (retain reset per condition run; future carryover option with user-facing pros/cons)
 - [Participant results and question presentation](exec-plans/planned/participant-results-and-question-presentation.md) (proposal; not implemented)
 - [Luminance/RMS equalization investigation](exec-plans/planned/luminance-rms-equalization-investigation.md) (algorithm and validation investigation; not implemented)
 - [Lab-independent recording setup](exec-plans/planned/lab-independent-recording-setup.md) (named profiles and display selection; not implemented)

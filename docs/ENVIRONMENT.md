@@ -54,6 +54,16 @@ remaining Pillow/MoviePy and setuptools/PsychoPy constraints. Do not override
 upstream requirements or treat a scanner package match as proof of a reachable
 Studio attack path.
 
+If Windows PowerShell blocks repository scripts because execution is restricted,
+launch the specific repository script with a process-only policy:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\verify.ps1 -Scope repo -Tier precommit
+```
+
+This does not change the user or machine execution policy. Repository test helpers
+that load `.ps1` files use the same process-only setting.
+
 ## Launching The App
 
 Run the authoring GUI with:

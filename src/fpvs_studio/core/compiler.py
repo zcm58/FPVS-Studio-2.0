@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import random
 from collections import Counter
+from collections.abc import Callable
 from pathlib import Path
 
 from fpvs_studio.core.attentional_blink_presets import RECALL_TASK_ID
@@ -24,6 +25,7 @@ from fpvs_studio.core.compiler_fixation import (
     resolve_realized_target_count,
 )
 from fpvs_studio.core.compiler_inputs import CompilationInputs
+from fpvs_studio.core.compiler_limits import CompilationLimits, validate_compilation_workload
 from fpvs_studio.core.compiler_masking import compile_masking_run, validate_masking_settings
 from fpvs_studio.core.compiler_presentation import (
     build_interleaved_text_height_values,
@@ -36,7 +38,9 @@ from fpvs_studio.core.compiler_schedules import (
 from fpvs_studio.core.compiler_support import (
     RANDOM_SEED_UPPER_BOUND,
     CompileError,
+    check_compilation_cancelled,
     color_to_string,
+    compilation_cancellation,
     make_run_id,
     make_session_id,
     make_session_run_id,
@@ -374,6 +378,34 @@ def compile_session_plan(
     session_id: str | None = None,
     condition_ids: list[str] | None = None,
     manifest: StimulusManifest | None = None,
+    limits: CompilationLimits | None = None,
+    cancel_check: Callable[[], None] | None = None,
+) -> SessionPlan:
+    """Compile a session, optionally bounding untrusted input and honoring cancellation."""
+    with compilation_cancellation(
+        cancel_check, max_work_units=limits.max_schedule_work if limits is not None else None,
+    ):
+        if limits is not None:
+            validate_compilation_workload(
+                project, select_conditions(project, condition_ids),
+                refresh_hz=refresh_hz, limits=limits,
+            )
+        return _compile_session_plan(
+            project, refresh_hz=refresh_hz, project_root=project_root,
+            random_seed=random_seed, session_id=session_id, condition_ids=condition_ids,
+            manifest=manifest,
+        )
+
+
+def _compile_session_plan(
+    project: ProjectFile,
+    *,
+    refresh_hz: float,
+    project_root: Path | None = None,
+    random_seed: int | None = None,
+    session_id: str | None = None,
+    condition_ids: list[str] | None = None,
+    manifest: StimulusManifest | None = None,
 ) -> SessionPlan:
     """Compile repeated conditions with blockwise or session-wide seeded randomization."""
 
@@ -428,6 +460,7 @@ def compile_session_plan(
             catches = [condition for condition in pool if condition.masking_catch]
             ordered: list[tuple[Condition, bool, Condition | None]] = []
             for _ in range(repetition_count):
+                check_compilation_cancelled(_)
                 triplet = list(ordinary)
                 session_rng.shuffle(triplet)
                 ordered.extend((condition, False, None) for condition in triplet)
@@ -462,6 +495,7 @@ def compile_session_plan(
     )
     occurrences: dict[str, int] = {}
     for block_index in range(compiled_block_count):
+        check_compilation_cancelled()
         if masking_groups:
             block_trials = group_conditions[block_index]
         else:
@@ -473,6 +507,7 @@ def compile_session_plan(
 
         entries: list[SessionEntry] = []
         for index_within_block, trial in enumerate(block_trials):
+            check_compilation_cancelled()
             condition, is_catch_trial, masking_source = trial
             masking = condition_masking(project, condition)
             occurrence_index = occurrences.get(condition.condition_id, 0)

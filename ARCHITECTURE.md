@@ -160,12 +160,16 @@ the public contract is in [Bug reporting](docs/BUG_REPORTING.md).
   domain logic. `compiler_inputs.py` and `compiler_tasks.py` prepare shared inputs only
   for one compilation invocation; compiled run/task outputs stay independent.
   `serialization.py` owns atomic UTF-8 persistence; bundle hashes describe the exact
-  streamed archive bytes. See `docs/SESSION_PLAN.md` and `docs/GUI_WORKFLOW.md`.
+  streamed archive bytes. `project_bundle.py` enforces Library inventories and bounded
+  JSON reads; `compiler_limits.py` bounds bundle compilation before schedule allocation.
+  See `docs/SESSION_PLAN.md`, `docs/GUI_WORKFLOW.md`, and the validation contract in
+  `docs/EXPERIMENT_LIBRARY.md`.
   `task_models.numeric_step_aligned` supplies the shared numeric-response step check
   used by runtime acceptance and the engine's task input validation.
 - `src/fpvs_studio/preprocessing/`: image intake, inspection, normalization, derived
   variants, and manifest provenance; independent of GUI, runtime, and PsychoPy.
   Fresh source pools are staged and validated before document adoption.
+  `inspection.py` verifies bundle image formats and bounded decoding without rewriting pixels.
 - `src/fpvs_studio/tools/`: reserved for Studio-native utilities. Current Image Resizer
   UI remains under the GUI package and delegates to preprocessing.
 - `src/fpvs_studio/runtime/`: launch settings, preflight, session orchestration,

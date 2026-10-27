@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import random
 
-from fpvs_studio.core.compiler_support import CompileError
+from fpvs_studio.core.compiler_support import CompileError, check_compilation_cancelled
 from fpvs_studio.core.models import FixationTaskSettings
 from fpvs_studio.core.run_spec import FixationEvent
 
@@ -70,6 +70,7 @@ def build_fixation_events(
     jitter_radius = min(slack_per_interval / 2, anchor_step * 0.25)
     fixation_events: list[FixationEvent] = []
     for event_index in range(total_event_count):
+        check_compilation_cancelled(event_index)
         anchor = first_start_frame + (event_index * anchor_step)
         earliest_start = (
             first_start_frame

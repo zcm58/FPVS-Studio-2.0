@@ -359,6 +359,8 @@ def main() -> int:
                     "powershell.exe",
                     "-NoProfile",
                     "-NonInteractive",
+                    "-ExecutionPolicy",
+                    "Bypass",
                     "-File",
                     str(junction_script),
                     "-LinkPath",

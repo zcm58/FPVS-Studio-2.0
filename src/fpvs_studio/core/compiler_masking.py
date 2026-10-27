@@ -5,7 +5,12 @@ from __future__ import annotations
 import random
 from pathlib import Path
 
-from fpvs_studio.core.compiler_support import CompileError, make_run_id
+from fpvs_studio.core.compiler_support import (
+    CompileError,
+    check_compilation_cancelled,
+    consume_compilation_work,
+    make_run_id,
+)
 from fpvs_studio.core.enums import DutyCycleMode, StimulusModality
 from fpvs_studio.core.masking import (
     MaskingEventTriggers,
@@ -87,6 +92,7 @@ def compile_masking_run(
     if is_catch_trial and settings.catch_trial is None and not condition.masking_catch:
         raise CompileError("A catch run requires enabled masking catch trial settings.")
     visuals = masking_visuals(settings)
+    consume_compilation_work(len(visuals))
     for visual in visuals:
         if visual.image_path is not None:
             if project_root is None:
@@ -102,10 +108,13 @@ def compile_masking_run(
     total_slots = cycles * protocol.oddball_every_n
     previous = previous_base_id
     for index in range(total_slots):
+        check_compilation_cancelled(index)
         is_target = (index + 1) % protocol.oddball_every_n == 0
         pool = (
             settings.mask_visuals if is_target and settings.mask_visuals else settings.base_visuals
         )
+        if len(pool) > 1:
+            consume_compilation_work(len(pool))
         choices = [item for item in pool if item.visual_id != previous] if len(pool) > 1 else pool
         selected = rng.choice(choices)
         previous = selected.visual_id

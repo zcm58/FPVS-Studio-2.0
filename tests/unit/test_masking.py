@@ -7,6 +7,7 @@ import pytest
 from PIL import Image
 
 from fpvs_studio.core.compiler import CompileError, compile_run_spec, compile_session_plan
+from fpvs_studio.core.compiler_limits import CompilationLimits, validate_compilation_workload
 from fpvs_studio.core.compiler_masking import compile_masking_run
 from fpvs_studio.core.condition_modifiers import assign_modifier
 from fpvs_studio.core.enums import PresentationUnit, ProjectSchemaVersion
@@ -349,6 +350,103 @@ def catch_project():
             )]
             settings.target_answers = {"angry": "angry"}
     return project
+
+
+def test_bundle_workload_counts_automatic_catches_and_preserves_masking(tmp_path):
+    project = catch_project()
+    with pytest.raises(CompileError, match="session entries limit"):
+        validate_compilation_workload(
+            project, project.conditions, refresh_hz=60,
+            limits=CompilationLimits(max_session_entries=29),
+        )
+    ordinary = compile_session_plan(project, project_root=tmp_path, refresh_hz=60, random_seed=42)
+    bounded = compile_session_plan(
+        project, project_root=tmp_path, refresh_hz=60, random_seed=42,
+        limits=CompilationLimits(),
+    )
+    assert bounded.model_dump() == ordinary.model_dump()
+    assert bounded.total_runs == 30
+
+
+def test_bundle_workload_counts_explicit_catch_once_per_group(tmp_path):
+    from fpvs_studio.core.masking import add_masking_catch_condition
+
+    project = masking_project(("number",))
+    project, _ = add_masking_catch_condition(project, project.conditions[0].condition_id)
+    expected = 3 * project.settings.session.block_count + 1
+    with pytest.raises(CompileError, match="session entries limit"):
+        validate_compilation_workload(
+            project, project.conditions, refresh_hz=60,
+            limits=CompilationLimits(max_session_entries=expected - 1),
+        )
+    assert compile_session_plan(
+        project, project_root=tmp_path, refresh_hz=60,
+        limits=CompilationLimits(max_session_entries=expected),
+    ).total_runs == expected
+    project.settings.session.block_count = 1_000_000_000
+    catch = next(item for item in project.conditions if item.masking_catch)
+    with pytest.raises(CompileError, match="session repetitions limit"):
+        validate_compilation_workload(
+            project, [catch], refresh_hz=60, limits=CompilationLimits(),
+        )
+
+
+def test_bundle_workload_counts_masking_decorations_before_scene_allocation():
+    project = masking_project(("number",))
+    project.conditions[0].oddball_cycle_repeats_per_sequence = 100
+    settings = condition_masking(project, project.conditions[0])
+    assert settings is not None
+    # 500 stream slots and 100 targets fit 1,000 events; two decorations per slot do not.
+    settings.base_overlays *= 2
+    assert len(settings.base_overlays) == 2
+    with pytest.raises(CompileError, match="events per run limit"):
+        validate_compilation_workload(
+            project, project.conditions, refresh_hz=60,
+            limits=CompilationLimits(max_events_per_run=1_000),
+        )
+
+
+def test_bundle_workload_bounds_masking_candidate_scans_before_compilation():
+    project = masking_project(("number",))
+    project.conditions[0].oddball_cycle_repeats_per_sequence = 10_000
+    settings = condition_masking(project, project.conditions[0])
+    assert settings is not None
+    settings.base_overlays = []
+    settings.base_visuals = [
+        settings.base_visuals[0].model_copy(update={"visual_id": f"base-{index}"})
+        for index in range(5_000)
+    ]
+    # Emitted scene events fit their budget, but 50,000 slots scanning 5,000
+    # candidates each must fail without entering the masking compiler.
+    with pytest.raises(CompileError, match="schedule work limit"):
+        validate_compilation_workload(
+            project, project.conditions, refresh_hz=60, limits=CompilationLimits(),
+        )
+
+
+def test_bundle_compilation_can_cancel_during_masking_slots(tmp_path, monkeypatch):
+    import fpvs_studio.core.compiler_masking as masking_compiler
+
+    project = masking_project(("number",))
+    emitted = 0
+    original = masking_compiler.SceneEvent
+
+    def record_event(*args, **kwargs):
+        nonlocal emitted
+        emitted += 1
+        return original(*args, **kwargs)
+
+    def cancel():
+        if emitted >= 10:
+            raise InterruptedError("cancelled masking construction")
+
+    monkeypatch.setattr(masking_compiler, "SceneEvent", record_event)
+    with pytest.raises(InterruptedError, match="masking construction"):
+        compile_session_plan(
+            project, project_root=tmp_path, refresh_hz=60,
+            limits=CompilationLimits(), cancel_check=cancel,
+        )
+    assert 10 <= emitted < 1_000
 
 
 def test_catch_trials_keep_all_regular_soas_and_randomize_complete_blocks(tmp_path):
