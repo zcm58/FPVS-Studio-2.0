@@ -450,7 +450,8 @@ current compatible Python interpreter:
 
 Add `-List` to a scoped command to inspect its steps and use
 `./scripts/verify.ps1 -CheckConfig` after harness edits. GUI-focused local verification
-does not run Qt. Document a visible manual smoke path; run Qt locally only when the user
+does not run Qt; it includes isolated crash-coordinator failure and cancellation checks.
+Document a visible manual smoke path; run Qt locally only when the user
 approves a safe visible environment, and do not set `QT_QPA_PLATFORM=offscreen`.
 
 Non-Qt tiers support optional process workers and report slow test phases. See

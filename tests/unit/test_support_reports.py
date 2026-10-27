@@ -5,6 +5,9 @@ from __future__ import annotations
 import json
 import logging
 import os
+import stat
+from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -125,6 +128,172 @@ def test_redaction_preserves_trace_module_but_removes_common_private_values():
         "/home/alice",
     ):
         assert secret not in safe
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        ('{"token": "two private words", "mode": "lab"}',
+         '{"token": "<redacted>", "mode": "lab"}'),
+        ("{'secret': 'two private words', 'mode': 'lab'}",
+         "{'secret': '<redacted>', 'mode': 'lab'}"),
+        ('API_KEY = "private value"; mode=lab', 'API_KEY = "<redacted>"; mode=lab'),
+        ('password="two words', 'password="<redacted>"'),
+        ('password="two words\\', 'password="<redacted>"'),
+        ("password='two words", "password='<redacted>'"),
+        ('token=private-value; mode=lab', 'token=<redacted>; mode=lab'),
+        ('Authorization: Bearer abc+/._~-==', 'Authorization: Bearer <redacted>'),
+        ('{"authorization": "bEaReR abc+/._~-==", "mode": "lab"}',
+         '{"authorization": "Bearer <redacted>", "mode": "lab"}'),
+        ('tokenize=public; secret_count=2; mode=lab',
+         'tokenize=public; secret_count=2; mode=lab'),
+    ],
+)
+def test_redaction_covers_quoted_credentials_and_complete_bearer_tokens(source, expected):
+    assert redact(source) == expected
+    assert redact(expected) == expected
+
+
+def test_redaction_preserves_nested_json_around_escaped_secret_values():
+    source = json.dumps({
+        "configuration": {"token": 'private "quoted" value \\ suffix', "mode": "lab"},
+        "password": "private 'quoted' words", "status": "failed",
+    })
+    expected = {
+        "configuration": {"token": "<redacted>", "mode": "lab"},
+        "password": "<redacted>", "status": "failed",
+    }
+    result = redact(source)
+    assert json.loads(result) == expected
+    assert redact(result) == result
+
+
+class _RacedLog:
+    name = "session-" + "c" * 32 + ".log"
+
+    def __init__(self, error):
+        self.error = error
+
+    def is_file(self):
+        return True
+
+    def is_symlink(self):
+        return False
+
+    def stat(self):
+        raise self.error("Synthetic peer log race")
+
+    def lstat(self):
+        raise self.error("Synthetic peer log race")
+
+
+def _inject_raced_log(monkeypatch, folder, *, phase="startup", error=FileNotFoundError):
+    folder = storage.filesystem_path(folder)
+    original = Path.iterdir
+    raced = _RacedLog(error)
+    scans = []
+
+    def iterdir(path):
+        entries = list(original(path))
+        if path == folder:
+            scans.append(True)
+            if phase == "startup" or len(scans) > 1:
+                entries.append(raced)
+        return iter(entries)
+
+    monkeypatch.setattr(Path, "iterdir", iterdir)
+    return scans
+
+
+@pytest.mark.parametrize("phase", ["startup", "record"])
+def test_logging_continues_when_peer_log_disappears_during_scan(tmp_path, monkeypatch, phase):
+    monkeypatch.setattr(diagnostics, "_logging_notice", "")
+    folder = tmp_path / "logs"
+    folder.mkdir()
+    scans = _inject_raced_log(monkeypatch, folder, phase=phase)
+    session = DiagnosticLogging(tmp_path)
+    session.start()
+    try:
+        assert session.ready.wait(2)
+        session.logger.warning("First message survives a rotated peer log")
+        session.logger.warning("Subsequent message is also retained")
+    finally:
+        session.close()
+    assert len(scans) >= 3
+    text = (folder / f"session-{session.session_id}.log").read_text(encoding="utf-8")
+    assert "First message survives" in text
+    assert "Subsequent message" in text
+    assert diagnostics._logging_notice == ""
+
+
+def test_collection_keeps_healthy_logs_when_peer_disappears_during_scan(tmp_path, monkeypatch):
+    folder = tmp_path / "logs"
+    folder.mkdir()
+    (folder / ("session-" + "a" * 32 + ".log")).write_text("Healthy diagnostic", encoding="utf-8")
+    _inject_raced_log(monkeypatch, folder)
+    assert "Healthy diagnostic" in collect_diagnostics(tmp_path)
+
+
+def test_collection_keeps_healthy_logs_when_peer_disappears_before_open(tmp_path, monkeypatch):
+    folder = tmp_path / "logs"
+    folder.mkdir()
+    healthy = folder / ("session-" + "a" * 32 + ".log")
+    vanished = folder / ("session-" + "b" * 32 + ".log")
+    healthy.write_text("Healthy diagnostic", encoding="utf-8")
+    vanished.write_text("Vanished diagnostic", encoding="utf-8")
+    original = Path.open
+
+    def open_log(path, *args, **kwargs):
+        if path == storage.filesystem_path(vanished):
+            raise FileNotFoundError("Synthetic rotation after metadata snapshot")
+        return original(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", open_log)
+    result = collect_diagnostics(tmp_path)
+    assert "Healthy diagnostic" in result
+    assert "Vanished diagnostic" not in result
+
+
+def test_collection_keeps_permission_errors_visible(tmp_path, monkeypatch):
+    folder = tmp_path / "logs"
+    folder.mkdir()
+    _inject_raced_log(monkeypatch, folder, error=PermissionError)
+    with pytest.raises(PermissionError, match="Synthetic peer log race"):
+        collect_diagnostics(tmp_path)
+
+
+def test_logging_keeps_permission_errors_visible(tmp_path, monkeypatch):
+    monkeypatch.setattr(diagnostics, "_logging_notice", "")
+    folder = tmp_path / "logs"
+    folder.mkdir()
+    _inject_raced_log(monkeypatch, folder, error=PermissionError)
+    session = DiagnosticLogging(tmp_path)
+    session.start()
+    try:
+        assert session.ready.wait(2)
+    finally:
+        session.close()
+    assert diagnostics._logging_notice == (
+        "Persistent application logs are unavailable on this machine."
+    )
+
+
+def test_collection_excludes_reparse_logs_without_opening_them(tmp_path, monkeypatch):
+    folder = tmp_path / "logs"
+    folder.mkdir()
+    link = folder / ("session-" + "b" * 32 + ".log")
+    link.write_text("Never collect redirected content", encoding="utf-8")
+    original = Path.lstat
+
+    def lstat(path):
+        if path == storage.filesystem_path(link):
+            return SimpleNamespace(
+                st_mode=stat.S_IFREG, st_file_attributes=stat.FILE_ATTRIBUTE_REPARSE_POINT,
+            )
+        return original(path)
+
+    monkeypatch.setattr(Path, "lstat", lstat)
+    assert "Never collect" not in collect_diagnostics(tmp_path)
 
 
 def test_collection_reads_only_owned_regular_logs_and_caps_bytes(tmp_path):

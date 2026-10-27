@@ -4,10 +4,14 @@ from __future__ import annotations
 
 import json
 import os
+import stat
 import subprocess
 import sys
 import time
+from contextlib import contextmanager
+from pathlib import Path
 from threading import Event
+from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
@@ -89,6 +93,186 @@ def test_native_recovery_contains_only_source_locations(crash_store):
     data = event.model_dump_json()
     assert "private" not in data and "secret" not in data and "participant" not in data
     assert crash_store.recover()[0].receipt_token == event.receipt_token
+
+
+@pytest.mark.parametrize("operation", ["stat", "open", "read"])
+@pytest.mark.parametrize("failure", [PermissionError, FileNotFoundError])
+def test_unreadable_native_trace_defers_only_its_session_until_retry(
+    crash_store, monkeypatch, caplog, operation, failure,
+):
+    consent = enabled(crash_store)
+    healthy = session(crash_store, consent, created_epoch=time.time() - 10)
+    affected = session(crash_store, consent)
+    logs = crash_store.root / "logs"
+    logs.mkdir()
+    native = logs / f"session-{affected.session_id.hex}-native.log"
+    native.write_text(
+        "Qt fatal: participant=private-value token=private-secret\n"
+        '  File "C:/private/src/fpvs_studio/gui/workers.py", line 42 in run\n',
+        encoding="utf-8",
+    )
+    original_session = crash_store._session_path(affected).read_bytes()
+    original_trace = native.read_bytes()
+    requests = []
+
+    def received(method, url, data, headers):
+        requests.append(json.loads(data))
+        return json.dumps({
+            "report_id": requests[-1]["report"]["report_id"], "state": "received",
+        }).encode()
+
+    original_lstat = Path.lstat
+    original_open = Path.open
+
+    def fail():
+        raise failure("private error text token=private-secret")
+
+    def unreadable_lstat(path, *args, **kwargs):
+        if path.name == native.name:
+            fail()
+        return original_lstat(path, *args, **kwargs)
+
+    @contextmanager
+    def unreadable_stream(path, mode, *args, **kwargs):
+        with original_open(path, mode, *args, **kwargs) as stream:
+            yield SimpleNamespace(
+                fileno=stream.fileno, seek=stream.seek, read=lambda _limit: fail(),
+            )
+
+    def unreadable_open(path, mode="r", *args, **kwargs):
+        if path.name == native.name and mode == "rb":
+            if operation == "open":
+                fail()
+            return unreadable_stream(path, mode, *args, **kwargs)
+        return original_open(path, mode, *args, **kwargs)
+
+    with monkeypatch.context() as patch:
+        if operation == "stat":
+            patch.setattr(Path, "lstat", unreadable_lstat)
+        else:
+            patch.setattr(Path, "open", unreadable_open)
+        events = crash_store.recover()
+        assert [event.report.report_id for event in events] == [healthy.session_id]
+        assert not (crash_store.folder() / f"crash-{affected.session_id}.json").exists()
+        client = ReportClient(SERVICE_ORIGIN, transport=received)
+        assert crash_store.deliver(client, Event()) == 1
+        assert requests[0]["report"]["report_id"] == str(healthy.session_id)
+
+    assert crash_store._session_path(affected).read_bytes() == original_session
+    assert native.read_bytes() == original_trace
+    assert failure.__name__ in caplog.text
+    assert "private" not in caplog.text and str(native) not in caplog.text
+    events = crash_store.recover()
+    assert len(events) == 1
+    event = events[0]
+    assert event.report.report_id == affected.session_id
+    assert event.report.crash_type == "native_fault"
+    assert event.report.stack == [safe_frame("fpvs_studio/gui/workers.py", "run", 42)]
+    assert event.installation_id == consent.installation_id
+    assert "private" not in event.model_dump_json()
+    assert crash_store.recover()[0] == event  # Retry retains the report and receipt identity.
+    assert crash_store.deliver(client, Event()) == 1
+    assert requests[-1]["report"]["report_id"] == str(affected.session_id)
+    assert crash_store.recover() == []
+
+
+@pytest.mark.parametrize("change_stage", ["open", "read"])
+def test_changing_native_trace_is_retried_without_guessing_a_report_type(
+    crash_store, monkeypatch, change_stage,
+):
+    consent = enabled(crash_store)
+    affected = session(crash_store, consent)
+    logs = crash_store.root / "logs"
+    logs.mkdir()
+    native = logs / f"session-{affected.session_id.hex}-native.log"
+    native.write_text("Initial native trace\n", encoding="utf-8")
+    original_open = Path.open
+
+    def append_trace():
+        with original_open(native, "a", encoding="utf-8") as stream:
+            stream.write('  File "fpvs_studio/gui/workers.py", line 42 in run\n')
+
+    @contextmanager
+    def changing_stream(path, mode, *args, **kwargs):
+        with original_open(path, mode, *args, **kwargs) as stream:
+            if change_stage == "open":
+                append_trace()
+
+            def read(limit):
+                result = stream.read(limit)
+                if change_stage == "read":
+                    append_trace()
+                return result
+
+            yield SimpleNamespace(fileno=stream.fileno, seek=stream.seek, read=read)
+
+    def changing_open(path, mode="r", *args, **kwargs):
+        if path.name == native.name and mode == "rb":
+            return changing_stream(path, mode, *args, **kwargs)
+        return original_open(path, mode, *args, **kwargs)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(Path, "open", changing_open)
+        assert crash_store.recover() == []
+        assert crash_store.pending() == []
+    event = crash_store.recover()[0]
+    assert event.report.report_id == affected.session_id
+    assert event.report.crash_type == "native_fault"
+    assert event.report.stack == [safe_frame("fpvs_studio/gui/workers.py", "run", 42)]
+
+
+@pytest.mark.parametrize(
+    ("file_mode", "attributes"),
+    [
+        (stat.S_IFDIR, 0),
+        (stat.S_IFIFO, 0),
+        (stat.S_IFCHR, 0),
+        (stat.S_IFLNK, 0),
+        (stat.S_IFREG, 0x400),
+    ],
+)
+def test_redirected_or_nonregular_native_trace_is_never_opened(
+    crash_store, monkeypatch, file_mode, attributes,
+):
+    consent = enabled(crash_store)
+    affected = session(crash_store, consent)
+    logs = crash_store.root / "logs"
+    logs.mkdir()
+    native = logs / f"session-{affected.session_id.hex}-native.log"
+    native.write_text("Preserve source evidence", encoding="utf-8")
+    original_lstat, original_open = Path.lstat, Path.open
+
+    def special_lstat(path, *args, **kwargs):
+        if path.name == native.name:
+            return SimpleNamespace(st_mode=file_mode, st_file_attributes=attributes)
+        return original_lstat(path, *args, **kwargs)
+
+    def safe_open(path, *args, **kwargs):
+        if path.name == native.name:
+            pytest.fail("Recovery opened a redirected or nonregular trace")
+        return original_open(path, *args, **kwargs)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(Path, "lstat", special_lstat)
+        patch.setattr(Path, "open", safe_open)
+        assert crash_store.recover() == []
+        assert crash_store.pending() == []
+    assert native.read_text(encoding="utf-8") == "Preserve source evidence"
+    assert crash_store._session_path(affected).exists()
+
+
+def test_empty_native_trace_preserves_python_failure_classification(crash_store):
+    consent = enabled(crash_store)
+    affected = session(
+        crash_store, consent, state="failed",
+        stack=[safe_frame("fpvs_studio/app/main.py", "main", 17)],
+    )
+    logs = crash_store.root / "logs"
+    logs.mkdir()
+    (logs / f"session-{affected.session_id.hex}-native.log").touch()
+    event = crash_store.recover()[0]
+    assert event.report.crash_type == "python_exception"
+    assert event.report.stack == affected.stack
 
 
 def test_live_and_clean_sessions_are_never_crashes(crash_store, monkeypatch):

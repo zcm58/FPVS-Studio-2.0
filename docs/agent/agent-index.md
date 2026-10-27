@@ -273,6 +273,8 @@ the active plan records the explicit service approval and pending activation gat
 Read `docs/BUG_REPORTING.md` and the active automatic-crash plan before changing
 consent, recovery or HTTP. Use `tests/unit/test_automatic_crash_reporting.py`,
 registered `tests/gui/test_crash_reporting.py`, GUI focused and repo precommit.
+The GUI focused route also exercises safe failure logging and canceled/stale
+completions without Qt in `tests/unit/test_crash_reporting_gui_jobs.py`.
 The separate `../FPVS-Studio-Feedback` service owns grants and email delivery;
 run its synthetic `pnpm test` and Wrangler deployment dry-run separately.
 

@@ -12,7 +12,7 @@ from PySide6.QtCore import QObject, QTimer, Signal, Slot
 from PySide6.QtWidgets import QApplication
 
 from fpvs_studio.gui.update_lifecycle import UpdateJob, UpdateTaskResult, update_lifecycle
-from fpvs_studio.support.client import ReportClient, ReportServiceError
+from fpvs_studio.support.client import ReportCancelled, ReportClient, ReportServiceError
 from fpvs_studio.support.crash_reporting import CrashConsent, CrashStore
 from fpvs_studio.support.storage import support_directory
 
@@ -187,7 +187,16 @@ class CrashReportController(QObject):
             self._upload()
             return
         if result.error is not None or result.cancelled:
-            _LOGGER.warning("Automatic crash-report operation failed (%s)", stage)
+            if result.cancelled or isinstance(result.error, ReportCancelled):
+                _LOGGER.info("Automatic crash-report operation canceled (operation=%s)", stage)
+            else:
+                # Keep local failures diagnosable without logging messages, bodies or capabilities.
+                _LOGGER.warning(
+                    "Automatic crash-report operation failed "
+                    "(operation=%s error_type=%s http_status=%s)",
+                    stage, type(result.error).__name__,
+                    result.error.status if isinstance(result.error, ReportServiceError) else None,
+                )
             if stage == "load":
                 self._preference_failed()
                 return

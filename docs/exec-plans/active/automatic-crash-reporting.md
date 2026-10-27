@@ -183,3 +183,24 @@ session snapshot until actual shutdown. Synthetic support and visible GUI checks
 blocked delivery, rapid toggles, shutdown persistence and later crash recovery.
 The canonical contract remains in [Bug reporting](../../BUG_REPORTING.md); authenticated
 live crash-service activation remains a separate rollout item.
+
+## October 27 diagnostic reliability follow-up
+
+The approved scope contains four narrow fixes: tolerate disappearing owned logs
+during rotation and collection; defer only the session whose native trace cannot be
+read safely; retain safe error-class/HTTP-status details in local reporting warnings;
+and redact quoted credentials and complete bearer tokens. Consent, automatic payloads,
+retry identity, storage budgets and presentation behavior retain their current contracts.
+
+The implementation uses synthetic local files and fake HTTP. Regression checks cover
+concurrent disappearance, access errors, healthy-session recovery and later retry,
+diagnostic privacy, and quoted/escaped credential values.
+
+Verification passed: 115 support/coordinator unit cases with one Windows symlink
+permission skip, GUI focused (95), docs focused (10), and all 14 verification scopes.
+The four-worker precommit gate passed Ruff, compilation, mypy over 245 source files,
+repository audits and 3,747 non-Qt tests, with 12 Windows symlink-permission skips in
+437.00 seconds. Registered GUI coverage adds reporting-status and cancellation cases;
+Qt execution, live reporting, physical hardware and service activation were not run.
+The existing Settings > Diagnostics manual smoke path remains applicable. This work
+does not establish a cause for the earlier unreproduced launch-screen hang.

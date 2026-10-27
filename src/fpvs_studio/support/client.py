@@ -80,13 +80,15 @@ def http_transport(method: str, url: str, data: bytes | None, headers: dict[str,
         status = error.code
         error.close()
         if status == 429:
-            raise ReportServiceError("The reporting service is busy. Try again later.") from None
+            raise ReportServiceError(
+                "The reporting service is busy. Try again later.", status=status,
+            ) from None
         if status in (401, 403, 410):
             raise ReportServiceError(
                 "Verification or receipt access expired. Keep your saved report.", status=status,
             ) from None
         raise ReportServiceError(
-            f"The reporting service could not complete the request ({status})."
+            f"The reporting service could not complete the request ({status}).", status=status,
         ) from None
     except (URLError, TimeoutError, OSError, HTTPException):
         raise ReportServiceError(

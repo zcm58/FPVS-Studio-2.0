@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import ctypes
+import logging
 import os
 import re
 import secrets
+import stat
 import sys
 import time
 from pathlib import Path
@@ -24,6 +26,7 @@ MAX_CRASH_BYTES = 32 * 1024
 _SESSION_NAME = re.compile(r"session-([0-9a-f]{32})\.json\Z")
 _EVENT_NAME = re.compile(r"crash-[a-f0-9-]{36}\.json\Z")
 _NATIVE_FRAME = re.compile(r'File "([^"\r\n]+)", line (\d+) in ([^\r\n]+)')
+_LOGGER = logging.getLogger(__name__)
 
 
 class StackFrame(BaseModel):
@@ -310,13 +313,39 @@ class CrashStore:
             native = (
                 owned_folder(self.root, "logs") / f"session-{session.session_id.hex}-native.log"
             )
-            if native.exists() and native.stat().st_size:
+            try:
+                # Absence is normal when native capture was unavailable. Disappearance
+                # after that check is an I/O failure and must defer this session.
+                native_info = native.lstat() if native.exists() else None
+                if native_info is not None:
+                    if (
+                        not stat.S_ISREG(native_info.st_mode)
+                        or getattr(native_info, "st_file_attributes", 0) & 0x400
+                    ):
+                        continue
+                    with native.open("rb") as stream:
+                        opened_info = os.fstat(stream.fileno())
+                        if (
+                            not os.path.samestat(native_info, opened_info)
+                            or native_info.st_size != opened_info.st_size
+                            or native_info.st_mtime_ns != opened_info.st_mtime_ns
+                        ):
+                            raise OSError("The native crash trace changed during recovery.")
+                        stream.seek(max(0, opened_info.st_size - 64 * 1024))
+                        data = stream.read(64 * 1024).decode("utf-8", errors="replace")
+                        final_info = os.fstat(stream.fileno())
+                        if (
+                            opened_info.st_size != final_info.st_size
+                            or opened_info.st_mtime_ns != final_info.st_mtime_ns
+                        ):
+                            raise OSError("The native crash trace changed during recovery.")
+            except OSError as error:
+                # Keep the source evidence for retry; one inaccessible trace must not
+                # stop other sessions or create an immutable report with a guessed type.
+                _LOGGER.warning("Native crash trace recovery deferred (%s)", type(error).__name__)
+                continue
+            if native_info is not None and native_info.st_size:
                 # Capture only stack locations. Never include raw native messages or logs.
-                if native.is_symlink() or getattr(native.lstat(), "st_file_attributes", 0) & 0x400:
-                    continue
-                with native.open("rb") as stream:
-                    stream.seek(max(0, native.stat().st_size - 64 * 1024))
-                    data = stream.read(64 * 1024).decode("utf-8", errors="replace")
                 stack = [
                     safe_frame(name, function, int(line))
                     for name, line, function in _NATIVE_FRAME.findall(data)

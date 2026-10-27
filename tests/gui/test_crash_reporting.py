@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from threading import Event
 
 import pytest
@@ -14,7 +15,12 @@ from tests.gui.helpers import assert_visible_children_within_parent
 from fpvs_studio.gui import crash_report_controller as module
 from fpvs_studio.gui.settings_dialog import AppSettingsDialog
 from fpvs_studio.gui.update_lifecycle import UpdateTaskResult
-from fpvs_studio.support.client import SERVICE_ORIGIN, ReportClient, ReportServiceError
+from fpvs_studio.support.client import (
+    SERVICE_ORIGIN,
+    ReportCancelled,
+    ReportClient,
+    ReportServiceError,
+)
 from fpvs_studio.support.crash_reporting import CrashConsent, CrashSession, CrashStore
 
 
@@ -205,6 +211,48 @@ def test_lost_registration_response_keeps_default_on_and_retries_same_identity(
     lifecycle.jobs[-1][0].complete()
     assert calls[0] == calls[1]
     assert value.store().consent().registered and "On." in value.status
+    value.deleteLater()
+
+
+@pytest.mark.parametrize("status", [401, 429, 503])
+def test_registration_failure_logs_safe_details_and_keeps_reporting_enabled(
+    tmp_path, monkeypatch, caplog, status,
+):
+    def unavailable(*args):
+        raise ReportServiceError("private-response-body synthetic-secret-token", status=status)
+
+    value, lifecycle = controller(tmp_path, monkeypatch, unavailable)
+    value.start()
+    lifecycle.jobs[-1][0].complete()
+    with caplog.at_level(logging.WARNING, logger=module.__name__):
+        lifecycle.jobs[-1][0].complete()
+    assert value.enabled and value.store().consent().enabled
+    assert not value.busy and value._retry.isActive()
+    assert "Delivery is unavailable" in value.status
+    assert "operation=sync" in caplog.text
+    assert "error_type=ReportServiceError" in caplog.text
+    assert f"http_status={status}" in caplog.text
+    assert "private-response-body" not in caplog.text
+    assert "synthetic-secret-token" not in caplog.text
+    value.deleteLater()
+
+
+def test_expected_registration_cancellation_is_not_logged_as_failure(
+    tmp_path, monkeypatch, caplog,
+):
+    def cancelled(*args):
+        raise ReportCancelled("private cancellation message")
+
+    value, lifecycle = controller(tmp_path, monkeypatch, cancelled)
+    value.start()
+    lifecycle.jobs[-1][0].complete()
+    with caplog.at_level(logging.INFO, logger=module.__name__):
+        lifecycle.jobs[-1][0].complete()
+    assert value.enabled and "Delivery is unavailable" in value.status
+    assert value._retry.isActive()
+    assert "canceled (operation=sync)" in caplog.text
+    assert not any(record.levelno >= logging.WARNING for record in caplog.records)
+    assert "private cancellation message" not in caplog.text
     value.deleteLater()
 
 

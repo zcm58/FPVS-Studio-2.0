@@ -56,6 +56,9 @@ Python failures and native trace evidence
 have separate categories; without native evidence the report says **unclean shutdown**,
 which can also mean forced termination or power loss. Healthy active processes and
 clean exits are excluded. This is best-effort recovery, not a guaranteed minidump.
+An unreadable or changing native trace defers only its session for a later recovery
+pass; other eligible sessions can still be recovered. Deferred evidence is preserved
+without guessing a failure category.
 
 Automatic payloads contain Studio/OS versions, timestamp, failure category and at
 most 40 sanitized stack locations. Only package-relative Studio source paths,
@@ -80,6 +83,8 @@ registering a fresh generation after re-enabling. Network failure does not turn 
 enabled preference off, and remote revocation never resets a saved opt-out to on.
 Already sent/in-flight reports cannot be recalled. Network work is cancellable and
 application-owned; only local opt-out persistence may finish during shutdown.
+Local delivery warnings include the operation, error class and available HTTP status,
+without exception messages, credentials or response bodies.
 
 Exhausting the log budget or losing the log sink leaves the running session snapshot
 active until Studio actually closes. A later unexpected exit can still recover as
@@ -192,6 +197,8 @@ Recent logs are not deleted to make room for another process. Logging stops with
 a collection notice at the 10 MiB budget; simultaneous processes may exceed that
 threshold briefly by a bounded record per writer. The queue holds 256 records;
 overload drops logs with a notice instead of blocking presentation.
+Files disappearing during concurrent log rotation or pruning are skipped without
+stopping the logging thread or collection. Other storage failures remain visible.
 Native capture stops after reaching 1 MiB; an in-flight traceback may exceed that
 threshold, bounded by Python's limits of 100 threads/100 frames and 500 characters per
 string. Native files share the existing retention and overall budget. Only fatal Qt
@@ -208,6 +215,8 @@ are not encrypted separately. Do not include research records in reports.
 Collection reads only app-owned support logs, up to 96 KiB. Common path prefixes,
 emails, participant tags, and credentials are redacted best-effort. Users review
 the final text because redaction cannot guarantee removal of every sensitive value.
+Credential redaction covers quoted keys and values, including JSON and passwords
+containing spaces, as well as complete bearer tokens.
 No project models, stimuli, participant CSVs, or arbitrary attachments are collected.
 
 ## Production activation

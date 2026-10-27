@@ -10,6 +10,7 @@ import os
 import platform
 import queue
 import re
+import stat
 import sys
 import threading
 import time
@@ -24,6 +25,16 @@ from fpvs_studio.support.models import MAX_LOG_BYTES
 from fpvs_studio.support.storage import owned_folder, support_directory
 
 _LOG_NAME = re.compile(r"session-[0-9a-f]{32}(?:-native)?\.log(?:\.[12])?\Z")
+_CREDENTIAL = re.compile(
+    r"""(?P<label>(?<!\w)(?P<key_quote>["']?)(?:password|token|secret|api[_-]?key)
+    (?P=key_quote)\s*[:=]\s*)
+    (?P<value>
+        "(?:\\[^\r\n]|[^"\\\r\n])*(?:"|\\?(?=\r?$))
+        | '(?:\\[^\r\n]|[^'\\\r\n])*(?:'|\\?(?=\r?$))
+        | [^\s,;}\]"']+
+    )""",
+    re.IGNORECASE | re.MULTILINE | re.VERBOSE,
+)
 _logging_notice = ""
 _native_diagnostic_fd: int | None = None
 
@@ -54,12 +65,14 @@ def bounded_text(text: str, limit: int = MAX_LOG_BYTES) -> str:
 def redact(text: str) -> str:
     """Remove common paths, participant tags, emails and credentials; review is still required."""
     text = text.replace(str(Path.home()), "<user-home>")
-    text = re.sub(r"(?i)\b(?:bearer\s+)[\w.\-]+", "Bearer <redacted>", text)
-    text = re.sub(
-        r"(?i)(\b(?:password|token|secret|api[_-]?key)\b\s*[:=]\s*)[^\s,;]+",
-        r"\1<redacted>",
-        text,
-    )
+    text = re.sub(r"(?i)\bbearer\s+[A-Za-z0-9._~+/=\-]+", "Bearer <redacted>", text)
+
+    def credential(match: re.Match[str]) -> str:
+        value = match["value"]
+        quote = value[0] if value[0] in "\"'" else ""
+        return match["label"] + quote + "<redacted>" + quote
+
+    text = _CREDENTIAL.sub(credential, text)
     text = re.sub(r"[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}", "<email>", text)
     text = re.sub(
         r"(?i)(participant(?:[_ -]?(?:id|number))?\s*[:=]\s*)[^\s,;]+", r"\1<redacted>", text
@@ -73,33 +86,44 @@ def redact(text: str) -> str:
     return text
 
 
+def _log_files(folder: Path) -> list[tuple[Path, os.stat_result]]:
+    """Snapshot owned regular files, allowing peers to rotate or prune a log."""
+    files = []
+    for path in folder.iterdir():
+        if not _LOG_NAME.fullmatch(path.name):
+            continue
+        try:
+            metadata = path.lstat()
+        except FileNotFoundError:
+            continue
+        if stat.S_ISREG(metadata.st_mode) and not (
+            getattr(metadata, "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT
+        ):
+            files.append((path, metadata))
+    return files
+
+
 def collect_diagnostics(root: Path) -> str:
     """Read only known support logs; never enumerate a project or environment."""
     folder = owned_folder(root, "logs")
     chunks: list[str] = []
     budget = MAX_LOG_BYTES
     truncated = False
-    if folder.exists():
-        files = sorted(
-            (
-                p
-                for p in folder.iterdir()
-                if _LOG_NAME.fullmatch(p.name) and p.is_file() and not p.is_symlink()
-            ),
-            key=lambda p: p.stat().st_mtime,
-            reverse=True,
-        )
-        for path in files:
-            if budget <= 0:
-                truncated = True
-                break
+    files = sorted(_log_files(folder), key=lambda pair: pair[1].st_mtime, reverse=True)
+    for path, _metadata in files:
+        if budget <= 0:
+            truncated = True
+            break
+        try:
             with path.open("rb") as stream:
-                size = path.stat().st_size
+                size = os.fstat(stream.fileno()).st_size
                 truncated = truncated or size > budget
                 stream.seek(max(0, size - budget))
                 data = stream.read(budget)
-            chunks.insert(0, data.decode("utf-8", errors="replace"))
-            budget -= len(data)
+        except FileNotFoundError:
+            continue
+        chunks.insert(0, data.decode("utf-8", errors="replace"))
+        budget -= len(data)
     text = "\n".join(chunks)
     if truncated:
         text = "[Earlier log text omitted to fit the diagnostic limit.]\n" + text
@@ -211,17 +235,13 @@ class DiagnosticLogging:
                 except (OSError, ValueError):
                     _logging_notice = "Automatic crash capture could not access its local settings."
             folder = owned_folder(self.root, "logs")
-            files = [
-                p
-                for p in folder.iterdir()
-                if _LOG_NAME.fullmatch(p.name) and not p.is_symlink() and p.is_file()
-            ]
-            retained = sum(p.stat().st_size for p in files)
-            for path in sorted(files, key=lambda p: p.stat().st_mtime):
+            files = _log_files(folder)
+            retained = sum(metadata.st_size for _path, metadata in files)
+            for path, metadata in sorted(files, key=lambda pair: pair[1].st_mtime):
                 # Never remove a potentially active session's log.
-                age = time.time() - path.stat().st_mtime
+                age = time.time() - metadata.st_mtime
                 if age > 7 * 24 * 3600 or (retained > 7 * 1024 * 1024 and age > 24 * 3600):
-                    retained -= path.stat().st_size
+                    retained -= metadata.st_size
                     path.unlink(missing_ok=True)
             if retained > 7 * 1024 * 1024:
                 raise OSError("Recent support logs already occupy the local logging budget.")
@@ -248,11 +268,7 @@ class DiagnosticLogging:
                     record = self.records.get(timeout=0.1)
                 except queue.Empty:
                     continue
-                total = sum(
-                    p.stat().st_size
-                    for p in folder.iterdir()
-                    if _LOG_NAME.fullmatch(p.name) and p.is_file() and not p.is_symlink()
-                )
+                total = sum(metadata.st_size for _path, metadata in _log_files(folder))
                 if total + 20 * 1024 > 10 * 1024 * 1024:
                     _logging_notice = "Application logging paused at its local storage budget."
                     break

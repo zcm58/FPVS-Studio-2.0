@@ -7,6 +7,7 @@ import json
 from email.message import Message
 from io import BytesIO
 from threading import Event
+from urllib.error import HTTPError
 
 import pytest
 
@@ -36,6 +37,28 @@ def test_http_transport_identifies_application_without_changing_auth(monkeypatch
     monkeypatch.setattr("fpvs_studio.support.client.build_opener", lambda *_: Opener())
     headers = {"Authorization": "Bearer synthetic"}
     assert http_transport("GET", SERVICE_ORIGIN, None, headers) == b"{}"
+
+
+@pytest.mark.parametrize("status", [301, 400, 401, 403, 404, 410, 429, 500, 503])
+def test_http_failure_preserves_status_without_exposing_response(monkeypatch, status):
+    body = BytesIO(b"private-response-body synthetic-secret-token")
+    error = HTTPError(
+        SERVICE_ORIGIN + "/private-path", status,
+        "private-response-reason", Message(), body,
+    )
+
+    class Opener:
+        def open(self, request, timeout):
+            raise error
+
+    monkeypatch.setattr("fpvs_studio.support.client.build_opener", lambda *_: Opener())
+    with pytest.raises(ReportServiceError) as caught:
+        http_transport("GET", SERVICE_ORIGIN, None, {"Authorization": "Bearer private-token"})
+
+    assert caught.value.status == status
+    assert body.closed
+    assert "private" not in str(caught.value)
+    assert "synthetic-secret-token" not in str(caught.value)
 
 
 def intent():

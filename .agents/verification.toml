@@ -41,9 +41,10 @@ tests = [
   "tests/unit/test_bundle_open_setup.py",
   "tests/unit/test_gui_launch_lifecycle.py",
   "tests/unit/test_persistent_worker_routing.py",
+  "tests/unit/test_crash_reporting_gui_jobs.py",
 ]
 full_tests = ["tests/gui"]
-include = ["src/fpvs_studio/gui/**", "tests/gui/**", "tests/unit/test_bundle_open_setup.py", "tests/unit/test_gui_launch_lifecycle.py", "tests/unit/test_persistent_worker_routing.py", "tests/unit/test_default_recording_preferences.py"]
+include = ["src/fpvs_studio/gui/**", "tests/gui/**", "tests/unit/test_bundle_open_setup.py", "tests/unit/test_gui_launch_lifecycle.py", "tests/unit/test_persistent_worker_routing.py", "tests/unit/test_default_recording_preferences.py", "tests/unit/test_crash_reporting_gui_jobs.py"]
 manual_smoke = [
   "Launch FPVS Studio normally in a visible Windows session.",
   "Exercise the changed surface at its documented minimum/default size and check for clipping.",
