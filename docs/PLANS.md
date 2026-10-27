@@ -39,6 +39,10 @@ Recent completion: [Computer default EEG hardware](exec-plans/completed/default-
 (first-run hardware choice, computer defaults, project overrides/reset and captured
 completed-session export; source and visible GUI checks passed in 2.5.0).
 
+Recent completion: [One-time incomplete-session acknowledgement](exec-plans/completed/interruption-acknowledgement.md)
+(explicit project-local acknowledgement, quiet project reopening, retained manual
+history and unchanged incomplete-session evidence; source and visible Qt checks passed).
+
 Recent completion: [Branch feature consolidation and cleanup](exec-plans/completed/branch-consolidation-2026-10-26.md)
 (missing Library cleanup and bundle/compiler safeguards integrated; 11 local and two
 remote branches deleted after ancestry/equivalence checks and verified backup).

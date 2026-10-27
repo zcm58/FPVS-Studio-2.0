@@ -3,6 +3,10 @@
 from __future__ import annotations
 
 import json
+import shutil
+from dataclasses import replace
+from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
@@ -11,6 +15,7 @@ from tests.unit.runtime_launcher_helpers import StubEngine
 from fpvs_studio.core.compiler import compile_session_plan
 from fpvs_studio.core.enums import StimulusModality
 from fpvs_studio.core.execution import RunExecutionSummary
+from fpvs_studio.core.paths import filesystem_path
 from fpvs_studio.core.scene_models import SceneEvent, SceneStreamSpec, SceneVisual
 from fpvs_studio.core.serialization import read_json_file, write_json_file
 from fpvs_studio.core.session_plan import SessionPlan
@@ -20,6 +25,7 @@ from fpvs_studio.runtime import condition_recovery
 from fpvs_studio.runtime.acquisition_evidence import AcquisitionEvidenceRecorder
 from fpvs_studio.runtime.condition_recovery import (
     ConditionRecoveryRecorder,
+    acknowledge_condition_recovery,
     build_recovery_session_plan,
     build_replacement_session_plan,
     query_condition_recovery,
@@ -49,6 +55,7 @@ def _record(root, plan):
 
 
 def _files(root):
+    root = filesystem_path(root)
     return {path.relative_to(root): path.read_bytes() for path in root.rglob("*") if path.is_file()}
 
 
@@ -602,3 +609,284 @@ def test_query_rejects_redirected_record(execution, tmp_path):
     assert not report.records
     assert report.warnings
     assert json.loads(outside.read_text())["state"] == "running"
+
+
+def _interrupted_record(root, plan):
+    recorder = _record(root, plan)
+    recorder.start_run(plan.ordered_entries()[0].run_id)
+    recorder.close()
+    return next(
+        record for record in query_condition_recovery(root).records
+        if record.execution_id == recorder.execution_id
+    )
+
+
+def _acknowledgement_file(root):
+    return next(
+        (filesystem_path(root) / "logs" / ".condition-recovery" / "acknowledgements").glob("*.json")
+    )
+
+
+def test_acknowledgement_persists_without_rewriting_incomplete_evidence(execution, tmp_path):
+    root, plan = execution
+    record = _interrupted_record(root, plan)
+    before = _files(root)
+    acknowledge_condition_recovery(root, (record,))
+    after = _files(root)
+    assert all(after[path] == payload for path, payload in before.items())
+    (new_path,) = after.keys() - before.keys()
+    assert new_path.parent == Path("logs/.condition-recovery/acknowledgements")
+    saved = json.loads(after[new_path])
+    assert saved["schema_version"] == "1"
+    assert saved["project_id"] == plan.project_id
+    assert saved["execution_id"] == record.execution_id
+    assert saved["run_id"] == record.run_id
+    assert saved["participant_number"] == record.participant_number
+    assert not query_condition_recovery(root, include_acknowledged=False).records
+    (reviewed,) = query_condition_recovery(root).records
+    assert reviewed.acknowledged_at is not None
+    assert reviewed.status == record.status
+    assert not reviewed.playback_completed
+    assert build_recovery_session_plan(root, reviewed).total_runs == 1
+    assert build_recovery_session_plan(root, record).ordered_entries()[0].run_id == record.run_id
+    assert _files(root) == after  # Both query modes and manual review stay read-only.
+    copied = tmp_path / "copied-project"
+    shutil.copytree(filesystem_path(root), filesystem_path(copied))
+    assert not query_condition_recovery(copied, include_acknowledged=False).records
+    assert query_condition_recovery(copied).records[0].acknowledged_at == reviewed.acknowledged_at
+
+
+def test_acknowledgement_is_idempotent_and_does_not_need_original_plan(execution, monkeypatch):
+    root, plan = execution
+    record = _interrupted_record(root, plan)
+    acknowledge_condition_recovery(root, (record,))
+    before = _files(root)
+    acknowledge_condition_recovery(root, (record, record))
+    assert _files(root) == before
+    (root / "logs" / ".condition-recovery" / f"{record.execution_id}.plan.json").unlink()
+    with monkeypatch.context() as patch:
+        patch.setattr(
+            condition_recovery, "_original_plan", Mock(side_effect=AssertionError("No plan read")),
+        )
+        report = query_condition_recovery(root, include_acknowledged=False)
+    assert report.records == report.warnings == ()
+    (reviewed,) = query_condition_recovery(root).records
+    assert reviewed.acknowledged_at is not None
+    assert not reviewed.can_rerun
+
+
+def test_plan_removed_after_display_does_not_block_acknowledgement(execution):
+    root, plan = execution
+    record = _interrupted_record(root, plan)
+    assert record.can_rerun
+    (root / "logs" / ".condition-recovery" / f"{record.execution_id}.plan.json").unlink()
+    acknowledge_condition_recovery(root, (record,))
+    report = query_condition_recovery(root, include_acknowledged=False)
+    assert report.records == report.warnings == ()
+
+
+@pytest.mark.parametrize("session_known", [False, True])
+def test_acknowledgement_legacy_receipt_hides_its_missing_plan_notice(execution, session_known):
+    root, plan = execution
+    recorder = AcquisitionEvidenceRecorder(
+        root, [entry.run_spec for entry in plan.ordered_entries()],
+        project_id=plan.project_id, session_id=plan.session_id if session_known else None,
+        participant_number="0012", runtime_options={},
+    )
+    recorder.start_run(plan.ordered_entries()[0].run_id, 0)
+    (record,) = query_condition_recovery(root).records
+    assert record.status == "unverified"
+    assert query_condition_recovery(root).warnings
+    before = _files(root)
+    acknowledge_condition_recovery(root, (record,))
+    report = query_condition_recovery(root, include_acknowledged=False)
+    assert report.records == report.warnings == ()
+    assert query_condition_recovery(root).records[0].acknowledged_at is not None
+    assert all(_files(root)[path] == value for path, value in before.items())
+
+
+def test_new_execution_for_same_participant_remains_pending(execution):
+    root, plan = execution
+    first = _interrupted_record(root, plan)
+    acknowledge_condition_recovery(root, (first,))
+    second = _interrupted_record(root, plan)
+    assert second.execution_id != first.execution_id
+    (pending,) = query_condition_recovery(root, include_acknowledged=False).records
+    assert pending.execution_id == second.execution_id
+    assert pending.acknowledged_at is None
+
+
+def test_new_occurrence_and_snapshot_require_new_acknowledgement(execution):
+    root, plan = execution
+    recorder = _record(root, plan)
+    first, second = plan.ordered_entries()[:2]
+    recorder.start_run(first.run_id)
+    recorder.close()
+    (record,) = query_condition_recovery(root).records
+    acknowledge_condition_recovery(root, (record,))
+    path = root / record.evidence_path
+    payload = json.loads(path.read_text())
+    payload["current_run_id"] = second.run_id
+    payload["started_run_ids"].append(second.run_id)
+    path.write_text(json.dumps(payload))
+    (pending,) = query_condition_recovery(root, include_acknowledged=False).records
+    assert pending.run_id == second.run_id
+    acknowledge_condition_recovery(root, (pending,))
+    assert len(list(_acknowledgement_file(root).parent.glob("*.json"))) == 2
+    payload["stage"] = "playback"
+    payload["updated_at"] = "2099-01-01T00:00:00+00:00"
+    path.write_text(json.dumps(payload))
+    (new_snapshot,) = query_condition_recovery(root, include_acknowledged=False).records
+    assert new_snapshot.stage == "playback"
+    acknowledge_condition_recovery(root, (new_snapshot,))
+    assert not query_condition_recovery(root, include_acknowledged=False).records
+
+
+def test_acknowledgement_rejects_live_stale_and_foreign_records(execution, tmp_path):
+    root, plan = execution
+    recorder = _record(root, plan)
+    recorder.start_run(plan.ordered_entries()[0].run_id)
+    live = replace(
+        _interrupted_record(tmp_path / "other-project", plan),
+        execution_id=recorder.execution_id,
+    )
+    with pytest.raises(ValueError, match="changed"):
+        acknowledge_condition_recovery(root, (live,))
+    recorder.close()
+    (record,) = query_condition_recovery(root).records
+    for stale in (replace(record, stage="playback"), replace(record, evidence_path="../outside")):
+        with pytest.raises(ValueError, match="changed"):
+            acknowledge_condition_recovery(root, (stale,))
+    with pytest.raises(ValueError, match="changed"):
+        acknowledge_condition_recovery(tmp_path / "other-project", (record,))
+    assert not (root / "logs" / ".condition-recovery" / "acknowledgements").exists()
+
+
+def test_acknowledgement_validates_whole_batch_before_writing(execution):
+    root, plan = execution
+    first = _interrupted_record(root, plan)
+    second = _interrupted_record(root, plan)
+    before = _files(root)
+    with pytest.raises(ValueError, match="changed"):
+        acknowledge_condition_recovery(root, (first, replace(second, participant_number="9999")))
+    assert _files(root) == before
+
+
+def test_acknowledgement_write_failure_is_reported_and_retry_preserves_first_stamp(
+    execution, monkeypatch,
+):
+    root, plan = execution
+    records = (_interrupted_record(root, plan), _interrupted_record(root, plan))
+    original = condition_recovery.write_json_file
+    count = 0
+
+    def fail_second(path, model):
+        nonlocal count
+        count += 1
+        if count == 2:
+            raise PermissionError("Synthetic acknowledgement denial")
+        return original(path, model)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(condition_recovery, "write_json_file", fail_second)
+        with pytest.raises(PermissionError, match="denial"):
+            acknowledge_condition_recovery(root, records)
+    first = next(
+        record for record in query_condition_recovery(root).records
+        if record.execution_id == records[0].execution_id
+    )
+    assert first.acknowledged_at is not None
+    assert len(query_condition_recovery(root, include_acknowledged=False).records) == 1
+    acknowledge_condition_recovery(root, records)
+    assert not query_condition_recovery(root, include_acknowledged=False).records
+    assert next(
+        record for record in query_condition_recovery(root).records
+        if record.execution_id == first.execution_id
+    ).acknowledged_at == first.acknowledged_at
+
+
+@pytest.mark.parametrize(
+    "tamper", ["malformed", "oversized", "project_id", "run_id", "evidence_path"],
+)
+def test_invalid_acknowledgement_never_hides_evidence(execution, tamper):
+    root, plan = execution
+    record = _interrupted_record(root, plan)
+    acknowledge_condition_recovery(root, (record,))
+    path = _acknowledgement_file(root)
+    if tamper == "malformed":
+        path.write_text("{unfinished")
+    elif tamper == "oversized":
+        path.write_text(" " * (64 * 1024 + 1))
+    else:
+        payload = json.loads(path.read_text())
+        payload[tamper] = "unrelated"
+        path.write_text(json.dumps(payload))
+    before = _files(root)
+    report = query_condition_recovery(root, include_acknowledged=False)
+    assert report.records[0].execution_id == record.execution_id
+    assert report.records[0].acknowledged_at is None
+    assert any("acknowledgement" in warning for warning in report.warnings)
+    assert _files(root) == before
+    with pytest.raises(ValueError):
+        acknowledge_condition_recovery(root, (record,))
+    assert _files(root) == before
+
+
+def test_linked_acknowledgement_is_rejected_without_changing_its_target(execution):
+    root, plan = execution
+    record = _interrupted_record(root, plan)
+    acknowledge_condition_recovery(root, (record,))
+    path = _acknowledgement_file(root)
+    target = root / "saved-acknowledgement.json"
+    path.rename(target)
+    path.hardlink_to(target)
+    before = target.read_bytes()
+    report = query_condition_recovery(root, include_acknowledged=False)
+    assert report.records[0].acknowledged_at is None
+    assert any("acknowledgement" in warning for warning in report.warnings)
+    with pytest.raises(ValueError, match="regular file"):
+        acknowledge_condition_recovery(root, (record,))
+    assert target.read_bytes() == before
+
+
+def test_acknowledgement_does_not_hide_unrelated_corruption(execution):
+    root, plan = execution
+    record = _interrupted_record(root, plan)
+    acknowledge_condition_recovery(root, (record,))
+    bad = root / "logs" / ".condition-recovery" / "corrupted.json"
+    bad.write_text("{unfinished")
+    report = query_condition_recovery(root, include_acknowledged=False)
+    assert not report.records
+    assert report.warnings == ("Could not inspect recovery record corrupted.json.",)
+
+
+@pytest.mark.parametrize("tag, blocked", [(0x9000001A, False), (0xA0000003, True), (0, True)])
+def test_acknowledgement_accepts_cloud_placeholders_but_not_redirects(
+    execution, monkeypatch, tag, blocked,
+):
+    root, plan = execution
+    record = _interrupted_record(root, plan)
+    folder = root / "logs" / ".condition-recovery" / "acknowledgements"
+    folder.mkdir()
+    original = Path.lstat
+
+    def reparse_info(path):
+        info = original(path)
+        if path.name != "acknowledgements":
+            return info
+        return SimpleNamespace(
+            st_mode=info.st_mode, st_nlink=info.st_nlink,
+            st_file_attributes=getattr(info, "st_file_attributes", 0) | 0x400,
+            st_reparse_tag=tag,
+        )
+
+    monkeypatch.setattr(Path, "lstat", reparse_info)
+    if blocked:
+        with pytest.raises(ValueError, match="links"):
+            acknowledge_condition_recovery(root, (record,))
+        report = query_condition_recovery(root, include_acknowledged=False)
+        assert report.records[0].acknowledged_at is None
+        assert any("acknowledgement" in warning for warning in report.warnings)
+    else:
+        acknowledge_condition_recovery(root, (record,))
+        assert not query_condition_recovery(root, include_acknowledged=False).records

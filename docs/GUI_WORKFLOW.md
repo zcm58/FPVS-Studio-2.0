@@ -81,8 +81,22 @@ After opening a project, Studio checks local session evidence in a background wo
 An interrupted-session window identifies the participant, visit, run occurrence,
 condition and last recorded stage. Completed runs and not-started runs are listed
 separately. A completed stimulus presentation with an unfinished follow-up activity
-is explicitly distinguished from incomplete playback. **View > Interrupted Sessions**
-reopens the same read-only view; it works offline and independently of crash-report email.
+is explicitly distinguished from incomplete playback. **Acknowledge and Continue**
+records that the operator has reviewed the shown incomplete sessions, then closes the
+notice. With several pending sessions the action reads **Acknowledge All and Continue**.
+Acknowledged evidence stops appearing automatically when this project reopens.
+Closing with Close, Escape or the window X does not acknowledge anything.
+
+Acknowledgements are saved with the project's logs in an app-owned background job.
+While saving, actions and dismissal are disabled. A failed save keeps the dialog
+available for retry and reports the error. Original results remain incomplete;
+acknowledgement never resumes an experiment or marks missing conditions complete.
+New interrupted executions, run occurrences or updated evidence remain pending.
+
+**View > Interrupted Sessions** includes acknowledged history and its acknowledgement
+time, preserving manual review and rerun actions. It works offline and independently
+of crash-report email. An unavailable original plan for acknowledged evidence does
+not repeatedly reopen the automatic notice; real inspection errors remain visible.
 
 **Re-run This Condition** uses the original saved compiled occurrence, including its
 before/after activities, in a new participant visit. The original results remain
@@ -97,11 +111,13 @@ explicit confirmation. If the condition was removed, this action is disabled.
 The recovery dialog has a `640x440` minimum and `760x520` default size, with full
 condition names and paths in selectable, scrollable details and combo-box tooltips.
 Registered `tests/gui/test_condition_recovery_dialog.py` covers both sizes and themes,
-legacy confirmation, missing plans, completed playback, launch guards and background
-query behavior. Visible manual acceptance: open a synthetic interrupted project, verify
+legacy confirmation, missing plans, completed playback, launch guards, acknowledgement
+save/retry and background query behavior. Visible manual acceptance: open a synthetic interrupted project, verify
 run six is distinguished from five completed runs and two not-started runs, cancel
 participant collection, then retry one occurrence and verify a separate visit. Close
-and reopen the project and inspect View > Interrupted Sessions. No real EEG hardware
+and reopen the project after acknowledging: no automatic notice should appear. Inspect
+View > Interrupted Sessions to see the retained record, then create a new interruption
+and confirm it still prompts. No real EEG hardware
 or participant data is needed for this acceptance.
 
 ## Bug reporting

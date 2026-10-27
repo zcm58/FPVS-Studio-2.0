@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import errno
+import hashlib
 import logging
+import stat
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import BinaryIO, Literal, TypeVar
@@ -14,7 +16,11 @@ from uuid import uuid4
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from fpvs_studio.core.execution import AcquisitionEvidence
-from fpvs_studio.core.paths import resolve_project_relative_path, to_project_relative_posix
+from fpvs_studio.core.paths import (
+    filesystem_path,
+    resolve_project_relative_path,
+    to_project_relative_posix,
+)
 from fpvs_studio.core.serialization import write_json_file
 from fpvs_studio.core.session_plan import SessionBlock, SessionEntry, SessionPlan
 
@@ -57,12 +63,28 @@ class InterruptedCondition:
     can_rerun: bool
     evidence_path: str
     updated_at: datetime
+    acknowledged_at: datetime | None = None
 
 
 @dataclass(frozen=True)
 class ConditionRecoveryReport:
     records: tuple[InterruptedCondition, ...] = ()
     warnings: tuple[str, ...] = ()
+
+
+class _Acknowledgement(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    schema_version: Literal["1"] = "1"
+    project_id: str
+    execution_id: str
+    run_id: str
+    session_id: str | None = None
+    participant_number: str
+    participant_session_number: int | None = None
+    condition_id: str
+    evidence_path: str
+    evidence_updated_at: datetime
+    acknowledged_at: datetime
 
 
 class _Run(BaseModel):
@@ -286,10 +308,87 @@ def _original_plan(
     return None
 
 
-def query_condition_recovery(project_root: Path) -> ConditionRecoveryReport:
+def _acknowledgement_path(project_root: Path, record: InterruptedCondition) -> Path:
+    identity = hashlib.sha256(f"{record.execution_id}\0{record.run_id}".encode()).hexdigest()
+    relative = f"{_DIRECTORY}/acknowledgements/{identity}.json"
+    # Check the lexical path before the shared resolver follows existing links.
+    path = filesystem_path(project_root).resolve()
+    for component in relative.split("/"):
+        path /= component
+        try:
+            info = path.lstat()
+        except FileNotFoundError:
+            continue
+        reparse = getattr(info, "st_file_attributes", 0) & 0x400
+        tag = getattr(info, "st_reparse_tag", 0)
+        # Cloud placeholders may live in projects; name-surrogate tags redirect paths.
+        if stat.S_ISLNK(info.st_mode) or tag & 0x20000000 or (reparse and not tag):
+            raise ValueError(
+                "Interruption acknowledgements cannot use links or directory redirects."
+            )
+        if component == f"{identity}.json" and (
+            not stat.S_ISREG(info.st_mode) or info.st_nlink != 1
+        ):
+            raise ValueError("The interruption acknowledgement is not a private regular file.")
+    return resolve_project_relative_path(project_root, relative)
+
+
+def _acknowledgement(
+    record: InterruptedCondition, project_id: str, acknowledged_at: datetime,
+) -> _Acknowledgement:
+    return _Acknowledgement(
+        project_id=project_id,
+        execution_id=record.execution_id,
+        run_id=record.run_id,
+        session_id=record.session_id,
+        participant_number=record.participant_number,
+        participant_session_number=record.participant_session_number,
+        condition_id=record.condition_id,
+        evidence_path=record.evidence_path,
+        evidence_updated_at=record.updated_at,
+        acknowledged_at=acknowledged_at,
+    )
+
+
+def _acknowledged_at(
+    project_root: Path, record: InterruptedCondition, project_id: str,
+) -> datetime | None:
+    path = _acknowledgement_path(project_root, record)
+    if not path.exists():
+        return None
+    saved = _bounded_read(path, _Acknowledgement, limit=64 * 1024)
+    expected = _acknowledgement(record, project_id, saved.acknowledged_at)
+    identity_fields = {"acknowledged_at", "evidence_updated_at"}
+    if saved.model_dump(exclude=identity_fields) != expected.model_dump(exclude=identity_fields):
+        raise ValueError("The interruption acknowledgement does not match its evidence.")
+    return saved.acknowledged_at if saved.evidence_updated_at == record.updated_at else None
+
+
+def query_condition_recovery(
+    project_root: Path, *, include_acknowledged: bool = True,
+) -> ConditionRecoveryReport:
     """Inspect known project records without creating, rewriting or deleting any file."""
     records: list[InterruptedCondition] = []
     warnings: list[str] = []
+
+    def add_record(record: InterruptedCondition, source: _Checkpoint | AcquisitionEvidence) -> None:
+        try:
+            record = replace(
+                record, acknowledged_at=_acknowledged_at(project_root, record, source.project_id),
+            )
+        except (OSError, ValueError):
+            warnings.append(
+                "Could not inspect interruption acknowledgement for execution "
+                f"{record.execution_id}."
+            )
+        if include_acknowledged or record.acknowledged_at is None:
+            record = replace(record, can_rerun=_original_plan(project_root, source) is not None)
+            records.append(record)
+            if not record.can_rerun:
+                warnings.append(
+                    f"Original compiled plan unavailable for execution {record.execution_id}."
+                )
+
     known: set[str] = set()
     directory = resolve_project_relative_path(project_root, _DIRECTORY)
     candidates = sorted(directory.glob("*.json")) if directory.exists() else []
@@ -316,8 +415,7 @@ def query_condition_recovery(project_root: Path) -> ConditionRecoveryReport:
             not_started = tuple(
                 item.run_id for item in runs if item.run_id not in checkpoint.started_run_ids
             )
-            available = _original_plan(project_root, checkpoint) is not None
-            records.append(
+            add_record(
                 InterruptedCondition(
                     execution_id=checkpoint.execution_id,
                     participant_number=checkpoint.participant_number,
@@ -335,15 +433,11 @@ def query_condition_recovery(project_root: Path) -> ConditionRecoveryReport:
                     stage=checkpoint.stage,
                     playback_completed=run.run_id in completed,
                     status="interrupted",
-                    can_rerun=available,
+                    can_rerun=False,
                     evidence_path=to_project_relative_posix(project_root, path),
                     updated_at=checkpoint.updated_at,
-                )
+                ), checkpoint,
             )
-            if not available:
-                warnings.append(
-                    f"Original compiled plan unavailable for execution {checkpoint.execution_id}."
-                )
         except (OSError, ValueError):
             warnings.append(f"Could not inspect recovery record {candidate.name}.")
             known.add(candidate.stem)
@@ -380,8 +474,7 @@ def query_condition_recovery(project_root: Path) -> ConditionRecoveryReport:
             ]
             completed = tuple(run.run_id for run in evidence.runs if run.state == "completed")
             not_started = tuple(run.run_id for run in evidence.runs if run.state == "not_started")
-            available = _original_plan(project_root, evidence) is not None
-            records.append(
+            add_record(
                 InterruptedCondition(
                     execution_id=evidence.execution_id,
                     participant_number=evidence.participant_number,
@@ -399,19 +492,55 @@ def query_condition_recovery(project_root: Path) -> ConditionRecoveryReport:
                     stage="completion_unknown",
                     playback_completed=active.state == "completed",
                     status="unverified",
-                    can_rerun=available,
+                    can_rerun=False,
                     evidence_path=to_project_relative_posix(project_root, path),
                     updated_at=evidence.updated_at_utc,
-                )
+                ), evidence,
             )
-            if not available:
-                warnings.append(
-                    f"Original compiled plan unavailable for execution {evidence.execution_id}."
-                )
         except (OSError, ValueError):
             warnings.append(f"Could not inspect acquisition record {candidate.name}.")
     records.sort(key=lambda record: record.updated_at.timestamp(), reverse=True)
     return ConditionRecoveryReport(tuple(records), tuple(warnings))
+
+
+def acknowledge_condition_recovery(
+    project_root: Path, records: tuple[InterruptedCondition, ...],
+) -> None:
+    """Persist explicit acknowledgement without changing incomplete research evidence."""
+    if not records:
+        return
+    current = {
+        (record.execution_id, record.run_id): record
+        for record in query_condition_recovery(project_root).records
+    }
+    pending: dict[Path, _Acknowledgement] = {}
+    acknowledged_at = datetime.now(timezone.utc)
+    for record in records:
+        refreshed = current.get((record.execution_id, record.run_id))
+        if refreshed is None or replace(
+            refreshed, acknowledged_at=None, can_rerun=False,
+        ) != replace(
+            record, acknowledged_at=None, can_rerun=False,
+        ):
+            raise ValueError("The interruption evidence changed; refresh it before acknowledging.")
+        path = resolve_project_relative_path(project_root, refreshed.evidence_path)
+        source: _Checkpoint | AcquisitionEvidence
+        if refreshed.status == "interrupted":
+            source = _bounded_read(path, _Checkpoint, limit=1024 * 1024)
+            updated_at = source.updated_at
+        else:
+            source = _bounded_read(path, AcquisitionEvidence)
+            updated_at = source.updated_at_utc
+        if source.execution_id != refreshed.execution_id or updated_at != refreshed.updated_at:
+            raise ValueError("The interruption evidence changed; refresh it before acknowledging.")
+        if _acknowledged_at(project_root, refreshed, source.project_id) is None:
+            pending[_acknowledgement_path(project_root, refreshed)] = _acknowledgement(
+                refreshed, source.project_id, acknowledged_at,
+            )
+    # Validate the entire requested batch first. Atomic per-record writes are
+    # idempotent, so a surfaced I/O failure can be retried without losing history.
+    for path, acknowledgement in pending.items():
+        write_json_file(path, acknowledgement)
 
 
 def build_recovery_session_plan(
@@ -433,7 +562,7 @@ def build_recovery_session_plan(
         raise ValueError(
             "The original condition is unavailable or this execution is still running."
         )
-    if current != record:
+    if replace(current, acknowledged_at=None) != replace(record, acknowledged_at=None):
         raise ValueError("The recovery evidence changed; refresh it before rerunning.")
     if current.status == "unverified" and not allow_unverified:
         raise ValueError(

@@ -94,6 +94,10 @@ This phase should establish:
   Discovery is read-only, excludes live/completed/cancelled launches, and treats old acquisition receipts without
   lifetime evidence as unverified. Never recompile missing original plans or overwrite
   earlier participant visits; completed playback is distinct from later task completion.
+  Explicit acknowledgements are separate project-local audit records, never completion
+  markers. Suppress reviewed snapshots only in automatic notices; preserve manual
+  history, new interruption notices and original research evidence. Writes stay
+  outside discovery and run on a GUI-owned worker when requested by the operator.
 - commit numbered research rows idempotently before generating derived spreadsheets;
   preserve legacy rows, visit identity, and prior files if atomic replacement fails
 - `attentional_blink_report.py` checkpoints native burst targets and per-question

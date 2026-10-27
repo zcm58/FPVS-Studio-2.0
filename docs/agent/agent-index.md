@@ -108,6 +108,9 @@ For crashes between conditions and interrupted-run guidance, start with
 `engines/psychopy_graphics_lifetime.py`, `engines/psychopy_text_screens.py`,
 `runtime/condition_recovery.py` and `gui/condition_recovery_dialog.py`. Graphics
 cleanup remains engine-owned; occurrence checkpoints and retry plans remain runtime-owned.
+Project-local acknowledgements also belong to `runtime/condition_recovery.py`;
+automatic discovery excludes reviewed snapshots, while manual history retains them.
+The GUI saves acknowledgement through an app-owned worker, never on close alone.
 Use engine/runtime/gui focused routes and repo precommit. The local recovery workflow
 in [GUI workflow](../GUI_WORKFLOW.md#interrupted-conditions) works without email intake.
 
