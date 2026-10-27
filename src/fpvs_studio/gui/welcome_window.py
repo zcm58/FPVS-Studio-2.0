@@ -64,15 +64,6 @@ class WelcomeWindow(QWidget):
         self.headline_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         hero_layout.addWidget(self.headline_label)
 
-        self.body_label = QLabel(
-            "Create a project, import a project bundle, or open existing work.",
-            self.hero_container,
-        )
-        self.body_label.setObjectName("welcome_body_label")
-        self.body_label.setWordWrap(True)
-        self.body_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        hero_layout.addWidget(self.body_label)
-
         self.bundle_drop_hint_label = QLabel(
             "Tip: Drop a .fpvsbundle file anywhere on this window.",
             self.hero_container,

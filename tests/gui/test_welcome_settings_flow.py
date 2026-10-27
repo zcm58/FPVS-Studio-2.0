@@ -135,7 +135,7 @@ def test_welcome_window_copy_and_primary_hierarchy(controller: StudioController)
 
     assert brand is None
     assert headline is not None
-    assert body is not None
+    assert body is None
     assert create_button is not None
     assert import_project_button is not None
     assert open_button is None
@@ -143,7 +143,6 @@ def test_welcome_window_copy_and_primary_hierarchy(controller: StudioController)
     assert root_folder_button is not None
 
     assert headline.text() == "Welcome to FPVS Studio"
-    assert body.text() == "Create a project, import a project bundle, or open existing work."
     assert create_button.text() == "Create Project"
     assert import_project_button.text() == "Import New Project"
     assert open_projects_button.text() == "Open Existing Project"

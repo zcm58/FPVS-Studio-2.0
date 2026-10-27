@@ -2290,10 +2290,6 @@ def welcome_window_stylesheet(theme: StudioTheme | QPalette | None = None) -> st
         font-size: 44px;
         font-weight: 700;
     }}
-    QLabel#welcome_body_label {{
-        color: {theme.text_secondary};
-        font-size: 17px;
-    }}
     QLabel#welcome_bundle_drop_hint {{
         color: {theme.text_hint};
         font-size: {FONT_SIZE_BODY}px;
