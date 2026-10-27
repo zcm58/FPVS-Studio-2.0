@@ -8,6 +8,8 @@ from dataclasses import dataclass, replace
 from threading import Event
 from types import ModuleType
 
+from fpvs_studio.triggers.serial_port_access import check_serial_port_access
+
 _TRIGGERBOX_NAME = re.compile(
     r"^(?:Brain Products(?: GmbH)?[\s:-]+)?TriggerBox"
     r"(?:\s+(?:Plus|rev\.?\s*0?2))?"
@@ -88,37 +90,11 @@ def discover_triggerbox_ports(
 def _check_port_access(
     candidate: TriggerBoxPortCandidate, serial_module: ModuleType, cancel_event: Event | None,
 ) -> TriggerBoxPortCandidate:
-    _check_cancelled(cancel_event)
-    connection = None
-    error = ""
-    try:
-        # Keep construction closed so control-line preferences precede open(). The
-        # operating system/driver may still change those lines while opening.
-        connection = serial_module.Serial(
-            port=None, baudrate=2_000_000, bytesize=serial_module.EIGHTBITS,
-            parity=serial_module.PARITY_NONE, stopbits=serial_module.STOPBITS_ONE,
-            timeout=0, write_timeout=0, rtscts=False, dsrdtr=False, xonxoff=False,
-        )
-        connection.port = candidate.port
-        connection.rts = False
-        connection.dtr = False
-        _check_cancelled(cancel_event)
-        connection.open()
-        _check_cancelled(cancel_event)
-    except Exception as exc:
-        error = str(exc) or type(exc).__name__
-    finally:
-        if connection is not None:
-            try:
-                connection.close()
-            except Exception as exc:
-                close_error = str(exc) or type(exc).__name__
-                error = (
-                    f"{error} Closing the port also failed: {close_error}"
-                    if error else f"Unable to close the port: {close_error}"
-                )
-    _check_cancelled(cancel_event)
-    return replace(candidate, accessible=not error, access_error=error)
+    result = check_serial_port_access(
+        candidate.port, baudrate=2_000_000, serial_module=serial_module,
+        cancel_event=cancel_event,
+    )
+    return replace(candidate, accessible=result.accessible, access_error=result.access_error)
 
 
 def _check_cancelled(cancel_event: Event | None) -> None:

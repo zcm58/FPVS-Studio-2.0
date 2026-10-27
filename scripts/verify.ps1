@@ -2,6 +2,10 @@ param(
     [string]$Scope,
     [ValidateSet("focused", "precommit", "full")]
     [string]$Tier = "focused",
+    [ValidateRange(1, 2147483647)]
+    [int]$Workers = 1,
+    [ValidateRange(0, 2147483647)]
+    [int]$Durations = 20,
     [switch]$List,
     [switch]$CheckConfig
 )
@@ -12,6 +16,7 @@ $RepoRoot = Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot "script_helpers.ps1")
 $Python = Resolve-RepoPython -RepoRoot $RepoRoot
 $VerifyArgs = @(".agents\scripts\verify.py")
+$VerifyArgs += @("--workers", $Workers.ToString(), "--durations", $Durations.ToString())
 
 if ($CheckConfig -and ($List -or -not [string]::IsNullOrWhiteSpace($Scope))) {
     throw "-CheckConfig cannot be combined with -List or -Scope."

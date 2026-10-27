@@ -264,6 +264,8 @@ def test_queued_logging_writes_redacted_trace_and_restores_hooks(tmp_path):
 def test_queued_logging_preserves_records_with_malformed_unicode(tmp_path, monkeypatch):
     monkeypatch.setattr(diagnostics, "_logging_notice", "")
     session = DiagnosticLogging(tmp_path)
+    # Keep the deliberate surrogate in Studio's handler; xdist reports require UTF-8.
+    monkeypatch.setattr(session.logger, "propagate", False)
     session.start()
     try:
         logging.getLogger("fpvs_studio.test").warning("Synthetic filename: bad\ud800name")

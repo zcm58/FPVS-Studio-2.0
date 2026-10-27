@@ -215,6 +215,8 @@ def _pytest_command(
     tests: Sequence[str],
     *,
     allow_qt: bool,
+    workers: int = 1,
+    durations: int = 20,
 ) -> list[str]:
     command = [
         str(python),
@@ -226,6 +228,9 @@ def _pytest_command(
     ]
     if allow_qt:
         command.extend(["-p", "pytestqt.plugin", "--allow-qt-tests"])
+    if workers > 1:
+        command.extend(["-p", "xdist.plugin", "--dist=loadfile", "-n", str(workers)])
+    command.append(f"--durations={durations}")
     command.extend(["-q", *tests])
     return command
 
@@ -272,8 +277,13 @@ def build_commands(
     python: Path,
     powershell: str,
     changed: Sequence[str],
+    workers: int = 1,
+    durations: int = 20,
 ) -> list[list[str]]:
     """Build commands for a focused, precommit, or optional full tier."""
+
+    if tier == "full" and workers > 1:
+        raise ValueError("full requires --workers=1; registered Qt tests run serially")
 
     if tier == "full" and scope.name == "repo":
         return [
@@ -281,7 +291,7 @@ def build_commands(
             [str(python), "-m", "mypy", "src"],
             _check_command("gc", powershell=powershell),
             _check_command("docs-hygiene", powershell=powershell),
-            _pytest_command(python, (), allow_qt=True),
+            _pytest_command(python, (), allow_qt=True, durations=durations),
         ]
 
     if tier == "precommit":
@@ -301,7 +311,10 @@ def build_commands(
                 [str(python), "-m", "mypy", "src"],
                 _check_command("gc", powershell=powershell),
                 _check_command("docs-hygiene", powershell=powershell),
-                _pytest_command(python, unit_tests, allow_qt=False),
+                _pytest_command(
+                    python, unit_tests, allow_qt=False,
+                    workers=workers, durations=durations,
+                ),
             ]
         )
         return commands
@@ -318,7 +331,12 @@ def build_commands(
         tests = tuple(dict.fromkeys((*scope.tests, *scope.full_tests)))
         allow_qt = True
     if tests:
-        commands.append(_pytest_command(python, tests, allow_qt=allow_qt))
+        commands.append(
+            _pytest_command(
+                python, tests, allow_qt=allow_qt,
+                workers=workers, durations=durations,
+            )
+        )
     return commands
 
 
@@ -352,6 +370,37 @@ def _qt_opted_in() -> bool:
     }
 
 
+def _require_parallel_dependency(python: Path) -> None:
+    """Check the selected interpreter before starting a parallel verification run."""
+
+    result = subprocess.run(
+        [str(python), "-c", "import xdist.plugin"],
+        cwd=REPO_ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode:
+        raise RuntimeError(
+            "parallel tests require pytest-xdist in the verification interpreter; "
+            "install the dev extra with -m pip install -e '.[dev]'"
+        )
+
+
+def _positive_int(value: str) -> int:
+    number = int(value)
+    if number < 1:
+        raise argparse.ArgumentTypeError("must be a positive integer")
+    return number
+
+
+def _nonnegative_int(value: str) -> int:
+    number = int(value)
+    if number < 0:
+        raise argparse.ArgumentTypeError("must be a nonnegative integer")
+    return number
+
+
 def parse_args(
     scopes: Mapping[str, VerificationScope], argv: Sequence[str] | None = None
 ) -> argparse.Namespace:
@@ -363,6 +412,14 @@ def parse_args(
         default="focused",
     )
     parser.add_argument("--list", action="store_true", help="Print commands without running them.")
+    parser.add_argument(
+        "--workers", type=_positive_int, default=1,
+        help="Run non-Qt tests in this many processes (default: 1).",
+    )
+    parser.add_argument(
+        "--durations", type=_nonnegative_int, default=20,
+        help="Report the slowest N test phases; 0 reports all (default: 20).",
+    )
     parser.add_argument(
         "--check-config",
         action="store_true",
@@ -378,6 +435,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"verification config error: {exc}", file=sys.stderr)
         return 2
     args = parse_args(scopes, argv)
+    if args.tier == "full" and args.workers > 1:
+        print(
+            "verification error: full requires --workers=1; registered Qt tests run serially",
+            file=sys.stderr,
+        )
+        return 2
     errors = validate_config(scopes, registry)
     if errors:
         for error in errors:
@@ -427,7 +490,13 @@ def main(argv: Sequence[str] | None = None) -> int:
             python=python,
             powershell=powershell,
             changed=changed_files(),
+            workers=args.workers,
+            durations=args.durations,
         )
+        if args.workers > 1 and not args.list and any(
+            "pytest" in command for command in commands
+        ):
+            _require_parallel_dependency(python)
     except (RuntimeError, ValueError) as exc:
         print(f"verification error: {exc}", file=sys.stderr)
         return 2

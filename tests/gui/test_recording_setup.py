@@ -764,6 +764,8 @@ def test_settings_recording_subdialog_persists_only_apply(
             "brainproducts_sampling_rate_hz": (
                 500 if backend == "brainproducts_triggerbox" else None
             ),
+            **({"serial_port": "COM3"}
+               if backend in ("serial", "biosemi_active_three") else {}),
         }]
         assert "legacy" not in dialog.recording_summary.text()
         assert "invalid" not in dialog.recording_summary.text()

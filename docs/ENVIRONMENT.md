@@ -43,7 +43,7 @@ Notes:
 - PsychoPy remains optional at install time and is still confined to
   `src/fpvs_studio/engines/`
 - the dev extra includes `pytest`, `pytest-qt`, and `pytest-timeout` for GUI
-  verification
+  verification, and `pytest-xdist` for parallel non-Qt checks
 - the packaging extra includes PyInstaller for local executable builds
 
 The extras declare security minimums for their existing dependencies. Refresh an
@@ -96,13 +96,37 @@ That means:
 - launch settings use explicit presentation, trigger, refresh-verification, and
   timing-QC options; there is no runtime production/test Boolean gate
 - fullscreen playback is the current default and is not user-configurable in the GUI
-- serial trigger settings remain backend fields, but they are not exposed in the
-  current GUI until the hardware workflow is ready
+- Settings > Recording exposes project BioSemi/TriggerBox serial ports; other serial
+  parameters remain backend fields
 
 Source-tree runs on Windows and Linux expose an app-level `Experiment Test Mode`. It
 uses the same fullscreen compiled session and timing QC while explicitly disabling
 serial output, the Sophia/BioSemi gate, connected-display refresh verification, and
 participant collection. Packaged builds do not expose or honor this development mode.
+
+## Test Performance
+
+The verification driver reports the 20 slowest test phases by default. Use
+`-Durations 0` to remove the count limit or choose another nonnegative count.
+Pytest hides phases shorter than 5 ms in its normal concise output.
+
+Non-Qt checks can run in separate worker processes:
+
+```powershell
+./scripts/verify.ps1 -Scope repo -Tier precommit -Workers 4 -Durations 20
+```
+
+Install the current `dev` extra first. Parallel execution loads `pytest-xdist`
+explicitly, keeps each test file in one worker, and retains a separate temporary
+profile for every process. Start with two to four workers; more workers can increase
+Windows filesystem contention and memory use. Audits, lint and type checks still run
+in order. The default is one worker, which is also useful when diagnosing failures.
+
+The Qt-enabled `full` tier requires one worker. Its existing visible-environment
+approval and opt-in requirements still apply.
+
+The remaining sequential history-test bottleneck and its measured limits are tracked
+in [TD-004](exec-plans/tech-debt-tracker.md#td-004-sequential-uploaded-history-stress-test).
 
 ## GUI Test Environment
 

@@ -122,8 +122,9 @@ interaction.
   AB previews share derived descriptions within one edit only. Manage Projects scans
   through the app-owned job lifecycle with loading, close and retry states; see
   [GUI responsiveness](GUI_WORKFLOW.md#authoring-and-project-discovery-responsiveness).
-- Current runtime launch controls intentionally do not expose serial trigger settings,
-  display selection, or fullscreen toggles; those remain backend/runtime contract values.
+- Settings > Recording exposes project BioSemi/TriggerBox serial-port selection.
+  Other serial parameters, display selection and fullscreen policy remain
+  backend/runtime contract values outside runtime launch controls.
 
 ## Verification
 

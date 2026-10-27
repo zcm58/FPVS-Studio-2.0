@@ -3,8 +3,9 @@
 This is the single source of truth for measured engineering debt. It is not a product
 backlog or a record of already-completed cleanup.
 
-Measurements below were refreshed on 2026-07-10. Re-run the evidence command before
-promoting an item to an execution plan.
+The initial inventory was refreshed on 2026-07-10; later investigations are dated
+within their items. Re-run the evidence command before promoting an item to an
+execution plan.
 
 ## TD-001: Large Source Context Surfaces
 
@@ -88,6 +89,37 @@ surface is too broad.
 
 **Verification:** Run the original file before the move, the new focused files after it,
 and the owning driver scope.
+
+## TD-004: Sequential Uploaded-History Stress Test
+
+**Evidence (2026-10-27, Windows):** A serial safe-unit run took 502.95 seconds;
+`test_data_sharing_service.py::test_1500_acknowledged_sessions_retire_exact_history_and_keep_latest`
+alone took 161.23 seconds. A test-only experiment skipping disk `fsync` barriers took
+162.26 seconds and was reverted. A reduced 20-cycle profile attributed about 60% of
+elapsed time to cumulative `_private_path` work, including Windows `stat` and path
+resolution. Nested profiler times overlap.
+
+The final four-worker run took 301.67 seconds (3,599 passed, 12 Windows permission
+skips), about 40% less time than the serial baseline (3,586 passed, 12 skips). The
+additional cases cover the new runner options. The history test itself took 219.25
+seconds under parallel load, so further worker-count increases need measurement.
+
+**Impact:** This single sequential test limits gains from additional pytest workers.
+Its 1,500 real delivery/archive cycles check that accepted history cannot fill the
+active outbox or capture budget and that exact receipts and research data survive.
+
+**Next action:** Profile redundant guarded-path work in
+`src/fpvs_studio/data_sharing/storage.py` within one locked operation. Consider a
+production optimization only with evidence that path freshness and link/reparse
+protection remain intact; there is no proven fixture-only shortcut yet.
+
+**Constraints:** Retain all 1,500 cycles, exact payload/receipt assertions, archive
+moves and research-file preservation. Do not bypass filesystem safety checks, remove
+durability barriers, or omit this test from the ordinary precommit gate for speed.
+
+**Verification:** Use data-sharing focused verification with `-Durations 5`, then
+repo precommit with one and four workers when evaluating an optimization. Compare
+the stress-test duration as well as total suite time.
 
 ## Tracking Rules
 

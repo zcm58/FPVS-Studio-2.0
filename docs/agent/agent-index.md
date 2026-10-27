@@ -69,6 +69,11 @@ The registry also includes the two `ProjectDocument` QObject test modules under
 `tests/unit/`; the `core` full tier selects them, while default collection excludes
 them before importing Qt.
 
+For faster non-Qt verification, add `-Workers 4`; the default is one worker. Test
+commands report the 20 slowest phases by default (`-Durations 0` removes the count limit).
+See [test performance](../ENVIRONMENT.md#test-performance) for dependencies and
+isolation. The Qt-enabled `full` tier remains serial.
+
 ## Skill Routing
 
 For startup saved-report notices, start with `gui/data_sharing_controller.py`,
@@ -139,6 +144,12 @@ reading or writing device bytes. Both use the app-owned GUI worker and preserve 
 entry. Fake serial access tests live in `tests/unit/test_brainproducts_discovery.py`;
 registered dialog states live in `tests/gui/test_recording_setup.py`. Amplifier/rate
 pulse limits live in `core/brainproducts.py`; use the core route for its vendor table.
+BioSemi port selection lives in `gui/biosemi_port_selector.py`; generic metadata and
+shared byte-free access checks live in `triggers/serial_port_access.py`. The port
+remains in project trigger settings; project-service persistence updates it alongside
+the recording choice without changing other saved fields or open drafts. Use
+triggers/gui/project-I/O focused routes, with fake serial services and registered
+`test_biosemi_port_selector.py` / `test_biosemi_recording_persistence.py` GUI coverage.
 For first-run/default EEG hardware, start with `gui/controller.py`,
 `gui/recording_dialog.py`, `gui/settings_dialog.py`, `gui/document.py` and
 `gui/document_runtime.py`. Explicit project recording settings override the injected

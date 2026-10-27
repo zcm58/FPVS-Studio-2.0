@@ -374,6 +374,9 @@ owns endpoint estimates and task-response checkpoints. Details and acceptance ar
   discovery metadata-only and runs Detect checks through the app-owned worker lifecycle,
   retaining manual entry. Core's `brainproducts.py` owns the vendor amplifier/rate
   pulse table. Runtime validates the explicit selection and compiled marker spacing.
+  `triggers/serial_port_access.py` supplies shared access checks and generic port
+  metadata; BioSemi's project selector preserves `settings.triggers.serial_port`
+  and checks only that selection without identifying generic ports as BioSemi.
   New devices retain selected identity without inventing Toolbox montage profiles.
 - Full export mode writes each numbered visit under `runs/P<PID>_session<NN>/`.
   Current native session launches also write a completed Toolbox config under
@@ -449,6 +452,10 @@ Add `-List` to a scoped command to inspect its steps and use
 `./scripts/verify.ps1 -CheckConfig` after harness edits. GUI-focused local verification
 does not run Qt. Document a visible manual smoke path; run Qt locally only when the user
 approves a safe visible environment, and do not set `QT_QPA_PLATFORM=offscreen`.
+
+Non-Qt tiers support optional process workers and report slow test phases. See
+[test performance](docs/ENVIRONMENT.md#test-performance) for `-Workers` and `-Durations`;
+Qt-enabled full verification remains serial.
 
 GitHub does not run a repository test or code-quality workflow; the independent
 documentation build and publishing workflow remains automated. Legacy PowerShell

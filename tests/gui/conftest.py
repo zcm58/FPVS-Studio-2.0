@@ -5,14 +5,40 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from PySide6.QtCore import QSettings
+from PySide6.QtCore import QObject, QSettings, Signal
 from PySide6.QtWidgets import QFileDialog, QMessageBox
 
+from fpvs_studio.gui import biosemi_port_selector as biosemi_port_module
 from fpvs_studio.gui import controller as controller_module
 from fpvs_studio.gui.controller import StudioController
 from fpvs_studio.gui.create_project_dialog import CreateProjectDialog
 from fpvs_studio.gui.recording_dialog import DefaultRecordingHardwareDialog
 from fpvs_studio.gui.run_page import RunPage
+
+
+class _HeldSerialPortJob(QObject):
+    finished = Signal(object)
+
+    def cancel(self) -> None:
+        pass
+
+
+@pytest.fixture(autouse=True)
+def _guard_biosemi_serial_ports(monkeypatch) -> None:
+    """Existing GUI tests never enumerate/open hardware or start serial workers."""
+
+    from types import SimpleNamespace
+    from unittest.mock import Mock
+
+    monkeypatch.setattr(
+        biosemi_port_module, "update_lifecycle",
+        lambda: SimpleNamespace(start_task=lambda *_args, **_kwargs: _HeldSerialPortJob()),
+    )
+    for name in ("enumerate_serial_ports", "check_serial_port_access"):
+        monkeypatch.setattr(
+            biosemi_port_module, name,
+            Mock(side_effect=AssertionError("GUI tests must use fake serial services")),
+        )
 
 
 @pytest.fixture

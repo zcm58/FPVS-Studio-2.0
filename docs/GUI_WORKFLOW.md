@@ -787,9 +787,10 @@ to FPVS Studio without starting the experiment.
 Project recording configuration is validated before participant collection. **Settings > Recording >
 Recording Setup…** edits the open project's BioSemi ActiveTwo, BioSemi ActiveThree
 (128 electrodes), Brain Products / BrainVision (TriggerBox/Plus), or Unicorn Recorder
-UDP choice. Unicorn exposes its loopback port; Brain Products exposes an editable
-detected-port list, amplifier, EEG sampling rate and pulse width. Apply atomically
-saves only `settings.recording` in that project's
+UDP choice. Unicorn exposes its loopback port; BioSemi exposes an editable serial-port
+selector; Brain Products exposes an editable detected-port list, amplifier, EEG
+sampling rate and pulse width. Apply atomically saves `settings.recording` and, for
+BioSemi, the selected `settings.triggers.serial_port` in that project's
 `project.json`; Cancel keeps the saved choice, and failed saves retain the accepted device.
 Other unsaved setup edits remain pending. Project Recording Setup is disabled without
 an open project. The obsolete `recording/backend` and `recording/unicorn_udp_port`
@@ -834,9 +835,9 @@ The optional typed settings contain `recording_backend` (`serial`,
 default 10), plus optional `brainproducts_amplifier` (`actichamp`, `brainamp`, `liveamp`)
 and `brainproducts_sampling_rate_hz` (positive integer or unset). Existing projects
 with unset amplifier/rate remain readable; select both before normal TriggerBox launch.
-Malformed saved configurations
-are rejected on load. Recording choice does not alter existing project serial fields
-or compiled experiment timing.
+Malformed saved configurations are rejected on load. Choosing another recording device
+preserves BioSemi's serial settings. Editing its port preserves the project baudrate
+and all other trigger fields; no recording choice changes compiled experiment timing.
 
 After Launch Experiment and the normal participant flow, the existing background
 launch worker checks that Unicorn Recorder is open and writing a raw BDF. A failure
@@ -852,7 +853,19 @@ authority if callers bypass the GUI; see
 [Runtime execution](RUNTIME_EXECUTION.md#unicorn-recorder-udp-receiver-validation-pending).
 
 Recording setup has a `700x640` minimum/default size.
-ActiveThree retains project serial settings and the BioSemi Sophia prompt.
+BioSemi ActiveTwo and ActiveThree share the existing project serial settings and
+Sophia prompt. Their selector defaults unset ports to COM3 and lists available driver
+ports on a worker without opening them. Refresh retains the selected/manual value,
+including when that port is not currently listed; generic USB serial names do not
+identify BioSemi and never replace the current choice automatically.
+Check Port opens/closes only the selected port at the project baudrate (normally
+115200), 8N1, no flow control, without reading or writing device bytes or making
+explicit buffer-reset/flush calls. RTS/DTR are requested low before opening, though
+the OS/driver may still change them. Success means the port was accessible at that
+moment, not that BioSemi identity, recording or marker receipt was verified. Errors
+remain available in tooltips. Edits and dismissal invalidate pending results; manual
+entry and Apply remain usable after errors. Computer-default setup hides these
+project-only port controls and never writes a BioSemi COM preference.
 TriggerBox discovery starts when its setup is first shown and reads device metadata
 without opening ports. Detect refreshes the list and checks recognized candidates by
 opening and closing them at 2,000,000 baud / 8N1 without sending or reading bytes.
@@ -889,6 +902,16 @@ Choose actiCHamp at 100 Hz: 10 ms must disable Apply and 20 ms must allow it.
 Switch devices, Cancel and reopen to check staged fields. With lab equipment,
 confirm normal-run saved markers separately from port discovery and check that
 Test/Pilot sends none.
+
+Visible BioSemi acceptance: open a project and Recording Setup at `700x640` in both
+themes. Verify ActiveTwo/ActiveThree port selection, manual COM193, empty/error/busy
+states, and full status/error details without clipping. Refresh must retain the
+selection. Check Port must report only that selection; edit or switch devices during
+a held check, then dismiss/reopen and confirm late results cannot overwrite state.
+Apply/reopen must preserve the port and existing baudrate; Cancel and a failed save
+must preserve the previous saved values and unrelated drafts. Change Default and Use
+Computer Default must retain the project COM field. Use fake services for this UI
+smoke path; real interface access and manually recorded markers remain separate checks.
 
 Visible computer-default acceptance: start with an isolated preference profile,
 choose a Root Folder and then each hardware option at `640x300`. Restart and confirm
@@ -1475,4 +1498,4 @@ adds 40 pixels to the previous single-page layout.
 Recording persistence manual acceptance: open one Unicorn and one BioSemi project;
 confirm Home and Run agree after switching and restarting. Change a device through
 Settings, cancel a draft, and confirm Apply persists without saving unrelated pending
-setup edits. Check Recording Setup at `640x560` and Settings in both themes.
+setup edits. Check Recording Setup at `700x640` and Settings in both themes.

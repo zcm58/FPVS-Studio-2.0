@@ -26,6 +26,7 @@ from fpvs_studio.core.brainproducts import (
     supported_sampling_rates_hz,
 )
 from fpvs_studio.core.models import ProjectRecordingSettings
+from fpvs_studio.gui.biosemi_port_selector import BioSemiPortSelector
 from fpvs_studio.gui.components import (
     DialogHeader,
     apply_dialog_theme,
@@ -42,6 +43,7 @@ from fpvs_studio.triggers.brainproducts_discovery import (
     TriggerBoxPortCandidate,
     discover_triggerbox_ports,
 )
+from fpvs_studio.triggers.serial_backend import resolve_serial_port
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -131,7 +133,8 @@ class RecordingSetupDialog(QDialog):
 
     def __init__(
         self, configuration: dict[str, object], parent: QWidget | None = None,
-        *, computer_default: bool = False,
+        *, computer_default: bool = False, biosemi_serial_port: str | None = "COM3",
+        biosemi_serial_baudrate: int = 115200,
     ) -> None:
         super().__init__(parent)
         self.setObjectName("recording_setup_dialog")
@@ -139,6 +142,8 @@ class RecordingSetupDialog(QDialog):
         self.setMinimumSize(700, 640)
         self.resize(self.minimumSize())
         self._configuration = dict(configuration)
+        self._computer_default = computer_default
+        self._accepted_biosemi_serial_port = resolve_serial_port(biosemi_serial_port)
         self._port_detection_job: UpdateJob | None = None
         self._detection_started = False
         self._discovery_dismissed = False
@@ -193,6 +198,9 @@ class RecordingSetupDialog(QDialog):
         self.port_edit.setValidator(QIntValidator(1, 65535, self.port_edit))
         self.port_edit.setAccessibleName("Unicorn Recorder UDP port")
         self.port_edit.setToolTip("Match Recorder's UDP input port; an integer from 1 to 65535.")
+        self.biosemi_port_selector = BioSemiPortSelector(
+            biosemi_serial_port, biosemi_serial_baudrate, self,
+        )
         self.brainproducts_port_combo = QComboBox(self)
         self.brainproducts_port_combo.setEditable(True)
         self.brainproducts_port_combo.setAccessibleName("Brain Products TriggerBox COM port")
@@ -267,6 +275,9 @@ class RecordingSetupDialog(QDialog):
         form.addRow("Recording device", self.backend_combo)
         self.unicorn_port_label = QLabel("Unicorn UDP port", self)
         form.addRow(self.unicorn_port_label, self.port_edit)
+        self.biosemi_port_label = QLabel("BioSemi serial port", self)
+        self.biosemi_port_label.setBuddy(self.biosemi_port_selector.combo)
+        form.addRow(self.biosemi_port_label, self.biosemi_port_selector)
         self.brainproducts_port_label = QLabel("TriggerBox COM port", self)
         self.brainproducts_pulse_label = QLabel("Trigger pulse width (ms)", self)
         self.brainproducts_amplifier_label = QLabel("EEG amplifier", self)
@@ -308,6 +319,7 @@ class RecordingSetupDialog(QDialog):
         layout.addWidget(self.button_box)
         self.backend_combo.currentIndexChanged.connect(self._refresh)
         self.port_edit.textChanged.connect(self._refresh)
+        self.biosemi_port_selector.port_changed.connect(self._refresh)
         self.brainproducts_port_edit.textChanged.connect(self._refresh)
         self.brainproducts_port_edit.textChanged.connect(self._refresh_port_detection_status)
         self.brainproducts_pulse_edit.textChanged.connect(self._refresh)
@@ -317,6 +329,7 @@ class RecordingSetupDialog(QDialog):
         self.brainproducts_port_edit.textEdited.connect(self._manual_port_edited)
         self.brainproducts_port_combo.activated.connect(self._manual_port_edited)
         self.finished.connect(self._cancel_port_detection)
+        self.finished.connect(self.biosemi_port_selector.cancel)
         self._refresh()
         apply_dialog_theme(self)
 
@@ -497,6 +510,12 @@ class RecordingSetupDialog(QDialog):
 
         return dict(self._configuration)
 
+    @property
+    def biosemi_serial_port(self) -> str:
+        """Return the accepted project port, retaining the original on Cancel."""
+
+        return self._accepted_biosemi_serial_port
+
     def _draft(self) -> dict[str, object]:
         selected = self.backend_combo.currentData()
         text = self.port_edit.text()
@@ -532,9 +551,12 @@ class RecordingSetupDialog(QDialog):
         selected = self.backend_combo.currentData()
         unicorn = selected == "unicorn_udp"
         brainproducts = selected == "brainproducts_triggerbox"
+        biosemi = selected in ("serial", "biosemi_active_three")
         self.port_edit.setEnabled(unicorn)
-        self.unicorn_port_label.setVisible(not brainproducts)
-        self.port_edit.setVisible(not brainproducts)
+        self.unicorn_port_label.setVisible(unicorn)
+        self.port_edit.setVisible(unicorn)
+        self.biosemi_port_label.setVisible(biosemi and not self._computer_default)
+        self.biosemi_port_selector.setVisible(biosemi and not self._computer_default)
         self.endpoint_label.setVisible(unicorn)
         for widget in (
             self.brainproducts_port_label, self.brainproducts_port_row,
@@ -572,10 +594,10 @@ class RecordingSetupDialog(QDialog):
             )
         else:
             guidance = (
-                "BioSemi uses the current project's serial settings. The Sophia Mode "
-                "recording prompt remains controlled by Settings > General. "
-                "Test and Pilot modes never send markers."
+                "Configure the trigger-interface port in each project's Recording Setup. "
+                if self._computer_default else "Start recording in ActiView before launch. "
             )
+            guidance += "Test and Pilot modes never send markers."
             detail = (
                 "ActiveThree uses BioSemi's compatible USB Trigger Interface and the "
                 "current project's serial port/baud settings. Verify interface wiring, "
@@ -597,6 +619,8 @@ class RecordingSetupDialog(QDialog):
                 )
         draft = self._draft()
         try:
+            if biosemi and not self._computer_default and not self.biosemi_port_selector.port:
+                raise ValueError("Enter the BioSemi trigger-interface serial port.")
             validate_recording_configuration(draft)
             validated = ProjectRecordingSettings.model_validate(draft)
         except ValueError as exc:
@@ -617,4 +641,7 @@ class RecordingSetupDialog(QDialog):
         if not self.apply_button.isEnabled():
             return
         self._configuration = self._draft()
+        if (not self._computer_default
+                and self.backend_combo.currentData() in ("serial", "biosemi_active_three")):
+            self._accepted_biosemi_serial_port = self.biosemi_port_selector.port
         super().accept()
