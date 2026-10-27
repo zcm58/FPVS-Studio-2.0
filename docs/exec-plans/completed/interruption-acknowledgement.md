@@ -106,6 +106,17 @@ cases were `test_manage_projects_dialog_lists_projects_from_saved_root` and
 `test_source_details_exposes_and_copies_full_long_path`; their platform limitation
 and the interrupted attempt remain in the retained evidence logs.
 
+A later remote advance added support-error guidance (`6fc8d26`) and explicit
+TriggerBox port-access checks (`b9a723b`). These merged cleanly in `b3cefa8` without
+changing recovery source or shared worker contracts. Final merged checks passed
+mypy for all 243 source files, the trigger focused route (139 tests), discovery and
+support modules (80 passed, one Windows symlink skip), the safe GUI route (83 tests),
+and documentation checks (10 tests). Visible recording setup passed all 118 tests,
+and a separate final recovery run passed all 53 tests. The first combined visible
+attempt was interrupted while progress output was sparse; verbose isolation showed
+the recording cases continuing and finishing successfully without a fixture or
+production-code change.
+
 ## Delivery boundary
 
 This is a source fix. No release version, installer, real participant session or
