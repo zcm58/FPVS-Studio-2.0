@@ -60,3 +60,27 @@ They are added and compiled, not executed. No real serial enumeration, port open
 marker tests or EEG acquisition were performed during implementation. Follow the
 visible fake-service smoke path in `docs/GUI_WORKFLOW.md` before claiming visual
 or physical acceptance.
+
+## BioSemi marker regression audit (2026-10-27)
+
+Compared with pre-selector `b9a723b`, source at `ca60591` leaves the BioSemi writer,
+runtime backend selection, launcher, document launch mapping, engine trigger dispatch,
+code validation and core models byte-for-byte unchanged. Both BioSemi selections
+still use raw single-byte serial output, normally 115200 / 8N1 with no flow control;
+default reset sends no zero byte.
+
+Additional fake-only regressions check all event codes 1–255 through public and
+prevalidated runtime paths, repeated 55/128/255 values, an exclusive selected-port
+check followed by a fresh runtime connection, and exact bit/high-bit/repeated bytes
+on presentation flips. Ordinary recording with obsolete disabled-output flags must
+still use the physical-capable serial adapter rather than logging markers only.
+
+Audit verification passed: 183 trigger tests, 458 engine-focused tests, and 195
+recording/persistence tests with one Windows symlink-permission skip. Ruff,
+compilation and docs checks passed. These overlapping focused bundles include the
+24 new marker-regression cases; no production-code change was necessary.
+
+No marker transmissions or receiving-side BDF/ActiView validation were performed.
+The repository contains no recorded BioSemi fixture establishing actual receipt.
+Use the manual BioSemi checklist in `docs/RUNTIME_EXECUTION.md` to complete that
+separate receiving-side check. Successful fake writes do not qualify physical timing.

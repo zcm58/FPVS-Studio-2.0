@@ -42,7 +42,7 @@ from fpvs_studio.engines.psychopy_stimuli import (
     release_stimuli,
 )
 from fpvs_studio.engines.psychopy_text_screens import show_text_screen
-from fpvs_studio.runtime.triggers import LoggedTriggerBackend
+from fpvs_studio.runtime.triggers import LoggedTriggerBackend, build_trigger_backend
 from fpvs_studio.triggers.base import TriggerBackend
 from fpvs_studio.triggers.serial_backend import SerialBackend
 from fpvs_studio.triggers.unicorn_udp_backend import UnicornUDPBackend
@@ -2019,6 +2019,81 @@ def test_psychopy_engine_preserves_marker_frames_and_clock_for_external_transpor
     assert [record.time_s for record in backend.records] == pytest.approx([0.1, 0.2])
     assert [record.backend_name for record in backend.records] == [transport, transport]
     assert [record.status for record in backend.records] == ["sent", "sent"]
+
+
+@pytest.mark.parametrize("selected", ["serial", "biosemi_active_three"])
+@pytest.mark.parametrize("codes", [
+    (1, 55), (55, 55), (128, 255), (255, 1),
+    (1, 2), (4, 8), (16, 32), (64, 128),
+])
+def test_biosemi_selected_port_submits_exact_codes_on_flip_despite_legacy_disabled_flag(
+    monkeypatch, sample_project, sample_project_root, selected, codes,
+) -> None:
+    """Pin real adapter bytes at the flip boundary, without opening real hardware."""
+
+    run_spec = _two_event_run_spec(sample_project, sample_project_root, duplicate_image=False)
+    run_spec.trigger_events = [
+        TriggerEvent(frame_index=0, code=codes[0], label="condition_start"),
+        TriggerEvent(
+            frame_index=1, code=codes[1],
+            label="oddball_onset" if codes[1] == 55 else "validation_marker",
+        ),
+    ]
+    submissions: list[bytes] = []
+    opens: list[dict[str, object]] = []
+    closed: list[bool] = []
+
+    def submit(payload: bytes) -> int:
+        submissions.append(payload)
+        return len(payload)
+
+    def open_port(**parameters):
+        opens.append(parameters)
+        return SimpleNamespace(write=submit, close=lambda: closed.append(True))
+
+    serial_module = SimpleNamespace(
+        EIGHTBITS=8, PARITY_NONE="N", STOPBITS_ONE=1, Serial=open_port,
+    )
+    monkeypatch.setattr(
+        "fpvs_studio.triggers.serial_backend._load_serial_module", lambda: serial_module,
+    )
+    options = {
+        "recording_backend": selected,
+        "serial_enabled": False,  # Legacy project flag must not suppress a normal recording.
+        "serial_port": "COM193",
+        "serial_baudrate": 115200,
+        "timing_warmup_frames": 2,
+    }
+    backend, warnings = build_trigger_backend(options)
+    captures: dict[str, object] = {}
+    fake_psychopy = _build_fake_psychopy(captures, flip_times=[0.1, 0.2, 0.3, 0.4, 0.5])
+    engine = PsychoPyEngine()
+    _patch_fake_psychopy(monkeypatch, engine, fake_psychopy)
+    backend.connect()
+    backend.reset()
+    assert submissions == []
+    try:
+        engine.run_condition(
+            run_spec, sample_project_root, runtime_options=options, trigger_backend=backend,
+        )
+    finally:
+        backend.reset()
+        backend.close()
+        engine.close_session()
+
+    assert warnings == []
+    assert opens == [{
+        "port": "COM193", "baudrate": 115200, "bytesize": 8, "parity": "N",
+        "stopbits": 1, "timeout": 0, "write_timeout": 0,
+        "rtscts": False, "dsrdtr": False, "xonxoff": False,
+    }]
+    assert closed == [True]
+    assert submissions == [bytes([code]) for code in codes]
+    assert [record.code for record in backend.records] == list(codes)
+    assert [record.status for record in backend.records] == ["sent", "sent"]
+    assert [record.frame_index for record in backend.records] == [0, 1]
+    assert [record.time_s for record in backend.records] == pytest.approx([0.1, 0.2])
+    assert len([event for event in _events(captures) if event[0] == "callOnFlip"]) == 2
 
 
 @pytest.mark.parametrize("mode", ["experiment_test_mode", "pilot_mode"])

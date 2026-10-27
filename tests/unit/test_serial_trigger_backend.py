@@ -9,6 +9,7 @@ import pytest
 from fpvs_studio.runtime.triggers import build_trigger_backend
 from fpvs_studio.triggers.base import TriggerBackend
 from fpvs_studio.triggers.serial_backend import SerialBackend
+from fpvs_studio.triggers.serial_port_access import check_serial_port_access
 
 
 class _FakePort:
@@ -407,3 +408,135 @@ def test_logged_prevalidated_hot_path_defers_model_materialization(monkeypatch) 
     assert physical_backend.sent == [(55, 10, "oddball_onset", 0.5)]
     with pytest.raises(AssertionError, match="outside the flip callback"):
         _ = backend.records
+
+
+@pytest.mark.parametrize("selected_backend", ["serial", "biosemi_active_three"])
+@pytest.mark.parametrize("prevalidated", [False, True])
+def test_biosemi_runtime_preserves_all_byte_values_order_and_repeated_codes(
+    monkeypatch, selected_backend, prevalidated,
+) -> None:
+    """Exercise the real runtime wrapper and byte writer, never a physical port."""
+
+    serial_module = _FakeSerialModule()
+    monkeypatch.setattr(
+        "fpvs_studio.triggers.serial_backend._load_serial_module", lambda: serial_module,
+    )
+    backend, warnings = build_trigger_backend({
+        "recording_backend": selected_backend,
+        "serial_enabled": False,  # Obsolete flags cannot silence explicit normal recording.
+        "serial_port": "COM193",
+    })
+    assert not warnings
+    assert backend.backend_name == "serial" and backend.emits_external_markers
+    backend.connect()
+    assert not serial_module.port.writes
+    backend.reset()
+
+    codes = (*range(1, 256), 55, 55, 128, 128, 255, 255)
+    send = backend.send_prevalidated_trigger if prevalidated else backend.send_trigger
+    for frame, code in enumerate(codes):
+        send(code, frame_index=frame, label="wire_regression", time_s=frame / 60)
+    backend.reset()
+    backend.close()
+
+    # Include the high bit and repeated 55/128/255 markers explicitly. Neither
+    # decimal ASCII, a bit shift/mask nor an inserted reset byte is equivalent.
+    expected = bytes(range(1, 256)) + b"\x37\x37\x80\x80\xff\xff"
+    assert b"".join(serial_module.port.writes) == expected
+    assert all(len(payload) == 1 for payload in serial_module.port.writes)
+    assert tuple(record.code for record in backend.records) == codes
+    assert all(record.status == "sent" for record in backend.records)
+    assert serial_module.port.closed
+
+
+class _ExclusiveSerialPort:
+    def __init__(self, module, options):
+        self.module = module
+        self.port = options["port"]
+        self.rts = True
+        self.dtr = True
+        self.is_open = False
+        self.writes = []
+        if self.port is not None:
+            self.open()
+
+    def open(self):
+        if self.port in self.module.active_ports:
+            raise OSError("The serial port is already in use")
+        self.module.active_ports.add(self.port)
+        self.is_open = True
+
+    def write(self, payload):
+        assert self.is_open
+        self.writes.append(payload)
+        return len(payload)
+
+    def close(self):
+        self.module.active_ports.discard(self.port)
+        self.is_open = False
+
+
+class _ExclusiveSerialModule:
+    EIGHTBITS = 8
+    PARITY_NONE = "N"
+    STOPBITS_ONE = 1
+
+    def __init__(self):
+        self.active_ports = set()
+        self.open_calls = []
+        self.connections = []
+
+    def Serial(self, **options):  # noqa: N802
+        self.open_calls.append(options)
+        connection = _ExclusiveSerialPort(self, options)
+        self.connections.append(connection)
+        return connection
+
+
+@pytest.mark.parametrize("selected_backend", ["serial", "biosemi_active_three"])
+@pytest.mark.parametrize("baudrate", [115200, 57600])
+def test_biosemi_port_check_releases_port_before_runtime_byte_output(
+    monkeypatch, selected_backend, baudrate,
+) -> None:
+    """A port availability probe cannot retain the port or mutate marker output."""
+
+    serial_module = _ExclusiveSerialModule()
+    result = check_serial_port_access(
+        "COM193", baudrate=baudrate, serial_module=serial_module,
+    )
+    assert result.accessible and not result.access_error
+    probe = serial_module.connections[0]
+    assert not probe.is_open and not serial_module.active_ports
+    assert not probe.writes
+    assert probe.rts is False and probe.dtr is False
+    assert serial_module.open_calls[0]["port"] is None
+
+    monkeypatch.setattr(
+        "fpvs_studio.triggers.serial_backend._load_serial_module", lambda: serial_module,
+    )
+    backend, warnings = build_trigger_backend({
+        "recording_backend": selected_backend,
+        "serial_port": " COM193 ",
+        "serial_baudrate": baudrate,
+    })
+    assert not warnings
+    backend.connect()  # Fails if the probe did not release its exclusive connection.
+    runtime = serial_module.connections[1]
+    assert runtime is not probe
+    assert serial_module.open_calls[1] == {
+        "port": "COM193", "baudrate": baudrate,
+        "bytesize": 8, "parity": "N", "stopbits": 1,
+        "timeout": 0, "write_timeout": 0,
+        "rtscts": False, "dsrdtr": False, "xonxoff": False,
+    }
+    assert not runtime.writes
+    backend.reset()
+    for code in (1, 2, 4, 8, 16, 32, 64, 128, 55, 55, 255, 255):
+        backend.send_prevalidated_trigger(code, label="wire_regression")
+    backend.reset()
+    backend.close()
+
+    assert b"".join(runtime.writes) == b"\x01\x02\x04\x08\x10\x20\x40\x80\x37\x37\xff\xff"
+    assert all(len(payload) == 1 for payload in runtime.writes)
+    assert not serial_module.active_ports and not runtime.is_open
+    assert not probe.writes

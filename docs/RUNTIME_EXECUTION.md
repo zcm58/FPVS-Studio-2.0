@@ -1131,8 +1131,14 @@ Use this manual checklist when validating a real lab rig:
 - connect the BioSemi USB Trigger Interface
 - confirm the COM port in Windows Device Manager
 - start ActiView
-- send test values `1`, `2`, `4`, `8`, `16`, `32`, `64`, and `128`
+- use ordinary recording mode; Test/Pilot deliberately sends no markers
+- select the interface port, run Check Port and close Recording Setup before the
+  marker test; an accessible port is not receiving-side evidence
+- manually send well-separated test values `1`, `2`, `4`, `8`, `16`, `32`, `64`,
+  `128`, `55`, `55`, `255`, `255` to check individual bits, high-bit codes and repeats
 - confirm ActiView displays the expected trigger/status values
+- retain a BDF recording and compare the received values and order with the requested
+  sequence; Studio's `sent` records establish write submission only
 - run one FPVS condition
 - confirm `condition_start` and `oddball_onset` markers appear in the BDF/status channel
 - use native resolution and a fixed approved refresh rate; disable Windows Dynamic
