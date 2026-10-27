@@ -1,6 +1,7 @@
 """Common error guidance follows the cause without inventing a diagnosis."""
 
 import errno
+from zipfile import BadZipFile
 
 import pytest
 
@@ -40,6 +41,31 @@ def test_wrapped_import_error_uses_real_cause(cause, expected):
 def test_static_message_box_can_explain_technical_details(details, expected):
     explanation = explain_error("Error", "Unable to finish", details=details)
     assert expected in explanation.summary
+
+
+@pytest.mark.parametrize("wrapped", [False, True])
+def test_bad_zip_exception_uses_download_guidance_without_traceback_details(wrapped):
+    cause = BadZipFile("Truncated file header")
+    error = RuntimeError("Unable to import project bundle") if wrapped else cause
+    if wrapped:
+        error.__cause__ = cause
+
+    explanation = explain_error("Import Error", "Unable to import project bundle", error=error)
+
+    assert "incomplete, damaged" in explanation.summary
+    assert "Download a fresh copy" in explanation.advice
+
+
+def test_unsupported_project_config_schema_uses_update_guidance():
+    error = ValueError(
+        "Unsupported project config schema version: '99.0.0'. "
+        "Expected a supported version from 1.2.0 through 1.8.0."
+    )
+
+    explanation = explain_error("Import Error", "Unable to import project config", error=error)
+
+    assert "format this version of FPVS Studio can't read" in explanation.summary
+    assert "latest Studio update" in explanation.advice
 
 
 def test_unknown_import_failure_is_honest_and_actionable():
