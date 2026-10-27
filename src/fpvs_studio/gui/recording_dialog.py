@@ -48,7 +48,7 @@ _LOGGER = logging.getLogger(__name__)
 RECORDING_HARDWARE_CHOICES = (
     ("BioSemi ActiveTwo", "serial"),
     ("BioSemi ActiveThree (128 electrodes)", "biosemi_active_three"),
-    ("Brain Products TriggerBox / TriggerBox Plus", "brainproducts_triggerbox"),
+    ("Brain Products / BrainVision (TriggerBox/Plus)", "brainproducts_triggerbox"),
     ("Unicorn Hybrid Black", "unicorn_udp"),
 )
 

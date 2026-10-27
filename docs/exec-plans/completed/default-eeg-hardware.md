@@ -44,6 +44,9 @@ Welcome exposes Settings directly; all five actions retain its 760x520 minimum a
 
 ## Verification
 
+The [2.5.0 release record](../active/release-2.5.0.md) tracks subsequent approved
+visible GUI checks and packaging. Results below describe implementation-time checks.
+
 1. Verify root/picker ordering, persistence, invalid/cancel/save failure and all four
    devices with fake preferences and dialogs, including safe non-Qt control-flow tests.
 2. Verify override precedence, live inheritance, reset preservation, imported files,

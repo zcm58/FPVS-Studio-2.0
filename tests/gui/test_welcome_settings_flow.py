@@ -678,26 +678,19 @@ def test_file_manage_projects_action_opens_themed_dialog(
     qtbot,
     controller: StudioController,
     tmp_path: Path,
-    monkeypatch,
 ) -> None:
     _, window = _open_created_project(controller, qtbot, tmp_path, "Manage Menu Project")
     assert window.manage_projects_action.text() == "Manage Projects..."
     assert window.manage_projects_action.objectName() == "manage_projects_action"
     assert not hasattr(window, "_native_menu_style")
 
-    captured: list[ManageProjectsDialog] = []
-
-    def _capture_exec(dialog: ManageProjectsDialog) -> int:
-        captured.append(dialog)
-        qtbot.addWidget(dialog)
-        return int(dialog.DialogCode.Rejected)
-
-    monkeypatch.setattr(ManageProjectsDialog, "exec", _capture_exec)
-
     window.manage_projects_action.trigger()
 
-    assert captured
-    project_list = captured[0].findChild(QListWidget, "manage_projects_list")
+    dialog = controller._manage_projects_dialog
+    assert isinstance(dialog, ManageProjectsDialog)
+    qtbot.addWidget(dialog)
+    assert dialog.isVisible()
+    project_list = dialog.findChild(QListWidget, "manage_projects_list")
     assert project_list is not None
 
 

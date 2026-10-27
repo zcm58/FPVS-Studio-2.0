@@ -662,7 +662,7 @@ def test_unicorn_launch_queues_automatic_check_and_surfaces_failure(
     ready.assert_not_called()
     page.launch_session()
     participant_prompt.assert_called_once_with()
-    assert len(tasks) == 1
+    qtbot.waitUntil(lambda: len(tasks) == 1)
     assert window.is_launch_busy()
     assert errors == []
     ready.assert_not_called()
@@ -749,6 +749,7 @@ def test_ready_unicorn_reaches_runtime_execution_on_both_launch_surfaces(
 
     page.launch_session()
 
+    qtbot.waitUntil(lambda: bool(trace) or bool(errors))
     ready.assert_called_once_with()
     assert trace == ["ready", "engine", "preflight", "reserve", "execute"]
     assert errors == []

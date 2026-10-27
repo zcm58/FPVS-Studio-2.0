@@ -66,6 +66,9 @@ spacing. Explain and verify ordinary 6 Hz FPVS on a 60 Hz display.
   was run. The canonical runtime/workflow docs describe the visible and lab smoke
   paths; synthetic passing tests do not qualify physical timing.
 
+Subsequent approved visible GUI and packaging acceptance is tracked in the
+[2.5.0 release record](../active/release-2.5.0.md).
+
 ## Files changed
 
 - `.agents/verification.toml`

@@ -266,6 +266,7 @@ class WelcomeWindow(QWidget):
                 self.action_layout.removeWidget(button)
             self.action_layout.removeWidget(self.settings_button)
             self.action_container.setProperty("compactActions", columns == 1)
+            self.launch_surface.hero_layout.setSpacing(10 if columns == 1 else 18)
             for button in (*buttons, self.settings_button):
                 button.setMinimumHeight(
                     38 if columns == 1 or button is self.settings_button else 52,
