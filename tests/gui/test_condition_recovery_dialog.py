@@ -1,12 +1,12 @@
 """Visible, isolated recovery guidance and launch-guard regression coverage."""
 
 from dataclasses import replace
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
-from PySide6.QtCore import QObject, Signal
+from PySide6.QtCore import QObject, Qt, Signal
 from PySide6.QtGui import QColor, QPalette
 from PySide6.QtWidgets import QApplication, QLabel, QWidget
 from tests.gui.helpers import assert_visible_children_within_parent
@@ -42,6 +42,7 @@ def test_details_distinguish_run_occurrences_and_fit(qtbot, size, background):
     palette = dialog.palette()
     palette.setColor(QPalette.ColorRole.Window, QColor(background))
     dialog.setPalette(palette)
+    module.apply_studio_theme(dialog)
     dialog.resize(*size)
     dialog.show()
     QApplication.processEvents()
@@ -130,7 +131,7 @@ def test_controller_uses_worker_and_suppresses_active_launch(qtbot, tmp_path, mo
     query.assert_not_called()
     task = DeferredTask.instances[-1]
     result = task.callback()
-    query.assert_called_once_with(tmp_path)
+    query.assert_called_once_with(tmp_path, include_acknowledged=False)
     busy = True
     task.succeeded.emit(result)
     task.finished.emit()
@@ -249,3 +250,310 @@ def test_late_recovery_results_and_errors_cannot_reopen_old_project(
     show_error.assert_not_called()
     controller.check(automatic=True)
     assert controller._task is None
+
+
+@pytest.mark.parametrize("size", [(640, 440), (760, 520)])
+@pytest.mark.parametrize("background", ["#f4f7fb", "#202124"])
+@pytest.mark.parametrize("state", ["pending", "acknowledged", "saving", "error"])
+def test_acknowledgement_states_fit_minimum_and_default(qtbot, size, background, state):
+    first = _record(can_rerun=False)
+    if state == "acknowledged":
+        first = replace(first, acknowledged_at=datetime.now(timezone.utc))
+    second = replace(first, execution_id="execution-2", run_id="run-008-condition-4")
+    dialog = module.ConditionRecoveryDialog(
+        ConditionRecoveryReport(records=(first, second)),
+        current_condition_ids=frozenset({first.condition_id}),
+    )
+    qtbot.addWidget(dialog)
+    palette = dialog.palette()
+    palette.setColor(QPalette.ColorRole.Window, QColor(background))
+    dialog.setPalette(palette)
+    module.apply_studio_theme(dialog)
+    if state == "saving":
+        dialog.set_saving(True)
+    elif state == "error":
+        dialog.show_save_error(PermissionError(
+            "A long project path cannot be written: " + "folder/" * 35,
+        ))
+    dialog.resize(*size)
+    dialog.show()
+    QApplication.processEvents()
+    assert dialog.size().toTuple() == size
+    assert_visible_children_within_parent(dialog)
+    for label in dialog.findChildren(QLabel):
+        if label.isVisible() and label.wordWrap():
+            assert label.height() >= label.heightForWidth(label.width())
+    for button in (dialog.rerun_button, dialog.acknowledge_button, dialog.close_button):
+        assert button.width() >= button.sizeHint().width()
+    if state == "pending":
+        assert dialog.acknowledge_button.text() == "Acknowledge All and Continue"
+        assert dialog.acknowledge_button.property("primaryActionRole") == "true"
+    elif state == "acknowledged":
+        assert not dialog.acknowledge_button.isEnabled()
+        assert "Acknowledged:" in dialog.details.toPlainText()
+        assert "record is unchanged" in dialog.details.toPlainText()
+        assert "Acknowledged" in dialog.condition_combo.currentText()
+    elif state == "saving":
+        assert not dialog.acknowledge_button.isEnabled()
+        assert not dialog.close_button.isEnabled()
+        dialog.set_saving(False)
+    else:
+        assert "Could not save acknowledgement" in dialog.status_label.text()
+        assert "folder/" in dialog.status_label.toolTip()
+
+
+def _controller_with_report(qtbot, tmp_path, monkeypatch, report):
+    DeferredTask.instances.clear()
+    monkeypatch.setattr(module, "BackgroundTask", DeferredTask)
+    window = QWidget()
+    qtbot.addWidget(window)
+    window.show()
+    errors = Mock()
+    controller = module.ConditionRecoveryController(
+        parent=window, project_root=tmp_path, is_busy=lambda: False,
+        rerun=Mock(), show_error=errors,
+    )
+    controller._loaded(report, automatic=False)
+    assert controller._dialog is not None
+    return controller, window, controller._dialog, errors
+
+
+def test_explicit_acknowledgement_saves_all_pending_rows_off_gui_thread(
+    qtbot, tmp_path, monkeypatch,
+):
+    first = _record()
+    second = replace(first, execution_id="execution-2", run_id="run-002")
+    old = replace(first, execution_id="execution-old", acknowledged_at=datetime.now(timezone.utc))
+    controller, _window, dialog, errors = _controller_with_report(
+        qtbot, tmp_path, monkeypatch, ConditionRecoveryReport(records=(first, second, old)),
+    )
+    save = Mock()
+    monkeypatch.setattr(module, "acknowledge_condition_recovery", save)
+    dialog.acknowledge_button.click()
+    save.assert_not_called()
+    task = DeferredTask.instances[-1]
+    assert controller._ack_task is task
+    assert not dialog.rerun_button.isEnabled()
+    assert not dialog.condition_combo.isEnabled()
+    assert not dialog.close()
+    qtbot.keyClick(dialog, Qt.Key.Key_Escape)
+    assert dialog.isVisible()
+    controller._acknowledge(dialog)
+    assert DeferredTask.instances == [task]
+    controller._loaded(ConditionRecoveryReport(records=(second,)), automatic=True)
+    assert controller._dialog is dialog
+    result = task.callback()
+    save.assert_called_once_with(tmp_path, (first, second))
+    task.succeeded.emit(result)
+    assert dialog.isVisible()  # Native worker cleanup has not finished yet.
+    task.finished.emit()
+    assert not dialog.isVisible()
+    assert controller._ack_task is None
+    errors.assert_not_called()
+
+
+def test_acknowledgement_failure_keeps_dialog_and_can_be_retried(qtbot, tmp_path, monkeypatch):
+    item = _record()
+    controller, _window, dialog, errors = _controller_with_report(
+        qtbot, tmp_path, monkeypatch, ConditionRecoveryReport(records=(item,)),
+    )
+    save = Mock(side_effect=[PermissionError("Project is read-only"), None])
+    monkeypatch.setattr(module, "acknowledge_condition_recovery", save)
+    dialog.acknowledge_button.click()
+    task = DeferredTask.instances[-1]
+    with pytest.raises(PermissionError) as failure:
+        task.callback()
+    task.failed.emit(failure.value)
+    task.finished.emit()
+    assert dialog.isVisible()
+    assert dialog.acknowledge_button.isEnabled()
+    assert "Check project permissions" in dialog.status_label.text()
+    errors.assert_called_once_with(failure.value)
+    dialog.acknowledge_button.click()
+    retry = DeferredTask.instances[-1]
+    assert retry is not task
+    retry.succeeded.emit(retry.callback())
+    retry.finished.emit()
+    assert not dialog.isVisible()
+    assert save.call_count == 2
+
+
+@pytest.mark.parametrize("close_kind", ["button", "escape", "window"])
+def test_passive_close_never_acknowledges_a_session(qtbot, tmp_path, monkeypatch, close_kind):
+    _controller, _window, dialog, _errors = _controller_with_report(
+        qtbot, tmp_path, monkeypatch, ConditionRecoveryReport(records=(_record(),)),
+    )
+    save = Mock()
+    monkeypatch.setattr(module, "acknowledge_condition_recovery", save)
+    if close_kind == "button":
+        dialog.close_button.click()
+    elif close_kind == "escape":
+        qtbot.keyClick(dialog, Qt.Key.Key_Escape)
+    else:
+        dialog.close()
+    assert not dialog.isVisible()
+    save.assert_not_called()
+    assert not DeferredTask.instances
+
+
+def test_new_controller_hides_saved_acknowledgements_but_manual_history_keeps_them(
+    qtbot, tmp_path, monkeypatch,
+):
+    DeferredTask.instances.clear()
+    monkeypatch.setattr(module, "BackgroundTask", DeferredTask)
+    records = [_record()]
+    acknowledged = set()
+
+    def query(_root, *, include_acknowledged):
+        rows = tuple(
+            replace(item, acknowledged_at=datetime.now(timezone.utc))
+            if item.execution_id in acknowledged else item for item in records
+        )
+        return ConditionRecoveryReport(records=tuple(
+            item for item in rows if include_acknowledged or item.acknowledged_at is None
+        ))
+
+    def save(_root, rows):
+        acknowledged.update(item.execution_id for item in rows)
+
+    monkeypatch.setattr(module, "query_condition_recovery", query)
+    monkeypatch.setattr(module, "acknowledge_condition_recovery", save)
+
+    def make_controller():
+        window = QWidget()
+        qtbot.addWidget(window)
+        window.show()
+        return module.ConditionRecoveryController(
+            parent=window, project_root=tmp_path, is_busy=lambda: False,
+            rerun=Mock(), show_error=Mock(),
+        )
+
+    def finish_query(controller, *, automatic):
+        controller.check(automatic=automatic)
+        task = DeferredTask.instances[-1]
+        task.succeeded.emit(task.callback())
+        task.finished.emit()
+
+    first = make_controller()
+    finish_query(first, automatic=True)
+    assert first._dialog is not None
+    first._dialog.acknowledge_button.click()
+    task = DeferredTask.instances[-1]
+    task.succeeded.emit(task.callback())
+    task.finished.emit()
+    first.deactivate()
+    reopened = make_controller()
+    finish_query(reopened, automatic=True)
+    assert reopened._dialog is None
+    finish_query(reopened, automatic=False)
+    assert reopened._dialog is not None
+    assert "Acknowledged:" in reopened._dialog.details.toPlainText()
+    assert not reopened._dialog.acknowledge_button.isEnabled()
+    records.append(replace(records[0], execution_id="execution-new", run_id="run-new"))
+    finish_query(reopened, automatic=True)
+    assert reopened._dialog is not None
+    assert reopened._dialog.pending_records() == (records[-1],)
+
+
+@pytest.mark.parametrize("state", ["hidden", "deactivated", "presentation", "shutdown", "replaced"])
+@pytest.mark.parametrize("failed", [False, True])
+def test_late_acknowledgement_result_cannot_close_or_reopen_another_view(
+    qtbot, tmp_path, monkeypatch, state, failed,
+):
+    controller, window, dialog, errors = _controller_with_report(
+        qtbot, tmp_path, monkeypatch, ConditionRecoveryReport(records=(_record(),)),
+    )
+    lifecycle = SimpleNamespace(is_shutting_down=False)
+    monkeypatch.setattr(module, "update_lifecycle", lambda: lifecycle)
+    monkeypatch.setattr(module, "acknowledge_condition_recovery", Mock())
+    dialog.acknowledge_button.click()
+    task = DeferredTask.instances[-1]
+    accepted = Mock()
+    monkeypatch.setattr(dialog, "accept", accepted)
+    if state == "hidden":
+        window.hide()
+    elif state == "deactivated":
+        controller.deactivate()
+    elif state == "presentation":
+        controller._is_busy = lambda: True
+    elif state == "shutdown":
+        lifecycle.is_shutting_down = True
+    else:
+        replacement = module.ConditionRecoveryDialog(ConditionRecoveryReport(), window)
+        controller._dialog = replacement
+        replacement.show()
+    if failed:
+        task.failed.emit(PermissionError("Project is unavailable"))
+    else:
+        task.succeeded.emit(None)
+    task.finished.emit()
+    if not failed and state in {"hidden", "presentation"}:
+        accepted.assert_called_once_with()
+    else:
+        accepted.assert_not_called()
+    errors.assert_not_called()
+    assert controller._ack_task is None
+    if state == "replaced":
+        assert replacement.isVisible()
+    else:
+        assert not dialog._saving
+
+
+@pytest.mark.parametrize("failed", [False, True])
+def test_acknowledgement_finishes_quietly_during_launch_and_can_recover(
+    qtbot, tmp_path, monkeypatch, failed,
+):
+    controller, _window, dialog, errors = _controller_with_report(
+        qtbot, tmp_path, monkeypatch, ConditionRecoveryReport(records=(_record(),)),
+    )
+    monkeypatch.setattr(module, "acknowledge_condition_recovery", Mock())
+    dialog.acknowledge_button.click()
+    task = DeferredTask.instances[-1]
+    controller._is_busy = lambda: True
+    if failed:
+        task.failed.emit(PermissionError("Project is read-only"))
+    else:
+        task.succeeded.emit(None)
+    task.finished.emit()
+    controller._is_busy = lambda: False
+    assert controller._ack_task is None
+    assert not dialog._saving
+    errors.assert_not_called()
+    if failed:
+        assert dialog.isVisible()
+        assert dialog.acknowledge_button.isEnabled()
+        assert "Could not save acknowledgement" in dialog.status_label.text()
+        dialog.acknowledge_button.click()
+        retry = DeferredTask.instances[-1]
+        retry.succeeded.emit(retry.callback())
+        retry.finished.emit()
+    assert not dialog.isVisible()
+
+
+def test_acknowledged_legacy_history_keeps_confirmation_and_rerun_guards(qtbot):
+    item = _record(acknowledged_at=datetime.now(timezone.utc))
+    dialog = module.ConditionRecoveryDialog(ConditionRecoveryReport(records=(item,)))
+    qtbot.addWidget(dialog)
+    assert not dialog.acknowledge_button.isEnabled()
+    assert not dialog.rerun_button.isEnabled()
+    dialog.confirmation.setChecked(True)
+    with qtbot.waitSignal(dialog.rerun_requested) as emitted:
+        dialog.rerun_button.click()
+    assert emitted.args == [item]
+
+
+def test_same_occurrence_with_new_evidence_can_prompt_again_in_same_window(
+    qtbot, tmp_path, monkeypatch,
+):
+    item = _record()
+    controller, _window, dialog, _errors = _controller_with_report(
+        qtbot, tmp_path, monkeypatch, ConditionRecoveryReport(records=(item,)),
+    )
+    dialog.close()
+    controller._loaded(ConditionRecoveryReport(records=(item,)), automatic=True)
+    assert controller._dialog is dialog
+    assert not dialog.isVisible()
+    newer = replace(item, updated_at=item.updated_at + timedelta(seconds=1))
+    controller._loaded(ConditionRecoveryReport(records=(newer,)), automatic=True)
+    assert controller._dialog is not dialog
+    assert controller._dialog.isVisible()

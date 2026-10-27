@@ -110,7 +110,7 @@ def test_launch_cleanup_does_not_start_recovery_worker_during_shutdown(shutting_
     task_factory = Mock()
     controller = SimpleNamespace(
         _active=True, _window=SimpleNamespace(isVisible=lambda: True),
-        _is_busy=lambda: False, _task=None, _project_root=Path("project"),
+        _is_busy=lambda: False, _task=None, _ack_task=None, _project_root=Path("project"),
         _loaded=Mock(), _failed=Mock(), _finished=Mock(),
     )
     _bind_methods(

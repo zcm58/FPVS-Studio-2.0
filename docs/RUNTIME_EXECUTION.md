@@ -858,6 +858,20 @@ cancellation and successful sessions are excluded from interruption notices. Lar
 duplicate plan snapshots are retired after those terminal outcomes; interrupted plans
 and their evidence remain available for review.
 
+Explicit operator acknowledgement is separate from completion or cancellation.
+`acknowledge_condition_recovery` atomically writes versioned records under
+`logs/.condition-recovery/acknowledgements/`, keyed by execution/run and bound to
+the reviewed evidence snapshot. It validates current inactive evidence before writing
+and preserves the first acknowledgement timestamp on retry. Original checkpoint,
+acquisition, compiled-plan and research files are not changed. A partial storage
+failure propagates to the caller; retry preserves already-written acknowledgements.
+
+`query_condition_recovery` remains read-only and includes acknowledged history by
+default. The automatic GUI query passes `include_acknowledged=False`, excluding
+acknowledged records and their missing-original-plan notices before loading saved
+plans. New executions, occurrences or updated evidence still prompt. Invalid or
+unsafe acknowledgement records cannot silently suppress interruption evidence.
+
 Trigger-output failures are interruptions, even when the runtime returns an aborted
 summary. They retain the frozen plan and incomplete occurrence for recovery instead
 of being retired as voluntary cancellation. A final TriggerBox reset failure retains

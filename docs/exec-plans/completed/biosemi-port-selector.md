@@ -40,8 +40,6 @@ details in tooltips. Available ports never replace the current selection.
 - [x] Document visible manual smoke path; Qt and real hardware checks are not
   authorized by this task and will not run automatically.
 
-The uncommitted verification-speed changes from the previous task remain separate.
-
 ## Verification results
 
 Focused verification passed: triggers 175, GUI-safe 83, project-I/O 392 with two
@@ -49,6 +47,12 @@ Windows symlink-permission skips, and docs 10. Mypy passed all 245 source files;
 changed-source Ruff, compilation and configuration validation passed. Independent
 review found no blocking issues. Four-worker non-Qt precommit passed 3,645 tests
 with 12 Windows symlink-permission skips in 309.87 seconds. No failures occurred.
+
+After merging remote master `8ec53bb` (interrupted-session acknowledgements), the
+combined precommit run passed 3,665 tests with the same 12 permission skips in
+320.97 seconds. Focused recording/recovery integration passed 162 tests with one
+permission skip. Lint, compilation, mypy and repository audits passed on the merge;
+the new BioSemi Qt and physical-hardware acceptance limits below still apply.
 
 Registered Qt tests cover 700x640 states in both themes, selected-port checks,
 stale jobs, Apply/Cancel, failed saves, project reopen and default inheritance.

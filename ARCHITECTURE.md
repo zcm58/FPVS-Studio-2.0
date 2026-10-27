@@ -178,7 +178,9 @@ the public contract is in [Bug reporting](docs/BUG_REPORTING.md).
   participant history and atomic visit reservation, fixation reporting and explicit-path Excel export, fixation
   scoring, trigger coordination, and execution exports.
   `runtime/condition_recovery.py` owns durable occurrence checkpoints, lifetime locks,
-  read-only interrupted-session queries and single-occurrence retry plans.
+  read-only interrupted-session queries, project-local operator acknowledgements
+  and single-occurrence retry plans. Acknowledgement suppresses automatic reminders
+  while retaining incomplete evidence for manual review.
   `gui/condition_recovery_dialog.py` presents this evidence after project open or a
   failed launch; local recovery is independent of automatic crash-report delivery.
   Attentional-blink runs add phase onset records and event CSVs in full and compact
