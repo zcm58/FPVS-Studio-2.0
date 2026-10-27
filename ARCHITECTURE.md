@@ -29,6 +29,8 @@ the public contract is in [Bug reporting](docs/BUG_REPORTING.md).
   native protected credential storage, and bounded verified bundle downloads.
   `provenance.py` checks locally pinned Ed25519 evidence before cache creation/reuse;
   the bounded wire contract lives in `docs/LIBRARY_ARTIFACT_PROVENANCE.md`.
+
+  Download leases clean up transfer files when review/import ends.
   The Library dialog uses app-owned jobs and the existing reviewed project importer;
   `core/library_publish.py` prepares clean publishable whole-project copies with
   the current fixed COM3 serial-port policy.

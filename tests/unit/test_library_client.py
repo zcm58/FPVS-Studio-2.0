@@ -21,6 +21,13 @@ from tests.unit.library_provenance_fixtures import (
     sign_proof,
 )
 
+from fpvs_studio.core.paths import app_data_dir, filesystem_path
+from fpvs_studio.core.project_bundle import (
+    IMPORT_STAGING_DIRNAME,
+    export_project_bundle,
+    import_project_bundle,
+)
+from fpvs_studio.core.serialization import load_project_file, save_project_file
 from fpvs_studio.library import cache as cache_module
 from fpvs_studio.library import client as client_module
 from fpvs_studio.library import provenance
@@ -35,6 +42,7 @@ from fpvs_studio.library.models import (
     LibraryConnection,
     LibraryItem,
 )
+from fpvs_studio.preprocessing.manifest import create_empty_manifest, write_stimulus_manifest
 
 ORIGIN = "https://library.example.test"
 MANAGED_ORIGIN = "https://openfpvs.com"
@@ -526,6 +534,7 @@ def test_download_verifies_hash_size_and_retains_exclusive_lease(environment):
     with pytest.raises(LibraryError, match="Another"):
         second.acquire()
     client.release_download()
+    assert not path.exists()
     second.acquire()
     second.release()
 
@@ -541,6 +550,72 @@ def test_failed_download_removes_partial_and_releases_lock(environment, payload)
     lock = DownloadCache(client._cache.root)
     lock.acquire()
     lock.release()
+
+
+def test_repeated_download_release_removes_only_owned_files(environment):
+    client, _, _, replies = environment
+    for _ in range(3):
+        replies.append(payload_reply())
+        path = client.download(item())
+        note = path.parent / "user-notes.txt"
+        note.write_text("keep")
+        client.release_download()
+        client.release_download()  # Repeated completion must be harmless.
+        assert {p.name for p in path.parent.iterdir()} == {".library.lock", note.name}
+        assert note.read_text() == "keep"
+
+
+def test_release_cleanup_failure_logs_and_unlocks_then_next_download_recovers(
+    environment, monkeypatch, caplog,
+):
+    client, _, _, replies = environment
+    replies.append(payload_reply())
+    path = client.download(item())
+    with monkeypatch.context() as patch:
+        def denied(*args, **kwargs):
+            raise PermissionError("synthetic locked archive")
+
+        patch.setattr(client._cache, "clear", denied)
+        client.release_download()
+    assert "Could not remove temporary Library download files" in caplog.text
+    assert path.exists()
+    other = DownloadCache(path.parent)
+    other.acquire()
+    other.release()
+    replies.append(catalog(item()))
+    replies.append(provenance_reply())
+    assert client.download(item()).read_bytes() == PAYLOAD
+    client.release_download()
+    assert not path.exists()
+
+
+def test_imported_project_survives_download_cleanup(
+    environment, tmp_path, sample_project, sample_project_root,
+):
+    client, _, _, replies = environment
+    save_project_file(sample_project, sample_project_root / "project.json")
+    write_stimulus_manifest(
+        sample_project_root, create_empty_manifest(sample_project.meta.project_id),
+    )
+    source = tmp_path / "source.fpvsbundle"
+    manifest = export_project_bundle(sample_project_root, source)
+    payload = source.read_bytes()
+    artifact = item(
+        size_bytes=len(payload), sha256=hashlib.sha256(payload).hexdigest(),
+    )
+    replies.append(payload_reply(payload, proof_item=artifact))
+    path = client.download(artifact)
+    root = tmp_path / "installed"
+    try:
+        imported = import_project_bundle(path, root)
+    finally:
+        client.release_download()
+    assert not path.exists()
+    assert load_project_file(imported.project_root / "project.json").meta == sample_project.meta
+    for record in manifest.files:
+        assert (imported.project_root / record.path).is_file()
+    assert list((app_data_dir(root) / IMPORT_STAGING_DIRNAME).iterdir()) == []
+    assert source.read_bytes() == payload
 
 
 def test_download_cancellation_cleans_partial(environment):
@@ -568,6 +643,7 @@ def test_cached_payload_rehashed_and_still_requires_authorization(environment):
     replies.append(payload_reply())
     path = client.download(item())
     client.release_download()
+    path.write_bytes(PAYLOAD)  # Simulate a payload left by an interrupted process.
     replies.append(catalog(item()))
     replies.append(provenance_reply())
     assert client.download(item()) == path
@@ -583,11 +659,13 @@ def test_cached_payload_rehashed_and_still_requires_authorization(environment):
 def test_cached_withdrawn_item_is_not_importable(environment):
     client, _, _, replies = environment
     replies.append(payload_reply())
-    client.download(item())
+    path = client.download(item())
     client.release_download()
+    path.write_bytes(PAYLOAD)
     replies.append(catalog())
     with pytest.raises(LibraryError, match="withdrawn"):
         client.download(item())
+    assert not path.exists()
 
 
 def test_cached_payload_does_not_bypass_current_view_only_permission(environment):
@@ -595,6 +673,7 @@ def test_cached_payload_does_not_bypass_current_view_only_permission(environment
     replies.append(payload_reply())
     path = client.download(item())
     client.release_download()
+    path.write_bytes(PAYLOAD)  # Recover a payload left by an interrupted process.
     token = store.value.token
     replies.append(dict(catalog(item()), access_level="view", lab_name="Shared lab"))
     with pytest.raises(LibraryError, match="view-only"):
@@ -603,7 +682,7 @@ def test_cached_payload_does_not_bypass_current_view_only_permission(environment
     assert client.connection_info().access_level == "view"
     assert requests[-1].full_url.endswith("catalog?kind=experiment")
     assert requests[-1].get_header("X-fpvs-library-metadata") == "1"
-    assert path.read_bytes() == PAYLOAD
+    assert not path.exists()
     assert not client._download_held
     lock = DownloadCache(client._cache.root)
     lock.acquire()
@@ -615,6 +694,7 @@ def test_new_payload_replaces_only_recognized_cache_files(environment):
     replies.append(payload_reply())
     first = client.download(item())
     client.release_download()
+    first.write_bytes(PAYLOAD)
     preserved = first.parent / "user-notes.txt"
     preserved.write_text("user-owned")
     new_bytes = b"different example"
@@ -772,6 +852,7 @@ def test_hardlinked_payload_is_rejected_without_deleting_the_original(environmen
     replies.append(payload_reply())
     target = client.download(item())
     client.release_download()
+    target.write_bytes(PAYLOAD)
     outside = tmp_path / "original.bin"
     target.replace(outside)
     target.hardlink_to(outside)
@@ -900,6 +981,7 @@ def test_download_cache_without_windows_long_path_policy(environment, tmp_path, 
     downloaded = client.download(item())
     assert downloaded.read_bytes() == PAYLOAD
     client.release_download()
+    filesystem_path(downloaded).write_bytes(PAYLOAD)
     replies.append(catalog(item()))
     replies.append(provenance_reply())
     assert client.download(item()) == downloaded
@@ -933,13 +1015,15 @@ def test_cached_payload_requires_live_exact_signed_proof(environment):
     replies.append(payload_reply())
     retained = client.download(item())
     client.release_download()
+    retained.write_bytes(PAYLOAD)  # Recover a payload left by an interrupted process.
     evidence = provenance_reply()
     evidence["proof"]["sha256"] = "f" * 64
     replies.extend([catalog(item()), evidence])
     with pytest.raises(LibraryError, match="untrusted_provenance"):
         client.download(item())
     assert not client._download_held
-    assert retained.read_bytes() == PAYLOAD
+    assert not retained.exists()
+    retained.write_bytes(PAYLOAD)
     replies.extend([catalog(item()), provenance_reply()])
     assert client.download(item()) == retained
     assert requests[-1].full_url.endswith("/provenance")

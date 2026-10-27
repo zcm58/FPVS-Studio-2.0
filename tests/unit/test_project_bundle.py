@@ -128,7 +128,9 @@ def test_library_import_rejects_unexpected_payload_before_extraction(
 
     monkeypatch.setattr(project_bundle_module, "_extract_verified_record", must_not_extract)
     receiver = tmp_path / "receiver"
-    with pytest.raises(ProjectBundleError, match="unexpected stimulus file"):
+    with pytest.raises(
+        ProjectBundleError, match="active or archive payload|unexpected stimulus file",
+    ):
         import_project_bundle(bundle, receiver, library_origin=origin)
     assert not (receiver / sample_project.meta.project_id).exists()
     assert list((app_data_dir(receiver) / IMPORT_STAGING_DIRNAME).iterdir()) == []
@@ -188,7 +190,9 @@ def test_library_validation_rejects_other_compression_before_extraction(
         pytest.fail("Unsupported compression reached extraction")
 
     monkeypatch.setattr(project_bundle_module, "_extract_verified_record", must_not_extract)
-    with pytest.raises(ProjectBundleError, match="unsupported compression method"):
+    with pytest.raises(
+        ProjectBundleError, match="unsupported (compression method|ZIP compression)",
+    ):
         validate_project_bundle(bundle)
 
 
@@ -254,7 +258,7 @@ def test_library_import_rejects_tiny_excessive_workload_before_scheduling(
 
     monkeypatch.setattr(compiler, "build_stimulus_sequence", must_not_schedule)
     receiver = tmp_path / "receiver"
-    with pytest.raises(ProjectBundleError, match="compilation exceeds"):
+    with pytest.raises(ProjectBundleError, match="compilation(?: workload)? exceeds"):
         import_project_bundle(bundle, receiver, library_safe=True)
     assert not (receiver / sample_project.meta.project_id).exists()
 

@@ -298,6 +298,12 @@ availability and persistence for both build types. Use the GUI focused route. Fo
 visible acceptance, open Settings at `700x610`, enable the option, reopen Settings to
 check persistence, and disable it again to restore ordinary launch checks.
 
+## Library Import Cleanup
+
+For Library import cleanup, start with `library/client.py` and `library/cache.py`;
+the download lease owns transfer-file cleanup and core bundle import owns extraction
+staging. Use the `library` route and `tests/unit/test_project_bundle.py`.
+
 ## Cognitive Load FPVS
 
 For Masking, start with `core/masking.py`, `core/masking_presets.py`,
